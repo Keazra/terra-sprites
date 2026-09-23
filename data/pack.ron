@@ -1,0 +1,6 @@
+// The default Terra Sprites data pack. Embedded in the binary; `--data <dir>`
+// overrides it for new worlds.
+(
+    name: "core",
+    version: "1",
+)
