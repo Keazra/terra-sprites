@@ -9,12 +9,13 @@
 
 ## Changes from v3
 
-Two small amendments, both made while building slice 1 ([#2](https://github.com/Keazra/terra-sprites/issues/2)).
+Three small amendments, all made while building slice 1 ([#2](https://github.com/Keazra/terra-sprites/issues/2)).
 
 | # | Change | Source | Sections |
 |---|---|---|---|
 | 1 | **Slower speeds.** `-` keeps halving below 1×, to ½× (5 ticks/s), ¼× (2.5 ticks/s) and ⅛× (1.25 ticks/s), then stops; `+` climbs back the same steps. The game still starts at 1×. At 1× a sprite's decisions go by too fast to follow. The UI clock counts rates in eighths of a tick per second, so ⅛× stays exact in integer maths. The top bar labels them `1/2x`, `1/4x`, `1/8x`: ASCII, because CP437 has no ⅛. | Owner feedback after trying slice 1 | §6.6 |
 | 2 | **Quit key recorded:** `q` or `Ctrl+C`. v3 never listed a way to quit; slice 1 added one. `q` doesn't clash with any planned key. | Slice 1 implementation | §6.5, §6.6 |
+| 3 | **Held keys stop at 1×.** Holding `+` or `-` steps the speed until it reaches 1×, then stops; a fresh press is needed to go past it. 1× is where most observation happens, and with nine speeds a held key would otherwise shoot straight past it. Also: holding `space` toggles pause only once (no flicker), and holding `.` keeps stepping. | Owner feedback after trying slice 1 | §6.6 |
 
 ---
 
@@ -1029,6 +1030,12 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 
 - **Keys:** `space` pauses and resumes; `.` steps one tick while paused; `+` and `-` step through ⅛×, ¼×, ½×, 1× (10 ticks per second), 2×, 4×, 8×, 16× and **Max**. Each step halves or doubles the rate. The game starts at 1×; `-` stops at ⅛× (1.25 ticks/s) and `+` at Max. The top bar labels the slow speeds `1/2x`, `1/4x` and `1/8x`. `q` or `Ctrl+C` quits.
 - **Exact pacing:** the UI clock counts owed ticks in integer maths, with rates in eighths of a tick per second, so every speed (including ⅛×) runs at exactly its nominal rate with no drift.
+- **Held keys:**
+  - **1× is a stop for held keys.** A held `+` or `-` stops at 1×; a fresh press is needed to go past it, in either direction.
+  - **`space` toggles pause only on a fresh press,** so holding it doesn't flicker.
+  - **Holding `.` keeps stepping,** one tick per repeat.
+  - **Telling a hold from a press:** a key counts as held when the terminal reports it as repeating, or when it's pressed again with no release in between. The second rule is only trusted where the terminal reports releases: Windows always does, and any other terminal is trusted once a release arrives. Keys are tracked by physical key, so a `+` whose release is reported as `=` (Shift released first) still counts as released.
+  - **Limitation:** terminals that report neither repeats nor releases can't tell a hold from taps, so every press there counts as fresh.
 - **Single-threaded in M1.** Each frame:
   1. drain input into `Action`s and `Command`s
   2. run as many ticks as the speed allows, within a **~25 ms** budget

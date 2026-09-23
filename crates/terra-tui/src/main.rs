@@ -9,7 +9,7 @@ use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{self, Event};
 use terra_sim::{DataPack, World};
 use terra_tui::clock::Clock;
-use terra_tui::input::{Action, action_for};
+use terra_tui::input::{Action, Keys};
 use terra_tui::ui;
 
 /// About 30 frames per second.
@@ -52,6 +52,7 @@ fn main() -> ExitCode {
 
 fn run(terminal: &mut DefaultTerminal, mut world: World, force_panic: bool) -> io::Result<()> {
     let mut clock = Clock::new();
+    let mut keys = Keys::new();
     let mut last_frame = Instant::now();
 
     loop {
@@ -64,12 +65,14 @@ fn run(terminal: &mut DefaultTerminal, mut world: World, force_panic: bool) -> i
         let deadline = last_frame + FRAME;
         while event::poll(deadline.saturating_duration_since(Instant::now()))? {
             if let Event::Key(key) = event::read()? {
-                match action_for(key) {
+                match keys.action_for(key) {
                     Some(Action::Quit) => return Ok(()),
                     Some(Action::TogglePause) => clock.toggle_pause(),
                     Some(Action::StepOnce) => clock.step_once(),
-                    Some(Action::Faster) => clock.faster(),
-                    Some(Action::Slower) => clock.slower(),
+                    Some(Action::Faster { held: false }) => clock.faster(),
+                    Some(Action::Faster { held: true }) => clock.faster_held(),
+                    Some(Action::Slower { held: false }) => clock.slower(),
+                    Some(Action::Slower { held: true }) => clock.slower_held(),
                     None => {}
                 }
             }

@@ -17,8 +17,8 @@ cargo run --release
 | Key | Action |
 |---|---|
 | `space` | Pause / resume |
-| `.` | Step one tick while paused |
-| `+` / `-` | Faster / slower: each step doubles or halves the speed, from ⅛× up to 16×, then Max. The game starts at 1× (10 ticks per second). |
+| `.` | Step one tick while paused (hold to keep stepping) |
+| `+` / `-` | Faster / slower: each step doubles or halves the speed, from ⅛× up to 16×, then Max. The game starts at 1× (10 ticks per second). Holding either key stops at 1×; press again to go past it. |
 | `q` or `Ctrl+C` | Quit |
 
 To run the checks CI runs: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`.

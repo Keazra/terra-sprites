@@ -154,3 +154,57 @@ fn faster_climbs_back_up_from_an_eighth() {
     use Speed::*;
     assert_eq!(seen, [Eighth, Quarter, Half, X1]);
 }
+
+#[test]
+fn holding_slower_stops_at_1x_until_pressed_again() {
+    let mut clock = Clock::new();
+    for _ in 0..4 {
+        clock.faster();
+    }
+    assert_eq!(clock.speed(), Speed::X16);
+
+    let mut seen = vec![];
+    for _ in 0..6 {
+        clock.slower_held();
+        seen.push(clock.speed());
+    }
+    use Speed::*;
+    assert_eq!(seen, [X8, X4, X2, X1, X1, X1]);
+
+    clock.slower();
+    assert_eq!(clock.speed(), Half);
+}
+
+#[test]
+fn holding_faster_stops_at_1x_until_pressed_again() {
+    let mut clock = Clock::new();
+    for _ in 0..3 {
+        clock.slower();
+    }
+    assert_eq!(clock.speed(), Speed::Eighth);
+
+    let mut seen = vec![];
+    for _ in 0..5 {
+        clock.faster_held();
+        seen.push(clock.speed());
+    }
+    use Speed::*;
+    assert_eq!(seen, [Quarter, Half, X1, X1, X1]);
+
+    clock.faster();
+    assert_eq!(clock.speed(), X2);
+}
+
+#[test]
+fn holding_continues_past_1x_once_a_fresh_press_has_crossed_it() {
+    let mut clock = Clock::new();
+    clock.slower(); // a fresh press crosses 1×
+    clock.slower_held();
+    clock.slower_held();
+    assert_eq!(clock.speed(), Speed::Eighth);
+
+    let mut clock = Clock::new();
+    clock.faster(); // a fresh press crosses 1×
+    clock.faster_held();
+    assert_eq!(clock.speed(), Speed::X4);
+}
