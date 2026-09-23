@@ -94,6 +94,13 @@ impl Clock {
         self.speed = self.speed.faster();
     }
 
+    /// One step faster from a held key: stops at 1× until the key is pressed again.
+    pub fn faster_held(&mut self) {
+        if self.speed != Speed::X1 {
+            self.faster();
+        }
+    }
+
     pub fn is_paused(&self) -> bool {
         self.paused
     }
@@ -116,6 +123,13 @@ impl Clock {
     /// One step slower, stopping at ⅛×.
     pub fn slower(&mut self) {
         self.speed = self.speed.slower();
+    }
+
+    /// One step slower from a held key: stops at 1× until the key is pressed again.
+    pub fn slower_held(&mut self) {
+        if self.speed != Speed::X1 {
+            self.slower();
+        }
     }
 
     /// Accounts for `elapsed` real time, calling `step` once per tick that is due.
