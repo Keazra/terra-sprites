@@ -1,6 +1,6 @@
 # Terra Sprites — M1 "A Sprite Lives" design (v3)
 
-- **Status:** Draft v3 for review
+- **Status:** Final
 - **Date:** 2026-09-23
 - **Supersedes:** [v2](m1-a-sprite-lives-v2.md) (which superseded [v1](m1-a-sprite-lives.md))
 - **Covers:** Milestone 1 in full detail, plus the architecture decisions that every later milestone depends on
