@@ -6,8 +6,8 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 | -------------------------- | -------------------- | ---------------------------------------- |
 | `needs-triage`             | `needs-triage`       | Maintainer needs to evaluate this issue  |
 | `needs-info`               | `needs-info`         | Waiting on reporter for more information |
-| `ready-for-agent`          | `afk`                | Fully specified, ready for an AFK agent  |
-| `ready-for-human`          | `hitl`               | Requires human implementation            |
+| `ready-for-agent`          | `afk`                | Fully specified; an agent can build it (owner checks before merge) |
+| `ready-for-human`          | `hitl`               | Needs a human decision, review or sign-off |
 | `wontfix`                  | `wontfix`            | Will not be actioned                     |
 
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.
