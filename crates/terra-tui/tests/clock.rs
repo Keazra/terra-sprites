@@ -43,18 +43,21 @@ fn the_tick_rate_follows_the_speed() {
 }
 
 #[test]
-fn slower_steps_back_down_and_stops_at_1x() {
+fn slower_halves_the_speed_down_to_an_eighth_and_stops() {
     let mut clock = Clock::new();
     for _ in 0..5 {
         clock.faster();
     }
     let mut seen = vec![clock.speed()];
-    for _ in 0..6 {
+    for _ in 0..9 {
         clock.slower();
         seen.push(clock.speed());
     }
     use Speed::*;
-    assert_eq!(seen, [Max, X16, X8, X4, X2, X1, X1]);
+    assert_eq!(
+        seen,
+        [Max, X16, X8, X4, X2, X1, Half, Quarter, Eighth, Eighth]
+    );
 }
 
 #[test]
@@ -125,4 +128,29 @@ fn at_max_speed_a_frame_runs_until_its_budget_is_spent() {
         || ticks.get() >= 500,
     );
     assert_eq!(ran, 500);
+}
+
+#[test]
+fn an_eighth_speed_runs_exactly_ten_ticks_in_eight_seconds() {
+    let mut clock = Clock::new();
+    for _ in 0..3 {
+        clock.slower();
+    }
+    assert_eq!(clock.speed(), Speed::Eighth); // 1.25 ticks per second
+    assert_eq!(run_for(&mut clock, Duration::from_secs(8)), 10);
+}
+
+#[test]
+fn faster_climbs_back_up_from_an_eighth() {
+    let mut clock = Clock::new();
+    for _ in 0..3 {
+        clock.slower();
+    }
+    let mut seen = vec![clock.speed()];
+    for _ in 0..3 {
+        clock.faster();
+        seen.push(clock.speed());
+    }
+    use Speed::*;
+    assert_eq!(seen, [Eighth, Quarter, Half, X1]);
 }

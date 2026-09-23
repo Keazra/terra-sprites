@@ -32,6 +32,9 @@ fn top_bar_line(world: &World, clock: &Clock) -> Line<'static> {
 
 fn speed_label(speed: Speed) -> &'static str {
     match speed {
+        Speed::Eighth => "1/8x",
+        Speed::Quarter => "1/4x",
+        Speed::Half => "1/2x",
         Speed::X1 => "1x",
         Speed::X2 => "2x",
         Speed::X4 => "4x",
