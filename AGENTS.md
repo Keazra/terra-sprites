@@ -1,5 +1,17 @@
 # Agent instructions
 
+## Project
+
+Terra Sprites is an ASCII artificial-life game in Rust. The spec is the current design doc in `docs/design/` (the highest `-vN`); see `docs/agents/domain.md` for how to read it.
+
+Before pushing, run the checks CI runs (`.github/workflows/ci.yml` is the source of truth):
+
+- `cargo fmt --all --check`
+- `cargo clippy --workspace --all-targets -- -D warnings` (this includes the simulation's determinism lints)
+- `cargo test --workspace`
+
+`terra-sim` must not depend on terminal crates (`ratatui`, `crossterm`); CI checks this too.
+
 ## Agent skills
 
 ### Issue tracker
