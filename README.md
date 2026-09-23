@@ -4,7 +4,24 @@ An ASCII artificial-life game for the terminal, inspired by *Creatures*.
 
 Sprites have a genome, a simulated biochemistry and a brain that learns from experience. They live on a grid world of plants, water, toys and thorns. You watch, inspect, and intervene with a "hand of god": tickle a sprite to reward it, slap it to punish it, or move things around, and watch individual sprites learn.
 
-**Status:** milestone 1 is designed and being planned. There is no playable build yet.
+**Status:** milestone 1 is being built, slice by slice ([milestone](https://github.com/Keazra/terra-sprites/milestone/1)). Today the game shows an empty world whose clock you can pause, step and speed up.
+
+## Running it
+
+You need [Rust](https://rustup.rs) (stable). Then, from the repository root:
+
+```bash
+cargo run --release
+```
+
+| Key | Action |
+|---|---|
+| `space` | Pause / resume |
+| `.` | Step one tick while paused |
+| `+` / `-` | Faster / slower (1×, 2×, 4×, 8×, 16×, Max) |
+| `q` or `Ctrl+C` | Quit |
+
+To run the checks CI runs: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`.
 
 ## Design
 
