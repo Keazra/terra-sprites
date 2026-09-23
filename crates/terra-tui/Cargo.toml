@@ -1,0 +1,16 @@
+[package]
+name = "terra-tui"
+description = "The Terra Sprites terminal front end."
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "terra-sprites"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = "0.30.2"
+terra-sim = { path = "../terra-sim" }
+
+[lints]
+workspace = true
