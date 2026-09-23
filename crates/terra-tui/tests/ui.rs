@@ -44,3 +44,13 @@ fn the_top_bar_shows_when_time_is_paused() {
     assert!(bar.contains("|| paused"), "{bar}");
     assert!(!bar.contains('►'), "{bar}");
 }
+
+#[test]
+fn the_top_bar_labels_slow_speeds_as_fractions() {
+    let mut clock = Clock::new();
+    for expected in ["1/2x", "1/4x", "1/8x"] {
+        clock.slower();
+        let bar = top_bar(&world(), &clock);
+        assert!(bar.contains(&format!("► {expected}")), "{bar}");
+    }
+}

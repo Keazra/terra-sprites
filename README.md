@@ -18,14 +18,14 @@ cargo run --release
 |---|---|
 | `space` | Pause / resume |
 | `.` | Step one tick while paused |
-| `+` / `-` | Faster / slower (1×, 2×, 4×, 8×, 16×, Max) |
+| `+` / `-` | Faster / slower: each step doubles or halves the speed, from ⅛× up to 16×, then Max. The game starts at 1× (10 ticks per second). |
 | `q` or `Ctrl+C` | Quit |
 
 To run the checks CI runs: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`.
 
 ## Design
 
-- [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v3.md) (final, v3). Earlier iterations and the external evaluations that shaped them are alongside it in [`docs/design/`](docs/design/).
+- [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v4.md) (final, v4). Earlier iterations and the external evaluations that shaped them are alongside it in [`docs/design/`](docs/design/).
 
 ## Roadmap
 
