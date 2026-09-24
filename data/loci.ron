@@ -1,0 +1,29 @@
+// The loci registry (design §4.2, Appendix A): the named values genes and
+// verbs read and write. IDs are stable and append-only: never renumber or
+// reuse one. Chemical levels are loci too, referred to as `Chem(id)`, so
+// they aren't listed here.
+//
+// Kinds: BodySensor (physics fills it in every tick), Pulse (an event that
+// lasts one tick; object verbs `Signal` these) and ReceptorTarget (written by
+// receptors). `brain_visible` says whether the brain can read it.
+[
+    (id: 1,  name: "always",            kind: BodySensor,     brain_visible: true),
+    (id: 2,  name: "age",               kind: BodySensor,     brain_visible: true),
+    (id: 3,  name: "nearby_sprites",    kind: BodySensor,     brain_visible: true),
+    // Physiology only: as brain inputs they'd loop the action back into itself.
+    (id: 4,  name: "moving",            kind: BodySensor,     brain_visible: false),
+    (id: 5,  name: "resting",           kind: BodySensor,     brain_visible: false),
+
+    (id: 32, name: "ate",               kind: Pulse,          brain_visible: true),
+    (id: 33, name: "drank",             kind: Pulse,          brain_visible: true),
+    (id: 34, name: "played",            kind: Pulse,          brain_visible: true),
+    (id: 35, name: "played_social",     kind: Pulse,          brain_visible: true),
+    (id: 36, name: "pricked",           kind: Pulse,          brain_visible: true),
+    (id: 37, name: "was_hit",           kind: Pulse,          brain_visible: true),
+    (id: 38, name: "did_hit",           kind: Pulse,          brain_visible: true),
+    (id: 39, name: "petted",            kind: Pulse,          brain_visible: true),
+    (id: 40, name: "shocked",           kind: Pulse,          brain_visible: true),
+
+    (id: 64, name: "learning_rate_mod", kind: ReceptorTarget, brain_visible: false),
+    (id: 65, name: "exploration_mod",   kind: ReceptorTarget, brain_visible: false),
+]
