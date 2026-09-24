@@ -1,0 +1,14 @@
+// Terrain properties (design §3.1). Every terrain must be listed.
+//
+// A walkable terrain gives its step cost (what an orthogonal step onto it
+// costs; a diagonal step costs 14/10 of that), its fertility (0 to 1) and
+// whether sprites can drink there. An unwalkable terrain gives only
+// `walkable: false`.
+{
+    grass:         (walkable: true, step_cost: 10, fertility: 1.0, drinkable: false),
+    dirt:          (walkable: true, step_cost: 10, fertility: 0.5, drinkable: false),
+    sand:          (walkable: true, step_cost: 15, fertility: 0.0, drinkable: false),
+    shallow_water: (walkable: true, step_cost: 25, fertility: 0.0, drinkable: true),
+    deep_water:    (walkable: false),
+    rock:          (walkable: false),
+}
