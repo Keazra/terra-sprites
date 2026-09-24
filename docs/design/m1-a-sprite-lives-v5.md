@@ -13,7 +13,7 @@ Decided with the owner while building slice 2 ([#3](https://github.com/Keazra/te
 
 | # | Change | Source | Sections |
 |---|---|---|---|
-| 1 | **The keyboard scrolls the map; the mouse points.** `W` `A` `S` `D` or the arrow keys scroll the viewport (Shift: 5 tiles). The cursor follows the mouse pointer, and there is no keyboard cursor. | Owner decision | §6.1, §6.5 |
+| 1 | **The keyboard scrolls the map; the mouse points.** `W` `A` `S` `D` or the arrow keys scroll the viewport (Shift: 5 tiles), and so does the mouse wheel (3 tiles a notch; a tilting wheel scrolls sideways). The cursor follows the mouse pointer, and there is no keyboard cursor. | Owner decision | §6.1, §6.5 |
 | 2 | **A 3×3 cursor** centred on its target: arrows on its sides point in, **mode marks** sit at two corners and **status marks** `Y` and `N` at the other two. | Owner decision | §6.2, §6.5 |
 | 3 | **Cursor modes:** `E` Select, `Q` Hand (grab, drop, and the Place menu), `Z` Reward, `X` Correct. A right-click or `Esc` returns to Select. Switching modes keeps each mode's state, so what the hand holds waits in reserve, and the status line always shows it. Pausing lets you queue actions for the next tick. | Owner decision | §6.5, §6.8 |
 | 4 | **Click feedback:** in Reward and Correct mode each click flashes the status marks `+` at once, then `☼` (applied) or `?` (rejected) when the sim reports back. A click with nothing on the tile to act on sends no command and flashes `?`. | Owner decision | §6.5 |
@@ -939,7 +939,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 **Panels:**
 - **Top bar:** tick, speed, seed, population, food counts, save status.
 - **Map view:**
-  - Its viewport scrolls with `W` `A` `S` `D` or the arrow keys, or follows the selected sprite (`f`).
+  - Its viewport scrolls with `W` `A` `S` `D`, the arrow keys or the mouse wheel, or follows the selected sprite (`f`).
   - A map smaller than the space gets a map view shrunk to fit it, at the top-left.
   - Its border is **double-lined** (`═ ║`) on any side where the terrarium's wall is in view, and single-lined where the map carries on.
   - The cursor is 3×3 tiles and follows the mouse (§6.5).
@@ -1020,7 +1020,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 
 ### 6.5 The hand
 
-- **Scrolling:** `W` `A` `S` `D` or the arrow keys scroll the viewport one tile, and Shift makes it 5. Holding a key keeps scrolling. The viewport stops at the wall. There is **no keyboard cursor**.
+- **Scrolling:** `W` `A` `S` `D` or the arrow keys scroll the viewport one tile, and Shift makes it 5. Holding a key keeps scrolling. The mouse wheel scrolls 3 tiles a notch: up and down, or left and right on a wheel that tilts. The viewport stops at the wall. There is **no keyboard cursor**.
 - **The cursor follows the mouse.** It sits on the tile under the pointer, so it changes as the map scrolls beneath a still pointer. When the pointer leaves the map view, the cursor stays on its last tile. A click acts on the cursor's tile, as the cursor mode says.
 - **Reach:** the hand reaches anywhere on the map.
 - **Ownership:** **the hand lives in the sim.** `World` owns `Hand { held: Option<HeldEntity> }`.

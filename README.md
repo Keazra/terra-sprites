@@ -17,6 +17,7 @@ cargo run --release -- --seed 7
 | Key | Action |
 |---|---|
 | `W` `A` `S` `D` or arrows | Scroll the map (hold Shift to scroll 5 tiles) |
+| Mouse wheel | Scroll the map 3 tiles a notch (sideways too, on a wheel that tilts) |
 | Mouse | Point at a tile: the status line says what's there |
 | `space` | Pause / resume |
 | `.` | Step one tick while paused (hold to keep stepping) |

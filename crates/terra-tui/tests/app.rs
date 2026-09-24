@@ -123,6 +123,21 @@ fn a_click_puts_the_cursor_on_a_tile_without_scrolling() {
 }
 
 #[test]
+fn the_wheel_scrolls_and_the_cursor_stays_under_the_pointer() {
+    let mut app = app(&grass(160, 96), tile_area(20, 10));
+    assert_eq!(app.viewport(), at(70, 43));
+    let wheel = Action::Wheel {
+        at: Position::new(11, 7),
+        dx: 0,
+        dy: 3,
+    };
+    assert_eq!(app.apply(wheel), Flow::Continue);
+    assert_eq!(app.viewport(), at(70, 46));
+    // Screen cell (11, 7) is the tenth column and sixth row of tiles.
+    assert_eq!(app.cursor(), at(80, 51));
+}
+
+#[test]
 fn a_bigger_view_after_a_resize_still_stops_at_the_wall() {
     let mut app = app(&grass(160, 96), tile_area(20, 10));
     scroll(&mut app, 1000, 1000);
@@ -181,10 +196,15 @@ fn any_other_key_cancels_the_quit_prompt_and_does_nothing_else() {
 }
 
 #[test]
-fn moving_the_mouse_leaves_the_quit_prompt_open() {
+fn the_mouse_leaves_the_quit_prompt_open() {
     let mut app = app(&grass(40, 30), tile_area(20, 10));
     app.apply(Action::Back);
     point(&mut app, 3, 3);
+    app.apply(Action::Wheel {
+        at: Position::new(3, 3),
+        dx: 0,
+        dy: 3,
+    });
     assert_eq!(app.screen(), Screen::QuitPrompt);
 }
 

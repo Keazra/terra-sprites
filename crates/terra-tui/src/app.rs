@@ -138,7 +138,7 @@ impl App {
             match action {
                 Action::Confirm | Action::Back | Action::Quit => return Flow::Quit,
                 // The mouse carries on as usual and doesn't answer the prompt.
-                Action::Point(_) | Action::Click(_) => {}
+                Action::Point(_) | Action::Click(_) | Action::Wheel { .. } => {}
                 // Any other key cancels the prompt, and does nothing else.
                 _ => {
                     self.screen = Screen::Normal;
@@ -156,6 +156,10 @@ impl App {
             Action::Scroll { dx, dy } => self.scroll(dx, dy),
             // In Select mode (the only mode so far), a click just points.
             Action::Point(cell) | Action::Click(cell) => self.point(cell),
+            Action::Wheel { at, dx, dy } => {
+                self.point(at);
+                self.scroll(dx, dy);
+            }
             Action::Back => self.screen = Screen::QuitPrompt,
             Action::Confirm | Action::Dismiss => {}
             Action::Quit => return Flow::Quit,
