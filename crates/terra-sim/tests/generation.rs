@@ -76,10 +76,16 @@ proptest! {
 }
 
 #[test]
-fn every_default_size_map_has_all_six_terrains() {
+fn every_default_size_map_is_one_region_with_all_six_terrains() {
+    let default = WorldConfig::builtin();
     for seed in 0..16 {
-        let world = generate(160, 96, seed);
+        let world = generate(default.width(), default.height(), seed);
         let map = world.map();
+        let (walkable, reachable) = walkable_and_reachable(map);
+        assert_eq!(
+            reachable, walkable,
+            "seed {seed}: some walkable tiles are cut off"
+        );
         for terrain in Terrain::ALL {
             assert!(
                 positions(map).any(|pos| map.terrain(pos) == terrain),

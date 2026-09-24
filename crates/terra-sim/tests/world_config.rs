@@ -1,9 +1,9 @@
 use terra_sim::{ConfigError, WorldConfig};
 
 #[test]
-fn the_built_in_preset_is_160_by_96() {
+fn the_built_in_preset_is_256_by_160() {
     let config = WorldConfig::builtin();
-    assert_eq!((config.width(), config.height()), (160, 96));
+    assert_eq!((config.width(), config.height()), (256, 160));
 }
 
 #[test]

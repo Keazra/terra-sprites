@@ -21,6 +21,7 @@ Decided with the owner while building slice 2 ([#3](https://github.com/Keazra/te
 | 6 | **Quitting is `Esc`, twice:** `Esc` asks "Quit? (y/n)"; `y` or a second `Esc` quits. `Ctrl+C` quits at once. `q` no longer quits (this replaces v4 change 2: `q` sits beside `W` and `A`). | Owner decision | §6.5, §6.6 |
 | 7 | **Keys retired or moved:** `t` (Tickle) and `s` (Slap) give way to modes, and `s` now scrolls; `g` no longer grabs (`Q` does) and now exports the genome (`e` is Select); `p` (Place) becomes `Q` pressed again in Hand mode; `Enter` is dropped (a click selects); `hjkl` and `q` (quit) are gone. Dropping `hjkl` also removes their clash with `l` (sprite list). | Follows from 1, 3 and 6 | §6.1, §6.5 |
 | 8 | **Slice 2's terrain and map-view decisions:** the map's edge is the terrarium's **wall**, and the map view's border is double-lined where the wall is in view; a small map gets a shrunk map view; the top bar shows the seed; `--ascii` swaps only what themes cover. Generation uses terrain bands by percentile and carves the route with the fewest carved tiles, then the fewest steps, by orthogonal steps; value noise needs no `libm`. Map sides are 32–1024 tiles. `World::new` can't fail, because the config and data pack are validated when parsed. | Slice 2 design session with the owner | §2.2, §3.1, §3.2, §6.1, §6.2 |
+| 9 | **A bigger default map, with plants and toys by density.** The default map grows from 160×96 to 256×160 (about 2.7× the area): at the recommended terminal size, with the inspector open, 160×96 was only a couple of screens across. Berry bushes, thornbushes and balls are now set per area, so the bigger map gets proportionally more of them and food stays as easy to find; the sprite count doesn't scale. | Owner decision | §3.1, §3.9 |
 
 ---
 
@@ -326,7 +327,7 @@ A replay file contains:
 
 ### 3.1 Grid and terrain
 
-- The world is a fixed-size grid, **160×96 tiles** by default (configurable: each side 32–1024).
+- The world is a fixed-size grid, **256×160 tiles** by default (configurable: each side 32–1024).
 - The map's edge is the terrarium's **wall**. No step crosses it.
 - Movement is 8-directional.
 - Terrain properties come from `data/terrain.ron`:
@@ -548,7 +549,8 @@ This keeps credit assignment clean. If thorns scratched sprites walking past, th
 
 ### 3.9 Defaults and performance
 
-- **Defaults:** 160×96 map; 30 starter sprites (configurable, 20–100); about 150 berry bushes, 40 thornbushes and 6 balls.
+- **Defaults:** 256×160 map; 30 starter sprites (configurable, 20–100).
+- **Plants and toys are set by density**, so a bigger map gets proportionally more and food stays as easy to find: about 150 berry bushes, 40 thornbushes and 6 balls per 15,360 tiles (a 160×96 area). On the default map that is about 400 berry bushes, 107 thornbushes and 16 balls. The sprite count doesn't scale; it stays in the 20–100 range.
 - **Performance target:** **≥200 ticks per second with 100 sprites** in a release build.
 
 ---
