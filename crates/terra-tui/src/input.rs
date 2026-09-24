@@ -2,7 +2,9 @@
 
 use std::collections::HashSet;
 
-use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use ratatui::crossterm::event::{
+    KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
 
 /// Something the player asked the UI to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -16,8 +18,21 @@ pub enum Action {
     Slower {
         held: bool,
     },
+    /// Move the cursor by this many tiles.
+    MoveCursor {
+        dx: i32,
+        dy: i32,
+    },
+    /// A left click on this screen cell.
+    Click {
+        column: u16,
+        row: u16,
+    },
     Quit,
 }
+
+/// How far Shift moves the cursor, in tiles (design §6.5).
+const SHIFT_STEP: i32 = 5;
 
 /// Turns key events into actions, remembering enough to recognise held keys.
 ///
@@ -58,7 +73,21 @@ impl Keys {
         if key.modifiers.contains(KeyModifiers::CONTROL) {
             return (key.code == KeyCode::Char('c')).then_some(Action::Quit);
         }
+        let step = if key.modifiers.contains(KeyModifiers::SHIFT) {
+            SHIFT_STEP
+        } else {
+            1
+        };
+        let move_by = |dx: i32, dy: i32| Some(Action::MoveCursor { dx, dy });
         match key.code {
+            KeyCode::Left | KeyCode::Char('h') => move_by(-step, 0),
+            KeyCode::Right | KeyCode::Char('l') => move_by(step, 0),
+            KeyCode::Up | KeyCode::Char('k') => move_by(0, -step),
+            KeyCode::Down | KeyCode::Char('j') => move_by(0, step),
+            KeyCode::Char('H') => move_by(-SHIFT_STEP, 0),
+            KeyCode::Char('L') => move_by(SHIFT_STEP, 0),
+            KeyCode::Char('K') => move_by(0, -SHIFT_STEP),
+            KeyCode::Char('J') => move_by(0, SHIFT_STEP),
             // Holding space would flicker pause on and off, so only a fresh press toggles.
             KeyCode::Char(' ') => (!held).then_some(Action::TogglePause),
             KeyCode::Char('.') => Some(Action::StepOnce),
@@ -68,6 +97,14 @@ impl Keys {
             _ => None,
         }
     }
+}
+
+/// The action for a mouse event, if it has one: only a left-button press acts.
+pub fn mouse_action(event: MouseEvent) -> Option<Action> {
+    (event.kind == MouseEventKind::Down(MouseButton::Left)).then_some(Action::Click {
+        column: event.column,
+        row: event.row,
+    })
 }
 
 /// Identifies the physical key behind a character, so a key pressed with Shift

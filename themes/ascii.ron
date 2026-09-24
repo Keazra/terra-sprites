@@ -1,0 +1,12 @@
+// The `--ascii` theme (design §6.2): the cp437 theme's meanings in plain ASCII
+// glyphs. It changes only the map's tiles; frames and text stay the same.
+(
+    tiles: {
+        terrain(grass):         (glyph: '.', fg: green),
+        terrain(dirt):          (glyph: ',', fg: yellow),
+        terrain(sand):          (glyph: ':', fg: light_yellow),
+        terrain(shallow_water): (glyph: '~', fg: cyan),
+        terrain(deep_water):    (glyph: '=', fg: blue),
+        terrain(rock):          (glyph: '#', fg: gray),
+    },
+)

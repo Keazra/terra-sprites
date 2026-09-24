@@ -1541,6 +1541,8 @@ name = "terra-tui"
 version = "0.1.0"
 dependencies = [
  "ratatui",
+ "ron",
+ "serde",
  "terra-sim",
 ]
 
