@@ -1,6 +1,6 @@
 // The default world config (design §3.9). `--preset <file>` replaces it.
 (
     // The map's size in tiles. Each side must be from 32 to 1024.
-    width: 160,
-    height: 96,
+    width: 256,
+    height: 160,
 )
