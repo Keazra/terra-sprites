@@ -1,6 +1,7 @@
 //! The UI state (design §6.8): everything the screen shows that isn't the world.
 
 use ratatui::layout::{Position, Rect, Size};
+use serde::Deserialize;
 use terra_sim::{Map, Pos};
 
 use crate::clock::Clock;
@@ -14,28 +15,57 @@ pub enum Flow {
     Quit,
 }
 
+/// What fills the screen besides the map (design §6.8). Menus and help come later.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Screen {
+    Normal,
+    /// "Quit? (y/n)" is waiting for an answer.
+    QuitPrompt,
+}
+
+/// What a click on the map does (design §6.5). The Hand, Reward and Correct
+/// modes arrive with the hand's slices.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CursorMode {
+    Select,
+}
+
+impl CursorMode {
+    /// Every cursor mode. Each theme must give all of them a mark.
+    pub const ALL: [CursorMode; 1] = [CursorMode::Select];
+
+    /// The mode's name on the status line.
+    pub fn label(self) -> &'static str {
+        match self {
+            CursorMode::Select => "SELECT",
+        }
+    }
+}
+
 /// The UI state. Rendering reads it; actions change it.
 pub struct App {
     pub clock: Clock,
     pub theme: Theme,
     /// The seed the world was made from, shown so a map can be made again.
     pub seed: u64,
+    screen: Screen,
+    mode: CursorMode,
     cursor: Pos,
     /// The top-left tile of the viewport.
     viewport: Pos,
     /// The map's size, in tiles.
     map_size: Size,
-    /// Where on screen the map view draws its tiles.
-    tiles: Rect,
-    /// The screen cell under the mouse pointer, while that is one of the map view's tiles.
+    /// The screen cells where the map view draws its tiles.
+    tile_area: Rect,
+    /// The screen cell under the mouse pointer, while that cell shows a tile.
     pointer: Option<Position>,
-    quit_prompt: bool,
 }
 
 impl App {
     /// A new UI for `map`, with the cursor at the map's centre and the viewport
-    /// centred on it. `tiles` is where on screen the map view draws its tiles.
-    pub fn new(map: &Map, theme: Theme, seed: u64, tiles: Rect) -> App {
+    /// centred on it. `tile_area` is where on screen the map view draws its tiles.
+    pub fn new(map: &Map, theme: Theme, seed: u64, tile_area: Rect) -> App {
         let cursor = Pos {
             x: map.width() / 2,
             y: map.height() / 2,
@@ -47,15 +77,16 @@ impl App {
             clock: Clock::new(),
             theme,
             seed,
+            screen: Screen::Normal,
+            mode: CursorMode::Select,
             cursor,
             viewport: Pos {
-                x: centred(cursor.x, tiles.width, map.width()),
-                y: centred(cursor.y, tiles.height, map.height()),
+                x: centred(cursor.x, tile_area.width, map.width()),
+                y: centred(cursor.y, tile_area.height, map.height()),
             },
             map_size: Size::new(map.width(), map.height()),
-            tiles,
+            tile_area,
             pointer: None,
-            quit_prompt: false,
         }
     }
 
@@ -69,28 +100,48 @@ impl App {
         self.viewport
     }
 
-    /// Whether "Quit? (y/n)" is waiting for an answer.
-    pub fn quit_prompt_open(&self) -> bool {
-        self.quit_prompt
+    pub fn screen(&self) -> Screen {
+        self.screen
+    }
+
+    pub fn mode(&self) -> CursorMode {
+        self.mode
+    }
+
+    /// The tile drawn at screen cell `cell`, if the map view draws one there.
+    pub fn tile_at(&self, cell: Position) -> Option<Pos> {
+        let area = self.tile_area;
+        area.contains(cell).then(|| Pos {
+            x: (self.viewport.x + (cell.x - area.x)).min(self.map_size.width - 1),
+            y: (self.viewport.y + (cell.y - area.y)).min(self.map_size.height - 1),
+        })
+    }
+
+    /// The screen cell where `tile` is drawn, if it is in view.
+    pub fn cell_of(&self, tile: Pos) -> Option<Position> {
+        let (area, origin) = (self.tile_area, self.viewport);
+        let in_view = (origin.x..origin.x + area.width).contains(&tile.x)
+            && (origin.y..origin.y + area.height).contains(&tile.y);
+        in_view.then(|| Position::new(area.x + (tile.x - origin.x), area.y + (tile.y - origin.y)))
     }
 
     /// Refits the viewport to where the map view now draws its tiles, as after
-    /// a resize. The viewport stays within the wall.
-    pub fn fit_viewport(&mut self, tiles: Rect) {
-        self.tiles = tiles;
-        self.scroll(0, 0);
+    /// a resize.
+    pub fn fit_viewport(&mut self, tile_area: Rect) {
+        self.tile_area = tile_area;
+        self.settle();
     }
 
     /// Carries out an action, and says whether the game carries on.
     pub fn apply(&mut self, action: Action) -> Flow {
-        if self.quit_prompt {
+        if self.screen == Screen::QuitPrompt {
             match action {
-                Action::Yes | Action::Escape | Action::Quit => return Flow::Quit,
+                Action::Confirm | Action::Back | Action::Quit => return Flow::Quit,
                 // The mouse carries on as usual and doesn't answer the prompt.
-                Action::Point { .. } | Action::Click { .. } => {}
+                Action::Point(_) | Action::Click(_) => {}
                 // Any other key cancels the prompt, and does nothing else.
                 _ => {
-                    self.quit_prompt = false;
+                    self.screen = Screen::Normal;
                     return Flow::Continue;
                 }
             }
@@ -104,27 +155,32 @@ impl App {
             Action::Slower { held: true } => self.clock.slower_held(),
             Action::Scroll { dx, dy } => self.scroll(dx, dy),
             // In Select mode (the only mode so far), a click just points.
-            Action::Point { column, row } | Action::Click { column, row } => {
-                self.point(Position::new(column, row));
-            }
-            Action::Escape => self.quit_prompt = true,
-            Action::Yes | Action::OtherKey => {}
+            Action::Point(cell) | Action::Click(cell) => self.point(cell),
+            Action::Back => self.screen = Screen::QuitPrompt,
+            Action::Confirm | Action::Dismiss => {}
             Action::Quit => return Flow::Quit,
         }
         Flow::Continue
     }
 
-    /// Scrolls the viewport, stopping at the wall. A still pointer then points
-    /// at whatever tile has moved under it.
     fn scroll(&mut self, dx: i32, dy: i32) {
-        let map = self.map_size;
+        let shifted = |origin: u16, delta: i32| {
+            (i32::from(origin) + delta).clamp(0, i32::from(u16::MAX)) as u16
+        };
         self.viewport = Pos {
-            x: clamp_origin(i32::from(self.viewport.x) + dx, self.tiles.width, map.width),
-            y: clamp_origin(
-                i32::from(self.viewport.y) + dy,
-                self.tiles.height,
-                map.height,
-            ),
+            x: shifted(self.viewport.x, dx),
+            y: shifted(self.viewport.y, dy),
+        };
+        self.settle();
+    }
+
+    /// Keeps the viewport within the wall, and the cursor on whatever tile is
+    /// under a still pointer.
+    fn settle(&mut self) {
+        let (map, area) = (self.map_size, self.tile_area);
+        self.viewport = Pos {
+            x: clamp_origin(i32::from(self.viewport.x), area.width, map.width),
+            y: clamp_origin(i32::from(self.viewport.y), area.height, map.height),
         };
         if let Some(cell) = self.pointer {
             self.point(cell);
@@ -132,18 +188,15 @@ impl App {
     }
 
     /// Puts the cursor on the tile at screen cell `cell`. Off the map view's
-    /// tiles, the cursor stays where it was.
+    /// tiles, the cursor stays on its last tile.
     fn point(&mut self, cell: Position) {
-        if !self.tiles.contains(cell) {
-            self.pointer = None;
-            return;
+        match self.tile_at(cell) {
+            Some(tile) => {
+                self.pointer = Some(cell);
+                self.cursor = tile;
+            }
+            None => self.pointer = None,
         }
-        self.pointer = Some(cell);
-        let map = self.map_size;
-        self.cursor = Pos {
-            x: (self.viewport.x + (cell.x - self.tiles.x)).min(map.width - 1),
-            y: (self.viewport.y + (cell.y - self.tiles.y)).min(map.height - 1),
-        };
     }
 }
 

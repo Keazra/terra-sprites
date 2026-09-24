@@ -62,8 +62,12 @@ The part of the map currently shown in the map view.
 _Avoid_: camera
 
 **Cursor**:
-The one-tile marker the player moves over the map. The hand acts on its tile.
-_Avoid_: pointer, selection (the selection is the chosen sprite)
+The 3×3 marker on the map that follows the pointer. A click acts on the tile at its centre, as the cursor mode says.
+_Avoid_: selection (the selection is the chosen sprite)
+
+**Pointer**:
+Where the mouse is on screen. The cursor follows it over the map view.
+_Avoid_: mouse cursor
 
 **Cursor mode**:
 What a click on the map does: Select, Hand, Reward or Correct.
@@ -79,7 +83,7 @@ _Avoid_: skin
 ### The hand
 
 **Hand**:
-The player's way of acting on the terrarium: rewarding, correcting, picking up, putting down and placing. It holds at most one thing.
+The player's way of acting on the terrarium: rewarding, correcting, grabbing, dropping and placing. It holds at most one thing.
 
 **Reward**:
 A pet or hug from the hand, which raises the sprite's reward chemical.

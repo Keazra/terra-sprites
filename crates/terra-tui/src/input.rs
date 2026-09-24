@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use ratatui::crossterm::event::{
     KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
+use ratatui::layout::Position;
 
 /// Something the player asked the UI to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,21 +26,15 @@ pub enum Action {
         dy: i32,
     },
     /// The mouse pointer is over this screen cell.
-    Point {
-        column: u16,
-        row: u16,
-    },
+    Point(Position),
     /// A left click on this screen cell.
-    Click {
-        column: u16,
-        row: u16,
-    },
-    /// `Esc`: back out of whatever is open, or ask to quit.
-    Escape,
-    /// `y`, answering a prompt.
-    Yes,
-    /// A key with no job of its own. It still cancels a prompt.
-    OtherKey,
+    Click(Position),
+    /// Back out of whatever is open, or ask to quit (`Esc`).
+    Back,
+    /// Say yes to a prompt (`y`).
+    Confirm,
+    /// Cancel a prompt: any key with no job of its own.
+    Dismiss,
     /// Quit at once (`Ctrl+C`).
     Quit,
 }
@@ -84,47 +79,46 @@ impl Keys {
         let pressed_again = !self.down.insert(physical);
         let held = key.kind == KeyEventKind::Repeat || (self.releases_reported && pressed_again);
         if key.modifiers.contains(KeyModifiers::CONTROL) {
-            return (key.code == KeyCode::Char('c')).then_some(Action::Quit);
+            let quit = key.code == KeyCode::Char('c');
+            return Some(if quit { Action::Quit } else { Action::Dismiss });
         }
+        // Only Shift makes a scroll key jump: a capital letter may come from Caps Lock.
         let step = if key.modifiers.contains(KeyModifiers::SHIFT) {
             SHIFT_STEP
         } else {
             1
         };
         let scroll = |dx: i32, dy: i32| Some(Action::Scroll { dx, dy });
-        match key.code {
+        let code = match key.code {
+            KeyCode::Char(c) => KeyCode::Char(c.to_ascii_lowercase()),
+            other => other,
+        };
+        match code {
             KeyCode::Up | KeyCode::Char('w') => scroll(0, -step),
             KeyCode::Left | KeyCode::Char('a') => scroll(-step, 0),
             KeyCode::Down | KeyCode::Char('s') => scroll(0, step),
             KeyCode::Right | KeyCode::Char('d') => scroll(step, 0),
-            KeyCode::Char('W') => scroll(0, -SHIFT_STEP),
-            KeyCode::Char('A') => scroll(-SHIFT_STEP, 0),
-            KeyCode::Char('S') => scroll(0, SHIFT_STEP),
-            KeyCode::Char('D') => scroll(SHIFT_STEP, 0),
             // Holding space would flicker pause on and off, so only a fresh press toggles.
             KeyCode::Char(' ') => (!held).then_some(Action::TogglePause),
             // Likewise, a held Esc would answer its own "Quit?" prompt.
-            KeyCode::Esc => (!held).then_some(Action::Escape),
+            KeyCode::Esc => (!held).then_some(Action::Back),
             KeyCode::Char('.') => Some(Action::StepOnce),
             KeyCode::Char('+' | '=') => Some(Action::Faster { held }),
             KeyCode::Char('-') => Some(Action::Slower { held }),
-            KeyCode::Char('y') => Some(Action::Yes),
-            _ => Some(Action::OtherKey),
+            KeyCode::Char('y') => Some(Action::Confirm),
+            _ => Some(Action::Dismiss),
         }
     }
 }
 
-/// The action for a mouse event, if it has one. Moving (or dragging) points;
-/// a left-button press clicks.
+/// The action for a mouse event. Every event says where the pointer is, so it
+/// points there; a left-button press clicks.
 pub fn mouse_action(event: MouseEvent) -> Option<Action> {
-    let (column, row) = (event.column, event.row);
-    match event.kind {
-        MouseEventKind::Moved | MouseEventKind::Drag(MouseButton::Left) => {
-            Some(Action::Point { column, row })
-        }
-        MouseEventKind::Down(MouseButton::Left) => Some(Action::Click { column, row }),
-        _ => None,
-    }
+    let cell = Position::new(event.column, event.row);
+    Some(match event.kind {
+        MouseEventKind::Down(MouseButton::Left) => Action::Click(cell),
+        _ => Action::Point(cell),
+    })
 }
 
 /// Identifies the physical key behind a character, so a key pressed with Shift

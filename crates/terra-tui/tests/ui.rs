@@ -1,5 +1,5 @@
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Rect, Size};
+use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{DataPack, Map, World, WorldConfig};
@@ -121,7 +121,7 @@ fn the_map_view_draws_its_tiles_inside_its_border() {
 }
 
 #[test]
-fn a_small_map_in_the_cp437_theme_with_the_select_cursor() {
+fn a_small_map_in_the_cp437_theme_shows_the_select_cursor() {
     let world = drawn_world(&SMALL_MAP);
     let app = app_for(&world, Theme::cp437(), 40, 8);
     let screen = render(&app, &world, 40, 8);
@@ -190,7 +190,7 @@ fn map_tiles_take_their_theme_colours() {
     let world = drawn_world(&SMALL_MAP);
     let mut app = app_for(&world, Theme::cp437(), 40, 8);
     // Point at the top-left tile, so the cursor sits clear of the tiles checked.
-    app.apply(Action::Point { column: 1, row: 2 });
+    app.apply(Action::Point(Position::new(1, 2)));
     let screen = render(&app, &world, 40, 8);
     assert_eq!(screen[(3, 2)].fg, Color::Green, "grass");
     assert_eq!(screen[(6, 3)].fg, Color::Blue, "deep water");
@@ -238,7 +238,7 @@ fn the_cursor_is_clipped_at_the_edge_of_the_map_view() {
     let row = ".".repeat(30);
     let world = drawn_world(&vec![row.as_str(); 20]);
     let mut app = app_for(&world, Theme::cp437(), 20, 8);
-    app.apply(Action::Point { column: 1, row: 2 }); // the view's top-left tile
+    app.apply(Action::Point(Position::new(1, 2))); // the view's top-left tile
     assert_eq!(
         lines(&render(&app, &world, 20, 8))[1..7],
         [
@@ -249,6 +249,29 @@ fn the_cursor_is_clipped_at_the_edge_of_the_map_view() {
             "│..................│",
             "└──────────────────┘",
         ]
+    );
+}
+
+#[test]
+fn a_cursor_whose_target_is_out_of_view_is_not_drawn_at_all() {
+    let row = ".".repeat(30);
+    let world = drawn_world(&vec![row.as_str(); 20]);
+    let mut app = app_for(&world, Theme::cp437(), 20, 8);
+    // Put the cursor on the view's rightmost column, (23, 10), then move the
+    // pointer off the map and scroll left, so the cursor's tile leaves the view.
+    app.apply(Action::Point(Position::new(18, 4)));
+    assert_eq!(app.cursor(), terra_sim::Pos { x: 23, y: 10 });
+    app.apply(Action::Point(Position::new(0, 4)));
+    app.apply(Action::Scroll { dx: -1, dy: 0 });
+    assert_eq!(
+        lines(&render(&app, &world, 20, 8))[2..6],
+        [
+            "│..................│",
+            "│..................│",
+            "│..................│",
+            "│..................│",
+        ],
+        "no stray arrows or marks at the view's edge"
     );
 }
 
@@ -266,10 +289,7 @@ fn the_status_line_names_the_terrain_under_the_cursor() {
     for ((x, y), expected) in cases {
         let mut app = app_for(&world, Theme::cp437(), 40, 8);
         // Tiles are drawn from screen cell (1, 2).
-        app.apply(Action::Point {
-            column: 1 + x,
-            row: 2 + y,
-        });
+        app.apply(Action::Point(Position::new(1 + x, 2 + y)));
         assert_eq!(lines(&render(&app, &world, 40, 8))[7], expected);
     }
 }
@@ -298,6 +318,6 @@ fn with_room_the_status_line_also_shows_the_keys() {
 fn the_quit_prompt_takes_over_the_status_line() {
     let world = drawn_world(&SMALL_MAP);
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    app.apply(Action::Escape);
+    app.apply(Action::Back);
     assert_eq!(lines(&render(&app, &world, 100, 30))[29], " Quit? (y/n)");
 }

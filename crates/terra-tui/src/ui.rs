@@ -4,12 +4,12 @@ use ratatui::{
     Frame,
     buffer::Buffer,
     layout::{Constraint, Layout, Margin, Position, Rect, Size},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::Line,
 };
 use terra_sim::{Map, Pos, Terrain, World};
 
-use crate::app::App;
+use crate::app::{App, Screen};
 use crate::clock::Speed;
 use crate::theme::SemanticTile;
 
@@ -80,11 +80,10 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, map: &Map) {
     draw_cursor(buf, inner, app);
 }
 
-/// The Select mode's colour: the cursor's arrows and marks take it (design §6.5).
-const SELECT_COLOUR: Color = Color::White;
-
 /// Draws the 3×3 cursor around its target tile, which the tile loop has already
-/// drawn in reverse video. Pieces outside the map view's tiles aren't drawn.
+/// drawn in reverse video. The arrows and marks take the mode mark's colour. The
+/// cursor is drawn only while its target is in view, and pieces outside the map
+/// view's tiles are left off.
 ///
 /// ```text
 /// M ↓ Y      M: the mode mark
@@ -92,29 +91,30 @@ const SELECT_COLOUR: Color = Color::White;
 /// N ↑ M
 /// ```
 fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App) {
-    let glyphs = app.theme.cursor();
-    let (cursor, origin) = (app.cursor(), app.viewport());
-    let centre_x = i32::from(tiles.x) + i32::from(cursor.x) - i32::from(origin.x);
-    let centre_y = i32::from(tiles.y) + i32::from(cursor.y) - i32::from(origin.y);
+    let Some(centre) = app.cell_of(app.cursor()) else {
+        return;
+    };
+    let (arrows, status) = (app.theme.arrows(), app.theme.status_marks());
+    let mark = app.theme.mode_mark(app.mode());
     let pieces = [
-        (-1, -1, glyphs.select),
-        (0, -1, glyphs.down),
-        (1, -1, glyphs.idle),
-        (-1, 0, glyphs.right),
-        (1, 0, glyphs.left),
-        (-1, 1, glyphs.idle),
-        (0, 1, glyphs.up),
-        (1, 1, glyphs.select),
+        (-1, -1, mark.symbol),
+        (0, -1, arrows.down),
+        (1, -1, status.idle),
+        (-1, 0, arrows.right),
+        (1, 0, arrows.left),
+        (-1, 1, status.idle),
+        (0, 1, arrows.up),
+        (1, 1, mark.symbol),
     ];
     for (dx, dy, glyph) in pieces {
-        let (x, y) = (centre_x + dx, centre_y + dy);
-        let on_screen = u16::try_from(x).ok().zip(u16::try_from(y).ok());
-        if let Some((x, y)) = on_screen
+        let x = centre.x.checked_add_signed(dx);
+        let y = centre.y.checked_add_signed(dy);
+        if let Some((x, y)) = x.zip(y)
             && tiles.contains(Position::new(x, y))
         {
             buf[(x, y)]
                 .set_char(glyph)
-                .set_style(Style::default().fg(SELECT_COLOUR));
+                .set_style(Style::default().fg(mark.fg));
         }
     }
 }
@@ -179,12 +179,13 @@ const KEY_HINTS: &str = "WASD scroll  space pause  . step  +/- speed  esc quit "
 /// The tile under the cursor and the cursor mode, then key hints if they fit in
 /// `width` cells. An open prompt takes the line over.
 fn status_line(app: &App, map: &Map, width: u16) -> Line<'static> {
-    if app.quit_prompt_open() {
+    if app.screen() == Screen::QuitPrompt {
         return Line::from(" Quit? (y/n)");
     }
     let cursor = app.cursor();
     let terrain = terrain_name(map.terrain(cursor));
-    let tile = format!(" ({},{}) {terrain} │ SELECT", cursor.x, cursor.y);
+    let mode = app.mode().label();
+    let tile = format!(" ({},{}) {terrain} │ {mode}", cursor.x, cursor.y);
     let used = tile.chars().count() + KEY_HINTS.chars().count();
     match usize::from(width).checked_sub(used) {
         Some(gap) if gap >= 2 => Line::from(format!("{tile}{}{KEY_HINTS}", " ".repeat(gap))),

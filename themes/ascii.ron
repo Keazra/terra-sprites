@@ -11,11 +11,10 @@
         terrain(rock):          (glyph: '#', fg: gray),
     },
     cursor: (
-        up: '^',
-        down: 'v',
-        left: '<',
-        right: '>',
-        select: 'S',
-        idle: '-',
+        arrows: (up: '^', down: 'v', left: '<', right: '>'),
+        status_marks: (idle: '-'),
+        mode_marks: {
+            select: (glyph: 'S', fg: white),
+        },
     ),
 )
