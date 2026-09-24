@@ -18,6 +18,14 @@ pub(crate) struct Object {
     /// Its type's index in the data pack.
     pub(crate) kind: usize,
     pub(crate) pos: Pos,
+    /// The current stage's index, or `None` if the type has no stages.
+    pub(crate) stage: Option<usize>,
+    /// The tick on whose turn the current stage has run its full length.
+    pub(crate) stage_ends: u64,
+    /// Each counter's value, in the type's counter order.
+    pub(crate) counters: Vec<u16>,
+    /// It hasn't had its first turn yet, on which it enters its first stage.
+    pub(crate) fresh: bool,
 }
 
 /// Every object in the world, and the tile each stands on. A tile holds at most
@@ -49,6 +57,21 @@ impl Objects {
         self.on_tile[self.index(pos)]
     }
 
+    /// The object `id`, if it exists.
+    pub(crate) fn get(&self, id: EntityId) -> Option<&Object> {
+        self.by_id.get(&id)
+    }
+
+    /// The object `id`, if it exists, to change.
+    pub(crate) fn get_mut(&mut self, id: EntityId) -> Option<&mut Object> {
+        self.by_id.get_mut(&id)
+    }
+
+    /// Every object, in ascending ID order.
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (EntityId, &Object)> {
+        self.by_id.iter().map(|(&id, object)| (id, object))
+    }
+
     /// The type index of the object `id`, which must exist.
     pub(crate) fn kind(&self, id: EntityId) -> usize {
         self.by_id[&id].kind
@@ -62,25 +85,19 @@ impl Objects {
         if !map.is_walkable(pos) || self.at(pos).is_some() {
             return false;
         }
-        if !data.object_types()[kind].solid {
-            return true;
-        }
-        data.terrain(map.terrain(pos)).allows_fixtures()
-            && Dir::ALL.iter().all(|&dir| {
-                map.neighbour(pos, dir)
-                    .is_some_and(|n| map.is_walkable(n) && !self.is_solid_at(data, n))
-            })
+        !data.object_types()[kind].solid || self.has_clear_ring(map, data, pos)
     }
 
-    /// Puts a new object on the tile at `pos`. The caller has checked `can_place`.
-    pub(crate) fn place(&mut self, id: EntityId, kind: usize, pos: Pos) {
-        let index = self.index(pos);
+    /// Puts a new object on its tile. The caller has checked `can_place`.
+    pub(crate) fn place(&mut self, id: EntityId, object: Object) {
+        let index = self.index(object.pos);
         debug_assert!(
             self.on_tile[index].is_none(),
-            "{pos:?} already holds an object"
+            "{:?} already holds an object",
+            object.pos
         );
         self.on_tile[index] = Some(id);
-        self.by_id.insert(id, Object { kind, pos });
+        self.by_id.insert(id, object);
     }
 
     /// Takes the object `id`, which must exist, out of the world.
@@ -92,6 +109,57 @@ impl Objects {
         let index = self.index(object.pos);
         self.on_tile[index] = None;
         object
+    }
+
+    /// Checks that every object stands where the rules allow, alone on its
+    /// tile, with its stage and counters in range; describes the first problem.
+    pub(crate) fn check(&self, map: &Map, data: &DataPack) -> Result<(), String> {
+        let indexed = self.on_tile.iter().flatten().count();
+        if indexed != self.by_id.len() {
+            return Err(format!(
+                "{indexed} tiles hold objects, but there are {} objects",
+                self.by_id.len()
+            ));
+        }
+        for (&id, object) in &self.by_id {
+            let object_type = &data.object_types()[object.kind];
+            let problem = if self.at(object.pos) != Some(id) {
+                "isn't on its tile in the index"
+            } else if object_type.pseudo {
+                "is of a pseudo type"
+            } else if !map.is_walkable(object.pos) {
+                "stands on a tile that isn't walkable"
+            } else if object_type.solid && !self.has_clear_ring(map, data, object.pos) {
+                "is solid but lacks its clear ring"
+            } else if object.stage.is_some_and(|s| s >= object_type.stages.len()) {
+                "is in a stage its type doesn't have"
+            } else if object.counters.len() != object_type.counters.len()
+                || object
+                    .counters
+                    .iter()
+                    .zip(&object_type.counters)
+                    .any(|(&value, counter)| value > counter.max)
+            {
+                "has a counter out of range"
+            } else {
+                continue;
+            };
+            return Err(format!(
+                "{} {id:?} at {:?} {problem}",
+                object_type.name, object.pos
+            ));
+        }
+        Ok(())
+    }
+
+    /// Whether a solid object on `pos` meets the ring rule: terrain that allows
+    /// fixtures, and 8 walkable neighbours holding no solid object.
+    fn has_clear_ring(&self, map: &Map, data: &DataPack, pos: Pos) -> bool {
+        data.terrain(map.terrain(pos)).allows_fixtures()
+            && Dir::ALL.iter().all(|&dir| {
+                map.neighbour(pos, dir)
+                    .is_some_and(|n| map.is_walkable(n) && !self.is_solid_at(data, n))
+            })
     }
 
     fn is_solid_at(&self, data: &DataPack, pos: Pos) -> bool {
@@ -154,7 +222,15 @@ mod tests {
             assert!(self.can_place(name, pos), "{name} at {pos:?}");
             let id = EntityId(self.next_id);
             self.next_id += 1;
-            self.objects.place(id, self.kind(name), pos);
+            let object = Object {
+                kind: self.kind(name),
+                pos,
+                stage: None,
+                stage_ends: 0,
+                counters: Vec::new(),
+                fresh: false,
+            };
+            self.objects.place(id, object);
             id
         }
 

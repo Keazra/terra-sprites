@@ -2,11 +2,11 @@
 //! percentile, then one region.
 
 use rand_chacha::ChaCha8Rng;
-use rand_chacha::rand_core::Rng;
 
 use crate::config::WorldConfig;
 use crate::data::DataPack;
 use crate::map::Map;
+use crate::random::unit;
 use crate::regions;
 use crate::terrain::Terrain;
 
@@ -103,9 +103,4 @@ fn cell(coord: u16, spacing: u16) -> (usize, f32) {
 
 fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
-}
-
-/// A random value in [0, 1) from the top 24 bits of a draw, so it is exact in `f32`.
-fn unit(rng: &mut ChaCha8Rng) -> f32 {
-    (rng.next_u32() >> 8) as f32 / (1u32 << 24) as f32
 }
