@@ -1,8 +1,12 @@
-//! Maps keys to UI actions (design §6.5–6.6), telling held keys from fresh presses.
+//! Maps keys and the mouse to UI actions (design §6.5–6.6), telling held keys
+//! from fresh presses.
 
 use std::collections::HashSet;
 
-use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use ratatui::crossterm::event::{
+    KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
+use ratatui::layout::Position;
 
 /// Something the player asked the UI to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -16,8 +20,27 @@ pub enum Action {
     Slower {
         held: bool,
     },
+    /// Scroll the viewport by this many tiles.
+    Scroll {
+        dx: i32,
+        dy: i32,
+    },
+    /// The mouse pointer is over this screen cell.
+    Point(Position),
+    /// A left click on this screen cell.
+    Click(Position),
+    /// Back out of whatever is open, or ask to quit (`Esc`).
+    Back,
+    /// Say yes to a prompt (`y`).
+    Confirm,
+    /// Cancel a prompt: any key with no job of its own.
+    Dismiss,
+    /// Quit at once (`Ctrl+C`).
     Quit,
 }
+
+/// How far Shift scrolls the viewport, in tiles (design §6.5).
+const SHIFT_STEP: i32 = 5;
 
 /// Turns key events into actions, remembering enough to recognise held keys.
 ///
@@ -56,18 +79,47 @@ impl Keys {
         let pressed_again = !self.down.insert(physical);
         let held = key.kind == KeyEventKind::Repeat || (self.releases_reported && pressed_again);
         if key.modifiers.contains(KeyModifiers::CONTROL) {
-            return (key.code == KeyCode::Char('c')).then_some(Action::Quit);
+            let quit = key.code == KeyCode::Char('c');
+            return Some(if quit { Action::Quit } else { Action::Dismiss });
         }
-        match key.code {
+        // Only Shift makes a scroll key jump: a capital letter may come from Caps Lock.
+        let step = if key.modifiers.contains(KeyModifiers::SHIFT) {
+            SHIFT_STEP
+        } else {
+            1
+        };
+        let scroll = |dx: i32, dy: i32| Some(Action::Scroll { dx, dy });
+        let code = match key.code {
+            KeyCode::Char(c) => KeyCode::Char(c.to_ascii_lowercase()),
+            other => other,
+        };
+        match code {
+            KeyCode::Up | KeyCode::Char('w') => scroll(0, -step),
+            KeyCode::Left | KeyCode::Char('a') => scroll(-step, 0),
+            KeyCode::Down | KeyCode::Char('s') => scroll(0, step),
+            KeyCode::Right | KeyCode::Char('d') => scroll(step, 0),
             // Holding space would flicker pause on and off, so only a fresh press toggles.
             KeyCode::Char(' ') => (!held).then_some(Action::TogglePause),
+            // Likewise, a held Esc would answer its own "Quit?" prompt.
+            KeyCode::Esc => (!held).then_some(Action::Back),
             KeyCode::Char('.') => Some(Action::StepOnce),
             KeyCode::Char('+' | '=') => Some(Action::Faster { held }),
             KeyCode::Char('-') => Some(Action::Slower { held }),
-            KeyCode::Char('q') => Some(Action::Quit),
-            _ => None,
+            KeyCode::Char('y') => Some(Action::Confirm),
+            _ => Some(Action::Dismiss),
         }
     }
+}
+
+/// The action for a mouse event. Every event says where the pointer is, so it
+/// points there; a left-button press clicks. (The wheel will cycle the cursor
+/// modes once there is more than one, design §6.5.)
+pub fn mouse_action(event: MouseEvent) -> Option<Action> {
+    let cell = Position::new(event.column, event.row);
+    Some(match event.kind {
+        MouseEventKind::Down(MouseButton::Left) => Action::Click(cell),
+        _ => Action::Point(cell),
+    })
 }
 
 /// Identifies the physical key behind a character, so a key pressed with Shift

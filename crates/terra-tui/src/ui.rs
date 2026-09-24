@@ -2,32 +2,210 @@
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout},
+    buffer::Buffer,
+    layout::{Constraint, Layout, Margin, Position, Rect, Size},
     style::{Modifier, Style},
     text::Line,
 };
-use terra_sim::World;
+use terra_sim::{Map, Pos, Terrain, World};
 
-use crate::clock::{Clock, Speed};
+use crate::app::{App, Screen};
+use crate::clock::Speed;
+use crate::theme::SemanticTile;
 
-/// Draws one frame: the top bar, and (from slice 2) the map beneath it.
-pub fn render(frame: &mut Frame, world: &World, clock: &Clock) {
-    let [top_bar, _map] =
-        Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(frame.area());
-    frame.render_widget(top_bar_line(world, clock), top_bar);
+/// Draws one frame: the top bar, the map view and the status line.
+pub fn render(frame: &mut Frame, app: &App, world: &World) {
+    let area = frame.area();
+    let [top_bar, _, status] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Min(0),
+        Constraint::Length(1),
+    ])
+    .areas(area);
+    frame.render_widget(top_bar_line(app, world), top_bar);
+    render_map_view(
+        frame.buffer_mut(),
+        map_view_area(area, world.map()),
+        app,
+        world.map(),
+    );
+    frame.render_widget(status_line(app, world.map(), status.width), status);
 }
 
-fn top_bar_line(world: &World, clock: &Clock) -> Line<'static> {
+/// Where the map view draws its tiles on a screen of `screen` cells: inside
+/// its border, between the top bar and the status line, and no bigger than
+/// the map itself.
+pub fn tile_area(screen: Size, map: &Map) -> Rect {
+    map_view_area(screen.into(), map).inner(Margin::new(1, 1))
+}
+
+/// The map view, border included: below the top bar, at the left, shrunk to fit a small map.
+fn map_view_area(screen: Rect, map: &Map) -> Rect {
+    let width = (map.width().saturating_add(2)).min(screen.width);
+    let height = (map.height().saturating_add(2)).min(screen.height.saturating_sub(2));
+    Rect::new(screen.x, screen.y + 1.min(screen.height), width, height)
+}
+
+fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, map: &Map) {
+    if area.width < 2 || area.height < 2 {
+        return;
+    }
+    let inner = area.inner(Margin::new(1, 1));
+    let origin = app.viewport();
+    // The wall is in view on any side where the viewport reaches the map's edge.
+    let walls = Sides {
+        left: origin.x == 0,
+        right: origin.x + inner.width >= map.width(),
+        top: origin.y == 0,
+        bottom: origin.y + inner.height >= map.height(),
+    };
+    draw_border(buf, area, " Map ", walls);
+
+    // Normally the view fits the map, but if the terminal grew since the app
+    // last fitted its view, stop at the wall rather than read past it.
+    let cols = inner.width.min(map.width() - origin.x);
+    let rows = inner.height.min(map.height() - origin.y);
+    for row in 0..rows {
+        for col in 0..cols {
+            let pos = Pos {
+                x: origin.x + col,
+                y: origin.y + row,
+            };
+            let glyph = app.theme.glyph(SemanticTile::Terrain(map.terrain(pos)));
+            let mut style = Style::default().fg(glyph.fg);
+            if pos == app.cursor() {
+                style = style.add_modifier(Modifier::REVERSED);
+            }
+            buf[(inner.x + col, inner.y + row)]
+                .set_char(glyph.symbol)
+                .set_style(style);
+        }
+    }
+    draw_cursor(buf, inner, app);
+}
+
+/// Draws the 3×3 cursor around its target tile, which the tile loop has already
+/// drawn in reverse video. The arrows and marks take the mode mark's colour. The
+/// cursor is drawn only while its target is in view, and pieces outside the map
+/// view's tiles are left off.
+///
+/// ```text
+/// M ↓ Y      M: the mode mark
+/// → ☺ ←      Y, N: the status marks
+/// N ↑ M
+/// ```
+fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App) {
+    let Some(centre) = app.cell_of(app.cursor()) else {
+        return;
+    };
+    let (arrows, status) = (app.theme.arrows(), app.theme.status_marks());
+    let mark = app.theme.mode_mark(app.mode());
+    let pieces = [
+        (-1, -1, mark.symbol),
+        (0, -1, arrows.down),
+        (1, -1, status.idle),
+        (-1, 0, arrows.right),
+        (1, 0, arrows.left),
+        (-1, 1, status.idle),
+        (0, 1, arrows.up),
+        (1, 1, mark.symbol),
+    ];
+    for (dx, dy, glyph) in pieces {
+        let x = centre.x.checked_add_signed(dx);
+        let y = centre.y.checked_add_signed(dy);
+        if let Some((x, y)) = x.zip(y)
+            && tiles.contains(Position::new(x, y))
+        {
+            buf[(x, y)]
+                .set_char(glyph)
+                .set_style(Style::default().fg(mark.fg));
+        }
+    }
+}
+
+/// Which sides of the map view's border are the terrarium's wall.
+struct Sides {
+    left: bool,
+    right: bool,
+    top: bool,
+    bottom: bool,
+}
+
+/// Draws a box around `area` with `title` in its top edge. Sides that are the
+/// wall use double lines; the others single lines.
+fn draw_border(buf: &mut Buffer, area: Rect, title: &str, walls: Sides) {
+    let horizontal = |wall| if wall { "═" } else { "─" };
+    let vertical = |wall| if wall { "║" } else { "│" };
+    // Corners by (horizontal side is the wall, vertical side is the wall).
+    let corner = |h, v, [both, h_only, v_only, neither]: [&'static str; 4]| match (h, v) {
+        (true, true) => both,
+        (true, false) => h_only,
+        (false, true) => v_only,
+        (false, false) => neither,
+    };
+    let (left, right) = (area.left(), area.right() - 1);
+    let (top, bottom) = (area.top(), area.bottom() - 1);
+    for x in left + 1..right {
+        buf[(x, top)].set_symbol(horizontal(walls.top));
+        buf[(x, bottom)].set_symbol(horizontal(walls.bottom));
+    }
+    for y in top + 1..bottom {
+        buf[(left, y)].set_symbol(vertical(walls.left));
+        buf[(right, y)].set_symbol(vertical(walls.right));
+    }
+    buf[(left, top)].set_symbol(corner(walls.top, walls.left, ["╔", "╒", "╓", "┌"]));
+    buf[(right, top)].set_symbol(corner(walls.top, walls.right, ["╗", "╕", "╖", "┐"]));
+    buf[(left, bottom)].set_symbol(corner(walls.bottom, walls.left, ["╚", "╘", "╙", "└"]));
+    buf[(right, bottom)].set_symbol(corner(walls.bottom, walls.right, ["╝", "╛", "╜", "┘"]));
+    // The title sits one cell in from the corner, as in "┌─ Map ──".
+    let room = usize::from(area.width.saturating_sub(3));
+    buf.set_stringn(left + 2, top, title, room, Style::default());
+}
+
+fn top_bar_line(app: &App, world: &World) -> Line<'static> {
+    let clock = &app.clock;
     let time = if clock.is_paused() {
         "|| paused".to_string()
     } else {
         format!("► {}", speed_label(clock.speed()))
     };
     let text = format!(
-        " Terra Sprites │ tick {} │ {time}",
-        group_thousands(world.tick())
+        " Terra Sprites │ tick {} │ {time} │ seed {}",
+        group_thousands(world.tick()),
+        app.seed
     );
     Line::from(text).style(Style::default().add_modifier(Modifier::REVERSED))
+}
+
+/// The keys that work now, shown at the right of the status line when there is room.
+const KEY_HINTS: &str = "WASD scroll  space pause  . step  +/- speed  esc quit ";
+
+/// The tile under the cursor and the cursor mode, then key hints if they fit in
+/// `width` cells. An open prompt takes the line over.
+fn status_line(app: &App, map: &Map, width: u16) -> Line<'static> {
+    if app.screen() == Screen::QuitPrompt {
+        return Line::from(" Quit? (y/n)");
+    }
+    let cursor = app.cursor();
+    let terrain = terrain_name(map.terrain(cursor));
+    let mode = app.mode().label();
+    let tile = format!(" ({},{}) {terrain} │ {mode}", cursor.x, cursor.y);
+    let used = tile.chars().count() + KEY_HINTS.chars().count();
+    match usize::from(width).checked_sub(used) {
+        Some(gap) if gap >= 2 => Line::from(format!("{tile}{}{KEY_HINTS}", " ".repeat(gap))),
+        _ => Line::from(tile),
+    }
+}
+
+fn terrain_name(terrain: Terrain) -> &'static str {
+    match terrain {
+        Terrain::Grass => "grass",
+        Terrain::Dirt => "dirt",
+        Terrain::Sand => "sand",
+        Terrain::ShallowWater => "shallow water",
+        Terrain::DeepWater => "deep water",
+        Terrain::Rock => "rock",
+    }
 }
 
 fn speed_label(speed: Speed) -> &'static str {

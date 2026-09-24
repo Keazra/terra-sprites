@@ -1,9 +1,16 @@
+use std::collections::BTreeMap;
+
+use ron::extensions::Extensions;
 use serde::Deserialize;
+
+use crate::terrain::{Terrain, TerrainProps};
 
 /// A validated data pack: everything a world needs from `data/`.
 #[derive(Debug, Clone)]
 pub struct DataPack {
     manifest: Manifest,
+    /// Indexed by `Terrain as usize`.
+    terrain: Vec<TerrainProps>,
 }
 
 /// Why a data pack could not be loaded.
@@ -19,9 +26,14 @@ pub enum DataError {
 
 /// The name of the pack manifest, relative to the pack root.
 const MANIFEST: &str = "pack.ron";
+/// The terrain properties file, relative to the pack root.
+const TERRAIN: &str = "terrain.ron";
 
 /// The default pack's files, embedded at compile time from the repository's `data/`.
-const BUILTIN: &[(&str, &str)] = &[(MANIFEST, include_str!("../../../data/pack.ron"))];
+const BUILTIN: &[(&str, &str)] = &[
+    (MANIFEST, include_str!("../../../data/pack.ron")),
+    (TERRAIN, include_str!("../../../data/terrain.ron")),
+];
 
 /// `pack.ron`: identifies the pack.
 #[derive(Debug, Clone, Deserialize)]
@@ -45,6 +57,81 @@ impl Manifest {
     }
 }
 
+/// One entry of `terrain.ron`, before validation.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TerrainEntry {
+    walkable: bool,
+    #[serde(default)]
+    step_cost: Option<u16>,
+    #[serde(default)]
+    fertility: Option<f32>,
+    #[serde(default)]
+    drinkable: Option<bool>,
+}
+
+/// Checks `terrain.ron` and returns each terrain's properties, indexed by `Terrain as usize`.
+fn terrain_table(
+    mut entries: BTreeMap<Terrain, TerrainEntry>,
+) -> Result<Vec<TerrainProps>, DataError> {
+    Terrain::ALL
+        .iter()
+        .map(|&terrain| {
+            let name = terrain_name(terrain);
+            let invalid = |problem: &str| DataError::Invalid {
+                file: TERRAIN.into(),
+                message: format!("`{name}` {problem}"),
+            };
+            let entry = entries
+                .remove(&terrain)
+                .ok_or_else(|| invalid("is missing"))?;
+            entry.into_props(terrain).map_err(invalid)
+        })
+        .collect()
+}
+
+impl TerrainEntry {
+    /// The validated properties, or what is wrong with the entry.
+    fn into_props(self, terrain: Terrain) -> Result<TerrainProps, &'static str> {
+        if !self.walkable {
+            // Carving turns unwalkable tiles into these two, so they must be walkable
+            // for a generated map to be connected (design §3.2).
+            if matches!(terrain, Terrain::Dirt | Terrain::ShallowWater) {
+                return Err("must be walkable, because carving creates it");
+            }
+            if self.step_cost.is_some() || self.fertility.is_some() || self.drinkable.is_some() {
+                return Err("is unwalkable, so it takes nothing but `walkable: false`");
+            }
+            return Ok(TerrainProps {
+                step_cost: None,
+                fertility: 0.0,
+                drinkable: false,
+            });
+        }
+        let step_cost = match self.step_cost {
+            Some(cost) if cost > 0 => cost,
+            _ => return Err("is walkable, so it needs a `step_cost` above 0"),
+        };
+        let fertility = match self.fertility {
+            Some(fertility) if (0.0..=1.0).contains(&fertility) => fertility,
+            _ => return Err("is walkable, so it needs a `fertility` from 0 to 1"),
+        };
+        let Some(drinkable) = self.drinkable else {
+            return Err("is walkable, so it must say whether it is `drinkable`");
+        };
+        Ok(TerrainProps {
+            step_cost: Some(step_cost),
+            fertility,
+            drinkable,
+        })
+    }
+}
+
+/// A terrain's name as written in `terrain.ron`.
+fn terrain_name(terrain: Terrain) -> String {
+    ron::to_string(&terrain).expect("a unit variant always serializes")
+}
+
 impl DataPack {
     /// The default data pack embedded in the binary.
     pub fn builtin() -> Result<DataPack, DataError> {
@@ -55,7 +142,8 @@ impl DataPack {
     pub fn from_sources(sources: &[(&str, &str)]) -> Result<DataPack, DataError> {
         let manifest = parse::<Manifest>(sources, MANIFEST)?;
         manifest.validate()?;
-        Ok(DataPack { manifest })
+        let terrain = terrain_table(parse(sources, TERRAIN)?)?;
+        Ok(DataPack { manifest, terrain })
     }
 
     /// The pack's name, from its manifest.
@@ -66,6 +154,11 @@ impl DataPack {
     /// The pack's version, from its manifest.
     pub fn version(&self) -> &str {
         &self.manifest.version
+    }
+
+    /// A terrain's properties, from `terrain.ron`.
+    pub fn terrain(&self, terrain: Terrain) -> &TerrainProps {
+        &self.terrain[terrain as usize]
     }
 }
 
@@ -78,8 +171,12 @@ fn parse<T: for<'de> Deserialize<'de>>(
         .iter()
         .find(|(path, _)| *path == file)
         .ok_or_else(|| DataError::MissingFile(file.into()))?;
-    ron::from_str(text).map_err(|e| DataError::Parse {
-        file: file.into(),
-        message: e.to_string(),
-    })
+    // `implicit_some` lets optional fields be written as plain values: `step_cost: 10`.
+    ron::Options::default()
+        .with_default_extension(Extensions::IMPLICIT_SOME)
+        .from_str(text)
+        .map_err(|e| DataError::Parse {
+            file: file.into(),
+            message: e.to_string(),
+        })
 }

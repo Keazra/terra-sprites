@@ -1,0 +1,27 @@
+// The default theme (design §6.2): CP437 glyphs, so any CP437 bitmap font or
+// tileset can draw it. Every kind of thing has its own glyph; colour only
+// decorates or marks state. Colours are the 16 terminal colours, by name:
+// black, red, green, yellow, blue, magenta, cyan, gray, dark_gray, light_red,
+// light_green, light_yellow, light_blue, light_magenta, light_cyan, white.
+(
+    tiles: {
+        terrain(grass):         (glyph: '.', fg: green),
+        terrain(dirt):          (glyph: ',', fg: yellow), // dark yellow: terminals have no brown
+        terrain(sand):          (glyph: ':', fg: light_yellow),
+        terrain(shallow_water): (glyph: '~', fg: cyan),
+        terrain(deep_water):    (glyph: '≈', fg: blue),
+        terrain(rock):          (glyph: '#', fg: gray),
+    },
+    // The 3×3 cursor (design §6.5). The arrows are named by the way they point.
+    // Each mode's mark gives the cursor its colour: the arrows and status marks
+    // take it too.
+    cursor: (
+        arrows: (up: '↑', down: '↓', left: '←', right: '→'),
+        status_marks: (
+            idle: '·', // nothing to report
+        ),
+        mode_marks: {
+            select: (glyph: '♦', fg: white),
+        },
+    ),
+)

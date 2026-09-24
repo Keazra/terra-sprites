@@ -1,15 +1,18 @@
 //! `terra-sprites`: owns the terminal and runs the frame loop (design §6.6).
 //! All logic worth testing lives in the `terra_tui` library.
 
-use std::io;
+use std::io::{self, stdout};
 use std::process::ExitCode;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use ratatui::DefaultTerminal;
-use ratatui::crossterm::event::{self, Event};
-use terra_sim::{DataPack, World};
-use terra_tui::clock::Clock;
-use terra_tui::input::{Action, Keys};
+use ratatui::crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event};
+use ratatui::crossterm::execute;
+use terra_sim::{DataPack, World, WorldConfig};
+use terra_tui::app::{App, Flow};
+use terra_tui::args::{Args, USAGE};
+use terra_tui::input::{self, Keys};
+use terra_tui::theme::Theme;
 use terra_tui::ui;
 
 /// About 30 frames per second.
@@ -18,9 +21,28 @@ const FRAME: Duration = Duration::from_millis(33);
 const SIM_BUDGET: Duration = Duration::from_millis(25);
 
 fn main() -> ExitCode {
-    // Hidden developer flag: panics after the first frame, to check the terminal is restored.
-    let force_panic = std::env::args().any(|arg| arg == "--force-panic");
-
+    let args = match Args::parse(std::env::args().skip(1)) {
+        Ok(args) => args,
+        Err(err) => {
+            eprintln!("terra-sprites: {err}\n{USAGE}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let config = match &args.preset {
+        None => WorldConfig::builtin(),
+        Some(path) => {
+            let loaded = std::fs::read_to_string(path)
+                .map_err(|err| err.to_string())
+                .and_then(|text| WorldConfig::from_ron(&text).map_err(|err| err.to_string()));
+            match loaded {
+                Ok(config) => config,
+                Err(err) => {
+                    eprintln!("terra-sprites: can't use preset {}: {err}", path.display());
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
+    };
     let data = match DataPack::builtin() {
         Ok(data) => data,
         Err(err) => {
@@ -28,7 +50,13 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let world = World::new(data, time_seed());
+    let seed = args.seed.unwrap_or_else(time_seed);
+    let world = World::new(config, data, seed);
+    let theme = if args.ascii {
+        Theme::ascii()
+    } else {
+        Theme::cp437()
+    };
 
     // Installs a panic hook that restores the terminal before the panic is reported.
     let mut terminal = match ratatui::try_init() {
@@ -38,7 +66,15 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let result = run(&mut terminal, world, force_panic);
+    // Mouse capture isn't part of ratatui's restore, so the panic hook turns it off too.
+    let restore_terminal = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = execute!(stdout(), DisableMouseCapture);
+        restore_terminal(info);
+    }));
+    let result = execute!(stdout(), EnableMouseCapture)
+        .and_then(|()| run(&mut terminal, world, theme, seed, args.force_panic));
+    let _ = execute!(stdout(), DisableMouseCapture);
     ratatui::restore();
 
     match result {
@@ -50,13 +86,22 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(terminal: &mut DefaultTerminal, mut world: World, force_panic: bool) -> io::Result<()> {
-    let mut clock = Clock::new();
+fn run(
+    terminal: &mut DefaultTerminal,
+    mut world: World,
+    theme: Theme,
+    seed: u64,
+    force_panic: bool,
+) -> io::Result<()> {
+    let tiles = ui::tile_area(terminal.size()?, world.map());
+    let mut app = App::new(world.map(), theme, seed, tiles);
     let mut keys = Keys::new();
     let mut last_frame = Instant::now();
 
     loop {
-        terminal.draw(|frame| ui::render(frame, &world, &clock))?;
+        // The terminal may have been resized since the last frame.
+        app.fit_viewport(ui::tile_area(terminal.size()?, world.map()));
+        terminal.draw(|frame| ui::render(frame, &app, &world))?;
         if force_panic {
             panic!("forced panic (--force-panic): the terminal should now be restored");
         }
@@ -64,17 +109,15 @@ fn run(terminal: &mut DefaultTerminal, mut world: World, force_panic: bool) -> i
         // Handle input until the next frame is due.
         let deadline = last_frame + FRAME;
         while event::poll(deadline.saturating_duration_since(Instant::now()))? {
-            if let Event::Key(key) = event::read()? {
-                match keys.action_for(key) {
-                    Some(Action::Quit) => return Ok(()),
-                    Some(Action::TogglePause) => clock.toggle_pause(),
-                    Some(Action::StepOnce) => clock.step_once(),
-                    Some(Action::Faster { held: false }) => clock.faster(),
-                    Some(Action::Faster { held: true }) => clock.faster_held(),
-                    Some(Action::Slower { held: false }) => clock.slower(),
-                    Some(Action::Slower { held: true }) => clock.slower_held(),
-                    None => {}
-                }
+            let action = match event::read()? {
+                Event::Key(key) => keys.action_for(key),
+                Event::Mouse(mouse) => input::mouse_action(mouse),
+                _ => None,
+            };
+            if let Some(action) = action
+                && app.apply(action) == Flow::Quit
+            {
+                return Ok(());
             }
         }
 
@@ -82,7 +125,7 @@ fn run(terminal: &mut DefaultTerminal, mut world: World, force_panic: bool) -> i
         let elapsed = now - last_frame;
         last_frame = now;
         let frame_start = Instant::now();
-        clock.advance(
+        app.clock.advance(
             elapsed,
             || world.step(),
             || frame_start.elapsed() >= SIM_BUDGET,
@@ -90,7 +133,7 @@ fn run(terminal: &mut DefaultTerminal, mut world: World, force_panic: bool) -> i
     }
 }
 
-/// A seed from the clock. `--seed` arrives with world presets in slice 2.
+/// A seed from the clock, used when `--seed` isn't given.
 fn time_seed() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
