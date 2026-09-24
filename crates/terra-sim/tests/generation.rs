@@ -88,3 +88,16 @@ fn every_default_size_map_has_all_six_terrains() {
         }
     }
 }
+
+#[test]
+fn maps_at_the_size_limits_are_one_region() {
+    for (width, height, seed) in [(1024, 32, 1), (32, 1024, 2), (1024, 1024, 3)] {
+        let world = generate(width, height, seed);
+        let (walkable, reachable) = walkable_and_reachable(world.map());
+        assert!(walkable > 0, "{width}x{height}: no walkable tiles");
+        assert_eq!(
+            reachable, walkable,
+            "{width}x{height}: some walkable tiles are cut off"
+        );
+    }
+}

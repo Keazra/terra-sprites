@@ -15,12 +15,7 @@ pub(crate) fn connect(map: &mut Map, min_region: usize) {
     let Some(mainland) = regions.largest() else {
         return;
     };
-    let mut members = vec![Vec::new(); regions.count()];
-    for (index, region) in regions.of_tile.iter().enumerate() {
-        if let Some(region) = *region {
-            members[region].push(index);
-        }
-    }
+    let members = &regions.members;
 
     let mut in_mainland = vec![false; map.tile_count()];
     for &index in &members[mainland] {
@@ -120,8 +115,9 @@ fn cheapest_route(map: &Map, from: &[usize], in_mainland: &[bool]) -> Vec<usize>
 pub(crate) struct Regions {
     /// Each tile's region, by tile index; `None` for unwalkable tiles.
     of_tile: Vec<Option<usize>>,
-    /// Each region's size in tiles. Regions are numbered in order of their first tile.
-    sizes: Vec<usize>,
+    /// Each region's tile indices, in ascending order. Regions are numbered in
+    /// order of their first tile.
+    members: Vec<Vec<usize>>,
 }
 
 impl Regions {
@@ -155,14 +151,20 @@ impl Regions {
             }
             sizes.push(size);
         }
-        Regions { of_tile, sizes }
+        let mut members = vec![Vec::new(); sizes.len()];
+        for (index, region) in of_tile.iter().enumerate() {
+            if let Some(region) = *region {
+                members[region].push(index);
+            }
+        }
+        Regions { of_tile, members }
     }
 
     /// The largest region: the mainland. Ties go to the region found first.
     fn largest(&self) -> Option<usize> {
         let mut largest: Option<usize> = None;
-        for (region, &size) in self.sizes.iter().enumerate() {
-            if largest.is_none_or(|best| size > self.sizes[best]) {
+        for (region, tiles) in self.members.iter().enumerate() {
+            if largest.is_none_or(|best| tiles.len() > self.members[best].len()) {
                 largest = Some(region);
             }
         }
@@ -171,7 +173,7 @@ impl Regions {
 
     /// How many regions the map has.
     pub(crate) fn count(&self) -> usize {
-        self.sizes.len()
+        self.members.len()
     }
 }
 
@@ -179,38 +181,18 @@ impl Regions {
 mod tests {
     use super::*;
     use crate::data::DataPack;
-    use crate::map::Pos;
-    use crate::terrain::Terrain;
 
     fn draw(rows: &[&str]) -> Map {
         let data = DataPack::builtin().expect("built-in data pack is valid");
         Map::from_ascii(rows, &data).expect("valid drawing")
     }
 
-    /// The map as rows of ascii-legend glyphs.
-    fn rows(map: &Map) -> Vec<String> {
-        (0..map.height())
-            .map(|y| {
-                (0..map.width())
-                    .map(|x| match map.terrain(Pos { x, y }) {
-                        Terrain::Grass => '.',
-                        Terrain::Dirt => ',',
-                        Terrain::Sand => ':',
-                        Terrain::ShallowWater => '~',
-                        Terrain::DeepWater => '=',
-                        Terrain::Rock => '#',
-                    })
-                    .collect()
-            })
-            .collect()
-    }
-
     /// Joins `drawing` with a minimum region size of `min_region` and returns the result.
     fn connected(drawing: &[&str], min_region: usize) -> Vec<String> {
         let mut map = draw(drawing);
         connect(&mut map, min_region);
-        assert_eq!(Regions::find(&map).count(), 1, "{:#?}", rows(&map));
-        rows(&map)
+        assert_eq!(Regions::find(&map).count(), 1, "{:#?}", map.to_ascii());
+        map.to_ascii()
     }
 
     #[test]
@@ -290,6 +272,29 @@ mod tests {
         ];
         let result = connected(&drawing, 4);
         assert_eq!(result[0], "....,,,....");
+    }
+
+    #[test]
+    fn between_routes_carving_the_same_number_of_tiles_the_shorter_wins() {
+        // The left region can reach the mainland (bottom) by carving two tiles
+        // straight down (3 steps), or by carving one tile into the right region,
+        // crossing it, and carving one more (4+ steps). It must go straight down.
+        let drawing = [
+            "...#...", //
+            "...#...", //
+            "#######", //
+            "####...", //
+            ".......", //
+        ];
+        let result = connected(&drawing, 4);
+        let carved = |rows: &[String], columns: std::ops::Range<usize>| -> usize {
+            rows.iter()
+                .map(|row| row[columns.clone()].matches(',').count())
+                .sum()
+        };
+        // Two carves straight below the left region; then one more joins the right region.
+        assert_eq!(carved(&result[2..4], 0..3), 2, "{result:#?}");
+        assert_eq!(carved(&result, 0..7), 3, "{result:#?}");
     }
 
     #[test]

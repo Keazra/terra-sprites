@@ -148,3 +148,17 @@ fn a_drawing_must_be_from_1_to_1024_tiles_on_each_side() {
     let widest = ".".repeat(1024);
     assert!(try_draw(&[widest.as_str()]).is_ok());
 }
+
+#[test]
+fn diagonal_costs_round_down_in_integer_maths() {
+    // Sand at 19 makes a diagonal 19 × 14 / 10 = 26.6, which must round down to 26.
+    let terrain =
+        include_str!("../../../data/terrain.ron").replace("step_cost: 15", "step_cost: 19");
+    let data = DataPack::from_sources(&[
+        ("pack.ron", r#"(name: "test", version: "1")"#),
+        ("terrain.ron", &terrain),
+    ])
+    .expect("valid pack");
+    let map = Map::from_ascii(&["..", ".:"], &data).expect("valid drawing");
+    assert_eq!(map.step_cost(at(0, 0), Dir::SE), Some(26));
+}

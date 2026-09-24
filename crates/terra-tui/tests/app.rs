@@ -29,11 +29,11 @@ fn the_cursor_moves_and_stops_at_the_wall() {
     let map = grass(40, 30);
     let view = Size::new(20, 10);
     let mut app = app(&map, view);
-    app.move_cursor(3, -2, &map, view);
+    app.move_cursor(3, -2);
     assert_eq!(app.cursor(), at(23, 13));
-    app.move_cursor(-100, -100, &map, view);
+    app.move_cursor(-100, -100);
     assert_eq!(app.cursor(), at(0, 0));
-    app.move_cursor(100, 100, &map, view);
+    app.move_cursor(100, 100);
     assert_eq!(app.cursor(), at(39, 29));
 }
 
@@ -58,16 +58,16 @@ fn moving_the_cursor_scrolls_just_enough_to_keep_it_3_tiles_from_the_edge() {
     // Cursor (80, 48); the view shows x 70..=89 and y 43..=52.
     assert_eq!(app.viewport(), at(70, 43));
 
-    app.move_cursor(6, 0, &map, view); // x 86: three tiles from the right edge
+    app.move_cursor(6, 0); // x 86: three tiles from the right edge
     assert_eq!(app.viewport(), at(70, 43), "no scroll yet");
-    app.move_cursor(1, 0, &map, view); // x 87
+    app.move_cursor(1, 0); // x 87
     assert_eq!(app.viewport(), at(71, 43), "scrolled one tile");
-    app.move_cursor(5, 0, &map, view); // x 92
+    app.move_cursor(5, 0); // x 92
     assert_eq!(app.viewport(), at(76, 43), "a Shift move scrolls five");
 
-    app.move_cursor(-13, -2, &map, view); // (79, 46): three tiles from the left and top
+    app.move_cursor(-13, -2); // (79, 46): three tiles from the left and top
     assert_eq!(app.viewport(), at(76, 43), "no scroll yet");
-    app.move_cursor(-1, -1, &map, view); // (78, 45)
+    app.move_cursor(-1, -1); // (78, 45)
     assert_eq!(app.viewport(), at(75, 42));
 }
 
@@ -76,9 +76,9 @@ fn the_viewport_never_shows_past_the_wall() {
     let map = grass(160, 96);
     let view = Size::new(20, 10);
     let mut app = app(&map, view);
-    app.move_cursor(-1000, -1000, &map, view);
+    app.move_cursor(-1000, -1000);
     assert_eq!((app.cursor(), app.viewport()), (at(0, 0), at(0, 0)));
-    app.move_cursor(1000, 1000, &map, view);
+    app.move_cursor(1000, 1000);
     assert_eq!((app.cursor(), app.viewport()), (at(159, 95), at(140, 86)));
 }
 
@@ -86,9 +86,9 @@ fn the_viewport_never_shows_past_the_wall() {
 fn a_bigger_view_after_a_resize_still_stops_at_the_wall() {
     let map = grass(160, 96);
     let mut app = app(&map, Size::new(20, 10));
-    app.move_cursor(1000, 1000, &map, Size::new(20, 10));
+    app.move_cursor(1000, 1000);
     assert_eq!(app.viewport(), at(140, 86));
-    app.fit_viewport(&map, Size::new(40, 20));
+    app.fit_viewport(Size::new(40, 20));
     assert_eq!(app.viewport(), at(120, 76));
 }
 
@@ -97,9 +97,9 @@ fn a_smaller_view_after_a_resize_keeps_the_cursor_in_view() {
     let map = grass(160, 96);
     let mut app = app(&map, Size::new(40, 20));
     // Cursor (80, 48); the view shows x 60..=99 and y 38..=57.
-    app.move_cursor(16, 6, &map, Size::new(40, 20)); // (96, 54), inside the margin
+    app.move_cursor(16, 6); // (96, 54), inside the margin
     assert_eq!(app.viewport(), at(60, 38));
-    app.fit_viewport(&map, Size::new(20, 10));
+    app.fit_viewport(Size::new(20, 10));
     // Just enough to bring (96, 54) back into a 20×10 view.
     assert_eq!(app.viewport(), at(77, 45));
 }
