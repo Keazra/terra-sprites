@@ -321,3 +321,19 @@ fn the_quit_prompt_takes_over_the_status_line() {
     app.apply(Action::Back);
     assert_eq!(lines(&render(&app, &world, 100, 30))[29], " Quit? (y/n)");
 }
+
+#[test]
+fn a_frame_bigger_than_the_fitted_view_draws_no_tiles_past_the_wall() {
+    // The terminal can grow between the app fitting its view and the frame
+    // being drawn, so for one frame the map view can be wider and taller than
+    // the part of the map the viewport has room for.
+    let row = ".".repeat(30);
+    let world = drawn_world(&vec![row.as_str(); 20]);
+    let mut app = app_for(&world, Theme::cp437(), 20, 8); // 18×4 tiles
+    app.apply(Action::Scroll { dx: 100, dy: 100 }); // tiles (12, 16) to (29, 19): the bottom-right corner
+    let screen = render(&app, &world, 40, 10); // room for 30×6 tiles
+    for line in &lines(&screen)[2..6] {
+        let tiles: String = line.chars().skip(1).take(19).collect();
+        assert_eq!(tiles, format!("{} ", ".".repeat(18)), "{line:?}");
+    }
+}
