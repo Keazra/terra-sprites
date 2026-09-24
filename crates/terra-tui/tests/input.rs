@@ -262,7 +262,7 @@ fn any_other_key_is_reported_so_it_can_cancel_a_prompt() {
 }
 
 #[test]
-fn every_mouse_event_points_a_left_press_clicks_and_the_wheel_scrolls() {
+fn every_mouse_event_points_and_a_left_press_also_clicks() {
     use ratatui::crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
     let mouse = |kind| MouseEvent {
         kind,
@@ -283,17 +283,10 @@ fn every_mouse_event_points_a_left_press_clicks_and_the_wheel_scrolls() {
         MouseEventKind::Up(MouseButton::Left),
         MouseEventKind::Down(MouseButton::Right),
         MouseEventKind::Drag(MouseButton::Middle),
+        MouseEventKind::ScrollDown,
     ] {
         assert_eq!(action(kind), point, "{kind:?}");
     }
-    // The wheel scrolls 3 tiles a notch: up and down, or left and right on a
-    // wheel that tilts. It also says where the pointer is.
-    let at = Position::new(12, 7);
-    let wheel = |dx, dy| Some(Action::Wheel { at, dx, dy });
-    assert_eq!(action(MouseEventKind::ScrollUp), wheel(0, -3));
-    assert_eq!(action(MouseEventKind::ScrollDown), wheel(0, 3));
-    assert_eq!(action(MouseEventKind::ScrollLeft), wheel(-3, 0));
-    assert_eq!(action(MouseEventKind::ScrollRight), wheel(3, 0));
 }
 
 #[test]

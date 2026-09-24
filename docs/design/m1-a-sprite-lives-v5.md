@@ -13,9 +13,9 @@ Decided with the owner while building slice 2 ([#3](https://github.com/Keazra/te
 
 | # | Change | Source | Sections |
 |---|---|---|---|
-| 1 | **The keyboard scrolls the map; the mouse points.** `W` `A` `S` `D` or the arrow keys scroll the viewport (Shift: 5 tiles), and so does the mouse wheel (3 tiles a notch; a tilting wheel scrolls sideways). The cursor follows the mouse pointer, and there is no keyboard cursor. | Owner decision | §6.1, §6.5 |
+| 1 | **The keyboard scrolls the map; the mouse points.** `W` `A` `S` `D` or the arrow keys scroll the viewport (Shift: 5 tiles). The cursor follows the mouse pointer, and there is no keyboard cursor. | Owner decision | §6.1, §6.5 |
 | 2 | **A 3×3 cursor** centred on its target: arrows on its sides point in, **mode marks** sit at two corners and **status marks** `Y` and `N` at the other two. | Owner decision | §6.2, §6.5 |
-| 3 | **Cursor modes:** `E` Select, `Q` Hand (grab, drop, and the Place menu), `Z` Reward, `X` Correct. A right-click or `Esc` returns to Select. Switching modes keeps each mode's state, so what the hand holds waits in reserve, and the status line always shows it. Pausing lets you queue actions for the next tick. | Owner decision | §6.5, §6.8 |
+| 3 | **Cursor modes:** `E` Select, `Q` Hand (grab, drop, and the Place menu), `Z` Reward, `X` Correct, and the mouse wheel cycles through them. A right-click or `Esc` returns to Select. Switching modes keeps each mode's state, so what the hand holds waits in reserve, and the status line always shows it. Pausing lets you queue actions for the next tick. | Owner decision | §6.5, §6.8 |
 | 4 | **Click feedback:** in Reward and Correct mode each click flashes the status marks `+` at once, then `☼` (applied) or `?` (rejected) when the sim reports back. A click with nothing on the tile to act on sends no command and flashes `?`. | Owner decision | §6.5 |
 | 5 | **Tickle becomes Reward** (a pet or hug) and **Slap becomes Correct** (an electric shock). The chemistry is unchanged: Reward injects `reward`; Correct injects `punishment` and `pain`. The sprite senses `petted` or `shocked` (renamed from `tickled`/`slapped`; same IDs), kept apart from the `reward` chemical that other things also raise. | Owner decision | §0, §2.2, §2.5, §4.6, §5.2, §5.8, §6.3, §7.3, §7.4, App. A, App. B |
 | 6 | **Quitting is `Esc`, twice:** `Esc` asks "Quit? (y/n)"; `y` or a second `Esc` quits. `Ctrl+C` quits at once. `q` no longer quits (this replaces v4 change 2: `q` sits beside `W` and `A`). | Owner decision | §6.5, §6.6 |
@@ -939,7 +939,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 **Panels:**
 - **Top bar:** tick, speed, seed, population, food counts, save status.
 - **Map view:**
-  - Its viewport scrolls with `W` `A` `S` `D`, the arrow keys or the mouse wheel, or follows the selected sprite (`f`).
+  - Its viewport scrolls with `W` `A` `S` `D` or the arrow keys, or follows the selected sprite (`f`).
   - A map smaller than the space gets a map view shrunk to fit it, at the top-left.
   - Its border is **double-lined** (`═ ║`) on any side where the terrarium's wall is in view, and single-lined where the map carries on.
   - The cursor is 3×3 tiles and follows the mouse (§6.5).
@@ -1020,7 +1020,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 
 ### 6.5 The hand
 
-- **Scrolling:** `W` `A` `S` `D` or the arrow keys scroll the viewport one tile, and Shift makes it 5. Holding a key keeps scrolling. The mouse wheel scrolls 3 tiles a notch: up and down, or left and right on a wheel that tilts. The viewport stops at the wall. There is **no keyboard cursor**.
+- **Scrolling:** `W` `A` `S` `D` or the arrow keys scroll the viewport one tile, and Shift makes it 5. Holding a key keeps scrolling. The viewport stops at the wall. There is **no keyboard cursor**.
 - **The cursor follows the mouse.** It sits on the tile under the pointer, so it changes as the map scrolls beneath a still pointer. When the pointer leaves the map view, the cursor stays on its last tile. A click acts on the cursor's tile, as the cursor mode says.
 - **Reach:** the hand reaches anywhere on the map.
 - **Ownership:** **the hand lives in the sim.** `World` owns `Hand { held: Option<HeldEntity> }`.
@@ -1049,6 +1049,7 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 | `Z` | **Reward** | `♥` | green | sends `Reward` to the sprite there | feedback (below) |
 | `X` | **Correct** | `‼` | light red | sends `Correct` to the sprite there | feedback (below) |
 
+- **The mouse wheel cycles the modes:** a notch down picks the next (Select → Hand → Reward → Correct, then back to Select), a notch up the previous. A wheel event also points, like every mouse event. The wheel doesn't scroll the map.
 - **Place menu:** berry, ball, bush seedling, new sprite (starter genome + variation), sprite from a genome file. The chosen item waits in the hand's marks, and the next click on a tile sends `Place { tile, object_type }` or `SpawnSprite`.
 - **Feedback:** in Reward and Correct mode, each click flashes `+` in both status marks at once ("sent"). When the sim reports back, they flash `☼` (applied) or `?` (rejected). Flashes last about 0.3 s of **real** time and are driven by events, like emotes (§6.3). In Hand mode a rejected `Grab`, `Drop` or `Place` flashes `?`.
 - **Nothing to act on:** a click in Hand, Reward or Correct mode with nothing on the tile to act on sends no command and flashes `?` at once.

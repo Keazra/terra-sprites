@@ -29,13 +29,6 @@ pub enum Action {
     Point(Position),
     /// A left click on this screen cell.
     Click(Position),
-    /// The mouse wheel, turned with the pointer over screen cell `at`: scroll
-    /// the viewport by `(dx, dy)` tiles.
-    Wheel {
-        at: Position,
-        dx: i32,
-        dy: i32,
-    },
     /// Back out of whatever is open, or ask to quit (`Esc`).
     Back,
     /// Say yes to a prompt (`y`).
@@ -48,8 +41,6 @@ pub enum Action {
 
 /// How far Shift scrolls the viewport, in tiles (design §6.5).
 const SHIFT_STEP: i32 = 5;
-/// How far one notch of the mouse wheel scrolls the viewport, in tiles.
-const WHEEL_STEP: i32 = 3;
 
 /// Turns key events into actions, remembering enough to recognise held keys.
 ///
@@ -121,16 +112,12 @@ impl Keys {
 }
 
 /// The action for a mouse event. Every event says where the pointer is, so it
-/// points there; a left-button press also clicks, and the wheel also scrolls.
+/// points there; a left-button press clicks. (The wheel will cycle the cursor
+/// modes once there is more than one, design §6.5.)
 pub fn mouse_action(event: MouseEvent) -> Option<Action> {
     let cell = Position::new(event.column, event.row);
-    let wheel = |dx: i32, dy: i32| Action::Wheel { at: cell, dx, dy };
     Some(match event.kind {
         MouseEventKind::Down(MouseButton::Left) => Action::Click(cell),
-        MouseEventKind::ScrollUp => wheel(0, -WHEEL_STEP),
-        MouseEventKind::ScrollDown => wheel(0, WHEEL_STEP),
-        MouseEventKind::ScrollLeft => wheel(-WHEEL_STEP, 0),
-        MouseEventKind::ScrollRight => wheel(WHEEL_STEP, 0),
         _ => Action::Point(cell),
     })
 }
