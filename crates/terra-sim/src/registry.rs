@@ -78,5 +78,6 @@ pub(crate) struct Locus {
     pub(crate) id: u16,
     pub(crate) name: String,
     pub(crate) kind: LocusKind,
+    #[expect(dead_code, reason = "the brain's inputs are built from it in slice 8")]
     pub(crate) brain_visible: bool,
 }

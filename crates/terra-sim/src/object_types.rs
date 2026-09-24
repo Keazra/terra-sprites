@@ -16,8 +16,16 @@ pub(crate) const OBJECTS: &str = "objects.ron";
 /// their index in the pack's list, stages and counters to their index in this type.
 #[derive(Debug, Clone)]
 pub(crate) struct ObjectType {
+    #[expect(
+        dead_code,
+        reason = "saves record object types by stable ID from slice 12"
+    )]
     pub(crate) id: u16,
     pub(crate) name: String,
+    #[expect(
+        dead_code,
+        reason = "perception sorts objects by category from slice 5"
+    )]
     pub(crate) category: Category,
     /// Nothing can move through it. In M1 every solid object is also a fixture,
     /// and every other object is an item (design §3.5.1).
@@ -27,6 +35,7 @@ pub(crate) struct ObjectType {
     pub(crate) counters: Vec<CounterDef>,
     pub(crate) stages: Vec<Stage>,
     pub(crate) rules: Vec<Rule>,
+    #[expect(dead_code, reason = "sprites apply verbs from slice 6")]
     pub(crate) verbs: BTreeMap<Verb, Vec<Effect>>,
     pub(crate) visual: Vec<Visual>,
 }
@@ -99,6 +108,20 @@ pub(crate) enum Cmp {
     Ne,
     Ge,
     Gt,
+}
+
+impl Cmp {
+    /// Whether `left` compares with `right` this way.
+    pub(crate) fn holds<T: PartialOrd>(self, left: T, right: T) -> bool {
+        match self {
+            Cmp::Lt => left < right,
+            Cmp::Le => left <= right,
+            Cmp::Eq => left == right,
+            Cmp::Ne => left != right,
+            Cmp::Ge => left >= right,
+            Cmp::Gt => left > right,
+        }
+    }
 }
 
 /// Who a verb's effect acts on: the sprite doing the verb, or the sprite it's done to.

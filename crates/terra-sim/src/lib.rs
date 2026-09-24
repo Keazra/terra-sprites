@@ -5,10 +5,13 @@
 
 mod config;
 mod data;
+mod ecology;
+mod events;
 mod generate;
 mod map;
 mod object_types;
 mod objects;
+mod random;
 mod regions;
 mod registry;
 mod terrain;
@@ -16,6 +19,8 @@ mod world;
 
 pub use config::{ConfigError, WorldConfig};
 pub use data::{DataError, DataPack};
+pub use events::{Event, EventKind, Removal};
 pub use map::{Dir, Map, MapError, Pos};
+pub use objects::EntityId;
 pub use terrain::{Terrain, TerrainProps};
-pub use world::{InvariantViolation, World};
+pub use world::{InvariantViolation, ObjectView, ScenarioError, World};

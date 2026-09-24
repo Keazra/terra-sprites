@@ -130,7 +130,9 @@ fn run(
         let frame_start = Instant::now();
         app.clock.advance(
             elapsed,
-            || world.step(),
+            || {
+                world.step();
+            },
             || frame_start.elapsed() >= SIM_BUDGET,
         );
     }

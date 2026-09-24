@@ -13,7 +13,9 @@ pub struct DataPack {
     manifest: Manifest,
     /// Indexed by `Terrain as usize`.
     terrain: Vec<TerrainProps>,
+    #[expect(dead_code, reason = "biochemistry reads the registries from slice 4")]
     chemicals: Vec<Chemical>,
+    #[expect(dead_code, reason = "biochemistry reads the registries from slice 4")]
     loci: Vec<Locus>,
     /// In ascending ID order.
     object_types: Vec<ObjectType>,
