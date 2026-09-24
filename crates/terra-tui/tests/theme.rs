@@ -61,3 +61,42 @@ fn cp437_covers_the_glyphs_the_design_uses_and_nothing_outside_the_code_page() {
         assert_eq!(cp437::contains(c), expected, "{c:?}");
     }
 }
+
+#[test]
+fn the_themes_draw_the_select_cursor_as_the_design_table_says() {
+    // Design §6.2: arrows, the Select mode mark, and the idle status mark.
+    let cp437 = Theme::cp437().cursor();
+    let ascii = Theme::ascii().cursor();
+    assert_eq!(
+        [
+            cp437.up,
+            cp437.down,
+            cp437.left,
+            cp437.right,
+            cp437.select,
+            cp437.idle
+        ],
+        ['↑', '↓', '←', '→', '♦', '·']
+    );
+    assert_eq!(
+        [
+            ascii.up,
+            ascii.down,
+            ascii.left,
+            ascii.right,
+            ascii.select,
+            ascii.idle
+        ],
+        ['^', 'v', '<', '>', 'S', '-']
+    );
+    for glyph in [
+        cp437.up,
+        cp437.down,
+        cp437.left,
+        cp437.right,
+        cp437.select,
+        cp437.idle,
+    ] {
+        assert!(cp437::contains(glyph), "{glyph:?}");
+    }
+}

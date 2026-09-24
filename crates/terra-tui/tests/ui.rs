@@ -1,9 +1,10 @@
 use ratatui::buffer::Buffer;
-use ratatui::layout::Size;
+use ratatui::layout::{Rect, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{DataPack, Map, World, WorldConfig};
 use terra_tui::app::App;
+use terra_tui::input::Action;
 use terra_tui::theme::Theme;
 use terra_tui::ui;
 
@@ -23,8 +24,8 @@ fn drawn_world(rows: &[&str]) -> World {
 
 /// A UI for `world` sized for a `width`×`height` screen, showing seed 7.
 fn app_for(world: &World, theme: Theme, width: u16, height: u16) -> App {
-    let view = ui::map_view_size(Size::new(width, height), world.map());
-    App::new(world.map(), theme, 7, view)
+    let tiles = ui::tile_area(Size::new(width, height), world.map());
+    App::new(world.map(), theme, 7, tiles)
 }
 
 fn render(app: &App, world: &World, width: u16, height: u16) -> Buffer {
@@ -103,21 +104,39 @@ const SMALL_MAP: [&str; 4] = [
 ];
 
 #[test]
-fn a_small_map_in_the_cp437_theme_is_framed_by_the_wall() {
+fn the_map_view_draws_its_tiles_inside_its_border() {
+    let small = drawn_world(&SMALL_MAP);
+    assert_eq!(
+        ui::tile_area(Size::new(40, 8), small.map()),
+        Rect::new(1, 2, 10, 4),
+        "a small map gets a shrunk map view"
+    );
+    let row = ".".repeat(30);
+    let big = drawn_world(&vec![row.as_str(); 20]);
+    assert_eq!(
+        ui::tile_area(Size::new(20, 8), big.map()),
+        Rect::new(1, 2, 18, 4),
+        "a big map fills the space between the top bar and the status line"
+    );
+}
+
+#[test]
+fn a_small_map_in_the_cp437_theme_with_the_select_cursor() {
     let world = drawn_world(&SMALL_MAP);
     let app = app_for(&world, Theme::cp437(), 40, 8);
     let screen = render(&app, &world, 40, 8);
+    // The cursor starts at the map's centre, (5, 2), and covers (4, 1) to (6, 3).
     assert_eq!(
         lines(&screen),
         [
             " Terra Sprites │ tick 0 │ ► 1x │ seed 7",
             "╔═ Map ════╗",
             "║....~~~~..║",
-            "║..#.~≈≈~..║",
-            "║..#..~~.,,║",
-            "║::....,,,,║",
+            "║..#.♦↓·~..║",
+            "║..#.→~←.,,║",
+            "║::..·↑♦,,,║",
             "╚══════════╝",
-            " (5,2) shallow water",
+            " (5,2) shallow water │ SELECT",
         ]
     );
 }
@@ -132,59 +151,75 @@ fn a_small_map_in_the_ascii_theme_differs_only_in_its_glyphs() {
         [
             "╔═ Map ════╗",
             "║....~~~~..║",
-            "║..#.~==~..║",
-            "║..#..~~.,,║",
-            "║::....,,,,║",
+            "║..#.Sv-~..║",
+            "║..#.>~<.,,║",
+            "║::..-^S,,,║",
             "╚══════════╝",
         ]
     );
 }
 
 #[test]
-fn the_cursor_cell_is_reverse_video_and_keeps_its_glyph() {
+fn the_cursor_centre_is_reverse_video_and_its_marks_take_the_modes_colour() {
     let world = drawn_world(&SMALL_MAP);
     let app = app_for(&world, Theme::cp437(), 40, 8);
     let screen = render(&app, &world, 40, 8);
-    // The cursor starts at the map's centre, (5, 2): screen column 1 + 5, row 2 + 2.
-    let cursor = &screen[(6, 4)];
-    assert_eq!(cursor.symbol(), "~");
-    assert!(cursor.modifier.contains(Modifier::REVERSED));
-    assert!(!screen[(5, 4)].modifier.contains(Modifier::REVERSED));
+    // The cursor's centre, (5, 2), is at screen column 1 + 5, row 2 + 2.
+    let centre = &screen[(6, 4)];
+    assert_eq!(centre.symbol(), "~");
+    assert!(centre.modifier.contains(Modifier::REVERSED));
+    assert_eq!(centre.fg, Color::Cyan, "the tile keeps its own colour");
+    for (column, row) in [
+        (5, 3),
+        (6, 3),
+        (7, 3),
+        (5, 4),
+        (7, 4),
+        (5, 5),
+        (6, 5),
+        (7, 5),
+    ] {
+        let piece = &screen[(column, row)];
+        assert_eq!(piece.fg, Color::White, "Select is white: ({column}, {row})");
+        assert!(!piece.modifier.contains(Modifier::REVERSED));
+    }
 }
 
 #[test]
 fn map_tiles_take_their_theme_colours() {
     let world = drawn_world(&SMALL_MAP);
-    let app = app_for(&world, Theme::cp437(), 40, 8);
+    let mut app = app_for(&world, Theme::cp437(), 40, 8);
+    // Point at the top-left tile, so the cursor sits clear of the tiles checked.
+    app.apply(Action::Point { column: 1, row: 2 });
     let screen = render(&app, &world, 40, 8);
-    assert_eq!(screen[(1, 2)].fg, Color::Green, "grass");
+    assert_eq!(screen[(3, 2)].fg, Color::Green, "grass");
     assert_eq!(screen[(6, 3)].fg, Color::Blue, "deep water");
     assert_eq!(screen[(3, 3)].fg, Color::Gray, "rock");
 }
 
 #[test]
-fn the_frame_is_single_where_the_map_carries_on_and_double_at_the_wall() {
+fn the_border_is_single_where_the_map_carries_on_and_double_at_the_wall() {
     let row = ".".repeat(30);
     let world = drawn_world(&vec![row.as_str(); 20]);
     let mut app = app_for(&world, Theme::cp437(), 20, 8);
-    let view = ui::map_view_size(Size::new(20, 8), world.map());
-    assert_eq!(view, Size::new(18, 4));
 
-    // In the middle of the map, every side has more map beyond it.
+    // In the middle of the map, every side has more map beyond it. The cursor
+    // starts at (15, 10), in the middle of the view.
     assert_eq!(
         lines(&render(&app, &world, 20, 8))[1..7],
         [
             "┌─ Map ────────────┐",
             "│..................│",
-            "│..................│",
-            "│..................│",
-            "│..................│",
+            "│........♦↓·.......│",
+            "│........→.←.......│",
+            "│........·↑♦.......│",
             "└──────────────────┘",
         ]
     );
 
-    // In the top-left corner, the top and left sides are the wall.
-    app.move_cursor(-100, -100);
+    // Scrolled to the top-left corner, the top and left sides are the wall.
+    // The cursor stayed on (15, 10), which is now out of view.
+    app.apply(Action::Scroll { dx: -100, dy: -100 });
     assert_eq!(
         lines(&render(&app, &world, 20, 8))[1..7],
         [
@@ -199,20 +234,42 @@ fn the_frame_is_single_where_the_map_carries_on_and_double_at_the_wall() {
 }
 
 #[test]
+fn the_cursor_is_clipped_at_the_edge_of_the_map_view() {
+    let row = ".".repeat(30);
+    let world = drawn_world(&vec![row.as_str(); 20]);
+    let mut app = app_for(&world, Theme::cp437(), 20, 8);
+    app.apply(Action::Point { column: 1, row: 2 }); // the view's top-left tile
+    assert_eq!(
+        lines(&render(&app, &world, 20, 8))[1..7],
+        [
+            "┌─ Map ────────────┐",
+            "│.←................│",
+            "│↑♦................│",
+            "│..................│",
+            "│..................│",
+            "└──────────────────┘",
+        ]
+    );
+}
+
+#[test]
 fn the_status_line_names_the_terrain_under_the_cursor() {
     let world = drawn_world(&SMALL_MAP);
     let cases = [
-        ((0, 0), " (0,0) grass"),
-        ((8, 2), " (8,2) dirt"),
-        ((0, 3), " (0,3) sand"),
-        ((4, 0), " (4,0) shallow water"),
-        ((5, 1), " (5,1) deep water"),
-        ((2, 1), " (2,1) rock"),
+        ((0, 0), " (0,0) grass │ SELECT"),
+        ((8, 2), " (8,2) dirt │ SELECT"),
+        ((0, 3), " (0,3) sand │ SELECT"),
+        ((4, 0), " (4,0) shallow water │ SELECT"),
+        ((5, 1), " (5,1) deep water │ SELECT"),
+        ((2, 1), " (2,1) rock │ SELECT"),
     ];
     for ((x, y), expected) in cases {
         let mut app = app_for(&world, Theme::cp437(), 40, 8);
-        let (from_x, from_y) = (i32::from(app.cursor().x), i32::from(app.cursor().y));
-        app.move_cursor(x - from_x, y - from_y);
+        // Tiles are drawn from screen cell (1, 2).
+        app.apply(Action::Point {
+            column: 1 + x,
+            row: 2 + y,
+        });
         assert_eq!(lines(&render(&app, &world, 40, 8))[7], expected);
     }
 }
@@ -222,43 +279,25 @@ fn with_room_the_status_line_also_shows_the_keys() {
     let world = drawn_world(&SMALL_MAP);
     let app = app_for(&world, Theme::cp437(), 100, 30);
     let status = lines(&render(&app, &world, 100, 30))[29].clone();
-    assert!(status.starts_with(" (5,2) shallow water"), "{status}");
-    for hint in ["hjkl move", "space pause", ". step", "+/- speed", "q quit"] {
+    assert!(
+        status.starts_with(" (5,2) shallow water │ SELECT"),
+        "{status}"
+    );
+    for hint in [
+        "WASD scroll",
+        "space pause",
+        ". step",
+        "+/- speed",
+        "esc quit",
+    ] {
         assert!(status.contains(hint), "{hint:?} missing from {status:?}");
     }
 }
 
 #[test]
-fn clicking_a_tile_puts_the_cursor_on_it_without_scrolling() {
-    let row = ".".repeat(30);
-    let world = drawn_world(&vec![row.as_str(); 20]);
-    let screen = Size::new(20, 8);
-    let mut app = app_for(&world, Theme::cp437(), 20, 8);
-    // An 18×4 view whose top-left tile is (6, 8), drawn from screen cell (1, 2).
-    assert_eq!(app.viewport(), terra_sim::Pos { x: 6, y: 8 });
-
-    let tile = ui::tile_at(screen, &app, world.map(), 1, 2).expect("a tile");
-    assert_eq!(tile, terra_sim::Pos { x: 6, y: 8 });
-    app.place_cursor(tile);
-    assert_eq!(app.cursor(), tile);
-    assert_eq!(app.viewport(), terra_sim::Pos { x: 6, y: 8 }, "no scroll");
-
-    let far_corner = ui::tile_at(screen, &app, world.map(), 18, 5);
-    assert_eq!(far_corner, Some(terra_sim::Pos { x: 23, y: 11 }));
-}
-
-#[test]
-fn clicks_off_the_map_views_tiles_are_not_on_a_tile() {
+fn the_quit_prompt_takes_over_the_status_line() {
     let world = drawn_world(&SMALL_MAP);
-    let screen = Size::new(40, 8);
-    let app = app_for(&world, Theme::cp437(), 40, 8);
-    // The top bar, the frame's corners and sides, the status line, and the
-    // empty space beside the shrunk map view.
-    for (column, row) in [(3, 0), (0, 1), (0, 3), (11, 3), (5, 6), (5, 7), (20, 3)] {
-        assert_eq!(
-            ui::tile_at(screen, &app, world.map(), column, row),
-            None,
-            "({column}, {row})"
-        );
-    }
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::Escape);
+    assert_eq!(lines(&render(&app, &world, 100, 30))[29], " Quit? (y/n)");
 }

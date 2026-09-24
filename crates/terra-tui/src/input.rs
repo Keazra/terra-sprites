@@ -1,4 +1,5 @@
-//! Maps keys to UI actions (design §6.5–6.6), telling held keys from fresh presses.
+//! Maps keys and the mouse to UI actions (design §6.5–6.6), telling held keys
+//! from fresh presses.
 
 use std::collections::HashSet;
 
@@ -18,20 +19,32 @@ pub enum Action {
     Slower {
         held: bool,
     },
-    /// Move the cursor by this many tiles.
-    MoveCursor {
+    /// Scroll the viewport by this many tiles.
+    Scroll {
         dx: i32,
         dy: i32,
+    },
+    /// The mouse pointer is over this screen cell.
+    Point {
+        column: u16,
+        row: u16,
     },
     /// A left click on this screen cell.
     Click {
         column: u16,
         row: u16,
     },
+    /// `Esc`: back out of whatever is open, or ask to quit.
+    Escape,
+    /// `y`, answering a prompt.
+    Yes,
+    /// A key with no job of its own. It still cancels a prompt.
+    OtherKey,
+    /// Quit at once (`Ctrl+C`).
     Quit,
 }
 
-/// How far Shift moves the cursor, in tiles (design §6.5).
+/// How far Shift scrolls the viewport, in tiles (design §6.5).
 const SHIFT_STEP: i32 = 5;
 
 /// Turns key events into actions, remembering enough to recognise held keys.
@@ -78,33 +91,40 @@ impl Keys {
         } else {
             1
         };
-        let move_by = |dx: i32, dy: i32| Some(Action::MoveCursor { dx, dy });
+        let scroll = |dx: i32, dy: i32| Some(Action::Scroll { dx, dy });
         match key.code {
-            KeyCode::Left | KeyCode::Char('h') => move_by(-step, 0),
-            KeyCode::Right | KeyCode::Char('l') => move_by(step, 0),
-            KeyCode::Up | KeyCode::Char('k') => move_by(0, -step),
-            KeyCode::Down | KeyCode::Char('j') => move_by(0, step),
-            KeyCode::Char('H') => move_by(-SHIFT_STEP, 0),
-            KeyCode::Char('L') => move_by(SHIFT_STEP, 0),
-            KeyCode::Char('K') => move_by(0, -SHIFT_STEP),
-            KeyCode::Char('J') => move_by(0, SHIFT_STEP),
+            KeyCode::Up | KeyCode::Char('w') => scroll(0, -step),
+            KeyCode::Left | KeyCode::Char('a') => scroll(-step, 0),
+            KeyCode::Down | KeyCode::Char('s') => scroll(0, step),
+            KeyCode::Right | KeyCode::Char('d') => scroll(step, 0),
+            KeyCode::Char('W') => scroll(0, -SHIFT_STEP),
+            KeyCode::Char('A') => scroll(-SHIFT_STEP, 0),
+            KeyCode::Char('S') => scroll(0, SHIFT_STEP),
+            KeyCode::Char('D') => scroll(SHIFT_STEP, 0),
             // Holding space would flicker pause on and off, so only a fresh press toggles.
             KeyCode::Char(' ') => (!held).then_some(Action::TogglePause),
+            // Likewise, a held Esc would answer its own "Quit?" prompt.
+            KeyCode::Esc => (!held).then_some(Action::Escape),
             KeyCode::Char('.') => Some(Action::StepOnce),
             KeyCode::Char('+' | '=') => Some(Action::Faster { held }),
             KeyCode::Char('-') => Some(Action::Slower { held }),
-            KeyCode::Char('q') => Some(Action::Quit),
-            _ => None,
+            KeyCode::Char('y') => Some(Action::Yes),
+            _ => Some(Action::OtherKey),
         }
     }
 }
 
-/// The action for a mouse event, if it has one: only a left-button press acts.
+/// The action for a mouse event, if it has one. Moving (or dragging) points;
+/// a left-button press clicks.
 pub fn mouse_action(event: MouseEvent) -> Option<Action> {
-    (event.kind == MouseEventKind::Down(MouseButton::Left)).then_some(Action::Click {
-        column: event.column,
-        row: event.row,
-    })
+    let (column, row) = (event.column, event.row);
+    match event.kind {
+        MouseEventKind::Moved | MouseEventKind::Drag(MouseButton::Left) => {
+            Some(Action::Point { column, row })
+        }
+        MouseEventKind::Down(MouseButton::Left) => Some(Action::Click { column, row }),
+        _ => None,
+    }
 }
 
 /// Identifies the physical key behind a character, so a key pressed with Shift
