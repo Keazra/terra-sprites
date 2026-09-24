@@ -65,9 +65,36 @@ _Avoid_: camera
 The one-tile marker the player moves over the map. The hand acts on its tile.
 _Avoid_: pointer, selection (the selection is the chosen sprite)
 
+**Cursor mode**:
+What a click on the map does: Select, Hand, Reward or Correct.
+_Avoid_: tool
+
 **Semantic tile**:
 What the map view draws for a tile, named by meaning (such as grass terrain) rather than by character.
 
 **Theme**:
 A mapping from semantic tiles to glyphs and colours.
 _Avoid_: skin
+
+### The hand
+
+**Hand**:
+The player's way of acting on the terrarium: rewarding, correcting, picking up, putting down and placing. It holds at most one thing.
+
+**Reward**:
+A pet or hug from the hand, which raises the sprite's reward chemical.
+_Avoid_: tickle, positive
+
+**Correct**:
+An electric shock from the hand, which hurts the sprite and raises its punishment chemical.
+_Avoid_: slap, punish, negative
+
+### Zones (a later milestone)
+
+**Zone**:
+A discrete area of the terrarium that the player gives a purpose, such as a hatchery.
+_Avoid_: biome, region (a region is about reachability)
+
+**Device**:
+An object in a zone that makes the zone's purpose possible, such as a hatchery's incubator.
+_Avoid_: machine, building
