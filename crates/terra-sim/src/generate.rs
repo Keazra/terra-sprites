@@ -66,8 +66,9 @@ pub(crate) fn generate(config: &WorldConfig, data: &DataPack, rng: &mut ChaCha8R
 
 /// Places the preset's objects on the mainland (design §3.2): solid objects
 /// first, then items, each type in ID order. Each goes on a tile drawn
-/// uniformly from those where it may go at that moment; if none is left, the
-/// rest of that type is skipped. Every object starts at a random point in its life.
+/// uniformly from the type's remaining candidates, where it may go and, if it's
+/// solid, where it keeps paths open; if none is left, the rest of that type is
+/// skipped. Every object starts at a random point in its life.
 pub(crate) fn place_objects(config: &WorldConfig, data: &DataPack, state: &mut WorldState) {
     let types = data.object_types();
     let solid_first = (0..types.len())
@@ -84,16 +85,20 @@ pub(crate) fn place_objects(config: &WorldConfig, data: &DataPack, state: &mut W
             .positions()
             .filter(|&pos| state.map.is_walkable(pos))
             .collect();
+        let solid = types[kind].solid;
         for _ in 0..count {
-            // Tiles only ever become unusable as objects are placed, so a tile
-            // found unusable is dropped for good.
+            // A tile found unusable is set aside for this type. (One that would
+            // cut a path might become usable once a neighbour fills in; setting
+            // it aside anyway keeps generation quick.)
             let pos = loop {
                 if candidates.is_empty() {
                     break None;
                 }
                 let choice = uniform(&mut state.rng, candidates.len() as u64) as usize;
                 let pos = candidates.swap_remove(choice);
-                if state.objects.can_place(&state.map, data, kind, pos) {
+                if state.objects.can_place(&state.map, data, kind, pos)
+                    && (!solid || state.objects.keeps_paths_open(&state.map, data, pos))
+                {
                     break Some(pos);
                 }
             };

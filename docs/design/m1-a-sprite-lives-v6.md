@@ -16,14 +16,15 @@ Decided with the owner in the design session for slice 3 ([#4](https://github.co
 | 1 | **Solid and fixture are separate ideas.** Solid means nothing can move through it; a fixture is attached to the ground. Deep water isn't walkable but isn't solid: crossing it is a matter of ability (swimming, out of scope for M1). | Owner decision | §3.1, §3.3 |
 | 2 | **Tags replace `placement`.** An object type lists its tags, `tags: [Solid, Fixture]`; having a tag means yes. The set is closed, and M1 loads only two combinations: both (bushes) or neither (items). A solid object that isn't a fixture, which would be pushable, is a load error until entity tags are designed ([#27](https://github.com/Keazra/terra-sprites/issues/27)). | Owner decision | §3.3, §3.4, §3.5 |
 | 3 | **One object per tile.** A tile holds at most one sprite and at most one object; a sprite can share a tile with an item, never with a solid object. So a berry drops beside its bush, never under it, and every tile shows at most one object. | Owner decision | §3.3, §3.4, §3.5.2 |
-| 4 | **Terrain says whether fixtures may stand on it.** `terrain.ron` gains `allows_fixtures`: grass, dirt and sand allow them, shallow water doesn't, so no bush grows in a pond. The ring rule is restated for solid objects. | Owner decision | §3.1, §3.3 |
-| 5 | **An object's turn is fully specified:** the stage clock first, then its rules in order; an expiring object runs only its `OnExpire` rules; `DestroySelf` or a successful `ReplaceWith` ends the turn. Where `SpawnNearby` and `SpreadTo` look, and how a uniform choice makes exactly one draw, are spelled out. | Slice 3 design session | §3.5.2 |
-| 6 | **Objects start partway through their lives.** World generation gives each object a random point in its lifespan, so the world has fruit early and bushes don't all expire together. | Slice 3 design session | §3.2 |
-| 7 | **`ObjectExpired` becomes `ObjectRemoved { reason }`** (`Expired`, `Destroyed` or `Replaced`), because objects also leave by being eaten or replaced. | Slice 3 design session | §2.5 |
-| 8 | **The preset sets densities** as counts per area, checked against the data pack when the preset is parsed. | Slice 3 design session | §2.2, §3.9 |
-| 9 | **Registry file formats** for `chemicals.ron` and `loci.ron`, both arriving in slice 3 so every name in `objects.ron` can be checked when it loads. | Slice 3 design session | §3.5.2, §4.1, §4.2 |
-| 10 | **UI details for objects:** the World tab's contents, display names, and how a theme falls back when it has no glyph for an object's visual state. | Slice 3 design session | §6.1, §6.2 |
-| 11 | **Held `+` also stops at 16×.** Max, the jump to "as fast as the computer allows", takes a fresh press. | Owner feedback ([#28](https://github.com/Keazra/terra-sprites/issues/28)) | §6.6 |
+| 4 | **Terrain says whether fixtures may stand on it.** `terrain.ron` gains `allows_fixtures`: grass, dirt and sand allow them, shallow water doesn't, so no bush grows in a pond. | Owner decision | §3.1, §3.3 |
+| 5 | **The ring rule is gone; keeping paths open is the data's choice.** v5 kept every fixture in a ring of 8 open tiles, so no two could touch: two boulders couldn't lie side by side, and a berry, which drops beside its bush, could never sprout while its parent lived (the bush population halved every ~20,000 ticks). Now solid objects may stand side by side anywhere, and a new location condition, **`KeepsPathsOpen`**, lets a rule refuse a tile where a solid object would split the open tiles around it. The built-in berry sprouting and thornbush spreading use it; world generation always applies it. | Owner decision, after a population check | §3.2, §3.3, §3.5 |
+| 6 | **An object's turn is fully specified:** the stage clock first, then its rules in order; an expiring object runs only its `OnExpire` rules; `DestroySelf` or a successful `ReplaceWith` ends the turn. Where `SpawnNearby` and `SpreadTo` look, and how a uniform choice makes exactly one draw, are spelled out. | Slice 3 design session | §3.5.2 |
+| 7 | **Objects start partway through their lives.** World generation gives each object a random point in its lifespan, so the world has fruit early and bushes don't all expire together. | Slice 3 design session | §3.2 |
+| 8 | **`ObjectExpired` becomes `ObjectRemoved { reason }`** (`Expired`, `Destroyed` or `Replaced`), because objects also leave by being eaten or replaced. | Slice 3 design session | §2.5 |
+| 9 | **The preset sets densities** as counts per area, checked against the data pack when the preset is parsed. | Slice 3 design session | §2.2, §3.9 |
+| 10 | **Registry file formats** for `chemicals.ron` and `loci.ron`, both arriving in slice 3 so every name in `objects.ron` can be checked when it loads. | Slice 3 design session | §3.5.2, §4.1, §4.2 |
+| 11 | **UI details for objects:** the World tab's contents, display names, and how a theme falls back when it has no glyph for an object's visual state. | Slice 3 design session | §6.1, §6.2 |
+| 12 | **Held `+` also stops at 16×.** Max, the jump to "as fast as the computer allows", takes a fresh press. | Owner feedback ([#28](https://github.com/Keazra/terra-sprites/issues/28)) | §6.6 |
 
 ---
 
@@ -376,22 +377,35 @@ A replay file contains:
    - Every other region of **≥64 tiles** is joined to the mainland, largest first, along the route that **carves the fewest tiles, then takes the fewest steps**. The route uses orthogonal steps only, so it never depends on a diagonal, and the connection it carves is one tile wide. Deep water becomes shallow water; any other unwalkable terrain becomes dirt. A route that crosses another region joins that region too.
    - Regions **under 64 tiles** become rock.
 4. **Placement:** sprites and objects are placed on the mainland, obeying the rules in §3.3–3.4.
-   - **Objects:** each object type's count comes from the preset's densities (§3.9). Solid objects are placed first, then items, each type in ID order. Each object goes on a tile drawn uniformly from the mainland tiles where it may go at that moment. If the map runs out of room, generation places what fits and carries on.
+   - **Objects:** each object type's count comes from the preset's densities (§3.9). Solid objects are placed first, then items, each type in ID order. Each object goes on a tile drawn uniformly from the type's remaining candidates: mainland tiles where it may go. A tile found unusable is set aside for the rest of that type (one that would cut a path might become usable once a neighbour fills in, but checking again would slow generation). If the map runs out of room, generation places what fits and carries on.
+   - **Generation always keeps paths open:** a solid object goes only where `KeepsPathsOpen` (§3.3) holds, so no world starts out split.
    - **Objects start partway through their lives.** For an object with stages, generation draws every stage's duration, then an age uniformly within their total, and starts the object at that point: in the stage the age falls in, with that stage's remaining time. Its counters start at 0, and no `OnStageEnter` fires for the stage it starts in. Without this, every bush would start as a seedling (no fruit for 1,500 ticks or more) and they'd all expire in the same few thousand ticks.
 
 Property tests check full connectivity across many seeds.
 
-### 3.3 The ring rule
+### 3.3 Solid objects and keeping paths open
 
 An object is **solid** if nothing can move through it, and a **fixture** if it's attached to the ground (§3.5.1). In M1 these always go together: every solid object is a fixture, and every other object is an **item**.
 
-A solid object may only be placed, spawned, spread or created by `ReplaceWith` onto a tile that meets all of these:
-- the tile's terrain allows fixtures (§3.1), and the tile holds no sprite and no object
-- **all 8 neighbouring tiles are walkable and hold no solid object**
+**Where a solid object may stand** is physics, and nothing more: a walkable tile whose terrain allows fixtures (§3.1), holding no sprite and no object. Solid objects may stand side by side, in clumps and hedges, beside rock, water or the wall.
 
-**Why this is enough:** every solid object is surrounded by a ring of walkable tiles, so any path through its tile can go around the ring instead. Any diagonal step it forbids under the no-corner-cutting rule connects two tiles of that ring, which are joined by orthogonal steps. So **no ecology outcome can ever disconnect the map or trap a sprite.** A property test checks this invariant under random sequences of placements and removals.
+**Keeping paths open is the data's choice.** A solid object can cut a path: one thornbush in a one-tile corridor cuts off everything beyond it, and a diagonal line of bushes is a wall, because sprites can't cut corners. The engine doesn't forbid this everywhere. Instead, the rule vocabulary has a location condition a rule can ask for (§3.5.2):
 
-The guarantee rests on solid objects never moving. A solid object that could be pushed could be shoved into a one-tile corridor after it's placed, so it would need a rule of its own; that's why M1 doesn't allow one (§3.5.1).
+- **`KeepsPathsOpen`** holds at a tile if a solid object there would leave **the open tiles on its four sides (N, E, S, W) still joined to one another by stepping around it**, through the 8 tiles that surround it. An open tile is walkable and holds no solid object. The tile's own contents don't matter, so a berry can ask it of its own tile before becoming a bush.
+
+**Why it's enough:** any path through the tile enters and leaves by two of its four side tiles, and the condition says those two are joined around it, so the path can go around instead. A diagonal step past the tile is only allowed when both tiles beside it are open, and those are two of its side tiles, so it goes around too. Every rule that makes a solid object only where `KeepsPathsOpen` holds therefore **never splits the map or traps a sprite**. A property test checks this under random sequences of placements and removals.
+
+| Case | `KeepsPathsOpen` |
+|---|---|
+| Beside another bush in open ground, or in a 2×2 clump | holds |
+| The end of a line of bushes, or beside rock or the wall | holds, while the other sides stay joined |
+| Plugging a one-tile corridor | fails: its two open sides can't reach each other around it |
+| The piece that would close a loop, or carry a line to the wall | fails |
+
+- The built-in berry sprouting and thornbush spreading ask for it (§3.5.3), and world generation always does (§3.2). A data pack that leaves it out gets objects that can wall things off; that's its author's choice.
+- **It only looks at the 8 tiles around, so it errs on the safe side:** it can refuse a tile whose sides would still meet the long way round. That's the price of a check that costs nothing.
+- **A removal can leave a pocket.** Solid objects may fill a dead end; if the one at the end later expires, its tile can be left closed off by the others. The pocket held nothing but that object, so no sprite is ever in one, and an item that later drops there just rots.
+- It's judged when an object appears. A solid object that could be pushed could later be shoved into a corridor, so it would need a rule of its own; that's another reason M1 doesn't allow one (§3.5.1).
 
 ### 3.4 Space rules
 
@@ -410,7 +424,7 @@ The guarantee rests on solid objects never moving. A solid object that could be 
 | `id` | Stable `ObjectTypeId` |
 | `name` | Referenced by rules and themes |
 | `category` | Stable `CategoryId` (Appendix A), which is what brains perceive |
-| `tags` | The object's **tags**, e.g. `[Solid, Fixture]`. Having a tag means yes; lacking it means no; leaving the field out means no tags. `Solid`: nothing can move through it (the ring rule applies, §3.3). `Fixture`: attached to the ground, so nothing can push, pull or carry it. |
+| `tags` | The object's **tags**, e.g. `[Solid, Fixture]`. Having a tag means yes; lacking it means no; leaving the field out means no tags. `Solid`: nothing can move through it (§3.3). `Fixture`: attached to the ground, so nothing can push, pull or carry it. |
 | `pseudo` | `true` for Water and Sprite: a verb table only, no instances, tags or lifecycle |
 | `counters` | Named integer counters with maximums, e.g. `{"fruit": 6}` |
 | `stages` | `[(name, ticks: (min, max), next: Stage(name) \| Expire)]`. The duration is drawn from the world RNG when the stage is entered. An object with no stages is permanent. |
@@ -435,6 +449,7 @@ The guarantee rests on solid objects never moving. A solid object that could be 
 - `Chance(p)`, which draws from the world RNG
 - `Fertility(cmp, f)`, which is a **location** condition
 - `DensityBelow(type, radius, max)`, which is true when fewer than `max` objects of `type` are within the Chebyshev `radius`. It is a **location** condition.
+- `KeepsPathsOpen`, which is true when a solid object on the tile would leave the open tiles on its four sides joined around it (§3.3). It is a **location** condition.
 
 **Effects:**
 
@@ -444,7 +459,7 @@ The guarantee rests on solid objects never moving. A solid object that could be 
 | `RequireCounter(name, n)` | **In a verb only:** if the counter is below *n*, the verb **fails**. Later effects don't run, and the outcome is `failed`. |
 | `SpawnNearby(type, radius)` | Creates an object on a tile within the Chebyshev radius (on the map, this object's own tile included) where the new type may go (§3.3–3.4), chosen uniformly among those candidates (one RNG draw if there's at least one). A fixed scan order would make bushes drift in one direction. Does nothing, with no draw, if there are no candidates. |
 | `SpreadTo(type, radius, [conditions])` | Draws **one** tile uniformly from the (2·radius+1)² square around this object, cut down to the map (one RNG draw). If the tile passes placement and the conditions, which are evaluated *at that tile*, the object is created there. Otherwise nothing happens. The object's own tile is in the square and always fails placement; that's harmless. |
-| `ReplaceWith(type)` | Replaces this object with a new one (new ID, first stage) on the same tile. This object is taken off the tile first, then placement is checked for the new type, e.g. the ring rule and no sprite on the tile. If that fails, nothing happens and this object stays. |
+| `ReplaceWith(type)` | Replaces this object with a new one (new ID, first stage) on the same tile. This object is taken off the tile first, then placement is checked for the new type, e.g. terrain that allows fixtures and no sprite on the tile. If that fails, nothing happens and this object stays. |
 | `DestroySelf` | Removes the object |
 | `Inject(Actor \| Target, chemical, amount)` | Adds to a chemical. **Only physical chemicals are allowed.** Anything else is a load error. |
 | `Signal(Actor \| Target, locus)` | Writes a pulse to the `incoming` buffer. A pulse on the Target records the Actor as its source. |
@@ -502,7 +517,7 @@ The guarantee rests on solid objects never moving. A solid object that could be 
  stages: [(name: "fresh", ticks: (1500, 2500), next: Expire)],
  rules: [
    (trigger: OnExpire,
-    if: [Fertility(Ge, 0.5), DensityBelow("berry_bush", 4, 3), Chance(0.1)],
+    if: [Fertility(Ge, 0.5), DensityBelow("berry_bush", 4, 3), KeepsPathsOpen, Chance(0.1)],
     do: [ReplaceWith("berry_bush")]),
  ],
  verbs: { Eat: [Inject(Actor, "food", 0.3), Signal(Actor, "ate"), DestroySelf] })
@@ -511,7 +526,7 @@ The guarantee rests on solid objects never moving. A solid object that could be 
  stages: [(name: "grown", ticks: (40000, 60000), next: Expire)],
  rules: [
    (trigger: Every(2000), if: [Chance(0.1)],
-    do: [SpreadTo("thornbush", 4, [DensityBelow("thornbush", 4, 2)])]),
+    do: [SpreadTo("thornbush", 4, [DensityBelow("thornbush", 4, 2), KeepsPathsOpen])]),
  ],
  verbs: {
    Eat:  [Inject(Actor, "injury", 0.05), Signal(Actor, "pricked")],
@@ -1186,7 +1201,7 @@ Implementation is **test-first, one vertical slice at a time.** Everything in `t
 - **`World::check_invariants()`:** runs every tick in debug builds and tests. It checks:
   - the occupancy index matches entity positions
   - concentrations are within [0, 1]
-  - every solid object has its clear ring, and no tile holds more than one object
+  - no tile holds more than one object, and every solid object stands on terrain that allows fixtures
   - held entities appear in neither the index nor perception
   - IDs only go up
 - **Lab runner:** `cargo run -p terra-sim --example lab -- scenarios/<name>.ron --seeds 10` prints metrics. The scenarios double as tests and as the main tuning tool.
@@ -1218,7 +1233,7 @@ Implementation is **test-first, one vertical slice at a time.** Everything in `t
    - **Commands:** every rejection path.
 2. **Property tests (`proptest`):**
    - The map is connected for any seed.
-   - Random sequences of solid-object placements and removals never disconnect it.
+   - Among random placements and removals, placing a solid object where `KeepsPathsOpen` holds never splits the open ground into more pieces.
    - Concentrations always stay in bounds.
    - **Genes can't change physical chemistry directly.** This runs on the pure step-3 function with identical scripted physical inputs for 1,000 ticks: step flags, `resting`, verb injections, pulses and `nearby_sprites`. A random genome runs beside a control genome, and **their physical chemical arrays must be bit-identical on every tick**. Both genomes share identical `Trait` genes, since traits change physical costs legitimately; every other gene type varies randomly.
 3. **Determinism tests:**

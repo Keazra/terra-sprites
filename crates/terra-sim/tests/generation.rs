@@ -229,3 +229,62 @@ fn a_generated_object_gets_no_on_stage_enter_for_the_stage_it_starts_in() {
         "no herb entered a stage on tick 0"
     );
 }
+
+/// How many separate pieces the open ground is in: walkable tiles holding no
+/// solid object. A legal diagonal step needs both tiles beside it open, so
+/// joining by orthogonal steps gives the same pieces.
+fn open_pieces(world: &World) -> usize {
+    let map = world.map();
+    let data = DataPack::builtin().expect("valid pack");
+    let open = |pos: Pos| {
+        data.terrain(map.terrain(pos)).step_cost().is_some()
+            && !world.object_at(pos).is_some_and(|o| o.is_solid())
+    };
+    let index = |pos: Pos| usize::from(pos.y) * usize::from(map.width()) + usize::from(pos.x);
+    let mut seen = vec![false; usize::from(map.width()) * usize::from(map.height())];
+    let mut pieces = 0;
+    for start in positions(map).filter(|&pos| open(pos)) {
+        if seen[index(start)] {
+            continue;
+        }
+        pieces += 1;
+        seen[index(start)] = true;
+        let mut stack = vec![start];
+        while let Some(pos) = stack.pop() {
+            for dir in [Dir::N, Dir::E, Dir::S, Dir::W] {
+                let (dx, dy) = match dir {
+                    Dir::N => (0, -1),
+                    Dir::E => (1, 0),
+                    Dir::S => (0, 1),
+                    _ => (-1, 0),
+                };
+                let (Some(x), Some(y)) =
+                    (pos.x.checked_add_signed(dx), pos.y.checked_add_signed(dy))
+                else {
+                    continue;
+                };
+                let next = Pos { x, y };
+                if x < map.width() && y < map.height() && open(next) && !seen[index(next)] {
+                    seen[index(next)] = true;
+                    stack.push(next);
+                }
+            }
+        }
+    }
+    pieces
+}
+
+#[test]
+fn generation_never_splits_the_open_ground() {
+    for seed in 0..4 {
+        assert_eq!(open_pieces(&default_world(seed)), 1, "seed {seed}");
+    }
+    // Crowded: a bush wanted on every tile.
+    let data = DataPack::builtin().expect("valid pack");
+    let preset = r#"(width: 48, height: 48, objects: {"berry_bush": 1}, per_tiles: 1)"#;
+    for seed in 0..4 {
+        let config = WorldConfig::from_ron(preset, &data).expect("valid preset");
+        let world = World::new(config, data.clone(), seed);
+        assert_eq!(open_pieces(&world), 1, "crowded, seed {seed}");
+    }
+}

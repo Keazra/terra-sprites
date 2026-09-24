@@ -71,6 +71,11 @@ impl<'a> ObjectView<'a> {
         self.object.pos
     }
 
+    /// Whether nothing can move through the object (design §3.3).
+    pub fn is_solid(&self) -> bool {
+        self.world.data.object_types()[self.object.kind].solid
+    }
+
     /// The value of the object's counter called `name`, or `None` if its type has no such counter.
     pub fn counter(&self, name: &str) -> Option<u16> {
         let counters = &self.world.data.object_types()[self.object.kind].counters;
@@ -271,10 +276,12 @@ impl World {
 mod tests {
     use super::*;
 
-    /// A 7×5 field of grass with a berry bush at (2, 2), before any step.
+    /// A 7×5 field of grass, with a pool of shallow water at (5, 3), and a
+    /// berry bush at (2, 2), before any step.
     fn field_with_a_bush() -> World {
         let data = DataPack::builtin().expect("built-in data pack is valid");
-        let map = Map::from_ascii(&["......."; 5], &data).expect("valid drawing");
+        let rows = [".......", ".......", ".......", ".....~.", "......."];
+        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
         World::from_scenario(map, &[(Pos { x: 2, y: 2 }, "berry_bush")], data, 7)
             .expect("valid scenario")
     }
@@ -294,10 +301,12 @@ mod tests {
     }
 
     #[test]
-    fn a_solid_object_beside_another_breaks_an_invariant() {
+    fn a_solid_object_on_terrain_that_does_not_allow_fixtures_breaks_an_invariant() {
         let mut world = field_with_a_bush();
         force_place(&mut world, "thornbush", Pos { x: 3, y: 3 });
-        assert!(world.check_invariants().is_err());
+        assert_eq!(world.check_invariants(), Ok(()), "side by side is fine");
+        force_place(&mut world, "thornbush", Pos { x: 5, y: 3 });
+        assert!(world.check_invariants().is_err(), "in the pool");
     }
 
     #[test]

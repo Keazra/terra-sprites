@@ -77,15 +77,55 @@ impl Objects {
         self.by_id[&id].kind
     }
 
-    /// Whether an object of type `kind` may go on the tile at `pos` (design §3.3–3.4).
-    /// An item needs a walkable tile holding no object. A solid object also needs
-    /// terrain that allows fixtures, and 8 walkable neighbours holding no solid
-    /// object: the ring that keeps the map connected.
+    /// Whether an object of type `kind` may go on the tile at `pos` (design §3.3–3.4):
+    /// a walkable tile holding no object, whose terrain allows fixtures if the
+    /// object is solid. Whether it would cut a path is for the rules to ask,
+    /// with `keeps_paths_open`.
     pub(crate) fn can_place(&self, map: &Map, data: &DataPack, kind: usize, pos: Pos) -> bool {
-        if !map.is_walkable(pos) || self.at(pos).is_some() {
-            return false;
+        map.is_walkable(pos)
+            && self.at(pos).is_none()
+            && (!data.object_types()[kind].solid
+                || data.terrain(map.terrain(pos)).allows_fixtures())
+    }
+
+    /// Whether a solid object on `pos` would leave the open tiles on its four
+    /// sides joined to one another around it, through the 8 tiles that surround
+    /// it (design §3.3). An open tile is walkable and holds no solid object.
+    /// Where this holds, a solid object can't split the map: any path through
+    /// the tile can go around it instead.
+    pub(crate) fn keeps_paths_open(&self, map: &Map, data: &DataPack, pos: Pos) -> bool {
+        // The surrounding tiles clockwise from N. Each is an orthogonal step
+        // from the next, so a run of open ones is a path around the tile.
+        let open: Vec<bool> = Dir::ALL
+            .iter()
+            .map(|&dir| {
+                map.neighbour(pos, dir)
+                    .is_some_and(|n| map.is_walkable(n) && !self.is_solid_at(data, n))
+            })
+            .collect();
+        let Some(closed) = open.iter().position(|&is_open| !is_open) else {
+            return true;
+        };
+        // Number the runs of open tiles, walking once around from a closed one.
+        let mut run = vec![0; open.len()];
+        let mut current = 0;
+        for step in 1..=open.len() {
+            let i = (closed + step) % open.len();
+            if open[i] {
+                run[i] = current;
+            } else {
+                current += 1;
+            }
         }
-        !data.object_types()[kind].solid || self.has_clear_ring(map, data, pos)
+        // N, E, S and W are the even positions; the open ones must share a run.
+        let mut sides = (0..open.len())
+            .step_by(2)
+            .filter(|&i| open[i])
+            .map(|i| run[i]);
+        match sides.next() {
+            Some(first) => sides.all(|r| r == first),
+            None => true,
+        }
     }
 
     /// Puts a new object on its tile. The caller has checked `can_place`.
@@ -129,8 +169,9 @@ impl Objects {
                 "is of a pseudo type"
             } else if !map.is_walkable(object.pos) {
                 "stands on a tile that isn't walkable"
-            } else if object_type.solid && !self.has_clear_ring(map, data, object.pos) {
-                "is solid but lacks its clear ring"
+            } else if object_type.solid && !data.terrain(map.terrain(object.pos)).allows_fixtures()
+            {
+                "is solid on terrain that doesn't allow fixtures"
             } else if object.stage.is_some_and(|s| s >= object_type.stages.len()) {
                 "is in a stage its type doesn't have"
             } else if object.counters.len() != object_type.counters.len()
@@ -150,16 +191,6 @@ impl Objects {
             ));
         }
         Ok(())
-    }
-
-    /// Whether a solid object on `pos` meets the ring rule: terrain that allows
-    /// fixtures, and 8 walkable neighbours holding no solid object.
-    fn has_clear_ring(&self, map: &Map, data: &DataPack, pos: Pos) -> bool {
-        data.terrain(map.terrain(pos)).allows_fixtures()
-            && Dir::ALL.iter().all(|&dir| {
-                map.neighbour(pos, dir)
-                    .is_some_and(|n| map.is_walkable(n) && !self.is_solid_at(data, n))
-            })
     }
 
     fn is_solid_at(&self, data: &DataPack, pos: Pos) -> bool {
@@ -234,10 +265,10 @@ mod tests {
             id
         }
 
-        /// Whether every walkable tile free of solid objects can reach every
-        /// other by legal steps: no step onto a solid object, and no diagonal
-        /// past one (design §3.1).
-        fn open_tiles_connected(&self) -> bool {
+        /// How many separate pieces the open ground is in: walkable tiles free
+        /// of solid objects, joined by legal steps (no step onto a solid
+        /// object, and no diagonal past one, design §3.1).
+        fn open_pieces(&self) -> usize {
             let open = |pos: Pos| {
                 self.map.is_walkable(pos)
                     && !self
@@ -245,30 +276,31 @@ mod tests {
                         .at(pos)
                         .is_some_and(|id| self.data.object_types()[self.objects.kind(id)].solid)
             };
-            let all: Vec<Pos> = self.map.positions().filter(|&pos| open(pos)).collect();
-            let Some(&start) = all.first() else {
-                return true;
-            };
             let mut seen = vec![false; self.map.tile_count()];
-            seen[self.map.index(start)] = true;
-            let mut stack = vec![start];
-            let mut reached = 1;
-            while let Some(pos) = stack.pop() {
-                for dir in Dir::ALL {
-                    let Some(to) = self.map.neighbour(pos, dir) else {
-                        continue;
-                    };
-                    let sides_open = [Pos { x: to.x, y: pos.y }, Pos { x: pos.x, y: to.y }]
-                        .into_iter()
-                        .all(open);
-                    if open(to) && sides_open && !seen[self.map.index(to)] {
-                        seen[self.map.index(to)] = true;
-                        reached += 1;
-                        stack.push(to);
+            let mut pieces = 0;
+            for start in self.map.positions().filter(|&pos| open(pos)) {
+                if seen[self.map.index(start)] {
+                    continue;
+                }
+                pieces += 1;
+                seen[self.map.index(start)] = true;
+                let mut stack = vec![start];
+                while let Some(pos) = stack.pop() {
+                    for dir in Dir::ALL {
+                        let Some(to) = self.map.neighbour(pos, dir) else {
+                            continue;
+                        };
+                        let sides_open = [Pos { x: to.x, y: pos.y }, Pos { x: pos.x, y: to.y }]
+                            .into_iter()
+                            .all(open);
+                        if open(to) && sides_open && !seen[self.map.index(to)] {
+                            seen[self.map.index(to)] = true;
+                            stack.push(to);
+                        }
                     }
                 }
             }
-            reached == all.len()
+            pieces
         }
     }
 
@@ -288,7 +320,7 @@ mod tests {
     }
 
     #[test]
-    fn a_solid_object_needs_eight_walkable_neighbours_free_of_solid_objects() {
+    fn solid_objects_may_stand_side_by_side_and_beside_rock_or_the_wall() {
         let mut scene = Scene::new(&[
             ".......", //
             ".......", //
@@ -296,19 +328,92 @@ mod tests {
             "....#..", //
             ".......", //
         ]);
-        assert!(!scene.can_place("berry_bush", at(0, 2)), "beside the wall");
-        assert!(!scene.can_place("berry_bush", at(3, 2)), "beside rock");
+        assert!(scene.can_place("berry_bush", at(0, 2)), "beside the wall");
+        assert!(scene.can_place("berry_bush", at(3, 2)), "beside rock");
 
         scene.place("berry_bush", at(1, 1));
-        assert!(!scene.can_place("thornbush", at(2, 2)), "beside a bush");
+        assert!(scene.can_place("thornbush", at(2, 2)), "beside a bush");
         assert!(!scene.can_place("berry", at(1, 1)), "the tile holds a bush");
 
         scene.place("berry", at(2, 1));
-        assert!(scene.can_place("thornbush", at(3, 1)), "beside a berry");
         assert!(
             !scene.can_place("thornbush", at(2, 1)),
             "the tile holds a berry"
         );
+    }
+
+    fn keeps_paths_open(scene: &Scene, pos: Pos) -> bool {
+        scene.objects.keeps_paths_open(&scene.map, &scene.data, pos)
+    }
+
+    #[test]
+    fn keeps_paths_open_holds_beside_other_solid_objects() {
+        let mut scene = Scene::new(&["......"; 5]);
+        assert!(keeps_paths_open(&scene, at(2, 2)), "in open ground");
+        scene.place("berry_bush", at(1, 1));
+        assert!(keeps_paths_open(&scene, at(2, 1)), "beside a bush");
+        scene.place("berry_bush", at(2, 1));
+        scene.place("berry_bush", at(1, 2));
+        assert!(keeps_paths_open(&scene, at(2, 2)), "completing a 2x2 clump");
+        assert!(keeps_paths_open(&scene, at(3, 1)), "beside the clump");
+    }
+
+    #[test]
+    fn keeps_paths_open_judges_only_the_tiles_around_so_it_errs_on_the_safe_side() {
+        // A bush in the corner at (0, 0) would split its two open sides around
+        // it, though they'd still meet the long way round the clump.
+        let mut scene = Scene::new(&["......"; 5]);
+        for (x, y) in [(1, 1), (2, 1), (1, 2)] {
+            scene.place("berry_bush", at(x, y));
+        }
+        assert!(!keeps_paths_open(&scene, at(0, 0)));
+    }
+
+    #[test]
+    fn keeps_paths_open_fails_where_a_solid_object_would_plug_a_corridor() {
+        let scene = Scene::new(&[
+            "#####", //
+            ".....", //
+            "#####", //
+        ]);
+        assert!(!keeps_paths_open(&scene, at(2, 1)));
+        assert!(
+            keeps_paths_open(&scene, at(0, 1)),
+            "the dead end at the wall"
+        );
+    }
+
+    #[test]
+    fn keeps_paths_open_fails_for_the_piece_that_would_close_a_wall() {
+        // A diagonal line of bushes is a wall, since sprites can't cut corners.
+        let mut scene = Scene::new(&["....."; 5]);
+        for i in 0..4 {
+            scene.place("berry_bush", at(i, i));
+        }
+        assert!(
+            !keeps_paths_open(&scene, at(4, 4)),
+            "carrying the line to the wall"
+        );
+        assert!(
+            !keeps_paths_open(&scene, at(4, 3)),
+            "touching the wall beside the line's end"
+        );
+
+        let mut scene = Scene::new(&["......."; 7]);
+        for i in 1..4 {
+            scene.place("berry_bush", at(i, i));
+        }
+        assert!(
+            keeps_paths_open(&scene, at(4, 3)),
+            "beside the line's end, in the open"
+        );
+
+        // A ring of bushes around (2, 2), missing only its last piece.
+        let mut scene = Scene::new(&["....."; 5]);
+        for (x, y) in [(1, 1), (2, 1), (3, 1), (3, 2), (3, 3), (2, 3), (1, 3)] {
+            scene.place("berry_bush", at(x, y));
+        }
+        assert!(!keeps_paths_open(&scene, at(1, 2)), "closing the ring");
     }
 
     #[test]
@@ -358,7 +463,7 @@ mod tests {
 
     proptest! {
         #[test]
-        fn placing_and_removing_solid_objects_never_disconnects_the_map(
+        fn placing_solid_objects_where_paths_stay_open_never_splits_the_open_ground(
             ops in vec((0u16..14, 0u16..9, any::<bool>(), any::<prop::sample::Index>()), 0..120)
         ) {
             let mut scene = Scene::new(&WARREN);
@@ -366,14 +471,17 @@ mod tests {
             for (x, y, add, which) in ops {
                 let kind = if (x + y) % 3 == 0 { "thornbush" } else { "berry_bush" };
                 if add || placed.is_empty() {
-                    if scene.can_place(kind, at(x, y)) {
+                    if scene.can_place(kind, at(x, y)) && keeps_paths_open(&scene, at(x, y)) {
+                        let before = scene.open_pieces();
                         placed.push(scene.place(kind, at(x, y)));
+                        prop_assert!(scene.open_pieces() <= before, "placed at ({x}, {y})");
                     }
                 } else {
+                    // A removal can leave a pocket where a filled dead end was,
+                    // but it held nothing but the object, so nothing is trapped.
                     let id = placed.swap_remove(which.index(placed.len()));
                     scene.objects.remove(id);
                 }
-                prop_assert!(scene.open_tiles_connected());
             }
         }
     }
