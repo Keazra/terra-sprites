@@ -69,7 +69,17 @@ pub enum MapError {
 }
 
 /// The longest a side of any map can be, in tiles.
-const MAX_SIDE: u16 = 1024;
+pub(crate) const MAX_SIDE: u16 = 1024;
+
+/// The drawing legend for `Map::from_ascii`: the ascii theme's glyphs.
+const LEGEND: [(char, Terrain); 6] = [
+    ('.', Terrain::Grass),
+    (',', Terrain::Dirt),
+    (':', Terrain::Sand),
+    ('~', Terrain::ShallowWater),
+    ('=', Terrain::DeepWater),
+    ('#', Terrain::Rock),
+];
 
 /// The world's fixed-size grid of tiles, with the terrain movement rules (design §3.1).
 #[derive(Debug, Clone, Serialize)]
@@ -80,7 +90,7 @@ pub struct Map {
     #[serde(serialize_with = "terrain_bytes")]
     tiles: Vec<Terrain>,
     /// Each terrain's step cost, indexed by `Terrain as usize`; `None` if unwalkable.
-    step_costs: [Option<u16>; 6],
+    step_costs: [Option<u16>; Terrain::ALL.len()],
 }
 
 impl Map {
@@ -100,20 +110,12 @@ impl Map {
                 return Err(MapError::RaggedRow { row: y });
             }
             for (x, glyph) in row.chars().enumerate() {
-                let terrain = match glyph {
-                    '.' => Terrain::Grass,
-                    ',' => Terrain::Dirt,
-                    ':' => Terrain::Sand,
-                    '~' => Terrain::ShallowWater,
-                    '=' => Terrain::DeepWater,
-                    '#' => Terrain::Rock,
-                    _ => {
-                        let pos = Pos {
-                            x: x as u16,
-                            y: y as u16,
-                        };
-                        return Err(MapError::UnknownGlyph { glyph, pos });
-                    }
+                let Some(&(_, terrain)) = LEGEND.iter().find(|(drawn, _)| *drawn == glyph) else {
+                    let pos = Pos {
+                        x: x as u16,
+                        y: y as u16,
+                    };
+                    return Err(MapError::UnknownGlyph { glyph, pos });
                 };
                 tiles.push(terrain);
             }
@@ -122,7 +124,7 @@ impl Map {
             width: width as u16,
             height: height as u16,
             tiles,
-            step_costs: Terrain::ALL.map(|terrain| data.terrain(terrain).step_cost()),
+            step_costs: step_costs(data),
         })
     }
 
@@ -132,8 +134,21 @@ impl Map {
             width,
             height,
             tiles: vec![terrain; usize::from(width) * usize::from(height)],
-            step_costs: Terrain::ALL.map(|terrain| data.terrain(terrain).step_cost()),
+            step_costs: step_costs(data),
         }
+    }
+
+    /// The map drawn with the `from_ascii` legend, one string per row.
+    #[cfg(test)]
+    pub(crate) fn to_ascii(&self) -> Vec<String> {
+        let glyph = |terrain| LEGEND.iter().find(|(_, t)| *t == terrain).map(|(g, _)| *g);
+        (0..self.height)
+            .map(|y| {
+                (0..self.width)
+                    .map(|x| glyph(self.terrain(Pos { x, y })).expect("every terrain has a glyph"))
+                    .collect()
+            })
+            .collect()
     }
 
     /// The map's width, in tiles.
@@ -219,6 +234,11 @@ impl Map {
     pub(crate) fn index(&self, pos: Pos) -> usize {
         usize::from(pos.y) * usize::from(self.width) + usize::from(pos.x)
     }
+}
+
+/// Each terrain's step cost from the data pack, indexed by `Terrain as usize`.
+fn step_costs(data: &DataPack) -> [Option<u16>; Terrain::ALL.len()] {
+    Terrain::ALL.map(|terrain| data.terrain(terrain).step_cost())
 }
 
 /// Serializes terrain compactly, one byte per tile, for the state hash.

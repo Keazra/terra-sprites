@@ -1,10 +1,13 @@
 use serde::Deserialize;
 
+use crate::map::MAX_SIDE;
+
 /// The default preset, embedded at compile time from the repository's `data/presets/`.
 const BUILTIN: &str = include_str!("../../../data/presets/default.ron");
 
-/// The allowed range for each side of a generated map, in tiles.
-const SIDE: std::ops::RangeInclusive<u16> = 32..=1024;
+/// The allowed range for each side of a generated map, in tiles: room enough
+/// for generation to make a mainland, up to the limit for any map.
+const SIDE: std::ops::RangeInclusive<u16> = 32..=MAX_SIDE;
 
 /// The settings a new world is made from. A preset file holds one.
 #[derive(Debug, Clone, PartialEq, Eq)]

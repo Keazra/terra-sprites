@@ -18,6 +18,10 @@ pub struct App {
     cursor: Pos,
     /// The top-left tile of the viewport.
     viewport: Pos,
+    /// The map's size, in tiles.
+    map_size: Size,
+    /// How many tiles the map view shows.
+    view: Size,
 }
 
 impl App {
@@ -40,6 +44,8 @@ impl App {
                 x: centred(cursor.x, view.width, map.width()),
                 y: centred(cursor.y, view.height, map.height()),
             },
+            map_size: Size::new(map.width(), map.height()),
+            view,
         }
     }
 
@@ -53,12 +59,14 @@ impl App {
         self.viewport
     }
 
-    /// Refits the viewport to a view of a new size, as after a resize: it stays
-    /// within the wall and keeps the cursor in view, moving as little as it can.
-    pub fn fit_viewport(&mut self, map: &Map, view: Size) {
+    /// Refits the viewport to a map view of `view` tiles, as after a resize: it
+    /// stays within the wall and keeps the cursor in view, moving as little as it can.
+    pub fn fit_viewport(&mut self, view: Size) {
+        self.view = view;
+        let map = self.map_size;
         self.viewport = Pos {
-            x: contain(self.viewport.x, self.cursor.x, view.width, map.width()),
-            y: contain(self.viewport.y, self.cursor.y, view.height, map.height()),
+            x: contain(self.viewport.x, self.cursor.x, view.width, map.width),
+            y: contain(self.viewport.y, self.cursor.y, view.height, map.height),
         };
     }
 
@@ -70,14 +78,15 @@ impl App {
 
     /// Moves the cursor by `(dx, dy)` tiles, stopping at the wall. The viewport
     /// scrolls just enough to keep the cursor away from its edge.
-    pub fn move_cursor(&mut self, dx: i32, dy: i32, map: &Map, view: Size) {
+    pub fn move_cursor(&mut self, dx: i32, dy: i32) {
+        let (map, view) = (self.map_size, self.view);
         self.cursor = Pos {
-            x: step_within(self.cursor.x, dx, map.width()),
-            y: step_within(self.cursor.y, dy, map.height()),
+            x: step_within(self.cursor.x, dx, map.width),
+            y: step_within(self.cursor.y, dy, map.height),
         };
         self.viewport = Pos {
-            x: follow(self.viewport.x, self.cursor.x, view.width, map.width()),
-            y: follow(self.viewport.y, self.cursor.y, view.height, map.height()),
+            x: follow(self.viewport.x, self.cursor.x, view.width, map.width),
+            y: follow(self.viewport.y, self.cursor.y, view.height, map.height),
         };
     }
 }

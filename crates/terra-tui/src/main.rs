@@ -101,8 +101,7 @@ fn run(
     loop {
         // The terminal may have been resized since the last frame.
         let screen = terminal.size()?;
-        let view = ui::map_view_size(screen, world.map());
-        app.fit_viewport(world.map(), view);
+        app.fit_viewport(ui::map_view_size(screen, world.map()));
         terminal.draw(|frame| ui::render(frame, &app, &world))?;
         if force_panic {
             panic!("forced panic (--force-panic): the terminal should now be restored");
@@ -124,7 +123,7 @@ fn run(
                 Some(Action::Faster { held: true }) => app.clock.faster_held(),
                 Some(Action::Slower { held: false }) => app.clock.slower(),
                 Some(Action::Slower { held: true }) => app.clock.slower_held(),
-                Some(Action::MoveCursor { dx, dy }) => app.move_cursor(dx, dy, world.map(), view),
+                Some(Action::MoveCursor { dx, dy }) => app.move_cursor(dx, dy),
                 Some(Action::Click { column, row }) => {
                     if let Some(tile) = ui::tile_at(screen, &app, world.map(), column, row) {
                         app.place_cursor(tile);

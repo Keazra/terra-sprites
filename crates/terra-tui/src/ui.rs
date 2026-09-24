@@ -36,25 +36,24 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
 /// space between the top bar and the status line, inside the frame, but no
 /// more than the map itself.
 pub fn map_view_size(screen: Size, map: &Map) -> Size {
-    map_cells(screen.into(), map).as_size()
+    tile_area(screen.into(), map).as_size()
 }
 
-/// The map tile drawn at screen cell `(column, row)`, or `None` if that cell
-/// isn't one of the map view's tiles.
+/// The tile drawn at screen cell `(column, row)`, or `None` if no tile is drawn there.
 pub fn tile_at(screen: Size, app: &App, map: &Map, column: u16, row: u16) -> Option<Pos> {
-    let cells = map_cells(screen.into(), map);
-    cells.contains(Position::new(column, row)).then(|| Pos {
-        x: app.viewport().x + (column - cells.x),
-        y: app.viewport().y + (row - cells.y),
+    let tiles = tile_area(screen.into(), map);
+    tiles.contains(Position::new(column, row)).then(|| Pos {
+        x: app.viewport().x + (column - tiles.x),
+        y: app.viewport().y + (row - tiles.y),
     })
 }
 
-/// The cells inside the map view's frame, where tiles are drawn.
-fn map_cells(screen: Rect, map: &Map) -> Rect {
+/// The screen cells inside the map view's border, where tiles are drawn.
+fn tile_area(screen: Rect, map: &Map) -> Rect {
     map_view_area(screen, map).inner(Margin::new(1, 1))
 }
 
-/// The map view's frame: below the top bar, at the left, shrunk to fit a small map.
+/// The map view, border included: below the top bar, at the left, shrunk to fit a small map.
 fn map_view_area(screen: Rect, map: &Map) -> Rect {
     let width = (map.width().saturating_add(2)).min(screen.width);
     let height = (map.height().saturating_add(2)).min(screen.height.saturating_sub(2));
@@ -74,7 +73,7 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, map: &Map) {
         top: origin.y == 0,
         bottom: origin.y + inner.height >= map.height(),
     };
-    draw_frame(buf, area, " Map ", walls);
+    draw_border(buf, area, " Map ", walls);
 
     for row in 0..inner.height {
         for col in 0..inner.width {
@@ -94,7 +93,7 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, map: &Map) {
     }
 }
 
-/// Which sides of the map view's frame are the terrarium's wall.
+/// Which sides of the map view's border are the terrarium's wall.
 struct Sides {
     left: bool,
     right: bool,
@@ -104,7 +103,7 @@ struct Sides {
 
 /// Draws a box around `area` with `title` in its top edge. Sides that are the
 /// wall use double lines; the others single lines.
-fn draw_frame(buf: &mut Buffer, area: Rect, title: &str, walls: Sides) {
+fn draw_border(buf: &mut Buffer, area: Rect, title: &str, walls: Sides) {
     let horizontal = |wall| if wall { "═" } else { "─" };
     let vertical = |wall| if wall { "║" } else { "│" };
     // Corners by (horizontal side is the wall, vertical side is the wall).

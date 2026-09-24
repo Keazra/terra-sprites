@@ -184,7 +184,7 @@ fn the_frame_is_single_where_the_map_carries_on_and_double_at_the_wall() {
     );
 
     // In the top-left corner, the top and left sides are the wall.
-    app.move_cursor(-100, -100, world.map(), view);
+    app.move_cursor(-100, -100);
     assert_eq!(
         lines(&render(&app, &world, 20, 8))[1..7],
         [
@@ -201,8 +201,6 @@ fn the_frame_is_single_where_the_map_carries_on_and_double_at_the_wall() {
 #[test]
 fn the_status_line_names_the_terrain_under_the_cursor() {
     let world = drawn_world(&SMALL_MAP);
-    let map = world.map();
-    let view = ui::map_view_size(Size::new(40, 8), map);
     let cases = [
         ((0, 0), " (0,0) grass"),
         ((8, 2), " (8,2) dirt"),
@@ -214,7 +212,7 @@ fn the_status_line_names_the_terrain_under_the_cursor() {
     for ((x, y), expected) in cases {
         let mut app = app_for(&world, Theme::cp437(), 40, 8);
         let (from_x, from_y) = (i32::from(app.cursor().x), i32::from(app.cursor().y));
-        app.move_cursor(x - from_x, y - from_y, map, view);
+        app.move_cursor(x - from_x, y - from_y);
         assert_eq!(lines(&render(&app, &world, 40, 8))[7], expected);
     }
 }
@@ -231,7 +229,7 @@ fn with_room_the_status_line_also_shows_the_keys() {
 }
 
 #[test]
-fn clicking_a_map_cell_puts_the_cursor_on_that_tile_without_scrolling() {
+fn clicking_a_tile_puts_the_cursor_on_it_without_scrolling() {
     let row = ".".repeat(30);
     let world = drawn_world(&vec![row.as_str(); 20]);
     let screen = Size::new(20, 8);
@@ -239,7 +237,7 @@ fn clicking_a_map_cell_puts_the_cursor_on_that_tile_without_scrolling() {
     // An 18×4 view whose top-left tile is (6, 8), drawn from screen cell (1, 2).
     assert_eq!(app.viewport(), terra_sim::Pos { x: 6, y: 8 });
 
-    let tile = ui::tile_at(screen, &app, world.map(), 1, 2).expect("a map cell");
+    let tile = ui::tile_at(screen, &app, world.map(), 1, 2).expect("a tile");
     assert_eq!(tile, terra_sim::Pos { x: 6, y: 8 });
     app.place_cursor(tile);
     assert_eq!(app.cursor(), tile);
@@ -250,7 +248,7 @@ fn clicking_a_map_cell_puts_the_cursor_on_that_tile_without_scrolling() {
 }
 
 #[test]
-fn clicks_outside_the_map_cells_are_not_on_a_tile() {
+fn clicks_off_the_map_views_tiles_are_not_on_a_tile() {
     let world = drawn_world(&SMALL_MAP);
     let screen = Size::new(40, 8);
     let app = app_for(&world, Theme::cp437(), 40, 8);

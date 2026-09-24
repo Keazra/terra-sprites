@@ -132,3 +132,10 @@ fn the_seed_decides_the_map() {
         );
     }
 }
+
+#[test]
+fn the_map_is_part_of_the_state_hash() {
+    let a = drawn(&["...", "..."]).expect("one region");
+    let b = drawn(&["...", ".~."]).expect("one region");
+    assert_ne!(a.state_hash(), b.state_hash());
+}
