@@ -23,7 +23,11 @@ The kind of ground a tile has: grass, dirt, sand, shallow water, deep water or r
 _Avoid_: tile type, biome, ground
 
 **Walkable**:
-Said of a terrain that sprites can stand on and step onto. Shallow water is walkable; deep water and rock are not.
+Said of a terrain that sprites can stand on and step onto on foot. Shallow water is walkable; deep water and rock are not.
+
+**Solid**:
+Said of anything that can't be moved through, such as rock or a bush. Deep water isn't walkable, but it isn't solid: crossing it is a matter of ability, not physics.
+_Avoid_: blocking, impassable
 
 **Step cost**:
 What stepping onto a tile costs a sprite, set by the tile's terrain. A diagonal step costs more than an orthogonal one.
@@ -50,6 +54,49 @@ The number that, together with a world config and a data pack, determines a new 
 **World config**:
 The settings a new world is made from, such as the map's size. A **preset** is a file that holds one.
 _Avoid_: settings, options
+
+### Objects
+
+**Entity**:
+A sprite or an object. Each has an ID that is never reused.
+
+**Object**:
+An entity that isn't a sprite, such as a berry bush, a berry or a ball. Its **object type** says how it lives and what verbs do to it.
+_Avoid_: thing, prop
+
+**Fixture**:
+An object attached to the ground, so nothing can push, pull or carry it, such as a bush. Being a fixture and being solid are separate: a crate could be solid yet pushable.
+_Avoid_: obstacle
+
+**Item**:
+An object that is neither solid nor a fixture, so a sprite can stand on it and the hand can carry it, such as a berry or a ball.
+_Avoid_: loose item, pickup
+
+**Tag**:
+A property an object type either has or lacks, such as solid or fixture. Having the tag means yes; lacking it means no.
+_Avoid_: flag, attribute
+
+**Stage**:
+A phase of an object's life, such as a bush's seedling and mature stages. Each lasts a random time within its type's range.
+_Avoid_: phase, age
+
+**Counter**:
+A named whole number an object keeps, between 0 and a maximum, such as the fruit on a bush.
+
+**Lifecycle rule**:
+Something an object does by itself: when a trigger fires and its conditions hold, its effects happen.
+_Avoid_: behaviour, script
+
+**Verb table**:
+What each verb does when a sprite applies it to a target. Water and sprites have verb tables too, though they aren't objects.
+
+**Expire**:
+An object expires when its last stage ends.
+_Avoid_: die (sprites die), rot
+
+**Visual state**:
+The name a theme draws an object by, such as a bush's seedling, bare or fruiting look.
+_Avoid_: sprite (a sprite is a creature), appearance
 
 ### The screen
 
