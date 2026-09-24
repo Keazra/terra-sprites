@@ -1,4 +1,5 @@
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use ratatui::layout::Position;
 use terra_tui::input::{Action, Keys};
 
 fn press(code: KeyCode) -> KeyEvent {
@@ -158,7 +159,7 @@ fn a_plus_released_as_equals_is_still_released() {
 }
 
 #[test]
-fn wasd_and_the_arrows_scroll_the_view_one_tile() {
+fn wasd_and_the_arrows_scroll_the_viewport_one_tile() {
     let one = |dx, dy| Some(Action::Scroll { dx, dy });
     let cases = [
         (KeyCode::Char('w'), one(0, -1)),
@@ -184,11 +185,11 @@ fn shift_scrolls_five_tiles() {
         (shifted(KeyCode::Left), five(-5, 0)),
         (shifted(KeyCode::Down), five(0, 5)),
         (shifted(KeyCode::Right), five(5, 0)),
-        // Terminals report Shift+w as `W`, with or without the Shift modifier.
+        // Terminals report Shift+w as `W` with the Shift modifier.
         (shifted(KeyCode::Char('W')), five(0, -5)),
-        (press(KeyCode::Char('A')), five(-5, 0)),
+        (shifted(KeyCode::Char('A')), five(-5, 0)),
         (shifted(KeyCode::Char('S')), five(0, 5)),
-        (press(KeyCode::Char('D')), five(5, 0)),
+        (shifted(KeyCode::Char('D')), five(5, 0)),
     ];
     for (key, expected) in cases {
         assert_eq!(Keys::new().action_for(key), expected, "{key:?}");
@@ -216,22 +217,22 @@ fn holding_a_scroll_key_keeps_scrolling() {
 fn escape_and_y_answer_the_quit_prompt_and_q_no_longer_quits() {
     assert_eq!(
         Keys::new().action_for(press(KeyCode::Esc)),
-        Some(Action::Escape)
+        Some(Action::Back)
     );
     assert_eq!(
         Keys::new().action_for(press(KeyCode::Char('y'))),
-        Some(Action::Yes)
+        Some(Action::Confirm)
     );
     assert_eq!(
         Keys::new().action_for(press(KeyCode::Char('q'))),
-        Some(Action::OtherKey)
+        Some(Action::Dismiss)
     );
 }
 
 #[test]
 fn holding_escape_counts_once_so_it_cannot_confirm_its_own_prompt() {
     let mut keys = Keys::with_release_reporting(true);
-    assert_eq!(keys.action_for(press(KeyCode::Esc)), Some(Action::Escape));
+    assert_eq!(keys.action_for(press(KeyCode::Esc)), Some(Action::Back));
     assert_eq!(
         keys.action_for(press(KeyCode::Esc)),
         None,
@@ -254,14 +255,14 @@ fn any_other_key_is_reported_so_it_can_cancel_a_prompt() {
     ] {
         assert_eq!(
             Keys::new().action_for(press(code)),
-            Some(Action::OtherKey),
+            Some(Action::Dismiss),
             "{code:?}"
         );
     }
 }
 
 #[test]
-fn the_mouse_points_while_moving_and_clicks_with_the_left_button() {
+fn every_mouse_event_points_and_a_left_press_also_clicks() {
     use ratatui::crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
     let mouse = |kind| MouseEvent {
         kind,
@@ -270,18 +271,46 @@ fn the_mouse_points_while_moving_and_clicks_with_the_left_button() {
         modifiers: KeyModifiers::NONE,
     };
     let action = |kind| terra_tui::input::mouse_action(mouse(kind));
-    let point = Some(Action::Point { column: 12, row: 7 });
+    let point = Some(Action::Point(Position::new(12, 7)));
     assert_eq!(action(MouseEventKind::Moved), point);
     assert_eq!(action(MouseEventKind::Drag(MouseButton::Left)), point);
     assert_eq!(
         action(MouseEventKind::Down(MouseButton::Left)),
-        Some(Action::Click { column: 12, row: 7 })
+        Some(Action::Click(Position::new(12, 7)))
     );
+    // Every mouse event says where the pointer is, so the cursor follows it.
     for kind in [
         MouseEventKind::Up(MouseButton::Left),
         MouseEventKind::Down(MouseButton::Right),
+        MouseEventKind::Drag(MouseButton::Middle),
         MouseEventKind::ScrollDown,
     ] {
-        assert_eq!(action(kind), None, "{kind:?}");
+        assert_eq!(action(kind), point, "{kind:?}");
     }
+}
+
+#[test]
+fn caps_lock_letters_without_shift_scroll_one_tile() {
+    // With Caps Lock on, Windows reports `W` without the Shift modifier.
+    assert_eq!(
+        Keys::new().action_for(press(KeyCode::Char('W'))),
+        Some(Action::Scroll { dx: 0, dy: -1 })
+    );
+    assert_eq!(
+        Keys::new().action_for(press(KeyCode::Char('D'))),
+        Some(Action::Scroll { dx: 1, dy: 0 })
+    );
+}
+
+#[test]
+fn a_capital_y_confirms_too() {
+    let shifted_y = KeyEvent::new(KeyCode::Char('Y'), KeyModifiers::SHIFT);
+    assert_eq!(Keys::new().action_for(shifted_y), Some(Action::Confirm));
+}
+
+#[test]
+fn ctrl_with_any_key_but_c_dismisses() {
+    let ctrl = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL);
+    assert_eq!(Keys::new().action_for(ctrl('z')), Some(Action::Dismiss));
+    assert_eq!(Keys::new().action_for(ctrl('c')), Some(Action::Quit));
 }

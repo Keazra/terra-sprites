@@ -12,13 +12,16 @@
         terrain(deep_water):    (glyph: '≈', fg: blue),
         terrain(rock):          (glyph: '#', fg: gray),
     },
-    // The 3×3 cursor (design §6.5). Its arrows are named by the way they point.
+    // The 3×3 cursor (design §6.5). The arrows are named by the way they point.
+    // Each mode's mark gives the cursor its colour: the arrows and status marks
+    // take it too.
     cursor: (
-        up: '↑',
-        down: '↓',
-        left: '←',
-        right: '→',
-        select: '♦', // the Select mode's mark
-        idle: '·',   // a status mark with nothing to report
+        arrows: (up: '↑', down: '↓', left: '←', right: '→'),
+        status_marks: (
+            idle: '·', // nothing to report
+        ),
+        mode_marks: {
+            select: (glyph: '♦', fg: white),
+        },
     ),
 )

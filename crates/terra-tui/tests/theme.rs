@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use ratatui::style::Color;
 use terra_sim::Terrain;
+use terra_tui::app::CursorMode;
 use terra_tui::cp437;
 use terra_tui::theme::{SemanticTile, Theme};
 
@@ -62,41 +63,41 @@ fn cp437_covers_the_glyphs_the_design_uses_and_nothing_outside_the_code_page() {
     }
 }
 
+/// A theme's cursor glyphs for Select mode: the four arrows (up, down, left,
+/// right), the mode mark and the idle status mark.
+fn select_cursor(theme: &Theme) -> [char; 6] {
+    let (arrows, status) = (theme.arrows(), theme.status_marks());
+    let mark = theme.mode_mark(CursorMode::Select).symbol;
+    [
+        arrows.up,
+        arrows.down,
+        arrows.left,
+        arrows.right,
+        mark,
+        status.idle,
+    ]
+}
+
 #[test]
 fn the_themes_draw_the_select_cursor_as_the_design_table_says() {
     // Design §6.2: arrows, the Select mode mark, and the idle status mark.
-    let cp437 = Theme::cp437().cursor();
-    let ascii = Theme::ascii().cursor();
     assert_eq!(
-        [
-            cp437.up,
-            cp437.down,
-            cp437.left,
-            cp437.right,
-            cp437.select,
-            cp437.idle
-        ],
+        select_cursor(&Theme::cp437()),
         ['↑', '↓', '←', '→', '♦', '·']
     );
     assert_eq!(
-        [
-            ascii.up,
-            ascii.down,
-            ascii.left,
-            ascii.right,
-            ascii.select,
-            ascii.idle
-        ],
+        select_cursor(&Theme::ascii()),
         ['^', 'v', '<', '>', 'S', '-']
     );
-    for glyph in [
-        cp437.up,
-        cp437.down,
-        cp437.left,
-        cp437.right,
-        cp437.select,
-        cp437.idle,
-    ] {
+    for glyph in select_cursor(&Theme::cp437()) {
         assert!(cp437::contains(glyph), "{glyph:?}");
+    }
+}
+
+#[test]
+fn the_select_mode_is_white_in_both_themes() {
+    // Design §6.5: the mode mark's colour is the whole cursor's colour.
+    for theme in [Theme::cp437(), Theme::ascii()] {
+        assert_eq!(theme.mode_mark(CursorMode::Select).fg, Color::White);
     }
 }

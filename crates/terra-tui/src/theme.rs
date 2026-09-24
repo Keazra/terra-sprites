@@ -7,6 +7,8 @@ use ratatui::style::Color;
 use serde::Deserialize;
 use terra_sim::Terrain;
 
+use crate::app::CursorMode;
+
 /// What the map view draws for a tile, named by meaning rather than by character.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -33,26 +35,31 @@ pub struct Glyph {
     pub fg: Color,
 }
 
-/// The glyphs a theme draws the cursor with (design §6.5). The arrows are
-/// named by the way they point.
+/// The cursor's arrows (design §6.5), named by the way they point.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct CursorGlyphs {
+pub struct Arrows {
     pub up: char,
     pub down: char,
     pub left: char,
     pub right: char,
-    /// The Select mode's mark.
-    pub select: char,
-    /// A status mark with nothing to report.
+}
+
+/// What the cursor's status marks, `Y` and `N`, can show (design §6.5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StatusMarks {
+    /// Nothing to report.
     pub idle: char,
 }
 
-/// A mapping from semantic tiles to glyphs and colours.
+/// A mapping from semantic tiles, and the cursor, to glyphs and colours.
 #[derive(Debug, Clone)]
 pub struct Theme {
     tiles: BTreeMap<SemanticTile, Glyph>,
-    cursor: CursorGlyphs,
+    arrows: Arrows,
+    status_marks: StatusMarks,
+    mode_marks: BTreeMap<CursorMode, Glyph>,
 }
 
 impl Theme {
@@ -71,36 +78,59 @@ impl Theme {
         self.tiles[&tile]
     }
 
-    /// How this theme draws the cursor.
-    pub fn cursor(&self) -> CursorGlyphs {
-        self.cursor
+    /// The cursor's arrows.
+    pub fn arrows(&self) -> Arrows {
+        self.arrows
+    }
+
+    /// What the cursor's status marks show.
+    pub fn status_marks(&self) -> StatusMarks {
+        self.status_marks
+    }
+
+    /// The mode mark for `mode`. The cursor's arrows and status marks take its colour.
+    pub fn mode_mark(&self, mode: CursorMode) -> Glyph {
+        self.mode_marks[&mode]
     }
 
     fn builtin(name: &str, text: &str) -> Theme {
         let file: ThemeFile = ron::from_str(text)
             .unwrap_or_else(|e| panic!("the built-in {name} theme doesn't parse: {e}"));
-        let tiles: BTreeMap<SemanticTile, Glyph> = file
-            .tiles
-            .into_iter()
-            .map(|(tile, entry)| {
-                let glyph = Glyph {
-                    symbol: entry.glyph,
-                    fg: entry.fg.into(),
-                };
-                (tile, glyph)
-            })
-            .collect();
+        let tiles = glyphs(file.tiles);
         for tile in SemanticTile::ALL {
             assert!(
                 tiles.contains_key(&tile),
                 "the {name} theme has no {tile:?}"
             );
         }
+        let mode_marks = glyphs(file.cursor.mode_marks);
+        for mode in CursorMode::ALL {
+            assert!(
+                mode_marks.contains_key(&mode),
+                "the {name} theme has no {mode:?} mark"
+            );
+        }
         Theme {
             tiles,
-            cursor: file.cursor,
+            arrows: file.cursor.arrows,
+            status_marks: file.cursor.status_marks,
+            mode_marks,
         }
     }
+}
+
+/// Turns a theme file's entries into glyphs.
+fn glyphs<K: Ord>(entries: BTreeMap<K, GlyphEntry>) -> BTreeMap<K, Glyph> {
+    entries
+        .into_iter()
+        .map(|(key, entry)| {
+            let glyph = Glyph {
+                symbol: entry.glyph,
+                fg: entry.fg.into(),
+            };
+            (key, glyph)
+        })
+        .collect()
 }
 
 /// A theme file, as written in `themes/*.ron`.
@@ -108,7 +138,16 @@ impl Theme {
 #[serde(deny_unknown_fields)]
 struct ThemeFile {
     tiles: BTreeMap<SemanticTile, GlyphEntry>,
-    cursor: CursorGlyphs,
+    cursor: CursorFile,
+}
+
+/// A theme file's `cursor` section.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CursorFile {
+    arrows: Arrows,
+    status_marks: StatusMarks,
+    mode_marks: BTreeMap<CursorMode, GlyphEntry>,
 }
 
 #[derive(Deserialize)]
