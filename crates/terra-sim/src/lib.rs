@@ -7,6 +7,7 @@ mod config;
 mod data;
 mod generate;
 mod map;
+mod object_types;
 mod objects;
 mod regions;
 mod registry;

@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use ron::extensions::Extensions;
 use serde::Deserialize;
 
-use crate::objects::{OBJECTS, ObjectType, TypeEntry, object_types};
+use crate::object_types::{OBJECTS, ObjectType, TypeEntry, object_types};
 use crate::registry::{Chemical, Locus};
 use crate::terrain::{Terrain, TerrainProps};
 
