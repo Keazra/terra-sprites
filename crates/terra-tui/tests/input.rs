@@ -158,3 +158,86 @@ fn a_plus_released_as_equals_is_still_released() {
         Some(Action::Faster { held: false })
     );
 }
+
+#[test]
+fn arrows_and_hjkl_move_the_cursor_one_tile() {
+    let one = |dx, dy| Some(Action::MoveCursor { dx, dy });
+    let cases = [
+        (KeyCode::Left, one(-1, 0)),
+        (KeyCode::Right, one(1, 0)),
+        (KeyCode::Up, one(0, -1)),
+        (KeyCode::Down, one(0, 1)),
+        (KeyCode::Char('h'), one(-1, 0)),
+        (KeyCode::Char('l'), one(1, 0)),
+        (KeyCode::Char('k'), one(0, -1)),
+        (KeyCode::Char('j'), one(0, 1)),
+    ];
+    for (code, expected) in cases {
+        assert_eq!(Keys::new().action_for(press(code)), expected, "{code:?}");
+    }
+}
+
+#[test]
+fn shift_moves_the_cursor_five_tiles() {
+    let five = |dx, dy| Some(Action::MoveCursor { dx, dy });
+    let shifted = |code| KeyEvent::new(code, KeyModifiers::SHIFT);
+    let cases = [
+        (shifted(KeyCode::Left), five(-5, 0)),
+        (shifted(KeyCode::Right), five(5, 0)),
+        (shifted(KeyCode::Up), five(0, -5)),
+        (shifted(KeyCode::Down), five(0, 5)),
+        // Terminals report Shift+h as `H`, with or without the Shift modifier.
+        (shifted(KeyCode::Char('H')), five(-5, 0)),
+        (press(KeyCode::Char('L')), five(5, 0)),
+        (shifted(KeyCode::Char('K')), five(0, -5)),
+        (press(KeyCode::Char('J')), five(0, 5)),
+    ];
+    for (key, expected) in cases {
+        assert_eq!(Keys::new().action_for(key), expected, "{key:?}");
+    }
+}
+
+#[test]
+fn holding_a_cursor_key_keeps_moving() {
+    let mut keys = Keys::with_release_reporting(true);
+    let right = Some(Action::MoveCursor { dx: 1, dy: 0 });
+    assert_eq!(keys.action_for(press(KeyCode::Right)), right);
+    assert_eq!(
+        keys.action_for(press(KeyCode::Right)),
+        right,
+        "held via a second press"
+    );
+    assert_eq!(
+        keys.action_for(kind(KeyCode::Right, KeyEventKind::Repeat)),
+        right,
+        "held via repeat"
+    );
+}
+
+#[test]
+fn a_left_click_is_a_click_at_that_cell_and_other_mouse_events_are_ignored() {
+    use ratatui::crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+    let mouse = |kind| MouseEvent {
+        kind,
+        column: 12,
+        row: 7,
+        modifiers: KeyModifiers::NONE,
+    };
+    assert_eq!(
+        terra_tui::input::mouse_action(mouse(MouseEventKind::Down(MouseButton::Left))),
+        Some(Action::Click { column: 12, row: 7 })
+    );
+    for kind in [
+        MouseEventKind::Up(MouseButton::Left),
+        MouseEventKind::Down(MouseButton::Right),
+        MouseEventKind::Drag(MouseButton::Left),
+        MouseEventKind::Moved,
+        MouseEventKind::ScrollDown,
+    ] {
+        assert_eq!(
+            terra_tui::input::mouse_action(mouse(kind)),
+            None,
+            "{kind:?}"
+        );
+    }
+}
