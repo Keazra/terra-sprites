@@ -195,6 +195,11 @@ impl World {
         &self.state.map
     }
 
+    /// The data pack the world was made with.
+    pub fn data(&self) -> &DataPack {
+        &self.data
+    }
+
     /// Every object, in ascending ID order.
     pub fn objects(&self) -> impl Iterator<Item = ObjectView<'_>> {
         self.state.objects.iter().map(|(id, object)| ObjectView {

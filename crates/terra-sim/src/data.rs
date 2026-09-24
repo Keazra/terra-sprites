@@ -202,6 +202,53 @@ impl DataPack {
         &self.terrain[terrain as usize]
     }
 
+    /// The names of the object types that can have objects (not pseudo types), in ID order.
+    pub fn object_type_names(&self) -> impl Iterator<Item = &str> {
+        self.object_types
+            .iter()
+            .filter(|t| !t.pseudo)
+            .map(|t| t.name.as_str())
+    }
+
+    /// The names of an object type's stages, in order. Empty for a type with
+    /// no stages, or no such type.
+    pub fn stage_names(&self, object_type: &str) -> Vec<&str> {
+        self.named(object_type)
+            .map(|t| t.stages.iter().map(|s| s.name.as_str()).collect())
+            .unwrap_or_default()
+    }
+
+    /// The names of an object type's counters.
+    pub fn counter_names(&self, object_type: &str) -> Vec<&str> {
+        self.named(object_type)
+            .map(|t| t.counters.iter().map(|c| c.name.as_str()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Every visual state an object type can be in: those its visual rules name,
+    /// in order, then `"default"`.
+    pub fn visual_states(&self, object_type: &str) -> Vec<&str> {
+        let Some(named) = self.named(object_type) else {
+            return Vec::new();
+        };
+        let mut states: Vec<&str> = Vec::new();
+        for state in named
+            .visual
+            .iter()
+            .map(|v| v.state.as_str())
+            .chain(["default"])
+        {
+            if !states.contains(&state) {
+                states.push(state);
+            }
+        }
+        states
+    }
+
+    fn named(&self, object_type: &str) -> Option<&ObjectType> {
+        self.object_types.iter().find(|t| t.name == object_type)
+    }
+
     /// Every object type, in ascending ID order. Rules refer to types by their index here.
     pub(crate) fn object_types(&self) -> &[ObjectType] {
         &self.object_types
