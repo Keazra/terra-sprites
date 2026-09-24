@@ -61,8 +61,12 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, map: &Map) {
     };
     draw_border(buf, area, " Map ", walls);
 
-    for row in 0..inner.height {
-        for col in 0..inner.width {
+    // Normally the view fits the map, but if the terminal grew since the app
+    // last fitted its view, stop at the wall rather than read past it.
+    let cols = inner.width.min(map.width() - origin.x);
+    let rows = inner.height.min(map.height() - origin.y);
+    for row in 0..rows {
+        for col in 0..cols {
             let pos = Pos {
                 x: origin.x + col,
                 y: origin.y + row,
