@@ -1,0 +1,88 @@
+// Object types (design §3.5). IDs are stable and append-only: never renumber
+// or reuse one. Names are what rules, presets and themes refer to.
+//
+// Each type has:
+//   category  what brains perceive it as (BerryBush, Berry, Thornbush, Water, Ball, Sprite)
+//   tags      [Solid, Fixture] for things like bushes, which nothing can move
+//             through or move; no tags for items, like berries and balls
+//   counters  named whole numbers with maximums: {"fruit": 6}
+//   stages    [(name, ticks: (min, max), next: Stage(name) or Expire)]; a type
+//             with no stages is permanent
+//   rules     [(trigger, if: [conditions], do: [effects])], run in order
+//   verbs     {Verb: [effects]}: what happens when a sprite does that verb to it
+//   visual    [(if: [conditions], state: name)]: the first match names the state
+//             themes draw; with no match, the state is "default"
+//
+// Triggers: Every(n), OnStageEnter(stage), OnExpire.
+// Conditions: InStage(stage), Counter(name, cmp, n), Chance(p),
+//   Fertility(cmp, f), DensityBelow(type, radius, max); cmp is Lt, Le, Eq, Ne, Ge or Gt.
+// Effects: AddCounter(name, delta), SpawnNearby(type, radius),
+//   SpreadTo(type, radius, [conditions]), ReplaceWith(type), DestroySelf;
+//   and in verbs only: RequireCounter(name, n), Inject(Actor or Target, chemical, amount),
+//   Signal(Actor or Target, locus), Push(tiles).
+[
+    (id: 1, name: "berry_bush", category: BerryBush, tags: [Solid, Fixture],
+     counters: {"fruit": 6},
+     stages: [
+         (name: "seedling", ticks: (1500, 2500),   next: Stage("mature")),
+         (name: "mature",   ticks: (20000, 30000), next: Expire),
+     ],
+     rules: [
+         (trigger: Every(200), if: [InStage("mature")], do: [AddCounter("fruit", 1)]),
+         // Overripe fruit drops beside the bush.
+         (trigger: Every(50), if: [Counter("fruit", Ge, 6), Chance(0.2)],
+          do: [AddCounter("fruit", -1), SpawnNearby("berry", 1)]),
+     ],
+     verbs: {
+         Eat: [RequireCounter("fruit", 1), AddCounter("fruit", -1),
+               Inject(Actor, "food", 0.3), Signal(Actor, "ate")],
+         Hit: [Signal(Actor, "did_hit")],
+     },
+     visual: [
+         (if: [InStage("seedling")], state: "seedling"),
+         (if: [Counter("fruit", Ge, 1)], state: "fruiting"),
+     ]),
+
+    (id: 2, name: "berry", category: Berry,
+     stages: [(name: "fresh", ticks: (1500, 2500), next: Expire)],
+     rules: [
+         // A rotting berry sometimes sprouts, on fertile land that isn't crowded.
+         (trigger: OnExpire,
+          if: [Fertility(Ge, 0.5), DensityBelow("berry_bush", 4, 3), Chance(0.1)],
+          do: [ReplaceWith("berry_bush")]),
+     ],
+     verbs: {
+         Eat: [Inject(Actor, "food", 0.3), Signal(Actor, "ate"), DestroySelf],
+     }),
+
+    (id: 3, name: "thornbush", category: Thornbush, tags: [Solid, Fixture],
+     stages: [(name: "grown", ticks: (40000, 60000), next: Expire)],
+     rules: [
+         (trigger: Every(2000), if: [Chance(0.1)],
+          do: [SpreadTo("thornbush", 4, [DensityBelow("thornbush", 4, 2)])]),
+     ],
+     // Every contact hurts, deliberately, even Play (design §3.5.3).
+     verbs: {
+         Eat:  [Inject(Actor, "injury", 0.05), Signal(Actor, "pricked")],
+         Hit:  [Inject(Actor, "injury", 0.03), Signal(Actor, "pricked"), Signal(Actor, "did_hit")],
+         Play: [Inject(Actor, "injury", 0.03), Signal(Actor, "pricked")],
+     }),
+
+    (id: 4, name: "ball", category: Ball,
+     verbs: {
+         Play: [Push(4), Signal(Actor, "played")],
+         Hit:  [Push(2), Signal(Actor, "did_hit")],
+     }),
+
+    // Pseudo types: a verb table only, with no instances or lifecycle.
+    (id: 100, name: "water", category: Water, pseudo: true,
+     verbs: {
+         Drink: [Inject(Actor, "water", 0.2), Signal(Actor, "drank")],
+     }),
+
+    (id: 101, name: "sprite", category: Sprite, pseudo: true,
+     verbs: {
+         Hit:  [Inject(Target, "injury", 0.03), Signal(Target, "was_hit"), Signal(Actor, "did_hit")],
+         Play: [Signal(Actor, "played_social"), Signal(Target, "played_social")],
+     }),
+]

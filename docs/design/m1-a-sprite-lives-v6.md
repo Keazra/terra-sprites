@@ -471,9 +471,10 @@ The guarantee rests on solid objects never moving. A solid object that could be 
   - a verb-only effect in a lifecycle rule
   - `Inject` of a chemical that isn't physical; `Signal` of a locus that isn't a pulse
   - `Chance` in a visual rule
-  - a stage whose `ticks` minimum is below 1 or above its maximum; a counter maximum of 0; `Every(0)`; a `Chance` outside [0, 1]
+  - a stage whose `ticks` minimum is below 1 or above its maximum; a stage name used twice in one type; a counter maximum of 0; `Every(0)`; a `Chance` outside [0, 1]
   - a tag combination M1 doesn't support (§3.5.1)
-  - a pseudo type with tags, counters, stages, rules or visual rules; a spawn, spread or replacement that names a pseudo type
+  - a pseudo type with tags, counters, stages, rules or visual rules; a spawn, spread, replacement or `DensityBelow` that names a pseudo type
+  - a verb table for a verb other than Eat, Drink, Hit and Play: the others move, rest or are reserved, and never act through a target's table (§5.2)
 
 **Scope rule:** any later object type that fits this vocabulary needs **no new code**. A genuinely new behaviour means adding one case to the rule enum. (M3 critters are agents, not objects.)
 

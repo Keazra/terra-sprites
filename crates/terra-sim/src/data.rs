@@ -1,8 +1,10 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use ron::extensions::Extensions;
 use serde::Deserialize;
 
+use crate::objects::{OBJECTS, ObjectType, TypeEntry, object_types};
+use crate::registry::{Chemical, Locus};
 use crate::terrain::{Terrain, TerrainProps};
 
 /// A validated data pack: everything a world needs from `data/`.
@@ -11,6 +13,10 @@ pub struct DataPack {
     manifest: Manifest,
     /// Indexed by `Terrain as usize`.
     terrain: Vec<TerrainProps>,
+    chemicals: Vec<Chemical>,
+    loci: Vec<Locus>,
+    /// In ascending ID order.
+    object_types: Vec<ObjectType>,
 }
 
 /// Why a data pack could not be loaded.
@@ -28,11 +34,18 @@ pub enum DataError {
 const MANIFEST: &str = "pack.ron";
 /// The terrain properties file, relative to the pack root.
 const TERRAIN: &str = "terrain.ron";
+/// The chemicals registry, relative to the pack root.
+const CHEMICALS: &str = "chemicals.ron";
+/// The loci registry, relative to the pack root.
+const LOCI: &str = "loci.ron";
 
 /// The default pack's files, embedded at compile time from the repository's `data/`.
 const BUILTIN: &[(&str, &str)] = &[
     (MANIFEST, include_str!("../../../data/pack.ron")),
     (TERRAIN, include_str!("../../../data/terrain.ron")),
+    (CHEMICALS, include_str!("../../../data/chemicals.ron")),
+    (LOCI, include_str!("../../../data/loci.ron")),
+    (OBJECTS, include_str!("../../../data/objects.ron")),
 ];
 
 /// `pack.ron`: identifies the pack.
@@ -68,6 +81,8 @@ struct TerrainEntry {
     fertility: Option<f32>,
     #[serde(default)]
     drinkable: Option<bool>,
+    #[serde(default)]
+    allows_fixtures: Option<bool>,
 }
 
 /// Checks `terrain.ron` and returns each terrain's properties, indexed by `Terrain as usize`.
@@ -99,13 +114,18 @@ impl TerrainEntry {
             if matches!(terrain, Terrain::Dirt | Terrain::ShallowWater) {
                 return Err("must be walkable, because carving creates it");
             }
-            if self.step_cost.is_some() || self.fertility.is_some() || self.drinkable.is_some() {
+            if self.step_cost.is_some()
+                || self.fertility.is_some()
+                || self.drinkable.is_some()
+                || self.allows_fixtures.is_some()
+            {
                 return Err("is unwalkable, so it takes nothing but `walkable: false`");
             }
             return Ok(TerrainProps {
                 step_cost: None,
                 fertility: 0.0,
                 drinkable: false,
+                allows_fixtures: false,
             });
         }
         let step_cost = match self.step_cost {
@@ -119,10 +139,14 @@ impl TerrainEntry {
         let Some(drinkable) = self.drinkable else {
             return Err("is walkable, so it must say whether it is `drinkable`");
         };
+        let Some(allows_fixtures) = self.allows_fixtures else {
+            return Err("is walkable, so it must say whether it `allows_fixtures`");
+        };
         Ok(TerrainProps {
             step_cost: Some(step_cost),
             fertility,
             drinkable,
+            allows_fixtures,
         })
     }
 }
@@ -143,7 +167,22 @@ impl DataPack {
         let manifest = parse::<Manifest>(sources, MANIFEST)?;
         manifest.validate()?;
         let terrain = terrain_table(parse(sources, TERRAIN)?)?;
-        Ok(DataPack { manifest, terrain })
+        let chemicals: Vec<Chemical> = parse(sources, CHEMICALS)?;
+        check_unique(CHEMICALS, chemicals.iter().map(|c| (c.id, c.name.as_str())))?;
+        let loci: Vec<Locus> = parse(sources, LOCI)?;
+        check_unique(LOCI, loci.iter().map(|l| (l.id, l.name.as_str())))?;
+        let object_types = object_types(
+            parse::<Vec<TypeEntry>>(sources, OBJECTS)?,
+            &chemicals,
+            &loci,
+        )?;
+        Ok(DataPack {
+            manifest,
+            terrain,
+            chemicals,
+            loci,
+            object_types,
+        })
     }
 
     /// The pack's name, from its manifest.
@@ -160,6 +199,29 @@ impl DataPack {
     pub fn terrain(&self, terrain: Terrain) -> &TerrainProps {
         &self.terrain[terrain as usize]
     }
+}
+
+/// Checks that no two registry entries in `file` share an ID or a name.
+pub(crate) fn check_unique<'a>(
+    file: &str,
+    entries: impl Iterator<Item = (u16, &'a str)>,
+) -> Result<(), DataError> {
+    let mut ids = BTreeSet::new();
+    let mut names = BTreeSet::new();
+    for (id, name) in entries {
+        let duplicate = if !ids.insert(id) {
+            format!("the id {id}")
+        } else if !names.insert(name) {
+            format!("the name `{name}`")
+        } else {
+            continue;
+        };
+        return Err(DataError::Invalid {
+            file: file.into(),
+            message: format!("{duplicate} is used more than once"),
+        });
+    }
+    Ok(())
 }
 
 /// Finds `file` among `sources` and parses it as `T`.

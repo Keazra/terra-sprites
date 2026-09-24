@@ -2,13 +2,13 @@
 //
 // A walkable terrain gives its step cost (what an orthogonal step onto it
 // costs; a diagonal step costs 14/10 of that), its fertility (0 to 1) and
-// whether sprites can drink there. An unwalkable terrain gives only
-// `walkable: false`.
+// whether sprites can drink there, and whether a fixture (such as a bush) may
+// stand there. An unwalkable terrain gives only `walkable: false`.
 {
-    grass:         (walkable: true, step_cost: 10, fertility: 1.0, drinkable: false),
-    dirt:          (walkable: true, step_cost: 10, fertility: 0.5, drinkable: false),
-    sand:          (walkable: true, step_cost: 15, fertility: 0.0, drinkable: false),
-    shallow_water: (walkable: true, step_cost: 25, fertility: 0.0, drinkable: true),
+    grass:         (walkable: true, step_cost: 10, fertility: 1.0, drinkable: false, allows_fixtures: true),
+    dirt:          (walkable: true, step_cost: 10, fertility: 0.5, drinkable: false, allows_fixtures: true),
+    sand:          (walkable: true, step_cost: 15, fertility: 0.0, drinkable: false, allows_fixtures: true),
+    shallow_water: (walkable: true, step_cost: 25, fertility: 0.0, drinkable: true,  allows_fixtures: false),
     deep_water:    (walkable: false),
     rock:          (walkable: false),
 }
