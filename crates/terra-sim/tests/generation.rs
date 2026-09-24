@@ -1,5 +1,5 @@
 use proptest::prelude::*;
-use terra_sim::{DataPack, Dir, Map, Pos, Terrain, World, WorldConfig};
+use terra_sim::{DataPack, Dir, EventKind, Map, Pos, Removal, Terrain, World, WorldConfig};
 
 fn generate(width: u16, height: u16, seed: u64) -> World {
     let data = DataPack::builtin().expect("valid pack");
@@ -107,4 +107,125 @@ fn maps_at_the_size_limits_are_one_region() {
             "{width}x{height}: some walkable tiles are cut off"
         );
     }
+}
+
+/// A new world from the built-in preset and pack.
+fn default_world(seed: u64) -> World {
+    let data = DataPack::builtin().expect("valid pack");
+    World::new(WorldConfig::builtin(&data), data, seed)
+}
+
+/// How many objects of each type the world has, by type name.
+fn census(world: &World) -> std::collections::BTreeMap<String, usize> {
+    let mut counts = std::collections::BTreeMap::new();
+    for object in world.objects() {
+        *counts.entry(object.type_name().to_string()).or_insert(0) += 1;
+    }
+    counts
+}
+
+#[test]
+fn a_new_world_gets_the_presets_objects_placed_by_the_rules() {
+    for seed in 0..4 {
+        let world = default_world(seed);
+        let expected = [("ball", 16), ("berry_bush", 400), ("thornbush", 107)]
+            .map(|(name, n)| (name.to_string(), n));
+        assert_eq!(census(&world), expected.into(), "seed {seed}");
+        assert_eq!(world.check_invariants(), Ok(()), "seed {seed}");
+    }
+}
+
+#[test]
+fn a_crowded_preset_places_what_fits_and_carries_on() {
+    let data = DataPack::builtin().expect("valid pack");
+    let preset = r#"(width: 32, height: 32, objects: {"berry_bush": 1, "ball": 1}, per_tiles: 1)"#;
+    let config = WorldConfig::from_ron(preset, &data).expect("valid preset");
+    let world = World::new(config, data, 5);
+    let counts = census(&world);
+    assert!(
+        counts["berry_bush"] > 0 && counts["berry_bush"] < 1024,
+        "{counts:?}"
+    );
+    assert!(counts["ball"] > 0, "items fill the gaps: {counts:?}");
+    assert_eq!(world.check_invariants(), Ok(()));
+}
+
+#[test]
+fn generated_objects_start_partway_through_their_lives() {
+    let mut world = default_world(11);
+    let bushes = || world.objects().filter(|o| o.type_name() == "berry_bush");
+    let seedlings = bushes().filter(|o| o.stage() == Some("seedling")).count();
+    // Seedlings last about 2,000 of a bush's 27,000 ticks: about 7% of them.
+    assert!(
+        (10..=60).contains(&seedlings),
+        "{seedlings} of 400 are seedlings"
+    );
+    assert!(
+        bushes().all(|o| o.counter("fruit") == Some(0)),
+        "counters start at 0"
+    );
+
+    // Mature bushes gain fruit every 200 ticks, so the world has food at once.
+    for _ in 0..200 {
+        world.step();
+    }
+    let fruiting = world
+        .objects()
+        .filter(|o| o.counter("fruit").is_some_and(|fruit| fruit > 0))
+        .count();
+    assert!(
+        fruiting > 300,
+        "{fruiting} bushes carry fruit after 200 ticks"
+    );
+}
+
+#[test]
+fn generated_objects_expire_spread_out_not_all_at_once() {
+    // A berry bush lives about 27,000 ticks. Started at random ages, about 15
+    // of the 400 expire in any 1,000 ticks; started fresh, none would.
+    let mut world = default_world(3);
+    let mut expired = 0;
+    for _ in 0..1_000 {
+        expired += world
+            .step()
+            .iter()
+            .filter(|e| {
+                matches!(
+                    &e.kind,
+                    EventKind::ObjectRemoved { object_type, reason: Removal::Expired, .. }
+                        if object_type == "berry_bush"
+                )
+            })
+            .count();
+    }
+    assert!(
+        (4..=40).contains(&expired),
+        "{expired} berry bushes expired"
+    );
+}
+
+#[test]
+fn a_generated_object_gets_no_on_stage_enter_for_the_stage_it_starts_in() {
+    let herb = r#"(id: 1, name: "herb", category: BerryBush, counters: {"entered": 9},
+        stages: [(name: "a", ticks: (50, 50), next: Stage("b")),
+                 (name: "b", ticks: (50, 50), next: Expire)],
+        rules: [(trigger: OnStageEnter("a"), do: [AddCounter("entered", 1)]),
+                (trigger: OnStageEnter("b"), do: [AddCounter("entered", 1)])])"#;
+    let objects = format!("[{herb}]");
+    let data = DataPack::from_sources(&[
+        ("pack.ron", include_str!("../../../data/pack.ron")),
+        ("terrain.ron", include_str!("../../../data/terrain.ron")),
+        ("chemicals.ron", include_str!("../../../data/chemicals.ron")),
+        ("loci.ron", include_str!("../../../data/loci.ron")),
+        ("objects.ron", &objects),
+    ])
+    .expect("valid pack");
+    let preset = r#"(width: 64, height: 64, objects: {"herb": 20}, per_tiles: 4096)"#;
+    let config = WorldConfig::from_ron(preset, &data).expect("valid preset");
+    let mut world = World::new(config, data, 9);
+    world.step();
+    assert!(
+        world.objects().all(|o| o.counter("entered") == Some(0)),
+        "no herb entered a stage on tick 0"
+    );
 }

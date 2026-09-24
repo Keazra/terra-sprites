@@ -34,6 +34,38 @@ pub(crate) fn new_object(
     }
 }
 
+/// A new object of type `kind` on `pos` at a random point in its life, for
+/// world generation (design §3.2): every stage's length is drawn, then an age
+/// within their total, and the object starts in the stage that age falls in,
+/// with that stage's remaining time. Its counters start at 0, and no
+/// `OnStageEnter` fires for the stage it starts in.
+pub(crate) fn aged_object(data: &DataPack, rng: &mut ChaCha8Rng, kind: usize, pos: Pos) -> Object {
+    let object_type = &data.object_types()[kind];
+    let mut object = new_object(data, rng, kind, pos, 0);
+    object.fresh = false;
+    if object_type.stages.is_empty() {
+        return object;
+    }
+    // The stages it lives through: from the first, until it expires or a stage repeats.
+    let mut life: Vec<(usize, u64)> = Vec::new();
+    let mut stage = Some(0);
+    while let Some(index) = stage.filter(|&s| life.iter().all(|&(seen, _)| seen != s)) {
+        life.push((index, duration(rng, &object_type.stages[index])));
+        stage = object_type.stages[index].next;
+    }
+    let total: u64 = life.iter().map(|&(_, ticks)| ticks).sum();
+    let mut age = uniform(rng, total);
+    for (index, ticks) in life {
+        if age < ticks {
+            object.stage = Some(index);
+            object.stage_ends = ticks - age;
+            break;
+        }
+        age -= ticks;
+    }
+    object
+}
+
 /// How long a stage lasts this time: from its minimum to its maximum, uniformly.
 fn duration(rng: &mut ChaCha8Rng, stage: &Stage) -> u64 {
     let (min, max) = stage.ticks;

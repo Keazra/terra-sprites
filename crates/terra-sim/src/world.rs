@@ -7,7 +7,7 @@ use crate::config::WorldConfig;
 use crate::data::DataPack;
 use crate::ecology::{self, holds_without_drawing, new_object};
 use crate::events::Event;
-use crate::generate::generate;
+use crate::generate::{generate, place_objects};
 use crate::map::{Map, MapError, Pos};
 use crate::objects::{EntityId, Object, Objects};
 use crate::regions::Regions;
@@ -113,7 +113,9 @@ impl World {
     pub fn new(config: WorldConfig, data: DataPack, seed: u64) -> World {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let map = generate(&config, &data, &mut rng);
-        World::with(map, data, rng)
+        let mut world = World::with(map, data, rng);
+        place_objects(&config, &world.data, &mut world.state);
+        world
     }
 
     /// A world on a hand-drawn map, which must form exactly one region.

@@ -5,10 +5,13 @@ use rand_chacha::ChaCha8Rng;
 
 use crate::config::WorldConfig;
 use crate::data::DataPack;
-use crate::map::Map;
-use crate::random::unit;
+use crate::ecology::aged_object;
+use crate::map::{Map, Pos};
+use crate::objects::EntityId;
+use crate::random::{uniform, unit};
 use crate::regions;
 use crate::terrain::Terrain;
+use crate::world::WorldState;
 
 /// Regions smaller than this become rock; larger ones are joined to the mainland.
 const MIN_REGION: usize = 64;
@@ -59,6 +62,50 @@ pub(crate) fn generate(config: &WorldConfig, data: &DataPack, rng: &mut ChaCha8R
 
     regions::connect(&mut map, MIN_REGION);
     map
+}
+
+/// Places the preset's objects on the mainland (design §3.2): solid objects
+/// first, then items, each type in ID order. Each goes on a tile drawn
+/// uniformly from those where it may go at that moment; if none is left, the
+/// rest of that type is skipped. Every object starts at a random point in its life.
+pub(crate) fn place_objects(config: &WorldConfig, data: &DataPack, state: &mut WorldState) {
+    let types = data.object_types();
+    let solid_first = (0..types.len())
+        .filter(|&kind| types[kind].solid)
+        .chain((0..types.len()).filter(|&kind| !types[kind].solid));
+    for kind in solid_first {
+        let count = config.object_count(&types[kind].name);
+        if count == 0 {
+            continue;
+        }
+        // After joining, every walkable tile is on the mainland.
+        let mut candidates: Vec<Pos> = state
+            .map
+            .positions()
+            .filter(|&pos| state.map.is_walkable(pos))
+            .collect();
+        for _ in 0..count {
+            // Tiles only ever become unusable as objects are placed, so a tile
+            // found unusable is dropped for good.
+            let pos = loop {
+                if candidates.is_empty() {
+                    break None;
+                }
+                let choice = uniform(&mut state.rng, candidates.len() as u64) as usize;
+                let pos = candidates.swap_remove(choice);
+                if state.objects.can_place(&state.map, data, kind, pos) {
+                    break Some(pos);
+                }
+            };
+            let Some(pos) = pos else {
+                break;
+            };
+            let id = EntityId(state.next_id);
+            state.next_id += 1;
+            let object = aged_object(data, &mut state.rng, kind, pos);
+            state.objects.place(id, object);
+        }
+    }
 }
 
 /// Indices of `values` from lowest to highest value; ties go to the lower index.
