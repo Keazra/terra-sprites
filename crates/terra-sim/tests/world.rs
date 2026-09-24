@@ -1,11 +1,8 @@
 use terra_sim::{DataPack, Map, MapError, Pos, Terrain, World, WorldConfig};
 
 fn new_world(seed: u64) -> World {
-    World::new(
-        WorldConfig::builtin(),
-        DataPack::builtin().expect("built-in data pack is valid"),
-        seed,
-    )
+    let data = DataPack::builtin().expect("built-in data pack is valid");
+    World::new(WorldConfig::builtin(&data), data, seed)
 }
 
 #[test]
@@ -95,9 +92,10 @@ fn a_drawn_map_must_have_exactly_one_region() {
 }
 
 fn generated(config: &str, seed: u64) -> World {
+    let data = DataPack::builtin().expect("built-in data pack is valid");
     World::new(
-        WorldConfig::from_ron(config).expect("valid preset"),
-        DataPack::builtin().expect("built-in data pack is valid"),
+        WorldConfig::from_ron(config, &data).expect("valid preset"),
+        data,
         seed,
     )
 }

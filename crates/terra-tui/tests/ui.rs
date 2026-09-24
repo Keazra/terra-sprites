@@ -13,7 +13,7 @@ fn pack() -> DataPack {
 }
 
 fn generated_world() -> World {
-    World::new(WorldConfig::builtin(), pack(), 7)
+    World::new(WorldConfig::builtin(&pack()), pack(), 7)
 }
 
 /// A world on a drawn map, using the ascii legend.

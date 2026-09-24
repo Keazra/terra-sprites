@@ -2,9 +2,10 @@ use proptest::prelude::*;
 use terra_sim::{DataPack, Dir, Map, Pos, Terrain, World, WorldConfig};
 
 fn generate(width: u16, height: u16, seed: u64) -> World {
-    let config = WorldConfig::from_ron(&format!("(width: {width}, height: {height})"))
+    let data = DataPack::builtin().expect("valid pack");
+    let config = WorldConfig::from_ron(&format!("(width: {width}, height: {height})"), &data)
         .expect("valid preset");
-    World::new(config, DataPack::builtin().expect("valid pack"), seed)
+    World::new(config, data, seed)
 }
 
 fn positions(map: &Map) -> impl Iterator<Item = Pos> + '_ {
@@ -77,7 +78,7 @@ proptest! {
 
 #[test]
 fn every_default_size_map_is_one_region_with_all_six_terrains() {
-    let default = WorldConfig::builtin();
+    let default = WorldConfig::builtin(&DataPack::builtin().expect("valid pack"));
     for seed in 0..16 {
         let world = generate(default.width(), default.height(), seed);
         let map = world.map();
