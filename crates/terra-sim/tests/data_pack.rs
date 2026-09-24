@@ -443,3 +443,26 @@ fn only_eat_drink_hit_and_play_have_verb_tables() {
         assert_invalid_objects(&[&bush(1, "bush", &fields)], &["bush", verb]);
     }
 }
+
+#[test]
+fn the_built_in_pack_describes_its_object_types_for_display() {
+    let pack = DataPack::builtin().expect("built-in data pack is valid");
+    let names: Vec<&str> = pack.object_type_names().collect();
+    assert_eq!(
+        names,
+        ["berry_bush", "berry", "thornbush", "ball"],
+        "ID order, no pseudo types"
+    );
+    assert_eq!(pack.stage_names("berry_bush"), ["seedling", "mature"]);
+    assert_eq!(pack.counter_names("berry_bush"), ["fruit"]);
+    assert_eq!(
+        pack.visual_states("berry_bush"),
+        ["seedling", "fruiting", "default"]
+    );
+    assert_eq!(pack.visual_states("ball"), ["default"]);
+    assert!(pack.stage_names("ball").is_empty());
+    assert!(
+        pack.stage_names("shrub").is_empty(),
+        "an unknown type has nothing"
+    );
+}

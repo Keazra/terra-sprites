@@ -7,13 +7,19 @@ use ratatui::{
     style::{Modifier, Style},
     text::Line,
 };
-use terra_sim::{Map, Pos, Terrain, World};
+use terra_sim::{Map, ObjectView, Pos, Terrain, World};
 
 use crate::app::{App, Screen};
 use crate::clock::Speed;
 use crate::theme::SemanticTile;
 
-/// Draws one frame: the top bar, the map view and the status line.
+/// The inspector's width, in columns, border included (design §6.1).
+const INSPECTOR_WIDTH: u16 = 46;
+/// The narrowest terminal that has room for the inspector beside the map view.
+const INSPECTOR_FROM: u16 = 100;
+
+/// Draws one frame: the top bar, the map view, the inspector if there's room,
+/// and the status line.
 pub fn render(frame: &mut Frame, app: &App, world: &World) {
     let area = frame.area();
     let [top_bar, _, status] = Layout::vertical([
@@ -27,9 +33,12 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
         frame.buffer_mut(),
         map_view_area(area, world.map()),
         app,
-        world.map(),
+        world,
     );
-    frame.render_widget(status_line(app, world.map(), status.width), status);
+    if let Some(inspector) = inspector_area(area) {
+        render_world_tab(frame.buffer_mut(), inspector, world);
+    }
+    frame.render_widget(status_line(app, world, status.width), status);
 }
 
 /// Where the map view draws its tiles on a screen of `screen` cells: inside
@@ -39,14 +48,33 @@ pub fn tile_area(screen: Size, map: &Map) -> Rect {
     map_view_area(screen.into(), map).inner(Margin::new(1, 1))
 }
 
-/// The map view, border included: below the top bar, at the left, shrunk to fit a small map.
+/// The map view, border included: below the top bar, at the left, shrunk to
+/// fit a small map, and leaving room for the inspector when there is some.
 fn map_view_area(screen: Rect, map: &Map) -> Rect {
-    let width = (map.width().saturating_add(2)).min(screen.width);
+    let room = match inspector_area(screen) {
+        Some(inspector) => inspector.x - screen.x,
+        None => screen.width,
+    };
+    let width = (map.width().saturating_add(2)).min(room);
     let height = (map.height().saturating_add(2)).min(screen.height.saturating_sub(2));
     Rect::new(screen.x, screen.y + 1.min(screen.height), width, height)
 }
 
-fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, map: &Map) {
+/// The inspector, border included: at the right, between the top bar and the
+/// status line, on a terminal wide enough for it.
+fn inspector_area(screen: Rect) -> Option<Rect> {
+    (screen.width >= INSPECTOR_FROM && screen.height > 2).then(|| {
+        Rect::new(
+            screen.right() - INSPECTOR_WIDTH,
+            screen.y + 1,
+            INSPECTOR_WIDTH,
+            screen.height - 2,
+        )
+    })
+}
+
+fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
+    let map = world.map();
     if area.width < 2 || area.height < 2 {
         return;
     }
@@ -71,8 +99,16 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, map: &Map) {
                 x: origin.x + col,
                 y: origin.y + row,
             };
-            let glyph = app.theme.glyph(SemanticTile::Terrain(map.terrain(pos)));
+            let glyph = match world.object_at(pos) {
+                Some(object) => app
+                    .theme
+                    .object_glyph(object.type_name(), object.visual_state()),
+                None => app.theme.glyph(SemanticTile::Terrain(map.terrain(pos))),
+            };
             let mut style = Style::default().fg(glyph.fg);
+            if glyph.bold {
+                style = style.add_modifier(Modifier::BOLD);
+            }
             if pos == app.cursor() {
                 style = style.add_modifier(Modifier::REVERSED);
             }
@@ -169,11 +205,25 @@ fn top_bar_line(app: &App, world: &World) -> Line<'static> {
     } else {
         format!("► {}", speed_label(clock.speed()))
     };
-    let text = format!(
+    let mut text = format!(
         " Terra Sprites │ tick {} │ {time} │ seed {}",
         group_thousands(world.tick()),
         app.seed
     );
+    // The food counts (design §6.1), for packs that have these types.
+    for (label, object_type) in [("bushes", "berry_bush"), ("berries", "berry")] {
+        if world
+            .data()
+            .object_type_names()
+            .any(|name| name == object_type)
+        {
+            let count = world
+                .objects()
+                .filter(|o| o.type_name() == object_type)
+                .count();
+            text += &format!(" │ {label} {}", group_thousands(count as u64));
+        }
+    }
     Line::from(text).style(Style::default().add_modifier(Modifier::REVERSED))
 }
 
@@ -182,18 +232,102 @@ const KEY_HINTS: &str = "WASD scroll  space pause  . step  +/- speed  esc quit "
 
 /// The tile under the cursor and the cursor mode, then key hints if they fit in
 /// `width` cells. An open prompt takes the line over.
-fn status_line(app: &App, map: &Map, width: u16) -> Line<'static> {
+fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     if app.screen() == Screen::QuitPrompt {
         return Line::from(" Quit? (y/n)");
     }
     let cursor = app.cursor();
-    let terrain = terrain_name(map.terrain(cursor));
+    let terrain = terrain_name(world.map().terrain(cursor));
+    let object = world
+        .object_at(cursor)
+        .map(|object| format!(" · {}", object_label(&object)))
+        .unwrap_or_default();
     let mode = app.mode().label();
-    let tile = format!(" ({},{}) {terrain} │ {mode}", cursor.x, cursor.y);
+    let tile = format!(" ({},{}) {terrain}{object} │ {mode}", cursor.x, cursor.y);
     let used = tile.chars().count() + KEY_HINTS.chars().count();
     match usize::from(width).checked_sub(used) {
         Some(gap) if gap >= 2 => Line::from(format!("{tile}{}{KEY_HINTS}", " ".repeat(gap))),
         _ => Line::from(tile),
+    }
+}
+
+/// An object's display name, with its stage if its type has stages: `berry bush (mature)`.
+fn object_label(object: &ObjectView) -> String {
+    let name = display_name(object.type_name());
+    match object.stage() {
+        Some(stage) => format!("{name} ({stage})"),
+        None => name,
+    }
+}
+
+/// A name from the data, as shown on screen: `berry_bush` → `berry bush`.
+fn display_name(name: &str) -> String {
+    name.replace('_', " ")
+}
+
+/// Draws the World tab (design §6.1): the data pack, then each object type
+/// with its count, the count in each stage (for a type with more than one)
+/// and the total of each counter.
+fn render_world_tab(buf: &mut Buffer, area: Rect, world: &World) {
+    let no_walls = Sides {
+        left: false,
+        right: false,
+        top: false,
+        bottom: false,
+    };
+    draw_border(buf, area, " World ", no_walls);
+    let data = world.data();
+    let mut lines = vec![format!(
+        " {:<12}{} v{}",
+        "data pack",
+        data.name(),
+        data.version()
+    )];
+    for object_type in data.object_type_names() {
+        let objects: Vec<ObjectView> = world
+            .objects()
+            .filter(|o| o.type_name() == object_type)
+            .collect();
+        lines.push(format!(
+            " {:<12}{:>7}",
+            display_name(object_type),
+            group_thousands(objects.len() as u64)
+        ));
+        let stages = data.stage_names(object_type);
+        if stages.len() > 1 {
+            let counts: Vec<String> = stages
+                .iter()
+                .map(|&stage| {
+                    let n = objects.iter().filter(|o| o.stage() == Some(stage)).count();
+                    format!("{stage} {}", group_thousands(n as u64))
+                })
+                .collect();
+            lines.push(format!("   {}", counts.join(" · ")));
+        }
+        let totals: Vec<String> = data
+            .counter_names(object_type)
+            .iter()
+            .map(|&counter| {
+                let total: u64 = objects
+                    .iter()
+                    .map(|o| u64::from(o.counter(counter).unwrap_or(0)))
+                    .sum();
+                format!("{counter} {}", group_thousands(total))
+            })
+            .collect();
+        if !totals.is_empty() {
+            lines.push(format!("   {}", totals.join(" · ")));
+        }
+    }
+    let inner = area.inner(Margin::new(1, 1));
+    for (row, line) in (inner.y..inner.bottom()).zip(&lines) {
+        buf.set_stringn(
+            inner.x,
+            row,
+            line,
+            usize::from(inner.width),
+            Style::default(),
+        );
     }
 }
 
