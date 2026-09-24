@@ -33,10 +33,26 @@ pub struct Glyph {
     pub fg: Color,
 }
 
+/// The glyphs a theme draws the cursor with (design §6.5). The arrows are
+/// named by the way they point.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CursorGlyphs {
+    pub up: char,
+    pub down: char,
+    pub left: char,
+    pub right: char,
+    /// The Select mode's mark.
+    pub select: char,
+    /// A status mark with nothing to report.
+    pub idle: char,
+}
+
 /// A mapping from semantic tiles to glyphs and colours.
 #[derive(Debug, Clone)]
 pub struct Theme {
     tiles: BTreeMap<SemanticTile, Glyph>,
+    cursor: CursorGlyphs,
 }
 
 impl Theme {
@@ -53,6 +69,11 @@ impl Theme {
     /// How this theme draws `tile`.
     pub fn glyph(&self, tile: SemanticTile) -> Glyph {
         self.tiles[&tile]
+    }
+
+    /// How this theme draws the cursor.
+    pub fn cursor(&self) -> CursorGlyphs {
+        self.cursor
     }
 
     fn builtin(name: &str, text: &str) -> Theme {
@@ -75,7 +96,10 @@ impl Theme {
                 "the {name} theme has no {tile:?}"
             );
         }
-        Theme { tiles }
+        Theme {
+            tiles,
+            cursor: file.cursor,
+        }
     }
 }
 
@@ -84,6 +108,7 @@ impl Theme {
 #[serde(deny_unknown_fields)]
 struct ThemeFile {
     tiles: BTreeMap<SemanticTile, GlyphEntry>,
+    cursor: CursorGlyphs,
 }
 
 #[derive(Deserialize)]

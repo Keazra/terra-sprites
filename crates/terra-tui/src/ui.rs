@@ -4,7 +4,7 @@ use ratatui::{
     Frame,
     buffer::Buffer,
     layout::{Constraint, Layout, Margin, Position, Rect, Size},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::Line,
 };
 use terra_sim::{Map, Pos, Terrain, World};
@@ -32,25 +32,11 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
     frame.render_widget(status_line(app, world.map(), status.width), status);
 }
 
-/// How many tiles the map view shows on a screen of `screen` cells: all the
-/// space between the top bar and the status line, inside the frame, but no
-/// more than the map itself.
-pub fn map_view_size(screen: Size, map: &Map) -> Size {
-    tile_area(screen.into(), map).as_size()
-}
-
-/// The tile drawn at screen cell `(column, row)`, or `None` if no tile is drawn there.
-pub fn tile_at(screen: Size, app: &App, map: &Map, column: u16, row: u16) -> Option<Pos> {
-    let tiles = tile_area(screen.into(), map);
-    tiles.contains(Position::new(column, row)).then(|| Pos {
-        x: app.viewport().x + (column - tiles.x),
-        y: app.viewport().y + (row - tiles.y),
-    })
-}
-
-/// The screen cells inside the map view's border, where tiles are drawn.
-fn tile_area(screen: Rect, map: &Map) -> Rect {
-    map_view_area(screen, map).inner(Margin::new(1, 1))
+/// Where the map view draws its tiles on a screen of `screen` cells: inside
+/// its border, between the top bar and the status line, and no bigger than
+/// the map itself.
+pub fn tile_area(screen: Size, map: &Map) -> Rect {
+    map_view_area(screen.into(), map).inner(Margin::new(1, 1))
 }
 
 /// The map view, border included: below the top bar, at the left, shrunk to fit a small map.
@@ -89,6 +75,46 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, map: &Map) {
             buf[(inner.x + col, inner.y + row)]
                 .set_char(glyph.symbol)
                 .set_style(style);
+        }
+    }
+    draw_cursor(buf, inner, app);
+}
+
+/// The Select mode's colour: the cursor's arrows and marks take it (design §6.5).
+const SELECT_COLOUR: Color = Color::White;
+
+/// Draws the 3×3 cursor around its target tile, which the tile loop has already
+/// drawn in reverse video. Pieces outside the map view's tiles aren't drawn.
+///
+/// ```text
+/// M ↓ Y      M: the mode mark
+/// → ☺ ←      Y, N: the status marks
+/// N ↑ M
+/// ```
+fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App) {
+    let glyphs = app.theme.cursor();
+    let (cursor, origin) = (app.cursor(), app.viewport());
+    let centre_x = i32::from(tiles.x) + i32::from(cursor.x) - i32::from(origin.x);
+    let centre_y = i32::from(tiles.y) + i32::from(cursor.y) - i32::from(origin.y);
+    let pieces = [
+        (-1, -1, glyphs.select),
+        (0, -1, glyphs.down),
+        (1, -1, glyphs.idle),
+        (-1, 0, glyphs.right),
+        (1, 0, glyphs.left),
+        (-1, 1, glyphs.idle),
+        (0, 1, glyphs.up),
+        (1, 1, glyphs.select),
+    ];
+    for (dx, dy, glyph) in pieces {
+        let (x, y) = (centre_x + dx, centre_y + dy);
+        let on_screen = u16::try_from(x).ok().zip(u16::try_from(y).ok());
+        if let Some((x, y)) = on_screen
+            && tiles.contains(Position::new(x, y))
+        {
+            buf[(x, y)]
+                .set_char(glyph)
+                .set_style(Style::default().fg(SELECT_COLOUR));
         }
     }
 }
@@ -148,13 +174,17 @@ fn top_bar_line(app: &App, world: &World) -> Line<'static> {
 }
 
 /// The keys that work now, shown at the right of the status line when there is room.
-const KEY_HINTS: &str = "arrows/hjkl move  space pause  . step  +/- speed  q quit ";
+const KEY_HINTS: &str = "WASD scroll  space pause  . step  +/- speed  esc quit ";
 
-/// The tile under the cursor, then key hints if they fit in `width` cells.
+/// The tile under the cursor and the cursor mode, then key hints if they fit in
+/// `width` cells. An open prompt takes the line over.
 fn status_line(app: &App, map: &Map, width: u16) -> Line<'static> {
+    if app.quit_prompt_open() {
+        return Line::from(" Quit? (y/n)");
+    }
     let cursor = app.cursor();
     let terrain = terrain_name(map.terrain(cursor));
-    let tile = format!(" ({},{}) {terrain}", cursor.x, cursor.y);
+    let tile = format!(" ({},{}) {terrain} │ SELECT", cursor.x, cursor.y);
     let used = tile.chars().count() + KEY_HINTS.chars().count();
     match usize::from(width).checked_sub(used) {
         Some(gap) if gap >= 2 => Line::from(format!("{tile}{}{KEY_HINTS}", " ".repeat(gap))),

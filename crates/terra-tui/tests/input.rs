@@ -26,12 +26,10 @@ fn time_control_keys_map_to_their_actions() {
             press(KeyCode::Char('-')),
             Some(Action::Slower { held: false }),
         ),
-        (press(KeyCode::Char('q')), Some(Action::Quit)),
         (
             KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL),
             Some(Action::Quit),
         ),
-        (press(KeyCode::Char('x')), None),
     ];
     for (key, expected) in cases {
         assert_eq!(Keys::new().action_for(key), expected, "{key:?}");
@@ -160,17 +158,17 @@ fn a_plus_released_as_equals_is_still_released() {
 }
 
 #[test]
-fn arrows_and_hjkl_move_the_cursor_one_tile() {
-    let one = |dx, dy| Some(Action::MoveCursor { dx, dy });
+fn wasd_and_the_arrows_scroll_the_view_one_tile() {
+    let one = |dx, dy| Some(Action::Scroll { dx, dy });
     let cases = [
-        (KeyCode::Left, one(-1, 0)),
-        (KeyCode::Right, one(1, 0)),
+        (KeyCode::Char('w'), one(0, -1)),
+        (KeyCode::Char('a'), one(-1, 0)),
+        (KeyCode::Char('s'), one(0, 1)),
+        (KeyCode::Char('d'), one(1, 0)),
         (KeyCode::Up, one(0, -1)),
+        (KeyCode::Left, one(-1, 0)),
         (KeyCode::Down, one(0, 1)),
-        (KeyCode::Char('h'), one(-1, 0)),
-        (KeyCode::Char('l'), one(1, 0)),
-        (KeyCode::Char('k'), one(0, -1)),
-        (KeyCode::Char('j'), one(0, 1)),
+        (KeyCode::Right, one(1, 0)),
     ];
     for (code, expected) in cases {
         assert_eq!(Keys::new().action_for(press(code)), expected, "{code:?}");
@@ -178,19 +176,19 @@ fn arrows_and_hjkl_move_the_cursor_one_tile() {
 }
 
 #[test]
-fn shift_moves_the_cursor_five_tiles() {
-    let five = |dx, dy| Some(Action::MoveCursor { dx, dy });
+fn shift_scrolls_five_tiles() {
+    let five = |dx, dy| Some(Action::Scroll { dx, dy });
     let shifted = |code| KeyEvent::new(code, KeyModifiers::SHIFT);
     let cases = [
-        (shifted(KeyCode::Left), five(-5, 0)),
-        (shifted(KeyCode::Right), five(5, 0)),
         (shifted(KeyCode::Up), five(0, -5)),
+        (shifted(KeyCode::Left), five(-5, 0)),
         (shifted(KeyCode::Down), five(0, 5)),
-        // Terminals report Shift+h as `H`, with or without the Shift modifier.
-        (shifted(KeyCode::Char('H')), five(-5, 0)),
-        (press(KeyCode::Char('L')), five(5, 0)),
-        (shifted(KeyCode::Char('K')), five(0, -5)),
-        (press(KeyCode::Char('J')), five(0, 5)),
+        (shifted(KeyCode::Right), five(5, 0)),
+        // Terminals report Shift+w as `W`, with or without the Shift modifier.
+        (shifted(KeyCode::Char('W')), five(0, -5)),
+        (press(KeyCode::Char('A')), five(-5, 0)),
+        (shifted(KeyCode::Char('S')), five(0, 5)),
+        (press(KeyCode::Char('D')), five(5, 0)),
     ];
     for (key, expected) in cases {
         assert_eq!(Keys::new().action_for(key), expected, "{key:?}");
@@ -198,24 +196,72 @@ fn shift_moves_the_cursor_five_tiles() {
 }
 
 #[test]
-fn holding_a_cursor_key_keeps_moving() {
+fn holding_a_scroll_key_keeps_scrolling() {
     let mut keys = Keys::with_release_reporting(true);
-    let right = Some(Action::MoveCursor { dx: 1, dy: 0 });
-    assert_eq!(keys.action_for(press(KeyCode::Right)), right);
+    let right = Some(Action::Scroll { dx: 1, dy: 0 });
+    assert_eq!(keys.action_for(press(KeyCode::Char('d'))), right);
     assert_eq!(
-        keys.action_for(press(KeyCode::Right)),
+        keys.action_for(press(KeyCode::Char('d'))),
         right,
         "held via a second press"
     );
     assert_eq!(
-        keys.action_for(kind(KeyCode::Right, KeyEventKind::Repeat)),
+        keys.action_for(kind(KeyCode::Char('d'), KeyEventKind::Repeat)),
         right,
         "held via repeat"
     );
 }
 
 #[test]
-fn a_left_click_is_a_click_at_that_cell_and_other_mouse_events_are_ignored() {
+fn escape_and_y_answer_the_quit_prompt_and_q_no_longer_quits() {
+    assert_eq!(
+        Keys::new().action_for(press(KeyCode::Esc)),
+        Some(Action::Escape)
+    );
+    assert_eq!(
+        Keys::new().action_for(press(KeyCode::Char('y'))),
+        Some(Action::Yes)
+    );
+    assert_eq!(
+        Keys::new().action_for(press(KeyCode::Char('q'))),
+        Some(Action::OtherKey)
+    );
+}
+
+#[test]
+fn holding_escape_counts_once_so_it_cannot_confirm_its_own_prompt() {
+    let mut keys = Keys::with_release_reporting(true);
+    assert_eq!(keys.action_for(press(KeyCode::Esc)), Some(Action::Escape));
+    assert_eq!(
+        keys.action_for(press(KeyCode::Esc)),
+        None,
+        "held via a second press"
+    );
+    assert_eq!(
+        keys.action_for(kind(KeyCode::Esc, KeyEventKind::Repeat)),
+        None,
+        "held via repeat"
+    );
+}
+
+#[test]
+fn any_other_key_is_reported_so_it_can_cancel_a_prompt() {
+    for code in [
+        KeyCode::Char('k'),
+        KeyCode::Char('n'),
+        KeyCode::Enter,
+        KeyCode::F(5),
+    ] {
+        assert_eq!(
+            Keys::new().action_for(press(code)),
+            Some(Action::OtherKey),
+            "{code:?}"
+        );
+    }
+}
+
+#[test]
+fn the_mouse_points_while_moving_and_clicks_with_the_left_button() {
     use ratatui::crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
     let mouse = |kind| MouseEvent {
         kind,
@@ -223,21 +269,19 @@ fn a_left_click_is_a_click_at_that_cell_and_other_mouse_events_are_ignored() {
         row: 7,
         modifiers: KeyModifiers::NONE,
     };
+    let action = |kind| terra_tui::input::mouse_action(mouse(kind));
+    let point = Some(Action::Point { column: 12, row: 7 });
+    assert_eq!(action(MouseEventKind::Moved), point);
+    assert_eq!(action(MouseEventKind::Drag(MouseButton::Left)), point);
     assert_eq!(
-        terra_tui::input::mouse_action(mouse(MouseEventKind::Down(MouseButton::Left))),
+        action(MouseEventKind::Down(MouseButton::Left)),
         Some(Action::Click { column: 12, row: 7 })
     );
     for kind in [
         MouseEventKind::Up(MouseButton::Left),
         MouseEventKind::Down(MouseButton::Right),
-        MouseEventKind::Drag(MouseButton::Left),
-        MouseEventKind::Moved,
         MouseEventKind::ScrollDown,
     ] {
-        assert_eq!(
-            terra_tui::input::mouse_action(mouse(kind)),
-            None,
-            "{kind:?}"
-        );
+        assert_eq!(action(kind), None, "{kind:?}");
     }
 }

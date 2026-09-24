@@ -1,15 +1,20 @@
 //! The UI state (design §6.8): everything the screen shows that isn't the world.
 
-use ratatui::layout::Size;
+use ratatui::layout::{Position, Rect, Size};
 use terra_sim::{Map, Pos};
 
 use crate::clock::Clock;
+use crate::input::Action;
 use crate::theme::Theme;
 
-/// How close to the viewport's edge the cursor may come before it scrolls, in tiles.
-const SCROLL_MARGIN: u16 = 3;
+/// Whether the game carries on after an action.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Flow {
+    Continue,
+    Quit,
+}
 
-/// The UI state. Rendering reads it; input changes it.
+/// The UI state. Rendering reads it; actions change it.
 pub struct App {
     pub clock: Clock,
     pub theme: Theme,
@@ -20,14 +25,17 @@ pub struct App {
     viewport: Pos,
     /// The map's size, in tiles.
     map_size: Size,
-    /// How many tiles the map view shows.
-    view: Size,
+    /// Where on screen the map view draws its tiles.
+    tiles: Rect,
+    /// The screen cell under the mouse pointer, while that is one of the map view's tiles.
+    pointer: Option<Position>,
+    quit_prompt: bool,
 }
 
 impl App {
-    /// A new UI for `map`, with the cursor at the map's centre. `view` is how
-    /// many tiles the map view shows.
-    pub fn new(map: &Map, theme: Theme, seed: u64, view: Size) -> App {
+    /// A new UI for `map`, with the cursor at the map's centre and the viewport
+    /// centred on it. `tiles` is where on screen the map view draws its tiles.
+    pub fn new(map: &Map, theme: Theme, seed: u64, tiles: Rect) -> App {
         let cursor = Pos {
             x: map.width() / 2,
             y: map.height() / 2,
@@ -41,11 +49,13 @@ impl App {
             seed,
             cursor,
             viewport: Pos {
-                x: centred(cursor.x, view.width, map.width()),
-                y: centred(cursor.y, view.height, map.height()),
+                x: centred(cursor.x, tiles.width, map.width()),
+                y: centred(cursor.y, tiles.height, map.height()),
             },
             map_size: Size::new(map.width(), map.height()),
-            view,
+            tiles,
+            pointer: None,
+            quit_prompt: false,
         }
     }
 
@@ -59,34 +69,80 @@ impl App {
         self.viewport
     }
 
-    /// Refits the viewport to a map view of `view` tiles, as after a resize: it
-    /// stays within the wall and keeps the cursor in view, moving as little as it can.
-    pub fn fit_viewport(&mut self, view: Size) {
-        self.view = view;
+    /// Whether "Quit? (y/n)" is waiting for an answer.
+    pub fn quit_prompt_open(&self) -> bool {
+        self.quit_prompt
+    }
+
+    /// Refits the viewport to where the map view now draws its tiles, as after
+    /// a resize. The viewport stays within the wall.
+    pub fn fit_viewport(&mut self, tiles: Rect) {
+        self.tiles = tiles;
+        self.scroll(0, 0);
+    }
+
+    /// Carries out an action, and says whether the game carries on.
+    pub fn apply(&mut self, action: Action) -> Flow {
+        if self.quit_prompt {
+            match action {
+                Action::Yes | Action::Escape | Action::Quit => return Flow::Quit,
+                // The mouse carries on as usual and doesn't answer the prompt.
+                Action::Point { .. } | Action::Click { .. } => {}
+                // Any other key cancels the prompt, and does nothing else.
+                _ => {
+                    self.quit_prompt = false;
+                    return Flow::Continue;
+                }
+            }
+        }
+        match action {
+            Action::TogglePause => self.clock.toggle_pause(),
+            Action::StepOnce => self.clock.step_once(),
+            Action::Faster { held: false } => self.clock.faster(),
+            Action::Faster { held: true } => self.clock.faster_held(),
+            Action::Slower { held: false } => self.clock.slower(),
+            Action::Slower { held: true } => self.clock.slower_held(),
+            Action::Scroll { dx, dy } => self.scroll(dx, dy),
+            // In Select mode (the only mode so far), a click just points.
+            Action::Point { column, row } | Action::Click { column, row } => {
+                self.point(Position::new(column, row));
+            }
+            Action::Escape => self.quit_prompt = true,
+            Action::Yes | Action::OtherKey => {}
+            Action::Quit => return Flow::Quit,
+        }
+        Flow::Continue
+    }
+
+    /// Scrolls the viewport, stopping at the wall. A still pointer then points
+    /// at whatever tile has moved under it.
+    fn scroll(&mut self, dx: i32, dy: i32) {
         let map = self.map_size;
         self.viewport = Pos {
-            x: contain(self.viewport.x, self.cursor.x, view.width, map.width),
-            y: contain(self.viewport.y, self.cursor.y, view.height, map.height),
+            x: clamp_origin(i32::from(self.viewport.x) + dx, self.tiles.width, map.width),
+            y: clamp_origin(
+                i32::from(self.viewport.y) + dy,
+                self.tiles.height,
+                map.height,
+            ),
         };
+        if let Some(cell) = self.pointer {
+            self.point(cell);
+        }
     }
 
-    /// Puts the cursor on `pos`, a tile in view, as a click does. The viewport
-    /// doesn't scroll.
-    pub fn place_cursor(&mut self, pos: Pos) {
-        self.cursor = pos;
-    }
-
-    /// Moves the cursor by `(dx, dy)` tiles, stopping at the wall. The viewport
-    /// scrolls just enough to keep the cursor away from its edge.
-    pub fn move_cursor(&mut self, dx: i32, dy: i32) {
-        let (map, view) = (self.map_size, self.view);
+    /// Puts the cursor on the tile at screen cell `cell`. Off the map view's
+    /// tiles, the cursor stays where it was.
+    fn point(&mut self, cell: Position) {
+        if !self.tiles.contains(cell) {
+            self.pointer = None;
+            return;
+        }
+        self.pointer = Some(cell);
+        let map = self.map_size;
         self.cursor = Pos {
-            x: step_within(self.cursor.x, dx, map.width),
-            y: step_within(self.cursor.y, dy, map.height),
-        };
-        self.viewport = Pos {
-            x: follow(self.viewport.x, self.cursor.x, view.width, map.width),
-            y: follow(self.viewport.y, self.cursor.y, view.height, map.height),
+            x: (self.viewport.x + (cell.x - self.tiles.x)).min(map.width - 1),
+            y: (self.viewport.y + (cell.y - self.tiles.y)).min(map.height - 1),
         };
     }
 }
@@ -96,32 +152,4 @@ impl App {
 fn clamp_origin(origin: i32, view: u16, len: u16) -> u16 {
     let furthest = (i32::from(len) - i32::from(view)).max(0);
     origin.clamp(0, furthest) as u16
-}
-
-/// A viewport origin moved as little as possible to keep `cursor` inside a
-/// view of `view` tiles, with no margin.
-fn contain(origin: u16, cursor: u16, view: u16, len: u16) -> u16 {
-    if view == 0 {
-        return origin;
-    }
-    let cursor = i32::from(cursor);
-    let origin = i32::from(origin).clamp(cursor + 1 - i32::from(view), cursor);
-    clamp_origin(origin, view, len)
-}
-
-/// A viewport origin moved as little as possible to keep `cursor` at least
-/// `SCROLL_MARGIN` tiles inside a view of `view` tiles (less, in a tiny view).
-fn follow(origin: u16, cursor: u16, view: u16, len: u16) -> u16 {
-    if view == 0 {
-        return origin;
-    }
-    let margin = i32::from(SCROLL_MARGIN.min((view - 1) / 2));
-    let (cursor, view_len) = (i32::from(cursor), i32::from(view));
-    let origin = i32::from(origin).clamp(cursor + margin + 1 - view_len, cursor - margin);
-    clamp_origin(origin, view, len)
-}
-
-/// `coord + delta`, kept within `0..len`.
-fn step_within(coord: u16, delta: i32, len: u16) -> u16 {
-    (i32::from(coord) + delta).clamp(0, i32::from(len) - 1) as u16
 }

@@ -1,6 +1,8 @@
-use ratatui::layout::Size;
+use ratatui::layout::Rect;
 use terra_sim::{DataPack, Map, Pos};
-use terra_tui::app::App;
+use terra_tui::app::{App, Flow};
+use terra_tui::clock::Speed;
+use terra_tui::input::Action;
 use terra_tui::theme::Theme;
 
 /// An all-grass map.
@@ -10,96 +12,178 @@ fn grass(width: usize, height: usize) -> Map {
     Map::from_ascii(&rows, &DataPack::builtin().expect("valid pack")).expect("valid drawing")
 }
 
-fn app(map: &Map, view: Size) -> App {
-    App::new(map, Theme::cp437(), 1, view)
+/// Where the map view draws its tiles on screen: `width`×`height` tiles from cell (1, 2).
+fn tiles(width: u16, height: u16) -> Rect {
+    Rect::new(1, 2, width, height)
+}
+
+fn app(map: &Map, tiles: Rect) -> App {
+    App::new(map, Theme::cp437(), 1, tiles)
 }
 
 fn at(x: u16, y: u16) -> Pos {
     Pos { x, y }
 }
 
-#[test]
-fn the_cursor_starts_at_the_centre_of_the_map() {
-    assert_eq!(app(&grass(160, 96), Size::new(60, 20)).cursor(), at(80, 48));
-    assert_eq!(app(&grass(5, 3), Size::new(5, 3)).cursor(), at(2, 1));
+fn scroll(app: &mut App, dx: i32, dy: i32) {
+    assert_eq!(app.apply(Action::Scroll { dx, dy }), Flow::Continue);
+}
+
+fn point(app: &mut App, column: u16, row: u16) {
+    assert_eq!(app.apply(Action::Point { column, row }), Flow::Continue);
 }
 
 #[test]
-fn the_cursor_moves_and_stops_at_the_wall() {
-    let map = grass(40, 30);
-    let view = Size::new(20, 10);
-    let mut app = app(&map, view);
-    app.move_cursor(3, -2);
-    assert_eq!(app.cursor(), at(23, 13));
-    app.move_cursor(-100, -100);
-    assert_eq!(app.cursor(), at(0, 0));
-    app.move_cursor(100, 100);
-    assert_eq!(app.cursor(), at(39, 29));
+fn the_cursor_starts_at_the_centre_of_the_map() {
+    assert_eq!(app(&grass(160, 96), tiles(60, 20)).cursor(), at(80, 48));
+    assert_eq!(app(&grass(5, 3), tiles(5, 3)).cursor(), at(2, 1));
 }
 
 #[test]
 fn the_viewport_starts_centred_on_the_cursor() {
     // The cursor starts at (80, 48); a 60×20 view centred on it starts at (50, 38).
-    let app = app(&grass(160, 96), Size::new(60, 20));
-    assert_eq!(app.viewport(), at(50, 38));
+    assert_eq!(app(&grass(160, 96), tiles(60, 20)).viewport(), at(50, 38));
 }
 
 #[test]
 fn a_map_that_fits_in_the_view_is_shown_from_its_top_left_corner() {
-    let app = app(&grass(20, 10), Size::new(20, 10));
-    assert_eq!(app.viewport(), at(0, 0));
+    assert_eq!(app(&grass(20, 10), tiles(20, 10)).viewport(), at(0, 0));
 }
 
 #[test]
-fn moving_the_cursor_scrolls_just_enough_to_keep_it_3_tiles_from_the_edge() {
-    let map = grass(160, 96);
-    let view = Size::new(20, 10);
-    let mut app = app(&map, view);
-    // Cursor (80, 48); the view shows x 70..=89 and y 43..=52.
+fn scrolling_moves_the_viewport_and_stops_at_the_wall() {
+    let mut app = app(&grass(160, 96), tiles(20, 10));
     assert_eq!(app.viewport(), at(70, 43));
-
-    app.move_cursor(6, 0); // x 86: three tiles from the right edge
-    assert_eq!(app.viewport(), at(70, 43), "no scroll yet");
-    app.move_cursor(1, 0); // x 87
-    assert_eq!(app.viewport(), at(71, 43), "scrolled one tile");
-    app.move_cursor(5, 0); // x 92
-    assert_eq!(app.viewport(), at(76, 43), "a Shift move scrolls five");
-
-    app.move_cursor(-13, -2); // (79, 46): three tiles from the left and top
-    assert_eq!(app.viewport(), at(76, 43), "no scroll yet");
-    app.move_cursor(-1, -1); // (78, 45)
-    assert_eq!(app.viewport(), at(75, 42));
+    scroll(&mut app, 1, 0);
+    assert_eq!(app.viewport(), at(71, 43));
+    scroll(&mut app, -5, 2);
+    assert_eq!(app.viewport(), at(66, 45));
+    scroll(&mut app, -1000, -1000);
+    assert_eq!(app.viewport(), at(0, 0));
+    scroll(&mut app, 1000, 1000);
+    assert_eq!(app.viewport(), at(140, 86));
 }
 
 #[test]
-fn the_viewport_never_shows_past_the_wall() {
-    let map = grass(160, 96);
-    let view = Size::new(20, 10);
-    let mut app = app(&map, view);
-    app.move_cursor(-1000, -1000);
-    assert_eq!((app.cursor(), app.viewport()), (at(0, 0), at(0, 0)));
-    app.move_cursor(1000, 1000);
-    assert_eq!((app.cursor(), app.viewport()), (at(159, 95), at(140, 86)));
+fn pointing_at_a_tile_puts_the_cursor_on_it() {
+    // The view shows tiles (70, 43) to (89, 52), drawn from screen cell (1, 2).
+    let mut app = app(&grass(160, 96), tiles(20, 10));
+    point(&mut app, 1, 2);
+    assert_eq!(app.cursor(), at(70, 43));
+    point(&mut app, 20, 11);
+    assert_eq!(app.cursor(), at(89, 52));
+}
+
+#[test]
+fn pointing_outside_the_map_view_leaves_the_cursor_on_its_last_tile() {
+    let mut app = app(&grass(160, 96), tiles(20, 10));
+    point(&mut app, 5, 5);
+    assert_eq!(app.cursor(), at(74, 46));
+    for (column, row) in [(0, 5), (21, 5), (5, 1), (5, 12)] {
+        point(&mut app, column, row);
+        assert_eq!(app.cursor(), at(74, 46), "pointer at ({column}, {row})");
+    }
+}
+
+#[test]
+fn scrolling_under_a_still_pointer_moves_the_cursor_with_the_map() {
+    let mut app = app(&grass(160, 96), tiles(20, 10));
+    point(&mut app, 11, 7);
+    assert_eq!(app.cursor(), at(80, 48));
+    scroll(&mut app, 3, -1);
+    assert_eq!(app.cursor(), at(83, 47));
+}
+
+#[test]
+fn with_the_pointer_off_the_map_scrolling_leaves_the_cursor_on_its_tile() {
+    let mut app = app(&grass(160, 96), tiles(20, 10));
+    scroll(&mut app, 3, 0); // no pointer yet
+    assert_eq!(app.cursor(), at(80, 48));
+    point(&mut app, 11, 7); // over (83, 48) now
+    point(&mut app, 0, 7); // the pointer leaves the map view
+    scroll(&mut app, 3, 0);
+    assert_eq!(app.cursor(), at(83, 48));
+}
+
+#[test]
+fn a_click_puts_the_cursor_on_a_tile_without_scrolling() {
+    let mut app = app(&grass(160, 96), tiles(20, 10));
+    assert_eq!(
+        app.apply(Action::Click { column: 1, row: 2 }),
+        Flow::Continue
+    );
+    assert_eq!(app.cursor(), at(70, 43));
+    assert_eq!(app.viewport(), at(70, 43));
 }
 
 #[test]
 fn a_bigger_view_after_a_resize_still_stops_at_the_wall() {
-    let map = grass(160, 96);
-    let mut app = app(&map, Size::new(20, 10));
-    app.move_cursor(1000, 1000);
+    let mut app = app(&grass(160, 96), tiles(20, 10));
+    scroll(&mut app, 1000, 1000);
     assert_eq!(app.viewport(), at(140, 86));
-    app.fit_viewport(Size::new(40, 20));
+    app.fit_viewport(tiles(40, 20));
     assert_eq!(app.viewport(), at(120, 76));
 }
 
 #[test]
-fn a_smaller_view_after_a_resize_keeps_the_cursor_in_view() {
-    let map = grass(160, 96);
-    let mut app = app(&map, Size::new(40, 20));
-    // Cursor (80, 48); the view shows x 60..=99 and y 38..=57.
-    app.move_cursor(16, 6); // (96, 54), inside the margin
-    assert_eq!(app.viewport(), at(60, 38));
-    app.fit_viewport(Size::new(20, 10));
-    // Just enough to bring (96, 54) back into a 20×10 view.
-    assert_eq!(app.viewport(), at(77, 45));
+fn time_actions_reach_the_clock() {
+    let mut app = app(&grass(40, 30), tiles(20, 10));
+    app.apply(Action::Faster { held: false });
+    assert_eq!(app.clock.speed(), Speed::X2);
+    app.apply(Action::TogglePause);
+    assert!(app.clock.is_paused());
+}
+
+#[test]
+fn escape_asks_to_quit_and_y_quits() {
+    let mut app = app(&grass(40, 30), tiles(20, 10));
+    assert_eq!(app.apply(Action::Escape), Flow::Continue);
+    assert!(app.quit_prompt_open());
+    assert_eq!(app.apply(Action::Yes), Flow::Quit);
+}
+
+#[test]
+fn a_second_escape_quits() {
+    let mut app = app(&grass(40, 30), tiles(20, 10));
+    app.apply(Action::Escape);
+    assert_eq!(app.apply(Action::Escape), Flow::Quit);
+}
+
+#[test]
+fn any_other_key_cancels_the_quit_prompt_and_does_nothing_else() {
+    let mut app = app(&grass(160, 96), tiles(20, 10));
+    for key in [
+        Action::OtherKey,
+        Action::TogglePause,
+        Action::Scroll { dx: 1, dy: 0 },
+    ] {
+        app.apply(Action::Escape);
+        assert_eq!(app.apply(key), Flow::Continue, "{key:?}");
+        assert!(!app.quit_prompt_open(), "{key:?} should cancel");
+    }
+    assert!(!app.clock.is_paused(), "space only cancelled the prompt");
+    assert_eq!(
+        app.viewport(),
+        at(70, 43),
+        "the scroll key only cancelled the prompt"
+    );
+    assert_eq!(
+        app.apply(Action::Yes),
+        Flow::Continue,
+        "y with no prompt open"
+    );
+}
+
+#[test]
+fn moving_the_mouse_leaves_the_quit_prompt_open() {
+    let mut app = app(&grass(40, 30), tiles(20, 10));
+    app.apply(Action::Escape);
+    point(&mut app, 3, 3);
+    assert!(app.quit_prompt_open());
+}
+
+#[test]
+fn ctrl_c_quits_at_once() {
+    let mut app = app(&grass(40, 30), tiles(20, 10));
+    assert_eq!(app.apply(Action::Quit), Flow::Quit);
 }

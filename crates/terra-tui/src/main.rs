@@ -9,9 +9,9 @@ use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event};
 use ratatui::crossterm::execute;
 use terra_sim::{DataPack, World, WorldConfig};
-use terra_tui::app::App;
+use terra_tui::app::{App, Flow};
 use terra_tui::args::{Args, USAGE};
-use terra_tui::input::{self, Action, Keys};
+use terra_tui::input::{self, Keys};
 use terra_tui::theme::Theme;
 use terra_tui::ui;
 
@@ -93,15 +93,14 @@ fn run(
     seed: u64,
     force_panic: bool,
 ) -> io::Result<()> {
-    let view = ui::map_view_size(terminal.size()?, world.map());
-    let mut app = App::new(world.map(), theme, seed, view);
+    let tiles = ui::tile_area(terminal.size()?, world.map());
+    let mut app = App::new(world.map(), theme, seed, tiles);
     let mut keys = Keys::new();
     let mut last_frame = Instant::now();
 
     loop {
         // The terminal may have been resized since the last frame.
-        let screen = terminal.size()?;
-        app.fit_viewport(ui::map_view_size(screen, world.map()));
+        app.fit_viewport(ui::tile_area(terminal.size()?, world.map()));
         terminal.draw(|frame| ui::render(frame, &app, &world))?;
         if force_panic {
             panic!("forced panic (--force-panic): the terminal should now be restored");
@@ -115,21 +114,10 @@ fn run(
                 Event::Mouse(mouse) => input::mouse_action(mouse),
                 _ => None,
             };
-            match action {
-                Some(Action::Quit) => return Ok(()),
-                Some(Action::TogglePause) => app.clock.toggle_pause(),
-                Some(Action::StepOnce) => app.clock.step_once(),
-                Some(Action::Faster { held: false }) => app.clock.faster(),
-                Some(Action::Faster { held: true }) => app.clock.faster_held(),
-                Some(Action::Slower { held: false }) => app.clock.slower(),
-                Some(Action::Slower { held: true }) => app.clock.slower_held(),
-                Some(Action::MoveCursor { dx, dy }) => app.move_cursor(dx, dy),
-                Some(Action::Click { column, row }) => {
-                    if let Some(tile) = ui::tile_at(screen, &app, world.map(), column, row) {
-                        app.place_cursor(tile);
-                    }
-                }
-                None => {}
+            if let Some(action) = action
+                && app.apply(action) == Flow::Quit
+            {
+                return Ok(());
             }
         }
 
