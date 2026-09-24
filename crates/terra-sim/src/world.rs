@@ -3,7 +3,11 @@ use rand_chacha::rand_core::SeedableRng;
 use serde::Serialize;
 use xxhash_rust::xxh3::xxh3_64_with_seed;
 
+use crate::config::WorldConfig;
 use crate::data::DataPack;
+use crate::generate::generate;
+use crate::map::{Map, MapError};
+use crate::regions::Regions;
 
 /// Fixed seed for `state_hash`, so hashes are comparable across runs and builds.
 const STATE_HASH_SEED: u64 = 0x7e22_a5b1_17e5_0001;
@@ -19,6 +23,7 @@ struct WorldState {
     tick: u64,
     /// The world's only source of randomness (design §2.3).
     rng: ChaCha8Rng,
+    map: Map,
 }
 
 /// A broken internal invariant: always a bug in the simulation.
@@ -26,12 +31,25 @@ struct WorldState {
 pub struct InvariantViolation(pub String);
 
 impl World {
-    pub fn new(_data: DataPack, seed: u64) -> World {
+    /// A new world, generated from `config` and `seed`.
+    pub fn new(config: WorldConfig, data: DataPack, seed: u64) -> World {
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        let map = generate(&config, &data, &mut rng);
+        World::with(map, rng)
+    }
+
+    /// A world on a hand-drawn map, which must form exactly one region.
+    pub fn from_map(map: Map, _data: DataPack, seed: u64) -> Result<World, MapError> {
+        let regions = Regions::find(&map).count();
+        if regions != 1 {
+            return Err(MapError::NotOneRegion { regions });
+        }
+        Ok(World::with(map, ChaCha8Rng::seed_from_u64(seed)))
+    }
+
+    fn with(map: Map, rng: ChaCha8Rng) -> World {
         World {
-            state: WorldState {
-                tick: 0,
-                rng: ChaCha8Rng::seed_from_u64(seed),
-            },
+            state: WorldState { tick: 0, rng, map },
         }
     }
 
@@ -45,6 +63,11 @@ impl World {
         self.sense_and_decide(); // 5
         self.resolve_actions(); // 6
         self.finish_tick(); // 7
+    }
+
+    /// The world's map.
+    pub fn map(&self) -> &Map {
+        &self.state.map
     }
 
     /// The number of ticks simulated so far.

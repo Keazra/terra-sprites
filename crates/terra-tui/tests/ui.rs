@@ -1,9 +1,13 @@
 use ratatui::{Terminal, backend::TestBackend};
-use terra_sim::{DataPack, World};
+use terra_sim::{DataPack, World, WorldConfig};
 use terra_tui::{clock::Clock, ui};
 
 fn world() -> World {
-    World::new(DataPack::builtin().expect("built-in data pack is valid"), 7)
+    World::new(
+        WorldConfig::builtin(),
+        DataPack::builtin().expect("built-in data pack is valid"),
+        7,
+    )
 }
 
 /// Renders one frame and returns the top line as text.

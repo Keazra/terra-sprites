@@ -7,7 +7,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{self, Event};
-use terra_sim::{DataPack, World};
+use terra_sim::{DataPack, World, WorldConfig};
 use terra_tui::clock::Clock;
 use terra_tui::input::{Action, Keys};
 use terra_tui::ui;
@@ -28,7 +28,7 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let world = World::new(data, time_seed());
+    let world = World::new(WorldConfig::builtin(), data, time_seed());
 
     // Installs a panic hook that restores the terminal before the panic is reported.
     let mut terminal = match ratatui::try_init() {
