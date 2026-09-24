@@ -189,6 +189,7 @@ pub(crate) fn holds_without_drawing(
         Condition::DensityBelow(kind, radius, max) => {
             count_near(map, objects, pos, kind, radius) < usize::from(max)
         }
+        Condition::KeepsPathsOpen => objects.keeps_paths_open(map, data, pos),
     })
 }
 

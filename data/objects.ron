@@ -15,7 +15,9 @@
 //
 // Triggers: Every(n), OnStageEnter(stage), OnExpire.
 // Conditions: InStage(stage), Counter(name, cmp, n), Chance(p),
-//   Fertility(cmp, f), DensityBelow(type, radius, max); cmp is Lt, Le, Eq, Ne, Ge or Gt.
+//   Fertility(cmp, f), DensityBelow(type, radius, max), KeepsPathsOpen;
+//   cmp is Lt, Le, Eq, Ne, Ge or Gt. KeepsPathsOpen holds where a solid object
+//   wouldn't split the open tiles around it: ask it before making one.
 // Effects: AddCounter(name, delta), SpawnNearby(type, radius),
 //   SpreadTo(type, radius, [conditions]), ReplaceWith(type), DestroySelf;
 //   and in verbs only: RequireCounter(name, n), Inject(Actor or Target, chemical, amount),
@@ -46,9 +48,10 @@
     (id: 2, name: "berry", category: Berry,
      stages: [(name: "fresh", ticks: (1500, 2500), next: Expire)],
      rules: [
-         // A rotting berry sometimes sprouts, on fertile land that isn't crowded.
+         // A rotting berry sometimes sprouts, on fertile land that isn't crowded,
+         // where a bush wouldn't cut a path.
          (trigger: OnExpire,
-          if: [Fertility(Ge, 0.5), DensityBelow("berry_bush", 4, 3), Chance(0.1)],
+          if: [Fertility(Ge, 0.5), DensityBelow("berry_bush", 4, 3), KeepsPathsOpen, Chance(0.1)],
           do: [ReplaceWith("berry_bush")]),
      ],
      verbs: {
@@ -59,7 +62,7 @@
      stages: [(name: "grown", ticks: (40000, 60000), next: Expire)],
      rules: [
          (trigger: Every(2000), if: [Chance(0.1)],
-          do: [SpreadTo("thornbush", 4, [DensityBelow("thornbush", 4, 2)])]),
+          do: [SpreadTo("thornbush", 4, [DensityBelow("thornbush", 4, 2), KeepsPathsOpen])]),
      ],
      // Every contact hurts, deliberately, even Play (design §3.5.3).
      verbs: {

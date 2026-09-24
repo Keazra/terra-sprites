@@ -82,16 +82,19 @@ fn a_scenario_places_objects_and_lists_them_in_ascending_id_order() {
     assert!(world.object_at(at(0, 0)).is_none());
 }
 
+/// FIELD with a pool of shallow water at (1, 1) and a rock at (3, 1).
+const POOL_AND_ROCK: [&str; 5] = [".......", ".~.#...", ".......", ".......", "......."];
+
 #[test]
 fn a_scenario_rejects_objects_that_break_the_placement_rules() {
     let pack = builtin();
     let cases: [&[(u16, u16, &str)]; 3] = [
-        &[(0, 2, "berry_bush")],
+        &[(1, 1, "berry_bush")],
+        &[(3, 1, "berry")],
         &[(3, 2, "berry"), (3, 2, "ball")],
-        &[(1, 1, "berry_bush"), (2, 2, "thornbush")],
     ];
     for objects in cases {
-        let result = try_scenario(&pack, &FIELD, objects);
+        let result = try_scenario(&pack, &POOL_AND_ROCK, objects);
         assert!(
             matches!(result, Err(ScenarioError::CantPlace { .. })),
             "{objects:?}: {:?}",
@@ -105,6 +108,18 @@ fn a_scenario_rejects_objects_that_break_the_placement_rules() {
             Some(ScenarioError::NotAnObjectType(name.into()))
         );
     }
+}
+
+#[test]
+fn solid_objects_may_stand_side_by_side_and_items_in_shallow_water() {
+    let objects = [
+        (2, 2, "berry_bush"),
+        (3, 2, "thornbush"),
+        (2, 3, "berry_bush"),
+        (1, 1, "berry"),
+        (0, 0, "berry_bush"),
+    ];
+    assert!(try_scenario(&builtin(), &POOL_AND_ROCK, &objects).is_ok());
 }
 
 /// A type with two stages of fixed length: `a` for 3 ticks, then `b` for 2,
@@ -527,9 +542,9 @@ fn replace_with_puts_a_new_object_at_its_first_stage_on_the_same_tile() {
 
 #[test]
 fn a_replacement_that_cant_go_there_leaves_the_object_as_it_was() {
-    // A shrub beside the seed leaves no room for another.
+    // Shallow water doesn't allow fixtures, so a seed there can't become a shrub.
     let pack = pack_with(&[&seed(r#"ReplaceWith("shrub")"#), &shrub("")]);
-    let mut world = scenario(&pack, &FIELD, &[(3, 2, "seed"), (2, 2, "shrub")]);
+    let mut world = scenario(&pack, &POOL_AND_ROCK, &[(1, 1, "seed")]);
     run(&mut world, 2);
     let events = world.step();
     assert!(
@@ -549,9 +564,9 @@ fn a_replacement_that_cant_go_there_leaves_the_object_as_it_was() {
     let every_tick =
         r#"rules: [(trigger: Every(1), do: [ReplaceWith("shrub"), AddCounter("n", 1)])]"#;
     let pack = pack_with(&[&ticker(100, every_tick), &shrub("")]);
-    let mut world = scenario(&pack, &FIELD, &[(3, 2, "ticker"), (2, 2, "shrub")]);
+    let mut world = scenario(&pack, &POOL_AND_ROCK, &[(1, 1, "ticker")]);
     world.step();
-    assert_eq!(n_at(&world, at(3, 2)), 1, "the ticker stays and carries on");
+    assert_eq!(n_at(&world, at(1, 1)), 1, "the ticker stays and carries on");
 }
 
 #[test]
@@ -640,4 +655,21 @@ fn the_built_in_berry_bush_looks_like_a_seedling_then_bare_then_fruiting() {
         }
     }
     assert_eq!(looks, ["seedling", "default", "fruiting"]);
+}
+
+#[test]
+fn keeps_paths_open_holds_where_a_solid_object_would_not_split_the_open_tiles_around() {
+    let pack = pack_with(&[&ticker(100, &count_when("KeepsPathsOpen")), PEBBLE]);
+    let corridor = [
+        "#####", //
+        ".....", //
+        "#####", //
+    ];
+    let mut plugging = scenario(&pack, &corridor, &[(2, 1, "ticker")]);
+    plugging.step();
+    assert_eq!(n_at(&plugging, at(2, 1)), 0, "it would plug the corridor");
+
+    let mut open = scenario(&pack, &FIELD, &[(3, 2, "ticker")]);
+    open.step();
+    assert_eq!(n_at(&open, at(3, 2)), 1, "in open ground");
 }

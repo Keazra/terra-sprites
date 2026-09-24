@@ -82,6 +82,7 @@ pub(crate) enum Condition {
     Chance(f32),
     Fertility(Cmp, f32),
     DensityBelow(usize, u16, u16),
+    KeepsPathsOpen,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -269,6 +270,7 @@ enum ConditionEntry {
     Chance(f32),
     Fertility(Cmp, f32),
     DensityBelow(String, u16, u16),
+    KeepsPathsOpen,
 }
 
 #[derive(Debug, Deserialize)]
@@ -491,6 +493,7 @@ impl Scope<'_> {
             &ConditionEntry::DensityBelow(ref name, radius, max) => {
                 Condition::DensityBelow(self.names.real_type(name)?, radius, max)
             }
+            ConditionEntry::KeepsPathsOpen => Condition::KeepsPathsOpen,
         })
     }
 
