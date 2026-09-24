@@ -199,6 +199,16 @@ impl DataPack {
     pub fn terrain(&self, terrain: Terrain) -> &TerrainProps {
         &self.terrain[terrain as usize]
     }
+
+    /// Every object type, in ascending ID order. Rules refer to types by their index here.
+    pub(crate) fn object_types(&self) -> &[ObjectType] {
+        &self.object_types
+    }
+
+    /// The index of the object type called `name`.
+    pub(crate) fn object_type_named(&self, name: &str) -> Option<usize> {
+        self.object_types.iter().position(|t| t.name == name)
+    }
 }
 
 /// Checks that no two registry entries in `file` share an ID or a name.
