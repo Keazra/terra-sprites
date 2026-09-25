@@ -659,6 +659,15 @@ mod tests {
     }
 
     #[test]
+    fn levels_a_tick_ago_that_do_not_match_the_chemicals_break_an_invariant() {
+        // As a body loaded from a save would have, if loading didn't fill them in.
+        let (mut world, first, _) = field_with_sprites();
+        let body = &mut world.state.sprites.get_mut(first).expect("a sprite").body;
+        body.chems_before_tick.clear();
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
     fn a_locus_that_is_not_a_number_breaks_an_invariant() {
         let (mut world, first, _) = field_with_sprites();
         world

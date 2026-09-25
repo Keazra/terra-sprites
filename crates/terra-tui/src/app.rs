@@ -307,16 +307,15 @@ impl App {
         Flow::Continue
     }
 
-    /// Selects the sprite `id`. Another sprite than before shows its tab from
-    /// the top, and from the World tab, selecting opens Body.
+    /// Selects the sprite `id`. From the World tab, that opens Body; and
+    /// another sprite than before shows its tab from the top.
     fn select(&mut self, id: EntityId) {
-        if self.selection.map(Selection::id) != Some(id) {
+        if self.tab == Tab::World {
+            self.open(Tab::Body);
+        } else if self.selection.map(Selection::id) != Some(id) {
             self.tab_scroll = 0;
         }
         self.selection = Some(Selection::Living(id));
-        if self.tab == Tab::World {
-            self.tab = Tab::Body;
-        }
     }
 
     /// Opens `tab`, from the top.

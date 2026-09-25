@@ -1199,3 +1199,53 @@ fn a_world_tab_list_too_long_for_one_line_wraps_after_a_dot() {
         ]
     );
 }
+
+#[test]
+fn selecting_the_selected_sprite_from_a_scrolled_world_tab_opens_body_at_the_top() {
+    // At 100×12 the inspector has 8 rows: too few for the World tab's 10
+    // lines, or the Body tab's 13.
+    let world = garden_with_sprites();
+    let mut app = app_for(&world, Theme::cp437(), 100, 12);
+    app.apply(Action::SelectNext, &world);
+    app.apply(Action::PreviousTab, &world);
+    app.apply(Action::ScrollTab { pages: 1 }, &world);
+    // The first sprite is at (2, 3), drawn at cell (3, 5).
+    app.apply(Action::Click(Position::new(3, 5)), &world);
+    let rows = right_part(&render(&app, &world, 100, 12), 46);
+    assert!(rows[1].contains("[Body]"), "{:?}", rows[1]);
+    assert!(inside(&rows[2]).starts_with("age "), "{:?}", rows[2]);
+}
+
+#[test]
+fn chemical_names_show_with_spaces_for_underscores() {
+    // "boredom" renamed "bored_ness" in the pack and the starter genome.
+    let files: Vec<(&str, String)> = DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, text)| {
+            let renamed = match path {
+                "chemicals.ron" | "genomes/starter.ron" => {
+                    text.replace("\"boredom\"", "\"bored_ness\"")
+                }
+                _ => text.to_string(),
+            };
+            (path, renamed)
+        })
+        .collect();
+    let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
+    let pack = DataPack::from_sources(&files).expect("valid pack");
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let sprites = [(terra_sim::Pos { x: 2, y: 3 }, None)];
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+    };
+    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::SelectNext, &world);
+    let (_, body) = inspector(&app, &world);
+    assert!(body[7].starts_with("bored ness  "), "{:?}", body[7]);
+    app.apply(Action::NextTab, &world);
+    let (_, chem) = inspector(&app, &world);
+    assert!(chem[11].starts_with("bored ness  "), "{:?}", chem[11]);
+}

@@ -373,3 +373,13 @@ fn the_mouse_wheel_turns_notches_where_the_pointer_is() {
         Some(Action::Wheel { at, notches: -1 })
     );
 }
+
+#[test]
+fn tab_with_shift_held_selects_the_previous_sprite_too() {
+    // Some terminals report Shift+Tab as Tab with Shift, not as its own key.
+    let shift_tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::SHIFT);
+    assert_eq!(
+        Keys::new().action_for(shift_tab),
+        Some(Action::SelectPrevious)
+    );
+}
