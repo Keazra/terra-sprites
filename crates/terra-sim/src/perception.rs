@@ -19,6 +19,8 @@ use crate::sprites::Sprites;
 pub(crate) enum Occupied {
     /// Crossable, at this many extra terrain units: sprites move.
     Penalty(u32),
+    /// Never entered: blocked re-planning's one-off search (design §3.7).
+    Impassable,
 }
 
 /// No step reached the tile.
@@ -116,6 +118,7 @@ impl Flood {
                     (_, None) => 0,
                     _ if to == origin => 0,
                     (Occupied::Penalty(penalty), Some(_)) => penalty,
+                    (Occupied::Impassable, Some(_)) => continue,
                 };
                 let total = cost + step + extra;
                 if total < flood.costs[next] {
