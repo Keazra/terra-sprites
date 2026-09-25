@@ -10,25 +10,15 @@ use crate::objects::{EntityId, Object, Objects};
 use crate::random::{chance, uniform};
 use crate::world::WorldState;
 
-/// A new object of type `kind` on `pos`, at the start of its first stage. Its
-/// first turn is at tick `first_turn`, when it enters that stage.
-pub(crate) fn new_object(
-    data: &DataPack,
-    rng: &mut ChaCha8Rng,
-    kind: usize,
-    pos: Pos,
-    first_turn: u64,
-) -> Object {
+/// A new object of type `kind` on `pos`, in its first stage. It enters that
+/// stage on its first turn, which is when the stage's length is drawn.
+pub(crate) fn new_object(data: &DataPack, kind: usize, pos: Pos) -> Object {
     let object_type = &data.object_types()[kind];
-    let (stage, stage_ends) = match object_type.stages.first() {
-        Some(first) => (Some(0), first_turn + duration(rng, first)),
-        None => (None, 0),
-    };
     Object {
         kind,
         pos,
-        stage,
-        stage_ends,
+        stage: (!object_type.stages.is_empty()).then_some(0),
+        stage_ends: 0,
         counters: vec![0; object_type.counters.len()],
         fresh: true,
     }
@@ -41,7 +31,7 @@ pub(crate) fn new_object(
 /// `OnStageEnter` fires for the stage it starts in.
 pub(crate) fn aged_object(data: &DataPack, rng: &mut ChaCha8Rng, kind: usize, pos: Pos) -> Object {
     let object_type = &data.object_types()[kind];
-    let mut object = new_object(data, rng, kind, pos, 0);
+    let mut object = new_object(data, kind, pos);
     object.fresh = false;
     if object_type.stages.is_empty() {
         return object;
@@ -81,11 +71,11 @@ pub(crate) fn run(state: &mut WorldState, data: &DataPack, events: &mut Vec<Even
     }
 }
 
-/// Whether the object is still in the world after an effect.
+/// Whether an object's turn goes on after an effect, or ends because the object is gone.
 #[derive(PartialEq, Eq)]
-enum Flow {
-    Stays,
-    Gone,
+enum Turn {
+    Continues,
+    Ends,
 }
 
 /// One object's turn: the stage clock, then its rules (design §3.5.2).
@@ -95,10 +85,15 @@ fn turn(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec<
         return;
     };
     let object_type = &data.object_types()[object.kind];
-    // A new object enters its first stage on its first turn.
-    let mut entered = if object.fresh { object.stage } else { None };
-    object.fresh = false;
+    let mut entered = None;
     let mut expiring = false;
+    // A new object enters its first stage on its first turn.
+    if std::mem::take(&mut object.fresh)
+        && let Some(first) = object.stage
+    {
+        object.stage_ends = tick + duration(&mut state.rng, &object_type.stages[first]);
+        entered = Some(first);
+    }
     if let Some(stage) = object.stage
         && tick >= object.stage_ends
     {
@@ -127,7 +122,7 @@ fn turn(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec<
             continue;
         }
         for effect in &rule.effects {
-            if apply(state, data, id, effect, events) == Flow::Gone {
+            if apply(state, data, id, effect, events) == Turn::Ends {
                 return;
             }
         }
@@ -225,7 +220,7 @@ fn apply(
     id: EntityId,
     effect: &Effect,
     events: &mut Vec<Event>,
-) -> Flow {
+) -> Turn {
     let object = state
         .objects
         .get_mut(id)
@@ -265,22 +260,22 @@ fn apply(
             let old = state.objects.remove(id);
             if !state.objects.can_place(&state.map, data, kind, pos) {
                 state.objects.place(id, old);
-                return Flow::Stays;
+                return Turn::Continues;
             }
             removed(state, data, id, old.kind, Removal::Replaced, events);
             create(state, data, kind, pos, events);
-            return Flow::Gone;
+            return Turn::Ends;
         }
         Effect::DestroySelf => {
             let old = state.objects.remove(id);
             removed(state, data, id, old.kind, Removal::Destroyed, events);
-            return Flow::Gone;
+            return Turn::Ends;
         }
         Effect::RequireCounter(..) | Effect::Inject(..) | Effect::Signal(..) | Effect::Push(..) => {
             unreachable!("verb-only effects are rejected in lifecycle rules when the pack loads")
         }
     }
-    Flow::Stays
+    Turn::Continues
 }
 
 /// Reports that the object `id`, of type `kind`, has left the world.
@@ -305,10 +300,7 @@ fn removed(
 /// Creates an object of type `kind` on `pos` during step 2, where the caller
 /// has checked it may go. It takes its first turn next tick.
 fn create(state: &mut WorldState, data: &DataPack, kind: usize, pos: Pos, events: &mut Vec<Event>) {
-    let id = EntityId(state.next_id);
-    state.next_id += 1;
-    let object = new_object(data, &mut state.rng, kind, pos, state.tick + 1);
-    state.objects.place(id, object);
+    let id = state.add_object(new_object(data, kind, pos));
     events.push(Event {
         tick: state.tick,
         kind: EventKind::ObjectSpawned {

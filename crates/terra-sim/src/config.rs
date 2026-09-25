@@ -77,20 +77,14 @@ impl WorldConfig {
                 )));
             }
         }
-        for name in preset.objects.keys() {
-            match data.object_type_named(name) {
-                None => {
-                    return Err(ConfigError::Invalid(format!(
-                        "`objects` names `{name}`, which isn't an object type in the data pack"
-                    )));
-                }
-                Some(index) if data.object_types()[index].pseudo => {
-                    return Err(ConfigError::Invalid(format!(
-                        "`objects` names `{name}`, a pseudo type, which has no objects"
-                    )));
-                }
-                Some(_) => {}
-            }
+        if let Some(name) = preset
+            .objects
+            .keys()
+            .find(|name| data.real_object_type(name).is_none())
+        {
+            return Err(ConfigError::Invalid(format!(
+                "`objects` names `{name}`, which isn't an object type in the data pack that can have objects"
+            )));
         }
         let per_tiles = match preset.per_tiles {
             Some(per_tiles) if per_tiles > 0 => per_tiles,

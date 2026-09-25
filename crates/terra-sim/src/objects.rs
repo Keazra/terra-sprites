@@ -265,10 +265,10 @@ mod tests {
             id
         }
 
-        /// How many separate pieces the open ground is in: walkable tiles free
+        /// How many regions the open ground is in: walkable tiles free
         /// of solid objects, joined by legal steps (no step onto a solid
         /// object, and no diagonal past one, design §3.1).
-        fn open_pieces(&self) -> usize {
+        fn open_regions(&self) -> usize {
             let open = |pos: Pos| {
                 self.map.is_walkable(pos)
                     && !self
@@ -277,12 +277,12 @@ mod tests {
                         .is_some_and(|id| self.data.object_types()[self.objects.kind(id)].solid)
             };
             let mut seen = vec![false; self.map.tile_count()];
-            let mut pieces = 0;
+            let mut regions = 0;
             for start in self.map.positions().filter(|&pos| open(pos)) {
                 if seen[self.map.index(start)] {
                     continue;
                 }
-                pieces += 1;
+                regions += 1;
                 seen[self.map.index(start)] = true;
                 let mut stack = vec![start];
                 while let Some(pos) = stack.pop() {
@@ -300,7 +300,7 @@ mod tests {
                     }
                 }
             }
-            pieces
+            regions
         }
     }
 
@@ -472,9 +472,9 @@ mod tests {
                 let kind = if (x + y) % 3 == 0 { "thornbush" } else { "berry_bush" };
                 if add || placed.is_empty() {
                     if scene.can_place(kind, at(x, y)) && keeps_paths_open(&scene, at(x, y)) {
-                        let before = scene.open_pieces();
+                        let before = scene.open_regions();
                         placed.push(scene.place(kind, at(x, y)));
-                        prop_assert!(scene.open_pieces() <= before, "placed at ({x}, {y})");
+                        prop_assert!(scene.open_regions() <= before, "placed at ({x}, {y})");
                     }
                 } else {
                     // A removal can leave a pocket where a filled dead end was,

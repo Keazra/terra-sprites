@@ -7,7 +7,6 @@ use crate::config::WorldConfig;
 use crate::data::DataPack;
 use crate::ecology::aged_object;
 use crate::map::{Map, Pos};
-use crate::objects::EntityId;
 use crate::random::{uniform, unit};
 use crate::regions;
 use crate::terrain::Terrain;
@@ -105,10 +104,8 @@ pub(crate) fn place_objects(config: &WorldConfig, data: &DataPack, state: &mut W
             let Some(pos) = pos else {
                 break;
             };
-            let id = EntityId(state.next_id);
-            state.next_id += 1;
             let object = aged_object(data, &mut state.rng, kind, pos);
-            state.objects.place(id, object);
+            state.add_object(object);
         }
     }
 }

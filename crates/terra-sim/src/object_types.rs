@@ -188,7 +188,7 @@ impl Names<'_> {
 
 /// Where in a type a condition or effect appears, which decides what's allowed there.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Place {
+enum Section {
     Rule,
     Verb,
     Visual,
@@ -368,7 +368,7 @@ impl TypeEntry {
                 }
                 let effects = effects
                     .iter()
-                    .map(|effect| scope.effect(effect, Place::Verb))
+                    .map(|effect| scope.effect(effect, Section::Verb))
                     .collect::<Result<Vec<_>, _>>()
                     .map_err(|e| format!("the {verb:?} verb: {e}"))?;
                 Ok((verb, effects))
@@ -380,7 +380,7 @@ impl TypeEntry {
             .enumerate()
             .map(|(index, visual)| {
                 let conditions = scope
-                    .conditions(&visual.conditions, Place::Visual)
+                    .conditions(&visual.conditions, Section::Visual)
                     .map_err(|e| format!("visual rule {}: {e}", index + 1))?;
                 Ok(Visual {
                     conditions,
@@ -454,11 +454,11 @@ impl Scope<'_> {
         };
         Ok(Rule {
             trigger,
-            conditions: self.conditions(&rule.conditions, Place::Rule)?,
+            conditions: self.conditions(&rule.conditions, Section::Rule)?,
             effects: rule
                 .effects
                 .iter()
-                .map(|effect| self.effect(effect, Place::Rule))
+                .map(|effect| self.effect(effect, Section::Rule))
                 .collect::<Result<_, _>>()?,
         })
     }
@@ -466,22 +466,22 @@ impl Scope<'_> {
     fn conditions(
         &self,
         conditions: &[ConditionEntry],
-        place: Place,
+        section: Section,
     ) -> Result<Vec<Condition>, String> {
         conditions
             .iter()
-            .map(|condition| self.condition(condition, place))
+            .map(|condition| self.condition(condition, section))
             .collect()
     }
 
-    fn condition(&self, condition: &ConditionEntry, place: Place) -> Result<Condition, String> {
+    fn condition(&self, condition: &ConditionEntry, section: Section) -> Result<Condition, String> {
         Ok(match condition {
             ConditionEntry::InStage(name) => Condition::InStage(self.stage_index(name)?),
             &ConditionEntry::Counter(ref name, cmp, value) => {
                 Condition::Counter(self.counter(name)?, cmp, value)
             }
             &ConditionEntry::Chance(p) => {
-                if place == Place::Visual {
+                if section == Section::Visual {
                     return Err("`Chance` isn't allowed, so drawing never uses the RNG".into());
                 }
                 if !(0.0..=1.0).contains(&p) {
@@ -497,7 +497,7 @@ impl Scope<'_> {
         })
     }
 
-    fn effect(&self, effect: &EffectEntry, place: Place) -> Result<Effect, String> {
+    fn effect(&self, effect: &EffectEntry, section: Section) -> Result<Effect, String> {
         let verb_only = matches!(
             effect,
             EffectEntry::RequireCounter(..)
@@ -505,7 +505,7 @@ impl Scope<'_> {
                 | EffectEntry::Signal(..)
                 | EffectEntry::Push(..)
         );
-        if verb_only && place != Place::Verb {
+        if verb_only && section != Section::Verb {
             return Err(format!(
                 "`{}` needs a sprite doing a verb, so it's only allowed in a verb table",
                 effect_name(effect)
@@ -524,7 +524,7 @@ impl Scope<'_> {
             &EffectEntry::SpreadTo(ref name, radius, ref conditions) => Effect::SpreadTo(
                 self.names.real_type(name)?,
                 radius,
-                self.conditions(conditions, place)?,
+                self.conditions(conditions, section)?,
             ),
             EffectEntry::ReplaceWith(name) => Effect::ReplaceWith(self.names.real_type(name)?),
             EffectEntry::DestroySelf => Effect::DestroySelf,

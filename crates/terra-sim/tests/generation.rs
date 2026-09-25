@@ -230,10 +230,10 @@ fn a_generated_object_gets_no_on_stage_enter_for_the_stage_it_starts_in() {
     );
 }
 
-/// How many separate pieces the open ground is in: walkable tiles holding no
+/// How many regions the open ground is in: walkable tiles holding no
 /// solid object. A legal diagonal step needs both tiles beside it open, so
-/// joining by orthogonal steps gives the same pieces.
-fn open_pieces(world: &World) -> usize {
+/// joining by orthogonal steps gives the same regions.
+fn open_regions(world: &World) -> usize {
     let map = world.map();
     let data = DataPack::builtin().expect("valid pack");
     let open = |pos: Pos| {
@@ -242,12 +242,12 @@ fn open_pieces(world: &World) -> usize {
     };
     let index = |pos: Pos| usize::from(pos.y) * usize::from(map.width()) + usize::from(pos.x);
     let mut seen = vec![false; usize::from(map.width()) * usize::from(map.height())];
-    let mut pieces = 0;
+    let mut regions = 0;
     for start in positions(map).filter(|&pos| open(pos)) {
         if seen[index(start)] {
             continue;
         }
-        pieces += 1;
+        regions += 1;
         seen[index(start)] = true;
         let mut stack = vec![start];
         while let Some(pos) = stack.pop() {
@@ -271,13 +271,13 @@ fn open_pieces(world: &World) -> usize {
             }
         }
     }
-    pieces
+    regions
 }
 
 #[test]
 fn generation_never_splits_the_open_ground() {
     for seed in 0..4 {
-        assert_eq!(open_pieces(&default_world(seed)), 1, "seed {seed}");
+        assert_eq!(open_regions(&default_world(seed)), 1, "seed {seed}");
     }
     // Crowded: a bush wanted on every tile.
     let data = DataPack::builtin().expect("valid pack");
@@ -285,6 +285,6 @@ fn generation_never_splits_the_open_ground() {
     for seed in 0..4 {
         let config = WorldConfig::from_ron(preset, &data).expect("valid preset");
         let world = World::new(config, data.clone(), seed);
-        assert_eq!(open_pieces(&world), 1, "crowded, seed {seed}");
+        assert_eq!(open_regions(&world), 1, "crowded, seed {seed}");
     }
 }
