@@ -4,7 +4,7 @@ How the engineering skills should consume this repo's domain documentation when 
 
 ## Before exploring, read these
 
-- **The current design doc** in `docs/design/`: for each design, the highest-numbered `-vN` revision is current (today, `m1-a-sprite-lives-v8.md`). Read the sections that touch the area you're about to work in. Earlier revisions and the `*-eval.md` files are history, not spec.
+- **The current design doc** in `docs/design/`: for each design, the highest-numbered `-vN` revision is current. Read the sections that touch the area you're about to work in. Earlier revisions and the `*-eval.md` files are history, not spec.
 - **`CONTEXT.md`** at the repo root: the glossary.
 - **`docs/adr/`**: read ADRs that touch the area you're about to work in.
 
