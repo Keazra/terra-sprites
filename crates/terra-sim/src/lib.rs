@@ -3,10 +3,12 @@
 //! This crate has no terminal and no filesystem access: it receives its data
 //! pack as already-read text and is driven one tick at a time.
 
+mod biochem;
 mod config;
 mod data;
 mod ecology;
 mod events;
+mod expression;
 mod generate;
 mod genome;
 mod map;
@@ -17,6 +19,7 @@ mod random;
 mod regions;
 mod registry;
 mod terrain;
+mod variation;
 mod world;
 
 pub use config::{ConfigError, WorldConfig};

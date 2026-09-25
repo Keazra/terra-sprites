@@ -3,8 +3,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use ron::extensions::Extensions;
 use serde::Deserialize;
 
+use crate::expression::{Expression, expressions};
+use crate::genome::{Gene, Genome, GenomeError};
 use crate::object_types::{OBJECTS, ObjectType, TypeEntry, object_types};
-use crate::physiology::{PHYSIOLOGY, PhysiologyEntry};
+use crate::physiology::{PHYSIOLOGY, Physiology, PhysiologyEntry, Slots};
 use crate::registry::{Chemical, Locus};
 use crate::terrain::{Terrain, TerrainProps};
 
@@ -18,6 +20,9 @@ pub struct DataPack {
     loci: Vec<Locus>,
     /// In ascending ID order.
     object_types: Vec<ObjectType>,
+    physiology: Physiology,
+    /// What sprites without parents are made from. Every gene in it is expressed or unexpressed.
+    starter: Genome,
 }
 
 /// Why a data pack could not be loaded.
@@ -187,20 +192,28 @@ impl DataPack {
             &chemicals,
             &loci,
         )?;
-        let _physiology = parse::<PhysiologyEntry>(sources, PHYSIOLOGY)?
-            .validate(&loci)
+        let slots =
+            Slots::find(&chemicals, &loci).map_err(|(file, message)| DataError::Invalid {
+                file: file.into(),
+                message,
+            })?;
+        let physiology = parse::<PhysiologyEntry>(sources, PHYSIOLOGY)?
+            .validate(slots, &loci)
             .map_err(|message| DataError::Invalid {
                 file: PHYSIOLOGY.into(),
                 message,
             })?;
-        find(sources, STARTER)?;
-        Ok(DataPack {
+        let mut pack = DataPack {
             manifest,
             terrain,
             chemicals,
             loci,
             object_types,
-        })
+            physiology,
+            starter: Genome { genes: Vec::new() },
+        };
+        pack.starter = starter_genome(find(sources, STARTER)?, &pack)?;
+        Ok(pack)
     }
 
     /// The pack's name, from its manifest.
@@ -266,6 +279,16 @@ impl DataPack {
             .map(|index| &self.object_types[index])
     }
 
+    /// The body's fixed rules, from `physiology.ron`.
+    pub(crate) fn physiology(&self) -> &Physiology {
+        &self.physiology
+    }
+
+    /// The genome sprites without parents are made from.
+    pub(crate) fn starter(&self) -> &Genome {
+        &self.starter
+    }
+
     /// Every chemical, in the order `chemicals.ron` lists them.
     pub(crate) fn chemicals(&self) -> &[Chemical] {
         &self.chemicals
@@ -274,6 +297,11 @@ impl DataPack {
     /// The chemical with the ID `id`.
     pub(crate) fn chemical(&self, id: u16) -> Option<&Chemical> {
         self.chemicals.iter().find(|c| c.id == id)
+    }
+
+    /// Where the chemical with the ID `id` is in the pack's chemical order.
+    pub(crate) fn chemical_slot(&self, id: u16) -> Option<usize> {
+        self.chemicals.iter().position(|c| c.id == id)
     }
 
     /// The chemical called `name`.
@@ -289,6 +317,11 @@ impl DataPack {
     /// The locus with the ID `id`.
     pub(crate) fn locus(&self, id: u16) -> Option<&Locus> {
         self.loci.iter().find(|l| l.id == id)
+    }
+
+    /// Where the locus with the ID `id` is in the pack's locus order.
+    pub(crate) fn locus_slot(&self, id: u16) -> Option<usize> {
+        self.loci.iter().position(|l| l.id == id)
     }
 
     /// The locus called `name`.
@@ -312,6 +345,42 @@ impl DataPack {
         self.object_type_named(name)
             .filter(|&index| !self.object_types[index].pseudo)
     }
+}
+
+/// Reads the starter genome, which must be clean: a flagged or unknown gene in
+/// it would silently do nothing (design §4.3).
+fn starter_genome(text: &str, data: &DataPack) -> Result<Genome, DataError> {
+    let invalid = |message: String| DataError::Invalid {
+        file: STARTER.into(),
+        message,
+    };
+    let genome = Genome::from_ron(text, data).map_err(|e| match e {
+        GenomeError::Parse(message) => DataError::Parse {
+            file: STARTER.into(),
+            message,
+        },
+        GenomeError::Invalid(message) => invalid(message),
+    })?;
+    for (index, (gene, expression)) in genome
+        .genes
+        .iter()
+        .zip(expressions(&genome, data))
+        .enumerate()
+    {
+        let number = index + 1;
+        match (expression, gene) {
+            (Expression::Flagged(reason), _) => {
+                return Err(invalid(format!("gene {number} is flagged: it {reason}")));
+            }
+            (Expression::Unknown, &Gene::Unknown { type_id, .. }) => {
+                return Err(invalid(format!(
+                    "gene {number} is of type {type_id}, which this build can't read"
+                )));
+            }
+            _ => {}
+        }
+    }
+    Ok(genome)
 }
 
 /// Checks that no two registry entries in `file` share an ID or a name.

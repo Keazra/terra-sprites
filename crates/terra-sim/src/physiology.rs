@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
-use crate::registry::{Locus, LocusKind};
+use crate::registry::{Chemical, ChemicalClass, Locus, LocusKind, Trait};
 
 /// The physiology file, relative to the pack root.
 pub(crate) const PHYSIOLOGY: &str = "physiology.ron";
@@ -30,6 +30,7 @@ pub(crate) struct Physiology {
     /// Each receptor target's range, by locus ID.
     pub(crate) receptor_targets: BTreeMap<u16, (f32, f32)>,
     pub(crate) spawn_variation: f32,
+    pub(crate) slots: Slots,
 }
 
 /// `physiology.ron`, before validation.
@@ -103,10 +104,21 @@ pub(crate) struct Traits {
     pub(crate) lifespan: (f32, f32),
 }
 
+impl Traits {
+    /// The range `which` is clamped to.
+    pub(crate) fn range(&self, which: Trait) -> (f32, f32) {
+        match which {
+            Trait::Speed => self.speed,
+            Trait::SenseRadius => self.sense_radius,
+            Trait::Lifespan => self.lifespan,
+        }
+    }
+}
+
 impl PhysiologyEntry {
     /// The validated physiology, or what's wrong with it. Receptor targets are
     /// checked against the pack's `loci`.
-    pub(crate) fn validate(self, loci: &[Locus]) -> Result<Physiology, String> {
+    pub(crate) fn validate(self, slots: Slots, loci: &[Locus]) -> Result<Physiology, String> {
         let newborn = self.newborn;
         for (name, level) in [
             ("newborn.energy", newborn.energy),
@@ -194,6 +206,7 @@ impl PhysiologyEntry {
             traits,
             receptor_targets,
             spawn_variation: self.spawn_variation,
+            slots,
         })
     }
 }
@@ -215,5 +228,66 @@ fn range(name: &str, (low, high): (f32, f32)) -> Result<(), String> {
         Err(format!(
             "`{name}` goes from {low} down to {high}, but must go from low to high"
         ))
+    }
+}
+
+/// Where physiology finds the chemicals and body sensors it works on: slots
+/// in the pack's chemical and locus order.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Slots {
+    pub(crate) energy: usize,
+    pub(crate) hydration: usize,
+    pub(crate) stamina: usize,
+    pub(crate) food: usize,
+    pub(crate) water: usize,
+    pub(crate) injury: usize,
+    pub(crate) always: usize,
+    pub(crate) age: usize,
+    pub(crate) nearby_sprites: usize,
+    pub(crate) moving: usize,
+    pub(crate) resting: usize,
+}
+
+impl Slots {
+    /// Finds each physical chemical and body sensor physiology needs, or says
+    /// which file lacks one.
+    pub(crate) fn find(
+        chemicals: &[Chemical],
+        loci: &[Locus],
+    ) -> Result<Slots, (&'static str, String)> {
+        let chem = |name: &str| {
+            chemicals
+                .iter()
+                .position(|c| c.name == name && c.class == ChemicalClass::Physical)
+                .ok_or_else(|| {
+                    (
+                        "chemicals.ron",
+                        format!("physiology needs a physical chemical called `{name}`"),
+                    )
+                })
+        };
+        let sensor = |name: &str| {
+            loci.iter()
+                .position(|l| l.name == name && l.kind == LocusKind::BodySensor)
+                .ok_or_else(|| {
+                    (
+                        "loci.ron",
+                        format!("physiology needs a body sensor called `{name}`"),
+                    )
+                })
+        };
+        Ok(Slots {
+            energy: chem("energy")?,
+            hydration: chem("hydration")?,
+            stamina: chem("stamina")?,
+            food: chem("food")?,
+            water: chem("water")?,
+            injury: chem("injury")?,
+            always: sensor("always")?,
+            age: sensor("age")?,
+            nearby_sprites: sensor("nearby_sprites")?,
+            moving: sensor("moving")?,
+            resting: sensor("resting")?,
+        })
     }
 }

@@ -541,3 +541,66 @@ fn every_receptor_target_has_a_range_and_nothing_else_does() {
         "ate",
     );
 }
+
+#[test]
+fn a_starter_genome_with_a_flagged_or_unknown_gene_does_not_load() {
+    let starter = |gene: &str| format!("(format: 1, genes: [{gene}])");
+    assert_invalid(
+        "genomes/starter.ron",
+        &starter(r#"HalfLife(chem: "energy", ticks: 10)"#),
+        "energy",
+    );
+    assert_invalid(
+        "genomes/starter.ron",
+        &starter(r#"Gene(type: 900, version: 1, payload: "")"#),
+        "900",
+    );
+    assert_invalid(
+        "genomes/starter.ron",
+        &starter(r#"HalfLife(chem: "glee", ticks: 10)"#),
+        "glee",
+    );
+}
+
+#[test]
+fn physiology_needs_its_physical_chemicals_and_body_sensors() {
+    let chemicals = include_str!("../../../data/chemicals.ron");
+    let loci = include_str!("../../../data/loci.ron");
+    let changed = |text: &str, from: &str, to: &str| {
+        assert!(text.contains(from), "{from:?} is in the file");
+        text.replace(from, to)
+    };
+    let stamina = r#"(id: 3,  name: "stamina",     class: Physical)"#;
+    assert_invalid(
+        "chemicals.ron",
+        &changed(
+            chemicals,
+            stamina,
+            r#"(id: 3,  name: "vigour",      class: Physical)"#,
+        ),
+        "stamina",
+    );
+    assert_invalid(
+        "chemicals.ron",
+        &changed(
+            chemicals,
+            stamina,
+            r#"(id: 3,  name: "stamina",     class: Signal)"#,
+        ),
+        "stamina",
+    );
+    assert_invalid(
+        "loci.ron",
+        &changed(loci, r#"name: "resting","#, r#"name: "lazing","#),
+        "resting",
+    );
+    assert_invalid(
+        "loci.ron",
+        &changed(
+            loci,
+            r#"name: "always",            kind: BodySensor"#,
+            r#"name: "always",            kind: Pulse"#,
+        ),
+        "always",
+    );
+}

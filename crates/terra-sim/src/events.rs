@@ -28,6 +28,26 @@ pub enum EventKind {
     },
 }
 
+/// What caused most of a dead sprite's recent injury (design §4.10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+pub enum DeathCause {
+    /// Its energy ran out.
+    Starvation,
+    /// Its hydration ran out.
+    Dehydration,
+    /// It lived past its lifespan.
+    OldAge,
+}
+
+impl DeathCause {
+    /// Every cause, in the order ties are settled.
+    pub(crate) const ALL: [DeathCause; 3] = [
+        DeathCause::Starvation,
+        DeathCause::Dehydration,
+        DeathCause::OldAge,
+    ];
+}
+
 /// Why an object left the world.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Removal {
