@@ -88,10 +88,12 @@ const POOL_AND_ROCK: [&str; 5] = [".......", ".~.#...", ".......", ".......", ".
 #[test]
 fn a_scenario_rejects_objects_that_break_the_placement_rules() {
     let pack = builtin();
-    let cases: [&[(u16, u16, &str)]; 3] = [
+    let cases: [&[(u16, u16, &str)]; 5] = [
         &[(1, 1, "berry_bush")],
         &[(3, 1, "berry")],
         &[(3, 2, "berry"), (3, 2, "ball")],
+        &[(7, 1, "ball")], // past the right wall: not row 2's first tile
+        &[(0, 5, "ball")], // below the bottom wall
     ];
     for objects in cases {
         let result = try_scenario(&pack, &POOL_AND_ROCK, objects);

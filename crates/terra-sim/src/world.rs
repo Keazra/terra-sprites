@@ -166,7 +166,9 @@ impl World {
                 .real_object_type(name)
                 .ok_or_else(not_an_object)?;
             let state = &mut world.state;
-            if !state.objects.can_place(&state.map, &world.data, kind, pos) {
+            if !state.map.contains(pos)
+                || !state.objects.can_place(&state.map, &world.data, kind, pos)
+            {
                 return Err(ScenarioError::CantPlace {
                     object_type: name.into(),
                     pos,
