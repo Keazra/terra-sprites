@@ -3,11 +3,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use ron::extensions::Extensions;
 use serde::Deserialize;
 
+use crate::brain_io::{BRAIN_IO, BrainInput, InputEntry, InputId, brain_inputs};
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, GenomeError};
 use crate::object_types::{OBJECTS, ObjectType, TypeEntry, object_types};
 use crate::physiology::{Indices, PHYSIOLOGY, Physiology, PhysiologyEntry};
-use crate::registry::{Chemical, Locus};
+use crate::registry::{Category, ChemId, Chemical, Locus, LocusId};
 use crate::terrain::{Terrain, TerrainProps};
 
 /// A validated data pack: everything a world needs from `data/`.
@@ -18,6 +19,8 @@ pub struct DataPack {
     terrain: Vec<TerrainProps>,
     chemicals: Vec<Chemical>,
     loci: Vec<Locus>,
+    /// Every brain input, in ID order.
+    brain_inputs: Vec<BrainInput>,
     /// In ascending ID order.
     object_types: Vec<ObjectType>,
     physiology: Physiology,
@@ -53,6 +56,7 @@ const BUILTIN: &[(&str, &str)] = &[
     (TERRAIN, include_str!("../../../data/terrain.ron")),
     (CHEMICALS, include_str!("../../../data/chemicals.ron")),
     (LOCI, include_str!("../../../data/loci.ron")),
+    (BRAIN_IO, include_str!("../../../data/brain_io.ron")),
     (OBJECTS, include_str!("../../../data/objects.ron")),
     (PHYSIOLOGY, include_str!("../../../data/physiology.ron")),
     (STARTER, include_str!("../../../data/genomes/starter.ron")),
@@ -184,9 +188,17 @@ impl DataPack {
         manifest.validate()?;
         let terrain = terrain_table(parse(sources, TERRAIN)?)?;
         let chemicals: Vec<Chemical> = parse(sources, CHEMICALS)?;
-        check_unique(CHEMICALS, chemicals.iter().map(|c| (c.id, c.name.as_str())))?;
+        check_unique(
+            CHEMICALS,
+            chemicals.iter().map(|c| (c.id.0, c.name.as_str())),
+        )?;
         let loci: Vec<Locus> = parse(sources, LOCI)?;
-        check_unique(LOCI, loci.iter().map(|l| (l.id, l.name.as_str())))?;
+        check_unique(LOCI, loci.iter().map(|l| (l.id.0, l.name.as_str())))?;
+        let brain_inputs = brain_inputs(
+            parse::<Vec<InputEntry>>(sources, BRAIN_IO)?,
+            &chemicals,
+            &loci,
+        )?;
         let object_types = object_types(
             parse::<Vec<TypeEntry>>(sources, OBJECTS)?,
             &chemicals,
@@ -208,6 +220,7 @@ impl DataPack {
             terrain,
             chemicals,
             loci,
+            brain_inputs,
             object_types,
             physiology,
             starter: Genome { genes: Vec::new() },
@@ -226,6 +239,29 @@ impl DataPack {
         &self.manifest.version
     }
 
+    /// Every brain input as `(stable ID, name)`, in ID order: the State
+    /// inputs `brain_io.ron` lists, then the Target inputs (design §5.2).
+    pub fn brain_inputs(&self) -> impl Iterator<Item = (u16, &str)> {
+        self.brain_inputs
+            .iter()
+            .map(|input| (input.id.0, input.name.as_str()))
+    }
+
+    /// Every brain input, in ID order: a brain's inputs are in this order.
+    pub(crate) fn brain_inputs_in_order(&self) -> &[BrainInput] {
+        &self.brain_inputs
+    }
+
+    /// The brain input with the ID `id`.
+    pub(crate) fn brain_input(&self, id: InputId) -> Option<&BrainInput> {
+        self.brain_inputs.iter().find(|input| input.id == id)
+    }
+
+    /// The brain input called `name`.
+    pub(crate) fn brain_input_named(&self, name: &str) -> Option<&BrainInput> {
+        self.brain_inputs.iter().find(|input| input.name == name)
+    }
+
     /// A terrain's properties, from `terrain.ron`.
     pub fn terrain(&self, terrain: Terrain) -> &TerrainProps {
         &self.terrain[terrain as usize]
@@ -236,6 +272,15 @@ impl DataPack {
         self.object_types
             .iter()
             .filter(|t| !t.pseudo)
+            .map(|t| t.name.as_str())
+    }
+
+    /// The name of the object type with the stable ID `id`, such as the one
+    /// a `DeathCause::HurtBy` names.
+    pub fn object_type_name(&self, id: u16) -> Option<&str> {
+        self.object_types
+            .iter()
+            .find(|t| t.id == id)
             .map(|t| t.name.as_str())
     }
 
@@ -295,12 +340,12 @@ impl DataPack {
     }
 
     /// The chemical with the ID `id`.
-    pub(crate) fn chemical(&self, id: u16) -> Option<&Chemical> {
+    pub(crate) fn chemical(&self, id: ChemId) -> Option<&Chemical> {
         self.chemicals.iter().find(|c| c.id == id)
     }
 
     /// Where the chemical with the ID `id` is in the pack's chemical order.
-    pub(crate) fn chemical_index(&self, id: u16) -> Option<usize> {
+    pub(crate) fn chemical_index(&self, id: ChemId) -> Option<usize> {
         self.chemicals.iter().position(|c| c.id == id)
     }
 
@@ -315,12 +360,12 @@ impl DataPack {
     }
 
     /// The locus with the ID `id`.
-    pub(crate) fn locus(&self, id: u16) -> Option<&Locus> {
+    pub(crate) fn locus(&self, id: LocusId) -> Option<&Locus> {
         self.loci.iter().find(|l| l.id == id)
     }
 
     /// Where the locus with the ID `id` is in the pack's locus order.
-    pub(crate) fn locus_index(&self, id: u16) -> Option<usize> {
+    pub(crate) fn locus_index(&self, id: LocusId) -> Option<usize> {
         self.loci.iter().position(|l| l.id == id)
     }
 
@@ -337,6 +382,14 @@ impl DataPack {
     /// The index of the object type called `name`.
     pub(crate) fn object_type_named(&self, name: &str) -> Option<usize> {
         self.object_types.iter().position(|t| t.name == name)
+    }
+
+    /// The index of the pseudo type of `category`, the verb table of water or
+    /// of sprites, if the pack has one.
+    pub(crate) fn pseudo_type(&self, category: Category) -> Option<usize> {
+        self.object_types
+            .iter()
+            .position(|t| t.pseudo && t.category == category)
     }
 
     /// The index of the object type called `name`, if it can have objects: it

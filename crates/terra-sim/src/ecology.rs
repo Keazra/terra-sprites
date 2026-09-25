@@ -73,7 +73,7 @@ pub(crate) fn run(state: &mut WorldState, data: &DataPack, events: &mut Vec<Even
 
 /// Whether an object's turn goes on after an effect, or ends because the object is gone.
 #[derive(PartialEq, Eq)]
-enum Turn {
+pub(crate) enum Turn {
     Continues,
     Ends,
 }
@@ -214,8 +214,8 @@ fn square_bounds(map: &Map, pos: Pos, radius: u16) -> (Pos, u16, u16) {
     (Pos { x: x0, y: y0 }, x1 - x0 + 1, y1 - y0 + 1)
 }
 
-/// Applies one effect of a lifecycle rule to the object `id`.
-fn apply(
+/// Applies one effect of a lifecycle rule, or of a verb, to the object `id`.
+pub(crate) fn apply(
     state: &mut WorldState,
     data: &DataPack,
     id: EntityId,
@@ -273,7 +273,9 @@ fn apply(
             return Turn::Ends;
         }
         Effect::RequireCounter(..) | Effect::Inject(..) | Effect::Signal(..) | Effect::Push(..) => {
-            unreachable!("verb-only effects are rejected in lifecycle rules when the pack loads")
+            unreachable!(
+                "verb-only effects are rejected in lifecycle rules when the pack loads, and verbs run them themselves"
+            )
         }
     }
     Turn::Continues

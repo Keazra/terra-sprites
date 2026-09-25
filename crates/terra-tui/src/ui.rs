@@ -7,7 +7,7 @@ use ratatui::{
     style::{Modifier, Style},
     text::Line,
 };
-use terra_sim::{Event, EventKind, Map, ObjectView, Pos, Progress, Terrain, World};
+use terra_sim::{DataPack, Event, EventKind, Map, ObjectView, Pos, Progress, Terrain, World};
 
 use crate::app::{App, Areas, Screen, Selection};
 use crate::clock::Speed;
@@ -43,7 +43,7 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
         render_inspector(frame.buffer_mut(), inspector, app, world);
     }
     if let Some(event_log) = event_log_area(area) {
-        render_event_log(frame.buffer_mut(), event_log, app);
+        render_event_log(frame.buffer_mut(), event_log, app, world);
     }
     frame.render_widget(status_line(app, world, status.width), status);
 }
@@ -333,7 +333,7 @@ fn render_inspector(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
 }
 
 /// Draws the event log (design §6.1): the latest events, newest first.
-fn render_event_log(buf: &mut Buffer, area: Rect, app: &App) {
+fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     let no_walls = Sides {
         left: false,
         right: false,
@@ -344,7 +344,7 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App) {
     let inner = area.inner(Margin::new(1, 1));
     let lines = app
         .event_log()
-        .filter_map(|event| Some((event.tick, event_text(event)?)));
+        .filter_map(|event| Some((event.tick, event_text(event, world.data())?)));
     for (row, (tick, text)) in (inner.y..inner.bottom()).zip(lines) {
         let line = format!(" {:>7}  {text}", group_thousands(tick));
         buf.set_stringn(
@@ -358,12 +358,12 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App) {
 }
 
 /// What an event says in the event log, if the log shows it.
-fn event_text(event: &Event) -> Option<String> {
+fn event_text(event: &Event, data: &DataPack) -> Option<String> {
     match &event.kind {
         EventKind::Died { id, cause, age } => Some(format!(
             "{} died ({}, age {})",
             sprite_label(*id),
-            cause_name(*cause),
+            cause_name(*cause, data),
             group_thousands(*age)
         )),
         EventKind::ObjectSpawned { .. }

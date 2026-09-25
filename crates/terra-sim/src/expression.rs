@@ -4,9 +4,10 @@
 
 use std::collections::BTreeSet;
 
+use crate::brain_io::{InputId, Source};
 use crate::data::DataPack;
 use crate::genome::{Gene, Genome, Term};
-use crate::registry::{ChemicalClass, LocusKind, Trait};
+use crate::registry::{BrainParam, Category, ChemId, ChemicalClass, LocusKind, Trait, Verb};
 
 /// How a gene is expressed (design §4.3).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,11 +24,15 @@ pub enum Expression {
 }
 
 /// The one value a gene sets, for the genes that set one. The others add up.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Setting {
-    HalfLife(u16),
-    InitialConcentration(u16),
+    HalfLife(ChemId),
+    InitialConcentration(ChemId),
     Trait(Trait),
+    BrainParam(BrainParam),
+    /// A concept's signature, its inputs in ID order, and a verb.
+    Instinct(Vec<(InputId, bool)>, Verb),
+    AttentionInstinct(InputId, Category),
 }
 
 impl Setting {
@@ -36,6 +41,17 @@ impl Setting {
             Gene::HalfLife { chem, .. } => Some(Setting::HalfLife(chem)),
             Gene::InitialConcentration { chem, .. } => Some(Setting::InitialConcentration(chem)),
             Gene::Trait { which, .. } => Some(Setting::Trait(which)),
+            Gene::BrainParam { param, .. } => Some(Setting::BrainParam(param)),
+            Gene::Instinct {
+                ref inputs, verb, ..
+            } => {
+                let mut signature = inputs.clone();
+                signature.sort();
+                Some(Setting::Instinct(signature, verb))
+            }
+            Gene::AttentionInstinct {
+                input, category, ..
+            } => Some(Setting::AttentionInstinct(input, category)),
             Gene::Reaction { .. }
             | Gene::Emitter { .. }
             | Gene::Receptor { .. }
@@ -58,7 +74,11 @@ pub(crate) fn expressions(genome: &Genome, data: &DataPack) -> Vec<Expression> {
                 return Expression::Flagged(reason);
             }
             match Setting::of(gene) {
-                Some(setting) if !settings.insert(setting) => Expression::Unexpressed,
+                Some(setting) if settings.contains(&setting) => Expression::Unexpressed,
+                Some(setting) => {
+                    settings.insert(setting);
+                    Expression::Expressed
+                }
                 _ => Expression::Expressed,
             }
         })
@@ -68,8 +88,8 @@ pub(crate) fn expressions(genome: &Genome, data: &DataPack) -> Vec<Expression> {
 /// Why `gene` breaks the restrictions (design §4.3), if it does. Genes may
 /// read physical chemicals, but never change them.
 fn breaks_restrictions(gene: &Gene, data: &DataPack) -> Option<String> {
-    let chemical = |id: u16| data.chemical(id).expect("a checked gene");
-    let physical = |id: u16| chemical(id).class == ChemicalClass::Physical;
+    let chemical = |id: ChemId| data.chemical(id).expect("a checked gene");
+    let physical = |id: ChemId| chemical(id).class == ChemicalClass::Physical;
     match *gene {
         Gene::HalfLife { chem, .. } if physical(chem) => Some(format!(
             "sets how fast {} decays, but a physical chemical's decay is fixed",
@@ -88,7 +108,7 @@ fn breaks_restrictions(gene: &Gene, data: &DataPack) -> Option<String> {
             ref products,
             ..
         } => {
-            let amount = |terms: &[Term], chem: u16| -> u32 {
+            let amount = |terms: &[Term], chem: ChemId| -> u32 {
                 terms
                     .iter()
                     .filter(|t| t.chem == chem)
@@ -115,10 +135,21 @@ fn breaks_restrictions(gene: &Gene, data: &DataPack) -> Option<String> {
                 )
             })
         }
+        Gene::AttentionInstinct { input, .. } => {
+            let input = data.brain_input(input).expect("a checked gene");
+            (!matches!(input.source, Source::State(_))).then(|| {
+                format!(
+                    "reads {}, but attention feels only State inputs, not what it attends to",
+                    input.name
+                )
+            })
+        }
         Gene::HalfLife { .. }
         | Gene::Emitter { .. }
         | Gene::InitialConcentration { .. }
         | Gene::Trait { .. }
+        | Gene::BrainParam { .. }
+        | Gene::Instinct { .. }
         | Gene::Unknown { .. } => None,
     }
 }
@@ -239,6 +270,51 @@ mod tests {
                 Unexpressed,
             ]
         );
+    }
+
+    #[test]
+    fn only_the_first_brain_gene_to_set_a_value_is_expressed() {
+        use Expression::{Expressed, Unexpressed};
+        assert_eq!(
+            expressions_of(&[
+                r#"BrainParam(param: "tau_base", value: 0.2)"#,
+                r#"BrainParam(param: "tau_base", value: 0.3)"#,
+                r#"BrainParam(param: "switch_margin", value: 0.3)"#,
+                r#"Instinct(inputs: [("hunger", false), ("pain", false)], verb: Eat, weight: 1.0)"#,
+                // The same concept, its inputs listed the other way round.
+                r#"Instinct(inputs: [("pain", false), ("hunger", false)], verb: Eat, weight: 0.5)"#,
+                r#"Instinct(inputs: [("hunger", false), ("pain", false)], verb: Rest, weight: 1.0)"#,
+                r#"Instinct(inputs: [("hunger", false), ("pain", true)], verb: Eat, weight: 1.0)"#,
+                r#"AttentionInstinct(input: "hunger", category: Berry, weight: 0.8)"#,
+                r#"AttentionInstinct(input: "hunger", category: Berry, weight: 0.4)"#,
+                r#"AttentionInstinct(input: "hunger", category: BerryBush, weight: 0.8)"#,
+            ]),
+            [
+                Expressed,
+                Unexpressed,
+                Expressed,
+                Expressed,
+                Unexpressed,
+                Expressed,
+                Expressed,
+                Expressed,
+                Unexpressed,
+                Expressed,
+            ]
+        );
+    }
+
+    #[test]
+    fn attention_instincts_may_use_only_state_inputs() {
+        assert_flagged(
+            r#"AttentionInstinct(input: "target_distance", category: Berry, weight: 0.5)"#,
+            "target_distance",
+        );
+        assert_flagged(
+            r#"AttentionInstinct(input: "attended_berry", category: Berry, weight: 0.5)"#,
+            "attended_berry",
+        );
+        assert_expressed(r#"AttentionInstinct(input: "always", category: Berry, weight: 0.5)"#);
     }
 
     #[test]

@@ -6,6 +6,7 @@ use serde::Serialize;
 
 use crate::action::{Action, Did, ScriptedAction};
 use crate::biochem::{Body, Program};
+use crate::brain::Brain;
 use crate::data::DataPack;
 use crate::genome::Genome;
 use crate::map::{Map, Pos};
@@ -25,6 +26,7 @@ pub(crate) struct Sprite {
     #[serde(skip)]
     pub(crate) program: Program,
     pub(crate) body: Body,
+    pub(crate) brain: Brain,
     /// What it's doing, or the action that last ended until the next starts.
     pub(crate) action: Option<Action>,
     /// The actions a hand-made world starts it on, in order, until they start.
@@ -47,12 +49,14 @@ impl Sprite {
     pub(crate) fn newborn(genome: Genome, pos: Pos, born: u64, data: &DataPack) -> Sprite {
         let program = Program::new(&genome, data);
         let body = Body::newborn(&program, data);
+        let brain = Brain::new(&genome, data);
         Sprite {
             pos,
             born,
             genome,
             program,
             body,
+            brain,
             action: None,
             scripted: VecDeque::new(),
             flood: None,

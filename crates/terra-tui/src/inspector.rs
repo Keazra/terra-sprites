@@ -4,8 +4,8 @@
 use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
-    ActionView, ChemicalKind, ChemicalLevel, DeathCause, EmitterMode, Expression, GeneView,
-    ObjectView, Outcome, Progress, SpriteView, Trait, Verb, World,
+    ActionView, ChemicalKind, ChemicalLevel, DataPack, DeathCause, EmitterMode, Expression,
+    GeneView, ObjectView, Outcome, Progress, SpriteView, Target, Trait, Verb, World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -71,14 +71,18 @@ pub fn lines(app: &App, world: &World) -> Vec<Line<'static>> {
         (Tab::World, _) => world_tab(world),
         (_, None) => vec![Line::from(NOTHING_SELECTED)],
         (tab, Some(Selection::Living(id))) => match world.sprite(id) {
-            Some(sprite) => sprite_tab(tab, &sprite, app.detail()),
+            Some(sprite) => sprite_tab(tab, &sprite, app, world),
             None => Vec::new(),
         },
         (_, Some(Selection::Dead { id, cause, age })) => {
+            let how = match cause {
+                DeathCause::HurtBy(_) => cause_name(cause, world.data()),
+                _ => format!("of {}", cause_name(cause, world.data())),
+            };
             let text = format!(
-                "{} died of {} at age{BOUND}{}",
+                "{} died {} at age{BOUND}{}",
                 unbroken(&sprite_label(id)),
-                unbroken(cause_name(cause)),
+                unbroken(&how),
                 group_thousands(age)
             );
             wrapped(&text, 1, Style::default())
@@ -93,10 +97,10 @@ pub(crate) fn first_shown(scroll: usize, length: usize, rows: usize) -> usize {
     scroll.min(length.saturating_sub(rows))
 }
 
-/// A sprite tab's lines for `sprite`, in the detail view if `detail`.
-fn sprite_tab(tab: Tab, sprite: &SpriteView, detail: bool) -> Vec<Line<'static>> {
+/// A sprite tab's lines for `sprite`, the selection.
+fn sprite_tab(tab: Tab, sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
     match tab {
-        Tab::Body => body_tab(sprite, detail),
+        Tab::Body => body_tab(sprite, app, world),
         Tab::Chem => chem_tab(sprite),
         Tab::Genome => genome_tab(sprite),
         Tab::World => Vec::new(),
@@ -104,12 +108,13 @@ fn sprite_tab(tab: Tab, sprite: &SpriteView, detail: bool) -> Vec<Line<'static>>
 }
 
 /// The Body tab (design §6.1): what the sprite is doing, age and traits, a
-/// bar for each drive, and the physical levels, three to a line.
-fn body_tab(sprite: &SpriteView, detail: bool) -> Vec<Line<'static>> {
+/// bar for each drive, the physical levels, three to a line, and what the
+/// player has observed it do.
+fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
     let traits = sprite.traits();
     let doing = sprite
         .action()
-        .map(|action| format!(" {}", action_line(&action, detail)));
+        .map(|action| format!(" {}", action_line(&action, app.detail(), world.data())));
     let mut lines: Vec<String> = doing.into_iter().collect();
     lines.extend([
         format!(
@@ -144,20 +149,181 @@ fn body_tab(sprite: &SpriteView, detail: bool) -> Vec<Line<'static>> {
     for three in physical.chunks(3) {
         lines.push(format!(" {}", three.join(" · ")));
     }
+    lines.push(String::new());
+    lines.extend(observed_lines(app, world.tick()));
     lines.into_iter().map(Line::from).collect()
+}
+
+/// The observed list (design §6.1), newest first: how long ago each line's
+/// latest action finished, right-aligned, and what it did, wrapped under
+/// its own text. `now` is the world's tick counter.
+fn observed_lines(app: &App, now: u64) -> Vec<String> {
+    let mut lines = vec![" Observed".to_string()];
+    let entries: Vec<(String, String)> = app
+        .observed()
+        .map(|o| {
+            // An action ending on tick t has been over since the world moved
+            // on to t + 1.
+            let ago = match now.saturating_sub(o.tick + 1) {
+                0 => "just now".to_string(),
+                1 => "1 tick ago".to_string(),
+                n => format!("{} ticks ago", group_thousands(n)),
+            };
+            let times = if o.count > 1 {
+                format!(" ×{}", o.count)
+            } else {
+                String::new()
+            };
+            (ago, format!("{}{times}", o.line))
+        })
+        .collect();
+    if entries.is_empty() {
+        lines.push("   nothing yet".into());
+    }
+    let width = entries.iter().map(|(ago, _)| ago.chars().count()).max();
+    for (ago, text) in &entries {
+        let head = format!(" {ago:>width$} · ", width = width.unwrap_or(0));
+        lines.extend(hanging(&head, text));
+    }
+    lines
+}
+
+/// `text` after `head`, wrapped to the inspector's width with each later
+/// line indented to where the text began.
+fn hanging(head: &str, text: &str) -> Vec<String> {
+    let indent = " ".repeat(head.chars().count());
+    let mut lines = Vec::new();
+    let mut line = head.to_string();
+    let mut empty = true;
+    for word in text.split(' ') {
+        if !empty && line.chars().count() + 1 + word.chars().count() > WIDTH {
+            lines.push(std::mem::replace(&mut line, indent.clone()));
+            empty = true;
+        }
+        if !empty {
+            line.push(' ');
+        }
+        line.push_str(word);
+        empty = false;
+    }
+    lines.push(line);
+    lines
 }
 
 /// What a sprite is doing, as the Body tab's first line says it (design
 /// §6.1): in plain words, describing and never speaking as the sprite; or,
-/// in the detail view, exactly, with its verb, destination and outcome.
-fn action_line(action: &ActionView, detail: bool) -> String {
+/// in the detail view, exactly, with its verb, destination or target, and
+/// outcome.
+fn action_line(action: &ActionView, detail: bool, data: &DataPack) -> String {
     let plain = match action.verb {
         _ if detail => None,
         Verb::Wander => wander_line(action.progress),
         Verb::Rest => rest_line(action.progress),
-        _ => None,
+        _ => aimed_line(action, data),
     };
-    plain.unwrap_or_else(|| exact_line(action))
+    plain.unwrap_or_else(|| exact_line(action, data))
+}
+
+/// An Eat, Drink or Approach in plain words, naming what it's aimed at, if
+/// it has words for `progress`.
+fn aimed_line(action: &ActionView, data: &DataPack) -> Option<String> {
+    action.target?;
+    let what = target_words(action, data);
+    let going = match action.verb {
+        Verb::Eat => format!("Going to eat {what}"),
+        Verb::Drink => "Going to drink".into(),
+        Verb::Approach => format!("Going over to {what}"),
+        _ => return None,
+    };
+    Some(match action.progress {
+        Progress::Walking { steps_left } => {
+            format!("{going} · {} to go", counted(steps_left, "tile"))
+        }
+        Progress::Waiting { .. } => format!("{going} · waiting to get past"),
+        Progress::Resting { .. } => return None,
+        Progress::Ended(Outcome::Applied) => match action.verb {
+            // A thing eaten whole is gone; one eaten from is still there.
+            Verb::Eat if action.target_gone => format!("Ate {what}"),
+            Verb::Eat => format!("Ate from {what}"),
+            Verb::Drink => "Drank".into(),
+            _ => format!("Got to {what}"),
+        },
+        Progress::Ended(Outcome::Failed) if action.attempted => match action.verb {
+            Verb::Eat => format!("Couldn't eat from {what}"),
+            _ => "Couldn't drink".into(),
+        },
+        Progress::Ended(Outcome::Failed) if action.target_gone => {
+            format!("Gave up: {what} was gone")
+        }
+        Progress::Ended(outcome) => return ended_line(outcome),
+    })
+}
+
+/// A finished action in the past tense, for the Body tab's observed list
+/// (design §6.1): what it did, or what it set out to do and how that went.
+pub(crate) fn observed_line(action: &ActionView, data: &DataPack) -> String {
+    let Progress::Ended(outcome) = action.progress else {
+        return action_line(action, false, data);
+    };
+    let what = target_words(action, data);
+    let set_out = match action.verb {
+        Verb::Wander => "Wandered off".to_string(),
+        Verb::Rest => "Rested".into(),
+        Verb::Eat => format!("Went to eat {what}"),
+        Verb::Drink => "Went to drink".into(),
+        Verb::Approach => format!("Went over to {what}"),
+        verb => verb_name(verb).to_lowercase(),
+    };
+    let how = match outcome {
+        Outcome::Applied => {
+            return match action.verb {
+                // A thing eaten whole is gone; one eaten from is still there.
+                Verb::Eat if action.target_gone => format!("Ate {what}"),
+                Verb::Eat => format!("Ate from {what}"),
+                Verb::Drink => "Drank".into(),
+                _ => set_out,
+            };
+        }
+        Outcome::Failed if action.attempted => "it was empty".to_string(),
+        Outcome::Failed if action.target_gone => match action.target {
+            Some(Target::Sprite(_)) => format!("{what} was gone"),
+            _ => "it was gone".into(),
+        },
+        Outcome::Interrupted => "changed its mind".into(),
+        outcome => {
+            let reason = ended_line(outcome).expect("an outcome that isn't applied");
+            reason.replacen("Gave up", "gave up", 1)
+        }
+    };
+    format!("{set_out}, but {how}")
+}
+
+/// What an aimed action is aimed at, in words: "the berry bush", "the
+/// water", "Sprite #530". Empty for an action aimed at nothing.
+fn target_words(action: &ActionView, data: &DataPack) -> String {
+    match action.target {
+        Some(Target::Sprite(id)) => sprite_label(id),
+        Some(Target::Water(_)) => "the water".into(),
+        Some(Target::Object(_)) => {
+            let name = action.target_type.and_then(|id| data.object_type_name(id));
+            format!("the {}", display_name(name.unwrap_or("?")))
+        }
+        None => String::new(),
+    }
+}
+
+/// How any action that ended without doing what it set out to ends, in plain words.
+fn ended_line(outcome: Outcome) -> Option<String> {
+    Some(
+        match outcome {
+            Outcome::Applied => return None,
+            Outcome::Blocked => "Gave up: the way was blocked",
+            Outcome::TimedOut => "Gave up: it took too long",
+            Outcome::Failed => "Gave up: it couldn't get there",
+            Outcome::Interrupted => "Changed its mind",
+        }
+        .into(),
+    )
 }
 
 /// A Wander in plain words, if it has any for `progress`.
@@ -168,9 +334,7 @@ fn wander_line(progress: Progress) -> Option<String> {
         }
         Progress::Waiting { .. } => "Wandering off · waiting to get past".into(),
         Progress::Ended(Outcome::Applied) => "Arrived".into(),
-        Progress::Ended(Outcome::Blocked) => "Gave up: the way was blocked".into(),
-        Progress::Ended(Outcome::TimedOut) => "Gave up: it took too long".into(),
-        Progress::Ended(Outcome::Failed) => "Gave up: it couldn't get there".into(),
+        Progress::Ended(outcome) => return ended_line(outcome),
         Progress::Resting { .. } => return None,
     })
 }
@@ -183,16 +347,24 @@ fn rest_line(progress: Progress) -> Option<String> {
             counted(of.saturating_sub(ticks), "tick")
         )),
         Progress::Ended(Outcome::Applied) => Some("Rested".into()),
+        Progress::Ended(Outcome::Interrupted) => Some("Changed its mind".into()),
         _ => None,
     }
 }
 
-/// An action exactly: `WANDER → (61,40) · walking (5 tiles)`.
-fn exact_line(action: &ActionView) -> String {
+/// An action exactly: `WANDER → (61,40) · walking (5 tiles)`, or
+/// `EAT → berry_bush #812 · applied`.
+fn exact_line(action: &ActionView, data: &DataPack) -> String {
     let verb = verb_name(action.verb);
-    let head = match action.destination {
-        Some(to) => format!("{verb} → ({},{})", to.x, to.y),
-        None => verb.to_string(),
+    let head = match (action.target, action.destination) {
+        (Some(Target::Object(id)), _) => {
+            let name = action.target_type.and_then(|t| data.object_type_name(t));
+            format!("{verb} → {} #{}", name.unwrap_or("?"), id.0)
+        }
+        (Some(Target::Water(at)), _) => format!("{verb} → water ({},{})", at.x, at.y),
+        (Some(Target::Sprite(id)), _) => format!("{verb} → sprite #{}", id.0),
+        (None, Some(to)) => format!("{verb} → ({},{})", to.x, to.y),
+        (None, None) => verb.to_string(),
     };
     let state = match action.progress {
         Progress::Walking { steps_left } => format!("walking ({})", counted(steps_left, "tile")),
@@ -236,6 +408,7 @@ fn outcome_name(outcome: Outcome) -> &'static str {
         Outcome::Applied => "applied",
         Outcome::Blocked => "blocked",
         Outcome::Failed => "failed",
+        Outcome::Interrupted => "interrupted",
         Outcome::TimedOut => "timed_out",
     }
 }
@@ -313,19 +486,25 @@ enum GeneGroup {
     Emitters,
     Receptors,
     StartingLevels,
+    BrainSettings,
+    Instincts,
+    Attention,
     Unknown,
 }
 
 impl GeneGroup {
     /// Every group, in the tab's order. Traits come first, since they share
     /// one line.
-    const ALL: [GeneGroup; 7] = [
+    const ALL: [GeneGroup; 10] = [
         GeneGroup::Traits,
         GeneGroup::HalfLives,
         GeneGroup::Reactions,
         GeneGroup::Emitters,
         GeneGroup::Receptors,
         GeneGroup::StartingLevels,
+        GeneGroup::BrainSettings,
+        GeneGroup::Instincts,
+        GeneGroup::Attention,
         GeneGroup::Unknown,
     ];
 
@@ -338,6 +517,9 @@ impl GeneGroup {
             GeneView::Emitter { .. } => GeneGroup::Emitters,
             GeneView::Receptor { .. } => GeneGroup::Receptors,
             GeneView::InitialConcentration { .. } => GeneGroup::StartingLevels,
+            GeneView::BrainParam { .. } => GeneGroup::BrainSettings,
+            GeneView::Instinct { .. } => GeneGroup::Instincts,
+            GeneView::AttentionInstinct { .. } => GeneGroup::Attention,
             GeneView::Unknown { .. } => GeneGroup::Unknown,
         }
     }
@@ -351,6 +533,9 @@ impl GeneGroup {
             GeneGroup::Emitters => "EMITTERS",
             GeneGroup::Receptors => "RECEPTORS",
             GeneGroup::StartingLevels => "STARTING LEVELS",
+            GeneGroup::BrainSettings => "BRAIN SETTINGS",
+            GeneGroup::Instincts => "INSTINCTS",
+            GeneGroup::Attention => "ATTENTION INSTINCTS",
             GeneGroup::Unknown => "UNKNOWN GENES",
         }
     }
@@ -477,6 +662,38 @@ fn gene_text(gene: &GeneView) -> String {
             display_name(target),
             signed(gain)
         ),
+        GeneView::BrainParam { param, value } => {
+            format!("{} {}", display_name(param), significant(value))
+        }
+        GeneView::Instinct {
+            ref inputs,
+            verb,
+            weight,
+        } => {
+            let inputs: Vec<String> = inputs
+                .iter()
+                .map(|&(input, negated)| match negated {
+                    true => format!("not {}", display_name(input)),
+                    false => display_name(input),
+                })
+                .collect();
+            format!(
+                "{} → {} {}",
+                inputs.join(" & "),
+                verb_name(verb).to_lowercase(),
+                signed(weight)
+            )
+        }
+        GeneView::AttentionInstinct {
+            input,
+            category,
+            weight,
+        } => format!(
+            "{} → attends to {} {}",
+            display_name(input),
+            display_name(category),
+            signed(weight)
+        ),
         GeneView::InitialConcentration { chem, value } => {
             format!(
                 "{} starts at{BOUND}{}",
@@ -540,14 +757,20 @@ fn wrapped(text: &str, indent: usize, style: Style) -> Vec<Line<'static>> {
 /// stage (for a type with more than one) and the total of each counter.
 fn world_tab(world: &World) -> Vec<Line<'static>> {
     let data = world.data();
-    let deaths: Vec<String> = DeathCause::ALL
+    // Physiology's causes always; an object only once it has killed.
+    let hurt = world
+        .deaths_by_cause()
+        .map(|(cause, _)| cause)
+        .filter(|cause| !DeathCause::PHYSIOLOGY.contains(cause));
+    let causes: Vec<DeathCause> = DeathCause::PHYSIOLOGY.into_iter().chain(hurt).collect();
+    let deaths: Vec<String> = causes
         .iter()
         .map(|&cause| {
             let n = world.deaths(cause);
-            format!("{} {}", cause_name(cause), group_thousands(n))
+            format!("{} {}", cause_name(cause, data), group_thousands(n))
         })
         .collect();
-    let total: u64 = DeathCause::ALL.iter().map(|&c| world.deaths(c)).sum();
+    let total: u64 = world.deaths_by_cause().map(|(_, n)| n).sum();
     let plain = Style::default();
     let mut lines: Vec<Line<'static>> = vec![
         Line::from(format!(
@@ -605,7 +828,7 @@ fn world_tab(world: &World) -> Vec<Line<'static>> {
 
 #[cfg(test)]
 mod tests {
-    use terra_sim::Pos;
+    use terra_sim::{EntityId, Pos};
 
     use super::*;
 
@@ -636,6 +859,10 @@ mod tests {
         ActionView {
             verb: Verb::Wander,
             destination: Some(Pos { x: 61, y: 40 }),
+            target: None,
+            target_type: None,
+            attempted: false,
+            target_gone: false,
             progress,
         }
     }
@@ -644,6 +871,10 @@ mod tests {
         ActionView {
             verb: Verb::Rest,
             destination: None,
+            target: None,
+            target_type: None,
+            attempted: false,
+            target_gone: false,
             progress,
         }
     }
@@ -705,14 +936,190 @@ mod tests {
             ),
         ];
         for (view, plain, exact) in cases {
-            assert_eq!(action_line(&view, false), plain, "{view:?}");
-            assert_eq!(action_line(&view, true), exact, "{view:?}");
+            assert_eq!(action_line(&view, false, &pack()), plain, "{view:?}");
+            assert_eq!(action_line(&view, true, &pack()), exact, "{view:?}");
         }
         let nowhere = ActionView {
             destination: None,
             ..wander(Progress::Ended(Outcome::Failed))
         };
-        assert_eq!(action_line(&nowhere, true), "WANDER · failed");
+        assert_eq!(action_line(&nowhere, true, &pack()), "WANDER · failed");
+    }
+
+    fn pack() -> DataPack {
+        DataPack::builtin().expect("built-in data pack is valid")
+    }
+
+    /// An aimed action, `verb`, at `target` of the type `target_type`.
+    fn aimed(verb: Verb, target: Target, target_type: u16, progress: Progress) -> ActionView {
+        ActionView {
+            verb,
+            destination: None,
+            target: Some(target),
+            target_type: Some(target_type),
+            attempted: false,
+            target_gone: false,
+            progress,
+        }
+    }
+
+    #[test]
+    fn the_action_line_names_what_an_eat_drink_or_approach_is_aimed_at() {
+        use Outcome::*;
+        use Progress::*;
+        // Object types: berry_bush 1, berry 2, water 100, sprite 101.
+        let bush = |p| aimed(Verb::Eat, Target::Object(EntityId(812)), 1, p);
+        let berry = |p| aimed(Verb::Eat, Target::Object(EntityId(9)), 2, p);
+        let water = |p| aimed(Verb::Drink, Target::Water(Pos { x: 40, y: 12 }), 100, p);
+        let sprite = |p| aimed(Verb::Approach, Target::Sprite(EntityId(530)), 101, p);
+        let tried = |view: ActionView| ActionView {
+            attempted: true,
+            ..view
+        };
+        let gone = |view: ActionView| ActionView {
+            target_gone: true,
+            ..view
+        };
+        let cases = [
+            (
+                bush(Walking { steps_left: 3 }),
+                "Going to eat the berry bush · 3 tiles to go",
+                "EAT → berry_bush #812 · walking (3 tiles)",
+            ),
+            (
+                bush(Waiting { blocked_ticks: 1 }),
+                "Going to eat the berry bush · waiting to get past",
+                "EAT → berry_bush #812 · blocked (1 tick)",
+            ),
+            (
+                tried(bush(Ended(Applied))),
+                "Ate from the berry bush",
+                "EAT → berry_bush #812 · applied",
+            ),
+            (
+                tried(bush(Ended(Failed))),
+                "Couldn't eat from the berry bush",
+                "EAT → berry_bush #812 · failed",
+            ),
+            (
+                gone(tried(berry(Ended(Applied)))),
+                "Ate the berry",
+                "EAT → berry #9 · applied",
+            ),
+            (
+                gone(berry(Ended(Failed))),
+                "Gave up: the berry was gone",
+                "EAT → berry #9 · failed",
+            ),
+            (
+                bush(Ended(Failed)),
+                "Gave up: it couldn't get there",
+                "EAT → berry_bush #812 · failed",
+            ),
+            (
+                bush(Ended(Interrupted)),
+                "Changed its mind",
+                "EAT → berry_bush #812 · interrupted",
+            ),
+            (
+                water(Walking { steps_left: 2 }),
+                "Going to drink · 2 tiles to go",
+                "DRINK → water (40,12) · walking (2 tiles)",
+            ),
+            (
+                tried(water(Ended(Applied))),
+                "Drank",
+                "DRINK → water (40,12) · applied",
+            ),
+            (
+                sprite(Walking { steps_left: 4 }),
+                "Going over to Sprite #530 · 4 tiles to go",
+                "APPROACH → sprite #530 · walking (4 tiles)",
+            ),
+            (
+                tried(sprite(Ended(Applied))),
+                "Got to Sprite #530",
+                "APPROACH → sprite #530 · applied",
+            ),
+            (
+                gone(sprite(Ended(Failed))),
+                "Gave up: Sprite #530 was gone",
+                "APPROACH → sprite #530 · failed",
+            ),
+        ];
+        for (view, plain, exact) in cases {
+            assert_eq!(action_line(&view, false, &pack()), plain, "{view:?}");
+            assert_eq!(action_line(&view, true, &pack()), exact, "{view:?}");
+        }
+    }
+
+    #[test]
+    fn a_finished_action_is_observed_in_the_past_tense_saying_how_it_went_if_badly() {
+        use Outcome::*;
+        use Progress::Ended;
+        let bush = |o| aimed(Verb::Eat, Target::Object(EntityId(812)), 1, Ended(o));
+        let berry = |o| aimed(Verb::Eat, Target::Object(EntityId(9)), 2, Ended(o));
+        let water = |o| {
+            aimed(
+                Verb::Drink,
+                Target::Water(Pos { x: 4, y: 1 }),
+                100,
+                Ended(o),
+            )
+        };
+        let sprite = |o| aimed(Verb::Approach, Target::Sprite(EntityId(530)), 101, Ended(o));
+        let tried = |view: ActionView| ActionView {
+            attempted: true,
+            ..view
+        };
+        let gone = |view: ActionView| ActionView {
+            target_gone: true,
+            ..view
+        };
+        let cases = [
+            (wander(Ended(Applied)), "Wandered off"),
+            (
+                wander(Ended(Blocked)),
+                "Wandered off, but gave up: the way was blocked",
+            ),
+            (
+                wander(Ended(TimedOut)),
+                "Wandered off, but gave up: it took too long",
+            ),
+            (
+                wander(Ended(Failed)),
+                "Wandered off, but gave up: it couldn't get there",
+            ),
+            (rest(Ended(Applied)), "Rested"),
+            (rest(Ended(Interrupted)), "Rested, but changed its mind"),
+            (tried(bush(Applied)), "Ate from the berry bush"),
+            (gone(tried(berry(Applied))), "Ate the berry"),
+            (
+                tried(bush(Failed)),
+                "Went to eat the berry bush, but it was empty",
+            ),
+            (
+                bush(Interrupted),
+                "Went to eat the berry bush, but changed its mind",
+            ),
+            (
+                gone(berry(Failed)),
+                "Went to eat the berry, but it was gone",
+            ),
+            (tried(water(Applied)), "Drank"),
+            (
+                water(Failed),
+                "Went to drink, but gave up: it couldn't get there",
+            ),
+            (tried(sprite(Applied)), "Went over to Sprite #530"),
+            (
+                gone(sprite(Failed)),
+                "Went over to Sprite #530, but Sprite #530 was gone",
+            ),
+        ];
+        for (view, line) in cases {
+            assert_eq!(observed_line(&view, &pack()), line, "{view:?}");
+        }
     }
 
     // Levels never leave 0 to 1 (design §4.4), but a bar mustn't crash the
