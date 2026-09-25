@@ -272,12 +272,7 @@ impl Flood {
     /// with its cost: ties go to the lower tile index. `None` if it reached
     /// none.
     pub(crate) fn nearest_goal(&self, map: &Map, pos: Pos, own_tile: bool) -> Option<(Pos, u32)> {
-        let beside = Dir::ALL
-            .into_iter()
-            .filter_map(|dir| map.neighbour(pos, dir));
-        let own = own_tile.then_some(pos);
-        beside
-            .chain(own)
+        goal_tiles(map, pos, own_tile)
             .filter_map(|goal| Some((goal, self.cost(goal)?)))
             .min_by_key(|&(goal, cost)| (cost, map.index(goal)))
     }
@@ -298,6 +293,19 @@ impl Flood {
             y: self.corner.y + (index / width) as u16,
         }
     }
+}
+
+/// The goal tiles of a thing on `pos` (design §3.6): the tiles beside it,
+/// and, if `own_tile`, its own tile too.
+pub(crate) fn goal_tiles(
+    map: &Map,
+    pos: Pos,
+    own_tile: bool,
+) -> impl Iterator<Item = Pos> + use<'_> {
+    let beside = Dir::ALL
+        .into_iter()
+        .filter_map(move |dir| map.neighbour(pos, dir));
+    beside.chain(own_tile.then_some(pos))
 }
 
 /// Serializes bytes compactly, for the state hash.

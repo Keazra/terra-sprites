@@ -17,7 +17,7 @@ use crate::generate::{generate, place_objects, place_sprites};
 use crate::genome::{GeneView, Genome};
 use crate::map::{Map, MapError, Pos};
 use crate::objects::{EntityId, Object, Objects};
-use crate::perception::{Flood, Target};
+use crate::perception::{Flood, Target, goal_tiles};
 use crate::regions::Regions;
 use crate::registry::{Category, ChemicalKind};
 use crate::sprites::{Sprite, Sprites};
@@ -131,15 +131,21 @@ impl WorldState {
             .map(|(goal, _)| goal)
     }
 
-    /// The stable ID of `target`'s object type: a pseudo type for water or a
-    /// sprite. `None` if it's gone, or the pack has no such pseudo type.
-    pub(crate) fn type_of(&self, data: &DataPack, target: Target) -> Option<u16> {
-        let kind = match target {
+    /// The index of `target`'s object type, whose verb table it answers
+    /// with: a pseudo type for water or a sprite. `None` if it's gone, or
+    /// the pack has no such pseudo type.
+    pub(crate) fn kind_of(&self, data: &DataPack, target: Target) -> Option<usize> {
+        match target {
             Target::Object(id) => self.objects.get(id).map(|o| o.kind),
             Target::Water(_) => data.pseudo_type(Category::Water),
             Target::Sprite(_) => data.pseudo_type(Category::Sprite),
-        };
-        kind.map(|kind| data.object_types()[kind].id)
+        }
+    }
+
+    /// The stable ID of `target`'s object type, as `kind_of` finds it.
+    pub(crate) fn type_of(&self, data: &DataPack, target: Target) -> Option<u16> {
+        self.kind_of(data, target)
+            .map(|kind| data.object_types()[kind].id)
     }
 
     /// Whether `pos` is a goal tile of `target` (design §3.6): beside it, or
@@ -147,9 +153,7 @@ impl WorldState {
     pub(crate) fn on_goal_tile(&self, data: &DataPack, pos: Pos, target: Target) -> bool {
         self.whereabouts(data, target)
             .is_some_and(|(there, own_tile)| {
-                let beside =
-                    pos != there && pos.x.abs_diff(there.x) <= 1 && pos.y.abs_diff(there.y) <= 1;
-                beside || (own_tile && pos == there)
+                goal_tiles(&self.map, there, own_tile).any(|g| g == pos)
             })
     }
 
@@ -242,7 +246,7 @@ impl<'a> SpriteView<'a> {
     /// What the sprite is doing, or the action that last ended until the
     /// next one starts; `None` before its first.
     pub fn action(&self) -> Option<ActionView> {
-        action::view(self.sprite, &self.world.state, &self.world.data)
+        action::view(self.sprite, &self.world.data)
     }
 
     /// The traits its body has: its genes', clamped to physiology's ranges.

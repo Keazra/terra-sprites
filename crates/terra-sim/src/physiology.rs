@@ -367,11 +367,13 @@ pub(crate) struct Indices {
     pub(crate) nearby_sprites: usize,
     pub(crate) moving: usize,
     pub(crate) resting: usize,
+    /// The receptor target that scales the brain's temperatures (design §5.3, §5.5).
+    pub(crate) exploration_mod: usize,
 }
 
 impl Indices {
-    /// Finds each physical chemical and body sensor physiology needs, or says
-    /// which file lacks one.
+    /// Finds each physical chemical and body sensor physiology needs, and
+    /// the receptor target the brain reads, or says which file lacks one.
     pub(crate) fn find(
         chemicals: &[Chemical],
         loci: &[Locus],
@@ -397,6 +399,16 @@ impl Indices {
                     )
                 })
         };
+        let target = |name: &str| {
+            loci.iter()
+                .position(|l| l.name == name && l.kind == LocusKind::ReceptorTarget)
+                .ok_or_else(|| {
+                    (
+                        "loci.ron",
+                        format!("the brain needs a receptor target called `{name}`"),
+                    )
+                })
+        };
         Ok(Indices {
             energy: chem("energy")?,
             hydration: chem("hydration")?,
@@ -409,6 +421,7 @@ impl Indices {
             nearby_sprites: sensor("nearby_sprites")?,
             moving: sensor("moving")?,
             resting: sensor("resting")?,
+            exploration_mod: target("exploration_mod")?,
         })
     }
 }

@@ -8,7 +8,7 @@ use crate::events::{DeathCause, Event};
 use crate::object_types::{Effect, Party};
 use crate::objects::EntityId;
 use crate::perception::Target;
-use crate::registry::{Category, Verb};
+use crate::registry::Verb;
 use crate::world::WorldState;
 
 /// Sprite `actor` applies `verb` to `target`, once: `failed` if the target's
@@ -22,7 +22,7 @@ pub(crate) fn attempt(
     target: Target,
     events: &mut Vec<Event>,
 ) -> Outcome {
-    let Some(kind) = target_type(state, data, target) else {
+    let Some(kind) = state.kind_of(data, target) else {
         return Outcome::Failed;
     };
     let Some(effects) = data.object_types()[kind].verbs.get(&verb) else {
@@ -75,16 +75,6 @@ pub(crate) fn attempt(
         }
     }
     Outcome::Applied
-}
-
-/// The index of the object type whose verb table `target` answers with, or
-/// `None` for water or a sprite in a pack with no pseudo type for them.
-fn target_type(state: &WorldState, data: &DataPack, target: Target) -> Option<usize> {
-    match target {
-        Target::Object(id) => Some(state.objects.kind(id)),
-        Target::Water(_) => data.pseudo_type(Category::Water),
-        Target::Sprite(_) => data.pseudo_type(Category::Sprite),
-    }
 }
 
 /// The sprite an effect for `party` acts on: the actor, or a target that's

@@ -83,7 +83,7 @@ pub struct ActionView {
     pub target_type: Option<u16>,
     /// Whether it got to its target and made its attempt (design §5.5).
     pub attempted: bool,
-    /// Whether its target has left the world.
+    /// Whether its target had left the world when it ended: eaten whole, say.
     pub target_gone: bool,
     /// How far it has got, or how it ended.
     pub progress: Progress,
@@ -102,6 +102,10 @@ pub(crate) struct Action {
     pub(crate) target_type: Option<u16>,
     /// Whether it got to its target and made its attempt.
     pub(crate) attempted: bool,
+    /// Where its target stood at the latest 5.0.
+    pub(crate) target_at: Option<Pos>,
+    /// Whether its target had left the world when it ended.
+    pub(crate) target_gone: bool,
     /// The tick it started on, for the timeout.
     pub(crate) started: u64,
     /// The ticks it has been carried out on, at step 6.
@@ -141,6 +145,8 @@ impl Action {
             target: target.map(|(target, _)| target),
             target_type: target.map(|(_, kind)| kind),
             attempted: false,
+            target_at: None,
+            target_gone: false,
             started: tick,
             ticks: 0,
             blocked_ticks: 0,
@@ -152,7 +158,7 @@ impl Action {
 }
 
 /// `sprite`'s action as the screen sees it, if it has had one.
-pub(crate) fn view(sprite: &Sprite, state: &WorldState, data: &DataPack) -> Option<ActionView> {
+pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
     let action = sprite.action.as_ref()?;
     let progress = if let Some(outcome) = action.ended {
         Progress::Ended(outcome)
@@ -176,9 +182,7 @@ pub(crate) fn view(sprite: &Sprite, state: &WorldState, data: &DataPack) -> Opti
         target: action.target,
         target_type: action.target_type,
         attempted: action.attempted,
-        target_gone: action
-            .target
-            .is_some_and(|target| state.whereabouts(data, target).is_none()),
+        target_gone: action.target_gone,
         progress,
     })
 }
@@ -225,32 +229,44 @@ pub(crate) fn sense_and_decide(
             let aim = action
                 .target
                 .map(|target| state.goal_for(data, flood, target));
-            let outcome = if state.tick >= action.started + u64::from(timeout) {
-                Some(Outcome::TimedOut)
-            } else if aim == Some(None)
+            let there = action
+                .target
+                .and_then(|target| state.whereabouts(data, target))
+                .map(|(pos, _)| pos);
+            // Losing the target or the way comes first in 5.0 (design §5.5).
+            let outcome = if aim == Some(None)
                 || action.committed.is_none()
                     && action
                         .destination
                         .is_some_and(|to| flood.cost(to).is_none())
             {
                 Some(Outcome::Failed)
+            } else if state.tick >= action.started + u64::from(timeout) {
+                Some(Outcome::TimedOut)
             } else {
                 None
             };
+            let gone = action.target.is_some() && there.is_none();
             let sprite = state.sprites.get_mut(id).expect("the same sprite");
             let action = sprite.action.as_mut().expect("an action");
             match outcome {
-                Some(outcome) => end(action, id, outcome, state.tick, events),
+                Some(outcome) => {
+                    action.target_gone = gone;
+                    end(action, id, outcome, state.tick, events);
+                }
                 None => {
                     if let Some(Some(goal)) = aim {
-                        // A committed way round is to where a sprite target
-                        // was; once it has moved, it's dropped (design §3.7).
-                        let moved = matches!(action.target, Some(Target::Sprite(_)))
-                            && action.destination != Some(goal);
-                        if moved {
-                            action.committed = None;
+                        // A committed way round leads to where a sprite
+                        // target was; once it moves, it's dropped (design §3.7).
+                        if there != action.target_at {
+                            action.target_at = there;
+                            if matches!(action.target, Some(Target::Sprite(_))) {
+                                action.committed = None;
+                            }
                         }
-                        action.destination = Some(goal);
+                        if action.committed.is_none() {
+                            action.destination = Some(goal);
+                        }
                     }
                 }
             }
@@ -389,6 +405,7 @@ fn act(
         Verb::Approach => Outcome::Applied,
         verb => verbs::attempt(state, data, id, verb, target, events),
     };
+    let gone = state.whereabouts(data, target).is_none();
     let action = state
         .sprites
         .get_mut(id)
@@ -397,6 +414,7 @@ fn act(
         .as_mut();
     let action = action.expect("an action");
     action.attempted = true;
+    action.target_gone = gone;
     end(action, id, outcome, state.tick, events);
 }
 

@@ -174,7 +174,7 @@ fn aimed_line(action: &ActionView, data: &DataPack) -> Option<String> {
         Target::Water(_) => "the water".into(),
         Target::Object(_) => {
             let name = action.target_type.and_then(|id| data.object_type_name(id));
-            format!("the {}", display_name(name.unwrap_or("thing")))
+            format!("the {}", display_name(name.unwrap_or("?")))
         }
     };
     let going = match action.verb {
@@ -430,7 +430,7 @@ impl GeneGroup {
             GeneGroup::StartingLevels => "STARTING LEVELS",
             GeneGroup::BrainSettings => "BRAIN SETTINGS",
             GeneGroup::Instincts => "INSTINCTS",
-            GeneGroup::Attention => "ATTENTION",
+            GeneGroup::Attention => "ATTENTION INSTINCTS",
             GeneGroup::Unknown => "UNKNOWN GENES",
         }
     }
@@ -575,7 +575,7 @@ fn gene_text(gene: &GeneView) -> String {
             format!(
                 "{} → {} {}",
                 inputs.join(" & "),
-                format!("{verb:?}").to_lowercase(),
+                verb_name(verb).to_lowercase(),
                 signed(weight)
             )
         }

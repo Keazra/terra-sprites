@@ -150,6 +150,14 @@ impl BrainParam {
     pub(crate) fn named(name: &str) -> Option<BrainParam> {
         BrainParam::ALL.into_iter().find(|p| p.name() == name)
     }
+
+    /// Whether it counts something, so spawn variation rounds it (design §4.9).
+    pub(crate) fn is_whole(self) -> bool {
+        matches!(
+            self,
+            BrainParam::PoolSize | BrainParam::MaxArity | BrainParam::ForgetTicks
+        )
+    }
 }
 
 /// An evolvable body trait (design §4.8). The discriminants are the stable trait IDs.
