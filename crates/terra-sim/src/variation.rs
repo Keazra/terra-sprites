@@ -37,7 +37,7 @@ pub(crate) fn varied(genome: &Genome, data: &DataPack, rng: &mut ChaCha8Rng) -> 
                     ref mut gain,
                     ..
                 } => {
-                    *threshold = level(vary(*threshold));
+                    *threshold = vary(*threshold).max(0.0);
                     *gain = vary(*gain);
                 }
                 Gene::InitialConcentration { ref mut value, .. } => *value = level(vary(*value)),
@@ -201,7 +201,7 @@ mod tests {
             for gene in &varied.genes {
                 match *gene {
                     Gene::HalfLife { ticks, .. } => assert_eq!(ticks, 1, "at least 1 tick"),
-                    Gene::Emitter { threshold, .. } => assert!(threshold <= 1.0),
+                    Gene::Emitter { threshold, .. } => assert!(threshold >= 0.0),
                     Gene::InitialConcentration { value, .. } => assert!(value <= 1.0),
                     Gene::Trait { value, .. } => assert!(value <= 12.0, "speed's range is 4–12"),
                     _ => {}

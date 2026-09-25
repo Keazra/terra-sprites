@@ -23,15 +23,15 @@ pub(crate) struct Physiology {
     pub(crate) stamina: Stamina,
     pub(crate) healing: f32,
     pub(crate) injury: Injury,
-    /// What each cause-of-death tally is multiplied by every tick, so that it
-    /// halves every `cause_fade` ticks.
-    pub(crate) cause_fade: f32,
-    pub(crate) traits: Traits,
+    /// What each cause-of-death tally is multiplied by every tick: the file's
+    /// `cause_fade` is how many ticks it takes to halve.
+    pub(crate) tally_fade: f32,
+    pub(crate) traits: TraitRanges,
     /// Each receptor target's range, by locus ID.
     pub(crate) receptor_targets: BTreeMap<u16, (f32, f32)>,
     pub(crate) nearby_sprites: NearbySprites,
     pub(crate) spawn_variation: f32,
-    pub(crate) slots: Slots,
+    pub(crate) indices: Indices,
 }
 
 /// `physiology.ron`, before validation.
@@ -47,7 +47,7 @@ pub(crate) struct PhysiologyEntry {
     healing: f32,
     injury: Injury,
     cause_fade: u32,
-    traits: Traits,
+    traits: TraitRanges,
     receptor_targets: BTreeMap<String, (f32, f32)>,
     nearby_sprites: NearbySprites,
     spawn_variation: f32,
@@ -110,13 +110,13 @@ pub(crate) struct Injury {
 /// The range each trait is clamped to.
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct Traits {
+pub(crate) struct TraitRanges {
     pub(crate) speed: (f32, f32),
     pub(crate) sense_radius: (f32, f32),
     pub(crate) lifespan: (f32, f32),
 }
 
-impl Traits {
+impl TraitRanges {
     /// The range `which` is clamped to.
     pub(crate) fn range(&self, which: Trait) -> (f32, f32) {
         match which {
@@ -130,7 +130,7 @@ impl Traits {
 impl PhysiologyEntry {
     /// The validated physiology, or what's wrong with it. Receptor targets are
     /// checked against the pack's `loci`.
-    pub(crate) fn validate(self, slots: Slots, loci: &[Locus]) -> Result<Physiology, String> {
+    pub(crate) fn validate(self, indices: Indices, loci: &[Locus]) -> Result<Physiology, String> {
         let newborn = self.newborn;
         for (name, level) in [
             ("newborn.energy", newborn.energy),
@@ -217,14 +217,19 @@ impl PhysiologyEntry {
             stamina,
             healing: self.healing,
             injury,
-            cause_fade: libm::powf(0.5, 1.0 / self.cause_fade as f32),
+            tally_fade: halving_factor(self.cause_fade as f32),
             traits,
             receptor_targets,
             nearby_sprites: self.nearby_sprites,
             spawn_variation: self.spawn_variation,
-            slots,
+            indices,
         })
     }
+}
+
+/// What a level is multiplied by every tick so that it halves every `ticks` ticks.
+pub(crate) fn halving_factor(ticks: f32) -> f32 {
+    libm::powf(0.5, 1.0 / ticks)
 }
 
 /// Checks that `value` is a level: from 0 to 1.
@@ -247,10 +252,10 @@ fn range(name: &str, (low, high): (f32, f32)) -> Result<(), String> {
     }
 }
 
-/// Where physiology finds the chemicals and body sensors it works on: slots
+/// Where physiology finds the chemicals and body sensors it works on: indices
 /// in the pack's chemical and locus order.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Slots {
+pub(crate) struct Indices {
     pub(crate) energy: usize,
     pub(crate) hydration: usize,
     pub(crate) stamina: usize,
@@ -264,13 +269,13 @@ pub(crate) struct Slots {
     pub(crate) resting: usize,
 }
 
-impl Slots {
+impl Indices {
     /// Finds each physical chemical and body sensor physiology needs, or says
     /// which file lacks one.
     pub(crate) fn find(
         chemicals: &[Chemical],
         loci: &[Locus],
-    ) -> Result<Slots, (&'static str, String)> {
+    ) -> Result<Indices, (&'static str, String)> {
         let chem = |name: &str| {
             chemicals
                 .iter()
@@ -292,7 +297,7 @@ impl Slots {
                     )
                 })
         };
-        Ok(Slots {
+        Ok(Indices {
             energy: chem("energy")?,
             hydration: chem("hydration")?,
             stamina: chem("stamina")?,

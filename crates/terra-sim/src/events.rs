@@ -41,15 +41,16 @@ pub enum EventKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 pub enum DeathCause {
     /// Its energy ran out.
-    Starvation,
+    Starvation = 0,
     /// Its hydration ran out.
-    Dehydration,
+    Dehydration = 1,
     /// It lived past its lifespan.
-    OldAge,
+    OldAge = 2,
 }
 
 impl DeathCause {
-    /// Every cause, in the order ties are settled.
+    /// Every cause, in the order ties are settled. A cause's discriminant is
+    /// its place here, and in a body's tallies.
     pub(crate) const ALL: [DeathCause; 3] = [
         DeathCause::Starvation,
         DeathCause::Dehydration,

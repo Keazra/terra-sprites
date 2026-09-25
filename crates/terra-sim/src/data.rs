@@ -6,7 +6,7 @@ use serde::Deserialize;
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, GenomeError};
 use crate::object_types::{OBJECTS, ObjectType, TypeEntry, object_types};
-use crate::physiology::{PHYSIOLOGY, Physiology, PhysiologyEntry, Slots};
+use crate::physiology::{Indices, PHYSIOLOGY, Physiology, PhysiologyEntry};
 use crate::registry::{Chemical, Locus};
 use crate::terrain::{Terrain, TerrainProps};
 
@@ -192,13 +192,13 @@ impl DataPack {
             &chemicals,
             &loci,
         )?;
-        let slots =
-            Slots::find(&chemicals, &loci).map_err(|(file, message)| DataError::Invalid {
+        let indices =
+            Indices::find(&chemicals, &loci).map_err(|(file, message)| DataError::Invalid {
                 file: file.into(),
                 message,
             })?;
         let physiology = parse::<PhysiologyEntry>(sources, PHYSIOLOGY)?
-            .validate(slots, &loci)
+            .validate(indices, &loci)
             .map_err(|message| DataError::Invalid {
                 file: PHYSIOLOGY.into(),
                 message,
@@ -300,7 +300,7 @@ impl DataPack {
     }
 
     /// Where the chemical with the ID `id` is in the pack's chemical order.
-    pub(crate) fn chemical_slot(&self, id: u16) -> Option<usize> {
+    pub(crate) fn chemical_index(&self, id: u16) -> Option<usize> {
         self.chemicals.iter().position(|c| c.id == id)
     }
 
@@ -320,7 +320,7 @@ impl DataPack {
     }
 
     /// Where the locus with the ID `id` is in the pack's locus order.
-    pub(crate) fn locus_slot(&self, id: u16) -> Option<usize> {
+    pub(crate) fn locus_index(&self, id: u16) -> Option<usize> {
         self.loci.iter().position(|l| l.id == id)
     }
 

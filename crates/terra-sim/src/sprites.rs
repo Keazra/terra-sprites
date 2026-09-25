@@ -9,6 +9,7 @@ use crate::data::DataPack;
 use crate::genome::Genome;
 use crate::map::{Map, Pos};
 use crate::objects::{EntityId, Objects};
+use crate::occupancy::Occupancy;
 
 /// One sprite.
 #[derive(Debug, Clone, Serialize)]
@@ -25,6 +26,11 @@ pub(crate) struct Sprite {
 }
 
 impl Sprite {
+    /// The sprite's age on the tick `tick`.
+    pub(crate) fn age(&self, tick: u64) -> u64 {
+        tick - self.born
+    }
+
     /// A newborn with `genome` on `pos`, born on the tick `born` (design §4.7).
     pub(crate) fn newborn(genome: Genome, pos: Pos, born: u64, data: &DataPack) -> Sprite {
         let program = Program::new(&genome, data);
@@ -45,12 +51,9 @@ impl Sprite {
 pub(crate) struct Sprites {
     /// In ascending ID order, the order every per-sprite pass takes (design §2.3).
     by_id: BTreeMap<EntityId, Sprite>,
-    /// The sprite on each tile, by tile index. It's derived from `by_id`, so it isn't hashed.
+    /// The sprite on each tile. It's derived from `by_id`, so it isn't hashed.
     #[serde(skip)]
-    on_tile: Vec<Option<EntityId>>,
-    /// The map's width, to find a tile's index.
-    #[serde(skip)]
-    width: u16,
+    on_tile: Occupancy,
 }
 
 impl Sprites {
@@ -58,14 +61,13 @@ impl Sprites {
     pub(crate) fn new(map: &Map) -> Sprites {
         Sprites {
             by_id: BTreeMap::new(),
-            on_tile: vec![None; map.tile_count()],
-            width: map.width(),
+            on_tile: Occupancy::new(map),
         }
     }
 
     /// The sprite on the tile at `pos`, if any.
     pub(crate) fn at(&self, pos: Pos) -> Option<EntityId> {
-        self.on_tile[self.index(pos)]
+        self.on_tile.at(pos)
     }
 
     /// Every sprite, in ascending ID order.
@@ -86,25 +88,14 @@ impl Sprites {
     /// Takes the sprite `id`, which must exist, out of the world.
     pub(crate) fn remove(&mut self, id: EntityId) -> Sprite {
         let sprite = self.by_id.remove(&id).expect("the sprite to remove");
-        let index = self.index(sprite.pos);
-        self.on_tile[index] = None;
+        self.on_tile.clear(sprite.pos);
         sprite
     }
 
     /// Puts a new sprite on its tile. The caller has checked the tile is free.
     pub(crate) fn place(&mut self, id: EntityId, sprite: Sprite) {
-        let index = self.index(sprite.pos);
-        debug_assert!(
-            self.on_tile[index].is_none(),
-            "{:?} already holds a sprite",
-            sprite.pos
-        );
-        self.on_tile[index] = Some(id);
+        self.on_tile.put(sprite.pos, id);
         self.by_id.insert(id, sprite);
-    }
-
-    fn index(&self, pos: Pos) -> usize {
-        usize::from(pos.y) * usize::from(self.width) + usize::from(pos.x)
     }
 
     /// Checks the sprites' invariants (design §7.1), or says which is broken:
@@ -116,7 +107,7 @@ impl Sprites {
         objects: &Objects,
         data: &DataPack,
     ) -> Result<(), String> {
-        let indexed = self.on_tile.iter().filter(|id| id.is_some()).count();
+        let indexed = self.on_tile.count();
         if indexed != self.by_id.len() {
             return Err(format!(
                 "the tile index holds {indexed} sprites, but there are {}",
@@ -128,10 +119,8 @@ impl Sprites {
             if !map.contains(pos) || self.at(pos) != Some(id) {
                 return Err(format!("the tile index doesn't have {id:?} on {pos:?}"));
             }
-            if let Some(object) = objects.at(pos)
-                && data.object_types()[objects.kind(object)].solid
-            {
-                return Err(format!("{id:?} stands on the solid {object:?}"));
+            if objects.is_solid_at(data, pos) {
+                return Err(format!("{id:?} stands on a solid object at {pos:?}"));
             }
             if let Some(level) = sprite.body.chems.iter().find(|l| !(0.0..=1.0).contains(*l)) {
                 return Err(format!("{id:?} has a chemical at {level}, outside 0 to 1"));

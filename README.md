@@ -4,7 +4,7 @@ An ASCII artificial-life game for the terminal, inspired by *Creatures*.
 
 Sprites have a genome, a simulated biochemistry and a brain that learns from experience. They live on a grid world of plants, water, toys and thorns. You watch, inspect, and intervene with a "hand of god": reward a sprite with a pet, correct it with a shock, or move things around, and watch individual sprites learn.
 
-**Status:** milestone 1 is being built, slice by slice ([milestone](https://github.com/Keazra/terra-sprites/milestone/1)). Today it generates a terrarium of terrain from a seed, which you can scroll around and point at, and its clock can be paused, stepped and sped up.
+**Status:** milestone 1 is being built, slice by slice ([milestone](https://github.com/Keazra/terra-sprites/milestone/1)). Today it generates a terrarium from a seed, with plants that grow, fruit, spread and expire, and a first population of sprites. The sprites can't move yet, so they grow hungry and thirsty and die, and each death shows in the event log. You can scroll around and point at things, and the clock can be paused, stepped and sped up.
 
 ## Running it
 

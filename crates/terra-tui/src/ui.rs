@@ -375,8 +375,11 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App) {
     };
     draw_border(buf, area, " Events ", no_walls);
     let inner = area.inner(Margin::new(1, 1));
-    for (row, event) in (inner.y..inner.bottom()).zip(app.event_log()) {
-        let line = format!(" {:>7}  {}", group_thousands(event.tick), event_text(event));
+    let lines = app
+        .event_log()
+        .filter_map(|event| Some((event.tick, event_text(event)?)));
+    for (row, (tick, text)) in (inner.y..inner.bottom()).zip(lines) {
+        let line = format!(" {:>7}  {text}", group_thousands(tick));
         buf.set_stringn(
             inner.x,
             row,
@@ -387,8 +390,8 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App) {
     }
 }
 
-/// What an event says in the event log.
-fn event_text(event: &Event) -> String {
+/// What an event says in the event log, if the log shows it.
+fn event_text(event: &Event) -> Option<String> {
     match &event.kind {
         EventKind::Died {
             name, cause, age, ..
@@ -398,11 +401,12 @@ fn event_text(event: &Event) -> String {
                 DeathCause::Dehydration => "dehydration",
                 DeathCause::OldAge => "old age",
             };
-            format!("{name} died ({cause}, age {})", group_thousands(*age))
+            Some(format!(
+                "{name} died ({cause}, age {})",
+                group_thousands(*age)
+            ))
         }
-        EventKind::ObjectSpawned { .. } | EventKind::ObjectRemoved { .. } => {
-            unreachable!("the event log leaves object events out")
-        }
+        EventKind::ObjectSpawned { .. } | EventKind::ObjectRemoved { .. } => None,
     }
 }
 

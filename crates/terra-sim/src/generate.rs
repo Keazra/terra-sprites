@@ -122,7 +122,7 @@ pub(crate) fn place_sprites(config: &WorldConfig, data: &DataPack, state: &mut W
     let mut candidates: Vec<Pos> = state
         .map
         .positions()
-        .filter(|&pos| state.map.is_walkable(pos) && state.objects.at(pos).is_none())
+        .filter(|&pos| state.can_stand(data, pos) && state.objects.at(pos).is_none())
         .collect();
     let physiology = data.physiology();
     let (low, high) = physiology.first_population;
@@ -134,8 +134,9 @@ pub(crate) fn place_sprites(config: &WorldConfig, data: &DataPack, state: &mut W
         let pos = candidates.swap_remove(choice);
         let genome = varied(data.starter(), data, &mut state.rng);
         let mut sprite = Sprite::newborn(genome, pos, state.tick, data);
-        for slot in [physiology.slots.energy, physiology.slots.hydration] {
-            sprite.body.chems[slot] *= low + (high - low) * unit(&mut state.rng);
+        for index in [physiology.indices.energy, physiology.indices.hydration] {
+            let level = sprite.body.chems[index] * (low + (high - low) * unit(&mut state.rng));
+            sprite.body.start_at(index, level);
         }
         state.add_sprite(sprite);
     }
