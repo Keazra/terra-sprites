@@ -846,7 +846,7 @@ Only hunger, thirst, tiredness and pain are tied to physical need in M1. Whether
 | `sense_radius` | 6–14 tiles | Basal metabolism grows linearly with the radius |
 | `lifespan` | 20,000–200,000 ticks | Once exceeded, old age adds `injury` every tick |
 
-The starter genome's traits are speed 7, sense_radius 10 and lifespan 60,000 ticks (100 minutes at 1×).
+The starter genome's traits are speed 7, sense_radius 10 and lifespan 60,000 ticks (100 minutes at 1×). A genome with no `Trait` gene for a trait gets the middle of its range.
 
 ### 4.9 Spawn variation
 

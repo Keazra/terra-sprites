@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc fbc2307d6488a7fc68c94c95b866934e97b08967bc3f0bbd1dbef3c454f931ca # shrinks to traits = [Trait { which: Speed, value: 4.0 }, Trait { which: SenseRadius, value: 6.0 }, Trait { which: Lifespan, value: 20000.0 }], genes = [Emitter { locus: Chem(1), mode: Level, invert: false, threshold: 0.0, gain: -0.42509207, chem: 1 }], seed = 0
