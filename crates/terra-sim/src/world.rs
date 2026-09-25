@@ -368,6 +368,9 @@ impl World {
     /// Advances the world by exactly one tick, running the canonical tick order
     /// (design §2.4), and reports what happened. Later slices fill in the steps
     /// that are empty today.
+    ///
+    /// In debug builds and tests, the world then checks its invariants (design
+    /// §7.1), and panics naming the tick if one is broken.
     pub fn step(&mut self) -> Vec<Event> {
         let mut events = Vec::new();
         self.remember_levels();
@@ -378,6 +381,11 @@ impl World {
         self.sense_and_decide(&dying, &mut events); // 5
         self.resolve_actions(&dying, &mut events); // 6
         self.finish_tick(&dying, &mut events); // 7
+        #[cfg(debug_assertions)]
+        if let Err(InvariantViolation(broken)) = self.check_invariants() {
+            let tick = self.state.tick - 1;
+            panic!("a broken invariant at the end of tick {tick}: {broken}");
+        }
         events
     }
 
@@ -595,6 +603,14 @@ mod tests {
     fn force_place(world: &mut World, name: &str, pos: Pos) {
         let kind = world.data.object_type_named(name).expect("a built-in type");
         world.state.add_object(new_object(&world.data, kind, pos));
+    }
+
+    #[test]
+    #[should_panic(expected = "at the end of tick 0: EntityId(1) is at or above the ID counter")]
+    fn in_debug_builds_a_broken_invariant_fails_on_the_tick_it_is_found() {
+        let mut world = field_with_a_bush();
+        world.state.next_id = 1;
+        world.step();
     }
 
     #[test]

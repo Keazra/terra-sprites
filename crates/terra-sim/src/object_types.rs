@@ -22,10 +22,6 @@ pub(crate) struct ObjectType {
     )]
     pub(crate) id: u16,
     pub(crate) name: String,
-    #[expect(
-        dead_code,
-        reason = "perception sorts objects by category from slice 5"
-    )]
     pub(crate) category: Category,
     /// Nothing can move through it. In M1 every solid object is also a fixture,
     /// and every other object is an item (design §3.5.1).
