@@ -17,7 +17,7 @@ use crate::generate::{generate, place_objects, place_sprites};
 use crate::genome::{GeneView, Genome};
 use crate::map::{Map, MapError, Pos};
 use crate::objects::{EntityId, Object, Objects};
-use crate::perception::Target;
+use crate::perception::{Flood, Target};
 use crate::regions::Regions;
 use crate::registry::ChemicalKind;
 use crate::sprites::{Sprite, Sprites};
@@ -119,6 +119,16 @@ impl WorldState {
             Target::Water(pos) => Some((pos, true)),
             Target::Sprite(id) => Some((self.sprites.get(id)?.pos, false)),
         }
+    }
+
+    /// Where a sprite with `flood` heads to act on `target`: its nearest
+    /// reachable goal tile. `None` if the target is gone or the flood
+    /// reaches none of its goal tiles.
+    pub(crate) fn goal_for(&self, data: &DataPack, flood: &Flood, target: Target) -> Option<Pos> {
+        let (there, own_tile) = self.whereabouts(data, target)?;
+        flood
+            .nearest_goal(&self.map, there, own_tile)
+            .map(|(goal, _)| goal)
     }
 
     /// Whether `pos` is a goal tile of `target` (design §3.6): beside it, or

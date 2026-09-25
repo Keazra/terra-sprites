@@ -184,22 +184,48 @@ pub(crate) fn sense_and_decide(
             let flood = flood(state, data, sprite, penalty);
             state.sprites.get_mut(id).expect("the same sprite").flood = Some(flood);
         }
-        let sprite = state.sprites.get_mut(id).expect("the same sprite");
+        let sprite = state.sprites.get(id).expect("the same sprite");
         if is_acting(sprite) {
             let flood = sprite.flood.as_ref().expect("the flood made above");
-            let action = sprite.action.as_mut().expect("an action");
-            if state.tick >= action.started + u64::from(timeout) {
-                end(action, id, Outcome::TimedOut, state.tick, events);
-            } else if action.committed.is_none()
-                && action
-                    .destination
-                    .is_some_and(|to| flood.cost(to).is_none())
+            let action = sprite.action.as_ref().expect("an action");
+            // An aimed action heads for its target's nearest goal tile as
+            // things stand now (design §3.6), so it follows a target that
+            // moves; a target that's gone, or out of reach, ends it.
+            let aim = action
+                .target
+                .map(|target| state.goal_for(data, flood, target));
+            let outcome = if state.tick >= action.started + u64::from(timeout) {
+                Some(Outcome::TimedOut)
+            } else if aim == Some(None)
+                || action.committed.is_none()
+                    && action
+                        .destination
+                        .is_some_and(|to| flood.cost(to).is_none())
             {
-                end(action, id, Outcome::Failed, state.tick, events);
+                Some(Outcome::Failed)
             } else {
-                continue;
+                None
+            };
+            let sprite = state.sprites.get_mut(id).expect("the same sprite");
+            let action = sprite.action.as_mut().expect("an action");
+            match outcome {
+                Some(outcome) => end(action, id, outcome, state.tick, events),
+                None => {
+                    if let Some(Some(goal)) = aim {
+                        // A committed way round is to where a sprite target
+                        // was; once it has moved, it's dropped (design §3.7).
+                        let moved = matches!(action.target, Some(Target::Sprite(_)))
+                            && action.destination != Some(goal);
+                        if moved {
+                            action.committed = None;
+                        }
+                        action.destination = Some(goal);
+                    }
+                    continue;
+                }
             }
         }
+        let sprite = state.sprites.get_mut(id).expect("the same sprite");
         let script = sprite.scripted.pop_front();
         let (verb, destination, target) = match script {
             Some(ScriptedAction::Wander { destination }) => (Verb::Wander, Some(destination), None),
@@ -223,6 +249,17 @@ pub(crate) fn sense_and_decide(
                 verb => (verb, None, None),
             },
         };
+        let flood = state
+            .sprites
+            .get(id)
+            .expect("the same sprite")
+            .flood
+            .as_ref();
+        let flood = flood.expect("the flood made above");
+        let destination = match target {
+            Some(target) => state.goal_for(data, flood, target),
+            None => destination,
+        };
         let sprite = state.sprites.get_mut(id).expect("the same sprite");
         start(sprite, id, verb, destination, target, state.tick, events);
     }
@@ -230,8 +267,9 @@ pub(crate) fn sense_and_decide(
 
 /// Starts `sprite` (`id`) on an action. A Wander with no destination, or one
 /// its flood doesn't reach, ends at once, as failed (design §5.5); one to the
-/// tile it stands on ends at once, as applied. An aimed action with nothing
-/// to aim at ends at once, as failed.
+/// tile it stands on ends at once, as applied. An aimed action heads for its
+/// target's nearest goal tile, its destination; with none, it ends at once,
+/// as failed.
 fn start(
     sprite: &mut Sprite,
     id: EntityId,
@@ -248,7 +286,7 @@ fn start(
     });
     let flood = sprite.flood.as_ref().expect("step 5 made the flood");
     let lost = verb == Verb::Wander && destination.is_none_or(|to| flood.cost(to).is_none());
-    if lost || (verb.is_aimed() && target.is_none()) {
+    if lost || (verb.is_aimed() && destination.is_none()) {
         end(&mut action, id, Outcome::Failed, tick, events);
     } else if verb == Verb::Wander && destination == Some(sprite.pos) {
         // Already there.
@@ -320,7 +358,11 @@ pub(crate) fn resolve(
             }
         } else if let Some(target) = action.target {
             let pos = sprite.pos;
-            if state.on_goal_tile(data, pos, target) {
+            if !state.on_goal_tile(data, pos, target) && !moved.contains(&id) {
+                walk(state, data, id, &mut moved, events);
+            }
+            let sprite = state.sprites.get(id).expect("the actor");
+            if is_acting(sprite) && state.on_goal_tile(data, sprite.pos, target) {
                 act(state, data, id, target, events);
             }
         } else if !moved.contains(&id) {
@@ -502,8 +544,9 @@ fn swaps(
 }
 
 /// Sprite `id` has just stepped, for `cost` tenths. Returns whether that
-/// brought it to its destination, which ends its action. Arriving, it keeps
-/// at most that step's worth of points (design §3.7).
+/// brought it to its destination. Arriving, it keeps at most that step's
+/// worth of points (design §3.7), and a Wander ends; an aimed action acts
+/// once its walk is over.
 fn stepped(state: &mut WorldState, id: EntityId, cost: u32, events: &mut Vec<Event>) -> bool {
     let sprite = state.sprites.get_mut(id).expect("the walker");
     sprite.move_points -= cost;
@@ -517,7 +560,7 @@ fn stepped(state: &mut WorldState, id: EntityId, cost: u32, events: &mut Vec<Eve
     if let Some(committed) = &mut action.committed {
         committed.remove(0);
     }
-    if arrived {
+    if arrived && action.target.is_none() {
         end(action, id, Outcome::Applied, state.tick, events);
     }
     arrived

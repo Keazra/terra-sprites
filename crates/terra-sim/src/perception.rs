@@ -267,11 +267,21 @@ impl Flood {
     /// tile beside it, or, if `own_tile`, its own tile too. `None` if the
     /// flood reached none.
     fn goal_cost(&self, map: &Map, pos: Pos, own_tile: bool) -> Option<u32> {
+        self.nearest_goal(map, pos, own_tile).map(|(_, cost)| cost)
+    }
+
+    /// The goal tile of a thing on `pos` the flood reaches most cheaply,
+    /// with its cost: ties go to the lower tile index. `None` if it reached
+    /// none.
+    pub(crate) fn nearest_goal(&self, map: &Map, pos: Pos, own_tile: bool) -> Option<(Pos, u32)> {
         let beside = Dir::ALL
             .into_iter()
             .filter_map(|dir| map.neighbour(pos, dir));
         let own = own_tile.then_some(pos);
-        beside.chain(own).filter_map(|goal| self.cost(goal)).min()
+        beside
+            .chain(own)
+            .filter_map(|goal| Some((goal, self.cost(goal)?)))
+            .min_by_key(|&(goal, cost)| (cost, map.index(goal)))
     }
 
     /// The index of `pos` in the square, or `None` if it's outside.
