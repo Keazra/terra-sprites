@@ -15,11 +15,13 @@ use crate::app::CursorMode;
 pub enum SemanticTile {
     Terrain(Terrain),
     Sprite,
+    /// The selected sprite (design §6.1).
+    SelectedSprite,
 }
 
 impl SemanticTile {
     /// Every semantic tile. Each theme must draw all of them.
-    pub const ALL: [SemanticTile; 7] = [
+    pub const ALL: [SemanticTile; 8] = [
         SemanticTile::Terrain(Terrain::Grass),
         SemanticTile::Terrain(Terrain::Dirt),
         SemanticTile::Terrain(Terrain::Sand),
@@ -27,6 +29,7 @@ impl SemanticTile {
         SemanticTile::Terrain(Terrain::DeepWater),
         SemanticTile::Terrain(Terrain::Rock),
         SemanticTile::Sprite,
+        SemanticTile::SelectedSprite,
     ];
 }
 
@@ -36,6 +39,8 @@ pub struct Glyph {
     pub symbol: char,
     pub fg: Color,
     pub bold: bool,
+    /// Drawn in reverse video.
+    pub reversed: bool,
 }
 
 /// What a theme draws for an object it has no glyph for, so a data pack's new
@@ -44,6 +49,7 @@ const UNKNOWN_OBJECT: Glyph = Glyph {
     symbol: '?',
     fg: Color::White,
     bold: false,
+    reversed: false,
 };
 
 /// The cursor's arrows (design §6.5), named by the way they point.
@@ -161,6 +167,7 @@ fn glyphs<K: Ord>(entries: BTreeMap<K, GlyphEntry>) -> BTreeMap<K, Glyph> {
                 symbol: entry.glyph,
                 fg: entry.fg.into(),
                 bold: entry.bold,
+                reversed: entry.reversed,
             };
             (key, glyph)
         })
@@ -193,6 +200,8 @@ struct GlyphEntry {
     fg: Colour,
     #[serde(default)]
     bold: bool,
+    #[serde(default)]
+    reversed: bool,
 }
 
 /// The 16 terminal colours, as named in theme files.

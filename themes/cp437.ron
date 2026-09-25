@@ -13,6 +13,7 @@
         terrain(rock):          (glyph: '#', fg: gray),
         // Drawn over any item on the sprite's tile.
         sprite:                 (glyph: '☺', fg: white),
+        selected_sprite:        (glyph: '☻', fg: white),
     },
     // Objects, by type name from the data pack's `objects.ron`, then visual
     // state. An object whose state isn't listed is drawn with its "default"

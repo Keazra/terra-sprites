@@ -42,9 +42,12 @@ impl Verb {
 
 /// An evolvable body trait (design §4.8). The discriminants are the stable trait IDs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub(crate) enum Trait {
+pub enum Trait {
+    /// Move points per tick.
     Speed = 1,
+    /// How far the sprite perceives, in tiles.
     SenseRadius = 2,
+    /// Ticks until old age.
     Lifespan = 3,
 }
 
@@ -77,6 +80,23 @@ pub(crate) enum ChemicalClass {
     Hormone,
 }
 
+/// What a chemical is to a sprite (design §4.1): its class, with the signal
+/// chemicals told apart into drives and learning signals.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChemicalKind {
+    /// The body's actual state, changed only by physiology and object verbs.
+    Physical,
+    /// A signal chemical the sprite feels as an urge.
+    Drive,
+    /// Reward or punishment, which learning uses up every tick.
+    LearningSignal,
+    /// A spare channel the genome may put to use.
+    Hormone,
+}
+
+/// The signal chemicals that are learning signals. Every other one is a drive.
+const LEARNING_SIGNALS: [&str; 2] = ["reward", "punishment"];
+
 /// One entry of `chemicals.ron`.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -84,6 +104,20 @@ pub(crate) struct Chemical {
     pub(crate) id: u16,
     pub(crate) name: String,
     pub(crate) class: ChemicalClass,
+}
+
+impl Chemical {
+    /// What the chemical is to a sprite.
+    pub(crate) fn kind(&self) -> ChemicalKind {
+        match self.class {
+            ChemicalClass::Physical => ChemicalKind::Physical,
+            ChemicalClass::Hormone => ChemicalKind::Hormone,
+            ChemicalClass::Signal if LEARNING_SIGNALS.contains(&self.name.as_str()) => {
+                ChemicalKind::LearningSignal
+            }
+            ChemicalClass::Signal => ChemicalKind::Drive,
+        }
+    }
 }
 
 /// What fills a locus in (design §4.2).

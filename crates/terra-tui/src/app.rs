@@ -2,12 +2,13 @@
 
 use std::collections::VecDeque;
 
-use ratatui::layout::{Position, Rect, Size};
+use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
-use terra_sim::{Event, EventKind, Map, Pos};
+use terra_sim::{DeathCause, EntityId, Event, EventKind, Map, Pos, World};
 
 use crate::clock::Clock;
 use crate::input::Action;
+use crate::inspector;
 use crate::theme::Theme;
 
 /// Whether the game carries on after an action.
@@ -45,6 +46,70 @@ impl CursorMode {
     }
 }
 
+/// The sprite the inspector shows (design §6.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Selection {
+    /// A sprite in the world.
+    Living(EntityId),
+    /// A sprite that died while selected: of what, and at what age.
+    Dead {
+        id: EntityId,
+        cause: DeathCause,
+        age: u64,
+    },
+}
+
+impl Selection {
+    /// The selected sprite's ID, living or dead.
+    pub fn id(self) -> EntityId {
+        match self {
+            Selection::Living(id) | Selection::Dead { id, .. } => id,
+        }
+    }
+}
+
+/// An inspector tab (design §6.1). The Brain tab joins with the brain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tab {
+    Body,
+    Chem,
+    Genome,
+    World,
+}
+
+impl Tab {
+    /// Every tab, in the order `[` and `]` go through them.
+    pub const ALL: [Tab; 4] = [Tab::Body, Tab::Chem, Tab::Genome, Tab::World];
+
+    /// The tab's name in the inspector's title.
+    pub fn label(self) -> &'static str {
+        match self {
+            Tab::Body => "Body",
+            Tab::Chem => "Chem",
+            Tab::Genome => "Genome",
+            Tab::World => "World",
+        }
+    }
+
+    /// The tab `steps` along from this one, wrapping around.
+    fn along(self, steps: isize) -> Tab {
+        let here = Tab::ALL.iter().position(|&tab| tab == self).expect("a tab") as isize;
+        Tab::ALL[(here + steps).rem_euclid(Tab::ALL.len() as isize) as usize]
+    }
+}
+
+/// Where on screen the panels the app works with are drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Areas {
+    /// The screen cells where the map view draws its tiles.
+    pub tiles: Rect,
+    /// The inspector, border included, if the screen has room for it.
+    pub inspector: Option<Rect>,
+}
+
+/// How many lines a notch of the mouse wheel scrolls an inspector tab.
+const WHEEL_LINES: i32 = 3;
+
 /// How many events the event log keeps.
 const EVENT_LOG_LENGTH: usize = 100;
 
@@ -63,46 +128,58 @@ pub struct App {
     map_size: Size,
     /// The screen cells where the map view draws its tiles.
     tile_area: Rect,
+    /// The inspector, border included, if the screen has room for it.
+    inspector: Option<Rect>,
     /// The screen cell under the mouse pointer, while that cell shows a tile.
     pointer: Option<Position>,
     /// The latest events the event log shows, newest first.
     event_log: VecDeque<Event>,
+    selection: Option<Selection>,
+    tab: Tab,
+    /// How many lines the open tab is scrolled down.
+    tab_scroll: usize,
 }
 
 impl App {
     /// A new UI for `map`, with the cursor at the map's centre and the viewport
-    /// centred on it. `tile_area` is where on screen the map view draws its tiles.
-    pub fn new(map: &Map, theme: Theme, seed: u64, tile_area: Rect) -> App {
+    /// centred on it, and its panels drawn in `areas`.
+    pub fn new(map: &Map, theme: Theme, seed: u64, areas: Areas) -> App {
         let cursor = Pos {
             x: map.width() / 2,
             y: map.height() / 2,
         };
-        let centred = |cursor: u16, view: u16, len: u16| {
-            clamp_origin(i32::from(cursor) - i32::from(view / 2), view, len)
-        };
-        App {
+        let mut app = App {
             clock: Clock::new(),
             theme,
             seed,
             screen: Screen::Normal,
             mode: CursorMode::Select,
             cursor,
-            viewport: Pos {
-                x: centred(cursor.x, tile_area.width, map.width()),
-                y: centred(cursor.y, tile_area.height, map.height()),
-            },
+            viewport: Pos { x: 0, y: 0 },
             map_size: Size::new(map.width(), map.height()),
-            tile_area,
+            tile_area: areas.tiles,
+            inspector: areas.inspector,
             pointer: None,
             event_log: VecDeque::new(),
-        }
+            selection: None,
+            tab: Tab::World,
+            tab_scroll: 0,
+        };
+        app.centre_on(cursor);
+        app
     }
 
-    /// Takes in what happened during a tick, for the event log (design §6.1).
-    /// Object events are left out: they happen dozens of times a minute and
-    /// would bury everything else, and the World tab counts objects instead.
+    /// Takes in what happened during a tick, for the event log (design §6.1),
+    /// and the death of the selected sprite. Object events are left out of the
+    /// log: they happen dozens of times a minute and would bury everything
+    /// else, and the World tab counts objects instead.
     pub fn record(&mut self, events: &[Event]) {
         for event in events {
+            if let EventKind::Died { id, cause, age } = event.kind
+                && self.selection == Some(Selection::Living(id))
+            {
+                self.selection = Some(Selection::Dead { id, cause, age });
+            }
             if !matches!(
                 event.kind,
                 EventKind::ObjectSpawned { .. } | EventKind::ObjectRemoved { .. }
@@ -136,6 +213,21 @@ impl App {
         self.mode
     }
 
+    /// The sprite the inspector shows, if one is selected.
+    pub fn selection(&self) -> Option<Selection> {
+        self.selection
+    }
+
+    /// The open inspector tab.
+    pub fn tab(&self) -> Tab {
+        self.tab
+    }
+
+    /// How many lines the open tab is scrolled down.
+    pub fn tab_scroll(&self) -> usize {
+        self.tab_scroll
+    }
+
     /// The tile drawn at screen cell `cell`, if the map view draws one there.
     pub fn tile_at(&self, cell: Position) -> Option<Pos> {
         let area = self.tile_area;
@@ -153,20 +245,20 @@ impl App {
         in_view.then(|| Position::new(area.x + (tile.x - origin.x), area.y + (tile.y - origin.y)))
     }
 
-    /// Refits the viewport to where the map view now draws its tiles, as after
-    /// a resize.
-    pub fn fit_viewport(&mut self, tile_area: Rect) {
-        self.tile_area = tile_area;
+    /// Refits the app to where its panels are now drawn, as after a resize.
+    pub fn fit(&mut self, areas: Areas) {
+        self.tile_area = areas.tiles;
+        self.inspector = areas.inspector;
         self.settle();
     }
 
-    /// Carries out an action, and says whether the game carries on.
-    pub fn apply(&mut self, action: Action) -> Flow {
+    /// Carries out an action on `world`, and says whether the game carries on.
+    pub fn apply(&mut self, action: Action, world: &World) -> Flow {
         if self.screen == Screen::QuitPrompt {
             match action {
                 Action::Confirm | Action::Back | Action::Quit => return Flow::Quit,
                 // The mouse carries on as usual and doesn't answer the prompt.
-                Action::Point(_) | Action::Click(_) => {}
+                Action::Point(_) | Action::Click(_) | Action::Wheel { .. } => {}
                 // Any other key cancels the prompt, and does nothing else.
                 _ => {
                     self.screen = Screen::Normal;
@@ -182,13 +274,112 @@ impl App {
             Action::Slower { held: false } => self.clock.slower(),
             Action::Slower { held: true } => self.clock.slower_held(),
             Action::Scroll { dx, dy } => self.scroll(dx, dy),
-            // In Select mode (the only mode so far), a click just points.
-            Action::Point(cell) | Action::Click(cell) => self.point(cell),
+            Action::Point(cell) => self.point(cell),
+            // In Select mode (the only mode so far), a click on the map
+            // selects the sprite there, or clears the selection.
+            Action::Click(cell) => {
+                self.point(cell);
+                if let Some(tile) = self.tile_at(cell) {
+                    match world.sprite_at(tile) {
+                        Some(sprite) => self.select(sprite.id()),
+                        None => self.selection = None,
+                    }
+                }
+            }
+            Action::SelectNext => self.select_along(world, Direction::Next),
+            Action::SelectPrevious => self.select_along(world, Direction::Previous),
+            Action::NextTab => self.open(self.tab.along(1)),
+            Action::PreviousTab => self.open(self.tab.along(-1)),
+            Action::ScrollTab { pages } => {
+                let page = self.inspector_rows() as i32;
+                self.scroll_tab(pages * page, world);
+            }
+            Action::Wheel { at, notches } => {
+                self.point(at);
+                if self.inspector.is_some_and(|area| area.contains(at)) {
+                    self.scroll_tab(notches * WHEEL_LINES, world);
+                }
+            }
             Action::Back => self.screen = Screen::QuitPrompt,
             Action::Confirm | Action::Dismiss => {}
             Action::Quit => return Flow::Quit,
         }
         Flow::Continue
+    }
+
+    /// Selects the sprite `id`. From the World tab, that opens Body; and
+    /// another sprite than before shows its tab from the top.
+    fn select(&mut self, id: EntityId) {
+        if self.tab == Tab::World {
+            self.open(Tab::Body);
+        } else if self.selection.map(Selection::id) != Some(id) {
+            self.tab_scroll = 0;
+        }
+        self.selection = Some(Selection::Living(id));
+    }
+
+    /// Opens `tab`, from the top.
+    fn open(&mut self, tab: Tab) {
+        self.tab = tab;
+        self.tab_scroll = 0;
+    }
+
+    /// The rows inside the inspector's border: a page.
+    fn inspector_rows(&self) -> usize {
+        self.inspector
+            .map_or(0, |area| usize::from(area.inner(Margin::new(1, 1)).height))
+    }
+
+    /// Scrolls the open tab by `lines` from where it's shown, down being
+    /// positive, stopping at the top and where its last line comes into view.
+    fn scroll_tab(&mut self, lines: i32, world: &World) {
+        let (length, rows) = (inspector::lines(self, world).len(), self.inspector_rows());
+        let from = inspector::first_shown(self.tab_scroll, length, rows);
+        let furthest = inspector::first_shown(usize::MAX, length, rows);
+        let scrolled = from as i64 + i64::from(lines);
+        self.tab_scroll = scrolled.clamp(0, furthest as i64) as usize;
+    }
+
+    /// Selects the sprite with the next or previous ID, wrapping around, and
+    /// centres the viewport on it if it's out of view. With nothing selected,
+    /// it starts from the lowest or highest ID.
+    fn select_along(&mut self, world: &World, direction: Direction) {
+        let ids: Vec<EntityId> = world.sprites().map(|sprite| sprite.id()).collect();
+        let current = self.selection.map(Selection::id);
+        let chosen = match direction {
+            Direction::Next => current
+                .and_then(|current| ids.iter().find(|&&id| id > current))
+                .or(ids.first()),
+            Direction::Previous => current
+                .and_then(|current| ids.iter().rev().find(|&&id| id < current))
+                .or(ids.last()),
+        };
+        let Some(&id) = chosen else {
+            return;
+        };
+        self.select(id);
+        let pos = world.sprite(id).expect("a sprite just listed").pos();
+        if self.cell_of(pos).is_none() {
+            self.centre_on(pos);
+        }
+    }
+
+    /// Scrolls the viewport so that `tile` is at its centre, as far as the wall allows.
+    fn centre_on(&mut self, tile: Pos) {
+        let area = self.tile_area;
+        self.viewport = Pos {
+            x: clamp_origin(
+                i32::from(tile.x) - i32::from(area.width / 2),
+                area.width,
+                self.map_size.width,
+            ),
+            y: clamp_origin(
+                i32::from(tile.y) - i32::from(area.height / 2),
+                area.height,
+                self.map_size.height,
+            ),
+        };
+        self.settle();
     }
 
     fn scroll(&mut self, dx: i32, dy: i32) {
@@ -226,6 +417,13 @@ impl App {
             None => self.pointer = None,
         }
     }
+}
+
+/// Which way `Tab` and `Shift+Tab` go through the sprites.
+#[derive(Debug, Clone, Copy)]
+enum Direction {
+    Next,
+    Previous,
 }
 
 /// A viewport origin kept within the map, so the view never shows past the wall.

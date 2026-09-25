@@ -6,16 +6,19 @@ use serde::Serialize;
 use crate::data::DataPack;
 use crate::events::DeathCause;
 use crate::expression::{Expression, expressions};
-use crate::genome::{Gene, Genome, LocusRef, Mode, Term};
+use crate::genome::{EmitterMode, Gene, Genome, LocusRef, Term};
 use crate::physiology::halving_factor;
 use crate::registry::{LocusKind, Trait};
 
 /// A sprite's traits (design §4.8), clamped to physiology's ranges.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct Traits {
-    pub(crate) speed: f32,
-    pub(crate) sense_radius: f32,
-    pub(crate) lifespan: f32,
+pub struct Traits {
+    /// Move points per tick.
+    pub speed: f32,
+    /// How far it perceives, in tiles.
+    pub sense_radius: f32,
+    /// Ticks until old age.
+    pub lifespan: f32,
 }
 
 impl Traits {
@@ -224,9 +227,9 @@ impl Program {
                         chem: chem(id),
                     };
                     match mode {
-                        Mode::Level => level_emitters.push(emitter),
-                        Mode::Rise => change_emitters.push((Change::Rise, emitter)),
-                        Mode::Fall => change_emitters.push((Change::Fall, emitter)),
+                        EmitterMode::Level => level_emitters.push(emitter),
+                        EmitterMode::Rise => change_emitters.push((Change::Rise, emitter)),
+                        EmitterMode::Fall => change_emitters.push((Change::Fall, emitter)),
                     }
                 }
                 Gene::Receptor {
@@ -277,6 +280,12 @@ pub(crate) struct Body {
     /// and Fall emitters.
     last_chems: Vec<f32>,
     last_loci: Vec<f32>,
+    /// `chems` as they were before the latest tick began, for the change the
+    /// Chem tab shows (design §6.1). Nothing in the sim reads them, so they
+    /// aren't hashed. Not to be confused with `last_chems`, which step 3's
+    /// Rise and Fall emitters read.
+    #[serde(skip)]
+    pub(crate) chems_before_tick: Vec<f32>,
     /// The injury each of physiology's causes added lately, fading, indexed
     /// by `DeathCause` (design §4.10).
     pub(crate) tallies: [f32; 3],
@@ -311,6 +320,7 @@ impl Body {
         Body {
             last_chems: chems.clone(),
             last_loci: loci.clone(),
+            chems_before_tick: chems.clone(),
             incoming: vec![0.0; loci.len()],
             chems,
             loci,
@@ -319,11 +329,12 @@ impl Body {
     }
 
     /// Starts the chemical at `index` at `level`, as if it had been there
-    /// since the end of the previous tick's step 3, so no Rise or Fall
-    /// emitter sees a change.
+    /// since the end of the previous tick's step 3, so no Rise or Fall emitter
+    /// sees a change, and since before that tick, so the Chem tab shows none.
     pub(crate) fn start_at(&mut self, index: usize, level: f32) {
         self.chems[index] = level;
         self.last_chems[index] = level;
+        self.chems_before_tick[index] = level;
     }
 
     /// What caused most of the body's recent injury (design §4.10). Ties go
@@ -983,7 +994,11 @@ mod tests {
                 chem.clone().prop_map(LocusRef::Chem),
                 locus.clone().prop_map(LocusRef::Locus),
             ];
-            let mode = prop_oneof![Just(Mode::Level), Just(Mode::Rise), Just(Mode::Fall)];
+            let mode = prop_oneof![
+                Just(EmitterMode::Level),
+                Just(EmitterMode::Rise),
+                Just(EmitterMode::Fall)
+            ];
             let term =
                 (chem.clone(), 1u8..=3).prop_map(|(chem, coefficient)| Term { chem, coefficient });
             prop_oneof![
@@ -1011,7 +1026,7 @@ mod tests {
                             locus,
                             mode,
                             // Only a Level emitter can be inverted.
-                            invert: invert && mode == Mode::Level,
+                            invert: invert && mode == EmitterMode::Level,
                             threshold,
                             gain,
                             chem,

@@ -7,14 +7,14 @@ use ratatui::{
     style::{Modifier, Style},
     text::Line,
 };
-use terra_sim::{DeathCause, EntityId, Event, EventKind, Map, ObjectView, Pos, Terrain, World};
+use terra_sim::{Event, EventKind, Map, ObjectView, Pos, Terrain, World};
 
-use crate::app::{App, Screen};
+use crate::app::{App, Areas, Screen, Selection};
 use crate::clock::Speed;
+use crate::inspector::{self, INSPECTOR_WIDTH, first_shown};
+use crate::text::{cause_name, display_name, group_thousands, sprite_label};
 use crate::theme::SemanticTile;
 
-/// The inspector's width, in columns, border included (design §6.1).
-const INSPECTOR_WIDTH: u16 = 46;
 /// The narrowest terminal that has room for the inspector beside the map view.
 const MIN_WIDTH_FOR_INSPECTOR: u16 = 100;
 /// The event log's height, in rows, border included: three events (design §6.1).
@@ -40,7 +40,7 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
         world,
     );
     if let Some(inspector) = inspector_area(area) {
-        render_world_tab(frame.buffer_mut(), inspector, world);
+        render_inspector(frame.buffer_mut(), inspector, app, world);
     }
     if let Some(event_log) = event_log_area(area) {
         render_event_log(frame.buffer_mut(), event_log, app);
@@ -48,11 +48,14 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
     frame.render_widget(status_line(app, world, status.width), status);
 }
 
-/// Where the map view draws its tiles on a screen of `screen` cells: inside
-/// its border, between the top bar and the status line, and no bigger than
-/// the map itself.
-pub fn tile_area(screen: Size, map: &Map) -> Rect {
-    map_view_area(screen.into(), map).inner(Margin::new(1, 1))
+/// Where the app's panels are drawn on a screen of `screen` cells. The map
+/// view draws its tiles inside its border, between the top bar and the
+/// status line, no bigger than the map itself.
+pub fn areas(screen: Size, map: &Map) -> Areas {
+    Areas {
+        tiles: map_view_area(screen.into(), map).inner(Margin::new(1, 1)),
+        inspector: inspector_area(screen.into()),
+    }
 }
 
 /// The map view, border included: below the top bar, at the left, shrunk to
@@ -132,8 +135,13 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
                 y: origin.y + row,
             };
             // A sprite is drawn over any item on its tile.
-            let glyph = if world.sprite_at(pos).is_some() {
-                app.theme.glyph(SemanticTile::Sprite)
+            let glyph = if let Some(sprite) = world.sprite_at(pos) {
+                let tile = if app.selection() == Some(Selection::Living(sprite.id())) {
+                    SemanticTile::SelectedSprite
+                } else {
+                    SemanticTile::Sprite
+                };
+                app.theme.glyph(tile)
             } else if let Some(object) = world.object_at(pos) {
                 app.theme
                     .object_glyph(object.type_name(), object.visual_state())
@@ -144,7 +152,7 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
             if glyph.bold {
                 style = style.add_modifier(Modifier::BOLD);
             }
-            if pos == app.cursor() {
+            if glyph.reversed || pos == app.cursor() {
                 style = style.add_modifier(Modifier::REVERSED);
             }
             buf[(inner.x + col, inner.y + row)]
@@ -290,78 +298,21 @@ fn object_label(object: &ObjectView) -> String {
     }
 }
 
-/// The world's objects of the type called `object_type`.
-fn objects_of<'a>(world: &'a World, object_type: &str) -> impl Iterator<Item = ObjectView<'a>> {
-    world
-        .objects()
-        .filter(move |o| o.type_name() == object_type)
-}
-
-/// A name from the data, as shown on screen: `berry_bush` → `berry bush`.
-fn display_name(name: &str) -> String {
-    name.replace('_', " ")
-}
-
-/// Draws the World tab (design §6.1): the data pack, then each object type
-/// with its count, the count in each stage (for a type with more than one)
-/// and the total of each counter.
-fn render_world_tab(buf: &mut Buffer, area: Rect, world: &World) {
+/// Draws the inspector (design §6.1): its title, and the open tab inside its border.
+fn render_inspector(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     let no_walls = Sides {
         left: false,
         right: false,
         top: false,
         bottom: false,
     };
-    draw_border(buf, area, " World ", no_walls);
-    let data = world.data();
-    let mut lines = vec![format!(
-        " {:<12}{} v{}",
-        "data pack",
-        data.name(),
-        data.version()
-    )];
-    for object_type in data.object_type_names() {
-        let objects: Vec<ObjectView> = objects_of(world, object_type).collect();
-        lines.push(format!(
-            " {:<12}{:>7}",
-            display_name(object_type),
-            group_thousands(objects.len() as u64)
-        ));
-        let stages = data.stage_names(object_type);
-        if stages.len() > 1 {
-            let counts: Vec<String> = stages
-                .iter()
-                .map(|&stage| {
-                    let n = objects.iter().filter(|o| o.stage() == Some(stage)).count();
-                    format!("{stage} {}", group_thousands(n as u64))
-                })
-                .collect();
-            lines.push(format!("   {}", counts.join(" · ")));
-        }
-        let totals: Vec<String> = data
-            .counter_names(object_type)
-            .iter()
-            .map(|&counter| {
-                let total: u64 = objects
-                    .iter()
-                    .map(|o| u64::from(o.counter(counter).unwrap_or(0)))
-                    .sum();
-                format!("{counter} {}", group_thousands(total))
-            })
-            .collect();
-        if !totals.is_empty() {
-            lines.push(format!("   {}", totals.join(" · ")));
-        }
-    }
+    draw_border(buf, area, &inspector::title(app), no_walls);
     let inner = area.inner(Margin::new(1, 1));
-    for (row, line) in (inner.y..inner.bottom()).zip(&lines) {
-        buf.set_stringn(
-            inner.x,
-            row,
-            line,
-            usize::from(inner.width),
-            Style::default(),
-        );
+    let lines = inspector::lines(app, world);
+    let first = first_shown(app.tab_scroll(), lines.len(), usize::from(inner.height));
+    let shown = lines.iter().skip(first);
+    for (row, line) in (inner.y..inner.bottom()).zip(shown) {
+        buf.set_line(inner.x, row, line, inner.width);
     }
 }
 
@@ -390,27 +341,15 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App) {
     }
 }
 
-/// How the screen names a sprite. Sprites have no names until the player
-/// gives them one (design §6.5), so each shows by its ID.
-fn sprite_label(id: EntityId) -> String {
-    format!("Sprite #{}", id.0)
-}
-
 /// What an event says in the event log, if the log shows it.
 fn event_text(event: &Event) -> Option<String> {
     match &event.kind {
-        EventKind::Died { id, cause, age } => {
-            let cause = match cause {
-                DeathCause::Starvation => "starvation",
-                DeathCause::Dehydration => "dehydration",
-                DeathCause::OldAge => "old age",
-            };
-            Some(format!(
-                "{} died ({cause}, age {})",
-                sprite_label(*id),
-                group_thousands(*age)
-            ))
-        }
+        EventKind::Died { id, cause, age } => Some(format!(
+            "{} died ({}, age {})",
+            sprite_label(*id),
+            cause_name(*cause),
+            group_thousands(*age)
+        )),
         EventKind::ObjectSpawned { .. } | EventKind::ObjectRemoved { .. } => None,
     }
 }
@@ -438,17 +377,4 @@ fn speed_label(speed: Speed) -> &'static str {
         Speed::X16 => "16x",
         Speed::Max => "Max",
     }
-}
-
-/// `1234567` → `"1,234,567"`.
-fn group_thousands(n: u64) -> String {
-    let digits = n.to_string();
-    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
 }

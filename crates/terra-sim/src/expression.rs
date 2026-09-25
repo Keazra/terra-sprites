@@ -8,9 +8,9 @@ use crate::data::DataPack;
 use crate::genome::{Gene, Genome, Term};
 use crate::registry::{ChemicalClass, LocusKind, Trait};
 
-/// How a gene is expressed.
+/// How a gene is expressed (design §4.3).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Expression {
+pub enum Expression {
     /// It has its effect.
     Expressed,
     /// It breaks the restrictions on what genes may change, so it has no

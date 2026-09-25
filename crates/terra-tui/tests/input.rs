@@ -283,7 +283,6 @@ fn every_mouse_event_points_and_a_left_press_also_clicks() {
         MouseEventKind::Up(MouseButton::Left),
         MouseEventKind::Down(MouseButton::Right),
         MouseEventKind::Drag(MouseButton::Middle),
-        MouseEventKind::ScrollDown,
     ] {
         assert_eq!(action(kind), point, "{kind:?}");
     }
@@ -313,4 +312,74 @@ fn ctrl_with_any_key_but_c_dismisses() {
     let ctrl = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL);
     assert_eq!(Keys::new().action_for(ctrl('z')), Some(Action::Dismiss));
     assert_eq!(Keys::new().action_for(ctrl('c')), Some(Action::Quit));
+}
+
+#[test]
+fn tab_and_shift_tab_select_the_next_and_previous_sprite() {
+    assert_eq!(
+        Keys::new().action_for(press(KeyCode::Tab)),
+        Some(Action::SelectNext)
+    );
+    // Terminals report Shift+Tab as its own key, with Shift held.
+    let shift_tab = KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT);
+    assert_eq!(
+        Keys::new().action_for(shift_tab),
+        Some(Action::SelectPrevious)
+    );
+}
+
+#[test]
+fn the_square_brackets_switch_inspector_tabs() {
+    assert_eq!(
+        Keys::new().action_for(press(KeyCode::Char(']'))),
+        Some(Action::NextTab)
+    );
+    assert_eq!(
+        Keys::new().action_for(press(KeyCode::Char('['))),
+        Some(Action::PreviousTab)
+    );
+}
+
+#[test]
+fn page_up_and_page_down_scroll_the_inspector_tab_a_page() {
+    assert_eq!(
+        Keys::new().action_for(press(KeyCode::PageDown)),
+        Some(Action::ScrollTab { pages: 1 })
+    );
+    assert_eq!(
+        Keys::new().action_for(press(KeyCode::PageUp)),
+        Some(Action::ScrollTab { pages: -1 })
+    );
+}
+
+#[test]
+fn the_mouse_wheel_turns_notches_where_the_pointer_is() {
+    use ratatui::crossterm::event::{MouseEvent, MouseEventKind};
+    let wheel = |kind| {
+        terra_tui::input::mouse_action(MouseEvent {
+            kind,
+            column: 70,
+            row: 5,
+            modifiers: KeyModifiers::NONE,
+        })
+    };
+    let at = Position::new(70, 5);
+    assert_eq!(
+        wheel(MouseEventKind::ScrollDown),
+        Some(Action::Wheel { at, notches: 1 })
+    );
+    assert_eq!(
+        wheel(MouseEventKind::ScrollUp),
+        Some(Action::Wheel { at, notches: -1 })
+    );
+}
+
+#[test]
+fn tab_with_shift_held_selects_the_previous_sprite_too() {
+    // Some terminals report Shift+Tab as Tab with Shift, not as its own key.
+    let shift_tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::SHIFT);
+    assert_eq!(
+        Keys::new().action_for(shift_tab),
+        Some(Action::SelectPrevious)
+    );
 }
