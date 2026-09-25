@@ -393,7 +393,7 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App) {
 /// How the screen names a sprite. Sprites have no names until the player
 /// gives them one (design §6.5), so each shows by its ID.
 fn sprite_label(id: EntityId) -> String {
-    format!("Unnamed #{}", id.0)
+    format!("Sprite #{}", id.0)
 }
 
 /// What an event says in the event log, if the log shows it.

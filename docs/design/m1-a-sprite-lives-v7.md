@@ -28,7 +28,7 @@ Decided with the owner in the design session for slice 4 ([#5](https://github.co
 | 13 | **Organs and organ failure are out of scope for M1** ([#31](https://github.com/Keazra/terra-sprites/issues/31)). The model leaves room for them: an organ's health would be a physical chemical, and its failure one more source of injury. | Owner idea, parked | §1.3 |
 | 14 | **First-cut physiology timescales,** for a sprite at rest: full hydration lasts about 3,000 ticks and full energy about 6,000; once either runs out, injury kills in about 1,000 more; a sprite past its lifespan dies within about 2,000. Slice 17 tunes them. | Slice 4 design session | App. B |
 | 15 | **No level ever leaves [0, 1], even partway through step 3.** Physiology, each reaction and each emitter clamp what they write, instead of one clamp at (f). v6's single clamp let a drive at 0, pushed below 0 by a relief emitter, look like a fall to its Fall emitter, so a sprite at rest dripped reward every tick, and eating when full was rewarded, against §4.5. Found in the slice 4 code review. | Owner decision | §2.4, §4.4 |
-| 16 | **Sprites start unnamed.** v6 named every sprite with a syllable generator applied to its ID. Now a sprite has no name until the player gives it one with `r`: a name the player makes up, or one generated at random. The player has to care first. Until then the screen shows a sprite by its ID, as "Unnamed #530". | Owner decision, after trying the build | §2.5, §6.1, §6.5 |
+| 16 | **Sprites start unnamed.** v6 named every sprite with a syllable generator applied to its ID. Now a sprite has no name until the player gives it one with `r`: a name the player makes up, or one generated at random. The player has to care first. Until then the screen shows a sprite by its ID, as "Sprite #530". | Owner decision, after trying the build | §2.5, §6.1, §6.5 |
 
 ---
 
@@ -1104,7 +1104,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
   - Selecting a sprite while the World tab is open switches to Body. From any other tab, the tab stays.
   - When the selected sprite dies, its tabs read "Mira #12 died of dehydration at age 4,012" until another sprite is selected.
   - A tab too long to fit scrolls with `PgUp` / `PgDn`, or the mouse wheel over the inspector.
-- **Event log:** each event shows its sprite by name and ID, as "Mira #12", or "Unnamed #530" for a sprite with no name (§6.5). Newest first, filtered to all / the selected sprite / major events only (deaths, learning milestones, rejected commands). It never shows object events (`ObjectSpawned`, `ObjectRemoved`): they happen dozens of times a minute and would bury everything else, and the World tab counts objects instead.
+- **Event log:** each event shows its sprite by name and ID, as "Mira #12", or "Sprite #530" for a sprite with no name (§6.5). Newest first, filtered to all / the selected sprite / major events only (deaths, learning milestones, rejected commands). It never shows object events (`ObjectSpawned`, `ObjectRemoved`): they happen dozens of times a minute and would bury everything else, and the World tab counts objects instead.
 - **Status line:** the tile under the cursor, the cursor mode, what the hand holds (in every mode), and hints for the active keys. A prompt such as "Quit? (y/n)" takes its place while open.
   - The tile names its terrain and any object on it, with the object's stage if it has stages: `(61,40) grass · berry bush (mature)`.
   - **Display names** are the data's names with `_` shown as a space (`berry_bush` → "berry bush"), so `objects.ron` needs no separate display name.
@@ -1231,7 +1231,7 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 | `Ctrl+C` | Quit at once |
 
 - A rejected command shows its reason on the status line and in the event log.
-- **Names:** a sprite has no name until the player gives it one with `r`, either a name they make up or one generated at random. The player has to care first. Until then the screen shows a sprite by its ID, as "Unnamed #530".
+- **Names:** a sprite has no name until the player gives it one with `r`, either a name they make up or one generated at random. The player has to care first. Until then the screen shows a sprite by its ID, as "Sprite #530".
 
 ### 6.6 Time and the frame loop
 
