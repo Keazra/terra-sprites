@@ -127,6 +127,13 @@ impl Sprites {
             if objects.is_solid_at(data, pos) {
                 return Err(format!("{id:?} stands on a solid object at {pos:?}"));
             }
+            if sprite.body.chems_before_tick.len() != sprite.body.chems.len() {
+                return Err(format!(
+                    "{id:?} has {} levels from a tick ago, but {} chemicals",
+                    sprite.body.chems_before_tick.len(),
+                    sprite.body.chems.len()
+                ));
+            }
             if let Some(level) = sprite.body.chems.iter().find(|l| !(0.0..=1.0).contains(*l)) {
                 return Err(format!("{id:?} has a chemical at {level}, outside 0 to 1"));
             }

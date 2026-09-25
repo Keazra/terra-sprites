@@ -124,8 +124,12 @@ impl Keys {
             KeyCode::Char('+' | '=') => Some(Action::Faster { held }),
             KeyCode::Char('-') => Some(Action::Slower { held }),
             KeyCode::Char('y') => Some(Action::Confirm),
-            KeyCode::Tab => Some(Action::SelectNext),
+            // Some terminals report Shift+Tab as its own key, others as Tab with Shift.
             KeyCode::BackTab => Some(Action::SelectPrevious),
+            KeyCode::Tab if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                Some(Action::SelectPrevious)
+            }
+            KeyCode::Tab => Some(Action::SelectNext),
             KeyCode::Char(']') => Some(Action::NextTab),
             KeyCode::Char('[') => Some(Action::PreviousTab),
             KeyCode::PageDown => Some(Action::ScrollTab { pages: 1 }),

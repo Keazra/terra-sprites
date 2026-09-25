@@ -37,10 +37,32 @@ pub fn title(app: &App) -> String {
         })
         .collect();
     let tabs = tabs.join(" ");
-    match app.selection() {
-        Some(selection) => format!(" {} ── {tabs} ", sprite_label(selection.id())),
-        None => format!(" {tabs} "),
-    }
+    let labels = app.selection().map(|selection| {
+        let id = selection.id();
+        (sprite_label(id), format!("#{}", id.0))
+    });
+    fitted_title(
+        labels
+            .as_ref()
+            .map(|(label, short)| (label.as_str(), short.as_str())),
+        &tabs,
+    )
+}
+
+/// The columns the border leaves the title: all but its corners and the
+/// line before the title.
+const TITLE_ROOM: usize = INSPECTOR_WIDTH as usize - 3;
+
+/// The title with the sprite's `label` if it fits, or else its `short`
+/// label, or else no label: the tabs are never cut (design §6.1).
+fn fitted_title(labels: Option<(&str, &str)>, tabs: &str) -> String {
+    let (label, short) = labels.unzip();
+    [label, short]
+        .into_iter()
+        .flatten()
+        .map(|label| format!(" {label} ── {tabs} "))
+        .find(|title| title.chars().count() <= TITLE_ROOM)
+        .unwrap_or_else(|| format!(" {tabs} "))
 }
 
 /// The open tab's lines, from the top.
@@ -100,12 +122,10 @@ fn body_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
     ];
     let chemicals: Vec<ChemicalLevel> = sprite.chemicals().collect();
     for drive in chemicals.iter().filter(|c| c.kind == ChemicalKind::Drive) {
-        let filled = (drive.level * 10.0).round() as usize;
         let line = format!(
-            " {:<12}{}{} {} {}",
-            drive.name,
-            "█".repeat(filled),
-            "░".repeat(10 - filled),
+            " {:<12}{} {} {}",
+            display_name(drive.name),
+            bar(drive.level),
             level(drive.level),
             trend(drive.change)
         );
@@ -121,6 +141,13 @@ fn body_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
         lines.push(format!(" {}", three.join(" · ")));
     }
     lines.into_iter().map(Line::from).collect()
+}
+
+/// A level as a bar ten cells long, filled to the nearest tenth.
+fn bar(level: f32) -> String {
+    // `as` makes a NaN 0.
+    let filled = ((level * 10.0).round() as usize).min(10);
+    format!("{}{}", "█".repeat(filled), "░".repeat(10 - filled))
 }
 
 /// An arrow for which way a level went over the last tick, or nothing when
@@ -149,7 +176,8 @@ fn chem_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
     let chemicals: Vec<ChemicalLevel> = sprite.chemicals().collect();
     let line = |c: &ChemicalLevel| {
         let amount = change(c.change).unwrap_or_default();
-        let text = format!(" {:<13}{:>4}  {amount}", c.name, level(c.level));
+        let name = display_name(c.name);
+        let text = format!(" {name:<13}{:>4}  {amount}", level(c.level));
         text.trim_end().to_string()
     };
     let of_kinds = |kinds: &[ChemicalKind]| {
@@ -172,7 +200,7 @@ fn chem_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
     for four in of_kinds(&[ChemicalKind::Hormone]).chunks(4) {
         let cells: Vec<String> = four
             .iter()
-            .map(|c| format!("{:<4}{:>4}", c.name, level(c.level)))
+            .map(|c| format!("{:<4}{:>4}", display_name(c.name), level(c.level)))
             .collect();
         lines.push(format!(" {}", cells.join("   ")));
     }
@@ -391,8 +419,9 @@ fn wrapped(text: &str, indent: usize, style: Style) -> Vec<Line<'static>> {
     let mut line = " ".repeat(indent);
     let mut empty = true;
     for word in text.split(' ') {
-        let fits = line.chars().count() + 1 + word.chars().count() <= WIDTH;
-        if !empty && !fits {
+        // A word after another needs a space before it. The first word on a
+        // line goes there whether it fits or not.
+        if !empty && line.chars().count() + 1 + word.chars().count() > WIDTH {
             lines.push(std::mem::replace(&mut line, " ".repeat(3)));
             empty = true;
         }
@@ -475,4 +504,42 @@ fn world_tab(world: &World) -> Vec<Line<'static>> {
         }
     }
     lines
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // No sprite's number or name is long enough yet to crowd the tabs, so
+    // this tests the title's fitting directly.
+    #[test]
+    fn a_label_too_long_for_the_title_is_shortened_before_the_tabs_are() {
+        let tabs = "[Body] Chem Genome World";
+        let fit = |label: &str, short: &str| fitted_title(Some((label, short)), tabs);
+        assert_eq!(
+            fit("Sprite #530", "#530"),
+            " Sprite #530 ── [Body] Chem Genome World "
+        );
+        assert_eq!(
+            fit("Sprite #1234567", "#1234567"),
+            " #1234567 ── [Body] Chem Genome World "
+        );
+        let crowded = "[Body] Brain Chem Genome World Lineage";
+        assert_eq!(
+            fitted_title(Some(("Sprite #1234567", "#1234567")), crowded),
+            format!(" {crowded} "),
+            "with no room for even the number, the tabs alone"
+        );
+        assert_eq!(fitted_title(None, tabs), format!(" {tabs} "));
+    }
+
+    // Levels never leave 0 to 1 (design §4.4), but a bar mustn't crash the
+    // screen if one ever did.
+    #[test]
+    fn a_drive_bar_is_ten_cells_whatever_the_level() {
+        assert_eq!(bar(0.42), "████░░░░░░");
+        assert_eq!(bar(1.05), "██████████");
+        assert_eq!(bar(-0.3), "░░░░░░░░░░");
+        assert_eq!(bar(f32::NAN), "░░░░░░░░░░");
+    }
 }
