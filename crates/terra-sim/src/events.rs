@@ -49,7 +49,7 @@ pub enum DeathCause {
 impl DeathCause {
     /// Every cause, in the order ties are settled. A cause's discriminant is
     /// its place here, and in a body's tallies.
-    pub(crate) const ALL: [DeathCause; 3] = [
+    pub const ALL: [DeathCause; 3] = [
         DeathCause::Starvation,
         DeathCause::Dehydration,
         DeathCause::OldAge,

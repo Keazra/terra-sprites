@@ -9,7 +9,7 @@ use crate::biochem::{self, Senses, Traits};
 use crate::config::WorldConfig;
 use crate::data::DataPack;
 use crate::ecology::{self, holds_without_drawing, new_object, square};
-use crate::events::{Event, EventKind};
+use crate::events::{DeathCause, Event, EventKind};
 use crate::expression::{Expression, expressions};
 use crate::generate::{generate, place_objects, place_sprites};
 use crate::genome::{GeneView, Genome};
@@ -43,6 +43,8 @@ pub(crate) struct WorldState {
     pub(crate) next_id: u64,
     pub(crate) objects: Objects,
     pub(crate) sprites: Sprites,
+    /// How many sprites have died of each cause, indexed by `DeathCause`.
+    pub(crate) deaths: [u64; 3],
 }
 
 impl WorldState {
@@ -330,6 +332,7 @@ impl World {
                 next_id: 1,
                 objects,
                 sprites,
+                deaths: [0; 3],
             },
             data,
             checked_next_id: Cell::new(1),
@@ -415,6 +418,11 @@ impl World {
         })
     }
 
+    /// How many sprites have died of `cause` since the world began.
+    pub fn deaths(&self, cause: DeathCause) -> u64 {
+        self.state.deaths[cause as usize]
+    }
+
     /// The number of ticks simulated so far.
     pub fn tick(&self) -> u64 {
         self.state.tick
@@ -489,11 +497,13 @@ impl World {
         let state = &mut self.state;
         for &id in dying {
             let sprite = state.sprites.remove(id);
+            let cause = sprite.body.cause_of_death();
+            state.deaths[cause as usize] += 1;
             events.push(Event {
                 tick: state.tick,
                 kind: EventKind::Died {
                     id,
-                    cause: sprite.body.cause_of_death(),
+                    cause,
                     age: sprite.age(state.tick),
                 },
             });
