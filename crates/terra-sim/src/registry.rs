@@ -70,6 +70,29 @@ impl Trait {
     }
 }
 
+/// A chemical's stable ID (Appendix A).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub(crate) struct ChemId(pub(crate) u16);
+
+/// A locus's stable ID (Appendix A). Chemical levels, which are loci too, go
+/// by their `ChemId`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub(crate) struct LocusId(pub(crate) u16);
+
+impl std::fmt::Display for ChemId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::fmt::Display for LocusId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// What changes a chemical, and so who may change it (design §4.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub(crate) enum ChemicalClass {
@@ -102,7 +125,7 @@ const LEARNING_SIGNALS: [&str; 2] = ["reward", "punishment"];
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Chemical {
-    pub(crate) id: u16,
+    pub(crate) id: ChemId,
     pub(crate) name: String,
     pub(crate) class: ChemicalClass,
 }
@@ -136,7 +159,7 @@ pub(crate) enum LocusKind {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Locus {
-    pub(crate) id: u16,
+    pub(crate) id: LocusId,
     pub(crate) name: String,
     pub(crate) kind: LocusKind,
     #[expect(dead_code, reason = "the brain's inputs are built from it in slice 8")]

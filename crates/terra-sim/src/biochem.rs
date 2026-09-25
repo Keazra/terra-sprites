@@ -8,7 +8,7 @@ use crate::events::DeathCause;
 use crate::expression::{Expression, expressions};
 use crate::genome::{EmitterMode, Gene, Genome, LocusRef, Term};
 use crate::physiology::halving_factor;
-use crate::registry::{LocusKind, Trait};
+use crate::registry::{ChemId, LocusKind, Trait};
 
 /// A sprite's traits (design §4.8), clamped to physiology's ranges.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -132,7 +132,7 @@ impl Reaction {
         reactants: &[Term],
         products: &[Term],
         rate: f32,
-        index: impl Fn(u16) -> usize,
+        index: impl Fn(ChemId) -> usize,
     ) -> Reaction {
         let mut net: Vec<(usize, f32)> = Vec::new();
         let terms = reactants
@@ -177,7 +177,7 @@ impl Program {
             sense_radius: middle(Trait::SenseRadius),
             lifespan: middle(Trait::Lifespan),
         };
-        let chem = |id: u16| data.chemical_index(id).expect("a checked gene");
+        let chem = |id: ChemId| data.chemical_index(id).expect("a checked gene");
         let mut decay = vec![1.0; data.chemicals().len()];
         let mut reactions = Vec::new();
         let mut level_emitters = Vec::new();
@@ -981,13 +981,13 @@ mod tests {
         use rand_chacha::rand_core::{Rng, SeedableRng};
 
         use super::*;
-        use crate::registry::ChemicalClass;
+        use crate::registry::{ChemicalClass, LocusId};
 
         /// Any valid gene of types 1–5, naming any chemical or locus in the built-in pack.
         fn gene() -> impl Strategy<Value = Gene> {
             let data = builtin();
-            let chems: Vec<u16> = data.chemicals().iter().map(|c| c.id).collect();
-            let loci: Vec<u16> = data.loci().iter().map(|l| l.id).collect();
+            let chems: Vec<ChemId> = data.chemicals().iter().map(|c| c.id).collect();
+            let loci: Vec<LocusId> = data.loci().iter().map(|l| l.id).collect();
             let chem = prop::sample::select(chems);
             let locus = prop::sample::select(loci);
             let read = prop_oneof![

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
-use crate::registry::{Chemical, ChemicalClass, Locus, LocusKind, Trait};
+use crate::registry::{Chemical, ChemicalClass, Locus, LocusId, LocusKind, Trait};
 
 /// The physiology file, relative to the pack root.
 pub(crate) const PHYSIOLOGY: &str = "physiology.ron";
@@ -28,7 +28,7 @@ pub(crate) struct Physiology {
     pub(crate) tally_fade: f32,
     pub(crate) traits: TraitRanges,
     /// Each receptor target's range, by locus ID.
-    pub(crate) receptor_targets: BTreeMap<u16, (f32, f32)>,
+    pub(crate) receptor_targets: BTreeMap<LocusId, (f32, f32)>,
     pub(crate) nearby_sprites: NearbySprites,
     pub(crate) spawn_variation: f32,
     pub(crate) actions: Actions,

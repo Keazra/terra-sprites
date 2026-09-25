@@ -7,7 +7,7 @@ use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, GenomeError};
 use crate::object_types::{OBJECTS, ObjectType, TypeEntry, object_types};
 use crate::physiology::{Indices, PHYSIOLOGY, Physiology, PhysiologyEntry};
-use crate::registry::{Chemical, Locus};
+use crate::registry::{ChemId, Chemical, Locus, LocusId};
 use crate::terrain::{Terrain, TerrainProps};
 
 /// A validated data pack: everything a world needs from `data/`.
@@ -184,9 +184,12 @@ impl DataPack {
         manifest.validate()?;
         let terrain = terrain_table(parse(sources, TERRAIN)?)?;
         let chemicals: Vec<Chemical> = parse(sources, CHEMICALS)?;
-        check_unique(CHEMICALS, chemicals.iter().map(|c| (c.id, c.name.as_str())))?;
+        check_unique(
+            CHEMICALS,
+            chemicals.iter().map(|c| (c.id.0, c.name.as_str())),
+        )?;
         let loci: Vec<Locus> = parse(sources, LOCI)?;
-        check_unique(LOCI, loci.iter().map(|l| (l.id, l.name.as_str())))?;
+        check_unique(LOCI, loci.iter().map(|l| (l.id.0, l.name.as_str())))?;
         let object_types = object_types(
             parse::<Vec<TypeEntry>>(sources, OBJECTS)?,
             &chemicals,
@@ -295,12 +298,12 @@ impl DataPack {
     }
 
     /// The chemical with the ID `id`.
-    pub(crate) fn chemical(&self, id: u16) -> Option<&Chemical> {
+    pub(crate) fn chemical(&self, id: ChemId) -> Option<&Chemical> {
         self.chemicals.iter().find(|c| c.id == id)
     }
 
     /// Where the chemical with the ID `id` is in the pack's chemical order.
-    pub(crate) fn chemical_index(&self, id: u16) -> Option<usize> {
+    pub(crate) fn chemical_index(&self, id: ChemId) -> Option<usize> {
         self.chemicals.iter().position(|c| c.id == id)
     }
 
@@ -315,12 +318,12 @@ impl DataPack {
     }
 
     /// The locus with the ID `id`.
-    pub(crate) fn locus(&self, id: u16) -> Option<&Locus> {
+    pub(crate) fn locus(&self, id: LocusId) -> Option<&Locus> {
         self.loci.iter().find(|l| l.id == id)
     }
 
     /// Where the locus with the ID `id` is in the pack's locus order.
-    pub(crate) fn locus_index(&self, id: u16) -> Option<usize> {
+    pub(crate) fn locus_index(&self, id: LocusId) -> Option<usize> {
         self.loci.iter().position(|l| l.id == id)
     }
 

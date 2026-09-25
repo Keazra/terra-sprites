@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 
 use crate::data::{DataError, check_unique};
-use crate::registry::{Category, Chemical, ChemicalClass, Locus, LocusKind, Verb};
+use crate::registry::{Category, ChemId, Chemical, ChemicalClass, Locus, LocusId, LocusKind, Verb};
 
 /// The object types file, relative to the pack root.
 pub(crate) const OBJECTS: &str = "objects.ron";
@@ -90,9 +90,9 @@ pub(crate) enum Effect {
     ReplaceWith(usize),
     DestroySelf,
     /// A physical chemical's ID.
-    Inject(Party, u16, f32),
+    Inject(Party, ChemId, f32),
     /// A pulse locus's ID.
-    Signal(Party, u16),
+    Signal(Party, LocusId),
     Push(u16),
 }
 
