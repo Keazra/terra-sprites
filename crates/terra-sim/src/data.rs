@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use ron::extensions::Extensions;
 use serde::Deserialize;
 
+use crate::brain_io::{BRAIN_IO, BrainInput, InputEntry, brain_inputs};
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, GenomeError};
 use crate::object_types::{OBJECTS, ObjectType, TypeEntry, object_types};
@@ -18,6 +19,8 @@ pub struct DataPack {
     terrain: Vec<TerrainProps>,
     chemicals: Vec<Chemical>,
     loci: Vec<Locus>,
+    /// Every brain input, in ID order.
+    brain_inputs: Vec<BrainInput>,
     /// In ascending ID order.
     object_types: Vec<ObjectType>,
     physiology: Physiology,
@@ -53,6 +56,7 @@ const BUILTIN: &[(&str, &str)] = &[
     (TERRAIN, include_str!("../../../data/terrain.ron")),
     (CHEMICALS, include_str!("../../../data/chemicals.ron")),
     (LOCI, include_str!("../../../data/loci.ron")),
+    (BRAIN_IO, include_str!("../../../data/brain_io.ron")),
     (OBJECTS, include_str!("../../../data/objects.ron")),
     (PHYSIOLOGY, include_str!("../../../data/physiology.ron")),
     (STARTER, include_str!("../../../data/genomes/starter.ron")),
@@ -190,6 +194,11 @@ impl DataPack {
         )?;
         let loci: Vec<Locus> = parse(sources, LOCI)?;
         check_unique(LOCI, loci.iter().map(|l| (l.id.0, l.name.as_str())))?;
+        let brain_inputs = brain_inputs(
+            parse::<Vec<InputEntry>>(sources, BRAIN_IO)?,
+            &chemicals,
+            &loci,
+        )?;
         let object_types = object_types(
             parse::<Vec<TypeEntry>>(sources, OBJECTS)?,
             &chemicals,
@@ -211,6 +220,7 @@ impl DataPack {
             terrain,
             chemicals,
             loci,
+            brain_inputs,
             object_types,
             physiology,
             starter: Genome { genes: Vec::new() },
@@ -227,6 +237,14 @@ impl DataPack {
     /// The pack's version, from its manifest.
     pub fn version(&self) -> &str {
         &self.manifest.version
+    }
+
+    /// Every brain input as `(stable ID, name)`, in ID order: the State
+    /// inputs `brain_io.ron` lists, then the Target inputs (design §5.2).
+    pub fn brain_inputs(&self) -> impl Iterator<Item = (u16, &str)> {
+        self.brain_inputs
+            .iter()
+            .map(|input| (input.id.0, input.name.as_str()))
     }
 
     /// A terrain's properties, from `terrain.ron`.

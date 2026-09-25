@@ -255,9 +255,9 @@ fn a_pack_without_an_objects_file_is_rejected() {
 
 #[test]
 fn locus_ids_and_names_are_unique() {
-    let same_id = r#"[(id: 32, name: "ate", kind: Pulse, brain_visible: true), (id: 32, name: "drank", kind: Pulse, brain_visible: true)]"#;
+    let same_id = r#"[(id: 32, name: "ate", kind: Pulse), (id: 32, name: "drank", kind: Pulse)]"#;
     assert_invalid("loci.ron", same_id, "32");
-    let same_name = r#"[(id: 32, name: "ate", kind: Pulse, brain_visible: true), (id: 33, name: "ate", kind: Pulse, brain_visible: true)]"#;
+    let same_name = r#"[(id: 32, name: "ate", kind: Pulse), (id: 33, name: "ate", kind: Pulse)]"#;
     assert_invalid("loci.ron", same_name, "ate");
 }
 
@@ -623,4 +623,93 @@ fn trait_ranges_are_finite_and_above_0() {
 #[test]
 fn physiology_rates_are_finite() {
     assert_invalid_physiology("healing: 0.0001", "healing: inf", "healing");
+}
+
+#[test]
+fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() {
+    let pack = DataPack::builtin().expect("built-in data pack is valid");
+    let inputs: Vec<(u16, &str)> = pack.brain_inputs().collect();
+    let hormones: Vec<String> = (0..16).map(|n| format!("h{n}")).collect();
+    let mut expected: Vec<(u16, &str)> = [
+        "hunger",
+        "thirst",
+        "pain",
+        "tiredness",
+        "boredom",
+        "loneliness",
+        "crowdedness",
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(i, name)| (i as u16 + 1, name))
+    .collect();
+    expected.extend(
+        hormones
+            .iter()
+            .enumerate()
+            .map(|(i, h)| (i as u16 + 8, h.as_str())),
+    );
+    expected.extend([(24, "nearby_sprites"), (25, "age"), (26, "always")]);
+    let pulses = [
+        "ate",
+        "drank",
+        "played",
+        "played_social",
+        "pricked",
+        "was_hit",
+        "did_hit",
+        "petted",
+        "shocked",
+    ];
+    expected.extend(pulses.iter().enumerate().map(|(i, &p)| (i as u16 + 27, p)));
+    // The Target inputs are fixed in code, after the State inputs (Appendix A).
+    expected.extend([
+        (36, "attended_berry_bush"),
+        (37, "attended_berry"),
+        (38, "attended_thornbush"),
+        (39, "attended_water"),
+        (40, "attended_ball"),
+        (41, "attended_sprite"),
+        (42, "target_distance"),
+        (43, "target_adjacent"),
+    ]);
+    assert_eq!(inputs, expected);
+}
+
+#[test]
+fn a_pack_without_a_brain_io_file_is_rejected() {
+    assert_eq!(
+        builtin_without("brain_io.ron").unwrap_err(),
+        DataError::MissingFile("brain_io.ron".into())
+    );
+}
+
+#[test]
+fn a_brain_input_reads_a_drive_hormone_body_sensor_or_pulse_that_exists() {
+    for (reads, word) in [
+        (r#"Chem("nectar")"#, "nectar"),
+        (r#"Locus("glow")"#, "glow"),
+        // Physical chemicals: the brain feels the body only through drives.
+        (r#"Chem("energy")"#, "energy"),
+        // Learning signals.
+        (r#"Chem("reward")"#, "reward"),
+        (r#"Locus("exploration_mod")"#, "exploration_mod"),
+    ] {
+        let text = format!(r#"[(id: 1, name: "odd", reads: {reads})]"#);
+        assert_invalid("brain_io.ron", &text, word);
+    }
+}
+
+#[test]
+fn brain_input_ids_and_names_are_unique_and_below_the_target_inputs() {
+    let same_id =
+        r#"[(id: 1, name: "a", reads: Chem("hunger")), (id: 1, name: "b", reads: Chem("thirst"))]"#;
+    assert_invalid("brain_io.ron", same_id, "1");
+    let same_name =
+        r#"[(id: 1, name: "a", reads: Chem("hunger")), (id: 2, name: "a", reads: Chem("thirst"))]"#;
+    assert_invalid("brain_io.ron", same_name, "`a`");
+    let target_name = r#"[(id: 1, name: "target_adjacent", reads: Chem("hunger"))]"#;
+    assert_invalid("brain_io.ron", target_name, "target_adjacent");
+    let target_id = r#"[(id: 36, name: "hungry", reads: Chem("hunger"))]"#;
+    assert_invalid("brain_io.ron", target_id, "36");
 }

@@ -5,6 +5,7 @@
 
 mod action;
 mod biochem;
+mod brain_io;
 mod config;
 mod data;
 mod ecology;
