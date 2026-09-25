@@ -24,6 +24,8 @@ Decided with the owner in the design session for slice 6 ([#7](https://github.co
 | 9 | **An interaction makes its one attempt on the tick the sprite reaches a goal tile** (at once, if it starts on one), as part of the same step 6. | Slice 6 | §5.5 |
 | 10 | **Eating a berry reports it removed:** the berry's `DestroySelf` emits `ObjectRemoved { reason: Destroyed }` along with the `ate` pulse. | Slice 3 carry-over | §2.5 |
 | 11 | **The Body tab words Eat, Drink and Approach** in §6.1's pattern: "Going to eat the berry bush · 3 tiles to go", "Ate from the berry bush", "Going to drink · 2 tiles to go", "Going over to Sprite #530 · 4 tiles to go". A target that vanished reads "Gave up: the berry was gone". | Slice 5 carry-over | §6.1 |
+| 12 | **Brain parameters get stable IDs** (Appendix A), for `BrainParam` payloads, and **defaults** beside their ranges (Appendix B). | Slice 6 | App. A, App. B |
+| 13 | **The Genome tab shows the brain genes** under three more headings, after starting levels: brain settings (`tau base .2`), instincts (`thirst & not target adjacent → drink -.5`) and attention instincts (`hunger → attends to berry bush +.8`). | Slice 6 | §6.1 |
 
 ---
 
@@ -1174,7 +1176,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 | **Body** | What the sprite is doing, in plain words (below); age and lifespan; speed and sense radius as expressed; a bar for each drive, with its level and an arrow for its change over the last tick (`▲` rising, `▼` falling, none when steady); the physical levels |
 | **Brain** | Output of `explain()` |
 | **Chem** | One list: each chemical on its own line with its level and its change per tick (`-.0002`, blank when it rounds to 0), the physical chemicals, then a blank line and the signal chemicals, plus `last_r` from slice 8. The 16 hormones sit in a 4×4 grid of levels below, so all of it fits at 100×30. Reward and punishment are consumed every tick, so their levels always read 0 between ticks. |
-| **Genome** | Genes grouped under headings: traits first, on one line (`speed 7.21 · sense 9.87 · lifespan 61,204`), then half-lives, reactions, emitters, receptors and starting levels, and unknown genes last, each group in genome order. Each gene is a plain line with 3 significant figures, so spawn variation shows: `low energy → hunger +.00428 past .515`, `hunger falls → reward +1.02 past .0198`, `hunger halves every 2,041 ticks`. A line too long for the tab wraps, indented. A flagged, unexpressed or unknown gene is dimmed, with its reason on the line below (§4.3). `g` exports to RON. |
+| **Genome** | Genes grouped under headings: traits first, on one line (`speed 7.21 · sense 9.87 · lifespan 61,204`), then half-lives, reactions, emitters, receptors, starting levels, brain settings (`tau base .2`), instincts (`thirst & not target adjacent → drink -.5`) and attention instincts (`hunger → attends to berry bush +.8`), and unknown genes last, each group in genome order. Each gene is a plain line with 3 significant figures, so spawn variation shows: `low energy → hunger +.00428 past .515`, `hunger falls → reward +1.02 past .0198`, `hunger halves every 2,041 ticks`. A line too long for the tab wraps, indented. A flagged, unexpressed or unknown gene is dimmed, with its reason on the line below (§4.3). `g` exports to RON. |
 | **World** | The data pack's identity; population and deaths by cause (counted by the sim, so they're saved); each object type in ID order with its count, the count in each stage (left out for a type with only one stage), and the total of each counter (such as the fruit on all bushes). It's drawn from the data, so a pack's new object types appear with no new code. |
 
 - **The Body tab's action line** describes what the sprite is doing, in the present tense, naming its target, with no coordinates. It never speaks as the sprite: the Brain tab shows *why*, and a line in the sprite's own voice could contradict it. When an action ends, its ending stays until the next one starts.
@@ -1602,6 +1604,25 @@ IDs are stable and append-only. Gaps are left for growth, and the ranges are a c
 | 9 | Mate | reserved for M2 |
 | 10 | Speak | reserved for M4 |
 
+**Brain parameters** (in `BrainParam` genes, and in `physiology.ron` by name):
+
+| ID | Parameter |
+|---|---|
+| 1 | learning_rate (η) |
+| 2 | trace_decay (λ) |
+| 3 | relax_rate |
+| 4 | consolidate_rate |
+| 5 | tau_base |
+| 6 | tau_att_base |
+| 7 | switch_margin |
+| 8 | attention_margin |
+| 9 | salience_gain |
+| 10 | pool_size |
+| 11 | max_arity |
+| 12 | recruit_threshold |
+| 13 | novelty_threshold |
+| 14 | forget_ticks |
+
 **Traits:**
 
 | ID | Trait |
@@ -1626,22 +1647,22 @@ This file fixes the **mechanisms and ranges**. The starting values are tuned wit
 - **Trait ranges:** speed 4–12, sense_radius 6–14, lifespan 20,000–200,000.
 - **BrainParam ranges (initial),** each with a default for a genome that has no gene for it:
 
-| Parameter | Range |
-|---|---|
-| η (`learning_rate`) | 0.001–0.5 |
-| λ (`trace_decay`) | 0.5–0.99 |
-| `relax_rate` | 0–0.01 |
-| `consolidate_rate` | 0–0.001 |
-| `tau_base` | 0.05–2.0 |
-| `tau_att_base` | 0.05–2.0 |
-| `switch_margin` | 0–1 |
-| `attention_margin` | 0–1 |
-| `salience_gain` | 0–2 |
-| `pool_size` | 0–64 |
-| `max_arity` | 1–3 |
-| `recruit_threshold` | 0–1 |
-| `novelty_threshold` | 0–1 |
-| `forget_ticks` | 100–100,000 |
+| Parameter | Range | Default |
+|---|---|---|
+| η (`learning_rate`) | 0.001–0.5 | 0.05 |
+| λ (`trace_decay`) | 0.5–0.99 | 0.9 |
+| `relax_rate` | 0–0.01 | 0.001 |
+| `consolidate_rate` | 0–0.001 | 0.0001 |
+| `tau_base` | 0.05–2.0 | 0.2 |
+| `tau_att_base` | 0.05–2.0 | 0.2 |
+| `switch_margin` | 0–1 | 0.2 |
+| `attention_margin` | 0–1 | 0.2 |
+| `salience_gain` | 0–2 | 0.5 |
+| `pool_size` | 0–64 | 32 |
+| `max_arity` | 1–3 | 3 |
+| `recruit_threshold` | 0–1 | 0.3 |
+| `novelty_threshold` | 0–1 | 0.5 |
+| `forget_ticks` | 100–100,000 | 5,000 |
 
 - **Receptor target ranges:** `learning_rate_mod` 0.5–2.0, `exploration_mod` 0.25–4.0, both neutral at 1.0.
 - **Hand stimuli:** Reward's `reward` amount; Correct's `punishment` and `pain` amounts.

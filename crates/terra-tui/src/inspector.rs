@@ -313,19 +313,25 @@ enum GeneGroup {
     Emitters,
     Receptors,
     StartingLevels,
+    BrainSettings,
+    Instincts,
+    Attention,
     Unknown,
 }
 
 impl GeneGroup {
     /// Every group, in the tab's order. Traits come first, since they share
     /// one line.
-    const ALL: [GeneGroup; 7] = [
+    const ALL: [GeneGroup; 10] = [
         GeneGroup::Traits,
         GeneGroup::HalfLives,
         GeneGroup::Reactions,
         GeneGroup::Emitters,
         GeneGroup::Receptors,
         GeneGroup::StartingLevels,
+        GeneGroup::BrainSettings,
+        GeneGroup::Instincts,
+        GeneGroup::Attention,
         GeneGroup::Unknown,
     ];
 
@@ -338,6 +344,9 @@ impl GeneGroup {
             GeneView::Emitter { .. } => GeneGroup::Emitters,
             GeneView::Receptor { .. } => GeneGroup::Receptors,
             GeneView::InitialConcentration { .. } => GeneGroup::StartingLevels,
+            GeneView::BrainParam { .. } => GeneGroup::BrainSettings,
+            GeneView::Instinct { .. } => GeneGroup::Instincts,
+            GeneView::AttentionInstinct { .. } => GeneGroup::Attention,
             GeneView::Unknown { .. } => GeneGroup::Unknown,
         }
     }
@@ -351,6 +360,9 @@ impl GeneGroup {
             GeneGroup::Emitters => "EMITTERS",
             GeneGroup::Receptors => "RECEPTORS",
             GeneGroup::StartingLevels => "STARTING LEVELS",
+            GeneGroup::BrainSettings => "BRAIN SETTINGS",
+            GeneGroup::Instincts => "INSTINCTS",
+            GeneGroup::Attention => "ATTENTION",
             GeneGroup::Unknown => "UNKNOWN GENES",
         }
     }
@@ -476,6 +488,38 @@ fn gene_text(gene: &GeneView) -> String {
             past(threshold),
             display_name(target),
             signed(gain)
+        ),
+        GeneView::BrainParam { param, value } => {
+            format!("{} {}", display_name(param), significant(value))
+        }
+        GeneView::Instinct {
+            ref inputs,
+            verb,
+            weight,
+        } => {
+            let inputs: Vec<String> = inputs
+                .iter()
+                .map(|&(input, negated)| match negated {
+                    true => format!("not {}", display_name(input)),
+                    false => display_name(input),
+                })
+                .collect();
+            format!(
+                "{} → {} {}",
+                inputs.join(" & "),
+                format!("{verb:?}").to_lowercase(),
+                signed(weight)
+            )
+        }
+        GeneView::AttentionInstinct {
+            input,
+            category,
+            weight,
+        } => format!(
+            "{} → attends to {} {}",
+            display_name(input),
+            display_name(category),
+            signed(weight)
         ),
         GeneView::InitialConcentration { chem, value } => {
             format!(

@@ -5,6 +5,7 @@
 
 mod action;
 mod biochem;
+mod brain;
 mod brain_io;
 mod config;
 mod data;
