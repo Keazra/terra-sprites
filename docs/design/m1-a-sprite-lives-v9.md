@@ -14,7 +14,7 @@ Decided with the owner in the design session for slice 5 ([#6](https://github.co
 | # | Change | Source | Sections |
 |---|---|---|---|
 | 1 | **Speed keeps its decimals.** Move points are counted in tenths: a sprite gains `round(speed × 10)` tenths a tick, and a step costs its terrain cost × 10. Spawn variation gives speeds like 7.4, and a 7.4 sprite now walks a little faster than a 7.0 one, as it pays energy for 7.4. | Owner decision | §3.7, §4.8 |
-| 2 | **The flood reaches whole tiles:** the sense radius rounded to the nearest tile, so 9.87 reaches 10. | Owner decision | §3.6 |
+| 2 | **The flood reaches whole tiles:** the sense radius rounded to the nearest tile, so 9.87 reaches 10. A Wander's "more than half the radius" still uses the trait as it is. | Owner decision | §3.6, §5.5 |
 | 3 | **Walking around another sprite:** the flood prices a tile holding another sprite at 30 more, three grass steps, so a sprite detours up to about 3 tiles rather than wait behind it. | Slice 5 design session | §3.6, App. B |
 | 4 | **Stamina doesn't stop walking.** A sprite with no stamina left still walks; low stamina only raises tiredness (§4.5), which the brain can answer by resting. | Slice 5 design session | §3.7 |
 | 5 | **A sprite on the Wander destination:** the wanderer waits, re-plans after 3 blocked ticks, finds no way onto the tile, and ends `blocked`. No special case. | Slice 5 design session | §3.7, §5.5 |
@@ -1005,7 +1005,7 @@ It only wins decisions where learning finds it useful.
 3. **5b Decision:**
    - **Score** each *available* verb: `s_v = Σₖ aₖ·W[k][v]`.
    - **With no current action:** sample a verb from softmax(s / τ), where **τ = τ_base × `exploration_mod`**, drawing on the world RNG.
-     - If the chosen verb is **Wander**, its destination is sampled now: uniformly from the reachable tiles in the flood whose Chebyshev distance from the sprite is more than `sense_radius / 2`. If there are none, it samples from all reachable tiles other than the sprite's own. If there are none at all, Wander ends straight away with outcome `failed`.
+     - If the chosen verb is **Wander**, its destination is sampled now: uniformly from the reachable tiles in the flood whose Chebyshev distance from the sprite is more than `sense_radius / 2`, the trait as it is, not rounded as the flood's reach is. If there are none, it samples from all reachable tiles other than the sprite's own. If there are none at all, Wander ends straight away with outcome `failed`.
    - **With a current action, verb c:** it continues unless some available verb v has `s_v > s_c + switch_margin`. If one does, the sprite switches **deterministically** to the highest-scoring such verb, with ties going to the lower `OutputId`.
 4. **Snapshot** the activations (inputs, concept activations, chosen verb, attended category), ready for the trace entry committed at step 6.
 
@@ -1154,7 +1154,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
   | Moment | Line | Detail view (`v`) |
   |---|---|---|
   | Wandering | `Wandering off · 5 tiles to go` | `WANDER → (61,40) · walking (5 tiles)` |
-  | Held up behind another sprite | `Wandering off · waiting to get past` | `WANDER → (61,40) · blocked (3 ticks)` |
+  | Held up behind another sprite | `Wandering off · waiting to get past` | `WANDER → (61,40) · blocked (2 ticks)` |
   | Arrived | `Arrived` | `WANDER → (61,40) · applied` |
   | Gave up, no way through | `Gave up: the way was blocked` | `WANDER → (61,40) · blocked` |
   | Gave up at the timeout | `Gave up: it took too long` | `WANDER → (61,40) · timed_out` |
@@ -1163,7 +1163,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
   | Rested | `Rested` | `REST · applied` |
 
   Later verbs follow the same pattern: `Going to eat the berry bush · 3 tiles to go`, `Ate from the berry bush`, `Couldn't eat from the berry bush`.
-- **The detail view** (`v`, in every build) shows the exact workings behind what the screen describes in words. It switches the action line to the exact verb, destination and outcome, and marks the selected sprite's Wander destination on the map with `X`. It stays on until `v` is pressed again, whatever is selected.
+- **The detail view** (`v`, in every build) shows the exact workings behind what the screen describes in words. It switches the action line to the exact verb, destination and outcome, and, while the action is under way, marks the selected sprite's Wander destination on the map with `X`. A sprite standing on the destination is drawn over the mark. It stays on until `v` is pressed again, whatever is selected.
 - **The inspector and the selection:**
   - The Body, Brain, Chem and Genome tabs show the selected sprite. With none selected, they read "No sprite selected: click one, or press Tab".
   - Selecting a sprite while the World tab is open switches to Body. From any other tab, the tab stays.

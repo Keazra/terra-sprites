@@ -583,6 +583,8 @@ impl World {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::action::Outcome;
+    use crate::registry::Verb;
 
     /// A 7×5 field of grass, with a pool of shallow water at (5, 3), and a
     /// berry bush at (2, 2), before any step.
@@ -839,10 +841,60 @@ mod tests {
             .collect();
         let failed = EventKind::ActionEnded {
             id,
-            verb: crate::registry::Verb::Wander,
-            outcome: crate::action::Outcome::Failed,
+            verb: Verb::Wander,
+            outcome: Outcome::Failed,
         };
         assert_eq!(ended, [(1, failed)]);
+    }
+
+    #[test]
+    fn two_sprites_never_swap_diagonally_past_a_bush_that_grew_since_their_floods() {
+        // Speed 4: 40 tenths a tick against a diagonal's 140, so neither
+        // steps for the first ticks, and both floods still show the diagonal
+        // when the bush grows.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let map = Map::from_ascii(&["..", ".."], &data).expect("valid drawing");
+        let genes = r#"(format: 1, genes: [Trait(trait: "speed", value: 4.0)])"#;
+        let genome = Genome::from_ron(genes, &data).expect("a valid genome");
+        let (a, b) = (Pos { x: 0, y: 0 }, Pos { x: 1, y: 1 });
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &[(a, Some(genome.clone())), (b, Some(genome))],
+            scripted: &[
+                (a, ScriptedAction::Wander { destination: b }),
+                (b, ScriptedAction::Wander { destination: a }),
+            ],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        world.step();
+        force_place(&mut world, "thornbush", Pos { x: 1, y: 0 });
+        let waiting = |world: &World| -> Vec<(u32, u32)> {
+            world
+                .state
+                .sprites
+                .iter()
+                .map(|(_, s)| {
+                    (
+                        s.action.as_ref().expect("wandering").blocked_ticks,
+                        s.move_points,
+                    )
+                })
+                .collect()
+        };
+        world.step();
+        assert_eq!(waiting(&world), [(0, 80); 2], "80 tenths: not yet blocked");
+        world.step();
+        world.step();
+        assert_eq!(
+            waiting(&world),
+            [(1, 140); 2],
+            "blocked, banked up to the step"
+        );
+        assert!(
+            world.sprite_at(a).is_some() && world.sprite_at(b).is_some(),
+            "no swap"
+        );
     }
 
     #[test]

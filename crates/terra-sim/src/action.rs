@@ -61,9 +61,11 @@ pub enum Progress {
 /// that last ended until the next one starts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ActionView {
+    /// What kind of action it is.
     pub verb: Verb,
     /// Where a Wander is heading.
     pub destination: Option<Pos>,
+    /// How far it has got, or how it ended.
     pub progress: Progress,
 }
 
@@ -191,7 +193,11 @@ pub(crate) fn sense_and_decide(
             None => match standin::choose(&mut state.rng) {
                 Verb::Wander => {
                     let flood = sprite.flood.as_ref().expect("the flood made above");
-                    (Verb::Wander, flood.wander_destination(&mut state.rng))
+                    let sense_radius = sprite.program.traits.sense_radius;
+                    (
+                        Verb::Wander,
+                        flood.wander_destination(sense_radius, &mut state.rng),
+                    )
                 }
                 verb => (verb, None),
             },
@@ -337,12 +343,27 @@ fn next_step(sprite: &Sprite) -> Option<Pos> {
     way_ahead(sprite)?.first().copied()
 }
 
-/// What `sprite`'s step onto `next` costs, in tenths, or `None` if physics forbids it.
-fn cost_onto(state: &WorldState, data: &DataPack, sprite: &Sprite, next: Pos) -> Option<u32> {
-    let dir = Dir::ALL
+/// The direction of the step from `from` onto `next`, a tile beside it.
+fn direction(state: &WorldState, from: Pos, next: Pos) -> Dir {
+    Dir::ALL
         .into_iter()
-        .find(|&d| state.map.neighbour(sprite.pos, d) == Some(next))?;
+        .find(|&d| state.map.neighbour(from, d) == Some(next))
+        .expect("a path goes a step at a time")
+}
+
+/// What `sprite`'s step onto `next` costs, in tenths, or `None` if physics forbids it.
+fn step_tenths(state: &WorldState, data: &DataPack, sprite: &Sprite, next: Pos) -> Option<u32> {
+    let dir = direction(state, sprite.pos, next);
     step_cost(&state.map, &state.objects, data, sprite.pos, dir).map(|cost| cost * 10)
+}
+
+/// What `sprite`'s step onto `next` would cost over bare terrain, in tenths,
+/// whatever stands there now. Terrain never changes, so a step on a path is
+/// always walkable terrain.
+fn terrain_tenths(state: &WorldState, sprite: &Sprite, next: Pos) -> u32 {
+    let dir = direction(state, sprite.pos, next);
+    let cost = state.map.step_cost(sprite.pos, dir);
+    cost.expect("a path only crosses walkable terrain") * 10
 }
 
 /// Sprite `id`'s turn to walk: it steps along its path while its points last.
@@ -358,11 +379,18 @@ fn walk(
         let Some(next) = next_step(sprite) else {
             return;
         };
-        let Some(cost) = cost_onto(state, data, sprite, next) else {
-            wait(state, data, id, sprite.move_points, events);
-            return;
+        let (cost, possible) = match step_tenths(state, data, sprite, next) {
+            Some(cost) => (cost, true),
+            // Impossible now, onto a bush grown since the flood, say: what
+            // the step costs over bare terrain decides whether it had the
+            // points to be blocked.
+            None => (terrain_tenths(state, sprite, next), false),
         };
         if sprite.move_points < cost {
+            return;
+        }
+        if !possible {
+            wait(state, data, id, cost, events);
             return;
         }
         if let Some(other) = state.sprites.at(next) {
@@ -370,7 +398,7 @@ fn walk(
                 wait(state, data, id, cost, events);
                 return;
             }
-            let other_cost = cost_onto(
+            let other_cost = step_tenths(
                 state,
                 data,
                 state.sprites.get(other).expect("it"),
@@ -407,7 +435,7 @@ fn swaps(
     let here = state.sprites.get(walker).expect("the walker").pos;
     let other = state.sprites.get(other).expect("the sprite in the way");
     next_step(other) == Some(here)
-        && cost_onto(state, data, other, here).is_some_and(|cost| other.move_points >= cost)
+        && step_tenths(state, data, other, here).is_some_and(|cost| other.move_points >= cost)
 }
 
 /// Sprite `id` has just stepped, for `cost` tenths. Returns whether that
@@ -449,7 +477,7 @@ fn wait(state: &mut WorldState, data: &DataPack, id: EntityId, cost: u32, events
     }
     let destination = action.destination.expect("a walker has a destination");
     let sprite = state.sprites.get(id).expect("the walker");
-    let way = flood(state, data, sprite, Occupied::Impassable).path_to(destination);
+    let way = flood(state, data, sprite, Occupied::Closed).path_to(destination);
     let action = state
         .sprites
         .get_mut(id)
