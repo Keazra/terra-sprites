@@ -22,13 +22,14 @@ Decided with the owner in the design session for slice 5 ([#6](https://github.co
 | 7 | **The stand-in chooser.** Until the brain arrives in slice 6, a stand-in behind the same interface picks Wander or Rest at even odds, from the world RNG, and never switches a running action. | Owner decision | §5.5 |
 | 8 | **The Body tab says what the sprite is doing in plain words,** in the present tense, naming its target, with no coordinates: "Wandering off · 5 tiles to go", "Resting · 6 ticks left". It describes, and never speaks as the sprite: the Brain tab shows why, and a line in the sprite's voice could contradict it. | Owner decision, after pushback on a first-person voice | §6.1 |
 | 9 | **The detail view.** `v` switches the action line to the exact verb, destination and outcome (`WANDER → (61,40) · walking (5 tiles)`), and marks the selected sprite's destination on the map with `X` (CP437 has no `×`). It works in every build, and stays on until `v` is pressed again. | Owner idea | §6.1, §6.2, §6.5 |
-| 10 | **The event log leaves out action events** (`ActionStarted`, `ActionEnded`). With 30 sprites they come about 30 a second at 1×, and would bury deaths. | Owner decision | §6.1 |
+| 10 | **The event log leaves out action events** (`ActionStarted`, `ActionEnded`). With 30 sprites they come about 3 for every tick, and would bury deaths. | Owner decision | §6.1 |
 | 11 | **The self-check runs after every tick** in debug builds and tests, at the end of step 7, and names the tick that broke a rule. It costs about 1.2 ms a tick on the default map in a debug build, adding about 30 s to the debug test run; release builds skip it. | Owner decision ([#29](https://github.com/Keazra/terra-sprites/issues/29)) | §7.1 |
 | 12 | **A flood refreshes 8 ticks after the sprite's last one,** not on a shared tick, so floods don't all land at once. | Slice 5 | §3.6, App. B |
 | 13 | **A sprite takes as many steps in a tick as its points pay for,** so speed above a terrain's cost still counts (speed 12 on grass is 1.2 steps a tick). A swap ends both sprites' walking for the tick. | Slice 5 | §3.7 |
 | 14 | **A Wander ends as failed at 5.0** once the flood no longer reaches its destination (a bush grew there, say), unless the sprite is keeping to a committed path. A Wander that starts with a destination the flood doesn't reach fails at once, as one with none does. | Slice 5 | §5.5 |
 | 15 | **A step that has become impossible,** onto a bush that grew since the flood, counts as a blocked tick, like a step onto a sprite. | Slice 5 | §3.7 |
 | 16 | **A hand-made world can start sprites on scripted actions** (Wander to a tile, or Rest), in order, before the stand-in or the brain takes over, so tests and lab scenarios can set up exact situations. | Slice 5 | §7.1 |
+| 17 | **The clock runs 8× slower: 1× is 1.25 ticks a second**, today's ⅛×, and every speed step moves down with it (⅛× is 5/32 of a tick a second, 16× is 20 ticks a second). At 10 ticks a second, sprites walked about 7 tiles a second, too fast to watch. Nothing in the sim changes, since everything counts in ticks: at 1× a rest takes 8 s, a full stomach lasts about 80 minutes and a starter sprite's life about 13 hours; `+` speeds it up. The UI clock counts rates in 32nds of a tick a second, so ⅛× stays exact. | Owner feedback after trying slice 5 | §4.8, §6.6 |
 
 ---
 
@@ -907,7 +908,7 @@ Only hunger, thirst, tiredness and pain are tied to physical need in M1. Whether
 | `sense_radius` | 6–14 tiles | Basal metabolism grows linearly with the radius |
 | `lifespan` | 20,000–200,000 ticks | Once exceeded, old age adds `injury` every tick |
 
-The starter genome's traits are speed 7, sense_radius 10 and lifespan 60,000 ticks (100 minutes at 1×). A genome with no `Trait` gene for a trait gets the middle of its range.
+The starter genome's traits are speed 7, sense_radius 10 and lifespan 60,000 ticks (about 13 hours at 1×, 50 minutes at 16×). A genome with no `Trait` gene for a trait gets the middle of its range.
 
 ### 4.9 Spawn variation
 
@@ -1169,7 +1170,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
   - Selecting a sprite while the World tab is open switches to Body. From any other tab, the tab stays.
   - When the selected sprite dies, its tabs read "Mira #12 died of dehydration at age 4,012" until another sprite is selected.
   - A tab too long to fit scrolls a page with `PgUp` / `PgDn`, or 3 lines per notch of the mouse wheel over the inspector. It stops at the top and at the end, and goes back to the top when the tab or the selection changes.
-- **Event log:** each event shows its sprite by name and ID, as "Mira #12", or "Sprite #530" for a sprite with no name (§6.5). Newest first, filtered to all / the selected sprite / major events only (deaths, learning milestones, rejected commands). It never shows object events (`ObjectSpawned`, `ObjectRemoved`): they happen dozens of times a minute and would bury everything else, and the World tab counts objects instead. Nor does it show action events (`ActionStarted`, `ActionEnded`): with 30 sprites they come about 30 a second at 1×. The Body tab shows the selected sprite's action instead, and emotes show resting and giving up on the map (§6.3).
+- **Event log:** each event shows its sprite by name and ID, as "Mira #12", or "Sprite #530" for a sprite with no name (§6.5). Newest first, filtered to all / the selected sprite / major events only (deaths, learning milestones, rejected commands). It never shows object events (`ObjectSpawned`, `ObjectRemoved`): they happen dozens of times a minute and would bury everything else, and the World tab counts objects instead. Nor does it show action events (`ActionStarted`, `ActionEnded`): with 30 sprites they come about 3 for every tick. The Body tab shows the selected sprite's action instead, and emotes show resting and giving up on the map (§6.3).
 - **Status line:** the tile under the cursor, the cursor mode, what the hand holds (in every mode), and hints for the active keys. A prompt such as "Quit? (y/n)" takes its place while open.
   - The tile names its terrain and any object on it, with the object's stage if it has stages: `(61,40) grass · berry bush (mature)`.
   - **Display names** are the data's names with `_` shown as a space (`berry_bush` → "berry bush"), so `objects.ron` needs no separate display name.
@@ -1302,9 +1303,9 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 
 ### 6.6 Time and the frame loop
 
-- **Keys:** `space` pauses and resumes; `.` steps one tick while paused; `+` and `-` step through ⅛×, ¼×, ½×, 1× (10 ticks per second), 2×, 4×, 8×, 16× and **Max**. Each step halves or doubles the rate. The game starts at 1×; `-` stops at ⅛× (1.25 ticks/s) and `+` at Max. The top bar labels the slow speeds `1/2x`, `1/4x` and `1/8x`.
+- **Keys:** `space` pauses and resumes; `.` steps one tick while paused; `+` and `-` step through ⅛×, ¼×, ½×, 1× (1.25 ticks per second), 2×, 4×, 8×, 16× (20 ticks per second) and **Max**. Each step halves or doubles the rate. The game starts at 1×; `-` stops at ⅛× (5/32 of a tick a second) and `+` at Max. The top bar labels the slow speeds `1/2x`, `1/4x` and `1/8x`.
 - **Quitting:** `Esc` (from Select, with no menu open) asks "Quit? (y/n)". `y` or a second `Esc` quits; any other key cancels. `Ctrl+C` quits at once.
-- **Exact pacing:** the UI clock counts owed ticks in integer maths, with rates in eighths of a tick per second, so every speed (including ⅛×) runs at exactly its nominal rate with no drift.
+- **Exact pacing:** the UI clock counts owed ticks in integer maths, with rates in 32nds of a tick per second, so every speed (including ⅛×) runs at exactly its nominal rate with no drift.
 - **Held keys:**
   - **1× is a stop for held keys.** A held `+` or `-` stops at 1×; a fresh press is needed to go past it, in either direction.
   - **16× is a stop for a held `+`.** Max runs as fast as the computer allows, so reaching it takes a fresh press. A held `-` coming down from Max passes 16× and stops only at 1×.
