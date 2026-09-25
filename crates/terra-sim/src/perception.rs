@@ -4,14 +4,17 @@
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
+use std::collections::BTreeMap;
+
 use rand_chacha::ChaCha8Rng;
 use serde::{Serialize, Serializer};
 
 use crate::data::DataPack;
 use crate::map::{Dir, Map, Pos};
-use crate::objects::Objects;
+use crate::objects::{EntityId, Objects};
 use crate::physics::{beside, entry_cost, step};
 use crate::random::uniform;
+use crate::registry::Category;
 use crate::sprites::Sprites;
 
 /// How a search treats tiles that hold another sprite.
@@ -21,6 +24,15 @@ pub(crate) enum Occupied {
     Penalty(u32),
     /// Never entered: blocked re-planning's one-off search (design §3.7).
     Impassable,
+}
+
+/// Something a sprite can aim a verb at (design §3.6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Target {
+    Object(EntityId),
+    /// A tile of drinkable water.
+    Water(Pos),
+    Sprite(EntityId),
 }
 
 /// No step reached the tile.
@@ -176,6 +188,82 @@ impl Flood {
         Some(pool[uniform(rng, pool.len() as u64) as usize])
     }
 
+    /// The candidate of each category around the flood's origin (design
+    /// §3.6), with the cost of the way to it: the nearest reachable thing of
+    /// that category, the one with the lowest (cost, ID), where water's ID is
+    /// its tile index. A thing is reachable if the flood reached one of its
+    /// goal tiles: beside it, or, for an item or water, its own tile too.
+    /// `me` is the sprite the flood is for, which is never its own candidate.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "the brain aims its verbs at candidates from slice 6"
+        )
+    )]
+    pub(crate) fn candidates(
+        &self,
+        ground: Ground,
+        me: EntityId,
+    ) -> BTreeMap<Category, (Target, u32)> {
+        let map = ground.map;
+        let mut best: BTreeMap<Category, (u32, u64, Target)> = BTreeMap::new();
+        let mut offer = |category, target, id, cost| {
+            let better = best
+                .get(&category)
+                .is_none_or(|&(c, i, _)| (cost, id) < (c, i));
+            if better {
+                best.insert(category, (cost, id, target));
+            }
+        };
+        // Things just outside the square can have goal tiles inside it.
+        let x0 = self.corner.x.saturating_sub(1);
+        let y0 = self.corner.y.saturating_sub(1);
+        let x1 = (self.corner.x + self.width).min(map.width() - 1);
+        let y1 = (self.corner.y + self.height).min(map.height() - 1);
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                let pos = Pos { x, y };
+                if let Some(id) = ground.objects.at(pos) {
+                    let object_type = &ground.data.object_types()[ground.objects.kind(id)];
+                    let own_tile = !object_type.solid;
+                    if let Some(cost) = self.goal_cost(map, pos, own_tile) {
+                        offer(object_type.category, Target::Object(id), id.0, cost);
+                    }
+                }
+                if ground.data.terrain(map.terrain(pos)).is_drinkable()
+                    && let Some(cost) = self.goal_cost(map, pos, true)
+                {
+                    offer(
+                        Category::Water,
+                        Target::Water(pos),
+                        map.index(pos) as u64,
+                        cost,
+                    );
+                }
+                if let Some(id) = ground.sprites.at(pos).filter(|&id| id != me)
+                    && let Some(cost) = self.goal_cost(map, pos, false)
+                {
+                    offer(Category::Sprite, Target::Sprite(id), id.0, cost);
+                }
+            }
+        }
+        best.into_iter()
+            .map(|(category, (cost, _, target))| (category, (target, cost)))
+            .collect()
+    }
+
+    /// The cost of the cheapest way to a goal tile of a thing on `pos`: a
+    /// tile beside it, or, if `own_tile`, its own tile too. `None` if the
+    /// flood reached none.
+    fn goal_cost(&self, map: &Map, pos: Pos, own_tile: bool) -> Option<u32> {
+        let beside = Dir::ALL
+            .into_iter()
+            .filter_map(|dir| map.neighbour(pos, dir));
+        let own = own_tile.then_some(pos);
+        beside.chain(own).filter_map(|goal| self.cost(goal)).min()
+    }
+
     /// The index of `pos` in the square, or `None` if it's outside.
     fn local(&self, pos: Pos) -> Option<usize> {
         let x = pos.x.checked_sub(self.corner.x)?;
@@ -216,27 +304,111 @@ fn back(pos: Pos, dir: Dir) -> Pos {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
 
     use rand_chacha::ChaCha8Rng;
     use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
-    use crate::objects::EntityId;
+    use crate::ecology::new_object;
     use crate::sprites::Sprite;
 
     /// What a flood spreads through: a map drawn from `rows`, with no
-    /// objects, and starter sprites on `sprites`.
+    /// objects, and starter sprites on `sprites`, with IDs from 1.
     fn parts(rows: &[&str], sprites: &[Pos]) -> (Map, Objects, Sprites, DataPack) {
+        parts_with(rows, &[], sprites)
+    }
+
+    /// `parts`, with objects as `(tile, object type)`, with IDs from 101.
+    fn parts_with(
+        rows: &[&str],
+        objects: &[(Pos, &str)],
+        sprites: &[Pos],
+    ) -> (Map, Objects, Sprites, DataPack) {
         let data = DataPack::builtin().expect("built-in data pack is valid");
         let map = Map::from_ascii(rows, &data).expect("valid drawing");
-        let objects = Objects::new(&map);
+        let mut placed_objects = Objects::new(&map);
+        for (n, &(pos, name)) in objects.iter().enumerate() {
+            let kind = data.object_type_named(name).expect("a built-in type");
+            placed_objects.place(EntityId(n as u64 + 101), new_object(&data, kind, pos));
+        }
         let mut placed = Sprites::new(&map);
         for (n, &pos) in sprites.iter().enumerate() {
             let sprite = Sprite::newborn(data.starter().clone(), pos, 0, &data);
             placed.place(EntityId(n as u64 + 1), sprite);
         }
-        (map, objects, placed, data)
+        (map, placed_objects, placed, data)
+    }
+
+    /// The candidates of sprite 1, the first on `sprites`, which the flood
+    /// spreads from, with a radius of 10.
+    fn candidates_of(
+        rows: &[&str],
+        objects: &[(Pos, &str)],
+        sprites: &[Pos],
+    ) -> BTreeMap<Category, (Target, u32)> {
+        let (map, objects, sprites_placed, data) = parts_with(rows, objects, sprites);
+        let ground = Ground {
+            map: &map,
+            objects: &objects,
+            sprites: &sprites_placed,
+            data: &data,
+        };
+        let flood = Flood::new(ground, sprites[0], 10, Occupied::Penalty(30), 0);
+        flood.candidates(ground, EntityId(1))
+    }
+
+    #[test]
+    fn the_candidate_of_each_kind_is_the_nearest_one_the_sprite_can_reach() {
+        let berries = [(at(3, 0), "berry"), (at(6, 0), "berry")];
+        let found = candidates_of(&["........"], &berries, &[at(0, 0)]);
+        // Berries are items: a sprite can take one from its tile or beside it.
+        assert_eq!(found[&Category::Berry], (Target::Object(EntityId(101)), 20));
+    }
+
+    #[test]
+    fn candidates_the_same_distance_away_go_to_the_lower_id() {
+        let berries = [(at(4, 0), "berry"), (at(0, 0), "berry")];
+        let found = candidates_of(&["....."], &berries, &[at(2, 0)]);
+        assert_eq!(found[&Category::Berry], (Target::Object(EntityId(101)), 10));
+    }
+
+    #[test]
+    fn water_is_told_apart_by_tile_index_and_can_be_drunk_from_its_own_tile() {
+        let found = candidates_of(&["~.~", "..."], &[], &[at(1, 1)]);
+        assert_eq!(found[&Category::Water], (Target::Water(at(0, 0)), 0));
+        let found = candidates_of(&["..~"], &[], &[at(0, 0)]);
+        assert_eq!(found[&Category::Water], (Target::Water(at(2, 0)), 10));
+    }
+
+    #[test]
+    fn a_bush_or_a_sprite_is_reached_from_beside_it() {
+        let found = candidates_of(
+            &["......"],
+            &[(at(5, 0), "thornbush")],
+            &[at(0, 0), at(3, 0)],
+        );
+        assert_eq!(
+            found[&Category::Thornbush],
+            (Target::Object(EntityId(101)), 40 + 30)
+        );
+        assert_eq!(found[&Category::Sprite], (Target::Sprite(EntityId(2)), 20));
+    }
+
+    #[test]
+    fn a_nearer_thing_the_sprite_cannot_reach_is_never_its_candidate() {
+        // The near berry is walled in; the far one is in the open.
+        let rows = ["...#.#", "...###", "......"];
+        let berries = [(at(4, 0), "berry"), (at(0, 2), "berry")];
+        let found = candidates_of(&rows, &berries, &[at(2, 0)]);
+        // Taken from beside it, one diagonal step away.
+        assert_eq!(found[&Category::Berry], (Target::Object(EntityId(102)), 14));
+    }
+
+    #[test]
+    fn a_sprite_is_never_its_own_candidate() {
+        let found = candidates_of(&["..."], &[], &[at(0, 0)]);
+        assert!(!found.contains_key(&Category::Sprite));
     }
 
     fn flood(rows: &[&str], sprites: &[Pos], origin: Pos, radius: u16, penalty: u32) -> Flood {
