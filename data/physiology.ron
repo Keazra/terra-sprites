@@ -48,4 +48,11 @@
     // Spawn variation (design §4.9): each gene value is multiplied by a factor
     // drawn between 1 − this and 1 + this.
     spawn_variation: 0.1,
+
+    // How long actions last (design §5.5), in ticks.
+    actions: (rest_bout: 10),
+    // How sprites find their way (design §3.6–3.7). The flood prices a tile
+    // holding another sprite at `occupied_penalty` more, in terrain units
+    // (a grass step is 10).
+    movement: (occupied_penalty: 30),
 )

@@ -40,6 +40,18 @@ fn world_with(
     sprites: &[Pos],
     scripted: &[(Pos, ScriptedAction)],
 ) -> World {
+    seeded(rows, objects, speed, sprites, scripted, 1)
+}
+
+/// `world_with`, from the world seed `seed`.
+fn seeded(
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    speed: f32,
+    sprites: &[Pos],
+    scripted: &[(Pos, ScriptedAction)],
+    seed: u64,
+) -> World {
     let data = builtin();
     let map = Map::from_ascii(rows, &data).expect("valid drawing");
     let sprites: Vec<(Pos, Option<Genome>)> = sprites
@@ -52,7 +64,7 @@ fn world_with(
         sprites: &sprites,
         scripted,
     };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+    World::from_scenario(scenario, data, seed).expect("a valid scenario")
 }
 
 fn at(x: u16, y: u16) -> Pos {
@@ -62,6 +74,27 @@ fn at(x: u16, y: u16) -> Pos {
 /// The ID of the sprite on `pos`.
 fn sprite_on(world: &World, pos: Pos) -> EntityId {
     world.sprite_at(pos).expect("a sprite there").id()
+}
+
+/// Steps `world` until sprite `id`'s first action ends, at most `ticks`
+/// times, returning the tile it stands on after each tick and how the action
+/// ended.
+fn first_action(world: &mut World, id: EntityId, ticks: usize) -> (Vec<Pos>, Outcome) {
+    let mut tiles = Vec::new();
+    for _ in 0..ticks {
+        let events = world.step();
+        tiles.push(world.sprite(id).expect("still alive").pos());
+        for event in events {
+            if let EventKind::ActionEnded {
+                id: ended, outcome, ..
+            } = event.kind
+                && ended == id
+            {
+                return (tiles, outcome);
+            }
+        }
+    }
+    panic!("the first action didn't end in {ticks} ticks: {tiles:?}");
 }
 
 /// Steps `world` `ticks` times, returning every event and the tile `id`
@@ -168,7 +201,8 @@ fn route(rows: &[&str], objects: &[(Pos, &str)], from: Pos, to: Pos) -> Vec<Pos>
     let wander = ScriptedAction::Wander { destination: to };
     let mut world = world_with(rows, objects, 10.0, &[from], &[(from, wander)]);
     let id = sprite_on(&world, from);
-    let (_, tiles) = run(&mut world, id, 30);
+    let (tiles, outcome) = first_action(&mut world, id, 30);
+    assert_eq!(outcome, Outcome::Applied, "arrived");
     let mut route: Vec<Pos> = Vec::new();
     for pos in tiles {
         if route.last() != Some(&pos) && pos != from {
@@ -247,4 +281,188 @@ fn a_sprite_reaches_as_far_as_its_sense_radius_rounded_to_whole_tiles() {
         "9.6 reaches 10 tiles"
     );
     assert_eq!(wander_east(10, 9.4), Outcome::Failed, "9.4 reaches 9");
+}
+
+/// The change over the last tick in the chemical called `name`, for sprite `id`.
+fn change(world: &World, id: EntityId, name: &str) -> f32 {
+    let sprite = world.sprite(id).expect("alive");
+    let level = sprite.chemicals().find(|c| c.name == name);
+    level.expect("a chemical").change
+}
+
+#[test]
+fn a_rest_lasts_10_ticks_and_ends_applied() {
+    let start = at(0, 0);
+    let mut world = world(&["..."], 10.0, &[start], &[(start, ScriptedAction::Rest)]);
+    let id = sprite_on(&world, start);
+    let (events, tiles) = run(&mut world, id, 10);
+    assert!(tiles.iter().all(|&pos| pos == start), "a rest stays put");
+    let ended: Vec<(u64, Outcome)> = events
+        .iter()
+        .filter_map(|e| match e.kind {
+            EventKind::ActionEnded {
+                verb: Verb::Rest,
+                outcome,
+                ..
+            } => Some((e.tick, outcome)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ended.first(), Some(&(9, Outcome::Applied)));
+}
+
+#[test]
+fn walking_tires_a_sprite_and_resting_restores_it() {
+    // 14 steps east, one a tick, then a rest.
+    let start = at(0, 0);
+    let wander = ScriptedAction::Wander {
+        destination: at(14, 0),
+    };
+    let scripted = [(start, wander), (start, ScriptedAction::Rest)];
+    let mut world = world(&["..............."], 10.0, &[start], &scripted);
+    let id = sprite_on(&world, start);
+    let (mut stamina, mut energy) = (Vec::new(), Vec::new());
+    for _ in 0..25 {
+        world.step();
+        stamina.push(change(&world, id, "stamina"));
+        energy.push(change(&world, id, "energy"));
+    }
+    // The body feels each tick's steps, and each tick of rest, on the next tick.
+    assert!(stamina[1..=14].iter().all(|&c| c < 0.0), "{stamina:?}");
+    assert!(stamina[15..=24].iter().all(|&c| c > 0.0), "{stamina:?}");
+    assert!(
+        energy[5] < energy[20],
+        "walking costs more energy than resting: {energy:?}"
+    );
+}
+
+#[test]
+fn a_sprite_walks_around_another_when_that_costs_less_than_3_grass_steps_more() {
+    // Straight through the resting sprite would cost 60 + 30; around it, 68.
+    let (walker, rester) = (at(0, 1), at(3, 1));
+    let wander = ScriptedAction::Wander {
+        destination: at(6, 1),
+    };
+    let scripted = [(walker, wander), (rester, ScriptedAction::Rest)];
+    let mut world = world(&["......."; 3], 10.0, &[walker, rester], &scripted);
+    let id = sprite_on(&world, walker);
+    let (tiles, outcome) = first_action(&mut world, id, 8);
+    assert_eq!(outcome, Outcome::Applied, "arrived: {tiles:?}");
+    assert!(!tiles.contains(&rester), "{tiles:?}");
+}
+
+/// Every `ActionStarted` and `ActionEnded` in `events`, as `(tick, verb, how
+/// it ended)`, with `None` for a start.
+fn action_events(events: &[Event]) -> Vec<(u64, Verb, Option<Outcome>)> {
+    events
+        .iter()
+        .filter_map(|e| match e.kind {
+            EventKind::ActionStarted { verb, .. } => Some((e.tick, verb, None)),
+            EventKind::ActionEnded { verb, outcome, .. } => Some((e.tick, verb, Some(outcome))),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_sprite_with_nothing_to_do_wanders_or_rests_of_its_own_accord() {
+    let start = at(4, 4);
+    let mut world = world(&["........."; 9], 7.0, &[start], &[]);
+    let id = sprite_on(&world, start);
+    let (events, _) = run(&mut world, id, 300);
+    let started: Vec<Verb> = action_events(&events)
+        .into_iter()
+        .filter(|(_, _, ended)| ended.is_none())
+        .map(|(_, verb, _)| verb)
+        .collect();
+    assert!(started.contains(&Verb::Wander), "{started:?}");
+    assert!(started.contains(&Verb::Rest), "{started:?}");
+    assert!(
+        started
+            .iter()
+            .all(|v| matches!(v, Verb::Wander | Verb::Rest))
+    );
+}
+
+#[test]
+fn a_sprite_with_nowhere_to_go_gives_up_each_wander_at_once() {
+    let start = at(0, 0);
+    let mut world = world(&["."], 7.0, &[start], &[]);
+    let id = sprite_on(&world, start);
+    let (events, _) = run(&mut world, id, 100);
+    let wanders: Vec<(u64, Verb, Option<Outcome>)> = action_events(&events)
+        .into_iter()
+        .filter(|(_, verb, _)| *verb == Verb::Wander)
+        .collect();
+    assert!(
+        !wanders.is_empty(),
+        "the stand-in chose to wander at some point"
+    );
+    for pair in wanders.chunks(2) {
+        let [(started, _, None), (ended, _, Some(outcome))] = pair else {
+            panic!("a start then an end: {pair:?}");
+        };
+        assert_eq!((ended, outcome), (started, &Outcome::Failed));
+    }
+}
+
+fn wander_to(destination: Pos) -> ScriptedAction {
+    ScriptedAction::Wander { destination }
+}
+
+#[test]
+fn of_two_sprites_stepping_onto_one_tile_the_first_in_the_tick_s_shuffled_order_gets_it() {
+    let (left, right, middle) = (at(0, 0), at(2, 0), at(1, 0));
+    let scripted = [(left, wander_to(middle)), (right, wander_to(middle))];
+    let mut winners = Vec::new();
+    for seed in 1..=20 {
+        let mut world = seeded(&["..."], &[], 10.0, &[left, right], &scripted, seed);
+        let (a, b) = (sprite_on(&world, left), sprite_on(&world, right));
+        world.step();
+        assert_eq!(world.check_invariants(), Ok(()));
+        let winner = sprite_on(&world, middle);
+        let loser = if winner == a { b } else { a };
+        let stayed = world.sprite(loser).expect("alive").pos();
+        assert!(stayed == left || stayed == right, "the other waits");
+        winners.push(winner == a);
+    }
+    assert!(
+        winners.contains(&true) && winners.contains(&false),
+        "{winners:?}"
+    );
+}
+
+#[test]
+fn two_sprites_meeting_head_on_in_a_one_tile_corridor_swap_and_pass() {
+    let (west, east) = (at(0, 1), at(6, 1));
+    let rows = ["#######", ".......", "#######"];
+    let scripted = [(west, wander_to(east)), (east, wander_to(west))];
+    let mut world = world(&rows, 10.0, &[west, east], &scripted);
+    let (a, b) = (sprite_on(&world, west), sprite_on(&world, east));
+    let mut arrived = Vec::new();
+    for _ in 0..12 {
+        for event in world.step() {
+            if let EventKind::ActionEnded { id, outcome, .. } = event.kind {
+                arrived.push((id, outcome));
+            }
+        }
+        assert_eq!(world.check_invariants(), Ok(()));
+        if arrived.len() == 2 {
+            break;
+        }
+    }
+    arrived.sort_by_key(|&(id, _)| id);
+    assert_eq!(arrived, [(a, Outcome::Applied), (b, Outcome::Applied)]);
+}
+
+#[test]
+fn two_sprites_swap_diagonally_when_neither_cuts_a_corner() {
+    let (a_start, b_start) = (at(0, 0), at(1, 1));
+    let scripted = [(a_start, wander_to(b_start)), (b_start, wander_to(a_start))];
+    let mut world = world(&["..", ".."], 10.0, &[a_start, b_start], &scripted);
+    let (a, b) = (sprite_on(&world, a_start), sprite_on(&world, b_start));
+    world.step();
+    world.step();
+    assert_eq!(world.sprite(a).expect("alive").pos(), b_start);
+    assert_eq!(world.sprite(b).expect("alive").pos(), a_start);
 }

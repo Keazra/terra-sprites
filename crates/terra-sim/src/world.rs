@@ -118,7 +118,8 @@ pub struct Scenario<'a> {
     /// spawn variation, as for the `SpawnSprite` command.
     pub sprites: &'a [(Pos, Option<Genome>)],
     /// Actions to start sprites on, by the tile each sprite starts on,
-    /// instead of what they would choose.
+    /// instead of what they would choose. A sprite given several does them in
+    /// the order given.
     pub scripted: &'a [(Pos, ScriptedAction)],
 }
 
@@ -341,7 +342,8 @@ impl World {
                 .then(|| sprites.at(pos))
                 .flatten()
                 .ok_or(ScenarioError::NoSpriteToScript(pos))?;
-            sprites.get_mut(id).expect("the sprite there").scripted = Some(script);
+            let sprite = sprites.get_mut(id).expect("the sprite there");
+            sprite.scripted.push_back(script);
         }
         Ok(world)
     }
@@ -492,7 +494,8 @@ impl World {
                 let senses = Senses {
                     age: sprite.age(state.tick),
                     nearby_sprites: (others as f32 / f32::from(nearby.full)).min(1.0),
-                    ..Senses::default()
+                    steps: sprite.did.steps,
+                    resting: sprite.did.rested,
                 };
                 (id, senses)
             })

@@ -4,12 +4,14 @@
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
-use serde::Serialize;
+use rand_chacha::ChaCha8Rng;
+use serde::{Serialize, Serializer};
 
 use crate::data::DataPack;
 use crate::map::{Dir, Map, Pos};
 use crate::objects::Objects;
-use crate::physics::step_cost;
+use crate::physics::{beside, entry_cost, step};
+use crate::random::uniform;
 use crate::sprites::Sprites;
 
 /// How a search treats tiles that hold another sprite.
@@ -33,13 +35,17 @@ pub(crate) struct Flood {
     pub(crate) origin: Pos,
     /// The tick it was made on, for its refresh.
     pub(crate) made: u64,
+    /// How far it reaches, in tiles in any direction.
+    radius: u16,
     /// The top-left tile of the square it covers.
     corner: Pos,
     width: u16,
     height: u16,
     /// The cost to reach each tile of the square, row by row, in terrain units.
+    #[serde(serialize_with = "costs_as_bytes")]
     costs: Vec<u32>,
     /// The direction of the step that reached each tile, as its place in `Dir::ALL`.
+    #[serde(serialize_with = "as_bytes")]
     steps: Vec<u8>,
 }
 
@@ -72,12 +78,17 @@ impl Flood {
         let mut flood = Flood {
             origin,
             made: tick,
+            radius,
             corner: Pos { x: x0, y: y0 },
             width,
             height,
             costs: vec![UNREACHED; tiles],
             steps: vec![NO_STEP; tiles],
         };
+        // What stepping onto each tile of the square costs, found once.
+        let entry: Vec<Option<u32>> = (0..tiles)
+            .map(|index| entry_cost(map, ground.objects, ground.data, flood.pos(index)))
+            .collect();
         let start = flood
             .local(origin)
             .expect("the origin is in its own square");
@@ -96,7 +107,9 @@ impl Flood {
                 let Some(next) = flood.local(to) else {
                     continue;
                 };
-                let Some(step) = step_cost(map, ground.objects, ground.data, from, dir) else {
+                let open = |pos| flood.local(pos).is_some_and(|i| entry[i].is_some());
+                let beside_open = || beside(from, to).into_iter().all(open);
+                let Some(step) = step(entry[next], dir, beside_open) else {
                     continue;
                 };
                 let extra = match (occupied, ground.sprites.at(to)) {
@@ -137,6 +150,29 @@ impl Flood {
         Some(path)
     }
 
+    /// Where a Wander heads (design §5.5): a tile drawn uniformly from those
+    /// the flood reached more than half its radius from the origin; failing
+    /// any, from every tile it reached but the origin; `None` if it reached
+    /// none. One draw from `rng`, if there's a tile to draw.
+    pub(crate) fn wander_destination(&self, rng: &mut ChaCha8Rng) -> Option<Pos> {
+        let reached: Vec<Pos> = (0..self.costs.len())
+            .filter(|&index| self.costs[index] != UNREACHED)
+            .map(|index| self.pos(index))
+            .filter(|&pos| pos != self.origin)
+            .collect();
+        let origin = self.origin;
+        let far: Vec<Pos> = reached
+            .iter()
+            .copied()
+            .filter(|pos| 2 * pos.x.abs_diff(origin.x).max(pos.y.abs_diff(origin.y)) > self.radius)
+            .collect();
+        let pool = if far.is_empty() { reached } else { far };
+        if pool.is_empty() {
+            return None;
+        }
+        Some(pool[uniform(rng, pool.len() as u64) as usize])
+    }
+
     /// The index of `pos` in the square, or `None` if it's outside.
     fn local(&self, pos: Pos) -> Option<usize> {
         let x = pos.x.checked_sub(self.corner.x)?;
@@ -155,6 +191,17 @@ impl Flood {
     }
 }
 
+/// Serializes bytes compactly, for the state hash.
+fn as_bytes<S: Serializer>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.serialize_bytes(bytes)
+}
+
+/// Serializes costs compactly, as little-endian bytes, for the state hash.
+fn costs_as_bytes<S: Serializer>(costs: &[u32], serializer: S) -> Result<S::Ok, S::Error> {
+    let bytes: Vec<u8> = costs.iter().flat_map(|cost| cost.to_le_bytes()).collect();
+    serializer.serialize_bytes(&bytes)
+}
+
 /// The tile one step back from `pos` against direction `dir`.
 fn back(pos: Pos, dir: Dir) -> Pos {
     let (dx, dy) = dir.offset();
@@ -166,6 +213,11 @@ fn back(pos: Pos, dir: Dir) -> Pos {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
+    use rand_chacha::ChaCha8Rng;
+    use rand_chacha::rand_core::SeedableRng;
+
     use super::*;
     use crate::objects::EntityId;
     use crate::sprites::Sprite;
@@ -197,6 +249,41 @@ mod tests {
 
     fn at(x: u16, y: u16) -> Pos {
         Pos { x, y }
+    }
+
+    /// Every destination `flood` gives in 2,000 draws.
+    fn destinations(flood: &Flood) -> BTreeSet<Option<Pos>> {
+        let mut rng = ChaCha8Rng::seed_from_u64(5);
+        (0..2_000)
+            .map(|_| flood.wander_destination(&mut rng))
+            .collect()
+    }
+
+    #[test]
+    fn a_wander_heads_for_a_tile_farther_than_half_the_radius_when_there_is_one() {
+        // Radius 2 on open ground: the far tiles are the 16 of the outer ring.
+        let flood = flood(&["....."; 5], &[], at(2, 2), 2, 0);
+        let drawn = destinations(&flood);
+        let ring: BTreeSet<Option<Pos>> = (0..5)
+            .flat_map(|y| (0..5).map(move |x| at(x, y)))
+            .filter(|p| p.x == 0 || p.x == 4 || p.y == 0 || p.y == 4)
+            .map(Some)
+            .collect();
+        assert_eq!(drawn, ring);
+    }
+
+    #[test]
+    fn with_no_tile_that_far_a_wander_heads_for_any_it_reaches() {
+        // Radius 4 wants more than 2 tiles away; this corridor has only 2.
+        let flood = flood(&["..."], &[], at(0, 0), 4, 0);
+        let drawn = destinations(&flood);
+        assert_eq!(drawn, BTreeSet::from([Some(at(1, 0)), Some(at(2, 0))]));
+    }
+
+    #[test]
+    fn with_nowhere_to_go_a_wander_has_no_destination() {
+        let flood = flood(&[".#"], &[], at(0, 0), 4, 0);
+        assert_eq!(destinations(&flood), BTreeSet::from([None]));
     }
 
     #[test]

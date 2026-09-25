@@ -6,6 +6,35 @@ use crate::data::DataPack;
 use crate::map::{Dir, Map, Pos};
 use crate::objects::Objects;
 
+/// What a step onto the tile at `pos` costs, in terrain units, or `None` if
+/// nothing may step there: unwalkable terrain, or a solid object.
+pub(crate) fn entry_cost(map: &Map, objects: &Objects, data: &DataPack, pos: Pos) -> Option<u32> {
+    let cost = map.cost_onto(pos)?;
+    (!objects.is_solid_at(data, pos)).then_some(u32::from(cost))
+}
+
+/// What a step in direction `dir` costs, onto a tile whose entry cost is
+/// `entry`: a diagonal step costs 14 tenths as much, and is allowed only if
+/// `beside_open` says both tiles beside it may be stepped on. No corner is
+/// ever cut, past unwalkable terrain or a solid object.
+pub(crate) fn step(
+    entry: Option<u32>,
+    dir: Dir,
+    beside_open: impl FnOnce() -> bool,
+) -> Option<u32> {
+    let cost = entry?;
+    if !dir.is_diagonal() {
+        return Some(cost);
+    }
+    beside_open().then_some(cost * 14 / 10)
+}
+
+/// The two tiles beside a step from `from` to `to`: for a diagonal step,
+/// the corners it passes.
+pub(crate) fn beside(from: Pos, to: Pos) -> [Pos; 2] {
+    [Pos { x: to.x, y: from.y }, Pos { x: from.x, y: to.y }]
+}
+
 /// What a step from `from` in direction `dir` costs, in terrain units, or
 /// `None` if physics forbids it: past the wall, onto unwalkable terrain or a
 /// solid object, or cutting a corner past either.
@@ -16,15 +45,9 @@ pub(crate) fn step_cost(
     from: Pos,
     dir: Dir,
 ) -> Option<u32> {
-    let cost = map.step_cost(from, dir)?;
     let to = map.neighbour(from, dir)?;
-    if objects.is_solid_at(data, to) {
-        return None;
-    }
-    // No corner-cutting past a solid object either.
-    let beside = [Pos { x: to.x, y: from.y }, Pos { x: from.x, y: to.y }];
-    if beside.iter().any(|&pos| objects.is_solid_at(data, pos)) {
-        return None;
-    }
-    Some(cost)
+    let open = |pos| entry_cost(map, objects, data, pos).is_some();
+    step(entry_cost(map, objects, data, to), dir, || {
+        beside(from, to).into_iter().all(open)
+    })
 }

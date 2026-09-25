@@ -1,10 +1,10 @@
 //! The world's sprites and where they stand (design §2.3, §3.4, §4).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 
 use serde::Serialize;
 
-use crate::action::{Action, ScriptedAction};
+use crate::action::{Action, Did, ScriptedAction};
 use crate::biochem::{Body, Program};
 use crate::data::DataPack;
 use crate::genome::Genome;
@@ -27,12 +27,14 @@ pub(crate) struct Sprite {
     pub(crate) body: Body,
     /// What it's doing, or the action that last ended until the next starts.
     pub(crate) action: Option<Action>,
-    /// The action a hand-made world starts it on, until it starts.
-    pub(crate) scripted: Option<ScriptedAction>,
+    /// The actions a hand-made world starts it on, in order, until they start.
+    pub(crate) scripted: VecDeque<ScriptedAction>,
     /// Its cached perception flood (design §3.6).
     pub(crate) flood: Option<Flood>,
     /// Move points banked towards its next step, in tenths (design §3.7).
     pub(crate) move_points: u32,
+    /// What it did at the last step 6.
+    pub(crate) did: Did,
 }
 
 impl Sprite {
@@ -52,9 +54,10 @@ impl Sprite {
             program,
             body,
             action: None,
-            scripted: None,
+            scripted: VecDeque::new(),
             flood: None,
             move_points: 0,
+            did: Did::default(),
         }
     }
 }
@@ -118,6 +121,18 @@ impl Sprites {
         self.on_tile.clear(sprite.pos);
         self.on_tile.put(to, id);
         sprite.pos = to;
+    }
+
+    /// Swaps the tiles of sprites `a` and `b`, which must exist.
+    pub(crate) fn swap(&mut self, a: EntityId, b: EntityId) {
+        let pa = self.by_id[&a].pos;
+        let pb = self.by_id[&b].pos;
+        self.on_tile.clear(pa);
+        self.on_tile.clear(pb);
+        self.on_tile.put(pa, b);
+        self.on_tile.put(pb, a);
+        self.by_id.get_mut(&a).expect("sprite a").pos = pb;
+        self.by_id.get_mut(&b).expect("sprite b").pos = pa;
     }
 
     /// Puts a new sprite on its tile. The caller has checked the tile is free.
