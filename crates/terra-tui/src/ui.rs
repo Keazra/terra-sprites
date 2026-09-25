@@ -350,7 +350,10 @@ fn event_text(event: &Event) -> Option<String> {
             cause_name(*cause),
             group_thousands(*age)
         )),
-        EventKind::ObjectSpawned { .. } | EventKind::ObjectRemoved { .. } => None,
+        EventKind::ObjectSpawned { .. }
+        | EventKind::ObjectRemoved { .. }
+        | EventKind::ActionStarted { .. }
+        | EventKind::ActionEnded { .. } => None,
     }
 }
 

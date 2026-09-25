@@ -92,6 +92,7 @@ fn lone_sprite(data: DataPack, genome: Option<&str>) -> World {
         map,
         objects: &[],
         sprites: &sprites,
+        scripted: &[],
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }
@@ -201,6 +202,7 @@ fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> Result<World, terra_sim::S
             map,
             objects,
             sprites: &sprites,
+            scripted: &[],
         },
         data,
         1,

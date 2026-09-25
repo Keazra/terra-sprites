@@ -4,12 +4,14 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
+use crate::action::{Action, ScriptedAction};
 use crate::biochem::{Body, Program};
 use crate::data::DataPack;
 use crate::genome::Genome;
 use crate::map::{Map, Pos};
 use crate::objects::{EntityId, Objects};
 use crate::occupancy::Occupancy;
+use crate::perception::Flood;
 
 /// One sprite.
 #[derive(Debug, Clone, Serialize)]
@@ -23,6 +25,14 @@ pub(crate) struct Sprite {
     #[serde(skip)]
     pub(crate) program: Program,
     pub(crate) body: Body,
+    /// What it's doing, or the action that last ended until the next starts.
+    pub(crate) action: Option<Action>,
+    /// The action a hand-made world starts it on, until it starts.
+    pub(crate) scripted: Option<ScriptedAction>,
+    /// Its cached perception flood (design §3.6).
+    pub(crate) flood: Option<Flood>,
+    /// Move points banked towards its next step, in tenths (design §3.7).
+    pub(crate) move_points: u32,
 }
 
 impl Sprite {
@@ -41,6 +51,10 @@ impl Sprite {
             genome,
             program,
             body,
+            action: None,
+            scripted: None,
+            flood: None,
+            move_points: 0,
         }
     }
 }
@@ -95,6 +109,15 @@ impl Sprites {
         let sprite = self.by_id.remove(&id).expect("the sprite to remove");
         self.on_tile.clear(sprite.pos);
         sprite
+    }
+
+    /// Moves the sprite `id`, which must exist, onto the tile at `to`. The
+    /// caller has checked the tile is free.
+    pub(crate) fn move_to(&mut self, id: EntityId, to: Pos) {
+        let sprite = self.by_id.get_mut(&id).expect("the sprite to move");
+        self.on_tile.clear(sprite.pos);
+        self.on_tile.put(to, id);
+        sprite.pos = to;
     }
 
     /// Puts a new sprite on its tile. The caller has checked the tile is free.

@@ -19,6 +19,7 @@ fn grass_with(width: usize, height: usize, sprites: &[Pos]) -> World {
         map,
         objects: &[],
         sprites: &sprites,
+        scripted: &[],
     };
     World::from_scenario(scenario, pack(), 1).expect("valid scenario")
 }

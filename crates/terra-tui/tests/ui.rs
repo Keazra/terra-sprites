@@ -353,6 +353,7 @@ fn garden(pack: DataPack) -> World {
         map,
         objects: &objects,
         sprites: &[],
+        scripted: &[],
     };
     World::from_scenario(scenario, pack, 7).expect("valid scenario")
 }
@@ -375,6 +376,7 @@ fn garden_with_sprites() -> World {
         map,
         objects: &objects,
         sprites: &sprites,
+        scripted: &[],
     };
     World::from_scenario(scenario, pack, 7).expect("valid scenario")
 }
@@ -746,6 +748,7 @@ fn one_sprite(genome: &str, ticks: u32) -> (World, App) {
         map,
         objects: &[],
         sprites: &sprites,
+        scripted: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     for _ in 0..ticks {
@@ -1029,6 +1032,7 @@ fn selecting_another_sprite_starts_its_tab_from_the_top_and_the_same_one_again_d
         map,
         objects: &[],
         sprites: &sprites,
+        scripted: &[],
     };
     let world = World::from_scenario(scenario, pack.clone(), 7).expect("valid scenario");
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
@@ -1132,6 +1136,7 @@ fn the_world_tab_shows_the_population_and_the_deaths_by_cause() {
         map,
         objects: &[],
         sprites: &sprites,
+        scripted: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let app = app_for(&world, Theme::cp437(), 100, 30);
@@ -1239,6 +1244,7 @@ fn chemical_names_show_with_spaces_for_underscores() {
         map,
         objects: &[],
         sprites: &sprites,
+        scripted: &[],
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
