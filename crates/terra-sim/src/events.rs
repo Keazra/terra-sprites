@@ -45,21 +45,25 @@ pub enum EventKind {
     },
 }
 
-/// What caused most of a dead sprite's recent injury (design §4.10).
+/// What caused most of a dead sprite's recent injury (design §4.10). Ties
+/// are settled in this order: physiology's three causes, then objects by
+/// type ID.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 pub enum DeathCause {
     /// Its energy ran out.
-    Starvation = 0,
+    Starvation,
     /// Its hydration ran out.
-    Dehydration = 1,
+    Dehydration,
     /// It lived past its lifespan.
-    OldAge = 2,
+    OldAge,
+    /// Injury an object's verb injected: the stable ID of the object type
+    /// whose verb table did it, such as a thornbush's.
+    HurtBy(u16),
 }
 
 impl DeathCause {
-    /// Every cause, in the order ties are settled. A cause's discriminant is
-    /// its place here, and in a body's tallies.
-    pub const ALL: [DeathCause; 3] = [
+    /// Physiology's causes, built in, in the order ties are settled.
+    pub const PHYSIOLOGY: [DeathCause; 3] = [
         DeathCause::Starvation,
         DeathCause::Dehydration,
         DeathCause::OldAge,

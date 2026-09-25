@@ -8,7 +8,7 @@ use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, GenomeError};
 use crate::object_types::{OBJECTS, ObjectType, TypeEntry, object_types};
 use crate::physiology::{Indices, PHYSIOLOGY, Physiology, PhysiologyEntry};
-use crate::registry::{ChemId, Chemical, Locus, LocusId};
+use crate::registry::{Category, ChemId, Chemical, Locus, LocusId};
 use crate::terrain::{Terrain, TerrainProps};
 
 /// A validated data pack: everything a world needs from `data/`.
@@ -270,6 +270,15 @@ impl DataPack {
             .map(|t| t.name.as_str())
     }
 
+    /// The name of the object type with the stable ID `id`, such as the one
+    /// a `DeathCause::HurtBy` names.
+    pub fn object_type_name(&self, id: u16) -> Option<&str> {
+        self.object_types
+            .iter()
+            .find(|t| t.id == id)
+            .map(|t| t.name.as_str())
+    }
+
     /// The names of an object type's stages, in order. Empty for a type with
     /// no stages, or no such type.
     pub fn stage_names(&self, object_type: &str) -> Vec<&str> {
@@ -368,6 +377,14 @@ impl DataPack {
     /// The index of the object type called `name`.
     pub(crate) fn object_type_named(&self, name: &str) -> Option<usize> {
         self.object_types.iter().position(|t| t.name == name)
+    }
+
+    /// The index of the pseudo type of `category`, the verb table of water or
+    /// of sprites, if the pack has one.
+    pub(crate) fn pseudo_type(&self, category: Category) -> Option<usize> {
+        self.object_types
+            .iter()
+            .position(|t| t.pseudo && t.category == category)
     }
 
     /// The index of the object type called `name`, if it can have objects: it

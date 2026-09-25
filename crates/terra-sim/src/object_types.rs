@@ -16,10 +16,6 @@ pub(crate) const OBJECTS: &str = "objects.ron";
 /// their index in the pack's list, stages and counters to their index in this type.
 #[derive(Debug, Clone)]
 pub(crate) struct ObjectType {
-    #[expect(
-        dead_code,
-        reason = "saves record object types by stable ID from slice 12"
-    )]
     pub(crate) id: u16,
     pub(crate) name: String,
     pub(crate) category: Category,
@@ -31,7 +27,6 @@ pub(crate) struct ObjectType {
     pub(crate) counters: Vec<CounterDef>,
     pub(crate) stages: Vec<Stage>,
     pub(crate) rules: Vec<Rule>,
-    #[expect(dead_code, reason = "sprites apply verbs from slice 6")]
     pub(crate) verbs: BTreeMap<Verb, Vec<Effect>>,
     pub(crate) visual: Vec<Visual>,
 }

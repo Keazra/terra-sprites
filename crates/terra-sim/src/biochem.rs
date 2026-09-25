@@ -1,6 +1,8 @@
 //! Biochemistry (design §4): a genome compiled for the chemistry step, and
 //! the step itself, a pure function of a body and what it sensed.
 
+use std::collections::BTreeMap;
+
 use serde::Serialize;
 
 use crate::data::DataPack;
@@ -290,9 +292,9 @@ pub(crate) struct Body {
     /// Rise and Fall emitters read.
     #[serde(skip)]
     pub(crate) chems_before_tick: Vec<f32>,
-    /// The injury each of physiology's causes added lately, fading, indexed
-    /// by `DeathCause` (design §4.10).
-    pub(crate) tallies: [f32; 3],
+    /// The injury each cause added lately, fading (design §4.10). A cause
+    /// that has never added any has no entry.
+    pub(crate) tallies: BTreeMap<DeathCause, f32>,
 }
 
 impl Body {
@@ -328,7 +330,7 @@ impl Body {
             incoming: vec![0.0; loci.len()],
             chems,
             loci,
-            tallies: [0.0; 3],
+            tallies: BTreeMap::new(),
         }
     }
 
@@ -342,19 +344,24 @@ impl Body {
     }
 
     /// What caused most of the body's recent injury (design §4.10). Ties go
-    /// to the cause listed first.
+    /// to the cause that comes first; with no injury at all, starvation.
     pub(crate) fn cause_of_death(&self) -> DeathCause {
-        let tally = |cause: DeathCause| self.tallies[cause as usize];
-        DeathCause::ALL
-            .into_iter()
-            .reduce(|most, next| {
-                if tally(next) > tally(most) {
-                    next
-                } else {
-                    most
-                }
+        self.tallies
+            .iter()
+            .fold((DeathCause::Starvation, 0.0), |most, (&cause, &tally)| {
+                if tally > most.1 { (cause, tally) } else { most }
             })
-            .expect("there are causes")
+            .0
+    }
+
+    /// Adds `amount` to the chemical at `index`, within 0 to 1. Injury,
+    /// at `injury`, is put down to `cause`.
+    pub(crate) fn inject(&mut self, index: usize, amount: f32, injury: usize, cause: DeathCause) {
+        let before = self.chems[index];
+        self.chems[index] = (before + amount).clamp(0.0, 1.0);
+        if index == injury && amount > 0.0 {
+            *self.tallies.entry(cause).or_insert(0.0) += self.chems[index] - before;
+        }
     }
 }
 
@@ -483,13 +490,13 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
         ),
         (DeathCause::OldAge, age > traits.lifespan, injury.old_age),
     ];
-    for tally in &mut body.tallies {
+    for tally in body.tallies.values_mut() {
         *tally *= physiology.tally_fade;
     }
     for (cause, harmed, amount) in harms {
         if harmed {
             chems[indices.injury] += amount;
-            body.tallies[cause as usize] += amount;
+            *body.tallies.entry(cause).or_insert(0.0) += amount;
         }
     }
 
@@ -1198,13 +1205,13 @@ mod tests {
         sprite.set("hydration", 0.0);
         sprite.step();
         sprite.set("hydration", 1.0);
-        let tallies = sprite.body.tallies;
+        let tallies = sprite.body.tallies.clone();
         sprite.set("injury", 0.5);
         sprite.step();
         let fade = libm::powf(0.5, 1.0 / 350.0);
         assert_eq!(
-            sprite.body.tallies[1],
-            tallies[1] * fade,
+            sprite.body.tallies[&DeathCause::Dehydration],
+            tallies[&DeathCause::Dehydration] * fade,
             "only fading lowers it"
         );
     }

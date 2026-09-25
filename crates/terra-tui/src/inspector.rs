@@ -75,10 +75,14 @@ pub fn lines(app: &App, world: &World) -> Vec<Line<'static>> {
             None => Vec::new(),
         },
         (_, Some(Selection::Dead { id, cause, age })) => {
+            let how = match cause {
+                DeathCause::HurtBy(_) => cause_name(cause, world.data()),
+                _ => format!("of {}", cause_name(cause, world.data())),
+            };
             let text = format!(
-                "{} died of {} at age{BOUND}{}",
+                "{} died {} at age{BOUND}{}",
                 unbroken(&sprite_label(id)),
-                unbroken(cause_name(cause)),
+                unbroken(&how),
                 group_thousands(age)
             );
             wrapped(&text, 1, Style::default())
@@ -584,14 +588,20 @@ fn wrapped(text: &str, indent: usize, style: Style) -> Vec<Line<'static>> {
 /// stage (for a type with more than one) and the total of each counter.
 fn world_tab(world: &World) -> Vec<Line<'static>> {
     let data = world.data();
-    let deaths: Vec<String> = DeathCause::ALL
+    // Physiology's causes always; an object only once it has killed.
+    let hurt = world
+        .deaths_by_cause()
+        .map(|(cause, _)| cause)
+        .filter(|cause| !DeathCause::PHYSIOLOGY.contains(cause));
+    let causes: Vec<DeathCause> = DeathCause::PHYSIOLOGY.into_iter().chain(hurt).collect();
+    let deaths: Vec<String> = causes
         .iter()
         .map(|&cause| {
             let n = world.deaths(cause);
-            format!("{} {}", cause_name(cause), group_thousands(n))
+            format!("{} {}", cause_name(cause, data), group_thousands(n))
         })
         .collect();
-    let total: u64 = DeathCause::ALL.iter().map(|&c| world.deaths(c)).sum();
+    let total: u64 = world.deaths_by_cause().map(|(_, n)| n).sum();
     let plain = Style::default();
     let mut lines: Vec<Line<'static>> = vec![
         Line::from(format!(
@@ -680,6 +690,7 @@ mod tests {
         ActionView {
             verb: Verb::Wander,
             destination: Some(Pos { x: 61, y: 40 }),
+            target: None,
             progress,
         }
     }
@@ -688,6 +699,7 @@ mod tests {
         ActionView {
             verb: Verb::Rest,
             destination: None,
+            target: None,
             progress,
         }
     }

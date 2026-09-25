@@ -27,8 +27,8 @@ pub(crate) enum Occupied {
 }
 
 /// Something a sprite can aim a verb at (design §3.6).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Target {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum Target {
     /// An object, such as a berry or a bush.
     Object(EntityId),
     /// A tile of drinkable water.
