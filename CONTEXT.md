@@ -236,6 +236,36 @@ _Avoid_: pass, collision
 A way around blocking sprites that a stuck sprite found, and keeps to until it arrives, is blocked again or its action ends.
 _Avoid_: detour, reroute
 
+**Target**:
+The thing an action is aimed at, such as the berry bush a sprite is going to eat from. An action keeps the same target from start to end. Wander and Rest have none.
+_Avoid_: goal (a goal tile is where the sprite stands to act)
+
+### The brain
+
+**Brain**:
+What chooses a sprite's actions: it notices one kind of thing nearby, and picks a verb to do about it.
+_Avoid_: AI, mind, controller
+
+**Brain input**:
+Something the brain feels, such as hunger, a pulse, or how far away its target is. Each has a permanent number.
+_Avoid_: sense, locus (a locus is what genes read)
+
+**Attention**:
+The brain noticing one kind of thing nearby, such as berries or water, out of every kind it could reach. What it attends to is where its verbs aim.
+_Avoid_: focus, perception
+
+**Concept**:
+Something the brain recognises from its inputs: one input on its own, or a combination such as "hungry and next to the target". Concepts are what the brain's choices are weighed on.
+_Avoid_: neuron, feature
+
+**Instinct**:
+A built-in leaning a sprite is born with, set by its genome, such as "hunger leads to eating" or "hunger draws attention to berry bushes". Learning can later change it.
+_Avoid_: reflex, rule (rules belong to objects)
+
+**Brain parameter**:
+A setting of how the brain works, such as how much chance is in its choices, set by a gene within limits physiology fixes.
+_Avoid_: hyperparameter
+
 ### The screen
 
 **Map view**:
