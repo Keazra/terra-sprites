@@ -564,3 +564,12 @@ fn an_action_still_going_after_60_ticks_times_out() {
         Some(&(60, Verb::Wander, Some(Outcome::TimedOut)))
     );
 }
+
+#[test]
+fn a_wander_to_the_tile_the_sprite_stands_on_arrives_at_once() {
+    let start = at(1, 0);
+    let mut world = world(&["..."], 10.0, &[start], &[(start, wander_to(start))]);
+    let id = sprite_on(&world, start);
+    let (tiles, outcome) = first_action(&mut world, id, 5);
+    assert_eq!((tiles.len(), outcome), (1, Outcome::Applied));
+}
