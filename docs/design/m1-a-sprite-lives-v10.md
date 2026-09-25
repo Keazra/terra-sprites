@@ -23,7 +23,7 @@ Decided with the owner in the design session for slice 6 ([#7](https://github.co
 | 8 | **A missing `BrainParam` gene falls back to a default** kept in `physiology.ron` beside the parameter's range. A genome that lost a gene still makes a working brain, and the starter genome lists only the parameters the slices so far read. | Owner decision | §5.7, App. B |
 | 9 | **An interaction makes its one attempt on the tick the sprite reaches a goal tile** (at once, if it starts on one), as part of the same step 6. | Slice 6 | §5.5 |
 | 10 | **Eating a berry reports it removed:** the berry's `DestroySelf` emits `ObjectRemoved { reason: Destroyed }` along with the `ate` pulse. | Slice 3 carry-over | §2.5 |
-| 11 | **The Body tab words Eat, Drink and Approach** in §6.1's pattern: "Going to eat the berry bush · 3 tiles to go", "Ate from the berry bush", "Going to drink · 2 tiles to go", "Going over to Sprite #530 · 4 tiles to go". A target that vanished reads "Gave up: the berry was gone". | Slice 5 carry-over | §6.1 |
+| 11 | **The Body tab words Eat, Drink and Approach** in §6.1's pattern: "Going to eat the berry bush · 3 tiles to go", "Ate from the berry bush", "Going to drink · 2 tiles to go", "Going over to Sprite #530 · 4 tiles to go". A target that vanished reads "Gave up: the berry was gone". Something eaten whole reads "Ate the berry"; something eaten from, "Ate from the berry bush". The detail view's `X` marks where any walking action is heading: a Wander's destination, or an aimed action's goal tile. | Slice 5 carry-over | §6.1 |
 | 12 | **Brain parameters get stable IDs** (Appendix A), for `BrainParam` payloads, and **defaults** beside their ranges (Appendix B). | Slice 6 | App. A, App. B |
 | 13 | **The Genome tab shows the brain genes** under three more headings, after starting levels: brain settings (`tau base .2`), instincts (`thirst & not target adjacent → drink -.5`) and attention instincts (`hunger → attends to berry bush +.8`). | Slice 6 | §6.1 |
 | 14 | **A new outcome, `interrupted`,** records an action the sprite dropped because it changed its mind: attention switched away from its target, or another verb beat it by more than the switch margin. The Body tab reads "Changed its mind". It stays distinct from `failed` (tried, didn't get it), which learning and the A1–A3 counts treat as a real attempt. | Owner decision | §5.3, §5.5, §6.1 |
@@ -1197,6 +1197,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 
   | Going to eat | `Going to eat the berry bush · 3 tiles to go` | `EAT → berry_bush #812 · walking (3 tiles)` |
   | Ate | `Ate from the berry bush` | `EAT → berry_bush #812 · applied` |
+  | Ate a berry whole | `Ate the berry` | `EAT → berry #9 · applied` |
   | Couldn't eat | `Couldn't eat from the berry bush` | `EAT → berry_bush #812 · failed` |
   | Going to drink | `Going to drink · 2 tiles to go` | `DRINK → water (40,12) · walking (2 tiles)` |
   | Drank | `Drank` | `DRINK → water (40,12) · applied` |
@@ -1204,7 +1205,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
   | Got there | `Got to Sprite #530` | `APPROACH → sprite #530 · applied` |
 
   Gave-up lines keep the Wander wording. A target that vanished reads `Gave up: the berry was gone`. Later verbs (Hit, Play, Retreat) follow the same pattern.
-- **The detail view** (`v`, in every build) shows the exact workings behind what the screen describes in words. It switches the action line to the exact verb, destination and outcome, and, while the action is under way, marks the selected sprite's Wander destination on the map with `X`. A sprite standing on the destination is drawn over the mark. It stays on until `v` is pressed again, whatever is selected.
+- **The detail view** (`v`, in every build) shows the exact workings behind what the screen describes in words. It switches the action line to the exact verb, destination and outcome, and, while the action is under way, marks where the selected sprite is heading on the map with `X`: a Wander's destination, or the goal tile an Eat, Drink or Approach is walking to. A sprite standing on the destination is drawn over the mark. It stays on until `v` is pressed again, whatever is selected.
 - **The inspector and the selection:**
   - The Body, Brain, Chem and Genome tabs show the selected sprite. With none selected, they read "No sprite selected: click one, or press Tab".
   - Selecting a sprite while the World tab is open switches to Body. From any other tab, the tab stays.

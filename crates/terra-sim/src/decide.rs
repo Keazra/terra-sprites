@@ -24,6 +24,8 @@ struct Candidate {
     aim: Aim,
     /// The verbs its type's verb table has.
     table: Vec<Verb>,
+    /// The stable ID of its type.
+    type_id: u16,
 }
 
 /// Step 5a and 5b for sprite `id`, after 5.0 (design §5.5). A scripted
@@ -68,7 +70,9 @@ pub(crate) fn decide(
                 adjacent: state.on_goal_tile(data, sprite.pos, target),
             };
             let table = table(state, data, target);
+            let type_id = state.type_of(data, target).expect("a candidate is there");
             let candidate = Candidate {
+                type_id,
                 target,
                 goal,
                 aim,
@@ -154,7 +158,10 @@ pub(crate) fn decide(
         Verb::Rest => (None, None),
         _ => {
             let candidate = candidate.expect("an aimed verb is offered only with a target");
-            (Some(candidate.goal), Some(candidate.target))
+            (
+                Some(candidate.goal),
+                Some((candidate.target, candidate.type_id)),
+            )
         }
     };
     start(
@@ -194,6 +201,7 @@ fn start_scripted(state: &mut WorldState, data: &DataPack, id: EntityId, events:
         Some(target) => state.goal_for(data, flood, target),
         None => destination,
     };
+    let target = target.and_then(|t| Some((t, state.type_of(data, t)?)));
     let sprite = state.sprites.get_mut(id).expect("the same sprite");
     start(
         sprite,

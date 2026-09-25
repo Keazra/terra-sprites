@@ -73,10 +73,18 @@ pub enum Progress {
 pub struct ActionView {
     /// What kind of action it is.
     pub verb: Verb,
-    /// Where a Wander is heading.
+    /// Where it's heading: a Wander's destination, or the goal tile an
+    /// aimed action is walking to.
     pub destination: Option<Pos>,
     /// What an action aimed at something is aimed at.
     pub target: Option<Target>,
+    /// The stable ID of the target's object type, a pseudo type for water
+    /// or a sprite: kept from the start, so it names a target that's gone.
+    pub target_type: Option<u16>,
+    /// Whether it got to its target and made its attempt (design §5.5).
+    pub attempted: bool,
+    /// Whether its target has left the world.
+    pub target_gone: bool,
     /// How far it has got, or how it ended.
     pub progress: Progress,
 }
@@ -85,10 +93,15 @@ pub struct ActionView {
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct Action {
     pub(crate) verb: Verb,
-    /// Where a Wander is heading.
+    /// Where it's heading: a Wander's destination, or the goal tile an
+    /// aimed action is walking to, found again at every 5.0.
     pub(crate) destination: Option<Pos>,
     /// What an Approach, Eat or Drink is aimed at (design §5.3).
     pub(crate) target: Option<Target>,
+    /// The stable ID of the target's object type.
+    pub(crate) target_type: Option<u16>,
+    /// Whether it got to its target and made its attempt.
+    pub(crate) attempted: bool,
     /// The tick it started on, for the timeout.
     pub(crate) started: u64,
     /// The ticks it has been carried out on, at step 6.
@@ -118,14 +131,16 @@ impl Action {
     fn new(
         verb: Verb,
         destination: Option<Pos>,
-        target: Option<Target>,
+        target: Option<(Target, u16)>,
         scripted: bool,
         tick: u64,
     ) -> Action {
         Action {
             verb,
             destination,
-            target,
+            target: target.map(|(target, _)| target),
+            target_type: target.map(|(_, kind)| kind),
+            attempted: false,
             started: tick,
             ticks: 0,
             blocked_ticks: 0,
@@ -137,7 +152,7 @@ impl Action {
 }
 
 /// `sprite`'s action as the screen sees it, if it has had one.
-pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
+pub(crate) fn view(sprite: &Sprite, state: &WorldState, data: &DataPack) -> Option<ActionView> {
     let action = sprite.action.as_ref()?;
     let progress = if let Some(outcome) = action.ended {
         Progress::Ended(outcome)
@@ -159,6 +174,11 @@ pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
         verb: action.verb,
         destination: action.destination,
         target: action.target,
+        target_type: action.target_type,
+        attempted: action.attempted,
+        target_gone: action
+            .target
+            .is_some_and(|target| state.whereabouts(data, target).is_none()),
         progress,
     })
 }
@@ -243,14 +263,15 @@ pub(crate) fn sense_and_decide(
 /// its flood doesn't reach, ends at once, as failed (design §5.5); one to the
 /// tile it stands on ends at once, as applied. An aimed action heads for its
 /// target's nearest goal tile, its destination; with none, it ends at once,
-/// as failed. A `scripted` action is left be by the brain.
+/// as failed. A target comes with the stable ID of its type. A `scripted`
+/// action is left be by the brain.
 #[expect(clippy::too_many_arguments, reason = "an action's every part")]
 pub(crate) fn start(
     sprite: &mut Sprite,
     id: EntityId,
     verb: Verb,
     destination: Option<Pos>,
-    target: Option<Target>,
+    target: Option<(Target, u16)>,
     scripted: bool,
     tick: u64,
     events: &mut Vec<Event>,
@@ -374,7 +395,9 @@ fn act(
         .expect("the actor")
         .action
         .as_mut();
-    end(action.expect("an action"), id, outcome, state.tick, events);
+    let action = action.expect("an action");
+    action.attempted = true;
+    end(action, id, outcome, state.tick, events);
 }
 
 /// Shuffles `ids` with the world RNG: Fisher–Yates, one draw per place but the first.
