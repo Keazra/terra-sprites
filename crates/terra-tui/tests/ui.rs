@@ -528,7 +528,7 @@ fn with_room_the_world_tab_shows_the_pack_and_every_object_types_numbers() {
         inspector[1], "┌─ Body Chem Genome [World] ─────────────────┐",
         "with nothing selected, the title is just the tabs"
     );
-    let body: Vec<&str> = inspector[2..9]
+    let body: Vec<&str> = inspector[2..12]
         .iter()
         .map(|line| {
             line.trim_start_matches('│')
@@ -540,6 +540,9 @@ fn with_room_the_world_tab_shows_the_pack_and_every_object_types_numbers() {
         body,
         [
             " data pack   core v1",
+            " sprites           0",
+            " deaths            0",
+            "   starvation 0 · dehydration 0 · old age 0",
             " berry bush        1",
             "   seedling 1 · mature 0",
             "   fruit 0",
@@ -1019,4 +1022,46 @@ fn a_tab_goes_back_to_the_top_when_the_tab_or_the_selection_changes() {
         "EMITTERS",
         "after selecting"
     );
+}
+
+#[test]
+fn the_world_tab_shows_the_population_and_the_deaths_by_cause() {
+    // Water runs out in two ticks, and then dehydration kills in two more.
+    let physiology = include_str!("../../../data/physiology.ron")
+        .replace("hydration_loss: 0.00033", "hydration_loss: 0.5")
+        .replace("dehydration: 0.0011", "dehydration: 0.5");
+    let pack =
+        DataPack::from_sources(&builtin_with("physiology.ron", &physiology)).expect("valid pack");
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let at = |x, y| (terra_sim::Pos { x, y }, None);
+    let sprites = [at(1, 1), at(4, 2), at(8, 3)];
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+    };
+    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let app = app_for(&world, Theme::cp437(), 100, 30);
+    let (_, text) = inspector(&app, &world);
+    assert_eq!(
+        text[1..4],
+        [
+            "sprites           3",
+            "deaths            0",
+            "starvation 0 · dehydration 0 · old age 0",
+        ]
+    );
+    for _ in 0..10 {
+        world.step();
+    }
+    let (_, text) = inspector(&app, &world);
+    assert_eq!(
+        text[1..4],
+        [
+            "sprites           0",
+            "deaths            3",
+            "starvation 0 · dehydration 3 · old age 0",
+        ]
+    );
+    assert_eq!(text[4], "berry bush        0", "then the objects");
 }

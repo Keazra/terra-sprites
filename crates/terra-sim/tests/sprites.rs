@@ -482,3 +482,26 @@ fn a_sprite_shows_each_gene_by_name_with_how_it_is_expressed() {
         ]
     );
 }
+
+#[test]
+fn the_world_counts_deaths_by_cause() {
+    let data = builtin_changing(
+        "physiology.ron",
+        &[("hydration_loss: 0.00033", "hydration_loss: 0.5")],
+    );
+    let mut world = lone_sprite(data, None);
+    let counts = |world: &World| {
+        [
+            DeathCause::Starvation,
+            DeathCause::Dehydration,
+            DeathCause::OldAge,
+        ]
+        .map(|cause| world.deaths(cause))
+    };
+    assert_eq!(counts(&world), [0, 0, 0]);
+    let death = first_death(&mut world, 3_000);
+    assert_eq!(death.cause, DeathCause::Dehydration);
+    assert_eq!(counts(&world), [0, 1, 0]);
+    world.step();
+    assert_eq!(counts(&world), [0, 1, 0], "the count outlives the sprite");
+}

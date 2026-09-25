@@ -4,7 +4,8 @@
 use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
-    ChemicalKind, ChemicalLevel, EmitterMode, Expression, GeneView, ObjectView, SpriteView, World,
+    ChemicalKind, ChemicalLevel, DeathCause, EmitterMode, Expression, GeneView, ObjectView,
+    SpriteView, World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -417,17 +418,29 @@ fn without_leading_zero(number: &str) -> String {
     }
 }
 
-/// The World tab (design §6.1): the data pack, then each object type with its
-/// count, the count in each stage (for a type with more than one) and the
-/// total of each counter.
+/// The World tab (design §6.1): the data pack; the population, and the
+/// deaths by cause; then each object type with its count, the count in each
+/// stage (for a type with more than one) and the total of each counter.
 fn world_tab(world: &World) -> Vec<Line<'static>> {
     let data = world.data();
-    let mut lines = vec![format!(
-        " {:<12}{} v{}",
-        "data pack",
-        data.name(),
-        data.version()
-    )];
+    let deaths: Vec<String> = DeathCause::ALL
+        .iter()
+        .map(|&cause| {
+            let n = world.deaths(cause);
+            format!("{} {}", cause_name(cause), group_thousands(n))
+        })
+        .collect();
+    let total: u64 = DeathCause::ALL.iter().map(|&c| world.deaths(c)).sum();
+    let mut lines = vec![
+        format!(" {:<12}{} v{}", "data pack", data.name(), data.version()),
+        format!(
+            " {:<12}{:>7}",
+            "sprites",
+            group_thousands(world.sprites().count() as u64)
+        ),
+        format!(" {:<12}{:>7}", "deaths", group_thousands(total)),
+        format!("   {}", deaths.join(" · ")),
+    ];
     for object_type in data.object_type_names() {
         let objects: Vec<ObjectView> = world
             .objects()
