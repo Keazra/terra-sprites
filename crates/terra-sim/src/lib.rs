@@ -24,11 +24,16 @@ mod terrain;
 mod variation;
 mod world;
 
+pub use biochem::Traits;
 pub use config::{ConfigError, WorldConfig};
 pub use data::{DataError, DataPack};
 pub use events::{DeathCause, Event, EventKind, Removal};
-pub use genome::{Genome, GenomeError};
+pub use expression::Expression;
+pub use genome::{EmitterMode, GeneView, Genome, GenomeError};
 pub use map::{Dir, Map, MapError, Pos};
 pub use objects::EntityId;
+pub use registry::{ChemicalKind, Trait};
 pub use terrain::{Terrain, TerrainProps};
-pub use world::{InvariantViolation, ObjectView, Scenario, ScenarioError, SpriteView, World};
+pub use world::{
+    ChemicalLevel, InvariantViolation, ObjectView, Scenario, ScenarioError, SpriteView, World,
+};

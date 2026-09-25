@@ -32,9 +32,14 @@ fn pack() -> DataPack {
 /// for: a terrain, or an object type in any of its visual states.
 fn map_glyphs(theme: &Theme) -> Vec<(char, String)> {
     let pack = pack();
+    // The selected sprite is still a sprite, so it may share the sprite's glyph.
+    let kind = |tile: SemanticTile| match tile {
+        SemanticTile::SelectedSprite => format!("{:?}", SemanticTile::Sprite),
+        tile => format!("{tile:?}"),
+    };
     let terrain = SemanticTile::ALL
         .iter()
-        .map(|&tile| (theme.glyph(tile).symbol, format!("{tile:?}")));
+        .map(|&tile| (theme.glyph(tile).symbol, kind(tile)));
     let objects = pack.object_type_names().flat_map(|name| {
         pack.visual_states(name)
             .into_iter()

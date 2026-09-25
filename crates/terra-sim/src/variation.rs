@@ -63,7 +63,7 @@ mod tests {
 
     use super::*;
     use crate::expression::expressions;
-    use crate::genome::{Gene, LocusRef, Mode};
+    use crate::genome::{EmitterMode, Gene, LocusRef};
     use crate::random::unit;
     use crate::registry::Trait;
 
@@ -128,14 +128,14 @@ mod tests {
                     (
                         Gene::Emitter {
                             locus: LocusRef::Chem(1),
-                            mode: Mode::Level,
+                            mode: EmitterMode::Level,
                             invert: true,
                             chem: 16,
                             ..
                         },
                         &Gene::Emitter {
                             locus: LocusRef::Chem(1),
-                            mode: Mode::Level,
+                            mode: EmitterMode::Level,
                             invert: true,
                             threshold,
                             gain,

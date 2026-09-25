@@ -80,6 +80,11 @@ impl Sprites {
         self.by_id.get(&id)
     }
 
+    /// Every sprite's body, in ascending ID order, to change.
+    pub(crate) fn bodies_mut(&mut self) -> impl Iterator<Item = &mut Body> {
+        self.by_id.values_mut().map(|sprite| &mut sprite.body)
+    }
+
     /// The sprite `id`, if it exists, to change.
     pub(crate) fn get_mut(&mut self, id: EntityId) -> Option<&mut Sprite> {
         self.by_id.get_mut(&id)
@@ -121,6 +126,13 @@ impl Sprites {
             }
             if objects.is_solid_at(data, pos) {
                 return Err(format!("{id:?} stands on a solid object at {pos:?}"));
+            }
+            if sprite.body.chems_before_tick.len() != sprite.body.chems.len() {
+                return Err(format!(
+                    "{id:?} has {} levels from a tick ago, but {} chemicals",
+                    sprite.body.chems_before_tick.len(),
+                    sprite.body.chems.len()
+                ));
             }
             if let Some(level) = sprite.body.chems.iter().find(|l| !(0.0..=1.0).contains(*l)) {
                 return Err(format!("{id:?} has a chemical at {level}, outside 0 to 1"));
