@@ -66,6 +66,7 @@ mod tests {
     use crate::genome::{EmitterMode, Gene, LocusRef};
     use crate::random::unit;
     use crate::registry::Trait;
+    use crate::registry::{ChemId, LocusId};
 
     fn builtin() -> DataPack {
         DataPack::builtin().expect("built-in data pack is valid")
@@ -103,10 +104,13 @@ mod tests {
                 match (before, after) {
                     (
                         Gene::HalfLife {
-                            chem: 18,
+                            chem: ChemId(18),
                             ticks: 30,
                         },
-                        &Gene::HalfLife { chem: 18, ticks },
+                        &Gene::HalfLife {
+                            chem: ChemId(18),
+                            ticks,
+                        },
                     ) => {
                         assert!((27..=33).contains(&ticks), "{ticks}");
                     }
@@ -127,19 +131,19 @@ mod tests {
                     }
                     (
                         Gene::Emitter {
-                            locus: LocusRef::Chem(1),
+                            locus: LocusRef::Chem(ChemId(1)),
                             mode: EmitterMode::Level,
                             invert: true,
-                            chem: 16,
+                            chem: ChemId(16),
                             ..
                         },
                         &Gene::Emitter {
-                            locus: LocusRef::Chem(1),
+                            locus: LocusRef::Chem(ChemId(1)),
                             mode: EmitterMode::Level,
                             invert: true,
                             threshold,
                             gain,
-                            chem: 16,
+                            chem: ChemId(16),
                         },
                     ) => {
                         assert!(within_ten_percent(0.5, threshold), "{threshold}");
@@ -147,23 +151,28 @@ mod tests {
                     }
                     (
                         Gene::Receptor {
-                            chem: 23,
-                            target: 64,
+                            chem: ChemId(23),
+                            target: LocusId(64),
                             ..
                         },
                         &Gene::Receptor {
-                            chem: 23,
+                            chem: ChemId(23),
                             threshold,
                             gain,
-                            target: 64,
+                            target: LocusId(64),
                         },
                     ) => {
                         assert!(within_ten_percent(0.2, threshold), "{threshold}");
                         assert!(within_ten_percent(0.5, gain), "{gain}");
                     }
                     (
-                        Gene::InitialConcentration { chem: 20, .. },
-                        &Gene::InitialConcentration { chem: 20, value },
+                        Gene::InitialConcentration {
+                            chem: ChemId(20), ..
+                        },
+                        &Gene::InitialConcentration {
+                            chem: ChemId(20),
+                            value,
+                        },
                     ) => {
                         assert!(within_ten_percent(0.2, value), "{value}");
                     }

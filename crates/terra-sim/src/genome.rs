@@ -7,7 +7,7 @@ use std::fmt::Write as _;
 use serde::{Deserialize, Serialize};
 
 use crate::data::DataPack;
-use crate::registry::Trait;
+use crate::registry::{ChemId, LocusId, Trait};
 
 /// The genome file format this build writes, and the newest it reads.
 const FORMAT: u32 = 1;
@@ -42,7 +42,7 @@ impl std::fmt::Display for GenomeError {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) enum Gene {
     /// Type 1: the chemical decays by half every `ticks` ticks.
-    HalfLife { chem: u16, ticks: u32 },
+    HalfLife { chem: ChemId, ticks: u32 },
     /// Type 2: reactants turn into products, at `rate` of the most the reactants allow.
     Reaction {
         reactants: Vec<Term>,
@@ -56,17 +56,17 @@ pub(crate) enum Gene {
         invert: bool,
         threshold: f32,
         gain: f32,
-        chem: u16,
+        chem: ChemId,
     },
     /// Type 4: a chemical's level past `threshold` moves a receptor target by `gain` of it.
     Receptor {
-        chem: u16,
+        chem: ChemId,
         threshold: f32,
         gain: f32,
-        target: u16,
+        target: LocusId,
     },
     /// Type 5: a chemical's level at birth.
-    InitialConcentration { chem: u16, value: f32 },
+    InitialConcentration { chem: ChemId, value: f32 },
     /// Type 6: a body trait.
     Trait { which: Trait, value: f32 },
     /// A gene this build can't read: an unknown type, or a payload version
@@ -81,15 +81,15 @@ pub(crate) enum Gene {
 /// A chemical and its coefficient in a reaction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub(crate) struct Term {
-    pub(crate) chem: u16,
+    pub(crate) chem: ChemId,
     pub(crate) coefficient: u8,
 }
 
 /// What an emitter reads: a chemical's level, or another locus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub(crate) enum LocusRef {
-    Chem(u16),
-    Locus(u16),
+    Chem(ChemId),
+    Locus(LocusId),
 }
 
 /// One of a sprite's genes, with what it refers to by the data pack's names.
@@ -184,8 +184,8 @@ impl Genome {
 impl Gene {
     /// The gene with what it refers to named from `data`.
     pub(crate) fn view<'a>(&self, data: &'a DataPack) -> GeneView<'a> {
-        let chem = |id: u16| data.chemical(id).expect("a checked gene").name.as_str();
-        let locus = |id: u16| data.locus(id).expect("a checked gene").name.as_str();
+        let chem = |id: ChemId| data.chemical(id).expect("a checked gene").name.as_str();
+        let locus = |id: LocusId| data.locus(id).expect("a checked gene").name.as_str();
         let terms = |terms: &[Term]| {
             terms
                 .iter()
@@ -254,7 +254,7 @@ impl Gene {
 
     /// Checks the gene's references and values, or says what's wrong.
     fn check(&self, data: &DataPack) -> Result<(), String> {
-        let chemical = |id: u16| {
+        let chemical = |id: ChemId| {
             data.chemical(id)
                 .map(|_| ())
                 .ok_or_else(|| format!("refers to chemical {id}, which isn't in the pack"))
@@ -363,8 +363,8 @@ impl Gene {
 
     /// The gene as it's written in a genome file.
     fn to_ron(&self, data: &DataPack) -> String {
-        let chem = |id: u16| &data.chemical(id).expect("a checked gene").name;
-        let locus = |id: u16| &data.locus(id).expect("a checked gene").name;
+        let chem = |id: ChemId| &data.chemical(id).expect("a checked gene").name;
+        let locus = |id: LocusId| &data.locus(id).expect("a checked gene").name;
         let terms = |terms: &[Term]| {
             let written: Vec<String> = terms
                 .iter()
@@ -633,7 +633,7 @@ fn decode(type_id: u16, version: u8, payload: Vec<u8>) -> Result<Gene, String> {
         rmp_serde::from_slice(payload)
             .map_err(|e| format!("has a payload that can't be read for its type: {e}"))
     }
-    let terms = |terms: Vec<(u16, u8)>| {
+    let terms = |terms: Vec<(ChemId, u8)>| {
         terms
             .into_iter()
             .map(|(chem, coefficient)| Term { chem, coefficient })
@@ -659,11 +659,11 @@ fn decode(type_id: u16, version: u8, payload: Vec<u8>) -> Result<Gene, String> {
                 bool,
                 f32,
                 f32,
-                u16,
+                ChemId,
             ) = read(&payload)?;
             let locus = match kind {
-                0 => LocusRef::Chem(id),
-                1 => LocusRef::Locus(id),
+                0 => LocusRef::Chem(ChemId(id)),
+                1 => LocusRef::Locus(LocusId(id)),
                 _ => {
                     return Err(format!(
                         "has a payload with the locus kind {kind}, which isn't 0 or 1"

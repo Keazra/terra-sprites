@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 
 use crate::data::DataPack;
 use crate::genome::{Gene, Genome, Term};
-use crate::registry::{ChemicalClass, LocusKind, Trait};
+use crate::registry::{ChemId, ChemicalClass, LocusKind, Trait};
 
 /// How a gene is expressed (design §4.3).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,8 +25,8 @@ pub enum Expression {
 /// The one value a gene sets, for the genes that set one. The others add up.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Setting {
-    HalfLife(u16),
-    InitialConcentration(u16),
+    HalfLife(ChemId),
+    InitialConcentration(ChemId),
     Trait(Trait),
 }
 
@@ -68,8 +68,8 @@ pub(crate) fn expressions(genome: &Genome, data: &DataPack) -> Vec<Expression> {
 /// Why `gene` breaks the restrictions (design §4.3), if it does. Genes may
 /// read physical chemicals, but never change them.
 fn breaks_restrictions(gene: &Gene, data: &DataPack) -> Option<String> {
-    let chemical = |id: u16| data.chemical(id).expect("a checked gene");
-    let physical = |id: u16| chemical(id).class == ChemicalClass::Physical;
+    let chemical = |id: ChemId| data.chemical(id).expect("a checked gene");
+    let physical = |id: ChemId| chemical(id).class == ChemicalClass::Physical;
     match *gene {
         Gene::HalfLife { chem, .. } if physical(chem) => Some(format!(
             "sets how fast {} decays, but a physical chemical's decay is fixed",
@@ -88,7 +88,7 @@ fn breaks_restrictions(gene: &Gene, data: &DataPack) -> Option<String> {
             ref products,
             ..
         } => {
-            let amount = |terms: &[Term], chem: u16| -> u32 {
+            let amount = |terms: &[Term], chem: ChemId| -> u32 {
                 terms
                     .iter()
                     .filter(|t| t.chem == chem)
