@@ -195,7 +195,10 @@ fn start_scripted(state: &mut WorldState, data: &DataPack, id: EntityId, events:
         ScriptedAction::Eat { at } => (Verb::Eat, None, state.object_target(at)),
         ScriptedAction::Drink { at } => (Verb::Drink, None, state.water_target(data, at)),
         ScriptedAction::Approach { at } => {
-            let target = state.sprite_target(at).or_else(|| state.object_target(at));
+            let target = state
+                .sprite_target(at)
+                .or_else(|| state.object_target(at))
+                .or_else(|| state.water_target(data, at));
             (Verb::Approach, None, target)
         }
     };
