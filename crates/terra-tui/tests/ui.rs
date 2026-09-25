@@ -1158,3 +1158,44 @@ fn the_world_tab_shows_the_population_and_the_deaths_by_cause() {
     );
     assert_eq!(text[4], "berry bush        0", "then the objects");
 }
+
+#[test]
+fn a_death_message_too_long_for_one_line_wraps() {
+    let world = garden_with_sprites();
+    let id = world.sprites().next().expect("a sprite").id();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::SelectNext, &world);
+    app.record(&[died(4_012, id.0, DeathCause::Dehydration, 12_345_678)]);
+    let (_, text) = inspector(&app, &world);
+    assert_eq!(
+        text[..3],
+        [
+            format!("Sprite #{} died of dehydration at", id.0),
+            "age 12,345,678".to_string(),
+            String::new(),
+        ],
+        "a line break keeps \"age\" with its number"
+    );
+}
+
+#[test]
+fn a_world_tab_list_too_long_for_one_line_wraps_after_a_dot() {
+    let objects = include_str!("../../../data/objects.ron")
+        .replace("\"mature\"", "\"fully_grown_and_bearing_fruit\"");
+    let world =
+        garden(DataPack::from_sources(&builtin_with("objects.ron", &objects)).expect("valid pack"));
+    let app = app_for(&world, Theme::cp437(), 100, 30);
+    let rows = right_part(&render(&app, &world, 100, 30), 46);
+    let text: Vec<&str> = rows[2..10]
+        .iter()
+        .map(|row| row.trim_start_matches('│').trim_end_matches('│').trim_end())
+        .collect();
+    assert_eq!(
+        text[4..7],
+        [
+            " berry bush        1",
+            "   seedling 1 ·",
+            "   fully_grown_and_bearing_fruit 0",
+        ]
+    );
+}

@@ -52,12 +52,15 @@ pub fn lines(app: &App, world: &World) -> Vec<Line<'static>> {
             Some(sprite) => sprite_tab(tab, &sprite),
             None => Vec::new(),
         },
-        (_, Some(Selection::Dead { id, cause, age })) => vec![Line::from(format!(
-            " {} died of {} at age {}",
-            sprite_label(id),
-            cause_name(cause),
-            group_thousands(age)
-        ))],
+        (_, Some(Selection::Dead { id, cause, age })) => {
+            let text = format!(
+                "{} died of {} at age{BOUND}{}",
+                unbroken(&sprite_label(id)),
+                unbroken(cause_name(cause)),
+                group_thousands(age)
+            );
+            wrapped(&text, 1, Style::default())
+        }
     }
 }
 
@@ -248,7 +251,7 @@ fn genome_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
         });
         if !together.is_empty() {
             let traits: Vec<String> = together.iter().map(|(gene, _)| gene_text(gene)).collect();
-            lines.extend(wrapped(&traits.join(" · "), 1, Style::default()));
+            lines.extend(wrapped(&listed(&traits), 1, Style::default()));
         }
         for (gene, how) in apart {
             let reason = match how {
@@ -369,6 +372,18 @@ fn gene_text(gene: &GeneView) -> String {
     }
 }
 
+/// `text` with its spaces kept together when a line wraps.
+fn unbroken(text: &str) -> String {
+    text.replace(' ', &BOUND.to_string())
+}
+
+/// `items` as one line, `a · b · c`, which wraps only after a dot, never
+/// inside an item.
+fn listed(items: &[String]) -> String {
+    let items: Vec<String> = items.iter().map(|item| unbroken(item)).collect();
+    items.join(&format!("{BOUND}· "))
+}
+
 /// `text` wrapped at word boundaries to fit the inspector, its first line
 /// indented `indent` columns and the rest 3, all in `style`.
 fn wrapped(text: &str, indent: usize, style: Style) -> Vec<Line<'static>> {
@@ -407,26 +422,32 @@ fn world_tab(world: &World) -> Vec<Line<'static>> {
         })
         .collect();
     let total: u64 = DeathCause::ALL.iter().map(|&c| world.deaths(c)).sum();
-    let mut lines = vec![
-        format!(" {:<12}{} v{}", "data pack", data.name(), data.version()),
-        format!(
+    let plain = Style::default();
+    let mut lines: Vec<Line<'static>> = vec![
+        Line::from(format!(
+            " {:<12}{} v{}",
+            "data pack",
+            data.name(),
+            data.version()
+        )),
+        Line::from(format!(
             " {:<12}{:>7}",
             "sprites",
             group_thousands(world.sprites().count() as u64)
-        ),
-        format!(" {:<12}{:>7}", "deaths", group_thousands(total)),
-        format!("   {}", deaths.join(" · ")),
+        )),
+        Line::from(format!(" {:<12}{:>7}", "deaths", group_thousands(total))),
     ];
+    lines.extend(wrapped(&listed(&deaths), 3, plain));
     for object_type in data.object_type_names() {
         let objects: Vec<ObjectView> = world
             .objects()
             .filter(|o| o.type_name() == object_type)
             .collect();
-        lines.push(format!(
+        lines.push(Line::from(format!(
             " {:<12}{:>7}",
             display_name(object_type),
             group_thousands(objects.len() as u64)
-        ));
+        )));
         let stages = data.stage_names(object_type);
         if stages.len() > 1 {
             let counts: Vec<String> = stages
@@ -436,7 +457,7 @@ fn world_tab(world: &World) -> Vec<Line<'static>> {
                     format!("{stage} {}", group_thousands(n as u64))
                 })
                 .collect();
-            lines.push(format!("   {}", counts.join(" · ")));
+            lines.extend(wrapped(&listed(&counts), 3, plain));
         }
         let totals: Vec<String> = data
             .counter_names(object_type)
@@ -450,8 +471,8 @@ fn world_tab(world: &World) -> Vec<Line<'static>> {
             })
             .collect();
         if !totals.is_empty() {
-            lines.push(format!("   {}", totals.join(" · ")));
+            lines.extend(wrapped(&listed(&totals), 3, plain));
         }
     }
-    lines.into_iter().map(Line::from).collect()
+    lines
 }
