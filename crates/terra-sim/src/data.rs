@@ -4,6 +4,7 @@ use ron::extensions::Extensions;
 use serde::Deserialize;
 
 use crate::object_types::{OBJECTS, ObjectType, TypeEntry, object_types};
+use crate::physiology::{PHYSIOLOGY, PhysiologyEntry};
 use crate::registry::{Chemical, Locus};
 use crate::terrain::{Terrain, TerrainProps};
 
@@ -13,9 +14,7 @@ pub struct DataPack {
     manifest: Manifest,
     /// Indexed by `Terrain as usize`.
     terrain: Vec<TerrainProps>,
-    #[expect(dead_code, reason = "biochemistry reads the registries from slice 4")]
     chemicals: Vec<Chemical>,
-    #[expect(dead_code, reason = "biochemistry reads the registries from slice 4")]
     loci: Vec<Locus>,
     /// In ascending ID order.
     object_types: Vec<ObjectType>,
@@ -40,6 +39,8 @@ const TERRAIN: &str = "terrain.ron";
 const CHEMICALS: &str = "chemicals.ron";
 /// The loci registry, relative to the pack root.
 const LOCI: &str = "loci.ron";
+/// The starter genome, relative to the pack root.
+const STARTER: &str = "genomes/starter.ron";
 
 /// The default pack's files, embedded at compile time from the repository's `data/`.
 const BUILTIN: &[(&str, &str)] = &[
@@ -48,6 +49,8 @@ const BUILTIN: &[(&str, &str)] = &[
     (CHEMICALS, include_str!("../../../data/chemicals.ron")),
     (LOCI, include_str!("../../../data/loci.ron")),
     (OBJECTS, include_str!("../../../data/objects.ron")),
+    (PHYSIOLOGY, include_str!("../../../data/physiology.ron")),
+    (STARTER, include_str!("../../../data/genomes/starter.ron")),
 ];
 
 /// `pack.ron`: identifies the pack.
@@ -164,6 +167,12 @@ impl DataPack {
         DataPack::from_sources(BUILTIN)
     }
 
+    /// The default pack's files, as `(path within the pack, RON text)`, for
+    /// building a pack that changes some of them.
+    pub fn builtin_sources() -> &'static [(&'static str, &'static str)] {
+        BUILTIN
+    }
+
     /// Builds a pack from already-read files, given as `(path within the pack, RON text)`.
     pub fn from_sources(sources: &[(&str, &str)]) -> Result<DataPack, DataError> {
         let manifest = parse::<Manifest>(sources, MANIFEST)?;
@@ -178,6 +187,13 @@ impl DataPack {
             &chemicals,
             &loci,
         )?;
+        let _physiology = parse::<PhysiologyEntry>(sources, PHYSIOLOGY)?
+            .validate(&loci)
+            .map_err(|message| DataError::Invalid {
+                file: PHYSIOLOGY.into(),
+                message,
+            })?;
+        find(sources, STARTER)?;
         Ok(DataPack {
             manifest,
             terrain,
@@ -250,6 +266,36 @@ impl DataPack {
             .map(|index| &self.object_types[index])
     }
 
+    /// Every chemical, in the order `chemicals.ron` lists them.
+    pub(crate) fn chemicals(&self) -> &[Chemical] {
+        &self.chemicals
+    }
+
+    /// The chemical with the ID `id`.
+    pub(crate) fn chemical(&self, id: u16) -> Option<&Chemical> {
+        self.chemicals.iter().find(|c| c.id == id)
+    }
+
+    /// The chemical called `name`.
+    pub(crate) fn chemical_named(&self, name: &str) -> Option<&Chemical> {
+        self.chemicals.iter().find(|c| c.name == name)
+    }
+
+    /// Every locus other than a chemical level, in the order `loci.ron` lists them.
+    pub(crate) fn loci(&self) -> &[Locus] {
+        &self.loci
+    }
+
+    /// The locus with the ID `id`.
+    pub(crate) fn locus(&self, id: u16) -> Option<&Locus> {
+        self.loci.iter().find(|l| l.id == id)
+    }
+
+    /// The locus called `name`.
+    pub(crate) fn locus_named(&self, name: &str) -> Option<&Locus> {
+        self.loci.iter().find(|l| l.name == name)
+    }
+
     /// Every object type, in ascending ID order. Rules refer to types by their index here.
     pub(crate) fn object_types(&self) -> &[ObjectType] {
         &self.object_types
@@ -291,15 +337,21 @@ pub(crate) fn check_unique<'a>(
     Ok(())
 }
 
+/// The text of `file` among `sources`.
+fn find<'a>(sources: &[(&str, &'a str)], file: &str) -> Result<&'a str, DataError> {
+    sources
+        .iter()
+        .find(|(path, _)| *path == file)
+        .map(|&(_, text)| text)
+        .ok_or_else(|| DataError::MissingFile(file.into()))
+}
+
 /// Finds `file` among `sources` and parses it as `T`.
 fn parse<T: for<'de> Deserialize<'de>>(
     sources: &[(&str, &str)],
     file: &str,
 ) -> Result<T, DataError> {
-    let (_, text) = sources
-        .iter()
-        .find(|(path, _)| *path == file)
-        .ok_or_else(|| DataError::MissingFile(file.into()))?;
+    let text = find(sources, file)?;
     // `implicit_some` lets optional fields be written as plain values: `step_cost: 10`.
     ron::Options::default()
         .with_default_extension(Extensions::IMPLICIT_SOME)

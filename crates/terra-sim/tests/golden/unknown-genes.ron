@@ -1,0 +1,9 @@
+(
+    format: 1,
+    genes: [
+        Gene(type: 900, version: 1, payload: "c0ffee"),
+        Gene(type: 901, version: 3, payload: ""),
+        Gene(type: 1, version: 200, payload: "0badf00d"),
+        HalfLife(chem: "pain", ticks: 30),
+    ],
+)
