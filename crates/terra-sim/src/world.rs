@@ -5,6 +5,7 @@ use rand_chacha::rand_core::SeedableRng;
 use serde::Serialize;
 use xxhash_rust::xxh3::xxh3_64_with_seed;
 
+use crate::action::{self, ActionView, ScriptedAction};
 use crate::biochem::{self, Senses, Traits};
 use crate::config::WorldConfig;
 use crate::data::DataPack;
@@ -103,6 +104,8 @@ pub enum ScenarioError {
     CantPlace { object_type: String, pos: Pos },
     /// A sprite can't stand on this tile (design §3.4).
     CantPlaceSprite(Pos),
+    /// A scripted action is for a tile with no sprite on it.
+    NoSpriteToScript(Pos),
 }
 
 /// A hand-made world, for tests and lab scenarios.
@@ -114,6 +117,9 @@ pub struct Scenario<'a> {
     /// Newborn sprites as `(tile, genome)`: `None` is the starter genome with
     /// spawn variation, as for the `SpawnSprite` command.
     pub sprites: &'a [(Pos, Option<Genome>)],
+    /// Actions to start sprites on, by the tile each sprite starts on,
+    /// instead of what they would choose.
+    pub scripted: &'a [(Pos, ScriptedAction)],
 }
 
 /// A chemical's level in one sprite.
@@ -150,6 +156,13 @@ impl<'a> SpriteView<'a> {
     /// Ticks since the sprite was born.
     pub fn age(&self) -> u64 {
         self.sprite.age(self.world.state.tick)
+    }
+
+    /// What the sprite is doing, or the action that last ended until the
+    /// next one starts; `None` before its first.
+    pub fn action(&self) -> Option<ActionView> {
+        let action = self.sprite.action.as_ref()?;
+        Some(action.view(self.sprite.flood.as_ref()))
     }
 
     /// The traits its body has: its genes', clamped to physiology's ranges.
@@ -319,6 +332,17 @@ impl World {
             let sprite = Sprite::newborn(genome, pos, state.tick, &world.data);
             state.add_sprite(sprite);
         }
+        for &(pos, script) in scenario.scripted {
+            let sprites = &mut world.state.sprites;
+            let id = world
+                .state
+                .map
+                .contains(pos)
+                .then(|| sprites.at(pos))
+                .flatten()
+                .ok_or(ScenarioError::NoSpriteToScript(pos))?;
+            sprites.get_mut(id).expect("the sprite there").scripted = Some(script);
+        }
         Ok(world)
     }
 
@@ -350,8 +374,8 @@ impl World {
         self.run_environment(&mut events); // 2
         let dying = self.run_biochemistry(); // 3
         self.run_learning(); // 4
-        self.sense_and_decide(); // 5
-        self.resolve_actions(); // 6
+        self.sense_and_decide(&dying, &mut events); // 5
+        self.resolve_actions(&dying, &mut events); // 6
         self.finish_tick(&dying, &mut events); // 7
         events
     }
@@ -487,10 +511,14 @@ impl World {
     fn run_learning(&mut self) {}
 
     /// Step 5: perception, attention and decisions.
-    fn sense_and_decide(&mut self) {}
+    fn sense_and_decide(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
+        action::sense_and_decide(&mut self.state, &self.data, dying, events);
+    }
 
     /// Step 6: movement and verb effects, then trace entries.
-    fn resolve_actions(&mut self) {}
+    fn resolve_actions(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
+        action::resolve(&mut self.state, &self.data, dying, events);
+    }
 
     /// Step 7: the dying are removed, each with a `Died` event; then the tick
     /// counter advances. (Death check #2 arrives with step 6's effects.)
@@ -556,6 +584,7 @@ mod tests {
             map,
             objects: &[(Pos { x: 2, y: 2 }, "berry_bush")],
             sprites: &[],
+            scripted: &[],
         };
         World::from_scenario(scenario, data, 7).expect("valid scenario")
     }
@@ -613,6 +642,7 @@ mod tests {
             map,
             objects: &[(Pos { x: 2, y: 2 }, "berry_bush")],
             sprites: &[(Pos { x: 5, y: 1 }, None), (Pos { x: 5, y: 2 }, None)],
+            scripted: &[],
         };
         let world = World::from_scenario(scenario, data, 7).expect("valid scenario");
         let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
@@ -721,6 +751,7 @@ mod tests {
             map,
             objects: &[],
             sprites: &sprites,
+            scripted: &[],
         };
         let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
         world.step();

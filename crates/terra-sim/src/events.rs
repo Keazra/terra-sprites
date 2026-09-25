@@ -1,7 +1,9 @@
 //! What happened during a tick, reported by `World::step` (design §2.5).
 
+use crate::action::Outcome;
 use crate::map::Pos;
 use crate::objects::EntityId;
+use crate::registry::Verb;
 
 /// Something that happened during a tick.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,6 +21,14 @@ pub enum EventKind {
         id: EntityId,
         object_type: String,
         pos: Pos,
+    },
+    /// A sprite started an action.
+    ActionStarted { id: EntityId, verb: Verb },
+    /// A sprite's action ended.
+    ActionEnded {
+        id: EntityId,
+        verb: Verb,
+        outcome: Outcome,
     },
     /// A sprite died, and left the world.
     Died {

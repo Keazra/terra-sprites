@@ -37,7 +37,7 @@ impl Dir {
     ];
 
     /// The change in `(x, y)` a step in this direction makes.
-    fn offset(self) -> (i32, i32) {
+    pub(crate) fn offset(self) -> (i32, i32) {
         match self {
             Dir::N => (0, -1),
             Dir::NE => (1, -1),
