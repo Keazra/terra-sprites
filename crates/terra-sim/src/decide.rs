@@ -15,7 +15,7 @@ use crate::perception::{Ground, Target};
 use crate::registry::{Category, Verb};
 use crate::world::WorldState;
 
-/// A thing the sprite could aim at, as it stands this tick.
+/// Something the sprite could aim at, as it stands this tick.
 #[derive(Debug, Clone)]
 struct Candidate {
     target: Target,
@@ -56,6 +56,8 @@ pub(crate) fn decide(
         sprites: &state.sprites,
         data,
     };
+    // What walking the flood's reach on grass costs: a grass step is 10
+    // terrain units (design §5.2).
     let reach = 10.0 * f32::from(flood.reach());
     let candidates: BTreeMap<Category, Candidate> = flood
         .candidates(ground, id)
@@ -66,11 +68,13 @@ pub(crate) fn decide(
                 .expect("a candidate is reachable");
             let aim = Aim {
                 category,
-                distance: (cost as f32 / reach).min(1.0),
+                distance: normalized(cost, reach),
                 adjacent: state.on_goal_tile(data, sprite.pos, target),
             };
-            let table = table(state, data, target);
-            let type_id = state.type_of(data, target).expect("a candidate is there");
+            let kind = state.kind_of(data, target).expect("a candidate is there");
+            let object_type = &data.object_types()[kind];
+            let table = object_type.verbs.keys().copied().collect();
+            let type_id = object_type.id;
             let candidate = Candidate {
                 type_id,
                 target,
@@ -94,15 +98,20 @@ pub(crate) fn decide(
             .map_or(u32::MAX, |(_, cost)| cost);
         Aim {
             category,
-            distance: (cost as f32 / reach).min(1.0),
+            distance: normalized(cost, reach),
             adjacent,
         }
     });
-    let exploration = exploration(state, data, id);
-    let distances: BTreeMap<Category, f32> = candidates
+    let exploration = sprite.body.loci[data.physiology().indices.exploration_mod];
+    // A running action's category is scored by the instance it's aimed at,
+    // which a nearer one of the same category doesn't replace (design §5.3).
+    let mut distances: BTreeMap<Category, f32> = candidates
         .iter()
-        .map(|(&c, o)| (c, o.aim.distance))
+        .map(|(&category, candidate)| (category, candidate.aim.distance))
         .collect();
+    if let Some(aim) = aimed {
+        distances.insert(aim.category, aim.distance);
+    }
 
     let sprite = state.sprites.get_mut(id).expect("the same sprite");
     let rng = &mut state.rng;
@@ -122,13 +131,13 @@ pub(crate) fn decide(
         running = false;
     }
     let candidate = attended.and_then(|c| candidates.get(&c));
-    let aim = if running { aimed } else { None }.or(candidate.map(|o| o.aim));
+    let aim = if running { aimed } else { None }.or(candidate.map(|c| c.aim));
 
     // 5b: the decision.
     let inputs = brain.inputs(&sprite.body, aim, data);
     let activations = brain.activations(&inputs);
     let scores = brain.scores(&activations);
-    let offered = available(candidate.map(|o| o.table.as_slice()));
+    let offered = available(candidate.map(|c| c.table.as_slice()));
     let current = sprite.action.as_ref().filter(|_| running).map(|a| a.verb);
     let chosen = match current {
         Some(verb) => brain.switch(verb, &scores, &offered),
@@ -224,22 +233,7 @@ fn category_of(state: &WorldState, data: &DataPack, target: Target) -> Category 
     }
 }
 
-/// The verbs `target`'s type's verb table has.
-fn table(state: &WorldState, data: &DataPack, target: Target) -> Vec<Verb> {
-    let kind = match target {
-        Target::Object(id) => Some(state.objects.kind(id)),
-        Target::Water(_) => data.pseudo_type(Category::Water),
-        Target::Sprite(_) => data.pseudo_type(Category::Sprite),
-    };
-    kind.map(|kind| data.object_types()[kind].verbs.keys().copied().collect())
-        .unwrap_or_default()
-}
-
-/// Sprite `id`'s `exploration_mod` receptor target, which scales both
-/// temperatures (design §5.3, §5.5); 1, its neutral point, in a pack without it.
-fn exploration(state: &WorldState, data: &DataPack, id: EntityId) -> f32 {
-    let sprite = state.sprites.get(id).expect("the sprite");
-    data.locus_named("exploration_mod")
-        .and_then(|locus| data.locus_index(locus.id))
-        .map_or(1.0, |index| sprite.body.loci[index])
+/// `cost` over the cost of walking the flood's `reach`, capped at 1.
+fn normalized(cost: u32, reach: f32) -> f32 {
+    (cost as f32 / reach).min(1.0)
 }

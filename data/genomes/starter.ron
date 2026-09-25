@@ -67,7 +67,7 @@
         Emitter(locus: Chem("crowdedness"), mode: Fall, threshold: 0.02, gain: 1.0, chem: "reward"),
 
         // How the brain works. Choices are fairly sure of themselves: with
-        // nothing pressing a sprite wanders, and a need of .5 wins most choices.
+        // no drive pressing a sprite wanders, and a drive of .5 wins most choices.
         BrainParam(param: "tau_base", value: 0.1),
         BrainParam(param: "tau_att_base", value: 0.2),
         BrainParam(param: "switch_margin", value: 0.2),
@@ -85,7 +85,7 @@
         Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
         Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
         Instinct(inputs: [("tiredness", false)], verb: Rest, weight: 1.0),
-        // A mild habit of wandering, which any grown need outweighs.
+        // A mild habit of wandering, which any drive that has grown outweighs.
         Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3),
     ],
 )

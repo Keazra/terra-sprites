@@ -946,7 +946,7 @@ fn the_genome_tab_shows_brain_settings_instincts_and_attention_instincts() {
             "INSTINCTS",
             "hunger → eat +1",
             "thirst & not target adjacent → drink -.5",
-            "ATTENTION",
+            "ATTENTION INSTINCTS",
             "hunger → attends to berry bush +.8",
             "",
             "",

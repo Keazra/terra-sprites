@@ -48,7 +48,18 @@ pub(crate) fn varied(genome: &Genome, data: &DataPack, rng: &mut ChaCha8Rng) -> 
                     let (low, high) = physiology.traits.range(which);
                     *value = vary(*value).clamp(low, high);
                 }
-                Gene::BrainParam { ref mut value, .. } => *value = vary(*value),
+                Gene::BrainParam {
+                    param,
+                    ref mut value,
+                } => {
+                    let (low, high) = physiology.brain.of(param).range;
+                    let varied = vary(*value).clamp(low, high);
+                    *value = if param.is_whole() {
+                        varied.round()
+                    } else {
+                        varied
+                    };
+                }
                 Gene::Instinct { ref mut weight, .. }
                 | Gene::AttentionInstinct { ref mut weight, .. } => *weight = vary(*weight),
                 Gene::Unknown { .. } => {}
@@ -255,6 +266,31 @@ mod tests {
                     Gene::InitialConcentration { value, .. } => assert!(value <= 1.0),
                     Gene::Trait { value, .. } => assert!(value <= 12.0, "speed's range is 4–12"),
                     _ => {}
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn varied_brain_parameters_stay_in_range_and_whole_numbers_stay_whole() {
+        let data = builtin();
+        let text = r#"(format: 1, genes: [
+            BrainParam(param: "tau_base", value: 2.0),
+            BrainParam(param: "pool_size", value: 30.0),
+            BrainParam(param: "max_arity", value: 3.0),
+            BrainParam(param: "forget_ticks", value: 5000.0),
+        ])"#;
+        let original = Genome::from_ron(text, &data).expect("a valid genome");
+        for seed in 0..50 {
+            let varied = varied(&original, &data, &mut ChaCha8Rng::seed_from_u64(seed));
+            for gene in &varied.genes {
+                let Gene::BrainParam { param, value } = *gene else {
+                    unreachable!("only brain parameters");
+                };
+                let (low, high) = data.physiology().brain.of(param).range;
+                assert!((low..=high).contains(&value), "{param:?} {value}");
+                if param != BrainParam::TauBase {
+                    assert_eq!(value, value.round(), "{param:?} is a whole number");
                 }
             }
         }

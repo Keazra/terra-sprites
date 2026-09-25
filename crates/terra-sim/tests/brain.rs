@@ -1,6 +1,6 @@
 //! The brain at work (design §5): sprites made from the starter genome eat
 //! when hungry, drink when thirsty and wander when content, and change their
-//! minds when a need grows.
+//! minds when a drive grows.
 
 use terra_sim::{
     DataPack, EntityId, Event, EventKind, Genome, Map, Outcome, Pos, Scenario, Verb, World,
@@ -189,7 +189,7 @@ fn a_content_sprite_mostly_wanders() {
 }
 
 #[test]
-fn a_growing_need_interrupts_what_the_sprite_was_doing() {
+fn a_growing_drive_interrupts_what_the_sprite_was_doing() {
     // Hunger climbs fast, from nothing, so eating soon outscores wandering by
     // more than the switch margin.
     let data = builtin();
@@ -258,7 +258,7 @@ fn a_lone_sprite_with_a_bush_and_water_nearby_survives_10_000_ticks() {
         // Full energy lasts about 6,000 ticks and hydration about 3,000.
         assert!(
             meals > 0 && drinks > 0,
-            "seed {seed}: it lived on its needs"
+            "seed {seed}: it lived on its meals and drinks"
         );
         assert!(sprite.chemical("injury") < Some(0.5), "seed {seed}");
     }
