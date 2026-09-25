@@ -128,13 +128,13 @@ fn run(
         let elapsed = now - last_frame;
         last_frame = now;
         let frame_start = Instant::now();
+        let mut events = Vec::new();
         app.clock.advance(
             elapsed,
-            || {
-                world.step();
-            },
+            || events.extend(world.step()),
             || frame_start.elapsed() >= SIM_BUDGET,
         );
+        app.record(&events);
     }
 }
 

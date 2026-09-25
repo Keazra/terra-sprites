@@ -1,8 +1,10 @@
 //! The UI state (design §6.8): everything the screen shows that isn't the world.
 
+use std::collections::VecDeque;
+
 use ratatui::layout::{Position, Rect, Size};
 use serde::Deserialize;
-use terra_sim::{Map, Pos};
+use terra_sim::{Event, EventKind, Map, Pos};
 
 use crate::clock::Clock;
 use crate::input::Action;
@@ -43,6 +45,9 @@ impl CursorMode {
     }
 }
 
+/// How many events the event log keeps.
+const EVENT_LOG_LENGTH: usize = 100;
+
 /// The UI state. Rendering reads it; actions change it.
 pub struct App {
     pub clock: Clock,
@@ -60,6 +65,8 @@ pub struct App {
     tile_area: Rect,
     /// The screen cell under the mouse pointer, while that cell shows a tile.
     pointer: Option<Position>,
+    /// The latest events the event log shows, newest first.
+    event_log: VecDeque<Event>,
 }
 
 impl App {
@@ -87,7 +94,28 @@ impl App {
             map_size: Size::new(map.width(), map.height()),
             tile_area,
             pointer: None,
+            event_log: VecDeque::new(),
         }
+    }
+
+    /// Takes in what happened during a tick, for the event log (design §6.1).
+    /// Object events are left out: they happen dozens of times a minute and
+    /// would bury everything else, and the World tab counts objects instead.
+    pub fn record(&mut self, events: &[Event]) {
+        for event in events {
+            if !matches!(
+                event.kind,
+                EventKind::ObjectSpawned { .. } | EventKind::ObjectRemoved { .. }
+            ) {
+                self.event_log.push_front(event.clone());
+            }
+        }
+        self.event_log.truncate(EVENT_LOG_LENGTH);
+    }
+
+    /// The events the event log shows, newest first.
+    pub fn event_log(&self) -> impl Iterator<Item = &Event> {
+        self.event_log.iter()
     }
 
     /// The tile the cursor is on.

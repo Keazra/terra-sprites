@@ -477,7 +477,7 @@ impl GeneEntry {
 /// The bytes a payload's hex digits spell.
 fn hex(digits: &str) -> Result<Vec<u8>, String> {
     let bad = || format!("has the payload {digits:?}, which isn't pairs of hex digits");
-    if digits.len() % 2 != 0 || !digits.is_ascii() {
+    if !digits.len().is_multiple_of(2) || !digits.is_ascii() {
         return Err(bad());
     }
     (0..digits.len())
