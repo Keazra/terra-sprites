@@ -27,10 +27,6 @@ pub(crate) struct Physiology {
     /// `cause_fade` is how many ticks it takes to halve.
     pub(crate) tally_fade: f32,
     pub(crate) traits: TraitRanges,
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the brain reads its parameters later in slice 6")
-    )]
     pub(crate) brain: BrainRanges,
     /// Each receptor target's range, by locus ID.
     pub(crate) receptor_targets: BTreeMap<LocusId, (f32, f32)>,

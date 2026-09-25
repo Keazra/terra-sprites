@@ -8,6 +8,7 @@ use rand_chacha::ChaCha8Rng;
 use serde::Serialize;
 
 use crate::data::DataPack;
+use crate::decide::decide;
 use crate::events::{Event, EventKind};
 use crate::map::{Dir, Pos};
 use crate::objects::EntityId;
@@ -16,7 +17,6 @@ use crate::physics::step_cost;
 use crate::random::uniform;
 use crate::registry::Verb;
 use crate::sprites::Sprite;
-use crate::standin;
 use crate::verbs;
 use crate::world::WorldState;
 
@@ -29,6 +29,9 @@ pub enum Outcome {
     Blocked,
     /// It couldn't be carried out.
     Failed,
+    /// The sprite changed its mind: attention moved off its target, or
+    /// another verb beat it by more than the switch margin (design §5.5).
+    Interrupted,
     /// It was still going at the timeout.
     TimedOut,
 }
@@ -97,6 +100,8 @@ pub(crate) struct Action {
     pub(crate) committed: Option<Vec<Pos>>,
     /// How it ended, once it has.
     pub(crate) ended: Option<Outcome>,
+    /// A hand-made world started it: the brain leaves it be until it ends.
+    pub(crate) scripted: bool,
 }
 
 /// What a sprite did at step 6, which its body feels at the next tick's
@@ -110,7 +115,13 @@ pub(crate) struct Did {
 }
 
 impl Action {
-    fn new(verb: Verb, destination: Option<Pos>, target: Option<Target>, tick: u64) -> Action {
+    fn new(
+        verb: Verb,
+        destination: Option<Pos>,
+        target: Option<Target>,
+        scripted: bool,
+        tick: u64,
+    ) -> Action {
         Action {
             verb,
             destination,
@@ -120,6 +131,7 @@ impl Action {
             blocked_ticks: 0,
             committed: None,
             ended: None,
+            scripted,
         }
     }
 }
@@ -152,15 +164,14 @@ pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
 }
 
 /// Whether `sprite` has an action that hasn't ended.
-fn is_acting(sprite: &Sprite) -> bool {
+pub(crate) fn is_acting(sprite: &Sprite) -> bool {
     sprite.action.as_ref().is_some_and(|a| a.ended.is_none())
 }
 
 /// Step 5 for every sprite not marked dying (design §2.4): refresh its flood
 /// if it moved or the flood is due; end its action if that has timed out, or
-/// is a Wander whose destination the flood no longer reaches (5.0); then, if
-/// it has none, start one: its next scripted one, or else the stand-in's
-/// choice (5b).
+/// lost its target or destination (5.0); then attention and the decision
+/// (5a, 5b).
 pub(crate) fn sense_and_decide(
     state: &mut WorldState,
     data: &DataPack,
@@ -221,47 +232,10 @@ pub(crate) fn sense_and_decide(
                         }
                         action.destination = Some(goal);
                     }
-                    continue;
                 }
             }
         }
-        let sprite = state.sprites.get_mut(id).expect("the same sprite");
-        let script = sprite.scripted.pop_front();
-        let (verb, destination, target) = match script {
-            Some(ScriptedAction::Wander { destination }) => (Verb::Wander, Some(destination), None),
-            Some(ScriptedAction::Rest) => (Verb::Rest, None, None),
-            Some(ScriptedAction::Eat { at }) => (Verb::Eat, None, state.object_target(at)),
-            Some(ScriptedAction::Drink { at }) => (Verb::Drink, None, state.water_target(data, at)),
-            Some(ScriptedAction::Approach { at }) => {
-                let target = state.sprite_target(at).or_else(|| state.object_target(at));
-                (Verb::Approach, None, target)
-            }
-            None => match standin::choose(&mut state.rng) {
-                Verb::Wander => {
-                    let flood = sprite.flood.as_ref().expect("the flood made above");
-                    let sense_radius = sprite.program.traits.sense_radius;
-                    (
-                        Verb::Wander,
-                        flood.wander_destination(sense_radius, &mut state.rng),
-                        None,
-                    )
-                }
-                verb => (verb, None, None),
-            },
-        };
-        let flood = state
-            .sprites
-            .get(id)
-            .expect("the same sprite")
-            .flood
-            .as_ref();
-        let flood = flood.expect("the flood made above");
-        let destination = match target {
-            Some(target) => state.goal_for(data, flood, target),
-            None => destination,
-        };
-        let sprite = state.sprites.get_mut(id).expect("the same sprite");
-        start(sprite, id, verb, destination, target, state.tick, events);
+        decide(state, data, id, events);
     }
 }
 
@@ -269,17 +243,19 @@ pub(crate) fn sense_and_decide(
 /// its flood doesn't reach, ends at once, as failed (design §5.5); one to the
 /// tile it stands on ends at once, as applied. An aimed action heads for its
 /// target's nearest goal tile, its destination; with none, it ends at once,
-/// as failed.
-fn start(
+/// as failed. A `scripted` action is left be by the brain.
+#[expect(clippy::too_many_arguments, reason = "an action's every part")]
+pub(crate) fn start(
     sprite: &mut Sprite,
     id: EntityId,
     verb: Verb,
     destination: Option<Pos>,
     target: Option<Target>,
+    scripted: bool,
     tick: u64,
     events: &mut Vec<Event>,
 ) {
-    let mut action = Action::new(verb, destination, target, tick);
+    let mut action = Action::new(verb, destination, target, scripted, tick);
     events.push(Event {
         tick,
         kind: EventKind::ActionStarted { id, verb },
@@ -296,7 +272,13 @@ fn start(
 }
 
 /// Ends `action` (sprite `id`'s) with `outcome`, and reports it.
-fn end(action: &mut Action, id: EntityId, outcome: Outcome, tick: u64, events: &mut Vec<Event>) {
+pub(crate) fn end(
+    action: &mut Action,
+    id: EntityId,
+    outcome: Outcome,
+    tick: u64,
+    events: &mut Vec<Event>,
+) {
     action.ended = Some(outcome);
     events.push(Event {
         tick,

@@ -175,6 +175,7 @@ fn wander_line(progress: Progress) -> Option<String> {
         Progress::Ended(Outcome::Blocked) => "Gave up: the way was blocked".into(),
         Progress::Ended(Outcome::TimedOut) => "Gave up: it took too long".into(),
         Progress::Ended(Outcome::Failed) => "Gave up: it couldn't get there".into(),
+        Progress::Ended(Outcome::Interrupted) => "Changed its mind".into(),
         Progress::Resting { .. } => return None,
     })
 }
@@ -187,6 +188,7 @@ fn rest_line(progress: Progress) -> Option<String> {
             counted(of.saturating_sub(ticks), "tick")
         )),
         Progress::Ended(Outcome::Applied) => Some("Rested".into()),
+        Progress::Ended(Outcome::Interrupted) => Some("Changed its mind".into()),
         _ => None,
     }
 }
@@ -240,6 +242,7 @@ fn outcome_name(outcome: Outcome) -> &'static str {
         Outcome::Applied => "applied",
         Outcome::Blocked => "blocked",
         Outcome::Failed => "failed",
+        Outcome::Interrupted => "interrupted",
         Outcome::TimedOut => "timed_out",
     }
 }

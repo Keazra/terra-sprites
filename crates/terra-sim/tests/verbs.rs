@@ -300,7 +300,7 @@ fn approaching_a_bush_ends_on_arrival_beside_it() {
 #[test]
 fn approaching_a_sprite_follows_it_as_it_moves() {
     // The leader wanders off along the top row; the follower sets off after it.
-    let (leader_start, leader_end) = (at(3, 1), at(14, 1));
+    let (leader_start, leader_end) = (at(3, 1), at(12, 1));
     let wander = [ScriptedAction::Wander {
         destination: leader_end,
     }];
