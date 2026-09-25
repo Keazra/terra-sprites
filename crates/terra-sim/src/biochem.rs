@@ -72,6 +72,20 @@ struct Emitter {
     chem: usize,
 }
 
+impl Emitter {
+    /// Adds `gain` times how far `signal` is past the threshold to the
+    /// emitter's chemical, kept within 0 to 1.
+    fn emit(&self, body: &mut Body, signal: f32) {
+        let level = &mut body.chems[self.chem];
+        *level = clamped(*level + self.gain * (signal - self.threshold).max(0.0));
+    }
+}
+
+/// `level` kept within 0 to 1.
+fn clamped(level: f32) -> f32 {
+    level.clamp(0.0, 1.0)
+}
+
 /// Where an emitter reads its value from: a chemical's level or a locus's value, by index.
 #[derive(Debug, Clone, Copy)]
 enum Source {
@@ -336,6 +350,11 @@ pub(crate) struct Senses {
 
 /// Step 3 for one sprite (design §4.4). Returns whether its injury has
 /// reached 1, so it's dying.
+///
+/// No level ever leaves 0 to 1, even partway through: physiology, each
+/// reaction and each emitter clamp what they write (decay can't leave the
+/// range). So no gene reads a level outside it, and a Rise or Fall emitter
+/// only sees a change that really happened.
 pub(crate) fn step(program: &Program, body: &mut Body, senses: &Senses, data: &DataPack) -> bool {
     // (a) The pulse latch: what came in goes live, and the buffer empties.
     for (index, locus) in data.loci().iter().enumerate() {
@@ -343,7 +362,12 @@ pub(crate) fn step(program: &Program, body: &mut Body, senses: &Senses, data: &D
             body.loci[index] = std::mem::take(&mut body.incoming[index]);
         }
     }
+    // (b) Physiology. It works on its own chemicals below 0 or above 1, to
+    // tell when energy or hydration has run out, and clamps them when done.
     physiology(program, body, senses, data);
+    for level in &mut body.chems {
+        *level = clamped(*level);
+    }
     // (c) Reactions, in genome order.
     for reaction in &program.reactions {
         let most = reaction
@@ -353,7 +377,7 @@ pub(crate) fn step(program: &Program, body: &mut Body, senses: &Senses, data: &D
             .fold(f32::INFINITY, f32::min);
         let extent = reaction.rate * most;
         for &(index, gain) in &reaction.net {
-            body.chems[index] += gain * extent;
+            body.chems[index] = clamped(body.chems[index] + gain * extent);
         }
     }
     // (d) Half-life decay.
@@ -364,7 +388,7 @@ pub(crate) fn step(program: &Program, body: &mut Body, senses: &Senses, data: &D
     for emitter in &program.level_emitters {
         let value = emitter.source.value(body);
         let signal = if emitter.invert { 1.0 - value } else { value };
-        body.chems[emitter.chem] += emitter.gain * (signal - emitter.threshold).max(0.0);
+        emitter.emit(body, signal);
     }
     // (e2) Rise and Fall emitters, in genome order, after every Level emitter.
     for &(change, emitter) in &program.change_emitters {
@@ -373,13 +397,9 @@ pub(crate) fn step(program: &Program, body: &mut Body, senses: &Senses, data: &D
             Change::Rise => delta.max(0.0),
             Change::Fall => (-delta).max(0.0),
         };
-        body.chems[emitter.chem] += emitter.gain * (signal - emitter.threshold).max(0.0);
+        emitter.emit(body, signal);
     }
-    // (f) Clamp.
-    for level in &mut body.chems {
-        *level = level.clamp(0.0, 1.0);
-    }
-    // (g) Receptors.
+    // (f) Receptors.
     for target in &program.targets {
         let pull: f32 = target
             .receptors
@@ -1158,6 +1178,66 @@ mod tests {
             tallies[1] * fade,
             "only fading lowers it"
         );
+    }
+
+    /// A newborn made from the built-in starter genome, unvaried.
+    fn starter() -> Subject {
+        let data = builtin();
+        let program = Program::new(data.starter(), &data);
+        let body = Body::newborn(&program, &data);
+        Subject {
+            data,
+            program,
+            body,
+        }
+    }
+
+    #[test]
+    fn a_sprite_at_rest_with_nothing_happening_gets_no_reward() {
+        let mut sprite = starter();
+        for tick in 0..200 {
+            sprite.step_at(tick);
+            assert_eq!(sprite.level("reward"), 0.0, "tick {tick}");
+        }
+    }
+
+    #[test]
+    fn eating_when_full_earns_almost_nothing_and_eating_when_hungry_earns_in_proportion() {
+        let mut full = starter();
+        full.step();
+        full.pulse("ate");
+        full.step();
+        assert_eq!(full.level("reward"), 0.0, "hunger at 0 can't fall");
+
+        let mut hungry = starter();
+        hungry.set("hunger", 0.8);
+        hungry.step();
+        let before = hungry.level("hunger");
+        hungry.pulse("ate");
+        hungry.step();
+        // The ate pulse drops hunger by 0.5; the Fall emitter's deadband is 0.02.
+        assert!((before - hungry.level("hunger") - 0.5).abs() < 0.01);
+        assert!(
+            (hungry.level("reward") - 0.48).abs() < 0.01,
+            "{}",
+            hungry.level("reward")
+        );
+    }
+
+    #[test]
+    fn a_reaction_never_runs_backwards_when_a_level_runs_out() {
+        let mut sprite = Subject::new(
+            builtin(),
+            &[
+                r#"Reaction(reactants: [("hunger", 1), ("energy", 1)], products: [("energy", 1)], rate: 0.5)"#,
+            ],
+        );
+        sprite.set("energy", 0.0);
+        sprite.set("hunger", 0.4);
+        sprite.step();
+        // Basal metabolism takes energy below 0 before the reaction runs,
+        // but no level is ever read outside 0 to 1.
+        assert_eq!(sprite.level("hunger"), 0.4);
     }
 
     #[test]

@@ -27,6 +27,7 @@ Decided with the owner in the design session for slice 4 ([#5](https://github.co
 | 12 | **The Chem and Genome tabs fit the inspector.** Chem shows body chemicals and signal chemicals in two columns, each with its level and change per tick, with the 16 hormones in a 4×4 grid below. Genome shows genes grouped by type as plain lines (`low energy → hunger +.020 past .50`), each flagged, unexpressed or unknown gene marked with its reason. `PgUp` / `PgDn`, and the mouse wheel over the inspector, scroll a tab too long to fit. | Slice 4 design session | §6.1, §6.5 |
 | 13 | **Organs and organ failure are out of scope for M1** ([#31](https://github.com/Keazra/terra-sprites/issues/31)). The model leaves room for them: an organ's health would be a physical chemical, and its failure one more source of injury. | Owner idea, parked | §1.3 |
 | 14 | **First-cut physiology timescales,** for a sprite at rest: full hydration lasts about 3,000 ticks and full energy about 6,000; once either runs out, injury kills in about 1,000 more; a sprite past its lifespan dies within about 2,000. Slice 17 tunes them. | Slice 4 design session | App. B |
+| 15 | **No level ever leaves [0, 1], even partway through step 3.** Physiology, each reaction and each emitter clamp what they write, instead of one clamp at (f). v6's single clamp let a drive at 0, pushed below 0 by a relief emitter, look like a fall to its Fall emitter, so a sprite at rest dripped reward every tick, and eating when full was rewarded, against §4.5. Found in the slice 4 code review. | Owner decision | §2.4, §4.4 |
 
 ---
 
@@ -253,7 +254,7 @@ world.check_invariants();                                // debug/test builds
 |---|---|---|
 | 1 | **Commands** | Apply the commands stamped for this tick, in the order they were submitted. The hand's direct chemical injections happen here, and its pulses go into the target's `incoming` buffer. Invalid commands are rejected with a `CommandRejected` event. |
 | 2 | **Environment** | Object rules run (stages, counters, spawning, spreading, expiry). This covers the objects that exist **when step 2 begins**, in ascending ID order, with rules in the order listed (§3.5). Objects created during step 2 first run next tick. |
-| 3 | **Biochemistry** | For every sprite, **held or not**: (a) pulse latch: `live ← incoming` and `incoming` is emptied; (b) physiology; (c) reactions; (d) half-life decay; (e1) Level emitters; (e2) Rise/Fall emitters; (f) clamp to [0, 1]; (g) receptors. Then **death check #1**: if `injury ≥ 1.0` the sprite is marked **dying**. |
+| 3 | **Biochemistry** | For every sprite, **held or not**: (a) pulse latch: `live ← incoming` and `incoming` is emptied; (b) physiology; (c) reactions; (d) half-life decay; (e1) Level emitters; (e2) Rise/Fall emitters; (f) receptors. No level leaves [0, 1] at any point (§4.4). Then **death check #1**: if `injury ≥ 1.0` the sprite is marked **dying**. |
 | 4 | **Learning** | For every sprite not marked dying: read `r = reward − punishment`, then **reset both to 0** (learning consumes them). Reinforce using the trace ring buffer (the freshest entry is from the previous tick), relax the two-timescale weights, then recruitment (§5.6). |
 | 5 | **Sense and decide** | For every sprite that is neither dying nor held: refresh the perception flood if needed (§3.6), then **5.0** check the current action, **5a** attention, **5b** decision (§5.5). The activations are snapshotted. |
 | 6 | **Resolve actions** | In an order shuffled each tick by the world RNG: movement steps (including head-on swaps, §3.7) and verb effects. Effects inject physical chemicals and write `incoming` pulses. Then each deciding sprite **commits one trace entry**: its snapshot plus the outcome. This happens every tick, whether the action just started or is continuing. |
@@ -790,8 +791,9 @@ For each sprite:
    - **(e2) Rise/Fall emitters** run in genome order. Their "change" is the locus value now (after reactions, decay, e1, and any earlier e2 emitter) minus its value at the end of the previous tick's step 3.
    - Each emitter sees the effects of every emitter before it. This guarantees that a drive knocked down by a pulse-keyed Level emitter produces its Fall reward **in the same tick**, ready for step 4.
    - A chain of Rise/Fall emitters, such as injury → pain → punishment, works within one tick if its genes are in chain order. The starter genome orders them that way; evolution can reorder them.
-6. **(f) Clamp** every concentration to [0, 1].
-7. **(g) Receptors** update the modulators.
+6. **(f) Receptors** update the modulators.
+
+**No level ever leaves [0, 1], even partway through.** Physiology clamps its chemicals once it's done: it works on them below 0 only to tell that energy or hydration has run out. Each reaction and each emitter then clamps what it writes, and decay can't leave the range. So no gene ever reads a level outside [0, 1], and a Rise or Fall emitter only sees a change that really happened: a drive at 0 that a relief emitter pushes down stays at 0, and releases no reward.
 
 Then **death check #1** runs (§2.4).
 
