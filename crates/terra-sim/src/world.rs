@@ -166,9 +166,7 @@ impl World {
                 .real_object_type(name)
                 .ok_or_else(not_an_object)?;
             let state = &mut world.state;
-            if !state.map.contains(pos)
-                || !state.objects.can_place(&state.map, &world.data, kind, pos)
-            {
+            if !state.objects.can_place(&state.map, &world.data, kind, pos) {
                 return Err(ScenarioError::CantPlace {
                     object_type: name.into(),
                     pos,
@@ -228,8 +226,11 @@ impl World {
         })
     }
 
-    /// The object on the tile at `pos`, if any.
+    /// The object on the tile at `pos`, if any. Off the map there is none.
     pub fn object_at(&self, pos: Pos) -> Option<ObjectView<'_>> {
+        if !self.state.map.contains(pos) {
+            return None;
+        }
         let id = self.state.objects.at(pos)?;
         Some(ObjectView {
             id,
@@ -278,12 +279,14 @@ impl World {
     /// Checks the world's internal invariants (design §7.1). Later slices add checks here.
     pub fn check_invariants(&self) -> Result<(), InvariantViolation> {
         let state = &self.state;
-        if state.next_id < self.checked_next_id.replace(state.next_id) {
+        // Keep the highest value seen, so a counter that went back stays caught.
+        if state.next_id < self.checked_next_id.get() {
             return Err(InvariantViolation(format!(
                 "the ID counter went back, to {}: IDs must only go up",
                 state.next_id
             )));
         }
+        self.checked_next_id.set(state.next_id);
         if let Some((id, _)) = state.objects.iter().find(|(id, _)| id.0 >= state.next_id) {
             return Err(InvariantViolation(format!(
                 "{id:?} is at or above the ID counter, {}: IDs must only go up",
@@ -352,6 +355,7 @@ mod tests {
         // Every object left is below the counter, but the berry's ID could now be reused.
         world.state.next_id -= 1;
         assert!(world.check_invariants().is_err());
+        assert!(world.check_invariants().is_err(), "and it stays caught");
     }
 
     #[test]
