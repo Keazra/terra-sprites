@@ -163,3 +163,70 @@ fn back(pos: Pos, dir: Dir) -> Pos {
         y: (i32::from(pos.y) - dy) as u16,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::objects::EntityId;
+    use crate::sprites::Sprite;
+
+    /// What a flood spreads through: a map drawn from `rows`, with no
+    /// objects, and starter sprites on `sprites`.
+    fn parts(rows: &[&str], sprites: &[Pos]) -> (Map, Objects, Sprites, DataPack) {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let map = Map::from_ascii(rows, &data).expect("valid drawing");
+        let objects = Objects::new(&map);
+        let mut placed = Sprites::new(&map);
+        for (n, &pos) in sprites.iter().enumerate() {
+            let sprite = Sprite::newborn(data.starter().clone(), pos, 0, &data);
+            placed.place(EntityId(n as u64 + 1), sprite);
+        }
+        (map, objects, placed, data)
+    }
+
+    fn flood(rows: &[&str], sprites: &[Pos], origin: Pos, radius: u16, penalty: u32) -> Flood {
+        let (map, objects, sprites, data) = parts(rows, sprites);
+        let ground = Ground {
+            map: &map,
+            objects: &objects,
+            sprites: &sprites,
+            data: &data,
+        };
+        Flood::new(ground, origin, radius, Occupied::Penalty(penalty), 0)
+    }
+
+    fn at(x: u16, y: u16) -> Pos {
+        Pos { x, y }
+    }
+
+    #[test]
+    fn a_tile_holding_another_sprite_costs_the_penalty_more_to_cross() {
+        let origin = at(0, 0);
+        let flood = flood(&["....."], &[origin, at(2, 0)], origin, 10, 30);
+        assert_eq!(flood.cost(at(1, 0)), Some(10));
+        assert_eq!(flood.cost(at(2, 0)), Some(50));
+        assert_eq!(flood.cost(at(4, 0)), Some(70));
+    }
+
+    #[test]
+    fn the_flood_reaches_tiles_within_its_radius_only() {
+        let flood = flood(&["........."], &[], at(4, 0), 3, 0);
+        assert_eq!(flood.cost(at(1, 0)), Some(30));
+        assert_eq!(flood.cost(at(7, 0)), Some(30));
+        assert_eq!(flood.cost(at(0, 0)), None);
+        assert_eq!(flood.cost(at(8, 0)), None);
+    }
+
+    #[test]
+    fn the_path_to_a_tile_is_its_steps_from_the_origin() {
+        let flood = flood(&["...", ".#.", "..."], &[], at(0, 1), 5, 0);
+        assert_eq!(flood.path_to(at(0, 1)), Some(vec![]));
+        // Around the rock, without cutting its corners; the way over the
+        // top and the way under cost the same, and the top comes first in
+        // tile order.
+        assert_eq!(
+            flood.path_to(at(2, 1)),
+            Some(vec![at(0, 0), at(1, 0), at(2, 0), at(2, 1)])
+        );
+    }
+}

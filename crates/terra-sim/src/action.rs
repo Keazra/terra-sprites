@@ -127,16 +127,51 @@ pub(crate) fn sense_and_decide(
             continue;
         }
         if let Some(ScriptedAction::Wander { destination }) = sprite.scripted.take() {
-            sprite.action = Some(Action::new(Verb::Wander, Some(destination)));
-            events.push(Event {
-                tick: state.tick,
-                kind: EventKind::ActionStarted {
-                    id,
-                    verb: Verb::Wander,
-                },
-            });
+            start(
+                sprite,
+                id,
+                Verb::Wander,
+                Some(destination),
+                state.tick,
+                events,
+            );
         }
     }
+}
+
+/// Starts `sprite` (`id`) on an action. A Wander to a destination its flood
+/// doesn't reach ends at once, as failed (design §5.5).
+fn start(
+    sprite: &mut Sprite,
+    id: EntityId,
+    verb: Verb,
+    destination: Option<Pos>,
+    tick: u64,
+    events: &mut Vec<Event>,
+) {
+    let mut action = Action::new(verb, destination);
+    events.push(Event {
+        tick,
+        kind: EventKind::ActionStarted { id, verb },
+    });
+    let flood = sprite.flood.as_ref().expect("step 5 made the flood");
+    if destination.is_some_and(|to| flood.cost(to).is_none()) {
+        end(&mut action, id, Outcome::Failed, tick, events);
+    }
+    sprite.action = Some(action);
+}
+
+/// Ends `action` (sprite `id`'s) with `outcome`, and reports it.
+fn end(action: &mut Action, id: EntityId, outcome: Outcome, tick: u64, events: &mut Vec<Event>) {
+    action.ended = Some(outcome);
+    events.push(Event {
+        tick,
+        kind: EventKind::ActionEnded {
+            id,
+            verb: action.verb,
+            outcome,
+        },
+    });
 }
 
 /// Step 6 (design §2.4, §3.7): every acting sprite not marked dying carries
@@ -181,15 +216,7 @@ pub(crate) fn resolve(
             sprite.move_points -= cost;
             if next == destination {
                 let action = sprite.action.as_mut().expect("an action");
-                action.ended = Some(Outcome::Applied);
-                events.push(Event {
-                    tick: state.tick,
-                    kind: EventKind::ActionEnded {
-                        id,
-                        verb: action.verb,
-                        outcome: Outcome::Applied,
-                    },
-                });
+                end(action, id, Outcome::Applied, state.tick, events);
                 break;
             }
         }
