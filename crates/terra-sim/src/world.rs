@@ -983,12 +983,19 @@ mod tests {
             .filter(|e| matches!(e.kind, EventKind::ActionEnded { .. }))
             .map(|e| (e.tick, e.kind))
             .collect();
-        let failed = EventKind::ActionEnded {
-            id,
-            verb: Verb::Wander,
-            outcome: Outcome::Failed,
-        };
-        assert_eq!(ended, [(1, failed)]);
+        let failed: Vec<(u64, Verb, Outcome)> = ended
+            .into_iter()
+            .map(|(tick, kind)| match kind {
+                EventKind::ActionEnded {
+                    id: who,
+                    verb,
+                    outcome,
+                    ..
+                } if who == id => (tick, verb, outcome),
+                _ => unreachable!("only endings"),
+            })
+            .collect();
+        assert_eq!(failed, [(1, Verb::Wander, Outcome::Failed)]);
     }
 
     #[test]

@@ -2,8 +2,8 @@
 //! re-planning, driven through hand-made worlds.
 
 use terra_sim::{
-    DataPack, EntityId, Event, EventKind, Genome, Map, Outcome, Pos, Progress, Scenario,
-    ScriptedAction, Verb, World,
+    ActionView, DataPack, EntityId, Event, EventKind, Genome, Map, Outcome, Pos, Progress,
+    Scenario, ScriptedAction, Verb, World,
 };
 
 fn builtin() -> DataPack {
@@ -146,7 +146,16 @@ fn a_sprite_told_to_wander_to_a_spot_walks_there_a_step_at_a_time_and_arrives() 
                 EventKind::ActionEnded {
                     id,
                     verb: Verb::Wander,
-                    outcome: Outcome::Applied
+                    outcome: Outcome::Applied,
+                    action: ActionView {
+                        verb: Verb::Wander,
+                        destination: Some(at(5, 0)),
+                        target: None,
+                        target_type: None,
+                        attempted: false,
+                        target_gone: false,
+                        progress: Progress::Ended(Outcome::Applied),
+                    }
                 }
             ),
         ]

@@ -1,6 +1,6 @@
 //! What happened during a tick, reported by `World::step` (design §2.5).
 
-use crate::action::Outcome;
+use crate::action::{ActionView, Outcome};
 use crate::map::Pos;
 use crate::objects::EntityId;
 use crate::registry::Verb;
@@ -29,6 +29,9 @@ pub enum EventKind {
         id: EntityId,
         verb: Verb,
         outcome: Outcome,
+        /// The action as it ended: what it was aimed at, and whether it got
+        /// to make its attempt, for describing it afterwards.
+        action: ActionView,
     },
     /// A sprite died, and left the world.
     Died {

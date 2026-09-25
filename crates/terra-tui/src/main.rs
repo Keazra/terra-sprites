@@ -134,7 +134,7 @@ fn run(
             || events.extend(world.step()),
             || frame_start.elapsed() >= SIM_BUDGET,
         );
-        app.record(&events);
+        app.record(&events, &world);
     }
 }
 

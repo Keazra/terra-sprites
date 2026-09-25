@@ -317,12 +317,22 @@ pub(crate) fn end(
     events: &mut Vec<Event>,
 ) {
     action.ended = Some(outcome);
+    let view = ActionView {
+        verb: action.verb,
+        destination: action.destination,
+        target: action.target,
+        target_type: action.target_type,
+        attempted: action.attempted,
+        target_gone: action.target_gone,
+        progress: Progress::Ended(outcome),
+    };
     events.push(Event {
         tick,
         kind: EventKind::ActionEnded {
             id,
             verb: action.verb,
             outcome,
+            action: view,
         },
     });
 }

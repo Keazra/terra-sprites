@@ -265,7 +265,9 @@ fn a_target_that_is_gone_ends_the_action_as_failed() {
     assert!(world.object_at(berry).is_none(), "eaten");
     let events = world.step();
     let far_ended = events.iter().find_map(|e| match e.kind {
-        EventKind::ActionEnded { id, verb, outcome } if id == far => Some((verb, outcome)),
+        EventKind::ActionEnded {
+            id, verb, outcome, ..
+        } if id == far => Some((verb, outcome)),
         _ => None,
     });
     assert_eq!(far_ended, Some((Verb::Eat, Outcome::Failed)));
@@ -320,7 +322,9 @@ fn approaching_a_sprite_follows_it_as_it_moves() {
     for _ in 0..60 {
         let events = world.step();
         let ended = events.iter().find_map(|e| match e.kind {
-            EventKind::ActionEnded { id, verb, outcome } if id == follower => Some((verb, outcome)),
+            EventKind::ActionEnded {
+                id, verb, outcome, ..
+            } if id == follower => Some((verb, outcome)),
             _ => None,
         });
         if let Some(ended) = ended {

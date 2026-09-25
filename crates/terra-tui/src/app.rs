@@ -46,6 +46,22 @@ impl CursorMode {
     }
 }
 
+/// How many lines the observed list keeps (design §6.1).
+pub const OBSERVED_LENGTH: usize = 500;
+
+/// A line of the Body tab's observed list (design §6.1): an action the
+/// player watched the selected sprite finish, or several in a row that read
+/// the same.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Observed {
+    /// What it did, in the past tense.
+    pub line: String,
+    /// How many times in a row.
+    pub count: u32,
+    /// The tick the latest of them finished on.
+    pub tick: u64,
+}
+
 /// The sprite the inspector shows (design §6.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Selection {
@@ -134,6 +150,8 @@ pub struct App {
     pointer: Option<Position>,
     /// The latest events the event log shows, newest first.
     event_log: VecDeque<Event>,
+    /// The selected sprite's observed list, newest first.
+    observed: VecDeque<Observed>,
     selection: Option<Selection>,
     tab: Tab,
     /// How many lines the open tab is scrolled down.
@@ -163,6 +181,7 @@ impl App {
             inspector: areas.inspector,
             pointer: None,
             event_log: VecDeque::new(),
+            observed: VecDeque::new(),
             selection: None,
             tab: Tab::World,
             tab_scroll: 0,
@@ -177,8 +196,16 @@ impl App {
     /// left out of the log: they happen dozens of times a minute and would
     /// bury everything else. The World tab counts objects instead, and the
     /// Body tab shows the selected sprite's action.
-    pub fn record(&mut self, events: &[Event]) {
+    ///
+    /// An action the selected sprite finishes goes on the front of its
+    /// observed list, or counts up the line there if it reads the same.
+    pub fn record(&mut self, events: &[Event], world: &World) {
         for event in events {
+            if let EventKind::ActionEnded { id, ref action, .. } = event.kind
+                && self.selection == Some(Selection::Living(id))
+            {
+                self.observe(event.tick, inspector::observed_line(action, world.data()));
+            }
             if let EventKind::Died { id, cause, age } = event.kind
                 && self.selection == Some(Selection::Living(id))
             {
@@ -195,6 +222,30 @@ impl App {
             }
         }
         self.event_log.truncate(EVENT_LOG_LENGTH);
+    }
+
+    /// Puts `line`, finished on `tick`, on the front of the observed list.
+    fn observe(&mut self, tick: u64, line: String) {
+        match self.observed.front_mut() {
+            Some(front) if front.line == line => {
+                front.count += 1;
+                front.tick = tick;
+            }
+            _ => {
+                self.observed.push_front(Observed {
+                    line,
+                    count: 1,
+                    tick,
+                });
+                self.observed.truncate(OBSERVED_LENGTH);
+            }
+        }
+    }
+
+    /// What the player has watched the selected sprite finish since
+    /// selecting it, newest first (design §6.1).
+    pub fn observed(&self) -> impl Iterator<Item = &Observed> {
+        self.observed.iter()
     }
 
     /// The events the event log shows, newest first.
@@ -324,10 +375,14 @@ impl App {
     /// Selects the sprite `id`. From the World tab, that opens Body; and
     /// another sprite than before shows its tab from the top.
     fn select(&mut self, id: EntityId) {
+        let another = self.selection.map(Selection::id) != Some(id);
         if self.tab == Tab::World {
             self.open(Tab::Body);
-        } else if self.selection.map(Selection::id) != Some(id) {
+        } else if another {
             self.tab_scroll = 0;
+        }
+        if another {
+            self.observed.clear();
         }
         self.selection = Some(Selection::Living(id));
     }

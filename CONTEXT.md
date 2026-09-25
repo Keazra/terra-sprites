@@ -296,6 +296,10 @@ _Avoid_: focus, target
 The side panel of tabs about the selected sprite (Body, Brain, Chem, Genome) or the world (World).
 _Avoid_: sidebar, details
 
+**Observed list**:
+What the player has watched the selected sprite finish since selecting it, at the end of the Body tab. It only grows while the sprite is selected.
+_Avoid_: history, log (the event log is different)
+
 **Detail view**:
 A view the player switches on and off that shows the exact workings behind what the screen describes in words, such as a sprite's verb and where it's heading.
 _Avoid_: debug mode (it's in every build)

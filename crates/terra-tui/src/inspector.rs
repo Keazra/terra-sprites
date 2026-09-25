@@ -71,7 +71,7 @@ pub fn lines(app: &App, world: &World) -> Vec<Line<'static>> {
         (Tab::World, _) => world_tab(world),
         (_, None) => vec![Line::from(NOTHING_SELECTED)],
         (tab, Some(Selection::Living(id))) => match world.sprite(id) {
-            Some(sprite) => sprite_tab(tab, &sprite, app.detail(), world.data()),
+            Some(sprite) => sprite_tab(tab, &sprite, app, world),
             None => Vec::new(),
         },
         (_, Some(Selection::Dead { id, cause, age })) => {
@@ -97,10 +97,10 @@ pub(crate) fn first_shown(scroll: usize, length: usize, rows: usize) -> usize {
     scroll.min(length.saturating_sub(rows))
 }
 
-/// A sprite tab's lines for `sprite`, in the detail view if `detail`.
-fn sprite_tab(tab: Tab, sprite: &SpriteView, detail: bool, data: &DataPack) -> Vec<Line<'static>> {
+/// A sprite tab's lines for `sprite`, the selection.
+fn sprite_tab(tab: Tab, sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
     match tab {
-        Tab::Body => body_tab(sprite, detail, data),
+        Tab::Body => body_tab(sprite, app, world),
         Tab::Chem => chem_tab(sprite),
         Tab::Genome => genome_tab(sprite),
         Tab::World => Vec::new(),
@@ -108,12 +108,13 @@ fn sprite_tab(tab: Tab, sprite: &SpriteView, detail: bool, data: &DataPack) -> V
 }
 
 /// The Body tab (design §6.1): what the sprite is doing, age and traits, a
-/// bar for each drive, and the physical levels, three to a line.
-fn body_tab(sprite: &SpriteView, detail: bool, data: &DataPack) -> Vec<Line<'static>> {
+/// bar for each drive, the physical levels, three to a line, and what the
+/// player has observed it do.
+fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
     let traits = sprite.traits();
     let doing = sprite
         .action()
-        .map(|action| format!(" {}", action_line(&action, detail, data)));
+        .map(|action| format!(" {}", action_line(&action, app.detail(), world.data())));
     let mut lines: Vec<String> = doing.into_iter().collect();
     lines.extend([
         format!(
@@ -148,7 +149,65 @@ fn body_tab(sprite: &SpriteView, detail: bool, data: &DataPack) -> Vec<Line<'sta
     for three in physical.chunks(3) {
         lines.push(format!(" {}", three.join(" · ")));
     }
+    lines.push(String::new());
+    lines.extend(observed_lines(app, world.tick()));
     lines.into_iter().map(Line::from).collect()
+}
+
+/// The observed list (design §6.1), newest first: how long ago each line's
+/// latest action finished, right-aligned, and what it did, wrapped under
+/// its own text. `now` is the world's tick counter.
+fn observed_lines(app: &App, now: u64) -> Vec<String> {
+    let mut lines = vec![" Observed".to_string()];
+    let entries: Vec<(String, String)> = app
+        .observed()
+        .map(|o| {
+            // An action ending on tick t has been over since the world moved
+            // on to t + 1.
+            let ago = match now.saturating_sub(o.tick + 1) {
+                0 => "just now".to_string(),
+                1 => "1 tick ago".to_string(),
+                n => format!("{} ticks ago", group_thousands(n)),
+            };
+            let times = if o.count > 1 {
+                format!(" ×{}", o.count)
+            } else {
+                String::new()
+            };
+            (ago, format!("{}{times}", o.line))
+        })
+        .collect();
+    if entries.is_empty() {
+        lines.push("   nothing yet".into());
+    }
+    let width = entries.iter().map(|(ago, _)| ago.chars().count()).max();
+    for (ago, text) in &entries {
+        let head = format!(" {ago:>width$} · ", width = width.unwrap_or(0));
+        lines.extend(hanging(&head, text));
+    }
+    lines
+}
+
+/// `text` after `head`, wrapped to the inspector's width with each later
+/// line indented to where the text began.
+fn hanging(head: &str, text: &str) -> Vec<String> {
+    let indent = " ".repeat(head.chars().count());
+    let mut lines = Vec::new();
+    let mut line = head.to_string();
+    let mut empty = true;
+    for word in text.split(' ') {
+        if !empty && line.chars().count() + 1 + word.chars().count() > WIDTH {
+            lines.push(std::mem::replace(&mut line, indent.clone()));
+            empty = true;
+        }
+        if !empty {
+            line.push(' ');
+        }
+        line.push_str(word);
+        empty = false;
+    }
+    lines.push(line);
+    lines
 }
 
 /// What a sprite is doing, as the Body tab's first line says it (design
@@ -168,15 +227,8 @@ fn action_line(action: &ActionView, detail: bool, data: &DataPack) -> String {
 /// An Eat, Drink or Approach in plain words, naming what it's aimed at, if
 /// it has words for `progress`.
 fn aimed_line(action: &ActionView, data: &DataPack) -> Option<String> {
-    let target = action.target?;
-    let what = match target {
-        Target::Sprite(id) => sprite_label(id),
-        Target::Water(_) => "the water".into(),
-        Target::Object(_) => {
-            let name = action.target_type.and_then(|id| data.object_type_name(id));
-            format!("the {}", display_name(name.unwrap_or("?")))
-        }
-    };
+    action.target?;
+    let what = target_words(action, data);
     let going = match action.verb {
         Verb::Eat => format!("Going to eat {what}"),
         Verb::Drink => "Going to drink".into(),
@@ -205,6 +257,59 @@ fn aimed_line(action: &ActionView, data: &DataPack) -> Option<String> {
         }
         Progress::Ended(outcome) => return ended_line(outcome),
     })
+}
+
+/// A finished action in the past tense, for the Body tab's observed list
+/// (design §6.1): what it did, or what it set out to do and how that went.
+pub(crate) fn observed_line(action: &ActionView, data: &DataPack) -> String {
+    let Progress::Ended(outcome) = action.progress else {
+        return action_line(action, false, data);
+    };
+    let what = target_words(action, data);
+    let set_out = match action.verb {
+        Verb::Wander => "Wandered off".to_string(),
+        Verb::Rest => "Rested".into(),
+        Verb::Eat => format!("Went to eat {what}"),
+        Verb::Drink => "Went to drink".into(),
+        Verb::Approach => format!("Went over to {what}"),
+        verb => verb_name(verb).to_lowercase(),
+    };
+    let how = match outcome {
+        Outcome::Applied => {
+            return match action.verb {
+                // A thing eaten whole is gone; one eaten from is still there.
+                Verb::Eat if action.target_gone => format!("Ate {what}"),
+                Verb::Eat => format!("Ate from {what}"),
+                Verb::Drink => "Drank".into(),
+                _ => set_out,
+            };
+        }
+        Outcome::Failed if action.attempted => "it was empty".to_string(),
+        Outcome::Failed if action.target_gone => match action.target {
+            Some(Target::Sprite(_)) => format!("{what} was gone"),
+            _ => "it was gone".into(),
+        },
+        Outcome::Interrupted => "changed its mind".into(),
+        outcome => {
+            let reason = ended_line(outcome).expect("an outcome that isn't applied");
+            reason.replacen("Gave up", "gave up", 1)
+        }
+    };
+    format!("{set_out}, but {how}")
+}
+
+/// What an aimed action is aimed at, in words: "the berry bush", "the
+/// water", "Sprite #530". Empty for an action aimed at nothing.
+fn target_words(action: &ActionView, data: &DataPack) -> String {
+    match action.target {
+        Some(Target::Sprite(id)) => sprite_label(id),
+        Some(Target::Water(_)) => "the water".into(),
+        Some(Target::Object(_)) => {
+            let name = action.target_type.and_then(|id| data.object_type_name(id));
+            format!("the {}", display_name(name.unwrap_or("?")))
+        }
+        None => String::new(),
+    }
 }
 
 /// How any action that ended without doing what it set out to ends, in plain words.
@@ -945,6 +1050,75 @@ mod tests {
         for (view, plain, exact) in cases {
             assert_eq!(action_line(&view, false, &pack()), plain, "{view:?}");
             assert_eq!(action_line(&view, true, &pack()), exact, "{view:?}");
+        }
+    }
+
+    #[test]
+    fn a_finished_action_is_observed_in_the_past_tense_saying_how_it_went_if_badly() {
+        use Outcome::*;
+        use Progress::Ended;
+        let bush = |o| aimed(Verb::Eat, Target::Object(EntityId(812)), 1, Ended(o));
+        let berry = |o| aimed(Verb::Eat, Target::Object(EntityId(9)), 2, Ended(o));
+        let water = |o| {
+            aimed(
+                Verb::Drink,
+                Target::Water(Pos { x: 4, y: 1 }),
+                100,
+                Ended(o),
+            )
+        };
+        let sprite = |o| aimed(Verb::Approach, Target::Sprite(EntityId(530)), 101, Ended(o));
+        let tried = |view: ActionView| ActionView {
+            attempted: true,
+            ..view
+        };
+        let gone = |view: ActionView| ActionView {
+            target_gone: true,
+            ..view
+        };
+        let cases = [
+            (wander(Ended(Applied)), "Wandered off"),
+            (
+                wander(Ended(Blocked)),
+                "Wandered off, but gave up: the way was blocked",
+            ),
+            (
+                wander(Ended(TimedOut)),
+                "Wandered off, but gave up: it took too long",
+            ),
+            (
+                wander(Ended(Failed)),
+                "Wandered off, but gave up: it couldn't get there",
+            ),
+            (rest(Ended(Applied)), "Rested"),
+            (rest(Ended(Interrupted)), "Rested, but changed its mind"),
+            (tried(bush(Applied)), "Ate from the berry bush"),
+            (gone(tried(berry(Applied))), "Ate the berry"),
+            (
+                tried(bush(Failed)),
+                "Went to eat the berry bush, but it was empty",
+            ),
+            (
+                bush(Interrupted),
+                "Went to eat the berry bush, but changed its mind",
+            ),
+            (
+                gone(berry(Failed)),
+                "Went to eat the berry, but it was gone",
+            ),
+            (tried(water(Applied)), "Drank"),
+            (
+                water(Failed),
+                "Went to drink, but gave up: it couldn't get there",
+            ),
+            (tried(sprite(Applied)), "Went over to Sprite #530"),
+            (
+                gone(sprite(Failed)),
+                "Went over to Sprite #530, but Sprite #530 was gone",
+            ),
+        ];
+        for (view, line) in cases {
+            assert_eq!(observed_line(&view, &pack()), line, "{view:?}");
         }
     }
 

@@ -3,8 +3,8 @@ use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
-    DataPack, DeathCause, EntityId, Event, EventKind, Map, Outcome, Pos, Removal, Scenario,
-    ScriptedAction, Verb, World, WorldConfig,
+    ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Map, Outcome, Pos, Progress,
+    Removal, Scenario, ScriptedAction, Verb, World, WorldConfig,
 };
 use terra_tui::app::App;
 use terra_tui::input::Action;
@@ -606,19 +606,22 @@ fn inside(row: &str) -> &str {
 fn the_event_log_lists_deaths_newest_first_under_the_map() {
     let world = garden(pack());
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    app.record(&[died(4_012, 31, DeathCause::Dehydration, 4_012)]);
-    app.record(&[
-        Event {
-            tick: 4_100,
-            kind: EventKind::ObjectRemoved {
-                id: EntityId(3),
-                object_type: "berry".into(),
-                reason: Removal::Expired,
+    app.record(&[died(4_012, 31, DeathCause::Dehydration, 4_012)], &world);
+    app.record(
+        &[
+            Event {
+                tick: 4_100,
+                kind: EventKind::ObjectRemoved {
+                    id: EntityId(3),
+                    object_type: "berry".into(),
+                    reason: Removal::Expired,
+                },
             },
-        },
-        died(4_100, 12, DeathCause::Starvation, 3_900),
-        died(4_100, 13, DeathCause::OldAge, 66_000),
-    ]);
+            died(4_100, 12, DeathCause::Starvation, 3_900),
+            died(4_100, 13, DeathCause::OldAge, 66_000),
+        ],
+        &world,
+    );
     let screen = lines(&render(&app, &world, 100, 30));
     assert!(screen[24].starts_with("┌─ Events ─"), "{:?}", screen[24]);
     assert_eq!(
@@ -648,28 +651,40 @@ fn the_event_log_leaves_object_and_action_events_out_and_keeps_the_latest_100() 
             pos: terra_sim::Pos { x: 1, y: 1 },
         },
     };
-    app.record(&[spawned]);
+    app.record(&[spawned], &world);
     let id = EntityId(3);
-    app.record(&[
-        Event {
-            tick: 1,
-            kind: EventKind::ActionStarted {
-                id,
-                verb: Verb::Wander,
+    app.record(
+        &[
+            Event {
+                tick: 1,
+                kind: EventKind::ActionStarted {
+                    id,
+                    verb: Verb::Wander,
+                },
             },
-        },
-        Event {
-            tick: 1,
-            kind: EventKind::ActionEnded {
-                id,
-                verb: Verb::Wander,
-                outcome: Outcome::Failed,
+            Event {
+                tick: 1,
+                kind: EventKind::ActionEnded {
+                    id,
+                    verb: Verb::Wander,
+                    outcome: Outcome::Failed,
+                    action: ActionView {
+                        verb: Verb::Wander,
+                        destination: None,
+                        target: None,
+                        target_type: None,
+                        attempted: false,
+                        target_gone: false,
+                        progress: Progress::Ended(Outcome::Failed),
+                    },
+                },
             },
-        },
-    ]);
+        ],
+        &world,
+    );
     assert_eq!(app.event_log().count(), 0, "nor action events");
     for tick in 0..150 {
-        app.record(&[died(tick, tick, DeathCause::Starvation, tick)]);
+        app.record(&[died(tick, tick, DeathCause::Starvation, tick)], &world);
     }
     let ticks: Vec<u64> = app.event_log().map(|event| event.tick).collect();
     assert_eq!(ticks.len(), 100);
@@ -739,7 +754,7 @@ fn when_the_selected_sprite_dies_its_tabs_say_how_and_at_what_age() {
     let id = world.sprites().next().expect("a sprite").id();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
-    app.record(&[died(4_012, id.0, DeathCause::Dehydration, 4_012)]);
+    app.record(&[died(4_012, id.0, DeathCause::Dehydration, 4_012)], &world);
     for tab in ["Body", "Chem", "Genome"] {
         let (top, text) = inspector(&app, &world);
         assert!(
@@ -762,7 +777,7 @@ fn a_sprite_hurt_to_death_by_an_object_is_named_after_its_type() {
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
     // The thornbush is object type 3.
-    app.record(&[died(4_012, id.0, DeathCause::HurtBy(3), 4_012)]);
+    app.record(&[died(4_012, id.0, DeathCause::HurtBy(3), 4_012)], &world);
     let (_, text) = inspector(&app, &world);
     assert_eq!(
         text[..2].join(" "),
@@ -846,7 +861,8 @@ fn the_body_tab_shows_age_traits_drives_and_physical_levels() {
             "food .00 · water .00 · injury .00",
         ]
     );
-    assert!(text[14..].iter().all(String::is_empty), "{text:?}");
+    assert_eq!(text[14..17], ["", "Observed", "nothing yet"]);
+    assert!(text[17..].iter().all(String::is_empty), "{text:?}");
 }
 
 /// A genome that walks a grass step a tick.
@@ -1289,7 +1305,10 @@ fn a_death_message_too_long_for_one_line_wraps() {
     let id = world.sprites().next().expect("a sprite").id();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
-    app.record(&[died(4_012, id.0, DeathCause::Dehydration, 12_345_678)]);
+    app.record(
+        &[died(4_012, id.0, DeathCause::Dehydration, 12_345_678)],
+        &world,
+    );
     let (_, text) = inspector(&app, &world);
     assert_eq!(
         text[..3],
@@ -1373,4 +1392,87 @@ fn chemical_names_show_with_spaces_for_underscores() {
     app.apply(Action::NextTab, &world);
     let (_, chem) = inspector(&app, &world);
     assert!(chem[11].starts_with("bored ness  "), "{:?}", chem[11]);
+}
+
+/// The Body tab's lines from "Observed" to the end, on a screen tall
+/// enough to show it all, keeping their leading spaces.
+fn observed_section(app: &App, world: &World) -> Vec<String> {
+    let rows = right_part(&render(app, world, 100, 60), 46);
+    let text: Vec<String> = rows
+        .iter()
+        .map(|row| {
+            let inner = row.trim_start_matches('│').trim_end_matches('│');
+            inner.trim_end().to_string()
+        })
+        .collect();
+    let start = text
+        .iter()
+        .position(|t| t == " Observed")
+        .expect("the section");
+    let end = text[start..]
+        .iter()
+        .position(|t| t.is_empty() || t.starts_with('└'))
+        .map_or(text.len(), |n| start + n);
+    text[start..end].to_vec()
+}
+
+/// Sprite `id` finished `verb`, aimed at nothing, with `outcome`, on `tick`.
+fn finished(tick: u64, id: EntityId, verb: Verb, outcome: Outcome) -> Event {
+    let action = ActionView {
+        verb,
+        destination: None,
+        target: None,
+        target_type: None,
+        attempted: false,
+        target_gone: false,
+        progress: Progress::Ended(outcome),
+    };
+    Event {
+        tick,
+        kind: EventKind::ActionEnded {
+            id,
+            verb,
+            outcome,
+            action,
+        },
+    }
+}
+
+#[test]
+fn the_body_tab_ends_with_what_was_observed_and_how_long_ago() {
+    let (mut world, _) = one_sprite(WORKED_GENOME, 0);
+    let mut app = app_for(&world, Theme::cp437(), 100, 60);
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(
+        observed_section(&app, &world),
+        [" Observed", "   nothing yet"]
+    );
+    let id = world.sprites().next().expect("the sprite").id();
+    for _ in 0..1_300 {
+        world.step();
+    }
+    // The world has run ticks 0 to 1,299.
+    app.record(
+        &[
+            finished(3, id, Verb::Rest, Outcome::Applied),
+            finished(1_280, id, Verb::Wander, Outcome::Applied),
+            finished(1_290, id, Verb::Wander, Outcome::Applied),
+            finished(1_291, id, Verb::Wander, Outcome::Blocked),
+            finished(1_299, id, Verb::Rest, Outcome::Applied),
+        ],
+        &world,
+    );
+    // Newest first; the times right-aligned, and a long line wrapped under
+    // its text.
+    assert_eq!(
+        observed_section(&app, &world),
+        [
+            " Observed",
+            "        just now · Rested",
+            "     8 ticks ago · Wandered off, but gave",
+            "                   up: the way was blocked",
+            "     9 ticks ago · Wandered off ×2",
+            " 1,296 ticks ago · Rested",
+        ]
+    );
 }
