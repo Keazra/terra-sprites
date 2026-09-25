@@ -73,6 +73,11 @@ impl Sprites {
         self.by_id.iter().map(|(&id, sprite)| (id, sprite))
     }
 
+    /// The sprite `id`, if it exists.
+    pub(crate) fn get(&self, id: EntityId) -> Option<&Sprite> {
+        self.by_id.get(&id)
+    }
+
     /// The sprite `id`, if it exists, to change.
     pub(crate) fn get_mut(&mut self, id: EntityId) -> Option<&mut Sprite> {
         self.by_id.get_mut(&id)

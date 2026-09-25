@@ -332,6 +332,19 @@ impl World {
         })
     }
 
+    /// The sprite on the tile at `pos`, if any. Off the map there is none.
+    pub fn sprite_at(&self, pos: Pos) -> Option<SpriteView<'_>> {
+        if !self.state.map.contains(pos) {
+            return None;
+        }
+        let id = self.state.sprites.at(pos)?;
+        Some(SpriteView {
+            id,
+            sprite: self.state.sprites.get(id)?,
+            world: self,
+        })
+    }
+
     /// The object on the tile at `pos`, if any. Off the map there is none.
     pub fn object_at(&self, pos: Pos) -> Option<ObjectView<'_>> {
         if !self.state.map.contains(pos) {

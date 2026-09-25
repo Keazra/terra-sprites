@@ -160,7 +160,7 @@ impl PhysiologyEntry {
             ("injury.dehydration", injury.dehydration),
             ("injury.old_age", injury.old_age),
         ] {
-            if !(rate >= 0.0) {
+            if rate.is_nan() || rate < 0.0 {
                 return Err(format!("`{name}` is {rate}, but can't be negative"));
             }
         }
