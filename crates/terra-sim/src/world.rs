@@ -162,8 +162,7 @@ impl<'a> SpriteView<'a> {
     /// What the sprite is doing, or the action that last ended until the
     /// next one starts; `None` before its first.
     pub fn action(&self) -> Option<ActionView> {
-        let action = self.sprite.action.as_ref()?;
-        Some(action.view(self.sprite.flood.as_ref()))
+        action::view(self.sprite, &self.world.data)
     }
 
     /// The traits its body has: its genes', clamped to physiology's ranges.
@@ -777,6 +776,57 @@ mod tests {
             "(4, 4) and (6, 6); (3, 3) is 4 tiles away"
         );
         assert_eq!(reading(8, 8), 0.25, "(6, 6) only");
+    }
+
+    /// A row of grass `length` tiles long with one walker of speed 10, a
+    /// step a tick, at its west end, starting on `scripted`.
+    fn row_with_a_walker(length: usize, scripted: &[ScriptedAction]) -> (World, EntityId) {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let row = ".".repeat(length);
+        let map = Map::from_ascii(&[row.as_str()], &data).expect("valid drawing");
+        let start = Pos { x: 0, y: 0 };
+        let scripted: Vec<(Pos, ScriptedAction)> = scripted.iter().map(|&a| (start, a)).collect();
+        let genes = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
+        let genome = Genome::from_ron(genes, &data).expect("a valid genome");
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &[(start, Some(genome))],
+            scripted: &scripted,
+        };
+        let world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let id = world.sprites().next().expect("the walker").id();
+        (world, id)
+    }
+
+    #[test]
+    fn a_sprite_that_stays_put_makes_its_flood_again_every_8_ticks() {
+        let (mut world, id) = row_with_a_walker(3, &[ScriptedAction::Rest; 3]);
+        for tick in 0..24 {
+            world.step();
+            let flood = world.state.sprites.get(id).expect("alive").flood.as_ref();
+            assert_eq!(flood.expect("a flood").made, tick / 8 * 8, "tick {tick}");
+        }
+    }
+
+    #[test]
+    fn a_wander_ends_as_failed_once_its_destination_can_no_longer_be_reached() {
+        let destination = Pos { x: 5, y: 0 };
+        let (mut world, id) = row_with_a_walker(6, &[ScriptedAction::Wander { destination }]);
+        world.step();
+        force_place(&mut world, "thornbush", destination);
+        let ended: Vec<(u64, EventKind)> = world
+            .step()
+            .into_iter()
+            .filter(|e| matches!(e.kind, EventKind::ActionEnded { .. }))
+            .map(|e| (e.tick, e.kind))
+            .collect();
+        let failed = EventKind::ActionEnded {
+            id,
+            verb: crate::registry::Verb::Wander,
+            outcome: crate::action::Outcome::Failed,
+        };
+        assert_eq!(ended, [(1, failed)]);
     }
 
     #[test]

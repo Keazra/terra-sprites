@@ -61,8 +61,13 @@ pub(crate) struct PhysiologyEntry {
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Movement {
+    /// How many ticks after a flood is made it's made again, if the sprite
+    /// hasn't moved sooner.
+    pub(crate) flood_refresh: u32,
     /// What the flood adds for a tile holding another sprite, in terrain units.
     pub(crate) occupied_penalty: u32,
+    /// How many blocked ticks in a row start the search for a way round.
+    pub(crate) replan_after: u32,
 }
 
 /// How long actions last (design §5.5), in ticks.
@@ -71,6 +76,8 @@ pub(crate) struct Movement {
 pub(crate) struct Actions {
     /// How long a Rest lasts.
     pub(crate) rest_bout: u32,
+    /// How long any action may last.
+    pub(crate) timeout: u32,
 }
 
 /// How the `nearby_sprites` body sensor counts.
@@ -237,8 +244,15 @@ impl PhysiologyEntry {
             ));
         }
 
-        if self.actions.rest_bout == 0 {
-            return Err("`actions.rest_bout` must be at least 1 tick".into());
+        for (name, ticks) in [
+            ("actions.rest_bout", self.actions.rest_bout),
+            ("actions.timeout", self.actions.timeout),
+            ("movement.flood_refresh", self.movement.flood_refresh),
+            ("movement.replan_after", self.movement.replan_after),
+        ] {
+            if ticks == 0 {
+                return Err(format!("`{name}` must be at least 1 tick"));
+            }
         }
 
         Ok(Physiology {

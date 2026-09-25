@@ -49,10 +49,13 @@
     // drawn between 1 − this and 1 + this.
     spawn_variation: 0.1,
 
-    // How long actions last (design §5.5), in ticks.
-    actions: (rest_bout: 10),
-    // How sprites find their way (design §3.6–3.7). The flood prices a tile
-    // holding another sprite at `occupied_penalty` more, in terrain units
-    // (a grass step is 10).
-    movement: (occupied_penalty: 30),
+    // How long actions last (design §5.5), in ticks. An action still going
+    // at the timeout ends as timed out.
+    actions: (rest_bout: 10, timeout: 60),
+    // How sprites find their way (design §3.6–3.7). A flood is made again 8
+    // ticks after the last, if the sprite hasn't moved sooner. It prices a
+    // tile holding another sprite at `occupied_penalty` more, in terrain
+    // units (a grass step is 10). After `replan_after` blocked ticks in a
+    // row, a sprite looks for a way round the sprites in its way.
+    movement: (flood_refresh: 8, occupied_penalty: 30, replan_after: 3),
 )

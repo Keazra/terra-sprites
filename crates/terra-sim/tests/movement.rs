@@ -295,7 +295,16 @@ fn a_rest_lasts_10_ticks_and_ends_applied() {
     let start = at(0, 0);
     let mut world = world(&["..."], 10.0, &[start], &[(start, ScriptedAction::Rest)]);
     let id = sprite_on(&world, start);
-    let (events, tiles) = run(&mut world, id, 10);
+    let (_, tiles) = run(&mut world, id, 4);
+    let progress = world
+        .sprite(id)
+        .expect("alive")
+        .action()
+        .expect("resting")
+        .progress;
+    assert_eq!(progress, Progress::Resting { ticks: 4, of: 10 });
+    let (events, more) = run(&mut world, id, 6);
+    let tiles = [tiles, more].concat();
     assert!(tiles.iter().all(|&pos| pos == start), "a rest stays put");
     let ended: Vec<(u64, Outcome)> = events
         .iter()
@@ -465,4 +474,93 @@ fn two_sprites_swap_diagonally_when_neither_cuts_a_corner() {
     world.step();
     assert_eq!(world.sprite(a).expect("alive").pos(), b_start);
     assert_eq!(world.sprite(b).expect("alive").pos(), a_start);
+}
+
+/// `n` rests in a row for the sprite on `pos`.
+fn rests(pos: Pos, n: usize) -> Vec<(Pos, ScriptedAction)> {
+    vec![(pos, ScriptedAction::Rest); n]
+}
+
+#[test]
+fn a_sprite_that_can_find_no_way_past_gives_up_after_3_blocked_ticks() {
+    let (walker, rester) = (at(0, 0), at(2, 0));
+    let mut scripted = vec![(walker, wander_to(at(4, 0)))];
+    scripted.extend(rests(rester, 5));
+    let mut world = world(&["....."], 10.0, &[walker, rester], &scripted);
+    let id = sprite_on(&world, walker);
+    run(&mut world, id, 2);
+    let progress = world
+        .sprite(id)
+        .expect("alive")
+        .action()
+        .expect("wandering")
+        .progress;
+    assert_eq!(progress, Progress::Waiting { blocked_ticks: 1 });
+    let (events, _) = run(&mut world, id, 2);
+    let ended: Vec<_> = action_events(&events)
+        .into_iter()
+        .filter(|(_, _, outcome)| outcome.is_some())
+        .collect();
+    assert_eq!(ended, [(3, Verb::Wander, Some(Outcome::Blocked))]);
+}
+
+/// Two long corridors joined at both ends, with an alcove above the top one
+/// at (3, 0): the way along the bottom is short, the way round the top long.
+const LOOP: [&str; 4] = ["###.####", "........", ".######.", "........"];
+
+#[test]
+fn a_stuck_sprite_keeps_to_the_way_round_it_found() {
+    // The flood keeps pricing the way through the rester cheaper than the
+    // way round, so without keeping to the way it found, it would turn back.
+    let (walker, rester) = (at(0, 3), at(4, 3));
+    let mut scripted = vec![(walker, wander_to(at(7, 3)))];
+    scripted.extend(rests(rester, 10));
+    let mut world = world(&LOOP, 10.0, &[walker, rester], &scripted);
+    let id = sprite_on(&world, walker);
+    let (tiles, outcome) = first_action(&mut world, id, 60);
+    assert_eq!(outcome, Outcome::Applied, "{tiles:?}");
+    assert!(tiles.contains(&at(4, 1)), "round the top: {tiles:?}");
+    assert!(!tiles.contains(&rester), "{tiles:?}");
+}
+
+#[test]
+fn a_sprite_blocked_again_on_its_way_round_searches_again() {
+    // A second sprite rests in the alcove, then steps into the top corridor
+    // and rests there, after the walker has set off round the top.
+    let (walker, rester, lurker) = (at(0, 3), at(4, 3), at(3, 0));
+    let mut scripted = vec![(walker, wander_to(at(7, 3)))];
+    scripted.extend(rests(rester, 10));
+    scripted.push((lurker, ScriptedAction::Rest));
+    scripted.push((lurker, wander_to(at(3, 1))));
+    scripted.extend(rests(lurker, 10));
+    let mut world = world(&LOOP, 10.0, &[walker, rester, lurker], &scripted);
+    let id = sprite_on(&world, walker);
+    let (tiles, outcome) = first_action(&mut world, id, 60);
+    assert_eq!(outcome, Outcome::Blocked, "{tiles:?}");
+    assert!(
+        tiles.contains(&at(1, 1)),
+        "it set off round the top: {tiles:?}"
+    );
+    assert!(
+        !tiles.contains(&at(3, 1)) && !tiles.contains(&rester),
+        "{tiles:?}"
+    );
+}
+
+#[test]
+fn an_action_still_going_after_60_ticks_times_out() {
+    // Speed 4 through shallow water: a step every 6 or 7 ticks.
+    let start = at(0, 0);
+    let row = ["~~~~~~~~~~~~~~~"];
+    let mut world = world(&row, 4.0, &[start], &[(start, wander_to(at(14, 0)))]);
+    let id = sprite_on(&world, start);
+    let (events, _) = run(&mut world, id, 61);
+    let ended: Vec<_> = action_events(&events)
+        .into_iter()
+        .filter(|(_, _, outcome)| outcome.is_some())
+        .collect();
+    assert_eq!(
+        ended.first(),
+        Some(&(60, Verb::Wander, Some(Outcome::TimedOut)))
+    );
 }
