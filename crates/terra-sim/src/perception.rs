@@ -23,15 +23,17 @@ pub(crate) enum Occupied {
     /// Crossable, at this many extra terrain units: sprites move.
     Penalty(u32),
     /// Never entered: blocked re-planning's one-off search (design §3.7).
-    Impassable,
+    Closed,
 }
 
 /// Something a sprite can aim a verb at (design §3.6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Target {
+    /// An object, such as a berry or a bush.
     Object(EntityId),
     /// A tile of drinkable water.
     Water(Pos),
+    /// Another sprite.
     Sprite(EntityId),
 }
 
@@ -130,7 +132,7 @@ impl Flood {
                     (_, None) => 0,
                     _ if to == origin => 0,
                     (Occupied::Penalty(penalty), Some(_)) => penalty,
-                    (Occupied::Impassable, Some(_)) => continue,
+                    (Occupied::Closed, Some(_)) => continue,
                 };
                 let total = cost + step + extra;
                 if total < flood.costs[next] {
@@ -166,10 +168,15 @@ impl Flood {
     }
 
     /// Where a Wander heads (design §5.5): a tile drawn uniformly from those
-    /// the flood reached more than half its radius from the origin; failing
-    /// any, from every tile it reached but the origin; `None` if it reached
-    /// none. One draw from `rng`, if there's a tile to draw.
-    pub(crate) fn wander_destination(&self, rng: &mut ChaCha8Rng) -> Option<Pos> {
+    /// the flood reached more than half of `sense_radius` from the origin,
+    /// the sprite's trait as it is, before the flood rounds it; failing any,
+    /// from every tile it reached but the origin; `None` if it reached none.
+    /// One draw from `rng`, if there's a tile to draw.
+    pub(crate) fn wander_destination(
+        &self,
+        sense_radius: f32,
+        rng: &mut ChaCha8Rng,
+    ) -> Option<Pos> {
         let reached: Vec<Pos> = (0..self.costs.len())
             .filter(|&index| self.costs[index] != UNREACHED)
             .map(|index| self.pos(index))
@@ -179,7 +186,10 @@ impl Flood {
         let far: Vec<Pos> = reached
             .iter()
             .copied()
-            .filter(|pos| 2 * pos.x.abs_diff(origin.x).max(pos.y.abs_diff(origin.y)) > self.radius)
+            .filter(|pos| {
+                let distance = pos.x.abs_diff(origin.x).max(pos.y.abs_diff(origin.y));
+                f32::from(distance) > sense_radius / 2.0
+            })
             .collect();
         let pool = if far.is_empty() { reached } else { far };
         if pool.is_empty() {
@@ -430,7 +440,7 @@ mod tests {
     fn destinations(flood: &Flood) -> BTreeSet<Option<Pos>> {
         let mut rng = ChaCha8Rng::seed_from_u64(5);
         (0..2_000)
-            .map(|_| flood.wander_destination(&mut rng))
+            .map(|_| flood.wander_destination(f32::from(flood.radius), &mut rng))
             .collect()
     }
 
@@ -445,6 +455,19 @@ mod tests {
             .map(Some)
             .collect();
         assert_eq!(drawn, ring);
+    }
+
+    #[test]
+    fn the_half_radius_a_wander_must_beat_is_the_sense_radius_s_not_the_flood_s() {
+        // Sense radius 9.6: the flood reaches 10 tiles, and a wander heads
+        // more than 4.8 away, so 5 tiles is far enough.
+        let flood = flood(&["..........."], &[], at(0, 0), 10, 0);
+        let mut rng = ChaCha8Rng::seed_from_u64(5);
+        let drawn: BTreeSet<Option<Pos>> = (0..2_000)
+            .map(|_| flood.wander_destination(9.6, &mut rng))
+            .collect();
+        let far: BTreeSet<Option<Pos>> = (5..=10).map(|x| Some(at(x, 0))).collect();
+        assert_eq!(drawn, far);
     }
 
     #[test]

@@ -225,6 +225,9 @@ A tile a sprite can act on its target from, such as any walkable tile beside a b
 **Candidate**:
 The nearest reachable thing of each kind around a sprite: the one its verbs would aim at.
 
+**Scripted action**:
+An action a hand-made world starts a sprite on, in place of what it would choose, so a test or a lab scenario can set up an exact situation. Nothing to do with lifecycle rules.
+
 **Swap**:
 Two sprites trading tiles in one tick, because each was stepping into the other's.
 _Avoid_: pass, collision
