@@ -4,7 +4,7 @@
 
 use terra_sim::{
     DataPack, DeathCause, EntityId, Event, EventKind, Genome, Map, ObjectView, Outcome, Pos,
-    Removal, Scenario, ScriptedAction, Verb, World,
+    Progress, Removal, Scenario, ScriptedAction, Target, Verb, World,
 };
 
 fn builtin() -> DataPack {
@@ -187,4 +187,160 @@ fn eating_a_thornbush_pricks_and_enough_bites_kill_hurt_by_thornbush() {
         }
     }
     panic!("30 bites of .05 should kill");
+}
+
+#[test]
+fn a_sprite_walks_to_its_target_and_bites_on_the_tick_it_arrives() {
+    let bush = at(6, 1);
+    let start = at(1, 1);
+    let mut world = world(
+        &["........", "........", "........"],
+        &[(bush, "berry_bush")],
+        start,
+        &[ScriptedAction::Eat { at: bush }],
+    );
+    world
+        .start_object(bush, "mature", &[("fruit", 3)])
+        .expect("a bush to ripen");
+    let id = the_sprite(&world);
+    for _ in 0..20 {
+        let events = world.step();
+        let sprite = world.sprite(id).expect("the sprite");
+        let action = sprite.action().expect("an action");
+        assert_eq!(action.verb, Verb::Eat);
+        assert_eq!(
+            action.target,
+            Some(Target::Object(object(&world, bush).id()))
+        );
+        if sprite.pos() == at(5, 1) {
+            // The one tile beside the bush on the way: it bites as it gets there.
+            assert_eq!(endings(&events), [(Verb::Eat, Outcome::Applied)]);
+            assert_eq!(object(&world, bush).counter("fruit"), Some(2));
+            return;
+        }
+        assert!(endings(&events).is_empty(), "{events:?}");
+        assert!(
+            matches!(action.progress, Progress::Walking { .. }),
+            "{:?}",
+            action.progress
+        );
+    }
+    panic!("the sprite should reach the bush");
+}
+
+/// A world drawn from `rows`, with `objects`, and a walker on each tile of
+/// `sprites` doing its script.
+fn world_of(rows: &[&str], objects: &[(Pos, &str)], sprites: &[(Pos, &[ScriptedAction])]) -> World {
+    let data = builtin();
+    let map = Map::from_ascii(rows, &data).expect("valid drawing");
+    let walkers: Vec<(Pos, Option<Genome>)> = sprites
+        .iter()
+        .map(|&(pos, _)| (pos, Some(walker(&data))))
+        .collect();
+    let scripted: Vec<(Pos, ScriptedAction)> = sprites
+        .iter()
+        .flat_map(|&(pos, script)| script.iter().map(move |&s| (pos, s)))
+        .collect();
+    let scenario = Scenario {
+        map,
+        objects,
+        sprites: &walkers,
+        scripted: &scripted,
+    };
+    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+}
+
+#[test]
+fn a_target_that_is_gone_ends_the_action_as_failed() {
+    // The near sprite eats the berry first; the far one loses its target.
+    let berry = at(1, 1);
+    let eat = [ScriptedAction::Eat { at: berry }];
+    let mut world = world_of(
+        &["........", "........", "........"],
+        &[(berry, "berry")],
+        &[(at(1, 1), &eat), (at(7, 1), &eat)],
+    );
+    let far = world.sprite_at(at(7, 1)).expect("the far sprite").id();
+    world.step();
+    assert!(world.object_at(berry).is_none(), "eaten");
+    let events = world.step();
+    let far_ended = events.iter().find_map(|e| match e.kind {
+        EventKind::ActionEnded { id, verb, outcome } if id == far => Some((verb, outcome)),
+        _ => None,
+    });
+    assert_eq!(far_ended, Some((Verb::Eat, Outcome::Failed)));
+}
+
+/// Whether `a` and `b` are different tiles that touch, at a side or a corner.
+fn beside(a: Pos, b: Pos) -> bool {
+    a != b && a.x.abs_diff(b.x) <= 1 && a.y.abs_diff(b.y) <= 1
+}
+
+#[test]
+fn approaching_a_bush_ends_on_arrival_beside_it() {
+    let bush = at(6, 1);
+    let mut world = world(
+        &["........", "........", "........"],
+        &[(bush, "berry_bush")],
+        at(1, 1),
+        &[ScriptedAction::Approach { at: bush }],
+    );
+    let id = the_sprite(&world);
+    for _ in 0..20 {
+        let events = world.step();
+        if !endings(&events).is_empty() {
+            assert_eq!(endings(&events), [(Verb::Approach, Outcome::Applied)]);
+            assert!(beside(world.sprite(id).expect("it").pos(), bush));
+            return;
+        }
+    }
+    panic!("the sprite should reach the bush");
+}
+
+#[test]
+fn approaching_a_sprite_follows_it_as_it_moves() {
+    // The leader wanders off along the top row; the follower sets off after it.
+    let (leader_start, leader_end) = (at(3, 1), at(14, 1));
+    let wander = [ScriptedAction::Wander {
+        destination: leader_end,
+    }];
+    let approach = [ScriptedAction::Approach { at: leader_start }];
+    let mut world = world_of(
+        &[
+            "................",
+            "................",
+            "................",
+            "................",
+        ],
+        &[],
+        &[(leader_start, &wander), (at(0, 3), &approach)],
+    );
+    let leader = world.sprite_at(leader_start).expect("the leader").id();
+    let follower = world.sprite_at(at(0, 3)).expect("the follower").id();
+    for _ in 0..60 {
+        let events = world.step();
+        let ended = events.iter().find_map(|e| match e.kind {
+            EventKind::ActionEnded { id, verb, outcome } if id == follower => Some((verb, outcome)),
+            _ => None,
+        });
+        if let Some(ended) = ended {
+            assert_eq!(ended, (Verb::Approach, Outcome::Applied));
+            let (follower, leader) = (world.sprite(follower), world.sprite(leader));
+            let leader = leader.expect("the leader").pos();
+            assert!(leader.x > 8, "the leader got well away: {leader:?}");
+            // It reached the leader on its own turn; the leader may have
+            // stepped on after that, in the same tick.
+            let follower = follower.expect("the follower").pos();
+            assert!(follower.x > 6, "it followed the leader: {follower:?}");
+            assert!(
+                follower
+                    .x
+                    .abs_diff(leader.x)
+                    .max(follower.y.abs_diff(leader.y))
+                    <= 2
+            );
+            return;
+        }
+    }
+    panic!("the follower should catch the leader");
 }
