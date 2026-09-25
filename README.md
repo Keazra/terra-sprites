@@ -24,7 +24,7 @@ cargo run --release -- --seed 7
 | `v` | Detail view: exactly what the selected sprite is doing, and an `X` where it's heading |
 | `space` | Pause / resume |
 | `.` | Step one tick while paused (hold to keep stepping) |
-| `+` / `-` | Faster / slower: each step doubles or halves the speed, from ⅛× up to 16×, then Max. The game starts at 1× (10 ticks per second). Holding either key stops at 1×; press again to go past it. |
+| `+` / `-` | Faster / slower: each step doubles or halves the speed, from ⅛× up to 16×, then Max. The game starts at 1× (1.25 ticks per second, slow enough to watch sprites walk). Holding either key stops at 1×; press again to go past it. |
 | `Esc` | Quit, after "Quit? (y/n)": press `y` or `Esc` again |
 | `Ctrl+C` | Quit at once |
 

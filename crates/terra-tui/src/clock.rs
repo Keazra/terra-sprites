@@ -2,12 +2,14 @@
 
 use std::time::Duration;
 
-/// Rates are counted in eighths of a tick per second, so ⅛× (1.25 ticks/s) stays exact.
-const EIGHTHS: u128 = 8;
+/// Rates are counted in 32nds of a tick per second, so ⅛× (5/32 of a tick a
+/// second) stays exact.
+const PARTS: u128 = 32;
 const NANOS_PER_SECOND: u128 = 1_000_000_000;
 
-/// Simulation speed. 1× is 10 ticks per second; each step halves or doubles it.
-/// Max runs as fast as the frame budget allows.
+/// Simulation speed. 1× is 1.25 ticks per second, slow enough to watch a
+/// sprite walk; each step halves or doubles it. Max runs as fast as the frame
+/// budget allows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Speed {
     Eighth,
@@ -22,17 +24,17 @@ pub enum Speed {
 }
 
 impl Speed {
-    /// Eighths of a tick per second, or `None` for Max.
-    fn eighth_ticks_per_second(self) -> Option<u32> {
+    /// 32nds of a tick per second, or `None` for Max.
+    fn parts_per_second(self) -> Option<u32> {
         match self {
-            Speed::Eighth => Some(10),
-            Speed::Quarter => Some(20),
-            Speed::Half => Some(40),
-            Speed::X1 => Some(80),
-            Speed::X2 => Some(160),
-            Speed::X4 => Some(320),
-            Speed::X8 => Some(640),
-            Speed::X16 => Some(1280),
+            Speed::Eighth => Some(5),
+            Speed::Quarter => Some(10),
+            Speed::Half => Some(20),
+            Speed::X1 => Some(40),
+            Speed::X2 => Some(80),
+            Speed::X4 => Some(160),
+            Speed::X8 => Some(320),
+            Speed::X16 => Some(640),
             Speed::Max => None,
         }
     }
@@ -70,7 +72,7 @@ pub struct Clock {
     paused: bool,
     /// A single step requested while paused, run on the next frame.
     step_requested: bool,
-    /// Owed ticks, scaled by 8 × 10⁹ so pacing stays exact in integer maths.
+    /// Owed ticks, scaled by 32 × 10⁹ so pacing stays exact in integer maths.
     owed: u128,
 }
 
@@ -151,11 +153,11 @@ impl Clock {
             }
             return 0;
         }
-        let due = match self.speed.eighth_ticks_per_second() {
+        let due = match self.speed.parts_per_second() {
             Some(rate) => {
                 self.owed += elapsed.as_nanos() * u128::from(rate);
-                let due = self.owed / (NANOS_PER_SECOND * EIGHTHS);
-                self.owed %= NANOS_PER_SECOND * EIGHTHS;
+                let due = self.owed / (NANOS_PER_SECOND * PARTS);
+                self.owed %= NANOS_PER_SECOND * PARTS;
                 due
             }
             // Max: as many ticks as the frame budget allows.
