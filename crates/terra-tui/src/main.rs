@@ -28,12 +28,22 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    let data = match DataPack::builtin() {
+        Ok(data) => data,
+        Err(err) => {
+            eprintln!("terra-sprites: the built-in data pack is invalid: {err:?}");
+            return ExitCode::FAILURE;
+        }
+    };
+    // A preset names object types, so it's checked against the pack.
     let config = match &args.preset {
-        None => WorldConfig::builtin(),
+        None => WorldConfig::builtin(&data),
         Some(path) => {
             let loaded = std::fs::read_to_string(path)
                 .map_err(|err| err.to_string())
-                .and_then(|text| WorldConfig::from_ron(&text).map_err(|err| err.to_string()));
+                .and_then(|text| {
+                    WorldConfig::from_ron(&text, &data).map_err(|err| err.to_string())
+                });
             match loaded {
                 Ok(config) => config,
                 Err(err) => {
@@ -41,13 +51,6 @@ fn main() -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             }
-        }
-    };
-    let data = match DataPack::builtin() {
-        Ok(data) => data,
-        Err(err) => {
-            eprintln!("terra-sprites: the built-in data pack is invalid: {err:?}");
-            return ExitCode::FAILURE;
         }
     };
     let seed = args.seed.unwrap_or_else(time_seed);
@@ -127,7 +130,9 @@ fn run(
         let frame_start = Instant::now();
         app.clock.advance(
             elapsed,
-            || world.step(),
+            || {
+                world.step();
+            },
             || frame_start.elapsed() >= SIM_BUDGET,
         );
     }

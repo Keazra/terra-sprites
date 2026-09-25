@@ -2,13 +2,15 @@
 //! percentile, then one region.
 
 use rand_chacha::ChaCha8Rng;
-use rand_chacha::rand_core::Rng;
 
 use crate::config::WorldConfig;
 use crate::data::DataPack;
-use crate::map::Map;
+use crate::ecology::aged_object;
+use crate::map::{Map, Pos};
+use crate::random::{uniform, unit};
 use crate::regions;
 use crate::terrain::Terrain;
+use crate::world::WorldState;
 
 /// Regions smaller than this become rock; larger ones are joined to the mainland.
 const MIN_REGION: usize = 64;
@@ -61,6 +63,53 @@ pub(crate) fn generate(config: &WorldConfig, data: &DataPack, rng: &mut ChaCha8R
     map
 }
 
+/// Places the preset's objects on the mainland (design §3.2): solid objects
+/// first, then items, each type in ID order. Each goes on a tile drawn
+/// uniformly from the type's remaining candidates, where it may go and, if it's
+/// solid, where it keeps paths open; if none is left, the rest of that type is
+/// skipped. Every object starts at a random point in its life.
+pub(crate) fn place_objects(config: &WorldConfig, data: &DataPack, state: &mut WorldState) {
+    let types = data.object_types();
+    let solid_first = (0..types.len())
+        .filter(|&kind| types[kind].solid)
+        .chain((0..types.len()).filter(|&kind| !types[kind].solid));
+    for kind in solid_first {
+        let count = config.object_count(&types[kind].name);
+        if count == 0 {
+            continue;
+        }
+        // After joining, every walkable tile is on the mainland.
+        let mut candidates: Vec<Pos> = state
+            .map
+            .positions()
+            .filter(|&pos| state.map.is_walkable(pos))
+            .collect();
+        let solid = types[kind].solid;
+        for _ in 0..count {
+            // A tile found unusable is set aside for this type. (One that would
+            // cut a path might become usable once a neighbour fills in; setting
+            // it aside anyway keeps generation quick.)
+            let pos = loop {
+                if candidates.is_empty() {
+                    break None;
+                }
+                let choice = uniform(&mut state.rng, candidates.len() as u64) as usize;
+                let pos = candidates.swap_remove(choice);
+                if state.objects.can_place(&state.map, data, kind, pos)
+                    && (!solid || state.objects.keeps_paths_open(&state.map, data, pos))
+                {
+                    break Some(pos);
+                }
+            };
+            let Some(pos) = pos else {
+                break;
+            };
+            let object = aged_object(data, &mut state.rng, kind, pos);
+            state.add_object(object);
+        }
+    }
+}
+
 /// Indices of `values` from lowest to highest value; ties go to the lower index.
 fn ranked(values: &[f32]) -> Vec<usize> {
     let mut order: Vec<usize> = (0..values.len()).collect();
@@ -103,9 +152,4 @@ fn cell(coord: u16, spacing: u16) -> (usize, f32) {
 
 fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
-}
-
-/// A random value in [0, 1) from the top 24 bits of a draw, so it is exact in `f32`.
-fn unit(rng: &mut ChaCha8Rng) -> f32 {
-    (rng.next_u32() >> 8) as f32 / (1u32 << 24) as f32
 }

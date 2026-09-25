@@ -192,6 +192,11 @@ impl Map {
         self.tiles[index] = terrain;
     }
 
+    /// Whether `pos` is on the map, inside the wall.
+    pub(crate) fn contains(&self, pos: Pos) -> bool {
+        pos.x < self.width && pos.y < self.height
+    }
+
     /// Whether sprites can stand on the tile at `pos`.
     pub(crate) fn is_walkable(&self, pos: Pos) -> bool {
         self.cost_onto(pos).is_some()

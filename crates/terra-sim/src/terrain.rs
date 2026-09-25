@@ -30,6 +30,7 @@ pub struct TerrainProps {
     pub(crate) step_cost: Option<u16>,
     pub(crate) fertility: f32,
     pub(crate) drinkable: bool,
+    pub(crate) allows_fixtures: bool,
 }
 
 impl TerrainProps {
@@ -46,5 +47,10 @@ impl TerrainProps {
     /// Whether sprites can drink here.
     pub fn is_drinkable(&self) -> bool {
         self.drinkable
+    }
+
+    /// Whether a fixture may stand here. Always false on unwalkable terrain.
+    pub fn allows_fixtures(&self) -> bool {
+        self.allows_fixtures
     }
 }

@@ -157,6 +157,9 @@ fn diagonal_costs_round_down_in_integer_maths() {
     let data = DataPack::from_sources(&[
         ("pack.ron", r#"(name: "test", version: "1")"#),
         ("terrain.ron", &terrain),
+        ("chemicals.ron", include_str!("../../../data/chemicals.ron")),
+        ("loci.ron", include_str!("../../../data/loci.ron")),
+        ("objects.ron", include_str!("../../../data/objects.ron")),
     ])
     .expect("valid pack");
     let map = Map::from_ascii(&["..", ".:"], &data).expect("valid drawing");

@@ -13,7 +13,7 @@ fn pack() -> DataPack {
 }
 
 fn generated_world() -> World {
-    World::new(WorldConfig::builtin(), pack(), 7)
+    World::new(WorldConfig::builtin(&pack()), pack(), 7)
 }
 
 /// A world on a drawn map, using the ascii legend.
@@ -336,4 +336,153 @@ fn a_frame_bigger_than_the_fitted_view_draws_no_tiles_past_the_wall() {
         let tiles: String = line.chars().skip(1).take(19).collect();
         assert_eq!(tiles, format!("{} ", ".".repeat(18)), "{line:?}");
     }
+}
+
+/// A 10×5 field of grass with a berry bush, a thornbush, a berry and a ball.
+fn garden(pack: DataPack) -> World {
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let objects = [
+        (terra_sim::Pos { x: 1, y: 1 }, "berry_bush"),
+        (terra_sim::Pos { x: 4, y: 1 }, "thornbush"),
+        (terra_sim::Pos { x: 7, y: 1 }, "berry"),
+        (terra_sim::Pos { x: 6, y: 3 }, "ball"),
+    ];
+    World::from_scenario(map, &objects, pack, 7).expect("valid scenario")
+}
+
+/// An app on `world` with the cursor pointed at tile `(x, y)` of a small map,
+/// whose tiles are drawn from screen cell (1, 2).
+fn pointing_at(world: &World, theme: Theme, width: u16, height: u16, x: u16, y: u16) -> App {
+    let mut app = app_for(world, theme, width, height);
+    app.apply(Action::Point(Position::new(1 + x, 2 + y)));
+    app
+}
+
+#[test]
+fn objects_are_drawn_with_their_themes_glyph_for_their_visual_state() {
+    let world = garden(pack());
+    let app = pointing_at(&world, Theme::cp437(), 40, 9, 0, 4); // the cursor out of the way
+    let screen = render(&app, &world, 40, 9);
+    assert_eq!(lines(&screen)[3], "║.'..♠..•..║");
+    assert_eq!(
+        screen[(7, 5)].symbol(),
+        "○",
+        "the ball, beside the cursor's arrows"
+    );
+    assert_eq!(screen[(2, 3)].fg, Color::Green, "a seedling");
+    assert_eq!(screen[(5, 3)].fg, Color::Magenta, "a thornbush");
+    assert_eq!(screen[(8, 3)].fg, Color::Red, "a berry");
+
+    let ascii = pointing_at(&world, Theme::ascii(), 40, 9, 0, 4);
+    assert_eq!(lines(&render(&ascii, &world, 40, 9))[3], "║.'..*..%..║");
+}
+
+#[test]
+fn a_fruiting_bush_is_drawn_bold_red() {
+    // A quick-growing berry bush: one tick as a seedling, a fruit every tick.
+    let objects = include_str!("../../../data/objects.ron")
+        .replace("ticks: (1500, 2500)", "ticks: (1, 1)")
+        .replace("Every(200)", "Every(1)");
+    let pack = DataPack::from_sources(&[
+        ("pack.ron", include_str!("../../../data/pack.ron")),
+        ("terrain.ron", include_str!("../../../data/terrain.ron")),
+        ("chemicals.ron", include_str!("../../../data/chemicals.ron")),
+        ("loci.ron", include_str!("../../../data/loci.ron")),
+        ("objects.ron", &objects),
+    ])
+    .expect("valid pack");
+    let mut world = garden(pack);
+    for _ in 0..3 {
+        world.step();
+    }
+    let app = pointing_at(&world, Theme::cp437(), 40, 9, 0, 4);
+    let bush = &render(&app, &world, 40, 9)[(2, 3)];
+    assert_eq!(bush.symbol(), "♣");
+    assert_eq!(bush.fg, Color::Red);
+    assert!(bush.modifier.contains(Modifier::BOLD));
+}
+
+#[test]
+fn the_status_line_names_the_object_under_the_cursor_with_its_stage() {
+    let world = garden(pack());
+    let cases = [
+        ((1, 1), " (1,1) grass · berry bush (seedling) │ SELECT"),
+        ((7, 1), " (7,1) grass · berry (fresh) │ SELECT"),
+        ((6, 3), " (6,3) grass · ball │ SELECT"),
+        ((0, 0), " (0,0) grass │ SELECT"),
+    ];
+    for ((x, y), expected) in cases {
+        let app = pointing_at(&world, Theme::cp437(), 50, 9, x, y);
+        assert_eq!(lines(&render(&app, &world, 50, 9))[8], expected);
+    }
+}
+
+#[test]
+fn the_top_bar_leaves_object_counts_to_the_world_tab() {
+    let world = garden(pack());
+    let app = app_for(&world, Theme::cp437(), 100, 30);
+    let bar = lines(&render(&app, &world, 100, 30))[0].clone();
+    assert!(bar.ends_with("│ seed 7"), "{bar}");
+}
+
+/// The right-hand `width` columns of each screen row, trimmed.
+fn right_part(buffer: &Buffer, width: u16) -> Vec<String> {
+    (0..buffer.area.height)
+        .map(|y| {
+            let row: String = (buffer.area.width - width..buffer.area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect();
+            row.trim_end().to_string()
+        })
+        .collect()
+}
+
+#[test]
+fn with_room_the_world_tab_shows_the_pack_and_every_object_types_numbers() {
+    let world = garden(pack());
+    let app = app_for(&world, Theme::cp437(), 100, 30);
+    let inspector = right_part(&render(&app, &world, 100, 30), 46);
+    assert!(inspector[1].starts_with("┌─ World ─"), "{:?}", inspector[1]);
+    let body: Vec<&str> = inspector[2..9]
+        .iter()
+        .map(|line| {
+            line.trim_start_matches('│')
+                .trim_end_matches('│')
+                .trim_end()
+        })
+        .collect();
+    assert_eq!(
+        body,
+        [
+            " data pack   core v1",
+            " berry bush        1",
+            "   seedling 1 · mature 0",
+            "   fruit 0",
+            " berry             1",
+            " thornbush         1",
+            " ball              1",
+        ]
+    );
+}
+
+#[test]
+fn a_narrow_terminal_leaves_the_inspector_out_and_gives_the_map_view_the_width() {
+    let row = ".".repeat(200);
+    let world = drawn_world(&vec![row.as_str(); 20]);
+    assert_eq!(
+        ui::tile_area(Size::new(99, 30), world.map()).width,
+        97,
+        "below 100 columns, the map view takes it all"
+    );
+    assert_eq!(
+        ui::tile_area(Size::new(100, 30), world.map()).width,
+        52,
+        "from 100 columns, the inspector takes 46"
+    );
+    let app = app_for(&world, Theme::cp437(), 99, 30);
+    let screen = lines(&render(&app, &world, 99, 30));
+    assert!(
+        screen.iter().all(|line| !line.contains("World")),
+        "no World tab"
+    );
 }

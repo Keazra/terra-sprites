@@ -208,3 +208,38 @@ fn holding_continues_past_1x_once_a_fresh_press_has_crossed_it() {
     clock.faster_held();
     assert_eq!(clock.speed(), Speed::X4);
 }
+
+#[test]
+fn holding_faster_stops_at_16x_so_max_takes_a_fresh_press() {
+    let mut clock = Clock::new();
+    clock.faster(); // a fresh press crosses 1×
+    assert_eq!(clock.speed(), Speed::X2);
+
+    let mut seen = vec![];
+    for _ in 0..5 {
+        clock.faster_held();
+        seen.push(clock.speed());
+    }
+    use Speed::*;
+    assert_eq!(seen, [X4, X8, X16, X16, X16]);
+
+    clock.faster();
+    assert_eq!(clock.speed(), Max);
+}
+
+#[test]
+fn holding_slower_from_max_passes_16x_and_stops_at_1x() {
+    let mut clock = Clock::new();
+    for _ in 0..5 {
+        clock.faster();
+    }
+    assert_eq!(clock.speed(), Speed::Max);
+
+    let mut seen = vec![];
+    for _ in 0..6 {
+        clock.slower_held();
+        seen.push(clock.speed());
+    }
+    use Speed::*;
+    assert_eq!(seen, [X16, X8, X4, X2, X1, X1]);
+}

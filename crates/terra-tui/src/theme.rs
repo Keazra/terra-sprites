@@ -33,7 +33,16 @@ impl SemanticTile {
 pub struct Glyph {
     pub symbol: char,
     pub fg: Color,
+    pub bold: bool,
 }
+
+/// What a theme draws for an object it has no glyph for, so a data pack's new
+/// object types still show.
+const UNKNOWN_OBJECT: Glyph = Glyph {
+    symbol: '?',
+    fg: Color::White,
+    bold: false,
+};
 
 /// The cursor's arrows (design §6.5), named by the way they point.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -57,6 +66,8 @@ pub struct StatusMarks {
 #[derive(Debug, Clone)]
 pub struct Theme {
     tiles: BTreeMap<SemanticTile, Glyph>,
+    /// By object type name, then visual state.
+    objects: BTreeMap<String, BTreeMap<String, Glyph>>,
     arrows: Arrows,
     status_marks: StatusMarks,
     mode_marks: BTreeMap<CursorMode, Glyph>,
@@ -76,6 +87,20 @@ impl Theme {
     /// How this theme draws `tile`.
     pub fn glyph(&self, tile: SemanticTile) -> Glyph {
         self.tiles[&tile]
+    }
+
+    /// How this theme draws an object of type `object` in visual state `state`
+    /// (design §6.2). With no glyph for that state, it uses the object's
+    /// `"default"` look, and failing that a `?`.
+    pub fn object_glyph(&self, object: &str, state: &str) -> Glyph {
+        self.object_entry(object, state)
+            .or_else(|| self.object_entry(object, "default"))
+            .unwrap_or(UNKNOWN_OBJECT)
+    }
+
+    /// The glyph this theme gives exactly this object type and visual state, if any.
+    pub fn object_entry(&self, object: &str, state: &str) -> Option<Glyph> {
+        self.objects.get(object)?.get(state).copied()
     }
 
     /// The cursor's arrows.
@@ -110,8 +135,14 @@ impl Theme {
                 "the {name} theme has no {mode:?} mark"
             );
         }
+        let objects = file
+            .objects
+            .into_iter()
+            .map(|(object, states)| (object, glyphs(states)))
+            .collect();
         Theme {
             tiles,
+            objects,
             arrows: file.cursor.arrows,
             status_marks: file.cursor.status_marks,
             mode_marks,
@@ -127,6 +158,7 @@ fn glyphs<K: Ord>(entries: BTreeMap<K, GlyphEntry>) -> BTreeMap<K, Glyph> {
             let glyph = Glyph {
                 symbol: entry.glyph,
                 fg: entry.fg.into(),
+                bold: entry.bold,
             };
             (key, glyph)
         })
@@ -138,6 +170,8 @@ fn glyphs<K: Ord>(entries: BTreeMap<K, GlyphEntry>) -> BTreeMap<K, Glyph> {
 #[serde(deny_unknown_fields)]
 struct ThemeFile {
     tiles: BTreeMap<SemanticTile, GlyphEntry>,
+    /// By object type name (from the data pack's `objects.ron`), then visual state.
+    objects: BTreeMap<String, BTreeMap<String, GlyphEntry>>,
     cursor: CursorFile,
 }
 
@@ -155,6 +189,8 @@ struct CursorFile {
 struct GlyphEntry {
     glyph: char,
     fg: Colour,
+    #[serde(default)]
+    bold: bool,
 }
 
 /// The 16 terminal colours, as named in theme files.
