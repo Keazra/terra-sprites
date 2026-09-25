@@ -27,8 +27,8 @@ pub(crate) enum Occupied {
 }
 
 /// Something a sprite can aim a verb at (design §3.6).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Target {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum Target {
     /// An object, such as a berry or a bush.
     Object(EntityId),
     /// A tile of drinkable water.
@@ -145,6 +145,11 @@ impl Flood {
         flood
     }
 
+    /// How far it reaches, in tiles in any direction.
+    pub(crate) fn reach(&self) -> u16 {
+        self.radius
+    }
+
     /// The cost of the cheapest way to `pos`, or `None` if the flood didn't reach it.
     pub(crate) fn cost(&self, pos: Pos) -> Option<u32> {
         let index = self.local(pos)?;
@@ -204,13 +209,6 @@ impl Flood {
     /// its tile index. A thing is reachable if the flood reached one of its
     /// goal tiles: beside it, or, for an item or water, its own tile too.
     /// `me` is the sprite the flood is for, which is never its own candidate.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the brain aims its verbs at candidates from slice 6"
-        )
-    )]
     pub(crate) fn candidates(
         &self,
         ground: Ground,
@@ -267,11 +265,16 @@ impl Flood {
     /// tile beside it, or, if `own_tile`, its own tile too. `None` if the
     /// flood reached none.
     fn goal_cost(&self, map: &Map, pos: Pos, own_tile: bool) -> Option<u32> {
-        let beside = Dir::ALL
-            .into_iter()
-            .filter_map(|dir| map.neighbour(pos, dir));
-        let own = own_tile.then_some(pos);
-        beside.chain(own).filter_map(|goal| self.cost(goal)).min()
+        self.nearest_goal(map, pos, own_tile).map(|(_, cost)| cost)
+    }
+
+    /// The goal tile of a thing on `pos` the flood reaches most cheaply,
+    /// with its cost: ties go to the lower tile index. `None` if it reached
+    /// none.
+    pub(crate) fn nearest_goal(&self, map: &Map, pos: Pos, own_tile: bool) -> Option<(Pos, u32)> {
+        goal_tiles(map, pos, own_tile)
+            .filter_map(|goal| Some((goal, self.cost(goal)?)))
+            .min_by_key(|&(goal, cost)| (cost, map.index(goal)))
     }
 
     /// The index of `pos` in the square, or `None` if it's outside.
@@ -290,6 +293,19 @@ impl Flood {
             y: self.corner.y + (index / width) as u16,
         }
     }
+}
+
+/// The goal tiles of a thing on `pos` (design §3.6): the tiles beside it,
+/// and, if `own_tile`, its own tile too.
+pub(crate) fn goal_tiles(
+    map: &Map,
+    pos: Pos,
+    own_tile: bool,
+) -> impl Iterator<Item = Pos> + use<'_> {
+    let beside = Dir::ALL
+        .into_iter()
+        .filter_map(move |dir| map.neighbour(pos, dir));
+    beside.chain(own_tile.then_some(pos))
 }
 
 /// Serializes bytes compactly, for the state hash.

@@ -1,5 +1,8 @@
 use ratatui::layout::{Position, Rect};
-use terra_sim::{DataPack, DeathCause, EntityId, Event, EventKind, Map, Pos, Scenario, World};
+use terra_sim::{
+    ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Map, Outcome, Pos, Progress,
+    Scenario, Verb, World,
+};
 use terra_tui::app::{App, Areas, Flow, Screen, Selection, Tab};
 use terra_tui::clock::Speed;
 use terra_tui::input::Action;
@@ -380,13 +383,13 @@ fn the_selection_remembers_how_the_selected_sprite_died() {
     let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
     let mut app = app(&world, tile_area(20, 10));
     app.apply(Action::SelectNext, &world);
-    app.record(&[died(ids[1], DeathCause::Starvation, 90)]);
+    app.record(&[died(ids[1], DeathCause::Starvation, 90)], &world);
     assert_eq!(
         app.selection(),
         Some(Selection::Living(ids[0])),
         "another sprite's death"
     );
-    app.record(&[died(ids[0], DeathCause::Dehydration, 4_012)]);
+    app.record(&[died(ids[0], DeathCause::Dehydration, 4_012)], &world);
     assert_eq!(
         app.selection(),
         Some(Selection::Dead {
@@ -406,11 +409,11 @@ fn after_the_selected_sprite_dies_tab_carries_on_from_its_id() {
     let mut app = app(&world, tile_area(20, 10));
     app.apply(Action::SelectNext, &world);
     app.apply(Action::SelectNext, &world);
-    app.record(&[died(ids[1], DeathCause::OldAge, 70_000)]);
+    app.record(&[died(ids[1], DeathCause::OldAge, 70_000)], &world);
     app.apply(Action::SelectNext, &world);
     assert_eq!(app.selection(), Some(Selection::Living(ids[2])));
 
-    app.record(&[died(ids[2], DeathCause::OldAge, 70_000)]);
+    app.record(&[died(ids[2], DeathCause::OldAge, 70_000)], &world);
     app.apply(Action::SelectPrevious, &world);
     assert_eq!(app.selection(), Some(Selection::Living(ids[1])));
 }
@@ -426,4 +429,99 @@ fn the_detail_view_starts_off_and_toggles_whatever_is_selected() {
     assert!(app.detail(), "a new selection keeps it");
     app.apply(Action::ToggleDetail, &world);
     assert!(!app.detail());
+}
+
+/// Sprite `id` finished `verb`, aimed at nothing, with `outcome`, on `tick`.
+fn finished(tick: u64, id: EntityId, verb: Verb, outcome: Outcome) -> Event {
+    let action = ActionView {
+        verb,
+        destination: None,
+        target: None,
+        target_type: None,
+        attempted: false,
+        target_gone: false,
+        progress: Progress::Ended(outcome),
+    };
+    Event {
+        tick,
+        kind: EventKind::ActionEnded {
+            id,
+            verb,
+            outcome,
+            action,
+        },
+    }
+}
+
+/// The observed list, newest first, as `(line, count, tick)`.
+fn observed(app: &App) -> Vec<(&str, u32, u64)> {
+    app.observed()
+        .map(|o| (o.line.as_str(), o.count, o.tick))
+        .collect()
+}
+
+#[test]
+fn the_observed_list_keeps_what_the_selected_sprite_finished_newest_first() {
+    let world = grass_with(20, 10, &[at(3, 4), at(6, 2)]);
+    let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
+    let mut app = app(&world, tile_area(20, 10));
+    app.record(&[finished(1, ids[0], Verb::Rest, Outcome::Applied)], &world);
+    assert_eq!(observed(&app), [], "nothing is watched before a selection");
+    app.apply(Action::SelectNext, &world);
+    app.record(
+        &[
+            finished(5, ids[0], Verb::Wander, Outcome::Applied),
+            finished(6, ids[1], Verb::Rest, Outcome::Applied),
+            finished(9, ids[0], Verb::Wander, Outcome::Applied),
+        ],
+        &world,
+    );
+    app.record(
+        &[
+            finished(12, ids[0], Verb::Wander, Outcome::Applied),
+            finished(20, ids[0], Verb::Rest, Outcome::Applied),
+        ],
+        &world,
+    );
+    assert_eq!(
+        observed(&app),
+        [("Rested", 1, 20), ("Wandered off", 3, 12)],
+        "the same line in a row counts up, and keeps the latest tick"
+    );
+}
+
+#[test]
+fn selecting_another_sprite_starts_its_observed_list_afresh() {
+    let world = grass_with(20, 10, &[at(3, 4), at(6, 2)]);
+    let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
+    let mut app = app(&world, tile_area(20, 10));
+    app.apply(Action::SelectNext, &world);
+    app.record(&[finished(5, ids[0], Verb::Rest, Outcome::Applied)], &world);
+    // Clicking the selected sprite again keeps what was watched.
+    click(&mut app, &world, 1 + 3, 2 + 4);
+    assert_eq!(observed(&app).len(), 1);
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(observed(&app), []);
+    app.apply(Action::SelectPrevious, &world);
+    assert_eq!(observed(&app), [], "coming back starts afresh too");
+}
+
+#[test]
+fn the_observed_list_keeps_the_latest_500_lines() {
+    let world = grass_with(20, 10, &[at(3, 4)]);
+    let id = world.sprites().next().expect("a sprite").id();
+    let mut app = app(&world, tile_area(20, 10));
+    app.apply(Action::SelectNext, &world);
+    for tick in 0..600 {
+        // Alternating, so no two lines in a row read the same.
+        let verb = if tick % 2 == 0 {
+            Verb::Rest
+        } else {
+            Verb::Wander
+        };
+        app.record(&[finished(tick, id, verb, Outcome::Applied)], &world);
+    }
+    let list = observed(&app);
+    assert_eq!(list.len(), 500);
+    assert_eq!((list[0].2, list[499].2), (599, 100), "newest first");
 }

@@ -1,6 +1,8 @@
 //! Biochemistry (design §4): a genome compiled for the chemistry step, and
 //! the step itself, a pure function of a body and what it sensed.
 
+use std::collections::BTreeMap;
+
 use serde::Serialize;
 
 use crate::data::DataPack;
@@ -8,7 +10,7 @@ use crate::events::DeathCause;
 use crate::expression::{Expression, expressions};
 use crate::genome::{EmitterMode, Gene, Genome, LocusRef, Term};
 use crate::physiology::halving_factor;
-use crate::registry::{LocusKind, Trait};
+use crate::registry::{ChemId, LocusKind, Trait};
 
 /// A sprite's traits (design §4.8), clamped to physiology's ranges.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -132,7 +134,7 @@ impl Reaction {
         reactants: &[Term],
         products: &[Term],
         rate: f32,
-        index: impl Fn(u16) -> usize,
+        index: impl Fn(ChemId) -> usize,
     ) -> Reaction {
         let mut net: Vec<(usize, f32)> = Vec::new();
         let terms = reactants
@@ -177,7 +179,7 @@ impl Program {
             sense_radius: middle(Trait::SenseRadius),
             lifespan: middle(Trait::Lifespan),
         };
-        let chem = |id: u16| data.chemical_index(id).expect("a checked gene");
+        let chem = |id: ChemId| data.chemical_index(id).expect("a checked gene");
         let mut decay = vec![1.0; data.chemicals().len()];
         let mut reactions = Vec::new();
         let mut level_emitters = Vec::new();
@@ -250,6 +252,10 @@ impl Program {
                     let (low, high) = range(which);
                     traits.set(which, value.clamp(low, high));
                 }
+                // The brain's genes (design §5.7) don't touch the chemistry.
+                Gene::BrainParam { .. }
+                | Gene::Instinct { .. }
+                | Gene::AttentionInstinct { .. } => {}
                 Gene::Unknown { .. } => unreachable!("an unknown gene isn't expressed"),
             }
         }
@@ -286,9 +292,9 @@ pub(crate) struct Body {
     /// Rise and Fall emitters read.
     #[serde(skip)]
     pub(crate) chems_before_tick: Vec<f32>,
-    /// The injury each of physiology's causes added lately, fading, indexed
-    /// by `DeathCause` (design §4.10).
-    pub(crate) tallies: [f32; 3],
+    /// The injury each cause added lately, fading (design §4.10). A cause
+    /// that has never added any has no entry.
+    pub(crate) tallies: BTreeMap<DeathCause, f32>,
 }
 
 impl Body {
@@ -324,7 +330,7 @@ impl Body {
             incoming: vec![0.0; loci.len()],
             chems,
             loci,
-            tallies: [0.0; 3],
+            tallies: BTreeMap::new(),
         }
     }
 
@@ -338,19 +344,25 @@ impl Body {
     }
 
     /// What caused most of the body's recent injury (design §4.10). Ties go
-    /// to the cause listed first.
+    /// to the cause that comes first; with no injury at all, starvation.
     pub(crate) fn cause_of_death(&self) -> DeathCause {
-        let tally = |cause: DeathCause| self.tallies[cause as usize];
-        DeathCause::ALL
-            .into_iter()
-            .reduce(|most, next| {
-                if tally(next) > tally(most) {
-                    next
-                } else {
-                    most
-                }
+        self.tallies
+            .iter()
+            .fold((DeathCause::Starvation, 0.0), |most, (&cause, &tally)| {
+                if tally > most.1 { (cause, tally) } else { most }
             })
-            .expect("there are causes")
+            .0
+    }
+
+    /// Adds `amount` to the chemical at `index`, within 0 to 1. Injury,
+    /// at `injury`, is put down to `cause` in full, as physiology's is,
+    /// even where the level stops at 1.
+    pub(crate) fn inject(&mut self, index: usize, amount: f32, injury: usize, cause: DeathCause) {
+        let before = self.chems[index];
+        self.chems[index] = (before + amount).clamp(0.0, 1.0);
+        if index == injury && amount > 0.0 {
+            *self.tallies.entry(cause).or_insert(0.0) += amount;
+        }
     }
 }
 
@@ -479,13 +491,13 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
         ),
         (DeathCause::OldAge, age > traits.lifespan, injury.old_age),
     ];
-    for tally in &mut body.tallies {
+    for tally in body.tallies.values_mut() {
         *tally *= physiology.tally_fade;
     }
     for (cause, harmed, amount) in harms {
         if harmed {
             chems[indices.injury] += amount;
-            body.tallies[cause as usize] += amount;
+            *body.tallies.entry(cause).or_insert(0.0) += amount;
         }
     }
 
@@ -981,13 +993,13 @@ mod tests {
         use rand_chacha::rand_core::{Rng, SeedableRng};
 
         use super::*;
-        use crate::registry::ChemicalClass;
+        use crate::registry::{ChemicalClass, LocusId};
 
         /// Any valid gene of types 1–5, naming any chemical or locus in the built-in pack.
         fn gene() -> impl Strategy<Value = Gene> {
             let data = builtin();
-            let chems: Vec<u16> = data.chemicals().iter().map(|c| c.id).collect();
-            let loci: Vec<u16> = data.loci().iter().map(|l| l.id).collect();
+            let chems: Vec<ChemId> = data.chemicals().iter().map(|c| c.id).collect();
+            let loci: Vec<LocusId> = data.loci().iter().map(|l| l.id).collect();
             let chem = prop::sample::select(chems);
             let locus = prop::sample::select(loci);
             let read = prop_oneof![
@@ -1189,18 +1201,29 @@ mod tests {
     }
 
     #[test]
+    fn injected_injury_counts_in_full_towards_its_cause_even_past_1() {
+        let mut sprite = physical(&[]);
+        let injury = sprite.chem_index("injury");
+        sprite.set("injury", 0.98);
+        let thornbush = DeathCause::HurtBy(3);
+        sprite.body.inject(injury, 0.05, injury, thornbush);
+        assert_eq!(sprite.level("injury"), 1.0);
+        assert_eq!(sprite.body.tallies[&thornbush], 0.05);
+    }
+
+    #[test]
     fn healing_lowers_injury_but_not_the_tallies() {
         let mut sprite = physical(&[]);
         sprite.set("hydration", 0.0);
         sprite.step();
         sprite.set("hydration", 1.0);
-        let tallies = sprite.body.tallies;
+        let tallies = sprite.body.tallies.clone();
         sprite.set("injury", 0.5);
         sprite.step();
         let fade = libm::powf(0.5, 1.0 / 350.0);
         assert_eq!(
-            sprite.body.tallies[1],
-            tallies[1] * fade,
+            sprite.body.tallies[&DeathCause::Dehydration],
+            tallies[&DeathCause::Dehydration] * fade,
             "only fading lowers it"
         );
     }

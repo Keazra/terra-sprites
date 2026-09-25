@@ -8,15 +8,16 @@ use rand_chacha::ChaCha8Rng;
 use serde::Serialize;
 
 use crate::data::DataPack;
+use crate::decide::decide;
 use crate::events::{Event, EventKind};
 use crate::map::{Dir, Pos};
 use crate::objects::EntityId;
-use crate::perception::{Flood, Ground, Occupied};
+use crate::perception::{Flood, Ground, Occupied, Target};
 use crate::physics::step_cost;
 use crate::random::uniform;
 use crate::registry::Verb;
 use crate::sprites::Sprite;
-use crate::standin;
+use crate::verbs;
 use crate::world::WorldState;
 
 /// How an action ended (design §5.5).
@@ -28,6 +29,9 @@ pub enum Outcome {
     Blocked,
     /// It couldn't be carried out.
     Failed,
+    /// The sprite changed its mind: attention moved off its target, or
+    /// another verb beat it by more than the switch margin (design §5.5).
+    Interrupted,
     /// It was still going at the timeout.
     TimedOut,
 }
@@ -41,6 +45,12 @@ pub enum ScriptedAction {
     Wander { destination: Pos },
     /// Rest for a bout.
     Rest,
+    /// Eat the object on `at`.
+    Eat { at: Pos },
+    /// Drink the water on `at`.
+    Drink { at: Pos },
+    /// Approach the sprite on `at`, or else the object there, or else the water.
+    Approach { at: Pos },
 }
 
 /// How far an action has got.
@@ -63,8 +73,18 @@ pub enum Progress {
 pub struct ActionView {
     /// What kind of action it is.
     pub verb: Verb,
-    /// Where a Wander is heading.
+    /// Where it's heading: a Wander's destination, or the goal tile an
+    /// aimed action is walking to.
     pub destination: Option<Pos>,
+    /// What an action aimed at something is aimed at.
+    pub target: Option<Target>,
+    /// The stable ID of the target's object type, a pseudo type for water
+    /// or a sprite: kept from the start, so it names a target that's gone.
+    pub target_type: Option<u16>,
+    /// Whether it got to its target and made its attempt (design §5.5).
+    pub attempted: bool,
+    /// Whether its target had left the world when it ended: eaten whole, say.
+    pub target_gone: bool,
     /// How far it has got, or how it ended.
     pub progress: Progress,
 }
@@ -73,8 +93,19 @@ pub struct ActionView {
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct Action {
     pub(crate) verb: Verb,
-    /// Where a Wander is heading.
+    /// Where it's heading: a Wander's destination, or the goal tile an
+    /// aimed action is walking to, found again at every 5.0.
     pub(crate) destination: Option<Pos>,
+    /// What an Approach, Eat or Drink is aimed at (design §5.3).
+    pub(crate) target: Option<Target>,
+    /// The stable ID of the target's object type.
+    pub(crate) target_type: Option<u16>,
+    /// Whether it got to its target and made its attempt.
+    pub(crate) attempted: bool,
+    /// Where its target stood at the latest 5.0.
+    pub(crate) target_at: Option<Pos>,
+    /// Whether its target had left the world when it ended.
+    pub(crate) target_gone: bool,
     /// The tick it started on, for the timeout.
     pub(crate) started: u64,
     /// The ticks it has been carried out on, at step 6.
@@ -86,6 +117,8 @@ pub(crate) struct Action {
     pub(crate) committed: Option<Vec<Pos>>,
     /// How it ended, once it has.
     pub(crate) ended: Option<Outcome>,
+    /// A hand-made world started it: the brain leaves it be until it ends.
+    pub(crate) scripted: bool,
 }
 
 /// What a sprite did at step 6, which its body feels at the next tick's
@@ -99,15 +132,27 @@ pub(crate) struct Did {
 }
 
 impl Action {
-    fn new(verb: Verb, destination: Option<Pos>, tick: u64) -> Action {
+    fn new(
+        verb: Verb,
+        destination: Option<Pos>,
+        target: Option<(Target, u16)>,
+        scripted: bool,
+        tick: u64,
+    ) -> Action {
         Action {
             verb,
             destination,
+            target: target.map(|(target, _)| target),
+            target_type: target.map(|(_, kind)| kind),
+            attempted: false,
+            target_at: None,
+            target_gone: false,
             started: tick,
             ticks: 0,
             blocked_ticks: 0,
             committed: None,
             ended: None,
+            scripted,
         }
     }
 }
@@ -134,20 +179,23 @@ pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
     Some(ActionView {
         verb: action.verb,
         destination: action.destination,
+        target: action.target,
+        target_type: action.target_type,
+        attempted: action.attempted,
+        target_gone: action.target_gone,
         progress,
     })
 }
 
 /// Whether `sprite` has an action that hasn't ended.
-fn is_acting(sprite: &Sprite) -> bool {
+pub(crate) fn is_acting(sprite: &Sprite) -> bool {
     sprite.action.as_ref().is_some_and(|a| a.ended.is_none())
 }
 
 /// Step 5 for every sprite not marked dying (design §2.4): refresh its flood
 /// if it moved or the flood is due; end its action if that has timed out, or
-/// is a Wander whose destination the flood no longer reaches (5.0); then, if
-/// it has none, start one: its next scripted one, or else the stand-in's
-/// choice (5b).
+/// lost its target or destination (5.0); then attention and the decision
+/// (5a, 5b).
 pub(crate) fn sense_and_decide(
     state: &mut WorldState,
     data: &DataPack,
@@ -171,60 +219,88 @@ pub(crate) fn sense_and_decide(
             let flood = flood(state, data, sprite, penalty);
             state.sprites.get_mut(id).expect("the same sprite").flood = Some(flood);
         }
-        let sprite = state.sprites.get_mut(id).expect("the same sprite");
+        let sprite = state.sprites.get(id).expect("the same sprite");
         if is_acting(sprite) {
             let flood = sprite.flood.as_ref().expect("the flood made above");
-            let action = sprite.action.as_mut().expect("an action");
-            if state.tick >= action.started + u64::from(timeout) {
-                end(action, id, Outcome::TimedOut, state.tick, events);
-            } else if action.committed.is_none()
-                && action
+            let action = sprite.action.as_ref().expect("an action");
+            // An aimed action heads for its target's nearest goal tile as
+            // things stand now (design §3.6), so it follows a target that
+            // moves; a target that's gone, or out of reach, ends it.
+            let aim = action
+                .target
+                .map(|target| state.goal_for(data, flood, target));
+            let there = action
+                .target
+                .and_then(|target| state.whereabouts(data, target))
+                .map(|(pos, _)| pos);
+            // Losing the target or the way comes first in 5.0 (design §5.5).
+            // A sprite keeping to a committed way round goes on with it
+            // whatever the flood reaches (§3.7), unless the target is gone.
+            let gone = action.target.is_some() && there.is_none();
+            let lost = aim == Some(None)
+                || action
                     .destination
-                    .is_some_and(|to| flood.cost(to).is_none())
-            {
-                end(action, id, Outcome::Failed, state.tick, events);
+                    .is_some_and(|to| flood.cost(to).is_none());
+            let outcome = if gone || action.committed.is_none() && lost {
+                Some(Outcome::Failed)
+            } else if state.tick >= action.started + u64::from(timeout) {
+                Some(Outcome::TimedOut)
             } else {
-                continue;
+                None
+            };
+            let sprite = state.sprites.get_mut(id).expect("the same sprite");
+            let action = sprite.action.as_mut().expect("an action");
+            match outcome {
+                Some(outcome) => {
+                    action.target_gone = gone;
+                    end(action, id, outcome, state.tick, events);
+                }
+                None => {
+                    if let Some(Some(goal)) = aim {
+                        // A committed way round leads to where a sprite
+                        // target was; once it moves, it's dropped (design §3.7).
+                        // Where it was first seen isn't a move.
+                        let moved = action.target_at.is_some_and(|at| there != Some(at));
+                        if moved && matches!(action.target, Some(Target::Sprite(_))) {
+                            action.committed = None;
+                        }
+                        action.target_at = there;
+                        if action.committed.is_none() {
+                            action.destination = Some(goal);
+                        }
+                    }
+                }
             }
         }
-        let (verb, destination) = match sprite.scripted.pop_front() {
-            Some(ScriptedAction::Wander { destination }) => (Verb::Wander, Some(destination)),
-            Some(ScriptedAction::Rest) => (Verb::Rest, None),
-            None => match standin::choose(&mut state.rng) {
-                Verb::Wander => {
-                    let flood = sprite.flood.as_ref().expect("the flood made above");
-                    let sense_radius = sprite.program.traits.sense_radius;
-                    (
-                        Verb::Wander,
-                        flood.wander_destination(sense_radius, &mut state.rng),
-                    )
-                }
-                verb => (verb, None),
-            },
-        };
-        start(sprite, id, verb, destination, state.tick, events);
+        decide(state, data, id, events);
     }
 }
 
 /// Starts `sprite` (`id`) on an action. A Wander with no destination, or one
 /// its flood doesn't reach, ends at once, as failed (design §5.5); one to the
-/// tile it stands on ends at once, as applied.
-fn start(
+/// tile it stands on ends at once, as applied. An aimed action heads for its
+/// target's nearest goal tile, its destination; with none, it ends at once,
+/// as failed. A target comes with the stable ID of its type. A `scripted`
+/// action is left be by the brain.
+#[expect(clippy::too_many_arguments, reason = "an action's every part")]
+pub(crate) fn start(
     sprite: &mut Sprite,
     id: EntityId,
     verb: Verb,
     destination: Option<Pos>,
+    target: Option<(Target, u16)>,
+    scripted: bool,
     tick: u64,
     events: &mut Vec<Event>,
 ) {
-    let mut action = Action::new(verb, destination, tick);
+    let mut action = Action::new(verb, destination, target, scripted, tick);
     events.push(Event {
         tick,
         kind: EventKind::ActionStarted { id, verb },
     });
     let flood = sprite.flood.as_ref().expect("step 5 made the flood");
     let lost = verb == Verb::Wander && destination.is_none_or(|to| flood.cost(to).is_none());
-    if lost {
+    if lost || (verb.is_aimed() && destination.is_none()) {
         end(&mut action, id, Outcome::Failed, tick, events);
     } else if verb == Verb::Wander && destination == Some(sprite.pos) {
         // Already there.
@@ -234,14 +310,30 @@ fn start(
 }
 
 /// Ends `action` (sprite `id`'s) with `outcome`, and reports it.
-fn end(action: &mut Action, id: EntityId, outcome: Outcome, tick: u64, events: &mut Vec<Event>) {
+pub(crate) fn end(
+    action: &mut Action,
+    id: EntityId,
+    outcome: Outcome,
+    tick: u64,
+    events: &mut Vec<Event>,
+) {
     action.ended = Some(outcome);
+    let view = ActionView {
+        verb: action.verb,
+        destination: action.destination,
+        target: action.target,
+        target_type: action.target_type,
+        attempted: action.attempted,
+        target_gone: action.target_gone,
+        progress: Progress::Ended(outcome),
+    };
     events.push(Event {
         tick,
         kind: EventKind::ActionEnded {
             id,
             verb: action.verb,
             outcome,
+            action: view,
         },
     });
 }
@@ -268,9 +360,17 @@ pub(crate) fn resolve(
         .collect();
     shuffle(&mut order, &mut state.rng);
     for &id in &order {
-        let sprite = state.sprites.get_mut(id).expect("a sprite taking its turn");
+        let sprite = state.sprites.get(id).expect("a sprite taking its turn");
+        // An aimed action already on a goal tile acts where it stands: it
+        // has no walking to do, so it banks no points for later (design §3.7).
+        let arrived = sprite
+            .action
+            .as_ref()
+            .and_then(|a| a.target)
+            .is_some_and(|target| state.on_goal_tile(data, sprite.pos, target));
+        let sprite = state.sprites.get_mut(id).expect("the same sprite");
         sprite.did = Did::default();
-        if is_walking(sprite) {
+        if is_walking(sprite) && !arrived {
             sprite.move_points += (sprite.program.traits.speed * 10.0).round() as u32;
         }
         // Counted before anyone's turn, so a swap ending an action on
@@ -294,10 +394,47 @@ pub(crate) fn resolve(
             if action.ticks >= rest_bout {
                 end(action, id, Outcome::Applied, state.tick, events);
             }
+        } else if let Some(target) = action.target {
+            let pos = sprite.pos;
+            if !state.on_goal_tile(data, pos, target) && !moved.contains(&id) {
+                walk(state, data, id, &mut moved, events);
+            }
+            let sprite = state.sprites.get(id).expect("the actor");
+            if is_acting(sprite) && state.on_goal_tile(data, sprite.pos, target) {
+                act(state, data, id, target, events);
+            }
         } else if !moved.contains(&id) {
             walk(state, data, id, &mut moved, events);
         }
     }
+}
+
+/// Sprite `id`, on a goal tile of `target`, ends its aimed action: an
+/// Approach has arrived, and Eat or Drink makes its one attempt (design §5.5).
+fn act(
+    state: &mut WorldState,
+    data: &DataPack,
+    id: EntityId,
+    target: Target,
+    events: &mut Vec<Event>,
+) {
+    let verb = state.sprites.get(id).expect("the actor").action.as_ref();
+    let verb = verb.expect("an action").verb;
+    let outcome = match verb {
+        Verb::Approach => Outcome::Applied,
+        verb => verbs::attempt(state, data, id, verb, target, events),
+    };
+    let gone = state.whereabouts(data, target).is_none();
+    let action = state
+        .sprites
+        .get_mut(id)
+        .expect("the actor")
+        .action
+        .as_mut();
+    let action = action.expect("an action");
+    action.attempted = true;
+    action.target_gone = gone;
+    end(action, id, outcome, state.tick, events);
 }
 
 /// Shuffles `ids` with the world RNG: Fisher–Yates, one draw per place but the first.
@@ -449,8 +586,9 @@ fn swaps(
 }
 
 /// Sprite `id` has just stepped, for `cost` tenths. Returns whether that
-/// brought it to its destination, which ends its action. Arriving, it keeps
-/// at most that step's worth of points (design §3.7).
+/// brought it to its destination. Arriving, it keeps at most that step's
+/// worth of points (design §3.7), and a Wander ends; an aimed action acts
+/// once its walk is over.
 fn stepped(state: &mut WorldState, id: EntityId, cost: u32, events: &mut Vec<Event>) -> bool {
     let sprite = state.sprites.get_mut(id).expect("the walker");
     sprite.move_points -= cost;
@@ -464,7 +602,7 @@ fn stepped(state: &mut WorldState, id: EntityId, cost: u32, events: &mut Vec<Eve
     if let Some(committed) = &mut action.committed {
         committed.remove(0);
     }
-    if arrived {
+    if arrived && action.target.is_none() {
         end(action, id, Outcome::Applied, state.tick, events);
     }
     arrived

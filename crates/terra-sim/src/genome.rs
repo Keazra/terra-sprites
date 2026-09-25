@@ -6,8 +6,9 @@ use std::fmt::Write as _;
 
 use serde::{Deserialize, Serialize};
 
+use crate::brain_io::InputId;
 use crate::data::DataPack;
-use crate::registry::Trait;
+use crate::registry::{BrainParam, Category, ChemId, LocusId, Trait, Verb};
 
 /// The genome file format this build writes, and the newest it reads.
 const FORMAT: u32 = 1;
@@ -42,7 +43,7 @@ impl std::fmt::Display for GenomeError {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) enum Gene {
     /// Type 1: the chemical decays by half every `ticks` ticks.
-    HalfLife { chem: u16, ticks: u32 },
+    HalfLife { chem: ChemId, ticks: u32 },
     /// Type 2: reactants turn into products, at `rate` of the most the reactants allow.
     Reaction {
         reactants: Vec<Term>,
@@ -56,19 +57,34 @@ pub(crate) enum Gene {
         invert: bool,
         threshold: f32,
         gain: f32,
-        chem: u16,
+        chem: ChemId,
     },
     /// Type 4: a chemical's level past `threshold` moves a receptor target by `gain` of it.
     Receptor {
-        chem: u16,
+        chem: ChemId,
         threshold: f32,
         gain: f32,
-        target: u16,
+        target: LocusId,
     },
     /// Type 5: a chemical's level at birth.
-    InitialConcentration { chem: u16, value: f32 },
+    InitialConcentration { chem: ChemId, value: f32 },
     /// Type 6: a body trait.
     Trait { which: Trait, value: f32 },
+    /// Type 7: a setting of how the brain works.
+    BrainParam { param: BrainParam, value: f32 },
+    /// Type 8: the concept of these inputs, each maybe negated, starts with
+    /// `weight` towards `verb`.
+    Instinct {
+        inputs: Vec<(InputId, bool)>,
+        verb: Verb,
+        weight: f32,
+    },
+    /// Type 9: a State input starts with `weight` towards attending to `category`.
+    AttentionInstinct {
+        input: InputId,
+        category: Category,
+        weight: f32,
+    },
     /// A gene this build can't read: an unknown type, or a payload version
     /// newer than it knows. Kept exactly as it is.
     Unknown {
@@ -81,15 +97,15 @@ pub(crate) enum Gene {
 /// A chemical and its coefficient in a reaction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub(crate) struct Term {
-    pub(crate) chem: u16,
+    pub(crate) chem: ChemId,
     pub(crate) coefficient: u8,
 }
 
 /// What an emitter reads: a chemical's level, or another locus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub(crate) enum LocusRef {
-    Chem(u16),
-    Locus(u16),
+    Chem(ChemId),
+    Locus(LocusId),
 }
 
 /// One of a sprite's genes, with what it refers to by the data pack's names.
@@ -124,6 +140,21 @@ pub enum GeneView<'a> {
     InitialConcentration { chem: &'a str, value: f32 },
     /// Type 6: a body trait.
     Trait { which: Trait, value: f32 },
+    /// Type 7: a setting of how the brain works.
+    BrainParam { param: &'static str, value: f32 },
+    /// Type 8: the concept of these inputs, as `(input, negated)`, starts
+    /// with `weight` towards `verb`.
+    Instinct {
+        inputs: Vec<(&'a str, bool)>,
+        verb: Verb,
+        weight: f32,
+    },
+    /// Type 9: an input starts with `weight` towards attending to a category.
+    AttentionInstinct {
+        input: &'a str,
+        category: &'static str,
+        weight: f32,
+    },
     /// A gene this build can't read, with the length of its payload.
     Unknown {
         type_id: u16,
@@ -184,8 +215,9 @@ impl Genome {
 impl Gene {
     /// The gene with what it refers to named from `data`.
     pub(crate) fn view<'a>(&self, data: &'a DataPack) -> GeneView<'a> {
-        let chem = |id: u16| data.chemical(id).expect("a checked gene").name.as_str();
-        let locus = |id: u16| data.locus(id).expect("a checked gene").name.as_str();
+        let chem = |id: ChemId| data.chemical(id).expect("a checked gene").name.as_str();
+        let locus = |id: LocusId| data.locus(id).expect("a checked gene").name.as_str();
+        let input = |id: InputId| data.brain_input(id).expect("a checked gene").name.as_str();
         let terms = |terms: &[Term]| {
             terms
                 .iter()
@@ -240,6 +272,31 @@ impl Gene {
                 value,
             },
             Gene::Trait { which, value } => GeneView::Trait { which, value },
+            Gene::BrainParam { param, value } => GeneView::BrainParam {
+                param: param.name(),
+                value,
+            },
+            Gene::Instinct {
+                ref inputs,
+                verb,
+                weight,
+            } => GeneView::Instinct {
+                inputs: inputs
+                    .iter()
+                    .map(|&(id, negated)| (input(id), negated))
+                    .collect(),
+                verb,
+                weight,
+            },
+            Gene::AttentionInstinct {
+                input: id,
+                category,
+                weight,
+            } => GeneView::AttentionInstinct {
+                input: input(id),
+                category: category.name(),
+                weight,
+            },
             Gene::Unknown {
                 type_id,
                 version,
@@ -254,10 +311,15 @@ impl Gene {
 
     /// Checks the gene's references and values, or says what's wrong.
     fn check(&self, data: &DataPack) -> Result<(), String> {
-        let chemical = |id: u16| {
+        let chemical = |id: ChemId| {
             data.chemical(id)
                 .map(|_| ())
                 .ok_or_else(|| format!("refers to chemical {id}, which isn't in the pack"))
+        };
+        let input = |id: InputId| {
+            data.brain_input(id)
+                .map(|input| input.name.as_str())
+                .ok_or_else(|| format!("refers to brain input {}, which isn't in the pack", id.0))
         };
         let level = |field: &str, value: f32| {
             if (0.0..=1.0).contains(&value) {
@@ -355,7 +417,39 @@ impl Gene {
                 chemical(chem)?;
                 level("value", value)?;
             }
-            Gene::Trait { value, .. } => finite("value", value)?,
+            Gene::Trait { value, .. } | Gene::BrainParam { value, .. } => {
+                finite("value", value)?;
+            }
+            Gene::Instinct {
+                ref inputs,
+                verb,
+                weight,
+            } => {
+                if !(1..=3).contains(&inputs.len()) {
+                    return Err(format!(
+                        "combines {} inputs, but an instinct combines one to three",
+                        inputs.len()
+                    ));
+                }
+                for (index, &(id, _)) in inputs.iter().enumerate() {
+                    let named = input(id)?;
+                    if inputs[..index].iter().any(|&(earlier, _)| earlier == id) {
+                        return Err(format!("names `{named}` twice, but its inputs must differ"));
+                    }
+                }
+                if verb.is_reserved() {
+                    return Err(format!(
+                        "leads to {verb:?}, a verb reserved for a later milestone"
+                    ));
+                }
+                finite("weight", weight)?;
+            }
+            Gene::AttentionInstinct {
+                input: id, weight, ..
+            } => {
+                input(id)?;
+                finite("weight", weight)?;
+            }
             Gene::Unknown { .. } => {}
         }
         Ok(())
@@ -363,8 +457,9 @@ impl Gene {
 
     /// The gene as it's written in a genome file.
     fn to_ron(&self, data: &DataPack) -> String {
-        let chem = |id: u16| &data.chemical(id).expect("a checked gene").name;
-        let locus = |id: u16| &data.locus(id).expect("a checked gene").name;
+        let chem = |id: ChemId| &data.chemical(id).expect("a checked gene").name;
+        let locus = |id: LocusId| &data.locus(id).expect("a checked gene").name;
+        let input = |id: InputId| &data.brain_input(id).expect("a checked gene").name;
         let terms = |terms: &[Term]| {
             let written: Vec<String> = terms
                 .iter()
@@ -427,6 +522,31 @@ impl Gene {
             Gene::Trait { which, value } => {
                 format!("Trait(trait: {:?}, value: {value:?})", which.name())
             }
+            Gene::BrainParam { param, value } => {
+                format!("BrainParam(param: {:?}, value: {value:?})", param.name())
+            }
+            Gene::Instinct {
+                ref inputs,
+                verb,
+                weight,
+            } => {
+                let written: Vec<String> = inputs
+                    .iter()
+                    .map(|&(id, negated)| format!("({:?}, {negated})", input(id)))
+                    .collect();
+                format!(
+                    "Instinct(inputs: [{}], verb: {verb:?}, weight: {weight:?})",
+                    written.join(", ")
+                )
+            }
+            Gene::AttentionInstinct {
+                input: id,
+                category,
+                weight,
+            } => format!(
+                "AttentionInstinct(input: {:?}, category: {category:?}, weight: {weight:?})",
+                input(id)
+            ),
             Gene::Unknown {
                 type_id,
                 version,
@@ -486,6 +606,20 @@ enum GeneEntry {
         which: String,
         value: f32,
     },
+    BrainParam {
+        param: String,
+        value: f32,
+    },
+    Instinct {
+        inputs: Vec<(String, bool)>,
+        verb: Verb,
+        weight: f32,
+    },
+    AttentionInstinct {
+        input: String,
+        category: Category,
+        weight: f32,
+    },
     /// Any gene, by number: its type ID, payload version and payload bytes in hex.
     Gene {
         #[serde(rename = "type")]
@@ -511,6 +645,9 @@ impl GeneEntry {
             GeneEntry::Receptor { .. } => "Receptor",
             GeneEntry::InitialConcentration { .. } => "InitialConcentration",
             GeneEntry::Trait { .. } => "Trait",
+            GeneEntry::BrainParam { .. } => "BrainParam",
+            GeneEntry::Instinct { .. } => "Instinct",
+            GeneEntry::AttentionInstinct { .. } => "AttentionInstinct",
             GeneEntry::Gene { .. } => "Gene",
         }
     }
@@ -526,6 +663,11 @@ impl GeneEntry {
             data.locus_named(name)
                 .map(|l| l.id)
                 .ok_or_else(|| format!("names the unknown locus `{name}`"))
+        };
+        let input = |name: &str| {
+            data.brain_input_named(name)
+                .map(|input| input.id)
+                .ok_or_else(|| format!("names the unknown brain input `{name}`"))
         };
         let terms = |terms: Vec<(String, u8)>| {
             terms
@@ -590,6 +732,32 @@ impl GeneEntry {
                     .ok_or_else(|| format!("names the unknown trait `{which}`"))?,
                 value,
             },
+            GeneEntry::BrainParam { param, value } => Gene::BrainParam {
+                param: BrainParam::named(&param)
+                    .ok_or_else(|| format!("names the unknown brain parameter `{param}`"))?,
+                value,
+            },
+            GeneEntry::Instinct {
+                inputs,
+                verb,
+                weight,
+            } => Gene::Instinct {
+                inputs: inputs
+                    .iter()
+                    .map(|(name, negated)| Ok((input(name)?, *negated)))
+                    .collect::<Result<_, String>>()?,
+                verb,
+                weight,
+            },
+            GeneEntry::AttentionInstinct {
+                input: name,
+                category,
+                weight,
+            } => Gene::AttentionInstinct {
+                input: input(&name)?,
+                category,
+                weight,
+            },
             GeneEntry::Gene {
                 type_id,
                 version,
@@ -633,7 +801,7 @@ fn decode(type_id: u16, version: u8, payload: Vec<u8>) -> Result<Gene, String> {
         rmp_serde::from_slice(payload)
             .map_err(|e| format!("has a payload that can't be read for its type: {e}"))
     }
-    let terms = |terms: Vec<(u16, u8)>| {
+    let terms = |terms: Vec<(ChemId, u8)>| {
         terms
             .into_iter()
             .map(|(chem, coefficient)| Term { chem, coefficient })
@@ -659,11 +827,11 @@ fn decode(type_id: u16, version: u8, payload: Vec<u8>) -> Result<Gene, String> {
                 bool,
                 f32,
                 f32,
-                u16,
+                ChemId,
             ) = read(&payload)?;
             let locus = match kind {
-                0 => LocusRef::Chem(id),
-                1 => LocusRef::Locus(id),
+                0 => LocusRef::Chem(ChemId(id)),
+                1 => LocusRef::Locus(LocusId(id)),
                 _ => {
                     return Err(format!(
                         "has a payload with the locus kind {kind}, which isn't 0 or 1"
@@ -709,6 +877,38 @@ fn decode(type_id: u16, version: u8, payload: Vec<u8>) -> Result<Gene, String> {
                 .find(|&t| t as u16 == id)
                 .ok_or_else(|| format!("refers to trait {id}, which doesn't exist"))?;
             Gene::Trait { which, value }
+        }
+        7 => {
+            let (id, value): (u16, f32) = read(&payload)?;
+            let param = BrainParam::ALL
+                .into_iter()
+                .find(|&p| p as u16 == id)
+                .ok_or_else(|| format!("refers to brain parameter {id}, which doesn't exist"))?;
+            Gene::BrainParam { param, value }
+        }
+        8 => {
+            let (inputs, verb, weight): (Vec<(InputId, bool)>, u16, f32) = read(&payload)?;
+            let verb = Verb::ALL
+                .into_iter()
+                .find(|&v| v as u16 == verb)
+                .ok_or_else(|| format!("refers to verb {verb}, which doesn't exist"))?;
+            Gene::Instinct {
+                inputs,
+                verb,
+                weight,
+            }
+        }
+        9 => {
+            let (input, category, weight): (InputId, u16, f32) = read(&payload)?;
+            let category = Category::ALL
+                .into_iter()
+                .find(|&c| c as u16 == category)
+                .ok_or_else(|| format!("refers to category {category}, which doesn't exist"))?;
+            Gene::AttentionInstinct {
+                input,
+                category,
+                weight,
+            }
         }
         _ => Gene::Unknown {
             type_id,

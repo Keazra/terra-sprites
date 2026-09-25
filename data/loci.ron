@@ -5,25 +5,24 @@
 //
 // Kinds: BodySensor (physiology fills it in every tick), Pulse (an event that
 // lasts one tick; object verbs `Signal` these) and ReceptorTarget (written by
-// receptors). `brain_visible` says whether the brain can read it.
+// receptors). Which of them the brain feels is listed in `brain_io.ron`.
 [
-    (id: 1,  name: "always",            kind: BodySensor,     brain_visible: true),
-    (id: 2,  name: "age",               kind: BodySensor,     brain_visible: true),
-    (id: 3,  name: "nearby_sprites",    kind: BodySensor,     brain_visible: true),
-    // Physiology only: as brain inputs they'd loop the action back into itself.
-    (id: 4,  name: "moving",            kind: BodySensor,     brain_visible: false),
-    (id: 5,  name: "resting",           kind: BodySensor,     brain_visible: false),
+    (id: 1,  name: "always",            kind: BodySensor),
+    (id: 2,  name: "age",               kind: BodySensor),
+    (id: 3,  name: "nearby_sprites",    kind: BodySensor),
+    (id: 4,  name: "moving",            kind: BodySensor),
+    (id: 5,  name: "resting",           kind: BodySensor),
 
-    (id: 32, name: "ate",               kind: Pulse,          brain_visible: true),
-    (id: 33, name: "drank",             kind: Pulse,          brain_visible: true),
-    (id: 34, name: "played",            kind: Pulse,          brain_visible: true),
-    (id: 35, name: "played_social",     kind: Pulse,          brain_visible: true),
-    (id: 36, name: "pricked",           kind: Pulse,          brain_visible: true),
-    (id: 37, name: "was_hit",           kind: Pulse,          brain_visible: true),
-    (id: 38, name: "did_hit",           kind: Pulse,          brain_visible: true),
-    (id: 39, name: "petted",            kind: Pulse,          brain_visible: true),
-    (id: 40, name: "shocked",           kind: Pulse,          brain_visible: true),
+    (id: 32, name: "ate",               kind: Pulse),
+    (id: 33, name: "drank",             kind: Pulse),
+    (id: 34, name: "played",            kind: Pulse),
+    (id: 35, name: "played_social",     kind: Pulse),
+    (id: 36, name: "pricked",           kind: Pulse),
+    (id: 37, name: "was_hit",           kind: Pulse),
+    (id: 38, name: "did_hit",           kind: Pulse),
+    (id: 39, name: "petted",            kind: Pulse),
+    (id: 40, name: "shocked",           kind: Pulse),
 
-    (id: 64, name: "learning_rate_mod", kind: ReceptorTarget, brain_visible: false),
-    (id: 65, name: "exploration_mod",   kind: ReceptorTarget, brain_visible: false),
+    (id: 64, name: "learning_rate_mod", kind: ReceptorTarget),
+    (id: 65, name: "exploration_mod",   kind: ReceptorTarget),
 ]

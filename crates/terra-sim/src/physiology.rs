@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
-use crate::registry::{Chemical, ChemicalClass, Locus, LocusKind, Trait};
+use crate::registry::{BrainParam, Chemical, ChemicalClass, Locus, LocusId, LocusKind, Trait};
 
 /// The physiology file, relative to the pack root.
 pub(crate) const PHYSIOLOGY: &str = "physiology.ron";
@@ -27,8 +27,9 @@ pub(crate) struct Physiology {
     /// `cause_fade` is how many ticks it takes to halve.
     pub(crate) tally_fade: f32,
     pub(crate) traits: TraitRanges,
+    pub(crate) brain: BrainRanges,
     /// Each receptor target's range, by locus ID.
-    pub(crate) receptor_targets: BTreeMap<u16, (f32, f32)>,
+    pub(crate) receptor_targets: BTreeMap<LocusId, (f32, f32)>,
     pub(crate) nearby_sprites: NearbySprites,
     pub(crate) spawn_variation: f32,
     pub(crate) actions: Actions,
@@ -50,11 +51,34 @@ pub(crate) struct PhysiologyEntry {
     injury: Injury,
     cause_fade: u32,
     traits: TraitRanges,
+    brain: BTreeMap<String, ParamRange>,
     receptor_targets: BTreeMap<String, (f32, f32)>,
     nearby_sprites: NearbySprites,
     spawn_variation: f32,
     actions: Actions,
     movement: Movement,
+}
+
+/// A brain parameter's range and default (design §5.7, Appendix B).
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ParamRange {
+    /// What a `BrainParam` gene is clamped to.
+    pub(crate) range: (f32, f32),
+    /// The value with no gene for it.
+    pub(crate) default: f32,
+}
+
+/// Every brain parameter's range and default, in `BrainParam::ALL` order.
+#[derive(Debug, Clone)]
+pub(crate) struct BrainRanges(Vec<ParamRange>);
+
+impl BrainRanges {
+    /// `param`'s range and default.
+    pub(crate) fn of(&self, param: BrainParam) -> ParamRange {
+        let index = BrainParam::ALL.iter().position(|&p| p == param);
+        self.0[index.expect("every parameter is in ALL")]
+    }
 }
 
 /// How sprites find their way (design §3.6–3.7).
@@ -213,6 +237,32 @@ impl PhysiologyEntry {
             }
         }
 
+        let mut brain = Vec::new();
+        for param in BrainParam::ALL {
+            let name = param.name();
+            let &entry = self
+                .brain
+                .get(name)
+                .ok_or_else(|| format!("`brain` has no range for `{name}`"))?;
+            range(&format!("brain.{name}"), entry.range)?;
+            if !(entry.range.0..=entry.range.1).contains(&entry.default) {
+                return Err(format!(
+                    "`brain.{name}` has the default {}, outside its range",
+                    entry.default
+                ));
+            }
+            brain.push(entry);
+        }
+        if let Some(name) = self
+            .brain
+            .keys()
+            .find(|name| BrainParam::named(name).is_none())
+        {
+            return Err(format!(
+                "`brain` names `{name}`, which isn't a brain parameter"
+            ));
+        }
+
         let mut receptor_targets = BTreeMap::new();
         for locus in loci.iter().filter(|l| l.kind == LocusKind::ReceptorTarget) {
             let &bounds = self.receptor_targets.get(&locus.name).ok_or_else(|| {
@@ -266,6 +316,7 @@ impl PhysiologyEntry {
             injury,
             tally_fade: halving_factor(self.cause_fade as f32),
             traits,
+            brain: BrainRanges(brain),
             receptor_targets,
             nearby_sprites: self.nearby_sprites,
             spawn_variation: self.spawn_variation,
@@ -316,11 +367,13 @@ pub(crate) struct Indices {
     pub(crate) nearby_sprites: usize,
     pub(crate) moving: usize,
     pub(crate) resting: usize,
+    /// The receptor target that scales the brain's temperatures (design §5.3, §5.5).
+    pub(crate) exploration_mod: usize,
 }
 
 impl Indices {
-    /// Finds each physical chemical and body sensor physiology needs, or says
-    /// which file lacks one.
+    /// Finds each physical chemical and body sensor physiology needs, and
+    /// the receptor target the brain reads, or says which file lacks one.
     pub(crate) fn find(
         chemicals: &[Chemical],
         loci: &[Locus],
@@ -346,6 +399,16 @@ impl Indices {
                     )
                 })
         };
+        let target = |name: &str| {
+            loci.iter()
+                .position(|l| l.name == name && l.kind == LocusKind::ReceptorTarget)
+                .ok_or_else(|| {
+                    (
+                        "loci.ron",
+                        format!("the brain needs a receptor target called `{name}`"),
+                    )
+                })
+        };
         Ok(Indices {
             energy: chem("energy")?,
             hydration: chem("hydration")?,
@@ -358,6 +421,7 @@ impl Indices {
             nearby_sprites: sensor("nearby_sprites")?,
             moving: sensor("moving")?,
             resting: sensor("resting")?,
+            exploration_mod: target("exploration_mod")?,
         })
     }
 }

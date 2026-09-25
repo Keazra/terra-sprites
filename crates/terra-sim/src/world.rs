@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::collections::BTreeMap;
 
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::SeedableRng;
@@ -16,8 +17,9 @@ use crate::generate::{generate, place_objects, place_sprites};
 use crate::genome::{GeneView, Genome};
 use crate::map::{Map, MapError, Pos};
 use crate::objects::{EntityId, Object, Objects};
+use crate::perception::{Flood, Target, goal_tiles};
 use crate::regions::Regions;
-use crate::registry::ChemicalKind;
+use crate::registry::{Category, ChemicalKind};
 use crate::sprites::{Sprite, Sprites};
 use crate::variation::varied;
 
@@ -44,8 +46,8 @@ pub(crate) struct WorldState {
     pub(crate) next_id: u64,
     pub(crate) objects: Objects,
     pub(crate) sprites: Sprites,
-    /// How many sprites have died of each cause, indexed by `DeathCause`.
-    pub(crate) deaths: [u64; 3],
+    /// How many sprites have died of each cause, for the causes any has.
+    pub(crate) deaths: BTreeMap<DeathCause, u64>,
 }
 
 impl WorldState {
@@ -82,6 +84,79 @@ impl WorldState {
             && !self.objects.is_solid_at(data, pos)
     }
 
+    /// The object on `pos`, as a target.
+    pub(crate) fn object_target(&self, pos: Pos) -> Option<Target> {
+        self.map
+            .contains(pos)
+            .then(|| self.objects.at(pos))?
+            .map(Target::Object)
+    }
+
+    /// The water on `pos`, as a target, if it's drinkable.
+    pub(crate) fn water_target(&self, data: &DataPack, pos: Pos) -> Option<Target> {
+        let drinkable =
+            self.map.contains(pos) && data.terrain(self.map.terrain(pos)).is_drinkable();
+        drinkable.then_some(Target::Water(pos))
+    }
+
+    /// The sprite on `pos`, as a target.
+    pub(crate) fn sprite_target(&self, pos: Pos) -> Option<Target> {
+        self.map
+            .contains(pos)
+            .then(|| self.sprites.at(pos))?
+            .map(Target::Sprite)
+    }
+
+    /// Where `target` is, and whether a sprite may act on it from its own
+    /// tile (an item or water) as well as from beside it (design §3.6).
+    /// `None` if it's gone.
+    pub(crate) fn whereabouts(&self, data: &DataPack, target: Target) -> Option<(Pos, bool)> {
+        match target {
+            Target::Object(id) => {
+                let object = self.objects.get(id)?;
+                Some((object.pos, !data.object_types()[object.kind].solid))
+            }
+            Target::Water(pos) => Some((pos, true)),
+            Target::Sprite(id) => Some((self.sprites.get(id)?.pos, false)),
+        }
+    }
+
+    /// Where a sprite with `flood` heads to act on `target`: its nearest
+    /// reachable goal tile. `None` if the target is gone or the flood
+    /// reaches none of its goal tiles.
+    pub(crate) fn goal_for(&self, data: &DataPack, flood: &Flood, target: Target) -> Option<Pos> {
+        let (there, own_tile) = self.whereabouts(data, target)?;
+        flood
+            .nearest_goal(&self.map, there, own_tile)
+            .map(|(goal, _)| goal)
+    }
+
+    /// The index of `target`'s object type, whose verb table it answers
+    /// with: a pseudo type for water or a sprite. `None` if it's gone, or
+    /// the pack has no such pseudo type.
+    pub(crate) fn kind_of(&self, data: &DataPack, target: Target) -> Option<usize> {
+        match target {
+            Target::Object(id) => self.objects.get(id).map(|o| o.kind),
+            Target::Water(_) => data.pseudo_type(Category::Water),
+            Target::Sprite(_) => data.pseudo_type(Category::Sprite),
+        }
+    }
+
+    /// The stable ID of `target`'s object type, as `kind_of` finds it.
+    pub(crate) fn type_of(&self, data: &DataPack, target: Target) -> Option<u16> {
+        self.kind_of(data, target)
+            .map(|kind| data.object_types()[kind].id)
+    }
+
+    /// Whether `pos` is a goal tile of `target` (design §3.6): beside it, or
+    /// for an item or water, its own tile too.
+    pub(crate) fn on_goal_tile(&self, data: &DataPack, pos: Pos, target: Target) -> bool {
+        self.whereabouts(data, target)
+            .is_some_and(|(there, own_tile)| {
+                goal_tiles(&self.map, there, own_tile).any(|g| g == pos)
+            })
+    }
+
     fn new_id(&mut self) -> EntityId {
         let id = EntityId(self.next_id);
         self.next_id += 1;
@@ -106,6 +181,15 @@ pub enum ScenarioError {
     CantPlaceSprite(Pos),
     /// A scripted action is for a tile with no sprite on it.
     NoSpriteToScript(Pos),
+    /// There's no object on this tile to start.
+    NoObject(Pos),
+    /// The object's type has no stage of this name.
+    NoSuchStage { object_type: String, stage: String },
+    /// The object's type has no counter of this name.
+    NoSuchCounter {
+        object_type: String,
+        counter: String,
+    },
 }
 
 /// A hand-made world, for tests and lab scenarios.
@@ -347,6 +431,52 @@ impl World {
         Ok(world)
     }
 
+    /// For a hand-made world: starts the object on `pos` in `stage`, with
+    /// the counters `counters` names set as given (each capped at its
+    /// maximum), instead of at the start of its first stage. It enters the
+    /// stage on its first turn, as a new object enters its first.
+    pub fn start_object(
+        &mut self,
+        pos: Pos,
+        stage: &str,
+        counters: &[(&str, u16)],
+    ) -> Result<(), ScenarioError> {
+        let state = &mut self.state;
+        let id = state
+            .map
+            .contains(pos)
+            .then(|| state.objects.at(pos))
+            .flatten()
+            .ok_or(ScenarioError::NoObject(pos))?;
+        let object = state.objects.get_mut(id).expect("the object there");
+        let object_type = &self.data.object_types()[object.kind];
+        let named = |what: &str| (object_type.name.clone(), what.to_string());
+        let index = object_type
+            .stages
+            .iter()
+            .position(|s| s.name == stage)
+            .ok_or_else(|| {
+                let (object_type, stage) = named(stage);
+                ScenarioError::NoSuchStage { object_type, stage }
+            })?;
+        object.stage = Some(index);
+        for &(name, value) in counters {
+            let counter = object_type
+                .counters
+                .iter()
+                .position(|c| c.name == name)
+                .ok_or_else(|| {
+                    let (object_type, counter) = named(name);
+                    ScenarioError::NoSuchCounter {
+                        object_type,
+                        counter,
+                    }
+                })?;
+            object.counters[counter] = value.min(object_type.counters[counter].max);
+        }
+        Ok(())
+    }
+
     fn with(map: Map, data: DataPack, rng: ChaCha8Rng) -> World {
         let objects = Objects::new(&map);
         let sprites = Sprites::new(&map);
@@ -358,7 +488,7 @@ impl World {
                 next_id: 1,
                 objects,
                 sprites,
-                deaths: [0; 3],
+                deaths: BTreeMap::new(),
             },
             data,
             checked_next_id: Cell::new(1),
@@ -454,7 +584,13 @@ impl World {
 
     /// How many sprites have died of `cause` since the world began.
     pub fn deaths(&self, cause: DeathCause) -> u64 {
-        self.state.deaths[cause as usize]
+        self.state.deaths.get(&cause).copied().unwrap_or(0)
+    }
+
+    /// Every cause any sprite has died of since the world began, in order,
+    /// with how many.
+    pub fn deaths_by_cause(&self) -> impl Iterator<Item = (DeathCause, u64)> + '_ {
+        self.state.deaths.iter().map(|(&cause, &n)| (cause, n))
     }
 
     /// The number of ticks simulated so far.
@@ -530,14 +666,22 @@ impl World {
         action::resolve(&mut self.state, &self.data, dying, events);
     }
 
-    /// Step 7: the dying are removed, each with a `Died` event; then the tick
-    /// counter advances. (Death check #2 arrives with step 6's effects.)
+    /// Step 7: death check #2 marks the sprites step 6's verbs injured to 1;
+    /// then the dying are removed, each with a `Died` event, in ascending ID
+    /// order; then the tick counter advances.
     fn finish_tick(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
         let state = &mut self.state;
-        for &id in dying {
+        let injury = self.data.physiology().indices.injury;
+        let dying: Vec<EntityId> = state
+            .sprites
+            .iter()
+            .filter(|(id, sprite)| dying.contains(id) || sprite.body.chems[injury] >= 1.0)
+            .map(|(id, _)| id)
+            .collect();
+        for id in dying {
             let sprite = state.sprites.remove(id);
             let cause = sprite.body.cause_of_death();
-            state.deaths[cause as usize] += 1;
+            *state.deaths.entry(cause).or_insert(0) += 1;
             events.push(Event {
                 tick: state.tick,
                 kind: EventKind::Died {
@@ -839,12 +983,19 @@ mod tests {
             .filter(|e| matches!(e.kind, EventKind::ActionEnded { .. }))
             .map(|e| (e.tick, e.kind))
             .collect();
-        let failed = EventKind::ActionEnded {
-            id,
-            verb: Verb::Wander,
-            outcome: Outcome::Failed,
-        };
-        assert_eq!(ended, [(1, failed)]);
+        let failed: Vec<(u64, Verb, Outcome)> = ended
+            .into_iter()
+            .map(|(tick, kind)| match kind {
+                EventKind::ActionEnded {
+                    id: who,
+                    verb,
+                    outcome,
+                    ..
+                } if who == id => (tick, verb, outcome),
+                _ => unreachable!("only endings"),
+            })
+            .collect();
+        assert_eq!(failed, [(1, Verb::Wander, Outcome::Failed)]);
     }
 
     #[test]

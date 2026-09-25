@@ -1,6 +1,6 @@
 //! How the screen writes names and numbers.
 
-use terra_sim::{DeathCause, EntityId};
+use terra_sim::{DataPack, DeathCause, EntityId};
 
 /// A name from the data, as shown on screen: `berry_bush` → `berry bush`.
 pub(crate) fn display_name(name: &str) -> String {
@@ -13,12 +13,17 @@ pub(crate) fn sprite_label(id: EntityId) -> String {
     format!("Sprite #{}", id.0)
 }
 
-/// A cause of death, as the screen names it.
-pub(crate) fn cause_name(cause: DeathCause) -> &'static str {
+/// A cause of death, as the screen names it: "hurt by thornbush" names the
+/// object type from the data pack.
+pub(crate) fn cause_name(cause: DeathCause, data: &DataPack) -> String {
     match cause {
-        DeathCause::Starvation => "starvation",
-        DeathCause::Dehydration => "dehydration",
-        DeathCause::OldAge => "old age",
+        DeathCause::Starvation => "starvation".into(),
+        DeathCause::Dehydration => "dehydration".into(),
+        DeathCause::OldAge => "old age".into(),
+        DeathCause::HurtBy(id) => {
+            let name = data.object_type_name(id).unwrap_or("something");
+            format!("hurt by {}", display_name(name))
+        }
     }
 }
 
