@@ -5,7 +5,7 @@ use rand_chacha::rand_core::SeedableRng;
 use serde::Serialize;
 use xxhash_rust::xxh3::xxh3_64_with_seed;
 
-use crate::biochem::{self, Senses};
+use crate::biochem::{self, Senses, Traits};
 use crate::config::WorldConfig;
 use crate::data::DataPack;
 use crate::ecology::{self, holds_without_drawing, new_object, square};
@@ -15,6 +15,7 @@ use crate::genome::Genome;
 use crate::map::{Map, MapError, Pos};
 use crate::objects::{EntityId, Object, Objects};
 use crate::regions::Regions;
+use crate::registry::ChemicalKind;
 use crate::sprites::{Sprite, Sprites};
 use crate::variation::varied;
 
@@ -112,6 +113,18 @@ pub struct Scenario<'a> {
     pub sprites: &'a [(Pos, Option<Genome>)],
 }
 
+/// A chemical's level in one sprite.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ChemicalLevel<'a> {
+    /// The chemical's name in the data pack.
+    pub name: &'a str,
+    pub kind: ChemicalKind,
+    /// From 0 to 1.
+    pub level: f32,
+    /// The level now less the level one tick ago.
+    pub change: f32,
+}
+
 /// A read-only view of one sprite.
 pub struct SpriteView<'a> {
     id: EntityId,
@@ -119,7 +132,7 @@ pub struct SpriteView<'a> {
     world: &'a World,
 }
 
-impl SpriteView<'_> {
+impl<'a> SpriteView<'a> {
     /// The sprite's entity ID.
     pub fn id(&self) -> EntityId {
         self.id
@@ -128,6 +141,32 @@ impl SpriteView<'_> {
     /// The tile the sprite stands on.
     pub fn pos(&self) -> Pos {
         self.sprite.pos
+    }
+
+    /// Ticks since the sprite was born.
+    pub fn age(&self) -> u64 {
+        self.sprite.age(self.world.state.tick)
+    }
+
+    /// The traits its body has: its genes', clamped to physiology's ranges.
+    pub fn traits(&self) -> Traits {
+        self.sprite.program.traits
+    }
+
+    /// Every chemical in the sprite, in the data pack's order.
+    pub fn chemicals(&self) -> impl Iterator<Item = ChemicalLevel<'a>> + use<'a> {
+        let body = &self.sprite.body;
+        self.world
+            .data
+            .chemicals()
+            .iter()
+            .zip(body.chems.iter().zip(&body.previous))
+            .map(|(chemical, (&level, &previous))| ChemicalLevel {
+                name: &chemical.name,
+                kind: chemical.kind(),
+                level,
+                change: level - previous,
+            })
     }
 
     /// The level of the chemical called `name`, or `None` if the pack has no such chemical.
@@ -289,6 +328,7 @@ impl World {
     /// that are empty today.
     pub fn step(&mut self) -> Vec<Event> {
         let mut events = Vec::new();
+        self.remember_levels();
         self.apply_commands(); // 1
         self.run_environment(&mut events); // 2
         let dying = self.run_biochemistry(); // 3
@@ -323,6 +363,15 @@ impl World {
         self.state.sprites.iter().map(|(id, sprite)| SpriteView {
             id,
             sprite,
+            world: self,
+        })
+    }
+
+    /// The sprite `id`, if it's in the world.
+    pub fn sprite(&self, id: EntityId) -> Option<SpriteView<'_>> {
+        Some(SpriteView {
+            id,
+            sprite: self.state.sprites.get(id)?,
             world: self,
         })
     }
@@ -363,6 +412,14 @@ impl World {
         let bytes = rmp_serde::to_vec_named(&self.state)
             .expect("world state always serializes to MessagePack");
         xxh3_64_with_seed(&bytes, STATE_HASH_SEED)
+    }
+
+    /// Keeps every sprite's chemical levels as they are before the tick, for
+    /// the change the Chem tab shows. It's not a step: nothing reads them.
+    fn remember_levels(&mut self) {
+        for body in self.state.sprites.bodies_mut() {
+            body.previous.clone_from(&body.chems);
+        }
     }
 
     /// Step 1: apply the commands stamped for this tick.

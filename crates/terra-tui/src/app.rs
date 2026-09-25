@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 
 use ratatui::layout::{Position, Rect, Size};
 use serde::Deserialize;
-use terra_sim::{EntityId, Event, EventKind, Map, Pos, World};
+use terra_sim::{DeathCause, EntityId, Event, EventKind, Map, Pos, World};
 
 use crate::clock::Clock;
 use crate::input::Action;
@@ -50,6 +50,21 @@ impl CursorMode {
 pub enum Selection {
     /// A sprite in the world.
     Living(EntityId),
+    /// A sprite that died while selected: of what, and at what age.
+    Dead {
+        id: EntityId,
+        cause: DeathCause,
+        age: u64,
+    },
+}
+
+impl Selection {
+    /// The selected sprite's ID, living or dead.
+    pub fn id(self) -> EntityId {
+        match self {
+            Selection::Living(id) | Selection::Dead { id, .. } => id,
+        }
+    }
 }
 
 /// An inspector tab (design §6.1). The Brain tab joins with the brain.
@@ -129,11 +144,17 @@ impl App {
         }
     }
 
-    /// Takes in what happened during a tick, for the event log (design §6.1).
-    /// Object events are left out: they happen dozens of times a minute and
-    /// would bury everything else, and the World tab counts objects instead.
+    /// Takes in what happened during a tick, for the event log (design §6.1),
+    /// and the death of the selected sprite. Object events are left out of the
+    /// log: they happen dozens of times a minute and would bury everything
+    /// else, and the World tab counts objects instead.
     pub fn record(&mut self, events: &[Event]) {
         for event in events {
+            if let EventKind::Died { id, cause, age } = event.kind
+                && self.selection == Some(Selection::Living(id))
+            {
+                self.selection = Some(Selection::Dead { id, cause, age });
+            }
             if !matches!(
                 event.kind,
                 EventKind::ObjectSpawned { .. } | EventKind::ObjectRemoved { .. }
@@ -259,7 +280,7 @@ impl App {
     /// it starts from the lowest or highest ID.
     fn select_along(&mut self, world: &World, direction: Direction) {
         let ids: Vec<EntityId> = world.sprites().map(|sprite| sprite.id()).collect();
-        let current = self.selection.map(|Selection::Living(id)| id);
+        let current = self.selection.map(Selection::id);
         let chosen = match direction {
             Direction::Next => current
                 .and_then(|current| ids.iter().find(|&&id| id > current))

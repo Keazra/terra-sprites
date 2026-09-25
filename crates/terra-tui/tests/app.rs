@@ -1,5 +1,5 @@
 use ratatui::layout::{Position, Rect};
-use terra_sim::{DataPack, EntityId, Map, Pos, Scenario, World};
+use terra_sim::{DataPack, DeathCause, EntityId, Event, EventKind, Map, Pos, Scenario, World};
 use terra_tui::app::{App, Flow, Screen, Selection, Tab};
 use terra_tui::clock::Speed;
 use terra_tui::input::Action;
@@ -356,4 +356,52 @@ fn clearing_the_selection_leaves_the_tab_open() {
     click(&mut app, &world, 1 + 3, 2 + 4);
     click(&mut app, &world, 1 + 5, 2 + 5);
     assert_eq!((app.selection(), app.tab()), (None, Tab::Body));
+}
+
+fn died(id: EntityId, cause: DeathCause, age: u64) -> Event {
+    Event {
+        tick: age,
+        kind: EventKind::Died { id, cause, age },
+    }
+}
+
+#[test]
+fn the_selection_remembers_how_the_selected_sprite_died() {
+    let world = grass_with(20, 10, &[at(3, 4), at(6, 2)]);
+    let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
+    let mut app = app(&world, tile_area(20, 10));
+    app.apply(Action::SelectNext, &world);
+    app.record(&[died(ids[1], DeathCause::Starvation, 90)]);
+    assert_eq!(
+        app.selection(),
+        Some(Selection::Living(ids[0])),
+        "another sprite's death"
+    );
+    app.record(&[died(ids[0], DeathCause::Dehydration, 4_012)]);
+    assert_eq!(
+        app.selection(),
+        Some(Selection::Dead {
+            id: ids[0],
+            cause: DeathCause::Dehydration,
+            age: 4_012
+        })
+    );
+}
+
+#[test]
+fn after_the_selected_sprite_dies_tab_carries_on_from_its_id() {
+    // The world here still has the dead sprite, as a real one wouldn't, so
+    // Tab stepping past it shows it goes by ID.
+    let world = grass_with(20, 10, &[at(3, 4), at(6, 2), at(9, 9)]);
+    let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
+    let mut app = app(&world, tile_area(20, 10));
+    app.apply(Action::SelectNext, &world);
+    app.apply(Action::SelectNext, &world);
+    app.record(&[died(ids[1], DeathCause::OldAge, 70_000)]);
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(app.selection(), Some(Selection::Living(ids[2])));
+
+    app.record(&[died(ids[2], DeathCause::OldAge, 70_000)]);
+    app.apply(Action::SelectPrevious, &world);
+    assert_eq!(app.selection(), Some(Selection::Living(ids[1])));
 }
