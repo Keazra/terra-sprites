@@ -12,6 +12,8 @@
         sprite:                 (glyph: '@', fg: white),
         // `&` is already the berry bush, so the selected sprite is `@` in reverse video.
         selected_sprite:        (glyph: '@', fg: white, reversed: true),
+        // Where the selected sprite is heading, in the detail view.
+        destination:            (glyph: 'X', fg: white),
     },
     objects: {
         "berry_bush": {
