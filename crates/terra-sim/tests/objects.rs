@@ -80,6 +80,11 @@ fn a_scenario_places_objects_and_lists_them_in_ascending_id_order() {
     );
     assert_eq!(world.object_at(at(5, 2)).map(|o| o.id()), Some(EntityId(2)));
     assert!(world.object_at(at(0, 0)).is_none());
+    assert!(
+        world.object_at(at(7, 3)).is_none(),
+        "past the right wall, not the berry at (0, 4)"
+    );
+    assert!(world.object_at(at(0, 5)).is_none(), "below the bottom wall");
 }
 
 /// FIELD with a pool of shallow water at (1, 1) and a rock at (3, 1).

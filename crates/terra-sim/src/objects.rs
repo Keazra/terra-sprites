@@ -78,11 +78,12 @@ impl Objects {
     }
 
     /// Whether an object of type `kind` may go on the tile at `pos` (design §3.3–3.4):
-    /// a walkable tile holding no object, whose terrain allows fixtures if the
-    /// object is solid. Whether it would cut a path is for the rules to ask,
-    /// with `keeps_paths_open`.
+    /// a walkable tile on the map holding no object, whose terrain allows
+    /// fixtures if the object is solid. Whether it would cut a path is for the
+    /// rules to ask, with `keeps_paths_open`.
     pub(crate) fn can_place(&self, map: &Map, data: &DataPack, kind: usize, pos: Pos) -> bool {
-        map.is_walkable(pos)
+        map.contains(pos)
+            && map.is_walkable(pos)
             && self.at(pos).is_none()
             && (!data.object_types()[kind].solid
                 || data.terrain(map.terrain(pos)).allows_fixtures())
@@ -433,6 +434,14 @@ mod tests {
             shore.can_place("berry_bush", at(1, 1)),
             "on grass by the water"
         );
+    }
+
+    #[test]
+    fn nothing_goes_off_the_map() {
+        let scene = Scene::new(&["...", "...", "..."]);
+        // x past the right wall would otherwise land on the next row's first tile.
+        assert!(!scene.can_place("berry", at(3, 1)));
+        assert!(!scene.can_place("berry", at(0, 3)));
     }
 
     #[test]

@@ -206,6 +206,7 @@ fn square(map: &Map, pos: Pos, radius: u16) -> impl Iterator<Item = Pos> + use<>
 /// The square of tiles within Chebyshev distance `radius` of `pos`, cut down
 /// to the map: its top-left tile, width and height.
 fn square_bounds(map: &Map, pos: Pos, radius: u16) -> (Pos, u16, u16) {
+    debug_assert!(map.contains(pos), "a square around {pos:?}, off the map");
     let x0 = pos.x.saturating_sub(radius);
     let y0 = pos.y.saturating_sub(radius);
     let x1 = pos.x.saturating_add(radius).min(map.width() - 1);

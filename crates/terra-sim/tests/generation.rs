@@ -235,7 +235,7 @@ fn a_generated_object_gets_no_on_stage_enter_for_the_stage_it_starts_in() {
 /// joining by orthogonal steps gives the same regions.
 fn open_regions(world: &World) -> usize {
     let map = world.map();
-    let data = DataPack::builtin().expect("valid pack");
+    let data = world.data();
     let open = |pos: Pos| {
         data.terrain(map.terrain(pos)).step_cost().is_some()
             && !world.object_at(pos).is_some_and(|o| o.is_solid())
