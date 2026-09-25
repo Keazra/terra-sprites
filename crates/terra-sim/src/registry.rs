@@ -42,9 +42,12 @@ impl Verb {
 
 /// An evolvable body trait (design §4.8). The discriminants are the stable trait IDs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub(crate) enum Trait {
+pub enum Trait {
+    /// Move points per tick.
     Speed = 1,
+    /// How far the sprite perceives, in tiles.
     SenseRadius = 2,
+    /// Ticks until old age.
     Lifespan = 3,
 }
 

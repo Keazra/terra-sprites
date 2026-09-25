@@ -32,7 +32,7 @@ pub use expression::Expression;
 pub use genome::{EmitterMode, GeneView, Genome, GenomeError};
 pub use map::{Dir, Map, MapError, Pos};
 pub use objects::EntityId;
-pub use registry::ChemicalKind;
+pub use registry::{ChemicalKind, Trait};
 pub use terrain::{Terrain, TerrainProps};
 pub use world::{
     ChemicalLevel, InvariantViolation, ObjectView, Scenario, ScenarioError, SpriteView, World,

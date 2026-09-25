@@ -280,10 +280,12 @@ pub(crate) struct Body {
     /// and Fall emitters.
     last_chems: Vec<f32>,
     last_loci: Vec<f32>,
-    /// `chems` as they were one tick ago, for the change the Chem tab shows
-    /// (design §6.1). Nothing in the sim reads them, so they aren't hashed.
+    /// `chems` as they were before the latest tick began, for the change the
+    /// Chem tab shows (design §6.1). Nothing in the sim reads them, so they
+    /// aren't hashed. Not to be confused with `last_chems`, which step 3's
+    /// Rise and Fall emitters read.
     #[serde(skip)]
-    pub(crate) previous: Vec<f32>,
+    pub(crate) chems_before_tick: Vec<f32>,
     /// The injury each of physiology's causes added lately, fading, indexed
     /// by `DeathCause` (design §4.10).
     pub(crate) tallies: [f32; 3],
@@ -318,7 +320,7 @@ impl Body {
         Body {
             last_chems: chems.clone(),
             last_loci: loci.clone(),
-            previous: chems.clone(),
+            chems_before_tick: chems.clone(),
             incoming: vec![0.0; loci.len()],
             chems,
             loci,
@@ -327,11 +329,12 @@ impl Body {
     }
 
     /// Starts the chemical at `index` at `level`, as if it had been there
-    /// since the previous tick, so no Rise or Fall emitter sees a change.
+    /// since the end of the previous tick's step 3, so no Rise or Fall emitter
+    /// sees a change, and since before that tick, so the Chem tab shows none.
     pub(crate) fn start_at(&mut self, index: usize, level: f32) {
         self.chems[index] = level;
         self.last_chems[index] = level;
-        self.previous[index] = level;
+        self.chems_before_tick[index] = level;
     }
 
     /// What caused most of the body's recent injury (design §4.10). Ties go

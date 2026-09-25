@@ -7,15 +7,14 @@ use ratatui::{
     style::{Modifier, Style},
     text::Line,
 };
-use terra_sim::{DeathCause, EntityId, Event, EventKind, Map, ObjectView, Pos, Terrain, World};
+use terra_sim::{Event, EventKind, Map, ObjectView, Pos, Terrain, World};
 
 use crate::app::{App, Areas, Screen, Selection};
 use crate::clock::Speed;
-use crate::inspector;
+use crate::inspector::{self, INSPECTOR_WIDTH, first_shown};
+use crate::text::{cause_name, display_name, group_thousands, sprite_label};
 use crate::theme::SemanticTile;
 
-/// The inspector's width, in columns, border included (design §6.1).
-pub(crate) const INSPECTOR_WIDTH: u16 = 46;
 /// The narrowest terminal that has room for the inspector beside the map view.
 const MIN_WIDTH_FOR_INSPECTOR: u16 = 100;
 /// The event log's height, in rows, border included: three events (design §6.1).
@@ -299,11 +298,6 @@ fn object_label(object: &ObjectView) -> String {
     }
 }
 
-/// A name from the data, as shown on screen: `berry_bush` → `berry bush`.
-pub(crate) fn display_name(name: &str) -> String {
-    name.replace('_', " ")
-}
-
 /// Draws the inspector (design §6.1): its title, and the open tab inside its border.
 fn render_inspector(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     let no_walls = Sides {
@@ -315,9 +309,8 @@ fn render_inspector(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     draw_border(buf, area, &inspector::title(app), no_walls);
     let inner = area.inner(Margin::new(1, 1));
     let lines = inspector::lines(app, world);
-    // The tab may have got shorter since it was scrolled.
-    let furthest = lines.len().saturating_sub(usize::from(inner.height));
-    let shown = lines.iter().skip(app.tab_scroll().min(furthest));
+    let first = first_shown(app.tab_scroll(), lines.len(), usize::from(inner.height));
+    let shown = lines.iter().skip(first);
     for (row, line) in (inner.y..inner.bottom()).zip(shown) {
         buf.set_line(inner.x, row, line, inner.width);
     }
@@ -348,12 +341,6 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App) {
     }
 }
 
-/// How the screen names a sprite. Sprites have no names until the player
-/// gives them one (design §6.5), so each shows by its ID.
-pub(crate) fn sprite_label(id: EntityId) -> String {
-    format!("Sprite #{}", id.0)
-}
-
 /// What an event says in the event log, if the log shows it.
 fn event_text(event: &Event) -> Option<String> {
     match &event.kind {
@@ -364,15 +351,6 @@ fn event_text(event: &Event) -> Option<String> {
             group_thousands(*age)
         )),
         EventKind::ObjectSpawned { .. } | EventKind::ObjectRemoved { .. } => None,
-    }
-}
-
-/// A cause of death, as the screen names it.
-pub(crate) fn cause_name(cause: DeathCause) -> &'static str {
-    match cause {
-        DeathCause::Starvation => "starvation",
-        DeathCause::Dehydration => "dehydration",
-        DeathCause::OldAge => "old age",
     }
 }
 
@@ -399,17 +377,4 @@ fn speed_label(speed: Speed) -> &'static str {
         Speed::X16 => "16x",
         Speed::Max => "Max",
     }
-}
-
-/// `1234567` → `"1,234,567"`.
-pub(crate) fn group_thousands(n: u64) -> String {
-    let digits = n.to_string();
-    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
 }

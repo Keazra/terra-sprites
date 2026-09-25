@@ -2,7 +2,7 @@
 
 use std::collections::VecDeque;
 
-use ratatui::layout::{Position, Rect, Size};
+use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
 use terra_sim::{DeathCause, EntityId, Event, EventKind, Map, Pos, World};
 
@@ -81,6 +81,16 @@ impl Tab {
     /// Every tab, in the order `[` and `]` go through them.
     pub const ALL: [Tab; 4] = [Tab::Body, Tab::Chem, Tab::Genome, Tab::World];
 
+    /// The tab's name in the inspector's title.
+    pub fn label(self) -> &'static str {
+        match self {
+            Tab::Body => "Body",
+            Tab::Chem => "Chem",
+            Tab::Genome => "Genome",
+            Tab::World => "World",
+        }
+    }
+
     /// The tab `steps` along from this one, wrapping around.
     fn along(self, steps: isize) -> Tab {
         let here = Tab::ALL.iter().position(|&tab| tab == self).expect("a tab") as isize;
@@ -134,34 +144,29 @@ impl App {
     /// A new UI for `map`, with the cursor at the map's centre and the viewport
     /// centred on it, and its panels drawn in `areas`.
     pub fn new(map: &Map, theme: Theme, seed: u64, areas: Areas) -> App {
-        let tile_area = areas.tiles;
         let cursor = Pos {
             x: map.width() / 2,
             y: map.height() / 2,
         };
-        let centred = |cursor: u16, view: u16, len: u16| {
-            clamp_origin(i32::from(cursor) - i32::from(view / 2), view, len)
-        };
-        App {
+        let mut app = App {
             clock: Clock::new(),
             theme,
             seed,
             screen: Screen::Normal,
             mode: CursorMode::Select,
             cursor,
-            viewport: Pos {
-                x: centred(cursor.x, tile_area.width, map.width()),
-                y: centred(cursor.y, tile_area.height, map.height()),
-            },
+            viewport: Pos { x: 0, y: 0 },
             map_size: Size::new(map.width(), map.height()),
-            tile_area,
+            tile_area: areas.tiles,
             inspector: areas.inspector,
             pointer: None,
             event_log: VecDeque::new(),
             selection: None,
             tab: Tab::World,
             tab_scroll: 0,
-        }
+        };
+        app.centre_on(cursor);
+        app
     }
 
     /// Takes in what happened during a tick, for the event log (design §6.1),
@@ -302,11 +307,13 @@ impl App {
         Flow::Continue
     }
 
-    /// Selects the sprite `id`, showing its tab from the top. From the World
-    /// tab, that opens Body.
+    /// Selects the sprite `id`. Another sprite than before shows its tab from
+    /// the top, and from the World tab, selecting opens Body.
     fn select(&mut self, id: EntityId) {
+        if self.selection.map(Selection::id) != Some(id) {
+            self.tab_scroll = 0;
+        }
         self.selection = Some(Selection::Living(id));
-        self.tab_scroll = 0;
         if self.tab == Tab::World {
             self.tab = Tab::Body;
         }
@@ -321,15 +328,16 @@ impl App {
     /// The rows inside the inspector's border: a page.
     fn inspector_rows(&self) -> usize {
         self.inspector
-            .map_or(0, |area| usize::from(area.height.saturating_sub(2)))
+            .map_or(0, |area| usize::from(area.inner(Margin::new(1, 1)).height))
     }
 
-    /// Scrolls the open tab by `lines`, down being positive, stopping at the
-    /// top and where its last line comes into view.
+    /// Scrolls the open tab by `lines` from where it's shown, down being
+    /// positive, stopping at the top and where its last line comes into view.
     fn scroll_tab(&mut self, lines: i32, world: &World) {
-        let length = inspector::lines(self, world).len();
-        let furthest = length.saturating_sub(self.inspector_rows());
-        let scrolled = self.tab_scroll as i64 + i64::from(lines);
+        let (length, rows) = (inspector::lines(self, world).len(), self.inspector_rows());
+        let from = inspector::first_shown(self.tab_scroll, length, rows);
+        let furthest = inspector::first_shown(usize::MAX, length, rows);
+        let scrolled = from as i64 + i64::from(lines);
         self.tab_scroll = scrolled.clamp(0, furthest as i64) as usize;
     }
 
@@ -351,11 +359,7 @@ impl App {
             return;
         };
         self.select(id);
-        let pos = world
-            .sprites()
-            .find(|sprite| sprite.id() == id)
-            .expect("a sprite just listed")
-            .pos();
+        let pos = world.sprite(id).expect("a sprite just listed").pos();
         if self.cell_of(pos).is_none() {
             self.centre_on(pos);
         }
