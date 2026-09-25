@@ -123,6 +123,8 @@ struct Reaction {
 }
 
 impl Reaction {
+    /// A chemical listed twice on one side counts as one term with both
+    /// coefficients, so the reaction never uses more than there is.
     fn new(
         reactants: &[Term],
         products: &[Term],
@@ -142,11 +144,16 @@ impl Reaction {
             }
         }
         net.retain(|&(_, gain)| gain != 0.0);
+        let mut merged: Vec<(usize, f32)> = Vec::new();
+        for term in reactants {
+            let coefficient = f32::from(term.coefficient);
+            match merged.iter_mut().find(|(i, _)| *i == index(term.chem)) {
+                Some((_, total)) => *total += coefficient,
+                None => merged.push((index(term.chem), coefficient)),
+            }
+        }
         Reaction {
-            reactants: reactants
-                .iter()
-                .map(|t| (index(t.chem), f32::from(t.coefficient)))
-                .collect(),
+            reactants: merged,
             net,
             rate,
         }
@@ -288,7 +295,7 @@ impl Body {
             chems[index] = level;
         }
         // Receptor targets rest at 1 (design §4.2).
-        let loci: Vec<f32> = data
+        let mut loci: Vec<f32> = data
             .loci()
             .iter()
             .map(|l| {
@@ -299,6 +306,8 @@ impl Body {
                 }
             })
             .collect();
+        // `always` is 1 from birth, so nothing ever sees it rise.
+        loci[indices.always] = 1.0;
         Body {
             last_chems: chems.clone(),
             last_loci: loci.clone(),
@@ -1001,7 +1010,8 @@ mod tests {
                         Gene::Emitter {
                             locus,
                             mode,
-                            invert,
+                            // Only a Level emitter can be inverted.
+                            invert: invert && mode == Mode::Level,
                             threshold,
                             gain,
                             chem,
@@ -1238,6 +1248,28 @@ mod tests {
         // Basal metabolism takes energy below 0 before the reaction runs,
         // but no level is ever read outside 0 to 1.
         assert_eq!(sprite.level("hunger"), 0.4);
+    }
+
+    #[test]
+    fn always_is_1_from_birth_so_nothing_sees_it_rise() {
+        let mut sprite = Subject::quiet(&[
+            r#"Emitter(locus: Locus("always"), mode: Rise, gain: 1.0, chem: "h0")"#,
+        ]);
+        assert_eq!(sprite.locus("always"), 1.0);
+        sprite.step();
+        assert_eq!(sprite.level("h0"), 0.0);
+    }
+
+    #[test]
+    fn a_reactant_listed_twice_counts_as_one_with_both_coefficients() {
+        let mut sprite = Subject::quiet(&[
+            r#"Reaction(reactants: [("h0", 1), ("h0", 1)], products: [("h1", 1)], rate: 1.0)"#,
+        ]);
+        sprite.set("h0", 0.4);
+        sprite.step();
+        // As 2 h0 → h1: at most 0.4 / 2, so it never uses more h0 than there is.
+        assert_close(sprite.level("h1"), 0.2);
+        assert_close(sprite.level("h0"), 0.0);
     }
 
     #[test]

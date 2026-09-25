@@ -69,7 +69,7 @@ impl Trait {
 /// What changes a chemical, and so who may change it (design §4.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub(crate) enum ChemicalClass {
-    /// Changed only by physics and object verbs.
+    /// Changed only by physiology and object verbs.
     Physical,
     /// Drives and learning signals: changed by the genome and the hand.
     Signal,
@@ -89,7 +89,7 @@ pub(crate) struct Chemical {
 /// What fills a locus in (design §4.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub(crate) enum LocusKind {
-    /// Filled in by physics every tick.
+    /// Filled in by physiology every tick.
     BodySensor,
     /// An event that lasts one tick, written by the hand and by verbs.
     Pulse,

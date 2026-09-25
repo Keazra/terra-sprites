@@ -578,6 +578,19 @@ mod tests {
     }
 
     #[test]
+    fn a_locus_that_is_not_a_number_breaks_an_invariant() {
+        let (mut world, first, _) = field_with_sprites();
+        world
+            .state
+            .sprites
+            .get_mut(first)
+            .expect("a sprite")
+            .body
+            .loci[1] = f32::NAN;
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
     fn a_sprite_id_the_counter_has_not_reached_breaks_an_invariant() {
         let (mut world, _, second) = field_with_sprites();
         world.state.next_id = second.0;

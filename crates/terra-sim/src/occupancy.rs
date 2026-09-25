@@ -47,6 +47,11 @@ impl Occupancy {
     }
 
     fn index(&self, pos: Pos) -> usize {
+        debug_assert!(
+            pos.x < self.width,
+            "{pos:?} is off a map {} wide",
+            self.width
+        );
         usize::from(pos.y) * usize::from(self.width) + usize::from(pos.x)
     }
 }

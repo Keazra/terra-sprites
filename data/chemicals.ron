@@ -1,7 +1,7 @@
 // The chemicals registry (design §4.1, Appendix A). IDs are stable and
 // append-only: never renumber or reuse one.
 //
-// Classes: Physical chemicals are changed only by physics and object verbs;
+// Classes: Physical chemicals are changed only by physiology and object verbs;
 // Signal chemicals (drives, reward, punishment) and Hormones by the genome.
 // Only Physical chemicals may be the target of an object verb's `Inject`.
 [

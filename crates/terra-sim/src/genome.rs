@@ -206,11 +206,17 @@ impl Gene {
             }
             Gene::Emitter {
                 locus,
+                mode,
+                invert,
                 threshold,
                 gain,
                 chem,
-                ..
             } => {
+                if invert && mode != Mode::Level {
+                    return Err(
+                        "has `invert: true`, but only a Level emitter can be inverted".into(),
+                    );
+                }
                 match locus {
                     LocusRef::Chem(id) => chemical(id)?,
                     LocusRef::Locus(id) => {
@@ -486,7 +492,8 @@ impl GeneEntry {
 /// The bytes a payload's hex digits spell.
 fn hex(digits: &str) -> Result<Vec<u8>, String> {
     let bad = || format!("has the payload {digits:?}, which isn't pairs of hex digits");
-    if !digits.len().is_multiple_of(2) || !digits.is_ascii() {
+    // Not `from_str_radix` alone: it takes a leading `+`.
+    if !digits.len().is_multiple_of(2) || !digits.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err(bad());
     }
     (0..digits.len())
