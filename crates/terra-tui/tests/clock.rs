@@ -16,9 +16,10 @@ fn run_for(clock: &mut Clock, total: Duration) -> u64 {
 }
 
 #[test]
-fn at_1x_one_second_of_frames_runs_ten_ticks() {
+fn at_1x_eight_seconds_of_frames_run_ten_ticks() {
+    // 1× is 1.25 ticks a second, slow enough to watch a sprite walk.
     let mut clock = Clock::new();
-    assert_eq!(run_for(&mut clock, Duration::from_secs(1)), 10);
+    assert_eq!(run_for(&mut clock, Duration::from_secs(8)), 10);
 }
 
 #[test]
@@ -39,7 +40,7 @@ fn the_tick_rate_follows_the_speed() {
     clock.faster();
     clock.faster();
     assert_eq!(clock.speed(), Speed::X4);
-    assert_eq!(run_for(&mut clock, Duration::from_secs(1)), 40);
+    assert_eq!(run_for(&mut clock, Duration::from_secs(2)), 10);
 }
 
 #[test]
@@ -65,11 +66,11 @@ fn a_paused_clock_runs_nothing_and_builds_no_backlog() {
     let mut clock = Clock::new();
     clock.toggle_pause();
     assert!(clock.is_paused());
-    assert_eq!(run_for(&mut clock, Duration::from_secs(1)), 0);
+    assert_eq!(run_for(&mut clock, Duration::from_secs(8)), 0);
 
     clock.toggle_pause();
     assert!(!clock.is_paused());
-    assert_eq!(run_for(&mut clock, Duration::from_secs(1)), 10);
+    assert_eq!(run_for(&mut clock, Duration::from_secs(8)), 10);
 }
 
 #[test]
@@ -89,7 +90,7 @@ fn stepping_while_paused_runs_exactly_one_tick() {
 fn stepping_while_running_does_nothing_extra() {
     let mut clock = Clock::new();
     clock.step_once();
-    assert_eq!(run_for(&mut clock, Duration::from_secs(1)), 10);
+    assert_eq!(run_for(&mut clock, Duration::from_secs(8)), 10);
 }
 
 #[test]
@@ -98,7 +99,7 @@ fn a_frame_cut_short_by_the_budget_drops_its_backlog() {
     for _ in 0..4 {
         clock.faster();
     }
-    assert_eq!(clock.speed(), Speed::X16); // 160 ticks per second
+    assert_eq!(clock.speed(), Speed::X16); // 20 ticks per second
 
     // A slow frame: a whole second is due, but the budget runs out after 3 ticks.
     let ticks = std::cell::Cell::new(0);
@@ -109,8 +110,8 @@ fn a_frame_cut_short_by_the_budget_drops_its_backlog() {
     );
     assert_eq!(ran, 3);
 
-    // The next 40 ms frame runs its own 6 ticks (6.4 due), not the 157 left over.
-    assert_eq!(run_for(&mut clock, Duration::from_millis(40)), 6);
+    // The next 200 ms of frames run their own 4 ticks, not the 17 left over.
+    assert_eq!(run_for(&mut clock, Duration::from_millis(200)), 4);
 }
 
 #[test]
@@ -131,13 +132,13 @@ fn at_max_speed_a_frame_runs_until_its_budget_is_spent() {
 }
 
 #[test]
-fn an_eighth_speed_runs_exactly_ten_ticks_in_eight_seconds() {
+fn an_eighth_speed_runs_exactly_ten_ticks_in_64_seconds() {
     let mut clock = Clock::new();
     for _ in 0..3 {
         clock.slower();
     }
-    assert_eq!(clock.speed(), Speed::Eighth); // 1.25 ticks per second
-    assert_eq!(run_for(&mut clock, Duration::from_secs(8)), 10);
+    assert_eq!(clock.speed(), Speed::Eighth); // 5/32 of a tick a second
+    assert_eq!(run_for(&mut clock, Duration::from_secs(64)), 10);
 }
 
 #[test]

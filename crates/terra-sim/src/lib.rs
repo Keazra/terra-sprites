@@ -3,6 +3,7 @@
 //! This crate has no terminal and no filesystem access: it receives its data
 //! pack as already-read text and is driven one tick at a time.
 
+mod action;
 mod biochem;
 mod config;
 mod data;
@@ -15,15 +16,19 @@ mod map;
 mod object_types;
 mod objects;
 mod occupancy;
+mod perception;
+mod physics;
 mod physiology;
 mod random;
 mod regions;
 mod registry;
 mod sprites;
+mod standin;
 mod terrain;
 mod variation;
 mod world;
 
+pub use action::{ActionView, Outcome, Progress, ScriptedAction};
 pub use biochem::Traits;
 pub use config::{ConfigError, WorldConfig};
 pub use data::{DataError, DataPack};
@@ -32,7 +37,7 @@ pub use expression::Expression;
 pub use genome::{EmitterMode, GeneView, Genome, GenomeError};
 pub use map::{Dir, Map, MapError, Pos};
 pub use objects::EntityId;
-pub use registry::{ChemicalKind, Trait};
+pub use registry::{ChemicalKind, Trait, Verb};
 pub use terrain::{Terrain, TerrainProps};
 pub use world::{
     ChemicalLevel, InvariantViolation, ObjectView, Scenario, ScenarioError, SpriteView, World,

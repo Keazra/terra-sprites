@@ -188,6 +188,54 @@ _Avoid_: senescence
 **Cause of death**:
 What caused most of a sprite's recent injury, with the most recent counting most: starvation, dehydration, old age, or being hurt by a kind of object, such as a thornbush or another sprite.
 
+### Actions and movement
+
+**Action**:
+What a sprite is doing, such as wandering to a spot or resting, from when it starts until it ends. A sprite does one at a time.
+_Avoid_: task, behaviour, activity
+
+**Verb**:
+A kind of action: Approach, Eat, Drink, Hit, Play, Retreat, Rest or Wander.
+_Avoid_: command (the player's commands are different), move
+
+**Outcome**:
+How an action went: still walking, applied, blocked, failed or timed out.
+_Avoid_: result, status
+
+**Timeout**:
+The longest any action may last. An action still going at the timeout ends as timed out.
+
+**Move points**:
+What a moving sprite gains each tick from its speed, and spends on steps.
+_Avoid_: action points
+
+**Perception flood**:
+The tiles a sprite can reach within its sense radius, and what each costs to walk to. It's how the sprite sees what's around it and finds its way. Shortened to "flood".
+_Avoid_: vision, field of view, pathfinding
+
+**Reachable**:
+Said of a tile the sprite's flood reached, or of a thing with a goal tile the flood reached. A thing the sprite can see but not reach is never its target.
+
+**Destination**:
+The tile a wandering sprite is walking to, picked when it starts to wander.
+
+**Goal tile**:
+A tile a sprite can act on its target from, such as any walkable tile beside a bush.
+
+**Candidate**:
+The nearest reachable thing of each kind around a sprite: the one its verbs would aim at.
+
+**Scripted action**:
+An action a hand-made world starts a sprite on, in place of what it would choose, so a test or a lab scenario can set up an exact situation. Nothing to do with lifecycle rules.
+
+**Swap**:
+Two sprites trading tiles in one tick, because each was stepping into the other's.
+_Avoid_: pass, collision
+
+**Committed path**:
+A way around blocking sprites that a stuck sprite found, and keeps to until it arrives, is blocked again or its action ends.
+_Avoid_: detour, reroute
+
 ### The screen
 
 **Map view**:
@@ -217,6 +265,10 @@ _Avoid_: focus, target
 **Inspector**:
 The side panel of tabs about the selected sprite (Body, Brain, Chem, Genome) or the world (World).
 _Avoid_: sidebar, details
+
+**Detail view**:
+A view the player switches on and off that shows the exact workings behind what the screen describes in words, such as a sprite's verb and where it's heading.
+_Avoid_: debug mode (it's in every build)
 
 **Event log**:
 The panel that lists what just happened to sprites, newest first.
