@@ -10,6 +10,8 @@
         terrain(deep_water):    (glyph: '=', fg: blue),
         terrain(rock):          (glyph: '#', fg: gray),
         sprite:                 (glyph: '@', fg: white),
+        // `&` is already the berry bush, so the selected sprite is `@` in reverse video.
+        selected_sprite:        (glyph: '@', fg: white, reversed: true),
     },
     objects: {
         "berry_bush": {

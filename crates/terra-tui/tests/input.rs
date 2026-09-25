@@ -314,3 +314,29 @@ fn ctrl_with_any_key_but_c_dismisses() {
     assert_eq!(Keys::new().action_for(ctrl('z')), Some(Action::Dismiss));
     assert_eq!(Keys::new().action_for(ctrl('c')), Some(Action::Quit));
 }
+
+#[test]
+fn tab_and_shift_tab_select_the_next_and_previous_sprite() {
+    assert_eq!(
+        Keys::new().action_for(press(KeyCode::Tab)),
+        Some(Action::SelectNext)
+    );
+    // Terminals report Shift+Tab as its own key, with Shift held.
+    let shift_tab = KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT);
+    assert_eq!(
+        Keys::new().action_for(shift_tab),
+        Some(Action::SelectPrevious)
+    );
+}
+
+#[test]
+fn the_square_brackets_switch_inspector_tabs() {
+    assert_eq!(
+        Keys::new().action_for(press(KeyCode::Char(']'))),
+        Some(Action::NextTab)
+    );
+    assert_eq!(
+        Keys::new().action_for(press(KeyCode::Char('['))),
+        Some(Action::PreviousTab)
+    );
+}

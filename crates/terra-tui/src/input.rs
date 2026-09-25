@@ -29,6 +29,14 @@ pub enum Action {
     Point(Position),
     /// A left click on this screen cell.
     Click(Position),
+    /// Select the sprite with the next ID (`Tab`).
+    SelectNext,
+    /// Select the sprite with the previous ID (`Shift+Tab`).
+    SelectPrevious,
+    /// Open the next inspector tab (`]`).
+    NextTab,
+    /// Open the previous inspector tab (`[`).
+    PreviousTab,
     /// Back out of whatever is open, or ask to quit (`Esc`).
     Back,
     /// Say yes to a prompt (`y`).
@@ -106,6 +114,10 @@ impl Keys {
             KeyCode::Char('+' | '=') => Some(Action::Faster { held }),
             KeyCode::Char('-') => Some(Action::Slower { held }),
             KeyCode::Char('y') => Some(Action::Confirm),
+            KeyCode::Tab => Some(Action::SelectNext),
+            KeyCode::BackTab => Some(Action::SelectPrevious),
+            KeyCode::Char(']') => Some(Action::NextTab),
+            KeyCode::Char('[') => Some(Action::PreviousTab),
             _ => Some(Action::Dismiss),
         }
     }

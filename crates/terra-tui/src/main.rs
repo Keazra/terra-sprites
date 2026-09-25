@@ -118,7 +118,7 @@ fn run(
                 _ => None,
             };
             if let Some(action) = action
-                && app.apply(action) == Flow::Quit
+                && app.apply(action, &world) == Flow::Quit
             {
                 return Ok(());
             }
