@@ -250,6 +250,10 @@ impl Program {
                     let (low, high) = range(which);
                     traits.set(which, value.clamp(low, high));
                 }
+                // The brain's genes (design §5.7) don't touch the chemistry.
+                Gene::BrainParam { .. }
+                | Gene::Instinct { .. }
+                | Gene::AttentionInstinct { .. } => {}
                 Gene::Unknown { .. } => unreachable!("an unknown gene isn't expressed"),
             }
         }

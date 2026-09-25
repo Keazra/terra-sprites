@@ -248,3 +248,93 @@ fn only_a_level_emitter_can_be_inverted() {
         assert_invalid(&[&gene], "invert");
     }
 }
+
+#[test]
+fn a_genome_file_reads_the_brain_genes_by_name_and_writes_them_back() {
+    let text = genome_file(&[
+        r#"BrainParam(param: "tau_base", value: 0.2)"#,
+        r#"Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0)"#,
+        r#"Instinct(inputs: [("hunger", false), ("target_adjacent", true)], verb: Approach, weight: 0.5)"#,
+        r#"AttentionInstinct(input: "hunger", category: BerryBush, weight: 0.8)"#,
+    ]);
+    let data = builtin();
+    let genome = Genome::from_ron(&text, &data).expect("a valid genome");
+    assert_eq!(genome.to_ron(&data), text);
+}
+
+#[test]
+fn a_brain_gene_naming_something_the_build_lacks_is_an_error_naming_it() {
+    assert_invalid(
+        &[r#"BrainParam(param: "curiosity", value: 0.2)"#],
+        "curiosity",
+    );
+    assert_invalid(
+        &[r#"Instinct(inputs: [("glee", false)], verb: Eat, weight: 1.0)"#],
+        "glee",
+    );
+    assert_invalid(
+        &[r#"AttentionInstinct(input: "glee", category: Berry, weight: 1.0)"#],
+        "glee",
+    );
+}
+
+#[test]
+fn an_instinct_combines_one_to_three_different_inputs() {
+    assert_invalid(
+        &[r#"Instinct(inputs: [], verb: Eat, weight: 1.0)"#],
+        "inputs",
+    );
+    assert_invalid(
+        &[
+            r#"Instinct(inputs: [("hunger", false), ("thirst", false), ("pain", false), ("age", false)], verb: Eat, weight: 1.0)"#,
+        ],
+        "inputs",
+    );
+    assert_invalid(
+        &[r#"Instinct(inputs: [("hunger", false), ("hunger", true)], verb: Eat, weight: 1.0)"#],
+        "hunger",
+    );
+}
+
+#[test]
+fn an_instinct_may_not_lead_to_a_reserved_verb() {
+    assert_invalid(
+        &[r#"Instinct(inputs: [("loneliness", false)], verb: Mate, weight: 1.0)"#],
+        "Mate",
+    );
+}
+
+#[test]
+fn brain_gene_values_must_be_numbers() {
+    assert_invalid(&[r#"BrainParam(param: "tau_base", value: inf)"#], "value");
+    assert_invalid(
+        &[r#"Instinct(inputs: [("hunger", false)], verb: Eat, weight: inf)"#],
+        "weight",
+    );
+    assert_invalid(
+        &[r#"AttentionInstinct(input: "hunger", category: Berry, weight: inf)"#],
+        "weight",
+    );
+}
+
+#[test]
+fn a_brain_gene_written_by_number_reads_the_same_as_by_name() {
+    // Payloads are MessagePack. BrainParam (type 7): [parameter ID, value];
+    // tau_base is parameter 5, and 0.5 is the f32 0xca3f000000.
+    // Instinct (type 8): [[[input ID, negated]], verb ID, weight]; hunger is
+    // input 1 and Eat is verb 2. AttentionInstinct (type 9): [input ID,
+    // category ID, weight]; Berry is category 2.
+    let data = builtin();
+    let by_number = genome_file(&[
+        r#"Gene(type: 7, version: 1, payload: "9205ca3f000000")"#,
+        r#"Gene(type: 8, version: 1, payload: "93919201c202ca3f000000")"#,
+        r#"Gene(type: 9, version: 1, payload: "930102ca3f000000")"#,
+    ]);
+    let by_name = genome_file(&[
+        r#"BrainParam(param: "tau_base", value: 0.5)"#,
+        r#"Instinct(inputs: [("hunger", false)], verb: Eat, weight: 0.5)"#,
+        r#"AttentionInstinct(input: "hunger", category: Berry, weight: 0.5)"#,
+    ]);
+    let genome = Genome::from_ron(&by_number, &data).expect("a valid genome");
+    assert_eq!(genome.to_ron(&data), by_name);
+}

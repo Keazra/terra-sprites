@@ -48,6 +48,9 @@ pub(crate) fn varied(genome: &Genome, data: &DataPack, rng: &mut ChaCha8Rng) -> 
                     let (low, high) = physiology.traits.range(which);
                     *value = vary(*value).clamp(low, high);
                 }
+                Gene::BrainParam { ref mut value, .. } => *value = vary(*value),
+                Gene::Instinct { ref mut weight, .. }
+                | Gene::AttentionInstinct { ref mut weight, .. } => *weight = vary(*weight),
                 Gene::Unknown { .. } => {}
             }
             gene
@@ -65,8 +68,7 @@ mod tests {
     use crate::expression::expressions;
     use crate::genome::{EmitterMode, Gene, LocusRef};
     use crate::random::unit;
-    use crate::registry::Trait;
-    use crate::registry::{ChemId, LocusId};
+    use crate::registry::{BrainParam, ChemId, LocusId, Trait};
 
     fn builtin() -> DataPack {
         DataPack::builtin().expect("built-in data pack is valid")
@@ -80,6 +82,9 @@ mod tests {
         Receptor(chem: "reward", threshold: 0.2, gain: 0.5, target: "learning_rate_mod"),
         InitialConcentration(chem: "boredom", value: 0.2),
         Trait(trait: "speed", value: 7.0),
+        BrainParam(param: "tau_base", value: 0.5),
+        Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
+        AttentionInstinct(input: "thirst", category: Water, weight: 0.8),
         Gene(type: 900, version: 1, payload: "c0ffee"),
     ])"#;
 
@@ -188,6 +193,42 @@ mod tests {
                     ) => {
                         assert!(within_ten_percent(7.0, value), "{value}");
                     }
+                    (
+                        Gene::BrainParam {
+                            param: BrainParam::TauBase,
+                            ..
+                        },
+                        &Gene::BrainParam {
+                            param: BrainParam::TauBase,
+                            value,
+                        },
+                    ) => {
+                        assert!(within_ten_percent(0.5, value), "{value}");
+                    }
+                    (
+                        Gene::Instinct { inputs, verb, .. },
+                        &Gene::Instinct {
+                            inputs: ref i,
+                            verb: v,
+                            weight,
+                        },
+                    ) => {
+                        assert_eq!((inputs, *verb), (i, v));
+                        assert!(within_ten_percent(1.0, weight), "{weight}");
+                    }
+                    (
+                        Gene::AttentionInstinct {
+                            input, category, ..
+                        },
+                        &Gene::AttentionInstinct {
+                            input: i,
+                            category: c,
+                            weight,
+                        },
+                    ) => {
+                        assert_eq!((*input, *category), (i, c));
+                        assert!(within_ten_percent(0.8, weight), "{weight}");
+                    }
                     (Gene::Unknown { .. }, _) => assert_eq!(before, after),
                     _ => panic!("{before:?} became {after:?}"),
                 }
@@ -225,8 +266,9 @@ mod tests {
         let mut rng = ChaCha8Rng::seed_from_u64(7);
         let mut expected = rng.clone();
         varied(&every_kind(&data), &data, &mut rng);
-        // Values: ticks, rate, threshold and gain, threshold and gain, value, value.
-        for _ in 0..8 {
+        // Values: ticks, rate, threshold and gain, threshold and gain, value,
+        // value, and the brain genes' value, weight and weight.
+        for _ in 0..11 {
             unit(&mut expected);
         }
         assert_eq!(rng, expected);

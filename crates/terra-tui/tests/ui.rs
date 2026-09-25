@@ -902,6 +902,36 @@ fn the_chem_tab_lists_every_chemical_with_its_level_and_change_per_tick() {
 }
 
 #[test]
+fn the_genome_tab_shows_brain_settings_instincts_and_attention_instincts() {
+    let genome = r#"(format: 1, genes: [
+        AttentionInstinct(input: "hunger", category: BerryBush, weight: 0.8),
+        Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
+        BrainParam(param: "tau_base", value: 0.2),
+        Instinct(inputs: [("thirst", false), ("target_adjacent", true)], verb: Drink, weight: -0.5),
+    ])"#;
+    let (world, mut app) = one_sprite(genome, 0);
+    app.apply(Action::NextTab, &world);
+    app.apply(Action::NextTab, &world);
+    let rows = right_part(&render(&app, &world, 100, 30), 46);
+    assert!(rows[1].contains("[Genome]"), "{:?}", rows[1]);
+    let text: Vec<&str> = rows[2..11].iter().map(|row| inside(row)).collect();
+    assert_eq!(
+        text,
+        [
+            "BRAIN SETTINGS",
+            "tau base .2",
+            "INSTINCTS",
+            "hunger → eat +1",
+            "thirst & not target adjacent → drink -.5",
+            "ATTENTION",
+            "hunger → attends to berry bush +.8",
+            "",
+            "",
+        ]
+    );
+}
+
+#[test]
 fn the_genome_tab_groups_genes_as_plain_lines_and_marks_those_with_no_effect() {
     let genome = r#"(format: 1, genes: [
         Trait(trait: "speed", value: 7.25),

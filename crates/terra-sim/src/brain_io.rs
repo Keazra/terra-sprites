@@ -37,7 +37,6 @@ pub(crate) enum Source {
 pub(crate) struct BrainInput {
     pub(crate) id: InputId,
     pub(crate) name: String,
-    #[expect(dead_code, reason = "the brain reads its inputs later in slice 6")]
     pub(crate) source: Source,
 }
 

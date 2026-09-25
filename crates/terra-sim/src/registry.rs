@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 /// What brains perceive an object as. The discriminants are the stable `CategoryId`s.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub(crate) enum Category {
     BerryBush = 1,
     Berry = 2,
@@ -57,10 +57,92 @@ pub enum Verb {
 }
 
 impl Verb {
+    pub(crate) const ALL: [Verb; 10] = [
+        Verb::Approach,
+        Verb::Eat,
+        Verb::Drink,
+        Verb::Hit,
+        Verb::Play,
+        Verb::Retreat,
+        Verb::Rest,
+        Verb::Wander,
+        Verb::Mate,
+        Verb::Speak,
+    ];
+
+    /// Whether the verb's ID is only reserved, for a later milestone.
+    pub(crate) fn is_reserved(self) -> bool {
+        matches!(self, Verb::Mate | Verb::Speak)
+    }
+
     /// Whether the verb acts on its target through the target's verb table
     /// (design §5.2). The others move, rest or are reserved.
     pub(crate) fn is_interaction(self) -> bool {
         matches!(self, Verb::Eat | Verb::Drink | Verb::Hit | Verb::Play)
+    }
+}
+
+/// A setting of how the brain works (design §5.7, Appendix B), set by a
+/// `BrainParam` gene. The discriminants are the stable parameter IDs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub(crate) enum BrainParam {
+    LearningRate = 1,
+    TraceDecay = 2,
+    RelaxRate = 3,
+    ConsolidateRate = 4,
+    TauBase = 5,
+    TauAttBase = 6,
+    SwitchMargin = 7,
+    AttentionMargin = 8,
+    SalienceGain = 9,
+    PoolSize = 10,
+    MaxArity = 11,
+    RecruitThreshold = 12,
+    NoveltyThreshold = 13,
+    ForgetTicks = 14,
+}
+
+impl BrainParam {
+    pub(crate) const ALL: [BrainParam; 14] = [
+        BrainParam::LearningRate,
+        BrainParam::TraceDecay,
+        BrainParam::RelaxRate,
+        BrainParam::ConsolidateRate,
+        BrainParam::TauBase,
+        BrainParam::TauAttBase,
+        BrainParam::SwitchMargin,
+        BrainParam::AttentionMargin,
+        BrainParam::SalienceGain,
+        BrainParam::PoolSize,
+        BrainParam::MaxArity,
+        BrainParam::RecruitThreshold,
+        BrainParam::NoveltyThreshold,
+        BrainParam::ForgetTicks,
+    ];
+
+    /// The parameter's name in genome files and `physiology.ron`.
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            BrainParam::LearningRate => "learning_rate",
+            BrainParam::TraceDecay => "trace_decay",
+            BrainParam::RelaxRate => "relax_rate",
+            BrainParam::ConsolidateRate => "consolidate_rate",
+            BrainParam::TauBase => "tau_base",
+            BrainParam::TauAttBase => "tau_att_base",
+            BrainParam::SwitchMargin => "switch_margin",
+            BrainParam::AttentionMargin => "attention_margin",
+            BrainParam::SalienceGain => "salience_gain",
+            BrainParam::PoolSize => "pool_size",
+            BrainParam::MaxArity => "max_arity",
+            BrainParam::RecruitThreshold => "recruit_threshold",
+            BrainParam::NoveltyThreshold => "novelty_threshold",
+            BrainParam::ForgetTicks => "forget_ticks",
+        }
+    }
+
+    /// The parameter called `name`, if there is one.
+    pub(crate) fn named(name: &str) -> Option<BrainParam> {
+        BrainParam::ALL.into_iter().find(|p| p.name() == name)
     }
 }
 

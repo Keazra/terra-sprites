@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use ron::extensions::Extensions;
 use serde::Deserialize;
 
-use crate::brain_io::{BRAIN_IO, BrainInput, InputEntry, brain_inputs};
+use crate::brain_io::{BRAIN_IO, BrainInput, InputEntry, InputId, brain_inputs};
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, GenomeError};
 use crate::object_types::{OBJECTS, ObjectType, TypeEntry, object_types};
@@ -245,6 +245,16 @@ impl DataPack {
         self.brain_inputs
             .iter()
             .map(|input| (input.id.0, input.name.as_str()))
+    }
+
+    /// The brain input with the ID `id`.
+    pub(crate) fn brain_input(&self, id: InputId) -> Option<&BrainInput> {
+        self.brain_inputs.iter().find(|input| input.id == id)
+    }
+
+    /// The brain input called `name`.
+    pub(crate) fn brain_input_named(&self, name: &str) -> Option<&BrainInput> {
+        self.brain_inputs.iter().find(|input| input.name == name)
     }
 
     /// A terrain's properties, from `terrain.ron`.

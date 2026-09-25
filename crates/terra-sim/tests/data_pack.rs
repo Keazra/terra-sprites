@@ -713,3 +713,24 @@ fn brain_input_ids_and_names_are_unique_and_below_the_target_inputs() {
     let target_id = r#"[(id: 36, name: "hungry", reads: Chem("hunger"))]"#;
     assert_invalid("brain_io.ron", target_id, "36");
 }
+
+#[test]
+fn every_brain_parameter_has_a_range_and_a_default_within_it() {
+    let tau = r#""tau_base":          (range: (0.05, 2.0),    default: 0.2),"#;
+    assert_invalid_physiology(tau, "", "tau_base");
+    assert_invalid_physiology(
+        tau,
+        &format!(r#"{tau} "curiosity": (range: (0.0, 1.0), default: 0.5),"#),
+        "curiosity",
+    );
+    assert_invalid_physiology(
+        tau,
+        r#""tau_base": (range: (0.05, 2.0), default: 3.0),"#,
+        "tau_base",
+    );
+    assert_invalid_physiology(
+        tau,
+        r#""tau_base": (range: (2.0, 0.05), default: 0.2),"#,
+        "tau_base",
+    );
+}
