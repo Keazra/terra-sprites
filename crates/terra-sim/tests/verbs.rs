@@ -344,3 +344,32 @@ fn approaching_a_sprite_follows_it_as_it_moves() {
     }
     panic!("the follower should catch the leader");
 }
+
+#[test]
+fn an_action_view_says_what_it_was_aimed_at_and_whether_it_got_to_try() {
+    // A berry and a bare bush: the berry is eaten whole, the bush has nothing.
+    let (berry, bush) = (at(1, 1), at(3, 1));
+    let mut world = world(
+        &[".....", ".....", "....."],
+        &[(berry, "berry"), (bush, "berry_bush")],
+        berry,
+        &[
+            ScriptedAction::Eat { at: berry },
+            ScriptedAction::Eat { at: bush },
+        ],
+    );
+    world
+        .start_object(bush, "mature", &[])
+        .expect("a bare bush");
+    let id = the_sprite(&world);
+    world.step();
+    let ate = world.sprite(id).expect("it").action().expect("an action");
+    assert_eq!(ate.progress, Progress::Ended(Outcome::Applied));
+    assert_eq!(ate.target_type, Some(2), "a berry");
+    assert!(ate.attempted && ate.target_gone, "{ate:?}");
+    world.step();
+    let bare = world.sprite(id).expect("it").action().expect("an action");
+    assert_eq!(bare.progress, Progress::Ended(Outcome::Failed));
+    assert_eq!(bare.target_type, Some(1), "a berry bush");
+    assert!(bare.attempted && !bare.target_gone, "{bare:?}");
+}
