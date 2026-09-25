@@ -37,7 +37,7 @@ impl Dir {
     ];
 
     /// The change in `(x, y)` a step in this direction makes.
-    fn offset(self) -> (i32, i32) {
+    pub(crate) fn offset(self) -> (i32, i32) {
         match self {
             Dir::N => (0, -1),
             Dir::NE => (1, -1),
@@ -50,7 +50,7 @@ impl Dir {
         }
     }
 
-    fn is_diagonal(self) -> bool {
+    pub(crate) fn is_diagonal(self) -> bool {
         matches!(self, Dir::NE | Dir::SE | Dir::SW | Dir::NW)
     }
 }
@@ -182,7 +182,7 @@ impl Map {
     }
 
     /// The step cost of the terrain at `pos`, or `None` if it isn't walkable.
-    fn cost_onto(&self, pos: Pos) -> Option<u16> {
+    pub(crate) fn cost_onto(&self, pos: Pos) -> Option<u16> {
         self.step_costs[self.terrain(pos) as usize]
     }
 

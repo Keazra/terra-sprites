@@ -17,11 +17,13 @@ pub enum SemanticTile {
     Sprite,
     /// The selected sprite (design §6.1).
     SelectedSprite,
+    /// Where the selected sprite is heading, in the detail view (design §6.1).
+    Destination,
 }
 
 impl SemanticTile {
     /// Every semantic tile. Each theme must draw all of them.
-    pub const ALL: [SemanticTile; 8] = [
+    pub const ALL: [SemanticTile; 9] = [
         SemanticTile::Terrain(Terrain::Grass),
         SemanticTile::Terrain(Terrain::Dirt),
         SemanticTile::Terrain(Terrain::Sand),
@@ -30,6 +32,7 @@ impl SemanticTile {
         SemanticTile::Terrain(Terrain::Rock),
         SemanticTile::Sprite,
         SemanticTile::SelectedSprite,
+        SemanticTile::Destination,
     ];
 }
 

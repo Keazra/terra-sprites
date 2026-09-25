@@ -51,6 +51,8 @@ pub enum Action {
     Back,
     /// Say yes to a prompt (`y`).
     Confirm,
+    /// Switch the detail view on or off (`v`).
+    ToggleDetail,
     /// Cancel a prompt: any key with no job of its own.
     Dismiss,
     /// Quit at once (`Ctrl+C`).
@@ -124,6 +126,8 @@ impl Keys {
             KeyCode::Char('+' | '=') => Some(Action::Faster { held }),
             KeyCode::Char('-') => Some(Action::Slower { held }),
             KeyCode::Char('y') => Some(Action::Confirm),
+            // A held `v` would flicker the detail view on and off.
+            KeyCode::Char('v') => (!held).then_some(Action::ToggleDetail),
             // Some terminals report Shift+Tab as its own key, others as Tab with Shift.
             KeyCode::BackTab => Some(Action::SelectPrevious),
             KeyCode::Tab if key.modifiers.contains(KeyModifiers::SHIFT) => {

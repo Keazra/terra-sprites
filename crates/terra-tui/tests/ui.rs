@@ -3,7 +3,8 @@ use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
-    DataPack, DeathCause, EntityId, Event, EventKind, Map, Removal, Scenario, World, WorldConfig,
+    DataPack, DeathCause, EntityId, Event, EventKind, Map, Outcome, Pos, Removal, Scenario,
+    ScriptedAction, Verb, World, WorldConfig,
 };
 use terra_tui::app::App;
 use terra_tui::input::Action;
@@ -353,6 +354,7 @@ fn garden(pack: DataPack) -> World {
         map,
         objects: &objects,
         sprites: &[],
+        scripted: &[],
     };
     World::from_scenario(scenario, pack, 7).expect("valid scenario")
 }
@@ -375,6 +377,7 @@ fn garden_with_sprites() -> World {
         map,
         objects: &objects,
         sprites: &sprites,
+        scripted: &[],
     };
     World::from_scenario(scenario, pack, 7).expect("valid scenario")
 }
@@ -634,7 +637,7 @@ fn the_event_log_lists_deaths_newest_first_under_the_map() {
 }
 
 #[test]
-fn the_event_log_leaves_object_events_out_and_keeps_the_latest_100() {
+fn the_event_log_leaves_object_and_action_events_out_and_keeps_the_latest_100() {
     let world = garden(pack());
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     let spawned = Event {
@@ -646,7 +649,25 @@ fn the_event_log_leaves_object_events_out_and_keeps_the_latest_100() {
         },
     };
     app.record(&[spawned]);
-    assert_eq!(app.event_log().count(), 0);
+    let id = EntityId(3);
+    app.record(&[
+        Event {
+            tick: 1,
+            kind: EventKind::ActionStarted {
+                id,
+                verb: Verb::Wander,
+            },
+        },
+        Event {
+            tick: 1,
+            kind: EventKind::ActionEnded {
+                id,
+                verb: Verb::Wander,
+                outcome: Outcome::Failed,
+            },
+        },
+    ]);
+    assert_eq!(app.event_log().count(), 0, "nor action events");
     for tick in 0..150 {
         app.record(&[died(tick, tick, DeathCause::Starvation, tick)]);
     }
@@ -738,14 +759,22 @@ fn when_the_selected_sprite_dies_its_tabs_say_how_and_at_what_age() {
 /// an app on it that has selected the sprite and stepped the world `ticks`
 /// times.
 fn one_sprite(genome: &str, ticks: u32) -> (World, App) {
+    one_sprite_doing(genome, &[], ticks)
+}
+
+/// `one_sprite`, starting on the `scripted` actions.
+fn one_sprite_doing(genome: &str, scripted: &[ScriptedAction], ticks: u32) -> (World, App) {
     let pack = pack();
     let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
     let genome = terra_sim::Genome::from_ron(genome, &pack).expect("a valid genome");
-    let sprites = [(terra_sim::Pos { x: 2, y: 3 }, Some(genome))];
+    let start = Pos { x: 2, y: 3 };
+    let sprites = [(start, Some(genome))];
+    let scripted: Vec<(Pos, ScriptedAction)> = scripted.iter().map(|&a| (start, a)).collect();
     let scenario = Scenario {
         map,
         objects: &[],
         sprites: &sprites,
+        scripted: &scripted,
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     for _ in 0..ticks {
@@ -772,11 +801,12 @@ const WORKED_GENOME: &str = r#"(format: 1, genes: [
 
 #[test]
 fn the_body_tab_shows_age_traits_drives_and_physical_levels() {
-    let (world, app) = one_sprite(WORKED_GENOME, 1);
+    let (world, app) = one_sprite_doing(WORKED_GENOME, &[ScriptedAction::Rest], 1);
     let (_, text) = inspector(&app, &world);
     assert_eq!(
-        text[..13],
+        text[..14],
         [
+            "Resting · 9 ticks left",
             "age 1 · lifespan 61,204",
             "speed 7.25 · sense 9.5",
             "",
@@ -793,7 +823,45 @@ fn the_body_tab_shows_age_traits_drives_and_physical_levels() {
             "food .00 · water .00 · injury .00",
         ]
     );
-    assert!(text[13..].iter().all(String::is_empty), "{text:?}");
+    assert!(text[14..].iter().all(String::is_empty), "{text:?}");
+}
+
+/// A genome that walks a grass step a tick.
+const SPEED_10: &str = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
+
+#[test]
+fn the_body_tab_starts_with_what_the_sprite_is_doing_in_plain_words() {
+    let wander = ScriptedAction::Wander {
+        destination: Pos { x: 7, y: 3 },
+    };
+    let (world, app) = one_sprite_doing(SPEED_10, &[wander], 1);
+    assert_eq!(
+        inspector(&app, &world).1[0],
+        "Wandering off · 4 tiles to go"
+    );
+    let (world, app) = one_sprite_doing(SPEED_10, &[wander], 5);
+    assert_eq!(inspector(&app, &world).1[0], "Arrived");
+}
+
+#[test]
+fn v_shows_the_exact_action_and_marks_where_the_selected_sprite_is_heading() {
+    let destination = Pos { x: 7, y: 3 };
+    let wander = ScriptedAction::Wander { destination };
+    let (world, mut app) = one_sprite_doing(SPEED_10, &[wander], 1);
+    let cell = app.cell_of(destination).expect("in view");
+    assert_eq!(render(&app, &world, 100, 30)[cell].symbol(), ".");
+
+    app.apply(Action::ToggleDetail, &world);
+    assert_eq!(
+        inspector(&app, &world).1[0],
+        "WANDER → (7,3) · walking (4 tiles)"
+    );
+    let screen = render(&app, &world, 100, 30);
+    assert_eq!(screen[cell].symbol(), "X");
+    assert_eq!(screen[cell].fg, Color::White);
+
+    app.apply(Action::ToggleDetail, &world);
+    assert_eq!(render(&app, &world, 100, 30)[cell].symbol(), ".");
 }
 
 #[test]
@@ -1029,6 +1097,7 @@ fn selecting_another_sprite_starts_its_tab_from_the_top_and_the_same_one_again_d
         map,
         objects: &[],
         sprites: &sprites,
+        scripted: &[],
     };
     let world = World::from_scenario(scenario, pack.clone(), 7).expect("valid scenario");
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
@@ -1068,7 +1137,8 @@ fn a_change_too_small_to_show_leaves_no_number_and_no_arrow() {
     ])"#;
     let (world, mut app) = one_sprite(genome, 1);
     let (_, body) = inspector(&app, &world);
-    assert_eq!(body[7], "boredom     ░░░░░░░░░░ .00", "the Body tab");
+    // After the action line, age, traits, a blank line and four drives.
+    assert_eq!(body[8], "boredom     ░░░░░░░░░░ .00", "the Body tab");
     app.apply(Action::NextTab, &world);
     let (_, chem) = inspector(&app, &world);
     assert_eq!(chem[11], "boredom       .00", "the Chem tab");
@@ -1132,6 +1202,7 @@ fn the_world_tab_shows_the_population_and_the_deaths_by_cause() {
         map,
         objects: &[],
         sprites: &sprites,
+        scripted: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let app = app_for(&world, Theme::cp437(), 100, 30);
@@ -1239,6 +1310,7 @@ fn chemical_names_show_with_spaces_for_underscores() {
         map,
         objects: &[],
         sprites: &sprites,
+        scripted: &[],
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let mut app = app_for(&world, Theme::cp437(), 100, 30);

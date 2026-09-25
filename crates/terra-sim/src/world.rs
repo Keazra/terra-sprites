@@ -5,6 +5,7 @@ use rand_chacha::rand_core::SeedableRng;
 use serde::Serialize;
 use xxhash_rust::xxh3::xxh3_64_with_seed;
 
+use crate::action::{self, ActionView, ScriptedAction};
 use crate::biochem::{self, Senses, Traits};
 use crate::config::WorldConfig;
 use crate::data::DataPack;
@@ -103,6 +104,8 @@ pub enum ScenarioError {
     CantPlace { object_type: String, pos: Pos },
     /// A sprite can't stand on this tile (design §3.4).
     CantPlaceSprite(Pos),
+    /// A scripted action is for a tile with no sprite on it.
+    NoSpriteToScript(Pos),
 }
 
 /// A hand-made world, for tests and lab scenarios.
@@ -114,6 +117,10 @@ pub struct Scenario<'a> {
     /// Newborn sprites as `(tile, genome)`: `None` is the starter genome with
     /// spawn variation, as for the `SpawnSprite` command.
     pub sprites: &'a [(Pos, Option<Genome>)],
+    /// Actions to start sprites on, by the tile each sprite starts on,
+    /// instead of what they would choose. A sprite given several does them in
+    /// the order given.
+    pub scripted: &'a [(Pos, ScriptedAction)],
 }
 
 /// A chemical's level in one sprite.
@@ -150,6 +157,12 @@ impl<'a> SpriteView<'a> {
     /// Ticks since the sprite was born.
     pub fn age(&self) -> u64 {
         self.sprite.age(self.world.state.tick)
+    }
+
+    /// What the sprite is doing, or the action that last ended until the
+    /// next one starts; `None` before its first.
+    pub fn action(&self) -> Option<ActionView> {
+        action::view(self.sprite, &self.world.data)
     }
 
     /// The traits its body has: its genes', clamped to physiology's ranges.
@@ -319,6 +332,18 @@ impl World {
             let sprite = Sprite::newborn(genome, pos, state.tick, &world.data);
             state.add_sprite(sprite);
         }
+        for &(pos, script) in scenario.scripted {
+            let sprites = &mut world.state.sprites;
+            let id = world
+                .state
+                .map
+                .contains(pos)
+                .then(|| sprites.at(pos))
+                .flatten()
+                .ok_or(ScenarioError::NoSpriteToScript(pos))?;
+            let sprite = sprites.get_mut(id).expect("the sprite there");
+            sprite.scripted.push_back(script);
+        }
         Ok(world)
     }
 
@@ -343,6 +368,9 @@ impl World {
     /// Advances the world by exactly one tick, running the canonical tick order
     /// (design §2.4), and reports what happened. Later slices fill in the steps
     /// that are empty today.
+    ///
+    /// In debug builds and tests, the world then checks its invariants (design
+    /// §7.1), and panics naming the tick if one is broken.
     pub fn step(&mut self) -> Vec<Event> {
         let mut events = Vec::new();
         self.remember_levels();
@@ -350,9 +378,14 @@ impl World {
         self.run_environment(&mut events); // 2
         let dying = self.run_biochemistry(); // 3
         self.run_learning(); // 4
-        self.sense_and_decide(); // 5
-        self.resolve_actions(); // 6
+        self.sense_and_decide(&dying, &mut events); // 5
+        self.resolve_actions(&dying, &mut events); // 6
         self.finish_tick(&dying, &mut events); // 7
+        #[cfg(debug_assertions)]
+        if let Err(InvariantViolation(broken)) = self.check_invariants() {
+            let tick = self.state.tick - 1;
+            panic!("a broken invariant at the end of tick {tick}: {broken}");
+        }
         events
     }
 
@@ -468,7 +501,8 @@ impl World {
                 let senses = Senses {
                     age: sprite.age(state.tick),
                     nearby_sprites: (others as f32 / f32::from(nearby.full)).min(1.0),
-                    ..Senses::default()
+                    steps: sprite.did.steps,
+                    resting: sprite.did.rested,
                 };
                 (id, senses)
             })
@@ -487,10 +521,14 @@ impl World {
     fn run_learning(&mut self) {}
 
     /// Step 5: perception, attention and decisions.
-    fn sense_and_decide(&mut self) {}
+    fn sense_and_decide(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
+        action::sense_and_decide(&mut self.state, &self.data, dying, events);
+    }
 
     /// Step 6: movement and verb effects, then trace entries.
-    fn resolve_actions(&mut self) {}
+    fn resolve_actions(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
+        action::resolve(&mut self.state, &self.data, dying, events);
+    }
 
     /// Step 7: the dying are removed, each with a `Died` event; then the tick
     /// counter advances. (Death check #2 arrives with step 6's effects.)
@@ -545,6 +583,8 @@ impl World {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::action::Outcome;
+    use crate::registry::Verb;
 
     /// A 7×5 field of grass, with a pool of shallow water at (5, 3), and a
     /// berry bush at (2, 2), before any step.
@@ -556,6 +596,7 @@ mod tests {
             map,
             objects: &[(Pos { x: 2, y: 2 }, "berry_bush")],
             sprites: &[],
+            scripted: &[],
         };
         World::from_scenario(scenario, data, 7).expect("valid scenario")
     }
@@ -564,6 +605,14 @@ mod tests {
     fn force_place(world: &mut World, name: &str, pos: Pos) {
         let kind = world.data.object_type_named(name).expect("a built-in type");
         world.state.add_object(new_object(&world.data, kind, pos));
+    }
+
+    #[test]
+    #[should_panic(expected = "at the end of tick 0: EntityId(1) is at or above the ID counter")]
+    fn in_debug_builds_a_broken_invariant_fails_on_the_tick_it_is_found() {
+        let mut world = field_with_a_bush();
+        world.state.next_id = 1;
+        world.step();
     }
 
     #[test]
@@ -613,6 +662,7 @@ mod tests {
             map,
             objects: &[(Pos { x: 2, y: 2 }, "berry_bush")],
             sprites: &[(Pos { x: 5, y: 1 }, None), (Pos { x: 5, y: 2 }, None)],
+            scripted: &[],
         };
         let world = World::from_scenario(scenario, data, 7).expect("valid scenario");
         let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
@@ -721,6 +771,7 @@ mod tests {
             map,
             objects: &[],
             sprites: &sprites,
+            scripted: &[],
         };
         let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
         world.step();
@@ -743,6 +794,176 @@ mod tests {
             "(4, 4) and (6, 6); (3, 3) is 4 tiles away"
         );
         assert_eq!(reading(8, 8), 0.25, "(6, 6) only");
+    }
+
+    /// A row of grass `length` tiles long with one walker of speed 10, a
+    /// step a tick, at its west end, starting on `scripted`.
+    fn row_with_a_walker(length: usize, scripted: &[ScriptedAction]) -> (World, EntityId) {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let row = ".".repeat(length);
+        let map = Map::from_ascii(&[row.as_str()], &data).expect("valid drawing");
+        let start = Pos { x: 0, y: 0 };
+        let scripted: Vec<(Pos, ScriptedAction)> = scripted.iter().map(|&a| (start, a)).collect();
+        let genes = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
+        let genome = Genome::from_ron(genes, &data).expect("a valid genome");
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &[(start, Some(genome))],
+            scripted: &scripted,
+        };
+        let world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let id = world.sprites().next().expect("the walker").id();
+        (world, id)
+    }
+
+    #[test]
+    fn a_sprite_that_stays_put_makes_its_flood_again_every_8_ticks() {
+        let (mut world, id) = row_with_a_walker(3, &[ScriptedAction::Rest; 3]);
+        for tick in 0..24 {
+            world.step();
+            let flood = world.state.sprites.get(id).expect("alive").flood.as_ref();
+            assert_eq!(flood.expect("a flood").made, tick / 8 * 8, "tick {tick}");
+        }
+    }
+
+    #[test]
+    fn a_wander_ends_as_failed_once_its_destination_can_no_longer_be_reached() {
+        let destination = Pos { x: 5, y: 0 };
+        let (mut world, id) = row_with_a_walker(6, &[ScriptedAction::Wander { destination }]);
+        world.step();
+        force_place(&mut world, "thornbush", destination);
+        let ended: Vec<(u64, EventKind)> = world
+            .step()
+            .into_iter()
+            .filter(|e| matches!(e.kind, EventKind::ActionEnded { .. }))
+            .map(|e| (e.tick, e.kind))
+            .collect();
+        let failed = EventKind::ActionEnded {
+            id,
+            verb: Verb::Wander,
+            outcome: Outcome::Failed,
+        };
+        assert_eq!(ended, [(1, failed)]);
+    }
+
+    #[test]
+    fn two_sprites_never_swap_diagonally_past_a_bush_that_grew_since_their_floods() {
+        // Speed 4: 40 tenths a tick against a diagonal's 140, so neither
+        // steps for the first ticks, and both floods still show the diagonal
+        // when the bush grows.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let map = Map::from_ascii(&["..", ".."], &data).expect("valid drawing");
+        let genes = r#"(format: 1, genes: [Trait(trait: "speed", value: 4.0)])"#;
+        let genome = Genome::from_ron(genes, &data).expect("a valid genome");
+        let (a, b) = (Pos { x: 0, y: 0 }, Pos { x: 1, y: 1 });
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &[(a, Some(genome.clone())), (b, Some(genome))],
+            scripted: &[
+                (a, ScriptedAction::Wander { destination: b }),
+                (b, ScriptedAction::Wander { destination: a }),
+            ],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        world.step();
+        force_place(&mut world, "thornbush", Pos { x: 1, y: 0 });
+        let waiting = |world: &World| -> Vec<(u32, u32)> {
+            world
+                .state
+                .sprites
+                .iter()
+                .map(|(_, s)| {
+                    (
+                        s.action.as_ref().expect("wandering").blocked_ticks,
+                        s.move_points,
+                    )
+                })
+                .collect()
+        };
+        world.step();
+        assert_eq!(waiting(&world), [(0, 80); 2], "80 tenths: not yet blocked");
+        world.step();
+        world.step();
+        assert_eq!(
+            waiting(&world),
+            [(1, 140); 2],
+            "blocked, banked up to the step"
+        );
+        assert!(
+            world.sprite_at(a).is_some() && world.sprite_at(b).is_some(),
+            "no swap"
+        );
+    }
+
+    #[test]
+    fn a_dying_sprite_takes_no_part_in_a_swap() {
+        // Head-on in a corridor. The east sprite (speed 10) banks a step's
+        // points on the first tick while the west one (speed 5) can't yet
+        // pay for a swap; then the east one starves to death.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let map = Map::from_ascii(&["...."], &data).expect("valid drawing");
+        let speed = |value: f32| {
+            let genes = format!(r#"(format: 1, genes: [Trait(trait: "speed", value: {value:?})])"#);
+            Genome::from_ron(&genes, &data).expect("a valid genome")
+        };
+        let (west, east) = (Pos { x: 1, y: 0 }, Pos { x: 2, y: 0 });
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &[(west, Some(speed(5.0))), (east, Some(speed(10.0)))],
+            scripted: &[
+                (
+                    west,
+                    ScriptedAction::Wander {
+                        destination: Pos { x: 3, y: 0 },
+                    },
+                ),
+                (
+                    east,
+                    ScriptedAction::Wander {
+                        destination: Pos { x: 0, y: 0 },
+                    },
+                ),
+            ],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
+        world.step();
+        let indices = world.data.physiology().indices;
+        let dying = world.state.sprites.get_mut(ids[1]).expect("east");
+        dying.body.chems[indices.energy] = 0.0;
+        dying.body.chems[indices.injury] = 1.0;
+        let events = world.step();
+        let about_dying: Vec<&EventKind> = events
+            .iter()
+            .map(|e| &e.kind)
+            .filter(|k| matches!(k, EventKind::ActionEnded { id, .. } if *id == ids[1]))
+            .collect();
+        assert!(about_dying.is_empty(), "{about_dying:?}");
+        assert!(world.sprite(ids[1]).is_none(), "it died");
+        assert_eq!(world.sprite(ids[0]).expect("alive").pos(), west, "no swap");
+    }
+
+    #[test]
+    fn a_sprite_arriving_keeps_at_most_one_step_s_worth_of_points() {
+        let (mut world, id) = row_with_a_walker(
+            6,
+            &[ScriptedAction::Wander {
+                destination: Pos { x: 1, y: 0 },
+            }],
+        );
+        world
+            .state
+            .sprites
+            .get_mut(id)
+            .expect("the walker")
+            .move_points = 1_000;
+        world.step();
+        let walker = world.state.sprites.get(id).expect("the walker");
+        assert_eq!(walker.pos, Pos { x: 1, y: 0 });
+        assert_eq!(walker.move_points, 100, "one grass step's worth");
     }
 
     #[test]

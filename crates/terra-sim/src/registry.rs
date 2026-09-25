@@ -15,9 +15,10 @@ pub(crate) enum Category {
     Sprite = 6,
 }
 
-/// A brain output. The discriminants are the stable verb IDs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
-pub(crate) enum Verb {
+/// A kind of action, and a brain output (design §5.2). The discriminants are
+/// the stable verb IDs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Verb {
     Approach = 1,
     Eat = 2,
     Drink = 3,

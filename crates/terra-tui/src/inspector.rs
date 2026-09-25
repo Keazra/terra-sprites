@@ -4,8 +4,8 @@
 use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
-    ChemicalKind, ChemicalLevel, DeathCause, EmitterMode, Expression, GeneView, ObjectView,
-    SpriteView, Trait, World,
+    ActionView, ChemicalKind, ChemicalLevel, DeathCause, EmitterMode, Expression, GeneView,
+    ObjectView, Outcome, Progress, SpriteView, Trait, Verb, World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -71,7 +71,7 @@ pub fn lines(app: &App, world: &World) -> Vec<Line<'static>> {
         (Tab::World, _) => world_tab(world),
         (_, None) => vec![Line::from(NOTHING_SELECTED)],
         (tab, Some(Selection::Living(id))) => match world.sprite(id) {
-            Some(sprite) => sprite_tab(tab, &sprite),
+            Some(sprite) => sprite_tab(tab, &sprite, app.detail()),
             None => Vec::new(),
         },
         (_, Some(Selection::Dead { id, cause, age })) => {
@@ -93,21 +93,25 @@ pub(crate) fn first_shown(scroll: usize, length: usize, rows: usize) -> usize {
     scroll.min(length.saturating_sub(rows))
 }
 
-/// A sprite tab's lines for `sprite`.
-fn sprite_tab(tab: Tab, sprite: &SpriteView) -> Vec<Line<'static>> {
+/// A sprite tab's lines for `sprite`, in the detail view if `detail`.
+fn sprite_tab(tab: Tab, sprite: &SpriteView, detail: bool) -> Vec<Line<'static>> {
     match tab {
-        Tab::Body => body_tab(sprite),
+        Tab::Body => body_tab(sprite, detail),
         Tab::Chem => chem_tab(sprite),
         Tab::Genome => genome_tab(sprite),
         Tab::World => Vec::new(),
     }
 }
 
-/// The Body tab (design §6.1): age and traits, a bar for each drive, and
-/// the physical levels, three to a line.
-fn body_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
+/// The Body tab (design §6.1): what the sprite is doing, age and traits, a
+/// bar for each drive, and the physical levels, three to a line.
+fn body_tab(sprite: &SpriteView, detail: bool) -> Vec<Line<'static>> {
     let traits = sprite.traits();
-    let mut lines = vec![
+    let doing = sprite
+        .action()
+        .map(|action| format!(" {}", action_line(&action, detail)));
+    let mut lines: Vec<String> = doing.into_iter().collect();
+    lines.extend([
         format!(
             " age {} · {}",
             group_thousands(sprite.age()),
@@ -119,7 +123,7 @@ fn body_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
             trait_text(Trait::SenseRadius, traits.sense_radius)
         ),
         String::new(),
-    ];
+    ]);
     let chemicals: Vec<ChemicalLevel> = sprite.chemicals().collect();
     for drive in chemicals.iter().filter(|c| c.kind == ChemicalKind::Drive) {
         let line = format!(
@@ -141,6 +145,99 @@ fn body_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
         lines.push(format!(" {}", three.join(" · ")));
     }
     lines.into_iter().map(Line::from).collect()
+}
+
+/// What a sprite is doing, as the Body tab's first line says it (design
+/// §6.1): in plain words, describing and never speaking as the sprite; or,
+/// in the detail view, exactly, with its verb, destination and outcome.
+fn action_line(action: &ActionView, detail: bool) -> String {
+    let plain = match action.verb {
+        _ if detail => None,
+        Verb::Wander => wander_line(action.progress),
+        Verb::Rest => rest_line(action.progress),
+        _ => None,
+    };
+    plain.unwrap_or_else(|| exact_line(action))
+}
+
+/// A Wander in plain words, if it has any for `progress`.
+fn wander_line(progress: Progress) -> Option<String> {
+    Some(match progress {
+        Progress::Walking { steps_left } => {
+            format!("Wandering off · {} to go", counted(steps_left, "tile"))
+        }
+        Progress::Waiting { .. } => "Wandering off · waiting to get past".into(),
+        Progress::Ended(Outcome::Applied) => "Arrived".into(),
+        Progress::Ended(Outcome::Blocked) => "Gave up: the way was blocked".into(),
+        Progress::Ended(Outcome::TimedOut) => "Gave up: it took too long".into(),
+        Progress::Ended(Outcome::Failed) => "Gave up: it couldn't get there".into(),
+        Progress::Resting { .. } => return None,
+    })
+}
+
+/// A Rest in plain words, if it has any for `progress`.
+fn rest_line(progress: Progress) -> Option<String> {
+    match progress {
+        Progress::Resting { ticks, of } => Some(format!(
+            "Resting · {} left",
+            counted(of.saturating_sub(ticks), "tick")
+        )),
+        Progress::Ended(Outcome::Applied) => Some("Rested".into()),
+        _ => None,
+    }
+}
+
+/// An action exactly: `WANDER → (61,40) · walking (5 tiles)`.
+fn exact_line(action: &ActionView) -> String {
+    let verb = verb_name(action.verb);
+    let head = match action.destination {
+        Some(to) => format!("{verb} → ({},{})", to.x, to.y),
+        None => verb.to_string(),
+    };
+    let state = match action.progress {
+        Progress::Walking { steps_left } => format!("walking ({})", counted(steps_left, "tile")),
+        Progress::Waiting { blocked_ticks } => {
+            format!("blocked ({})", counted(blocked_ticks, "tick"))
+        }
+        Progress::Resting { ticks, of } => format!("{ticks} of {of} ticks"),
+        Progress::Ended(outcome) => outcome_name(outcome).to_string(),
+    };
+    format!("{head} · {state}")
+}
+
+/// `n` of `thing`, pluralised: `1 tile`, `5 tiles`.
+fn counted(n: u32, thing: &str) -> String {
+    if n == 1 {
+        format!("1 {thing}")
+    } else {
+        format!("{n} {thing}s")
+    }
+}
+
+/// A verb's name in the detail view.
+fn verb_name(verb: Verb) -> &'static str {
+    match verb {
+        Verb::Approach => "APPROACH",
+        Verb::Eat => "EAT",
+        Verb::Drink => "DRINK",
+        Verb::Hit => "HIT",
+        Verb::Play => "PLAY",
+        Verb::Retreat => "RETREAT",
+        Verb::Rest => "REST",
+        Verb::Wander => "WANDER",
+        Verb::Mate => "MATE",
+        Verb::Speak => "SPEAK",
+    }
+}
+
+/// An outcome's name in the detail view, as the design names it (§5.5).
+fn outcome_name(outcome: Outcome) -> &'static str {
+    match outcome {
+        Outcome::Applied => "applied",
+        Outcome::Blocked => "blocked",
+        Outcome::Failed => "failed",
+        Outcome::TimedOut => "timed_out",
+    }
 }
 
 /// A level as a bar ten cells long, filled to the nearest tenth.
@@ -508,6 +605,8 @@ fn world_tab(world: &World) -> Vec<Line<'static>> {
 
 #[cfg(test)]
 mod tests {
+    use terra_sim::Pos;
+
     use super::*;
 
     // No sprite's number or name is long enough yet to crowd the tabs, so
@@ -531,6 +630,89 @@ mod tests {
             "with no room for even the number, the tabs alone"
         );
         assert_eq!(fitted_title(None, tabs), format!(" {tabs} "));
+    }
+
+    fn wander(progress: Progress) -> ActionView {
+        ActionView {
+            verb: Verb::Wander,
+            destination: Some(Pos { x: 61, y: 40 }),
+            progress,
+        }
+    }
+
+    fn rest(progress: Progress) -> ActionView {
+        ActionView {
+            verb: Verb::Rest,
+            destination: None,
+            progress,
+        }
+    }
+
+    // A timed-out action is followed by the next on the same tick, so the
+    // screen rarely shows its ending: every wording is tested here instead.
+    #[test]
+    fn the_action_line_says_what_a_sprite_is_doing_plainly_or_exactly() {
+        let cases = [
+            (
+                wander(Progress::Walking { steps_left: 5 }),
+                "Wandering off · 5 tiles to go",
+                "WANDER → (61,40) · walking (5 tiles)",
+            ),
+            (
+                wander(Progress::Walking { steps_left: 1 }),
+                "Wandering off · 1 tile to go",
+                "WANDER → (61,40) · walking (1 tile)",
+            ),
+            (
+                wander(Progress::Waiting { blocked_ticks: 2 }),
+                "Wandering off · waiting to get past",
+                "WANDER → (61,40) · blocked (2 ticks)",
+            ),
+            (
+                wander(Progress::Ended(Outcome::Applied)),
+                "Arrived",
+                "WANDER → (61,40) · applied",
+            ),
+            (
+                wander(Progress::Ended(Outcome::Blocked)),
+                "Gave up: the way was blocked",
+                "WANDER → (61,40) · blocked",
+            ),
+            (
+                wander(Progress::Ended(Outcome::TimedOut)),
+                "Gave up: it took too long",
+                "WANDER → (61,40) · timed_out",
+            ),
+            (
+                wander(Progress::Ended(Outcome::Failed)),
+                "Gave up: it couldn't get there",
+                "WANDER → (61,40) · failed",
+            ),
+            (
+                rest(Progress::Resting { ticks: 4, of: 10 }),
+                "Resting · 6 ticks left",
+                "REST · 4 of 10 ticks",
+            ),
+            (
+                rest(Progress::Resting { ticks: 9, of: 10 }),
+                "Resting · 1 tick left",
+                "REST · 9 of 10 ticks",
+            ),
+            (
+                rest(Progress::Ended(Outcome::Applied)),
+                "Rested",
+                "REST · applied",
+            ),
+        ];
+        for (view, plain, exact) in cases {
+            assert_eq!(action_line(&view, false), plain, "{view:?}");
+            assert_eq!(action_line(&view, true), exact, "{view:?}");
+        }
+        let nowhere = ActionView {
+            destination: None,
+            ..wander(Progress::Ended(Outcome::Failed))
+        };
+        assert_eq!(action_line(&nowhere, true), "WANDER · failed");
     }
 
     // Levels never leave 0 to 1 (design §4.4), but a bar mustn't crash the

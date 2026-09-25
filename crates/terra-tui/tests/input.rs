@@ -197,6 +197,14 @@ fn shift_scrolls_five_tiles() {
 }
 
 #[test]
+fn v_switches_the_detail_view_on_a_fresh_press_only() {
+    let mut keys = Keys::with_release_reporting(true);
+    let v = KeyCode::Char('v');
+    assert_eq!(keys.action_for(press(v)), Some(Action::ToggleDetail));
+    assert_eq!(keys.action_for(kind(v, KeyEventKind::Repeat)), None);
+}
+
+#[test]
 fn holding_a_scroll_key_keeps_scrolling() {
     let mut keys = Keys::with_release_reporting(true);
     let right = Some(Action::Scroll { dx: 1, dy: 0 });
