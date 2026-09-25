@@ -44,7 +44,7 @@ fn map_glyphs(theme: &Theme) -> Vec<(char, String)> {
 }
 
 #[test]
-fn every_kind_of_thing_on_the_map_has_its_own_glyphs_in_each_theme() {
+fn every_terrain_and_object_type_has_its_own_glyphs_in_each_theme() {
     // Design §6.2: colour marks state; the glyph says what kind of thing it is.
     for (name, theme) in [("cp437", Theme::cp437()), ("ascii", Theme::ascii())] {
         let glyphs = map_glyphs(&theme);

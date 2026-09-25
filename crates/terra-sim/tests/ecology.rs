@@ -13,11 +13,11 @@ fn default_world(seed: u64) -> World {
 type Tally = BTreeMap<(String, &'static str), usize>;
 
 #[test]
-fn at_speed_bushes_fruit_berries_drop_then_rot_or_sprout_and_thornbushes_spread() {
+fn at_speed_bushes_fruit_berries_drop_then_expire_or_sprout_and_thornbushes_spread() {
     let pack = DataPack::builtin().expect("built-in data pack is valid");
     let mut world = default_world(21);
     let mut tally = Tally::new();
-    // Fruit ripens within about 1,200 ticks and berries rot 1,500–2,500 ticks
+    // Fruit ripens within about 1,200 ticks and berries expire 1,500–2,500 ticks
     // later; thornbushes try to spread every 2,000. 5,000 ticks shows them all.
     for tick in 0..5_000 {
         for event in world.step() {
@@ -57,7 +57,7 @@ fn at_speed_bushes_fruit_berries_drop_then_rot_or_sprout_and_thornbushes_spread(
     );
     assert!(
         count("berry", "expired") > Some(0),
-        "berries rot: {tally:?}"
+        "berries expire: {tally:?}"
     );
     assert!(
         count("berry", "replaced") > Some(0),
@@ -74,7 +74,7 @@ fn at_speed_bushes_fruit_berries_drop_then_rot_or_sprout_and_thornbushes_spread(
     );
     assert!(
         count("berry_bush", "expired") > Some(0),
-        "old bushes die off: {tally:?}"
+        "old bushes expire: {tally:?}"
     );
 }
 

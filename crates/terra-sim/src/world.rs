@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::SeedableRng;
 use serde::Serialize;
@@ -20,6 +22,8 @@ pub struct World {
     state: WorldState,
     /// The data pack the world was made with. It never changes, so it isn't hashed.
     data: DataPack,
+    /// The ID counter as `check_invariants` last saw it, to catch it going back.
+    checked_next_id: Cell<u64>,
 }
 
 /// Everything that determines how the world evolves. Hashed by `state_hash`.
@@ -32,6 +36,17 @@ pub(crate) struct WorldState {
     /// The ID the next entity gets. It only goes up, so IDs are never reused.
     pub(crate) next_id: u64,
     pub(crate) objects: Objects,
+}
+
+impl WorldState {
+    /// Gives `object` the next entity ID and puts it in the world. The caller
+    /// has checked that it may go there.
+    pub(crate) fn add_object(&mut self, object: Object) -> EntityId {
+        let id = EntityId(self.next_id);
+        self.next_id += 1;
+        self.objects.place(id, object);
+        id
+    }
 }
 
 /// A broken internal invariant: always a bug in the simulation.
@@ -57,6 +72,7 @@ pub struct ObjectView<'a> {
 }
 
 impl<'a> ObjectView<'a> {
+    /// The object's entity ID.
     pub fn id(&self) -> EntityId {
         self.id
     }
@@ -113,6 +129,7 @@ impl<'a> ObjectView<'a> {
         self.object.stage.map(|stage| stages[stage].name.as_str())
     }
 }
+
 impl World {
     /// A new world, generated from `config` and `seed`.
     pub fn new(config: WorldConfig, data: DataPack, seed: u64) -> World {
@@ -146,11 +163,8 @@ impl World {
             let not_an_object = || ScenarioError::NotAnObjectType(name.into());
             let kind = world
                 .data
-                .object_type_named(name)
+                .real_object_type(name)
                 .ok_or_else(not_an_object)?;
-            if world.data.object_types()[kind].pseudo {
-                return Err(not_an_object());
-            }
             let state = &mut world.state;
             if !state.objects.can_place(&state.map, &world.data, kind, pos) {
                 return Err(ScenarioError::CantPlace {
@@ -158,10 +172,7 @@ impl World {
                     pos,
                 });
             }
-            let id = EntityId(state.next_id);
-            state.next_id += 1;
-            let object = new_object(&world.data, &mut state.rng, kind, pos, state.tick);
-            state.objects.place(id, object);
+            state.add_object(new_object(&world.data, kind, pos));
         }
         Ok(world)
     }
@@ -177,6 +188,7 @@ impl World {
                 objects,
             },
             data,
+            checked_next_id: Cell::new(1),
         }
     }
 
@@ -186,7 +198,7 @@ impl World {
     pub fn step(&mut self) -> Vec<Event> {
         let mut events = Vec::new();
         self.apply_commands(); // 1
-        ecology::run(&mut self.state, &self.data, &mut events); // 2
+        self.run_environment(&mut events); // 2
         self.run_biochemistry(); // 3
         self.run_learning(); // 4
         self.sense_and_decide(); // 5
@@ -239,6 +251,11 @@ impl World {
     /// Step 1: apply the commands stamped for this tick.
     fn apply_commands(&mut self) {}
 
+    /// Step 2: objects run their lifecycle rules.
+    fn run_environment(&mut self, events: &mut Vec<Event>) {
+        ecology::run(&mut self.state, &self.data, events);
+    }
+
     /// Step 3: pulse latch, physics, reactions, decay, emitters, receptors; death check #1.
     fn run_biochemistry(&mut self) {}
 
@@ -259,6 +276,12 @@ impl World {
     /// Checks the world's internal invariants (design §7.1). Later slices add checks here.
     pub fn check_invariants(&self) -> Result<(), InvariantViolation> {
         let state = &self.state;
+        if state.next_id < self.checked_next_id.replace(state.next_id) {
+            return Err(InvariantViolation(format!(
+                "the ID counter went back, to {}: IDs must only go up",
+                state.next_id
+            )));
+        }
         if let Some((id, _)) = state.objects.iter().find(|(id, _)| id.0 >= state.next_id) {
             return Err(InvariantViolation(format!(
                 "{id:?} is at or above the ID counter, {}: IDs must only go up",
@@ -289,10 +312,7 @@ mod tests {
     /// Puts an object of type `name` on `pos` without checking the placement rules.
     fn force_place(world: &mut World, name: &str, pos: Pos) {
         let kind = world.data.object_type_named(name).expect("a built-in type");
-        let id = EntityId(world.state.next_id);
-        world.state.next_id += 1;
-        let object = new_object(&world.data, &mut world.state.rng, kind, pos, 0);
-        world.state.objects.place(id, object);
+        world.state.add_object(new_object(&world.data, kind, pos));
     }
 
     #[test]
@@ -313,6 +333,22 @@ mod tests {
     fn an_id_the_counter_has_not_reached_breaks_an_invariant() {
         let mut world = field_with_a_bush();
         world.state.next_id = 1;
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn an_id_counter_that_goes_back_breaks_an_invariant() {
+        let mut world = field_with_a_bush();
+        force_place(&mut world, "berry", Pos { x: 5, y: 1 });
+        let berry = world
+            .state
+            .objects
+            .at(Pos { x: 5, y: 1 })
+            .expect("the berry");
+        world.state.objects.remove(berry);
+        assert_eq!(world.check_invariants(), Ok(()));
+        // Every object left is below the counter, but the berry's ID could now be reused.
+        world.state.next_id -= 1;
         assert!(world.check_invariants().is_err());
     }
 

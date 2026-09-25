@@ -404,7 +404,7 @@ An object is **solid** if nothing can move through it, and a **fixture** if it's
 
 - The built-in berry sprouting and thornbush spreading ask for it (§3.5.3), and world generation always does (§3.2). A data pack that leaves it out gets objects that can wall things off; that's its author's choice.
 - **It only looks at the 8 tiles around, so it errs on the safe side:** it can refuse a tile whose sides would still meet the long way round. That's the price of a check that costs nothing.
-- **A removal can leave a pocket.** Solid objects may fill a dead end; if the one at the end later expires, its tile can be left closed off by the others. The pocket held nothing but that object, so no sprite is ever in one, and an item that later drops there just rots.
+- **A removal can leave a pocket.** Solid objects may fill a dead end; if the one at the end later expires, its tile can be left closed off by the others. The pocket held nothing but that object, so no sprite is ever in one, and an item that later drops there just expires.
 - It's judged when an object appears. A solid object that could be pushed could later be shoved into a corridor, so it would need a rule of its own; that's another reason M1 doesn't allow one (§3.5.1).
 
 ### 3.4 Space rules
@@ -551,7 +551,7 @@ An object is **solid** if nothing can move through it, and a **fixture** if it's
 ```
 
 **The resulting ecology:**
-- **Food:** bushes carry fruit. Overripe fruit drops as berries, which are eaten or rot. Rotting berries sometimes sprout new bushes on fertile land that isn't crowded. Food therefore has a geography, spreads, and can be overgrazed.
+- **Food:** bushes carry fruit. Overripe fruit drops as berries, which are eaten or expire. Expiring berries sometimes sprout new bushes on fertile land that isn't crowded. Food therefore has a geography, spreads, and can be overgrazed.
 - **Thornbushes** give no food and spread slowly. They exist so sprites have something to learn to avoid. **Every contact verb hurts, deliberately, including Play:** thorns hurt whatever you do to them, and only Approach and Retreat are safe. Scenario A1 counts only thornbush Eats. Harm from Play also teaches sprites to pay less attention to thornbushes, which is a legitimate part of the lesson.
 - **Balls** are permanent toys.
 
@@ -1133,7 +1133,7 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 - **Place menu:** berry, ball, bush seedling, new sprite (starter genome + variation), sprite from a genome file. The chosen item waits in the hand's marks, and the next click on a tile sends `Place { tile, object_type }` or `SpawnSprite`.
 - **Feedback:** in Reward and Correct mode, each click flashes `+` in both status marks at once ("sent"). When the sim reports back, they flash `☼` (applied) or `?` (rejected). Flashes last about 0.3 s of **real** time and are driven by events, like emotes (§6.3). In Hand mode a rejected `Grab`, `Drop` or `Place` flashes `?`.
 - **Nothing to act on:** a click in Hand, Reward or Correct mode with nothing on the tile to act on sends no command and flashes `?` at once.
-- **Switching modes keeps each mode's state.** What the hand holds, or a Place item not yet put down, waits in reserve while other modes are in use; the selection stays in every mode. While the hand holds something, the status line shows it in every mode (`hand: Mira`), because a held sprite can't eat or drink (§2.4) and a held berry can rot.
+- **Switching modes keeps each mode's state.** What the hand holds, or a Place item not yet put down, waits in reserve while other modes are in use; the selection stays in every mode. While the hand holds something, the status line shows it in every mode (`hand: Mira`), because a held sprite can't eat or drink (§2.4) and a held berry can expire.
 - **Leaving a mode:** a right-click or `Esc` returns to Select. `Esc` first closes any open menu or overlay. From Select, `Esc` asks to quit (§6.6).
 - **Pausing queues actions.** Commands are stamped for the next tick (§2.5), so clicks made while paused apply, in click order, when time next moves (`space` or `.`). Hand mode's marks follow the queue: after a queued `Grab`, `Y` shows `↓` and `N` the thing being grabbed. If the sim rejects it, `?` flashes and the marks return to the hand's real state.
 

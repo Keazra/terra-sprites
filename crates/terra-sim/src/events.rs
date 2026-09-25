@@ -11,6 +11,7 @@ pub struct Event {
     pub kind: EventKind,
 }
 
+/// What kind of thing happened, with the entities involved.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EventKind {
     /// An object was created, by a lifecycle rule.

@@ -246,7 +246,8 @@ impl DataPack {
     }
 
     fn named(&self, object_type: &str) -> Option<&ObjectType> {
-        self.object_types.iter().find(|t| t.name == object_type)
+        self.object_type_named(object_type)
+            .map(|index| &self.object_types[index])
     }
 
     /// Every object type, in ascending ID order. Rules refer to types by their index here.
@@ -257,6 +258,13 @@ impl DataPack {
     /// The index of the object type called `name`.
     pub(crate) fn object_type_named(&self, name: &str) -> Option<usize> {
         self.object_types.iter().position(|t| t.name == name)
+    }
+
+    /// The index of the object type called `name`, if it can have objects: it
+    /// exists and isn't a pseudo type.
+    pub(crate) fn real_object_type(&self, name: &str) -> Option<usize> {
+        self.object_type_named(name)
+            .filter(|&index| !self.object_types[index].pseudo)
     }
 }
 

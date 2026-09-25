@@ -3,7 +3,7 @@
 //
 // Each type has:
 //   category  what brains perceive it as (BerryBush, Berry, Thornbush, Water, Ball, Sprite)
-//   tags      [Solid, Fixture] for things like bushes, which nothing can move
+//   tags      [Solid, Fixture] for objects like bushes, which nothing can move
 //             through or move; no tags for items, like berries and balls
 //   counters  named whole numbers with maximums: {"fruit": 6}
 //   stages    [(name, ticks: (min, max), next: Stage(name) or Expire)]; a type
@@ -48,7 +48,7 @@
     (id: 2, name: "berry", category: Berry,
      stages: [(name: "fresh", ticks: (1500, 2500), next: Expire)],
      rules: [
-         // A rotting berry sometimes sprouts, on fertile land that isn't crowded,
+         // An expiring berry sometimes sprouts, on fertile land that isn't crowded,
          // where a bush wouldn't cut a path.
          (trigger: OnExpire,
           if: [Fertility(Ge, 0.5), DensityBelow("berry_bush", 4, 3), KeepsPathsOpen, Chance(0.1)],

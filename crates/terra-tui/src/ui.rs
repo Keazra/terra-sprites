@@ -16,7 +16,7 @@ use crate::theme::SemanticTile;
 /// The inspector's width, in columns, border included (design §6.1).
 const INSPECTOR_WIDTH: u16 = 46;
 /// The narrowest terminal that has room for the inspector beside the map view.
-const INSPECTOR_FROM: u16 = 100;
+const MIN_WIDTH_FOR_INSPECTOR: u16 = 100;
 
 /// Draws one frame: the top bar, the map view, the inspector if there's room,
 /// and the status line.
@@ -63,7 +63,7 @@ fn map_view_area(screen: Rect, map: &Map) -> Rect {
 /// The inspector, border included: at the right, between the top bar and the
 /// status line, on a terminal wide enough for it.
 fn inspector_area(screen: Rect) -> Option<Rect> {
-    (screen.width >= INSPECTOR_FROM && screen.height > 2).then(|| {
+    (screen.width >= MIN_WIDTH_FOR_INSPECTOR && screen.height > 2).then(|| {
         Rect::new(
             screen.right() - INSPECTOR_WIDTH,
             screen.y + 1,
@@ -217,10 +217,7 @@ fn top_bar_line(app: &App, world: &World) -> Line<'static> {
             .object_type_names()
             .any(|name| name == object_type)
         {
-            let count = world
-                .objects()
-                .filter(|o| o.type_name() == object_type)
-                .count();
+            let count = objects_of(world, object_type).count();
             text += &format!(" │ {label} {}", group_thousands(count as u64));
         }
     }
@@ -260,6 +257,13 @@ fn object_label(object: &ObjectView) -> String {
     }
 }
 
+/// The world's objects of the type called `object_type`.
+fn objects_of<'a>(world: &'a World, object_type: &str) -> impl Iterator<Item = ObjectView<'a>> {
+    world
+        .objects()
+        .filter(move |o| o.type_name() == object_type)
+}
+
 /// A name from the data, as shown on screen: `berry_bush` → `berry bush`.
 fn display_name(name: &str) -> String {
     name.replace('_', " ")
@@ -284,10 +288,7 @@ fn render_world_tab(buf: &mut Buffer, area: Rect, world: &World) {
         data.version()
     )];
     for object_type in data.object_type_names() {
-        let objects: Vec<ObjectView> = world
-            .objects()
-            .filter(|o| o.type_name() == object_type)
-            .collect();
+        let objects: Vec<ObjectView> = objects_of(world, object_type).collect();
         lines.push(format!(
             " {:<12}{:>7}",
             display_name(object_type),

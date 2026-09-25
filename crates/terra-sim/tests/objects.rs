@@ -472,17 +472,40 @@ fn a_spawned_object_gets_the_next_id_and_is_reported() {
 
 #[test]
 fn spread_to_lands_within_the_square_where_placement_and_the_conditions_allow() {
-    // Grass in columns 0–4, sand in 5–8; the ticker is at (4, 2).
-    let half_sand = [".....::::"; 5];
+    // Grass in columns 0–4, sand in 5–8; the ticker is at (4, 3) of 7 rows.
+    let half_sand = [".....::::"; 7];
     let rules =
         r#"rules: [(trigger: Every(1), do: [SpreadTo("pebble", 2, [Fertility(Ge, 0.5)])])]"#;
-    let world = ticker_world(&half_sand, (4, 2), rules, 60);
+    let world = ticker_world(&half_sand, (4, 3), rules, 60);
     let spread = pebbles(&world);
     assert!(!spread.is_empty(), "60 draws put down some pebbles");
     for pos in spread {
-        assert!(pos.x >= 2 && pos.y <= 4, "{pos:?} is within 2 of (4, 2)");
+        assert!(
+            (2..=6).contains(&pos.x) && (1..=5).contains(&pos.y),
+            "{pos:?} is within 2 of (4, 3)"
+        );
         assert!(pos.x <= 4, "{pos:?} is on fertile grass");
     }
+}
+
+#[test]
+fn spread_to_draws_once_whatever_the_square_holds() {
+    // A spread that never lands, over squares of different sizes: the draws
+    // (and so the state) are the same each time, and differ from not spreading.
+    let spread = |radius: u16, times: usize| {
+        let effect = format!(r#"SpreadTo("pebble", {radius}, [Fertility(Gt, 2.0)])"#);
+        let effects = vec![effect; times].join(", ");
+        let rules = format!("rules: [(trigger: Every(1), do: [{effects}])]");
+        ticker_world(&FIELD, (3, 2), &rules, 5).state_hash()
+    };
+    assert_eq!(
+        spread(0, 1),
+        spread(3, 1),
+        "one draw, however big the square"
+    );
+    assert_ne!(spread(1, 1), spread(1, 2), "two spreads draw twice");
+    let idle = ticker_world(&FIELD, (3, 2), "rules: [(trigger: Every(1), do: [])]", 5);
+    assert_ne!(spread(1, 1), idle.state_hash(), "a spread draws");
 }
 
 /// A solid fixture with no rules unless `extra` adds some.
@@ -567,6 +590,17 @@ fn a_replacement_that_cant_go_there_leaves_the_object_as_it_was() {
     let mut world = scenario(&pack, &POOL_AND_ROCK, &[(1, 1, "ticker")]);
     world.step();
     assert_eq!(n_at(&world, at(1, 1)), 1, "the ticker stays and carries on");
+}
+
+#[test]
+fn a_replacement_ends_the_replaced_objects_turn() {
+    let rules =
+        r#"rules: [(trigger: Every(1), do: [ReplaceWith("shrub"), SpawnNearby("pebble", 1)])]"#;
+    let pack = pack_with(&[&ticker(100, rules), &shrub(""), PEBBLE]);
+    let mut world = scenario(&pack, &FIELD, &[(3, 2, "ticker")]);
+    world.step();
+    let names: Vec<&str> = world.objects().map(|o| o.type_name()).collect();
+    assert_eq!(names, ["shrub"], "no pebble after the replacement");
 }
 
 #[test]
