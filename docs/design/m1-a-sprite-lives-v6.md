@@ -23,7 +23,7 @@ Decided with the owner in the design session for slice 3 ([#4](https://github.co
 | 8 | **`ObjectExpired` becomes `ObjectRemoved { reason }`** (`Expired`, `Destroyed` or `Replaced`), because objects also leave by being eaten or replaced. | Slice 3 design session | §2.5 |
 | 9 | **The preset sets densities** as counts per area, checked against the data pack when the preset is parsed. | Slice 3 design session | §2.2, §3.9 |
 | 10 | **Registry file formats** for `chemicals.ron` and `loci.ron`, both arriving in slice 3 so every name in `objects.ron` can be checked when it loads. | Slice 3 design session | §3.5.2, §4.1, §4.2 |
-| 11 | **UI details for objects:** the World tab's contents, display names, and how a theme falls back when it has no glyph for an object's visual state. | Slice 3 design session | §6.1, §6.2 |
+| 11 | **UI details for objects:** the World tab's contents, display names, and how a theme falls back when it has no glyph for an object's visual state. The top bar drops its food counts; the World tab has them. | Slice 3 design session | §6.1, §6.2 |
 | 12 | **Held `+` also stops at 16×.** Max, the jump to "as fast as the computer allows", takes a fresh press. | Owner feedback ([#28](https://github.com/Keazra/terra-sprites/issues/28)) | §6.6 |
 
 ---
@@ -979,7 +979,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 - All text uses only CP437 characters (§6.2).
 
 ```
- Terra Sprites │ tick 48,210 │ ► 4x │ seed 7 │ sprites 27 │ bushes 141 │ saved 2m ago       ? help
+ Terra Sprites │ tick 48,210 │ ► 4x │ seed 7 │ sprites 27 │ saved 2m ago                     ? help
 ┌─ Map ────────────────────────────────────────────┐┌─ Mira #12 ── [Body] Brain Chem Genome World ┐
 │..,,,..~~~~≈≈≈≈~~..........♣....#########........ ││ EAT → berry bush · walking (3 tiles)        │
 │.,,,...~~~≈≈≈≈≈~~....♣.........########....♠..... ││ age 3,410 · speed 7 · sense 10              │
@@ -1012,7 +1012,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 ```
 
 **Panels:**
-- **Top bar:** tick, speed, seed, population, food counts, save status.
+- **Top bar:** tick, speed, seed, population, save status. Object counts, food included, are the World tab's job.
 - **Map view:**
   - Its viewport scrolls with `W` `A` `S` `D` or the arrow keys, or follows the selected sprite (`f`).
   - A map smaller than the space gets a map view shrunk to fit it, at the top-left.

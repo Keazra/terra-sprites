@@ -418,11 +418,11 @@ fn the_status_line_names_the_object_under_the_cursor_with_its_stage() {
 }
 
 #[test]
-fn the_top_bar_counts_the_bushes_and_berries() {
+fn the_top_bar_leaves_object_counts_to_the_world_tab() {
     let world = garden(pack());
     let app = app_for(&world, Theme::cp437(), 100, 30);
     let bar = lines(&render(&app, &world, 100, 30))[0].clone();
-    assert!(bar.contains("│ bushes 1 │ berries 1"), "{bar}");
+    assert!(bar.ends_with("│ seed 7"), "{bar}");
 }
 
 /// The right-hand `width` columns of each screen row, trimmed.

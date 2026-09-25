@@ -205,22 +205,11 @@ fn top_bar_line(app: &App, world: &World) -> Line<'static> {
     } else {
         format!("► {}", speed_label(clock.speed()))
     };
-    let mut text = format!(
+    let text = format!(
         " Terra Sprites │ tick {} │ {time} │ seed {}",
         group_thousands(world.tick()),
         app.seed
     );
-    // The food counts (design §6.1), for packs that have these types.
-    for (label, object_type) in [("bushes", "berry_bush"), ("berries", "berry")] {
-        if world
-            .data()
-            .object_type_names()
-            .any(|name| name == object_type)
-        {
-            let count = objects_of(world, object_type).count();
-            text += &format!(" │ {label} {}", group_thousands(count as u64));
-        }
-    }
     Line::from(text).style(Style::default().add_modifier(Modifier::REVERSED))
 }
 
