@@ -29,6 +29,10 @@ Said of a terrain that sprites can stand on and step onto on foot. Shallow water
 Said of anything that can't be moved through, such as rock or a bush. Deep water isn't walkable, but it isn't solid: crossing it is a matter of ability, not physics.
 _Avoid_: blocking, impassable
 
+**Physics**:
+The fixed rules of how things move and block: which tiles can be entered, what is solid, and what a step costs.
+_Avoid_: physiology (the body's rules)
+
 **Step cost**:
 What stepping onto a tile costs a sprite, set by the tile's terrain. A diagonal step costs more than an orthogonal one.
 _Avoid_: move cost, weight
@@ -98,6 +102,88 @@ _Avoid_: die (sprites die), rot
 The name a theme draws an object by, such as a bush's seedling, bare or fruiting look.
 _Avoid_: sprite (a sprite is a creature), appearance
 
+### Sprites
+
+**Sprite**:
+A living creature of the terrarium, with a genome, a body and a brain. Sprites die; objects expire.
+_Avoid_: agent, critter, pet
+
+**Genome**:
+A sprite's ordered list of genes, fixed for its whole life. It decides how the body feels, never what happens to it.
+_Avoid_: DNA
+
+**Gene**:
+One instruction in a genome, such as "low energy raises hunger". Its type says what kind of instruction it is.
+_Avoid_: allele
+
+**Starter genome**:
+The genome in the data pack that sprites are made from when they have no parents.
+
+**Gene value**:
+A number in a gene that variation may change, such as a strength or a threshold. The rest of a gene, such as which chemical it touches, never varies.
+
+**Spawn variation**:
+The small random change to the gene values of a sprite made from the starter genome.
+_Avoid_: mutation (that comes with inheritance)
+
+**Flagged gene**:
+A gene that would change the body directly, which no gene may do. It stays in the genome but has no effect.
+
+**Unexpressed gene**:
+A gene that sets something an earlier gene in the genome already set, so it has no effect.
+
+**Unknown gene**:
+A gene this version of the game can't read. It's kept exactly as it is, and has no effect.
+
+**Chemical**:
+A named level in a sprite's body, from 0 to 1. Every chemical is physical, a signal or a hormone.
+_Avoid_: stat
+
+**Physical chemical**:
+A chemical that is the body's actual state, such as energy, hydration or injury. Genes may read it but never change it.
+
+**Signal chemical**:
+A chemical the genome makes to tell the brain something: a drive or a learning signal.
+
+**Drive**:
+A signal chemical the sprite feels as an urge: hunger, thirst, pain, tiredness, boredom, loneliness or crowdedness.
+_Avoid_: need, emotion, mood
+
+**Learning signal**:
+The reward or punishment chemical, which learning uses up every tick.
+
+**Hormone**:
+One of sixteen unnamed chemicals that only the genome uses, spare for evolution to put to work.
+
+**Locus**:
+Anything a gene can read or write: a chemical, a body sensor, a pulse or a receptor target.
+_Avoid_: slot, input (brain inputs are a different list)
+
+**Body sensor**:
+A locus that physiology fills in every tick, such as the sprite's age or how many sprites are near it.
+
+**Pulse**:
+A locus that marks something that just happened to the sprite, such as eating or being petted. It lasts one tick.
+_Avoid_: event (events are what the world reports)
+
+**Trait**:
+A body property the genome sets, within limits and at a cost that physiology fixes: speed, sense radius or lifespan.
+
+**Physiology**:
+The body's fixed rules: metabolism, digestion, water loss, healing, and the injury that starvation, dehydration and old age cause. Genes can't change them.
+_Avoid_: physics (for the body)
+
+**Injury**:
+The physical chemical that measures harm. A sprite dies when its injury reaches 1.
+_Avoid_: damage, health
+
+**Old age**:
+Being past its lifespan, which injures a sprite a little every tick.
+_Avoid_: senescence
+
+**Cause of death**:
+What caused most of a sprite's recent injury, with the most recent counting most: starvation, dehydration, old age, or being hurt by a kind of object, such as a thornbush or another sprite.
+
 ### The screen
 
 **Map view**:
@@ -119,6 +205,18 @@ _Avoid_: mouse cursor
 **Cursor mode**:
 What a click on the map does: Select, Hand, Reward or Correct.
 _Avoid_: tool
+
+**Selection**:
+The sprite the inspector shows, chosen by clicking it or with `Tab`.
+_Avoid_: focus, target
+
+**Inspector**:
+The side panel of tabs about the selected sprite (Body, Brain, Chem, Genome) or the world (World).
+_Avoid_: sidebar, details
+
+**Event log**:
+The panel that lists what just happened to sprites, newest first.
+_Avoid_: events panel, console, feed
 
 **Semantic tile**:
 What the map view draws for a tile, named by meaning (such as grass terrain) rather than by character.
