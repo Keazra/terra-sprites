@@ -25,6 +25,10 @@ Decided with the owner in the design session for slice 5 ([#6](https://github.co
 | 10 | **The event log leaves out action events** (`ActionStarted`, `ActionEnded`). With 30 sprites they come about 30 a second at 1×, and would bury deaths. | Owner decision | §6.1 |
 | 11 | **The self-check runs after every tick** in debug builds and tests, at the end of step 7, and names the tick that broke a rule. It costs about 1.2 ms a tick on the default map in a debug build, adding about 30 s to the debug test run; release builds skip it. | Owner decision ([#29](https://github.com/Keazra/terra-sprites/issues/29)) | §7.1 |
 | 12 | **A flood refreshes 8 ticks after the sprite's last one,** not on a shared tick, so floods don't all land at once. | Slice 5 | §3.6, App. B |
+| 13 | **A sprite takes as many steps in a tick as its points pay for,** so speed above a terrain's cost still counts (speed 12 on grass is 1.2 steps a tick). A swap ends both sprites' walking for the tick. | Slice 5 | §3.7 |
+| 14 | **A Wander ends as failed at 5.0** once the flood no longer reaches its destination (a bush grew there, say), unless the sprite is keeping to a committed path. A Wander that starts with a destination the flood doesn't reach fails at once, as one with none does. | Slice 5 | §5.5 |
+| 15 | **A step that has become impossible,** onto a bush that grew since the flood, counts as a blocked tick, like a step onto a sprite. | Slice 5 | §3.7 |
+| 16 | **A hand-made world can start sprites on scripted actions** (Wander to a tile, or Rest), in order, before the stand-in or the brain takes over, so tests and lab scenarios can set up exact situations. | Slice 5 | §7.1 |
 
 ---
 
@@ -690,7 +694,8 @@ The rule constants above are starting values, tuned with the lab runner.
   - **The search:** a separate, one-off bounded Dijkstra from the sprite, with the same radius and step costs as the perception flood (§3.6), except that **tiles holding sprites can't be entered**. It looks for a path to the action's goal tiles, or to the Wander destination. It doesn't replace the perception flood, isn't used for perception, and isn't cached.
   - **Path found:** the path becomes the action's **committed path**, stored with the action and saved (§2.8). The sprite follows it step by step, and regular flood refreshes **don't override it**. Without this, the next refresh (which allows occupied tiles at a penalty) could route the sprite straight back into the blocked tile.
   - **Committed path dropped:** if the sprite is blocked again, the 3-tick count and the search start over. If the action's target is a sprite and that target moves, the path is dropped and normal flood-based planning resumes. The path also ends with the action.
-  - **A blocked tick** is one where the sprite had the points for its next step but couldn't take it.
+  - **A blocked tick** is one where the sprite had the points for its next step but couldn't take it: a sprite stood there, or the step has become impossible (a bush grew since the flood).
+- **Several steps a tick:** a sprite takes as many steps in a tick as its points pay for, so speed 12 on grass is 1.2 steps a tick. A swap ends both sprites' walking for the tick.
   - **No path found** (for example, a sprite resting in the only corridor, or on the Wander destination itself): **the action ends with outcome `blocked`**, freeing the brain to choose again.
   - **Retreat** doesn't use the search. It moves by straight-line distance (§5.5), so for Retreat "no path" means no free neighbour increases the Chebyshev distance from the target.
   - **Cost:** the search only runs after 3 blocked ticks, which is rare, so it doesn't threaten the §3.9 performance target.
@@ -995,7 +1000,7 @@ It only wins decisions where learning finds it useful.
 ### 5.5 Decision and action lifecycle
 
 **Step 5 runs in this order:**
-1. **5.0 Check the current action.** It ends if its target no longer exists or has become unreachable, or if the action has hit the timeout.
+1. **5.0 Check the current action.** It ends if its target no longer exists or has become unreachable, or if the action has hit the timeout. A Wander whose destination the flood no longer reaches ends as `failed`, unless the sprite is keeping to a committed path (§3.7).
 2. **5a Attention** (§5.3).
 3. **5b Decision:**
    - **Score** each *available* verb: `s_v = Σₖ aₖ·W[k][v]`.
@@ -1153,6 +1158,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
   | Arrived | `Arrived` | `WANDER → (61,40) · applied` |
   | Gave up, no way through | `Gave up: the way was blocked` | `WANDER → (61,40) · blocked` |
   | Gave up at the timeout | `Gave up: it took too long` | `WANDER → (61,40) · timed_out` |
+  | Gave up, destination out of reach | `Gave up: it couldn't get there` | `WANDER → (61,40) · failed` |
   | Resting | `Resting · 6 ticks left` | `REST · 4 of 10 ticks` |
   | Rested | `Rested` | `REST · applied` |
 
@@ -1343,6 +1349,7 @@ Implementation is **test-first, one vertical slice at a time.** Everything in `t
   - no tile holds more than one object, and every solid object stands on terrain that allows fixtures
   - held entities appear in neither the index nor perception
   - IDs only go up
+- **Scripted actions:** a hand-made world (`Scenario`) can start sprites on scripted actions, a Wander to a tile or a Rest, in order, before the stand-in or the brain chooses for them. Tests and lab scenarios use them to set up exact situations, such as two sprites meeting in a corridor.
 - **Lab runner:** `cargo run -p terra-sim --example lab -- scenarios/<name>.ron --seeds 10` prints metrics. The scenarios double as tests and as the main tuning tool.
 - **Trainer hook:** a scenario can include a trainer. It reads tick *t*'s events and submits commands stamped *t+1* through the same queue as the player.
 
