@@ -15,6 +15,29 @@ pub(crate) enum Category {
     Sprite = 6,
 }
 
+impl Category {
+    pub(crate) const ALL: [Category; 6] = [
+        Category::BerryBush,
+        Category::Berry,
+        Category::Thornbush,
+        Category::Water,
+        Category::Ball,
+        Category::Sprite,
+    ];
+
+    /// The category's name in brain input names, such as `attended_berry_bush`.
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Category::BerryBush => "berry_bush",
+            Category::Berry => "berry",
+            Category::Thornbush => "thornbush",
+            Category::Water => "water",
+            Category::Ball => "ball",
+            Category::Sprite => "sprite",
+        }
+    }
+}
+
 /// A kind of action, and a brain output (design §5.2). The discriminants are
 /// the stable verb IDs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -162,6 +185,4 @@ pub(crate) struct Locus {
     pub(crate) id: LocusId,
     pub(crate) name: String,
     pub(crate) kind: LocusKind,
-    #[expect(dead_code, reason = "the brain's inputs are built from it in slice 8")]
-    pub(crate) brain_visible: bool,
 }

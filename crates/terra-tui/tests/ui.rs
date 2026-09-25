@@ -1289,12 +1289,12 @@ fn selecting_the_selected_sprite_from_a_scrolled_world_tab_opens_body_at_the_top
 
 #[test]
 fn chemical_names_show_with_spaces_for_underscores() {
-    // "boredom" renamed "bored_ness" in the pack and the starter genome.
+    // "boredom" renamed "bored_ness" in the pack, its brain inputs and the starter genome.
     let files: Vec<(&str, String)> = DataPack::builtin_sources()
         .iter()
         .map(|&(path, text)| {
             let renamed = match path {
-                "chemicals.ron" | "genomes/starter.ron" => {
+                "chemicals.ron" | "brain_io.ron" | "genomes/starter.ron" => {
                     text.replace("\"boredom\"", "\"bored_ness\"")
                 }
                 _ => text.to_string(),

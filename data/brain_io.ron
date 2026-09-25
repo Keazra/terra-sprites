@@ -1,0 +1,49 @@
+// The brain's State inputs (design §5.2, Appendix A): what a sprite's brain
+// feels, each reading a drive, a hormone, a body sensor or a pulse. IDs are
+// stable and append-only: never renumber or reuse one.
+//
+// Not brain inputs: physical chemicals (the brain feels the body only through
+// drives), reward and punishment (learning signals), the `moving` and
+// `resting` sensors (as inputs they'd loop an action back into itself) and
+// receptor targets. The Target inputs, from 36 on, are fixed in code:
+// attended_berry_bush … attended_sprite, target_distance, target_adjacent.
+[
+    (id: 1,  name: "hunger",        reads: Chem("hunger")),
+    (id: 2,  name: "thirst",        reads: Chem("thirst")),
+    (id: 3,  name: "pain",          reads: Chem("pain")),
+    (id: 4,  name: "tiredness",     reads: Chem("tiredness")),
+    (id: 5,  name: "boredom",       reads: Chem("boredom")),
+    (id: 6,  name: "loneliness",    reads: Chem("loneliness")),
+    (id: 7,  name: "crowdedness",   reads: Chem("crowdedness")),
+
+    (id: 8,  name: "h0",            reads: Chem("h0")),
+    (id: 9,  name: "h1",            reads: Chem("h1")),
+    (id: 10, name: "h2",            reads: Chem("h2")),
+    (id: 11, name: "h3",            reads: Chem("h3")),
+    (id: 12, name: "h4",            reads: Chem("h4")),
+    (id: 13, name: "h5",            reads: Chem("h5")),
+    (id: 14, name: "h6",            reads: Chem("h6")),
+    (id: 15, name: "h7",            reads: Chem("h7")),
+    (id: 16, name: "h8",            reads: Chem("h8")),
+    (id: 17, name: "h9",            reads: Chem("h9")),
+    (id: 18, name: "h10",           reads: Chem("h10")),
+    (id: 19, name: "h11",           reads: Chem("h11")),
+    (id: 20, name: "h12",           reads: Chem("h12")),
+    (id: 21, name: "h13",           reads: Chem("h13")),
+    (id: 22, name: "h14",           reads: Chem("h14")),
+    (id: 23, name: "h15",           reads: Chem("h15")),
+
+    (id: 24, name: "nearby_sprites",reads: Locus("nearby_sprites")),
+    (id: 25, name: "age",           reads: Locus("age")),
+    (id: 26, name: "always",        reads: Locus("always")),
+
+    (id: 27, name: "ate",           reads: Locus("ate")),
+    (id: 28, name: "drank",         reads: Locus("drank")),
+    (id: 29, name: "played",        reads: Locus("played")),
+    (id: 30, name: "played_social", reads: Locus("played_social")),
+    (id: 31, name: "pricked",       reads: Locus("pricked")),
+    (id: 32, name: "was_hit",       reads: Locus("was_hit")),
+    (id: 33, name: "did_hit",       reads: Locus("did_hit")),
+    (id: 34, name: "petted",        reads: Locus("petted")),
+    (id: 35, name: "shocked",       reads: Locus("shocked")),
+]
