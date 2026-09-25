@@ -21,13 +21,14 @@ Decided with the owner in the design session for slice 4 ([#5](https://github.co
 | 6 | **The preset sets the sprite count** as a plain number, `sprites: 30` (20–100), not as a density. World generation puts each sprite on a random empty walkable tile, after the objects. | Slice 4 design session | §3.2, §3.9 |
 | 7 | **The cause of death is a fading tally.** Each source of injury keeps one running total that halves about every 350 ticks. This replaces the exact 500-tick window: 5 numbers per sprite instead of 2,500, with nearly the same answer. | Slice 4 design session | §4.10, App. B |
 | 8 | **Causes of death come from the data.** Physiology's three are built in: starvation, dehydration and **old age** (no longer "senescence"). Injury that an object verb injects is "hurt by *object type*", named after the type whose verb table did it, such as a thornbush or a sprite, so a new harmful object needs no code. | Slice 4 design session, from the owner's principle that the data names things | §3.5.2, §4.10 |
-| 9 | **`Died` carries the sprite's name,** because the sprite has left the world by the time the event log prints the event: `Died { name, cause, age }`. | Slice 4 design session | §2.5 |
+| 9 | **`Died` carries the sprite's name, once it has one** (change 16), because the sprite has left the world by the time the event log prints the event: `Died { name, cause, age }`, with no name for an unnamed sprite. | Slice 4 design session | §2.5 |
 | 10 | **The event log leaves out object events.** `ObjectSpawned` and `ObjectRemoved` happen dozens of times a minute and would bury everything else; the World tab counts objects instead. "Events panel" becomes **event log** throughout. | Slice 4 design session | §6.1 |
 | 11 | **Selection details.** The selected sprite is drawn `☻` in the cp437 theme, and as `@` in reverse video in the ascii theme (`&` is already the berry bush). `Tab` / `Shift+Tab` centre the viewport on the sprite they select if it's off-screen. With no sprite selected, the sprite tabs say how to select one. Selecting a sprite from the World tab switches to Body. When the selected sprite dies, its tabs say how and at what age, until another is selected. | Owner decision (the ascii glyph); slice 4 design session | §6.1, §6.2, §6.5 |
 | 12 | **The Chem and Genome tabs fit the inspector.** Chem shows body chemicals and signal chemicals in two columns, each with its level and change per tick, with the 16 hormones in a 4×4 grid below. Genome shows genes grouped by type as plain lines (`low energy → hunger +.020 past .50`), each flagged, unexpressed or unknown gene marked with its reason. `PgUp` / `PgDn`, and the mouse wheel over the inspector, scroll a tab too long to fit. | Slice 4 design session | §6.1, §6.5 |
 | 13 | **Organs and organ failure are out of scope for M1** ([#31](https://github.com/Keazra/terra-sprites/issues/31)). The model leaves room for them: an organ's health would be a physical chemical, and its failure one more source of injury. | Owner idea, parked | §1.3 |
 | 14 | **First-cut physiology timescales,** for a sprite at rest: full hydration lasts about 3,000 ticks and full energy about 6,000; once either runs out, injury kills in about 1,000 more; a sprite past its lifespan dies within about 2,000. Slice 17 tunes them. | Slice 4 design session | App. B |
 | 15 | **No level ever leaves [0, 1], even partway through step 3.** Physiology, each reaction and each emitter clamp what they write, instead of one clamp at (f). v6's single clamp let a drive at 0, pushed below 0 by a relief emitter, look like a fall to its Fall emitter, so a sprite at rest dripped reward every tick, and eating when full was rewarded, against §4.5. Found in the slice 4 code review. | Owner decision | §2.4, §4.4 |
+| 16 | **Sprites start unnamed.** v6 named every sprite with a syllable generator applied to its ID. Now a sprite has no name until the player gives it one with `r`: a name the player makes up, or one generated at random. The player has to care first. Until then the screen shows a sprite by its ID, as "Unnamed #530". | Owner decision, after trying the build | §2.5, §6.1, §6.5 |
 
 ---
 
@@ -288,7 +289,7 @@ world.check_invariants();                                // debug/test builds
 - `Ate`, `Drank`, `Played`, `Hit`, `Pricked`
 - `Rewarded`, `Corrected`
 - `Spawned`
-- `Died { name, cause, age }`: the sprite has left the world by the time the event log prints this, so the event carries its name. The causes are in §4.10.
+- `Died { name, cause, age }`: the sprite has left the world by the time the event log prints this, so the event carries its name, or none for an unnamed sprite (§6.5). The causes are in §4.10.
 - `LearnedMilestone { link, delta }`
 - `ObjectSpawned { object_type, pos }`: an object was created during the tick (by a lifecycle rule; later also by the hand)
 - `ObjectRemoved { object_type, reason }`: an object left the world. The reason is `Expired` (its last stage ended), `Destroyed` (`DestroySelf`) or `Replaced` (`ReplaceWith`). A berry that sprouts emits `ObjectRemoved { reason: Replaced }` for the berry and `ObjectSpawned` for the bush.
@@ -1103,7 +1104,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
   - Selecting a sprite while the World tab is open switches to Body. From any other tab, the tab stays.
   - When the selected sprite dies, its tabs read "Mira #12 died of dehydration at age 4,012" until another sprite is selected.
   - A tab too long to fit scrolls with `PgUp` / `PgDn`, or the mouse wheel over the inspector.
-- **Event log:** newest first, filtered to all / the selected sprite / major events only (deaths, learning milestones, rejected commands). It never shows object events (`ObjectSpawned`, `ObjectRemoved`): they happen dozens of times a minute and would bury everything else, and the World tab counts objects instead.
+- **Event log:** each event shows its sprite by name and ID, as "Mira #12", or "Unnamed #530" for a sprite with no name (§6.5). Newest first, filtered to all / the selected sprite / major events only (deaths, learning milestones, rejected commands). It never shows object events (`ObjectSpawned`, `ObjectRemoved`): they happen dozens of times a minute and would bury everything else, and the World tab counts objects instead.
 - **Status line:** the tile under the cursor, the cursor mode, what the hand holds (in every mode), and hints for the active keys. A prompt such as "Quit? (y/n)" takes its place while open.
   - The tile names its terrain and any object on it, with the object's stage if it has stages: `(61,40) grass · berry bush (mature)`.
   - **Display names** are the data's names with `_` shown as a space (`berry_bush` → "berry bush"), so `objects.ron` needs no separate display name.
@@ -1223,14 +1224,14 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 | `b` | Cycle the colour mode |
 | `[` / `]` | Switch inspector tabs |
 | `g` | Export the genome (Genome tab) |
-| `r` | Rename the selected sprite |
+| `r` | Name the selected sprite: a name you type, or one generated at random |
 | `l` | Open the sprite list |
 | `?` | Open help |
 | `Esc` | Close a menu or overlay; otherwise back to Select; from Select, ask to quit |
 | `Ctrl+C` | Quit at once |
 
 - A rejected command shows its reason on the status line and in the event log.
-- **Names:** sprite names come from a fixed syllable generator applied to the sprite's ID. It uses no RNG draws, so names are deterministic.
+- **Names:** a sprite has no name until the player gives it one with `r`, either a name they make up or one generated at random. The player has to care first. Until then the screen shows a sprite by its ID, as "Unnamed #530".
 
 ### 6.6 Time and the frame loop
 

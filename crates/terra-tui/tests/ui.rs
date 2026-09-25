@@ -451,15 +451,15 @@ fn the_status_line_names_the_object_under_the_cursor_with_its_stage() {
 }
 
 #[test]
-fn the_status_line_names_a_sprite_under_the_cursor_with_its_id() {
+fn the_status_line_shows_a_sprite_under_the_cursor_by_its_id() {
     let world = garden_with_sprites();
     let sprite = world
         .sprite_at(terra_sim::Pos { x: 7, y: 1 })
         .expect("the sprite on the berry");
     let app = pointing_at(&world, Theme::cp437(), 60, 9, 7, 1);
+    // Sprites have no names until the player gives them one (design v7 §6.5).
     let expected = format!(
-        " (7,1) grass · {} #{} · berry (fresh) │ SELECT",
-        sprite.name(),
+        " (7,1) grass · Unnamed #{} · berry (fresh) │ SELECT",
         sprite.id().0
     );
     assert_eq!(lines(&render(&app, &world, 60, 9))[8], expected);
@@ -557,12 +557,11 @@ fn builtin_with<'a>(file: &str, text: &'a str) -> Vec<(&'static str, &'a str)> {
         .collect()
 }
 
-fn died(tick: u64, id: u64, name: &str, cause: DeathCause, age: u64) -> Event {
+fn died(tick: u64, id: u64, cause: DeathCause, age: u64) -> Event {
     Event {
         tick,
         kind: EventKind::Died {
             id: EntityId(id),
-            name: name.into(),
             cause,
             age,
         },
@@ -578,7 +577,7 @@ fn inside(row: &str) -> &str {
 fn the_event_log_lists_deaths_newest_first_under_the_map() {
     let world = garden(pack());
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    app.record(&[died(4_012, 31, "Kel", DeathCause::Dehydration, 4_012)]);
+    app.record(&[died(4_012, 31, DeathCause::Dehydration, 4_012)]);
     app.record(&[
         Event {
             tick: 4_100,
@@ -588,22 +587,22 @@ fn the_event_log_lists_deaths_newest_first_under_the_map() {
                 reason: Removal::Expired,
             },
         },
-        died(4_100, 12, "Mira", DeathCause::Starvation, 3_900),
-        died(4_100, 13, "Toli", DeathCause::OldAge, 66_000),
+        died(4_100, 12, DeathCause::Starvation, 3_900),
+        died(4_100, 13, DeathCause::OldAge, 66_000),
     ]);
     let screen = lines(&render(&app, &world, 100, 30));
     assert!(screen[24].starts_with("┌─ Events ─"), "{:?}", screen[24]);
     assert_eq!(
         inside(&screen[25]),
-        "4,100  Toli died (old age, age 66,000)"
+        "4,100  Unnamed #13 died (old age, age 66,000)"
     );
     assert_eq!(
         inside(&screen[26]),
-        "4,100  Mira died (starvation, age 3,900)"
+        "4,100  Unnamed #12 died (starvation, age 3,900)"
     );
     assert_eq!(
         inside(&screen[27]),
-        "4,012  Kel died (dehydration, age 4,012)"
+        "4,012  Unnamed #31 died (dehydration, age 4,012)"
     );
     assert!(screen[28].starts_with('└'), "three lines of events");
 }
@@ -623,7 +622,7 @@ fn the_event_log_leaves_object_events_out_and_keeps_the_latest_100() {
     app.record(&[spawned]);
     assert_eq!(app.event_log().count(), 0);
     for tick in 0..150 {
-        app.record(&[died(tick, tick, "Kel", DeathCause::Starvation, tick)]);
+        app.record(&[died(tick, tick, DeathCause::Starvation, tick)]);
     }
     let ticks: Vec<u64> = app.event_log().map(|event| event.tick).collect();
     assert_eq!(ticks.len(), 100);

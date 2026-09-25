@@ -95,12 +95,11 @@ fn lone_sprite(data: DataPack, genome: Option<&str>) -> World {
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }
 
-/// A death: the tick it happened in, who died, and the `Died` event's fields.
+/// A death: the tick it happened in, and the `Died` event's fields.
 #[derive(Debug)]
 struct Death {
     tick: u64,
     id: EntityId,
-    name: String,
     cause: DeathCause,
     age: u64,
 }
@@ -109,17 +108,10 @@ struct Death {
 fn first_death(world: &mut World, limit: u64) -> Death {
     for _ in 0..limit {
         for event in world.step() {
-            if let EventKind::Died {
-                id,
-                name,
-                cause,
-                age,
-            } = event.kind
-            {
+            if let EventKind::Died { id, cause, age } = event.kind {
                 return Death {
                     tick: event.tick,
                     id,
-                    name,
                     cause,
                     age,
                 };
@@ -132,10 +124,7 @@ fn first_death(world: &mut World, limit: u64) -> Death {
 #[test]
 fn a_motionless_sprite_gets_hungry_and_thirsty_then_dies_of_dehydration() {
     let mut world = lone_sprite(builtin(), None);
-    let (id, name) = {
-        let sprite = world.sprites().next().expect("the sprite");
-        (sprite.id(), sprite.name())
-    };
+    let id = world.sprites().next().expect("the sprite").id();
     for _ in 0..3_900 {
         world.step();
     }
@@ -150,7 +139,7 @@ fn a_motionless_sprite_gets_hungry_and_thirsty_then_dies_of_dehydration() {
     // Water lasts about 3,000 ticks, then injury kills in about 1,000 (design v7).
     let death = first_death(&mut world, 1_000);
     assert!((3_900..4_500).contains(&death.tick), "{death:?}");
-    assert_eq!((death.id, death.name.as_str()), (id, name.as_str()));
+    assert_eq!(death.id, id);
     assert_eq!(death.cause, DeathCause::Dehydration);
     assert_eq!(death.age, death.tick, "born on tick 0");
     assert_eq!(world.sprites().count(), 0, "gone by the end of the tick");
@@ -281,6 +270,6 @@ fn the_first_population_starts_with_no_false_fall_in_energy_or_hydration() {
     let mut world = World::new(config, data, 5);
     world.step();
     for sprite in world.sprites() {
-        assert_eq!(sprite.chemical("reward"), Some(0.0), "{}", sprite.name());
+        assert_eq!(sprite.chemical("reward"), Some(0.0), "{:?}", sprite.id());
     }
 }
