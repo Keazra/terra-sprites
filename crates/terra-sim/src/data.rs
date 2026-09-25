@@ -3,7 +3,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use ron::extensions::Extensions;
 use serde::Deserialize;
 
+use crate::expression::{Expression, expressions};
+use crate::genome::{Gene, Genome, GenomeError};
 use crate::object_types::{OBJECTS, ObjectType, TypeEntry, object_types};
+use crate::physiology::{Indices, PHYSIOLOGY, Physiology, PhysiologyEntry};
 use crate::registry::{Chemical, Locus};
 use crate::terrain::{Terrain, TerrainProps};
 
@@ -13,12 +16,13 @@ pub struct DataPack {
     manifest: Manifest,
     /// Indexed by `Terrain as usize`.
     terrain: Vec<TerrainProps>,
-    #[expect(dead_code, reason = "biochemistry reads the registries from slice 4")]
     chemicals: Vec<Chemical>,
-    #[expect(dead_code, reason = "biochemistry reads the registries from slice 4")]
     loci: Vec<Locus>,
     /// In ascending ID order.
     object_types: Vec<ObjectType>,
+    physiology: Physiology,
+    /// What sprites without parents are made from. Every gene in it is expressed or unexpressed.
+    starter: Genome,
 }
 
 /// Why a data pack could not be loaded.
@@ -40,6 +44,8 @@ const TERRAIN: &str = "terrain.ron";
 const CHEMICALS: &str = "chemicals.ron";
 /// The loci registry, relative to the pack root.
 const LOCI: &str = "loci.ron";
+/// The starter genome, relative to the pack root.
+const STARTER: &str = "genomes/starter.ron";
 
 /// The default pack's files, embedded at compile time from the repository's `data/`.
 const BUILTIN: &[(&str, &str)] = &[
@@ -48,6 +54,8 @@ const BUILTIN: &[(&str, &str)] = &[
     (CHEMICALS, include_str!("../../../data/chemicals.ron")),
     (LOCI, include_str!("../../../data/loci.ron")),
     (OBJECTS, include_str!("../../../data/objects.ron")),
+    (PHYSIOLOGY, include_str!("../../../data/physiology.ron")),
+    (STARTER, include_str!("../../../data/genomes/starter.ron")),
 ];
 
 /// `pack.ron`: identifies the pack.
@@ -164,6 +172,12 @@ impl DataPack {
         DataPack::from_sources(BUILTIN)
     }
 
+    /// The default pack's files, as `(path within the pack, RON text)`, for
+    /// building a pack that changes some of them.
+    pub fn builtin_sources() -> &'static [(&'static str, &'static str)] {
+        BUILTIN
+    }
+
     /// Builds a pack from already-read files, given as `(path within the pack, RON text)`.
     pub fn from_sources(sources: &[(&str, &str)]) -> Result<DataPack, DataError> {
         let manifest = parse::<Manifest>(sources, MANIFEST)?;
@@ -178,13 +192,28 @@ impl DataPack {
             &chemicals,
             &loci,
         )?;
-        Ok(DataPack {
+        let indices =
+            Indices::find(&chemicals, &loci).map_err(|(file, message)| DataError::Invalid {
+                file: file.into(),
+                message,
+            })?;
+        let physiology = parse::<PhysiologyEntry>(sources, PHYSIOLOGY)?
+            .validate(indices, &loci)
+            .map_err(|message| DataError::Invalid {
+                file: PHYSIOLOGY.into(),
+                message,
+            })?;
+        let mut pack = DataPack {
             manifest,
             terrain,
             chemicals,
             loci,
             object_types,
-        })
+            physiology,
+            starter: Genome { genes: Vec::new() },
+        };
+        pack.starter = starter_genome(find(sources, STARTER)?, &pack)?;
+        Ok(pack)
     }
 
     /// The pack's name, from its manifest.
@@ -250,6 +279,56 @@ impl DataPack {
             .map(|index| &self.object_types[index])
     }
 
+    /// The body's fixed rules, from `physiology.ron`.
+    pub(crate) fn physiology(&self) -> &Physiology {
+        &self.physiology
+    }
+
+    /// The genome sprites without parents are made from.
+    pub(crate) fn starter(&self) -> &Genome {
+        &self.starter
+    }
+
+    /// Every chemical, in the order `chemicals.ron` lists them.
+    pub(crate) fn chemicals(&self) -> &[Chemical] {
+        &self.chemicals
+    }
+
+    /// The chemical with the ID `id`.
+    pub(crate) fn chemical(&self, id: u16) -> Option<&Chemical> {
+        self.chemicals.iter().find(|c| c.id == id)
+    }
+
+    /// Where the chemical with the ID `id` is in the pack's chemical order.
+    pub(crate) fn chemical_index(&self, id: u16) -> Option<usize> {
+        self.chemicals.iter().position(|c| c.id == id)
+    }
+
+    /// The chemical called `name`.
+    pub(crate) fn chemical_named(&self, name: &str) -> Option<&Chemical> {
+        self.chemicals.iter().find(|c| c.name == name)
+    }
+
+    /// Every locus other than a chemical level, in the order `loci.ron` lists them.
+    pub(crate) fn loci(&self) -> &[Locus] {
+        &self.loci
+    }
+
+    /// The locus with the ID `id`.
+    pub(crate) fn locus(&self, id: u16) -> Option<&Locus> {
+        self.loci.iter().find(|l| l.id == id)
+    }
+
+    /// Where the locus with the ID `id` is in the pack's locus order.
+    pub(crate) fn locus_index(&self, id: u16) -> Option<usize> {
+        self.loci.iter().position(|l| l.id == id)
+    }
+
+    /// The locus called `name`.
+    pub(crate) fn locus_named(&self, name: &str) -> Option<&Locus> {
+        self.loci.iter().find(|l| l.name == name)
+    }
+
     /// Every object type, in ascending ID order. Rules refer to types by their index here.
     pub(crate) fn object_types(&self) -> &[ObjectType] {
         &self.object_types
@@ -266,6 +345,42 @@ impl DataPack {
         self.object_type_named(name)
             .filter(|&index| !self.object_types[index].pseudo)
     }
+}
+
+/// Reads the starter genome, which must be clean: a flagged or unknown gene in
+/// it would silently do nothing (design §4.3).
+fn starter_genome(text: &str, data: &DataPack) -> Result<Genome, DataError> {
+    let invalid = |message: String| DataError::Invalid {
+        file: STARTER.into(),
+        message,
+    };
+    let genome = Genome::from_ron(text, data).map_err(|e| match e {
+        GenomeError::Parse(message) => DataError::Parse {
+            file: STARTER.into(),
+            message,
+        },
+        GenomeError::Invalid(message) => invalid(message),
+    })?;
+    for (index, (gene, expression)) in genome
+        .genes
+        .iter()
+        .zip(expressions(&genome, data))
+        .enumerate()
+    {
+        let number = index + 1;
+        match (expression, gene) {
+            (Expression::Flagged(reason), _) => {
+                return Err(invalid(format!("gene {number} is flagged: it {reason}")));
+            }
+            (Expression::Unknown, &Gene::Unknown { type_id, .. }) => {
+                return Err(invalid(format!(
+                    "gene {number} is of type {type_id}, which this build can't read"
+                )));
+            }
+            _ => {}
+        }
+    }
+    Ok(genome)
 }
 
 /// Checks that no two registry entries in `file` share an ID or a name.
@@ -291,15 +406,21 @@ pub(crate) fn check_unique<'a>(
     Ok(())
 }
 
+/// The text of `file` among `sources`.
+fn find<'a>(sources: &[(&str, &'a str)], file: &str) -> Result<&'a str, DataError> {
+    sources
+        .iter()
+        .find(|(path, _)| *path == file)
+        .map(|&(_, text)| text)
+        .ok_or_else(|| DataError::MissingFile(file.into()))
+}
+
 /// Finds `file` among `sources` and parses it as `T`.
 fn parse<T: for<'de> Deserialize<'de>>(
     sources: &[(&str, &str)],
     file: &str,
 ) -> Result<T, DataError> {
-    let (_, text) = sources
-        .iter()
-        .find(|(path, _)| *path == file)
-        .ok_or_else(|| DataError::MissingFile(file.into()))?;
+    let text = find(sources, file)?;
     // `implicit_some` lets optional fields be written as plain values: `step_cost: 10`.
     ron::Options::default()
         .with_default_extension(Extensions::IMPLICIT_SOME)

@@ -14,17 +14,19 @@ use crate::app::CursorMode;
 #[serde(rename_all = "snake_case")]
 pub enum SemanticTile {
     Terrain(Terrain),
+    Sprite,
 }
 
 impl SemanticTile {
     /// Every semantic tile. Each theme must draw all of them.
-    pub const ALL: [SemanticTile; 6] = [
+    pub const ALL: [SemanticTile; 7] = [
         SemanticTile::Terrain(Terrain::Grass),
         SemanticTile::Terrain(Terrain::Dirt),
         SemanticTile::Terrain(Terrain::Sand),
         SemanticTile::Terrain(Terrain::ShallowWater),
         SemanticTile::Terrain(Terrain::DeepWater),
         SemanticTile::Terrain(Terrain::Rock),
+        SemanticTile::Sprite,
     ];
 }
 

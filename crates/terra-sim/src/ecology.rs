@@ -197,7 +197,7 @@ fn count_near(map: &Map, objects: &Objects, pos: Pos, kind: usize, radius: u16) 
 
 /// The tiles within Chebyshev distance `radius` of `pos` that are on the map,
 /// row by row.
-fn square(map: &Map, pos: Pos, radius: u16) -> impl Iterator<Item = Pos> + use<> {
+pub(crate) fn square(map: &Map, pos: Pos, radius: u16) -> impl Iterator<Item = Pos> + use<> {
     let (origin, width, height) = square_bounds(map, pos, radius);
     (origin.y..origin.y + height)
         .flat_map(move |y| (origin.x..origin.x + width).map(move |x| Pos { x, y }))
@@ -236,7 +236,7 @@ fn apply(
         }
         Effect::SpawnNearby(kind, radius) => {
             let candidates: Vec<Pos> = square(&state.map, pos, radius)
-                .filter(|&tile| state.objects.can_place(&state.map, data, kind, tile))
+                .filter(|&tile| state.can_place(data, kind, tile))
                 .collect();
             if !candidates.is_empty() {
                 let choice = uniform(&mut state.rng, candidates.len() as u64) as usize;
@@ -250,7 +250,7 @@ fn apply(
                 x: origin.x + (choice % u64::from(width)) as u16,
                 y: origin.y + (choice / u64::from(width)) as u16,
             };
-            if state.objects.can_place(&state.map, data, kind, target)
+            if state.can_place(data, kind, target)
                 && conditions_hold(state, data, id, target, conditions)
             {
                 create(state, data, kind, target, events);
@@ -259,7 +259,7 @@ fn apply(
         Effect::ReplaceWith(kind) => {
             // Off the tile first, so the new object's placement is judged without it.
             let old = state.objects.remove(id);
-            if !state.objects.can_place(&state.map, data, kind, pos) {
+            if !state.can_place(data, kind, pos) {
                 state.objects.place(id, old);
                 return Turn::Continues;
             }

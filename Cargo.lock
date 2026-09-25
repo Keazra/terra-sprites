@@ -1528,6 +1528,7 @@ dependencies = [
 name = "terra-sim"
 version = "0.1.0"
 dependencies = [
+ "libm",
  "proptest",
  "rand_chacha 0.10.0",
  "rmp-serde",

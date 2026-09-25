@@ -2,7 +2,9 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
-use terra_sim::{DataPack, Map, World, WorldConfig};
+use terra_sim::{
+    DataPack, DeathCause, EntityId, Event, EventKind, Map, Removal, Scenario, World, WorldConfig,
+};
 use terra_tui::app::App;
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
@@ -347,7 +349,45 @@ fn garden(pack: DataPack) -> World {
         (terra_sim::Pos { x: 7, y: 1 }, "berry"),
         (terra_sim::Pos { x: 6, y: 3 }, "ball"),
     ];
-    World::from_scenario(map, &objects, pack, 7).expect("valid scenario")
+    let scenario = Scenario {
+        map,
+        objects: &objects,
+        sprites: &[],
+    };
+    World::from_scenario(scenario, pack, 7).expect("valid scenario")
+}
+
+/// The garden, with starter sprites at (2, 3) and on the berry at (7, 1).
+fn garden_with_sprites() -> World {
+    let pack = pack();
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let objects = [
+        (terra_sim::Pos { x: 1, y: 1 }, "berry_bush"),
+        (terra_sim::Pos { x: 4, y: 1 }, "thornbush"),
+        (terra_sim::Pos { x: 7, y: 1 }, "berry"),
+        (terra_sim::Pos { x: 6, y: 3 }, "ball"),
+    ];
+    let sprites = [
+        (terra_sim::Pos { x: 2, y: 3 }, None),
+        (terra_sim::Pos { x: 7, y: 1 }, None),
+    ];
+    let scenario = Scenario {
+        map,
+        objects: &objects,
+        sprites: &sprites,
+    };
+    World::from_scenario(scenario, pack, 7).expect("valid scenario")
+}
+
+#[test]
+fn sprites_are_drawn_with_their_theme_glyph_over_any_item() {
+    let world = garden_with_sprites();
+    let cp437 = pointing_at(&world, Theme::cp437(), 40, 9, 0, 4);
+    let screen = render(&cp437, &world, 40, 9);
+    assert_eq!(lines(&screen)[3], "║.'..♠..☺..║", "the sprite on the berry");
+    assert_eq!(screen[(3, 5)].symbol(), "☺");
+    let ascii = pointing_at(&world, Theme::ascii(), 40, 9, 0, 4);
+    assert_eq!(lines(&render(&ascii, &world, 40, 9))[3], "║.'..*..@..║");
 }
 
 /// An app on `world` with the cursor pointed at tile `(x, y)` of a small map,
@@ -383,14 +423,7 @@ fn a_fruiting_bush_is_drawn_bold_red() {
     let objects = include_str!("../../../data/objects.ron")
         .replace("ticks: (1500, 2500)", "ticks: (1, 1)")
         .replace("Every(200)", "Every(1)");
-    let pack = DataPack::from_sources(&[
-        ("pack.ron", include_str!("../../../data/pack.ron")),
-        ("terrain.ron", include_str!("../../../data/terrain.ron")),
-        ("chemicals.ron", include_str!("../../../data/chemicals.ron")),
-        ("loci.ron", include_str!("../../../data/loci.ron")),
-        ("objects.ron", &objects),
-    ])
-    .expect("valid pack");
+    let pack = DataPack::from_sources(&builtin_with("objects.ron", &objects)).expect("valid pack");
     let mut world = garden(pack);
     for _ in 0..3 {
         world.step();
@@ -418,11 +451,40 @@ fn the_status_line_names_the_object_under_the_cursor_with_its_stage() {
 }
 
 #[test]
+fn the_status_line_shows_a_sprite_under_the_cursor_by_its_id() {
+    let world = garden_with_sprites();
+    let sprite = world
+        .sprite_at(terra_sim::Pos { x: 7, y: 1 })
+        .expect("the sprite on the berry");
+    let app = pointing_at(&world, Theme::cp437(), 60, 9, 7, 1);
+    // Sprites have no names until the player gives them one (design v7 §6.5).
+    let expected = format!(
+        " (7,1) grass · Sprite #{} · berry (fresh) │ SELECT",
+        sprite.id().0
+    );
+    assert_eq!(lines(&render(&app, &world, 60, 9))[8], expected);
+}
+
+#[test]
 fn the_top_bar_leaves_object_counts_to_the_world_tab() {
     let world = garden(pack());
     let app = app_for(&world, Theme::cp437(), 100, 30);
     let bar = lines(&render(&app, &world, 100, 30))[0].clone();
-    assert!(bar.ends_with("│ seed 7"), "{bar}");
+    for object in ["bush", "berr", "thorn", "ball"] {
+        assert!(!bar.contains(object), "{bar}");
+    }
+}
+
+#[test]
+fn the_top_bar_shows_the_population_after_the_seed() {
+    let world = garden_with_sprites();
+    let app = app_for(&world, Theme::cp437(), 100, 30);
+    let bar = lines(&render(&app, &world, 100, 30))[0].clone();
+    assert!(bar.ends_with("│ seed 7 │ sprites 2"), "{bar}");
+    assert!(
+        top_bar(&default_app()).ends_with("│ sprites 30"),
+        "the built-in preset's"
+    );
 }
 
 /// The right-hand `width` columns of each screen row, trimmed.
@@ -485,4 +547,92 @@ fn a_narrow_terminal_leaves_the_inspector_out_and_gives_the_map_view_the_width()
         screen.iter().all(|line| !line.contains("World")),
         "no World tab"
     );
+}
+
+/// The built-in pack's files with `file` replaced by `text`.
+fn builtin_with<'a>(file: &str, text: &'a str) -> Vec<(&'static str, &'a str)> {
+    DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, builtin)| (path, if path == file { text } else { builtin }))
+        .collect()
+}
+
+fn died(tick: u64, id: u64, cause: DeathCause, age: u64) -> Event {
+    Event {
+        tick,
+        kind: EventKind::Died {
+            id: EntityId(id),
+            cause,
+            age,
+        },
+    }
+}
+
+/// The text inside a bordered row, without the borders or trailing spaces.
+fn inside(row: &str) -> &str {
+    row.trim_start_matches('│').trim_end_matches('│').trim()
+}
+
+#[test]
+fn the_event_log_lists_deaths_newest_first_under_the_map() {
+    let world = garden(pack());
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.record(&[died(4_012, 31, DeathCause::Dehydration, 4_012)]);
+    app.record(&[
+        Event {
+            tick: 4_100,
+            kind: EventKind::ObjectRemoved {
+                id: EntityId(3),
+                object_type: "berry".into(),
+                reason: Removal::Expired,
+            },
+        },
+        died(4_100, 12, DeathCause::Starvation, 3_900),
+        died(4_100, 13, DeathCause::OldAge, 66_000),
+    ]);
+    let screen = lines(&render(&app, &world, 100, 30));
+    assert!(screen[24].starts_with("┌─ Events ─"), "{:?}", screen[24]);
+    assert_eq!(
+        inside(&screen[25]),
+        "4,100  Sprite #13 died (old age, age 66,000)"
+    );
+    assert_eq!(
+        inside(&screen[26]),
+        "4,100  Sprite #12 died (starvation, age 3,900)"
+    );
+    assert_eq!(
+        inside(&screen[27]),
+        "4,012  Sprite #31 died (dehydration, age 4,012)"
+    );
+    assert!(screen[28].starts_with('└'), "three lines of events");
+}
+
+#[test]
+fn the_event_log_leaves_object_events_out_and_keeps_the_latest_100() {
+    let world = garden(pack());
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    let spawned = Event {
+        tick: 1,
+        kind: EventKind::ObjectSpawned {
+            id: EntityId(9),
+            object_type: "berry".into(),
+            pos: terra_sim::Pos { x: 1, y: 1 },
+        },
+    };
+    app.record(&[spawned]);
+    assert_eq!(app.event_log().count(), 0);
+    for tick in 0..150 {
+        app.record(&[died(tick, tick, DeathCause::Starvation, tick)]);
+    }
+    let ticks: Vec<u64> = app.event_log().map(|event| event.tick).collect();
+    assert_eq!(ticks.len(), 100);
+    assert_eq!((ticks[0], ticks[99]), (149, 50), "newest first");
+}
+
+#[test]
+fn a_screen_under_30_rows_has_no_event_log() {
+    let world = garden(pack());
+    let app = app_for(&world, Theme::cp437(), 100, 29);
+    let screen = lines(&render(&app, &world, 100, 29));
+    assert!(screen.iter().all(|line| !line.contains("Events")));
 }

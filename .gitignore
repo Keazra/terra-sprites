@@ -1,1 +1,5 @@
 /target
+
+# Working files of the owner's outside-review tooling, written into the repo folder.
+/.agents/teamwork/
+/ORIGINAL_REQUEST.md
