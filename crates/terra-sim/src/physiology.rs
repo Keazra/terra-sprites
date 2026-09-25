@@ -29,6 +29,7 @@ pub(crate) struct Physiology {
     pub(crate) traits: Traits,
     /// Each receptor target's range, by locus ID.
     pub(crate) receptor_targets: BTreeMap<u16, (f32, f32)>,
+    pub(crate) nearby_sprites: NearbySprites,
     pub(crate) spawn_variation: f32,
     pub(crate) slots: Slots,
 }
@@ -48,7 +49,18 @@ pub(crate) struct PhysiologyEntry {
     cause_fade: u32,
     traits: Traits,
     receptor_targets: BTreeMap<String, (f32, f32)>,
+    nearby_sprites: NearbySprites,
     spawn_variation: f32,
+}
+
+/// How the `nearby_sprites` body sensor counts.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct NearbySprites {
+    /// How far away, in tiles in any direction, a sprite counts.
+    pub(crate) radius: u16,
+    /// How many sprites make the sensor read 1.
+    pub(crate) full: u16,
 }
 
 /// What a newborn's physical chemicals start at.
@@ -186,6 +198,9 @@ impl PhysiologyEntry {
             ));
         }
 
+        if self.nearby_sprites.radius == 0 || self.nearby_sprites.full == 0 {
+            return Err("`nearby_sprites` needs a `radius` and a `full` of at least 1".into());
+        }
         if !(0.0..1.0).contains(&self.spawn_variation) {
             return Err(format!(
                 "`spawn_variation` is {}, but must be at least 0 and below 1",
@@ -205,6 +220,7 @@ impl PhysiologyEntry {
             cause_fade: libm::powf(0.5, 1.0 / self.cause_fade as f32),
             traits,
             receptor_targets,
+            nearby_sprites: self.nearby_sprites,
             spawn_variation: self.spawn_variation,
             slots,
         })

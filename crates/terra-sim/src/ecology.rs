@@ -197,7 +197,7 @@ fn count_near(map: &Map, objects: &Objects, pos: Pos, kind: usize, radius: u16) 
 
 /// The tiles within Chebyshev distance `radius` of `pos` that are on the map,
 /// row by row.
-fn square(map: &Map, pos: Pos, radius: u16) -> impl Iterator<Item = Pos> + use<> {
+pub(crate) fn square(map: &Map, pos: Pos, radius: u16) -> impl Iterator<Item = Pos> + use<> {
     let (origin, width, height) = square_bounds(map, pos, radius);
     (origin.y..origin.y + height)
         .flat_map(move |y| (origin.x..origin.x + width).map(move |x| Pos { x, y }))

@@ -661,7 +661,7 @@ This keeps credit assignment clean. If thorns scratched sprites walking past, th
 ### 3.9 Defaults and performance
 
 - **Defaults:** 256×160 map; 30 starter sprites (configurable, 20–100).
-- **The sprite count is a plain number** in the preset, `sprites: 30`, from 20 to 100. It isn't a density: the population is a design target, not ecology, so it stays the same on any map size.
+- **The sprite count is a plain number** in the preset, `sprites: 30`, from 20 to 100. It isn't a density: the population is a design target, not ecology, so it stays the same on any map size. A preset that leaves it out gets no sprites, as a type it doesn't name gets no objects.
 - **Plants and toys are set by density**, so a bigger map gets proportionally more and food stays as easy to find: about 150 berry bushes, 40 thornbushes and 6 balls per 15,360 tiles (a 160×96 area). On the default map that is about 400 berry bushes, 107 thornbushes and 16 balls. The sprite count doesn't scale; it stays in the 20–100 range.
 - **In the preset**, densities are counts per area:
 

@@ -5,14 +5,18 @@ use rand_chacha::rand_core::SeedableRng;
 use serde::Serialize;
 use xxhash_rust::xxh3::xxh3_64_with_seed;
 
+use crate::biochem::{self, Senses};
 use crate::config::WorldConfig;
 use crate::data::DataPack;
-use crate::ecology::{self, holds_without_drawing, new_object};
-use crate::events::Event;
-use crate::generate::{generate, place_objects};
+use crate::ecology::{self, holds_without_drawing, new_object, square};
+use crate::events::{Event, EventKind};
+use crate::generate::{generate, place_objects, place_sprites};
+use crate::genome::Genome;
 use crate::map::{Map, MapError, Pos};
 use crate::objects::{EntityId, Object, Objects};
 use crate::regions::Regions;
+use crate::sprites::{self, Sprite, Sprites};
+use crate::variation::varied;
 
 /// Fixed seed for `state_hash`, so hashes are comparable across runs and builds.
 const STATE_HASH_SEED: u64 = 0x7e22_a5b1_17e5_0001;
@@ -36,15 +40,29 @@ pub(crate) struct WorldState {
     /// The ID the next entity gets. It only goes up, so IDs are never reused.
     pub(crate) next_id: u64,
     pub(crate) objects: Objects,
+    pub(crate) sprites: Sprites,
 }
 
 impl WorldState {
     /// Gives `object` the next entity ID and puts it in the world. The caller
     /// has checked that it may go there.
     pub(crate) fn add_object(&mut self, object: Object) -> EntityId {
+        let id = self.new_id();
+        self.objects.place(id, object);
+        id
+    }
+
+    /// Gives `sprite` the next entity ID and puts it in the world. The caller
+    /// has checked that its tile is free.
+    pub(crate) fn add_sprite(&mut self, sprite: Sprite) -> EntityId {
+        let id = self.new_id();
+        self.sprites.place(id, sprite);
+        id
+    }
+
+    fn new_id(&mut self) -> EntityId {
         let id = EntityId(self.next_id);
         self.next_id += 1;
-        self.objects.place(id, object);
         id
     }
 }
@@ -62,6 +80,52 @@ pub enum ScenarioError {
     NotAnObjectType(String),
     /// An object would break the placement rules (design §3.3–3.4).
     CantPlace { object_type: String, pos: Pos },
+}
+
+/// A hand-made world, for tests and lab scenarios.
+pub struct Scenario<'a> {
+    /// A hand-drawn map, which must form exactly one region.
+    pub map: Map,
+    /// Objects as `(tile, object type name)`. Each starts at the beginning of its first stage.
+    pub objects: &'a [(Pos, &'a str)],
+    /// Newborn sprites as `(tile, genome)`: `None` is the starter genome with
+    /// spawn variation, as for the `SpawnSprite` command.
+    pub sprites: &'a [(Pos, Option<Genome>)],
+}
+
+/// A read-only view of one sprite.
+pub struct SpriteView<'a> {
+    id: EntityId,
+    sprite: &'a Sprite,
+    world: &'a World,
+}
+
+impl SpriteView<'_> {
+    /// The sprite's entity ID.
+    pub fn id(&self) -> EntityId {
+        self.id
+    }
+
+    /// The sprite's name.
+    pub fn name(&self) -> String {
+        sprites::name(self.id)
+    }
+
+    /// The tile the sprite stands on.
+    pub fn pos(&self) -> Pos {
+        self.sprite.pos
+    }
+
+    /// The level of the chemical called `name`, or `None` if the pack has no such chemical.
+    pub fn chemical(&self, name: &str) -> Option<f32> {
+        let slot = self
+            .world
+            .data
+            .chemicals()
+            .iter()
+            .position(|c| c.name == name)?;
+        Some(self.sprite.body.chems[slot])
+    }
 }
 
 /// A read-only view of one object.
@@ -137,6 +201,7 @@ impl World {
         let map = generate(&config, &data, &mut rng);
         let mut world = World::with(map, data, rng);
         place_objects(&config, &world.data, &mut world.state);
+        place_sprites(&config, &world.data, &mut world.state);
         world
     }
 
@@ -149,17 +214,15 @@ impl World {
         Ok(World::with(map, data, ChaCha8Rng::seed_from_u64(seed)))
     }
 
-    /// A world on a hand-drawn map with objects placed by hand, as
-    /// `(tile, object type name)`, for tests and lab scenarios. The objects get
-    /// IDs in the order given, and each starts at the beginning of its first stage.
+    /// A world made by hand, for tests and lab scenarios. The objects get IDs
+    /// in the order given, then the sprites.
     pub fn from_scenario(
-        map: Map,
-        objects: &[(Pos, &str)],
+        scenario: Scenario,
         data: DataPack,
         seed: u64,
     ) -> Result<World, ScenarioError> {
-        let mut world = World::from_map(map, data, seed).map_err(ScenarioError::Map)?;
-        for &(pos, name) in objects {
+        let mut world = World::from_map(scenario.map, data, seed).map_err(ScenarioError::Map)?;
+        for &(pos, name) in scenario.objects {
             let not_an_object = || ScenarioError::NotAnObjectType(name.into());
             let kind = world
                 .data
@@ -174,11 +237,36 @@ impl World {
             }
             state.add_object(new_object(&world.data, kind, pos));
         }
+        for (pos, genome) in scenario.sprites {
+            let state = &mut world.state;
+            let pos = *pos;
+            let solid_object = state
+                .objects
+                .at(pos)
+                .is_some_and(|id| world.data.object_types()[state.objects.kind(id)].solid);
+            if !state.map.contains(pos)
+                || !state.map.is_walkable(pos)
+                || state.sprites.at(pos).is_some()
+                || solid_object
+            {
+                return Err(ScenarioError::CantPlace {
+                    object_type: "sprite".into(),
+                    pos,
+                });
+            }
+            let genome = match genome {
+                Some(genome) => genome.clone(),
+                None => varied(world.data.starter(), &world.data, &mut state.rng),
+            };
+            let sprite = Sprite::newborn(genome, pos, state.tick, &world.data);
+            state.add_sprite(sprite);
+        }
         Ok(world)
     }
 
     fn with(map: Map, data: DataPack, rng: ChaCha8Rng) -> World {
         let objects = Objects::new(&map);
+        let sprites = Sprites::new(&map);
         World {
             state: WorldState {
                 tick: 0,
@@ -186,6 +274,7 @@ impl World {
                 map,
                 next_id: 1,
                 objects,
+                sprites,
             },
             data,
             checked_next_id: Cell::new(1),
@@ -199,11 +288,11 @@ impl World {
         let mut events = Vec::new();
         self.apply_commands(); // 1
         self.run_environment(&mut events); // 2
-        self.run_biochemistry(); // 3
+        let dying = self.run_biochemistry(); // 3
         self.run_learning(); // 4
         self.sense_and_decide(); // 5
         self.resolve_actions(); // 6
-        self.finish_tick(); // 7
+        self.finish_tick(&dying, &mut events); // 7
         events
     }
 
@@ -222,6 +311,15 @@ impl World {
         self.state.objects.iter().map(|(id, object)| ObjectView {
             id,
             object,
+            world: self,
+        })
+    }
+
+    /// Every sprite, in ascending ID order.
+    pub fn sprites(&self) -> impl Iterator<Item = SpriteView<'_>> {
+        self.state.sprites.iter().map(|(id, sprite)| SpriteView {
+            id,
+            sprite,
             world: self,
         })
     }
@@ -259,8 +357,36 @@ impl World {
         ecology::run(&mut self.state, &self.data, events);
     }
 
-    /// Step 3: pulse latch, physics, reactions, decay, emitters, receptors; death check #1.
-    fn run_biochemistry(&mut self) {}
+    /// Step 3: every sprite's chemistry (design §4.4), then death check #1.
+    /// Returns the sprites marked dying, in ascending ID order.
+    fn run_biochemistry(&mut self) -> Vec<EntityId> {
+        let state = &mut self.state;
+        let data = &self.data;
+        let nearby = data.physiology().nearby_sprites;
+        let senses: Vec<(EntityId, Senses)> = state
+            .sprites
+            .iter()
+            .map(|(id, sprite)| {
+                let others = square(&state.map, sprite.pos, nearby.radius)
+                    .filter(|&tile| tile != sprite.pos && state.sprites.at(tile).is_some())
+                    .count();
+                let senses = Senses {
+                    age: state.tick - sprite.born,
+                    nearby_sprites: (others as f32 / f32::from(nearby.full)).min(1.0),
+                    ..Senses::default()
+                };
+                (id, senses)
+            })
+            .collect();
+        let mut dying = Vec::new();
+        for (id, senses) in senses {
+            let sprite = state.sprites.get_mut(id).expect("a sprite taking its turn");
+            if biochem::step(&sprite.program, &mut sprite.body, &senses, data) {
+                dying.push(id);
+            }
+        }
+        dying
+    }
 
     /// Step 4: reinforcement from consumed reward and punishment.
     fn run_learning(&mut self) {}
@@ -271,9 +397,23 @@ impl World {
     /// Step 6: movement and verb effects, then trace entries.
     fn resolve_actions(&mut self) {}
 
-    /// Step 7: death check #2, removals and events; then the tick counter advances.
-    fn finish_tick(&mut self) {
-        self.state.tick += 1;
+    /// Step 7: the dying are removed, each with a `Died` event; then the tick
+    /// counter advances. (Death check #2 arrives with step 6's effects.)
+    fn finish_tick(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
+        let state = &mut self.state;
+        for &id in dying {
+            let sprite = state.sprites.remove(id);
+            events.push(Event {
+                tick: state.tick,
+                kind: EventKind::Died {
+                    id,
+                    name: sprites::name(id),
+                    cause: sprite.body.cause_of_death(),
+                    age: state.tick - sprite.born,
+                },
+            });
+        }
+        state.tick += 1;
     }
 
     /// Checks the world's internal invariants (design §7.1). Later slices add checks here.
@@ -310,8 +450,12 @@ mod tests {
         let data = DataPack::builtin().expect("built-in data pack is valid");
         let rows = [".......", ".......", ".......", ".....~.", "......."];
         let map = Map::from_ascii(&rows, &data).expect("valid drawing");
-        World::from_scenario(map, &[(Pos { x: 2, y: 2 }, "berry_bush")], data, 7)
-            .expect("valid scenario")
+        let scenario = Scenario {
+            map,
+            objects: &[(Pos { x: 2, y: 2 }, "berry_bush")],
+            sprites: &[],
+        };
+        World::from_scenario(scenario, data, 7).expect("valid scenario")
     }
 
     /// Puts an object of type `name` on `pos` without checking the placement rules.

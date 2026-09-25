@@ -207,3 +207,15 @@ fn a_gene_type_the_build_has_never_heard_of_by_name_is_refused_naming_it() {
         other => panic!("expected an unknown gene type to be refused, got {other:?}"),
     }
 }
+
+#[test]
+fn golden_the_first_starter_genome_still_loads_with_every_gene_readable() {
+    // The starter genome as slice 4 shipped it. Every later build must load it.
+    let golden = include_str!("golden/starter-v1.ron");
+    let data = builtin();
+    let genome = Genome::from_ron(golden, &data).expect("the golden starter genome loads");
+    assert!(
+        !genome.to_ron(&data).contains("Gene("),
+        "every gene is known, so none is written by number"
+    );
+}

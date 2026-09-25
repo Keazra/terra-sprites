@@ -1,7 +1,9 @@
 //! The step 2 engine: objects defined as data, living by their lifecycle rules
 //! (design §3.5).
 
-use terra_sim::{DataPack, EntityId, Event, EventKind, Map, Pos, Removal, ScenarioError, World};
+use terra_sim::{
+    DataPack, EntityId, Event, EventKind, Map, Pos, Removal, Scenario, ScenarioError, World,
+};
 
 fn at(x: u16, y: u16) -> Pos {
     Pos { x, y }
@@ -41,7 +43,12 @@ fn try_scenario(
         .iter()
         .map(|&(x, y, name)| (at(x, y), name))
         .collect();
-    World::from_scenario(map, &objects, data.clone(), 7)
+    let scenario = Scenario {
+        map,
+        objects: &objects,
+        sprites: &[],
+    };
+    World::from_scenario(scenario, data.clone(), 7)
 }
 
 fn scenario(data: &DataPack, rows: &[&str], objects: &[(u16, u16, &str)]) -> World {
@@ -410,8 +417,12 @@ fn spawn_nearby_chooses_uniformly_among_the_candidates() {
             PEBBLE,
         ]);
         let map = Map::from_ascii(&FIELD, &pack).expect("valid drawing");
-        let mut world =
-            World::from_scenario(map, &[(at(3, 2), "ticker")], pack, seed).expect("valid");
+        let scenario = Scenario {
+            map,
+            objects: &[(at(3, 2), "ticker")],
+            sprites: &[],
+        };
+        let mut world = World::from_scenario(scenario, pack, seed).expect("valid");
         world.step();
         chosen.extend(pebbles(&world));
     }
