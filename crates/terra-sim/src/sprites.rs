@@ -8,7 +8,7 @@ use crate::biochem::{Body, Program};
 use crate::data::DataPack;
 use crate::genome::Genome;
 use crate::map::{Map, Pos};
-use crate::objects::EntityId;
+use crate::objects::{EntityId, Objects};
 
 /// One sprite.
 #[derive(Debug, Clone, Serialize)]
@@ -101,6 +101,39 @@ impl Sprites {
     fn index(&self, pos: Pos) -> usize {
         usize::from(pos.y) * usize::from(self.width) + usize::from(pos.x)
     }
+
+    /// Checks the sprites' invariants (design §7.1), or says which is broken:
+    /// the tile index matches where the sprites are, so no two share a tile;
+    /// none stands on a solid object; and every chemical is within 0 to 1.
+    pub(crate) fn check(
+        &self,
+        map: &Map,
+        objects: &Objects,
+        data: &DataPack,
+    ) -> Result<(), String> {
+        let indexed = self.on_tile.iter().filter(|id| id.is_some()).count();
+        if indexed != self.by_id.len() {
+            return Err(format!(
+                "the tile index holds {indexed} sprites, but there are {}",
+                self.by_id.len()
+            ));
+        }
+        for (&id, sprite) in &self.by_id {
+            let pos = sprite.pos;
+            if !map.contains(pos) || self.at(pos) != Some(id) {
+                return Err(format!("the tile index doesn't have {id:?} on {pos:?}"));
+            }
+            if let Some(object) = objects.at(pos)
+                && data.object_types()[objects.kind(object)].solid
+            {
+                return Err(format!("{id:?} stands on the solid {object:?}"));
+            }
+            if let Some(level) = sprite.body.chems.iter().find(|l| !(0.0..=1.0).contains(*l)) {
+                return Err(format!("{id:?} has a chemical at {level}, outside 0 to 1"));
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Syllables for sprite names: consonant then vowel, easy to say.
@@ -125,4 +158,35 @@ pub(crate) fn name(id: EntityId) -> String {
     let mut name = format!("{}{}{ending}", syllable(0), syllable(5));
     name[..1].make_ascii_uppercase();
     name
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_name_is_the_same_for_the_same_id_every_time() {
+        assert_eq!(name(EntityId(12)), name(EntityId(12)));
+    }
+
+    #[test]
+    fn names_are_capitalised_ascii_letters_of_4_to_5_characters() {
+        for id in 1..500 {
+            let name = name(EntityId(id));
+            assert!((4..=5).contains(&name.len()), "{name}");
+            assert!(name.chars().all(|c| c.is_ascii_alphabetic()), "{name}");
+            assert!(name.starts_with(|c: char| c.is_ascii_uppercase()), "{name}");
+        }
+    }
+
+    #[test]
+    fn neighbouring_ids_get_different_names_mostly() {
+        let names: std::collections::BTreeSet<String> =
+            (1..=100).map(|id| name(EntityId(id))).collect();
+        assert!(
+            names.len() > 80,
+            "only {} different names in 100",
+            names.len()
+        );
+    }
 }

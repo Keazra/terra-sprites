@@ -97,7 +97,7 @@ pub(crate) fn place_objects(config: &WorldConfig, data: &DataPack, state: &mut W
                 }
                 let choice = uniform(&mut state.rng, candidates.len() as u64) as usize;
                 let pos = candidates.swap_remove(choice);
-                if state.objects.can_place(&state.map, data, kind, pos)
+                if state.can_place(data, kind, pos)
                     && (!solid || state.objects.keeps_paths_open(&state.map, data, pos))
                 {
                     break Some(pos);

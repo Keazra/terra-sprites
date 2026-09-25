@@ -60,6 +60,14 @@ impl WorldState {
         id
     }
 
+    /// Whether an object of type `kind` may go on the tile at `pos` (design
+    /// §3.3–3.4): as the objects and terrain allow, and, if it's solid, onto
+    /// no sprite.
+    pub(crate) fn can_place(&self, data: &DataPack, kind: usize, pos: Pos) -> bool {
+        self.objects.can_place(&self.map, data, kind, pos)
+            && !(data.object_types()[kind].solid && self.sprites.at(pos).is_some())
+    }
+
     fn new_id(&mut self) -> EntityId {
         let id = EntityId(self.next_id);
         self.next_id += 1;
@@ -229,7 +237,7 @@ impl World {
                 .real_object_type(name)
                 .ok_or_else(not_an_object)?;
             let state = &mut world.state;
-            if !state.objects.can_place(&state.map, &world.data, kind, pos) {
+            if !state.can_place(&world.data, kind, pos) {
                 return Err(ScenarioError::CantPlace {
                     object_type: name.into(),
                     pos,
@@ -427,7 +435,12 @@ impl World {
             )));
         }
         self.checked_next_id.set(state.next_id);
-        if let Some((id, _)) = state.objects.iter().find(|(id, _)| id.0 >= state.next_id) {
+        let mut ids = state
+            .objects
+            .iter()
+            .map(|(id, _)| id)
+            .chain(state.sprites.iter().map(|(id, _)| id));
+        if let Some(id) = ids.find(|id| id.0 >= state.next_id) {
             return Err(InvariantViolation(format!(
                 "{id:?} is at or above the ID counter, {}: IDs must only go up",
                 state.next_id
@@ -436,6 +449,7 @@ impl World {
         state
             .objects
             .check(&state.map, &self.data)
+            .and_then(|()| state.sprites.check(&state.map, &state.objects, &self.data))
             .map_err(InvariantViolation)
     }
 }
@@ -500,6 +514,125 @@ mod tests {
         world.state.next_id -= 1;
         assert!(world.check_invariants().is_err());
         assert!(world.check_invariants().is_err(), "and it stays caught");
+    }
+
+    /// The field with a bush, plus starter sprites at (5, 1) and (5, 2).
+    fn field_with_sprites() -> (World, EntityId, EntityId) {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let rows = [".......", ".......", ".......", ".....~.", "......."];
+        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
+        let scenario = Scenario {
+            map,
+            objects: &[(Pos { x: 2, y: 2 }, "berry_bush")],
+            sprites: &[(Pos { x: 5, y: 1 }, None), (Pos { x: 5, y: 2 }, None)],
+        };
+        let world = World::from_scenario(scenario, data, 7).expect("valid scenario");
+        let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
+        (world, ids[0], ids[1])
+    }
+
+    #[test]
+    fn valid_sprites_pass_the_invariant_checks() {
+        assert_eq!(field_with_sprites().0.check_invariants(), Ok(()));
+    }
+
+    #[test]
+    fn a_sprite_the_tile_index_has_elsewhere_breaks_an_invariant() {
+        let (mut world, first, _) = field_with_sprites();
+        world.state.sprites.get_mut(first).expect("a sprite").pos = Pos { x: 0, y: 0 };
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn two_sprites_on_one_tile_break_an_invariant() {
+        let (mut world, first, _) = field_with_sprites();
+        world.state.sprites.get_mut(first).expect("a sprite").pos = Pos { x: 5, y: 2 };
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_sprite_on_a_solid_object_breaks_an_invariant() {
+        let (mut world, _, _) = field_with_sprites();
+        force_place(&mut world, "thornbush", Pos { x: 5, y: 1 });
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_level_outside_0_to_1_breaks_an_invariant() {
+        let (mut world, _, second) = field_with_sprites();
+        world
+            .state
+            .sprites
+            .get_mut(second)
+            .expect("a sprite")
+            .body
+            .chems[0] = 1.5;
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_sprite_id_the_counter_has_not_reached_breaks_an_invariant() {
+        let (mut world, _, second) = field_with_sprites();
+        world.state.next_id = second.0;
+        world.checked_next_id.set(second.0);
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn the_state_hash_covers_every_sprite_s_chemistry() {
+        let (mut world, _, second) = field_with_sprites();
+        let before = world.state_hash();
+        world
+            .state
+            .sprites
+            .get_mut(second)
+            .expect("a sprite")
+            .body
+            .chems[5] = 0.5;
+        assert_ne!(world.state_hash(), before);
+    }
+
+    #[test]
+    fn nearby_sprites_counts_the_others_within_3_tiles_over_4_capped_at_1() {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let map = Map::from_ascii(&["........."; 9], &data).expect("valid drawing");
+        let at = |x, y| (Pos { x, y }, None);
+        let sprites = [
+            at(3, 3),
+            at(0, 0),
+            at(6, 6),
+            at(3, 4),
+            at(4, 4),
+            at(2, 2),
+            at(7, 3),
+            at(8, 8),
+        ];
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &sprites,
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        world.step();
+        let slot = world.data.physiology().slots.nearby_sprites;
+        let reading = |x, y| {
+            let pos = Pos { x, y };
+            let id = world.state.sprites.at(pos).expect("a sprite");
+            let (_, sprite) = world
+                .state
+                .sprites
+                .iter()
+                .find(|&(i, _)| i == id)
+                .expect("a sprite");
+            sprite.body.loci[slot]
+        };
+        assert_eq!(reading(3, 3), 1.0, "5 others within 3 tiles, capped");
+        assert_eq!(
+            reading(7, 3),
+            0.5,
+            "(4, 4) and (6, 6); (3, 3) is 4 tiles away"
+        );
+        assert_eq!(reading(8, 8), 0.25, "(6, 6) only");
     }
 
     #[test]

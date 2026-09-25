@@ -186,3 +186,83 @@ fn a_sprite_that_never_hungers_or_thirsts_dies_of_old_age() {
     assert_eq!(death.cause, DeathCause::OldAge);
     assert!((21_500..22_500).contains(&death.age), "{death:?}");
 }
+
+/// Object types for testing where solid objects may go.
+const SOLIDS: &str = r#"[
+    (id: 1, name: "shrub", category: BerryBush, tags: [Solid, Fixture]),
+    (id: 2, name: "seed", category: Berry,
+     stages: [(name: "dormant", ticks: (2, 2), next: Expire)],
+     rules: [(trigger: OnExpire, do: [ReplaceWith("shrub")])]),
+    (id: 3, name: "creeper", category: Thornbush, tags: [Solid, Fixture],
+     rules: [(trigger: Every(1), do: [SpreadTo("creeper", 1, [])])]),
+    (id: 4, name: "spawner", category: Ball,
+     rules: [(trigger: Every(1), do: [SpawnNearby("shrub", 1)])]),
+    (id: 5, name: "pebble", category: Ball),
+]"#;
+
+/// A 5×5 field of grass holding `objects` and newborn starter sprites on `sprites`.
+fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> Result<World, terra_sim::ScenarioError> {
+    let objects_ron = include_str!("../../../data/objects.ron");
+    let data = builtin_changing("objects.ron", &[(objects_ron, SOLIDS)]);
+    let map = Map::from_ascii(&["....."; 5], &data).expect("valid drawing");
+    let sprites: Vec<(Pos, Option<Genome>)> = sprites.iter().map(|&pos| (pos, None)).collect();
+    World::from_scenario(
+        Scenario {
+            map,
+            objects,
+            sprites: &sprites,
+        },
+        data,
+        1,
+    )
+}
+
+fn type_at(world: &World, pos: Pos) -> Option<String> {
+    world.object_at(pos).map(|o| o.type_name().to_string())
+}
+
+const MIDDLE: Pos = Pos { x: 2, y: 2 };
+
+#[test]
+fn a_sprite_can_share_a_tile_with_an_item_but_not_a_solid_object() {
+    assert!(field(&[(MIDDLE, "pebble")], &[MIDDLE]).is_ok());
+    assert!(field(&[(MIDDLE, "shrub")], &[MIDDLE]).is_err());
+}
+
+#[test]
+fn an_item_under_a_sprite_is_not_replaced_by_a_solid_object() {
+    let mut control = field(&[(MIDDLE, "seed")], &[]).expect("valid");
+    let mut world = field(&[(MIDDLE, "seed")], &[Pos { x: 0, y: 0 }, MIDDLE]).expect("valid");
+    for _ in 0..5 {
+        control.step();
+        world.step();
+    }
+    assert_eq!(
+        type_at(&control, MIDDLE).as_deref(),
+        Some("shrub"),
+        "without a sprite it sprouts"
+    );
+    assert_eq!(
+        type_at(&world, MIDDLE),
+        None,
+        "the seed expired where it lay"
+    );
+}
+
+#[test]
+fn solid_objects_never_spread_or_spawn_onto_a_sprite() {
+    for spreader in ["creeper", "spawner"] {
+        let beside = Pos { x: 3, y: 2 };
+        let mut world = field(&[(MIDDLE, spreader)], &[beside]).expect("valid");
+        for _ in 0..200 {
+            world.step();
+        }
+        assert_eq!(type_at(&world, beside), None, "{spreader}");
+        let around = (1..=3)
+            .flat_map(|y| (1..=3).map(move |x| Pos { x, y }))
+            .filter(|&pos| pos != MIDDLE && pos != beside);
+        for pos in around {
+            assert!(type_at(&world, pos).is_some(), "{spreader} filled {pos:?}");
+        }
+    }
+}
