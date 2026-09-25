@@ -11,12 +11,13 @@ use crate::data::DataPack;
 use crate::events::{Event, EventKind};
 use crate::map::{Dir, Pos};
 use crate::objects::EntityId;
-use crate::perception::{Flood, Ground, Occupied};
+use crate::perception::{Flood, Ground, Occupied, Target};
 use crate::physics::step_cost;
 use crate::random::uniform;
 use crate::registry::Verb;
 use crate::sprites::Sprite;
 use crate::standin;
+use crate::verbs;
 use crate::world::WorldState;
 
 /// How an action ended (design §5.5).
@@ -41,6 +42,12 @@ pub enum ScriptedAction {
     Wander { destination: Pos },
     /// Rest for a bout.
     Rest,
+    /// Eat the object on `at`.
+    Eat { at: Pos },
+    /// Drink the water on `at`.
+    Drink { at: Pos },
+    /// Approach the sprite on `at`, or else the object there.
+    Approach { at: Pos },
 }
 
 /// How far an action has got.
@@ -65,6 +72,8 @@ pub struct ActionView {
     pub verb: Verb,
     /// Where a Wander is heading.
     pub destination: Option<Pos>,
+    /// What an action aimed at something is aimed at.
+    pub target: Option<Target>,
     /// How far it has got, or how it ended.
     pub progress: Progress,
 }
@@ -75,6 +84,8 @@ pub(crate) struct Action {
     pub(crate) verb: Verb,
     /// Where a Wander is heading.
     pub(crate) destination: Option<Pos>,
+    /// What an Approach, Eat or Drink is aimed at (design §5.3).
+    pub(crate) target: Option<Target>,
     /// The tick it started on, for the timeout.
     pub(crate) started: u64,
     /// The ticks it has been carried out on, at step 6.
@@ -99,10 +110,11 @@ pub(crate) struct Did {
 }
 
 impl Action {
-    fn new(verb: Verb, destination: Option<Pos>, tick: u64) -> Action {
+    fn new(verb: Verb, destination: Option<Pos>, target: Option<Target>, tick: u64) -> Action {
         Action {
             verb,
             destination,
+            target,
             started: tick,
             ticks: 0,
             blocked_ticks: 0,
@@ -134,6 +146,7 @@ pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
     Some(ActionView {
         verb: action.verb,
         destination: action.destination,
+        target: action.target,
         progress,
     })
 }
@@ -187,9 +200,16 @@ pub(crate) fn sense_and_decide(
                 continue;
             }
         }
-        let (verb, destination) = match sprite.scripted.pop_front() {
-            Some(ScriptedAction::Wander { destination }) => (Verb::Wander, Some(destination)),
-            Some(ScriptedAction::Rest) => (Verb::Rest, None),
+        let script = sprite.scripted.pop_front();
+        let (verb, destination, target) = match script {
+            Some(ScriptedAction::Wander { destination }) => (Verb::Wander, Some(destination), None),
+            Some(ScriptedAction::Rest) => (Verb::Rest, None, None),
+            Some(ScriptedAction::Eat { at }) => (Verb::Eat, None, state.object_target(at)),
+            Some(ScriptedAction::Drink { at }) => (Verb::Drink, None, state.water_target(data, at)),
+            Some(ScriptedAction::Approach { at }) => {
+                let target = state.sprite_target(at).or_else(|| state.object_target(at));
+                (Verb::Approach, None, target)
+            }
             None => match standin::choose(&mut state.rng) {
                 Verb::Wander => {
                     let flood = sprite.flood.as_ref().expect("the flood made above");
@@ -197,34 +217,38 @@ pub(crate) fn sense_and_decide(
                     (
                         Verb::Wander,
                         flood.wander_destination(sense_radius, &mut state.rng),
+                        None,
                     )
                 }
-                verb => (verb, None),
+                verb => (verb, None, None),
             },
         };
-        start(sprite, id, verb, destination, state.tick, events);
+        let sprite = state.sprites.get_mut(id).expect("the same sprite");
+        start(sprite, id, verb, destination, target, state.tick, events);
     }
 }
 
 /// Starts `sprite` (`id`) on an action. A Wander with no destination, or one
 /// its flood doesn't reach, ends at once, as failed (design §5.5); one to the
-/// tile it stands on ends at once, as applied.
+/// tile it stands on ends at once, as applied. An aimed action with nothing
+/// to aim at ends at once, as failed.
 fn start(
     sprite: &mut Sprite,
     id: EntityId,
     verb: Verb,
     destination: Option<Pos>,
+    target: Option<Target>,
     tick: u64,
     events: &mut Vec<Event>,
 ) {
-    let mut action = Action::new(verb, destination, tick);
+    let mut action = Action::new(verb, destination, target, tick);
     events.push(Event {
         tick,
         kind: EventKind::ActionStarted { id, verb },
     });
     let flood = sprite.flood.as_ref().expect("step 5 made the flood");
     let lost = verb == Verb::Wander && destination.is_none_or(|to| flood.cost(to).is_none());
-    if lost {
+    if lost || (verb.is_aimed() && target.is_none()) {
         end(&mut action, id, Outcome::Failed, tick, events);
     } else if verb == Verb::Wander && destination == Some(sprite.pos) {
         // Already there.
@@ -294,10 +318,39 @@ pub(crate) fn resolve(
             if action.ticks >= rest_bout {
                 end(action, id, Outcome::Applied, state.tick, events);
             }
+        } else if let Some(target) = action.target {
+            let pos = sprite.pos;
+            if state.on_goal_tile(data, pos, target) {
+                act(state, data, id, target, events);
+            }
         } else if !moved.contains(&id) {
             walk(state, data, id, &mut moved, events);
         }
     }
+}
+
+/// Sprite `id`, on a goal tile of `target`, ends its aimed action: an
+/// Approach has arrived, and Eat or Drink makes its one attempt (design §5.5).
+fn act(
+    state: &mut WorldState,
+    data: &DataPack,
+    id: EntityId,
+    target: Target,
+    events: &mut Vec<Event>,
+) {
+    let verb = state.sprites.get(id).expect("the actor").action.as_ref();
+    let verb = verb.expect("an action").verb;
+    let outcome = match verb {
+        Verb::Approach => Outcome::Applied,
+        verb => verbs::attempt(state, data, id, verb, target, events),
+    };
+    let action = state
+        .sprites
+        .get_mut(id)
+        .expect("the actor")
+        .action
+        .as_mut();
+    end(action.expect("an action"), id, outcome, state.tick, events);
 }
 
 /// Shuffles `ids` with the world RNG: Fisher–Yates, one draw per place but the first.

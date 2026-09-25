@@ -755,6 +755,29 @@ fn when_the_selected_sprite_dies_its_tabs_say_how_and_at_what_age() {
     }
 }
 
+#[test]
+fn a_sprite_hurt_to_death_by_an_object_is_named_after_its_type() {
+    let world = garden_with_sprites();
+    let id = world.sprites().next().expect("a sprite").id();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::SelectNext, &world);
+    // The thornbush is object type 3.
+    app.record(&[died(4_012, id.0, DeathCause::HurtBy(3), 4_012)]);
+    let (_, text) = inspector(&app, &world);
+    assert_eq!(
+        text[..2].join(" "),
+        format!("Sprite #{} died hurt by thornbush at age 4,012", id.0)
+    );
+    let screen = lines(&render(&app, &world, 100, 30));
+    assert_eq!(
+        inside(&screen[25]),
+        format!(
+            "4,012  Sprite #{} died (hurt by thornbush, age 4,012)",
+            id.0
+        )
+    );
+}
+
 /// A 10×5 field of grass with one sprite at (2, 3), made from `genome`, and
 /// an app on it that has selected the sprite and stepped the world `ticks`
 /// times.

@@ -28,6 +28,7 @@ mod sprites;
 mod standin;
 mod terrain;
 mod variation;
+mod verbs;
 mod world;
 
 pub use action::{ActionView, Outcome, Progress, ScriptedAction};
@@ -39,6 +40,7 @@ pub use expression::Expression;
 pub use genome::{EmitterMode, GeneView, Genome, GenomeError};
 pub use map::{Dir, Map, MapError, Pos};
 pub use objects::EntityId;
+pub use perception::Target;
 pub use registry::{ChemicalKind, Trait, Verb};
 pub use terrain::{Terrain, TerrainProps};
 pub use world::{

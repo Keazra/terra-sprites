@@ -70,6 +70,12 @@ impl Verb {
         Verb::Speak,
     ];
 
+    /// Whether the verb is aimed at a target (design §5.2): a movement or
+    /// interaction verb.
+    pub(crate) fn is_aimed(self) -> bool {
+        matches!(self, Verb::Approach | Verb::Retreat) || self.is_interaction()
+    }
+
     /// Whether the verb's ID is only reserved, for a later milestone.
     pub(crate) fn is_reserved(self) -> bool {
         matches!(self, Verb::Mate | Verb::Speak)
