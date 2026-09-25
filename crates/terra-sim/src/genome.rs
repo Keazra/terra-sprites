@@ -52,7 +52,7 @@ pub(crate) enum Gene {
     /// Type 3: a locus's level, rise or fall, past `threshold`, adds `gain` of it to `chem`.
     Emitter {
         locus: LocusRef,
-        mode: Mode,
+        mode: EmitterMode,
         invert: bool,
         threshold: f32,
         gain: f32,
@@ -92,9 +92,49 @@ pub(crate) enum LocusRef {
     Locus(u16),
 }
 
+/// One of a sprite's genes, with what it refers to by the data pack's names.
+#[derive(Debug, Clone, PartialEq)]
+pub enum GeneView<'a> {
+    /// Type 1: the chemical decays by half every `ticks` ticks.
+    HalfLife { chem: &'a str, ticks: u32 },
+    /// Type 2: reactants turn into products, as `(chemical, coefficient)`.
+    Reaction {
+        reactants: Vec<(&'a str, u8)>,
+        products: Vec<(&'a str, u8)>,
+        rate: f32,
+    },
+    /// Type 3: a locus's level, rise or fall, past `threshold`, adds `gain`
+    /// of it to `chem`. The locus may be a chemical.
+    Emitter {
+        locus: &'a str,
+        mode: EmitterMode,
+        invert: bool,
+        threshold: f32,
+        gain: f32,
+        chem: &'a str,
+    },
+    /// Type 4: a chemical's level past `threshold` moves a receptor target by `gain` of it.
+    Receptor {
+        chem: &'a str,
+        threshold: f32,
+        gain: f32,
+        target: &'a str,
+    },
+    /// Type 5: a chemical's level at birth.
+    InitialConcentration { chem: &'a str, value: f32 },
+    /// Type 6: a body trait, by its name in genome files.
+    Trait { name: &'static str, value: f32 },
+    /// A gene this build can't read, with the length of its payload.
+    Unknown {
+        type_id: u16,
+        version: u8,
+        bytes: usize,
+    },
+}
+
 /// What an emitter responds to (design §4.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) enum Mode {
+pub enum EmitterMode {
     /// The locus's value.
     Level,
     /// How much it went up since the previous tick.
@@ -142,6 +182,79 @@ impl Genome {
 }
 
 impl Gene {
+    /// The gene with what it refers to named from `data`.
+    pub(crate) fn view<'a>(&self, data: &'a DataPack) -> GeneView<'a> {
+        let chem = |id: u16| data.chemical(id).expect("a checked gene").name.as_str();
+        let locus = |id: u16| data.locus(id).expect("a checked gene").name.as_str();
+        let terms = |terms: &[Term]| {
+            terms
+                .iter()
+                .map(|t| (chem(t.chem), t.coefficient))
+                .collect()
+        };
+        match *self {
+            Gene::HalfLife { chem: id, ticks } => GeneView::HalfLife {
+                chem: chem(id),
+                ticks,
+            },
+            Gene::Reaction {
+                ref reactants,
+                ref products,
+                rate,
+            } => GeneView::Reaction {
+                reactants: terms(reactants),
+                products: terms(products),
+                rate,
+            },
+            Gene::Emitter {
+                locus: read,
+                mode,
+                invert,
+                threshold,
+                gain,
+                chem: id,
+            } => GeneView::Emitter {
+                locus: match read {
+                    LocusRef::Chem(id) => chem(id),
+                    LocusRef::Locus(id) => locus(id),
+                },
+                mode,
+                invert,
+                threshold,
+                gain,
+                chem: chem(id),
+            },
+            Gene::Receptor {
+                chem: id,
+                threshold,
+                gain,
+                target,
+            } => GeneView::Receptor {
+                chem: chem(id),
+                threshold,
+                gain,
+                target: locus(target),
+            },
+            Gene::InitialConcentration { chem: id, value } => GeneView::InitialConcentration {
+                chem: chem(id),
+                value,
+            },
+            Gene::Trait { which, value } => GeneView::Trait {
+                name: which.name(),
+                value,
+            },
+            Gene::Unknown {
+                type_id,
+                version,
+                ref payload,
+            } => GeneView::Unknown {
+                type_id,
+                version,
+                bytes: payload.len(),
+            },
+        }
+    }
+
     /// Checks the gene's references and values, or says what's wrong.
     fn check(&self, data: &DataPack) -> Result<(), String> {
         let chemical = |id: u16| {
@@ -212,7 +325,7 @@ impl Gene {
                 gain,
                 chem,
             } => {
-                if invert && mode != Mode::Level {
+                if invert && mode != EmitterMode::Level {
                     return Err(
                         "has `invert: true`, but only a Level emitter can be inverted".into(),
                     );
@@ -352,7 +465,7 @@ enum GeneEntry {
     },
     Emitter {
         locus: LocusEntry,
-        mode: Mode,
+        mode: EmitterMode,
         #[serde(default)]
         invert: bool,
         #[serde(default)]
@@ -561,9 +674,9 @@ fn decode(type_id: u16, version: u8, payload: Vec<u8>) -> Result<Gene, String> {
                 }
             };
             let mode = match mode {
-                0 => Mode::Level,
-                1 => Mode::Rise,
-                2 => Mode::Fall,
+                0 => EmitterMode::Level,
+                1 => EmitterMode::Rise,
+                2 => EmitterMode::Fall,
                 _ => {
                     return Err(format!(
                         "has a payload with the mode {mode}, which isn't 0, 1 or 2"

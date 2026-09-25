@@ -1,6 +1,6 @@
 use ratatui::layout::{Position, Rect};
 use terra_sim::{DataPack, DeathCause, EntityId, Event, EventKind, Map, Pos, Scenario, World};
-use terra_tui::app::{App, Flow, Screen, Selection, Tab};
+use terra_tui::app::{App, Areas, Flow, Screen, Selection, Tab};
 use terra_tui::clock::Speed;
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
@@ -34,7 +34,15 @@ fn tile_area(width: u16, height: u16) -> Rect {
 }
 
 fn app(world: &World, tile_area: Rect) -> App {
-    App::new(world.map(), Theme::cp437(), 1, tile_area)
+    App::new(world.map(), Theme::cp437(), 1, no_inspector(tile_area))
+}
+
+/// Panels with the map view's tiles on `tiles`, and no room for the inspector.
+fn no_inspector(tiles: Rect) -> Areas {
+    Areas {
+        tiles,
+        inspector: None,
+    }
 }
 
 fn at(x: u16, y: u16) -> Pos {
@@ -162,7 +170,7 @@ fn a_bigger_view_after_a_resize_still_stops_at_the_wall() {
     let mut app = app(&world, tile_area(20, 10));
     scroll(&mut app, &world, 1000, 1000);
     assert_eq!(app.viewport(), at(140, 86));
-    app.fit_viewport(tile_area(40, 20));
+    app.fit(no_inspector(tile_area(40, 20)));
     assert_eq!(app.viewport(), at(120, 76));
 }
 

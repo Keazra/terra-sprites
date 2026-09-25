@@ -10,8 +10,9 @@ use crate::config::WorldConfig;
 use crate::data::DataPack;
 use crate::ecology::{self, holds_without_drawing, new_object, square};
 use crate::events::{Event, EventKind};
+use crate::expression::{Expression, expressions};
 use crate::generate::{generate, place_objects, place_sprites};
-use crate::genome::Genome;
+use crate::genome::{GeneView, Genome};
 use crate::map::{Map, MapError, Pos};
 use crate::objects::{EntityId, Object, Objects};
 use crate::regions::Regions;
@@ -151,6 +152,18 @@ impl<'a> SpriteView<'a> {
     /// The traits its body has: its genes', clamped to physiology's ranges.
     pub fn traits(&self) -> Traits {
         self.sprite.program.traits
+    }
+
+    /// Every gene in the sprite's genome, in order, with how it's expressed.
+    pub fn genes(&self) -> Vec<(GeneView<'a>, Expression)> {
+        let data = &self.world.data;
+        let genome = &self.sprite.genome;
+        genome
+            .genes
+            .iter()
+            .map(|gene| gene.view(data))
+            .zip(expressions(genome, data))
+            .collect()
     }
 
     /// Every chemical in the sprite, in the data pack's order.

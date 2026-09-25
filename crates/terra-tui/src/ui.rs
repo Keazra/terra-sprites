@@ -9,13 +9,13 @@ use ratatui::{
 };
 use terra_sim::{DeathCause, EntityId, Event, EventKind, Map, ObjectView, Pos, Terrain, World};
 
-use crate::app::{App, Screen, Selection};
+use crate::app::{App, Areas, Screen, Selection};
 use crate::clock::Speed;
 use crate::inspector;
 use crate::theme::SemanticTile;
 
 /// The inspector's width, in columns, border included (design §6.1).
-const INSPECTOR_WIDTH: u16 = 46;
+pub(crate) const INSPECTOR_WIDTH: u16 = 46;
 /// The narrowest terminal that has room for the inspector beside the map view.
 const MIN_WIDTH_FOR_INSPECTOR: u16 = 100;
 /// The event log's height, in rows, border included: three events (design §6.1).
@@ -49,11 +49,14 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
     frame.render_widget(status_line(app, world, status.width), status);
 }
 
-/// Where the map view draws its tiles on a screen of `screen` cells: inside
-/// its border, between the top bar and the status line, and no bigger than
-/// the map itself.
-pub fn tile_area(screen: Size, map: &Map) -> Rect {
-    map_view_area(screen.into(), map).inner(Margin::new(1, 1))
+/// Where the app's panels are drawn on a screen of `screen` cells. The map
+/// view draws its tiles inside its border, between the top bar and the
+/// status line, no bigger than the map itself.
+pub fn areas(screen: Size, map: &Map) -> Areas {
+    Areas {
+        tiles: map_view_area(screen.into(), map).inner(Margin::new(1, 1)),
+        inspector: inspector_area(screen.into()),
+    }
 }
 
 /// The map view, border included: below the top bar, at the left, shrunk to
@@ -311,8 +314,12 @@ fn render_inspector(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     };
     draw_border(buf, area, &inspector::title(app), no_walls);
     let inner = area.inner(Margin::new(1, 1));
-    for (row, line) in (inner.y..inner.bottom()).zip(inspector::lines(app, world)) {
-        buf.set_line(inner.x, row, &line, inner.width);
+    let lines = inspector::lines(app, world);
+    // The tab may have got shorter since it was scrolled.
+    let furthest = lines.len().saturating_sub(usize::from(inner.height));
+    let shown = lines.iter().skip(app.tab_scroll().min(furthest));
+    for (row, line) in (inner.y..inner.bottom()).zip(shown) {
+        buf.set_line(inner.x, row, line, inner.width);
     }
 }
 

@@ -6,7 +6,7 @@ use serde::Serialize;
 use crate::data::DataPack;
 use crate::events::DeathCause;
 use crate::expression::{Expression, expressions};
-use crate::genome::{Gene, Genome, LocusRef, Mode, Term};
+use crate::genome::{EmitterMode, Gene, Genome, LocusRef, Term};
 use crate::physiology::halving_factor;
 use crate::registry::{LocusKind, Trait};
 
@@ -227,9 +227,9 @@ impl Program {
                         chem: chem(id),
                     };
                     match mode {
-                        Mode::Level => level_emitters.push(emitter),
-                        Mode::Rise => change_emitters.push((Change::Rise, emitter)),
-                        Mode::Fall => change_emitters.push((Change::Fall, emitter)),
+                        EmitterMode::Level => level_emitters.push(emitter),
+                        EmitterMode::Rise => change_emitters.push((Change::Rise, emitter)),
+                        EmitterMode::Fall => change_emitters.push((Change::Fall, emitter)),
                     }
                 }
                 Gene::Receptor {
@@ -991,7 +991,11 @@ mod tests {
                 chem.clone().prop_map(LocusRef::Chem),
                 locus.clone().prop_map(LocusRef::Locus),
             ];
-            let mode = prop_oneof![Just(Mode::Level), Just(Mode::Rise), Just(Mode::Fall)];
+            let mode = prop_oneof![
+                Just(EmitterMode::Level),
+                Just(EmitterMode::Rise),
+                Just(EmitterMode::Fall)
+            ];
             let term =
                 (chem.clone(), 1u8..=3).prop_map(|(chem, coefficient)| Term { chem, coefficient });
             prop_oneof![
@@ -1019,7 +1023,7 @@ mod tests {
                             locus,
                             mode,
                             // Only a Level emitter can be inverted.
-                            invert: invert && mode == Mode::Level,
+                            invert: invert && mode == EmitterMode::Level,
                             threshold,
                             gain,
                             chem,

@@ -96,14 +96,14 @@ fn run(
     seed: u64,
     force_panic: bool,
 ) -> io::Result<()> {
-    let tiles = ui::tile_area(terminal.size()?, world.map());
-    let mut app = App::new(world.map(), theme, seed, tiles);
+    let areas = ui::areas(terminal.size()?, world.map());
+    let mut app = App::new(world.map(), theme, seed, areas);
     let mut keys = Keys::new();
     let mut last_frame = Instant::now();
 
     loop {
         // The terminal may have been resized since the last frame.
-        app.fit_viewport(ui::tile_area(terminal.size()?, world.map()));
+        app.fit(ui::areas(terminal.size()?, world.map()));
         terminal.draw(|frame| ui::render(frame, &app, &world))?;
         if force_panic {
             panic!("forced panic (--force-panic): the terminal should now be restored");

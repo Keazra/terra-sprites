@@ -283,7 +283,6 @@ fn every_mouse_event_points_and_a_left_press_also_clicks() {
         MouseEventKind::Up(MouseButton::Left),
         MouseEventKind::Down(MouseButton::Right),
         MouseEventKind::Drag(MouseButton::Middle),
-        MouseEventKind::ScrollDown,
     ] {
         assert_eq!(action(kind), point, "{kind:?}");
     }
@@ -338,5 +337,39 @@ fn the_square_brackets_switch_inspector_tabs() {
     assert_eq!(
         Keys::new().action_for(press(KeyCode::Char('['))),
         Some(Action::PreviousTab)
+    );
+}
+
+#[test]
+fn page_up_and_page_down_scroll_the_inspector_tab_a_page() {
+    assert_eq!(
+        Keys::new().action_for(press(KeyCode::PageDown)),
+        Some(Action::ScrollTab { pages: 1 })
+    );
+    assert_eq!(
+        Keys::new().action_for(press(KeyCode::PageUp)),
+        Some(Action::ScrollTab { pages: -1 })
+    );
+}
+
+#[test]
+fn the_mouse_wheel_turns_notches_where_the_pointer_is() {
+    use ratatui::crossterm::event::{MouseEvent, MouseEventKind};
+    let wheel = |kind| {
+        terra_tui::input::mouse_action(MouseEvent {
+            kind,
+            column: 70,
+            row: 5,
+            modifiers: KeyModifiers::NONE,
+        })
+    };
+    let at = Position::new(70, 5);
+    assert_eq!(
+        wheel(MouseEventKind::ScrollDown),
+        Some(Action::Wheel { at, notches: 1 })
+    );
+    assert_eq!(
+        wheel(MouseEventKind::ScrollUp),
+        Some(Action::Wheel { at, notches: -1 })
     );
 }
