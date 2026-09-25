@@ -80,7 +80,8 @@ impl Objects {
     /// Whether an object of type `kind` may go on the tile at `pos` (design §3.3–3.4):
     /// a walkable tile on the map holding no object, whose terrain allows
     /// fixtures if the object is solid. Whether it would cut a path is for the
-    /// rules to ask, with `keeps_paths_open`.
+    /// rules to ask, with `keeps_paths_open`; whether a sprite is in the way is
+    /// for `WorldState::can_place`.
     pub(crate) fn can_place(&self, map: &Map, data: &DataPack, kind: usize, pos: Pos) -> bool {
         map.contains(pos)
             && map.is_walkable(pos)
