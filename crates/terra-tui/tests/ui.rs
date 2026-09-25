@@ -26,8 +26,8 @@ fn drawn_world(rows: &[&str]) -> World {
 
 /// A UI for `world` sized for a `width`×`height` screen, showing seed 7.
 fn app_for(world: &World, theme: Theme, width: u16, height: u16) -> App {
-    let tiles = ui::tile_area(Size::new(width, height), world.map());
-    App::new(world.map(), theme, 7, tiles)
+    let areas = ui::areas(Size::new(width, height), world.map());
+    App::new(world.map(), theme, 7, areas)
 }
 
 fn render(app: &App, world: &World, width: u16, height: u16) -> Buffer {
@@ -109,14 +109,14 @@ const SMALL_MAP: [&str; 4] = [
 fn the_map_view_draws_its_tiles_inside_its_border() {
     let small = drawn_world(&SMALL_MAP);
     assert_eq!(
-        ui::tile_area(Size::new(40, 8), small.map()),
+        ui::areas(Size::new(40, 8), small.map()).tiles,
         Rect::new(1, 2, 10, 4),
         "a small map gets a shrunk map view"
     );
     let row = ".".repeat(30);
     let big = drawn_world(&vec![row.as_str(); 20]);
     assert_eq!(
-        ui::tile_area(Size::new(20, 8), big.map()),
+        ui::areas(Size::new(20, 8), big.map()).tiles,
         Rect::new(1, 2, 18, 4),
         "a big map fills the space between the top bar and the status line"
     );
@@ -555,12 +555,12 @@ fn a_narrow_terminal_leaves_the_inspector_out_and_gives_the_map_view_the_width()
     let row = ".".repeat(200);
     let world = drawn_world(&vec![row.as_str(); 20]);
     assert_eq!(
-        ui::tile_area(Size::new(99, 30), world.map()).width,
+        ui::areas(Size::new(99, 30), world.map()).tiles.width,
         97,
         "below 100 columns, the map view takes it all"
     );
     assert_eq!(
-        ui::tile_area(Size::new(100, 30), world.map()).width,
+        ui::areas(Size::new(100, 30), world.map()).tiles.width,
         52,
         "from 100 columns, the inspector takes 46"
     );
@@ -791,4 +791,232 @@ fn the_body_tab_shows_age_traits_drives_and_physical_levels() {
         ]
     );
     assert!(text[13..].iter().all(String::is_empty), "{text:?}");
+}
+
+#[test]
+fn the_chem_tab_lists_every_chemical_with_its_level_and_change_per_tick() {
+    let (world, mut app) = one_sprite(WORKED_GENOME, 1);
+    app.apply(Action::NextTab, &world);
+    let (top, text) = inspector(&app, &world);
+    assert!(top.contains("[Chem]"), "{top:?}");
+    assert_eq!(
+        text,
+        [
+            // One tick at rest: basal metabolism with sense radius 9.5 costs
+            // .00016 of energy, and hydration loses .00033 (Appendix B).
+            "energy       1.00  -.0002",
+            "hydration    1.00  -.0003",
+            "stamina      1.00",
+            "food          .00",
+            "water         .00",
+            "injury        .00",
+            "",
+            "hunger        .40  -.4000",
+            "thirst        .18",
+            "pain          .00",
+            "tiredness     .39",
+            "boredom       .30  +.1000",
+            "loneliness    .00",
+            "crowdedness   .00",
+            "reward        .00",
+            "punishment    .00",
+            "HORMONES",
+            "h0   .00   h1   .00   h2   .00   h3   .00",
+            "h4   .00   h5   .00   h6   .00   h7   .00",
+            "h8   .00   h9   .00   h10  .00   h11  .00",
+            "h12  .00   h13  .00   h14  .00   h15  .00",
+        ],
+        "all of it fits at 100×30"
+    );
+}
+
+#[test]
+fn the_genome_tab_groups_genes_as_plain_lines_and_marks_those_with_no_effect() {
+    let genome = r#"(format: 1, genes: [
+        Trait(trait: "speed", value: 7.25),
+        Emitter(locus: Chem("energy"), mode: Level, invert: true, threshold: 0.5, gain: 0.00428, chem: "hunger"),
+        HalfLife(chem: "hunger", ticks: 2041),
+        Trait(trait: "sense_radius", value: 9.5),
+        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "hunger"),
+        Emitter(locus: Chem("hunger"), mode: Fall, threshold: 0.0198, gain: 1.02, chem: "reward"),
+        Emitter(locus: Chem("injury"), mode: Rise, gain: 10.0, chem: "pain"),
+        Emitter(locus: Locus("nearby_sprites"), mode: Level, invert: true, threshold: 0.5, gain: 0.0005, chem: "loneliness"),
+        Emitter(locus: Locus("ate"), mode: Level, gain: 0.3, chem: "food"),
+        HalfLife(chem: "hunger", ticks: 20),
+        Trait(trait: "lifespan", value: 61204.0),
+        Reaction(reactants: [("h0", 2)], products: [("h1", 1), ("h2", 1)], rate: 0.1),
+        Receptor(chem: "reward", threshold: 0.2, gain: 0.5, target: "learning_rate_mod"),
+        Trait(trait: "speed", value: 9.0),
+        InitialConcentration(chem: "boredom", value: 0.2),
+        Gene(type: 900, version: 1, payload: "c0ffee"),
+    ])"#;
+    let (world, mut app) = one_sprite(genome, 0);
+    app.apply(Action::NextTab, &world);
+    app.apply(Action::NextTab, &world);
+    let screen = render(&app, &world, 100, 40);
+    let rows = right_part(&screen, 46);
+    assert!(rows[1].contains("[Genome]"), "{:?}", rows[1]);
+    let text: Vec<&str> = rows[2..30].iter().map(|row| inside(row)).collect();
+    assert_eq!(
+        text,
+        [
+            "TRAITS",
+            "speed 7.25 · sense 9.5 · lifespan 61,204",
+            "speed 9",
+            "unexpressed: an earlier gene sets this",
+            "HALF-LIVES",
+            "hunger halves every 2,041 ticks",
+            "hunger halves every 20 ticks",
+            "unexpressed: an earlier gene sets this",
+            "REACTIONS",
+            "2 h0 → h1 + h2, rate .1",
+            "EMITTERS",
+            "low energy → hunger +.00428 past .5",
+            "ate → hunger -.5",
+            "hunger falls → reward +1.02 past .0198",
+            "injury rises → pain +10",
+            // Too long for one line, it wraps, keeping "past" with its number.
+            "low nearby sprites → loneliness +.0005",
+            "past .5",
+            "ate → food +.3",
+            "flagged: writes food, but only physiology",
+            "and verbs change a physical chemical",
+            "RECEPTORS",
+            "reward past .2 → learning rate mod +.5",
+            "STARTING LEVELS",
+            "boredom starts at .2",
+            "UNKNOWN GENES",
+            "type 900, version 1, 3 bytes",
+            "unknown: this version can't read it",
+            "",
+        ]
+    );
+    // A gene with no effect is dimmed, and so is its reason, indented under it.
+    let row_of = |text: &str| {
+        2 + rows[2..]
+            .iter()
+            .position(|r| inside(r) == text)
+            .expect(text)
+    };
+    let (x, flagged) = (100 - 46 + 2, row_of("ate → food +.3") as u16);
+    assert_eq!(screen[(x, flagged)].fg, Color::DarkGray);
+    assert_eq!(
+        screen[(x, flagged + 1)].symbol(),
+        " ",
+        "the reason is indented"
+    );
+    assert_eq!(screen[(x + 2, flagged + 1)].symbol(), "f");
+    assert_eq!(screen[(x + 2, flagged + 1)].fg, Color::DarkGray);
+    let expressed = row_of("ate → hunger -.5") as u16;
+    assert_eq!(screen[(x, expressed)].fg, Color::Reset);
+}
+
+/// A genome whose Genome tab is 61 lines: the heading, then 60 emitters
+/// whose gains, .001 to .060, tell them apart.
+fn long_genome() -> String {
+    let emitters: Vec<String> = (1..=60)
+        .map(|n| {
+            let gain = n as f32 / 1000.0;
+            format!(
+                r#"Emitter(locus: Locus("always"), mode: Level, gain: {gain}, chem: "boredom")"#
+            )
+        })
+        .collect();
+    format!("(format: 1, genes: [{}])", emitters.join(", "))
+}
+
+/// The first and last lines the inspector shows.
+fn first_and_last(app: &App, world: &World) -> (String, String) {
+    let (_, text) = inspector(app, world);
+    (text[0].clone(), text[text.len() - 1].clone())
+}
+
+#[test]
+fn page_down_and_up_scroll_a_long_tab_a_page_and_stop_at_either_end() {
+    let (world, mut app) = one_sprite(&long_genome(), 0);
+    app.apply(Action::NextTab, &world);
+    app.apply(Action::NextTab, &world);
+    // 21 rows fit at 100×30, so the tab scrolls at most 40 lines.
+    let mut page = |pages: i32| {
+        app.apply(Action::ScrollTab { pages }, &world);
+        first_and_last(&app, &world)
+    };
+    let shown = |first: &str, last: &str| (first.to_string(), last.to_string());
+    let gain = |gain: &str| format!("always → boredom +{gain}");
+    assert_eq!(page(1), shown(&gain(".021"), &gain(".041")), "a page down");
+    assert_eq!(
+        page(1),
+        shown(&gain(".04"), &gain(".06")),
+        "no further than the end"
+    );
+    assert_eq!(page(-1), shown(&gain(".019"), &gain(".039")), "a page up");
+    assert_eq!(
+        page(-1),
+        shown("EMITTERS", &gain(".02")),
+        "no further than the top"
+    );
+}
+
+#[test]
+fn the_wheel_over_the_inspector_scrolls_3_lines_a_notch_and_elsewhere_does_not() {
+    let (world, mut app) = one_sprite(&long_genome(), 0);
+    app.apply(Action::NextTab, &world);
+    app.apply(Action::NextTab, &world);
+    let over_inspector = Position::new(80, 10);
+    app.apply(
+        Action::Wheel {
+            at: over_inspector,
+            notches: 2,
+        },
+        &world,
+    );
+    assert_eq!(first_and_last(&app, &world).0, "always → boredom +.006");
+    app.apply(
+        Action::Wheel {
+            at: over_inspector,
+            notches: -1,
+        },
+        &world,
+    );
+    assert_eq!(first_and_last(&app, &world).0, "always → boredom +.003");
+    app.apply(
+        Action::Wheel {
+            at: Position::new(3, 3),
+            notches: 2,
+        },
+        &world,
+    );
+    assert_eq!(
+        first_and_last(&app, &world).0,
+        "always → boredom +.003",
+        "over the map"
+    );
+    assert_eq!(
+        app.cursor(),
+        terra_sim::Pos { x: 2, y: 1 },
+        "a wheel event points, like every mouse event"
+    );
+}
+
+#[test]
+fn a_tab_goes_back_to_the_top_when_the_tab_or_the_selection_changes() {
+    let (world, mut app) = one_sprite(&long_genome(), 0);
+    app.apply(Action::NextTab, &world);
+    app.apply(Action::NextTab, &world);
+    app.apply(Action::ScrollTab { pages: 1 }, &world);
+    app.apply(Action::NextTab, &world);
+    app.apply(Action::PreviousTab, &world);
+    assert_eq!(
+        first_and_last(&app, &world).0,
+        "EMITTERS",
+        "after switching tabs"
+    );
+    app.apply(Action::ScrollTab { pages: 1 }, &world);
+    // Selecting a sprite, even the same one again, starts it from the top.
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(
+        first_and_last(&app, &world).0,
+        "EMITTERS",
+        "after selecting"
+    );
 }

@@ -37,6 +37,16 @@ pub enum Action {
     NextTab,
     /// Open the previous inspector tab (`[`).
     PreviousTab,
+    /// Scroll the open inspector tab by this many pages (`PgDn` / `PgUp`).
+    ScrollTab {
+        pages: i32,
+    },
+    /// The mouse wheel turned this many notches, down being positive, with
+    /// the pointer over this screen cell.
+    Wheel {
+        at: Position,
+        notches: i32,
+    },
     /// Back out of whatever is open, or ask to quit (`Esc`).
     Back,
     /// Say yes to a prompt (`y`).
@@ -118,18 +128,27 @@ impl Keys {
             KeyCode::BackTab => Some(Action::SelectPrevious),
             KeyCode::Char(']') => Some(Action::NextTab),
             KeyCode::Char('[') => Some(Action::PreviousTab),
+            KeyCode::PageDown => Some(Action::ScrollTab { pages: 1 }),
+            KeyCode::PageUp => Some(Action::ScrollTab { pages: -1 }),
             _ => Some(Action::Dismiss),
         }
     }
 }
 
 /// The action for a mouse event. Every event says where the pointer is, so it
-/// points there; a left-button press clicks. (The wheel will cycle the cursor
-/// modes once there is more than one, design §6.5.)
+/// points there; a left-button press clicks, and the wheel turns.
 pub fn mouse_action(event: MouseEvent) -> Option<Action> {
     let cell = Position::new(event.column, event.row);
     Some(match event.kind {
         MouseEventKind::Down(MouseButton::Left) => Action::Click(cell),
+        MouseEventKind::ScrollDown => Action::Wheel {
+            at: cell,
+            notches: 1,
+        },
+        MouseEventKind::ScrollUp => Action::Wheel {
+            at: cell,
+            notches: -1,
+        },
         _ => Action::Point(cell),
     })
 }

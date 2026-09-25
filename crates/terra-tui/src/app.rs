@@ -8,6 +8,7 @@ use terra_sim::{DeathCause, EntityId, Event, EventKind, Map, Pos, World};
 
 use crate::clock::Clock;
 use crate::input::Action;
+use crate::inspector;
 use crate::theme::Theme;
 
 /// Whether the game carries on after an action.
@@ -87,6 +88,18 @@ impl Tab {
     }
 }
 
+/// Where on screen the panels the app works with are drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Areas {
+    /// The screen cells where the map view draws its tiles.
+    pub tiles: Rect,
+    /// The inspector, border included, if the screen has room for it.
+    pub inspector: Option<Rect>,
+}
+
+/// How many lines a notch of the mouse wheel scrolls an inspector tab.
+const WHEEL_LINES: i32 = 3;
+
 /// How many events the event log keeps.
 const EVENT_LOG_LENGTH: usize = 100;
 
@@ -105,18 +118,23 @@ pub struct App {
     map_size: Size,
     /// The screen cells where the map view draws its tiles.
     tile_area: Rect,
+    /// The inspector, border included, if the screen has room for it.
+    inspector: Option<Rect>,
     /// The screen cell under the mouse pointer, while that cell shows a tile.
     pointer: Option<Position>,
     /// The latest events the event log shows, newest first.
     event_log: VecDeque<Event>,
     selection: Option<Selection>,
     tab: Tab,
+    /// How many lines the open tab is scrolled down.
+    tab_scroll: usize,
 }
 
 impl App {
     /// A new UI for `map`, with the cursor at the map's centre and the viewport
-    /// centred on it. `tile_area` is where on screen the map view draws its tiles.
-    pub fn new(map: &Map, theme: Theme, seed: u64, tile_area: Rect) -> App {
+    /// centred on it, and its panels drawn in `areas`.
+    pub fn new(map: &Map, theme: Theme, seed: u64, areas: Areas) -> App {
+        let tile_area = areas.tiles;
         let cursor = Pos {
             x: map.width() / 2,
             y: map.height() / 2,
@@ -137,10 +155,12 @@ impl App {
             },
             map_size: Size::new(map.width(), map.height()),
             tile_area,
+            inspector: areas.inspector,
             pointer: None,
             event_log: VecDeque::new(),
             selection: None,
             tab: Tab::World,
+            tab_scroll: 0,
         }
     }
 
@@ -198,6 +218,11 @@ impl App {
         self.tab
     }
 
+    /// How many lines the open tab is scrolled down.
+    pub fn tab_scroll(&self) -> usize {
+        self.tab_scroll
+    }
+
     /// The tile drawn at screen cell `cell`, if the map view draws one there.
     pub fn tile_at(&self, cell: Position) -> Option<Pos> {
         let area = self.tile_area;
@@ -215,10 +240,10 @@ impl App {
         in_view.then(|| Position::new(area.x + (tile.x - origin.x), area.y + (tile.y - origin.y)))
     }
 
-    /// Refits the viewport to where the map view now draws its tiles, as after
-    /// a resize.
-    pub fn fit_viewport(&mut self, tile_area: Rect) {
-        self.tile_area = tile_area;
+    /// Refits the app to where its panels are now drawn, as after a resize.
+    pub fn fit(&mut self, areas: Areas) {
+        self.tile_area = areas.tiles;
+        self.inspector = areas.inspector;
         self.settle();
     }
 
@@ -228,7 +253,7 @@ impl App {
             match action {
                 Action::Confirm | Action::Back | Action::Quit => return Flow::Quit,
                 // The mouse carries on as usual and doesn't answer the prompt.
-                Action::Point(_) | Action::Click(_) => {}
+                Action::Point(_) | Action::Click(_) | Action::Wheel { .. } => {}
                 // Any other key cancels the prompt, and does nothing else.
                 _ => {
                     self.screen = Screen::Normal;
@@ -258,8 +283,18 @@ impl App {
             }
             Action::SelectNext => self.select_along(world, Direction::Next),
             Action::SelectPrevious => self.select_along(world, Direction::Previous),
-            Action::NextTab => self.tab = self.tab.along(1),
-            Action::PreviousTab => self.tab = self.tab.along(-1),
+            Action::NextTab => self.open(self.tab.along(1)),
+            Action::PreviousTab => self.open(self.tab.along(-1)),
+            Action::ScrollTab { pages } => {
+                let page = self.inspector_rows() as i32;
+                self.scroll_tab(pages * page, world);
+            }
+            Action::Wheel { at, notches } => {
+                self.point(at);
+                if self.inspector.is_some_and(|area| area.contains(at)) {
+                    self.scroll_tab(notches * WHEEL_LINES, world);
+                }
+            }
             Action::Back => self.screen = Screen::QuitPrompt,
             Action::Confirm | Action::Dismiss => {}
             Action::Quit => return Flow::Quit,
@@ -267,12 +302,35 @@ impl App {
         Flow::Continue
     }
 
-    /// Selects the sprite `id`. From the World tab, that opens Body.
+    /// Selects the sprite `id`, showing its tab from the top. From the World
+    /// tab, that opens Body.
     fn select(&mut self, id: EntityId) {
         self.selection = Some(Selection::Living(id));
+        self.tab_scroll = 0;
         if self.tab == Tab::World {
             self.tab = Tab::Body;
         }
+    }
+
+    /// Opens `tab`, from the top.
+    fn open(&mut self, tab: Tab) {
+        self.tab = tab;
+        self.tab_scroll = 0;
+    }
+
+    /// The rows inside the inspector's border: a page.
+    fn inspector_rows(&self) -> usize {
+        self.inspector
+            .map_or(0, |area| usize::from(area.height.saturating_sub(2)))
+    }
+
+    /// Scrolls the open tab by `lines`, down being positive, stopping at the
+    /// top and where its last line comes into view.
+    fn scroll_tab(&mut self, lines: i32, world: &World) {
+        let length = inspector::lines(self, world).len();
+        let furthest = length.saturating_sub(self.inspector_rows());
+        let scrolled = self.tab_scroll as i64 + i64::from(lines);
+        self.tab_scroll = scrolled.clamp(0, furthest as i64) as usize;
     }
 
     /// Selects the sprite with the next or previous ID, wrapping around, and

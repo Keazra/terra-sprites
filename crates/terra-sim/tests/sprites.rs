@@ -4,8 +4,8 @@
 use std::collections::BTreeSet;
 
 use terra_sim::{
-    ChemicalKind, DataPack, DeathCause, EntityId, EventKind, Genome, Map, Pos, Scenario, Traits,
-    World, WorldConfig,
+    ChemicalKind, DataPack, DeathCause, EmitterMode, EntityId, EventKind, Expression, GeneView,
+    Genome, Map, Pos, Scenario, Traits, World, WorldConfig,
 };
 
 fn builtin() -> DataPack {
@@ -368,5 +368,117 @@ fn each_chemical_s_change_is_its_level_now_less_its_level_one_tick_ago() {
         (hydration.change + 0.00033).abs() < 1e-6,
         "{}",
         hydration.change
+    );
+}
+
+#[test]
+fn a_sprite_shows_each_gene_by_name_with_how_it_is_expressed() {
+    let genome = r#"(format: 1, genes: [
+        HalfLife(chem: "pain", ticks: 20),
+        HalfLife(chem: "pain", ticks: 30),
+        Emitter(locus: Locus("nearby_sprites"), mode: Level, invert: true, threshold: 0.5, gain: 0.0005, chem: "loneliness"),
+        Emitter(locus: Chem("hunger"), mode: Fall, threshold: 0.02, gain: 1.0, chem: "reward"),
+        Emitter(locus: Locus("ate"), mode: Level, gain: 0.3, chem: "food"),
+        Reaction(reactants: [("h0", 2)], products: [("h1", 1), ("h2", 1)], rate: 0.1),
+        Receptor(chem: "reward", threshold: 0.2, gain: 0.5, target: "learning_rate_mod"),
+        InitialConcentration(chem: "boredom", value: 0.2),
+        Trait(trait: "sense_radius", value: 9.5),
+        Gene(type: 900, version: 1, payload: "c0ffee"),
+    ])"#;
+    let world = lone_sprite(builtin(), Some(genome));
+    let sprite = world.sprites().next().expect("the sprite");
+    use Expression::{Expressed, Flagged, Unexpressed, Unknown};
+    assert_eq!(
+        sprite.genes(),
+        [
+            (
+                GeneView::HalfLife {
+                    chem: "pain",
+                    ticks: 20
+                },
+                Expressed
+            ),
+            (
+                GeneView::HalfLife {
+                    chem: "pain",
+                    ticks: 30
+                },
+                Unexpressed
+            ),
+            (
+                GeneView::Emitter {
+                    locus: "nearby_sprites",
+                    mode: EmitterMode::Level,
+                    invert: true,
+                    threshold: 0.5,
+                    gain: 0.0005,
+                    chem: "loneliness"
+                },
+                Expressed
+            ),
+            (
+                GeneView::Emitter {
+                    locus: "hunger",
+                    mode: EmitterMode::Fall,
+                    invert: false,
+                    threshold: 0.02,
+                    gain: 1.0,
+                    chem: "reward"
+                },
+                Expressed
+            ),
+            (
+                GeneView::Emitter {
+                    locus: "ate",
+                    mode: EmitterMode::Level,
+                    invert: false,
+                    threshold: 0.0,
+                    gain: 0.3,
+                    chem: "food"
+                },
+                Flagged(
+                    "writes food, but only physiology and verbs change a physical chemical".into()
+                )
+            ),
+            (
+                GeneView::Reaction {
+                    reactants: vec![("h0", 2)],
+                    products: vec![("h1", 1), ("h2", 1)],
+                    rate: 0.1
+                },
+                Expressed
+            ),
+            (
+                GeneView::Receptor {
+                    chem: "reward",
+                    threshold: 0.2,
+                    gain: 0.5,
+                    target: "learning_rate_mod"
+                },
+                Expressed
+            ),
+            (
+                GeneView::InitialConcentration {
+                    chem: "boredom",
+                    value: 0.2
+                },
+                Expressed
+            ),
+            (
+                GeneView::Trait {
+                    name: "sense_radius",
+                    value: 9.5
+                },
+                Expressed
+            ),
+            (
+                GeneView::Unknown {
+                    type_id: 900,
+                    version: 1,
+                    bytes: 3
+                },
+                Unknown
+            ),
+        ]
     );
 }
