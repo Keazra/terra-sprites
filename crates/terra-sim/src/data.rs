@@ -1,8 +1,10 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use ron::extensions::Extensions;
 use serde::Deserialize;
 
+use crate::object_types::{OBJECTS, ObjectType, TypeEntry, object_types};
+use crate::registry::{Chemical, Locus};
 use crate::terrain::{Terrain, TerrainProps};
 
 /// A validated data pack: everything a world needs from `data/`.
@@ -11,6 +13,12 @@ pub struct DataPack {
     manifest: Manifest,
     /// Indexed by `Terrain as usize`.
     terrain: Vec<TerrainProps>,
+    #[expect(dead_code, reason = "biochemistry reads the registries from slice 4")]
+    chemicals: Vec<Chemical>,
+    #[expect(dead_code, reason = "biochemistry reads the registries from slice 4")]
+    loci: Vec<Locus>,
+    /// In ascending ID order.
+    object_types: Vec<ObjectType>,
 }
 
 /// Why a data pack could not be loaded.
@@ -28,11 +36,18 @@ pub enum DataError {
 const MANIFEST: &str = "pack.ron";
 /// The terrain properties file, relative to the pack root.
 const TERRAIN: &str = "terrain.ron";
+/// The chemicals registry, relative to the pack root.
+const CHEMICALS: &str = "chemicals.ron";
+/// The loci registry, relative to the pack root.
+const LOCI: &str = "loci.ron";
 
 /// The default pack's files, embedded at compile time from the repository's `data/`.
 const BUILTIN: &[(&str, &str)] = &[
     (MANIFEST, include_str!("../../../data/pack.ron")),
     (TERRAIN, include_str!("../../../data/terrain.ron")),
+    (CHEMICALS, include_str!("../../../data/chemicals.ron")),
+    (LOCI, include_str!("../../../data/loci.ron")),
+    (OBJECTS, include_str!("../../../data/objects.ron")),
 ];
 
 /// `pack.ron`: identifies the pack.
@@ -68,6 +83,8 @@ struct TerrainEntry {
     fertility: Option<f32>,
     #[serde(default)]
     drinkable: Option<bool>,
+    #[serde(default)]
+    allows_fixtures: Option<bool>,
 }
 
 /// Checks `terrain.ron` and returns each terrain's properties, indexed by `Terrain as usize`.
@@ -99,13 +116,18 @@ impl TerrainEntry {
             if matches!(terrain, Terrain::Dirt | Terrain::ShallowWater) {
                 return Err("must be walkable, because carving creates it");
             }
-            if self.step_cost.is_some() || self.fertility.is_some() || self.drinkable.is_some() {
+            if self.step_cost.is_some()
+                || self.fertility.is_some()
+                || self.drinkable.is_some()
+                || self.allows_fixtures.is_some()
+            {
                 return Err("is unwalkable, so it takes nothing but `walkable: false`");
             }
             return Ok(TerrainProps {
                 step_cost: None,
                 fertility: 0.0,
                 drinkable: false,
+                allows_fixtures: false,
             });
         }
         let step_cost = match self.step_cost {
@@ -119,10 +141,14 @@ impl TerrainEntry {
         let Some(drinkable) = self.drinkable else {
             return Err("is walkable, so it must say whether it is `drinkable`");
         };
+        let Some(allows_fixtures) = self.allows_fixtures else {
+            return Err("is walkable, so it must say whether it `allows_fixtures`");
+        };
         Ok(TerrainProps {
             step_cost: Some(step_cost),
             fertility,
             drinkable,
+            allows_fixtures,
         })
     }
 }
@@ -143,7 +169,22 @@ impl DataPack {
         let manifest = parse::<Manifest>(sources, MANIFEST)?;
         manifest.validate()?;
         let terrain = terrain_table(parse(sources, TERRAIN)?)?;
-        Ok(DataPack { manifest, terrain })
+        let chemicals: Vec<Chemical> = parse(sources, CHEMICALS)?;
+        check_unique(CHEMICALS, chemicals.iter().map(|c| (c.id, c.name.as_str())))?;
+        let loci: Vec<Locus> = parse(sources, LOCI)?;
+        check_unique(LOCI, loci.iter().map(|l| (l.id, l.name.as_str())))?;
+        let object_types = object_types(
+            parse::<Vec<TypeEntry>>(sources, OBJECTS)?,
+            &chemicals,
+            &loci,
+        )?;
+        Ok(DataPack {
+            manifest,
+            terrain,
+            chemicals,
+            loci,
+            object_types,
+        })
     }
 
     /// The pack's name, from its manifest.
@@ -160,6 +201,94 @@ impl DataPack {
     pub fn terrain(&self, terrain: Terrain) -> &TerrainProps {
         &self.terrain[terrain as usize]
     }
+
+    /// The names of the object types that can have objects (not pseudo types), in ID order.
+    pub fn object_type_names(&self) -> impl Iterator<Item = &str> {
+        self.object_types
+            .iter()
+            .filter(|t| !t.pseudo)
+            .map(|t| t.name.as_str())
+    }
+
+    /// The names of an object type's stages, in order. Empty for a type with
+    /// no stages, or no such type.
+    pub fn stage_names(&self, object_type: &str) -> Vec<&str> {
+        self.named(object_type)
+            .map(|t| t.stages.iter().map(|s| s.name.as_str()).collect())
+            .unwrap_or_default()
+    }
+
+    /// The names of an object type's counters.
+    pub fn counter_names(&self, object_type: &str) -> Vec<&str> {
+        self.named(object_type)
+            .map(|t| t.counters.iter().map(|c| c.name.as_str()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Every visual state an object type can be in: those its visual rules name,
+    /// in order, then `"default"`.
+    pub fn visual_states(&self, object_type: &str) -> Vec<&str> {
+        let Some(named) = self.named(object_type) else {
+            return Vec::new();
+        };
+        let mut states: Vec<&str> = Vec::new();
+        for state in named
+            .visual
+            .iter()
+            .map(|v| v.state.as_str())
+            .chain(["default"])
+        {
+            if !states.contains(&state) {
+                states.push(state);
+            }
+        }
+        states
+    }
+
+    fn named(&self, object_type: &str) -> Option<&ObjectType> {
+        self.object_type_named(object_type)
+            .map(|index| &self.object_types[index])
+    }
+
+    /// Every object type, in ascending ID order. Rules refer to types by their index here.
+    pub(crate) fn object_types(&self) -> &[ObjectType] {
+        &self.object_types
+    }
+
+    /// The index of the object type called `name`.
+    pub(crate) fn object_type_named(&self, name: &str) -> Option<usize> {
+        self.object_types.iter().position(|t| t.name == name)
+    }
+
+    /// The index of the object type called `name`, if it can have objects: it
+    /// exists and isn't a pseudo type.
+    pub(crate) fn real_object_type(&self, name: &str) -> Option<usize> {
+        self.object_type_named(name)
+            .filter(|&index| !self.object_types[index].pseudo)
+    }
+}
+
+/// Checks that no two registry entries in `file` share an ID or a name.
+pub(crate) fn check_unique<'a>(
+    file: &str,
+    entries: impl Iterator<Item = (u16, &'a str)>,
+) -> Result<(), DataError> {
+    let mut ids = BTreeSet::new();
+    let mut names = BTreeSet::new();
+    for (id, name) in entries {
+        let duplicate = if !ids.insert(id) {
+            format!("the id {id}")
+        } else if !names.insert(name) {
+            format!("the name `{name}`")
+        } else {
+            continue;
+        };
+        return Err(DataError::Invalid {
+            file: file.into(),
+            message: format!("{duplicate} is used more than once"),
+        });
+    }
+    Ok(())
 }
 
 /// Finds `file` among `sources` and parses it as `T`.

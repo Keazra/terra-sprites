@@ -34,7 +34,7 @@ To run the checks CI runs: `cargo fmt --all --check`, `cargo clippy --workspace 
 
 ## Design
 
-- [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v5.md) (final, v5). Earlier iterations and the external evaluations that shaped them are alongside it in [`docs/design/`](docs/design/).
+- [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v6.md) (final, v6). Earlier iterations and the external evaluations that shaped them are alongside it in [`docs/design/`](docs/design/).
 
 ## Roadmap
 

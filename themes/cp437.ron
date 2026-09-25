@@ -12,6 +12,19 @@
         terrain(deep_water):    (glyph: '≈', fg: blue),
         terrain(rock):          (glyph: '#', fg: gray),
     },
+    // Objects, by type name from the data pack's `objects.ron`, then visual
+    // state. An object whose state isn't listed is drawn with its "default"
+    // look, and one not listed at all as `?`.
+    objects: {
+        "berry_bush": {
+            "seedling": (glyph: '\'', fg: green),
+            "default":  (glyph: '♣', fg: green),                // bare
+            "fruiting": (glyph: '♣', fg: red, bold: true),
+        },
+        "berry":     { "default": (glyph: '•', fg: red) },
+        "thornbush": { "default": (glyph: '♠', fg: magenta) },
+        "ball":      { "default": (glyph: '○', fg: white) },
+    },
     // The 3×3 cursor (design §6.5). The arrows are named by the way they point.
     // Each mode's mark gives the cursor its colour: the arrows and status marks
     // take it too.

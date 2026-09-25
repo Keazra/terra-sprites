@@ -1,0 +1,41 @@
+// The chemicals registry (design §4.1, Appendix A). IDs are stable and
+// append-only: never renumber or reuse one.
+//
+// Classes: Physical chemicals are changed only by physics and object verbs;
+// Signal chemicals (drives, reward, punishment) and Hormones by the genome.
+// Only Physical chemicals may be the target of an object verb's `Inject`.
+[
+    (id: 1,  name: "energy",      class: Physical),
+    (id: 2,  name: "hydration",   class: Physical),
+    (id: 3,  name: "stamina",     class: Physical),
+    (id: 4,  name: "food",        class: Physical),
+    (id: 5,  name: "water",       class: Physical),
+    (id: 6,  name: "injury",      class: Physical),
+
+    (id: 16, name: "hunger",      class: Signal),
+    (id: 17, name: "thirst",      class: Signal),
+    (id: 18, name: "pain",        class: Signal),
+    (id: 19, name: "tiredness",   class: Signal),
+    (id: 20, name: "boredom",     class: Signal),
+    (id: 21, name: "loneliness",  class: Signal),
+    (id: 22, name: "crowdedness", class: Signal),
+    (id: 23, name: "reward",      class: Signal),
+    (id: 24, name: "punishment",  class: Signal),
+
+    (id: 32, name: "h0",  class: Hormone),
+    (id: 33, name: "h1",  class: Hormone),
+    (id: 34, name: "h2",  class: Hormone),
+    (id: 35, name: "h3",  class: Hormone),
+    (id: 36, name: "h4",  class: Hormone),
+    (id: 37, name: "h5",  class: Hormone),
+    (id: 38, name: "h6",  class: Hormone),
+    (id: 39, name: "h7",  class: Hormone),
+    (id: 40, name: "h8",  class: Hormone),
+    (id: 41, name: "h9",  class: Hormone),
+    (id: 42, name: "h10", class: Hormone),
+    (id: 43, name: "h11", class: Hormone),
+    (id: 44, name: "h12", class: Hormone),
+    (id: 45, name: "h13", class: Hormone),
+    (id: 46, name: "h14", class: Hormone),
+    (id: 47, name: "h15", class: Hormone),
+]

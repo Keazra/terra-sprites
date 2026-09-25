@@ -94,9 +94,10 @@ impl Clock {
         self.speed = self.speed.faster();
     }
 
-    /// One step faster from a held key: stops at 1× until the key is pressed again.
+    /// One step faster from a held key: stops at 1×, and at 16× so Max is always
+    /// a deliberate choice, until the key is pressed again.
     pub fn faster_held(&mut self) {
-        if self.speed != Speed::X1 {
+        if !matches!(self.speed, Speed::X1 | Speed::X16) {
             self.faster();
         }
     }
