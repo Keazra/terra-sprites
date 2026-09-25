@@ -28,6 +28,7 @@ Decided with the owner in the design session for slice 6 ([#7](https://github.co
 | 13 | **The Genome tab shows the brain genes** under three more headings, after starting levels: brain settings (`tau base .2`), instincts (`thirst & not target adjacent → drink -.5`) and attention instincts (`hunger → attends to berry bush +.8`). | Slice 6 | §6.1 |
 | 14 | **A new outcome, `interrupted`,** records an action the sprite dropped because it changed its mind: attention switched away from its target, or another verb beat it by more than the switch margin. The Body tab reads "Changed its mind". It stays distinct from `failed` (tried, didn't get it), which learning and the A1–A3 counts treat as a real attempt. | Owner decision | §5.3, §5.5, §6.1 |
 | 15 | **A target's distance is normalized** as its path cost over the cost of walking the flood's reach on grass (10 × reach), capped at 1: so a candidate at the edge of sight on open grass is 1, and one across sand or shallows reads farther. | Slice 6 | §5.2, §5.3 |
+| 16 | **The Body tab ends with an observed list:** what the player has watched the selected sprite finish, newest first, as "9 ticks ago · Wandered off ×2". One line per finished action, in the past tense, saying how it went only if badly ("Went to eat the berry bush, but changed its mind"), so there's no separate line for arriving. Lines that read the same in a row merge, counting up and keeping the latest time. The list starts afresh when another sprite is selected, and keeps at most 500 lines. It lives in the UI, not the sim: `ActionEnded` carries the ended action's view so the screen can describe it. | Owner request, after trying 6a | §2.5, §6.1 |
 
 ---
 
@@ -355,7 +356,7 @@ Before step 1, the world keeps every sprite's chemical levels as they stand, so 
 **Commands carry values, never references.** A genome loaded from a file is parsed by the UI and put inside the command in full. This keeps the command log self-contained.
 
 **Events** each carry the tick and the entity IDs involved. The M1 set:
-- `ActionStarted`, `ActionEnded { outcome }`
+- `ActionStarted`, `ActionEnded { outcome, action }`: `action` is the ended action's view, with its target and whether it made its attempt, so the screen can describe it afterwards (§6.1)
 - `Ate`, `Drank`, `Played`, `Hit`, `Pricked`
 - `Rewarded`, `Corrected`
 - `Spawned`
@@ -1175,7 +1176,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 
 | Tab | Shows |
 |---|---|
-| **Body** | What the sprite is doing, in plain words (below); age and lifespan; speed and sense radius as expressed; a bar for each drive, with its level and an arrow for its change over the last tick (`▲` rising, `▼` falling, none when steady); the physical levels |
+| **Body** | What the sprite is doing, in plain words (below); age and lifespan; speed and sense radius as expressed; a bar for each drive, with its level and an arrow for its change over the last tick (`▲` rising, `▼` falling, none when steady); the physical levels; the observed list (below) |
 | **Brain** | Output of `explain()` |
 | **Chem** | One list: each chemical on its own line with its level and its change per tick (`-.0002`, blank when it rounds to 0), the physical chemicals, then a blank line and the signal chemicals, plus `last_r` from slice 8. The 16 hormones sit in a 4×4 grid of levels below, so all of it fits at 100×30. Reward and punishment are consumed every tick, so their levels always read 0 between ticks. |
 | **Genome** | Genes grouped under headings: traits first, on one line (`speed 7.21 · sense 9.87 · lifespan 61,204`), then half-lives, reactions, emitters, receptors, starting levels, brain settings (`tau base .2`), instincts (`thirst & not target adjacent → drink -.5`) and attention instincts (`hunger → attends to berry bush +.8`), and unknown genes last, each group in genome order. Each gene is a plain line with 3 significant figures, so spawn variation shows: `low energy → hunger +.00428 past .515`, `hunger falls → reward +1.02 past .0198`, `hunger halves every 2,041 ticks`. A line too long for the tab wraps, indented. A flagged, unexpressed or unknown gene is dimmed, with its reason on the line below (§4.3). `g` exports to RON. |
@@ -1205,6 +1206,20 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
   | Got there | `Got to Sprite #530` | `APPROACH → sprite #530 · applied` |
 
   Gave-up lines keep the Wander wording. A target that vanished reads `Gave up: the berry was gone`. Later verbs (Hit, Play, Retreat) follow the same pattern.
+- **The observed list** ends the Body tab: what the player has watched the selected sprite finish since selecting it, newest first, at most 500 lines.
+
+  ```
+   Observed
+          just now · Rested
+       8 ticks ago · Wandered off, but gave
+                     up: the way was blocked
+       9 ticks ago · Wandered off ×2
+   1,296 ticks ago · Rested
+  ```
+
+  - One line per finished action, in the past tense: what it did ("Wandered off", "Rested", "Ate from the berry bush", "Ate the berry", "Drank", "Went over to Sprite #530"), or, if it went badly, what it set out to do and how that went ("Went to eat the berry bush, but it was empty", "…, but changed its mind", "Wandered off, but gave up: the way was blocked").
+  - Lines that read the same in a row merge into one with a count (`×3`); its time is when the latest of them finished. The times count up live and are right-aligned; a long line wraps under its own text.
+  - It starts afresh when another sprite is selected (reselecting the same one keeps it), and reads "nothing yet" until something finishes.
 - **The detail view** (`v`, in every build) shows the exact workings behind what the screen describes in words. It switches the action line to the exact verb, destination and outcome, and, while the action is under way, marks where the selected sprite is heading on the map with `X`: a Wander's destination, or the goal tile an Eat, Drink or Approach is walking to. A sprite standing on the destination is drawn over the mark. It stays on until `v` is pressed again, whatever is selected.
 - **The inspector and the selection:**
   - The Body, Brain, Chem and Genome tabs show the selected sprite. With none selected, they read "No sprite selected: click one, or press Tab".

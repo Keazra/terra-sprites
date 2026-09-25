@@ -55,6 +55,7 @@ fn ended(events: &[Event], id: EntityId) -> Vec<(Verb, Outcome)> {
                 id: who,
                 verb,
                 outcome,
+                ..
             } if who == id => Some((verb, outcome)),
             _ => None,
         })
