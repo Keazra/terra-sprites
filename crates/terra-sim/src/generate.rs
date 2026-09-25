@@ -9,7 +9,9 @@ use crate::ecology::aged_object;
 use crate::map::{Map, Pos};
 use crate::random::{uniform, unit};
 use crate::regions;
+use crate::sprites::Sprite;
 use crate::terrain::Terrain;
+use crate::variation::varied;
 use crate::world::WorldState;
 
 /// Regions smaller than this become rock; larger ones are joined to the mainland.
@@ -107,6 +109,35 @@ pub(crate) fn place_objects(config: &WorldConfig, data: &DataPack, state: &mut W
             let object = aged_object(data, &mut state.rng, kind, pos);
             state.add_object(object);
         }
+    }
+}
+
+/// Places the preset's first population (design §3.2), after the objects:
+/// each sprite on a tile drawn uniformly from the walkable tiles holding no
+/// object and no sprite, made from the starter genome with spawn variation,
+/// and with its energy and hydration drawn between physiology's
+/// `first_population` fractions of the newborn level, so the sprites don't
+/// all run dry together. If the map runs out of room, the rest are skipped.
+pub(crate) fn place_sprites(config: &WorldConfig, data: &DataPack, state: &mut WorldState) {
+    let mut candidates: Vec<Pos> = state
+        .map
+        .positions()
+        .filter(|&pos| state.map.is_walkable(pos) && state.objects.at(pos).is_none())
+        .collect();
+    let physiology = data.physiology();
+    let (low, high) = physiology.first_population;
+    for _ in 0..config.sprites() {
+        if candidates.is_empty() {
+            break;
+        }
+        let choice = uniform(&mut state.rng, candidates.len() as u64) as usize;
+        let pos = candidates.swap_remove(choice);
+        let genome = varied(data.starter(), data, &mut state.rng);
+        let mut sprite = Sprite::newborn(genome, pos, state.tick, data);
+        for slot in [physiology.slots.energy, physiology.slots.hydration] {
+            sprite.body.chems[slot] *= low + (high - low) * unit(&mut state.rng);
+        }
+        state.add_sprite(sprite);
     }
 }
 

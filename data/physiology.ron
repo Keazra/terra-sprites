@@ -41,6 +41,10 @@
         "exploration_mod": (0.25, 4.0),
     },
 
+    // The `nearby_sprites` body sensor counts the other sprites within
+    // `radius` tiles, in any direction, and reads 1 at `full` of them.
+    nearby_sprites: (radius: 3, full: 4),
+
     // Spawn variation (design §4.9): each gene value is multiplied by a factor
     // drawn between 1 − this and 1 + this.
     spawn_variation: 0.1,

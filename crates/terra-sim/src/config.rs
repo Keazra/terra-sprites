@@ -13,6 +13,9 @@ const BUILTIN: &str = include_str!("../../../data/presets/default.ron");
 /// for generation to make a mainland, up to the limit for any map.
 const SIDE: std::ops::RangeInclusive<u16> = 32..=MAX_SIDE;
 
+/// The allowed range for the first population (design §3.9).
+const SPRITES: std::ops::RangeInclusive<u16> = 20..=100;
+
 /// The settings a new world is made from. A preset file holds one.
 ///
 /// A config is checked against the data pack it was parsed with, and must be
@@ -24,6 +27,8 @@ pub struct WorldConfig {
     /// How many of each object type go in every `per_tiles` tiles (design §3.9).
     objects: BTreeMap<String, u32>,
     per_tiles: u32,
+    /// How many sprites a new world starts with.
+    sprites: u16,
 }
 
 /// Why a preset could not be read.
@@ -53,6 +58,8 @@ struct Preset {
     objects: BTreeMap<String, u32>,
     #[serde(default)]
     per_tiles: Option<u32>,
+    #[serde(default)]
+    sprites: Option<u16>,
 }
 
 impl WorldConfig {
@@ -95,11 +102,25 @@ impl WorldConfig {
                 ));
             }
         };
+        // A preset that leaves the sprites out gets none, as a type it
+        // doesn't name gets no objects.
+        let sprites = match preset.sprites {
+            None => 0,
+            Some(count) if SPRITES.contains(&count) => count,
+            Some(count) => {
+                return Err(ConfigError::Invalid(format!(
+                    "`sprites` is {count}, but must be from {} to {}",
+                    SPRITES.start(),
+                    SPRITES.end()
+                )));
+            }
+        };
         Ok(WorldConfig {
             width: preset.width,
             height: preset.height,
             objects: preset.objects,
             per_tiles,
+            sprites,
         })
     }
 
@@ -111,6 +132,11 @@ impl WorldConfig {
     /// The map's height, in tiles.
     pub fn height(&self) -> u16 {
         self.height
+    }
+
+    /// How many sprites a new world starts with.
+    pub fn sprites(&self) -> usize {
+        usize::from(self.sprites)
     }
 
     /// How many objects of the type called `name` a new world gets: the preset's

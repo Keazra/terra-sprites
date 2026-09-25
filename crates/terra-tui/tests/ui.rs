@@ -2,7 +2,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
-use terra_sim::{DataPack, Map, World, WorldConfig};
+use terra_sim::{DataPack, Map, Scenario, World, WorldConfig};
 use terra_tui::app::App;
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
@@ -347,7 +347,12 @@ fn garden(pack: DataPack) -> World {
         (terra_sim::Pos { x: 7, y: 1 }, "berry"),
         (terra_sim::Pos { x: 6, y: 3 }, "ball"),
     ];
-    World::from_scenario(map, &objects, pack, 7).expect("valid scenario")
+    let scenario = Scenario {
+        map,
+        objects: &objects,
+        sprites: &[],
+    };
+    World::from_scenario(scenario, pack, 7).expect("valid scenario")
 }
 
 /// An app on `world` with the cursor pointed at tile `(x, y)` of a small map,

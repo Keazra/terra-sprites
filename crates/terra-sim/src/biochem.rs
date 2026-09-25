@@ -288,6 +288,19 @@ impl Body {
             tallies: [0.0; 3],
         }
     }
+
+    /// What caused most of the body's recent injury (design §4.10). Ties go
+    /// to the cause listed first.
+    pub(crate) fn cause_of_death(&self) -> DeathCause {
+        let mut causes = DeathCause::ALL.into_iter().zip(self.tallies);
+        let first = causes.next().expect("there are causes");
+        causes
+            .fold(
+                first,
+                |most, next| if next.1 > most.1 { next } else { most },
+            )
+            .0
+    }
 }
 
 /// What the world tells the chemistry step about a sprite.
@@ -1070,6 +1083,46 @@ mod tests {
                 })?;
             }
         }
+    }
+
+    #[test]
+    fn the_cause_of_death_is_the_biggest_recent_source_of_injury() {
+        let mut sprite = physical(&[]);
+        sprite.set("energy", 0.0);
+        for _ in 0..600 {
+            sprite.step();
+        }
+        assert_eq!(sprite.body.cause_of_death(), DeathCause::Starvation);
+        // Fed, then parched: 0.3 of injury from thirst against 0.6 from
+        // hunger, but the hunger is older and has faded more.
+        sprite.set("energy", 1.0);
+        sprite.set("hydration", 0.0);
+        for _ in 0..100 {
+            sprite.step();
+        }
+        assert_eq!(sprite.body.cause_of_death(), DeathCause::Starvation);
+        for _ in 0..200 {
+            sprite.step();
+        }
+        assert_eq!(sprite.body.cause_of_death(), DeathCause::Dehydration);
+        assert!(sprite.level("injury") < 1.0, "still alive");
+    }
+
+    #[test]
+    fn healing_lowers_injury_but_not_the_tallies() {
+        let mut sprite = physical(&[]);
+        sprite.set("hydration", 0.0);
+        sprite.step();
+        sprite.set("hydration", 1.0);
+        let tallies = sprite.body.tallies;
+        sprite.set("injury", 0.5);
+        sprite.step();
+        let fade = libm::powf(0.5, 1.0 / 350.0);
+        assert_eq!(
+            sprite.body.tallies[1],
+            tallies[1] * fade,
+            "only fading lowers it"
+        );
     }
 
     #[test]

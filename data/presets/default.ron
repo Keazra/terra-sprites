@@ -4,6 +4,10 @@
     width: 256,
     height: 160,
 
+    // The first population, from 20 to 100. It stays the same on any map
+    // size. Leave it out for a world with no sprites.
+    sprites: 30,
+
     // Plants and toys, by density: how many of each object type go in every
     // `per_tiles` tiles, so a bigger map gets proportionally more. A type not
     // named here gets none. Names are object types from the data pack's

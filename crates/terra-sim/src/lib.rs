@@ -18,15 +18,16 @@ mod physiology;
 mod random;
 mod regions;
 mod registry;
+mod sprites;
 mod terrain;
 mod variation;
 mod world;
 
 pub use config::{ConfigError, WorldConfig};
 pub use data::{DataError, DataPack};
-pub use events::{Event, EventKind, Removal};
+pub use events::{DeathCause, Event, EventKind, Removal};
 pub use genome::{Genome, GenomeError};
 pub use map::{Dir, Map, MapError, Pos};
 pub use objects::EntityId;
 pub use terrain::{Terrain, TerrainProps};
-pub use world::{InvariantViolation, ObjectView, ScenarioError, World};
+pub use world::{InvariantViolation, ObjectView, Scenario, ScenarioError, SpriteView, World};
