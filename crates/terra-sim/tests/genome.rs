@@ -103,6 +103,16 @@ fn gene_values_out_of_their_range_are_errors() {
 }
 
 #[test]
+fn a_threshold_may_be_above_1_since_receptor_targets_go_up_to_4() {
+    let text = genome_file(&[
+        r#"Emitter(locus: Locus("exploration_mod"), mode: Level, threshold: 1.5, gain: 0.1, chem: "h0")"#,
+    ]);
+    let data = builtin();
+    let genome = Genome::from_ron(&text, &data).expect("a valid genome");
+    assert_eq!(genome.to_ron(&data), text);
+}
+
+#[test]
 fn a_reaction_has_one_or_two_reactants_and_at_most_two_products() {
     assert_invalid(
         &[r#"Reaction(reactants: [], products: [("hunger", 1)], rate: 0.1)"#],

@@ -266,3 +266,21 @@ fn solid_objects_never_spread_or_spawn_onto_a_sprite() {
         }
     }
 }
+
+#[test]
+fn the_first_population_starts_with_no_false_fall_in_energy_or_hydration() {
+    // A starter genome that turns any real fall in energy or hydration into reward.
+    let starter = r#"(format: 1, genes: [
+        Emitter(locus: Chem("energy"), mode: Fall, threshold: 0.02, gain: 1.0, chem: "reward"),
+        Emitter(locus: Chem("hydration"), mode: Fall, threshold: 0.02, gain: 1.0, chem: "reward"),
+    ])"#;
+    let starter_ron = include_str!("../../../data/genomes/starter.ron");
+    let data = builtin_changing("genomes/starter.ron", &[(starter_ron, starter)]);
+    let config =
+        WorldConfig::from_ron("(width: 48, height: 48, sprites: 20)", &data).expect("valid preset");
+    let mut world = World::new(config, data, 5);
+    world.step();
+    for sprite in world.sprites() {
+        assert_eq!(sprite.chemical("reward"), Some(0.0), "{}", sprite.name());
+    }
+}

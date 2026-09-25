@@ -7,6 +7,7 @@ use crate::data::DataPack;
 use crate::events::DeathCause;
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, LocusRef, Mode, Term};
+use crate::physiology::halving_factor;
 use crate::registry::{LocusKind, Trait};
 
 /// A sprite's traits (design §4.8), clamped to physiology's ranges.
@@ -17,8 +18,18 @@ pub(crate) struct Traits {
     pub(crate) lifespan: f32,
 }
 
+impl Traits {
+    fn set(&mut self, which: Trait, value: f32) {
+        match which {
+            Trait::Speed => self.speed = value,
+            Trait::SenseRadius => self.sense_radius = value,
+            Trait::Lifespan => self.lifespan = value,
+        }
+    }
+}
+
 /// A genome as the chemistry step runs it: its expressed genes only, with
-/// chemicals and loci as slots in the pack's order.
+/// chemicals and loci as indices in the pack's order.
 #[derive(Debug, Clone)]
 pub(crate) struct Program {
     pub(crate) traits: Traits,
@@ -29,18 +40,18 @@ pub(crate) struct Program {
     level_emitters: Vec<Emitter>,
     /// Rise and Fall emitters, in genome order.
     change_emitters: Vec<(Change, Emitter)>,
-    /// Each receptor target's slot and range, and the receptors that write it.
+    /// Each receptor target's index and range, and the receptors that write it.
     targets: Vec<Target>,
-    /// Each signal chemical's slot and level at birth, where a gene sets one.
+    /// Each signal chemical's index and level at birth, where a gene sets one.
     initial: Vec<(usize, f32)>,
 }
 
 /// A receptor target and the receptors aimed at it.
 #[derive(Debug, Clone)]
 struct Target {
-    slot: usize,
+    index: usize,
     range: (f32, f32),
-    /// Each receptor's chemical slot, threshold and gain.
+    /// Each receptor's chemical index, threshold and gain.
     receptors: Vec<(usize, f32, f32)>,
 }
 
@@ -54,33 +65,33 @@ enum Change {
 /// An emitter, compiled.
 #[derive(Debug, Clone, Copy)]
 struct Emitter {
-    read: Read,
+    source: Source,
     invert: bool,
     threshold: f32,
     gain: f32,
     chem: usize,
 }
 
-/// A value the chemistry step can read: a chemical's level or a locus's value, by slot.
+/// Where an emitter reads its value from: a chemical's level or a locus's value, by index.
 #[derive(Debug, Clone, Copy)]
-enum Read {
+enum Source {
     Chem(usize),
     Locus(usize),
 }
 
-impl Read {
+impl Source {
     fn value(self, body: &Body) -> f32 {
         match self {
-            Read::Chem(slot) => body.chems[slot],
-            Read::Locus(slot) => body.loci[slot],
+            Source::Chem(index) => body.chems[index],
+            Source::Locus(index) => body.loci[index],
         }
     }
 
     /// The value as the previous tick's step 3 left it.
     fn last(self, body: &Body) -> f32 {
         match self {
-            Read::Chem(slot) => body.last_chems[slot],
-            Read::Locus(slot) => body.last_loci[slot],
+            Source::Chem(index) => body.last_chems[index],
+            Source::Locus(index) => body.last_loci[index],
         }
     }
 }
@@ -88,7 +99,7 @@ impl Read {
 /// A reaction, compiled.
 #[derive(Debug, Clone)]
 struct Reaction {
-    /// Each reactant's slot and coefficient.
+    /// Each reactant's index and coefficient.
     reactants: Vec<(usize, f32)>,
     /// How much each chemical the reaction changes gains per unit of extent:
     /// products minus reactants. A catalyst, the same on both sides, isn't
@@ -102,7 +113,7 @@ impl Reaction {
         reactants: &[Term],
         products: &[Term],
         rate: f32,
-        slot: impl Fn(u16) -> usize,
+        index: impl Fn(u16) -> usize,
     ) -> Reaction {
         let mut net: Vec<(usize, f32)> = Vec::new();
         let terms = reactants
@@ -111,16 +122,16 @@ impl Reaction {
             .chain(products.iter().map(|t| (t, 1.0)));
         for (term, sign) in terms {
             let change = sign * f32::from(term.coefficient);
-            match net.iter_mut().find(|(s, _)| *s == slot(term.chem)) {
+            match net.iter_mut().find(|(s, _)| *s == index(term.chem)) {
                 Some((_, gain)) => *gain += change,
-                None => net.push((slot(term.chem), change)),
+                None => net.push((index(term.chem), change)),
             }
         }
         net.retain(|&(_, gain)| gain != 0.0);
         Reaction {
             reactants: reactants
                 .iter()
-                .map(|t| (slot(t.chem), f32::from(t.coefficient)))
+                .map(|t| (index(t.chem), f32::from(t.coefficient)))
                 .collect(),
             net,
             rate,
@@ -133,16 +144,16 @@ impl Program {
     pub(crate) fn new(genome: &Genome, data: &DataPack) -> Program {
         let range = |which: Trait| data.physiology().traits.range(which);
         // A trait no gene sets takes the middle of its range.
-        let value = |which: Trait| {
+        let middle = |which: Trait| {
             let (low, high) = range(which);
             low + (high - low) / 2.0
         };
-        let mut traits = [
-            value(Trait::Speed),
-            value(Trait::SenseRadius),
-            value(Trait::Lifespan),
-        ];
-        let chem = |id: u16| data.chemical_slot(id).expect("a checked gene");
+        let mut traits = Traits {
+            speed: middle(Trait::Speed),
+            sense_radius: middle(Trait::SenseRadius),
+            lifespan: middle(Trait::Lifespan),
+        };
+        let chem = |id: u16| data.chemical_index(id).expect("a checked gene");
         let mut decay = vec![1.0; data.chemicals().len()];
         let mut reactions = Vec::new();
         let mut level_emitters = Vec::new();
@@ -153,7 +164,7 @@ impl Program {
             .receptor_targets
             .iter()
             .map(|(&id, &range)| Target {
-                slot: data.locus_slot(id).expect("a validated receptor target"),
+                index: data.locus_index(id).expect("a validated receptor target"),
                 range,
                 receptors: Vec::new(),
             })
@@ -164,7 +175,7 @@ impl Program {
             }
             match *gene {
                 Gene::HalfLife { chem: id, ticks } => {
-                    decay[chem(id)] = libm::powf(0.5, 1.0 / ticks as f32);
+                    decay[chem(id)] = halving_factor(ticks as f32);
                 }
                 Gene::Reaction {
                     ref reactants,
@@ -180,10 +191,10 @@ impl Program {
                     chem: id,
                 } => {
                     let emitter = Emitter {
-                        read: match locus {
-                            LocusRef::Chem(id) => Read::Chem(chem(id)),
+                        source: match locus {
+                            LocusRef::Chem(id) => Source::Chem(chem(id)),
                             LocusRef::Locus(id) => {
-                                Read::Locus(data.locus_slot(id).expect("a checked gene"))
+                                Source::Locus(data.locus_index(id).expect("a checked gene"))
                             }
                         },
                         invert,
@@ -203,28 +214,23 @@ impl Program {
                     gain,
                     target,
                 } => {
-                    let slot = data.locus_slot(target).expect("a checked gene");
+                    let index = data.locus_index(target).expect("a checked gene");
                     let target = targets
                         .iter_mut()
-                        .find(|t| t.slot == slot)
+                        .find(|t| t.index == index)
                         .expect("an expressed receptor writes a receptor target");
                     target.receptors.push((chem(id), threshold, gain));
                 }
                 Gene::InitialConcentration { chem: id, value } => initial.push((chem(id), value)),
                 Gene::Trait { which, value } => {
                     let (low, high) = range(which);
-                    traits[which as usize - 1] = value.clamp(low, high);
+                    traits.set(which, value.clamp(low, high));
                 }
-                _ => {}
+                Gene::Unknown { .. } => unreachable!("an unknown gene isn't expressed"),
             }
         }
-        let [speed, sense_radius, lifespan] = traits;
         Program {
-            traits: Traits {
-                speed,
-                sense_radius,
-                lifespan,
-            },
+            traits,
             decay,
             reactions,
             level_emitters,
@@ -250,8 +256,8 @@ pub(crate) struct Body {
     /// and Fall emitters.
     last_chems: Vec<f32>,
     last_loci: Vec<f32>,
-    /// The injury each of physiology's causes added lately, fading, in
-    /// `DeathCause::ALL` order (design §4.10).
+    /// The injury each of physiology's causes added lately, fading, indexed
+    /// by `DeathCause` (design §4.10).
     pub(crate) tallies: [f32; 3],
 }
 
@@ -259,13 +265,13 @@ impl Body {
     /// A newborn's body (design §4.7).
     pub(crate) fn newborn(program: &Program, data: &DataPack) -> Body {
         let physiology = data.physiology();
-        let (slots, newborn) = (physiology.slots, physiology.newborn);
+        let (indices, newborn) = (physiology.indices, physiology.newborn);
         let mut chems = vec![0.0; data.chemicals().len()];
-        chems[slots.energy] = newborn.energy;
-        chems[slots.hydration] = newborn.hydration;
-        chems[slots.stamina] = newborn.stamina;
-        for &(slot, level) in &program.initial {
-            chems[slot] = level;
+        chems[indices.energy] = newborn.energy;
+        chems[indices.hydration] = newborn.hydration;
+        chems[indices.stamina] = newborn.stamina;
+        for &(index, level) in &program.initial {
+            chems[index] = level;
         }
         // Receptor targets rest at 1 (design §4.2).
         let loci: Vec<f32> = data
@@ -289,17 +295,28 @@ impl Body {
         }
     }
 
+    /// Starts the chemical at `index` at `level`, as if it had been there
+    /// since the end of the previous tick's step 3, so no Rise or Fall
+    /// emitter sees a change.
+    pub(crate) fn start_at(&mut self, index: usize, level: f32) {
+        self.chems[index] = level;
+        self.last_chems[index] = level;
+    }
+
     /// What caused most of the body's recent injury (design §4.10). Ties go
     /// to the cause listed first.
     pub(crate) fn cause_of_death(&self) -> DeathCause {
-        let mut causes = DeathCause::ALL.into_iter().zip(self.tallies);
-        let first = causes.next().expect("there are causes");
-        causes
-            .fold(
-                first,
-                |most, next| if next.1 > most.1 { next } else { most },
-            )
-            .0
+        let tally = |cause: DeathCause| self.tallies[cause as usize];
+        DeathCause::ALL
+            .into_iter()
+            .reduce(|most, next| {
+                if tally(next) > tally(most) {
+                    next
+                } else {
+                    most
+                }
+            })
+            .expect("there are causes")
     }
 }
 
@@ -308,7 +325,8 @@ impl Body {
 pub(crate) struct Senses {
     /// Ticks since it was born.
     pub(crate) age: u64,
-    /// Sprites within 3 tiles, divided by 4, capped at 1 (design §4.2).
+    /// How crowded it is around the sprite, from 0 to 1, as physiology's
+    /// `nearby_sprites` counts it (design §4.2).
     pub(crate) nearby_sprites: f32,
     /// The steps it took during the previous tick.
     pub(crate) steps: u32,
@@ -320,9 +338,9 @@ pub(crate) struct Senses {
 /// reached 1, so it's dying.
 pub(crate) fn step(program: &Program, body: &mut Body, senses: &Senses, data: &DataPack) -> bool {
     // (a) The pulse latch: what came in goes live, and the buffer empties.
-    for (slot, locus) in data.loci().iter().enumerate() {
+    for (index, locus) in data.loci().iter().enumerate() {
         if locus.kind == LocusKind::Pulse {
-            body.loci[slot] = std::mem::take(&mut body.incoming[slot]);
+            body.loci[index] = std::mem::take(&mut body.incoming[index]);
         }
     }
     physiology(program, body, senses, data);
@@ -331,11 +349,11 @@ pub(crate) fn step(program: &Program, body: &mut Body, senses: &Senses, data: &D
         let most = reaction
             .reactants
             .iter()
-            .map(|&(slot, coefficient)| body.chems[slot] / coefficient)
+            .map(|&(index, coefficient)| body.chems[index] / coefficient)
             .fold(f32::INFINITY, f32::min);
         let extent = reaction.rate * most;
-        for &(slot, gain) in &reaction.net {
-            body.chems[slot] += gain * extent;
+        for &(index, gain) in &reaction.net {
+            body.chems[index] += gain * extent;
         }
     }
     // (d) Half-life decay.
@@ -344,13 +362,13 @@ pub(crate) fn step(program: &Program, body: &mut Body, senses: &Senses, data: &D
     }
     // (e1) Level emitters, in genome order, each seeing those before it.
     for emitter in &program.level_emitters {
-        let value = emitter.read.value(body);
+        let value = emitter.source.value(body);
         let signal = if emitter.invert { 1.0 - value } else { value };
         body.chems[emitter.chem] += emitter.gain * (signal - emitter.threshold).max(0.0);
     }
     // (e2) Rise and Fall emitters, in genome order, after every Level emitter.
     for &(change, emitter) in &program.change_emitters {
-        let delta = emitter.read.value(body) - emitter.read.last(body);
+        let delta = emitter.source.value(body) - emitter.source.last(body);
         let signal = match change {
             Change::Rise => delta.max(0.0),
             Change::Fall => (-delta).max(0.0),
@@ -368,11 +386,11 @@ pub(crate) fn step(program: &Program, body: &mut Body, senses: &Senses, data: &D
             .iter()
             .map(|&(chem, threshold, gain)| gain * (body.chems[chem] - threshold).max(0.0))
             .sum();
-        body.loci[target.slot] = (1.0 + pull).clamp(target.range.0, target.range.1);
+        body.loci[target.index] = (1.0 + pull).clamp(target.range.0, target.range.1);
     }
     body.last_chems.clone_from(&body.chems);
     body.last_loci.clone_from(&body.loci);
-    body.chems[data.physiology().slots.injury] >= 1.0
+    body.chems[data.physiology().indices.injury] >= 1.0
 }
 
 /// Step 3(b), physiology (design §4.4): the body's fixed rules, which read
@@ -380,53 +398,63 @@ pub(crate) fn step(program: &Program, body: &mut Body, senses: &Senses, data: &D
 /// write only the physical chemicals and the body sensors.
 fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPack) {
     let physiology = data.physiology();
-    let (slots, traits) = (physiology.slots, program.traits);
+    let (indices, traits) = (physiology.indices, program.traits);
     let chems = &mut body.chems;
     let steps = senses.steps as f32;
     let pace = traits.speed / 8.0;
     let metabolism = physiology.metabolism;
-    chems[slots.energy] -= metabolism.basal
+    chems[indices.energy] -= metabolism.basal
         + metabolism.per_sense_tile * traits.sense_radius
         + steps * metabolism.per_step * pace * pace;
     for (gut, into, rate) in [
-        (slots.food, slots.energy, physiology.digestion.food),
-        (slots.water, slots.hydration, physiology.digestion.water),
+        (indices.food, indices.energy, physiology.digestion.food),
+        (indices.water, indices.hydration, physiology.digestion.water),
     ] {
         let digested = chems[gut].min(rate);
         chems[gut] -= digested;
         chems[into] += digested;
     }
-    chems[slots.hydration] -= physiology.hydration_loss;
-    chems[slots.stamina] += if senses.steps > 0 {
+    chems[indices.hydration] -= physiology.hydration_loss;
+    chems[indices.stamina] += if senses.steps > 0 {
         -steps * physiology.stamina.per_step
     } else if senses.resting {
         physiology.stamina.resting
     } else {
         physiology.stamina.idle
     };
-    chems[slots.injury] -= physiology.healing;
+    chems[indices.injury] -= physiology.healing;
 
     let age = senses.age as f32;
     let injury = physiology.injury;
     let harms = [
-        (chems[slots.energy] <= 0.0, injury.starvation),
-        (chems[slots.hydration] <= 0.0, injury.dehydration),
-        (age > traits.lifespan, injury.old_age),
+        (
+            DeathCause::Starvation,
+            chems[indices.energy] <= 0.0,
+            injury.starvation,
+        ),
+        (
+            DeathCause::Dehydration,
+            chems[indices.hydration] <= 0.0,
+            injury.dehydration,
+        ),
+        (DeathCause::OldAge, age > traits.lifespan, injury.old_age),
     ];
-    for (tally, (harmed, amount)) in body.tallies.iter_mut().zip(harms) {
-        *tally *= physiology.cause_fade;
+    for tally in &mut body.tallies {
+        *tally *= physiology.tally_fade;
+    }
+    for (cause, harmed, amount) in harms {
         if harmed {
-            chems[slots.injury] += amount;
-            *tally += amount;
+            chems[indices.injury] += amount;
+            body.tallies[cause as usize] += amount;
         }
     }
 
     let loci = &mut body.loci;
-    loci[slots.always] = 1.0;
-    loci[slots.age] = (age / traits.lifespan).min(1.0);
-    loci[slots.nearby_sprites] = senses.nearby_sprites;
-    loci[slots.moving] = if senses.steps > 0 { 1.0 } else { 0.0 };
-    loci[slots.resting] = if senses.resting { 1.0 } else { 0.0 };
+    loci[indices.always] = 1.0;
+    loci[indices.age] = (age / traits.lifespan).min(1.0);
+    loci[indices.nearby_sprites] = senses.nearby_sprites;
+    loci[indices.moving] = if senses.steps > 0 { 1.0 } else { 0.0 };
+    loci[indices.resting] = if senses.resting { 1.0 } else { 0.0 };
 }
 
 #[cfg(test)]
@@ -440,27 +468,31 @@ mod tests {
     /// The built-in physiology with every rate at 0, so only genes change a body.
     fn quiet() -> DataPack {
         let mut physiology = include_str!("../../../data/physiology.ron").to_string();
-        for (rate, zero) in [
-            ("basal: 0.0001,", "basal: 0.0,"),
-            ("per_sense_tile: 0.0000067,", "per_sense_tile: 0.0,"),
-            ("per_step: 0.0002,", "per_step: 0.0,"),
-            (
-                "digestion: (food: 0.001, water: 0.002)",
-                "digestion: (food: 0.0, water: 0.0)",
-            ),
-            ("hydration_loss: 0.00033", "hydration_loss: 0.0"),
-            (
-                "stamina: (per_step: 0.002, idle: 0.0005, resting: 0.002)",
-                "stamina: (per_step: 0.0, idle: 0.0, resting: 0.0)",
-            ),
-            ("healing: 0.0001", "healing: 0.0"),
-            (
-                "injury: (starvation: 0.0011, dehydration: 0.0011, old_age: 0.0006)",
-                "injury: (starvation: 0.0, dehydration: 0.0, old_age: 0.0)",
-            ),
-        ] {
-            assert!(physiology.contains(rate), "{rate} is in physiology.ron");
-            physiology = physiology.replace(rate, zero);
+        let rates = [
+            "basal",
+            "per_sense_tile",
+            "per_step",
+            "food",
+            "water",
+            "hydration_loss",
+            "idle",
+            "resting",
+            "healing",
+            "starvation",
+            "dehydration",
+            "old_age",
+        ];
+        for rate in rates {
+            // Every `rate: <number>` in the file, whatever it's tuned to.
+            let key = format!("{rate}: ");
+            let mut from = 0;
+            while let Some(at) = physiology[from..].find(&key) {
+                let start = from + at + key.len();
+                let end = start + physiology[start..].find([',', ')']).expect("a value");
+                physiology.replace_range(start..end, "0.0");
+                from = start;
+            }
+            assert!(from > 0, "{rate} is in physiology.ron");
         }
         let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
             .iter()
@@ -502,7 +534,7 @@ mod tests {
             Subject::new(quiet(), genes)
         }
 
-        fn chem_slot(&self, name: &str) -> usize {
+        fn chem_index(&self, name: &str) -> usize {
             self.data
                 .chemicals()
                 .iter()
@@ -510,7 +542,7 @@ mod tests {
                 .expect("a chemical")
         }
 
-        fn locus_slot(&self, name: &str) -> usize {
+        fn locus_index(&self, name: &str) -> usize {
             self.data
                 .loci()
                 .iter()
@@ -519,21 +551,21 @@ mod tests {
         }
 
         fn level(&self, chemical: &str) -> f32 {
-            self.body.chems[self.chem_slot(chemical)]
+            self.body.chems[self.chem_index(chemical)]
         }
 
         fn set(&mut self, chemical: &str, level: f32) {
-            let slot = self.chem_slot(chemical);
-            self.body.chems[slot] = level;
+            let index = self.chem_index(chemical);
+            self.body.chems[index] = level;
         }
 
         fn locus(&self, name: &str) -> f32 {
-            self.body.loci[self.locus_slot(name)]
+            self.body.loci[self.locus_index(name)]
         }
 
         fn pulse(&mut self, name: &str) {
-            let slot = self.locus_slot(name);
-            self.body.incoming[slot] = 1.0;
+            let index = self.locus_index(name);
+            self.body.incoming[index] = 1.0;
         }
 
         /// Runs step 3 with what the sprite sensed. Says whether it's dying.
@@ -1005,13 +1037,13 @@ mod tests {
             data: &DataPack,
             mut check: impl FnMut(&[(Program, Body)]) -> Result<(), TestCaseError>,
         ) -> Result<(), TestCaseError> {
-            let slots = data.physiology().slots;
+            let indices = data.physiology().indices;
             let pulses: Vec<usize> = data
                 .loci()
                 .iter()
                 .enumerate()
                 .filter(|(_, l)| l.kind == LocusKind::Pulse)
-                .map(|(slot, _)| slot)
+                .map(|(index, _)| index)
                 .collect();
             let mut script = ChaCha8Rng::seed_from_u64(seed);
             for age in 0..1_000 {
@@ -1023,8 +1055,11 @@ mod tests {
                     resting: roll % 7 == 0,
                 };
                 // What verbs did last tick: food, water or injury, and a pulse.
-                let injection = [(slots.food, 0.3), (slots.water, 0.2), (slots.injury, 0.03)]
-                    [(roll / 8 % 3) as usize];
+                let injection = [
+                    (indices.food, 0.3),
+                    (indices.water, 0.2),
+                    (indices.injury, 0.03),
+                ][(roll / 8 % 3) as usize];
                 let pulse = pulses[(roll / 32) as usize % pulses.len()];
                 for (program, body) in sprites.iter_mut() {
                     if roll % 11 == 0 {
@@ -1053,14 +1088,14 @@ mod tests {
                     .iter()
                     .enumerate()
                     .filter(|(_, c)| c.class == ChemicalClass::Physical)
-                    .map(|(slot, _)| slot)
+                    .map(|(index, _)| index)
                     .collect();
                 let random = traits.iter().cloned().chain(genes).collect();
                 let mut sprites = [newborn(random, &data), newborn(traits, &data)];
                 run_side_by_side(seed, &mut sprites, &data, |sprites| {
-                    for &slot in &physical {
-                        let (random, control) = (sprites[0].1.chems[slot], sprites[1].1.chems[slot]);
-                        prop_assert_eq!(random.to_bits(), control.to_bits(), "chemical slot {}", slot);
+                    for &index in &physical {
+                        let (random, control) = (sprites[0].1.chems[index], sprites[1].1.chems[index]);
+                        prop_assert_eq!(random.to_bits(), control.to_bits(), "chemical index {}", index);
                     }
                     Ok(())
                 })?;

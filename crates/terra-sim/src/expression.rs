@@ -24,26 +24,29 @@ pub(crate) enum Expression {
 
 /// The one value a gene sets, for the genes that set one. The others add up.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Sets {
+enum Setting {
     HalfLife(u16),
     InitialConcentration(u16),
     Trait(Trait),
 }
 
-impl Sets {
-    fn of(gene: &Gene) -> Option<Sets> {
+impl Setting {
+    fn of(gene: &Gene) -> Option<Setting> {
         match *gene {
-            Gene::HalfLife { chem, .. } => Some(Sets::HalfLife(chem)),
-            Gene::InitialConcentration { chem, .. } => Some(Sets::InitialConcentration(chem)),
-            Gene::Trait { which, .. } => Some(Sets::Trait(which)),
-            _ => None,
+            Gene::HalfLife { chem, .. } => Some(Setting::HalfLife(chem)),
+            Gene::InitialConcentration { chem, .. } => Some(Setting::InitialConcentration(chem)),
+            Gene::Trait { which, .. } => Some(Setting::Trait(which)),
+            Gene::Reaction { .. }
+            | Gene::Emitter { .. }
+            | Gene::Receptor { .. }
+            | Gene::Unknown { .. } => None,
         }
     }
 }
 
 /// How each of `genome`'s genes is expressed, in genome order.
 pub(crate) fn expressions(genome: &Genome, data: &DataPack) -> Vec<Expression> {
-    let mut set = BTreeSet::new();
+    let mut settings = BTreeSet::new();
     genome
         .genes
         .iter()
@@ -54,8 +57,8 @@ pub(crate) fn expressions(genome: &Genome, data: &DataPack) -> Vec<Expression> {
             if let Some(reason) = breaks_restrictions(gene, data) {
                 return Expression::Flagged(reason);
             }
-            match Sets::of(gene) {
-                Some(value) if !set.insert(value) => Expression::Unexpressed,
+            match Setting::of(gene) {
+                Some(setting) if !settings.insert(setting) => Expression::Unexpressed,
                 _ => Expression::Expressed,
             }
         })
@@ -112,7 +115,11 @@ fn breaks_restrictions(gene: &Gene, data: &DataPack) -> Option<String> {
                 )
             })
         }
-        _ => None,
+        Gene::HalfLife { .. }
+        | Gene::Emitter { .. }
+        | Gene::InitialConcentration { .. }
+        | Gene::Trait { .. }
+        | Gene::Unknown { .. } => None,
     }
 }
 

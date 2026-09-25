@@ -762,6 +762,15 @@ So a gene can be marked in three ways: **flagged** (it breaks the restrictions),
 
 If M2 adds structural mutation, every mutated gene must be validated again against the restrictions above.
 
+**Value ranges,** checked when a genome is read (a gene outside them is an error in the file, not a flagged gene):
+- `HalfLife` ticks: at least 1.
+- `Reaction` rate: 0 to 1, so a reaction never uses more than its reactants hold. A reaction needs one or two reactants, since they set its extent, and at most two products. Each coefficient is at least 1.
+- Thresholds: at least 0. They can be above 1, because some loci are: receptor targets reach 4.
+- `InitialConcentration` value: 0 to 1.
+- Gains and trait values: any number. A trait is clamped to its range when expressed.
+
+Spawn variation keeps each value within its range after varying it.
+
 ### 4.4 Inside step 3
 
 For each sprite:

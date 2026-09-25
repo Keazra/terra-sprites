@@ -68,6 +68,15 @@ impl WorldState {
             && !(data.object_types()[kind].solid && self.sprites.at(pos).is_some())
     }
 
+    /// Whether a sprite may stand on the tile at `pos` (design §3.4): a
+    /// walkable tile on the map holding no sprite and no solid object.
+    pub(crate) fn can_stand(&self, data: &DataPack, pos: Pos) -> bool {
+        self.map.contains(pos)
+            && self.map.is_walkable(pos)
+            && self.sprites.at(pos).is_none()
+            && !self.objects.is_solid_at(data, pos)
+    }
+
     fn new_id(&mut self) -> EntityId {
         let id = EntityId(self.next_id);
         self.next_id += 1;
@@ -88,6 +97,8 @@ pub enum ScenarioError {
     NotAnObjectType(String),
     /// An object would break the placement rules (design §3.3–3.4).
     CantPlace { object_type: String, pos: Pos },
+    /// A sprite can't stand on this tile (design §3.4).
+    CantPlaceSprite(Pos),
 }
 
 /// A hand-made world, for tests and lab scenarios.
@@ -126,13 +137,13 @@ impl SpriteView<'_> {
 
     /// The level of the chemical called `name`, or `None` if the pack has no such chemical.
     pub fn chemical(&self, name: &str) -> Option<f32> {
-        let slot = self
+        let index = self
             .world
             .data
             .chemicals()
             .iter()
             .position(|c| c.name == name)?;
-        Some(self.sprite.body.chems[slot])
+        Some(self.sprite.body.chems[index])
     }
 }
 
@@ -248,19 +259,8 @@ impl World {
         for (pos, genome) in scenario.sprites {
             let state = &mut world.state;
             let pos = *pos;
-            let solid_object = state
-                .objects
-                .at(pos)
-                .is_some_and(|id| world.data.object_types()[state.objects.kind(id)].solid);
-            if !state.map.contains(pos)
-                || !state.map.is_walkable(pos)
-                || state.sprites.at(pos).is_some()
-                || solid_object
-            {
-                return Err(ScenarioError::CantPlace {
-                    object_type: "sprite".into(),
-                    pos,
-                });
+            if !state.can_stand(&world.data, pos) {
+                return Err(ScenarioError::CantPlaceSprite(pos));
             }
             let genome = match genome {
                 Some(genome) => genome.clone(),
@@ -392,7 +392,7 @@ impl World {
                     .filter(|&tile| tile != sprite.pos && state.sprites.at(tile).is_some())
                     .count();
                 let senses = Senses {
-                    age: state.tick - sprite.born,
+                    age: sprite.age(state.tick),
                     nearby_sprites: (others as f32 / f32::from(nearby.full)).min(1.0),
                     ..Senses::default()
                 };
@@ -430,7 +430,7 @@ impl World {
                     id,
                     name: sprites::name(id),
                     cause: sprite.body.cause_of_death(),
-                    age: state.tick - sprite.born,
+                    age: sprite.age(state.tick),
                 },
             });
         }
@@ -627,7 +627,7 @@ mod tests {
         };
         let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
         world.step();
-        let slot = world.data.physiology().slots.nearby_sprites;
+        let index = world.data.physiology().indices.nearby_sprites;
         let reading = |x, y| {
             let pos = Pos { x, y };
             let id = world.state.sprites.at(pos).expect("a sprite");
@@ -637,7 +637,7 @@ mod tests {
                 .iter()
                 .find(|&(i, _)| i == id)
                 .expect("a sprite");
-            sprite.body.loci[slot]
+            sprite.body.loci[index]
         };
         assert_eq!(reading(3, 3), 1.0, "5 others within 3 tiles, capped");
         assert_eq!(

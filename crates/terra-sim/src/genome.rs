@@ -156,6 +156,15 @@ impl Gene {
                 Err(format!("`{field}` is {value}, but must be from 0 to 1"))
             }
         };
+        let at_least_0 = |field: &str, value: f32| {
+            if value >= 0.0 && value.is_finite() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "`{field}` is {value}, but must be a number, at least 0"
+                ))
+            }
+        };
         let finite = |field: &str, value: f32| {
             if value.is_finite() {
                 Ok(())
@@ -210,7 +219,7 @@ impl Gene {
                         })?;
                     }
                 }
-                level("threshold", threshold)?;
+                at_least_0("threshold", threshold)?;
                 finite("gain", gain)?;
                 chemical(chem)?;
             }
@@ -221,7 +230,7 @@ impl Gene {
                 target,
             } => {
                 chemical(chem)?;
-                level("threshold", threshold)?;
+                at_least_0("threshold", threshold)?;
                 finite("gain", gain)?;
                 data.locus(target)
                     .ok_or_else(|| format!("refers to locus {target}, which isn't in the pack"))?;
@@ -496,7 +505,7 @@ fn decode(type_id: u16, version: u8, payload: Vec<u8>) -> Result<Gene, String> {
     if version == 0 {
         return Err("has version 0, but versions start at 1".into());
     }
-    if !(1..=6).contains(&type_id) || version > VERSION {
+    if version > VERSION {
         return Ok(Gene::Unknown {
             type_id,
             version,
@@ -576,7 +585,7 @@ fn decode(type_id: u16, version: u8, payload: Vec<u8>) -> Result<Gene, String> {
             let (chem, value) = read(&payload)?;
             Gene::InitialConcentration { chem, value }
         }
-        _ => {
+        6 => {
             let (id, value): (u16, f32) = read(&payload)?;
             let which = Trait::ALL
                 .into_iter()
@@ -584,5 +593,10 @@ fn decode(type_id: u16, version: u8, payload: Vec<u8>) -> Result<Gene, String> {
                 .ok_or_else(|| format!("refers to trait {id}, which doesn't exist"))?;
             Gene::Trait { which, value }
         }
+        _ => Gene::Unknown {
+            type_id,
+            version,
+            payload,
+        },
     })
 }

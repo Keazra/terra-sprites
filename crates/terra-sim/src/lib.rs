@@ -14,6 +14,7 @@ mod genome;
 mod map;
 mod object_types;
 mod objects;
+mod occupancy;
 mod physiology;
 mod random;
 mod regions;

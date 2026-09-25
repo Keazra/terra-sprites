@@ -6,6 +6,7 @@ use serde::Serialize;
 
 use crate::data::DataPack;
 use crate::map::{Dir, Map, Pos};
+use crate::occupancy::Occupancy;
 
 /// An entity's ID. IDs come from a world counter that only goes up, and are
 /// never reused (design §2.3).
@@ -34,12 +35,9 @@ pub(crate) struct Object {
 pub(crate) struct Objects {
     /// In ascending ID order, the order every per-object pass takes (design §2.3).
     by_id: BTreeMap<EntityId, Object>,
-    /// The object on each tile, by tile index. It's derived from `by_id`, so it isn't hashed.
+    /// The object on each tile. It's derived from `by_id`, so it isn't hashed.
     #[serde(skip)]
-    on_tile: Vec<Option<EntityId>>,
-    /// The map's width, to find a tile's index.
-    #[serde(skip)]
-    width: u16,
+    on_tile: Occupancy,
 }
 
 impl Objects {
@@ -47,14 +45,13 @@ impl Objects {
     pub(crate) fn new(map: &Map) -> Objects {
         Objects {
             by_id: BTreeMap::new(),
-            on_tile: vec![None; map.tile_count()],
-            width: map.width(),
+            on_tile: Occupancy::new(map),
         }
     }
 
     /// The object on the tile at `pos`, if any.
     pub(crate) fn at(&self, pos: Pos) -> Option<EntityId> {
-        self.on_tile[self.index(pos)]
+        self.on_tile.at(pos)
     }
 
     /// The object `id`, if it exists.
@@ -132,13 +129,7 @@ impl Objects {
 
     /// Puts a new object on its tile. The caller has checked `can_place`.
     pub(crate) fn place(&mut self, id: EntityId, object: Object) {
-        let index = self.index(object.pos);
-        debug_assert!(
-            self.on_tile[index].is_none(),
-            "{:?} already holds an object",
-            object.pos
-        );
-        self.on_tile[index] = Some(id);
+        self.on_tile.put(object.pos, id);
         self.by_id.insert(id, object);
     }
 
@@ -148,15 +139,14 @@ impl Objects {
             .by_id
             .remove(&id)
             .expect("removing an object that exists");
-        let index = self.index(object.pos);
-        self.on_tile[index] = None;
+        self.on_tile.clear(object.pos);
         object
     }
 
     /// Checks that every object stands where the rules allow, alone on its
     /// tile, with its stage and counters in range; describes the first problem.
     pub(crate) fn check(&self, map: &Map, data: &DataPack) -> Result<(), String> {
-        let indexed = self.on_tile.iter().flatten().count();
+        let indexed = self.on_tile.count();
         if indexed != self.by_id.len() {
             return Err(format!(
                 "{indexed} tiles hold objects, but there are {} objects",
@@ -195,14 +185,10 @@ impl Objects {
         Ok(())
     }
 
-    fn is_solid_at(&self, data: &DataPack, pos: Pos) -> bool {
+    /// Whether a solid object stands on the tile at `pos`.
+    pub(crate) fn is_solid_at(&self, data: &DataPack, pos: Pos) -> bool {
         self.at(pos)
             .is_some_and(|id| data.object_types()[self.kind(id)].solid)
-    }
-
-    /// The tile index of `pos`: `y × width + x`.
-    fn index(&self, pos: Pos) -> usize {
-        usize::from(pos.y) * usize::from(self.width) + usize::from(pos.x)
     }
 }
 
