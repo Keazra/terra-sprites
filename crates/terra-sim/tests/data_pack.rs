@@ -604,3 +604,23 @@ fn physiology_needs_its_physical_chemicals_and_body_sensors() {
         "always",
     );
 }
+
+#[test]
+fn trait_ranges_are_finite_and_above_0() {
+    assert_invalid_physiology("speed: (4.0, 12.0)", "speed: (0.0, 12.0)", "speed");
+    assert_invalid_physiology(
+        "lifespan: (20000.0, 200000.0)",
+        "lifespan: (0.0, 200000.0)",
+        "lifespan",
+    );
+    assert_invalid_physiology(
+        "lifespan: (20000.0, 200000.0)",
+        "lifespan: (20000.0, inf)",
+        "lifespan",
+    );
+}
+
+#[test]
+fn physiology_rates_are_finite() {
+    assert_invalid_physiology("healing: 0.0001", "healing: inf", "healing");
+}

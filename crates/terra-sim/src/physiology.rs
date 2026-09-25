@@ -160,8 +160,10 @@ impl PhysiologyEntry {
             ("injury.dehydration", injury.dehydration),
             ("injury.old_age", injury.old_age),
         ] {
-            if rate.is_nan() || rate < 0.0 {
-                return Err(format!("`{name}` is {rate}, but can't be negative"));
+            if !(rate.is_finite() && rate >= 0.0) {
+                return Err(format!(
+                    "`{name}` is {rate}, but must be a number, and can't be negative"
+                ));
             }
         }
         if self.cause_fade == 0 {
@@ -175,6 +177,13 @@ impl PhysiologyEntry {
             ("traits.lifespan", traits.lifespan),
         ] {
             range(name, bounds)?;
+            // A lifespan of 0 would make the age sensor 0 ÷ 0.
+            if !(bounds.0 > 0.0 && bounds.1.is_finite()) {
+                return Err(format!(
+                    "`{name}` goes from {} to {}, but must be numbers above 0",
+                    bounds.0, bounds.1
+                ));
+            }
         }
 
         let mut receptor_targets = BTreeMap::new();

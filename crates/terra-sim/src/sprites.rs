@@ -125,6 +125,11 @@ impl Sprites {
             if let Some(level) = sprite.body.chems.iter().find(|l| !(0.0..=1.0).contains(*l)) {
                 return Err(format!("{id:?} has a chemical at {level}, outside 0 to 1"));
             }
+            if let Some(value) = sprite.body.loci.iter().find(|v| !v.is_finite()) {
+                return Err(format!(
+                    "{id:?} has a locus at {value}, which isn't a number"
+                ));
+            }
         }
         Ok(())
     }

@@ -229,3 +229,22 @@ fn golden_the_first_starter_genome_still_loads_with_every_gene_readable() {
         "every gene is known, so none is written by number"
     );
 }
+
+#[test]
+fn a_payload_is_hex_digits_and_nothing_else() {
+    // Rust's number parser takes a leading `+`, but a payload mustn't.
+    assert_invalid(
+        &[r#"Gene(type: 900, version: 1, payload: "+1+2")"#],
+        "payload",
+    );
+}
+
+#[test]
+fn only_a_level_emitter_can_be_inverted() {
+    for mode in ["Rise", "Fall"] {
+        let gene = format!(
+            r#"Emitter(locus: Chem("h1"), mode: {mode}, invert: true, gain: 1.0, chem: "h0")"#
+        );
+        assert_invalid(&[&gene], "invert");
+    }
+}
