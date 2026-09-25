@@ -5,11 +5,17 @@ use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
     ChemicalKind, ChemicalLevel, DeathCause, EmitterMode, Expression, GeneView, ObjectView,
-    SpriteView, World,
+    SpriteView, Trait, World,
 };
 
 use crate::app::{App, Selection, Tab};
-use crate::ui::{INSPECTOR_WIDTH, cause_name, display_name, group_thousands, sprite_label};
+use crate::text::{
+    cause_name, change, display_name, group_thousands, level, signed, significant, sprite_label,
+    whole,
+};
+
+/// The inspector's width, in columns, border included (design §6.1).
+pub(crate) const INSPECTOR_WIDTH: u16 = 46;
 
 /// The columns inside the inspector's border.
 const WIDTH: usize = INSPECTOR_WIDTH as usize - 2;
@@ -23,11 +29,10 @@ pub fn title(app: &App) -> String {
     let tabs: Vec<String> = Tab::ALL
         .iter()
         .map(|&tab| {
-            let name = tab_name(tab);
             if tab == app.tab() {
-                format!("[{name}]")
+                format!("[{}]", tab.label())
             } else {
-                name.to_string()
+                tab.label().to_string()
             }
         })
         .collect();
@@ -35,15 +40,6 @@ pub fn title(app: &App) -> String {
     match app.selection() {
         Some(selection) => format!(" {} ── {tabs} ", sprite_label(selection.id())),
         None => format!(" {tabs} "),
-    }
-}
-
-fn tab_name(tab: Tab) -> &'static str {
-    match tab {
-        Tab::Body => "Body",
-        Tab::Chem => "Chem",
-        Tab::Genome => "Genome",
-        Tab::World => "World",
     }
 }
 
@@ -65,6 +61,13 @@ pub fn lines(app: &App, world: &World) -> Vec<Line<'static>> {
     }
 }
 
+/// The first line shown of a tab `length` lines long in `rows` rows, when
+/// it's scrolled `scroll` lines: no further than where its last line comes
+/// into view, since the tab may have got shorter, or the rows more.
+pub(crate) fn first_shown(scroll: usize, length: usize, rows: usize) -> usize {
+    scroll.min(length.saturating_sub(rows))
+}
+
 /// A sprite tab's lines for `sprite`.
 fn sprite_tab(tab: Tab, sprite: &SpriteView) -> Vec<Line<'static>> {
     match tab {
@@ -81,14 +84,14 @@ fn body_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
     let traits = sprite.traits();
     let mut lines = vec![
         format!(
-            " age {} · lifespan {}",
+            " age {} · {}",
             group_thousands(sprite.age()),
-            group_thousands(traits.lifespan.round() as u64)
+            trait_text(Trait::Lifespan, traits.lifespan)
         ),
         format!(
-            " speed {} · sense {}",
-            significant(traits.speed),
-            significant(traits.sense_radius)
+            " {} · {}",
+            trait_text(Trait::Speed, traits.speed),
+            trait_text(Trait::SenseRadius, traits.sense_radius)
         ),
         String::new(),
     ];
@@ -117,13 +120,33 @@ fn body_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
     lines.into_iter().map(Line::from).collect()
 }
 
+/// An arrow for which way a level went over the last tick, or nothing when
+/// the change is too small to show.
+fn trend(amount: f32) -> &'static str {
+    match change(amount) {
+        None => "",
+        Some(_) if amount > 0.0 => "▲",
+        Some(_) => "▼",
+    }
+}
+
+/// A trait and its value: `speed 7.25`, `sense 9.5`, `lifespan 61,204`.
+fn trait_text(which: Trait, value: f32) -> String {
+    match which {
+        Trait::Speed => format!("speed {}", significant(value)),
+        Trait::SenseRadius => format!("sense {}", significant(value)),
+        Trait::Lifespan => format!("lifespan {}", whole(f64::from(value))),
+    }
+}
+
 /// The Chem tab (design §6.1): each chemical on its own line with its level
 /// and its change per tick, the physical chemicals, then the signal
 /// chemicals; then the hormones' levels, four to a line.
 fn chem_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
     let chemicals: Vec<ChemicalLevel> = sprite.chemicals().collect();
     let line = |c: &ChemicalLevel| {
-        let text = format!(" {:<13}{:>4}  {}", c.name, level(c.level), change(c.change));
+        let amount = change(c.change).unwrap_or_default();
+        let text = format!(" {:<13}{:>4}  {amount}", c.name, level(c.level));
         text.trim_end().to_string()
     };
     let of_kinds = |kinds: &[ChemicalKind]| {
@@ -153,28 +176,55 @@ fn chem_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
     lines.into_iter().map(Line::from).collect()
 }
 
-/// The Genome tab's groups, in order, with their headings. Traits come
-/// first, since they share one line.
-const GENE_GROUPS: [&str; 7] = [
-    "TRAITS",
-    "HALF-LIVES",
-    "REACTIONS",
-    "EMITTERS",
-    "RECEPTORS",
-    "STARTING LEVELS",
-    "UNKNOWN GENES",
-];
+/// A group of genes on the Genome tab.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GeneGroup {
+    Traits,
+    HalfLives,
+    Reactions,
+    Emitters,
+    Receptors,
+    StartingLevels,
+    Unknown,
+}
 
-/// Which of `GENE_GROUPS` a gene goes in.
-fn gene_group(gene: &GeneView) -> usize {
-    match gene {
-        GeneView::Trait { .. } => 0,
-        GeneView::HalfLife { .. } => 1,
-        GeneView::Reaction { .. } => 2,
-        GeneView::Emitter { .. } => 3,
-        GeneView::Receptor { .. } => 4,
-        GeneView::InitialConcentration { .. } => 5,
-        GeneView::Unknown { .. } => 6,
+impl GeneGroup {
+    /// Every group, in the tab's order. Traits come first, since they share
+    /// one line.
+    const ALL: [GeneGroup; 7] = [
+        GeneGroup::Traits,
+        GeneGroup::HalfLives,
+        GeneGroup::Reactions,
+        GeneGroup::Emitters,
+        GeneGroup::Receptors,
+        GeneGroup::StartingLevels,
+        GeneGroup::Unknown,
+    ];
+
+    /// The group `gene` goes in.
+    fn of(gene: &GeneView) -> GeneGroup {
+        match gene {
+            GeneView::Trait { .. } => GeneGroup::Traits,
+            GeneView::HalfLife { .. } => GeneGroup::HalfLives,
+            GeneView::Reaction { .. } => GeneGroup::Reactions,
+            GeneView::Emitter { .. } => GeneGroup::Emitters,
+            GeneView::Receptor { .. } => GeneGroup::Receptors,
+            GeneView::InitialConcentration { .. } => GeneGroup::StartingLevels,
+            GeneView::Unknown { .. } => GeneGroup::Unknown,
+        }
+    }
+
+    /// The group's heading.
+    fn heading(self) -> &'static str {
+        match self {
+            GeneGroup::Traits => "TRAITS",
+            GeneGroup::HalfLives => "HALF-LIVES",
+            GeneGroup::Reactions => "REACTIONS",
+            GeneGroup::Emitters => "EMITTERS",
+            GeneGroup::Receptors => "RECEPTORS",
+            GeneGroup::StartingLevels => "STARTING LEVELS",
+            GeneGroup::Unknown => "UNKNOWN GENES",
+        }
     }
 }
 
@@ -184,15 +234,15 @@ fn gene_group(gene: &GeneView) -> usize {
 fn genome_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
     let genes = sprite.genes();
     let mut lines = Vec::new();
-    for (group, heading) in GENE_GROUPS.iter().enumerate() {
+    for group in GeneGroup::ALL {
         let members: Vec<&(GeneView, Expression)> = genes
             .iter()
-            .filter(|(gene, _)| gene_group(gene) == group)
+            .filter(|(gene, _)| GeneGroup::of(gene) == group)
             .collect();
         if members.is_empty() {
             continue;
         }
-        lines.push(Line::from(format!(" {heading}")));
+        lines.push(Line::from(format!(" {}", group.heading())));
         let (together, apart): (Vec<_>, Vec<_>) = members.into_iter().partition(|(gene, how)| {
             matches!(gene, GeneView::Trait { .. }) && *how == Expression::Expressed
         });
@@ -231,11 +281,7 @@ fn gene_text(gene: &GeneView) -> String {
         }
     };
     match *gene {
-        GeneView::Trait { name, value } => match name {
-            "lifespan" => format!("lifespan {}", group_thousands(value.round() as u64)),
-            "sense_radius" => format!("sense {}", significant(value)),
-            name => format!("{} {}", display_name(name), significant(value)),
-        },
+        GeneView::Trait { which, value } => trait_text(which, value),
         GeneView::HalfLife { chem, ticks: 1 } => {
             format!("{} halves every tick", display_name(chem))
         }
@@ -346,76 +392,6 @@ fn wrapped(text: &str, indent: usize, style: Style) -> Vec<Line<'static>> {
         .into_iter()
         .map(|line| Line::styled(line.replace(BOUND, " "), style))
         .collect()
-}
-
-/// A gene value with its sign: `+.004`, `-.5`.
-fn signed(value: f32) -> String {
-    if value < 0.0 {
-        significant(value)
-    } else {
-        format!("+{}", significant(value))
-    }
-}
-
-/// A change per tick as the inspector shows it: to 4 decimals, with its sign
-/// and no leading zero, or nothing when it rounds to 0.
-fn change(change: f32) -> String {
-    if change.abs() < SMALLEST_CHANGE {
-        return String::new();
-    }
-    let sign = if change > 0.0 { "+" } else { "-" };
-    format!(
-        "{sign}{}",
-        without_leading_zero(&format!("{:.4}", change.abs()))
-    )
-}
-
-/// A level as the inspector shows it: two decimals, with no leading zero.
-fn level(level: f32) -> String {
-    without_leading_zero(&format!("{level:.2}"))
-}
-
-/// The smallest change the inspector shows: .0001, to 4 decimals.
-const SMALLEST_CHANGE: f32 = 0.00005;
-
-/// An arrow for which way a level went over the last tick, or nothing when
-/// the change is too small to show.
-fn trend(change: f32) -> &'static str {
-    if change >= SMALLEST_CHANGE {
-        "▲"
-    } else if change <= -SMALLEST_CHANGE {
-        "▼"
-    } else {
-        ""
-    }
-}
-
-/// `value` to 3 significant figures, with no trailing zeros and no leading
-/// zero: `7.25`, `9.5`, `.00428`, `61200`.
-fn significant(value: f32) -> String {
-    if value == 0.0 {
-        return "0".into();
-    }
-    let magnitude = value.abs().log10().floor() as i32;
-    let decimals = (2 - magnitude).max(0) as usize;
-    let text = format!("{value:.decimals$}");
-    let text = if text.contains('.') {
-        text.trim_end_matches('0').trim_end_matches('.')
-    } else {
-        &text
-    };
-    without_leading_zero(text)
-}
-
-/// `0.42` → `.42`, `-0.5` → `-.5`.
-fn without_leading_zero(number: &str) -> String {
-    if let Some(rest) = number.strip_prefix("0.") {
-        format!(".{rest}")
-    } else if let Some(rest) = number.strip_prefix("-0.") {
-        format!("-.{rest}")
-    } else {
-        number.to_string()
-    }
 }
 
 /// The World tab (design §6.1): the data pack; the population, and the

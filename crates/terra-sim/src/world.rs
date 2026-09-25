@@ -121,6 +121,7 @@ pub struct Scenario<'a> {
 pub struct ChemicalLevel<'a> {
     /// The chemical's name in the data pack.
     pub name: &'a str,
+    /// Physical, drive, learning signal or hormone.
     pub kind: ChemicalKind,
     /// From 0 to 1.
     pub level: f32,
@@ -175,12 +176,12 @@ impl<'a> SpriteView<'a> {
             .data
             .chemicals()
             .iter()
-            .zip(body.chems.iter().zip(&body.previous))
-            .map(|(chemical, (&level, &previous))| ChemicalLevel {
+            .zip(body.chems.iter().zip(&body.chems_before_tick))
+            .map(|(chemical, (&level, &before))| ChemicalLevel {
                 name: &chemical.name,
                 kind: chemical.kind(),
                 level,
-                change: level - previous,
+                change: level - before,
             })
     }
 
@@ -439,7 +440,7 @@ impl World {
     /// the change the Chem tab shows. It's not a step: nothing reads them.
     fn remember_levels(&mut self) {
         for body in self.state.sprites.bodies_mut() {
-            body.previous.clone_from(&body.chems);
+            body.chems_before_tick.clone_from(&body.chems);
         }
     }
 

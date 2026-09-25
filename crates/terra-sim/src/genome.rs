@@ -122,8 +122,8 @@ pub enum GeneView<'a> {
     },
     /// Type 5: a chemical's level at birth.
     InitialConcentration { chem: &'a str, value: f32 },
-    /// Type 6: a body trait, by its name in genome files.
-    Trait { name: &'static str, value: f32 },
+    /// Type 6: a body trait.
+    Trait { which: Trait, value: f32 },
     /// A gene this build can't read, with the length of its payload.
     Unknown {
         type_id: u16,
@@ -239,10 +239,7 @@ impl Gene {
                 chem: chem(id),
                 value,
             },
-            Gene::Trait { which, value } => GeneView::Trait {
-                name: which.name(),
-                value,
-            },
+            Gene::Trait { which, value } => GeneView::Trait { which, value },
             Gene::Unknown {
                 type_id,
                 version,

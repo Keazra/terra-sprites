@@ -14,7 +14,7 @@ Decided with the owner while starting slice 4b ([#5](https://github.com/Keazra/t
 | # | Change | Source | Sections |
 |---|---|---|---|
 | 1 | **The Chem tab is one list,** not two columns. Each chemical has its own line, with its level and its change per tick: the physical chemicals, a blank line, then the signal chemicals, with the 16 hormones in a 4×4 grid of levels below. Two columns of name, level and change need about 46 columns, and the inspector has 44 inside; a change rounded to fit would read `.000` for most of them. The list still fits at 100×30. | Owner decision | §6.1 |
-| 2 | **Change per tick** is a level now minus the level one tick ago, shown to 4 decimals (`-.0002`), and left blank when it rounds to 0. The sim keeps each sprite's levels from one tick ago for it. Nothing in the sim reads them, so they're left out of the state hash and of saves: after a load, every change reads blank for one tick. | Slice 4b | §2.8, §6.1 |
+| 2 | **Change per tick** is a level now minus the level one tick ago, shown to 4 decimals (`-.0002`), and left blank when it rounds to 0. The sim keeps each sprite's levels from one tick ago for it, before step 1 (§2.4). Nothing in the sim reads them, so they're left out of the state hash and of saves: after a load, every change reads blank for one tick. | Slice 4b | §2.4, §2.8, §6.1 |
 | 3 | **The inspector's title** is the selected sprite and the tabs, with the open one in brackets: `Sprite #530 ── [Body] Chem Genome World`. With no sprite selected, it's the tabs alone. A label too long to fit is shortened, never the tab names. The tabs go Body, Brain, Chem, Genome, World; `[` and `]` wrap around, and the game starts on World. | Slice 4b | §6.1 |
 | 4 | **The Body tab** shows age and lifespan; speed and sense radius as expressed; a bar for each drive with its level and an arrow for its change over the last tick (`▲` rising, `▼` falling); and the physical levels. The current action joins it when sprites act. | Slice 4b | §6.1 |
 | 5 | **The Genome tab** groups genes under headings: traits first, on one line, then half-lives, reactions, emitters, receptors and starting levels, with unknown genes last, each group in genome order. Numbers show 3 significant figures, so spawn variation shows: `low energy → hunger +.00428 past .515`. A flagged, unexpressed or unknown gene is dimmed, with its reason on the line below. | Slice 4b | §6.1 |
@@ -287,6 +287,8 @@ world.check_invariants();                                // debug/test builds
 - **Reward only credits the past.** Reward and punishment produced at step 3 are consumed at step 4 of the same tick, so they credit entries up to the previous tick and never linger onto later decisions.
 - **A sprite whose injury crosses 1.0 at step 3 makes no decision that tick.**
 - **Held sprites** run steps 3 and 4 but skip steps 5 and 6. They make no decisions and commit no trace entries.
+
+Before step 1, the world keeps every sprite's chemical levels as they stand, so the Chem tab can show each one's change over the tick (§6.1). It's bookkeeping, not a step: nothing in the sim reads those levels.
 
 ### 2.5 Commands and events
 

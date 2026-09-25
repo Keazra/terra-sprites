@@ -1014,14 +1014,107 @@ fn a_tab_goes_back_to_the_top_when_the_tab_or_the_selection_changes() {
         "EMITTERS",
         "after switching tabs"
     );
-    app.apply(Action::ScrollTab { pages: 1 }, &world);
-    // Selecting a sprite, even the same one again, starts it from the top.
+}
+
+#[test]
+fn selecting_another_sprite_starts_its_tab_from_the_top_and_the_same_one_again_does_not() {
+    let pack = pack();
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let genome = || Some(terra_sim::Genome::from_ron(&long_genome(), &pack).expect("valid"));
+    let sprites = [
+        (terra_sim::Pos { x: 2, y: 3 }, genome()),
+        (terra_sim::Pos { x: 6, y: 1 }, genome()),
+    ];
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+    };
+    let world = World::from_scenario(scenario, pack.clone(), 7).expect("valid scenario");
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
+    app.apply(Action::NextTab, &world);
+    app.apply(Action::NextTab, &world);
+    app.apply(Action::ScrollTab { pages: 1 }, &world);
+    // The first sprite is at (2, 3), drawn at cell (3, 5).
+    app.apply(Action::Click(Position::new(3, 5)), &world);
     assert_eq!(
         first_and_last(&app, &world).0,
-        "EMITTERS",
-        "after selecting"
+        "always → boredom +.021",
+        "the same sprite again"
     );
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(first_and_last(&app, &world).0, "EMITTERS", "another sprite");
+}
+
+#[test]
+fn after_the_inspector_grows_page_up_scrolls_from_what_is_shown() {
+    let (world, mut app) = one_sprite(&long_genome(), 0);
+    app.apply(Action::NextTab, &world);
+    app.apply(Action::NextTab, &world);
+    app.apply(Action::ScrollTab { pages: 2 }, &world); // the end: line 40 at the top
+    // At 100×40 the tab has 31 rows, so the end is line 30 at the top.
+    app.fit(ui::areas(Size::new(100, 40), world.map()));
+    app.apply(Action::ScrollTab { pages: -1 }, &world);
+    let rows = right_part(&render(&app, &world, 100, 40), 46);
+    assert_eq!(inside(&rows[2]), "EMITTERS", "a page up from line 30");
+}
+
+#[test]
+fn a_change_too_small_to_show_leaves_no_number_and_no_arrow() {
+    // Boredom gains .00005 a tick, which rounds to .0000 at 4 decimals.
+    let genome = r#"(format: 1, genes: [
+        Emitter(locus: Locus("always"), mode: Level, gain: 0.00005, chem: "boredom"),
+    ])"#;
+    let (world, mut app) = one_sprite(genome, 1);
+    let (_, body) = inspector(&app, &world);
+    assert_eq!(body[7], "boredom     ░░░░░░░░░░ .00", "the Body tab");
+    app.apply(Action::NextTab, &world);
+    let (_, chem) = inspector(&app, &world);
+    assert_eq!(chem[11], "boredom       .00", "the Chem tab");
+}
+
+#[test]
+fn big_and_negative_gene_values_keep_3_significant_figures_and_their_sign() {
+    let genome = r#"(format: 1, genes: [
+        Trait(trait: "lifespan", value: -1234.5),
+        Emitter(locus: Locus("always"), mode: Level, gain: 1234.5, chem: "boredom"),
+        Emitter(locus: Locus("always"), mode: Level, gain: -98765.0, chem: "boredom"),
+    ])"#;
+    let (world, mut app) = one_sprite(genome, 0);
+    app.apply(Action::NextTab, &world);
+    app.apply(Action::NextTab, &world);
+    let (_, text) = inspector(&app, &world);
+    assert_eq!(
+        text[..5],
+        [
+            "TRAITS",
+            "lifespan -1,235",
+            "EMITTERS",
+            "always → boredom +1,230",
+            "always → boredom -98,800",
+        ]
+    );
+}
+
+#[test]
+fn every_tab_s_text_is_within_cp437() {
+    // Design §6.2: any CP437 font or tileset can draw every panel.
+    let mut world = generated_world();
+    for _ in 0..500 {
+        world.step();
+    }
+    let mut app = app_for(&world, Theme::cp437(), 100, 40);
+    app.apply(Action::SelectNext, &world);
+    for _ in terra_tui::app::Tab::ALL {
+        let screen = render(&app, &world, 100, 40);
+        for line in lines(&screen) {
+            for c in line.chars() {
+                assert!(terra_tui::cp437::contains(c), "{c:?} in {line:?}");
+            }
+        }
+        app.apply(Action::NextTab, &world);
+    }
 }
 
 #[test]

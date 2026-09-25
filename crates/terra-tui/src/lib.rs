@@ -7,5 +7,6 @@ pub mod clock;
 pub mod cp437;
 pub mod input;
 mod inspector;
+mod text;
 pub mod theme;
 pub mod ui;

@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 
 use terra_sim::{
     ChemicalKind, DataPack, DeathCause, EmitterMode, EntityId, EventKind, Expression, GeneView,
-    Genome, Map, Pos, Scenario, Traits, World, WorldConfig,
+    Genome, Map, Pos, Scenario, Trait, Traits, World, WorldConfig,
 };
 
 fn builtin() -> DataPack {
@@ -466,7 +466,7 @@ fn a_sprite_shows_each_gene_by_name_with_how_it_is_expressed() {
             ),
             (
                 GeneView::Trait {
-                    name: "sense_radius",
+                    which: Trait::SenseRadius,
                     value: 9.5
                 },
                 Expressed
