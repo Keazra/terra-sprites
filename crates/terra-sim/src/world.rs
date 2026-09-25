@@ -15,7 +15,7 @@ use crate::genome::Genome;
 use crate::map::{Map, MapError, Pos};
 use crate::objects::{EntityId, Object, Objects};
 use crate::regions::Regions;
-use crate::sprites::{self, Sprite, Sprites};
+use crate::sprites::{Sprite, Sprites};
 use crate::variation::varied;
 
 /// Fixed seed for `state_hash`, so hashes are comparable across runs and builds.
@@ -123,11 +123,6 @@ impl SpriteView<'_> {
     /// The sprite's entity ID.
     pub fn id(&self) -> EntityId {
         self.id
-    }
-
-    /// The sprite's name.
-    pub fn name(&self) -> String {
-        sprites::name(self.id)
     }
 
     /// The tile the sprite stands on.
@@ -428,7 +423,6 @@ impl World {
                 tick: state.tick,
                 kind: EventKind::Died {
                     id,
-                    name: sprites::name(id),
                     cause: sprite.body.cause_of_death(),
                     age: sprite.age(state.tick),
                 },

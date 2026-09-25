@@ -116,6 +116,10 @@ _Avoid_: DNA
 One instruction in a genome, such as "low energy raises hunger". Its type says what kind of instruction it is.
 _Avoid_: allele
 
+**Name**:
+What the player calls a sprite: one they make up, or one generated at random. A sprite has no name until the player gives it one, and shows by its ID until then.
+_Avoid_: label
+
 **Starter genome**:
 The genome in the data pack that sprites are made from when they have no parents.
 

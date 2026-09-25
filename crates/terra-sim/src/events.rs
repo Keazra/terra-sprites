@@ -20,11 +20,9 @@ pub enum EventKind {
         object_type: String,
         pos: Pos,
     },
-    /// A sprite died, and left the world. It carries the sprite's name,
-    /// because the sprite is gone by the time anything reads the event.
+    /// A sprite died, and left the world.
     Died {
         id: EntityId,
-        name: String,
         cause: DeathCause,
         /// Its age in ticks.
         age: u64,

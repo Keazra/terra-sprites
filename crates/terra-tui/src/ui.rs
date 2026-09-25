@@ -7,7 +7,7 @@ use ratatui::{
     style::{Modifier, Style},
     text::Line,
 };
-use terra_sim::{DeathCause, Event, EventKind, Map, ObjectView, Pos, Terrain, World};
+use terra_sim::{DeathCause, EntityId, Event, EventKind, Map, ObjectView, Pos, Terrain, World};
 
 use crate::app::{App, Screen};
 use crate::clock::Speed;
@@ -263,7 +263,7 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     let terrain = terrain_name(world.map().terrain(cursor));
     let sprite = world
         .sprite_at(cursor)
-        .map(|sprite| format!(" · {} #{}", sprite.name(), sprite.id().0))
+        .map(|sprite| format!(" · {}", sprite_label(sprite.id())))
         .unwrap_or_default();
     let object = world
         .object_at(cursor)
@@ -390,19 +390,24 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App) {
     }
 }
 
+/// How the screen names a sprite. Sprites have no names until the player
+/// gives them one (design §6.5), so each shows by its ID.
+fn sprite_label(id: EntityId) -> String {
+    format!("Unnamed #{}", id.0)
+}
+
 /// What an event says in the event log, if the log shows it.
 fn event_text(event: &Event) -> Option<String> {
     match &event.kind {
-        EventKind::Died {
-            name, cause, age, ..
-        } => {
+        EventKind::Died { id, cause, age } => {
             let cause = match cause {
                 DeathCause::Starvation => "starvation",
                 DeathCause::Dehydration => "dehydration",
                 DeathCause::OldAge => "old age",
             };
             Some(format!(
-                "{name} died ({cause}, age {})",
+                "{} died ({cause}, age {})",
+                sprite_label(*id),
                 group_thousands(*age)
             ))
         }
