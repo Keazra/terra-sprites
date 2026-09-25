@@ -6,5 +6,11 @@ members = ["crates/terra-sim", "crates/terra-tui"]
 edition = "2024"
 version = "0.1.0"
 
+# Tests and debug builds run lightly optimised: sprites flood and walk every
+# tick, and the full self-check runs after each one (design §7.1), which
+# unoptimised takes the long tests minutes. Debug assertions stay on.
+[profile.dev]
+opt-level = 1
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
