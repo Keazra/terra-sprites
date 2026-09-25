@@ -414,3 +414,16 @@ fn after_the_selected_sprite_dies_tab_carries_on_from_its_id() {
     app.apply(Action::SelectPrevious, &world);
     assert_eq!(app.selection(), Some(Selection::Living(ids[1])));
 }
+
+#[test]
+fn the_detail_view_starts_off_and_toggles_whatever_is_selected() {
+    let world = grass_with(20, 10, &[at(3, 4)]);
+    let mut app = app(&world, tile_area(20, 10));
+    assert!(!app.detail());
+    app.apply(Action::ToggleDetail, &world);
+    assert!(app.detail());
+    app.apply(Action::SelectNext, &world);
+    assert!(app.detail(), "a new selection keeps it");
+    app.apply(Action::ToggleDetail, &world);
+    assert!(!app.detail());
+}

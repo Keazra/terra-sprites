@@ -138,6 +138,8 @@ pub struct App {
     tab: Tab,
     /// How many lines the open tab is scrolled down.
     tab_scroll: usize,
+    /// Whether the detail view is on (design §6.1).
+    detail: bool,
 }
 
 impl App {
@@ -164,15 +166,17 @@ impl App {
             selection: None,
             tab: Tab::World,
             tab_scroll: 0,
+            detail: false,
         };
         app.centre_on(cursor);
         app
     }
 
     /// Takes in what happened during a tick, for the event log (design §6.1),
-    /// and the death of the selected sprite. Object events are left out of the
-    /// log: they happen dozens of times a minute and would bury everything
-    /// else, and the World tab counts objects instead.
+    /// and the death of the selected sprite. Object and action events are
+    /// left out of the log: they happen dozens of times a minute and would
+    /// bury everything else. The World tab counts objects instead, and the
+    /// Body tab shows the selected sprite's action.
     pub fn record(&mut self, events: &[Event]) {
         for event in events {
             if let EventKind::Died { id, cause, age } = event.kind
@@ -182,7 +186,10 @@ impl App {
             }
             if !matches!(
                 event.kind,
-                EventKind::ObjectSpawned { .. } | EventKind::ObjectRemoved { .. }
+                EventKind::ObjectSpawned { .. }
+                    | EventKind::ObjectRemoved { .. }
+                    | EventKind::ActionStarted { .. }
+                    | EventKind::ActionEnded { .. }
             ) {
                 self.event_log.push_front(event.clone());
             }
@@ -193,6 +200,12 @@ impl App {
     /// The events the event log shows, newest first.
     pub fn event_log(&self) -> impl Iterator<Item = &Event> {
         self.event_log.iter()
+    }
+
+    /// Whether the detail view is on: the exact workings behind what the
+    /// screen describes in words (design §6.1).
+    pub fn detail(&self) -> bool {
+        self.detail
     }
 
     /// The tile the cursor is on.
@@ -300,6 +313,7 @@ impl App {
                     self.scroll_tab(notches * WHEEL_LINES, world);
                 }
             }
+            Action::ToggleDetail => self.detail = !self.detail,
             Action::Back => self.screen = Screen::QuitPrompt,
             Action::Confirm | Action::Dismiss => {}
             Action::Quit => return Flow::Quit,

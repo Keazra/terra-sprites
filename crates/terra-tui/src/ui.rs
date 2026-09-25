@@ -7,7 +7,7 @@ use ratatui::{
     style::{Modifier, Style},
     text::Line,
 };
-use terra_sim::{Event, EventKind, Map, ObjectView, Pos, Terrain, World};
+use terra_sim::{Event, EventKind, Map, ObjectView, Pos, Progress, Terrain, World};
 
 use crate::app::{App, Areas, Screen, Selection};
 use crate::clock::Speed;
@@ -128,6 +128,7 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     // last fitted its view, stop at the wall rather than read past it.
     let cols = inner.width.min(map.width() - origin.x);
     let rows = inner.height.min(map.height() - origin.y);
+    let destination = heading_for(app, world);
     for row in 0..rows {
         for col in 0..cols {
             let pos = Pos {
@@ -142,6 +143,8 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
                     SemanticTile::Sprite
                 };
                 app.theme.glyph(tile)
+            } else if destination == Some(pos) {
+                app.theme.glyph(SemanticTile::Destination)
             } else if let Some(object) = world.object_at(pos) {
                 app.theme
                     .object_glyph(object.type_name(), object.visual_state())
@@ -161,6 +164,19 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
         }
     }
     draw_cursor(buf, inner, app);
+}
+
+/// Where the selected sprite is heading, while the detail view is on and its
+/// action is under way (design §6.1).
+fn heading_for(app: &App, world: &World) -> Option<Pos> {
+    let Some(Selection::Living(id)) = app.selection() else {
+        return None;
+    };
+    let action = world.sprite(id)?.action()?;
+    let under_way = !matches!(action.progress, Progress::Ended(_));
+    (app.detail() && under_way)
+        .then_some(action.destination)
+        .flatten()
 }
 
 /// Draws the 3×3 cursor around its target tile, which the tile loop has already
