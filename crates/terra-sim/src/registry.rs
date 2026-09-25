@@ -1,8 +1,8 @@
 //! The registries (design §2.8, Appendix A): stable, append-only IDs. Chemicals
-//! and loci are data, listed in the pack. Categories and verbs are closed enums,
-//! because each one is also a brain input or output.
+//! and loci are data, listed in the pack. Categories, verbs and traits are closed
+//! enums, because code gives each one its meaning.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// What brains perceive an object as. The discriminants are the stable `CategoryId`s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
@@ -37,6 +37,32 @@ impl Verb {
     /// (design §5.2). The others move, rest or are reserved.
     pub(crate) fn is_interaction(self) -> bool {
         matches!(self, Verb::Eat | Verb::Drink | Verb::Hit | Verb::Play)
+    }
+}
+
+/// An evolvable body trait (design §4.8). The discriminants are the stable trait IDs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub(crate) enum Trait {
+    Speed = 1,
+    SenseRadius = 2,
+    Lifespan = 3,
+}
+
+impl Trait {
+    pub(crate) const ALL: [Trait; 3] = [Trait::Speed, Trait::SenseRadius, Trait::Lifespan];
+
+    /// The trait's name in genome files and `physiology.ron`.
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Trait::Speed => "speed",
+            Trait::SenseRadius => "sense_radius",
+            Trait::Lifespan => "lifespan",
+        }
+    }
+
+    /// The trait called `name`, if there is one.
+    pub(crate) fn named(name: &str) -> Option<Trait> {
+        Trait::ALL.into_iter().find(|t| t.name() == name)
     }
 }
 

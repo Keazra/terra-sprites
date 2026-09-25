@@ -3,14 +3,6 @@
 
 use terra_sim::{DataPack, EntityId, Event, EventKind, Map, Pos, Removal, ScenarioError, World};
 
-const BUILTIN: &[(&str, &str)] = &[
-    ("pack.ron", include_str!("../../../data/pack.ron")),
-    ("terrain.ron", include_str!("../../../data/terrain.ron")),
-    ("chemicals.ron", include_str!("../../../data/chemicals.ron")),
-    ("loci.ron", include_str!("../../../data/loci.ron")),
-    ("objects.ron", include_str!("../../../data/objects.ron")),
-];
-
 fn at(x: u16, y: u16) -> Pos {
     Pos { x, y }
 }
@@ -22,7 +14,7 @@ fn builtin() -> DataPack {
 /// The built-in pack with `objects.ron` holding only `types`.
 fn pack_with(types: &[&str]) -> DataPack {
     let objects = format!("[{}]", types.join(",\n"));
-    let sources: Vec<(&str, &str)> = BUILTIN
+    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
         .iter()
         .map(|&(path, text)| {
             (

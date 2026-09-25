@@ -154,14 +154,15 @@ fn diagonal_costs_round_down_in_integer_maths() {
     // Sand at 19 makes a diagonal 19 × 14 / 10 = 26.6, which must round down to 26.
     let terrain =
         include_str!("../../../data/terrain.ron").replace("step_cost: 15", "step_cost: 19");
-    let data = DataPack::from_sources(&[
-        ("pack.ron", r#"(name: "test", version: "1")"#),
-        ("terrain.ron", &terrain),
-        ("chemicals.ron", include_str!("../../../data/chemicals.ron")),
-        ("loci.ron", include_str!("../../../data/loci.ron")),
-        ("objects.ron", include_str!("../../../data/objects.ron")),
-    ])
-    .expect("valid pack");
+    let data = DataPack::from_sources(&builtin_with("terrain.ron", &terrain)).expect("valid pack");
     let map = Map::from_ascii(&["..", ".:"], &data).expect("valid drawing");
     assert_eq!(map.step_cost(at(0, 0), Dir::SE), Some(26));
+}
+
+/// The built-in pack's files with `file` replaced by `text`.
+fn builtin_with<'a>(file: &str, text: &'a str) -> Vec<(&'static str, &'a str)> {
+    DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, builtin)| (path, if path == file { text } else { builtin }))
+        .collect()
 }

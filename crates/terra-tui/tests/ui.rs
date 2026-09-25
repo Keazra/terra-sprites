@@ -383,14 +383,7 @@ fn a_fruiting_bush_is_drawn_bold_red() {
     let objects = include_str!("../../../data/objects.ron")
         .replace("ticks: (1500, 2500)", "ticks: (1, 1)")
         .replace("Every(200)", "Every(1)");
-    let pack = DataPack::from_sources(&[
-        ("pack.ron", include_str!("../../../data/pack.ron")),
-        ("terrain.ron", include_str!("../../../data/terrain.ron")),
-        ("chemicals.ron", include_str!("../../../data/chemicals.ron")),
-        ("loci.ron", include_str!("../../../data/loci.ron")),
-        ("objects.ron", &objects),
-    ])
-    .expect("valid pack");
+    let pack = DataPack::from_sources(&builtin_with("objects.ron", &objects)).expect("valid pack");
     let mut world = garden(pack);
     for _ in 0..3 {
         world.step();
@@ -485,4 +478,12 @@ fn a_narrow_terminal_leaves_the_inspector_out_and_gives_the_map_view_the_width()
         screen.iter().all(|line| !line.contains("World")),
         "no World tab"
     );
+}
+
+/// The built-in pack's files with `file` replaced by `text`.
+fn builtin_with<'a>(file: &str, text: &'a str) -> Vec<(&'static str, &'a str)> {
+    DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, builtin)| (path, if path == file { text } else { builtin }))
+        .collect()
 }
