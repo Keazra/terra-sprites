@@ -377,3 +377,56 @@ fn an_action_view_says_what_it_was_aimed_at_and_whether_it_got_to_try() {
     assert_eq!(bare.target_type, Some(1), "a berry bush");
     assert!(bare.attempted && !bare.target_gone, "{bare:?}");
 }
+
+#[test]
+fn acting_from_where_it_stands_banks_no_move_points_for_the_next_walk() {
+    // Speed 10 is exactly one grass step a tick. Eating at once, from beside
+    // the bush, mustn't leave points that let the next walk take two.
+    // The bush is behind the sprite, so the walk runs straight along the row.
+    let bush = at(0, 1);
+    let mut world = world(
+        &["..........", "..........", ".........."],
+        &[(bush, "berry_bush")],
+        at(1, 1),
+        &[
+            ScriptedAction::Eat { at: bush },
+            ScriptedAction::Wander {
+                destination: at(8, 1),
+            },
+        ],
+    );
+    world
+        .start_object(bush, "mature", &[("fruit", 3)])
+        .expect("a bush to ripen");
+    let id = the_sprite(&world);
+    world.step();
+    let before = world.sprite(id).expect("it").pos();
+    world.step();
+    let after = world.sprite(id).expect("it").pos();
+    let moved = after.x.abs_diff(before.x).max(after.y.abs_diff(before.y));
+    assert_eq!(moved, 1, "{before:?} to {after:?}");
+}
+
+#[test]
+fn a_scripted_approach_can_head_for_water() {
+    let water = at(4, 1);
+    let mut world = world(
+        &["......", "....~.", "......"],
+        &[],
+        at(1, 1),
+        &[ScriptedAction::Approach { at: water }],
+    );
+    let id = the_sprite(&world);
+    for _ in 0..10 {
+        let events = world.step();
+        if !endings(&events).is_empty() {
+            assert_eq!(endings(&events), [(Verb::Approach, Outcome::Applied)]);
+            assert!(
+                beside(world.sprite(id).expect("it").pos(), water)
+                    || world.sprite(id).expect("it").pos() == water
+            );
+            return;
+        }
+    }
+    panic!("it should reach the water");
+}

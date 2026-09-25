@@ -49,7 +49,7 @@ pub enum ScriptedAction {
     Eat { at: Pos },
     /// Drink the water on `at`.
     Drink { at: Pos },
-    /// Approach the sprite on `at`, or else the object there.
+    /// Approach the sprite on `at`, or else the object there, or else the water.
     Approach { at: Pos },
 }
 
@@ -234,19 +234,20 @@ pub(crate) fn sense_and_decide(
                 .and_then(|target| state.whereabouts(data, target))
                 .map(|(pos, _)| pos);
             // Losing the target or the way comes first in 5.0 (design §5.5).
-            let outcome = if aim == Some(None)
-                || action.committed.is_none()
-                    && action
-                        .destination
-                        .is_some_and(|to| flood.cost(to).is_none())
-            {
+            // A sprite keeping to a committed way round goes on with it
+            // whatever the flood reaches (§3.7), unless the target is gone.
+            let gone = action.target.is_some() && there.is_none();
+            let lost = aim == Some(None)
+                || action
+                    .destination
+                    .is_some_and(|to| flood.cost(to).is_none());
+            let outcome = if gone || action.committed.is_none() && lost {
                 Some(Outcome::Failed)
             } else if state.tick >= action.started + u64::from(timeout) {
                 Some(Outcome::TimedOut)
             } else {
                 None
             };
-            let gone = action.target.is_some() && there.is_none();
             let sprite = state.sprites.get_mut(id).expect("the same sprite");
             let action = sprite.action.as_mut().expect("an action");
             match outcome {
@@ -258,12 +259,12 @@ pub(crate) fn sense_and_decide(
                     if let Some(Some(goal)) = aim {
                         // A committed way round leads to where a sprite
                         // target was; once it moves, it's dropped (design §3.7).
-                        if there != action.target_at {
-                            action.target_at = there;
-                            if matches!(action.target, Some(Target::Sprite(_))) {
-                                action.committed = None;
-                            }
+                        // Where it was first seen isn't a move.
+                        let moved = action.target_at.is_some_and(|at| there != Some(at));
+                        if moved && matches!(action.target, Some(Target::Sprite(_))) {
+                            action.committed = None;
                         }
+                        action.target_at = there;
                         if action.committed.is_none() {
                             action.destination = Some(goal);
                         }
@@ -359,9 +360,17 @@ pub(crate) fn resolve(
         .collect();
     shuffle(&mut order, &mut state.rng);
     for &id in &order {
-        let sprite = state.sprites.get_mut(id).expect("a sprite taking its turn");
+        let sprite = state.sprites.get(id).expect("a sprite taking its turn");
+        // An aimed action already on a goal tile acts where it stands: it
+        // has no walking to do, so it banks no points for later (design §3.7).
+        let arrived = sprite
+            .action
+            .as_ref()
+            .and_then(|a| a.target)
+            .is_some_and(|target| state.on_goal_tile(data, sprite.pos, target));
+        let sprite = state.sprites.get_mut(id).expect("the same sprite");
         sprite.did = Did::default();
-        if is_walking(sprite) {
+        if is_walking(sprite) && !arrived {
             sprite.move_points += (sprite.program.traits.speed * 10.0).round() as u32;
         }
         // Counted before anyone's turn, so a swap ending an action on

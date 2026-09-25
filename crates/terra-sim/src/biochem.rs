@@ -355,12 +355,13 @@ impl Body {
     }
 
     /// Adds `amount` to the chemical at `index`, within 0 to 1. Injury,
-    /// at `injury`, is put down to `cause`.
+    /// at `injury`, is put down to `cause` in full, as physiology's is,
+    /// even where the level stops at 1.
     pub(crate) fn inject(&mut self, index: usize, amount: f32, injury: usize, cause: DeathCause) {
         let before = self.chems[index];
         self.chems[index] = (before + amount).clamp(0.0, 1.0);
         if index == injury && amount > 0.0 {
-            *self.tallies.entry(cause).or_insert(0.0) += self.chems[index] - before;
+            *self.tallies.entry(cause).or_insert(0.0) += amount;
         }
     }
 }
@@ -1197,6 +1198,17 @@ mod tests {
         }
         assert_eq!(sprite.body.cause_of_death(), DeathCause::Dehydration);
         assert!(sprite.level("injury") < 1.0, "still alive");
+    }
+
+    #[test]
+    fn injected_injury_counts_in_full_towards_its_cause_even_past_1() {
+        let mut sprite = physical(&[]);
+        let injury = sprite.chem_index("injury");
+        sprite.set("injury", 0.98);
+        let thornbush = DeathCause::HurtBy(3);
+        sprite.body.inject(injury, 0.05, injury, thornbush);
+        assert_eq!(sprite.level("injury"), 1.0);
+        assert_eq!(sprite.body.tallies[&thornbush], 0.05);
     }
 
     #[test]
