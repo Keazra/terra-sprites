@@ -898,6 +898,75 @@ mod tests {
     }
 
     #[test]
+    fn a_dying_sprite_takes_no_part_in_a_swap() {
+        // Head-on in a corridor. The east sprite (speed 10) banks a step's
+        // points on the first tick while the west one (speed 5) can't yet
+        // pay for a swap; then the east one starves to death.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let map = Map::from_ascii(&["...."], &data).expect("valid drawing");
+        let speed = |value: f32| {
+            let genes = format!(r#"(format: 1, genes: [Trait(trait: "speed", value: {value:?})])"#);
+            Genome::from_ron(&genes, &data).expect("a valid genome")
+        };
+        let (west, east) = (Pos { x: 1, y: 0 }, Pos { x: 2, y: 0 });
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &[(west, Some(speed(5.0))), (east, Some(speed(10.0)))],
+            scripted: &[
+                (
+                    west,
+                    ScriptedAction::Wander {
+                        destination: Pos { x: 3, y: 0 },
+                    },
+                ),
+                (
+                    east,
+                    ScriptedAction::Wander {
+                        destination: Pos { x: 0, y: 0 },
+                    },
+                ),
+            ],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
+        world.step();
+        let indices = world.data.physiology().indices;
+        let dying = world.state.sprites.get_mut(ids[1]).expect("east");
+        dying.body.chems[indices.energy] = 0.0;
+        dying.body.chems[indices.injury] = 1.0;
+        let events = world.step();
+        let about_dying: Vec<&EventKind> = events
+            .iter()
+            .map(|e| &e.kind)
+            .filter(|k| matches!(k, EventKind::ActionEnded { id, .. } if *id == ids[1]))
+            .collect();
+        assert!(about_dying.is_empty(), "{about_dying:?}");
+        assert!(world.sprite(ids[1]).is_none(), "it died");
+        assert_eq!(world.sprite(ids[0]).expect("alive").pos(), west, "no swap");
+    }
+
+    #[test]
+    fn a_sprite_arriving_keeps_at_most_one_step_s_worth_of_points() {
+        let (mut world, id) = row_with_a_walker(
+            6,
+            &[ScriptedAction::Wander {
+                destination: Pos { x: 1, y: 0 },
+            }],
+        );
+        world
+            .state
+            .sprites
+            .get_mut(id)
+            .expect("the walker")
+            .move_points = 1_000;
+        world.step();
+        let walker = world.state.sprites.get(id).expect("the walker");
+        assert_eq!(walker.pos, Pos { x: 1, y: 0 });
+        assert_eq!(walker.move_points, 100, "one grass step's worth");
+    }
+
+    #[test]
     fn a_counter_above_its_maximum_breaks_an_invariant() {
         let mut world = field_with_a_bush();
         let id = world

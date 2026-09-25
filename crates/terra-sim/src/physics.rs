@@ -6,8 +6,9 @@ use crate::data::DataPack;
 use crate::map::{Dir, Map, Pos};
 use crate::objects::Objects;
 
-/// What a step onto the tile at `pos` costs, in terrain units, or `None` if
-/// nothing may step there: unwalkable terrain, or a solid object.
+/// What a step onto the tile at `pos`, which must be on the map, costs, in
+/// terrain units, or `None` if nothing may step there: unwalkable terrain, or
+/// a solid object.
 pub(crate) fn entry_cost(map: &Map, objects: &Objects, data: &DataPack, pos: Pos) -> Option<u32> {
     let cost = map.cost_onto(pos)?;
     (!objects.is_solid_at(data, pos)).then_some(u32::from(cost))

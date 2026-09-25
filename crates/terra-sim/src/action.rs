@@ -207,7 +207,8 @@ pub(crate) fn sense_and_decide(
 }
 
 /// Starts `sprite` (`id`) on an action. A Wander with no destination, or one
-/// its flood doesn't reach, ends at once, as failed (design §5.5).
+/// its flood doesn't reach, ends at once, as failed (design §5.5); one to the
+/// tile it stands on ends at once, as applied.
 fn start(
     sprite: &mut Sprite,
     id: EntityId,
@@ -225,6 +226,9 @@ fn start(
     let lost = verb == Verb::Wander && destination.is_none_or(|to| flood.cost(to).is_none());
     if lost {
         end(&mut action, id, Outcome::Failed, tick, events);
+    } else if verb == Verb::Wander && destination == Some(sprite.pos) {
+        // Already there.
+        end(&mut action, id, Outcome::Applied, tick, events);
     }
     sprite.action = Some(action);
 }
@@ -269,16 +273,22 @@ pub(crate) fn resolve(
         if is_walking(sprite) {
             sprite.move_points += (sprite.program.traits.speed * 10.0).round() as u32;
         }
+        // Counted before anyone's turn, so a swap ending an action on
+        // another's turn doesn't make the count depend on the order.
+        if let Some(action) = sprite.action.as_mut().filter(|a| a.ended.is_none()) {
+            action.ticks += 1;
+        }
     }
-    // The sprites whose movement this tick is over: by stepping, or by a swap.
-    let mut moved = BTreeSet::new();
+    // The sprites whose movement this tick is over: by stepping, or by a
+    // swap; and the dying, which take no part (design §2.4), so nothing
+    // swaps with them.
+    let mut moved: BTreeSet<EntityId> = dying.iter().copied().collect();
     for &id in &order {
         let sprite = state.sprites.get_mut(id).expect("a sprite taking its turn");
         if !is_acting(sprite) {
             continue;
         }
         let action = sprite.action.as_mut().expect("an action");
-        action.ticks += 1;
         if action.verb == Verb::Rest {
             sprite.did.rested = true;
             if action.ticks >= rest_bout {
@@ -439,21 +449,25 @@ fn swaps(
 }
 
 /// Sprite `id` has just stepped, for `cost` tenths. Returns whether that
-/// brought it to its destination, which ends its action.
+/// brought it to its destination, which ends its action. Arriving, it keeps
+/// at most that step's worth of points (design §3.7).
 fn stepped(state: &mut WorldState, id: EntityId, cost: u32, events: &mut Vec<Event>) -> bool {
     let sprite = state.sprites.get_mut(id).expect("the walker");
     sprite.move_points -= cost;
     sprite.did.steps += 1;
+    let arrived = sprite.action.as_ref().expect("an action").destination == Some(sprite.pos);
+    if arrived {
+        sprite.move_points = sprite.move_points.min(cost);
+    }
     let action = sprite.action.as_mut().expect("an action");
     action.blocked_ticks = 0;
     if let Some(committed) = &mut action.committed {
         committed.remove(0);
     }
-    if action.destination != Some(sprite.pos) {
-        return false;
+    if arrived {
+        end(action, id, Outcome::Applied, state.tick, events);
     }
-    end(action, id, Outcome::Applied, state.tick, events);
-    true
+    arrived
 }
 
 /// Sprite `id` had the points for its next step but couldn't take it: it
