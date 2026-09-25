@@ -117,7 +117,7 @@ One instruction in a genome, such as "low energy raises hunger". Its type says w
 _Avoid_: allele
 
 **Name**:
-What the player calls a sprite: one they make up, or one generated at random. A sprite has no name until the player gives it one, and shows by its ID until then.
+What the player calls a sprite: one they make up, or one generated at random. A sprite has no name until the player gives it one, and until then shows by its ID, as "Sprite #530".
 _Avoid_: label
 
 **Starter genome**:

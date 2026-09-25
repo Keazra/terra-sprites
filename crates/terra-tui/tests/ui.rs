@@ -459,7 +459,7 @@ fn the_status_line_shows_a_sprite_under_the_cursor_by_its_id() {
     let app = pointing_at(&world, Theme::cp437(), 60, 9, 7, 1);
     // Sprites have no names until the player gives them one (design v7 §6.5).
     let expected = format!(
-        " (7,1) grass · Unnamed #{} · berry (fresh) │ SELECT",
+        " (7,1) grass · Sprite #{} · berry (fresh) │ SELECT",
         sprite.id().0
     );
     assert_eq!(lines(&render(&app, &world, 60, 9))[8], expected);
@@ -594,15 +594,15 @@ fn the_event_log_lists_deaths_newest_first_under_the_map() {
     assert!(screen[24].starts_with("┌─ Events ─"), "{:?}", screen[24]);
     assert_eq!(
         inside(&screen[25]),
-        "4,100  Unnamed #13 died (old age, age 66,000)"
+        "4,100  Sprite #13 died (old age, age 66,000)"
     );
     assert_eq!(
         inside(&screen[26]),
-        "4,100  Unnamed #12 died (starvation, age 3,900)"
+        "4,100  Sprite #12 died (starvation, age 3,900)"
     );
     assert_eq!(
         inside(&screen[27]),
-        "4,012  Unnamed #31 died (dehydration, age 4,012)"
+        "4,012  Sprite #31 died (dehydration, age 4,012)"
     );
     assert!(screen[28].starts_with('└'), "three lines of events");
 }
