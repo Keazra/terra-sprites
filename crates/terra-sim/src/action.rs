@@ -2,16 +2,21 @@
 //! starts and ends, and how a moving one walks. Step 5 refreshes floods and
 //! starts actions; step 6 carries them out.
 
+use std::collections::BTreeSet;
+
+use rand_chacha::ChaCha8Rng;
 use serde::Serialize;
 
 use crate::data::DataPack;
 use crate::events::{Event, EventKind};
-use crate::map::Pos;
+use crate::map::{Dir, Pos};
 use crate::objects::EntityId;
 use crate::perception::{Flood, Ground, Occupied};
 use crate::physics::step_cost;
+use crate::random::uniform;
 use crate::registry::Verb;
 use crate::sprites::Sprite;
+use crate::standin;
 use crate::world::WorldState;
 
 /// How an action ended (design §5.5).
@@ -34,6 +39,8 @@ pub enum Outcome {
 pub enum ScriptedAction {
     /// Wander to `destination`.
     Wander { destination: Pos },
+    /// Rest for a bout.
+    Rest,
 }
 
 /// How far an action has got.
@@ -61,8 +68,22 @@ pub(crate) struct Action {
     pub(crate) verb: Verb,
     /// Where a Wander is heading.
     pub(crate) destination: Option<Pos>,
+    /// The ticks it has been carried out on, at step 6.
+    pub(crate) ticks: u32,
+    /// Ticks in a row it had the points for its next step but couldn't take it.
+    pub(crate) blocked_ticks: u32,
     /// How it ended, once it has.
     pub(crate) ended: Option<Outcome>,
+}
+
+/// What a sprite did at step 6, which its body feels at the next tick's
+/// step 3 (design §2.4).
+#[derive(Debug, Clone, Copy, Default, Serialize)]
+pub(crate) struct Did {
+    /// The steps it took.
+    pub(crate) steps: u32,
+    /// Whether it rested.
+    pub(crate) rested: bool,
 }
 
 impl Action {
@@ -70,6 +91,8 @@ impl Action {
         Action {
             verb,
             destination,
+            ticks: 0,
+            blocked_ticks: 0,
             ended: None,
         }
     }
@@ -100,7 +123,8 @@ fn is_acting(sprite: &Sprite) -> bool {
 }
 
 /// Step 5 for every sprite not marked dying (design §2.4): refresh its flood
-/// if it moved, then start an action if it has none.
+/// if it moved, then start an action if it has none: its next scripted one,
+/// or else the stand-in's choice.
 pub(crate) fn sense_and_decide(
     state: &mut WorldState,
     data: &DataPack,
@@ -119,28 +143,31 @@ pub(crate) fn sense_and_decide(
                 data,
             };
             let radius = sprite.program.traits.sense_radius.round() as u16;
-            let flood = Flood::new(ground, sprite.pos, radius, Occupied::Penalty(0), state.tick);
+            let penalty = Occupied::Penalty(data.physiology().movement.occupied_penalty);
+            let flood = Flood::new(ground, sprite.pos, radius, penalty, state.tick);
             state.sprites.get_mut(id).expect("the same sprite").flood = Some(flood);
         }
         let sprite = state.sprites.get_mut(id).expect("the same sprite");
         if is_acting(sprite) {
             continue;
         }
-        if let Some(ScriptedAction::Wander { destination }) = sprite.scripted.take() {
-            start(
-                sprite,
-                id,
-                Verb::Wander,
-                Some(destination),
-                state.tick,
-                events,
-            );
-        }
+        let (verb, destination) = match sprite.scripted.pop_front() {
+            Some(ScriptedAction::Wander { destination }) => (Verb::Wander, Some(destination)),
+            Some(ScriptedAction::Rest) => (Verb::Rest, None),
+            None => match standin::choose(&mut state.rng) {
+                Verb::Wander => {
+                    let flood = sprite.flood.as_ref().expect("the flood made above");
+                    (Verb::Wander, flood.wander_destination(&mut state.rng))
+                }
+                verb => (verb, None),
+            },
+        };
+        start(sprite, id, verb, destination, state.tick, events);
     }
 }
 
-/// Starts `sprite` (`id`) on an action. A Wander to a destination its flood
-/// doesn't reach ends at once, as failed (design §5.5).
+/// Starts `sprite` (`id`) on an action. A Wander with no destination, or one
+/// its flood doesn't reach, ends at once, as failed (design §5.5).
 fn start(
     sprite: &mut Sprite,
     id: EntityId,
@@ -155,7 +182,8 @@ fn start(
         kind: EventKind::ActionStarted { id, verb },
     });
     let flood = sprite.flood.as_ref().expect("step 5 made the flood");
-    if destination.is_some_and(|to| flood.cost(to).is_none()) {
+    let lost = verb == Verb::Wander && destination.is_none_or(|to| flood.cost(to).is_none());
+    if lost {
         end(&mut action, id, Outcome::Failed, tick, events);
     }
     sprite.action = Some(action);
@@ -174,51 +202,177 @@ fn end(action: &mut Action, id: EntityId, outcome: Outcome, tick: u64, events: &
     });
 }
 
-/// Step 6 (design §2.4, §3.7): every acting sprite not marked dying carries
-/// out its action. Moving ones gain move points, in tenths, and step along
-/// their path while the points last.
+/// Step 6 (design §2.4, §3.7): every sprite not marked dying carries out its
+/// action, in an order shuffled each tick by the world RNG. Moving sprites
+/// all gain their move points first, in tenths; then each, on its turn,
+/// steps along its path while its points last. The first to claim a tile
+/// gets it: a sprite can't enter a tile another sprite stands on, except by
+/// a head-on swap, so it waits there, banking points only up to the cost of
+/// the step it's waiting to take.
 pub(crate) fn resolve(
     state: &mut WorldState,
     data: &DataPack,
     dying: &[EntityId],
     events: &mut Vec<Event>,
 ) {
-    let ids: Vec<EntityId> = state.sprites.iter().map(|(id, _)| id).collect();
-    for id in ids.into_iter().filter(|id| !dying.contains(id)) {
+    let rest_bout = data.physiology().actions.rest_bout;
+    let mut order: Vec<EntityId> = state
+        .sprites
+        .iter()
+        .map(|(id, _)| id)
+        .filter(|id| !dying.contains(id))
+        .collect();
+    shuffle(&mut order, &mut state.rng);
+    for &id in &order {
+        let sprite = state.sprites.get_mut(id).expect("a sprite taking its turn");
+        sprite.did = Did::default();
+        if is_walking(sprite) {
+            sprite.move_points += (sprite.program.traits.speed * 10.0).round() as u32;
+        }
+    }
+    // The sprites whose movement this tick is over: by stepping, or by a swap.
+    let mut moved = BTreeSet::new();
+    for &id in &order {
         let sprite = state.sprites.get_mut(id).expect("a sprite taking its turn");
         if !is_acting(sprite) {
             continue;
         }
-        let action = sprite.action.as_ref().expect("an action");
-        let Some(destination) = action.destination else {
-            continue;
-        };
-        let Some(path) = sprite.flood.as_ref().and_then(|f| f.path_to(destination)) else {
-            continue;
-        };
-        sprite.move_points += (sprite.program.traits.speed * 10.0).round() as u32;
-        for next in path {
-            let sprite = state.sprites.get(id).expect("the walker");
-            let from = sprite.pos;
-            let dir = crate::map::Dir::ALL
-                .into_iter()
-                .find(|&d| state.map.neighbour(from, d) == Some(next))
-                .expect("a path goes a step at a time");
-            let Some(cost) = step_cost(&state.map, &state.objects, data, from, dir) else {
-                break;
-            };
-            let cost = cost * 10;
-            if sprite.move_points < cost {
-                break;
-            }
-            state.sprites.move_to(id, next);
-            let sprite = state.sprites.get_mut(id).expect("the walker");
-            sprite.move_points -= cost;
-            if next == destination {
-                let action = sprite.action.as_mut().expect("an action");
+        let action = sprite.action.as_mut().expect("an action");
+        action.ticks += 1;
+        if action.verb == Verb::Rest {
+            sprite.did.rested = true;
+            if action.ticks >= rest_bout {
                 end(action, id, Outcome::Applied, state.tick, events);
-                break;
             }
+        } else if !moved.contains(&id) {
+            walk(state, data, id, &mut moved, events);
         }
     }
+}
+
+/// Shuffles `ids` with the world RNG: Fisher–Yates, one draw per place but the first.
+fn shuffle(ids: &mut [EntityId], rng: &mut ChaCha8Rng) {
+    for i in (1..ids.len()).rev() {
+        let j = uniform(rng, i as u64 + 1) as usize;
+        ids.swap(i, j);
+    }
+}
+
+/// Whether `sprite` is doing an action that walks.
+fn is_walking(sprite: &Sprite) -> bool {
+    is_acting(sprite)
+        && sprite
+            .action
+            .as_ref()
+            .is_some_and(|a| a.destination.is_some())
+}
+
+/// The tile a walking sprite steps onto next, along its flood's path to its
+/// destination, or `None` if it has no way there.
+fn next_step(sprite: &Sprite) -> Option<Pos> {
+    let action = sprite.action.as_ref().filter(|_| is_walking(sprite))?;
+    let flood = sprite.flood.as_ref()?;
+    let path = flood.path_to(action.destination?)?;
+    if sprite.pos == flood.origin {
+        return path.first().copied();
+    }
+    let here = path.iter().position(|&pos| pos == sprite.pos)?;
+    path.get(here + 1).copied()
+}
+
+/// What `sprite`'s step onto `next` costs, in tenths, or `None` if physics forbids it.
+fn cost_onto(state: &WorldState, data: &DataPack, sprite: &Sprite, next: Pos) -> Option<u32> {
+    let dir = Dir::ALL
+        .into_iter()
+        .find(|&d| state.map.neighbour(sprite.pos, d) == Some(next))?;
+    step_cost(&state.map, &state.objects, data, sprite.pos, dir).map(|cost| cost * 10)
+}
+
+/// Sprite `id`'s turn to walk: it steps along its path while its points last.
+fn walk(
+    state: &mut WorldState,
+    data: &DataPack,
+    id: EntityId,
+    moved: &mut BTreeSet<EntityId>,
+    events: &mut Vec<Event>,
+) {
+    loop {
+        let sprite = state.sprites.get(id).expect("the walker");
+        let Some(next) = next_step(sprite) else {
+            return;
+        };
+        let Some(cost) = cost_onto(state, data, sprite, next) else {
+            wait(state, id, sprite.move_points);
+            return;
+        };
+        if sprite.move_points < cost {
+            return;
+        }
+        if let Some(other) = state.sprites.at(next) {
+            if !swaps(state, data, id, other, moved) {
+                wait(state, id, cost);
+                return;
+            }
+            let other_cost = cost_onto(
+                state,
+                data,
+                state.sprites.get(other).expect("it"),
+                sprite.pos,
+            )
+            .expect("checked by swaps");
+            state.sprites.swap(id, other);
+            moved.extend([id, other]);
+            stepped(state, other, other_cost, events);
+            stepped(state, id, cost, events);
+            return;
+        }
+        state.sprites.move_to(id, next);
+        moved.insert(id);
+        if stepped(state, id, cost, events) {
+            return;
+        }
+    }
+}
+
+/// Whether `walker` may swap with `other`, the sprite on the tile it's
+/// stepping onto: a head-on swap, where `other` hasn't moved this tick, is
+/// stepping onto the walker's tile next, and has the points for it.
+fn swaps(
+    state: &WorldState,
+    data: &DataPack,
+    walker: EntityId,
+    other: EntityId,
+    moved: &BTreeSet<EntityId>,
+) -> bool {
+    if moved.contains(&other) {
+        return false;
+    }
+    let here = state.sprites.get(walker).expect("the walker").pos;
+    let other = state.sprites.get(other).expect("the sprite in the way");
+    next_step(other) == Some(here)
+        && cost_onto(state, data, other, here).is_some_and(|cost| other.move_points >= cost)
+}
+
+/// Sprite `id` has just stepped, for `cost` tenths. Returns whether that
+/// brought it to its destination, which ends its action.
+fn stepped(state: &mut WorldState, id: EntityId, cost: u32, events: &mut Vec<Event>) -> bool {
+    let sprite = state.sprites.get_mut(id).expect("the walker");
+    sprite.move_points -= cost;
+    sprite.did.steps += 1;
+    let action = sprite.action.as_mut().expect("an action");
+    action.blocked_ticks = 0;
+    if action.destination != Some(sprite.pos) {
+        return false;
+    }
+    end(action, id, Outcome::Applied, state.tick, events);
+    true
+}
+
+/// Sprite `id` had the points for its next step but couldn't take it: it
+/// banks points only up to `cost`, the step's cost.
+fn wait(state: &mut WorldState, id: EntityId, cost: u32) {
+    let sprite = state.sprites.get_mut(id).expect("the walker");
+    sprite.move_points = sprite.move_points.min(cost);
+    let action = sprite.action.as_mut().expect("an action");
+    action.blocked_ticks += 1;
 }

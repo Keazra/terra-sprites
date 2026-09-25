@@ -23,6 +23,7 @@ mod random;
 mod regions;
 mod registry;
 mod sprites;
+mod standin;
 mod terrain;
 mod variation;
 mod world;

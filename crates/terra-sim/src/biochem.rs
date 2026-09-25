@@ -364,7 +364,7 @@ pub(crate) struct Senses {
     pub(crate) nearby_sprites: f32,
     /// The steps it took during the previous tick.
     pub(crate) steps: u32,
-    /// Whether a Rest action is running.
+    /// Whether it rested during the previous tick.
     pub(crate) resting: bool,
 }
 

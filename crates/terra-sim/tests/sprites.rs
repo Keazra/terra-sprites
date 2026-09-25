@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 
 use terra_sim::{
     ChemicalKind, DataPack, DeathCause, EmitterMode, EntityId, EventKind, Expression, GeneView,
-    Genome, Map, Pos, Scenario, Trait, Traits, World, WorldConfig,
+    Genome, Map, Pos, Scenario, ScriptedAction, Trait, Traits, World, WorldConfig,
 };
 
 fn builtin() -> DataPack {
@@ -82,12 +82,13 @@ fn builtin_changing(file: &str, changes: &[(&str, &str)]) -> DataPack {
     DataPack::from_sources(&sources).expect("a valid test pack")
 }
 
-/// A 9×9 field of grass with one newborn sprite in the middle, made from
-/// `genome`, or the starter genome with spawn variation.
+/// A single tile of grass holding one newborn sprite, made from `genome`, or
+/// the starter genome with spawn variation. With nowhere to go, it never
+/// walks, so walking costs it nothing.
 fn lone_sprite(data: DataPack, genome: Option<&str>) -> World {
-    let map = Map::from_ascii(&["........."; 9], &data).expect("valid drawing");
+    let map = Map::from_ascii(&["."], &data).expect("valid drawing");
     let genome = genome.map(|text| Genome::from_ron(text, &data).expect("a valid genome"));
-    let sprites = [(Pos { x: 4, y: 4 }, genome)];
+    let sprites = [(Pos { x: 0, y: 0 }, genome)];
     let scenario = Scenario {
         map,
         objects: &[],
@@ -191,18 +192,23 @@ const SOLIDS: &str = r#"[
     (id: 5, name: "pebble", category: Ball),
 ]"#;
 
-/// A 5×5 field of grass holding `objects` and newborn starter sprites on `sprites`.
+/// A 5×5 field of grass holding `objects` and newborn starter sprites on
+/// `sprites`, each resting where it stands for its first 300 ticks.
 fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> Result<World, terra_sim::ScenarioError> {
     let objects_ron = include_str!("../../../data/objects.ron");
     let data = builtin_changing("objects.ron", &[(objects_ron, SOLIDS)]);
     let map = Map::from_ascii(&["....."; 5], &data).expect("valid drawing");
+    let rests: Vec<(Pos, ScriptedAction)> = sprites
+        .iter()
+        .flat_map(|&pos| [(pos, ScriptedAction::Rest); 30])
+        .collect();
     let sprites: Vec<(Pos, Option<Genome>)> = sprites.iter().map(|&pos| (pos, None)).collect();
     World::from_scenario(
         Scenario {
             map,
             objects,
             sprites: &sprites,
-            scripted: &[],
+            scripted: &rests,
         },
         data,
         1,

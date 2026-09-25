@@ -31,6 +31,8 @@ pub(crate) struct Physiology {
     pub(crate) receptor_targets: BTreeMap<u16, (f32, f32)>,
     pub(crate) nearby_sprites: NearbySprites,
     pub(crate) spawn_variation: f32,
+    pub(crate) actions: Actions,
+    pub(crate) movement: Movement,
     pub(crate) indices: Indices,
 }
 
@@ -51,6 +53,24 @@ pub(crate) struct PhysiologyEntry {
     receptor_targets: BTreeMap<String, (f32, f32)>,
     nearby_sprites: NearbySprites,
     spawn_variation: f32,
+    actions: Actions,
+    movement: Movement,
+}
+
+/// How sprites find their way (design §3.6–3.7).
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Movement {
+    /// What the flood adds for a tile holding another sprite, in terrain units.
+    pub(crate) occupied_penalty: u32,
+}
+
+/// How long actions last (design §5.5), in ticks.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Actions {
+    /// How long a Rest lasts.
+    pub(crate) rest_bout: u32,
 }
 
 /// How the `nearby_sprites` body sensor counts.
@@ -217,6 +237,10 @@ impl PhysiologyEntry {
             ));
         }
 
+        if self.actions.rest_bout == 0 {
+            return Err("`actions.rest_bout` must be at least 1 tick".into());
+        }
+
         Ok(Physiology {
             newborn,
             first_population: self.first_population,
@@ -231,6 +255,8 @@ impl PhysiologyEntry {
             receptor_targets,
             nearby_sprites: self.nearby_sprites,
             spawn_variation: self.spawn_variation,
+            actions: self.actions,
+            movement: self.movement,
             indices,
         })
     }
