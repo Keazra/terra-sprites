@@ -4,7 +4,8 @@
 use std::collections::BTreeSet;
 
 use terra_sim::{
-    DataPack, DeathCause, EntityId, EventKind, Genome, Map, Pos, Scenario, World, WorldConfig,
+    ChemicalKind, DataPack, DeathCause, EntityId, EventKind, Genome, Map, Pos, Scenario, Traits,
+    World, WorldConfig,
 };
 
 fn builtin() -> DataPack {
@@ -272,4 +273,100 @@ fn the_first_population_starts_with_no_false_fall_in_energy_or_hydration() {
     for sprite in world.sprites() {
         assert_eq!(sprite.chemical("reward"), Some(0.0), "{:?}", sprite.id());
     }
+}
+
+#[test]
+fn a_sprite_shows_its_age_and_its_traits_as_its_body_has_them() {
+    // Speed past its range is clamped to 12, and sense radius, with no gene,
+    // takes the middle of its range, 10 (design §4.8).
+    let genome = r#"(format: 1, genes: [
+        Trait(trait: "speed", value: 50.0),
+        Trait(trait: "lifespan", value: 61234.5),
+    ])"#;
+    let mut world = lone_sprite(builtin(), Some(genome));
+    assert_eq!(world.sprites().next().expect("the sprite").age(), 0);
+    for _ in 0..12 {
+        world.step();
+    }
+    let sprite = world.sprites().next().expect("the sprite");
+    assert_eq!(sprite.age(), 12);
+    assert_eq!(
+        sprite.traits(),
+        Traits {
+            speed: 12.0,
+            sense_radius: 10.0,
+            lifespan: 61234.5
+        }
+    );
+}
+
+#[test]
+fn a_sprite_lists_its_chemicals_in_pack_order_with_their_kinds() {
+    use ChemicalKind::{Drive, Hormone, LearningSignal, Physical};
+    let world = lone_sprite(builtin(), None);
+    let sprite = world.sprites().next().expect("the sprite");
+    let listed: Vec<(String, ChemicalKind)> = sprite
+        .chemicals()
+        .map(|c| (c.name.to_string(), c.kind))
+        .collect();
+    let mut expected: Vec<(String, ChemicalKind)> = [
+        ("energy", Physical),
+        ("hydration", Physical),
+        ("stamina", Physical),
+        ("food", Physical),
+        ("water", Physical),
+        ("injury", Physical),
+        ("hunger", Drive),
+        ("thirst", Drive),
+        ("pain", Drive),
+        ("tiredness", Drive),
+        ("boredom", Drive),
+        ("loneliness", Drive),
+        ("crowdedness", Drive),
+        ("reward", LearningSignal),
+        ("punishment", LearningSignal),
+    ]
+    .into_iter()
+    .map(|(name, kind)| (name.to_string(), kind))
+    .collect();
+    expected.extend((0..16).map(|n| (format!("h{n}"), Hormone)));
+    assert_eq!(listed, expected);
+}
+
+#[test]
+fn each_chemical_s_change_is_its_level_now_less_its_level_one_tick_ago() {
+    let mut world = lone_sprite(builtin(), None);
+    let newborn = world.sprites().next().expect("the sprite");
+    assert!(
+        newborn.chemicals().all(|c| c.change == 0.0),
+        "nothing has changed at birth"
+    );
+    for _ in 0..50 {
+        world.step();
+    }
+    let levels = |world: &World| -> Vec<f32> {
+        let sprite = world.sprites().next().expect("the sprite");
+        sprite.chemicals().map(|c| c.level).collect()
+    };
+    let before = levels(&world);
+    world.step();
+    let sprite = world.sprites().next().expect("the sprite");
+    for (chemical, before) in sprite.chemicals().zip(before) {
+        assert_eq!(
+            chemical.change,
+            chemical.level - before,
+            "{}",
+            chemical.name
+        );
+    }
+    // At rest, hydration falls by physiology's 0.00033 a tick (Appendix B).
+    let hydration = sprite
+        .chemicals()
+        .find(|c| c.name == "hydration")
+        .expect("hydration");
+    assert!(
+        (hydration.change + 0.00033).abs() < 1e-6,
+        "{}",
+        hydration.change
+    );
 }

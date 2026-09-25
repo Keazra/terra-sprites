@@ -12,10 +12,13 @@ use crate::registry::{LocusKind, Trait};
 
 /// A sprite's traits (design §4.8), clamped to physiology's ranges.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct Traits {
-    pub(crate) speed: f32,
-    pub(crate) sense_radius: f32,
-    pub(crate) lifespan: f32,
+pub struct Traits {
+    /// Move points per tick.
+    pub speed: f32,
+    /// How far it perceives, in tiles.
+    pub sense_radius: f32,
+    /// Ticks until old age.
+    pub lifespan: f32,
 }
 
 impl Traits {
@@ -277,6 +280,10 @@ pub(crate) struct Body {
     /// and Fall emitters.
     last_chems: Vec<f32>,
     last_loci: Vec<f32>,
+    /// `chems` as they were one tick ago, for the change the Chem tab shows
+    /// (design §6.1). Nothing in the sim reads them, so they aren't hashed.
+    #[serde(skip)]
+    pub(crate) previous: Vec<f32>,
     /// The injury each of physiology's causes added lately, fading, indexed
     /// by `DeathCause` (design §4.10).
     pub(crate) tallies: [f32; 3],
@@ -311,6 +318,7 @@ impl Body {
         Body {
             last_chems: chems.clone(),
             last_loci: loci.clone(),
+            previous: chems.clone(),
             incoming: vec![0.0; loci.len()],
             chems,
             loci,
@@ -319,11 +327,11 @@ impl Body {
     }
 
     /// Starts the chemical at `index` at `level`, as if it had been there
-    /// since the end of the previous tick's step 3, so no Rise or Fall
-    /// emitter sees a change.
+    /// since the previous tick, so no Rise or Fall emitter sees a change.
     pub(crate) fn start_at(&mut self, index: usize, level: f32) {
         self.chems[index] = level;
         self.last_chems[index] = level;
+        self.previous[index] = level;
     }
 
     /// What caused most of the body's recent injury (design §4.10). Ties go

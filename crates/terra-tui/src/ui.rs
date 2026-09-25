@@ -350,19 +350,22 @@ pub(crate) fn sprite_label(id: EntityId) -> String {
 /// What an event says in the event log, if the log shows it.
 fn event_text(event: &Event) -> Option<String> {
     match &event.kind {
-        EventKind::Died { id, cause, age } => {
-            let cause = match cause {
-                DeathCause::Starvation => "starvation",
-                DeathCause::Dehydration => "dehydration",
-                DeathCause::OldAge => "old age",
-            };
-            Some(format!(
-                "{} died ({cause}, age {})",
-                sprite_label(*id),
-                group_thousands(*age)
-            ))
-        }
+        EventKind::Died { id, cause, age } => Some(format!(
+            "{} died ({}, age {})",
+            sprite_label(*id),
+            cause_name(*cause),
+            group_thousands(*age)
+        )),
         EventKind::ObjectSpawned { .. } | EventKind::ObjectRemoved { .. } => None,
+    }
+}
+
+/// A cause of death, as the screen names it.
+pub(crate) fn cause_name(cause: DeathCause) -> &'static str {
+    match cause {
+        DeathCause::Starvation => "starvation",
+        DeathCause::Dehydration => "dehydration",
+        DeathCause::OldAge => "old age",
     }
 }
 

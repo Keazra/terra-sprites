@@ -708,3 +708,87 @@ fn the_title_names_the_selected_sprite_before_the_tabs() {
         "{top:?}"
     );
 }
+
+#[test]
+fn when_the_selected_sprite_dies_its_tabs_say_how_and_at_what_age() {
+    let world = garden_with_sprites();
+    let id = world.sprites().next().expect("a sprite").id();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::SelectNext, &world);
+    app.record(&[died(4_012, id.0, DeathCause::Dehydration, 4_012)]);
+    for tab in ["Body", "Chem", "Genome"] {
+        let (top, text) = inspector(&app, &world);
+        assert!(
+            top.starts_with(&format!("┌─ Sprite #{} ──", id.0)),
+            "{tab}: {top:?}"
+        );
+        assert_eq!(
+            text[0],
+            format!("Sprite #{} died of dehydration at age 4,012", id.0),
+            "{tab}"
+        );
+        app.apply(Action::NextTab, &world);
+    }
+}
+
+/// A 10×5 field of grass with one sprite at (2, 3), made from `genome`, and
+/// an app on it that has selected the sprite and stepped the world `ticks`
+/// times.
+fn one_sprite(genome: &str, ticks: u32) -> (World, App) {
+    let pack = pack();
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let genome = terra_sim::Genome::from_ron(genome, &pack).expect("a valid genome");
+    let sprites = [(terra_sim::Pos { x: 2, y: 3 }, Some(genome))];
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+    };
+    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    for _ in 0..ticks {
+        world.step();
+    }
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::SelectNext, &world);
+    (world, app)
+}
+
+/// Traits, and drives set so one tick changes them in ways worked out by
+/// hand: hunger halves every tick, and boredom gains .1 a tick.
+const WORKED_GENOME: &str = r#"(format: 1, genes: [
+    Trait(trait: "speed", value: 7.25),
+    Trait(trait: "sense_radius", value: 9.5),
+    Trait(trait: "lifespan", value: 61204.0),
+    InitialConcentration(chem: "hunger", value: 0.8),
+    HalfLife(chem: "hunger", ticks: 1),
+    InitialConcentration(chem: "thirst", value: 0.18),
+    InitialConcentration(chem: "tiredness", value: 0.39),
+    InitialConcentration(chem: "boredom", value: 0.2),
+    Emitter(locus: Locus("always"), mode: Level, gain: 0.1, chem: "boredom"),
+])"#;
+
+#[test]
+fn the_body_tab_shows_age_traits_drives_and_physical_levels() {
+    let (world, app) = one_sprite(WORKED_GENOME, 1);
+    let (_, text) = inspector(&app, &world);
+    assert_eq!(
+        text[..13],
+        [
+            "age 1 · lifespan 61,204",
+            "speed 7.25 · sense 9.5",
+            "",
+            "hunger      ████░░░░░░ .40 ▼",
+            "thirst      ██░░░░░░░░ .18",
+            "pain        ░░░░░░░░░░ .00",
+            "tiredness   ████░░░░░░ .39",
+            "boredom     ███░░░░░░░ .30 ▲",
+            "loneliness  ░░░░░░░░░░ .00",
+            "crowdedness ░░░░░░░░░░ .00",
+            "",
+            // A newborn's are full, and one tick at rest takes them only to .9998 or so.
+            "energy 1.00 · hydration 1.00 · stamina 1.00",
+            "food .00 · water .00 · injury .00",
+        ]
+    );
+    assert!(text[13..].iter().all(String::is_empty), "{text:?}");
+}

@@ -80,6 +80,11 @@ impl Sprites {
         self.by_id.get(&id)
     }
 
+    /// Every sprite's body, in ascending ID order, to change.
+    pub(crate) fn bodies_mut(&mut self) -> impl Iterator<Item = &mut Body> {
+        self.by_id.values_mut().map(|sprite| &mut sprite.body)
+    }
+
     /// The sprite `id`, if it exists, to change.
     pub(crate) fn get_mut(&mut self, id: EntityId) -> Option<&mut Sprite> {
         self.by_id.get_mut(&id)
