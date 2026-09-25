@@ -247,6 +247,11 @@ impl DataPack {
             .map(|input| (input.id.0, input.name.as_str()))
     }
 
+    /// Every brain input, in ID order: a brain's inputs are in this order.
+    pub(crate) fn brain_inputs_in_order(&self) -> &[BrainInput] {
+        &self.brain_inputs
+    }
+
     /// The brain input with the ID `id`.
     pub(crate) fn brain_input(&self, id: InputId) -> Option<&BrainInput> {
         self.brain_inputs.iter().find(|input| input.id == id)

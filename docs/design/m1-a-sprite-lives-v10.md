@@ -26,6 +26,8 @@ Decided with the owner in the design session for slice 6 ([#7](https://github.co
 | 11 | **The Body tab words Eat, Drink and Approach** in §6.1's pattern: "Going to eat the berry bush · 3 tiles to go", "Ate from the berry bush", "Going to drink · 2 tiles to go", "Going over to Sprite #530 · 4 tiles to go". A target that vanished reads "Gave up: the berry was gone". | Slice 5 carry-over | §6.1 |
 | 12 | **Brain parameters get stable IDs** (Appendix A), for `BrainParam` payloads, and **defaults** beside their ranges (Appendix B). | Slice 6 | App. A, App. B |
 | 13 | **The Genome tab shows the brain genes** under three more headings, after starting levels: brain settings (`tau base .2`), instincts (`thirst & not target adjacent → drink -.5`) and attention instincts (`hunger → attends to berry bush +.8`). | Slice 6 | §6.1 |
+| 14 | **A new outcome, `interrupted`,** records an action the sprite dropped because it changed its mind: attention switched away from its target, or another verb beat it by more than the switch margin. The Body tab reads "Changed its mind". It stays distinct from `failed` (tried, didn't get it), which learning and the A1–A3 counts treat as a real attempt. | Owner decision | §5.3, §5.5, §6.1 |
+| 15 | **A target's distance is normalized** as its path cost over the cost of walking the flood's reach on grass (10 × reach), capped at 1: so a candidate at the edge of sight on open grass is 1, and one across sand or shallows reads farther. | Slice 6 | §5.2, §5.3 |
 
 ---
 
@@ -967,7 +969,7 @@ Every input and output has a stable, append-only ID (Appendix A). Each input bel
 | Group | Inputs | Attention | Concepts |
 |---|---|---|---|
 | **State** (35) | 7 drives, 16 hormones, `nearby_sprites`, `age`, `always`, 9 event pulses | ✓ | ✓ |
-| **Target** (8) | 6 × `AttendedCategory` (BerryBush, Berry, Thornbush, Water, Ball, Sprite), `TargetDistance` (normalized path cost), `TargetAdjacent` | ✗ | ✓ |
+| **Target** (8) | 6 × `AttendedCategory` (BerryBush, Berry, Thornbush, Water, Ball, Sprite), `TargetDistance` (normalized path cost: the cost over 10 × the flood's reach, capped at 1), `TargetAdjacent` | ✗ | ✓ |
 
 - **Target inputs are outputs of attention.** They never feed back into attention.
 - **What the file holds:** the State inputs, each with its stable input ID and the chemical or locus it reads, e.g. `(id: 1, name: "hunger", reads: Chem("hunger"))`, `(id: 27, name: "ate", reads: Locus("ate"))`. A name that isn't a chemical or locus of the right kind (a drive or hormone; a body sensor or pulse) is a load error, as is a duplicate ID or name. The Target inputs and the verbs are fixed in code, which gives them their meaning, as it does categories. Their names, used in genome files, are `attended_berry_bush` … `attended_sprite`, `target_distance` and `target_adjacent`, and the verb names.
@@ -1053,7 +1055,7 @@ World randomness is separate: plant rules and the order actions resolve in. It c
 - **Verbs by slice.** Slice 6 makes Approach, Eat, Drink, Rest and Wander available; Hit, Play and Retreat are masked, as if no verb table offered them, until slice 7.
 - **Every** action that hasn't ended otherwise ends at the **action timeout** of 60 ticks, with outcome `timed_out`.
 - Bout lengths and the timeout are set in `physiology.ron`.
-- **Outcomes:** `applied` / `walking` / `blocked` / `failed` / `timed_out`. `walking` and `blocked` can also be per-tick outcomes of an action that's still running.
+- **Outcomes:** `applied` / `walking` / `blocked` / `failed` / `interrupted` / `timed_out`. `walking` and `blocked` can also be per-tick outcomes of an action that's still running. `interrupted` ends an action the sprite changed its mind about: attention switched away from its target (§5.3), or another verb beat it by more than `switch_margin` (5b).
 
 ### 5.6 Learning (step 4)
 
@@ -1189,6 +1191,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
   | Gave up, no way through | `Gave up: the way was blocked` | `WANDER → (61,40) · blocked` |
   | Gave up at the timeout | `Gave up: it took too long` | `WANDER → (61,40) · timed_out` |
   | Gave up, destination out of reach | `Gave up: it couldn't get there` | `WANDER → (61,40) · failed` |
+  | Changed its mind | `Changed its mind` | `WANDER → (61,40) · interrupted` |
   | Resting | `Resting · 6 ticks left` | `REST · 4 of 10 ticks` |
   | Rested | `Rested` | `REST · applied` |
 

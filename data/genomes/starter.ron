@@ -9,8 +9,11 @@
 // others). Each Fall emitter has a deadband of 0.02 per tick, so slow drifts
 // never drip reward.
 //
-// The values are first cuts; slice 17 tunes them. The brain's genes (types
-// 7–9) join in the slices that build the brain.
+// The brain (design §5.8): instincts that are good but not perfect, so
+// there's something to learn. Each joins in the slice that makes its verb
+// available: slice 6 has eating, drinking, resting and wandering.
+//
+// The values are first cuts; slice 17 tunes them.
 (
     format: 1,
     genes: [
@@ -62,5 +65,27 @@
         Emitter(locus: Chem("boredom"), mode: Fall, threshold: 0.02, gain: 1.0, chem: "reward"),
         Emitter(locus: Chem("loneliness"), mode: Fall, threshold: 0.02, gain: 1.0, chem: "reward"),
         Emitter(locus: Chem("crowdedness"), mode: Fall, threshold: 0.02, gain: 1.0, chem: "reward"),
+
+        // How the brain works. Choices are fairly sure of themselves: with
+        // nothing pressing a sprite wanders, and a need of .5 wins most choices.
+        BrainParam(param: "tau_base", value: 0.1),
+        BrainParam(param: "tau_att_base", value: 0.2),
+        BrainParam(param: "switch_margin", value: 0.2),
+        BrainParam(param: "attention_margin", value: 0.2),
+        BrainParam(param: "salience_gain", value: 0.5),
+
+        // Hunger draws attention to food, and a little to thornbushes: the
+        // deliberate mistake, which learning (slice 8) should correct.
+        AttentionInstinct(input: "hunger", category: BerryBush, weight: 1.0),
+        AttentionInstinct(input: "hunger", category: Berry, weight: 1.0),
+        AttentionInstinct(input: "hunger", category: Thornbush, weight: 0.3),
+        AttentionInstinct(input: "thirst", category: Water, weight: 1.0),
+
+        // Hunger leads to eating whatever is attended, not berries in particular.
+        Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
+        Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
+        Instinct(inputs: [("tiredness", false)], verb: Rest, weight: 1.0),
+        // A mild habit of wandering, which any grown need outweighs.
+        Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3),
     ],
 )

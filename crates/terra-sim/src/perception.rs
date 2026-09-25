@@ -145,6 +145,11 @@ impl Flood {
         flood
     }
 
+    /// How far it reaches, in tiles in any direction.
+    pub(crate) fn reach(&self) -> u16 {
+        self.radius
+    }
+
     /// The cost of the cheapest way to `pos`, or `None` if the flood didn't reach it.
     pub(crate) fn cost(&self, pos: Pos) -> Option<u32> {
         let index = self.local(pos)?;
@@ -204,13 +209,6 @@ impl Flood {
     /// its tile index. A thing is reachable if the flood reached one of its
     /// goal tiles: beside it, or, for an item or water, its own tile too.
     /// `me` is the sprite the flood is for, which is never its own candidate.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the brain aims its verbs at candidates from slice 6"
-        )
-    )]
     pub(crate) fn candidates(
         &self,
         ground: Ground,
