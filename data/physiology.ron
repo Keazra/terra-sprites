@@ -1,0 +1,51 @@
+// Physiology (design §4.4, Appendix B): the body's fixed rules, which genes
+// can't change. Levels are fractions of full, from 0 to 1; rates are per tick.
+//
+// The starting values aim for these timescales, for a sprite at rest: full
+// hydration lasts about 3,000 ticks and full energy about 6,000; once either
+// runs out, injury kills in about 1,000 more; a sprite past its lifespan dies
+// within about 2,000. Slice 17 tunes them.
+(
+    // What a newborn's physical chemicals start at. Injury and gut contents start at 0.
+    newborn: (energy: 1.0, hydration: 1.0, stamina: 1.0),
+    // The first population, placed by world generation, starts with its energy
+    // and its hydration each drawn between these fractions of the newborn level.
+    first_population: (0.6, 1.0),
+
+    metabolism: (
+        basal: 0.0001,              // energy per tick
+        per_sense_tile: 0.0000067,  // energy per tick, per tile of sense radius
+        per_step: 0.0002,           // energy per step at speed 8; scales with (speed / 8)²
+    ),
+    // Gut contents moved into the body per tick: food into energy, water into hydration.
+    digestion: (food: 0.001, water: 0.002),
+    hydration_loss: 0.00033,
+    stamina: (per_step: 0.002, idle: 0.0005, resting: 0.002),
+    healing: 0.0001,  // injury healed per tick
+    // Injury per tick while energy is at 0, while hydration is at 0, and while
+    // age is past lifespan.
+    injury: (starvation: 0.0011, dehydration: 0.0011, old_age: 0.0006),
+    // Each cause-of-death tally halves every this many ticks (design §4.10).
+    cause_fade: 350,
+
+    // The range each trait gene is clamped to (design §4.8).
+    traits: (
+        speed: (4.0, 12.0),
+        sense_radius: (6.0, 14.0),
+        lifespan: (20000.0, 200000.0),
+    ),
+    // The range of each receptor target in `loci.ron`. Each rests at 1.0 when
+    // no receptor writes it.
+    receptor_targets: {
+        "learning_rate_mod": (0.5, 2.0),
+        "exploration_mod": (0.25, 4.0),
+    },
+
+    // The `nearby_sprites` body sensor counts the other sprites within
+    // `radius` tiles, in any direction, and reads 1 at `full` of them.
+    nearby_sprites: (radius: 3, full: 4),
+
+    // Spawn variation (design §4.9): each gene value is multiplied by a factor
+    // drawn between 1 − this and 1 + this.
+    spawn_variation: 0.1,
+)

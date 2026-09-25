@@ -32,7 +32,7 @@ fn a_preset_sets_the_map_size() {
 
 #[test]
 fn a_preset_with_an_unknown_field_is_a_parse_error() {
-    let result = preset("(width: 64, height: 40, sprites: 30)");
+    let result = preset("(width: 64, height: 40, critters: 30)");
     assert!(matches!(result, Err(ConfigError::Parse(_))), "{result:?}");
 }
 

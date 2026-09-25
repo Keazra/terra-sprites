@@ -1,0 +1,66 @@
+// The starter genome (design §4.5, §5.8): what sprites without parents are
+// made from. The world decides what happens to the body; these genes decide
+// how that feels.
+//
+// Drives rise from a need and fall sharply when a one-shot action relieves
+// it (a pulse-keyed Level emitter), so the Fall emitters release reward on
+// the tick after the action, in proportion to the need. Relief is gradual
+// only where the relieving action is itself ongoing (resting, staying near
+// others). Each Fall emitter has a deadband of 0.02 per tick, so slow drifts
+// never drip reward.
+//
+// The values are first cuts; slice 17 tunes them. The brain's genes (types
+// 7–9) join in the slices that build the brain.
+(
+    format: 1,
+    genes: [
+        // Traits (design §4.8).
+        Trait(trait: "speed", value: 7.0),
+        Trait(trait: "sense_radius", value: 10.0),
+        Trait(trait: "lifespan", value: 60000.0),
+
+        // Hunger rises as energy falls below half, and drops at once on eating.
+        Emitter(locus: Chem("energy"), mode: Level, invert: true, threshold: 0.5, gain: 0.004, chem: "hunger"),
+        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "hunger"),
+        HalfLife(chem: "hunger", ticks: 2000),
+
+        // Thirst, the same way with hydration and drinking.
+        Emitter(locus: Chem("hydration"), mode: Level, invert: true, threshold: 0.5, gain: 0.004, chem: "thirst"),
+        Emitter(locus: Locus("drank"), mode: Level, gain: -0.5, chem: "thirst"),
+        HalfLife(chem: "thirst", ticks: 2000),
+
+        // Tiredness rises as stamina falls below half, and eases as rest restores it.
+        Emitter(locus: Chem("stamina"), mode: Level, invert: true, threshold: 0.5, gain: 0.004, chem: "tiredness"),
+        Emitter(locus: Chem("stamina"), mode: Level, threshold: 0.6, gain: -0.1, chem: "tiredness"),
+
+        // Boredom creeps up always; any play relieves it at once.
+        Emitter(locus: Locus("always"), mode: Level, gain: 0.0002, chem: "boredom"),
+        Emitter(locus: Locus("played"), mode: Level, gain: -0.5, chem: "boredom"),
+        Emitter(locus: Locus("played_social"), mode: Level, gain: -0.5, chem: "boredom"),
+
+        // Loneliness rises with nobody near, and eases in company or at once in social play.
+        Emitter(locus: Locus("nearby_sprites"), mode: Level, invert: true, threshold: 0.5, gain: 0.0005, chem: "loneliness"),
+        Emitter(locus: Locus("nearby_sprites"), mode: Level, threshold: 0.2, gain: -0.1, chem: "loneliness"),
+        Emitter(locus: Locus("played_social"), mode: Level, gain: -0.5, chem: "loneliness"),
+
+        // Crowdedness rises in a crowd, and falls within a few ticks of leaving it.
+        Emitter(locus: Locus("nearby_sprites"), mode: Level, threshold: 0.5, gain: 0.01, chem: "crowdedness"),
+        Emitter(locus: Locus("nearby_sprites"), mode: Level, invert: true, threshold: 0.5, gain: -0.5, chem: "crowdedness"),
+
+        // Pain comes with new injury, thorns and blows, and fades fast.
+        Emitter(locus: Locus("pricked"), mode: Level, gain: 0.3, chem: "pain"),
+        Emitter(locus: Locus("was_hit"), mode: Level, gain: 0.3, chem: "pain"),
+        HalfLife(chem: "pain", ticks: 20),
+
+        // Learning signals. Rise and Fall emitters run after every Level
+        // emitter, in this order, so injury → pain → punishment completes in one tick.
+        Emitter(locus: Chem("injury"), mode: Rise, gain: 10.0, chem: "pain"),
+        Emitter(locus: Chem("pain"), mode: Rise, gain: 1.0, chem: "punishment"),
+        Emitter(locus: Chem("hunger"), mode: Fall, threshold: 0.02, gain: 1.0, chem: "reward"),
+        Emitter(locus: Chem("thirst"), mode: Fall, threshold: 0.02, gain: 1.0, chem: "reward"),
+        Emitter(locus: Chem("tiredness"), mode: Fall, threshold: 0.02, gain: 1.0, chem: "reward"),
+        Emitter(locus: Chem("boredom"), mode: Fall, threshold: 0.02, gain: 1.0, chem: "reward"),
+        Emitter(locus: Chem("loneliness"), mode: Fall, threshold: 0.02, gain: 1.0, chem: "reward"),
+        Emitter(locus: Chem("crowdedness"), mode: Fall, threshold: 0.02, gain: 1.0, chem: "reward"),
+    ],
+)

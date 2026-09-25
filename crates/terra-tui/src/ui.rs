@@ -7,7 +7,7 @@ use ratatui::{
     style::{Modifier, Style},
     text::Line,
 };
-use terra_sim::{Map, ObjectView, Pos, Terrain, World};
+use terra_sim::{DeathCause, EntityId, Event, EventKind, Map, ObjectView, Pos, Terrain, World};
 
 use crate::app::{App, Screen};
 use crate::clock::Speed;
@@ -17,9 +17,13 @@ use crate::theme::SemanticTile;
 const INSPECTOR_WIDTH: u16 = 46;
 /// The narrowest terminal that has room for the inspector beside the map view.
 const MIN_WIDTH_FOR_INSPECTOR: u16 = 100;
+/// The event log's height, in rows, border included: three events (design §6.1).
+const EVENT_LOG_HEIGHT: u16 = 5;
+/// The shortest terminal that has room for the event log under the map view.
+const MIN_HEIGHT_FOR_EVENT_LOG: u16 = 30;
 
-/// Draws one frame: the top bar, the map view, the inspector if there's room,
-/// and the status line.
+/// Draws one frame: the top bar, the map view, the inspector and the event
+/// log if there's room, and the status line.
 pub fn render(frame: &mut Frame, app: &App, world: &World) {
     let area = frame.area();
     let [top_bar, _, status] = Layout::vertical([
@@ -38,6 +42,9 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
     if let Some(inspector) = inspector_area(area) {
         render_world_tab(frame.buffer_mut(), inspector, world);
     }
+    if let Some(event_log) = event_log_area(area) {
+        render_event_log(frame.buffer_mut(), event_log, app);
+    }
     frame.render_widget(status_line(app, world, status.width), status);
 }
 
@@ -49,26 +56,51 @@ pub fn tile_area(screen: Size, map: &Map) -> Rect {
 }
 
 /// The map view, border included: below the top bar, at the left, shrunk to
-/// fit a small map, and leaving room for the inspector when there is some.
+/// fit a small map, and leaving room for the inspector and the event log when
+/// there is some.
 fn map_view_area(screen: Rect, map: &Map) -> Rect {
     let room = match inspector_area(screen) {
         Some(inspector) => inspector.x - screen.x,
         None => screen.width,
     };
     let width = (map.width().saturating_add(2)).min(room);
-    let height = (map.height().saturating_add(2)).min(screen.height.saturating_sub(2));
+    let height = (map.height().saturating_add(2)).min(panels_height(screen));
     Rect::new(screen.x, screen.y + 1.min(screen.height), width, height)
 }
 
-/// The inspector, border included: at the right, between the top bar and the
-/// status line, on a terminal wide enough for it.
+/// The rows for the map view and the inspector: between the top bar and the
+/// event log, or the status line if there's no room for the log.
+fn panels_height(screen: Rect) -> u16 {
+    let log = if event_log_area(screen).is_some() {
+        EVENT_LOG_HEIGHT
+    } else {
+        0
+    };
+    screen.height.saturating_sub(2 + log)
+}
+
+/// The inspector, border included: at the right, below the top bar, on a
+/// terminal wide enough for it.
 fn inspector_area(screen: Rect) -> Option<Rect> {
     (screen.width >= MIN_WIDTH_FOR_INSPECTOR && screen.height > 2).then(|| {
         Rect::new(
             screen.right() - INSPECTOR_WIDTH,
             screen.y + 1,
             INSPECTOR_WIDTH,
-            screen.height - 2,
+            panels_height(screen),
+        )
+    })
+}
+
+/// The event log, border included: the full width, just above the status
+/// line, on a terminal tall enough for it.
+fn event_log_area(screen: Rect) -> Option<Rect> {
+    (screen.height >= MIN_HEIGHT_FOR_EVENT_LOG).then(|| {
+        Rect::new(
+            screen.x,
+            screen.bottom() - 1 - EVENT_LOG_HEIGHT,
+            screen.width,
+            EVENT_LOG_HEIGHT,
         )
     })
 }
@@ -99,11 +131,14 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
                 x: origin.x + col,
                 y: origin.y + row,
             };
-            let glyph = match world.object_at(pos) {
-                Some(object) => app
-                    .theme
-                    .object_glyph(object.type_name(), object.visual_state()),
-                None => app.theme.glyph(SemanticTile::Terrain(map.terrain(pos))),
+            // A sprite is drawn over any item on its tile.
+            let glyph = if world.sprite_at(pos).is_some() {
+                app.theme.glyph(SemanticTile::Sprite)
+            } else if let Some(object) = world.object_at(pos) {
+                app.theme
+                    .object_glyph(object.type_name(), object.visual_state())
+            } else {
+                app.theme.glyph(SemanticTile::Terrain(map.terrain(pos)))
             };
             let mut style = Style::default().fg(glyph.fg);
             if glyph.bold {
@@ -206,9 +241,10 @@ fn top_bar_line(app: &App, world: &World) -> Line<'static> {
         format!("► {}", speed_label(clock.speed()))
     };
     let text = format!(
-        " Terra Sprites │ tick {} │ {time} │ seed {}",
+        " Terra Sprites │ tick {} │ {time} │ seed {} │ sprites {}",
         group_thousands(world.tick()),
-        app.seed
+        app.seed,
+        world.sprites().count()
     );
     Line::from(text).style(Style::default().add_modifier(Modifier::REVERSED))
 }
@@ -216,7 +252,8 @@ fn top_bar_line(app: &App, world: &World) -> Line<'static> {
 /// The keys that work now, shown at the right of the status line when there is room.
 const KEY_HINTS: &str = "WASD scroll  space pause  . step  +/- speed  esc quit ";
 
-/// The tile under the cursor and the cursor mode, then key hints if they fit in
+/// The tile under the cursor, with any sprite and object on it, and the
+/// cursor mode, then key hints if they fit in
 /// `width` cells. An open prompt takes the line over.
 fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     if app.screen() == Screen::QuitPrompt {
@@ -224,12 +261,19 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     }
     let cursor = app.cursor();
     let terrain = terrain_name(world.map().terrain(cursor));
+    let sprite = world
+        .sprite_at(cursor)
+        .map(|sprite| format!(" · {}", sprite_label(sprite.id())))
+        .unwrap_or_default();
     let object = world
         .object_at(cursor)
         .map(|object| format!(" · {}", object_label(&object)))
         .unwrap_or_default();
     let mode = app.mode().label();
-    let tile = format!(" ({},{}) {terrain}{object} │ {mode}", cursor.x, cursor.y);
+    let tile = format!(
+        " ({},{}) {terrain}{sprite}{object} │ {mode}",
+        cursor.x, cursor.y
+    );
     let used = tile.chars().count() + KEY_HINTS.chars().count();
     match usize::from(width).checked_sub(used) {
         Some(gap) if gap >= 2 => Line::from(format!("{tile}{}{KEY_HINTS}", " ".repeat(gap))),
@@ -318,6 +362,56 @@ fn render_world_tab(buf: &mut Buffer, area: Rect, world: &World) {
             usize::from(inner.width),
             Style::default(),
         );
+    }
+}
+
+/// Draws the event log (design §6.1): the latest events, newest first.
+fn render_event_log(buf: &mut Buffer, area: Rect, app: &App) {
+    let no_walls = Sides {
+        left: false,
+        right: false,
+        top: false,
+        bottom: false,
+    };
+    draw_border(buf, area, " Events ", no_walls);
+    let inner = area.inner(Margin::new(1, 1));
+    let lines = app
+        .event_log()
+        .filter_map(|event| Some((event.tick, event_text(event)?)));
+    for (row, (tick, text)) in (inner.y..inner.bottom()).zip(lines) {
+        let line = format!(" {:>7}  {text}", group_thousands(tick));
+        buf.set_stringn(
+            inner.x,
+            row,
+            line,
+            usize::from(inner.width),
+            Style::default(),
+        );
+    }
+}
+
+/// How the screen names a sprite. Sprites have no names until the player
+/// gives them one (design §6.5), so each shows by its ID.
+fn sprite_label(id: EntityId) -> String {
+    format!("Sprite #{}", id.0)
+}
+
+/// What an event says in the event log, if the log shows it.
+fn event_text(event: &Event) -> Option<String> {
+    match &event.kind {
+        EventKind::Died { id, cause, age } => {
+            let cause = match cause {
+                DeathCause::Starvation => "starvation",
+                DeathCause::Dehydration => "dehydration",
+                DeathCause::OldAge => "old age",
+            };
+            Some(format!(
+                "{} died ({cause}, age {})",
+                sprite_label(*id),
+                group_thousands(*age)
+            ))
+        }
+        EventKind::ObjectSpawned { .. } | EventKind::ObjectRemoved { .. } => None,
     }
 }
 

@@ -1,15 +1,9 @@
 //! The step 2 engine: objects defined as data, living by their lifecycle rules
 //! (design §3.5).
 
-use terra_sim::{DataPack, EntityId, Event, EventKind, Map, Pos, Removal, ScenarioError, World};
-
-const BUILTIN: &[(&str, &str)] = &[
-    ("pack.ron", include_str!("../../../data/pack.ron")),
-    ("terrain.ron", include_str!("../../../data/terrain.ron")),
-    ("chemicals.ron", include_str!("../../../data/chemicals.ron")),
-    ("loci.ron", include_str!("../../../data/loci.ron")),
-    ("objects.ron", include_str!("../../../data/objects.ron")),
-];
+use terra_sim::{
+    DataPack, EntityId, Event, EventKind, Map, Pos, Removal, Scenario, ScenarioError, World,
+};
 
 fn at(x: u16, y: u16) -> Pos {
     Pos { x, y }
@@ -22,7 +16,7 @@ fn builtin() -> DataPack {
 /// The built-in pack with `objects.ron` holding only `types`.
 fn pack_with(types: &[&str]) -> DataPack {
     let objects = format!("[{}]", types.join(",\n"));
-    let sources: Vec<(&str, &str)> = BUILTIN
+    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
         .iter()
         .map(|&(path, text)| {
             (
@@ -49,7 +43,12 @@ fn try_scenario(
         .iter()
         .map(|&(x, y, name)| (at(x, y), name))
         .collect();
-    World::from_scenario(map, &objects, data.clone(), 7)
+    let scenario = Scenario {
+        map,
+        objects: &objects,
+        sprites: &[],
+    };
+    World::from_scenario(scenario, data.clone(), 7)
 }
 
 fn scenario(data: &DataPack, rows: &[&str], objects: &[(u16, u16, &str)]) -> World {
@@ -418,8 +417,12 @@ fn spawn_nearby_chooses_uniformly_among_the_candidates() {
             PEBBLE,
         ]);
         let map = Map::from_ascii(&FIELD, &pack).expect("valid drawing");
-        let mut world =
-            World::from_scenario(map, &[(at(3, 2), "ticker")], pack, seed).expect("valid");
+        let scenario = Scenario {
+            map,
+            objects: &[(at(3, 2), "ticker")],
+            sprites: &[],
+        };
+        let mut world = World::from_scenario(scenario, pack, seed).expect("valid");
         world.step();
         chosen.extend(pebbles(&world));
     }

@@ -3,7 +3,7 @@
 // reuse one. Chemical levels are loci too, referred to as `Chem(id)`, so
 // they aren't listed here.
 //
-// Kinds: BodySensor (physics fills it in every tick), Pulse (an event that
+// Kinds: BodySensor (physiology fills it in every tick), Pulse (an event that
 // lasts one tick; object verbs `Signal` these) and ReceptorTarget (written by
 // receptors). `brain_visible` says whether the brain can read it.
 [

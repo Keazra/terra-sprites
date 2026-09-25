@@ -9,6 +9,7 @@
         terrain(shallow_water): (glyph: '~', fg: cyan),
         terrain(deep_water):    (glyph: '=', fg: blue),
         terrain(rock):          (glyph: '#', fg: gray),
+        sprite:                 (glyph: '@', fg: white),
     },
     objects: {
         "berry_bush": {

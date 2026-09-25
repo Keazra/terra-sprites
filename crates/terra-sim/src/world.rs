@@ -5,14 +5,18 @@ use rand_chacha::rand_core::SeedableRng;
 use serde::Serialize;
 use xxhash_rust::xxh3::xxh3_64_with_seed;
 
+use crate::biochem::{self, Senses};
 use crate::config::WorldConfig;
 use crate::data::DataPack;
-use crate::ecology::{self, holds_without_drawing, new_object};
-use crate::events::Event;
-use crate::generate::{generate, place_objects};
+use crate::ecology::{self, holds_without_drawing, new_object, square};
+use crate::events::{Event, EventKind};
+use crate::generate::{generate, place_objects, place_sprites};
+use crate::genome::Genome;
 use crate::map::{Map, MapError, Pos};
 use crate::objects::{EntityId, Object, Objects};
 use crate::regions::Regions;
+use crate::sprites::{Sprite, Sprites};
+use crate::variation::varied;
 
 /// Fixed seed for `state_hash`, so hashes are comparable across runs and builds.
 const STATE_HASH_SEED: u64 = 0x7e22_a5b1_17e5_0001;
@@ -36,15 +40,46 @@ pub(crate) struct WorldState {
     /// The ID the next entity gets. It only goes up, so IDs are never reused.
     pub(crate) next_id: u64,
     pub(crate) objects: Objects,
+    pub(crate) sprites: Sprites,
 }
 
 impl WorldState {
     /// Gives `object` the next entity ID and puts it in the world. The caller
     /// has checked that it may go there.
     pub(crate) fn add_object(&mut self, object: Object) -> EntityId {
+        let id = self.new_id();
+        self.objects.place(id, object);
+        id
+    }
+
+    /// Gives `sprite` the next entity ID and puts it in the world. The caller
+    /// has checked that its tile is free.
+    pub(crate) fn add_sprite(&mut self, sprite: Sprite) -> EntityId {
+        let id = self.new_id();
+        self.sprites.place(id, sprite);
+        id
+    }
+
+    /// Whether an object of type `kind` may go on the tile at `pos` (design
+    /// §3.3–3.4): as the objects and terrain allow, and, if it's solid, onto
+    /// no sprite.
+    pub(crate) fn can_place(&self, data: &DataPack, kind: usize, pos: Pos) -> bool {
+        self.objects.can_place(&self.map, data, kind, pos)
+            && !(data.object_types()[kind].solid && self.sprites.at(pos).is_some())
+    }
+
+    /// Whether a sprite may stand on the tile at `pos` (design §3.4): a
+    /// walkable tile on the map holding no sprite and no solid object.
+    pub(crate) fn can_stand(&self, data: &DataPack, pos: Pos) -> bool {
+        self.map.contains(pos)
+            && self.map.is_walkable(pos)
+            && self.sprites.at(pos).is_none()
+            && !self.objects.is_solid_at(data, pos)
+    }
+
+    fn new_id(&mut self) -> EntityId {
         let id = EntityId(self.next_id);
         self.next_id += 1;
-        self.objects.place(id, object);
         id
     }
 }
@@ -62,6 +97,49 @@ pub enum ScenarioError {
     NotAnObjectType(String),
     /// An object would break the placement rules (design §3.3–3.4).
     CantPlace { object_type: String, pos: Pos },
+    /// A sprite can't stand on this tile (design §3.4).
+    CantPlaceSprite(Pos),
+}
+
+/// A hand-made world, for tests and lab scenarios.
+pub struct Scenario<'a> {
+    /// A hand-drawn map, which must form exactly one region.
+    pub map: Map,
+    /// Objects as `(tile, object type name)`. Each starts at the beginning of its first stage.
+    pub objects: &'a [(Pos, &'a str)],
+    /// Newborn sprites as `(tile, genome)`: `None` is the starter genome with
+    /// spawn variation, as for the `SpawnSprite` command.
+    pub sprites: &'a [(Pos, Option<Genome>)],
+}
+
+/// A read-only view of one sprite.
+pub struct SpriteView<'a> {
+    id: EntityId,
+    sprite: &'a Sprite,
+    world: &'a World,
+}
+
+impl SpriteView<'_> {
+    /// The sprite's entity ID.
+    pub fn id(&self) -> EntityId {
+        self.id
+    }
+
+    /// The tile the sprite stands on.
+    pub fn pos(&self) -> Pos {
+        self.sprite.pos
+    }
+
+    /// The level of the chemical called `name`, or `None` if the pack has no such chemical.
+    pub fn chemical(&self, name: &str) -> Option<f32> {
+        let index = self
+            .world
+            .data
+            .chemicals()
+            .iter()
+            .position(|c| c.name == name)?;
+        Some(self.sprite.body.chems[index])
+    }
 }
 
 /// A read-only view of one object.
@@ -137,6 +215,7 @@ impl World {
         let map = generate(&config, &data, &mut rng);
         let mut world = World::with(map, data, rng);
         place_objects(&config, &world.data, &mut world.state);
+        place_sprites(&config, &world.data, &mut world.state);
         world
     }
 
@@ -149,24 +228,22 @@ impl World {
         Ok(World::with(map, data, ChaCha8Rng::seed_from_u64(seed)))
     }
 
-    /// A world on a hand-drawn map with objects placed by hand, as
-    /// `(tile, object type name)`, for tests and lab scenarios. The objects get
-    /// IDs in the order given, and each starts at the beginning of its first stage.
+    /// A world made by hand, for tests and lab scenarios. The objects get IDs
+    /// in the order given, then the sprites.
     pub fn from_scenario(
-        map: Map,
-        objects: &[(Pos, &str)],
+        scenario: Scenario,
         data: DataPack,
         seed: u64,
     ) -> Result<World, ScenarioError> {
-        let mut world = World::from_map(map, data, seed).map_err(ScenarioError::Map)?;
-        for &(pos, name) in objects {
+        let mut world = World::from_map(scenario.map, data, seed).map_err(ScenarioError::Map)?;
+        for &(pos, name) in scenario.objects {
             let not_an_object = || ScenarioError::NotAnObjectType(name.into());
             let kind = world
                 .data
                 .real_object_type(name)
                 .ok_or_else(not_an_object)?;
             let state = &mut world.state;
-            if !state.objects.can_place(&state.map, &world.data, kind, pos) {
+            if !state.can_place(&world.data, kind, pos) {
                 return Err(ScenarioError::CantPlace {
                     object_type: name.into(),
                     pos,
@@ -174,11 +251,25 @@ impl World {
             }
             state.add_object(new_object(&world.data, kind, pos));
         }
+        for (pos, genome) in scenario.sprites {
+            let state = &mut world.state;
+            let pos = *pos;
+            if !state.can_stand(&world.data, pos) {
+                return Err(ScenarioError::CantPlaceSprite(pos));
+            }
+            let genome = match genome {
+                Some(genome) => genome.clone(),
+                None => varied(world.data.starter(), &world.data, &mut state.rng),
+            };
+            let sprite = Sprite::newborn(genome, pos, state.tick, &world.data);
+            state.add_sprite(sprite);
+        }
         Ok(world)
     }
 
     fn with(map: Map, data: DataPack, rng: ChaCha8Rng) -> World {
         let objects = Objects::new(&map);
+        let sprites = Sprites::new(&map);
         World {
             state: WorldState {
                 tick: 0,
@@ -186,6 +277,7 @@ impl World {
                 map,
                 next_id: 1,
                 objects,
+                sprites,
             },
             data,
             checked_next_id: Cell::new(1),
@@ -199,11 +291,11 @@ impl World {
         let mut events = Vec::new();
         self.apply_commands(); // 1
         self.run_environment(&mut events); // 2
-        self.run_biochemistry(); // 3
+        let dying = self.run_biochemistry(); // 3
         self.run_learning(); // 4
         self.sense_and_decide(); // 5
         self.resolve_actions(); // 6
-        self.finish_tick(); // 7
+        self.finish_tick(&dying, &mut events); // 7
         events
     }
 
@@ -222,6 +314,28 @@ impl World {
         self.state.objects.iter().map(|(id, object)| ObjectView {
             id,
             object,
+            world: self,
+        })
+    }
+
+    /// Every sprite, in ascending ID order.
+    pub fn sprites(&self) -> impl Iterator<Item = SpriteView<'_>> {
+        self.state.sprites.iter().map(|(id, sprite)| SpriteView {
+            id,
+            sprite,
+            world: self,
+        })
+    }
+
+    /// The sprite on the tile at `pos`, if any. Off the map there is none.
+    pub fn sprite_at(&self, pos: Pos) -> Option<SpriteView<'_>> {
+        if !self.state.map.contains(pos) {
+            return None;
+        }
+        let id = self.state.sprites.at(pos)?;
+        Some(SpriteView {
+            id,
+            sprite: self.state.sprites.get(id)?,
             world: self,
         })
     }
@@ -259,8 +373,36 @@ impl World {
         ecology::run(&mut self.state, &self.data, events);
     }
 
-    /// Step 3: pulse latch, physics, reactions, decay, emitters, receptors; death check #1.
-    fn run_biochemistry(&mut self) {}
+    /// Step 3: every sprite's chemistry (design §4.4), then death check #1.
+    /// Returns the sprites marked dying, in ascending ID order.
+    fn run_biochemistry(&mut self) -> Vec<EntityId> {
+        let state = &mut self.state;
+        let data = &self.data;
+        let nearby = data.physiology().nearby_sprites;
+        let senses: Vec<(EntityId, Senses)> = state
+            .sprites
+            .iter()
+            .map(|(id, sprite)| {
+                let others = square(&state.map, sprite.pos, nearby.radius)
+                    .filter(|&tile| tile != sprite.pos && state.sprites.at(tile).is_some())
+                    .count();
+                let senses = Senses {
+                    age: sprite.age(state.tick),
+                    nearby_sprites: (others as f32 / f32::from(nearby.full)).min(1.0),
+                    ..Senses::default()
+                };
+                (id, senses)
+            })
+            .collect();
+        let mut dying = Vec::new();
+        for (id, senses) in senses {
+            let sprite = state.sprites.get_mut(id).expect("a sprite taking its turn");
+            if biochem::step(&sprite.program, &mut sprite.body, &senses, data) {
+                dying.push(id);
+            }
+        }
+        dying
+    }
 
     /// Step 4: reinforcement from consumed reward and punishment.
     fn run_learning(&mut self) {}
@@ -271,9 +413,22 @@ impl World {
     /// Step 6: movement and verb effects, then trace entries.
     fn resolve_actions(&mut self) {}
 
-    /// Step 7: death check #2, removals and events; then the tick counter advances.
-    fn finish_tick(&mut self) {
-        self.state.tick += 1;
+    /// Step 7: the dying are removed, each with a `Died` event; then the tick
+    /// counter advances. (Death check #2 arrives with step 6's effects.)
+    fn finish_tick(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
+        let state = &mut self.state;
+        for &id in dying {
+            let sprite = state.sprites.remove(id);
+            events.push(Event {
+                tick: state.tick,
+                kind: EventKind::Died {
+                    id,
+                    cause: sprite.body.cause_of_death(),
+                    age: sprite.age(state.tick),
+                },
+            });
+        }
+        state.tick += 1;
     }
 
     /// Checks the world's internal invariants (design §7.1). Later slices add checks here.
@@ -287,7 +442,12 @@ impl World {
             )));
         }
         self.checked_next_id.set(state.next_id);
-        if let Some((id, _)) = state.objects.iter().find(|(id, _)| id.0 >= state.next_id) {
+        let mut ids = state
+            .objects
+            .iter()
+            .map(|(id, _)| id)
+            .chain(state.sprites.iter().map(|(id, _)| id));
+        if let Some(id) = ids.find(|id| id.0 >= state.next_id) {
             return Err(InvariantViolation(format!(
                 "{id:?} is at or above the ID counter, {}: IDs must only go up",
                 state.next_id
@@ -296,6 +456,7 @@ impl World {
         state
             .objects
             .check(&state.map, &self.data)
+            .and_then(|()| state.sprites.check(&state.map, &state.objects, &self.data))
             .map_err(InvariantViolation)
     }
 }
@@ -310,8 +471,12 @@ mod tests {
         let data = DataPack::builtin().expect("built-in data pack is valid");
         let rows = [".......", ".......", ".......", ".....~.", "......."];
         let map = Map::from_ascii(&rows, &data).expect("valid drawing");
-        World::from_scenario(map, &[(Pos { x: 2, y: 2 }, "berry_bush")], data, 7)
-            .expect("valid scenario")
+        let scenario = Scenario {
+            map,
+            objects: &[(Pos { x: 2, y: 2 }, "berry_bush")],
+            sprites: &[],
+        };
+        World::from_scenario(scenario, data, 7).expect("valid scenario")
     }
 
     /// Puts an object of type `name` on `pos` without checking the placement rules.
@@ -356,6 +521,138 @@ mod tests {
         world.state.next_id -= 1;
         assert!(world.check_invariants().is_err());
         assert!(world.check_invariants().is_err(), "and it stays caught");
+    }
+
+    /// The field with a bush, plus starter sprites at (5, 1) and (5, 2).
+    fn field_with_sprites() -> (World, EntityId, EntityId) {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let rows = [".......", ".......", ".......", ".....~.", "......."];
+        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
+        let scenario = Scenario {
+            map,
+            objects: &[(Pos { x: 2, y: 2 }, "berry_bush")],
+            sprites: &[(Pos { x: 5, y: 1 }, None), (Pos { x: 5, y: 2 }, None)],
+        };
+        let world = World::from_scenario(scenario, data, 7).expect("valid scenario");
+        let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
+        (world, ids[0], ids[1])
+    }
+
+    #[test]
+    fn valid_sprites_pass_the_invariant_checks() {
+        assert_eq!(field_with_sprites().0.check_invariants(), Ok(()));
+    }
+
+    #[test]
+    fn a_sprite_the_tile_index_has_elsewhere_breaks_an_invariant() {
+        let (mut world, first, _) = field_with_sprites();
+        world.state.sprites.get_mut(first).expect("a sprite").pos = Pos { x: 0, y: 0 };
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn two_sprites_on_one_tile_break_an_invariant() {
+        let (mut world, first, _) = field_with_sprites();
+        world.state.sprites.get_mut(first).expect("a sprite").pos = Pos { x: 5, y: 2 };
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_sprite_on_a_solid_object_breaks_an_invariant() {
+        let (mut world, _, _) = field_with_sprites();
+        force_place(&mut world, "thornbush", Pos { x: 5, y: 1 });
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_level_outside_0_to_1_breaks_an_invariant() {
+        let (mut world, _, second) = field_with_sprites();
+        world
+            .state
+            .sprites
+            .get_mut(second)
+            .expect("a sprite")
+            .body
+            .chems[0] = 1.5;
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_locus_that_is_not_a_number_breaks_an_invariant() {
+        let (mut world, first, _) = field_with_sprites();
+        world
+            .state
+            .sprites
+            .get_mut(first)
+            .expect("a sprite")
+            .body
+            .loci[1] = f32::NAN;
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_sprite_id_the_counter_has_not_reached_breaks_an_invariant() {
+        let (mut world, _, second) = field_with_sprites();
+        world.state.next_id = second.0;
+        world.checked_next_id.set(second.0);
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn the_state_hash_covers_every_sprite_s_chemistry() {
+        let (mut world, _, second) = field_with_sprites();
+        let before = world.state_hash();
+        world
+            .state
+            .sprites
+            .get_mut(second)
+            .expect("a sprite")
+            .body
+            .chems[5] = 0.5;
+        assert_ne!(world.state_hash(), before);
+    }
+
+    #[test]
+    fn nearby_sprites_counts_the_others_within_3_tiles_over_4_capped_at_1() {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let map = Map::from_ascii(&["........."; 9], &data).expect("valid drawing");
+        let at = |x, y| (Pos { x, y }, None);
+        let sprites = [
+            at(3, 3),
+            at(0, 0),
+            at(6, 6),
+            at(3, 4),
+            at(4, 4),
+            at(2, 2),
+            at(7, 3),
+            at(8, 8),
+        ];
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &sprites,
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        world.step();
+        let index = world.data.physiology().indices.nearby_sprites;
+        let reading = |x, y| {
+            let pos = Pos { x, y };
+            let id = world.state.sprites.at(pos).expect("a sprite");
+            let (_, sprite) = world
+                .state
+                .sprites
+                .iter()
+                .find(|&(i, _)| i == id)
+                .expect("a sprite");
+            sprite.body.loci[index]
+        };
+        assert_eq!(reading(3, 3), 1.0, "5 others within 3 tiles, capped");
+        assert_eq!(
+            reading(7, 3),
+            0.5,
+            "(4, 4) and (6, 6); (3, 3) is 4 tiles away"
+        );
+        assert_eq!(reading(8, 8), 0.25, "(6, 6) only");
     }
 
     #[test]

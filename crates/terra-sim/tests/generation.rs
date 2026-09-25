@@ -212,14 +212,7 @@ fn a_generated_object_gets_no_on_stage_enter_for_the_stage_it_starts_in() {
         rules: [(trigger: OnStageEnter("a"), do: [AddCounter("entered", 1)]),
                 (trigger: OnStageEnter("b"), do: [AddCounter("entered", 1)])])"#;
     let objects = format!("[{herb}]");
-    let data = DataPack::from_sources(&[
-        ("pack.ron", include_str!("../../../data/pack.ron")),
-        ("terrain.ron", include_str!("../../../data/terrain.ron")),
-        ("chemicals.ron", include_str!("../../../data/chemicals.ron")),
-        ("loci.ron", include_str!("../../../data/loci.ron")),
-        ("objects.ron", &objects),
-    ])
-    .expect("valid pack");
+    let data = DataPack::from_sources(&builtin_with("objects.ron", &objects)).expect("valid pack");
     let preset = r#"(width: 64, height: 64, objects: {"herb": 20}, per_tiles: 4096)"#;
     let config = WorldConfig::from_ron(preset, &data).expect("valid preset");
     let mut world = World::new(config, data, 9);
@@ -287,4 +280,12 @@ fn generation_never_splits_the_open_ground() {
         let world = World::new(config, data.clone(), seed);
         assert_eq!(open_regions(&world), 1, "crowded, seed {seed}");
     }
+}
+
+/// The built-in pack's files with `file` replaced by `text`.
+fn builtin_with<'a>(file: &str, text: &'a str) -> Vec<(&'static str, &'a str)> {
+    DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, builtin)| (path, if path == file { text } else { builtin }))
+        .collect()
 }

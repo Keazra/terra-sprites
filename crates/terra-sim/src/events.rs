@@ -20,12 +20,40 @@ pub enum EventKind {
         object_type: String,
         pos: Pos,
     },
+    /// A sprite died, and left the world.
+    Died {
+        id: EntityId,
+        cause: DeathCause,
+        /// Its age in ticks.
+        age: u64,
+    },
     /// An object left the world.
     ObjectRemoved {
         id: EntityId,
         object_type: String,
         reason: Removal,
     },
+}
+
+/// What caused most of a dead sprite's recent injury (design §4.10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+pub enum DeathCause {
+    /// Its energy ran out.
+    Starvation = 0,
+    /// Its hydration ran out.
+    Dehydration = 1,
+    /// It lived past its lifespan.
+    OldAge = 2,
+}
+
+impl DeathCause {
+    /// Every cause, in the order ties are settled. A cause's discriminant is
+    /// its place here, and in a body's tallies.
+    pub(crate) const ALL: [DeathCause; 3] = [
+        DeathCause::Starvation,
+        DeathCause::Dehydration,
+        DeathCause::OldAge,
+    ];
 }
 
 /// Why an object left the world.

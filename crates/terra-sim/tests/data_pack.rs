@@ -2,18 +2,9 @@ use terra_sim::{DataError, DataPack, Terrain};
 
 const BUILTIN_TERRAIN: &str = include_str!("../../../data/terrain.ron");
 
-/// The built-in pack's files, as `(path within the pack, RON text)`.
-const BUILTIN: &[(&str, &str)] = &[
-    ("pack.ron", include_str!("../../../data/pack.ron")),
-    ("terrain.ron", BUILTIN_TERRAIN),
-    ("chemicals.ron", include_str!("../../../data/chemicals.ron")),
-    ("loci.ron", include_str!("../../../data/loci.ron")),
-    ("objects.ron", include_str!("../../../data/objects.ron")),
-];
-
 /// Loads the built-in pack with `file` replaced by `text`.
 fn builtin_with(file: &str, text: &str) -> Result<DataPack, DataError> {
-    let sources: Vec<(&str, &str)> = BUILTIN
+    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
         .iter()
         .map(|&(path, builtin)| (path, if path == file { text } else { builtin }))
         .collect();
@@ -32,6 +23,16 @@ fn assert_invalid(file: &str, text: &str, word: &str) {
             assert!(message.contains(word), "{message:?} should mention {word}");
         }
         other => panic!("expected {file} to be invalid, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_pack_without_its_physiology_or_its_starter_genome_is_rejected() {
+    for file in ["physiology.ron", "genomes/starter.ron"] {
+        assert_eq!(
+            builtin_without(file).unwrap_err(),
+            DataError::MissingFile(file.into())
+        );
     }
 }
 
@@ -228,7 +229,7 @@ fn chemical_ids_and_names_are_unique() {
 
 /// Loads the built-in pack without `file`.
 fn builtin_without(file: &str) -> Result<DataPack, DataError> {
-    let sources: Vec<(&str, &str)> = BUILTIN
+    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
         .iter()
         .copied()
         .filter(|&(path, _)| path != file)
@@ -465,4 +466,161 @@ fn the_built_in_pack_describes_its_object_types_for_display() {
         pack.stage_names("shrub").is_empty(),
         "an unknown type has nothing"
     );
+}
+
+const BUILTIN_PHYSIOLOGY: &str = include_str!("../../../data/physiology.ron");
+
+/// Asserts that the built-in physiology with `from` replaced by `to` is
+/// invalid, with a message mentioning `word`.
+fn assert_invalid_physiology(from: &str, to: &str, word: &str) {
+    assert!(
+        BUILTIN_PHYSIOLOGY.contains(from),
+        "{from:?} is in physiology.ron"
+    );
+    assert_invalid(
+        "physiology.ron",
+        &BUILTIN_PHYSIOLOGY.replace(from, to),
+        word,
+    );
+}
+
+#[test]
+fn physiology_levels_are_fractions_from_0_to_1() {
+    assert_invalid_physiology("energy: 1.0", "energy: 1.5", "energy");
+    assert_invalid_physiology("stamina: 1.0)", "stamina: -0.1)", "stamina");
+    assert_invalid_physiology(
+        "first_population: (0.6, 1.0)",
+        "first_population: (0.6, 1.2)",
+        "first_population",
+    );
+}
+
+#[test]
+fn physiology_ranges_go_from_low_to_high() {
+    assert_invalid_physiology(
+        "first_population: (0.6, 1.0)",
+        "first_population: (0.9, 0.6)",
+        "first_population",
+    );
+    assert_invalid_physiology("speed: (4.0, 12.0)", "speed: (12.0, 4.0)", "speed");
+    assert_invalid_physiology("(0.25, 4.0)", "(4.0, 0.25)", "exploration_mod");
+}
+
+#[test]
+fn physiology_rates_are_not_negative() {
+    assert_invalid_physiology("basal: 0.0001", "basal: -0.0001", "basal");
+    assert_invalid_physiology("healing: 0.0001", "healing: -0.0001", "healing");
+    assert_invalid_physiology("old_age: 0.0006", "old_age: -0.0006", "old_age");
+}
+
+#[test]
+fn causes_of_death_fade_over_at_least_one_tick() {
+    assert_invalid_physiology("cause_fade: 350", "cause_fade: 0", "cause_fade");
+}
+
+#[test]
+fn spawn_variation_is_a_fraction_below_1() {
+    assert_invalid_physiology(
+        "spawn_variation: 0.1",
+        "spawn_variation: 1.0",
+        "spawn_variation",
+    );
+    assert_invalid_physiology(
+        "spawn_variation: 0.1",
+        "spawn_variation: -0.1",
+        "spawn_variation",
+    );
+}
+
+#[test]
+fn every_receptor_target_has_a_range_and_nothing_else_does() {
+    assert_invalid_physiology("\"exploration_mod\": (0.25, 4.0),", "", "exploration_mod");
+    assert_invalid_physiology(
+        "\"exploration_mod\": (0.25, 4.0),",
+        "\"exploration_mod\": (0.25, 4.0), \"ate\": (0.0, 1.0),",
+        "ate",
+    );
+}
+
+#[test]
+fn a_starter_genome_with_a_flagged_or_unknown_gene_does_not_load() {
+    let starter = |gene: &str| format!("(format: 1, genes: [{gene}])");
+    assert_invalid(
+        "genomes/starter.ron",
+        &starter(r#"HalfLife(chem: "energy", ticks: 10)"#),
+        "energy",
+    );
+    assert_invalid(
+        "genomes/starter.ron",
+        &starter(r#"Gene(type: 900, version: 1, payload: "")"#),
+        "900",
+    );
+    assert_invalid(
+        "genomes/starter.ron",
+        &starter(r#"HalfLife(chem: "glee", ticks: 10)"#),
+        "glee",
+    );
+}
+
+#[test]
+fn physiology_needs_its_physical_chemicals_and_body_sensors() {
+    let chemicals = include_str!("../../../data/chemicals.ron");
+    let loci = include_str!("../../../data/loci.ron");
+    let changed = |text: &str, from: &str, to: &str| {
+        assert!(text.contains(from), "{from:?} is in the file");
+        text.replace(from, to)
+    };
+    let stamina = r#"(id: 3,  name: "stamina",     class: Physical)"#;
+    assert_invalid(
+        "chemicals.ron",
+        &changed(
+            chemicals,
+            stamina,
+            r#"(id: 3,  name: "vigour",      class: Physical)"#,
+        ),
+        "stamina",
+    );
+    assert_invalid(
+        "chemicals.ron",
+        &changed(
+            chemicals,
+            stamina,
+            r#"(id: 3,  name: "stamina",     class: Signal)"#,
+        ),
+        "stamina",
+    );
+    assert_invalid(
+        "loci.ron",
+        &changed(loci, r#"name: "resting","#, r#"name: "lazing","#),
+        "resting",
+    );
+    assert_invalid(
+        "loci.ron",
+        &changed(
+            loci,
+            r#"name: "always",            kind: BodySensor"#,
+            r#"name: "always",            kind: Pulse"#,
+        ),
+        "always",
+    );
+}
+
+#[test]
+fn trait_ranges_are_finite_and_above_0() {
+    assert_invalid_physiology("speed: (4.0, 12.0)", "speed: (0.0, 12.0)", "speed");
+    assert_invalid_physiology(
+        "lifespan: (20000.0, 200000.0)",
+        "lifespan: (0.0, 200000.0)",
+        "lifespan",
+    );
+    assert_invalid_physiology(
+        "lifespan: (20000.0, 200000.0)",
+        "lifespan: (20000.0, inf)",
+        "lifespan",
+    );
+}
+
+#[test]
+fn physiology_rates_are_finite() {
+    assert_invalid_physiology("healing: 0.0001", "healing: inf", "healing");
 }
