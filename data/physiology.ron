@@ -67,9 +67,9 @@
     // drawn between 1 − this and 1 + this.
     spawn_variation: 0.1,
 
-    // How long actions last (design §5.5), in ticks. An action still going
-    // at the timeout ends as timed out.
-    actions: (rest_bout: 10, timeout: 60),
+    // How long actions last (design §5.5): a rest in ticks, a retreat in
+    // steps. An action still going at the timeout, in ticks, ends as timed out.
+    actions: (rest_bout: 10, retreat_bout: 6, timeout: 60),
     // How sprites find their way (design §3.6–3.7). A flood is made again 8
     // ticks after the last, if the sprite hasn't moved sooner. It prices a
     // tile holding another sprite at `occupied_penalty` more, in terrain
