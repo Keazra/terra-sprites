@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier};
@@ -903,24 +905,31 @@ fn the_body_tab_starts_with_what_the_sprite_is_doing_in_plain_words() {
 }
 
 #[test]
-fn v_shows_the_exact_action_and_marks_where_the_selected_sprite_is_heading() {
+fn where_the_selected_sprite_is_heading_flashes_an_inverted_x_whatever_the_detail_view() {
     let destination = Pos { x: 7, y: 3 };
     let wander = ScriptedAction::Wander { destination };
     let (world, mut app) = one_sprite_doing(SPEED_10, &[wander], 1);
     let cell = app.cell_of(destination).expect("in view");
-    assert_eq!(render(&app, &world, 100, 30)[cell].symbol(), ".");
+    let screen = render(&app, &world, 100, 30);
+    assert_eq!(screen[cell].symbol(), "X", "without the detail view");
+    assert_eq!(screen[cell].fg, Color::White);
+    assert!(screen[cell].modifier.contains(Modifier::REVERSED));
 
+    // It flashes about twice a second, in real time: the tile, then the X.
+    app.animate(Duration::from_millis(250));
+    let screen = render(&app, &world, 100, 30);
+    assert_eq!(screen[cell].symbol(), ".");
+    assert!(!screen[cell].modifier.contains(Modifier::REVERSED));
+    app.animate(Duration::from_millis(250));
+    assert_eq!(render(&app, &world, 100, 30)[cell].symbol(), "X");
+
+    // `v` only changes the action line.
     app.apply(Action::ToggleDetail, &world);
     assert_eq!(
         inspector(&app, &world).1[0],
         "WANDER → (7,3) · walking (4 tiles)"
     );
-    let screen = render(&app, &world, 100, 30);
-    assert_eq!(screen[cell].symbol(), "X");
-    assert_eq!(screen[cell].fg, Color::White);
-
-    app.apply(Action::ToggleDetail, &world);
-    assert_eq!(render(&app, &world, 100, 30)[cell].symbol(), ".");
+    assert_eq!(render(&app, &world, 100, 30)[cell].symbol(), "X");
 }
 
 /// A hungry sprite whose instincts point it at berries and to eating, with
@@ -965,6 +974,33 @@ fn the_brain_tab_shows_attention_scores_and_what_adds_most_to_the_decision() {
         ]
     );
     assert!(text[8..].iter().all(String::is_empty), "{text:?}");
+}
+
+#[test]
+fn the_map_marks_the_one_thing_the_selected_sprite_attends_to() {
+    // Away from the cursor, which starts on the map's centre, (5, 2).
+    let (berry, bush) = (Pos { x: 0, y: 1 }, Pos { x: 8, y: 4 });
+    let objects = [(bush, "berry_bush"), (berry, "berry")];
+    let (world, mut app) = one_sprite_among(HUNGRY_GENOME, &objects, &[], 1);
+    let (berry_cell, bush_cell) = (
+        app.cell_of(berry).expect("in view"),
+        app.cell_of(bush).expect("in view"),
+    );
+    let screen = render(&app, &world, 100, 30);
+    assert_eq!(screen[berry_cell].symbol(), "•", "the berry, still drawn");
+    assert_eq!(screen[berry_cell].bg, Color::DarkGray, "a steady mark");
+    assert_eq!(screen[bush_cell].bg, Color::Reset);
+    app.animate(Duration::from_millis(250));
+    assert_eq!(
+        render(&app, &world, 100, 30)[berry_cell].bg,
+        Color::DarkGray
+    );
+
+    // With no sprite selected, nothing is marked.
+    let grass = app.cell_of(Pos { x: 0, y: 0 }).expect("in view");
+    app.apply(Action::Click(grass), &world);
+    assert_eq!(app.selection(), None);
+    assert_eq!(render(&app, &world, 100, 30)[berry_cell].bg, Color::Reset);
 }
 
 #[test]

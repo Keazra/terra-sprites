@@ -1,6 +1,7 @@
 //! The UI state (design §6.8): everything the screen shows that isn't the world.
 
 use std::collections::VecDeque;
+use std::time::Duration;
 
 use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
@@ -160,7 +161,13 @@ pub struct App {
     tab_scroll: usize,
     /// Whether the detail view is on (design §6.1).
     detail: bool,
+    /// Real time the app has been running, for what flashes on the map.
+    running_for: Duration,
 }
+
+/// How long a flashing mark stays on, and then off: about 2 Hz, like the
+/// emotes (design §6.3).
+const FLASH_HALF: Duration = Duration::from_millis(250);
 
 impl App {
     /// A new UI for `map`, with the cursor at the map's centre and the viewport
@@ -188,6 +195,7 @@ impl App {
             tab: Tab::World,
             tab_scroll: 0,
             detail: false,
+            running_for: Duration::ZERO,
         };
         app.centre_on(cursor);
         app
@@ -253,6 +261,16 @@ impl App {
     /// The events the event log shows, newest first.
     pub fn event_log(&self) -> impl Iterator<Item = &Event> {
         self.event_log.iter()
+    }
+
+    /// Moves the app's real-time clock on by `elapsed`, for what flashes.
+    pub fn animate(&mut self, elapsed: Duration) {
+        self.running_for += elapsed;
+    }
+
+    /// Whether a flashing mark is in its "on" half just now.
+    pub fn flash_on(&self) -> bool {
+        (self.running_for.as_millis() / FLASH_HALF.as_millis()).is_multiple_of(2)
     }
 
     /// Whether the detail view is on: the exact workings behind what the
