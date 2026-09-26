@@ -5,6 +5,10 @@
 //   category  what brains perceive it as (BerryBush, Berry, Thornbush, Water, Ball, Sprite)
 //   tags      [Solid, Fixture] for objects like bushes, which nothing can move
 //             through or move; no tags for items, like berries and balls
+//   size      Small, Medium or Large, and
+//   hardness  from 0 to 1: a rolling item bounces off something bigger, knocks
+//             on something its size, and crushes something smaller and softer.
+//             Every type with objects gives both; a pseudo type gives both or neither
 //   counters  named whole numbers with maximums: {"fruit": 6}
 //   stages    [(name, ticks: (min, max), next: Stage(name) or Expire)]; a type
 //             with no stages is permanent
@@ -24,6 +28,7 @@
 //   Signal(Actor or Target, locus), Push(tiles).
 [
     (id: 1, name: "berry_bush", category: BerryBush, tags: [Solid, Fixture],
+     size: Large, hardness: 1.0,
      counters: {"fruit": 6},
      stages: [
          (name: "seedling", ticks: (1500, 2500),   next: Stage("mature")),
@@ -45,7 +50,7 @@
          (if: [Counter("fruit", Ge, 1)], state: "fruiting"),
      ]),
 
-    (id: 2, name: "berry", category: Berry,
+    (id: 2, name: "berry", category: Berry, size: Small, hardness: 0.1,
      stages: [(name: "fresh", ticks: (1500, 2500), next: Expire)],
      rules: [
          // An expiring berry sometimes sprouts, on fertile land that isn't crowded,
@@ -59,6 +64,7 @@
      }),
 
     (id: 3, name: "thornbush", category: Thornbush, tags: [Solid, Fixture],
+     size: Large, hardness: 1.0,
      stages: [(name: "grown", ticks: (40000, 60000), next: Expire)],
      rules: [
          (trigger: Every(2000), if: [Chance(0.1)],
@@ -71,7 +77,7 @@
          Play: [Inject(Actor, "injury", 0.03), Signal(Actor, "pricked")],
      }),
 
-    (id: 4, name: "ball", category: Ball,
+    (id: 4, name: "ball", category: Ball, size: Medium, hardness: 0.5,
      verbs: {
          Play: [Push(4), Signal(Actor, "played")],
          Hit:  [Push(2), Signal(Actor, "did_hit")],
@@ -83,7 +89,7 @@
          Drink: [Inject(Actor, "water", 0.2), Signal(Actor, "drank")],
      }),
 
-    (id: 101, name: "sprite", category: Sprite, pseudo: true,
+    (id: 101, name: "sprite", category: Sprite, pseudo: true, size: Large, hardness: 0.5,
      verbs: {
          Hit:  [Inject(Target, "injury", 0.03), Signal(Target, "was_hit"), Signal(Actor, "did_hit")],
          Play: [Signal(Actor, "played_social"), Signal(Target, "played_social")],

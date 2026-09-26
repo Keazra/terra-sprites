@@ -15,6 +15,7 @@ The owner's preferences and the project's conventions, for any agent session, lo
 - **The engine enforces physics only.** Behaviour and safety policies belong in each object's data rules, and the data names things. For example, the cause of death "hurt by thornbush" comes from the object type, not from a list in the code.
 - **Solid means impassable, whatever a sprite has learned.**
 - **The player has to care first.** Sprites start unnamed; the player names the ones they care about.
+- **Terra Sprites is a stepping stone** to a larger game: one adventurer in a world of NPCs that run on the Sprite system, with skills a player can lock and a character that can live on as an NPC ([#47](https://github.com/Keazra/terra-sprites/issues/47)). Nothing is built for it yet, but keep `terra-sim` a general engine, and when a design choice comes up, say whether it helps or hinders reusing sprites as NPCs.
 - **Sprites are blank slates.** They should learn what's good or bad, pass on their genes, and later teach the next generation, so instincts stay general and make mistakes rather than holding knowledge a sprite should earn. "Bored → play with whatever it's looking at", thornbushes included, stays, even when it costs lives until learning arrives (design v12, change 11).
 
 ## Design documents
@@ -33,7 +34,7 @@ Each slice is a GitHub issue ("Slice N: …") in the M1 milestone, worked as in 
 4. Build red-green with `tdd`, one behaviour at a time, committing as it goes.
 5. Run `two-axis-review` against `main` (Standards and Spec, in parallel sub-agents). Fix every finding that holds up, and give reasons for the ones declined.
 6. Open the PR ("Closes #N"), with the checks in `AGENTS.md` passing.
-7. Answer outside reviews (below), then merge when the owner says so: a merge commit, then delete the branch and pull `main`.
+7. Answer outside reviews (below), then merge when the owner says so: a merge commit, not a squash, then delete the branch and pull `main`. PR descriptions and review replies cite the slice's commits by hash, and a squash would drop them from `main`'s history.
 
 A slice too big for one PR ships as two ("4a", "4b"); only the last PR's description says "Closes #N".
 

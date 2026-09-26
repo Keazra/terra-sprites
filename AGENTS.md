@@ -54,7 +54,7 @@ Sessions start and end with the `handover` skill (`/handover start`, `/handover 
 - Post issue and PR bodies and comments with `--body-file` and a temp file, never an inline `--body`: inline text breaks on backticks, quotes and paths.
 - After opening an issue or a PR, post a plain-language comment on it for a human reader: what it changes or proposes, why it matters, and any caveats for the reviewer.
 - Follow-up work goes on GitHub, not just in the conversation. An item for a later slice is a comment on that slice's issue; anything else is a new issue, triaged `afk` or `hitl`.
-- "Closes #N" anywhere in a PR description closes that issue on merge, so write it only in the PR meant to close it.
+- "Closes #N" anywhere in a PR description closes that issue on merge, so write it only in the PR meant to close it. GitHub matches the keyword mid-sentence and in any form ("close", "closes", "fix", "fixes", "resolve", "resolves"), so a PR that only works towards an issue says "Part of #N" and never puts one of those words in front of the number. "Only 7c's PR closes #8" closed #8 when 7a merged.
 
 ## Agent skills
 

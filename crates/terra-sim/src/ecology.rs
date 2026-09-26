@@ -283,7 +283,7 @@ pub(crate) fn apply(
 }
 
 /// Reports that the object `id`, of type `kind`, has left the world.
-fn removed(
+pub(crate) fn removed(
     state: &WorldState,
     data: &DataPack,
     id: EntityId,
