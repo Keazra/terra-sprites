@@ -2,7 +2,9 @@
 //! tick, and it bounces off what it meets, driven through hand-made worlds
 //! with scripted kicks.
 
-use terra_sim::{DataPack, Genome, Map, Pos, Scenario, ScriptedAction, World};
+use terra_sim::{
+    DataPack, EventKind, Genome, Map, Outcome, Pos, Scenario, ScriptedAction, Verb, World,
+};
 
 fn builtin() -> DataPack {
     DataPack::builtin().expect("built-in data pack is valid")
@@ -152,7 +154,7 @@ fn a_ball_meeting_anything_head_on_bounces_straight_back() {
 }
 
 #[test]
-fn a_ball_meeting_a_sprite_head_on_bounces_straight_back() {
+fn a_ball_meeting_a_sprite_head_on_bounces_straight_back_and_doesnt_hurt_it() {
     let rest = [ScriptedAction::Rest; 3];
     let mut world = world(
         &LANE,
@@ -165,6 +167,9 @@ fn a_ball_meeting_a_sprite_head_on_bounces_straight_back() {
     let path = rolls(&mut world, 6);
     let expected = [(2, 1), (3, 1), (4, 1), (5, 1), (4, 1), (4, 1)];
     assert_eq!(path, expected.map(|(x, y)| at(x, y)));
+    // No incidental harm (design §3.8): the ball bounced off it, and that's all.
+    let stood = world.sprite_at(at(6, 1)).expect("the sprite it bounced off");
+    assert_eq!(stood.chemical("injury"), Some(0.0));
 }
 
 /// The ball's path when kicked north-east from (1, 4) at a ball on (2, 3),
@@ -249,4 +254,32 @@ fn kicking_a_rolling_ball_starts_a_fresh_roll() {
     let path = rolls(&mut world, 8);
     let expected = [(2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (7, 1), (7, 1), (7, 1)];
     assert_eq!(path, expected.map(|(x, y)| at(x, y)));
+}
+
+#[test]
+fn a_sprite_going_to_kick_a_rolling_ball_follows_it_and_kicks_it() {
+    // One sprite kicks the ball east along row 1. Another sets off for it
+    // from (1, 6) as it goes, follows it to (6, 1), where it stops, and kicks.
+    let mut world = world(
+        &FIELD,
+        &[(at(2, 1), "ball")],
+        &[
+            (at(1, 1), &kick(at(2, 1))),
+            (at(1, 6), &kick(at(2, 1))),
+        ],
+    );
+    let chaser = world.sprite_at(at(1, 6)).expect("the chaser").id();
+    let mut kicked = false;
+    for _ in 0..30 {
+        for event in world.step() {
+            if let EventKind::ActionEnded { id, verb: Verb::Play, outcome, .. } = event.kind
+                && id == chaser
+            {
+                assert_eq!(outcome, Outcome::Applied);
+                kicked = true;
+            }
+        }
+    }
+    assert!(kicked, "the chaser kicked the ball");
+    assert!(ball(&world).x > 6, "{:?}", ball(&world));
 }
