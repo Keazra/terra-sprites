@@ -430,7 +430,7 @@ pub(crate) fn resolve(
         } else if action.verb == Verb::Retreat {
             let target = action.target.expect("a retreat has a target");
             if !moved.contains(&id) {
-                retreat(state, data, id, target, &mut moved);
+                retreat(state, data, id, target, &mut moved, events);
             }
         } else if let Some(target) = action.target {
             let pos = sprite.pos;
@@ -687,14 +687,17 @@ fn wait(state: &mut WorldState, data: &DataPack, id: EntityId, cost: u32, events
 }
 
 /// Sprite `id`'s turn to back away from `target` (design §5.5): it steps
-/// while its points last.
+/// while its points last, and is done after `retreat_bout` steps, keeping
+/// at most the last step's worth of points, as an arrival does (§3.7).
 fn retreat(
     state: &mut WorldState,
     data: &DataPack,
     id: EntityId,
     target: Target,
     moved: &mut BTreeSet<EntityId>,
+    events: &mut Vec<Event>,
 ) {
+    let bout = data.physiology().actions.retreat_bout;
     loop {
         let Some((there, _)) = state.whereabouts(data, target) else {
             return;
@@ -714,6 +717,11 @@ fn retreat(
         sprite.did.steps += 1;
         let action = sprite.action.as_mut().expect("a retreat");
         action.steps += 1;
+        if action.steps >= bout {
+            end(action, id, Outcome::Applied, state.tick, events);
+            sprite.move_points = sprite.move_points.min(tenths);
+            return;
+        }
     }
 }
 
