@@ -17,7 +17,7 @@ Decided with the owner in the design session for slice 7b ([#8](https://github.c
 | 2 | **An item moves at most once a tick.** An item knocked on, or handed a roll by a knock, starts moving at the next tick's step 2, whatever its ID, so the order items are taken in never decides whether one moves twice. | Slice 7b design session | §3.5.4 |
 | 3 | **After a bounce, the tile it heads for is met by the usual rules:** an item there is knocked on or crushed as it would be head on. Only a second bounce ends the roll. The sides that decide a slantwise bounce's angle count as stopping it only if they would bounce it, not if they hold an item it would knock on or crush. | Owner decision | §3.5.4 |
 | 4 | **A crush isn't in the event log.** It is an `ObjectRemoved`, which the log already leaves out (§6.1). | Owner decision | §6.1 |
-| 5 | **Every object type with instances, and the `sprite` pseudo type, must give a size and a hardness;** leaving either out is a load error. Water gives neither. A sprite still always bounces a rolling item, whatever its size. | Slice 7b design session | §3.5.1, §3.5.3 |
+| 5 | **Every object type with instances must give a size and a hardness;** leaving either out is a load error. A pseudo type may give both or neither: `sprite` gives both, `water` neither, so the code names neither. Hardness is from 0 to 1. A sprite still always bounces a rolling item, whatever its size. | Slice 7b design session | §3.5.1, §3.5.3 |
 | 6 | **The roadmap names where Terra Sprites is heading:** a larger game of one adventurer among NPCs that run on the Sprite system ([#47](https://github.com/Keazra/terra-sprites/issues/47)). Nothing is built for it; it's a reason to keep `terra-sim` a general engine. | Owner vision | §1.1 |
 
 ---
@@ -603,8 +603,8 @@ An object is **solid** if nothing can move through it, and a **fixture** if it's
 | `stages` | `[(name, ticks: (min, max), next: Stage(name) \| Expire)]`. The duration is drawn from the world RNG when the stage is entered. An object with no stages is permanent. |
 | `rules` | `[(trigger, if: [conditions], do: [effects])]` |
 | `verbs` | `{Verb: [effects]}`: what happens when a sprite applies that verb to this object |
-| `size` | `Small`, `Medium` or `Large` (from slice 7b). What a rolling item does to what it meets depends on it (§3.5.4). Sprites' size is the `sprite` pseudo type's. Required on every type with instances and on `sprite`; `water` gives none. |
-| `hardness` | 0 to 1 (from slice 7b). A rolling item crushes a smaller, softer one (§3.5.4). Required where `size` is. |
+| `size` | `Small`, `Medium` or `Large` (from slice 7b). What a rolling item does to what it meets depends on it (§3.5.4). Sprites' size is the `sprite` pseudo type's. Required on every type with instances; a pseudo type gives it or not (`sprite` does, `water` doesn't). |
+| `hardness` | 0 to 1 (from slice 7b). A rolling item crushes a smaller, softer one (§3.5.4). Given with `size`, and only with it. |
 | `visual` | `[(if: [conditions], state: name)]`: the first match names the visual state the theme draws. If nothing matches, the state is `"default"`. `Chance` is not allowed here, so rendering never uses the RNG. |
 
 **Glyphs and colours are not in `objects.ron`.** Themes map `(object name, visual state)` to how it looks (§6.2).
