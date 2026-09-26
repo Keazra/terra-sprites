@@ -23,6 +23,15 @@ fn walker(data: &DataPack) -> Genome {
     Genome::from_ron(text, data).expect("a valid genome")
 }
 
+/// A walker that sees as little as a sprite can: 6 tiles.
+fn short_sighted(data: &DataPack) -> Genome {
+    let text = r#"(format: 1, genes: [
+        Trait(trait: "speed", value: 10.0),
+        Trait(trait: "sense_radius", value: 6.0),
+    ])"#;
+    Genome::from_ron(text, data).expect("a valid genome")
+}
+
 /// A walker that feels being cornered: the `cornered` pulse raises `h0`.
 fn feeling_cornered(data: &DataPack) -> Genome {
     let text = r#"(format: 1, genes: [
@@ -226,4 +235,38 @@ fn a_retreat_held_up_by_a_sprite_goes_on_once_it_moves_off() {
     assert!(where_is(&world).x >= 2, "it followed the other sprite out");
     world.step();
     assert_eq!(level(&world, "h0"), 0.0, "never cornered");
+}
+
+#[test]
+fn a_retreat_whose_target_is_gone_fails() {
+    // Another sprite eats the berry it's backing away from, at once.
+    let (me, eater, berry) = (at(2, 0), at(0, 0), at(1, 0));
+    let script = [
+        (me, ScriptedAction::Retreat { at: berry }),
+        (eater, ScriptedAction::Eat { at: berry }),
+    ];
+    let mut world = scene(
+        &["........"],
+        &[(berry, "berry")],
+        &[(me, walker), (eater, walker)],
+        &script,
+    );
+    world.step();
+    let events = world.step();
+    // With the retreat over, a sprite with no instincts may choose anything.
+    let first = first_endings(&world, &events).first().copied();
+    assert_eq!(first, Some((Verb::Retreat, Outcome::Failed)));
+}
+
+#[test]
+fn a_retreat_goes_on_once_its_target_is_out_of_sight() {
+    // It sees 6 tiles; six steps take it 11 from the berry.
+    let rows = ["................"];
+    let mut world = retreating_with(&rows, &[(at(0, 0), "berry")], at(5, 0), at(0, 0), short_sighted);
+    let mut ended = Vec::new();
+    for _ in 0..6 {
+        ended.extend(world.step().into_iter());
+    }
+    assert_eq!(endings(&ended), [(Verb::Retreat, Outcome::Applied)]);
+    assert_eq!(where_is(&world), at(11, 0));
 }
