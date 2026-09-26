@@ -102,6 +102,28 @@ _Avoid_: die (sprites die), rot
 The name a theme draws an object by, such as a bush's seedling, bare or fruiting look.
 _Avoid_: sprite (a sprite is a creature), appearance
 
+**Roll**:
+An item moving across the map one tile a tick after a sprite pushes it, such as a kicked ball, until it has gone as far as the push sent it.
+_Avoid_: slide, fly
+
+**Bounce**:
+A rolling item turning away from what it ran into: straight back if it met it head on, glancing off at the same angle if it met it slantwise.
+_Avoid_: collision, rebound
+
+**Size**:
+How big an object type, or a sprite, is: small, medium or large. What a rolling item does to what it meets depends on their sizes.
+
+**Hardness**:
+How hard an object type is, from 0 to 1. A rolling item crushes something smaller and softer than itself.
+
+**Knock on**:
+A rolling item stopping and passing its roll to the item it ran into, which rolls on the same way, as in billiards.
+_Avoid_: push (a push is what a sprite does)
+
+**Crush**:
+A rolling item destroying a smaller, softer item it runs into, and rolling on.
+_Avoid_: squash, break
+
 ### Sprites
 
 **Sprite**:
@@ -187,6 +209,10 @@ _Avoid_: senescence
 
 **Cause of death**:
 What caused most of a sprite's recent injury, with the most recent counting most: starvation, dehydration, old age, or being hurt by a kind of object, such as a thornbush or another sprite.
+
+**Hurt**:
+Injury that something did to a sprite: a thornbush it touched, another sprite's hit, or the hand's Correct. Starvation, dehydration and old age injure a sprite but don't hurt it.
+_Avoid_: damage, pricked (a thornbush word; the data names things, the screen says "hurt")
 
 ### Actions and movement
 
@@ -315,6 +341,10 @@ _Avoid_: highlight, attention mark
 **Event log**:
 The panel that lists what just happened to sprites, newest first.
 _Avoid_: events panel, console, feed
+
+**Emote**:
+A glyph that takes turns with a sprite's own glyph on the map for about a second, showing something that just happened to it, such as the red `!` of being hurt.
+_Avoid_: icon, bubble, flash
 
 **Semantic tile**:
 What the map view draws for a tile, named by meaning (such as grass terrain) rather than by character.

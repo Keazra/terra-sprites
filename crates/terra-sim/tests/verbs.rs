@@ -3,7 +3,7 @@
 //! worlds with scripted actions.
 
 use terra_sim::{
-    DataPack, DeathCause, EntityId, Event, EventKind, Genome, Map, ObjectView, Outcome, Pos,
+    DataPack, DeathCause, EntityId, Event, EventKind, Genome, Hurt, Map, ObjectView, Outcome, Pos,
     Progress, Removal, Scenario, ScriptedAction, Target, Verb, World,
 };
 
@@ -429,4 +429,148 @@ fn a_scripted_approach_can_head_for_water() {
         }
     }
     panic!("it should reach the water");
+}
+
+const LANE: [&str; 3] = [".......", ".......", "......."];
+
+#[test]
+fn hitting_a_sprite_hurts_it_and_not_the_hitter() {
+    let hitter = [ScriptedAction::Hit { at: at(2, 1) }, ScriptedAction::Rest];
+    let hit = [ScriptedAction::Rest; 2];
+    let mut world = world_of(&LANE, &[], &[(at(1, 1), &hitter), (at(2, 1), &hit)]);
+    let events = world.step();
+    assert!(
+        endings(&events).contains(&(Verb::Hit, Outcome::Applied)),
+        "{events:?}"
+    );
+    let injury = |pos| world.sprite_at(pos).expect("a sprite").chemical("injury");
+    assert_eq!(injury(at(1, 1)), Some(0.0));
+    assert_eq!(injury(at(2, 1)), Some(0.03));
+}
+
+const STARTER: &str = include_str!("../../../data/genomes/starter.ron");
+
+/// The starter genome, without spawn variation, bored and lonely.
+fn bored_and_lonely(data: &DataPack) -> Genome {
+    let extra = r#"        InitialConcentration(chem: "boredom", value: 0.8),
+        InitialConcentration(chem: "loneliness", value: 0.8),
+    ],
+)"#;
+    let text = STARTER.replace("    ],\n)", extra);
+    Genome::from_ron(&text, data).expect("a valid genome")
+}
+
+#[test]
+fn playing_with_a_sprite_eases_both_sprites_boredom_and_loneliness_at_once() {
+    let data = builtin();
+    let map = Map::from_ascii(&LANE, &data).expect("valid drawing");
+    let (a, b) = (at(1, 1), at(2, 1));
+    let sprites = [
+        (a, Some(bored_and_lonely(&data))),
+        (b, Some(bored_and_lonely(&data))),
+    ];
+    let scripted = [
+        (a, ScriptedAction::Play { at: b }),
+        (a, ScriptedAction::Rest),
+        (b, ScriptedAction::Rest),
+    ];
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: &scripted,
+    };
+    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    let levels = |world: &World| {
+        [a, b].map(|pos| {
+            let sprite = world.sprite_at(pos).expect("a sprite");
+            let level = |chem| sprite.chemical(chem).expect("a chemical");
+            (level("boredom"), level("loneliness"))
+        })
+    };
+    // The play lands at step 6 of tick 1, and its pulses at step 3 of tick 2.
+    let events = world.step();
+    assert!(
+        endings(&events).contains(&(Verb::Play, Outcome::Applied)),
+        "{events:?}"
+    );
+    let before = levels(&world);
+    world.step();
+    let after = levels(&world);
+    for (sprite, ((bored, lonely), (bored_after, lonely_after))) in
+        before.into_iter().zip(after).enumerate()
+    {
+        assert!(
+            bored - bored_after > 0.3,
+            "sprite {sprite}: {bored} → {bored_after}"
+        );
+        assert!(
+            lonely - lonely_after > 0.3,
+            "sprite {sprite}: {lonely} → {lonely_after}"
+        );
+    }
+}
+
+/// Which sprites the first action to end in `events` hurt.
+fn hurt_by_first_ending(events: &[Event]) -> Hurt {
+    events
+        .iter()
+        .find_map(|e| match &e.kind {
+            EventKind::ActionEnded { action, .. } => Some(action.hurt),
+            _ => None,
+        })
+        .expect("an action ended")
+}
+
+#[test]
+fn an_ended_action_says_which_sprites_its_attempt_hurt() {
+    let (me, there) = (at(1, 1), at(2, 1));
+    let rest = [ScriptedAction::Rest; 2];
+    let nobody = Hurt::default();
+    let actor = Hurt {
+        actor: true,
+        target: false,
+    };
+    let target = Hurt {
+        actor: false,
+        target: true,
+    };
+    // Each case: what's on the other tile, what the sprite does to it, and
+    // whom that hurts.
+    let cases: [(&str, Option<&str>, ScriptedAction, Hurt); 4] = [
+        (
+            "biting a thornbush",
+            Some("thornbush"),
+            ScriptedAction::Eat { at: there },
+            actor,
+        ),
+        (
+            "hitting a sprite",
+            None,
+            ScriptedAction::Hit { at: there },
+            target,
+        ),
+        (
+            "kicking a ball",
+            Some("ball"),
+            ScriptedAction::Play { at: there },
+            nobody,
+        ),
+        (
+            "playing with a sprite",
+            None,
+            ScriptedAction::Play { at: there },
+            nobody,
+        ),
+    ];
+    for (what, object, act, expected) in cases {
+        let objects: Vec<(Pos, &str)> = object.map(|kind| (there, kind)).into_iter().collect();
+        let script = [act, ScriptedAction::Rest];
+        let mut sprites: Vec<(Pos, &[ScriptedAction])> = vec![(me, &script)];
+        if object.is_none() {
+            sprites.push((there, &rest));
+        }
+        let mut world = world_of(&LANE, &objects, &sprites);
+        assert_eq!(hurt_by_first_ending(&world.step()), expected, "{what}");
+    }
 }
