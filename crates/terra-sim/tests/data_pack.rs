@@ -753,3 +753,27 @@ fn a_pack_says_which_verbs_push_which_object_types() {
     assert!(!pack.pushes(101, Verb::Play), "nor does a sprite");
     assert!(!pack.pushes(999, Verb::Play), "nor a type there isn't");
 }
+
+#[test]
+fn only_an_item_can_be_pushed() {
+    // A fixture can't be pushed (design §3.5.1); nor can water or a sprite,
+    // which have no objects to push.
+    let bush = bush(1, "bush", "verbs: { Play: [Push(2)] }");
+    assert_invalid_objects(&[&bush], &["bush", "Push", "item"]);
+    let water = r#"(id: 100, name: "water", category: Water, pseudo: true,
+        verbs: { Play: [Push(2)] })"#;
+    assert_invalid_objects(&[water], &["water", "Push", "item"]);
+}
+
+#[test]
+fn a_pseudo_type_s_verbs_only_inject_and_signal() {
+    // Water and sprites aren't objects, so nothing else a verb does applies.
+    for effect in ["DestroySelf", r#"SpawnNearby("bush", 1)"#] {
+        let water = format!(
+            r#"(id: 100, name: "water", category: Water, pseudo: true,
+                verbs: {{ Drink: [{effect}] }})"#
+        );
+        let words = ["water", effect.split('(').next().expect("a name"), "Inject"];
+        assert_invalid_objects(&[&bush(1, "bush", ""), &water], &words);
+    }
+}

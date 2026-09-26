@@ -356,6 +356,16 @@ fn deed(action: &ActionView, what: &str, data: &DataPack) -> String {
     }
 }
 
+/// `name` after "a", or "an" before a vowel, whatever its case: "a ball",
+/// "an Apple".
+fn with_article(name: &str) -> String {
+    let vowel = name
+        .chars()
+        .next()
+        .is_some_and(|c| "aeiou".contains(c.to_ascii_lowercase()));
+    format!("{} {name}", if vowel { "an" } else { "a" })
+}
+
 /// Sprite `actor`'s finished `action` as the event log says it (design
 /// §6.1), if the log shows it: every Play and Hit that applied, and any
 /// attempt that hurt a sprite, even one that then failed. "Sprite #4
@@ -372,9 +382,7 @@ pub(crate) fn logged_line(actor: EntityId, action: &ActionView, data: &DataPack)
         Target::Water(_) => "the water".into(),
         Target::Object(_) => {
             let name = action.target_type.and_then(|id| data.object_type_name(id));
-            let name = display_name(name.unwrap_or("?"));
-            let vowel = name.starts_with(['a', 'e', 'i', 'o', 'u']);
-            format!("{} {name}", if vowel { "an" } else { "a" })
+            with_article(&display_name(name.unwrap_or("?")))
         }
     };
     let deed = deed(action, &what, data);
@@ -1373,6 +1381,14 @@ mod tests {
         for (view, line) in cases {
             assert_eq!(observed_line(&view, &pack()), line, "{view:?}");
         }
+    }
+
+    #[test]
+    fn a_name_takes_an_before_a_vowel_whatever_its_case() {
+        assert_eq!(with_article("ball"), "a ball");
+        assert_eq!(with_article("apple"), "an apple");
+        assert_eq!(with_article("Apple"), "an Apple");
+        assert_eq!(with_article("Egg"), "an Egg");
     }
 
     #[test]
