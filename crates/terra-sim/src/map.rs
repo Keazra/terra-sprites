@@ -56,6 +56,22 @@ impl Dir {
         Dir::with_offset(-dx, -dy)
     }
 
+    /// A diagonal's two orthogonal parts, east or west first, then north or
+    /// south; `None` for an orthogonal direction.
+    pub(crate) fn parts(self) -> Option<(Dir, Dir)> {
+        let (dx, dy) = self.offset();
+        self.is_diagonal()
+            .then(|| (Dir::with_offset(dx, 0), Dir::with_offset(0, dy)))
+    }
+
+    /// This diagonal with its `part`, one of its orthogonal parts, reversed:
+    /// the way it glances off a wall that stops `part`.
+    pub(crate) fn mirrored(self, part: Dir) -> Dir {
+        let (dx, dy) = self.offset();
+        let (px, py) = part.offset();
+        Dir::with_offset(dx - 2 * px, dy - 2 * py)
+    }
+
     /// The direction whose step changes `(x, y)` by `(dx, dy)`, each -1, 0
     /// or 1 and not both 0.
     fn with_offset(dx: i32, dy: i32) -> Dir {

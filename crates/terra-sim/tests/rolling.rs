@@ -166,3 +166,64 @@ fn a_ball_meeting_a_sprite_head_on_bounces_straight_back() {
     let expected = [(2, 1), (3, 1), (4, 1), (5, 1), (4, 1), (4, 1)];
     assert_eq!(path, expected.map(|(x, y)| at(x, y)));
 }
+
+/// The ball's path when kicked north-east from (1, 4) at a ball on (2, 3),
+/// in a world drawn from `rows`.
+fn kicked_north_east(rows: &[&str]) -> Vec<Pos> {
+    let mut world = world(rows, &[(at(2, 3), "ball")], &[(at(1, 4), &kick(at(2, 3)))]);
+    rolls(&mut world, 6)
+}
+
+#[test]
+fn a_ball_meeting_a_wall_slantwise_glances_off_at_the_same_angle() {
+    // North-east into a wall on its east: it goes north-west, then meets the
+    // map's top edge and goes south-west.
+    let path = kicked_north_east(&[
+        ".....#.....",
+        ".....#.....",
+        ".....#.....",
+        ".....#.....",
+        "...........",
+        "...........",
+        "...........",
+    ]);
+    let expected = [(2, 3), (3, 2), (4, 1), (3, 0), (2, 1), (2, 1)];
+    assert_eq!(path, expected.map(|(x, y)| at(x, y)));
+}
+
+#[test]
+fn a_ball_cant_cut_a_corner_so_it_glances_off_it() {
+    // From (3, 2), (4, 1) is open, but the rock on (4, 2) is a corner the
+    // ball may not cut, so it glances off to the north-west.
+    let path = kicked_north_east(&[
+        "...........",
+        "...........",
+        "....#......",
+        "...........",
+        "...........",
+        "...........",
+        "...........",
+    ]);
+    let expected = [(2, 3), (3, 2), (2, 1), (1, 0), (0, 1), (0, 1)];
+    assert_eq!(path, expected.map(|(x, y)| at(x, y)));
+}
+
+#[test]
+fn a_ball_with_no_way_back_stops_for_good() {
+    // Rock ahead and the kicker behind, so the roll ends on tick 2. The
+    // kicker then walks off, and the ball stays where it is.
+    let mut world = world(
+        &["...........", "...#.......", "..........."],
+        &[(at(2, 1), "ball")],
+        &[(
+            at(1, 1),
+            &[
+                ScriptedAction::Play { at: at(2, 1) },
+                ScriptedAction::Wander { destination: at(8, 2) },
+                ScriptedAction::Rest,
+            ],
+        )],
+    );
+    let path = rolls(&mut world, 8);
+    assert_eq!(path, [at(2, 1); 8]);
+}

@@ -44,14 +44,31 @@ fn roll(state: &mut WorldState, data: &DataPack, id: EntityId) {
     };
     let mut to = open(state, data, from, dir);
     if to.is_none() {
-        dir = dir.reverse();
+        dir = bounce(dir, |side| open(state, data, from, side).is_none());
         to = open(state, data, from, dir);
     }
+    let object = state.objects.get_mut(id).expect("the same item");
+    // A bounce with nowhere to go ends the roll where it is.
+    object.roll = (to.is_some() && left > 1).then_some(Roll { dir, left: left - 1 });
     if let Some(to) = to {
         state.objects.move_to(id, to);
     }
-    let object = state.objects.get_mut(id).expect("the same item");
-    object.roll = (left > 1).then_some(Roll { dir, left: left - 1 });
+}
+
+/// The way an item rolling in direction `dir` goes when something stops it
+/// (design §3.5.4), where `blocked` says whether a roll in an orthogonal
+/// direction would be stopped too. Head on, it goes back the way it came;
+/// slantwise, with just one of the two sides beside a diagonal blocked, it
+/// glances off, reversing only the part of its way that ran into it.
+fn bounce(dir: Dir, blocked: impl Fn(Dir) -> bool) -> Dir {
+    let Some((across, along)) = dir.parts() else {
+        return dir.reverse();
+    };
+    match (blocked(across), blocked(along)) {
+        (true, false) => dir.mirrored(across),
+        (false, true) => dir.mirrored(along),
+        _ => dir.reverse(),
+    }
 }
 
 /// The tile a step from `from` in direction `dir` reaches, if a rolling item
