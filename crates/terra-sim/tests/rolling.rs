@@ -107,6 +107,8 @@ fn a_ball_kicked_from_its_own_tile_rolls_the_way_the_kicker_last_stepped() {
                     destination: at(3, 3),
                 },
                 ScriptedAction::Play { at: at(3, 3) },
+                ScriptedAction::Rest,
+                ScriptedAction::Rest,
             ],
         )],
     );
