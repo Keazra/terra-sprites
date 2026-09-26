@@ -23,6 +23,7 @@ Decided with the owner in the design session for slice 7c ([#8](https://github.c
 | 8 | **A pulse's source is the latest.** Every `Signal(Target, …)` records the actor as the pulse's source; if two land on one sprite in a tick, the one resolved last counts. The source is world state, hashed and saved with the pulse. | Slice 7c design session | §3.5.2, §4.2 |
 | 9 | **Crowding's instincts arrive with Retreat,** as v12 planned: crowdedness draws attention to sprites and leads to Retreat, and the deliberate mistake `crowdedness & attended sprite → Hit` (0.2). Pain leads to Retreat. | v12 plan | §5.8 |
 | 10 | **Retreat's words.** The Body tab reads `Backing away from Sprite #7 · 4 steps to go`, then `Backed away from Sprite #7`; cornered, `Backed into a corner`. The observed list reads "Backed away from Sprite #7", or "…, but was cornered". A retreat gets no event log line: it does nothing to anyone. | Owner decision | §6.1 |
+| 11 | **A retreat carries on out of reach.** 5.0 ends an aimed action whose target has become unreachable, but getting out of reach is what a retreat is for: it ends only when its bout is done, it's cornered, its target is gone, or at the timeout. | Slice 7c, agreed with the owner before building | §5.5 |
 
 ---
 
@@ -1148,7 +1149,7 @@ It only wins decisions where learning finds it useful.
 ### 5.5 Decision and action lifecycle
 
 **Step 5 runs in this order:**
-1. **5.0 Check the current action.** It ends as `failed` if its target no longer exists or has become unreachable, and as `timed_out` if the action has hit the timeout. A Wander whose destination the flood no longer reaches ends as `failed`, unless the sprite is keeping to a committed path (§3.7).
+1. **5.0 Check the current action.** It ends as `failed` if its target no longer exists or has become unreachable (a retreat's, only if it no longer exists), and as `timed_out` if the action has hit the timeout. A Wander whose destination the flood no longer reaches ends as `failed`, unless the sprite is keeping to a committed path (§3.7).
 2. **5a Attention** (§5.3).
 3. **5b Decision:**
    - **Score** each *available* verb: `s_v = Σₖ aₖ·W[k][v]`.
