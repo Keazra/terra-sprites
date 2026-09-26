@@ -59,15 +59,15 @@ fn roll(state: &mut WorldState, data: &DataPack, id: EntityId) {
 }
 
 /// The way an item rolling in direction `dir` goes when something stops it
-/// (design §3.5.4), where `blocked` says whether a roll in an orthogonal
+/// (design §3.5.4), where `stopped` says whether a roll in an orthogonal
 /// direction would be stopped too. Head on, it goes back the way it came;
-/// slantwise, with just one of the two sides beside a diagonal blocked, it
+/// slantwise, with just one of the two sides beside a diagonal stopping it, it
 /// glances off, reversing only the part of its way that ran into it.
-fn bounce(dir: Dir, blocked: impl Fn(Dir) -> bool) -> Dir {
+fn bounce(dir: Dir, stopped: impl Fn(Dir) -> bool) -> Dir {
     let Some((across, along)) = dir.parts() else {
         return dir.reverse();
     };
-    match (blocked(across), blocked(along)) {
+    match (stopped(across), stopped(along)) {
         (true, false) => dir.mirrored(across),
         (false, true) => dir.mirrored(along),
         _ => dir.reverse(),

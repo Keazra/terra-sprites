@@ -99,7 +99,9 @@ pub struct ActionView {
 /// say, or a sprite it aimed at, by hitting it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub struct Hurt {
+    /// The sprite whose action it was.
     pub actor: bool,
+    /// The sprite it was aimed at, if it was aimed at one.
     pub target: bool,
 }
 

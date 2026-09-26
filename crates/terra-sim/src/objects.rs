@@ -34,6 +34,7 @@ pub(crate) struct Object {
 /// A rolling item's way on (design §3.5.4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub(crate) struct Roll {
+    /// The way it's rolling.
     pub(crate) dir: Dir,
     /// The tiles it has left to go.
     pub(crate) left: u16,

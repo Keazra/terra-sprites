@@ -226,17 +226,7 @@ impl App {
         for event in events {
             if let EventKind::ActionEnded { id, ref action, .. } = event.kind {
                 self.note_hurt(id, action);
-            }
-            if let EventKind::ActionEnded { id, ref action, .. } = event.kind
-                && let Some(Selection::Living(selected)) = self.selection
-            {
-                if id == selected {
-                    self.observe(event.tick, inspector::observed_line(action, world.data()));
-                } else if action.target == Some(Target::Sprite(selected))
-                    && let Some(line) = inspector::done_to_line(id, action)
-                {
-                    self.observe(event.tick, line);
-                }
+                self.note_done_to_selected(event.tick, id, action, world);
             }
             if let EventKind::Died { id, cause, age } = event.kind
                 && self.selection == Some(Selection::Living(id))
@@ -261,13 +251,35 @@ impl App {
 
     /// Starts the Hurt emote on each sprite that sprite `actor`'s `action` hurt.
     fn note_hurt(&mut self, actor: EntityId, action: &ActionView) {
-        let target = match action.target {
+        let hurt_target = match action.target {
             Some(Target::Sprite(id)) if action.hurt.target => Some(id),
             _ => None,
         };
-        let actor = action.hurt.actor.then_some(actor);
-        for id in actor.into_iter().chain(target) {
+        let hurt_actor = action.hurt.actor.then_some(actor);
+        for id in hurt_actor.into_iter().chain(hurt_target) {
             self.hurt_at.insert(id, self.running_for);
+        }
+    }
+
+    /// Puts sprite `actor`'s `action`, finished on `tick`, on the selected
+    /// sprite's observed list, if it was the selected sprite's own or done
+    /// to it.
+    fn note_done_to_selected(
+        &mut self,
+        tick: u64,
+        actor: EntityId,
+        action: &ActionView,
+        world: &World,
+    ) {
+        let Some(Selection::Living(selected)) = self.selection else {
+            return;
+        };
+        if actor == selected {
+            self.observe(tick, inspector::observed_line(action, world.data()));
+        } else if action.target == Some(Target::Sprite(selected))
+            && let Some(line) = inspector::done_to_line(actor, action)
+        {
+            self.observe(tick, line);
         }
     }
 
