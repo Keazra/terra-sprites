@@ -37,10 +37,11 @@
         Emitter(locus: Chem("stamina"), mode: Level, invert: true, threshold: 0.5, gain: 0.004, chem: "tiredness"),
         Emitter(locus: Chem("stamina"), mode: Level, threshold: 0.6, gain: -0.1, chem: "tiredness"),
 
-        // Boredom creeps up always; any play relieves it at once.
+        // Boredom creeps up always; play relieves it at once, playing with
+        // another sprite much less than kicking a ball.
         Emitter(locus: Locus("always"), mode: Level, gain: 0.0002, chem: "boredom"),
         Emitter(locus: Locus("played"), mode: Level, gain: -0.5, chem: "boredom"),
-        Emitter(locus: Locus("played_social"), mode: Level, gain: -0.5, chem: "boredom"),
+        Emitter(locus: Locus("played_social"), mode: Level, gain: -0.15, chem: "boredom"),
 
         // Loneliness rises with nobody near, and eases in company or at once in social play.
         Emitter(locus: Locus("nearby_sprites"), mode: Level, invert: true, threshold: 0.5, gain: 0.0005, chem: "loneliness"),
