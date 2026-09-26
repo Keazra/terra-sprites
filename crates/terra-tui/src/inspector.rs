@@ -4,8 +4,8 @@
 use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
-    ActionView, ChemicalKind, ChemicalLevel, DataPack, DeathCause, EmitterMode, Expression,
-    GeneView, ObjectView, Outcome, Progress, SpriteView, Target, Trait, Verb, World,
+    ActionView, ChemicalKind, ChemicalLevel, DataPack, DeathCause, EmitterMode, EntityId,
+    Expression, GeneView, ObjectView, Outcome, Progress, SpriteView, Target, Trait, Verb, World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -292,6 +292,21 @@ pub(crate) fn observed_line(action: &ActionView, data: &DataPack) -> String {
         }
     };
     format!("{set_out}, but {how}")
+}
+
+/// What sprite `actor`'s finished `action` did to the sprite it was aimed
+/// at, as that sprite's observed list says it (design §6.1): "Was hit by
+/// Sprite #7". `None` if it did nothing worth a line.
+pub(crate) fn done_to_line(actor: EntityId, action: &ActionView) -> Option<String> {
+    if action.progress != Progress::Ended(Outcome::Applied) {
+        return None;
+    }
+    let who = sprite_label(actor);
+    match action.verb {
+        Verb::Hit => Some(format!("Was hit by {who}")),
+        Verb::Play => Some(format!("{who} played with it")),
+        _ => None,
+    }
 }
 
 /// What an aimed action that applied did to `what`, its target in words,
@@ -936,7 +951,7 @@ fn world_tab(world: &World) -> Vec<Line<'static>> {
 
 #[cfg(test)]
 mod tests {
-    use terra_sim::{EntityId, Hurt, Pos};
+    use terra_sim::{Hurt, Pos};
 
     use super::*;
 

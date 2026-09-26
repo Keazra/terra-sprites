@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
-use terra_sim::{DeathCause, EntityId, Event, EventKind, Map, Pos, World};
+use terra_sim::{DeathCause, EntityId, Event, EventKind, Map, Pos, Target, World};
 
 use crate::clock::Clock;
 use crate::input::Action;
@@ -207,14 +207,21 @@ impl App {
     /// bury everything else. The World tab counts objects instead, and the
     /// Body tab shows the selected sprite's action.
     ///
-    /// An action the selected sprite finishes goes on the front of its
-    /// observed list, or counts up the line there if it reads the same.
+    /// An action the selected sprite finishes, or another's done to it, goes
+    /// on the front of its observed list, or counts up the line there if it
+    /// reads the same.
     pub fn record(&mut self, events: &[Event], world: &World) {
         for event in events {
             if let EventKind::ActionEnded { id, ref action, .. } = event.kind
-                && self.selection == Some(Selection::Living(id))
+                && let Some(Selection::Living(selected)) = self.selection
             {
-                self.observe(event.tick, inspector::observed_line(action, world.data()));
+                if id == selected {
+                    self.observe(event.tick, inspector::observed_line(action, world.data()));
+                } else if action.target == Some(Target::Sprite(selected))
+                    && let Some(line) = inspector::done_to_line(id, action)
+                {
+                    self.observe(event.tick, line);
+                }
             }
             if let EventKind::Died { id, cause, age } = event.kind
                 && self.selection == Some(Selection::Living(id))
