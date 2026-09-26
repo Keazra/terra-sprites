@@ -631,3 +631,18 @@ fn a_rolling_item_can_be_crushed_before_its_turn() {
     assert!(tiles_of(&world, "pip").is_empty());
     assert_eq!(ball(&world), at(4, 1));
 }
+
+#[test]
+fn a_berry_under_a_sprite_bounces_a_ball_rather_than_being_crushed() {
+    // A tile uses its strongest result, and the sprite bounces it (design §3.5.4).
+    let rest = [ScriptedAction::Rest; 3];
+    let mut world = world(
+        &LANE,
+        &[(at(2, 1), "ball"), (at(6, 1), "berry")],
+        &[(at(1, 1), &kick(at(2, 1))), (at(6, 1), &rest)],
+    );
+    let path = rolls(&mut world, 6);
+    let expected = [(2, 1), (3, 1), (4, 1), (5, 1), (4, 1), (4, 1)];
+    assert_eq!(path, expected.map(|(x, y)| at(x, y)));
+    assert_eq!(tiles_of(&world, "berry"), [at(6, 1)]);
+}
