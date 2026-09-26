@@ -3,7 +3,8 @@
 //! cornered. Driven through hand-made worlds with scripted actions.
 
 use terra_sim::{
-    DataPack, Event, EventKind, Genome, Map, Outcome, Pos, Scenario, ScriptedAction, Verb, World,
+    DataPack, Event, EventKind, Genome, Map, Outcome, Pos, Progress, Scenario, ScriptedAction,
+    Verb, World,
 };
 
 fn builtin() -> DataPack {
@@ -269,4 +270,15 @@ fn a_retreat_goes_on_once_its_target_is_out_of_sight() {
     }
     assert_eq!(endings(&ended), [(Verb::Retreat, Outcome::Applied)]);
     assert_eq!(where_is(&world), at(11, 0));
+}
+
+#[test]
+fn a_retreat_s_progress_counts_the_steps_it_has_left() {
+    let rows = ["............"];
+    let mut world = retreating(&rows, &[(at(0, 0), "thornbush")], at(1, 0), at(0, 0));
+    world.step();
+    world.step();
+    let action = world.sprites().next().and_then(|s| s.action()).expect("the retreat");
+    assert_eq!(action.progress, Progress::Walking { steps_left: 4 });
+    assert_eq!(action.destination, None, "a retreat heads for no tile");
 }
