@@ -89,6 +89,15 @@ pub(crate) fn signed(value: f32) -> String {
     }
 }
 
+/// A level with its sign: `+.42`, `-.10`.
+pub(crate) fn signed_level(value: f32) -> String {
+    if value < 0.0 {
+        level(value)
+    } else {
+        format!("+{}", level(value))
+    }
+}
+
 /// `0.42` → `.42`, `-0.5` → `-.5`.
 fn without_leading_zero(number: &str) -> String {
     if let Some(rest) = number.strip_prefix("0.") {

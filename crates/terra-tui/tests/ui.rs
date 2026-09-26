@@ -934,6 +934,7 @@ const HUNGRY_GENOME: &str = r#"(format: 1, genes: [
     Instinct(inputs: [("hunger", false), ("target_adjacent", true)], verb: Eat, weight: 0.5),
     Instinct(inputs: [("always", false)], verb: Eat, weight: -0.1),
     Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3),
+    Instinct(inputs: [("target_adjacent", true)], verb: Eat, weight: 0.004),
 ])"#;
 
 #[test]
@@ -948,7 +949,8 @@ fn the_brain_tab_shows_attention_scores_and_what_adds_most_to_the_decision() {
     assert!(top.contains("[Brain]"), "{top:?}");
     // Attention: hunger's 1 × .8 on the berry, plus salience .5 × (1 − its
     // distance, .34); the bush has salience alone, .5 × (1 − .5).
-    // The decision: hunger .8 × 1, .8 × (1 − 0) × .5 and always 1 × −.1.
+    // The decision: hunger .8 × 1, .8 × (1 − 0) × .5 and always 1 × −.1;
+    // not target adjacent's .004 rounds to nothing, so it's left out.
     assert_eq!(
         text[..8],
         [

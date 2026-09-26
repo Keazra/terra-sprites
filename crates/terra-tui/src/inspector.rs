@@ -10,8 +10,8 @@ use terra_sim::{
 
 use crate::app::{App, Selection, Tab};
 use crate::text::{
-    cause_name, change, display_name, group_thousands, level, signed, significant, sprite_label,
-    whole,
+    cause_name, change, display_name, group_thousands, level, signed, signed_level, significant,
+    sprite_label, whole,
 };
 
 /// The inspector's width, in columns, border included (design §6.1).
@@ -445,7 +445,8 @@ const CONCEPTS_SHOWN: usize = 5;
 
 /// The Brain tab (design §5.9, §6.1): each category attention could go to,
 /// with its score, the attended one marked; then the verb chosen, with its
-/// score, and the concepts adding most to it, largest first.
+/// score, and the concepts adding most to it, largest first. A snapshot
+/// always has a verb; "none" only guards against one that doesn't.
 fn brain_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
     let Some(explained) = sprite.explain() else {
         return vec![Line::from(" Nothing decided yet")];
@@ -474,16 +475,20 @@ fn brain_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
         }
         None => lines.push(" DECISION: none".into()),
     }
-    for contribution in explained.contributions.iter().take(CONCEPTS_SHOWN) {
-        let sign = if contribution.amount < 0.0 { "" } else { "+" };
-        let amount = format!("{sign}{}", level(contribution.amount));
+    // A concept whose part rounds to nothing adds nothing worth showing.
+    let shown = explained
+        .contributions
+        .iter()
+        .filter(|c| level(c.amount.abs()) != ".00");
+    for contribution in shown.take(CONCEPTS_SHOWN) {
+        let amount = signed_level(contribution.amount);
         lines.extend(scored("   ", &concept_name(&contribution.inputs), &amount));
     }
     lines.into_iter().map(Line::from).collect()
 }
 
-/// A concept by its inputs, as the Genome tab words an instinct's: `hunger
-/// & not target adjacent`. A line wraps only between inputs.
+/// A concept by its inputs, as the Brain tab and the Genome tab's instincts
+/// word it: `hunger & not target adjacent`. A line wraps only between inputs.
 fn concept_name(inputs: &[(&str, bool)]) -> String {
     let inputs: Vec<String> = inputs
         .iter()
@@ -759,21 +764,12 @@ fn gene_text(gene: &GeneView) -> String {
             ref inputs,
             verb,
             weight,
-        } => {
-            let inputs: Vec<String> = inputs
-                .iter()
-                .map(|&(input, negated)| match negated {
-                    true => format!("not {}", display_name(input)),
-                    false => display_name(input),
-                })
-                .collect();
-            format!(
-                "{} → {} {}",
-                inputs.join(" & "),
-                verb_name(verb).to_lowercase(),
-                signed(weight)
-            )
-        }
+        } => format!(
+            "{} → {} {}",
+            concept_name(inputs),
+            verb_name(verb).to_lowercase(),
+            signed(weight)
+        ),
         GeneView::AttentionInstinct {
             input,
             category,
@@ -1212,8 +1208,6 @@ mod tests {
         }
     }
 
-    // Levels never leave 0 to 1 (design §4.4), but a bar mustn't crash the
-    // screen if one ever did.
     #[test]
     fn a_scored_name_too_long_for_its_row_wraps_under_itself() {
         let name = concept_name(&[
@@ -1233,6 +1227,8 @@ mod tests {
         assert!(lines.iter().all(|l| l.chars().count() < WIDTH));
     }
 
+    // Levels never leave 0 to 1 (design §4.4), but a bar mustn't crash the
+    // screen if one ever did.
     #[test]
     fn a_drive_bar_is_ten_cells_whatever_the_level() {
         assert_eq!(bar(0.42), "████░░░░░░");

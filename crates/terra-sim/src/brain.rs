@@ -235,34 +235,33 @@ impl Brain {
             .collect();
         // A stable sort keeps a tie in category order.
         attention.sort_by(|a, b| b.1.total_cmp(&a.1));
+        let decision = snapshot
+            .verb
+            .map(|verb| (verb, snapshot.scores[column(verb)]));
         let names = data.brain_inputs_in_order();
-        let contributions = match snapshot.verb {
-            Some(verb) => {
-                let mut contributions: Vec<Contribution> = self
-                    .concepts
-                    .iter()
-                    .zip(&snapshot.activations)
-                    .zip(&self.decision)
-                    .map(|((signature, &a), links)| Contribution {
-                        inputs: signature
-                            .iter()
-                            .map(|&(i, negated)| (names[i].name.as_str(), negated))
-                            .collect(),
-                        amount: a * links[column(verb)],
-                    })
-                    .filter(|c| c.amount != 0.0)
-                    .collect();
-                contributions.sort_by(|a, b| b.amount.abs().total_cmp(&a.amount.abs()));
-                contributions
-            }
+        let mut contributions: Vec<Contribution> = match decision {
+            Some((verb, _)) => self
+                .concepts
+                .iter()
+                .zip(&snapshot.activations)
+                .zip(&self.decision)
+                .map(|((signature, &activation), links)| Contribution {
+                    inputs: signature
+                        .iter()
+                        .map(|&(i, negated)| (names[i].name.as_str(), negated))
+                        .collect(),
+                    amount: activation * links[column(verb)],
+                })
+                .filter(|c| c.amount != 0.0)
+                .collect(),
             None => Vec::new(),
         };
+        // A stable sort keeps a tie in concept order.
+        contributions.sort_by(|a, b| b.amount.abs().total_cmp(&a.amount.abs()));
         Some(Explanation {
             attention,
             attended: snapshot.attended.map(Category::name),
-            decision: snapshot
-                .verb
-                .map(|verb| (verb, snapshot.scores[column(verb)])),
+            decision,
             contributions,
         })
     }

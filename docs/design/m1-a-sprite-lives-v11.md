@@ -13,13 +13,13 @@ Decided while building the Brain tab, slice 6b ([#7](https://github.com/Keazra/t
 
 | # | Change | Source | Sections |
 |---|---|---|---|
-| 1 | **The Brain tab stacks its parts** rather than setting attention and the decision side by side. A concept's name, such as `thirst & not target adjacent`, doesn't fit half of the inspector's 44 columns. Each part runs the tab's width, with its numbers right-aligned; a name too long for its row wraps between inputs, never inside one. | Slice 6b | §6.1 |
-| 2 | **Concepts are named as the Genome tab names instincts**, by their inputs' display names (`hunger & not target adjacent`), not by adjectives (`hungry & bush`), which the data doesn't hold. | Slice 6b | §6.1 |
-| 3 | **The decision lists the five concepts adding most** to the chosen verb's score, largest first whatever the sign; one adding nothing is left out. | Slice 6b | §5.9, §6.1 |
+| 1 | **The Brain tab stacks its parts** rather than setting attention and the decision side by side. A concept's name, such as `thirst & not target adjacent`, doesn't fit half of the inspector's 44 columns. Each part runs the tab's width, with its numbers right-aligned, the decision's score included; a name too long for its row wraps between inputs, never inside one. Numbers drop the leading zero (`+.91`), as every other tab's do. | Slice 6b | §6.1 |
+| 2 | **Concepts are named as the Genome tab names instincts**, by their inputs' display names (`hunger & not target adjacent`), not by adjectives (`hungry & bush`), which the data doesn't hold. The design's other examples follow suit. | Slice 6b | §5.6, §5.9, §6.1 |
+| 3 | **The decision lists the five concepts adding most** to the chosen verb's score, largest first whatever the sign; one whose part rounds to `.00` is left out. | Slice 6b | §5.9, §6.1 |
 | 4 | **The learned links arrive with learning** in slice 8. Until then the Brain tab leaves the part out, since every link still equals its instinct. | Slice 6b | §5.9, §6.1 |
-| 5 | **Before its first decision** the Brain tab reads "Nothing decided yet"; with nothing in reach, attention reads "nothing in sight". A sprite on a scripted action has no decision to explain. | Slice 6b | §6.1 |
+| 5 | **Before its first decision** the Brain tab reads "Nothing decided yet", as it does while a hand-made world's sprite works through its scripted actions, which come before the brain's; with nothing in reach, attention reads "nothing in sight". | Slice 6b | §6.1 |
 | 6 | **The inspector's title shows the sprite by its ID alone** (`#530`), since "Sprite #530" and five tabs don't fit 46 columns. That's the existing rule: the label is shortened, never the tabs. | Slice 6b | §6.1 |
-| 7 | **The front end reads the explanation through `SpriteView::explain`**, from the snapshot step 5 keeps. | Slice 6b | §5.9 |
+| 7 | **The front end reads the explanation through `SpriteView::explain`.** Its attention scores and concepts come from the snapshot step 5 keeps. | Slice 6b | §5.9 |
 
 ---
 
@@ -1083,7 +1083,7 @@ World randomness is separate: plant rules and the order actions resolve in. It c
   - Both start at the instinct value (0 if there isn't one).
 - **Trace ring buffer:**
   - **Every tick**, each deciding sprite commits one entry at the end of step 6: that tick's step-5 snapshot plus the outcome. This applies whether the action just started or is continuing, e.g. `walking`.
-  - A multi-tick action therefore leaves one entry per tick, each with its own activations. When a bite follows a 10-tick walk, the walking ticks *and* the bite tick are credited, and concepts such as `hungry & TargetAdjacent` (active only on arrival) get their share. This is standard eligibility-trace behaviour, not dilution.
+  - A multi-tick action therefore leaves one entry per tick, each with its own activations. When a bite follows a 10-tick walk, the walking ticks *and* the bite tick are credited, and concepts such as `hunger & target adjacent` (active only on arrival) get their share. This is standard eligibility-trace behaviour, not dilution.
   - Entries are kept while `λ^age ≥ 0.01`, up to a cap of 512.
 - **Reinforcement:**
   - `r = reward − punishment`, read at step 4 (after step 3 has produced this tick's reward). **Both chemicals are then reset to 0.**
@@ -1133,10 +1133,10 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 
 ### 5.9 Legibility
 
-`Brain::explain()` returns, from the snapshot step 5 keeps, and the front end reads it as `SpriteView::explain`:
-- the attention scores, highest first
-- the concepts contributing most to the current verb's score, largest first whatever the sign
-- from slice 8, the **learned links ranked by `|w − instinct|`**, e.g. `hunger & thornbush → eat  -0.71  (instinct +0.10)`
+`Brain::explain()` returns, and the front end reads it as `SpriteView::explain`:
+- the attention scores, highest first, from the snapshot step 5 keeps
+- the concepts contributing most to the current verb's score, largest first whatever the sign, from the same snapshot
+- from slice 8, the **learned links ranked by `|w − instinct|`**, e.g. `hunger & attended thornbush → eat  -.71  (instinct +.10)`
 
 ---
 
@@ -1161,7 +1161,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 └──────────────────────────────────────────────────┘└─────────────────────────────────────────────┘
 ┌─ Events ─────────────────────────────────────────────────────────────── [all|selected|major] ─┐
 │ 48,207  Mira was pricked by a thornbush                                                        │
-│ 48,190  Mira learned: hungry & thornbush → eat  -0.52                                          │
+│ 48,190  Mira learned: hunger & attended thornbush → eat  -.52                                  │
 │ 48,102  Kel died (starvation, age 6,020)                                                       │
 └────────────────────────────────────────────────────────────────────────────────────────────────┘
  (61,40) grass · berry (fresh) │ SELECT │ hand: Mira    E select  Q hand  Z reward  X correct
@@ -1184,9 +1184,9 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 ```
 
 - **Attention** lists each category in reach with its score, highest first, and marks the attended one `►`. With nothing in reach it reads "nothing in sight".
-- **The decision** names the verb chosen, or kept, at the latest step 5, with its score, then the five concepts adding most to it, largest first whatever the sign. Concepts are named by their inputs, as the Genome tab names instincts. A name too long for its row wraps between inputs.
+- **The decision** names the verb chosen, or kept, at the latest step 5, with its score, then the five concepts adding most to it, largest first whatever the sign; one whose part rounds to `.00` is left out. Concepts are named by their inputs, as the Genome tab names instincts. A name too long for its row wraps between inputs.
 - **Learned links** join the tab with learning, in slice 8.
-- Before a sprite's first decision the tab reads "Nothing decided yet".
+- Before a sprite's first decision the tab reads "Nothing decided yet", as it does while a sprite in a hand-made world works through its scripted actions.
 
 **Panels:**
 - **Top bar:** tick, speed, seed, population, save status. Object counts, food included, are the World tab's job.
