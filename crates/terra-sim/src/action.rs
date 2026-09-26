@@ -689,6 +689,8 @@ fn wait(state: &mut WorldState, data: &DataPack, id: EntityId, cost: u32, events
 /// Sprite `id`'s turn to back away from `target` (design §5.5): it steps
 /// while its points last, and is done after `retreat_bout` steps, keeping
 /// at most the last step's worth of points, as an arrival does (§3.7).
+/// With no step away, it's cornered: the retreat ends as blocked, and the
+/// sprite feels the `cornered` pulse.
 fn retreat(
     state: &mut WorldState,
     data: &DataPack,
@@ -704,6 +706,10 @@ fn retreat(
         };
         let sprite = state.sprites.get(id).expect("the retreater");
         let Some((next, cost)) = step_away(state, data, sprite.pos, there) else {
+            let sprite = state.sprites.get_mut(id).expect("the retreater");
+            sprite.body.incoming[data.physiology().indices.cornered] = 1.0;
+            let action = sprite.action.as_mut().expect("a retreat");
+            end(action, id, Outcome::Blocked, state.tick, events);
             return;
         };
         let tenths = cost * 10;

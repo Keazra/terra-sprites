@@ -374,11 +374,14 @@ pub(crate) struct Indices {
     pub(crate) resting: usize,
     /// The receptor target that scales the brain's temperatures (design §5.3, §5.5).
     pub(crate) exploration_mod: usize,
+    /// The pulse a retreat that finds no step away fires (design §3.7).
+    pub(crate) cornered: usize,
 }
 
 impl Indices {
-    /// Finds each physical chemical and body sensor physiology needs, and
-    /// the receptor target the brain reads, or says which file lacks one.
+    /// Finds each physical chemical and body sensor physiology needs, the
+    /// receptor target the brain reads and the pulse a cornered retreat
+    /// fires, or says which file lacks one.
     pub(crate) fn find(
         chemicals: &[Chemical],
         loci: &[Locus],
@@ -414,6 +417,16 @@ impl Indices {
                     )
                 })
         };
+        let pulse = |name: &str| {
+            loci.iter()
+                .position(|l| l.name == name && l.kind == LocusKind::Pulse)
+                .ok_or_else(|| {
+                    (
+                        "loci.ron",
+                        format!("a retreat needs a pulse called `{name}`"),
+                    )
+                })
+        };
         Ok(Indices {
             energy: chem("energy")?,
             hydration: chem("hydration")?,
@@ -427,6 +440,7 @@ impl Indices {
             moving: sensor("moving")?,
             resting: sensor("resting")?,
             exploration_mod: target("exploration_mod")?,
+            cornered: pulse("cornered")?,
         })
     }
 }
