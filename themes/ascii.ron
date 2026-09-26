@@ -12,8 +12,8 @@
         sprite:                 (glyph: '@', fg: white),
         // `&` is already the berry bush, so the selected sprite is `@` in reverse video.
         selected_sprite:        (glyph: '@', fg: white, reversed: true),
-        // Where the selected sprite is heading, in the detail view.
-        destination:            (glyph: 'X', fg: white),
+        // The Decision marker: where the selected sprite is heading. It flashes.
+        decision_marker:        (glyph: 'X', fg: white),
     },
     objects: {
         "berry_bush": {
@@ -25,6 +25,9 @@
         "thornbush": { "default": (glyph: '*', fg: magenta) },
         "ball":      { "default": (glyph: 'o', fg: white) },
     },
+    // The Attention marker: the background of the tile the selected sprite
+    // attends to (design §5.3).
+    attention_marker: dark_gray,
     cursor: (
         arrows: (up: '^', down: 'v', left: '<', right: '>'),
         status_marks: (idle: '-'),

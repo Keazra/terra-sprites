@@ -17,8 +17,9 @@ pub enum SemanticTile {
     Sprite,
     /// The selected sprite (design §6.1).
     SelectedSprite,
-    /// Where the selected sprite is heading, in the detail view (design §6.1).
-    Destination,
+    /// The Decision marker: where the selected sprite is heading (design
+    /// §6.1). It flashes.
+    DecisionMarker,
 }
 
 impl SemanticTile {
@@ -32,7 +33,7 @@ impl SemanticTile {
         SemanticTile::Terrain(Terrain::Rock),
         SemanticTile::Sprite,
         SemanticTile::SelectedSprite,
-        SemanticTile::Destination,
+        SemanticTile::DecisionMarker,
     ];
 }
 
@@ -82,6 +83,7 @@ pub struct Theme {
     arrows: Arrows,
     status_marks: StatusMarks,
     mode_marks: BTreeMap<CursorMode, Glyph>,
+    attention_marker: Color,
 }
 
 impl Theme {
@@ -112,6 +114,12 @@ impl Theme {
     /// The glyph this theme gives exactly this object type and visual state, if any.
     pub fn object_entry(&self, object: &str, state: &str) -> Option<Glyph> {
         self.objects.get(object)?.get(state).copied()
+    }
+
+    /// The Attention marker: the background of the tile the selected sprite
+    /// attends to.
+    pub fn attention_marker(&self) -> Color {
+        self.attention_marker
     }
 
     /// The cursor's arrows.
@@ -157,6 +165,7 @@ impl Theme {
             arrows: file.cursor.arrows,
             status_marks: file.cursor.status_marks,
             mode_marks,
+            attention_marker: file.attention_marker.into(),
         }
     }
 }
@@ -185,6 +194,9 @@ struct ThemeFile {
     /// By object type name (from the data pack's `objects.ron`), then visual state.
     objects: BTreeMap<String, BTreeMap<String, GlyphEntry>>,
     cursor: CursorFile,
+    /// The Attention marker: the background of the tile the selected sprite
+    /// attends to.
+    attention_marker: Colour,
 }
 
 /// A theme file's `cursor` section.

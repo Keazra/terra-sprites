@@ -8,6 +8,7 @@ use xxhash_rust::xxh3::xxh3_64_with_seed;
 
 use crate::action::{self, ActionView, ScriptedAction};
 use crate::biochem::{self, Senses, Traits};
+use crate::brain::Explanation;
 use crate::config::WorldConfig;
 use crate::data::DataPack;
 use crate::ecology::{self, holds_without_drawing, new_object, square};
@@ -247,6 +248,22 @@ impl<'a> SpriteView<'a> {
     /// next one starts; `None` before its first.
     pub fn action(&self) -> Option<ActionView> {
         action::view(self.sprite, &self.world.data)
+    }
+
+    /// What its brain did at the latest step 5, explained (design §5.9), or
+    /// `None` before its first decision.
+    pub fn explain(&self) -> Option<Explanation<'a>> {
+        self.sprite.brain.explain(&self.world.data)
+    }
+
+    /// The tile of the one thing its attention was on at the latest step 5
+    /// (design §5.3): an object's tile, a water tile, or where a sprite it
+    /// attends to is now. `None` before its first decision, with nothing in
+    /// reach, or once that thing is gone.
+    pub fn attending_to(&self) -> Option<Pos> {
+        let target = self.sprite.brain.snapshot.as_ref()?.target?;
+        let (pos, _) = self.world.state.whereabouts(&self.world.data, target)?;
+        Some(pos)
     }
 
     /// The traits its body has: its genes', clamped to physiology's ranges.

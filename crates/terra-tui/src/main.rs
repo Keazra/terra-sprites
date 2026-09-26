@@ -127,6 +127,7 @@ fn run(
         let now = Instant::now();
         let elapsed = now - last_frame;
         last_frame = now;
+        app.animate(elapsed);
         let frame_start = Instant::now();
         let mut events = Vec::new();
         app.clock.advance(
