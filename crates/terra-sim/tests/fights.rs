@@ -3,7 +3,8 @@
 //! away, and some hits are hit back. Driven through hand-made worlds.
 
 use terra_sim::{
-    DataPack, EntityId, EventKind, Genome, Map, Pos, Scenario, ScriptedAction, Target, Verb, World,
+    DataPack, EntityId, EventKind, Genome, Map, Outcome, Pos, Scenario, ScriptedAction, Target,
+    Verb, World,
 };
 
 const STARTER: &str = include_str!("../../../data/genomes/starter.ron");
@@ -142,4 +143,50 @@ fn a_sprite_pricked_by_a_thornbush_backs_away_from_it() {
         }
     }
     assert!(backed_away >= 8, "backed away in {backed_away} of 10");
+}
+
+#[test]
+fn a_hit_sprite_mostly_backs_away_from_its_attacker_and_sometimes_hits_back() {
+    let (me, attacker) = (at(3, 3), at(4, 3));
+    let rows = ["........"; 8];
+    let (mut backed_away, mut hit_back) = (0, 0);
+    for seed in 0..40 {
+        // The attacker hits once, as the sprite it hits sets off on its
+        // first action, and rests. That sprite is the starter genome with
+        // spawn variation.
+        let script = [
+            (attacker, ScriptedAction::Hit { at: me }),
+            (attacker, ScriptedAction::Rest),
+        ];
+        let data = builtin();
+        let sprites = [(me, None), (attacker, Some(walker(&data)))];
+        let scenario = Scenario {
+            map: Map::from_ascii(&rows, &data).expect("valid drawing"),
+            objects: &[],
+            sprites: &sprites,
+            scripted: &script,
+        };
+        let mut world = World::from_scenario(scenario, data, seed).expect("a valid scenario");
+        let (id, them) = (id_at(&world, me), id_at(&world, attacker));
+        let hit = (0..40).any(|_| {
+            world.step().iter().any(|e| {
+                matches!(e.kind, EventKind::ActionEnded {
+                    id: who,
+                    verb: Verb::Hit,
+                    outcome: Outcome::Applied,
+                    ..
+                } if who == them)
+            })
+        });
+        assert!(hit, "seed {seed}: the attacker hits");
+        match next_choice(&mut world, id, 1) {
+            Some((Verb::Retreat, Some(Target::Sprite(who)))) if who == them => backed_away += 1,
+            Some((Verb::Hit, Some(Target::Sprite(who)))) if who == them => hit_back += 1,
+            _ => {}
+        }
+    }
+    assert!(
+        backed_away > 2 * hit_back && hit_back >= 3,
+        "backed away {backed_away}, hit back {hit_back}, of 40"
+    );
 }

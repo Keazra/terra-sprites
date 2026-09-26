@@ -85,6 +85,8 @@
         // Boredom draws attention to balls, and loneliness to other sprites.
         AttentionInstinct(input: "boredom", category: Ball, weight: 1.0),
         AttentionInstinct(input: "loneliness", category: Sprite, weight: 1.0),
+        // Being hit draws attention to sprites, which means the attacker.
+        AttentionInstinct(input: "was_hit", category: Sprite, weight: 1.0),
 
         // Hunger leads to eating whatever is attended, not berries in particular.
         Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
@@ -96,7 +98,12 @@
         Instinct(inputs: [("loneliness", false)], verb: Approach, weight: 0.8),
         Instinct(inputs: [("loneliness", false)], verb: Play, weight: 0.8),
         // Pain leads to backing away from whatever the sprite attends to.
+        // Being hit, looking at the attacker, leads to hitting back, a little
+        // more weakly than a hit's pain leads to backing away: a busy sprite
+        // switches to whichever is stronger in it, so spawn variation makes
+        // about one sprite in four one that hits back.
         Instinct(inputs: [("pain", false)], verb: Retreat, weight: 1.0),
+        Instinct(inputs: [("was_hit", false), ("attended_sprite", false)], verb: Hit, weight: 0.56),
         // A mild habit of wandering, which any drive that has grown outweighs.
         Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3),
     ],
