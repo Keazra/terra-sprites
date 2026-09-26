@@ -25,13 +25,14 @@ mod physiology;
 mod random;
 mod regions;
 mod registry;
+mod rolling;
 mod sprites;
 mod terrain;
 mod variation;
 mod verbs;
 mod world;
 
-pub use action::{ActionView, Outcome, Progress, ScriptedAction};
+pub use action::{ActionView, Hurt, Outcome, Progress, ScriptedAction};
 pub use biochem::Traits;
 pub use brain::{Contribution, Explanation};
 pub use config::{ConfigError, WorldConfig};

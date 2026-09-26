@@ -138,7 +138,9 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
             };
             // A sprite is drawn over any item on its tile.
             let glyph = if let Some(sprite) = world.sprite_at(pos) {
-                let tile = if app.selection() == Some(Selection::Living(sprite.id())) {
+                let tile = if let Some(emote) = app.emote(sprite.id()) {
+                    SemanticTile::Emote(emote)
+                } else if app.selection() == Some(Selection::Living(sprite.id())) {
                     SemanticTile::SelectedSprite
                 } else {
                     SemanticTile::Sprite
@@ -377,10 +379,10 @@ fn event_text(event: &Event, data: &DataPack) -> Option<String> {
             cause_name(*cause, data),
             group_thousands(*age)
         )),
+        EventKind::ActionEnded { id, action, .. } => inspector::logged_line(*id, action, data),
         EventKind::ObjectSpawned { .. }
         | EventKind::ObjectRemoved { .. }
-        | EventKind::ActionStarted { .. }
-        | EventKind::ActionEnded { .. } => None,
+        | EventKind::ActionStarted { .. } => None,
     }
 }
 

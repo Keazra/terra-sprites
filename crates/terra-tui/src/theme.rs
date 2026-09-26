@@ -20,11 +20,22 @@ pub enum SemanticTile {
     /// The Decision marker: where the selected sprite is heading (design
     /// §6.1). It flashes.
     DecisionMarker,
+    /// An emote, which takes turns with a sprite's glyph (design §6.3).
+    Emote(Emote),
+}
+
+/// Something that just happened to a sprite, which the map shows by
+/// swapping its glyph for a while (design §6.3). Slice 14 adds the rest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Emote {
+    /// Something hurt it.
+    Hurt,
 }
 
 impl SemanticTile {
     /// Every semantic tile. Each theme must draw all of them.
-    pub const ALL: [SemanticTile; 9] = [
+    pub const ALL: [SemanticTile; 10] = [
         SemanticTile::Terrain(Terrain::Grass),
         SemanticTile::Terrain(Terrain::Dirt),
         SemanticTile::Terrain(Terrain::Sand),
@@ -34,6 +45,7 @@ impl SemanticTile {
         SemanticTile::Sprite,
         SemanticTile::SelectedSprite,
         SemanticTile::DecisionMarker,
+        SemanticTile::Emote(Emote::Hurt),
     ];
 }
 

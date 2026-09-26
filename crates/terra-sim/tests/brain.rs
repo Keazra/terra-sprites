@@ -357,3 +357,52 @@ fn attention_is_on_one_thing_the_map_can_show() {
         "a nearest water tile: {spot:?}"
     );
 }
+
+#[test]
+fn a_bored_sprite_goes_and_kicks_a_ball() {
+    for seed in 0..10 {
+        let data = builtin();
+        let bored = starter_with(
+            &[r#"InitialConcentration(chem: "boredom", value: 0.9)"#],
+            &data,
+        );
+        let ball = at(8, 3);
+        let mut world = world(&FIELD, &[(ball, "ball")], at(1, 3), bored, seed);
+        let id = world.sprites().next().expect("the sprite").id();
+        let kicked = (0..100).any(|_| {
+            let events = world.step();
+            ended(&events, id).contains(&(Verb::Play, Outcome::Applied))
+        });
+        assert!(kicked, "seed {seed}: a bored sprite kicks the ball");
+    }
+}
+
+#[test]
+fn a_lonely_sprite_goes_over_to_another_or_plays_with_it() {
+    for seed in 0..10 {
+        let data = builtin();
+        let lonely = starter_with(
+            &[r#"InitialConcentration(chem: "loneliness", value: 0.9)"#],
+            &data,
+        );
+        let content = starter_with(&[], &data);
+        let map = Map::from_ascii(&FIELD, &data).expect("valid drawing");
+        let sprites = [(at(1, 3), Some(lonely)), (at(9, 3), Some(content))];
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &sprites,
+            scripted: &[],
+        };
+        let mut world = World::from_scenario(scenario, data, seed).expect("a valid scenario");
+        let id = world.sprite_at(at(1, 3)).expect("the lonely sprite").id();
+        let sought_company = (0..100).any(|_| {
+            let events = world.step();
+            ended(&events, id).iter().any(|&ending| {
+                ending == (Verb::Approach, Outcome::Applied)
+                    || ending == (Verb::Play, Outcome::Applied)
+            })
+        });
+        assert!(sought_company, "seed {seed}: a lonely sprite seeks company");
+    }
+}

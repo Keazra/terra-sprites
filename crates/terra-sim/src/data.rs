@@ -6,9 +6,9 @@ use serde::Deserialize;
 use crate::brain_io::{BRAIN_IO, BrainInput, InputEntry, InputId, brain_inputs};
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, GenomeError};
-use crate::object_types::{OBJECTS, ObjectType, TypeEntry, object_types};
+use crate::object_types::{Effect, OBJECTS, ObjectType, TypeEntry, object_types};
 use crate::physiology::{Indices, PHYSIOLOGY, Physiology, PhysiologyEntry};
-use crate::registry::{Category, ChemId, Chemical, Locus, LocusId};
+use crate::registry::{Category, ChemId, Chemical, Locus, LocusId, Verb};
 use crate::terrain::{Terrain, TerrainProps};
 
 /// A validated data pack: everything a world needs from `data/`.
@@ -282,6 +282,18 @@ impl DataPack {
             .iter()
             .find(|t| t.id == id)
             .map(|t| t.name.as_str())
+    }
+
+    /// Whether `verb` on an object of the type with the stable ID
+    /// `object_type` pushes it (design §3.5.2): whether that verb's effects
+    /// hold a `Push`. So the screen can tell a kick from other play.
+    pub fn pushes(&self, object_type: u16, verb: Verb) -> bool {
+        let Some(kind) = self.object_types.iter().find(|t| t.id == object_type) else {
+            return false;
+        };
+        kind.verbs
+            .get(&verb)
+            .is_some_and(|effects| effects.iter().any(|e| matches!(e, Effect::Push(_))))
     }
 
     /// The names of an object type's stages, in order. Empty for a type with

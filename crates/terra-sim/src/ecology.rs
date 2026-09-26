@@ -21,6 +21,7 @@ pub(crate) fn new_object(data: &DataPack, kind: usize, pos: Pos) -> Object {
         stage_ends: 0,
         counters: vec![0; object_type.counters.len()],
         fresh: true,
+        roll: None,
     }
 }
 

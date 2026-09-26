@@ -1,4 +1,4 @@
-use terra_sim::{DataError, DataPack, Terrain};
+use terra_sim::{DataError, DataPack, Terrain, Verb};
 
 const BUILTIN_TERRAIN: &str = include_str!("../../../data/terrain.ron");
 
@@ -741,4 +741,15 @@ fn the_brain_needs_the_exploration_mod_receptor_target() {
     let renamed = loci.replace(r#"name: "exploration_mod""#, r#"name: "curiosity_mod""#);
     assert_ne!(renamed, loci);
     assert_invalid("loci.ron", &renamed, "exploration_mod");
+}
+
+#[test]
+fn a_pack_says_which_verbs_push_which_object_types() {
+    // Object types: thornbush 3, ball 4, sprite 101.
+    let pack = DataPack::builtin().expect("built-in data pack is valid");
+    assert!(pack.pushes(4, Verb::Play), "a ball rolls when played with");
+    assert!(pack.pushes(4, Verb::Hit), "and when hit");
+    assert!(!pack.pushes(3, Verb::Play), "a thornbush doesn't");
+    assert!(!pack.pushes(101, Verb::Play), "nor does a sprite");
+    assert!(!pack.pushes(999, Verb::Play), "nor a type there isn't");
 }

@@ -1,16 +1,16 @@
 //! The UI state (design §6.8): everything the screen shows that isn't the world.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::time::Duration;
 
 use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
-use terra_sim::{DeathCause, EntityId, Event, EventKind, Map, Pos, World};
+use terra_sim::{ActionView, DeathCause, EntityId, Event, EventKind, Map, Pos, Target, World};
 
 use crate::clock::Clock;
 use crate::input::Action;
 use crate::inspector;
-use crate::theme::Theme;
+use crate::theme::{Emote, Theme};
 
 /// Whether the game carries on after an action.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -163,11 +163,21 @@ pub struct App {
     detail: bool,
     /// Real time the app has been running, for the Decision marker's flashing.
     running_for: Duration,
+    /// When, in `running_for`, each sprite hurt lately was hurt, for its
+    /// Hurt emote.
+    hurt_at: BTreeMap<EntityId, Duration>,
 }
 
 /// How long the Decision marker shows, and then doesn't: once a second in
 /// all, like a text cursor (design §6.1).
 const FLASH_HALF: Duration = Duration::from_millis(500);
+
+/// How long an emote shows, and then the sprite does: twice as fast as the
+/// Decision marker, so the two can't be confused (design §6.3).
+const EMOTE_HALF: Duration = Duration::from_millis(250);
+
+/// How long an emote lasts, in real time, whatever the speed (design §6.3).
+const EMOTE_FOR: Duration = Duration::from_secs(1);
 
 impl App {
     /// A new UI for `map`, with the cursor at the map's centre and the viewport
@@ -196,42 +206,89 @@ impl App {
             tab_scroll: 0,
             detail: false,
             running_for: Duration::ZERO,
+            hurt_at: BTreeMap::new(),
         };
         app.centre_on(cursor);
         app
     }
 
     /// Takes in what happened during a tick, for the event log (design §6.1),
-    /// and the death of the selected sprite. Object and action events are
-    /// left out of the log: they happen dozens of times a minute and would
-    /// bury everything else. The World tab counts objects instead, and the
-    /// Body tab shows the selected sprite's action.
+    /// and the death of the selected sprite. Object events and most action
+    /// events are left out of the log: they happen dozens of times a minute
+    /// and would bury everything else. The World tab counts objects instead,
+    /// and the Body tab shows the selected sprite's action. The log keeps
+    /// every Play and Hit, and any action that hurt a sprite.
     ///
-    /// An action the selected sprite finishes goes on the front of its
-    /// observed list, or counts up the line there if it reads the same.
+    /// An action the selected sprite finishes, or another's done to it, goes
+    /// on the front of its observed list, or counts up the line there if it
+    /// reads the same.
     pub fn record(&mut self, events: &[Event], world: &World) {
         for event in events {
-            if let EventKind::ActionEnded { id, ref action, .. } = event.kind
-                && self.selection == Some(Selection::Living(id))
-            {
-                self.observe(event.tick, inspector::observed_line(action, world.data()));
+            if let EventKind::ActionEnded { id, ref action, .. } = event.kind {
+                self.note_hurt(id, action);
+                self.note_done_to_selected(event.tick, id, action, world);
             }
             if let EventKind::Died { id, cause, age } = event.kind
                 && self.selection == Some(Selection::Living(id))
             {
                 self.selection = Some(Selection::Dead { id, cause, age });
             }
-            if !matches!(
-                event.kind,
+            let logged = match event.kind {
                 EventKind::ObjectSpawned { .. }
-                    | EventKind::ObjectRemoved { .. }
-                    | EventKind::ActionStarted { .. }
-                    | EventKind::ActionEnded { .. }
-            ) {
+                | EventKind::ObjectRemoved { .. }
+                | EventKind::ActionStarted { .. } => false,
+                EventKind::ActionEnded { id, ref action, .. } => {
+                    inspector::logged_line(id, action, world.data()).is_some()
+                }
+                EventKind::Died { .. } => true,
+            };
+            if logged {
                 self.event_log.push_front(event.clone());
             }
         }
         self.event_log.truncate(EVENT_LOG_LENGTH);
+    }
+
+    /// Starts the Hurt emote on each sprite that sprite `actor`'s `action` hurt.
+    fn note_hurt(&mut self, actor: EntityId, action: &ActionView) {
+        let hurt_target = match action.target {
+            Some(Target::Sprite(id)) if action.hurt.target => Some(id),
+            _ => None,
+        };
+        let hurt_actor = action.hurt.actor.then_some(actor);
+        for id in hurt_actor.into_iter().chain(hurt_target) {
+            self.hurt_at.insert(id, self.running_for);
+        }
+    }
+
+    /// Puts sprite `actor`'s `action`, finished on `tick`, on the selected
+    /// sprite's observed list, if it was the selected sprite's own or done
+    /// to it.
+    fn note_done_to_selected(
+        &mut self,
+        tick: u64,
+        actor: EntityId,
+        action: &ActionView,
+        world: &World,
+    ) {
+        let Some(Selection::Living(selected)) = self.selection else {
+            return;
+        };
+        if actor == selected {
+            self.observe(tick, inspector::observed_line(action, world.data()));
+        } else if action.target == Some(Target::Sprite(selected))
+            && let Some(line) = inspector::done_to_line(actor, action)
+        {
+            self.observe(tick, line);
+        }
+    }
+
+    /// The emote sprite `id` shows now, if any: the Hurt emote, taking
+    /// turns with the sprite for a second after it's hurt (design §6.3).
+    pub fn emote(&self, id: EntityId) -> Option<Emote> {
+        let since = self.running_for.checked_sub(*self.hurt_at.get(&id)?)?;
+        let showing = (since.as_millis() / EMOTE_HALF.as_millis()).is_multiple_of(2);
+        (since < EMOTE_FOR && showing).then_some(Emote::Hurt)
     }
 
     /// Puts `line`, finished on `tick`, on the front of the observed list.
@@ -266,6 +323,8 @@ impl App {
     /// Moves the app's real-time clock on by `elapsed`, for what flashes.
     pub fn animate(&mut self, elapsed: Duration) {
         self.running_for += elapsed;
+        let now = self.running_for;
+        self.hurt_at.retain(|_, &mut at| now - at < EMOTE_FOR);
     }
 
     /// Whether the Decision marker is in its "on" half just now.

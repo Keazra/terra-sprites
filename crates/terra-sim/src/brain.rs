@@ -28,12 +28,14 @@ pub(crate) const VERBS: [Verb; 8] = [
     Verb::Wander,
 ];
 
-/// The verbs slice 6 offers (design §5.5): Hit, Play and Retreat are
-/// masked, as if no verb table offered them, until slice 7.
-const OFFERED: [Verb; 5] = [
+/// The verbs on offer (design §5.5): Retreat is masked, as if nothing
+/// offered it, until slice 7c.
+const OFFERED: [Verb; 7] = [
     Verb::Approach,
     Verb::Eat,
     Verb::Drink,
+    Verb::Hit,
+    Verb::Play,
     Verb::Rest,
     Verb::Wander,
 ];
@@ -410,7 +412,7 @@ impl Brain {
 
 /// The verbs a sprite may choose (design §5.2): Rest and Wander always;
 /// with a target, Approach, and the interactions `table` has, where `table`
-/// is its type's verb table. Slice 6 masks Hit, Play and Retreat.
+/// is its type's verb table. Retreat is masked until slice 7c.
 pub(crate) fn available(target: Option<&[Verb]>) -> Vec<Verb> {
     VERBS
         .into_iter()
@@ -592,11 +594,17 @@ mod tests {
             [Rest, Wander],
             "no target: targetless only"
         );
+        // Retreat, like Approach, needs only a target, but waits for slice 7c.
         assert_eq!(available(Some(&[])), [Approach, Rest, Wander]);
-        assert_eq!(available(Some(&[Eat, Hit])), [Approach, Eat, Rest, Wander]);
+        assert_eq!(
+            available(Some(&[Eat, Hit])),
+            [Approach, Eat, Hit, Rest, Wander]
+        );
         assert_eq!(available(Some(&[Drink])), [Approach, Drink, Rest, Wander]);
-        // Hit, Play and Retreat wait for slice 7, whatever the table says.
-        assert_eq!(available(Some(&[Hit, Play])), [Approach, Rest, Wander]);
+        assert_eq!(
+            available(Some(&[Hit, Play])),
+            [Approach, Hit, Play, Rest, Wander]
+        );
     }
 
     #[test]

@@ -11,7 +11,7 @@ pub struct Pos {
 }
 
 /// One of the eight step directions. North is up the screen.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub enum Dir {
     N,
     NE,
@@ -48,6 +48,46 @@ impl Dir {
             Dir::W => (-1, 0),
             Dir::NW => (-1, -1),
         }
+    }
+
+    /// The opposite direction.
+    pub(crate) fn reverse(self) -> Dir {
+        let (dx, dy) = self.offset();
+        Dir::with_offset(-dx, -dy)
+    }
+
+    /// A diagonal's two orthogonal parts, east or west first, then north or
+    /// south; `None` for an orthogonal direction.
+    pub(crate) fn parts(self) -> Option<(Dir, Dir)> {
+        let (dx, dy) = self.offset();
+        self.is_diagonal()
+            .then(|| (Dir::with_offset(dx, 0), Dir::with_offset(0, dy)))
+    }
+
+    /// This diagonal with its `part`, one of its orthogonal parts, reversed:
+    /// the way it glances off a wall that stops `part`.
+    pub(crate) fn mirrored(self, part: Dir) -> Dir {
+        let (dx, dy) = self.offset();
+        let (px, py) = part.offset();
+        Dir::with_offset(dx - 2 * px, dy - 2 * py)
+    }
+
+    /// The direction whose step changes `(x, y)` by `(dx, dy)`, each -1, 0
+    /// or 1 and not both 0.
+    fn with_offset(dx: i32, dy: i32) -> Dir {
+        Dir::ALL
+            .into_iter()
+            .find(|dir| dir.offset() == (dx, dy))
+            .expect("a step's offset")
+    }
+
+    /// The direction from `from` to `to`, a tile beside it, or `None` if
+    /// they're the same tile.
+    pub(crate) fn towards(from: Pos, to: Pos) -> Option<Dir> {
+        let dx = i32::from(to.x) - i32::from(from.x);
+        let dy = i32::from(to.y) - i32::from(from.y);
+        let (dx, dy) = (dx.signum(), dy.signum());
+        ((dx, dy) != (0, 0)).then(|| Dir::with_offset(dx, dy))
     }
 
     pub(crate) fn is_diagonal(self) -> bool {

@@ -2,7 +2,7 @@
 //! re-planning, driven through hand-made worlds.
 
 use terra_sim::{
-    ActionView, DataPack, EntityId, Event, EventKind, Genome, Map, Outcome, Pos, Progress,
+    ActionView, DataPack, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos, Progress,
     Scenario, ScriptedAction, Verb, World,
 };
 
@@ -154,6 +154,7 @@ fn a_sprite_told_to_wander_to_a_spot_walks_there_a_step_at_a_time_and_arrives() 
                         target_type: None,
                         attempted: false,
                         target_gone: false,
+                        hurt: Hurt::default(),
                         progress: Progress::Ended(Outcome::Applied),
                     }
                 }
