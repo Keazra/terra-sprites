@@ -646,7 +646,7 @@ impl World {
     /// Step 2: objects run their lifecycle rules, then rolling items roll.
     fn run_environment(&mut self, events: &mut Vec<Event>) {
         ecology::run(&mut self.state, &self.data, events);
-        rolling::run(&mut self.state, &self.data);
+        rolling::run(&mut self.state, &self.data, events);
     }
 
     /// Step 3: every sprite's chemistry (design §4.4), then death check #1.
