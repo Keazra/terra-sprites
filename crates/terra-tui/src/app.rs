@@ -88,6 +88,7 @@ impl Selection {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     Body,
+    Brain,
     Chem,
     Genome,
     World,
@@ -95,12 +96,13 @@ pub enum Tab {
 
 impl Tab {
     /// Every tab, in the order `[` and `]` go through them.
-    pub const ALL: [Tab; 4] = [Tab::Body, Tab::Chem, Tab::Genome, Tab::World];
+    pub const ALL: [Tab; 5] = [Tab::Body, Tab::Brain, Tab::Chem, Tab::Genome, Tab::World];
 
     /// The tab's name in the inspector's title.
     pub fn label(self) -> &'static str {
         match self {
             Tab::Body => "Body",
+            Tab::Brain => "Brain",
             Tab::Chem => "Chem",
             Tab::Genome => "Genome",
             Tab::World => "World",

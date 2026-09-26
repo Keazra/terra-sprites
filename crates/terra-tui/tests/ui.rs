@@ -6,7 +6,7 @@ use terra_sim::{
     ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Map, Outcome, Pos, Progress,
     Removal, Scenario, ScriptedAction, Verb, World, WorldConfig,
 };
-use terra_tui::app::App;
+use terra_tui::app::{App, Tab};
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
 use terra_tui::ui;
@@ -528,7 +528,7 @@ fn with_room_the_world_tab_shows_the_pack_and_every_object_types_numbers() {
     let app = app_for(&world, Theme::cp437(), 100, 30);
     let inspector = right_part(&render(&app, &world, 100, 30), 46);
     assert_eq!(
-        inspector[1], "┌─ Body Chem Genome [World] ─────────────────┐",
+        inspector[1], "┌─ Body Brain Chem Genome [World] ───────────┐",
         "with nothing selected, the title is just the tabs"
     );
     let body: Vec<&str> = inspector[2..12]
@@ -699,6 +699,13 @@ fn a_screen_under_30_rows_has_no_event_log() {
     assert!(screen.iter().all(|line| !line.contains("Events")));
 }
 
+/// Presses `]` until `tab` is open.
+fn open(app: &mut App, world: &World, tab: Tab) {
+    while app.tab() != tab {
+        app.apply(Action::NextTab, world);
+    }
+}
+
 /// The inspector's rows on a 100×30 screen: its title, then the text inside
 /// its border, trimmed.
 fn inspector(app: &App, world: &World) -> (String, Vec<String>) {
@@ -715,9 +722,10 @@ fn the_sprite_tabs_say_how_to_select_a_sprite_when_none_is() {
     let world = garden_with_sprites();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     for (tab, title) in [
-        ("Body", "┌─ [Body] Chem Genome World ─────────────────┐"),
-        ("Chem", "┌─ Body [Chem] Genome World ─────────────────┐"),
-        ("Genome", "┌─ Body Chem [Genome] World ─────────────────┐"),
+        ("Body", "┌─ [Body] Brain Chem Genome World ───────────┐"),
+        ("Brain", "┌─ Body [Brain] Chem Genome World ───────────┐"),
+        ("Chem", "┌─ Body Brain [Chem] Genome World ───────────┐"),
+        ("Genome", "┌─ Body Brain Chem [Genome] World ───────────┐"),
     ] {
         app.apply(Action::NextTab, &world);
         let (top, text) = inspector(&app, &world);
@@ -737,13 +745,15 @@ fn the_title_names_the_selected_sprite_before_the_tabs() {
     app.apply(Action::SelectNext, &world);
     let id = world.sprites().next().expect("a sprite").id().0;
     let (top, _) = inspector(&app, &world);
-    let title = format!("┌─ Sprite #{id} ── [Body] Chem Genome World ─");
+    // "Sprite #5" and five tabs don't fit in 46 columns, so the label is
+    // shortened to the ID, never the tabs (design §6.1).
+    let title = format!("┌─ #{id} ── [Body] Brain Chem Genome World ─");
     assert!(top.starts_with(&title), "{top:?}");
     assert!(top.ends_with("─┐"), "{top:?}");
     app.apply(Action::PreviousTab, &world);
     let (top, _) = inspector(&app, &world);
     assert!(
-        top.starts_with(&format!("┌─ Sprite #{id} ── Body Chem Genome [World] ─")),
+        top.starts_with(&format!("┌─ #{id} ── Body Brain Chem Genome [World] ─")),
         "{top:?}"
     );
 }
@@ -755,10 +765,10 @@ fn when_the_selected_sprite_dies_its_tabs_say_how_and_at_what_age() {
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
     app.record(&[died(4_012, id.0, DeathCause::Dehydration, 4_012)], &world);
-    for tab in ["Body", "Chem", "Genome"] {
+    for tab in ["Body", "Brain", "Chem", "Genome"] {
         let (top, text) = inspector(&app, &world);
         assert!(
-            top.starts_with(&format!("┌─ Sprite #{} ──", id.0)),
+            top.starts_with(&format!("┌─ #{} ──", id.0)),
             "{tab}: {top:?}"
         );
         assert_eq!(
@@ -802,6 +812,16 @@ fn one_sprite(genome: &str, ticks: u32) -> (World, App) {
 
 /// `one_sprite`, starting on the `scripted` actions.
 fn one_sprite_doing(genome: &str, scripted: &[ScriptedAction], ticks: u32) -> (World, App) {
+    one_sprite_among(genome, &[], scripted, ticks)
+}
+
+/// `one_sprite_doing`, with `objects` in the field.
+fn one_sprite_among(
+    genome: &str,
+    objects: &[(Pos, &str)],
+    scripted: &[ScriptedAction],
+    ticks: u32,
+) -> (World, App) {
     let pack = pack();
     let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
     let genome = terra_sim::Genome::from_ron(genome, &pack).expect("a valid genome");
@@ -810,7 +830,7 @@ fn one_sprite_doing(genome: &str, scripted: &[ScriptedAction], ticks: u32) -> (W
     let scripted: Vec<(Pos, ScriptedAction)> = scripted.iter().map(|&a| (start, a)).collect();
     let scenario = Scenario {
         map,
-        objects: &[],
+        objects,
         sprites: &sprites,
         scripted: &scripted,
     };
@@ -903,10 +923,73 @@ fn v_shows_the_exact_action_and_marks_where_the_selected_sprite_is_heading() {
     assert_eq!(render(&app, &world, 100, 30)[cell].symbol(), ".");
 }
 
+/// A hungry sprite whose instincts point it at berries and to eating, with
+/// a nudge against eating for no reason and a mild habit of wandering.
+const HUNGRY_GENOME: &str = r#"(format: 1, genes: [
+    InitialConcentration(chem: "hunger", value: 0.8),
+    BrainParam(param: "tau_base", value: 0.05),
+    BrainParam(param: "tau_att_base", value: 0.05),
+    AttentionInstinct(input: "hunger", category: Berry, weight: 1.0),
+    Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
+    Instinct(inputs: [("hunger", false), ("target_adjacent", true)], verb: Eat, weight: 0.5),
+    Instinct(inputs: [("always", false)], verb: Eat, weight: -0.1),
+    Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3),
+])"#;
+
+#[test]
+fn the_brain_tab_shows_attention_scores_and_what_adds_most_to_the_decision() {
+    let objects = [
+        (Pos { x: 8, y: 3 }, "berry_bush"),
+        (Pos { x: 6, y: 1 }, "berry"),
+    ];
+    let (world, mut app) = one_sprite_among(HUNGRY_GENOME, &objects, &[], 1);
+    open(&mut app, &world, Tab::Brain);
+    let (top, text) = inspector(&app, &world);
+    assert!(top.contains("[Brain]"), "{top:?}");
+    // Attention: hunger's 1 × .8 on the berry, plus salience .5 × (1 − its
+    // distance, .34); the bush has salience alone, .5 × (1 − .5).
+    // The decision: hunger .8 × 1, .8 × (1 − 0) × .5 and always 1 × −.1.
+    assert_eq!(
+        text[..8],
+        [
+            "ATTENTION",
+            "► berry                               1.13",
+            "berry bush                           .25",
+            "",
+            "DECISION: EAT                         1.10",
+            "hunger                              +.80",
+            "hunger & not target adjacent        +.40",
+            "always                              -.10",
+        ]
+    );
+    assert!(text[8..].iter().all(String::is_empty), "{text:?}");
+}
+
+#[test]
+fn the_brain_tab_says_when_nothing_has_been_decided_or_is_in_sight() {
+    let (world, mut app) = one_sprite(HUNGRY_GENOME, 0);
+    open(&mut app, &world, Tab::Brain);
+    let (_, text) = inspector(&app, &world);
+    assert_eq!(text[0], "Nothing decided yet");
+
+    let (world, mut app) = one_sprite(HUNGRY_GENOME, 1);
+    open(&mut app, &world, Tab::Brain);
+    let (_, text) = inspector(&app, &world);
+    assert_eq!(
+        text[..4],
+        [
+            "ATTENTION",
+            "nothing in sight",
+            "",
+            "DECISION: WANDER                       .30",
+        ]
+    );
+}
+
 #[test]
 fn the_chem_tab_lists_every_chemical_with_its_level_and_change_per_tick() {
     let (world, mut app) = one_sprite(WORKED_GENOME, 1);
-    app.apply(Action::NextTab, &world);
+    open(&mut app, &world, Tab::Chem);
     let (top, text) = inspector(&app, &world);
     assert!(top.contains("[Chem]"), "{top:?}");
     assert_eq!(
@@ -949,8 +1032,7 @@ fn the_genome_tab_shows_brain_settings_instincts_and_attention_instincts() {
         Instinct(inputs: [("thirst", false), ("target_adjacent", true)], verb: Drink, weight: -0.5),
     ])"#;
     let (world, mut app) = one_sprite(genome, 0);
-    app.apply(Action::NextTab, &world);
-    app.apply(Action::NextTab, &world);
+    open(&mut app, &world, Tab::Genome);
     let rows = right_part(&render(&app, &world, 100, 30), 46);
     assert!(rows[1].contains("[Genome]"), "{:?}", rows[1]);
     let text: Vec<&str> = rows[2..11].iter().map(|row| inside(row)).collect();
@@ -991,8 +1073,7 @@ fn the_genome_tab_groups_genes_as_plain_lines_and_marks_those_with_no_effect() {
         Gene(type: 900, version: 1, payload: "c0ffee"),
     ])"#;
     let (world, mut app) = one_sprite(genome, 0);
-    app.apply(Action::NextTab, &world);
-    app.apply(Action::NextTab, &world);
+    open(&mut app, &world, Tab::Genome);
     let screen = render(&app, &world, 100, 40);
     let rows = right_part(&screen, 46);
     assert!(rows[1].contains("[Genome]"), "{:?}", rows[1]);
@@ -1074,8 +1155,7 @@ fn first_and_last(app: &App, world: &World) -> (String, String) {
 #[test]
 fn page_down_and_up_scroll_a_long_tab_a_page_and_stop_at_either_end() {
     let (world, mut app) = one_sprite(&long_genome(), 0);
-    app.apply(Action::NextTab, &world);
-    app.apply(Action::NextTab, &world);
+    open(&mut app, &world, Tab::Genome);
     // 21 rows fit at 100×30, so the tab scrolls at most 40 lines.
     let mut page = |pages: i32| {
         app.apply(Action::ScrollTab { pages }, &world);
@@ -1100,8 +1180,7 @@ fn page_down_and_up_scroll_a_long_tab_a_page_and_stop_at_either_end() {
 #[test]
 fn the_wheel_over_the_inspector_scrolls_3_lines_a_notch_and_elsewhere_does_not() {
     let (world, mut app) = one_sprite(&long_genome(), 0);
-    app.apply(Action::NextTab, &world);
-    app.apply(Action::NextTab, &world);
+    open(&mut app, &world, Tab::Genome);
     let over_inspector = Position::new(80, 10);
     app.apply(
         Action::Wheel {
@@ -1141,8 +1220,7 @@ fn the_wheel_over_the_inspector_scrolls_3_lines_a_notch_and_elsewhere_does_not()
 #[test]
 fn a_tab_goes_back_to_the_top_when_the_tab_or_the_selection_changes() {
     let (world, mut app) = one_sprite(&long_genome(), 0);
-    app.apply(Action::NextTab, &world);
-    app.apply(Action::NextTab, &world);
+    open(&mut app, &world, Tab::Genome);
     app.apply(Action::ScrollTab { pages: 1 }, &world);
     app.apply(Action::NextTab, &world);
     app.apply(Action::PreviousTab, &world);
@@ -1171,8 +1249,7 @@ fn selecting_another_sprite_starts_its_tab_from_the_top_and_the_same_one_again_d
     let world = World::from_scenario(scenario, pack.clone(), 7).expect("valid scenario");
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
-    app.apply(Action::NextTab, &world);
-    app.apply(Action::NextTab, &world);
+    open(&mut app, &world, Tab::Genome);
     app.apply(Action::ScrollTab { pages: 1 }, &world);
     // The first sprite is at (2, 3), drawn at cell (3, 5).
     app.apply(Action::Click(Position::new(3, 5)), &world);
@@ -1188,8 +1265,7 @@ fn selecting_another_sprite_starts_its_tab_from_the_top_and_the_same_one_again_d
 #[test]
 fn after_the_inspector_grows_page_up_scrolls_from_what_is_shown() {
     let (world, mut app) = one_sprite(&long_genome(), 0);
-    app.apply(Action::NextTab, &world);
-    app.apply(Action::NextTab, &world);
+    open(&mut app, &world, Tab::Genome);
     app.apply(Action::ScrollTab { pages: 2 }, &world); // the end: line 40 at the top
     // At 100×40 the tab has 31 rows, so the end is line 30 at the top.
     app.fit(ui::areas(Size::new(100, 40), world.map()));
@@ -1208,7 +1284,7 @@ fn a_change_too_small_to_show_leaves_no_number_and_no_arrow() {
     let (_, body) = inspector(&app, &world);
     // After the action line, age, traits, a blank line and four drives.
     assert_eq!(body[8], "boredom     ░░░░░░░░░░ .00", "the Body tab");
-    app.apply(Action::NextTab, &world);
+    open(&mut app, &world, Tab::Chem);
     let (_, chem) = inspector(&app, &world);
     assert_eq!(chem[11], "boredom       .00", "the Chem tab");
 }
@@ -1221,8 +1297,7 @@ fn big_and_negative_gene_values_keep_3_significant_figures_and_their_sign() {
         Emitter(locus: Locus("always"), mode: Level, gain: -98765.0, chem: "boredom"),
     ])"#;
     let (world, mut app) = one_sprite(genome, 0);
-    app.apply(Action::NextTab, &world);
-    app.apply(Action::NextTab, &world);
+    open(&mut app, &world, Tab::Genome);
     let (_, text) = inspector(&app, &world);
     assert_eq!(
         text[..5],
@@ -1389,7 +1464,7 @@ fn chemical_names_show_with_spaces_for_underscores() {
     app.apply(Action::SelectNext, &world);
     let (_, body) = inspector(&app, &world);
     assert!(body[7].starts_with("bored ness  "), "{:?}", body[7]);
-    app.apply(Action::NextTab, &world);
+    open(&mut app, &world, Tab::Chem);
     let (_, chem) = inspector(&app, &world);
     assert!(chem[11].starts_with("bored ness  "), "{:?}", chem[11]);
 }

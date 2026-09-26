@@ -101,6 +101,7 @@ pub(crate) fn first_shown(scroll: usize, length: usize, rows: usize) -> usize {
 fn sprite_tab(tab: Tab, sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
     match tab {
         Tab::Body => body_tab(sprite, app, world),
+        Tab::Brain => brain_tab(sprite),
         Tab::Chem => chem_tab(sprite),
         Tab::Genome => genome_tab(sprite),
         Tab::World => Vec::new(),
@@ -437,6 +438,95 @@ fn trait_text(which: Trait, value: f32) -> String {
         Trait::SenseRadius => format!("sense {}", significant(value)),
         Trait::Lifespan => format!("lifespan {}", whole(f64::from(value))),
     }
+}
+
+/// How many concepts the Brain tab lists under the decision.
+const CONCEPTS_SHOWN: usize = 5;
+
+/// The Brain tab (design §5.9, §6.1): each category attention could go to,
+/// with its score, the attended one marked; then the verb chosen, with its
+/// score, and the concepts adding most to it, largest first.
+fn brain_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
+    let Some(explained) = sprite.explain() else {
+        return vec![Line::from(" Nothing decided yet")];
+    };
+    let mut lines = vec![" ATTENTION".to_string()];
+    if explained.attention.is_empty() {
+        lines.push("   nothing in sight".into());
+    }
+    for &(category, score) in &explained.attention {
+        let marker = if explained.attended == Some(category) {
+            "►"
+        } else {
+            " "
+        };
+        lines.extend(scored(
+            &format!(" {marker} "),
+            &display_name(category),
+            &level(score),
+        ));
+    }
+    lines.push(String::new());
+    match explained.decision {
+        Some((verb, score)) => {
+            let head = format!("DECISION: {}", verb_name(verb));
+            lines.extend(scored(" ", &head, &level(score)));
+        }
+        None => lines.push(" DECISION: none".into()),
+    }
+    for contribution in explained.contributions.iter().take(CONCEPTS_SHOWN) {
+        let sign = if contribution.amount < 0.0 { "" } else { "+" };
+        let amount = format!("{sign}{}", level(contribution.amount));
+        lines.extend(scored("   ", &concept_name(&contribution.inputs), &amount));
+    }
+    lines.into_iter().map(Line::from).collect()
+}
+
+/// A concept by its inputs, as the Genome tab words an instinct's: `hunger
+/// & not target adjacent`. A line wraps only between inputs.
+fn concept_name(inputs: &[(&str, bool)]) -> String {
+    let inputs: Vec<String> = inputs
+        .iter()
+        .map(|&(input, negated)| match negated {
+            true => unbroken(&format!("not {}", display_name(input))),
+            false => unbroken(&display_name(input)),
+        })
+        .collect();
+    inputs.join(" & ")
+}
+
+/// `name` after `head`, with `number` right-aligned a column short of the
+/// inspector's edge; a name too long for the room left wraps at its words,
+/// indented two columns past `head`.
+fn scored(head: &str, name: &str, number: &str) -> Vec<String> {
+    let right = WIDTH - 1;
+    let room = right - head.chars().count() - number.chars().count() - 1;
+    let mut rows: Vec<String> = Vec::new();
+    let mut row = String::new();
+    for word in name.split(' ') {
+        let limit = if rows.is_empty() { room } else { room - 2 };
+        if !row.is_empty() && row.chars().count() + 1 + word.chars().count() > limit {
+            rows.push(std::mem::take(&mut row));
+        }
+        if !row.is_empty() {
+            row.push(' ');
+        }
+        row.push_str(word);
+    }
+    rows.push(row);
+    let indent = " ".repeat(head.chars().count() + 2);
+    let mut lines = Vec::new();
+    for (i, text) in rows.iter().enumerate() {
+        let text = text.replace(BOUND, " ");
+        if i == 0 {
+            let line = format!("{head}{text}");
+            let gap = right.saturating_sub(line.chars().count() + number.chars().count());
+            lines.push(format!("{line}{}{number}", " ".repeat(gap)));
+        } else {
+            lines.push(format!("{indent}{text}"));
+        }
+    }
+    lines
 }
 
 /// The Chem tab (design §6.1): each chemical on its own line with its level
@@ -1124,6 +1214,25 @@ mod tests {
 
     // Levels never leave 0 to 1 (design §4.4), but a bar mustn't crash the
     // screen if one ever did.
+    #[test]
+    fn a_scored_name_too_long_for_its_row_wraps_under_itself() {
+        let name = concept_name(&[
+            ("attended_berry_bush", true),
+            ("target_adjacent", true),
+            ("hunger", false),
+        ]);
+        let lines = scored("   ", &name, "+.40");
+        assert_eq!(
+            lines,
+            [
+                "   not attended berry bush &           +.40",
+                "     not target adjacent & hunger",
+            ],
+            "each input kept whole"
+        );
+        assert!(lines.iter().all(|l| l.chars().count() < WIDTH));
+    }
+
     #[test]
     fn a_drive_bar_is_ten_cells_whatever_the_level() {
         assert_eq!(bar(0.42), "████░░░░░░");

@@ -337,6 +337,7 @@ fn the_inspector_starts_on_the_world_tab_and_the_brackets_go_round_the_tabs() {
         app.tab()
     };
     assert_eq!(next(Action::NextTab), Tab::Body, "wrapping around");
+    assert_eq!(next(Action::NextTab), Tab::Brain);
     assert_eq!(next(Action::NextTab), Tab::Chem);
     assert_eq!(next(Action::NextTab), Tab::Genome);
     assert_eq!(next(Action::NextTab), Tab::World);
@@ -356,9 +357,9 @@ fn selecting_a_sprite_from_the_world_tab_opens_body_and_from_another_tab_stays()
     assert_eq!(app.tab(), Tab::Body, "by Tab");
     app.apply(Action::NextTab, &world);
     app.apply(Action::SelectNext, &world);
-    assert_eq!(app.tab(), Tab::Chem, "already on a sprite tab");
+    assert_eq!(app.tab(), Tab::Brain, "already on a sprite tab");
     click(&mut app, &world, 1 + 3, 2 + 4);
-    assert_eq!(app.tab(), Tab::Chem);
+    assert_eq!(app.tab(), Tab::Brain);
 }
 
 #[test]
