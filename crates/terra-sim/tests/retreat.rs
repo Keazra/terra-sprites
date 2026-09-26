@@ -23,12 +23,33 @@ fn walker(data: &DataPack) -> Genome {
     Genome::from_ron(text, data).expect("a valid genome")
 }
 
+/// A walker that feels being cornered: the `cornered` pulse raises `h0`.
+fn feeling_cornered(data: &DataPack) -> Genome {
+    let text = r#"(format: 1, genes: [
+        Trait(trait: "speed", value: 10.0),
+        Trait(trait: "sense_radius", value: 10.0),
+        Emitter(locus: Locus("cornered"), mode: Level, gain: 1.0, chem: "h0"),
+    ])"#;
+    Genome::from_ron(text, data).expect("a valid genome")
+}
+
 /// A world drawn from `rows`, with `objects`, and one walker on `sprite`
 /// retreating from what's on `from`.
 fn retreating(rows: &[&str], objects: &[(Pos, &str)], sprite: Pos, from: Pos) -> World {
+    retreating_with(rows, objects, sprite, from, walker)
+}
+
+/// `retreating`, with the sprite's genome made by `genome`.
+fn retreating_with(
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    sprite: Pos,
+    from: Pos,
+    genome: fn(&DataPack) -> Genome,
+) -> World {
     let data = builtin();
     let map = Map::from_ascii(rows, &data).expect("valid drawing");
-    let sprites = [(sprite, Some(walker(&data)))];
+    let sprites = [(sprite, Some(genome(&data)))];
     let scripted = [(sprite, ScriptedAction::Retreat { at: from })];
     let scenario = Scenario {
         map,
@@ -53,6 +74,12 @@ fn endings(events: &[Event]) -> Vec<(Verb, Outcome)> {
 /// Where the one sprite stands.
 fn where_is(world: &World) -> Pos {
     world.sprites().next().expect("a sprite").pos()
+}
+
+/// The one sprite's level of `chemical`.
+fn level(world: &World, chemical: &str) -> f32 {
+    let sprite = world.sprites().next().expect("a sprite");
+    sprite.chemical(chemical).expect("a known chemical")
 }
 
 #[test]
@@ -107,4 +134,26 @@ fn a_retreat_is_done_after_six_steps_at_the_sprite_s_own_speed() {
     let events = world.step();
     assert_eq!(endings(&events), [(Verb::Retreat, Outcome::Applied)]);
     assert_eq!(where_is(&world), at(7, 0));
+}
+
+#[test]
+fn cornered_by_the_map_alone_a_retreat_ends_at_once_and_the_sprite_feels_it() {
+    // The berry is beside it, and the map's edge is behind it.
+    let rows = ["..."];
+    let mut world = retreating_with(&rows, &[(at(1, 0), "berry")], at(0, 0), at(1, 0), feeling_cornered);
+    let events = world.step();
+    assert_eq!(endings(&events), [(Verb::Retreat, Outcome::Blocked)]);
+    assert_eq!(where_is(&world), at(0, 0));
+    assert_eq!(level(&world, "h0"), 0.0, "a pulse goes live at the next tick");
+    world.step();
+    assert_eq!(level(&world, "h0"), 1.0, "cornered");
+}
+
+#[test]
+fn a_retreat_that_steps_away_is_not_cornered() {
+    let rows = ["....."];
+    let mut world = retreating_with(&rows, &[(at(0, 0), "berry")], at(1, 0), at(0, 0), feeling_cornered);
+    world.step();
+    world.step();
+    assert_eq!(level(&world, "h0"), 0.0);
 }

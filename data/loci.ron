@@ -22,6 +22,7 @@
     (id: 38, name: "did_hit",           kind: Pulse),
     (id: 39, name: "petted",            kind: Pulse),
     (id: 40, name: "shocked",           kind: Pulse),
+    (id: 41, name: "cornered",          kind: Pulse),  // a retreat found no step away
 
     (id: 64, name: "learning_rate_mod", kind: ReceptorTarget),
     (id: 65, name: "exploration_mod",   kind: ReceptorTarget),
