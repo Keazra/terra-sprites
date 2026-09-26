@@ -138,7 +138,9 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
             };
             // A sprite is drawn over any item on its tile.
             let glyph = if let Some(sprite) = world.sprite_at(pos) {
-                let tile = if app.selection() == Some(Selection::Living(sprite.id())) {
+                let tile = if let Some(emote) = app.emote(sprite.id()) {
+                    SemanticTile::Emote(emote)
+                } else if app.selection() == Some(Selection::Living(sprite.id())) {
                     SemanticTile::SelectedSprite
                 } else {
                     SemanticTile::Sprite

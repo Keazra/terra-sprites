@@ -16,6 +16,8 @@
         selected_sprite:        (glyph: '☻', fg: white),
         // The Decision marker: where the selected sprite is heading. It flashes. CP437 has no `×`.
         decision_marker:        (glyph: 'X', fg: white),
+        // Emotes take turns with a sprite's glyph (design §6.3): hurt by something.
+        emote(hurt):            (glyph: '!', fg: red),
     },
     // Objects, by type name from the data pack's `objects.ron`, then visual
     // state. An object whose state isn't listed is drawn with its "default"

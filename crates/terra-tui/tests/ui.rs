@@ -694,15 +694,27 @@ fn the_event_log_leaves_object_and_action_events_out_and_keeps_the_latest_100() 
     assert_eq!((ticks[0], ticks[99]), (149, 50), "newest first");
 }
 
+/// Nobody hurt.
+const UNHURT: Hurt = Hurt {
+    actor: false,
+    target: false,
+};
+
+/// The actor hurt, by what it did.
+const HURT_ITSELF: Hurt = Hurt {
+    actor: true,
+    target: false,
+};
+
 /// Sprite `id` finished `verb` at `target`, of the object type `target_type`,
-/// on `tick`, with `outcome`, its attempt hurting it if `hurt_itself`.
+/// on `tick`, with `outcome`, its attempt hurting whom `hurt` says.
 fn acted(
     tick: u64,
     id: u64,
     verb: Verb,
     (target, target_type): (Target, u16),
     outcome: Outcome,
-    hurt_itself: bool,
+    hurt: Hurt,
 ) -> Event {
     let action = ActionView {
         verb,
@@ -711,10 +723,7 @@ fn acted(
         target_type: Some(target_type),
         attempted: outcome == Outcome::Applied,
         target_gone: false,
-        hurt: Hurt {
-            actor: hurt_itself,
-            target: false,
-        },
+        hurt,
         progress: Progress::Ended(outcome),
     };
     Event {
@@ -747,11 +756,11 @@ fn the_event_log_shows_every_play_and_hit_and_whatever_hurt_a_sprite() {
     };
     app.record(
         &[
-            acted(10, 4, Verb::Play, ball, Applied, false),
-            acted(11, 5, Verb::Eat, bush, Applied, false),
-            acted(12, 9, Verb::Play, sprite(2), Applied, false),
-            acted(13, 7, Verb::Hit, sprite(12), Interrupted, false),
-            acted(14, 7, Verb::Hit, sprite(12), Applied, false),
+            acted(10, 4, Verb::Play, ball, Applied, UNHURT),
+            acted(11, 5, Verb::Eat, bush, Applied, UNHURT),
+            acted(12, 9, Verb::Play, sprite(2), Applied, UNHURT),
+            acted(13, 7, Verb::Hit, sprite(12), Interrupted, UNHURT),
+            acted(14, 7, Verb::Hit, sprite(12), Applied, UNHURT),
         ],
         &world,
     );
@@ -766,9 +775,9 @@ fn the_event_log_shows_every_play_and_hit_and_whatever_hurt_a_sprite() {
     );
     app.record(
         &[
-            acted(20, 3, Verb::Eat, thorns, Applied, true),
-            acted(21, 3, Verb::Play, thorns, Applied, true),
-            acted(22, 6, Verb::Hit, ball, Applied, false),
+            acted(20, 3, Verb::Eat, thorns, Applied, HURT_ITSELF),
+            acted(21, 3, Verb::Play, thorns, Applied, HURT_ITSELF),
+            acted(22, 6, Verb::Hit, ball, Applied, UNHURT),
         ],
         &world,
     );
@@ -1683,4 +1692,64 @@ fn the_body_tab_ends_with_what_was_observed_and_how_long_ago() {
             " 1,296 ticks ago · Rested",
         ]
     );
+}
+
+#[test]
+fn a_hurt_sprite_takes_turns_with_a_red_bang_for_a_second() {
+    for theme in [Theme::cp437(), Theme::ascii()] {
+        let world = garden_with_sprites();
+        let mut app = app_for(&world, theme, 100, 30);
+        let biter = world.sprite_at(Pos { x: 2, y: 3 }).expect("a sprite");
+        let other = world.sprite_at(Pos { x: 7, y: 1 }).expect("a sprite");
+        let (biter, other) = (biter.id(), other.id());
+        let biter_cell = app.cell_of(Pos { x: 2, y: 3 }).expect("in view");
+        let other_cell = app.cell_of(Pos { x: 7, y: 1 }).expect("in view");
+        let sprite_glyph = render(&app, &world, 100, 30)[biter_cell]
+            .symbol()
+            .to_string();
+        // A thornbush bite, which hurts the biter, and a harmless kick.
+        let thorns = (Target::Object(EntityId(77)), 3);
+        let ball = (Target::Object(EntityId(40)), 4);
+        app.record(
+            &[
+                acted(1, biter.0, Verb::Eat, thorns, Outcome::Applied, HURT_ITSELF),
+                acted(1, other.0, Verb::Play, ball, Outcome::Applied, UNHURT),
+            ],
+            &world,
+        );
+        let at = |app: &App, cell| {
+            let screen = render(app, &world, 100, 30);
+            let cell = &screen[cell];
+            (cell.symbol().to_string(), cell.fg)
+        };
+        // A quarter of a second the bang, a quarter the sprite, for a second.
+        let bang = ("!".to_string(), Color::Red);
+        assert_eq!(at(&app, biter_cell), bang);
+        assert_eq!(at(&app, other_cell).0, sprite_glyph, "a kick hurts nobody");
+        app.animate(Duration::from_millis(250));
+        assert_eq!(at(&app, biter_cell).0, sprite_glyph);
+        app.animate(Duration::from_millis(250));
+        assert_eq!(at(&app, biter_cell), bang);
+        app.animate(Duration::from_millis(500));
+        assert_eq!(at(&app, biter_cell).0, sprite_glyph, "and then it's over");
+        app.animate(Duration::from_millis(250));
+        assert_eq!(at(&app, biter_cell).0, sprite_glyph);
+
+        // A hit hurts the sprite hit, not the hitter.
+        let target = Hurt {
+            actor: false,
+            target: true,
+        };
+        let hit = acted(
+            2,
+            biter.0,
+            Verb::Hit,
+            (Target::Sprite(other), 101),
+            Outcome::Applied,
+            target,
+        );
+        app.record(&[hit], &world);
+        assert_eq!(at(&app, other_cell), bang);
+        assert_eq!(at(&app, biter_cell).0, sprite_glyph);
+    }
 }

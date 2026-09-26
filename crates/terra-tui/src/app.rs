@@ -1,16 +1,16 @@
 //! The UI state (design §6.8): everything the screen shows that isn't the world.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::time::Duration;
 
 use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
-use terra_sim::{DeathCause, EntityId, Event, EventKind, Map, Pos, Target, World};
+use terra_sim::{ActionView, DeathCause, EntityId, Event, EventKind, Map, Pos, Target, World};
 
 use crate::clock::Clock;
 use crate::input::Action;
 use crate::inspector;
-use crate::theme::Theme;
+use crate::theme::{Emote, Theme};
 
 /// Whether the game carries on after an action.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -163,11 +163,21 @@ pub struct App {
     detail: bool,
     /// Real time the app has been running, for the Decision marker's flashing.
     running_for: Duration,
+    /// When, in `running_for`, each sprite hurt lately was hurt, for its
+    /// Hurt emote.
+    hurt_at: BTreeMap<EntityId, Duration>,
 }
 
 /// How long the Decision marker shows, and then doesn't: once a second in
 /// all, like a text cursor (design §6.1).
 const FLASH_HALF: Duration = Duration::from_millis(500);
+
+/// How long an emote shows, and then the sprite does: twice as fast as the
+/// Decision marker, so the two can't be confused (design §6.3).
+const EMOTE_HALF: Duration = Duration::from_millis(250);
+
+/// How long an emote lasts, in real time, whatever the speed (design §6.3).
+const EMOTE_FOR: Duration = Duration::from_secs(1);
 
 impl App {
     /// A new UI for `map`, with the cursor at the map's centre and the viewport
@@ -196,6 +206,7 @@ impl App {
             tab_scroll: 0,
             detail: false,
             running_for: Duration::ZERO,
+            hurt_at: BTreeMap::new(),
         };
         app.centre_on(cursor);
         app
@@ -213,6 +224,9 @@ impl App {
     /// reads the same.
     pub fn record(&mut self, events: &[Event], world: &World) {
         for event in events {
+            if let EventKind::ActionEnded { id, ref action, .. } = event.kind {
+                self.note_hurt(id, action);
+            }
             if let EventKind::ActionEnded { id, ref action, .. } = event.kind
                 && let Some(Selection::Living(selected)) = self.selection
             {
@@ -243,6 +257,26 @@ impl App {
             }
         }
         self.event_log.truncate(EVENT_LOG_LENGTH);
+    }
+
+    /// Starts the Hurt emote on each sprite that sprite `actor`'s `action` hurt.
+    fn note_hurt(&mut self, actor: EntityId, action: &ActionView) {
+        let target = match action.target {
+            Some(Target::Sprite(id)) if action.hurt.target => Some(id),
+            _ => None,
+        };
+        let actor = action.hurt.actor.then_some(actor);
+        for id in actor.into_iter().chain(target) {
+            self.hurt_at.insert(id, self.running_for);
+        }
+    }
+
+    /// The emote sprite `id` shows now, if any: the Hurt emote, taking
+    /// turns with the sprite for a second after it's hurt (design §6.3).
+    pub fn emote(&self, id: EntityId) -> Option<Emote> {
+        let since = self.running_for.checked_sub(*self.hurt_at.get(&id)?)?;
+        let showing = (since.as_millis() / EMOTE_HALF.as_millis()).is_multiple_of(2);
+        (since < EMOTE_FOR && showing).then_some(Emote::Hurt)
     }
 
     /// Puts `line`, finished on `tick`, on the front of the observed list.
@@ -277,6 +311,8 @@ impl App {
     /// Moves the app's real-time clock on by `elapsed`, for what flashes.
     pub fn animate(&mut self, elapsed: Duration) {
         self.running_for += elapsed;
+        let now = self.running_for;
+        self.hurt_at.retain(|_, &mut at| now - at < EMOTE_FOR);
     }
 
     /// Whether the Decision marker is in its "on" half just now.
