@@ -94,12 +94,14 @@ pub(crate) struct Movement {
     pub(crate) replan_after: u32,
 }
 
-/// How long actions last (design §5.5), in ticks.
+/// How long actions last (design §5.5).
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Actions {
-    /// How long a Rest lasts.
+    /// How long a Rest lasts, in ticks.
     pub(crate) rest_bout: u32,
+    /// How many steps a Retreat takes.
+    pub(crate) retreat_bout: u32,
     /// How long any action may last.
     pub(crate) timeout: u32,
 }
@@ -303,6 +305,9 @@ impl PhysiologyEntry {
             if ticks == 0 {
                 return Err(format!("`{name}` must be at least 1 tick"));
             }
+        }
+        if self.actions.retreat_bout == 0 {
+            return Err("`actions.retreat_bout` must be at least 1 step".into());
         }
 
         Ok(Physiology {

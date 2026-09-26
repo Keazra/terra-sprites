@@ -55,6 +55,8 @@ pub enum ScriptedAction {
     Play { at: Pos },
     /// Hit the sprite on `at`, or else the object there.
     Hit { at: Pos },
+    /// Back away from the sprite on `at`, or else the object there, or else the water.
+    Retreat { at: Pos },
 }
 
 /// How far an action has got.
@@ -130,6 +132,8 @@ pub(crate) struct Action {
     pub(crate) ticks: u32,
     /// Ticks in a row it had the points for its next step but couldn't take it.
     pub(crate) blocked_ticks: u32,
+    /// The steps a Retreat has taken.
+    pub(crate) steps: u32,
     /// The rest of the way round blocking sprites that blocked re-planning
     /// found, which the sprite keeps to while it lasts (design §3.7).
     pub(crate) committed: Option<Vec<Pos>>,
@@ -169,6 +173,7 @@ impl Action {
             started: tick,
             ticks: 0,
             blocked_ticks: 0,
+            steps: 0,
             committed: None,
             ended: None,
             scripted,
@@ -245,9 +250,12 @@ pub(crate) fn sense_and_decide(
             let action = sprite.action.as_ref().expect("an action");
             // An aimed action heads for its target's nearest goal tile as
             // things stand now (design §3.6), so it follows a target that
-            // moves; a target that's gone, or out of reach, ends it.
+            // moves; a target that's gone, or out of reach, ends it. A
+            // retreat heads for no goal tile, and getting out of reach is
+            // what it's for (design §5.5).
             let aim = action
                 .target
+                .filter(|_| action.verb != Verb::Retreat)
                 .map(|target| state.goal_for(data, flood, target));
             let there = action
                 .target
@@ -321,7 +329,8 @@ pub(crate) fn start(
     });
     let flood = sprite.flood.as_ref().expect("step 5 made the flood");
     let lost = verb == Verb::Wander && destination.is_none_or(|to| flood.cost(to).is_none());
-    if lost || (verb.is_aimed() && destination.is_none()) {
+    let homeless = verb.is_aimed() && verb != Verb::Retreat && destination.is_none();
+    if lost || homeless || (verb == Verb::Retreat && target.is_none()) {
         end(&mut action, id, Outcome::Failed, tick, events);
     } else if verb == Verb::Wander && destination == Some(sprite.pos) {
         // Already there.
@@ -385,9 +394,11 @@ pub(crate) fn resolve(
         let sprite = state.sprites.get(id).expect("a sprite taking its turn");
         // An aimed action already on a goal tile acts where it stands: it
         // has no walking to do, so it banks no points for later (design §3.7).
+        // A retreat has no goal tile.
         let arrived = sprite
             .action
             .as_ref()
+            .filter(|a| a.verb != Verb::Retreat)
             .and_then(|a| a.target)
             .is_some_and(|target| state.on_goal_tile(data, sprite.pos, target));
         let sprite = state.sprites.get_mut(id).expect("the same sprite");
@@ -415,6 +426,11 @@ pub(crate) fn resolve(
             sprite.did.rested = true;
             if action.ticks >= rest_bout {
                 end(action, id, Outcome::Applied, state.tick, events);
+            }
+        } else if action.verb == Verb::Retreat {
+            let target = action.target.expect("a retreat has a target");
+            if !moved.contains(&id) {
+                retreat(state, data, id, target, &mut moved);
             }
         } else if let Some(target) = action.target {
             let pos = sprite.pos;
@@ -468,13 +484,14 @@ fn shuffle(ids: &mut [EntityId], rng: &mut ChaCha8Rng) {
     }
 }
 
-/// Whether `sprite` is doing an action that walks.
+/// Whether `sprite` is doing an action that walks: to a destination, or
+/// away from its target.
 fn is_walking(sprite: &Sprite) -> bool {
     is_acting(sprite)
         && sprite
             .action
             .as_ref()
-            .is_some_and(|a| a.destination.is_some())
+            .is_some_and(|a| a.destination.is_some() || a.verb == Verb::Retreat)
 }
 
 /// The flood `sprite` would make from where it stands now, treating other
@@ -667,4 +684,86 @@ fn wait(state: &mut WorldState, data: &DataPack, id: EntityId, cost: u32, events
         }
         None => end(action, id, Outcome::Blocked, state.tick, events),
     }
+}
+
+/// Sprite `id`'s turn to back away from `target` (design §5.5): it steps
+/// while its points last.
+fn retreat(
+    state: &mut WorldState,
+    data: &DataPack,
+    id: EntityId,
+    target: Target,
+    moved: &mut BTreeSet<EntityId>,
+) {
+    loop {
+        let Some((there, _)) = state.whereabouts(data, target) else {
+            return;
+        };
+        let sprite = state.sprites.get(id).expect("the retreater");
+        let Some((next, cost)) = step_away(state, data, sprite.pos, there) else {
+            return;
+        };
+        let tenths = cost * 10;
+        if sprite.move_points < tenths {
+            return;
+        }
+        state.sprites.move_to(id, next);
+        moved.insert(id);
+        let sprite = state.sprites.get_mut(id).expect("the retreater");
+        sprite.move_points -= tenths;
+        sprite.did.steps += 1;
+        let action = sprite.action.as_mut().expect("a retreat");
+        action.steps += 1;
+    }
+}
+
+/// The step a sprite on `from` backs away from `there` by, and its cost in
+/// terrain units: onto the free neighbour that gains the most Chebyshev
+/// distance from `there`, and among those the one pointing most directly
+/// away, ties going by direction order (design §5.5). `None` if no free
+/// neighbour gains any.
+fn step_away(state: &WorldState, data: &DataPack, from: Pos, there: Pos) -> Option<(Pos, u32)> {
+    let now = chebyshev(from, there);
+    let away = (
+        i64::from(from.x) - i64::from(there.x),
+        i64::from(from.y) - i64::from(there.y),
+    );
+    let mut best: Option<(Pos, u32, u16, i64)> = None;
+    for dir in Dir::ALL {
+        let Some(next) = state.map.neighbour(from, dir) else {
+            continue;
+        };
+        let Some(cost) = step_cost(&state.map, &state.objects, data, from, dir) else {
+            continue;
+        };
+        let gained = chebyshev(next, there);
+        if gained <= now || state.sprites.at(next).is_some() {
+            continue;
+        }
+        let directness = directness(dir, away);
+        let better = best.is_none_or(|(_, _, g, d)| (gained, directness) > (g, d));
+        if better {
+            best = Some((next, cost, gained, directness));
+        }
+    }
+    best.map(|(next, cost, _, _)| (next, cost))
+}
+
+/// How directly a step in `dir` points along `line`: the cosine of the
+/// angle between them, squared with its sign kept, times a factor the same
+/// for every step along that line (twice the line's squared length), so it
+/// stays an exact whole number.
+fn directness(dir: Dir, line: (i64, i64)) -> i64 {
+    let (dx, dy) = dir.offset();
+    let dot = i64::from(dx) * line.0 + i64::from(dy) * line.1;
+    // A diagonal step is √2 long: dividing the square by 2 is dividing the
+    // cosine by √2.
+    let length_squared = i64::from(dx * dx + dy * dy);
+    dot * dot.abs() * 2 / length_squared
+}
+
+/// The Chebyshev distance between two tiles: the most tiles apart they are
+/// along either axis.
+fn chebyshev(a: Pos, b: Pos) -> u16 {
+    a.x.abs_diff(b.x).max(a.y.abs_diff(b.y))
 }
