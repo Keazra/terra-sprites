@@ -23,6 +23,7 @@ Decided with the owner in the design session for slice 7 ([#8](https://github.co
 | 8 | **The event log shows play and hurt.** A line for every Play and Hit that applied, and for any action in which a sprite was hurt: "Sprite #4 kicked a ball", "Sprite #7 hit Sprite #12", "Sprite #3 tried to eat a thornbush and got hurt". This reverses part of v10's change 10, which kept every action out. | Owner decision | §6.1 |
 | 9 | **The Body tab says "kicked"** for a Play that pushes, worked out from the rule, not the object's name, and **"got hurt"** for being hurt by anything, since the data names things and the code keeps no list of words like "pricked". Its observed list also shows what others did to the sprite: "Was hit by Sprite #7", "Sprite #9 played with it". | Owner decision | §6.1 |
 | 10 | **Being hurt shows on the map as the Hurt emote,** a red `!`, built in 7a ahead of the other emotes (slice 14). Only being hurt by something sets it off: a thornbush, a sprite's hit, the hand's Correct. Starvation, dehydration and old age don't, or a starving sprite would flash non-stop. | Owner request | §6.3 |
+| 11 | **The play instincts stay general,** aimed at whatever the sprite attends to, knowing it will play with thornbushes. Sprites are blank slates that should learn what's good or bad, and later teach it; "balls are for play" is theirs to earn. Until learning arrives (slice 8), thorn play is a trap: it never eases boredom, and a 30,000-tick soak lost 6 of 30 sprites to it. Slice 8 must show learning breaks it ([#9](https://github.com/Keazra/terra-sprites/issues/9)); weaker instincts, or play tied to its target, are the fallbacks. | Owner decision, after a soak run | §5.8 |
 
 ---
 
@@ -1180,6 +1181,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 | Crowdedness | → Sprite | crowdedness → Retreat; **`crowdedness & Sprite → Hit` (0.2)** | Sprites sometimes hit their neighbours. Correct training should reduce this. |
 | Nothing pressing | — | `always` → Wander (mild) | |
 
+- **Play is general too,** like hunger → Eat: boredom and loneliness lead to playing with whatever is attended, a thornbush included. It's a second mistake for learning to correct, and a harsher one than thorn-eating, since thorn play never relieves the drive that chose it. Slice 8 must show learning breaks the loop before the thorns kill (v12 change 11).
 - **A content sprite wanders.** The `always → Wander` instinct is a mild habit that any grown need outweighs. Without it, a sprite with nothing pressing would pick at random among its available verbs, and half the time walk up to a bush for a bite it doesn't need.
 - **The genome grows with the brain.** Each instinct joins the starter genome in the slice that makes its verb available (§5.5): hunger, thirst, tiredness and the Wander habit in slice 6; boredom and loneliness (attention to balls and sprites, play, going over) in slice 7a; pain and crowdedness, with Retreat, in slice 7c. The Thornbush mistake ships in slice 6, before learning (slice 8) can correct it.
 
