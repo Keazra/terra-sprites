@@ -756,6 +756,8 @@ impl World {
 mod tests {
     use super::*;
     use crate::action::Outcome;
+    use crate::map::Dir;
+    use crate::objects::Roll;
     use crate::registry::Verb;
 
     /// A 7×5 field of grass, with a pool of shallow water at (5, 3), and a
@@ -785,6 +787,36 @@ mod tests {
         let mut world = field_with_a_bush();
         world.state.next_id = 1;
         world.step();
+    }
+
+    /// Sets the object on `pos` rolling east with `left` tiles to go.
+    fn set_rolling(world: &mut World, pos: Pos, left: u16) {
+        let id = world.state.objects.at(pos).expect("an object there");
+        let roll = Roll { dir: Dir::E, left };
+        world.state.objects.get_mut(id).expect("the object").roll = Some(roll);
+    }
+
+    #[test]
+    fn a_rolling_item_with_tiles_to_go_passes_the_invariant_checks() {
+        let mut world = field_with_a_bush();
+        force_place(&mut world, "ball", Pos { x: 4, y: 1 });
+        set_rolling(&mut world, Pos { x: 4, y: 1 }, 3);
+        assert_eq!(world.check_invariants(), Ok(()));
+    }
+
+    #[test]
+    fn a_rolling_solid_object_breaks_an_invariant() {
+        let mut world = field_with_a_bush();
+        set_rolling(&mut world, Pos { x: 2, y: 2 }, 3);
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_roll_with_no_tiles_to_go_breaks_an_invariant() {
+        let mut world = field_with_a_bush();
+        force_place(&mut world, "ball", Pos { x: 4, y: 1 });
+        set_rolling(&mut world, Pos { x: 4, y: 1 }, 0);
+        assert!(world.check_invariants().is_err());
     }
 
     #[test]

@@ -166,7 +166,8 @@ impl Objects {
     }
 
     /// Checks that every object stands where the rules allow, alone on its
-    /// tile, with its stage and counters in range; describes the first problem.
+    /// tile, with its stage and counters in range, and rolls only if it's an
+    /// item with tiles to go; describes the first problem.
     pub(crate) fn check(&self, map: &Map, data: &DataPack) -> Result<(), String> {
         let indexed = self.on_tile.count();
         if indexed != self.by_id.len() {
@@ -196,6 +197,10 @@ impl Objects {
                     .any(|(&value, counter)| value > counter.max)
             {
                 "has a counter out of range"
+            } else if object.roll.is_some() && object_type.solid {
+                "is solid, yet rolling"
+            } else if object.roll.is_some_and(|roll| roll.left == 0) {
+                "is rolling with no tiles to go"
             } else {
                 continue;
             };
