@@ -95,6 +95,8 @@
         Instinct(inputs: [("boredom", false)], verb: Play, weight: 1.0),
         Instinct(inputs: [("loneliness", false)], verb: Approach, weight: 0.8),
         Instinct(inputs: [("loneliness", false)], verb: Play, weight: 0.8),
+        // Pain leads to backing away from whatever the sprite attends to.
+        Instinct(inputs: [("pain", false)], verb: Retreat, weight: 1.0),
         // A mild habit of wandering, which any drive that has grown outweighs.
         Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3),
     ],
