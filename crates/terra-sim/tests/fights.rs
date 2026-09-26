@@ -190,3 +190,41 @@ fn a_hit_sprite_mostly_backs_away_from_its_attacker_and_sometimes_hits_back() {
         "backed away {backed_away}, hit back {hit_back}, of 40"
     );
 }
+
+#[test]
+fn a_crowded_sprite_mostly_backs_away_and_sometimes_hits_a_neighbour() {
+    let me = at(3, 3);
+    let neighbours = [at(2, 2), at(4, 2), at(2, 4), at(4, 4)];
+    let (mut backed_away, mut hit) = (0, 0);
+    for seed in 0..100 {
+        let data = builtin();
+        let text = STARTER.replace(
+            "    ],
+)",
+            "        InitialConcentration(chem: \"crowdedness\", value: 0.6),
+    ],
+)",
+        );
+        let crowded = Genome::from_ron(&text, &data).expect("a valid genome");
+        let mut sprites = vec![(me, Some(crowded))];
+        sprites.extend(neighbours.map(|pos| (pos, Some(walker(&data)))));
+        let script = neighbours.map(|pos| (pos, ScriptedAction::Rest));
+        let scenario = Scenario {
+            map: Map::from_ascii(&["........"; 8], &data).expect("valid drawing"),
+            objects: &[],
+            sprites: &sprites,
+            scripted: &script,
+        };
+        let mut world = World::from_scenario(scenario, data, seed).expect("a valid scenario");
+        let id = id_at(&world, me);
+        match next_choice(&mut world, id, 1) {
+            Some((Verb::Retreat, Some(Target::Sprite(_)))) => backed_away += 1,
+            Some((Verb::Hit, Some(Target::Sprite(_)))) => hit += 1,
+            _ => {}
+        }
+    }
+    assert!(
+        backed_away > 5 * hit && hit >= 3,
+        "backed away {backed_away}, hit {hit}, of 100"
+    );
+}

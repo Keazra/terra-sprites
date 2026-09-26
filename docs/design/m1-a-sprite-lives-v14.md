@@ -21,7 +21,7 @@ Decided with the owner in the design session for slice 7c ([#8](https://github.c
 | 6 | **A cornered sprite fights:** a new instinct makes `cornered & attended sprite` lead to Hit, strongly. So a sprite backed against a lake by a bully turns on it, while one cornered by a thornbush just chooses again. | Owner request | §5.8 |
 | 7 | **`cornered` is brain input 64.** State inputs 1–35 were all taken; IDs 36–63 are kept for Target inputs (36–43 used), so State inputs carry on from 64. | Slice 7c design session | §5.2, Appendix A |
 | 8 | **A pulse's source is the latest.** Every `Signal(Target, …)` records the actor as the pulse's source; if two land on one sprite in a tick, the one resolved last counts. The source is world state, hashed and saved with the pulse. | Slice 7c design session | §3.5.2, §4.2 |
-| 9 | **Crowding's instincts arrive with Retreat,** as v12 planned: crowdedness draws attention to sprites and leads to Retreat, and the deliberate mistake `crowdedness & attended sprite → Hit` (0.2). Pain leads to Retreat. | v12 plan | §5.8 |
+| 9 | **Crowding's instincts arrive with Retreat,** as v12 planned: crowdedness draws attention to sprites and leads to Retreat, and the deliberate mistake `crowdedness & attended sprite → Hit`, raised from 0.2 to 0.6 so it shows: about one crowded choice in ten is a hit. At 0.2 a crowded sprite hit about 1 time in 25 when mildly crowded and practically never when packed, no more than any other slip. Pain leads to Retreat. | v12 plan; the weight by owner decision, after measuring | §5.8 |
 | 10 | **Retreat's words.** The Body tab reads `Backing away from Sprite #7 · 4 steps to go`, then `Backed away from Sprite #7`; cornered, `Backed into a corner`. The observed list reads "Backed away from Sprite #7", or "…, but was cornered". A retreat gets no event log line: it does nothing to anyone. | Owner decision | §6.1 |
 | 11 | **A retreat carries on out of reach.** 5.0 ends an aimed action whose target has become unreachable, but getting out of reach is what a retreat is for: it ends only when its bout is done, it's cornered, its target is gone, or at the timeout. | Slice 7c, agreed with the owner before building | §5.5 |
 
@@ -1226,7 +1226,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 | Loneliness | → Sprite | loneliness → Approach, Play | |
 | Pain | — | pain → Retreat | |
 | Being hit | `was_hit` → Sprite (the attacker, §3.6) | `was_hit & attended sprite` → Hit (0.56) | |
-| Crowdedness | → Sprite | crowdedness → Retreat; **`crowdedness & attended sprite → Hit` (0.2)** | Sprites sometimes hit their neighbours. Correct training should reduce this. |
+| Crowdedness | → Sprite | crowdedness → Retreat; **`crowdedness & attended sprite → Hit` (0.6)** | Sprites sometimes hit their neighbours: about one crowded choice in ten, fewer when packed tight, since Retreat grows with crowding as fast. Correct training should reduce this. |
 | Cornered | — | `cornered & attended sprite` → Hit (1.0) | |
 | Nothing pressing | — | `always` → Wander (mild) | |
 
