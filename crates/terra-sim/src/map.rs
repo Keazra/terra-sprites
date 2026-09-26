@@ -11,7 +11,7 @@ pub struct Pos {
 }
 
 /// One of the eight step directions. North is up the screen.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub enum Dir {
     N,
     NE,

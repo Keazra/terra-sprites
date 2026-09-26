@@ -210,6 +210,8 @@ fn start_scripted(state: &mut WorldState, data: &DataPack, id: EntityId, events:
                 .or_else(|| state.water_target(data, at));
             (Verb::Approach, None, target)
         }
+        ScriptedAction::Play { at } => (Verb::Play, None, state.contact_target(at)),
+        ScriptedAction::Hit { at } => (Verb::Hit, None, state.contact_target(at)),
     };
     let flood = state
         .sprites

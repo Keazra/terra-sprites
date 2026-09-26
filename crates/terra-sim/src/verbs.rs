@@ -9,6 +9,7 @@ use crate::object_types::{Effect, Party};
 use crate::objects::EntityId;
 use crate::perception::Target;
 use crate::registry::Verb;
+use crate::rolling;
 use crate::world::WorldState;
 
 /// Sprite `actor` applies `verb` to `target`, once: `failed` if the target's
@@ -59,7 +60,12 @@ pub(crate) fn attempt(
                         .incoming[index] = 1.0;
                 }
             }
-            Effect::Push(_) => unreachable!("Hit and Play, the verbs that push, arrive in slice 7"),
+            Effect::Push(tiles) => {
+                let Target::Object(id) = target else {
+                    unreachable!("a pseudo type's verb table only injects and signals");
+                };
+                rolling::push(state, actor, id, tiles);
+            }
             Effect::AddCounter(..)
             | Effect::SpawnNearby(..)
             | Effect::SpreadTo(..)

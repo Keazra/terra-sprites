@@ -24,6 +24,7 @@ mod physics;
 mod physiology;
 mod random;
 mod regions;
+mod rolling;
 mod registry;
 mod sprites;
 mod terrain;

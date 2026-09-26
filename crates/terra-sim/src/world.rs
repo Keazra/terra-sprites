@@ -21,6 +21,7 @@ use crate::objects::{EntityId, Object, Objects};
 use crate::perception::{Flood, Target, goal_tiles};
 use crate::regions::Regions;
 use crate::registry::{Category, ChemicalKind};
+use crate::rolling;
 use crate::sprites::{Sprite, Sprites};
 use crate::variation::varied;
 
@@ -106,6 +107,12 @@ impl WorldState {
             .contains(pos)
             .then(|| self.sprites.at(pos))?
             .map(Target::Sprite)
+    }
+
+    /// The sprite on `pos`, or else the object there, as a target for a
+    /// verb of contact, Play or Hit.
+    pub(crate) fn contact_target(&self, pos: Pos) -> Option<Target> {
+        self.sprite_target(pos).or_else(|| self.object_target(pos))
     }
 
     /// Where `target` is, and whether a sprite may act on it from its own
@@ -633,9 +640,10 @@ impl World {
     /// Step 1: apply the commands stamped for this tick.
     fn apply_commands(&mut self) {}
 
-    /// Step 2: objects run their lifecycle rules.
+    /// Step 2: objects run their lifecycle rules, then rolling items roll.
     fn run_environment(&mut self, events: &mut Vec<Event>) {
         ecology::run(&mut self.state, &self.data, events);
+        rolling::run(&mut self.state, &self.data);
     }
 
     /// Step 3: every sprite's chemistry (design §4.4), then death check #1.

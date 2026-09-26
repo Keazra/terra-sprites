@@ -51,6 +51,10 @@ pub enum ScriptedAction {
     Drink { at: Pos },
     /// Approach the sprite on `at`, or else the object there, or else the water.
     Approach { at: Pos },
+    /// Play with the sprite on `at`, or else the object there.
+    Play { at: Pos },
+    /// Hit the sprite on `at`, or else the object there.
+    Hit { at: Pos },
 }
 
 /// How far an action has got.
