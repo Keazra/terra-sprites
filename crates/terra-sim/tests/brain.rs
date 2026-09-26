@@ -317,3 +317,43 @@ fn explain_gives_attention_scores_and_the_concepts_behind_the_verb() {
     let total: f32 = concepts.iter().map(|(_, amount)| amount).sum();
     assert!((score - total).abs() < 1e-6, "{score} is the sum, {total}");
 }
+
+#[test]
+fn attention_is_on_one_thing_the_map_can_show() {
+    let data = builtin();
+    let hungry = starter_with(
+        &[r#"InitialConcentration(chem: "hunger", value: 0.9)"#],
+        &data,
+    );
+    let bush = at(8, 3);
+    let mut first = world(&FIELD, &[(bush, "berry_bush")], at(1, 3), hungry, 1);
+    let id = first.sprites().next().expect("the sprite").id();
+    assert_eq!(first.sprite(id).expect("the sprite").attending_to(), None);
+    first.step();
+    assert_eq!(
+        first.sprite(id).expect("the sprite").attending_to(),
+        Some(bush),
+        "the bush, the only thing in reach"
+    );
+
+    // Water is many tiles, but attention is on one of them: the nearest.
+    let rows = [
+        "...........",
+        "...........",
+        "........~~.",
+        "........~~.",
+        "...........",
+    ];
+    let thirsty = starter_with(
+        &[r#"InitialConcentration(chem: "thirst", value: 0.9)"#],
+        &data,
+    );
+    let mut second = world(&rows, &[], at(1, 3), thirsty, 1);
+    let id = second.sprites().next().expect("the sprite").id();
+    second.step();
+    let spot = second.sprite(id).expect("the sprite").attending_to();
+    assert!(
+        matches!(spot, Some(Pos { x: 8, y: 2..=3 })),
+        "a nearest water tile: {spot:?}"
+    );
+}

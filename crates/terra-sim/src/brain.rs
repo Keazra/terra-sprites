@@ -11,6 +11,7 @@ use crate::brain_io::Source;
 use crate::data::DataPack;
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, LocusRef};
+use crate::perception::Target;
 use crate::random::unit;
 use crate::registry::{BrainParam, Category, Verb};
 
@@ -134,6 +135,9 @@ pub(crate) struct Snapshot {
     /// Each candidate category's attention score.
     pub(crate) attention: BTreeMap<Category, f32>,
     pub(crate) attended: Option<Category>,
+    /// The one thing attention is on: a running action's target, or else the
+    /// attended category's candidate.
+    pub(crate) target: Option<Target>,
     /// Each verb's score, in `VERBS` order.
     pub(crate) scores: [f32; VERBS.len()],
     /// The verb it's doing, if any.

@@ -256,6 +256,16 @@ impl<'a> SpriteView<'a> {
         self.sprite.brain.explain(&self.world.data)
     }
 
+    /// The tile of the one thing its attention was on at the latest step 5
+    /// (design §5.3): an object's tile, a water tile, or where a sprite it
+    /// attends to is now. `None` before its first decision, with nothing in
+    /// reach, or once that thing is gone.
+    pub fn attending_to(&self) -> Option<Pos> {
+        let target = self.sprite.brain.snapshot.as_ref()?.target?;
+        let (pos, _) = self.world.state.whereabouts(&self.world.data, target)?;
+        Some(pos)
+    }
+
     /// The traits its body has: its genes', clamped to physiology's ranges.
     pub fn traits(&self) -> Traits {
         self.sprite.program.traits

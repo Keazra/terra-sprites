@@ -143,11 +143,20 @@ pub(crate) fn decide(
         Some(verb) => brain.switch(verb, &scores, &offered),
         None => Some(brain.choose(&scores, &offered, exploration, rng)),
     };
+    // A new action is aimed at the candidate; a running one keeps its target.
+    let running_target = sprite
+        .action
+        .as_ref()
+        .filter(|_| running && chosen.is_none());
+    let target = running_target
+        .and_then(|a| a.target)
+        .or(candidate.map(|c| c.target));
     brain.snapshot = Some(Snapshot {
         inputs,
         activations,
         attention,
         attended,
+        target,
         scores,
         verb: chosen.or(current),
     });
