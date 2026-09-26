@@ -505,11 +505,14 @@ fn concept_name(inputs: &[(&str, bool)]) -> String {
 /// indented two columns past `head`.
 fn scored(head: &str, name: &str, number: &str) -> Vec<String> {
     let right = WIDTH - 1;
+    // The first row leaves room for the number and a space before it; the
+    // rest only for their indent.
     let room = right - head.chars().count() - number.chars().count() - 1;
+    let later_room = right - head.chars().count() - 2;
     let mut rows: Vec<String> = Vec::new();
     let mut row = String::new();
     for word in name.split(' ') {
-        let limit = if rows.is_empty() { room } else { room - 2 };
+        let limit = if rows.is_empty() { room } else { later_room };
         if !row.is_empty() && row.chars().count() + 1 + word.chars().count() > limit {
             rows.push(std::mem::take(&mut row));
         }
@@ -1225,6 +1228,24 @@ mod tests {
             "each input kept whole"
         );
         assert!(lines.iter().all(|l| l.chars().count() < WIDTH));
+    }
+
+    #[test]
+    fn a_wrapped_line_has_the_room_the_number_leaves_on_the_first() {
+        let name = concept_name(&[
+            ("attended_berry_bush", true),
+            ("attended_thornbush", true),
+            ("tiredness", false),
+        ]);
+        // The second row is 34 columns, which only fits because no number
+        // follows it.
+        assert_eq!(
+            scored("   ", &name, "+.40"),
+            [
+                "   not attended berry bush &           +.40",
+                "     not attended thornbush & tiredness",
+            ]
+        );
     }
 
     // Levels never leave 0 to 1 (design §4.4), but a bar mustn't crash the
