@@ -47,15 +47,29 @@ fn retreating_with(
     from: Pos,
     genome: fn(&DataPack) -> Genome,
 ) -> World {
+    let script = [(sprite, ScriptedAction::Retreat { at: from })];
+    scene(rows, objects, &[(sprite, genome)], &script)
+}
+
+/// A world drawn from `rows`, with `objects`, and `sprites` with genomes
+/// made as given, each starting on the scripted actions given for its tile.
+fn scene(
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    sprites: &[(Pos, fn(&DataPack) -> Genome)],
+    scripted: &[(Pos, ScriptedAction)],
+) -> World {
     let data = builtin();
     let map = Map::from_ascii(rows, &data).expect("valid drawing");
-    let sprites = [(sprite, Some(genome(&data)))];
-    let scripted = [(sprite, ScriptedAction::Retreat { at: from })];
+    let sprites: Vec<(Pos, Option<Genome>)> = sprites
+        .iter()
+        .map(|&(pos, genome)| (pos, Some(genome(&data))))
+        .collect();
     let scenario = Scenario {
         map,
         objects,
         sprites: &sprites,
-        scripted: &scripted,
+        scripted,
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }
@@ -71,15 +85,26 @@ fn endings(events: &[Event]) -> Vec<(Verb, Outcome)> {
         .collect()
 }
 
-/// Where the one sprite stands.
+/// Where the one sprite stands, or the first placed, if there are more.
 fn where_is(world: &World) -> Pos {
     world.sprites().next().expect("a sprite").pos()
 }
 
-/// The one sprite's level of `chemical`.
+/// The first sprite placed's level of `chemical`.
 fn level(world: &World, chemical: &str) -> f32 {
     let sprite = world.sprites().next().expect("a sprite");
     sprite.chemical(chemical).expect("a known chemical")
+}
+
+/// The `ActionEnded` events of the first sprite placed.
+fn first_endings(world: &World, events: &[Event]) -> Vec<(Verb, Outcome)> {
+    let first = world.sprites().next().expect("a sprite").id();
+    let own: Vec<Event> = events
+        .iter()
+        .filter(|e| matches!(e.kind, EventKind::ActionEnded { id, .. } if id == first))
+        .cloned()
+        .collect();
+    endings(&own)
 }
 
 #[test]
@@ -156,4 +181,49 @@ fn a_retreat_that_steps_away_is_not_cornered() {
     world.step();
     world.step();
     assert_eq!(level(&world, "h0"), 0.0);
+}
+
+#[test]
+fn held_up_by_a_sprite_a_retreat_waits_then_is_cornered_after_three_ticks() {
+    // The only step away is onto a sprite resting there.
+    let (me, other) = (at(1, 0), at(2, 0));
+    let script = [
+        (me, ScriptedAction::Retreat { at: at(0, 0) }),
+        (other, ScriptedAction::Rest),
+    ];
+    let mut world = scene(
+        &["...."],
+        &[(at(0, 0), "berry")],
+        &[(me, feeling_cornered), (other, walker)],
+        &script,
+    );
+    for tick in 1..3 {
+        let events = world.step();
+        assert_eq!(first_endings(&world, &events), [], "waiting at tick {tick}");
+    }
+    let events = world.step();
+    assert_eq!(first_endings(&world, &events), [(Verb::Retreat, Outcome::Blocked)]);
+    assert_eq!(where_is(&world), me);
+    world.step();
+    assert_eq!(level(&world, "h0"), 1.0, "cornered");
+}
+
+#[test]
+fn a_retreat_held_up_by_a_sprite_goes_on_once_it_moves_off() {
+    let (me, other) = (at(1, 0), at(2, 0));
+    let script = [
+        (me, ScriptedAction::Retreat { at: at(0, 0) }),
+        (other, ScriptedAction::Wander { destination: at(5, 0) }),
+    ];
+    let mut world = scene(
+        &["......"],
+        &[(at(0, 0), "berry")],
+        &[(me, feeling_cornered), (other, walker)],
+        &script,
+    );
+    world.step();
+    world.step();
+    assert!(where_is(&world).x >= 2, "it followed the other sprite out");
+    world.step();
+    assert_eq!(level(&world, "h0"), 0.0, "never cornered");
 }
