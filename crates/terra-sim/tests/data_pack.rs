@@ -793,6 +793,7 @@ fn an_object_type_with_objects_needs_a_size_and_a_hardness() {
     // What a rolling item does to what it meets depends on both (design §3.5.4).
     assert_invalid_objects(&[&pebble("hardness: 0.5")], &["pebble", "size"]);
     assert_invalid_objects(&[&pebble("size: Small")], &["pebble", "hardness"]);
+    assert_invalid_objects(&[&pebble("")], &["pebble", "size", "hardness"]);
     let text = format!("[{}]", pebble("size: Small, hardness: 0.5"));
     assert!(builtin_with("objects.ron", &text).is_ok());
 }
