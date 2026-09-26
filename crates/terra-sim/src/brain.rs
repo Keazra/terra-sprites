@@ -28,18 +28,6 @@ pub(crate) const VERBS: [Verb; 8] = [
     Verb::Wander,
 ];
 
-/// The verbs on offer (design §5.5): Retreat is masked, as if nothing
-/// offered it, until slice 7c.
-const OFFERED: [Verb; 7] = [
-    Verb::Approach,
-    Verb::Eat,
-    Verb::Drink,
-    Verb::Hit,
-    Verb::Play,
-    Verb::Rest,
-    Verb::Wander,
-];
-
 /// Where `verb` is in `VERBS`.
 fn column(verb: Verb) -> usize {
     VERBS
@@ -411,15 +399,14 @@ impl Brain {
 }
 
 /// The verbs a sprite may choose (design §5.2): Rest and Wander always;
-/// with a target, Approach, and the interactions `table` has, where `table`
-/// is its type's verb table. Retreat is masked until slice 7c.
+/// with a target, Approach and Retreat, and the interactions `table` has,
+/// where `table` is its type's verb table.
 pub(crate) fn available(target: Option<&[Verb]>) -> Vec<Verb> {
     VERBS
         .into_iter()
-        .filter(|verb| OFFERED.contains(verb))
         .filter(|&verb| match verb {
             Verb::Rest | Verb::Wander => true,
-            Verb::Approach => target.is_some(),
+            Verb::Approach | Verb::Retreat => target.is_some(),
             verb => target.is_some_and(|table| table.contains(&verb)),
         })
         .collect()
@@ -594,16 +581,19 @@ mod tests {
             [Rest, Wander],
             "no target: targetless only"
         );
-        // Retreat, like Approach, needs only a target, but waits for slice 7c.
-        assert_eq!(available(Some(&[])), [Approach, Rest, Wander]);
+        // Retreat, like Approach, needs only a target.
+        assert_eq!(available(Some(&[])), [Approach, Retreat, Rest, Wander]);
         assert_eq!(
             available(Some(&[Eat, Hit])),
-            [Approach, Eat, Hit, Rest, Wander]
+            [Approach, Eat, Hit, Retreat, Rest, Wander]
         );
-        assert_eq!(available(Some(&[Drink])), [Approach, Drink, Rest, Wander]);
+        assert_eq!(
+            available(Some(&[Drink])),
+            [Approach, Drink, Retreat, Rest, Wander]
+        );
         assert_eq!(
             available(Some(&[Hit, Play])),
-            [Approach, Hit, Play, Rest, Wander]
+            [Approach, Hit, Play, Retreat, Rest, Wander]
         );
     }
 
