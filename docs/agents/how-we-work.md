@@ -34,7 +34,7 @@ Each slice is a GitHub issue ("Slice N: …") in the M1 milestone, worked as in 
 4. Build red-green with `tdd`, one behaviour at a time, committing as it goes.
 5. Run `two-axis-review` against `main` (Standards and Spec, in parallel sub-agents). Fix every finding that holds up, and give reasons for the ones declined.
 6. Open the PR ("Closes #N"), with the checks in `AGENTS.md` passing.
-7. Answer outside reviews (below), then merge when the owner says so: a merge commit, then delete the branch and pull `main`.
+7. Answer outside reviews (below), then merge when the owner says so: a merge commit, not a squash, then delete the branch and pull `main`. PR descriptions and review replies cite the slice's commits by hash, and a squash would drop them from `main`'s history.
 
 A slice too big for one PR ships as two ("4a", "4b"); only the last PR's description says "Closes #N".
 
