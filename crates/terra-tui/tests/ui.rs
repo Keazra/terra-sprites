@@ -905,7 +905,7 @@ fn the_body_tab_starts_with_what_the_sprite_is_doing_in_plain_words() {
 }
 
 #[test]
-fn where_the_selected_sprite_is_heading_flashes_an_inverted_x_whatever_the_detail_view() {
+fn the_decision_marker_flashes_an_x_where_the_selected_sprite_is_heading() {
     let destination = Pos { x: 7, y: 3 };
     let wander = ScriptedAction::Wander { destination };
     let (world, mut app) = one_sprite_doing(SPEED_10, &[wander], 1);
@@ -913,14 +913,19 @@ fn where_the_selected_sprite_is_heading_flashes_an_inverted_x_whatever_the_detai
     let screen = render(&app, &world, 100, 30);
     assert_eq!(screen[cell].symbol(), "X", "without the detail view");
     assert_eq!(screen[cell].fg, Color::White);
-    assert!(screen[cell].modifier.contains(Modifier::REVERSED));
+    assert!(
+        !screen[cell].modifier.contains(Modifier::REVERSED),
+        "a plain X"
+    );
 
-    // It flashes about twice a second, in real time: the tile, then the X.
-    app.animate(Duration::from_millis(250));
+    // Like a text cursor, in real time: half a second the X, half the tile.
+    app.animate(Duration::from_millis(400));
+    assert_eq!(render(&app, &world, 100, 30)[cell].symbol(), "X");
+    app.animate(Duration::from_millis(100));
     let screen = render(&app, &world, 100, 30);
     assert_eq!(screen[cell].symbol(), ".");
-    assert!(!screen[cell].modifier.contains(Modifier::REVERSED));
-    app.animate(Duration::from_millis(250));
+    assert_eq!(screen[cell].fg, Color::Green, "the grass as it is");
+    app.animate(Duration::from_millis(500));
     assert_eq!(render(&app, &world, 100, 30)[cell].symbol(), "X");
 
     // `v` only changes the action line.
@@ -977,7 +982,7 @@ fn the_brain_tab_shows_attention_scores_and_what_adds_most_to_the_decision() {
 }
 
 #[test]
-fn the_map_marks_the_one_thing_the_selected_sprite_attends_to() {
+fn the_attention_marker_shades_the_one_thing_the_selected_sprite_attends_to() {
     // Away from the cursor, which starts on the map's centre, (5, 2).
     let (berry, bush) = (Pos { x: 0, y: 1 }, Pos { x: 8, y: 4 });
     let objects = [(bush, "berry_bush"), (berry, "berry")];

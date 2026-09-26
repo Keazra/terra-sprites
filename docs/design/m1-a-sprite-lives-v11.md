@@ -20,8 +20,8 @@ Decided while building the Brain tab, slice 6b ([#7](https://github.com/Keazra/t
 | 5 | **Before its first decision** the Brain tab reads "Nothing decided yet", as it does while a hand-made world's sprite works through its scripted actions, which come before the brain's; with nothing in reach, attention reads "nothing in sight". | Slice 6b | §6.1 |
 | 6 | **The inspector's title shows the sprite by its ID alone** (`#530`), since "Sprite #530" and five tabs don't fit 46 columns. That's the existing rule: the label is shortened, never the tabs. | Slice 6b | §6.1 |
 | 7 | **The front end reads the explanation through `SpriteView::explain`.** Its attention scores and concepts come from the snapshot step 5 keeps. | Slice 6b | §5.9 |
-| 8 | **The map always shows where the selected sprite is heading,** not only in the detail view, and the `X` flashes: about twice a second, in real time, it alternates between the tile as it is and an `X` in reverse video. `v` now only switches the action line to its exact form. | Owner request, reviewing 6b | §6.1, §6.2, §6.5 |
-| 9 | **The map marks what the selected sprite attends to:** the one thing, never every tile of its kind (the nearest water tile, not the lake), with a steady dark grey background, so it can't be mistaken for the flashing `X`. While an aimed action runs, that's its target; otherwise it's the attended category's candidate, which can move from tile to tile as the sprite walks. The step 5 snapshot keeps that target, and `SpriteView::attending_to` gives its tile. | Owner request, reviewing 6b | §5.3, §6.1, §6.2 |
+| 8 | **The Decision marker:** the map always shows where the selected sprite is heading, not only in the detail view, as a plain `X` that flashes like a text cursor, in real time: half a second the `X`, half a second the tile as it is. `v` now only switches the action line to its exact form. | Owner requests, reviewing 6b | §6.1, §6.2, §6.5 |
+| 9 | **The Attention marker:** the map shades what the selected sprite attends to: the one thing, never every tile of its kind (the nearest water tile, not the lake), with a steady dark grey background, so it can't be mistaken for the flashing Decision marker. While an aimed action runs, that's its target; otherwise it's the attended category's candidate, which can move from tile to tile as the sprite walks. The step 5 snapshot keeps that target, and `SpriteView::attending_to` gives its tile. | Owner request, reviewing 6b | §5.3, §6.1, §6.2 |
 
 ---
 
@@ -1247,8 +1247,8 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
   - It starts afresh when another sprite is selected (reselecting the same one keeps it), and reads "nothing yet" until something finishes.
 - **The detail view** (`v`, in every build) shows the exact workings behind what the screen describes in words: it switches the action line to the exact verb, destination and outcome. It stays on until `v` is pressed again, whatever is selected.
 - **Map marks for the selected sprite,** always shown:
-  - **Where it's heading** flashes, about twice a second in real time, between the tile as it is and an `X` in reverse video, while the action is under way: a Wander's destination, or the goal tile an Eat, Drink or Approach is walking to. A sprite standing on the destination is drawn over the mark.
-  - **What it attends to** has a steady dark grey background: the one thing attention is on (§5.3), never every tile of its kind. While an aimed action runs, that's its target; otherwise the attended category's candidate, which can move from tile to tile as the sprite walks.
+  - **The Decision marker,** where it's heading, flashes like a text cursor, in real time: half a second a plain `X`, half a second the tile as it is, while the action is under way: a Wander's destination, or the goal tile an Eat, Drink or Approach is walking to. A sprite standing on the destination is drawn over the mark.
+  - **The Attention marker,** what it attends to, is a steady dark grey background: the one thing attention is on (§5.3), never every tile of its kind. While an aimed action runs, that's its target; otherwise the attended category's candidate, which can move from tile to tile as the sprite walks.
 - **The inspector and the selection:**
   - The Body, Brain, Chem and Genome tabs show the selected sprite. With none selected, they read "No sprite selected: click one, or press Tab".
   - Selecting a sprite while the World tab is open switches to Body. From any other tab, the tab stays.
@@ -1285,8 +1285,8 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 | Cursor arrows | `↓ ↑ → ←` | `v ^ > <` | the cursor mode's colour |
 | Mode marks: Select / Hand / Reward / Correct | `♦` `∩` `♥` `‼` | `S` `H` `R` `C` | the mode's colour |
 | Status marks: idle / lift / drop / empty hand / sent / applied / rejected | `·` `↑` `↓` `░` `+` `☼` `?` | `-` `^` `v` `_` `+` `*` `?` | the mode's colour |
-| Destination marker (flashes) | `X` in reverse video | `X` in reverse video | white |
-| Attention mark | the tile's own glyph | the tile's own glyph | dark grey background |
+| Decision marker (flashes) | `X` | `X` | white |
+| Attention marker | the tile's own glyph | the tile's own glyph | dark grey background |
 
 - Every **kind** of thing on the map has a unique glyph. Colour is used only for **state**, and the status line always names what's under the cursor. The cursor's arrows and marks are UI drawn over the map, and may share glyphs with each other (lift and drop are arrows).
 - **`--ascii` swaps only what themes cover:** the map's glyphs, the cursor and the emotes. Frames and text stay CP437 in every theme.

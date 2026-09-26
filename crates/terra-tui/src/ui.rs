@@ -145,7 +145,7 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
                 };
                 app.theme.glyph(tile)
             } else if destination == Some(pos) {
-                app.theme.glyph(SemanticTile::Destination)
+                app.theme.glyph(SemanticTile::DecisionMarker)
             } else if let Some(object) = world.object_at(pos) {
                 app.theme
                     .object_glyph(object.type_name(), object.visual_state())
@@ -160,7 +160,7 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
                 style = style.add_modifier(Modifier::REVERSED);
             }
             if attended == Some(pos) {
-                style = style.bg(app.theme.attention());
+                style = style.bg(app.theme.attention_marker());
             }
             buf[(inner.x + col, inner.y + row)]
                 .set_char(glyph.symbol)
@@ -171,7 +171,7 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
 }
 
 /// Where the selected sprite is heading, while its action is under way
-/// (design §6.1). The map flashes an `X` there.
+/// (design §6.1): where the map flashes the Decision marker.
 fn heading_for(app: &App, world: &World) -> Option<Pos> {
     let Some(Selection::Living(id)) = app.selection() else {
         return None;
@@ -181,8 +181,8 @@ fn heading_for(app: &App, world: &World) -> Option<Pos> {
     under_way.then_some(action.destination).flatten()
 }
 
-/// The tile of the one thing the selected sprite attends to (design §5.3),
-/// which the map marks steadily.
+/// The tile of the one thing the selected sprite attends to (design §5.3):
+/// where the map shades the Attention marker.
 fn attended_by(app: &App, world: &World) -> Option<Pos> {
     let Some(Selection::Living(id)) = app.selection() else {
         return None;

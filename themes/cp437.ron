@@ -14,8 +14,8 @@
         // Drawn over any item on the sprite's tile.
         sprite:                 (glyph: '☺', fg: white),
         selected_sprite:        (glyph: '☻', fg: white),
-        // Where the selected sprite is heading: it flashes, inverted. CP437 has no `×`.
-        destination:            (glyph: 'X', fg: white, reversed: true),
+        // The Decision marker: where the selected sprite is heading. It flashes. CP437 has no `×`.
+        decision_marker:        (glyph: 'X', fg: white),
     },
     // Objects, by type name from the data pack's `objects.ron`, then visual
     // state. An object whose state isn't listed is drawn with its "default"
@@ -33,8 +33,9 @@
     // The 3×3 cursor (design §6.5). The arrows are named by the way they point.
     // Each mode's mark gives the cursor its colour: the arrows and status marks
     // take it too.
-    // The background of the tile the selected sprite attends to (design §5.3).
-    attention: dark_gray,
+    // The Attention marker: the background of the tile the selected sprite
+    // attends to (design §5.3).
+    attention_marker: dark_gray,
     cursor: (
         arrows: (up: '↑', down: '↓', left: '←', right: '→'),
         status_marks: (

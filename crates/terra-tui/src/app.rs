@@ -161,13 +161,13 @@ pub struct App {
     tab_scroll: usize,
     /// Whether the detail view is on (design §6.1).
     detail: bool,
-    /// Real time the app has been running, for what flashes on the map.
+    /// Real time the app has been running, for the Decision marker's flashing.
     running_for: Duration,
 }
 
-/// How long a flashing mark stays on, and then off: about 2 Hz, like the
-/// emotes (design §6.3).
-const FLASH_HALF: Duration = Duration::from_millis(250);
+/// How long the Decision marker shows, and then doesn't: once a second in
+/// all, like a text cursor (design §6.1).
+const FLASH_HALF: Duration = Duration::from_millis(500);
 
 impl App {
     /// A new UI for `map`, with the cursor at the map's centre and the viewport
@@ -268,7 +268,7 @@ impl App {
         self.running_for += elapsed;
     }
 
-    /// Whether a flashing mark is in its "on" half just now.
+    /// Whether the Decision marker is in its "on" half just now.
     pub fn flash_on(&self) -> bool {
         (self.running_for.as_millis() / FLASH_HALF.as_millis()).is_multiple_of(2)
     }
