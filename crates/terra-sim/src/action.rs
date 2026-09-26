@@ -62,7 +62,8 @@ pub enum ScriptedAction {
 /// How far an action has got.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Progress {
-    /// On its way, with this many steps of its path left.
+    /// On its way, with this many steps of its path left, or of its
+    /// retreat's bout.
     Walking { steps_left: u32 },
     /// Held up: it had the points for its next step but couldn't take it,
     /// this many ticks in a row.
@@ -195,6 +196,11 @@ pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
     } else if action.blocked_ticks > 0 {
         Progress::Waiting {
             blocked_ticks: action.blocked_ticks,
+        }
+    } else if action.verb == Verb::Retreat {
+        let bout = data.physiology().actions.retreat_bout;
+        Progress::Walking {
+            steps_left: bout.saturating_sub(action.steps),
         }
     } else {
         let steps_left = way_ahead(sprite).map_or(0, |way| way.len() as u32);
