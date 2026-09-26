@@ -1070,7 +1070,6 @@ mod tests {
         };
         let gone = |view: ActionView| ActionView {
             target_gone: true,
-            hurt: Hurt::default(),
             ..view
         };
         let cases = [
@@ -1167,7 +1166,6 @@ mod tests {
         };
         let gone = |view: ActionView| ActionView {
             target_gone: true,
-            hurt: Hurt::default(),
             ..view
         };
         let cases = [
