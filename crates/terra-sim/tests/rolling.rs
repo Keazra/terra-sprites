@@ -100,8 +100,8 @@ fn ball(world: &World) -> Pos {
         .pos()
 }
 
-/// Where each object of type `kind` is, in ID order.
-fn all(world: &World, kind: &str) -> Vec<Pos> {
+/// The tiles of every object of type `kind`, in ID order.
+fn tiles_of(world: &World, kind: &str) -> Vec<Pos> {
     world
         .objects()
         .filter(|o| o.type_name() == kind)
@@ -114,7 +114,7 @@ fn all_rolls(world: &mut World, ticks: usize) -> Vec<Vec<Pos>> {
     (0..ticks)
         .map(|_| {
             world.step();
-            all(world, "ball")
+            tiles_of(world, "ball")
         })
         .collect()
 }
@@ -499,7 +499,7 @@ fn a_ball_crushes_a_berry_in_its_way_and_rolls_on() {
     let expected = [(2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (6, 1)];
     assert_eq!(path, expected.map(|(x, y)| at(x, y)));
     assert_eq!(crushed, [(3, "berry".to_string(), Removal::Destroyed)]);
-    assert!(all(&world, "berry").is_empty());
+    assert!(tiles_of(&world, "berry").is_empty());
 }
 
 /// An item smaller than a ball, and harder.
@@ -520,7 +520,7 @@ fn a_ball_knocks_on_a_smaller_harder_item_rather_than_crushing_it() {
         world.step();
     }
     assert_eq!(ball(&world), at(3, 1));
-    assert_eq!(all(&world, "pebble"), [at(6, 1)]);
+    assert_eq!(tiles_of(&world, "pebble"), [at(6, 1)]);
 }
 
 #[test]
@@ -534,7 +534,7 @@ fn a_ball_bounces_off_a_bigger_item() {
     let path = rolls(&mut world, 6);
     let expected = [(2, 1), (3, 1), (4, 1), (5, 1), (4, 1), (4, 1)];
     assert_eq!(path, expected.map(|(x, y)| at(x, y)));
-    assert_eq!(all(&world, "crate"), [at(6, 1)]);
+    assert_eq!(tiles_of(&world, "crate"), [at(6, 1)]);
 }
 
 #[test]
@@ -576,7 +576,7 @@ fn after_a_bounce_a_ball_crushes_or_knocks_on_what_it_meets() {
     );
     let expected = [(2, 3), (3, 2), (4, 1), (3, 0), (2, 1), (2, 1)];
     assert_eq!(rolls(&mut crush, 6), expected.map(|(x, y)| at(x, y)));
-    assert!(all(&crush, "berry").is_empty());
+    assert!(tiles_of(&crush, "berry").is_empty());
 
     let mut knock = world(
         &rows,
@@ -628,6 +628,6 @@ fn a_rolling_item_can_be_crushed_before_its_turn() {
     );
     world.step();
     world.step();
-    assert!(all(&world, "pip").is_empty());
+    assert!(tiles_of(&world, "pip").is_empty());
     assert_eq!(ball(&world), at(4, 1));
 }

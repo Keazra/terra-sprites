@@ -25,14 +25,21 @@ pub(crate) struct ObjectType {
     /// A verb table only, with no instances or lifecycle: water and sprites.
     pub(crate) pseudo: bool,
     /// How big and how hard it is, which decides what a rolling item does to
-    /// it (design §3.5.4). Every type with objects has both; a pseudo type may not.
-    pub(crate) size: Option<Size>,
-    pub(crate) hardness: Option<f32>,
+    /// it (design §3.5.4). Every type with objects has one; a pseudo type may not.
+    pub(crate) build: Option<Build>,
     pub(crate) counters: Vec<CounterDef>,
     pub(crate) stages: Vec<Stage>,
     pub(crate) rules: Vec<Rule>,
     pub(crate) verbs: BTreeMap<Verb, Vec<Effect>>,
     pub(crate) visual: Vec<Visual>,
+}
+
+/// An object type's size and hardness (design §3.5.1), which come together.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Build {
+    pub(crate) size: Size,
+    /// From 0 to 1.
+    pub(crate) hardness: f32,
 }
 
 /// How big an object type is (design §3.5.1), smallest first.
@@ -309,7 +316,7 @@ impl TypeEntry {
             }
             _ => {}
         }
-        match (self.size, self.hardness) {
+        let build = match (self.size, self.hardness) {
             (None, None) if !self.pseudo => {
                 return Err("needs a size and a hardness, as every type with objects does".into());
             }
@@ -318,8 +325,9 @@ impl TypeEntry {
             (_, Some(hardness)) if !(0.0..=1.0).contains(&hardness) => {
                 return Err(format!("has a hardness of {hardness}, outside 0 to 1"));
             }
-            _ => {}
-        }
+            (Some(size), Some(hardness)) => Some(Build { size, hardness }),
+            (None, None) => None,
+        };
         if self.pseudo {
             let lifecycle = [
                 ("tags", !self.tags.is_empty()),
@@ -426,8 +434,7 @@ impl TypeEntry {
             category: self.category,
             solid,
             pseudo: self.pseudo,
-            size: self.size,
-            hardness: self.hardness,
+            build,
             counters,
             stages,
             rules,
