@@ -59,8 +59,10 @@ pub(crate) fn decide(
     // What walking the flood's reach on grass costs: a grass step is 10
     // terrain units (design §5.2).
     let reach = 10.0 * f32::from(flood.reach());
+    let was_hit = data.physiology().indices.was_hit;
+    let attacker = sprite.body.sources.get(&was_hit).copied();
     let candidates: BTreeMap<Category, Candidate> = flood
-        .candidates(ground, id)
+        .candidates(ground, id, attacker)
         .into_iter()
         .map(|(category, (target, cost))| {
             let goal = state
