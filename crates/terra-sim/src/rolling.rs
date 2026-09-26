@@ -35,13 +35,19 @@ pub(crate) fn run(state: &mut WorldState, data: &DataPack) {
     }
 }
 
-/// The item `id` rolls a tile on its way, if nothing stops it.
+/// The item `id` rolls a tile on its way, bouncing if something stops it.
+/// Either way, that's one of its tiles used up.
 fn roll(state: &mut WorldState, data: &DataPack, id: EntityId) {
     let object = state.objects.get(id).expect("a rolling item");
-    let (from, Some(Roll { dir, left })) = (object.pos, object.roll) else {
+    let (from, Some(Roll { mut dir, left })) = (object.pos, object.roll) else {
         return;
     };
-    if let Some(to) = open(state, data, from, dir) {
+    let mut to = open(state, data, from, dir);
+    if to.is_none() {
+        dir = dir.reverse();
+        to = open(state, data, from, dir);
+    }
+    if let Some(to) = to {
         state.objects.move_to(id, to);
     }
     let object = state.objects.get_mut(id).expect("the same item");

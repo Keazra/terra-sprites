@@ -50,13 +50,28 @@ impl Dir {
         }
     }
 
+    /// The opposite direction.
+    pub(crate) fn reverse(self) -> Dir {
+        let (dx, dy) = self.offset();
+        Dir::with_offset(-dx, -dy)
+    }
+
+    /// The direction whose step changes `(x, y)` by `(dx, dy)`, each -1, 0
+    /// or 1 and not both 0.
+    fn with_offset(dx: i32, dy: i32) -> Dir {
+        Dir::ALL
+            .into_iter()
+            .find(|dir| dir.offset() == (dx, dy))
+            .expect("a step's offset")
+    }
+
     /// The direction from `from` to `to`, a tile beside it, or `None` if
     /// they're the same tile.
     pub(crate) fn towards(from: Pos, to: Pos) -> Option<Dir> {
         let dx = i32::from(to.x) - i32::from(from.x);
         let dy = i32::from(to.y) - i32::from(from.y);
-        let offset = (dx.signum(), dy.signum());
-        Dir::ALL.into_iter().find(|dir| dir.offset() == offset)
+        let (dx, dy) = (dx.signum(), dy.signum());
+        ((dx, dy) != (0, 0)).then(|| Dir::with_offset(dx, dy))
     }
 
     pub(crate) fn is_diagonal(self) -> bool {

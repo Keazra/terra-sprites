@@ -43,6 +43,16 @@ fn world(rows: &[&str], objects: &[(Pos, &str)], sprites: &[(Pos, &[ScriptedActi
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }
 
+/// A kick at the item on `pos`, then rest, so the kicker stays out of the way.
+fn kick(pos: Pos) -> [ScriptedAction; 4] {
+    [
+        ScriptedAction::Play { at: pos },
+        ScriptedAction::Rest,
+        ScriptedAction::Rest,
+        ScriptedAction::Rest,
+    ]
+}
+
 /// Where the ball is.
 fn ball(world: &World) -> Pos {
     world
@@ -70,7 +80,7 @@ fn a_kicked_ball_rolls_four_tiles_away_from_the_kicker_one_a_tick() {
     let mut world = world(
         &LANE,
         &[(at(2, 1), "ball")],
-        &[(at(1, 1), &[ScriptedAction::Play { at: at(2, 1) }])],
+        &[(at(1, 1), &kick(at(2, 1)))],
     );
     let path = rolls(&mut world, 7);
     let expected = [(2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (6, 1), (6, 1)];
@@ -109,8 +119,50 @@ fn a_ball_kicked_from_its_own_tile_by_a_sprite_that_never_stepped_rolls_north() 
     let mut world = world(
         &FIELD,
         &[(at(3, 5), "ball")],
-        &[(at(3, 5), &[ScriptedAction::Play { at: at(3, 5) }])],
+        &[(at(3, 5), &kick(at(3, 5)))],
     );
     rolls(&mut world, 10);
     assert_eq!(ball(&world), at(3, 1));
+}
+
+#[test]
+fn a_ball_meeting_anything_head_on_bounces_straight_back() {
+    // Kicked east from (2, 1), the ball reaches (5, 1) on tick 4. On tick 5
+    // it meets what's on (6, 1) and comes back to (4, 1), its last tile.
+    let ahead = at(6, 1);
+    let cases: [(&str, [&str; 3], Option<&str>); 5] = [
+        ("rock", ["...........", "......#....", "..........."], None),
+        ("deep water", ["...........", "......=....", "..........."], None),
+        ("the map's edge", ["......", "......", "......"], None),
+        ("a bush", LANE, Some("thornbush")),
+        ("another ball", LANE, Some("ball")),
+    ];
+    for (what, rows, object) in cases {
+        let mut objects = vec![(at(2, 1), "ball")];
+        objects.extend(object.map(|kind| (ahead, kind)));
+        let mut world = world(
+            &rows,
+            &objects,
+            &[(at(1, 1), &kick(at(2, 1)))],
+        );
+        let path = rolls(&mut world, 6);
+        let expected = [(2, 1), (3, 1), (4, 1), (5, 1), (4, 1), (4, 1)];
+        assert_eq!(path, expected.map(|(x, y)| at(x, y)), "{what}");
+    }
+}
+
+#[test]
+fn a_ball_meeting_a_sprite_head_on_bounces_straight_back() {
+    let rest = [ScriptedAction::Rest; 3];
+    let mut world = world(
+        &LANE,
+        &[(at(2, 1), "ball")],
+        &[
+            (at(1, 1), &kick(at(2, 1))),
+            (at(6, 1), &rest),
+        ],
+    );
+    let path = rolls(&mut world, 6);
+    let expected = [(2, 1), (3, 1), (4, 1), (5, 1), (4, 1), (4, 1)];
+    assert_eq!(path, expected.map(|(x, y)| at(x, y)));
 }
