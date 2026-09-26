@@ -1,6 +1,7 @@
 //! The UI state (design §6.8): everything the screen shows that isn't the world.
 
 use std::collections::VecDeque;
+use std::time::Duration;
 
 use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
@@ -88,6 +89,7 @@ impl Selection {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     Body,
+    Brain,
     Chem,
     Genome,
     World,
@@ -95,12 +97,13 @@ pub enum Tab {
 
 impl Tab {
     /// Every tab, in the order `[` and `]` go through them.
-    pub const ALL: [Tab; 4] = [Tab::Body, Tab::Chem, Tab::Genome, Tab::World];
+    pub const ALL: [Tab; 5] = [Tab::Body, Tab::Brain, Tab::Chem, Tab::Genome, Tab::World];
 
     /// The tab's name in the inspector's title.
     pub fn label(self) -> &'static str {
         match self {
             Tab::Body => "Body",
+            Tab::Brain => "Brain",
             Tab::Chem => "Chem",
             Tab::Genome => "Genome",
             Tab::World => "World",
@@ -158,7 +161,13 @@ pub struct App {
     tab_scroll: usize,
     /// Whether the detail view is on (design §6.1).
     detail: bool,
+    /// Real time the app has been running, for the Decision marker's flashing.
+    running_for: Duration,
 }
+
+/// How long the Decision marker shows, and then doesn't: once a second in
+/// all, like a text cursor (design §6.1).
+const FLASH_HALF: Duration = Duration::from_millis(500);
 
 impl App {
     /// A new UI for `map`, with the cursor at the map's centre and the viewport
@@ -186,6 +195,7 @@ impl App {
             tab: Tab::World,
             tab_scroll: 0,
             detail: false,
+            running_for: Duration::ZERO,
         };
         app.centre_on(cursor);
         app
@@ -251,6 +261,16 @@ impl App {
     /// The events the event log shows, newest first.
     pub fn event_log(&self) -> impl Iterator<Item = &Event> {
         self.event_log.iter()
+    }
+
+    /// Moves the app's real-time clock on by `elapsed`, for what flashes.
+    pub fn animate(&mut self, elapsed: Duration) {
+        self.running_for += elapsed;
+    }
+
+    /// Whether the Decision marker is in its "on" half just now.
+    pub fn flash_on(&self) -> bool {
+        (self.running_for.as_millis() / FLASH_HALF.as_millis()).is_multiple_of(2)
     }
 
     /// Whether the detail view is on: the exact workings behind what the

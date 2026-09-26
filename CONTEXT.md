@@ -301,8 +301,16 @@ What the player has watched the selected sprite finish since selecting it, at th
 _Avoid_: history, log (the event log is different)
 
 **Detail view**:
-A view the player switches on and off that shows the exact workings behind what the screen describes in words, such as a sprite's verb and where it's heading.
+A view the player switches on and off that shows the exact workings behind what the screen describes in words, such as a sprite's exact verb and destination.
 _Avoid_: debug mode (it's in every build)
+
+**Decision marker**:
+The flashing `X` on the map where the selected sprite is heading: the destination of the action it decided on.
+_Avoid_: destination (that's the tile itself), cursor, highlight
+
+**Attention marker**:
+The steady grey shading on the map of the one thing the selected sprite is paying attention to.
+_Avoid_: highlight, attention mark
 
 **Event log**:
 The panel that lists what just happened to sprites, newest first.

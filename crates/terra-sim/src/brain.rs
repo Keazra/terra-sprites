@@ -11,6 +11,7 @@ use crate::brain_io::Source;
 use crate::data::DataPack;
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, LocusRef};
+use crate::perception::Target;
 use crate::random::unit;
 use crate::registry::{BrainParam, Category, Verb};
 
@@ -134,10 +135,39 @@ pub(crate) struct Snapshot {
     /// Each candidate category's attention score.
     pub(crate) attention: BTreeMap<Category, f32>,
     pub(crate) attended: Option<Category>,
+    /// The one thing attention is on: a running action's target, or else the
+    /// attended category's candidate.
+    pub(crate) target: Option<Target>,
     /// Each verb's score, in `VERBS` order.
     pub(crate) scores: [f32; VERBS.len()],
     /// The verb it's doing, if any.
     pub(crate) verb: Option<Verb>,
+}
+
+/// What a brain did at its latest step 5, explained (design §5.9): what it
+/// could attend to, and why it's doing what it's doing.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Explanation<'a> {
+    /// Each candidate category's attention score, as `(category, score)`,
+    /// highest first, ties to the lower category.
+    pub attention: Vec<(&'static str, f32)>,
+    /// The category attention is on, if any.
+    pub attended: Option<&'static str>,
+    /// The verb it chose or kept doing, with its score.
+    pub decision: Option<(Verb, f32)>,
+    /// The concepts adding to or taking from that verb's score, largest
+    /// first whatever the sign, ties in concept order. A concept adding
+    /// nothing is left out.
+    pub contributions: Vec<Contribution<'a>>,
+}
+
+/// How much one concept adds to a verb's score (design §5.9).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Contribution<'a> {
+    /// The concept's inputs by name, each with whether it's negated.
+    pub inputs: Vec<(&'a str, bool)>,
+    /// Its activation times its link to the verb.
+    pub amount: f32,
 }
 
 impl Brain {
@@ -196,6 +226,48 @@ impl Brain {
             attended: None,
             snapshot: None,
         }
+    }
+
+    /// What the brain did at its latest step 5, explained (design §5.9), or
+    /// `None` if it hasn't decided anything yet.
+    pub(crate) fn explain<'a>(&self, data: &'a DataPack) -> Option<Explanation<'a>> {
+        let snapshot = self.snapshot.as_ref()?;
+        let mut attention: Vec<(&'static str, f32)> = snapshot
+            .attention
+            .iter()
+            .map(|(category, &score)| (category.name(), score))
+            .collect();
+        // A stable sort keeps a tie in category order.
+        attention.sort_by(|a, b| b.1.total_cmp(&a.1));
+        let decision = snapshot
+            .verb
+            .map(|verb| (verb, snapshot.scores[column(verb)]));
+        let names = data.brain_inputs_in_order();
+        let mut contributions: Vec<Contribution> = match decision {
+            Some((verb, _)) => self
+                .concepts
+                .iter()
+                .zip(&snapshot.activations)
+                .zip(&self.decision)
+                .map(|((signature, &activation), links)| Contribution {
+                    inputs: signature
+                        .iter()
+                        .map(|&(i, negated)| (names[i].name.as_str(), negated))
+                        .collect(),
+                    amount: activation * links[column(verb)],
+                })
+                .filter(|c| c.amount != 0.0)
+                .collect(),
+            None => Vec::new(),
+        };
+        // A stable sort keeps a tie in concept order.
+        contributions.sort_by(|a, b| b.amount.abs().total_cmp(&a.amount.abs()));
+        Some(Explanation {
+            attention,
+            attended: snapshot.attended.map(Category::name),
+            decision,
+            contributions,
+        })
     }
 
     /// Every input's value (design §5.2), in the pack's input order: State

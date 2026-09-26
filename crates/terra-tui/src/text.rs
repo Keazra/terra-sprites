@@ -89,6 +89,17 @@ pub(crate) fn signed(value: f32) -> String {
     }
 }
 
+/// A level with its sign: `+.42`, `-.10`. One that rounds to zero reads
+/// `+.00`, never `-.00`.
+pub(crate) fn signed_level(value: f32) -> String {
+    let magnitude = level(value.abs());
+    if value < 0.0 && magnitude != ".00" {
+        format!("-{magnitude}")
+    } else {
+        format!("+{magnitude}")
+    }
+}
+
 /// `0.42` → `.42`, `-0.5` → `-.5`.
 fn without_leading_zero(number: &str) -> String {
     if let Some(rest) = number.strip_prefix("0.") {
@@ -97,5 +108,18 @@ fn without_leading_zero(number: &str) -> String {
         format!("-.{rest}")
     } else {
         number.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_signed_level_that_rounds_to_zero_reads_plus_zero() {
+        assert_eq!(signed_level(0.42), "+.42");
+        assert_eq!(signed_level(-0.1), "-.10");
+        assert_eq!(signed_level(-0.002), "+.00", "never -.00");
+        assert_eq!(signed_level(0.0), "+.00");
     }
 }
