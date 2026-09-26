@@ -1,7 +1,12 @@
-//! Fights (design §3.6, §5.8): a hit records its attacker, and a hit sprite
-//! turns to it while it feels the hit. Driven through hand-made worlds.
+//! Fights and flight (design §3.6, §5.8): a hit records its attacker, and
+//! a hit sprite turns to it while it feels the hit; pain leads to backing
+//! away, and some hits are hit back. Driven through hand-made worlds.
 
-use terra_sim::{DataPack, EntityId, Genome, Map, Pos, Scenario, ScriptedAction, World};
+use terra_sim::{
+    DataPack, EntityId, EventKind, Genome, Map, Pos, Scenario, ScriptedAction, Target, Verb, World,
+};
+
+const STARTER: &str = include_str!("../../../data/genomes/starter.ron");
 
 fn builtin() -> DataPack {
     DataPack::builtin().expect("built-in data pack is valid")
@@ -18,6 +23,11 @@ fn walker(data: &DataPack) -> Genome {
         Trait(trait: "sense_radius", value: 10.0),
     ])"#;
     Genome::from_ron(text, data).expect("a valid genome")
+}
+
+/// The starter genome, without spawn variation.
+fn starter(data: &DataPack) -> Genome {
+    Genome::from_ron(STARTER, data).expect("a valid genome")
 }
 
 /// A sprite that always rests, and always attends to sprites: so what it
@@ -40,6 +50,17 @@ fn scene(
     sprites: &[(Pos, fn(&DataPack) -> Genome)],
     scripted: &[(Pos, ScriptedAction)],
 ) -> World {
+    scene_with(rows, &[], sprites, scripted, 1)
+}
+
+/// `scene`, with `objects`, and the world's RNG seeded with `seed`.
+fn scene_with(
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    sprites: &[(Pos, fn(&DataPack) -> Genome)],
+    scripted: &[(Pos, ScriptedAction)],
+    seed: u64,
+) -> World {
     let data = builtin();
     let map = Map::from_ascii(rows, &data).expect("valid drawing");
     let sprites: Vec<(Pos, Option<Genome>)> = sprites
@@ -48,11 +69,27 @@ fn scene(
         .collect();
     let scenario = Scenario {
         map,
-        objects: &[],
+        objects,
         sprites: &sprites,
         scripted,
     };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+    World::from_scenario(scenario, data, seed).expect("a valid scenario")
+}
+
+/// The verb and target of the first action sprite `id` starts in the next
+/// `ticks` ticks, if it starts one.
+fn next_choice(world: &mut World, id: EntityId, ticks: u32) -> Option<(Verb, Option<Target>)> {
+    for _ in 0..ticks {
+        let events = world.step();
+        let started = events
+            .iter()
+            .any(|e| matches!(e.kind, EventKind::ActionStarted { id: who, .. } if who == id));
+        if started {
+            let action = world.sprite(id)?.action()?;
+            return Some((action.verb, action.target));
+        }
+    }
+    None
 }
 
 /// The ID of the sprite on `pos`.
@@ -85,4 +122,24 @@ fn a_hit_sprite_turns_to_its_attacker_while_it_feels_the_hit() {
     assert_eq!(attends(&world, me), Some(attacker), "feeling the hit");
     world.step();
     assert_eq!(attends(&world, me), Some(bystander), "the hit has passed");
+}
+
+#[test]
+fn a_sprite_pricked_by_a_thornbush_backs_away_from_it() {
+    // It tries to eat the thornbush beside it, and gets pricked.
+    let (me, thornbush) = (at(2, 2), at(3, 2));
+    let rows = [".......", ".......", ".......", ".......", "......."];
+    let mut backed_away = 0;
+    for seed in 0..10 {
+        let script = [(me, ScriptedAction::Eat { at: thornbush })];
+        let sprites = [(me, starter as fn(&DataPack) -> Genome)];
+        let mut world = scene_with(&rows, &[(thornbush, "thornbush")], &sprites, &script, seed);
+        let id = id_at(&world, me);
+        let bush = world.object_at(thornbush).expect("the thornbush").id();
+        world.step();
+        if next_choice(&mut world, id, 5) == Some((Verb::Retreat, Some(Target::Object(bush)))) {
+            backed_away += 1;
+        }
+    }
+    assert!(backed_away >= 8, "backed away in {backed_away} of 10");
 }
