@@ -181,15 +181,15 @@ fn a_sprite_that_never_hungers_or_thirsts_dies_of_old_age() {
 
 /// Object types for testing where solid objects may go.
 const SOLIDS: &str = r#"[
-    (id: 1, name: "shrub", category: BerryBush, tags: [Solid, Fixture]),
-    (id: 2, name: "seed", category: Berry,
+    (id: 1, name: "shrub", category: BerryBush, size: Large, hardness: 1.0, tags: [Solid, Fixture]),
+    (id: 2, name: "seed", category: Berry, size: Small, hardness: 0.5,
      stages: [(name: "dormant", ticks: (2, 2), next: Expire)],
      rules: [(trigger: OnExpire, do: [ReplaceWith("shrub")])]),
-    (id: 3, name: "creeper", category: Thornbush, tags: [Solid, Fixture],
+    (id: 3, name: "creeper", category: Thornbush, size: Large, hardness: 1.0, tags: [Solid, Fixture],
      rules: [(trigger: Every(1), do: [SpreadTo("creeper", 1, [])])]),
-    (id: 4, name: "spawner", category: Ball,
+    (id: 4, name: "spawner", category: Ball, size: Small, hardness: 0.5,
      rules: [(trigger: Every(1), do: [SpawnNearby("shrub", 1)])]),
-    (id: 5, name: "pebble", category: Ball),
+    (id: 5, name: "pebble", category: Ball, size: Small, hardness: 0.5),
 ]"#;
 
 /// A 5×5 field of grass holding `objects` and newborn starter sprites on

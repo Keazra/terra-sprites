@@ -117,7 +117,7 @@ How big an object type, or a sprite, is: small, medium or large. What a rolling 
 How hard an object type is, from 0 to 1. A rolling item crushes something smaller and softer than itself.
 
 **Knock on**:
-A rolling item stopping and passing its roll to the item it ran into, which rolls on the same way, as in billiards.
+A rolling item swapping rolls with an item it ran into that is its own size, or smaller but at least as hard, as equal balls exchange momentum: the item ahead rolls on the same way, and the rolling item takes the roll the other had, or stops if it had none.
 _Avoid_: push (a push is what a sprite does)
 
 **Crush**:

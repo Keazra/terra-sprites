@@ -284,10 +284,11 @@ fn assert_invalid_objects(types: &[&str], words: &[&str]) {
 }
 
 /// An object type called `name` with ID `id`, and `fields` added to the given
-/// basics: two stages, `young` then `old`, and a `fruit` counter.
+/// basics: large and hard, two stages, `young` then `old`, and a `fruit` counter.
 fn bush(id: u16, name: &str, fields: &str) -> String {
     format!(
         r#"(id: {id}, name: "{name}", category: BerryBush, tags: [Solid, Fixture],
+            size: Large, hardness: 1.0,
             counters: {{"fruit": 6}},
             stages: [(name: "young", ticks: (10, 20), next: Stage("old")),
                      (name: "old", ticks: (10, 20), next: Expire)],
@@ -330,7 +331,7 @@ fn every_name_objects_ron_uses_must_exist() {
     for (fields, unknown) in cases {
         assert_invalid_objects(&[&bush(1, "bush", fields)], &["bush", unknown]);
     }
-    let dead_end = r#"(id: 1, name: "bush", category: BerryBush,
+    let dead_end = r#"(id: 1, name: "bush", category: BerryBush, size: Large, hardness: 1.0,
         stages: [(name: "young", ticks: (10, 20), next: Stage("adult"))])"#;
     assert_invalid_objects(&[dead_end], &["adult"]);
 }
@@ -374,20 +375,20 @@ fn chance_must_be_a_probability_and_is_not_allowed_in_visual_rules() {
 fn stages_counters_and_triggers_need_sensible_numbers() {
     let stage = |ticks: &str| {
         format!(
-            r#"(id: 1, name: "bush", category: BerryBush,
+            r#"(id: 1, name: "bush", category: BerryBush, size: Large, hardness: 1.0,
                 stages: [(name: "young", ticks: {ticks}, next: Expire)])"#
         )
     };
     assert_invalid_objects(&[&stage("(0, 10)")], &["bush", "young"]);
     assert_invalid_objects(&[&stage("(20, 10)")], &["bush", "young"]);
 
-    let no_fruit = r#"(id: 1, name: "bush", category: BerryBush, counters: {"fruit": 0})"#;
+    let no_fruit = r#"(id: 1, name: "bush", category: BerryBush, size: Large, hardness: 1.0, counters: {"fruit": 0})"#;
     assert_invalid_objects(&[no_fruit], &["bush", "fruit"]);
 
     let never = "rules: [(trigger: Every(0), do: [DestroySelf])]";
     assert_invalid_objects(&[&bush(1, "bush", never)], &["bush", "Every(0)"]);
 
-    let twice = r#"(id: 1, name: "bush", category: BerryBush,
+    let twice = r#"(id: 1, name: "bush", category: BerryBush, size: Large, hardness: 1.0,
         stages: [(name: "young", ticks: (1, 2), next: Stage("young")),
                  (name: "young", ticks: (1, 2), next: Expire)])"#;
     assert_invalid_objects(&[twice], &["bush", "young"]);
@@ -395,7 +396,11 @@ fn stages_counters_and_triggers_need_sensible_numbers() {
 
 #[test]
 fn an_object_type_is_solid_and_a_fixture_or_neither() {
-    let with_tags = |tags: &str| format!(r#"(id: 1, name: "crate", category: Ball, tags: {tags})"#);
+    let with_tags = |tags: &str| {
+        format!(
+            r#"(id: 1, name: "crate", category: Ball, size: Medium, hardness: 0.5, tags: {tags})"#
+        )
+    };
     assert_invalid_objects(&[&with_tags("[Solid]")], &["crate", "solid", "fixture"]);
     assert_invalid_objects(&[&with_tags("[Fixture]")], &["crate", "solid", "fixture"]);
     for valid in ["[Solid, Fixture]", "[]"] {
@@ -775,5 +780,55 @@ fn a_pseudo_type_s_verbs_only_inject_and_signal() {
         );
         let words = ["water", effect.split('(').next().expect("a name"), "Inject"];
         assert_invalid_objects(&[&bush(1, "bush", ""), &water], &words);
+    }
+}
+
+/// An item type called `pebble`, with `fields`.
+fn pebble(fields: &str) -> String {
+    format!(r#"(id: 5, name: "pebble", category: Ball, {fields})"#)
+}
+
+#[test]
+fn an_object_type_with_objects_needs_a_size_and_a_hardness() {
+    // What a rolling item does to what it meets depends on both (design §3.5.4).
+    assert_invalid_objects(&[&pebble("hardness: 0.5")], &["pebble", "size"]);
+    assert_invalid_objects(&[&pebble("size: Small")], &["pebble", "hardness"]);
+    assert_invalid_objects(&[&pebble("")], &["pebble", "size", "hardness"]);
+    let text = format!("[{}]", pebble("size: Small, hardness: 0.5"));
+    assert!(builtin_with("objects.ron", &text).is_ok());
+}
+
+#[test]
+fn hardness_is_from_0_to_1() {
+    for hardness in ["-0.1", "1.1"] {
+        let fields = format!("size: Small, hardness: {hardness}");
+        assert_invalid_objects(&[&pebble(&fields)], &["pebble", "hardness"]);
+    }
+    for hardness in ["0.0", "1.0"] {
+        let text = format!(
+            "[{}]",
+            pebble(&format!("size: Small, hardness: {hardness}"))
+        );
+        assert!(builtin_with("objects.ron", &text).is_ok(), "{hardness}");
+    }
+}
+
+#[test]
+fn a_pseudo_type_gives_both_a_size_and_a_hardness_or_neither() {
+    // Sprites have a size and water doesn't, which the data says, not the code.
+    let water = |fields: &str| {
+        format!(r#"(id: 100, name: "water", category: Water, pseudo: true, {fields})"#)
+    };
+    assert_invalid_objects(
+        &[&bush(1, "bush", ""), &water("size: Large")],
+        &["water", "hardness"],
+    );
+    assert_invalid_objects(
+        &[&bush(1, "bush", ""), &water("hardness: 0.5")],
+        &["water", "size"],
+    );
+    for fields in ["", "size: Large, hardness: 0.5"] {
+        let text = format!("[{}, {}]", bush(1, "bush", ""), water(fields));
+        assert!(builtin_with("objects.ron", &text).is_ok(), "{fields:?}");
     }
 }
