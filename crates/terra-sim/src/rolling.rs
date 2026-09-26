@@ -8,7 +8,7 @@ use crate::data::DataPack;
 use crate::ecology;
 use crate::events::{Event, Removal};
 use crate::map::{Dir, Pos};
-use crate::object_types::{ObjectType, Size};
+use crate::object_types::{Build, ObjectType};
 use crate::objects::{EntityId, Roll};
 use crate::physics::step_cost;
 use crate::world::WorldState;
@@ -82,27 +82,27 @@ fn roll(
         dir,
         left: left - 1,
     });
-    match meeting {
+    let roll = match meeting {
         Meeting::Open(to) => {
-            state.objects.get_mut(id).expect("the same item").roll = rest;
             state.objects.move_to(id, to);
+            rest
         }
         Meeting::Crush(to, other) => {
             let crushed = state.objects.remove(other);
             ecology::removed(state, data, other, crushed.kind, Removal::Destroyed, events);
-            state.objects.get_mut(id).expect("the same item").roll = rest;
             state.objects.move_to(id, to);
+            rest
         }
         Meeting::KnockOn(other) => {
-            // Items of a size swap rolls, as equal balls exchange momentum.
-            let ahead = state.objects.get_mut(other).expect("the item ahead");
-            let taken = std::mem::replace(&mut ahead.roll, rest);
-            state.objects.get_mut(id).expect("the same item").roll = taken;
+            // The two swap rolls, an exchange of momentum (design §3.5.4).
             knocked.insert(other);
+            let ahead = state.objects.get_mut(other).expect("the item ahead");
+            std::mem::replace(&mut ahead.roll, rest)
         }
         // A bounce with nowhere to go ends the roll where it is.
-        Meeting::Bounce => state.objects.get_mut(id).expect("the same item").roll = None,
-    }
+        Meeting::Bounce => None,
+    };
+    state.objects.get_mut(id).expect("the same item").roll = roll;
 }
 
 /// What the item `id`, on `from`, meets a step away in direction `dir`. It
@@ -121,18 +121,14 @@ fn meet(state: &WorldState, data: &DataPack, id: EntityId, from: Pos, dir: Dir) 
     let Some(other) = state.objects.at(to) else {
         return Meeting::Open(to);
     };
-    let type_of = |id| {
-        let object = state.objects.get(id).expect("an object");
-        &data.object_types()[object.kind]
-    };
+    let type_of = |id| &data.object_types()[state.objects.kind(id)];
     if type_of(other).solid {
         return Meeting::Bounce;
     }
-    let (my_size, my_hardness) = size_and_hardness(type_of(id));
-    let (their_size, their_hardness) = size_and_hardness(type_of(other));
-    if their_size > my_size {
+    let (mine, theirs) = (build(type_of(id)), build(type_of(other)));
+    if theirs.size > mine.size {
         Meeting::Bounce
-    } else if their_size < my_size && their_hardness < my_hardness {
+    } else if theirs.size < mine.size && theirs.hardness < mine.hardness {
         Meeting::Crush(to, other)
     } else {
         Meeting::KnockOn(other)
@@ -140,9 +136,10 @@ fn meet(state: &WorldState, data: &DataPack, id: EntityId, from: Pos, dir: Dir) 
 }
 
 /// The size and hardness of a type with objects, which the pack guarantees it has.
-fn size_and_hardness(object_type: &ObjectType) -> (Size, f32) {
-    let size = object_type.size.expect("a type with objects has a size");
-    (size, object_type.hardness.expect("and a hardness"))
+fn build(object_type: &ObjectType) -> Build {
+    object_type
+        .build
+        .expect("a type with objects has a size and a hardness")
 }
 
 /// The way an item rolling in direction `dir` goes when something stops it
