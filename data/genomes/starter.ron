@@ -12,7 +12,8 @@
 // The brain (design §5.8): instincts that are good but not perfect, so
 // there's something to learn. Each joins in the slice that makes its verb
 // available: slice 6 has eating, drinking, resting and wandering; slice 7a
-// playing, and going over to others.
+// playing, and going over to others; slice 7c backing away, fighting back,
+// and crowding.
 //
 // The values are first cuts; slice 17 tunes them.
 (
@@ -110,6 +111,8 @@
         // neighbour: the deliberate mistake, which correcting should cure.
         Instinct(inputs: [("crowdedness", false)], verb: Retreat, weight: 1.0),
         Instinct(inputs: [("crowdedness", false), ("attended_sprite", false)], verb: Hit, weight: 0.6),
+        // A cornered sprite, looking at a sprite, turns on it.
+        Instinct(inputs: [("cornered", false), ("attended_sprite", false)], verb: Hit, weight: 1.0),
         // A mild habit of wandering, which any drive that has grown outweighs.
         Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3),
     ],

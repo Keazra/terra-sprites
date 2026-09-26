@@ -228,3 +228,46 @@ fn a_crowded_sprite_mostly_backs_away_and_sometimes_hits_a_neighbour() {
         "backed away {backed_away}, hit {hit}, of 100"
     );
 }
+
+#[test]
+fn a_sprite_cornered_by_its_attacker_turns_on_it() {
+    // At the end of a corridor, with the attacker in the only way out.
+    let (me, attacker) = (at(0, 0), at(1, 0));
+    let mut turned = 0;
+    for seed in 0..10 {
+        let script = [
+            (attacker, ScriptedAction::Hit { at: me }),
+            (attacker, ScriptedAction::Rest),
+        ];
+        let sprites = [(me, starter as fn(&DataPack) -> Genome), (attacker, walker)];
+        let mut world = scene_with(&["......"], &[], &sprites, &script, seed);
+        let (id, them) = (id_at(&world, me), id_at(&world, attacker));
+        // What the sprite does next, once a retreat of its has been cornered.
+        let mut cornered = false;
+        let mut next = None;
+        for _ in 0..20 {
+            for event in world.step() {
+                match event.kind {
+                    EventKind::ActionEnded {
+                        id: who,
+                        verb: Verb::Retreat,
+                        outcome: Outcome::Blocked,
+                        ..
+                    } if who == id => cornered = true,
+                    EventKind::ActionStarted { id: who, verb } if who == id && cornered => {
+                        let action = world.sprite(id).and_then(|s| s.action());
+                        next = Some((verb, action.and_then(|a| a.target)));
+                    }
+                    _ => {}
+                }
+            }
+            if next.is_some() {
+                break;
+            }
+        }
+        if next == Some((Verb::Hit, Some(Target::Sprite(them)))) {
+            turned += 1;
+        }
+    }
+    assert!(turned >= 8, "turned on the attacker in {turned} of 10");
+}
