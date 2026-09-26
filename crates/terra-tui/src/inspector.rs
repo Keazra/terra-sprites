@@ -225,8 +225,8 @@ fn action_line(action: &ActionView, detail: bool, data: &DataPack) -> String {
     plain.unwrap_or_else(|| exact_line(action, data))
 }
 
-/// An Eat, Drink or Approach in plain words, naming what it's aimed at, if
-/// it has words for `progress`.
+/// An aimed action in plain words, naming what it's aimed at, if it has
+/// words for `progress`.
 fn aimed_line(action: &ActionView, data: &DataPack) -> Option<String> {
     action.target?;
     let what = target_words(action, data);
@@ -234,6 +234,8 @@ fn aimed_line(action: &ActionView, data: &DataPack) -> Option<String> {
         Verb::Eat => format!("Going to eat {what}"),
         Verb::Drink => "Going to drink".into(),
         Verb::Approach => format!("Going over to {what}"),
+        Verb::Play => format!("Going to play with {what}"),
+        Verb::Hit => format!("Going to hit {what}"),
         _ => return None,
     };
     Some(match action.progress {
@@ -242,13 +244,7 @@ fn aimed_line(action: &ActionView, data: &DataPack) -> Option<String> {
         }
         Progress::Waiting { .. } => format!("{going} · waiting to get past"),
         Progress::Resting { .. } => return None,
-        Progress::Ended(Outcome::Applied) => match action.verb {
-            // A thing eaten whole is gone; one eaten from is still there.
-            Verb::Eat if action.target_gone => format!("Ate {what}"),
-            Verb::Eat => format!("Ate from {what}"),
-            Verb::Drink => "Drank".into(),
-            _ => format!("Got to {what}"),
-        },
+        Progress::Ended(Outcome::Applied) => done_line(action, &what, data),
         Progress::Ended(Outcome::Failed) if action.attempted => match action.verb {
             Verb::Eat => format!("Couldn't eat from {what}"),
             _ => "Couldn't drink".into(),
@@ -273,16 +269,15 @@ pub(crate) fn observed_line(action: &ActionView, data: &DataPack) -> String {
         Verb::Eat => format!("Went to eat {what}"),
         Verb::Drink => "Went to drink".into(),
         Verb::Approach => format!("Went over to {what}"),
+        Verb::Play => format!("Went to play with {what}"),
+        Verb::Hit => format!("Went to hit {what}"),
         verb => verb_name(verb).to_lowercase(),
     };
     let how = match outcome {
         Outcome::Applied => {
             return match action.verb {
-                // A thing eaten whole is gone; one eaten from is still there.
-                Verb::Eat if action.target_gone => format!("Ate {what}"),
-                Verb::Eat => format!("Ate from {what}"),
-                Verb::Drink => "Drank".into(),
-                _ => set_out,
+                Verb::Wander | Verb::Rest | Verb::Approach => set_out,
+                _ => done_line(action, &what, data),
             };
         }
         Outcome::Failed if action.attempted => "it was empty".to_string(),
@@ -297,6 +292,30 @@ pub(crate) fn observed_line(action: &ActionView, data: &DataPack) -> String {
         }
     };
     format!("{set_out}, but {how}")
+}
+
+/// What an aimed action that applied did to `what`, its target in words,
+/// in the past tense: "Ate from the berry bush", "Kicked the ball". It says
+/// ", and got hurt" if the attempt hurt its own sprite, whatever hurt it.
+fn done_line(action: &ActionView, what: &str, data: &DataPack) -> String {
+    let pushes = |verb| action.target_type.is_some_and(|t| data.pushes(t, verb));
+    let done = match action.verb {
+        // An Eat that hurts, a thornbush's say, gave no food.
+        Verb::Eat if action.hurt.actor => format!("Tried to eat {what}"),
+        // A thing eaten whole is gone; one eaten from is still there.
+        Verb::Eat if action.target_gone => format!("Ate {what}"),
+        Verb::Eat => format!("Ate from {what}"),
+        Verb::Drink => "Drank".into(),
+        Verb::Play if pushes(Verb::Play) => format!("Kicked {what}"),
+        Verb::Play => format!("Played with {what}"),
+        Verb::Hit => format!("Hit {what}"),
+        _ => format!("Got to {what}"),
+    };
+    if action.hurt.actor {
+        format!("{done}, and got hurt")
+    } else {
+        done
+    }
 }
 
 /// What an aimed action is aimed at, in words: "the berry bush", "the
@@ -1142,6 +1161,126 @@ mod tests {
         for (view, plain, exact) in cases {
             assert_eq!(action_line(&view, false, &pack()), plain, "{view:?}");
             assert_eq!(action_line(&view, true, &pack()), exact, "{view:?}");
+        }
+    }
+
+    /// `view` after its attempt, which hurt its own sprite.
+    fn tried_and_hurt(view: ActionView) -> ActionView {
+        let hurt = Hurt {
+            actor: true,
+            target: false,
+        };
+        ActionView {
+            attempted: true,
+            hurt,
+            ..view
+        }
+    }
+
+    #[test]
+    fn play_and_hit_lines_say_kicked_for_a_push_and_got_hurt_for_a_hurt() {
+        use Outcome::*;
+        use Progress::*;
+        // Object types: thornbush 3, ball 4, sprite 101.
+        let ball = |verb, p| aimed(verb, Target::Object(EntityId(40)), 4, p);
+        let thorns = |verb, p| aimed(verb, Target::Object(EntityId(77)), 3, p);
+        let sprite = |verb, p| aimed(verb, Target::Sprite(EntityId(7)), 101, p);
+        let tried = |view: ActionView| ActionView {
+            attempted: true,
+            ..view
+        };
+        let cases = [
+            (
+                ball(Verb::Play, Walking { steps_left: 3 }),
+                "Going to play with the ball · 3 tiles to go",
+                "PLAY → ball #40 · walking (3 tiles)",
+            ),
+            (
+                tried(ball(Verb::Play, Ended(Applied))),
+                "Kicked the ball",
+                "PLAY → ball #40 · applied",
+            ),
+            (
+                tried(ball(Verb::Hit, Ended(Applied))),
+                "Hit the ball",
+                "HIT → ball #40 · applied",
+            ),
+            (
+                tried(sprite(Verb::Play, Ended(Applied))),
+                "Played with Sprite #7",
+                "PLAY → sprite #7 · applied",
+            ),
+            (
+                sprite(Verb::Hit, Walking { steps_left: 1 }),
+                "Going to hit Sprite #7 · 1 tile to go",
+                "HIT → sprite #7 · walking (1 tile)",
+            ),
+            (
+                tried(sprite(Verb::Hit, Ended(Applied))),
+                "Hit Sprite #7",
+                "HIT → sprite #7 · applied",
+            ),
+            (
+                tried_and_hurt(thorns(Verb::Hit, Ended(Applied))),
+                "Hit the thornbush, and got hurt",
+                "HIT → thornbush #77 · applied",
+            ),
+            (
+                tried_and_hurt(thorns(Verb::Play, Ended(Applied))),
+                "Played with the thornbush, and got hurt",
+                "PLAY → thornbush #77 · applied",
+            ),
+            (
+                tried_and_hurt(thorns(Verb::Eat, Ended(Applied))),
+                "Tried to eat the thornbush, and got hurt",
+                "EAT → thornbush #77 · applied",
+            ),
+            (
+                sprite(Verb::Play, Ended(Interrupted)),
+                "Changed its mind",
+                "PLAY → sprite #7 · interrupted",
+            ),
+        ];
+        for (view, plain, exact) in cases {
+            assert_eq!(action_line(&view, false, &pack()), plain, "{view:?}");
+            assert_eq!(action_line(&view, true, &pack()), exact, "{view:?}");
+        }
+    }
+
+    #[test]
+    fn play_and_hit_are_observed_in_the_past_tense_like_the_other_verbs() {
+        use Outcome::*;
+        use Progress::Ended;
+        let ball = |verb, o| aimed(verb, Target::Object(EntityId(40)), 4, Ended(o));
+        let thorns = |verb, o| aimed(verb, Target::Object(EntityId(77)), 3, Ended(o));
+        let sprite = |verb, o| aimed(verb, Target::Sprite(EntityId(7)), 101, Ended(o));
+        let tried = |view: ActionView| ActionView {
+            attempted: true,
+            ..view
+        };
+        let cases = [
+            (tried(ball(Verb::Play, Applied)), "Kicked the ball"),
+            (tried(sprite(Verb::Play, Applied)), "Played with Sprite #7"),
+            (tried(sprite(Verb::Hit, Applied)), "Hit Sprite #7"),
+            (
+                tried_and_hurt(thorns(Verb::Eat, Applied)),
+                "Tried to eat the thornbush, and got hurt",
+            ),
+            (
+                tried_and_hurt(thorns(Verb::Play, Applied)),
+                "Played with the thornbush, and got hurt",
+            ),
+            (
+                sprite(Verb::Play, Interrupted),
+                "Went to play with Sprite #7, but changed its mind",
+            ),
+            (
+                ball(Verb::Hit, TimedOut),
+                "Went to hit the ball, but gave up: it took too long",
+            ),
+        ];
+        for (view, line) in cases {
+            assert_eq!(observed_line(&view, &pack()), line, "{view:?}");
         }
     }
 
