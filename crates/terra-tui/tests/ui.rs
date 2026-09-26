@@ -6,7 +6,7 @@ use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
     ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Map, Outcome, Pos,
-    Progress, Removal, Scenario, ScriptedAction, Verb, World, WorldConfig,
+    Progress, Removal, Scenario, ScriptedAction, Target, Verb, World, WorldConfig,
 };
 use terra_tui::app::{App, Tab};
 use terra_tui::input::Action;
@@ -692,6 +692,94 @@ fn the_event_log_leaves_object_and_action_events_out_and_keeps_the_latest_100() 
     let ticks: Vec<u64> = app.event_log().map(|event| event.tick).collect();
     assert_eq!(ticks.len(), 100);
     assert_eq!((ticks[0], ticks[99]), (149, 50), "newest first");
+}
+
+/// Sprite `id` finished `verb` at `target`, of the object type `target_type`,
+/// on `tick`, with `outcome`, its attempt hurting it if `hurt_itself`.
+fn acted(
+    tick: u64,
+    id: u64,
+    verb: Verb,
+    (target, target_type): (Target, u16),
+    outcome: Outcome,
+    hurt_itself: bool,
+) -> Event {
+    let action = ActionView {
+        verb,
+        destination: None,
+        target: Some(target),
+        target_type: Some(target_type),
+        attempted: outcome == Outcome::Applied,
+        target_gone: false,
+        hurt: Hurt {
+            actor: hurt_itself,
+            target: false,
+        },
+        progress: Progress::Ended(outcome),
+    };
+    Event {
+        tick,
+        kind: EventKind::ActionEnded {
+            id: EntityId(id),
+            verb,
+            outcome,
+            action,
+        },
+    }
+}
+
+#[test]
+fn the_event_log_shows_every_play_and_hit_and_whatever_hurt_a_sprite() {
+    use Outcome::{Applied, Interrupted};
+    // Object types: berry_bush 1, thornbush 3, ball 4, sprite 101.
+    let ball = (Target::Object(EntityId(40)), 4);
+    let thorns = (Target::Object(EntityId(77)), 3);
+    let bush = (Target::Object(EntityId(80)), 1);
+    let sprite = |id| (Target::Sprite(EntityId(id)), 101);
+    let world = garden(pack());
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    let log = |app: &App| -> Vec<String> {
+        let screen = lines(&render(app, &world, 100, 30));
+        screen[25..28]
+            .iter()
+            .map(|row| inside(row).to_string())
+            .collect()
+    };
+    app.record(
+        &[
+            acted(10, 4, Verb::Play, ball, Applied, false),
+            acted(11, 5, Verb::Eat, bush, Applied, false),
+            acted(12, 9, Verb::Play, sprite(2), Applied, false),
+            acted(13, 7, Verb::Hit, sprite(12), Interrupted, false),
+            acted(14, 7, Verb::Hit, sprite(12), Applied, false),
+        ],
+        &world,
+    );
+    assert_eq!(
+        log(&app),
+        [
+            "14  Sprite #7 hit Sprite #12",
+            "12  Sprite #9 played with Sprite #2",
+            "10  Sprite #4 kicked a ball",
+        ],
+        "not eating that hurt nobody, nor what didn't get done"
+    );
+    app.record(
+        &[
+            acted(20, 3, Verb::Eat, thorns, Applied, true),
+            acted(21, 3, Verb::Play, thorns, Applied, true),
+            acted(22, 6, Verb::Hit, ball, Applied, false),
+        ],
+        &world,
+    );
+    assert_eq!(
+        log(&app),
+        [
+            "22  Sprite #6 hit a ball",
+            "21  Sprite #3 played with a thornbush and got hurt",
+            "20  Sprite #3 tried to eat a thornbush and got hurt",
+        ]
+    );
 }
 
 #[test]

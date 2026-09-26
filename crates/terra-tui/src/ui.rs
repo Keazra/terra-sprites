@@ -377,10 +377,10 @@ fn event_text(event: &Event, data: &DataPack) -> Option<String> {
             cause_name(*cause, data),
             group_thousands(*age)
         )),
+        EventKind::ActionEnded { id, action, .. } => inspector::logged_line(*id, action, data),
         EventKind::ObjectSpawned { .. }
         | EventKind::ObjectRemoved { .. }
-        | EventKind::ActionStarted { .. }
-        | EventKind::ActionEnded { .. } => None,
+        | EventKind::ActionStarted { .. } => None,
     }
 }
 

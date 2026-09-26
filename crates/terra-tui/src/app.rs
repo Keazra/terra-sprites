@@ -202,10 +202,11 @@ impl App {
     }
 
     /// Takes in what happened during a tick, for the event log (design §6.1),
-    /// and the death of the selected sprite. Object and action events are
-    /// left out of the log: they happen dozens of times a minute and would
-    /// bury everything else. The World tab counts objects instead, and the
-    /// Body tab shows the selected sprite's action.
+    /// and the death of the selected sprite. Object events and most action
+    /// events are left out of the log: they happen dozens of times a minute
+    /// and would bury everything else. The World tab counts objects instead,
+    /// and the Body tab shows the selected sprite's action. The log keeps
+    /// every Play and Hit, and any action that hurt a sprite.
     ///
     /// An action the selected sprite finishes, or another's done to it, goes
     /// on the front of its observed list, or counts up the line there if it
@@ -228,13 +229,16 @@ impl App {
             {
                 self.selection = Some(Selection::Dead { id, cause, age });
             }
-            if !matches!(
-                event.kind,
+            let logged = match event.kind {
                 EventKind::ObjectSpawned { .. }
-                    | EventKind::ObjectRemoved { .. }
-                    | EventKind::ActionStarted { .. }
-                    | EventKind::ActionEnded { .. }
-            ) {
+                | EventKind::ObjectRemoved { .. }
+                | EventKind::ActionStarted { .. } => false,
+                EventKind::ActionEnded { id, ref action, .. } => {
+                    inspector::logged_line(id, action, world.data()).is_some()
+                }
+                EventKind::Died { .. } => true,
+            };
+            if logged {
                 self.event_log.push_front(event.clone());
             }
         }

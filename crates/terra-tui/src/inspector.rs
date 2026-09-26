@@ -313,24 +313,62 @@ pub(crate) fn done_to_line(actor: EntityId, action: &ActionView) -> Option<Strin
 /// in the past tense: "Ate from the berry bush", "Kicked the ball". It says
 /// ", and got hurt" if the attempt hurt its own sprite, whatever hurt it.
 fn done_line(action: &ActionView, what: &str, data: &DataPack) -> String {
-    let pushes = |verb| action.target_type.is_some_and(|t| data.pushes(t, verb));
-    let done = match action.verb {
-        // An Eat that hurts, a thornbush's say, gave no food.
-        Verb::Eat if action.hurt.actor => format!("Tried to eat {what}"),
-        // A thing eaten whole is gone; one eaten from is still there.
-        Verb::Eat if action.target_gone => format!("Ate {what}"),
-        Verb::Eat => format!("Ate from {what}"),
-        Verb::Drink => "Drank".into(),
-        Verb::Play if pushes(Verb::Play) => format!("Kicked {what}"),
-        Verb::Play => format!("Played with {what}"),
-        Verb::Hit => format!("Hit {what}"),
-        _ => format!("Got to {what}"),
-    };
+    let deed = deed(action, what, data);
+    let mut letters = deed.chars();
+    let first = letters.next().map(|c| c.to_ascii_uppercase());
+    let done: String = first.into_iter().chain(letters).collect();
     if action.hurt.actor {
         format!("{done}, and got hurt")
     } else {
         done
     }
+}
+
+/// What an aimed action that applied did to `what`, its target in words,
+/// in the past tense and lower case: "ate from the berry bush", "kicked the
+/// ball". A kick is a Play that pushes, as the target's verb table says.
+fn deed(action: &ActionView, what: &str, data: &DataPack) -> String {
+    let pushes = |verb| action.target_type.is_some_and(|t| data.pushes(t, verb));
+    match action.verb {
+        // An Eat that hurts, a thornbush's say, gave no food.
+        Verb::Eat if action.hurt.actor => format!("tried to eat {what}"),
+        // A thing eaten whole is gone; one eaten from is still there.
+        Verb::Eat if action.target_gone => format!("ate {what}"),
+        Verb::Eat => format!("ate from {what}"),
+        Verb::Drink => "drank".into(),
+        Verb::Play if pushes(Verb::Play) => format!("kicked {what}"),
+        Verb::Play => format!("played with {what}"),
+        Verb::Hit => format!("hit {what}"),
+        _ => format!("got to {what}"),
+    }
+}
+
+/// Sprite `actor`'s finished `action` as the event log says it (design
+/// §6.1), if the log shows it: every Play and Hit that applied, and any
+/// action that hurt a sprite. "Sprite #4 kicked a ball".
+pub(crate) fn logged_line(actor: EntityId, action: &ActionView, data: &DataPack) -> Option<String> {
+    let hurt = action.hurt.actor || action.hurt.target;
+    let shown = matches!(action.verb, Verb::Play | Verb::Hit) || hurt;
+    if action.progress != Progress::Ended(Outcome::Applied) || !shown {
+        return None;
+    }
+    let what = match action.target? {
+        Target::Sprite(id) => sprite_label(id),
+        Target::Water(_) => "the water".into(),
+        Target::Object(_) => {
+            let name = action.target_type.and_then(|id| data.object_type_name(id));
+            let name = display_name(name.unwrap_or("?"));
+            let vowel = name.starts_with(['a', 'e', 'i', 'o', 'u']);
+            format!("{} {name}", if vowel { "an" } else { "a" })
+        }
+    };
+    let deed = deed(action, &what, data);
+    let hurt_itself = if action.hurt.actor {
+        " and got hurt"
+    } else {
+        ""
+    };
+    Some(format!("{} {deed}{hurt_itself}", sprite_label(actor)))
 }
 
 /// What an aimed action is aimed at, in words: "the berry bush", "the
