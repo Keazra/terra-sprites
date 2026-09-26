@@ -667,7 +667,7 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
         "shocked",
     ];
     expected.extend(pulses.iter().enumerate().map(|(i, &p)| (i as u16 + 27, p)));
-    // The Target inputs are fixed in code, after the State inputs (Appendix A).
+    // The Target inputs are fixed in code, numbered from 36 (Appendix A).
     expected.extend([
         (36, "attended_berry_bush"),
         (37, "attended_berry"),
@@ -678,6 +678,8 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
         (42, "target_distance"),
         (43, "target_adjacent"),
     ]);
+    // State inputs carry on from 64, past the IDs kept for Target inputs.
+    expected.push((64, "cornered"));
     assert_eq!(inputs, expected);
 }
 
@@ -706,7 +708,7 @@ fn a_brain_input_reads_a_drive_hormone_body_sensor_or_pulse_that_exists() {
 }
 
 #[test]
-fn brain_input_ids_and_names_are_unique_and_below_the_target_inputs() {
+fn brain_input_ids_and_names_are_unique_and_clear_of_the_target_inputs() {
     let same_id =
         r#"[(id: 1, name: "a", reads: Chem("hunger")), (id: 1, name: "b", reads: Chem("thirst"))]"#;
     assert_invalid("brain_io.ron", same_id, "1");
@@ -715,8 +717,11 @@ fn brain_input_ids_and_names_are_unique_and_below_the_target_inputs() {
     assert_invalid("brain_io.ron", same_name, "`a`");
     let target_name = r#"[(id: 1, name: "target_adjacent", reads: Chem("hunger"))]"#;
     assert_invalid("brain_io.ron", target_name, "target_adjacent");
-    let target_id = r#"[(id: 36, name: "hungry", reads: Chem("hunger"))]"#;
-    assert_invalid("brain_io.ron", target_id, "36");
+    // 36 to 63 are kept for Target inputs.
+    for id in [36, 63] {
+        let target_id = format!(r#"[(id: {id}, name: "hungry", reads: Chem("hunger"))]"#);
+        assert_invalid("brain_io.ron", &target_id, &id.to_string());
+    }
 }
 
 #[test]
