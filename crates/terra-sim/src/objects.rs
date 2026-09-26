@@ -27,6 +27,17 @@ pub(crate) struct Object {
     pub(crate) counters: Vec<u16>,
     /// It hasn't had its first turn yet, on which it enters its first stage.
     pub(crate) fresh: bool,
+    /// Its roll, while a push has it rolling (design §3.5.4).
+    pub(crate) roll: Option<Roll>,
+}
+
+/// A rolling item's way on (design §3.5.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub(crate) struct Roll {
+    /// The way it's rolling.
+    pub(crate) dir: Dir,
+    /// The tiles it has left to go.
+    pub(crate) left: u16,
 }
 
 /// Every object in the world, and the tile each stands on. A tile holds at most
@@ -133,6 +144,18 @@ impl Objects {
         self.by_id.insert(id, object);
     }
 
+    /// Moves the object `id`, which must exist, onto the tile at `to`, which
+    /// must hold no object.
+    pub(crate) fn move_to(&mut self, id: EntityId, to: Pos) {
+        let object = self
+            .by_id
+            .get_mut(&id)
+            .expect("moving an object that exists");
+        self.on_tile.clear(object.pos);
+        self.on_tile.put(to, id);
+        object.pos = to;
+    }
+
     /// Takes the object `id`, which must exist, out of the world.
     pub(crate) fn remove(&mut self, id: EntityId) -> Object {
         let object = self
@@ -144,7 +167,8 @@ impl Objects {
     }
 
     /// Checks that every object stands where the rules allow, alone on its
-    /// tile, with its stage and counters in range; describes the first problem.
+    /// tile, with its stage and counters in range, and rolls only if it's an
+    /// item with tiles to go; describes the first problem.
     pub(crate) fn check(&self, map: &Map, data: &DataPack) -> Result<(), String> {
         let indexed = self.on_tile.count();
         if indexed != self.by_id.len() {
@@ -174,6 +198,10 @@ impl Objects {
                     .any(|(&value, counter)| value > counter.max)
             {
                 "has a counter out of range"
+            } else if object.roll.is_some() && object_type.solid {
+                "is solid, yet rolling"
+            } else if object.roll.is_some_and(|roll| roll.left == 0) {
+                "is rolling with no tiles to go"
             } else {
                 continue;
             };
@@ -248,6 +276,7 @@ mod tests {
                 stage_ends: 0,
                 counters: Vec::new(),
                 fresh: false,
+                roll: None,
             };
             self.objects.place(id, object);
             id

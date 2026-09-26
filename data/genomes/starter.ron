@@ -11,7 +11,8 @@
 //
 // The brain (design §5.8): instincts that are good but not perfect, so
 // there's something to learn. Each joins in the slice that makes its verb
-// available: slice 6 has eating, drinking, resting and wandering.
+// available: slice 6 has eating, drinking, resting and wandering; slice 7a
+// playing, and going over to others.
 //
 // The values are first cuts; slice 17 tunes them.
 (
@@ -80,11 +81,19 @@
         AttentionInstinct(input: "hunger", category: Berry, weight: 1.0),
         AttentionInstinct(input: "hunger", category: Thornbush, weight: 0.3),
         AttentionInstinct(input: "thirst", category: Water, weight: 1.0),
+        // Boredom draws attention to balls, and loneliness to other sprites.
+        AttentionInstinct(input: "boredom", category: Ball, weight: 1.0),
+        AttentionInstinct(input: "loneliness", category: Sprite, weight: 1.0),
 
         // Hunger leads to eating whatever is attended, not berries in particular.
         Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
         Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
         Instinct(inputs: [("tiredness", false)], verb: Rest, weight: 1.0),
+        // Boredom leads to play; loneliness to going over to others, or
+        // playing with them.
+        Instinct(inputs: [("boredom", false)], verb: Play, weight: 1.0),
+        Instinct(inputs: [("loneliness", false)], verb: Approach, weight: 0.8),
+        Instinct(inputs: [("loneliness", false)], verb: Play, weight: 0.8),
         // A mild habit of wandering, which any drive that has grown outweighs.
         Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3),
     ],

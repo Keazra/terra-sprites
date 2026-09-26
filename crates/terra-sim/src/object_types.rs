@@ -357,6 +357,21 @@ impl TypeEntry {
                         "has a verb table for {verb:?}, but only Eat, Drink, Hit and Play act on a target"
                     ));
                 }
+                for effect in effects {
+                    let name = effect_name(effect);
+                    let pushed = matches!(effect, EffectEntry::Push(..));
+                    if pushed && (solid || self.pseudo) {
+                        return Err(format!(
+                            "the {verb:?} verb: `{name}` needs an item to push, and this type isn't one"
+                        ));
+                    }
+                    let on_a_body = matches!(effect, EffectEntry::Inject(..) | EffectEntry::Signal(..));
+                    if self.pseudo && !on_a_body {
+                        return Err(format!(
+                            "the {verb:?} verb: `{name}` acts on an object, but a pseudo type's                              verbs may only Inject and Signal"
+                        ));
+                    }
+                }
                 let effects = effects
                     .iter()
                     .map(|effect| scope.effect(effect, Section::Verb))

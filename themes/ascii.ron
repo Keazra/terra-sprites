@@ -14,6 +14,8 @@
         selected_sprite:        (glyph: '@', fg: white, reversed: true),
         // The Decision marker: where the selected sprite is heading. It flashes.
         decision_marker:        (glyph: 'X', fg: white),
+        // Emotes take turns with a sprite's glyph (design §6.3): hurt by something.
+        emote(hurt):            (glyph: '!', fg: red),
     },
     objects: {
         "berry_bush": {

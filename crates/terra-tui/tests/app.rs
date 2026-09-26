@@ -1,7 +1,7 @@
 use ratatui::layout::{Position, Rect};
 use terra_sim::{
-    ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Map, Outcome, Pos, Progress,
-    Scenario, Verb, World,
+    ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Map, Outcome, Pos,
+    Progress, Scenario, Target, Verb, World,
 };
 use terra_tui::app::{App, Areas, Flow, Screen, Selection, Tab};
 use terra_tui::clock::Speed;
@@ -441,6 +441,7 @@ fn finished(tick: u64, id: EntityId, verb: Verb, outcome: Outcome) -> Event {
         target_type: None,
         attempted: false,
         target_gone: false,
+        hurt: Hurt::default(),
         progress: Progress::Ended(outcome),
     };
     Event {
@@ -488,6 +489,56 @@ fn the_observed_list_keeps_what_the_selected_sprite_finished_newest_first() {
         observed(&app),
         [("Rested", 1, 20), ("Wandered off", 3, 12)],
         "the same line in a row counts up, and keeps the latest tick"
+    );
+}
+
+/// Sprite `id` finished `verb` at sprite `target`, with `outcome`, on `tick`.
+fn finished_at(tick: u64, id: EntityId, verb: Verb, target: EntityId, outcome: Outcome) -> Event {
+    let Event { tick, kind } = finished(tick, id, verb, outcome);
+    let EventKind::ActionEnded { action, .. } = kind else {
+        unreachable!("finished makes an ending");
+    };
+    let action = ActionView {
+        target: Some(Target::Sprite(target)),
+        target_type: Some(101),
+        attempted: outcome == Outcome::Applied,
+        ..action
+    };
+    Event {
+        tick,
+        kind: EventKind::ActionEnded {
+            id,
+            verb,
+            outcome,
+            action,
+        },
+    }
+}
+
+#[test]
+fn the_observed_list_also_keeps_what_others_did_to_the_selected_sprite() {
+    let world = grass_with(20, 10, &[at(3, 4), at(6, 2)]);
+    let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
+    let (me, other) = (ids[0], ids[1]);
+    let mut app = app(&world, tile_area(20, 10));
+    app.apply(Action::SelectNext, &world);
+    app.record(
+        &[
+            finished_at(3, other, Verb::Hit, me, Outcome::Applied),
+            finished_at(4, other, Verb::Hit, me, Outcome::Interrupted),
+            finished_at(5, other, Verb::Play, other, Outcome::Applied),
+            finished_at(6, other, Verb::Play, me, Outcome::Applied),
+        ],
+        &world,
+    );
+    let by = format!("Sprite #{}", other.0);
+    assert_eq!(
+        observed(&app),
+        [
+            (format!("{by} played with it").as_str(), 1, 6),
+            (format!("Was hit by {by}").as_str(), 1, 3),
+        ],
+        "only what others did to it, and only once they'd done it"
     );
 }
 

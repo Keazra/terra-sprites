@@ -9,7 +9,7 @@ use crate::biochem::{Body, Program};
 use crate::brain::Brain;
 use crate::data::DataPack;
 use crate::genome::Genome;
-use crate::map::{Map, Pos};
+use crate::map::{Dir, Map, Pos};
 use crate::objects::{EntityId, Objects};
 use crate::occupancy::Occupancy;
 use crate::perception::Flood;
@@ -37,6 +37,9 @@ pub(crate) struct Sprite {
     pub(crate) move_points: u32,
     /// What it did at the last step 6.
     pub(crate) did: Did,
+    /// The direction of its latest step, if it has taken one: the way it
+    /// pushes an item on its own tile (design §3.5.2).
+    pub(crate) last_step: Option<Dir>,
 }
 
 impl Sprite {
@@ -62,6 +65,7 @@ impl Sprite {
             flood: None,
             move_points: 0,
             did: Did::default(),
+            last_step: None,
         }
     }
 }
@@ -124,6 +128,7 @@ impl Sprites {
         let sprite = self.by_id.get_mut(&id).expect("the sprite to move");
         self.on_tile.clear(sprite.pos);
         self.on_tile.put(to, id);
+        sprite.last_step = Dir::towards(sprite.pos, to).or(sprite.last_step);
         sprite.pos = to;
     }
 
@@ -135,8 +140,11 @@ impl Sprites {
         self.on_tile.clear(pb);
         self.on_tile.put(pa, b);
         self.on_tile.put(pb, a);
-        self.by_id.get_mut(&a).expect("sprite a").pos = pb;
-        self.by_id.get_mut(&b).expect("sprite b").pos = pa;
+        for (id, from, to) in [(a, pa, pb), (b, pb, pa)] {
+            let sprite = self.by_id.get_mut(&id).expect("a swapping sprite");
+            sprite.last_step = Dir::towards(from, to).or(sprite.last_step);
+            sprite.pos = to;
+        }
     }
 
     /// Puts a new sprite on its tile. The caller has checked the tile is free.

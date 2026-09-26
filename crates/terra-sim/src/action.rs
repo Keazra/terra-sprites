@@ -51,6 +51,10 @@ pub enum ScriptedAction {
     Drink { at: Pos },
     /// Approach the sprite on `at`, or else the object there, or else the water.
     Approach { at: Pos },
+    /// Play with the sprite on `at`, or else the object there.
+    Play { at: Pos },
+    /// Hit the sprite on `at`, or else the object there.
+    Hit { at: Pos },
 }
 
 /// How far an action has got.
@@ -85,8 +89,20 @@ pub struct ActionView {
     pub attempted: bool,
     /// Whether its target had left the world when it ended: eaten whole, say.
     pub target_gone: bool,
+    /// Which sprites its attempt hurt (design §4.10).
+    pub hurt: Hurt,
     /// How far it has got, or how it ended.
     pub progress: Progress,
+}
+
+/// Which sprites an action's attempt hurt: the actor, biting a thornbush
+/// say, or a sprite it aimed at, by hitting it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct Hurt {
+    /// The sprite whose action it was.
+    pub actor: bool,
+    /// The sprite it was aimed at, if it was aimed at one.
+    pub target: bool,
 }
 
 /// A sprite's action.
@@ -106,6 +122,8 @@ pub(crate) struct Action {
     pub(crate) target_at: Option<Pos>,
     /// Whether its target had left the world when it ended.
     pub(crate) target_gone: bool,
+    /// Which sprites its attempt hurt.
+    pub(crate) hurt: Hurt,
     /// The tick it started on, for the timeout.
     pub(crate) started: u64,
     /// The ticks it has been carried out on, at step 6.
@@ -147,6 +165,7 @@ impl Action {
             attempted: false,
             target_at: None,
             target_gone: false,
+            hurt: Hurt::default(),
             started: tick,
             ticks: 0,
             blocked_ticks: 0,
@@ -183,6 +202,7 @@ pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
         target_type: action.target_type,
         attempted: action.attempted,
         target_gone: action.target_gone,
+        hurt: action.hurt,
         progress,
     })
 }
@@ -257,11 +277,12 @@ pub(crate) fn sense_and_decide(
                 }
                 None => {
                     if let Some(Some(goal)) = aim {
-                        // A committed way round leads to where a sprite
-                        // target was; once it moves, it's dropped (design §3.7).
-                        // Where it was first seen isn't a move.
+                        // A committed way round leads to where the target
+                        // was; once it moves (a sprite, or a rolling item),
+                        // it's dropped (design §3.6, §3.7). Where it was
+                        // first seen isn't a move.
                         let moved = action.target_at.is_some_and(|at| there != Some(at));
-                        if moved && matches!(action.target, Some(Target::Sprite(_))) {
+                        if moved {
                             action.committed = None;
                         }
                         action.target_at = there;
@@ -325,6 +346,7 @@ pub(crate) fn end(
         target_type: action.target_type,
         attempted: action.attempted,
         target_gone: action.target_gone,
+        hurt: action.hurt,
         progress: Progress::Ended(outcome),
     };
     events.push(Event {
@@ -420,8 +442,8 @@ fn act(
 ) {
     let verb = state.sprites.get(id).expect("the actor").action.as_ref();
     let verb = verb.expect("an action").verb;
-    let outcome = match verb {
-        Verb::Approach => Outcome::Applied,
+    let (outcome, hurt) = match verb {
+        Verb::Approach => (Outcome::Applied, Hurt::default()),
         verb => verbs::attempt(state, data, id, verb, target, events),
     };
     let gone = state.whereabouts(data, target).is_none();
@@ -434,6 +456,7 @@ fn act(
     let action = action.expect("an action");
     action.attempted = true;
     action.target_gone = gone;
+    action.hurt = hurt;
     end(action, id, outcome, state.tick, events);
 }
 

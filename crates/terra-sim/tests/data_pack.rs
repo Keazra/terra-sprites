@@ -1,4 +1,4 @@
-use terra_sim::{DataError, DataPack, Terrain};
+use terra_sim::{DataError, DataPack, Terrain, Verb};
 
 const BUILTIN_TERRAIN: &str = include_str!("../../../data/terrain.ron");
 
@@ -741,4 +741,39 @@ fn the_brain_needs_the_exploration_mod_receptor_target() {
     let renamed = loci.replace(r#"name: "exploration_mod""#, r#"name: "curiosity_mod""#);
     assert_ne!(renamed, loci);
     assert_invalid("loci.ron", &renamed, "exploration_mod");
+}
+
+#[test]
+fn a_pack_says_which_verbs_push_which_object_types() {
+    // Object types: thornbush 3, ball 4, sprite 101.
+    let pack = DataPack::builtin().expect("built-in data pack is valid");
+    assert!(pack.pushes(4, Verb::Play), "a ball rolls when played with");
+    assert!(pack.pushes(4, Verb::Hit), "and when hit");
+    assert!(!pack.pushes(3, Verb::Play), "a thornbush doesn't");
+    assert!(!pack.pushes(101, Verb::Play), "nor does a sprite");
+    assert!(!pack.pushes(999, Verb::Play), "nor a type there isn't");
+}
+
+#[test]
+fn only_an_item_can_be_pushed() {
+    // A fixture can't be pushed (design §3.5.1); nor can water or a sprite,
+    // which have no objects to push.
+    let bush = bush(1, "bush", "verbs: { Play: [Push(2)] }");
+    assert_invalid_objects(&[&bush], &["bush", "Push", "item"]);
+    let water = r#"(id: 100, name: "water", category: Water, pseudo: true,
+        verbs: { Play: [Push(2)] })"#;
+    assert_invalid_objects(&[water], &["water", "Push", "item"]);
+}
+
+#[test]
+fn a_pseudo_type_s_verbs_only_inject_and_signal() {
+    // Water and sprites aren't objects, so nothing else a verb does applies.
+    for effect in ["DestroySelf", r#"SpawnNearby("bush", 1)"#] {
+        let water = format!(
+            r#"(id: 100, name: "water", category: Water, pseudo: true,
+                verbs: {{ Drink: [{effect}] }})"#
+        );
+        let words = ["water", effect.split('(').next().expect("a name"), "Inject"];
+        assert_invalid_objects(&[&bush(1, "bush", ""), &water], &words);
+    }
 }
