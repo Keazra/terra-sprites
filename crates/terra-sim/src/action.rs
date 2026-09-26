@@ -689,8 +689,10 @@ fn wait(state: &mut WorldState, data: &DataPack, id: EntityId, cost: u32, events
 /// Sprite `id`'s turn to back away from `target` (design §5.5): it steps
 /// while its points last, and is done after `retreat_bout` steps, keeping
 /// at most the last step's worth of points, as an arrival does (§3.7).
-/// With no step away, it's cornered: the retreat ends as blocked, and the
-/// sprite feels the `cornered` pulse.
+/// With no step away it's cornered (§3.7): the retreat ends as blocked, and
+/// the sprite feels the `cornered` pulse. If sprites stand on every step
+/// away, it waits as a walker does, banking points only up to the step's
+/// cost, and is cornered after `replan_after` blocked ticks in a row.
 fn retreat(
     state: &mut WorldState,
     data: &DataPack,
@@ -705,14 +707,28 @@ fn retreat(
             return;
         };
         let sprite = state.sprites.get(id).expect("the retreater");
-        let Some((next, cost)) = step_away(state, data, sprite.pos, there) else {
-            let sprite = state.sprites.get_mut(id).expect("the retreater");
-            sprite.body.incoming[data.physiology().indices.cornered] = 1.0;
-            let action = sprite.action.as_mut().expect("a retreat");
-            end(action, id, Outcome::Blocked, state.tick, events);
-            return;
+        let (next, tenths) = match step_away(state, data, sprite.pos, there) {
+            Away::Step(next, cost) => (next, cost * 10),
+            Away::HeldUp(cost) => {
+                let replan_after = data.physiology().movement.replan_after;
+                let sprite = state.sprites.get_mut(id).expect("the retreater");
+                let tenths = cost * 10;
+                if sprite.move_points < tenths {
+                    return;
+                }
+                sprite.move_points = tenths;
+                let action = sprite.action.as_mut().expect("a retreat");
+                action.blocked_ticks += 1;
+                if action.blocked_ticks >= replan_after {
+                    cornered(state, data, id, events);
+                }
+                return;
+            }
+            Away::Cornered => {
+                cornered(state, data, id, events);
+                return;
+            }
         };
-        let tenths = cost * 10;
         if sprite.move_points < tenths {
             return;
         }
@@ -723,6 +739,7 @@ fn retreat(
         sprite.did.steps += 1;
         let action = sprite.action.as_mut().expect("a retreat");
         action.steps += 1;
+        action.blocked_ticks = 0;
         if action.steps >= bout {
             end(action, id, Outcome::Applied, state.tick, events);
             sprite.move_points = sprite.move_points.min(tenths);
@@ -731,36 +748,61 @@ fn retreat(
     }
 }
 
-/// The step a sprite on `from` backs away from `there` by, and its cost in
-/// terrain units: onto the free neighbour that gains the most Chebyshev
-/// distance from `there`, and among those the one pointing most directly
-/// away, ties going by direction order (design §5.5). `None` if no free
-/// neighbour gains any.
-fn step_away(state: &WorldState, data: &DataPack, from: Pos, there: Pos) -> Option<(Pos, u32)> {
+/// Sprite `id`'s retreat is cornered: it ends as blocked, and the sprite
+/// feels the `cornered` pulse (design §3.7).
+fn cornered(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec<Event>) {
+    let sprite = state.sprites.get_mut(id).expect("the retreater");
+    sprite.body.incoming[data.physiology().indices.cornered] = 1.0;
+    let action = sprite.action.as_mut().expect("a retreat");
+    end(action, id, Outcome::Blocked, state.tick, events);
+}
+
+/// Which way a retreating sprite can back away.
+enum Away {
+    /// A step onto this tile, costing this much in terrain units.
+    Step(Pos, u32),
+    /// Sprites stand on every step away: the best of them would cost this much.
+    HeldUp(u32),
+    /// No step gains any distance, sprites or not.
+    Cornered,
+}
+
+/// How a sprite on `from` backs away from `there`: onto the free neighbour
+/// that gains the most Chebyshev distance from `there`, and among those the
+/// one pointing most directly away, ties going by direction order (design
+/// §5.5). A free neighbour is one physics lets it step onto with no sprite
+/// there.
+fn step_away(state: &WorldState, data: &DataPack, from: Pos, there: Pos) -> Away {
     let now = chebyshev(from, there);
     let away = (
         i64::from(from.x) - i64::from(there.x),
         i64::from(from.y) - i64::from(there.y),
     );
-    let mut best: Option<(Pos, u32, u16, i64)> = None;
-    for dir in Dir::ALL {
-        let Some(next) = state.map.neighbour(from, dir) else {
-            continue;
-        };
-        let Some(cost) = step_cost(&state.map, &state.objects, data, from, dir) else {
-            continue;
-        };
-        let gained = chebyshev(next, there);
-        if gained <= now || state.sprites.at(next).is_some() {
-            continue;
+    let best = |free: bool| {
+        let mut best: Option<(Pos, u32, u16, i64)> = None;
+        for dir in Dir::ALL {
+            let Some(next) = state.map.neighbour(from, dir) else {
+                continue;
+            };
+            let Some(cost) = step_cost(&state.map, &state.objects, data, from, dir) else {
+                continue;
+            };
+            let gained = chebyshev(next, there);
+            if gained <= now || free && state.sprites.at(next).is_some() {
+                continue;
+            }
+            let directness = directness(dir, away);
+            if best.is_none_or(|(_, _, g, d)| (gained, directness) > (g, d)) {
+                best = Some((next, cost, gained, directness));
+            }
         }
-        let directness = directness(dir, away);
-        let better = best.is_none_or(|(_, _, g, d)| (gained, directness) > (g, d));
-        if better {
-            best = Some((next, cost, gained, directness));
-        }
+        best
+    };
+    match (best(true), best(false)) {
+        (Some((next, cost, ..)), _) => Away::Step(next, cost),
+        (None, Some((_, cost, ..))) => Away::HeldUp(cost),
+        (None, None) => Away::Cornered,
     }
-    best.map(|(next, cost, _, _)| (next, cost))
 }
 
 /// How directly a step in `dir` points along `line`: the cosine of the
