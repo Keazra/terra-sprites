@@ -376,12 +376,15 @@ pub(crate) struct Indices {
     pub(crate) exploration_mod: usize,
     /// The pulse a retreat that finds no step away fires (design §3.7).
     pub(crate) cornered: usize,
+    /// The pulse whose source is the attacker, the Sprite candidate while
+    /// it's live (design §3.6).
+    pub(crate) was_hit: usize,
 }
 
 impl Indices {
     /// Finds each physical chemical and body sensor physiology needs, the
-    /// receptor target the brain reads and the pulse a cornered retreat
-    /// fires, or says which file lacks one.
+    /// receptor target the brain reads, and the pulses a cornered retreat
+    /// fires and an attacker is known by, or says which file lacks one.
     pub(crate) fn find(
         chemicals: &[Chemical],
         loci: &[Locus],
@@ -423,7 +426,7 @@ impl Indices {
                 .ok_or_else(|| {
                     (
                         "loci.ron",
-                        format!("a retreat needs a pulse called `{name}`"),
+                        format!("sprites need a pulse called `{name}`"),
                     )
                 })
         };
@@ -441,6 +444,7 @@ impl Indices {
             resting: sensor("resting")?,
             exploration_mod: target("exploration_mod")?,
             cornered: pulse("cornered")?,
+            was_hit: pulse("was_hit")?,
         })
     }
 }

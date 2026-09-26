@@ -9,6 +9,7 @@ use crate::data::DataPack;
 use crate::events::DeathCause;
 use crate::expression::{Expression, expressions};
 use crate::genome::{EmitterMode, Gene, Genome, LocusRef, Term};
+use crate::objects::EntityId;
 use crate::physiology::halving_factor;
 use crate::registry::{ChemId, LocusKind, Trait};
 
@@ -282,6 +283,11 @@ pub(crate) struct Body {
     pub(crate) loci: Vec<f32>,
     /// Pulses written since the last latch, by locus: they go live at the next one.
     pub(crate) incoming: Vec<f32>,
+    /// The sprite that caused each live pulse another's verb wrote, by
+    /// locus index: the attacker, for `was_hit` (design §4.2).
+    pub(crate) sources: BTreeMap<usize, EntityId>,
+    /// The sources of the pulses in `incoming`, which go live with them.
+    pub(crate) incoming_sources: BTreeMap<usize, EntityId>,
     /// `chems` and `loci` as the previous tick's step 3 left them, for Rise
     /// and Fall emitters.
     last_chems: Vec<f32>,
@@ -328,6 +334,8 @@ impl Body {
             last_loci: loci.clone(),
             chems_before_tick: chems.clone(),
             incoming: vec![0.0; loci.len()],
+            sources: BTreeMap::new(),
+            incoming_sources: BTreeMap::new(),
             chems,
             loci,
             tallies: BTreeMap::new(),
@@ -388,12 +396,14 @@ pub(crate) struct Senses {
 /// range). So no gene reads a level outside it, and a Rise or Fall emitter
 /// only sees a change that really happened.
 pub(crate) fn step(program: &Program, body: &mut Body, senses: &Senses, data: &DataPack) -> bool {
-    // (a) The pulse latch: what came in goes live, and the buffer empties.
+    // (a) The pulse latch: what came in goes live, with its sources, and
+    // the buffer empties.
     for (index, locus) in data.loci().iter().enumerate() {
         if locus.kind == LocusKind::Pulse {
             body.loci[index] = std::mem::take(&mut body.incoming[index]);
         }
     }
+    body.sources = std::mem::take(&mut body.incoming_sources);
     // (b) Physiology. It works on its own chemicals below 0 or above 1, to
     // tell when energy or hydration has run out, and clamps them when done.
     physiology(program, body, senses, data);
