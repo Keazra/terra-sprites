@@ -50,6 +50,15 @@ impl Dir {
         }
     }
 
+    /// The direction from `from` to `to`, a tile beside it, or `None` if
+    /// they're the same tile.
+    pub(crate) fn towards(from: Pos, to: Pos) -> Option<Dir> {
+        let dx = i32::from(to.x) - i32::from(from.x);
+        let dy = i32::from(to.y) - i32::from(from.y);
+        let offset = (dx.signum(), dy.signum());
+        Dir::ALL.into_iter().find(|dir| dir.offset() == offset)
+    }
+
     pub(crate) fn is_diagonal(self) -> bool {
         matches!(self, Dir::NE | Dir::SE | Dir::SW | Dir::NW)
     }

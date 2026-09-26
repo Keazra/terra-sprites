@@ -76,3 +76,41 @@ fn a_kicked_ball_rolls_four_tiles_away_from_the_kicker_one_a_tick() {
     let expected = [(2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (6, 1), (6, 1)];
     assert_eq!(path, expected.map(|(x, y)| at(x, y)));
 }
+
+const FIELD: [&str; 7] = [
+    "...........",
+    "...........",
+    "...........",
+    "...........",
+    "...........",
+    "...........",
+    "...........",
+];
+
+#[test]
+fn a_ball_kicked_from_its_own_tile_rolls_the_way_the_kicker_last_stepped() {
+    let mut world = world(
+        &FIELD,
+        &[(at(3, 3), "ball")],
+        &[(
+            at(1, 3),
+            &[
+                ScriptedAction::Wander { destination: at(3, 3) },
+                ScriptedAction::Play { at: at(3, 3) },
+            ],
+        )],
+    );
+    rolls(&mut world, 20);
+    assert_eq!(ball(&world), at(7, 3));
+}
+
+#[test]
+fn a_ball_kicked_from_its_own_tile_by_a_sprite_that_never_stepped_rolls_north() {
+    let mut world = world(
+        &FIELD,
+        &[(at(3, 5), "ball")],
+        &[(at(3, 5), &[ScriptedAction::Play { at: at(3, 5) }])],
+    );
+    rolls(&mut world, 10);
+    assert_eq!(ball(&world), at(3, 1));
+}

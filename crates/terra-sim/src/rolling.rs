@@ -11,20 +11,15 @@ use crate::world::WorldState;
 /// setting it rolling from the next tick. A push on an item already rolling
 /// starts a fresh roll.
 pub(crate) fn push(state: &mut WorldState, actor: EntityId, id: EntityId, tiles: u16) {
-    let from = state.sprites.get(actor).expect("the pusher").pos;
+    let pusher = state.sprites.get(actor).expect("the pusher");
+    let (from, last_step) = (pusher.pos, pusher.last_step);
     let object = state.objects.get_mut(id).expect("the pushed item");
-    let dir = away(from, object.pos).unwrap_or(Dir::N);
+    // A pusher acts from a goal tile, which for an item is its own tile or
+    // one beside it (design §3.6), so the direction away from it is exact.
+    let dir = Dir::towards(from, object.pos)
+        .or(last_step)
+        .unwrap_or(Dir::N);
     object.roll = (tiles > 0).then_some(Roll { dir, left: tiles });
-}
-
-/// The direction from `from` to `to`, a tile beside it, or `None` if they're
-/// the same tile. A pusher acts from a goal tile, which for an item is its
-/// own tile or one beside it (design §3.6), so the direction is exact.
-fn away(from: Pos, to: Pos) -> Option<Dir> {
-    let dx = i32::from(to.x) - i32::from(from.x);
-    let dy = i32::from(to.y) - i32::from(from.y);
-    let offset = (dx.signum(), dy.signum());
-    Dir::ALL.into_iter().find(|dir| dir.offset() == offset)
 }
 
 /// Every rolling item, in ascending ID order, moves one tile.

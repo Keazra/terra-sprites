@@ -109,10 +109,11 @@ impl WorldState {
             .map(Target::Sprite)
     }
 
-    /// The sprite on `pos`, or else the object there, as a target for a
-    /// verb of contact, Play or Hit.
-    pub(crate) fn contact_target(&self, pos: Pos) -> Option<Target> {
-        self.sprite_target(pos).or_else(|| self.object_target(pos))
+    /// The sprite on `pos` other than `actor`, or else the object there, as a
+    /// target for `actor`'s Play or Hit.
+    pub(crate) fn contact_target(&self, actor: EntityId, pos: Pos) -> Option<Target> {
+        let other = self.sprite_target(pos).filter(|&t| t != Target::Sprite(actor));
+        other.or_else(|| self.object_target(pos))
     }
 
     /// Where `target` is, and whether a sprite may act on it from its own
