@@ -227,3 +227,26 @@ fn a_ball_with_no_way_back_stops_for_good() {
     let path = rolls(&mut world, 8);
     assert_eq!(path, [at(2, 1); 8]);
 }
+
+#[test]
+fn kicking_a_rolling_ball_starts_a_fresh_roll() {
+    // The first kick would stop the ball on (6, 1) after tick 5. On tick 2,
+    // with the ball on (3, 1), the kicker steps up beside it and kicks
+    // again, so it rolls 4 more from there.
+    let mut world = world(
+        &LANE,
+        &[(at(2, 1), "ball")],
+        &[(
+            at(1, 1),
+            &[
+                ScriptedAction::Play { at: at(2, 1) },
+                ScriptedAction::Play { at: at(3, 1) },
+                ScriptedAction::Rest,
+                ScriptedAction::Rest,
+            ],
+        )],
+    );
+    let path = rolls(&mut world, 8);
+    let expected = [(2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (7, 1), (7, 1), (7, 1)];
+    assert_eq!(path, expected.map(|(x, y)| at(x, y)));
+}
