@@ -500,8 +500,9 @@ fn playing_with_a_sprite_eases_both_sprites_boredom_and_loneliness_at_once() {
     for (sprite, ((bored, lonely), (bored_after, lonely_after))) in
         before.into_iter().zip(after).enumerate()
     {
+        // Social play eases boredom by .15, much less than a kick (design §4.5).
         assert!(
-            bored - bored_after > 0.3,
+            bored - bored_after > 0.1,
             "sprite {sprite}: {bored} → {bored_after}"
         );
         assert!(
