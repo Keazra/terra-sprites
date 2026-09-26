@@ -79,11 +79,7 @@ const LANE: [&str; 3] = ["...........", "...........", "..........."];
 #[test]
 fn a_kicked_ball_rolls_four_tiles_away_from_the_kicker_one_a_tick() {
     // The kick lands on tick 1; the ball moves from tick 2.
-    let mut world = world(
-        &LANE,
-        &[(at(2, 1), "ball")],
-        &[(at(1, 1), &kick(at(2, 1)))],
-    );
+    let mut world = world(&LANE, &[(at(2, 1), "ball")], &[(at(1, 1), &kick(at(2, 1)))]);
     let path = rolls(&mut world, 7);
     let expected = [(2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (6, 1), (6, 1)];
     assert_eq!(path, expected.map(|(x, y)| at(x, y)));
@@ -107,7 +103,9 @@ fn a_ball_kicked_from_its_own_tile_rolls_the_way_the_kicker_last_stepped() {
         &[(
             at(1, 3),
             &[
-                ScriptedAction::Wander { destination: at(3, 3) },
+                ScriptedAction::Wander {
+                    destination: at(3, 3),
+                },
                 ScriptedAction::Play { at: at(3, 3) },
             ],
         )],
@@ -134,7 +132,11 @@ fn a_ball_meeting_anything_head_on_bounces_straight_back() {
     let ahead = at(6, 1);
     let cases: [(&str, [&str; 3], Option<&str>); 5] = [
         ("rock", ["...........", "......#....", "..........."], None),
-        ("deep water", ["...........", "......=....", "..........."], None),
+        (
+            "deep water",
+            ["...........", "......=....", "..........."],
+            None,
+        ),
         ("the map's edge", ["......", "......", "......"], None),
         ("a bush", LANE, Some("thornbush")),
         ("another ball", LANE, Some("ball")),
@@ -142,11 +144,7 @@ fn a_ball_meeting_anything_head_on_bounces_straight_back() {
     for (what, rows, object) in cases {
         let mut objects = vec![(at(2, 1), "ball")];
         objects.extend(object.map(|kind| (ahead, kind)));
-        let mut world = world(
-            &rows,
-            &objects,
-            &[(at(1, 1), &kick(at(2, 1)))],
-        );
+        let mut world = world(&rows, &objects, &[(at(1, 1), &kick(at(2, 1)))]);
         let path = rolls(&mut world, 6);
         let expected = [(2, 1), (3, 1), (4, 1), (5, 1), (4, 1), (4, 1)];
         assert_eq!(path, expected.map(|(x, y)| at(x, y)), "{what}");
@@ -159,16 +157,15 @@ fn a_ball_meeting_a_sprite_head_on_bounces_straight_back_and_doesnt_hurt_it() {
     let mut world = world(
         &LANE,
         &[(at(2, 1), "ball")],
-        &[
-            (at(1, 1), &kick(at(2, 1))),
-            (at(6, 1), &rest),
-        ],
+        &[(at(1, 1), &kick(at(2, 1))), (at(6, 1), &rest)],
     );
     let path = rolls(&mut world, 6);
     let expected = [(2, 1), (3, 1), (4, 1), (5, 1), (4, 1), (4, 1)];
     assert_eq!(path, expected.map(|(x, y)| at(x, y)));
     // No incidental harm (design §3.8): the ball bounced off it, and that's all.
-    let stood = world.sprite_at(at(6, 1)).expect("the sprite it bounced off");
+    let stood = world
+        .sprite_at(at(6, 1))
+        .expect("the sprite it bounced off");
     assert_eq!(stood.chemical("injury"), Some(0.0));
 }
 
@@ -224,7 +221,9 @@ fn a_ball_with_no_way_back_stops_for_good() {
             at(1, 1),
             &[
                 ScriptedAction::Play { at: at(2, 1) },
-                ScriptedAction::Wander { destination: at(8, 2) },
+                ScriptedAction::Wander {
+                    destination: at(8, 2),
+                },
                 ScriptedAction::Rest,
             ],
         )],
@@ -252,7 +251,16 @@ fn kicking_a_rolling_ball_starts_a_fresh_roll() {
         )],
     );
     let path = rolls(&mut world, 8);
-    let expected = [(2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (7, 1), (7, 1), (7, 1)];
+    let expected = [
+        (2, 1),
+        (3, 1),
+        (4, 1),
+        (5, 1),
+        (6, 1),
+        (7, 1),
+        (7, 1),
+        (7, 1),
+    ];
     assert_eq!(path, expected.map(|(x, y)| at(x, y)));
 }
 
@@ -263,16 +271,18 @@ fn a_sprite_going_to_kick_a_rolling_ball_follows_it_and_kicks_it() {
     let mut world = world(
         &FIELD,
         &[(at(2, 1), "ball")],
-        &[
-            (at(1, 1), &kick(at(2, 1))),
-            (at(1, 6), &kick(at(2, 1))),
-        ],
+        &[(at(1, 1), &kick(at(2, 1))), (at(1, 6), &kick(at(2, 1)))],
     );
     let chaser = world.sprite_at(at(1, 6)).expect("the chaser").id();
     let mut kicked = false;
     for _ in 0..30 {
         for event in world.step() {
-            if let EventKind::ActionEnded { id, verb: Verb::Play, outcome, .. } = event.kind
+            if let EventKind::ActionEnded {
+                id,
+                verb: Verb::Play,
+                outcome,
+                ..
+            } = event.kind
                 && id == chaser
             {
                 assert_eq!(outcome, Outcome::Applied);

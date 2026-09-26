@@ -917,7 +917,7 @@ fn world_tab(world: &World) -> Vec<Line<'static>> {
 
 #[cfg(test)]
 mod tests {
-    use terra_sim::{EntityId, Pos};
+    use terra_sim::{EntityId, Hurt, Pos};
 
     use super::*;
 
@@ -952,6 +952,7 @@ mod tests {
             target_type: None,
             attempted: false,
             target_gone: false,
+            hurt: Hurt::default(),
             progress,
         }
     }
@@ -964,6 +965,7 @@ mod tests {
             target_type: None,
             attempted: false,
             target_gone: false,
+            hurt: Hurt::default(),
             progress,
         }
     }
@@ -1048,6 +1050,7 @@ mod tests {
             target_type: Some(target_type),
             attempted: false,
             target_gone: false,
+            hurt: Hurt::default(),
             progress,
         }
     }
@@ -1067,6 +1070,7 @@ mod tests {
         };
         let gone = |view: ActionView| ActionView {
             target_gone: true,
+            hurt: Hurt::default(),
             ..view
         };
         let cases = [
@@ -1163,6 +1167,7 @@ mod tests {
         };
         let gone = |view: ActionView| ActionView {
             target_gone: true,
+            hurt: Hurt::default(),
             ..view
         };
         let cases = [

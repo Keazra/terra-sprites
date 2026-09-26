@@ -49,7 +49,10 @@ fn roll(state: &mut WorldState, data: &DataPack, id: EntityId) {
     }
     let object = state.objects.get_mut(id).expect("the same item");
     // A bounce with nowhere to go ends the roll where it is.
-    object.roll = (to.is_some() && left > 1).then_some(Roll { dir, left: left - 1 });
+    object.roll = (to.is_some() && left > 1).then_some(Roll {
+        dir,
+        left: left - 1,
+    });
     if let Some(to) = to {
         state.objects.move_to(id, to);
     }

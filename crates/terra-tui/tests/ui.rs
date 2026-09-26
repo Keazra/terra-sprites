@@ -5,8 +5,8 @@ use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
-    ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Map, Outcome, Pos, Progress,
-    Removal, Scenario, ScriptedAction, Verb, World, WorldConfig,
+    ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Map, Outcome, Pos,
+    Progress, Removal, Scenario, ScriptedAction, Verb, World, WorldConfig,
 };
 use terra_tui::app::{App, Tab};
 use terra_tui::input::Action;
@@ -677,6 +677,7 @@ fn the_event_log_leaves_object_and_action_events_out_and_keeps_the_latest_100() 
                         target_type: None,
                         attempted: false,
                         target_gone: false,
+                        hurt: Hurt::default(),
                         progress: Progress::Ended(Outcome::Failed),
                     },
                 },
@@ -1543,6 +1544,7 @@ fn finished(tick: u64, id: EntityId, verb: Verb, outcome: Outcome) -> Event {
         target_type: None,
         attempted: false,
         target_gone: false,
+        hurt: Hurt::default(),
         progress: Progress::Ended(outcome),
     };
     Event {

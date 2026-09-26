@@ -146,7 +146,10 @@ impl Objects {
     /// Moves the object `id`, which must exist, onto the tile at `to`, which
     /// must hold no object.
     pub(crate) fn move_to(&mut self, id: EntityId, to: Pos) {
-        let object = self.by_id.get_mut(&id).expect("moving an object that exists");
+        let object = self
+            .by_id
+            .get_mut(&id)
+            .expect("moving an object that exists");
         self.on_tile.clear(object.pos);
         self.on_tile.put(to, id);
         object.pos = to;

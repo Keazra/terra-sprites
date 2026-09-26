@@ -1,7 +1,7 @@
 use ratatui::layout::{Position, Rect};
 use terra_sim::{
-    ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Map, Outcome, Pos, Progress,
-    Scenario, Verb, World,
+    ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Map, Outcome, Pos,
+    Progress, Scenario, Verb, World,
 };
 use terra_tui::app::{App, Areas, Flow, Screen, Selection, Tab};
 use terra_tui::clock::Speed;
@@ -441,6 +441,7 @@ fn finished(tick: u64, id: EntityId, verb: Verb, outcome: Outcome) -> Event {
         target_type: None,
         attempted: false,
         target_gone: false,
+        hurt: Hurt::default(),
         progress: Progress::Ended(outcome),
     };
     Event {

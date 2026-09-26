@@ -3,8 +3,8 @@
 //! worlds with scripted actions.
 
 use terra_sim::{
-    DataPack, DeathCause, EntityId, Event, EventKind, Genome, Hurt, Map, ObjectView, Outcome,
-    Pos, Progress, Removal, Scenario, ScriptedAction, Target, Verb, World,
+    DataPack, DeathCause, EntityId, Event, EventKind, Genome, Hurt, Map, ObjectView, Outcome, Pos,
+    Progress, Removal, Scenario, ScriptedAction, Target, Verb, World,
 };
 
 fn builtin() -> DataPack {
@@ -439,7 +439,10 @@ fn hitting_a_sprite_hurts_it_and_not_the_hitter() {
     let hit = [ScriptedAction::Rest; 2];
     let mut world = world_of(&LANE, &[], &[(at(1, 1), &hitter), (at(2, 1), &hit)]);
     let events = world.step();
-    assert!(endings(&events).contains(&(Verb::Hit, Outcome::Applied)), "{events:?}");
+    assert!(
+        endings(&events).contains(&(Verb::Hit, Outcome::Applied)),
+        "{events:?}"
+    );
     let injury = |pos| world.sprite_at(pos).expect("a sprite").chemical("injury");
     assert_eq!(injury(at(1, 1)), Some(0.0));
     assert_eq!(injury(at(2, 1)), Some(0.03));
@@ -487,15 +490,24 @@ fn playing_with_a_sprite_eases_both_sprites_boredom_and_loneliness_at_once() {
     };
     // The play lands at step 6 of tick 1, and its pulses at step 3 of tick 2.
     let events = world.step();
-    assert!(endings(&events).contains(&(Verb::Play, Outcome::Applied)), "{events:?}");
+    assert!(
+        endings(&events).contains(&(Verb::Play, Outcome::Applied)),
+        "{events:?}"
+    );
     let before = levels(&world);
     world.step();
     let after = levels(&world);
     for (sprite, ((bored, lonely), (bored_after, lonely_after))) in
         before.into_iter().zip(after).enumerate()
     {
-        assert!(bored - bored_after > 0.3, "sprite {sprite}: {bored} → {bored_after}");
-        assert!(lonely - lonely_after > 0.3, "sprite {sprite}: {lonely} → {lonely_after}");
+        assert!(
+            bored - bored_after > 0.3,
+            "sprite {sprite}: {bored} → {bored_after}"
+        );
+        assert!(
+            lonely - lonely_after > 0.3,
+            "sprite {sprite}: {lonely} → {lonely_after}"
+        );
     }
 }
 
@@ -515,15 +527,41 @@ fn an_ended_action_says_which_sprites_its_attempt_hurt() {
     let (me, there) = (at(1, 1), at(2, 1));
     let rest = [ScriptedAction::Rest; 2];
     let nobody = Hurt::default();
-    let actor = Hurt { actor: true, target: false };
-    let target = Hurt { actor: false, target: true };
+    let actor = Hurt {
+        actor: true,
+        target: false,
+    };
+    let target = Hurt {
+        actor: false,
+        target: true,
+    };
     // Each case: what's on the other tile, what the sprite does to it, and
     // whom that hurts.
     let cases: [(&str, Option<&str>, ScriptedAction, Hurt); 4] = [
-        ("biting a thornbush", Some("thornbush"), ScriptedAction::Eat { at: there }, actor),
-        ("hitting a sprite", None, ScriptedAction::Hit { at: there }, target),
-        ("kicking a ball", Some("ball"), ScriptedAction::Play { at: there }, nobody),
-        ("playing with a sprite", None, ScriptedAction::Play { at: there }, nobody),
+        (
+            "biting a thornbush",
+            Some("thornbush"),
+            ScriptedAction::Eat { at: there },
+            actor,
+        ),
+        (
+            "hitting a sprite",
+            None,
+            ScriptedAction::Hit { at: there },
+            target,
+        ),
+        (
+            "kicking a ball",
+            Some("ball"),
+            ScriptedAction::Play { at: there },
+            nobody,
+        ),
+        (
+            "playing with a sprite",
+            None,
+            ScriptedAction::Play { at: there },
+            nobody,
+        ),
     ];
     for (what, object, act, expected) in cases {
         let objects: Vec<(Pos, &str)> = object.map(|kind| (there, kind)).into_iter().collect();
