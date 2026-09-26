@@ -8,6 +8,7 @@ use xxhash_rust::xxh3::xxh3_64_with_seed;
 
 use crate::action::{self, ActionView, ScriptedAction};
 use crate::biochem::{self, Senses, Traits};
+use crate::brain::Explanation;
 use crate::config::WorldConfig;
 use crate::data::DataPack;
 use crate::ecology::{self, holds_without_drawing, new_object, square};
@@ -247,6 +248,12 @@ impl<'a> SpriteView<'a> {
     /// next one starts; `None` before its first.
     pub fn action(&self) -> Option<ActionView> {
         action::view(self.sprite, &self.world.data)
+    }
+
+    /// What its brain did at the latest step 5, explained (design §5.9), or
+    /// `None` before its first decision.
+    pub fn explain(&self) -> Option<Explanation<'a>> {
+        self.sprite.brain.explain(&self.world.data)
     }
 
     /// The traits its body has: its genes', clamped to physiology's ranges.

@@ -264,3 +264,56 @@ fn a_lone_sprite_with_a_bush_and_water_nearby_survives_10_000_ticks() {
         assert!(sprite.chemical("injury") < Some(0.5), "seed {seed}");
     }
 }
+
+#[test]
+fn explain_gives_attention_scores_and_the_concepts_behind_the_verb() {
+    let data = builtin();
+    let genome = Genome::from_ron(
+        r#"(format: 1, genes: [
+            InitialConcentration(chem: "hunger", value: 0.8),
+            BrainParam(param: "tau_base", value: 0.05),
+            BrainParam(param: "tau_att_base", value: 0.05),
+            AttentionInstinct(input: "hunger", category: Berry, weight: 1.0),
+            Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
+            Instinct(inputs: [("hunger", false), ("target_adjacent", true)], verb: Eat, weight: 0.5),
+            Instinct(inputs: [("always", false)], verb: Eat, weight: -0.1),
+            Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3),
+        ])"#,
+        &data,
+    )
+    .expect("a valid genome");
+    let objects = [(at(8, 3), "berry_bush"), (at(8, 5), "berry")];
+    let mut world = world(&FIELD, &objects, at(1, 3), genome, 1);
+    let id = world.sprites().next().expect("the sprite").id();
+    let sprite = world.sprite(id).expect("the sprite");
+    assert!(sprite.explain().is_none(), "nothing decided before step 5");
+
+    world.step();
+    let sprite = world.sprite(id).expect("the sprite");
+    let hunger = sprite.chemical("hunger").expect("hunger");
+    let explained = sprite.explain().expect("step 5 ran");
+    assert_eq!(explained.attended, Some("berry"));
+    let categories: Vec<&str> = explained.attention.iter().map(|&(c, _)| c).collect();
+    assert_eq!(categories, ["berry", "berry_bush"], "highest first");
+    let (verb, score) = explained.decision.expect("a verb");
+    assert_eq!(verb, Verb::Eat);
+    // Largest first, whatever the sign: hunger, hunger and not there yet, always.
+    let concepts: Vec<(Vec<(&str, bool)>, f32)> = explained
+        .contributions
+        .iter()
+        .map(|c| (c.inputs.clone(), c.amount))
+        .collect();
+    assert_eq!(
+        concepts,
+        [
+            (vec![("hunger", false)], hunger),
+            (
+                vec![("hunger", false), ("target_adjacent", true)],
+                hunger * 0.5
+            ),
+            (vec![("always", false)], -0.1),
+        ]
+    );
+    let total: f32 = concepts.iter().map(|(_, amount)| amount).sum();
+    assert!((score - total).abs() < 1e-6, "{score} is the sum, {total}");
+}

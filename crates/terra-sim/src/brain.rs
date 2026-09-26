@@ -140,6 +140,32 @@ pub(crate) struct Snapshot {
     pub(crate) verb: Option<Verb>,
 }
 
+/// What a brain did at its latest step 5, explained (design §5.9): what it
+/// could attend to, and why it's doing what it's doing.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Explanation<'a> {
+    /// Each candidate category's attention score, as `(category, score)`,
+    /// highest first, ties to the lower category.
+    pub attention: Vec<(&'static str, f32)>,
+    /// The category attention is on, if any.
+    pub attended: Option<&'static str>,
+    /// The verb it chose or kept doing, with its score.
+    pub decision: Option<(Verb, f32)>,
+    /// The concepts adding to or taking from that verb's score, largest
+    /// first whatever the sign, ties in concept order. A concept adding
+    /// nothing is left out.
+    pub contributions: Vec<Contribution<'a>>,
+}
+
+/// How much one concept adds to a verb's score (design §5.9).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Contribution<'a> {
+    /// The concept's inputs by name, each with whether it's negated.
+    pub inputs: Vec<(&'a str, bool)>,
+    /// Its activation times its link to the verb.
+    pub amount: f32,
+}
+
 impl Brain {
     /// A newborn's brain from its genome (design §5.4, §5.7): a singleton per
     /// input, a conjunction per expressed multi-input `Instinct` signature,
@@ -196,6 +222,49 @@ impl Brain {
             attended: None,
             snapshot: None,
         }
+    }
+
+    /// What the brain did at its latest step 5, explained (design §5.9), or
+    /// `None` if it hasn't decided anything yet.
+    pub(crate) fn explain<'a>(&self, data: &'a DataPack) -> Option<Explanation<'a>> {
+        let snapshot = self.snapshot.as_ref()?;
+        let mut attention: Vec<(&'static str, f32)> = snapshot
+            .attention
+            .iter()
+            .map(|(category, &score)| (category.name(), score))
+            .collect();
+        // A stable sort keeps a tie in category order.
+        attention.sort_by(|a, b| b.1.total_cmp(&a.1));
+        let names = data.brain_inputs_in_order();
+        let contributions = match snapshot.verb {
+            Some(verb) => {
+                let mut contributions: Vec<Contribution> = self
+                    .concepts
+                    .iter()
+                    .zip(&snapshot.activations)
+                    .zip(&self.decision)
+                    .map(|((signature, &a), links)| Contribution {
+                        inputs: signature
+                            .iter()
+                            .map(|&(i, negated)| (names[i].name.as_str(), negated))
+                            .collect(),
+                        amount: a * links[column(verb)],
+                    })
+                    .filter(|c| c.amount != 0.0)
+                    .collect();
+                contributions.sort_by(|a, b| b.amount.abs().total_cmp(&a.amount.abs()));
+                contributions
+            }
+            None => Vec::new(),
+        };
+        Some(Explanation {
+            attention,
+            attended: snapshot.attended.map(Category::name),
+            decision: snapshot
+                .verb
+                .map(|verb| (verb, snapshot.scores[column(verb)])),
+            contributions,
+        })
     }
 
     /// Every input's value (design §5.2), in the pack's input order: State
