@@ -3,8 +3,8 @@
 //! worlds with scripted actions.
 
 use terra_sim::{
-    DataPack, DeathCause, EntityId, Event, EventKind, Genome, Map, ObjectView, Outcome, Pos,
-    Progress, Removal, Scenario, ScriptedAction, Target, Verb, World,
+    DataPack, DeathCause, EntityId, Event, EventKind, Genome, Hurt, Map, ObjectView, Outcome,
+    Pos, Progress, Removal, Scenario, ScriptedAction, Target, Verb, World,
 };
 
 fn builtin() -> DataPack {
@@ -496,5 +496,43 @@ fn playing_with_a_sprite_eases_both_sprites_boredom_and_loneliness_at_once() {
     {
         assert!(bored - bored_after > 0.3, "sprite {sprite}: {bored} → {bored_after}");
         assert!(lonely - lonely_after > 0.3, "sprite {sprite}: {lonely} → {lonely_after}");
+    }
+}
+
+/// Which sprites the first action to end in `events` hurt.
+fn hurt_by_first_ending(events: &[Event]) -> Hurt {
+    events
+        .iter()
+        .find_map(|e| match &e.kind {
+            EventKind::ActionEnded { action, .. } => Some(action.hurt),
+            _ => None,
+        })
+        .expect("an action ended")
+}
+
+#[test]
+fn an_ended_action_says_which_sprites_its_attempt_hurt() {
+    let (me, there) = (at(1, 1), at(2, 1));
+    let rest = [ScriptedAction::Rest; 2];
+    let nobody = Hurt::default();
+    let actor = Hurt { actor: true, target: false };
+    let target = Hurt { actor: false, target: true };
+    // Each case: what's on the other tile, what the sprite does to it, and
+    // whom that hurts.
+    let cases: [(&str, Option<&str>, ScriptedAction, Hurt); 4] = [
+        ("biting a thornbush", Some("thornbush"), ScriptedAction::Eat { at: there }, actor),
+        ("hitting a sprite", None, ScriptedAction::Hit { at: there }, target),
+        ("kicking a ball", Some("ball"), ScriptedAction::Play { at: there }, nobody),
+        ("playing with a sprite", None, ScriptedAction::Play { at: there }, nobody),
+    ];
+    for (what, object, act, expected) in cases {
+        let objects: Vec<(Pos, &str)> = object.map(|kind| (there, kind)).into_iter().collect();
+        let script = [act, ScriptedAction::Rest];
+        let mut sprites: Vec<(Pos, &[ScriptedAction])> = vec![(me, &script)];
+        if object.is_none() {
+            sprites.push((there, &rest));
+        }
+        let mut world = world_of(&LANE, &objects, &sprites);
+        assert_eq!(hurt_by_first_ending(&world.step()), expected, "{what}");
     }
 }
