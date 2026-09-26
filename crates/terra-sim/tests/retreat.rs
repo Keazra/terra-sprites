@@ -2,7 +2,9 @@
 //! from it, a step at a time, until the bout is done or the sprite is
 //! cornered. Driven through hand-made worlds with scripted actions.
 
-use terra_sim::{DataPack, Genome, Map, Pos, Scenario, ScriptedAction, World};
+use terra_sim::{
+    DataPack, Event, EventKind, Genome, Map, Outcome, Pos, Scenario, ScriptedAction, Verb, World,
+};
 
 fn builtin() -> DataPack {
     DataPack::builtin().expect("built-in data pack is valid")
@@ -35,6 +37,17 @@ fn retreating(rows: &[&str], objects: &[(Pos, &str)], sprite: Pos, from: Pos) ->
         scripted: &scripted,
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
+}
+
+/// The `ActionEnded` events in `events`, as `(verb, outcome)`.
+fn endings(events: &[Event]) -> Vec<(Verb, Outcome)> {
+    events
+        .iter()
+        .filter_map(|e| match e.kind {
+            EventKind::ActionEnded { verb, outcome, .. } => Some((verb, outcome)),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Where the one sprite stands.
@@ -79,4 +92,19 @@ fn a_retreat_may_step_onto_an_item() {
     let mut world = retreating(&rows, &objects, at(2, 2), at(2, 1));
     world.step();
     assert_eq!(where_is(&world), at(2, 3));
+}
+
+#[test]
+fn a_retreat_is_done_after_six_steps_at_the_sprite_s_own_speed() {
+    let rows = ["............"];
+    let mut world = retreating(&rows, &[(at(0, 0), "thornbush")], at(1, 0), at(0, 0));
+    // Speed 10 takes a grass step a tick.
+    for tick in 1..6 {
+        let events = world.step();
+        assert_eq!(endings(&events), [], "still backing away at tick {tick}");
+        assert_eq!(where_is(&world), at(1 + tick, 0));
+    }
+    let events = world.step();
+    assert_eq!(endings(&events), [(Verb::Retreat, Outcome::Applied)]);
+    assert_eq!(where_is(&world), at(7, 0));
 }
