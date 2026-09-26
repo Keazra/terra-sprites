@@ -15,6 +15,7 @@ The owner's preferences and the project's conventions, for any agent session, lo
 - **The engine enforces physics only.** Behaviour and safety policies belong in each object's data rules, and the data names things. For example, the cause of death "hurt by thornbush" comes from the object type, not from a list in the code.
 - **Solid means impassable, whatever a sprite has learned.**
 - **The player has to care first.** Sprites start unnamed; the player names the ones they care about.
+- **Sprites are blank slates.** They should learn what's good or bad, pass on their genes, and later teach the next generation, so instincts stay general and make mistakes rather than holding knowledge a sprite should earn. "Bored → play with whatever it's looking at", thornbushes included, stays, even when it costs lives until learning arrives (design v12, change 11).
 
 ## Design documents
 
