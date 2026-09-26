@@ -295,3 +295,53 @@ fn a_sprite_going_to_kick_a_rolling_ball_follows_it_and_kicks_it() {
     assert!(kicked, "the chaser kicked the ball");
     assert!(ball(&world).x > 6, "{:?}", ball(&world));
 }
+
+#[test]
+fn a_sprite_on_a_way_round_follows_a_ball_that_rolls_off() {
+    // The chaser heads north for the ball through the gap at (5, 2), where a
+    // sprite rests. Held up there, it commits to the long way round, through
+    // (10, 2). Meanwhile the ball is kicked west along row 0, away from where
+    // the way round leads; the chaser drops it and follows the ball instead
+    // (design §3.6).
+    let rows = [
+        "...........",
+        "...........",
+        "#####.####.",
+        "...........",
+        "...........",
+    ];
+    let wait = [ScriptedAction::Rest; 6];
+    let mut late_kick = vec![ScriptedAction::Rest];
+    late_kick.extend(kick(at(5, 0)));
+    let mut world = world(
+        &rows,
+        &[(at(5, 0), "ball")],
+        &[
+            (at(5, 4), &kick(at(5, 0))),
+            (at(5, 2), &wait),
+            (at(6, 0), &late_kick),
+        ],
+    );
+    let chaser = world.sprite_at(at(5, 4)).expect("the chaser").id();
+    let mut ending = None;
+    for _ in 0..70 {
+        for event in world.step() {
+            if let EventKind::ActionEnded {
+                id,
+                verb: Verb::Play,
+                outcome,
+                ..
+            } = event.kind
+                && id == chaser
+                && ending.is_none()
+            {
+                ending = Some(outcome);
+            }
+        }
+    }
+    assert_eq!(
+        ending,
+        Some(Outcome::Applied),
+        "the chaser caught up and kicked"
+    );
+}

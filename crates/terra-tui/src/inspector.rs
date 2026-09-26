@@ -245,10 +245,15 @@ fn aimed_line(action: &ActionView, data: &DataPack) -> Option<String> {
         Progress::Waiting { .. } => format!("{going} · waiting to get past"),
         Progress::Resting { .. } => return None,
         Progress::Ended(Outcome::Applied) => done_line(action, &what, data),
-        Progress::Ended(Outcome::Failed) if action.attempted => match action.verb {
-            Verb::Eat => format!("Couldn't eat from {what}"),
-            _ => "Couldn't drink".into(),
-        },
+        Progress::Ended(Outcome::Failed) if action.attempted => {
+            let couldnt = match action.verb {
+                Verb::Eat => format!("Couldn't eat from {what}"),
+                Verb::Play => format!("Couldn't play with {what}"),
+                Verb::Hit => format!("Couldn't hit {what}"),
+                _ => "Couldn't drink".into(),
+            };
+            and_if_hurt(couldnt, action)
+        }
         Progress::Ended(Outcome::Failed) if action.target_gone => {
             format!("Gave up: {what} was gone")
         }
@@ -280,7 +285,10 @@ pub(crate) fn observed_line(action: &ActionView, data: &DataPack) -> String {
                 _ => done_line(action, &what, data),
             };
         }
-        Outcome::Failed if action.attempted => "it was empty".to_string(),
+        Outcome::Failed if action.attempted => match action.verb {
+            Verb::Eat | Verb::Drink => "it was empty".to_string(),
+            _ => "couldn't".into(),
+        },
         Outcome::Failed if action.target_gone => match action.target {
             Some(Target::Sprite(_)) => format!("{what} was gone"),
             _ => "it was gone".into(),
@@ -291,7 +299,7 @@ pub(crate) fn observed_line(action: &ActionView, data: &DataPack) -> String {
             reason.replacen("Gave up", "gave up", 1)
         }
     };
-    format!("{set_out}, but {how}")
+    and_if_hurt(format!("{set_out}, but {how}"), action)
 }
 
 /// What sprite `actor`'s finished `action` did to the sprite it was aimed
@@ -310,17 +318,22 @@ pub(crate) fn done_to_line(actor: EntityId, action: &ActionView) -> Option<Strin
 }
 
 /// What an aimed action that applied did to `what`, its target in words,
-/// in the past tense: "Ate from the berry bush", "Kicked the ball". It says
-/// ", and got hurt" if the attempt hurt its own sprite, whatever hurt it.
+/// in the past tense: "Ate from the berry bush", "Kicked the ball", and
+/// whether it got hurt doing it.
 fn done_line(action: &ActionView, what: &str, data: &DataPack) -> String {
     let deed = deed(action, what, data);
     let mut letters = deed.chars();
     let first = letters.next().map(|c| c.to_ascii_uppercase());
-    let done: String = first.into_iter().chain(letters).collect();
+    and_if_hurt(first.into_iter().chain(letters).collect(), action)
+}
+
+/// `line`, with ", and got hurt" if `action`'s attempt hurt its own sprite,
+/// whatever hurt it.
+fn and_if_hurt(line: String, action: &ActionView) -> String {
     if action.hurt.actor {
-        format!("{done}, and got hurt")
+        format!("{line}, and got hurt")
     } else {
-        done
+        line
     }
 }
 
@@ -345,11 +358,13 @@ fn deed(action: &ActionView, what: &str, data: &DataPack) -> String {
 
 /// Sprite `actor`'s finished `action` as the event log says it (design
 /// §6.1), if the log shows it: every Play and Hit that applied, and any
-/// action that hurt a sprite. "Sprite #4 kicked a ball".
+/// attempt that hurt a sprite, even one that then failed. "Sprite #4
+/// kicked a ball".
 pub(crate) fn logged_line(actor: EntityId, action: &ActionView, data: &DataPack) -> Option<String> {
+    let applied = action.progress == Progress::Ended(Outcome::Applied);
     let hurt = action.hurt.actor || action.hurt.target;
-    let shown = matches!(action.verb, Verb::Play | Verb::Hit) || hurt;
-    if action.progress != Progress::Ended(Outcome::Applied) || !shown {
+    let played = applied && matches!(action.verb, Verb::Play | Verb::Hit);
+    if !played && !(action.attempted && hurt) {
         return None;
     }
     let what = match action.target? {
@@ -1293,6 +1308,21 @@ mod tests {
                 "Changed its mind",
                 "PLAY → sprite #7 · interrupted",
             ),
+            (
+                tried(ball(Verb::Play, Ended(Failed))),
+                "Couldn't play with the ball",
+                "PLAY → ball #40 · failed",
+            ),
+            (
+                tried(sprite(Verb::Hit, Ended(Failed))),
+                "Couldn't hit Sprite #7",
+                "HIT → sprite #7 · failed",
+            ),
+            (
+                tried_and_hurt(thorns(Verb::Eat, Ended(Failed))),
+                "Couldn't eat from the thornbush, and got hurt",
+                "EAT → thornbush #77 · failed",
+            ),
         ];
         for (view, plain, exact) in cases {
             assert_eq!(action_line(&view, false, &pack()), plain, "{view:?}");
@@ -1331,10 +1361,39 @@ mod tests {
                 ball(Verb::Hit, TimedOut),
                 "Went to hit the ball, but gave up: it took too long",
             ),
+            (
+                tried(sprite(Verb::Hit, Failed)),
+                "Went to hit Sprite #7, but couldn't",
+            ),
+            (
+                tried_and_hurt(thorns(Verb::Eat, Failed)),
+                "Went to eat the thornbush, but it was empty, and got hurt",
+            ),
         ];
         for (view, line) in cases {
             assert_eq!(observed_line(&view, &pack()), line, "{view:?}");
         }
+    }
+
+    #[test]
+    fn the_event_log_keeps_an_attempt_that_hurt_even_if_it_failed() {
+        use Outcome::*;
+        use Progress::Ended;
+        let thorns = |verb, o| aimed(verb, Target::Object(EntityId(77)), 3, Ended(o));
+        let me = EntityId(3);
+        assert_eq!(
+            logged_line(me, &tried_and_hurt(thorns(Verb::Eat, Failed)), &pack()).as_deref(),
+            Some("Sprite #3 tried to eat a thornbush and got hurt")
+        );
+        let unhurt = ActionView {
+            attempted: true,
+            ..thorns(Verb::Hit, Failed)
+        };
+        assert_eq!(
+            logged_line(me, &unhurt, &pack()),
+            None,
+            "a failed hit that hurt nobody"
+        );
     }
 
     #[test]

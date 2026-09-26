@@ -277,11 +277,12 @@ pub(crate) fn sense_and_decide(
                 }
                 None => {
                     if let Some(Some(goal)) = aim {
-                        // A committed way round leads to where a sprite
-                        // target was; once it moves, it's dropped (design §3.7).
-                        // Where it was first seen isn't a move.
+                        // A committed way round leads to where the target
+                        // was; once it moves (a sprite, or a rolling item),
+                        // it's dropped (design §3.6, §3.7). Where it was
+                        // first seen isn't a move.
                         let moved = action.target_at.is_some_and(|at| there != Some(at));
-                        if moved && matches!(action.target, Some(Target::Sprite(_))) {
+                        if moved {
                             action.committed = None;
                         }
                         action.target_at = there;
