@@ -71,6 +71,11 @@
 
         // How the brain works. Choices are fairly sure of themselves: with
         // no drive pressing a sprite wanders, and a drive of .5 wins most choices.
+        // It learns fast over a short trace, so a prick is blamed on the
+        // pokes just before it, not on everything it did for 40 ticks
+        // (design v15 change 10).
+        BrainParam(param: "learning_rate", value: 0.2),
+        BrainParam(param: "trace_decay", value: 0.5),
         BrainParam(param: "tau_base", value: 0.1),
         BrainParam(param: "tau_att_base", value: 0.2),
         BrainParam(param: "switch_margin", value: 0.2),
@@ -78,7 +83,7 @@
         BrainParam(param: "salience_gain", value: 0.5),
 
         // Hunger draws attention to food, and a little to thornbushes: the
-        // deliberate mistake, which learning (slice 8) should correct.
+        // deliberate mistake, which learning corrects.
         AttentionInstinct(input: "hunger", category: BerryBush, weight: 1.0),
         AttentionInstinct(input: "hunger", category: Berry, weight: 1.0),
         AttentionInstinct(input: "hunger", category: Thornbush, weight: 0.3),

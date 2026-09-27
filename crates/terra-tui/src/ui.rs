@@ -380,6 +380,9 @@ fn event_text(event: &Event, data: &DataPack) -> Option<String> {
             group_thousands(*age)
         )),
         EventKind::ActionEnded { id, action, .. } => inspector::logged_line(*id, action, data),
+        EventKind::LearnedMilestone { id, link, good } => {
+            Some(inspector::learned_line(*id, link, *good))
+        }
         EventKind::ObjectSpawned { .. }
         | EventKind::ObjectRemoved { .. }
         | EventKind::ActionStarted { .. } => None,

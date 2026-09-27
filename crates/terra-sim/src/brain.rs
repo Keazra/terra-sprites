@@ -1,7 +1,7 @@
 //! The brain (design §5): what a sprite attends to (5a) and what it chooses
 //! to do about it (5b), from its inputs through its concepts.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 
 use rand_chacha::ChaCha8Rng;
 use serde::Serialize;
@@ -11,6 +11,7 @@ use crate::brain_io::Source;
 use crate::data::DataPack;
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, LocusRef};
+use crate::learning::{LearnableLinks, TRACE_CAP, TraceEntry, still_counts, weight};
 use crate::perception::Target;
 use crate::random::unit;
 use crate::registry::{BrainParam, Category, Verb};
@@ -104,20 +105,26 @@ pub(crate) struct Brain {
     /// conjunctions in genome order.
     pub(crate) concepts: Vec<Signature>,
     /// Decision links W: each concept's weight towards each verb, in `VERBS` order.
-    decision: Vec<[f32; VERBS.len()]>,
+    decision: LearnableLinks<{ VERBS.len() }>,
     /// Attention links A: each State input's weight towards each category,
     /// in `Category::ALL` order, by the input's place in the pack.
-    attention: Vec<[f32; Category::ALL.len()]>,
+    attention: LearnableLinks<{ Category::ALL.len() }>,
     /// The category attention is on, if any.
     pub(crate) attended: Option<Category>,
     /// What the brain did at the latest step 5 (design §5.5), for the trace
     /// entry learning commits and for the Brain tab.
     pub(crate) snapshot: Option<Snapshot>,
+    /// The reward less the punishment step 4 last used up: `last_r` (design §5.6).
+    pub(crate) felt: f32,
+    /// What it felt and chose on its recent ticks, oldest first (design §5.6).
+    pub(crate) trace: VecDeque<TraceEntry>,
 }
 
 /// What the brain saw and did at a step 5.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct Snapshot {
+    /// The tick of that step 5.
+    pub(crate) tick: u64,
     /// Every input's value, in the pack's input order.
     pub(crate) inputs: Vec<f32>,
     /// Every concept's activation, in the brain's concept order.
@@ -134,6 +141,41 @@ pub(crate) struct Snapshot {
     pub(crate) verb: Option<Verb>,
 }
 
+/// A link, named (design §5.6): from a concept to a verb, or from a State
+/// input to a category.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Link {
+    /// A concept's link to a verb: the concept's inputs by name, each with
+    /// whether it's negated.
+    Decision {
+        inputs: Vec<(String, bool)>,
+        verb: Verb,
+    },
+    /// A State input's link to a category, as brain inputs name it (`thornbush`).
+    Attention { input: String, category: String },
+}
+
+/// The link from the input at `input` in the pack to `category`, named.
+fn attention_link(input: usize, category: Category, data: &DataPack) -> Link {
+    Link::Attention {
+        input: data.brain_inputs_in_order()[input].name.clone(),
+        category: category.name().to_string(),
+    }
+}
+
+/// How far one link has come from birth (design §5.9).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Memory {
+    pub link: Link,
+    /// Its working weight now.
+    pub now: f32,
+    /// The instinct it was born with.
+    pub birth: f32,
+}
+
+/// How many links the memory lists (design §5.9).
+const MEMORY_SIZE: usize = 5;
+
 /// What a brain did at its latest step 5, explained (design §5.9): what it
 /// could attend to, and why it's doing what it's doing.
 #[derive(Debug, Clone, PartialEq)]
@@ -149,6 +191,10 @@ pub struct Explanation<'a> {
     /// first whatever the sign, ties in concept order. A concept adding
     /// nothing is left out.
     pub contributions: Vec<Contribution<'a>>,
+    /// The links, of both kinds, furthest from birth, largest first, ties
+    /// in link order: decision links, then attention links. A link that
+    /// hasn't moved is left out.
+    pub memory: Vec<Memory>,
 }
 
 /// How much one concept adds to a verb's score (design §5.9).
@@ -211,10 +257,128 @@ impl Brain {
         Brain {
             params: BrainParams::express(genome, data),
             concepts,
-            decision,
-            attention,
+            decision: LearnableLinks::new(decision),
+            attention: LearnableLinks::new(attention),
             attended: None,
             snapshot: None,
+            felt: 0.0,
+            trace: VecDeque::new(),
+        }
+    }
+
+    /// Step 4 at `tick` (design §2.4, §5.6): `r`, scaled by
+    /// `learning_rate_mod`, is credited back along the trace, then every
+    /// link relaxes a tick. Each entry's verb gains η × mod × r × λ^(tick −
+    /// its tick) × each concept's activation from that concept; if the verb
+    /// was aimed at a target, its attended category gains the same from each
+    /// State input. Links stay within [−1, 1]. Returns the lessons it learned, decision links
+    /// first: each link that moved `lesson_threshold` from birth for the first
+    /// time, with whether it rose.
+    pub(crate) fn learn(
+        &mut self,
+        tick: u64,
+        r: f32,
+        learning_rate_mod: f32,
+        data: &DataPack,
+    ) -> Vec<(Link, bool)> {
+        if r == 0.0 {
+            // Relaxing only takes a link back towards birth: no lessons.
+            self.relax();
+            return Vec::new();
+        }
+        let rate = self.params.get(BrainParam::LearningRate) * learning_rate_mod * r;
+        let decay = self.params.get(BrainParam::TraceDecay);
+        let inputs = data.brain_inputs_in_order();
+        for entry in &self.trace {
+            let Some(verb) = entry.verb else {
+                continue;
+            };
+            let step = rate * weight(decay, tick, entry.tick);
+            for (k, &a) in entry.activations.iter().enumerate() {
+                self.decision.nudge(k, column(verb), step * a);
+            }
+            let Some(category) = entry.attended.filter(|_| verb.is_aimed()) else {
+                continue;
+            };
+            // The singletons come first, one per input, so their
+            // activations are the inputs.
+            for (i, input) in inputs.iter().enumerate() {
+                if matches!(input.source, Source::State(_)) {
+                    let x = entry.activations[i];
+                    self.attention.nudge(i, category_column(category), step * x);
+                }
+            }
+        }
+        self.relax();
+        let threshold = data.physiology().lesson_threshold;
+        let decisions: Vec<(Link, bool)> = self
+            .decision
+            .lessons(threshold)
+            .into_iter()
+            .map(|(k, v, good)| (self.decision_link(k, VERBS[v], data), good))
+            .collect();
+        let attention = self
+            .attention
+            .lessons(threshold)
+            .into_iter()
+            .map(|(i, c, good)| (attention_link(i, Category::ALL[c], data), good));
+        decisions.into_iter().chain(attention).collect()
+    }
+
+    /// One tick of the two timescales for every link (design §5.6).
+    fn relax(&mut self) {
+        let (relax, consolidate) = (
+            self.params.get(BrainParam::RelaxRate),
+            self.params.get(BrainParam::ConsolidateRate),
+        );
+        self.decision.relax(relax, consolidate);
+        self.attention.relax(relax, consolidate);
+    }
+
+    /// Checks the brain's learned state (design §5.6): links within [−1, 1],
+    /// a felt value that's a number, and a trace within its cap.
+    pub(crate) fn check(&self) -> Result<(), String> {
+        self.decision.check()?;
+        self.attention.check()?;
+        if !self.felt.is_finite() {
+            return Err(format!("felt {}, which isn't a number", self.felt));
+        }
+        if self.trace.len() > TRACE_CAP {
+            return Err(format!(
+                "has {} trace entries, over {TRACE_CAP}",
+                self.trace.len()
+            ));
+        }
+        Ok(())
+    }
+
+    /// Sets a decision link to `w`, unchecked, to test the checks.
+    #[cfg(test)]
+    pub(crate) fn break_a_link_for_test(&mut self, w: f32) {
+        self.decision.set(0, 0, w);
+    }
+
+    /// Commits this tick's trace entry at the end of step 6 (design §5.6),
+    /// if the brain decided at this tick's step 5, then drops the entries the
+    /// next step 4 would credit too little, whether it decided or not.
+    pub(crate) fn commit(&mut self, tick: u64) {
+        if let Some(snapshot) = self.snapshot.as_ref().filter(|s| s.tick == tick) {
+            self.trace.push_back(TraceEntry {
+                tick,
+                activations: snapshot.activations.clone(),
+                verb: snapshot.verb,
+                attended: snapshot.attended,
+            });
+        }
+        // Oldest first.
+        let decay = self.params.get(BrainParam::TraceDecay);
+        while self
+            .trace
+            .front()
+            .is_some_and(|e| !still_counts(decay, tick + 1, e.tick))
+            || self.trace.len() > TRACE_CAP
+        {
+            self.trace.pop_front();
         }
     }
 
@@ -238,7 +402,7 @@ impl Brain {
                 .concepts
                 .iter()
                 .zip(&snapshot.activations)
-                .zip(&self.decision)
+                .zip(self.decision.working())
                 .map(|((signature, &activation), links)| Contribution {
                     inputs: signature
                         .iter()
@@ -257,7 +421,38 @@ impl Brain {
             attended: snapshot.attended.map(Category::name),
             decision,
             contributions,
+            memory: self.memory(data),
         })
+    }
+
+    /// The links furthest from birth (design §5.9), of those that have moved.
+    fn memory(&self, data: &DataPack) -> Vec<Memory> {
+        let decisions = self
+            .decision
+            .moved()
+            .map(|(k, v, now, birth)| (self.decision_link(k, VERBS[v], data), now, birth));
+        let attention = self
+            .attention
+            .moved()
+            .map(|(i, c, now, birth)| (attention_link(i, Category::ALL[c], data), now, birth));
+        let mut memory: Vec<Memory> = decisions
+            .chain(attention)
+            .map(|(link, now, birth)| Memory { link, now, birth })
+            .collect();
+        // A stable sort keeps a tie in link order.
+        memory.sort_by(|a, b| (b.now - b.birth).abs().total_cmp(&(a.now - a.birth).abs()));
+        memory.truncate(MEMORY_SIZE);
+        memory
+    }
+
+    /// The link from the concept at `concept` to `verb`, named.
+    fn decision_link(&self, concept: usize, verb: Verb, data: &DataPack) -> Link {
+        let names = data.brain_inputs_in_order();
+        let inputs = self.concepts[concept]
+            .iter()
+            .map(|&(i, negated)| (names[i].name.clone(), negated))
+            .collect();
+        Link::Decision { inputs, verb }
     }
 
     /// Every input's value (design §5.2), in the pack's input order: State
@@ -318,7 +513,7 @@ impl Brain {
                 let c = category_column(category);
                 let learned: f32 = state
                     .iter()
-                    .map(|&i| inputs[i] * self.attention[i][c])
+                    .map(|&i| inputs[i] * self.attention.get(i, c))
                     .sum();
                 (category, learned + salience * (1.0 - distance))
             })
@@ -362,7 +557,7 @@ impl Brain {
     /// the decision links, in `VERBS` order.
     pub(crate) fn scores(&self, activations: &[f32]) -> [f32; VERBS.len()] {
         let mut scores = [0.0; VERBS.len()];
-        for (a, links) in activations.iter().zip(&self.decision) {
+        for (a, links) in activations.iter().zip(self.decision.working()) {
             for (score, w) in scores.iter_mut().zip(links) {
                 *score += a * w;
             }
@@ -399,14 +594,16 @@ impl Brain {
 }
 
 /// The verbs a sprite may choose (design §5.2): Rest and Wander always;
-/// with a target, Approach and Retreat, and the interactions `table` has,
-/// where `table` is its type's verb table.
-pub(crate) fn available(target: Option<&[Verb]>) -> Vec<Verb> {
+/// with a target, Retreat, the interactions `table` has, where `table` is
+/// its type's verb table, and Approach unless the sprite is already
+/// `beside` it, on one of its goal tiles, where Approach would do nothing.
+pub(crate) fn available(target: Option<&[Verb]>, beside: bool) -> Vec<Verb> {
     VERBS
         .into_iter()
         .filter(|&verb| match verb {
             Verb::Rest | Verb::Wander => true,
-            Verb::Approach | Verb::Retreat => target.is_some(),
+            Verb::Approach => target.is_some() && !beside,
+            Verb::Retreat => target.is_some(),
             verb => target.is_some_and(|table| table.contains(&verb)),
         })
         .collect()
@@ -577,23 +774,36 @@ mod tests {
     fn verbs_are_masked_by_kind_and_by_the_target_s_verb_table() {
         use Verb::*;
         assert_eq!(
-            available(None),
+            available(None, false),
             [Rest, Wander],
             "no target: targetless only"
         );
         // Retreat, like Approach, needs only a target.
-        assert_eq!(available(Some(&[])), [Approach, Retreat, Rest, Wander]);
         assert_eq!(
-            available(Some(&[Eat, Hit])),
+            available(Some(&[]), false),
+            [Approach, Retreat, Rest, Wander]
+        );
+        assert_eq!(
+            available(Some(&[Eat, Hit]), false),
             [Approach, Eat, Hit, Retreat, Rest, Wander]
         );
         assert_eq!(
-            available(Some(&[Drink])),
+            available(Some(&[Drink]), false),
             [Approach, Drink, Retreat, Rest, Wander]
         );
         assert_eq!(
-            available(Some(&[Hit, Play])),
+            available(Some(&[Hit, Play]), false),
             [Approach, Hit, Play, Retreat, Rest, Wander]
+        );
+    }
+
+    #[test]
+    fn approach_is_not_offered_to_a_sprite_already_beside_its_target() {
+        use Verb::*;
+        assert_eq!(available(Some(&[Eat]), true), [Eat, Retreat, Rest, Wander]);
+        assert_eq!(
+            available(Some(&[Eat]), false),
+            [Approach, Eat, Retreat, Rest, Wander]
         );
     }
 
@@ -658,7 +868,7 @@ mod tests {
         let mut brain = brain(&[]);
         let scores = BTreeMap::from([(Category::Water, 0.3), (Category::Ball, 0.5)]);
         let verbs = [0.1; VERBS.len()];
-        let available = available(Some(&[Verb::Eat]));
+        let available = available(Some(&[Verb::Eat]), false);
         let mut rng = ChaCha8Rng::seed_from_u64(7);
         let untouched = rng.clone();
         // An action running: attention and switching draw nothing.
@@ -688,5 +898,337 @@ mod tests {
         let cold = pick_first(0.1, &mut rng);
         assert!((650..800).contains(&warm), "{warm}");
         assert!(cold > 990, "{cold}");
+    }
+
+    /// A snapshot of step 5 at `tick`, having chosen `verb` while attending
+    /// to `attended`, with `activations`.
+    fn snapshot(
+        tick: u64,
+        activations: Vec<f32>,
+        verb: Verb,
+        attended: Option<Category>,
+    ) -> Snapshot {
+        Snapshot {
+            tick,
+            inputs: Vec::new(),
+            activations,
+            attention: BTreeMap::new(),
+            attended,
+            target: None,
+            scores: [0.0; VERBS.len()],
+            verb: Some(verb),
+        }
+    }
+
+    /// Has `brain` decide and commit on each of `ticks`.
+    fn decide_on(brain: &mut Brain, ticks: std::ops::Range<u64>) {
+        for tick in ticks {
+            brain.snapshot = Some(snapshot(tick, Vec::new(), Verb::Rest, None));
+            brain.commit(tick);
+        }
+    }
+
+    #[test]
+    fn the_trace_keeps_an_entry_while_its_weight_at_the_next_step_4_is_at_least_one_in_a_hundred() {
+        // 0.9^43 is about .0108 and 0.9^44 about .0097, so after committing
+        // tick 99 the next step 4 (tick 100) credits ticks 57 to 99.
+        let mut quick = brain(&[r#"BrainParam(param: "trace_decay", value: 0.9)"#]);
+        decide_on(&mut quick, 0..100);
+        let ticks: Vec<u64> = quick.trace.iter().map(|e| e.tick).collect();
+        assert_eq!(ticks, (57..100).collect::<Vec<u64>>());
+        // 0.99^458 is about .0100 and 0.99^459 about .0099.
+        let mut slow = brain(&[r#"BrainParam(param: "trace_decay", value: 0.99)"#]);
+        decide_on(&mut slow, 0..1000);
+        assert_eq!(slow.trace.len(), 458);
+        assert_eq!(slow.trace.front().map(|e| e.tick), Some(542));
+    }
+
+    /// Activations for `brain`'s concepts, all 0 but the singletons of
+    /// the inputs `set` names.
+    fn activations(brain: &Brain, set: &[(&str, f32)]) -> Vec<f32> {
+        let mut a = vec![0.0; brain.concepts.len()];
+        for &(name, value) in set {
+            a[input(name)] = value;
+        }
+        a
+    }
+
+    /// Has `brain` decide `verb` at `tick`, attending to `attended`, with
+    /// the singletons `set` names active, and commit it.
+    fn decide(
+        brain: &mut Brain,
+        tick: u64,
+        verb: Verb,
+        attended: Option<Category>,
+        set: &[(&str, f32)],
+    ) {
+        let a = activations(brain, set);
+        brain.snapshot = Some(snapshot(tick, a, verb, attended));
+        brain.commit(tick);
+    }
+
+    fn close(a: f32, b: f32) -> bool {
+        (a - b).abs() < 1e-6
+    }
+
+    #[test]
+    fn a_reward_credits_what_came_before_it_the_most_recent_most() {
+        let data = builtin();
+        let mut brain = brain(&[
+            r#"BrainParam(param: "learning_rate", value: 0.1)"#,
+            r#"BrainParam(param: "trace_decay", value: 0.5)"#,
+            r#"BrainParam(param: "relax_rate", value: 0.0)"#,
+            r#"BrainParam(param: "consolidate_rate", value: 0.0)"#,
+        ]);
+        let always = [("always", 1.0)];
+        decide(&mut brain, 7, Verb::Eat, None, &always);
+        decide(&mut brain, 8, Verb::Drink, None, &always);
+        decide(&mut brain, 9, Verb::Play, None, &always);
+        brain.learn(10, 1.0, 1.0, &data);
+        let link = |brain: &Brain, verb| brain.decision.get(input("always"), column(verb));
+        // η × r × λ^(10 − t_j) × activation.
+        assert!(
+            close(link(&brain, Verb::Play), 0.1 * 0.5),
+            "{}",
+            link(&brain, Verb::Play)
+        );
+        assert!(close(link(&brain, Verb::Drink), 0.1 * 0.25));
+        assert!(close(link(&brain, Verb::Eat), 0.1 * 0.125));
+        // What it does after the reward gets none of it: the reward was used up.
+        decide(&mut brain, 10, Verb::Wander, None, &always);
+        brain.learn(11, 0.0, 1.0, &data);
+        assert_eq!(link(&brain, Verb::Wander), 0.0);
+        assert!(close(link(&brain, Verb::Play), 0.1 * 0.5));
+    }
+
+    #[test]
+    fn a_reward_moves_each_link_by_how_active_its_concept_was() {
+        let data = builtin();
+        let mut brain = brain(&[
+            r#"BrainParam(param: "learning_rate", value: 0.1)"#,
+            r#"BrainParam(param: "trace_decay", value: 0.5)"#,
+            r#"BrainParam(param: "relax_rate", value: 0.0)"#,
+        ]);
+        decide(
+            &mut brain,
+            9,
+            Verb::Eat,
+            None,
+            &[("hunger", 0.8), ("always", 1.0)],
+        );
+        brain.learn(10, -1.0, 2.0, &data);
+        let eat = |name| brain.decision.get(input(name), column(Verb::Eat));
+        // η × learning_rate_mod × r × λ × activation.
+        assert!(
+            close(eat("hunger"), -0.1 * 2.0 * 0.5 * 0.8),
+            "{}",
+            eat("hunger")
+        );
+        assert!(close(eat("always"), -0.1 * 2.0 * 0.5));
+        assert_eq!(eat("thirst"), 0.0, "an inactive concept learns nothing");
+    }
+
+    #[test]
+    fn a_reward_moves_attention_only_for_actions_aimed_at_a_target() {
+        let data = builtin();
+        let mut brain = brain(&[
+            r#"BrainParam(param: "learning_rate", value: 0.1)"#,
+            r#"BrainParam(param: "trace_decay", value: 0.5)"#,
+            r#"BrainParam(param: "relax_rate", value: 0.0)"#,
+        ]);
+        let set = [("hunger", 0.8), ("attended_thornbush", 1.0)];
+        let thornbush = Some(Category::Thornbush);
+        decide(&mut brain, 8, Verb::Eat, thornbush, &set);
+        decide(&mut brain, 9, Verb::Rest, thornbush, &set);
+        brain.learn(10, -1.0, 1.0, &data);
+        let attends = |name| {
+            brain
+                .attention
+                .get(input(name), category_column(Category::Thornbush))
+        };
+        // Only the Eat, at λ²: the Rest used no target.
+        assert!(
+            close(attends("hunger"), -0.1 * 0.25 * 0.8),
+            "{}",
+            attends("hunger")
+        );
+        assert_eq!(
+            attends("attended_thornbush"),
+            0.0,
+            "a Target input never feeds attention"
+        );
+    }
+
+    #[test]
+    fn no_link_goes_past_minus_one_or_plus_one() {
+        let data = builtin();
+        let mut brain = brain(&[
+            r#"BrainParam(param: "learning_rate", value: 0.5)"#,
+            r#"BrainParam(param: "relax_rate", value: 0.0)"#,
+            r#"Instinct(inputs: [("always", false)], verb: Eat, weight: 0.9)"#,
+            r#"AttentionInstinct(input: "always", category: Berry, weight: -0.9)"#,
+        ]);
+        decide(
+            &mut brain,
+            9,
+            Verb::Eat,
+            Some(Category::Berry),
+            &[("always", 1.0)],
+        );
+        brain.learn(10, 1.0, 2.0, &data);
+        assert_eq!(brain.decision.get(input("always"), column(Verb::Eat)), 1.0);
+        brain.learn(11, -1.0, 2.0, &data);
+        brain.learn(12, -1.0, 2.0, &data);
+        brain.learn(13, -1.0, 2.0, &data);
+        assert_eq!(
+            brain
+                .attention
+                .get(input("always"), category_column(Category::Berry)),
+            -1.0
+        );
+    }
+
+    #[test]
+    fn a_learned_change_fades_towards_the_settled_weight_which_creeps_towards_it() {
+        let data = builtin();
+        let mut brain = brain(&[
+            r#"BrainParam(param: "learning_rate", value: 0.5)"#,
+            r#"BrainParam(param: "trace_decay", value: 0.5)"#,
+            r#"BrainParam(param: "relax_rate", value: 0.01)"#,
+            r#"BrainParam(param: "consolidate_rate", value: 0.001)"#,
+        ]);
+        decide(&mut brain, 9, Verb::Eat, None, &[("always", 1.0)]);
+        // The reward lifts w from 0 to .25, then the links relax a tick
+        // (design §2.4): w += .01 × (0 − .25) and w_long += .001 × (.25 − 0),
+        // both from the values before relaxing.
+        brain.learn(10, 1.0, 1.0, &data);
+        let eat = |brain: &Brain| brain.decision.get(input("always"), column(Verb::Eat));
+        assert!(close(eat(&brain), 0.2475), "{}", eat(&brain));
+        let long = brain.decision.settled(input("always"), column(Verb::Eat));
+        assert!(close(long, 0.00025), "{long}");
+        // In the end both settle on the same weight: c·w + r·w_long is kept,
+        // so (.001 × .25 + .01 × 0) / .011.
+        for tick in 11..20_000 {
+            brain.learn(tick, 0.0, 1.0, &data);
+        }
+        assert!((eat(&brain) - 0.25 / 11.0).abs() < 1e-4, "{}", eat(&brain));
+    }
+
+    #[test]
+    fn a_link_that_moves_half_a_point_from_birth_is_a_lesson_once() {
+        let data = builtin();
+        let mut brain = brain(&[
+            r#"BrainParam(param: "learning_rate", value: 0.4)"#,
+            r#"BrainParam(param: "trace_decay", value: 0.5)"#,
+            r#"BrainParam(param: "relax_rate", value: 0.0)"#,
+            r#"AttentionInstinct(input: "hunger", category: Thornbush, weight: 0.3)"#,
+        ]);
+        let set = [("hunger", 1.0), ("attended_thornbush", 1.0)];
+        decide(&mut brain, 9, Verb::Eat, Some(Category::Thornbush), &set);
+        // −.4 × .5 = −.2 a time: the third takes both links past −.5 from birth.
+        assert_eq!(brain.learn(10, -1.0, 1.0, &data), []);
+        assert_eq!(brain.learn(10, -1.0, 1.0, &data), []);
+        let eat = |input: &str| Link::Decision {
+            inputs: vec![(input.to_string(), false)],
+            verb: Verb::Eat,
+        };
+        let attends = Link::Attention {
+            input: "hunger".into(),
+            category: "thornbush".into(),
+        };
+        assert_eq!(
+            brain.learn(10, -1.0, 1.0, &data),
+            [
+                (eat("hunger"), false),
+                (eat("attended_thornbush"), false),
+                (attends, false),
+            ]
+        );
+        assert_eq!(brain.learn(10, -1.0, 1.0, &data), [], "each lesson once");
+    }
+
+    #[test]
+    fn memory_is_the_five_links_furthest_from_birth_largest_first() {
+        let data = builtin();
+        let mut brain = brain(&[
+            r#"BrainParam(param: "learning_rate", value: 0.4)"#,
+            r#"BrainParam(param: "trace_decay", value: 0.5)"#,
+            r#"BrainParam(param: "relax_rate", value: 0.0)"#,
+            r#"AttentionInstinct(input: "hunger", category: Thornbush, weight: 0.3)"#,
+        ]);
+        let set = [
+            ("hunger", 1.0),
+            ("attended_thornbush", 1.0),
+            ("always", 0.5),
+            ("thirst", 0.05),
+        ];
+        decide(&mut brain, 9, Verb::Eat, Some(Category::Thornbush), &set);
+        let memory = |brain: &Brain| brain.explain(&data).expect("a decision").memory;
+        assert_eq!(memory(&brain), [], "nothing has moved yet");
+        // −.4 × .5 = −.2 for each input at 1, −.1 at .5 and −.01 at .05.
+        brain.learn(10, -1.0, 1.0, &data);
+        let eat = |inputs: &[&str]| Link::Decision {
+            inputs: inputs.iter().map(|&i| (i.to_string(), false)).collect(),
+            verb: Verb::Eat,
+        };
+        let attends = |input: &str| Link::Attention {
+            input: input.into(),
+            category: "thornbush".into(),
+        };
+        let got: Vec<(Link, f32, f32)> = memory(&brain)
+            .into_iter()
+            .map(|m| (m.link, m.now, m.birth))
+            .collect();
+        // Ties keep link order: decision links in concept order, then attention.
+        let expected = [
+            (eat(&["hunger"]), -0.2, 0.0),
+            (eat(&["attended_thornbush"]), -0.2, 0.0),
+            (attends("hunger"), 0.1, 0.3),
+            (eat(&["always"]), -0.1, 0.0),
+            (attends("always"), -0.1, 0.0),
+        ];
+        assert_eq!(got.len(), expected.len(), "{got:?}");
+        for ((link, now, birth), (want, want_now, want_birth)) in got.iter().zip(&expected) {
+            assert_eq!(link, want);
+            assert!(
+                close(*now, *want_now) && close(*birth, *want_birth),
+                "{link:?} {now} {birth}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_instinct_past_one_is_born_at_one() {
+        let brain = brain(&[
+            r#"Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.5)"#,
+            r#"AttentionInstinct(input: "hunger", category: Berry, weight: -1.2)"#,
+        ]);
+        assert_eq!(brain.decision.get(input("hunger"), column(Verb::Eat)), 1.0);
+        assert_eq!(
+            brain
+                .attention
+                .get(input("hunger"), category_column(Category::Berry)),
+            -1.0
+        );
+    }
+
+    #[test]
+    fn a_brain_that_stops_deciding_still_drops_what_no_longer_counts() {
+        // A sprite held by the hand, or on a scripted action, commits no
+        // entries, but the ones it has still fade out: 0.9^43 is the last
+        // that counts.
+        let mut brain = brain(&[r#"BrainParam(param: "trace_decay", value: 0.9)"#]);
+        decide_on(&mut brain, 0..3);
+        brain.commit(40);
+        assert_eq!(brain.trace.len(), 3, "0.9^(41 − 0) still counts");
+        brain.commit(43);
+        let ticks: Vec<u64> = brain.trace.iter().map(|e| e.tick).collect();
+        assert_eq!(
+            ticks,
+            [1, 2],
+            "at tick 44's step 4, tick 0's weight is 0.9^44"
+        );
+        brain.commit(100);
+        assert!(brain.trace.is_empty());
     }
 }
