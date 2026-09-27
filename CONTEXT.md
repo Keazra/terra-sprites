@@ -304,6 +304,26 @@ _Avoid_: reflex, rule (rules belong to objects)
 A setting of how the brain works, such as how much chance is in its choices, set by a gene within limits physiology fixes.
 _Avoid_: hyperparameter
 
+**Link**:
+How strongly one thing leads to another in the brain: a concept to a verb ("hunger → eat"), or a brain input to a kind of thing to attend to ("hunger → attends to berry bush"). A sprite's instincts set where each starts, and learning moves it.
+_Avoid_: weight, synapse, connection
+
+**Trace**:
+The brain's record of what it felt and chose on each of its last few dozen ticks, most recent strongest. A reward or punishment is credited back along it.
+_Avoid_: history, memory (memory is what was learned)
+
+**Felt**:
+The reward a sprite took in on its last tick, less the punishment: what learning used up. The design calls it `last_r`.
+_Avoid_: last r, reinforcement (on screen)
+
+**Memory**:
+What a sprite has learned from experience: how far its links have moved from what it was born with.
+_Avoid_: learned links, knowledge
+
+**Lesson**:
+A link that has moved half a point from where the sprite was born with it. The event log announces each lesson once, as good or bad.
+_Avoid_: milestone (on screen)
+
 ### The screen
 
 **Map view**:
@@ -377,6 +397,12 @@ _Avoid_: tickle, positive
 **Correct**:
 An electric shock from the hand, which hurts the sprite and raises its punishment chemical.
 _Avoid_: slap, punish, negative
+
+### Testing and tuning
+
+**Lab scenario**:
+A file describing a world to run for many seeds and what to count in it, such as the thornbush bites in the first and the last 5,000 ticks. It is both a test and the main tool for tuning.
+_Avoid_: benchmark, experiment
 
 ### Zones (a later milestone)
 
