@@ -1,7 +1,7 @@
 //! The brain (design §5): what a sprite attends to (5a) and what it chooses
 //! to do about it (5b), from its inputs through its concepts.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 
 use rand_chacha::ChaCha8Rng;
 use serde::Serialize;
@@ -11,6 +11,7 @@ use crate::brain_io::Source;
 use crate::data::DataPack;
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, LocusRef};
+use crate::learning::TraceEntry;
 use crate::perception::Target;
 use crate::random::unit;
 use crate::registry::{BrainParam, Category, Verb};
@@ -115,11 +116,15 @@ pub(crate) struct Brain {
     pub(crate) snapshot: Option<Snapshot>,
     /// The reward less the punishment step 4 last used up: `last_r` (design §5.6).
     pub(crate) felt: f32,
+    /// What it felt and chose on its recent ticks, oldest first (design §5.6).
+    pub(crate) trace: VecDeque<TraceEntry>,
 }
 
 /// What the brain saw and did at a step 5.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct Snapshot {
+    /// The tick of that step 5.
+    pub(crate) tick: u64,
     /// Every input's value, in the pack's input order.
     pub(crate) inputs: Vec<f32>,
     /// Every concept's activation, in the brain's concept order.
@@ -218,7 +223,22 @@ impl Brain {
             attended: None,
             snapshot: None,
             felt: 0.0,
+            trace: VecDeque::new(),
         }
+    }
+
+    /// Commits this tick's trace entry at the end of step 6 (design §5.6),
+    /// if the brain decided at this tick's step 5.
+    pub(crate) fn commit(&mut self, tick: u64) {
+        let Some(snapshot) = self.snapshot.as_ref().filter(|s| s.tick == tick) else {
+            return;
+        };
+        self.trace.push_back(TraceEntry {
+            tick,
+            activations: snapshot.activations.clone(),
+            verb: snapshot.verb,
+            attended: snapshot.attended,
+        });
     }
 
     /// What the brain did at its latest step 5, explained (design §5.9), or

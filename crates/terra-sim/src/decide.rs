@@ -154,6 +154,7 @@ pub(crate) fn decide(
         .and_then(|a| a.target)
         .or(candidate.map(|c| c.target));
     brain.snapshot = Some(Snapshot {
+        tick: state.tick,
         inputs,
         activations,
         attention,
