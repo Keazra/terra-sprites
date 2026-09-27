@@ -7,6 +7,9 @@ use terra_sim::{
     Verb, World,
 };
 
+/// Makes a sprite's genome from the data pack.
+type MakeGenome = fn(&DataPack) -> Genome;
+
 fn builtin() -> DataPack {
     DataPack::builtin().expect("built-in data pack is valid")
 }
@@ -55,7 +58,7 @@ fn retreating_with(
     objects: &[(Pos, &str)],
     sprite: Pos,
     from: Pos,
-    genome: fn(&DataPack) -> Genome,
+    genome: MakeGenome,
 ) -> World {
     let script = [(sprite, ScriptedAction::Retreat { at: from })];
     scene(rows, objects, &[(sprite, genome)], &script)
@@ -66,7 +69,7 @@ fn retreating_with(
 fn scene(
     rows: &[&str],
     objects: &[(Pos, &str)],
-    sprites: &[(Pos, fn(&DataPack) -> Genome)],
+    sprites: &[(Pos, MakeGenome)],
     scripted: &[(Pos, ScriptedAction)],
 ) -> World {
     let data = builtin();
@@ -175,11 +178,21 @@ fn a_retreat_is_done_after_six_steps_at_the_sprite_s_own_speed() {
 fn cornered_by_the_map_alone_a_retreat_ends_at_once_and_the_sprite_feels_it() {
     // The berry is beside it, and the map's edge is behind it.
     let rows = ["..."];
-    let mut world = retreating_with(&rows, &[(at(1, 0), "berry")], at(0, 0), at(1, 0), feeling_cornered);
+    let mut world = retreating_with(
+        &rows,
+        &[(at(1, 0), "berry")],
+        at(0, 0),
+        at(1, 0),
+        feeling_cornered,
+    );
     let events = world.step();
     assert_eq!(endings(&events), [(Verb::Retreat, Outcome::Blocked)]);
     assert_eq!(where_is(&world), at(0, 0));
-    assert_eq!(level(&world, "h0"), 0.0, "a pulse goes live at the next tick");
+    assert_eq!(
+        level(&world, "h0"),
+        0.0,
+        "a pulse goes live at the next tick"
+    );
     world.step();
     assert_eq!(level(&world, "h0"), 1.0, "cornered");
 }
@@ -187,7 +200,13 @@ fn cornered_by_the_map_alone_a_retreat_ends_at_once_and_the_sprite_feels_it() {
 #[test]
 fn a_retreat_that_steps_away_is_not_cornered() {
     let rows = ["....."];
-    let mut world = retreating_with(&rows, &[(at(0, 0), "berry")], at(1, 0), at(0, 0), feeling_cornered);
+    let mut world = retreating_with(
+        &rows,
+        &[(at(0, 0), "berry")],
+        at(1, 0),
+        at(0, 0),
+        feeling_cornered,
+    );
     world.step();
     world.step();
     assert_eq!(level(&world, "h0"), 0.0);
@@ -212,7 +231,10 @@ fn held_up_by_a_sprite_a_retreat_waits_then_is_cornered_after_three_ticks() {
         assert_eq!(first_endings(&world, &events), [], "waiting at tick {tick}");
     }
     let events = world.step();
-    assert_eq!(first_endings(&world, &events), [(Verb::Retreat, Outcome::Blocked)]);
+    assert_eq!(
+        first_endings(&world, &events),
+        [(Verb::Retreat, Outcome::Blocked)]
+    );
     assert_eq!(where_is(&world), me);
     world.step();
     assert_eq!(level(&world, "h0"), 1.0, "cornered");
@@ -223,7 +245,12 @@ fn a_retreat_held_up_by_a_sprite_goes_on_once_it_moves_off() {
     let (me, other) = (at(1, 0), at(2, 0));
     let script = [
         (me, ScriptedAction::Retreat { at: at(0, 0) }),
-        (other, ScriptedAction::Wander { destination: at(5, 0) }),
+        (
+            other,
+            ScriptedAction::Wander {
+                destination: at(5, 0),
+            },
+        ),
     ];
     let mut world = scene(
         &["......"],
@@ -263,10 +290,16 @@ fn a_retreat_whose_target_is_gone_fails() {
 fn a_retreat_goes_on_once_its_target_is_out_of_sight() {
     // It sees 6 tiles; six steps take it 11 from the berry.
     let rows = ["................"];
-    let mut world = retreating_with(&rows, &[(at(0, 0), "berry")], at(5, 0), at(0, 0), short_sighted);
+    let mut world = retreating_with(
+        &rows,
+        &[(at(0, 0), "berry")],
+        at(5, 0),
+        at(0, 0),
+        short_sighted,
+    );
     let mut ended = Vec::new();
     for _ in 0..6 {
-        ended.extend(world.step().into_iter());
+        ended.extend(world.step());
     }
     assert_eq!(endings(&ended), [(Verb::Retreat, Outcome::Applied)]);
     assert_eq!(where_is(&world), at(11, 0));
@@ -278,7 +311,11 @@ fn a_retreat_s_progress_counts_the_steps_it_has_left() {
     let mut world = retreating(&rows, &[(at(0, 0), "thornbush")], at(1, 0), at(0, 0));
     world.step();
     world.step();
-    let action = world.sprites().next().and_then(|s| s.action()).expect("the retreat");
+    let action = world
+        .sprites()
+        .next()
+        .and_then(|s| s.action())
+        .expect("the retreat");
     assert_eq!(action.progress, Progress::Walking { steps_left: 4 });
     assert_eq!(action.destination, None, "a retreat heads for no tile");
 }

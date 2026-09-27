@@ -413,7 +413,12 @@ fn a_lonely_sprite_goes_over_to_another_or_plays_with_it() {
 /// that plays leaves it, less its boredom the tick after, when it feels it.
 fn boredom_eased_by_playing(objects: &[(Pos, &str)], sprites_at: &[Pos], with: Pos) -> f32 {
     let data = builtin();
-    let bored = || starter_with(&[r#"InitialConcentration(chem: "boredom", value: 0.9)"#], &data);
+    let bored = || {
+        starter_with(
+            &[r#"InitialConcentration(chem: "boredom", value: 0.9)"#],
+            &data,
+        )
+    };
     let me = at(1, 1);
     let mut sprites = vec![(me, Some(bored()))];
     sprites.extend(sprites_at.iter().map(|&pos| (pos, Some(bored()))));
