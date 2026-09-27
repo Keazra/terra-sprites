@@ -16,6 +16,7 @@ use crate::events::{DeathCause, Event, EventKind};
 use crate::expression::{Expression, expressions};
 use crate::generate::{generate, place_objects, place_sprites};
 use crate::genome::{GeneView, Genome};
+use crate::learning;
 use crate::map::{Map, MapError, Pos};
 use crate::objects::{EntityId, Object, Objects};
 use crate::perception::{Flood, Target, goal_tiles};
@@ -264,6 +265,12 @@ impl<'a> SpriteView<'a> {
     /// `None` before its first decision.
     pub fn explain(&self) -> Option<Explanation<'a>> {
         self.sprite.brain.explain(&self.world.data)
+    }
+
+    /// The reward less the punishment it took in on its last tick, which
+    /// learning used up (design §5.6): `last_r`.
+    pub fn felt(&self) -> f32 {
+        self.sprite.brain.felt
     }
 
     /// The tile of the one thing its attention was on at the latest step 5
@@ -534,7 +541,7 @@ impl World {
         self.apply_commands(); // 1
         self.run_environment(&mut events); // 2
         let dying = self.run_biochemistry(); // 3
-        self.run_learning(); // 4
+        self.run_learning(&dying, &mut events); // 4
         self.sense_and_decide(&dying, &mut events); // 5
         self.resolve_actions(&dying, &mut events); // 6
         self.finish_tick(&dying, &mut events); // 7
@@ -681,8 +688,11 @@ impl World {
         dying
     }
 
-    /// Step 4: reinforcement from consumed reward and punishment.
-    fn run_learning(&mut self) {}
+    /// Step 4: reinforcement from consumed reward and punishment, for every
+    /// sprite not marked dying.
+    fn run_learning(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
+        learning::run(&mut self.state, &self.data, dying, events);
+    }
 
     /// Step 5: perception, attention and decisions.
     fn sense_and_decide(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
@@ -692,6 +702,7 @@ impl World {
     /// Step 6: movement and verb effects, then trace entries.
     fn resolve_actions(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
         action::resolve(&mut self.state, &self.data, dying, events);
+        learning::commit(&mut self.state);
     }
 
     /// Step 7: death check #2 marks the sprites step 6's verbs injured to 1;
@@ -1186,6 +1197,132 @@ mod tests {
             .at(Pos { x: 2, y: 2 })
             .expect("the bush");
         world.state.objects.get_mut(id).expect("the bush").counters[0] = 7;
+        assert!(world.check_invariants().is_err());
+    }
+
+    /// A sprite of `genes` on (1, 1) of the field with a bush, doing
+    /// `script` first.
+    fn field_with_one(genes: &str, script: &[ScriptedAction]) -> (World, EntityId) {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let rows = [".......", ".......", ".......", ".....~.", "......."];
+        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
+        let text = format!("(format: 1, genes: [{genes}])");
+        let genome = Genome::from_ron(&text, &data).expect("a valid genome");
+        let at = Pos { x: 1, y: 1 };
+        let scripted: Vec<(Pos, ScriptedAction)> = script.iter().map(|&s| (at, s)).collect();
+        let scenario = Scenario {
+            map,
+            objects: &[(Pos { x: 2, y: 2 }, "berry_bush")],
+            sprites: &[(at, Some(genome))],
+            scripted: &scripted,
+        };
+        let world = World::from_scenario(scenario, data, 7).expect("valid scenario");
+        let id = world.sprites().next().expect("the sprite").id();
+        (world, id)
+    }
+
+    /// The ticks of the entries in sprite `id`'s trace, oldest first.
+    fn trace_ticks(world: &World, id: EntityId) -> Vec<u64> {
+        let sprite = world.state.sprites.get(id).expect("the sprite");
+        sprite.brain.trace.iter().map(|entry| entry.tick).collect()
+    }
+
+    #[test]
+    fn a_deciding_sprite_adds_one_trace_entry_every_tick_even_while_its_action_continues() {
+        // It rests for 10 ticks: one choice, then 4 ticks carrying on.
+        let (mut world, id) = field_with_one(
+            r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0)"#,
+            &[],
+        );
+        let started = (0..5)
+            .flat_map(|_| world.step())
+            .filter(|e| matches!(e.kind, EventKind::ActionStarted { .. }))
+            .count();
+        assert_eq!(started, 1, "one rest, still going");
+        assert_eq!(trace_ticks(&world, id), [0, 1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn a_sprite_on_a_scripted_action_adds_no_trace_entries() {
+        let (mut world, id) = field_with_one("", &[ScriptedAction::Rest]);
+        for _ in 0..5 {
+            world.step();
+        }
+        assert_eq!(trace_ticks(&world, id), [] as [u64; 0]);
+    }
+
+    /// A trace entry for sprite `id` at `tick`, choosing Eat with every
+    /// concept fully active.
+    fn eat_entry(world: &World, id: EntityId, tick: u64) -> crate::learning::TraceEntry {
+        let brain = &world.state.sprites.get(id).expect("the sprite").brain;
+        crate::learning::TraceEntry {
+            tick,
+            activations: vec![1.0; brain.concepts.len()],
+            verb: Some(Verb::Eat),
+            attended: None,
+        }
+    }
+
+    #[test]
+    fn a_sprite_marked_dying_learns_nothing_at_step_4() {
+        let (mut world, first, second) = field_with_sprites();
+        let reward = world.data.physiology().indices.reward;
+        for id in [first, second] {
+            let entry = eat_entry(&world, id, 0);
+            let sprite = world.state.sprites.get_mut(id).expect("a sprite");
+            sprite.brain.trace.push_back(entry);
+            sprite.body.chems[reward] = 0.5;
+        }
+        world.state.tick = 1;
+        let mut events = Vec::new();
+        learning::run(&mut world.state, &world.data, &[second], &mut events);
+        let sprite = |id| world.state.sprites.get(id).expect("a sprite");
+        assert_eq!(sprite(first).brain.felt, 0.5, "the living one learns");
+        assert_eq!(sprite(first).body.chems[reward], 0.0);
+        assert_eq!(sprite(second).brain.felt, 0.0, "the dying one doesn't");
+        assert_eq!(
+            sprite(second).body.chems[reward],
+            0.5,
+            "nor uses up its reward"
+        );
+    }
+
+    #[test]
+    fn the_state_hash_covers_every_sprite_s_learned_links() {
+        let (mut world, _, second) = field_with_sprites();
+        let entry = eat_entry(&world, second, 0);
+        let before = world.state_hash();
+        let data = world.data.clone();
+        let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
+        brain.trace.push_back(entry);
+        let traced = world.state_hash();
+        assert_ne!(traced, before, "the trace is hashed");
+        let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
+        brain.learn(1, 1.0, 1.0, &data);
+        assert_ne!(world.state_hash(), traced, "the links are hashed");
+    }
+
+    #[test]
+    fn a_learned_link_past_one_or_not_a_number_breaks_an_invariant() {
+        for broken in [1.5, f32::NAN] {
+            let (mut world, first, _) = field_with_sprites();
+            assert_eq!(world.check_invariants(), Ok(()));
+            let brain = &mut world.state.sprites.get_mut(first).expect("a sprite").brain;
+            brain.break_a_link_for_test(broken);
+            assert!(world.check_invariants().is_err(), "{broken}");
+        }
+    }
+
+    #[test]
+    fn a_felt_value_that_is_not_a_number_breaks_an_invariant() {
+        let (mut world, first, _) = field_with_sprites();
+        world
+            .state
+            .sprites
+            .get_mut(first)
+            .expect("a sprite")
+            .brain
+            .felt = f32::NAN;
         assert!(world.check_invariants().is_err());
     }
 }

@@ -5,7 +5,8 @@ use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
     ActionView, ChemicalKind, ChemicalLevel, DataPack, DeathCause, EmitterMode, EntityId,
-    Expression, GeneView, ObjectView, Outcome, Progress, SpriteView, Target, Trait, Verb, World,
+    Expression, GeneView, Link, ObjectView, Outcome, Progress, SpriteView, Target, Trait, Verb,
+    World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -604,7 +605,59 @@ fn brain_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
         let amount = signed_level(contribution.amount);
         lines.extend(scored("   ", &concept_name(&contribution.inputs), &amount));
     }
+    // A link whose move rounds to nothing has nothing worth showing.
+    let remembered: Vec<_> = explained
+        .memory
+        .iter()
+        .filter(|m| level((m.now - m.birth).abs()) != ".00")
+        .collect();
+    if !remembered.is_empty() {
+        lines.push(String::new());
+        lines.extend(scored(" ", "MEMORY", &columns("now", "birth")));
+    }
+    for memory in remembered {
+        let birth = match memory.birth {
+            0.0 => level(0.0),
+            birth => signed_level(birth),
+        };
+        let numbers = columns(&signed_level(memory.now), &birth);
+        lines.extend(scored("   ", &link_name(&memory.link), &numbers));
+    }
     lines.into_iter().map(Line::from).collect()
+}
+
+/// A lesson as the event log says it (design §6.1): "Sprite #12 learned:
+/// attended thornbush → eat is bad", "… is good" for a link that rose.
+pub(crate) fn learned_line(id: EntityId, link: &Link, good: bool) -> String {
+    let verdict = if good { "good" } else { "bad" };
+    let link = link_name(link).replace(BOUND, " ");
+    format!("{} learned: {link} is {verdict}", sprite_label(id))
+}
+
+/// The memory's two columns, a link's weight now and at birth, each
+/// right-aligned.
+fn columns(now: &str, birth: &str) -> String {
+    format!("{now:>5}  {birth:>5}")
+}
+
+/// A link as the Genome tab words the instinct it began as: `attended
+/// thornbush → eat`, `hunger → attends to thornbush`.
+fn link_name(link: &Link) -> String {
+    match link {
+        Link::Decision { inputs, verb } => {
+            let inputs: Vec<(&str, bool)> = inputs.iter().map(|(i, n)| (i.as_str(), *n)).collect();
+            format!(
+                "{} → {}",
+                concept_name(&inputs),
+                verb_name(*verb).to_lowercase()
+            )
+        }
+        Link::Attention { input, category } => format!(
+            "{} → attends to {}",
+            unbroken(&display_name(input)),
+            unbroken(&display_name(category))
+        ),
+    }
 }
 
 /// A concept by its inputs, as the Brain tab and the Genome tab's instincts
@@ -659,11 +712,17 @@ fn scored(head: &str, name: &str, number: &str) -> Vec<String> {
 
 /// The Chem tab (design §6.1): each chemical on its own line with its level
 /// and its change per tick, the physical chemicals, then the signal
-/// chemicals; then the hormones' levels, four to a line.
+/// chemicals, with what the sprite felt on the reward line; then the
+/// hormones' levels, four to a line.
 fn chem_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
     let chemicals: Vec<ChemicalLevel> = sprite.chemicals().collect();
     let line = |c: &ChemicalLevel| {
-        let amount = change(c.change).unwrap_or_default();
+        // Reward is used up every tick, so its line shows what learning
+        // took in instead of a change: `last_r` (design §6.1).
+        let amount = match c.name {
+            "reward" => format!("felt {}", signed_level(sprite.felt())),
+            _ => change(c.change).unwrap_or_default(),
+        };
         let name = display_name(c.name);
         let text = format!(" {name:<13}{:>4}  {amount}", level(c.level));
         text.trim_end().to_string()

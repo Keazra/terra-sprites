@@ -32,6 +32,8 @@ pub(crate) struct Physiology {
     pub(crate) receptor_targets: BTreeMap<LocusId, (f32, f32)>,
     pub(crate) nearby_sprites: NearbySprites,
     pub(crate) spawn_variation: f32,
+    /// How far a link moves from birth to be a lesson (design §5.6).
+    pub(crate) lesson_threshold: f32,
     pub(crate) actions: Actions,
     pub(crate) movement: Movement,
     pub(crate) indices: Indices,
@@ -55,6 +57,7 @@ pub(crate) struct PhysiologyEntry {
     receptor_targets: BTreeMap<String, (f32, f32)>,
     nearby_sprites: NearbySprites,
     spawn_variation: f32,
+    lesson_threshold: f32,
     actions: Actions,
     movement: Movement,
 }
@@ -325,6 +328,7 @@ impl PhysiologyEntry {
             receptor_targets,
             nearby_sprites: self.nearby_sprites,
             spawn_variation: self.spawn_variation,
+            lesson_threshold: self.lesson_threshold,
             actions: self.actions,
             movement: self.movement,
             indices,
@@ -367,6 +371,9 @@ pub(crate) struct Indices {
     pub(crate) food: usize,
     pub(crate) water: usize,
     pub(crate) injury: usize,
+    /// The learning signals, which step 4 uses up (design §5.6).
+    pub(crate) reward: usize,
+    pub(crate) punishment: usize,
     pub(crate) always: usize,
     pub(crate) age: usize,
     pub(crate) nearby_sprites: usize,
@@ -374,6 +381,8 @@ pub(crate) struct Indices {
     pub(crate) resting: usize,
     /// The receptor target that scales the brain's temperatures (design §5.3, §5.5).
     pub(crate) exploration_mod: usize,
+    /// The receptor target that scales learning (design §5.6).
+    pub(crate) learning_rate_mod: usize,
     /// The pulse a retreat that finds no step away fires (design §3.7).
     pub(crate) cornered: usize,
     /// The pulse whose source is the attacker, the Sprite candidate while
@@ -397,6 +406,17 @@ impl Indices {
                     (
                         "chemicals.ron",
                         format!("physiology needs a physical chemical called `{name}`"),
+                    )
+                })
+        };
+        let signal = |name: &str| {
+            chemicals
+                .iter()
+                .position(|c| c.name == name && c.class == ChemicalClass::Signal)
+                .ok_or_else(|| {
+                    (
+                        "chemicals.ron",
+                        format!("learning needs a signal chemical called `{name}`"),
                     )
                 })
         };
@@ -432,12 +452,15 @@ impl Indices {
             food: chem("food")?,
             water: chem("water")?,
             injury: chem("injury")?,
+            reward: signal("reward")?,
+            punishment: signal("punishment")?,
             always: sensor("always")?,
             age: sensor("age")?,
             nearby_sprites: sensor("nearby_sprites")?,
             moving: sensor("moving")?,
             resting: sensor("resting")?,
             exploration_mod: target("exploration_mod")?,
+            learning_rate_mod: target("learning_rate_mod")?,
             cornered: pulse("cornered")?,
             was_hit: pulse("was_hit")?,
         })
