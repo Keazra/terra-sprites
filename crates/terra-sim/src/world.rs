@@ -16,6 +16,7 @@ use crate::events::{DeathCause, Event, EventKind};
 use crate::expression::{Expression, expressions};
 use crate::generate::{generate, place_objects, place_sprites};
 use crate::genome::{GeneView, Genome};
+use crate::learning;
 use crate::map::{Map, MapError, Pos};
 use crate::objects::{EntityId, Object, Objects};
 use crate::perception::{Flood, Target, goal_tiles};
@@ -264,6 +265,12 @@ impl<'a> SpriteView<'a> {
     /// `None` before its first decision.
     pub fn explain(&self) -> Option<Explanation<'a>> {
         self.sprite.brain.explain(&self.world.data)
+    }
+
+    /// The reward less the punishment it took in on its last tick, which
+    /// learning used up (design §5.6): `last_r`.
+    pub fn felt(&self) -> f32 {
+        self.sprite.brain.felt
     }
 
     /// The tile of the one thing its attention was on at the latest step 5
@@ -682,7 +689,9 @@ impl World {
     }
 
     /// Step 4: reinforcement from consumed reward and punishment.
-    fn run_learning(&mut self) {}
+    fn run_learning(&mut self) {
+        learning::run(&mut self.state, &self.data);
+    }
 
     /// Step 5: perception, attention and decisions.
     fn sense_and_decide(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {

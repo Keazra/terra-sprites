@@ -113,6 +113,8 @@ pub(crate) struct Brain {
     /// What the brain did at the latest step 5 (design §5.5), for the trace
     /// entry learning commits and for the Brain tab.
     pub(crate) snapshot: Option<Snapshot>,
+    /// The reward less the punishment step 4 last used up: `last_r` (design §5.6).
+    pub(crate) felt: f32,
 }
 
 /// What the brain saw and did at a step 5.
@@ -215,6 +217,7 @@ impl Brain {
             attention,
             attended: None,
             snapshot: None,
+            felt: 0.0,
         }
     }
 

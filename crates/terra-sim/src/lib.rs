@@ -15,6 +15,7 @@ mod events;
 mod expression;
 mod generate;
 mod genome;
+mod learning;
 mod map;
 mod object_types;
 mod objects;

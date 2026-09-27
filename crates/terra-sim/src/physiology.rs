@@ -367,6 +367,9 @@ pub(crate) struct Indices {
     pub(crate) food: usize,
     pub(crate) water: usize,
     pub(crate) injury: usize,
+    /// The learning signals, which step 4 uses up (design §5.6).
+    pub(crate) reward: usize,
+    pub(crate) punishment: usize,
     pub(crate) always: usize,
     pub(crate) age: usize,
     pub(crate) nearby_sprites: usize,
@@ -397,6 +400,17 @@ impl Indices {
                     (
                         "chemicals.ron",
                         format!("physiology needs a physical chemical called `{name}`"),
+                    )
+                })
+        };
+        let signal = |name: &str| {
+            chemicals
+                .iter()
+                .position(|c| c.name == name && c.class == ChemicalClass::Signal)
+                .ok_or_else(|| {
+                    (
+                        "chemicals.ron",
+                        format!("learning needs a signal chemical called `{name}`"),
                     )
                 })
         };
@@ -432,6 +446,8 @@ impl Indices {
             food: chem("food")?,
             water: chem("water")?,
             injury: chem("injury")?,
+            reward: signal("reward")?,
+            punishment: signal("punishment")?,
             always: sensor("always")?,
             age: sensor("age")?,
             nearby_sprites: sensor("nearby_sprites")?,
