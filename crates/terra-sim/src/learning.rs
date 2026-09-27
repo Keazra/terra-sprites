@@ -5,6 +5,7 @@ use serde::Serialize;
 
 use crate::data::DataPack;
 use crate::events::{Event, EventKind};
+use crate::objects::EntityId;
 use crate::registry::{Category, Verb};
 use crate::world::WorldState;
 
@@ -24,8 +25,12 @@ pub(crate) struct LearnableLinks<const N: usize> {
 }
 
 impl<const N: usize> LearnableLinks<N> {
-    /// Links born at the weights `birth` gives.
-    pub(crate) fn new(birth: Vec<[f32; N]>) -> LearnableLinks<N> {
+    /// Links born at the weights `birth` gives, each clamped to [−1, 1] like
+    /// every link (design §5.6): spawn variation can take a 1.0 instinct past 1.
+    pub(crate) fn new(mut birth: Vec<[f32; N]>) -> LearnableLinks<N> {
+        for w in birth.iter_mut().flatten() {
+            *w = w.clamp(-1.0, 1.0);
+        }
         LearnableLinks {
             w: birth.clone(),
             settled: birth.clone(),
@@ -55,6 +60,22 @@ impl<const N: usize> LearnableLinks<N> {
     pub(crate) fn nudge(&mut self, row: usize, column: usize, by: f32) {
         let w = &mut self.w[row][column];
         *w = (*w + by).clamp(-1.0, 1.0);
+    }
+
+    /// Checks every working and consolidated weight is a number within
+    /// [−1, 1] (design §5.6), or says which isn't.
+    pub(crate) fn check(&self) -> Result<(), String> {
+        let weights = self.w.iter().chain(&self.settled).flatten();
+        match weights.copied().find(|w| !(-1.0..=1.0).contains(w)) {
+            Some(w) => Err(format!("a link at {w}, outside -1 to 1")),
+            None => Ok(()),
+        }
+    }
+
+    /// Sets the working weight in `row` and `column`, unchecked.
+    #[cfg(test)]
+    pub(crate) fn set(&mut self, row: usize, column: usize, w: f32) {
+        self.w[row][column] = w;
     }
 
     /// Every link that has moved from birth, as `(row, column, now, birth)`,
@@ -135,13 +156,22 @@ pub(crate) struct TraceEntry {
     pub(crate) attended: Option<Category>,
 }
 
-/// Step 4 for every sprite: reads `r = reward − punishment`, resets both to
-/// 0, keeps `r` as what the sprite felt, and learns from it, reporting each
-/// lesson.
-pub(crate) fn run(state: &mut WorldState, data: &DataPack, events: &mut Vec<Event>) {
+/// Step 4 for every sprite not `dying` (design §2.4): reads `r = reward −
+/// punishment`, resets both to 0, keeps `r` as what the sprite felt, and
+/// learns from it, reporting each lesson.
+pub(crate) fn run(
+    state: &mut WorldState,
+    data: &DataPack,
+    dying: &[EntityId],
+    events: &mut Vec<Event>,
+) {
     let indices = &data.physiology().indices;
     let tick = state.tick;
-    for (id, body, brain) in state.sprites.minds_mut() {
+    let living = state
+        .sprites
+        .minds_mut()
+        .filter(|(id, ..)| !dying.contains(id));
+    for (id, body, brain) in living {
         let r = body.chems[indices.reward] - body.chems[indices.punishment];
         body.chems[indices.reward] = 0.0;
         body.chems[indices.punishment] = 0.0;
