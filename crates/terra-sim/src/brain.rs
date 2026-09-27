@@ -176,33 +176,41 @@ pub(crate) enum Lesson {
 impl Lesson {
     /// The link it's about, named, and whether it rose.
     pub(crate) fn named(self, brain: &Brain, data: &DataPack) -> (Link, bool) {
-        let names = data.brain_inputs_in_order();
         match self {
             Lesson::Decision {
                 concept,
                 verb,
                 good,
-            } => {
-                let inputs = brain.concepts[concept]
-                    .iter()
-                    .map(|&(i, negated)| (names[i].name.clone(), negated))
-                    .collect();
-                (Link::Decision { inputs, verb }, good)
-            }
+            } => (brain.decision_link(concept, verb, data), good),
             Lesson::Attention {
                 input,
                 category,
                 good,
-            } => {
-                let link = Link::Attention {
-                    input: names[input].name.clone(),
-                    category: category.name().to_string(),
-                };
-                (link, good)
-            }
+            } => (attention_link(input, category, data), good),
         }
     }
 }
+
+/// The link from the input at `input` in the pack to `category`, named.
+fn attention_link(input: usize, category: Category, data: &DataPack) -> Link {
+    Link::Attention {
+        input: data.brain_inputs_in_order()[input].name.clone(),
+        category: category.name().to_string(),
+    }
+}
+
+/// How far one link has come from birth (design §5.9).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Memory {
+    pub link: Link,
+    /// Its working weight now.
+    pub now: f32,
+    /// The instinct it was born with.
+    pub birth: f32,
+}
+
+/// How many links the memory lists (design §5.9).
+const MEMORY_SIZE: usize = 5;
 
 /// What a brain did at its latest step 5, explained (design §5.9): what it
 /// could attend to, and why it's doing what it's doing.
@@ -219,6 +227,10 @@ pub struct Explanation<'a> {
     /// first whatever the sign, ties in concept order. A concept adding
     /// nothing is left out.
     pub contributions: Vec<Contribution<'a>>,
+    /// The links, of both kinds, furthest from birth, largest first, ties
+    /// in link order: decision links, then attention links. One whose
+    /// distance rounds to .00 is left out.
+    pub memory: Vec<Memory>,
 }
 
 /// How much one concept adds to a verb's score (design §5.9).
@@ -420,7 +432,39 @@ impl Brain {
             attended: snapshot.attended.map(Category::name),
             decision,
             contributions,
+            memory: self.memory(data),
         })
+    }
+
+    /// The links furthest from birth (design §5.9).
+    fn memory(&self, data: &DataPack) -> Vec<Memory> {
+        let decisions = self
+            .decision
+            .moved()
+            .map(|(k, v, now, birth)| (self.decision_link(k, VERBS[v], data), now, birth));
+        let attention = self
+            .attention
+            .moved()
+            .map(|(i, c, now, birth)| (attention_link(i, Category::ALL[c], data), now, birth));
+        let mut memory: Vec<Memory> = decisions
+            .chain(attention)
+            .filter(|&(_, now, birth)| (now - birth).abs() >= 0.005)
+            .map(|(link, now, birth)| Memory { link, now, birth })
+            .collect();
+        // A stable sort keeps a tie in link order.
+        memory.sort_by(|a, b| (b.now - b.birth).abs().total_cmp(&(a.now - a.birth).abs()));
+        memory.truncate(MEMORY_SIZE);
+        memory
+    }
+
+    /// The link from the concept at `concept` to `verb`, named.
+    fn decision_link(&self, concept: usize, verb: Verb, data: &DataPack) -> Link {
+        let names = data.brain_inputs_in_order();
+        let inputs = self.concepts[concept]
+            .iter()
+            .map(|&(i, negated)| (names[i].name.clone(), negated))
+            .collect();
+        Link::Decision { inputs, verb }
     }
 
     /// Every input's value (design §5.2), in the pack's input order: State
@@ -1119,5 +1163,55 @@ mod tests {
             ]
         );
         assert_eq!(brain.learn(10, -1.0, 1.0, &data), [], "each lesson once");
+    }
+
+    #[test]
+    fn memory_is_the_five_links_furthest_from_birth_largest_first() {
+        let data = builtin();
+        let mut brain = brain(&[
+            r#"BrainParam(param: "learning_rate", value: 0.4)"#,
+            r#"BrainParam(param: "trace_decay", value: 0.5)"#,
+            r#"BrainParam(param: "relax_rate", value: 0.0)"#,
+            r#"AttentionInstinct(input: "hunger", category: Thornbush, weight: 0.3)"#,
+        ]);
+        let set = [
+            ("hunger", 1.0),
+            ("attended_thornbush", 1.0),
+            ("always", 0.5),
+            ("thirst", 0.05),
+        ];
+        decide(&mut brain, 9, Verb::Eat, Some(Category::Thornbush), &set);
+        let memory = |brain: &Brain| brain.explain(&data).expect("a decision").memory;
+        assert_eq!(memory(&brain), [], "nothing has moved yet");
+        // −.4 × .5 = −.2 for each input at 1, −.1 at .5 and −.01 at .05.
+        brain.learn(10, -1.0, 1.0, &data);
+        let eat = |inputs: &[&str]| Link::Decision {
+            inputs: inputs.iter().map(|&i| (i.to_string(), false)).collect(),
+            verb: Verb::Eat,
+        };
+        let attends = |input: &str| Link::Attention {
+            input: input.into(),
+            category: "thornbush".into(),
+        };
+        let got: Vec<(Link, f32, f32)> = memory(&brain)
+            .into_iter()
+            .map(|m| (m.link, m.now, m.birth))
+            .collect();
+        // Ties keep link order: decision links in concept order, then attention.
+        let expected = [
+            (eat(&["hunger"]), -0.2, 0.0),
+            (eat(&["attended_thornbush"]), -0.2, 0.0),
+            (attends("hunger"), 0.1, 0.3),
+            (eat(&["always"]), -0.1, 0.0),
+            (attends("always"), -0.1, 0.0),
+        ];
+        assert_eq!(got.len(), expected.len(), "{got:?}");
+        for ((link, now, birth), (want, want_now, want_birth)) in got.iter().zip(&expected) {
+            assert_eq!(link, want);
+            assert!(
+                close(*now, *want_now) && close(*birth, *want_birth),
+                "{link:?} {now} {birth}"
+            );
+        }
     }
 }
