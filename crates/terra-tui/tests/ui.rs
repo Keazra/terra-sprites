@@ -1250,7 +1250,8 @@ fn the_chem_tab_lists_every_chemical_with_its_level_and_change_per_tick() {
             "boredom       .30  +.1000",
             "loneliness    .00",
             "crowdedness   .00",
-            "reward        .00",
+            // Nothing felt: learning used up no reward or punishment.
+            "reward        .00  felt +.00",
             "punishment    .00",
             "HORMONES",
             "h0   .00   h1   .00   h2   .00   h3   .00",
@@ -1260,6 +1261,21 @@ fn the_chem_tab_lists_every_chemical_with_its_level_and_change_per_tick() {
         ],
         "all of it fits at 100×30"
     );
+}
+
+#[test]
+fn the_chem_tab_shows_what_was_felt_on_the_reward_line() {
+    // The bite at tick 0 pricks; at tick 1 learning uses up a punishment of 1.
+    let objects = [(Pos { x: 3, y: 3 }, "thornbush")];
+    let (world, mut app) = one_sprite_among(THORN_GENOME, &objects, &[], 2);
+    open(&mut app, &world, Tab::Chem);
+    let (_, text) = inspector(&app, &world);
+    let row = |name: &str| text.iter().find(|r| r.starts_with(name)).cloned();
+    assert_eq!(
+        row("reward").as_deref(),
+        Some("reward        .00  felt -1.00")
+    );
+    assert_eq!(row("punishment").as_deref(), Some("punishment    .00"));
 }
 
 #[test]
