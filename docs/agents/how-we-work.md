@@ -22,6 +22,7 @@ The owner's preferences and the project's conventions, for any agent session, lo
 
 - The spec is the highest `docs/design/*-vN.md`. Each revision is a new copy with a "Changes from vN-1" table at the top, saying what changed, where the decision came from, and which sections it touches.
 - A revision not yet on `main` is amended in place within its PR. Once it's on `main`, the next change is a new version.
+- **`docs/design/` holds only the current revision of each design.** The PR that adds a revision moves the one it supersedes into `docs/design/archive/` with `git mv`, the new revision's "Supersedes" links point into `archive/`, and the README's design link moves to the new revision. Reviews of a design, such as the `*-eval.md` files, are archived with the revision they reviewed. Issues link to the current revision, since an archived one is history.
 - New or changed terms go in `CONTEXT.md` (the `domain-modeling` skill); code and comments use its words, not the ones on its _Avoid_ lists.
 
 ## The slice loop

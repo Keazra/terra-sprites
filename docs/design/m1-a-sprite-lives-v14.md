@@ -2,7 +2,7 @@
 
 - **Status:** Final
 - **Date:** 2026-09-26
-- **Supersedes:** [v13](m1-a-sprite-lives-v13.md) (earlier: [v12](m1-a-sprite-lives-v12.md), [v11](m1-a-sprite-lives-v11.md), [v10](m1-a-sprite-lives-v10.md), [v9](m1-a-sprite-lives-v9.md), [v8](m1-a-sprite-lives-v8.md), [v7](m1-a-sprite-lives-v7.md), [v6](m1-a-sprite-lives-v6.md), [v5](m1-a-sprite-lives-v5.md), [v4](m1-a-sprite-lives-v4.md), [v3](m1-a-sprite-lives-v3.md), [v2](m1-a-sprite-lives-v2.md), [v1](m1-a-sprite-lives.md))
+- **Supersedes:** [v13](archive/m1-a-sprite-lives-v13.md) (earlier: [v12](archive/m1-a-sprite-lives-v12.md), [v11](archive/m1-a-sprite-lives-v11.md), [v10](archive/m1-a-sprite-lives-v10.md), [v9](archive/m1-a-sprite-lives-v9.md), [v8](archive/m1-a-sprite-lives-v8.md), [v7](archive/m1-a-sprite-lives-v7.md), [v6](archive/m1-a-sprite-lives-v6.md), [v5](archive/m1-a-sprite-lives-v5.md), [v4](archive/m1-a-sprite-lives-v4.md), [v3](archive/m1-a-sprite-lives-v3.md), [v2](archive/m1-a-sprite-lives-v2.md), [v1](archive/m1-a-sprite-lives.md))
 - **Covers:** Milestone 1 in full detail, plus the architecture decisions that every later milestone depends on
 
 ---
@@ -239,7 +239,7 @@ v2 was reviewed once more and graded PASS, with two clarifications requested. Bo
 
 ## Changes in v2 (from v1)
 
-The changes come from the GPT and Gemini evaluations of v1 ([m1-gpt-eval.md](m1-gpt-eval.md), [m1-gemini-eval.md](m1-gemini-eval.md)) and from self-review. Evaluation points were assessed on their merits, not adopted wholesale.
+The changes come from the GPT and Gemini evaluations of v1 ([m1-gpt-eval.md](archive/m1-gpt-eval.md), [m1-gemini-eval.md](archive/m1-gemini-eval.md)) and from self-review. Evaluation points were assessed on their merits, not adopted wholesale.
 
 | # | Change | Source | Sections |
 |---|---|---|---|

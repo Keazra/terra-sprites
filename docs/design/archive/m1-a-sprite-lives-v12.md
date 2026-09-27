@@ -1,30 +1,15 @@
-# Terra Sprites — M1 "A Sprite Lives" design (v13)
+# Terra Sprites — M1 "A Sprite Lives" design (v12)
 
 - **Status:** Final
 - **Date:** 2026-09-26
-- **Supersedes:** [v12](m1-a-sprite-lives-v12.md) (earlier: [v11](m1-a-sprite-lives-v11.md), [v10](m1-a-sprite-lives-v10.md), [v9](m1-a-sprite-lives-v9.md), [v8](m1-a-sprite-lives-v8.md), [v7](m1-a-sprite-lives-v7.md), [v6](m1-a-sprite-lives-v6.md), [v5](m1-a-sprite-lives-v5.md), [v4](m1-a-sprite-lives-v4.md), [v3](m1-a-sprite-lives-v3.md), [v2](m1-a-sprite-lives-v2.md), [v1](m1-a-sprite-lives.md))
+- **Supersedes:** [v11](m1-a-sprite-lives-v11.md) (earlier: [v10](m1-a-sprite-lives-v10.md), [v9](m1-a-sprite-lives-v9.md), [v8](m1-a-sprite-lives-v8.md), [v7](m1-a-sprite-lives-v7.md), [v6](m1-a-sprite-lives-v6.md), [v5](m1-a-sprite-lives-v5.md), [v4](m1-a-sprite-lives-v4.md), [v3](m1-a-sprite-lives-v3.md), [v2](m1-a-sprite-lives-v2.md), [v1](m1-a-sprite-lives.md))
 - **Covers:** Milestone 1 in full detail, plus the architecture decisions that every later milestone depends on
 
 ---
 
-## Changes from v12
+## Changes from v11
 
-Decided with the owner in the design session for slice 7b ([#8](https://github.com/Keazra/terra-sprites/issues/8)), which gives objects a size and a hardness. No new domain terms.
-
-| # | Change | Source | Sections |
-|---|---|---|---|
-| 1 | **A knock-on swaps rolls,** so two items of the same size exchange momentum: every item rolls one tile a tick, and the same size means the same weight. The item ahead takes the rolling item's roll, less the tile the knock used; the rolling item takes the roll the item ahead had, or stops if it had none. So a ball meeting one at rest stops and sends it on, and two balls meeting head on both bounce back, each with the other's distance. A glancing knock swaps whole rolls too, which a grid of 8 directions makes close enough. A smaller, harder item knocked on swaps as well; momentum by weight waits for the richer-play design ([#45](https://github.com/Keazra/terra-sprites/issues/45)), and no M1 object meets that case. | Owner decision | §3.5.4 |
-| 2 | **An item moves at most once a tick.** An item knocked on, or handed a roll by a knock, starts moving at the next tick's step 2, whatever its ID, so the order items are taken in never decides whether one moves twice. | Slice 7b design session | §3.5.4 |
-| 3 | **After a bounce, the tile it heads for is met by the usual rules:** an item there is knocked on or crushed as it would be head on. Only a second bounce ends the roll. The sides that decide a slantwise bounce's angle count as stopping it only if they would bounce it, not if they hold an item it would knock on or crush. | Owner decision | §3.5.4 |
-| 4 | **A crush isn't in the event log.** It is an `ObjectRemoved`, which the log already leaves out (§6.1). | Owner decision | §6.1 |
-| 5 | **Every object type with instances must give a size and a hardness;** leaving either out is a load error. A pseudo type may give both or neither: `sprite` gives both, `water` neither, so the code names neither. Hardness is from 0 to 1. A sprite still always bounces a rolling item, whatever its size. | Slice 7b design session | §3.5.1, §3.5.3 |
-| 6 | **The roadmap names where Terra Sprites is heading:** a larger game of one adventurer among NPCs that run on the Sprite system ([#47](https://github.com/Keazra/terra-sprites/issues/47)). Nothing is built for it; it's a reason to keep `terra-sim` a general engine. | Owner vision | §1.1 |
-
----
-
-## Changes in v12 (from v11)
-
-Decided with the owner in the design session for slice 7 ([#8](https://github.com/Keazra/terra-sprites/issues/8)), which gives sprites play, fights and flight. The new domain terms (roll, bounce, size, hardness, knock on, crush, hurt, emote) are in [`CONTEXT.md`](../../CONTEXT.md).
+Decided with the owner in the design session for slice 7 ([#8](https://github.com/Keazra/terra-sprites/issues/8)), which gives sprites play, fights and flight. The new domain terms (roll, bounce, size, hardness, knock on, crush, hurt, emote) are in [`CONTEXT.md`](../../../CONTEXT.md).
 
 | # | Change | Source | Sections |
 |---|---|---|---|
@@ -62,7 +47,7 @@ Decided while building the Brain tab, slice 6b ([#7](https://github.com/Keazra/t
 
 ## Changes in v10 (from v9)
 
-Decided with the owner in the design session for slice 6 ([#7](https://github.com/Keazra/terra-sprites/issues/7)), which gives sprites a brain that eats and drinks on instinct. The new domain terms (brain input, attention, attended target, concept, instinct, brain parameter) are in [`CONTEXT.md`](../../CONTEXT.md).
+Decided with the owner in the design session for slice 6 ([#7](https://github.com/Keazra/terra-sprites/issues/7)), which gives sprites a brain that eats and drinks on instinct. The new domain terms (brain input, attention, attended target, concept, instinct, brain parameter) are in [`CONTEXT.md`](../../../CONTEXT.md).
 
 | # | Change | Source | Sections |
 |---|---|---|---|
@@ -87,7 +72,7 @@ Decided with the owner in the design session for slice 6 ([#7](https://github.co
 
 ## Changes in v9 (from v8)
 
-Decided with the owner in the design session for slice 5 ([#6](https://github.com/Keazra/terra-sprites/issues/6)), which makes sprites move. It also folds in [#29](https://github.com/Keazra/terra-sprites/issues/29), the self-check every tick. The new domain terms (action, verb, outcome, timeout, move points, perception flood, reachable, destination, goal tile, candidate, swap, committed path and detail view) are in [`CONTEXT.md`](../../CONTEXT.md).
+Decided with the owner in the design session for slice 5 ([#6](https://github.com/Keazra/terra-sprites/issues/6)), which makes sprites move. It also folds in [#29](https://github.com/Keazra/terra-sprites/issues/29), the self-check every tick. The new domain terms (action, verb, outcome, timeout, move points, perception flood, reachable, destination, goal tile, candidate, swap, committed path and detail view) are in [`CONTEXT.md`](../../../CONTEXT.md).
 
 | # | Change | Source | Sections |
 |---|---|---|---|
@@ -131,7 +116,7 @@ Decided with the owner while starting slice 4b ([#5](https://github.com/Keazra/t
 
 ## Changes in v7 (from v6)
 
-Decided with the owner in the design session for slice 4 ([#5](https://github.com/Keazra/terra-sprites/issues/5)), which gives sprites bodies. The new domain terms (sprite, genome, gene, chemical, drive, locus, pulse, physiology, cause of death, selection, inspector, event log and the rest) are in [`CONTEXT.md`](../../CONTEXT.md).
+Decided with the owner in the design session for slice 4 ([#5](https://github.com/Keazra/terra-sprites/issues/5)), which gives sprites bodies. The new domain terms (sprite, genome, gene, chemical, drive, locus, pulse, physiology, cause of death, selection, inspector, event log and the rest) are in [`CONTEXT.md`](../../../CONTEXT.md).
 
 | # | Change | Source | Sections |
 |---|---|---|---|
@@ -156,7 +141,7 @@ Decided with the owner in the design session for slice 4 ([#5](https://github.co
 
 ## Changes in v6 (from v5)
 
-Decided with the owner in the design session for slice 3 ([#4](https://github.com/Keazra/terra-sprites/issues/4)), which brings objects to life. The domain terms (solid, fixture, item, tag, stage, expire and the rest) are in [`CONTEXT.md`](../../CONTEXT.md).
+Decided with the owner in the design session for slice 3 ([#4](https://github.com/Keazra/terra-sprites/issues/4)), which brings objects to life. The domain terms (solid, fixture, item, tag, stage, expire and the rest) are in [`CONTEXT.md`](../../../CONTEXT.md).
 
 | # | Change | Source | Sections |
 |---|---|---|---|
@@ -177,7 +162,7 @@ Decided with the owner in the design session for slice 3 ([#4](https://github.co
 
 ## Changes in v5 (from v4)
 
-Decided with the owner while building slice 2 ([#3](https://github.com/Keazra/terra-sprites/issues/3)): the controls and the hand are reworked around a mouse-driven cursor, and the slice's refinements to terrain and the map view are recorded. The domain terms are in [`CONTEXT.md`](../../CONTEXT.md).
+Decided with the owner while building slice 2 ([#3](https://github.com/Keazra/terra-sprites/issues/3)): the controls and the hand are reworked around a mouse-driven cursor, and the slice's refinements to terrain and the map view are recorded. The domain terms are in [`CONTEXT.md`](../../../CONTEXT.md).
 
 | # | Change | Source | Sections |
 |---|---|---|---|
@@ -270,7 +255,6 @@ Terra Sprites is a terminal artificial-life game inspired by *Creatures*. Sprite
 | **M3 — Wild Terra** | Critters (prey and predators); more hazards and toys; possibly seasons, weather, day/night and temperature |
 | **M4 — Words** | The player (and later, sprites) name objects and verbs; word inputs and a Speak output |
 | **Tiles** *(UI milestone, can be scheduled any time after M1)* | A tile-window front end that draws bitmap tilesets and sprite sheets through the semantic-tile seam (§6.2) |
-| **Beyond Terra Sprites** *(vision, [#47](https://github.com/Keazra/terra-sprites/issues/47))* | A larger game: the player is one adventurer in a world of unique NPCs that run on a version of the Sprite system, with skills a player can lock, and a character the player can hand over to live as an NPC and take back. Nothing is built for it; it's why `terra-sim` stays a general engine |
 
 ### 1.2 In scope for M1
 
@@ -603,8 +587,8 @@ An object is **solid** if nothing can move through it, and a **fixture** if it's
 | `stages` | `[(name, ticks: (min, max), next: Stage(name) \| Expire)]`. The duration is drawn from the world RNG when the stage is entered. An object with no stages is permanent. |
 | `rules` | `[(trigger, if: [conditions], do: [effects])]` |
 | `verbs` | `{Verb: [effects]}`: what happens when a sprite applies that verb to this object |
-| `size` | `Small`, `Medium` or `Large` (from slice 7b). What a rolling item does to what it meets depends on it (§3.5.4). Sprites' size is the `sprite` pseudo type's. Required on every type with instances; a pseudo type gives it or not (`sprite` does, `water` doesn't). |
-| `hardness` | 0 to 1 (from slice 7b). A rolling item crushes a smaller, softer one (§3.5.4). Given with `size`, and only with it. |
+| `size` | `Small`, `Medium` or `Large` (from slice 7b). What a rolling item does to what it meets depends on it (§3.5.4). Sprites' size is the `sprite` pseudo type's. |
+| `hardness` | 0 to 1 (from slice 7b). A rolling item crushes a smaller, softer one (§3.5.4). |
 | `visual` | `[(if: [conditions], state: name)]`: the first match names the visual state the theme draws. If nothing matches, the state is `"default"`. `Chance` is not allowed here, so rendering never uses the RNG. |
 
 **Glyphs and colours are not in `objects.ron`.** Themes map `(object name, visual state)` to how it looks (§6.2).
@@ -754,24 +738,16 @@ A `Push` (§3.5.2) sets an item **rolling**: it keeps a direction (one of 8) and
 | The item ahead is… | Result |
 |---|---|
 | Bigger than the rolling item | It stops the rolling item (a bounce) |
-| The same size | **Knock on:** the rolling item stays put, and the two **swap rolls**. The item ahead rolls on in the rolling item's direction with the tiles it had left less this tick's, and the rolling item takes whatever roll the item ahead had, stopping if it had none |
+| The same size | **Knock on:** the rolling item stays put and its roll ends; the item ahead starts rolling in the same direction with the tiles that were left |
 | Smaller and softer | **Crush:** the item ahead is removed (`ObjectRemoved { reason: Destroyed }`), and the rolling item moves onto its tile |
 | Smaller, and at least as hard | **Knock on,** as for the same size |
 
-Before 7b, any item ahead stopped it. A tile holding several things uses the strongest result: a bounce over a knock-on over a crush. Since a tile holds at most one object (§3.4), that only matters for an item under a sprite, which bounces it.
-
-**A knock-on is an exchange of momentum.** Every item rolls one tile a tick, and items of the same size weigh the same, so swapping rolls is what equal balls do:
-- A ball meeting one at rest stops, and sends it on. A kick of 4 that meets a ball after 1 tile sends it 2 more; a roll on its last tile only nudges, and neither moves.
-- Two balls meeting head on both bounce back, each with the other's distance.
-- A glancing knock swaps whole rolls too, which a grid of 8 directions makes close enough.
-- A smaller, harder item knocked on swaps as well. Momentum by weight waits for the richer-play design ([#45](https://github.com/Keazra/terra-sprites/issues/45)); no M1 object meets that case.
-
-**Once a tick.** An item moves at most once a tick. One knocked on, or handed a roll by a knock, starts moving at the next tick's step 2, whatever its ID.
+Until 7b, any item ahead stops it. A tile holding several things uses the strongest result: a bounce over a knock-on over a crush.
 
 **Bouncing.** A stopped roll turns instead of ending:
 - **Head on** (an orthogonal direction, or a diagonal whose corner tile alone stops it, or whose two side tiles both do): it reverses.
-- **Slantwise** (a diagonal where only one side stops it): it glances off, reversing only the part of its direction that ran into the obstacle. A ball heading NE into a wall on its east goes NW; into one on its north, SE. A side counts as stopping it only if it would bounce it; an item it would knock on or crush there doesn't.
-- It then meets the tile in its new direction by the usual rules: it moves there, knocks on or crushes what's there, or, if that tile would bounce it too, the roll ends where it is. Either way the bounce uses up the tick's tile.
+- **Slantwise** (a diagonal where only one side stops it): it glances off, reversing only the part of its direction that ran into the obstacle. A ball heading NE into a wall on its east goes NW; into one on its north, SE.
+- It then moves to the tile in its new direction if nothing stops it there. If something does, the roll ends where it is. Either way the bounce uses up the tick's tile.
 
 **No harm.** Nothing a rolling item does hurts a sprite, and a sprite it bounces off feels nothing (§3.8). Bounces aren't events.
 
