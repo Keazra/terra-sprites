@@ -16,4 +16,4 @@ I would resolve these cross-section issues before treating the spec as final:
 
 I’d also make two implementation rules explicit: restrict actor/target effects such as `Inject`, `Signal` and `Push` to verb context, and state whether objects spawned during step 2 wait until the next tick before their own rules run.
 
-With those clarifications, I’d consider the design ready to guide implementation. This evaluation reviews [the design doc](</C:/Users/Player/Projects/Terra Sprites/docs/design/m1-a-sprite-lives.md>); it does not change it.
+With those clarifications, I’d consider the design ready to guide implementation. This evaluation reviews [the design doc](m1-a-sprite-lives.md); it does not change it.

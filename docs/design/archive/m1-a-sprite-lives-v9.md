@@ -1,40 +1,15 @@
-# Terra Sprites — M1 "A Sprite Lives" design (v10)
+# Terra Sprites — M1 "A Sprite Lives" design (v9)
 
 - **Status:** Final
 - **Date:** 2026-09-25
-- **Supersedes:** [v9](m1-a-sprite-lives-v9.md) (earlier: [v8](m1-a-sprite-lives-v8.md), [v7](m1-a-sprite-lives-v7.md), [v6](m1-a-sprite-lives-v6.md), [v5](m1-a-sprite-lives-v5.md), [v4](m1-a-sprite-lives-v4.md), [v3](m1-a-sprite-lives-v3.md), [v2](m1-a-sprite-lives-v2.md), [v1](m1-a-sprite-lives.md))
+- **Supersedes:** [v8](m1-a-sprite-lives-v8.md) (earlier: [v7](m1-a-sprite-lives-v7.md), [v6](m1-a-sprite-lives-v6.md), [v5](m1-a-sprite-lives-v5.md), [v4](m1-a-sprite-lives-v4.md), [v3](m1-a-sprite-lives-v3.md), [v2](m1-a-sprite-lives-v2.md), [v1](m1-a-sprite-lives.md))
 - **Covers:** Milestone 1 in full detail, plus the architecture decisions that every later milestone depends on
 
 ---
 
-## Changes from v9
+## Changes from v8
 
-Decided with the owner in the design session for slice 6 ([#7](https://github.com/Keazra/terra-sprites/issues/7)), which gives sprites a brain that eats and drinks on instinct. The new domain terms (brain input, attention, attended target, concept, instinct, brain parameter) are in [`CONTEXT.md`](../../CONTEXT.md).
-
-| # | Change | Source | Sections |
-|---|---|---|---|
-| 1 | **The brain arrives in stages.** Slice 6 offers Approach, Eat, Drink, Rest and Wander; Hit, Play and Retreat are masked until slice 7 designs them. The starter genome gains each instinct in the slice that first makes its verb available: hunger → Eat (with the Thornbush mistake), thirst → Drink and tiredness → Rest now; the rest of §5.8 with slice 7. | Owner decision | §5.2, §5.8 |
-| 2 | **The deliberate Thornbush mistake ships now,** before learning (slice 8) can correct it. Salience alone would sometimes point a hungry sprite at a nearby thornbush anyway. | Owner decision | §5.8 |
-| 3 | **A content sprite wanders.** The starter genome has an `always → Wander` instinct, a mild habit that any grown need outweighs, so a sprite with nothing pressing explores rather than picking at random and taking bites it doesn't need. | Owner decision | §5.8 |
-| 4 | **An action keeps its target.** A target-bound action is aimed at the candidate its category had when it started, and stays aimed at that instance: a closer one of the same category appearing doesn't retarget it. It ends only as §5.5 says (the target is gone or unreachable, attention switches category, a verb switch, the timeout, or completing). | Owner decision | §5.3, §5.5 |
-| 5 | **A target that vanishes, or that the flood no longer reaches, ends the action as `failed`**, like biting an empty bush. | Owner decision | §5.5 |
-| 6 | **Approach can follow a moving sprite** now, re-planning through the cached flood as §3.6 describes, and dropping a committed path when its sprite target moves (§3.7). | Owner decision | §3.6, §3.7 |
-| 7 | **`brain_io.ron` lists the State inputs** by stable input ID, each naming the chemical or locus it reads. The Target inputs and the verbs stay in code, which gives them meaning, as categories and verbs already do. The file replaces the `brain_visible` flag in `loci.ron`. | Owner decision | §4.2, §5.2 |
-| 8 | **A missing `BrainParam` gene falls back to a default** kept in `physiology.ron` beside the parameter's range. A genome that lost a gene still makes a working brain, and the starter genome lists only the parameters the slices so far read. | Owner decision | §5.7, App. B |
-| 9 | **An interaction makes its one attempt on the tick the sprite reaches a goal tile** (at once, if it starts on one), as part of the same step 6. | Slice 6 | §5.5 |
-| 10 | **Eating a berry reports it removed:** the berry's `DestroySelf` emits `ObjectRemoved { reason: Destroyed }` along with the `ate` pulse. | Slice 3 carry-over | §2.5 |
-| 11 | **The Body tab words Eat, Drink and Approach** in §6.1's pattern: "Going to eat the berry bush · 3 tiles to go", "Ate from the berry bush", "Going to drink · 2 tiles to go", "Going over to Sprite #530 · 4 tiles to go". A target that vanished reads "Gave up: the berry was gone". Something eaten whole reads "Ate the berry"; something eaten from, "Ate from the berry bush". The detail view's `X` marks where any walking action is heading: a Wander's destination, or an aimed action's goal tile. | Slice 5 carry-over | §6.1 |
-| 12 | **Brain parameters get stable IDs** (Appendix A), for `BrainParam` payloads, and **defaults** beside their ranges (Appendix B). | Slice 6 | App. A, App. B |
-| 13 | **The Genome tab shows the brain genes** under three more headings, after starting levels: brain settings (`tau base .2`), instincts (`thirst & not target adjacent → drink -.5`) and attention instincts (`hunger → attends to berry bush +.8`). | Slice 6 | §6.1 |
-| 14 | **A new outcome, `interrupted`,** records an action the sprite dropped because it changed its mind: attention switched away from its target, or another verb beat it by more than the switch margin. The Body tab reads "Changed its mind". It stays distinct from `failed` (tried, didn't get it), which learning and the A1–A3 counts treat as a real attempt. | Owner decision | §5.3, §5.5, §6.1 |
-| 15 | **A target's distance is normalized** as its path cost over the cost of walking the flood's reach on grass (10 × reach), capped at 1: so a candidate at the edge of sight on open grass is 1, and one across sand or shallows reads farther. | Slice 6 | §5.2, §5.3 |
-| 16 | **The Body tab ends with an observed list:** what the player has watched the selected sprite finish, newest first, as "9 ticks ago · Wandered off ×2". One line per finished action, in the past tense, saying how it went only if badly ("Went to eat the berry bush, but changed its mind"), so there's no separate line for arriving. Lines that read the same in a row merge, counting up and keeping the latest time. The list starts afresh when another sprite is selected, and keeps at most 500 lines. It lives in the UI, not the sim: `ActionEnded` carries the ended action's view so the screen can describe it. | Owner request, after trying 6a | §2.5, §6.1 |
-
----
-
-## Changes in v9 (from v8)
-
-Decided with the owner in the design session for slice 5 ([#6](https://github.com/Keazra/terra-sprites/issues/6)), which makes sprites move. It also folds in [#29](https://github.com/Keazra/terra-sprites/issues/29), the self-check every tick. The new domain terms (action, verb, outcome, timeout, move points, perception flood, reachable, destination, goal tile, candidate, swap, committed path and detail view) are in [`CONTEXT.md`](../../CONTEXT.md).
+Decided with the owner in the design session for slice 5 ([#6](https://github.com/Keazra/terra-sprites/issues/6)), which makes sprites move. It also folds in [#29](https://github.com/Keazra/terra-sprites/issues/29), the self-check every tick. The new domain terms (action, verb, outcome, timeout, move points, perception flood, reachable, destination, goal tile, candidate, swap, committed path and detail view) are in [`CONTEXT.md`](../../../CONTEXT.md).
 
 | # | Change | Source | Sections |
 |---|---|---|---|
@@ -78,7 +53,7 @@ Decided with the owner while starting slice 4b ([#5](https://github.com/Keazra/t
 
 ## Changes in v7 (from v6)
 
-Decided with the owner in the design session for slice 4 ([#5](https://github.com/Keazra/terra-sprites/issues/5)), which gives sprites bodies. The new domain terms (sprite, genome, gene, chemical, drive, locus, pulse, physiology, cause of death, selection, inspector, event log and the rest) are in [`CONTEXT.md`](../../CONTEXT.md).
+Decided with the owner in the design session for slice 4 ([#5](https://github.com/Keazra/terra-sprites/issues/5)), which gives sprites bodies. The new domain terms (sprite, genome, gene, chemical, drive, locus, pulse, physiology, cause of death, selection, inspector, event log and the rest) are in [`CONTEXT.md`](../../../CONTEXT.md).
 
 | # | Change | Source | Sections |
 |---|---|---|---|
@@ -103,7 +78,7 @@ Decided with the owner in the design session for slice 4 ([#5](https://github.co
 
 ## Changes in v6 (from v5)
 
-Decided with the owner in the design session for slice 3 ([#4](https://github.com/Keazra/terra-sprites/issues/4)), which brings objects to life. The domain terms (solid, fixture, item, tag, stage, expire and the rest) are in [`CONTEXT.md`](../../CONTEXT.md).
+Decided with the owner in the design session for slice 3 ([#4](https://github.com/Keazra/terra-sprites/issues/4)), which brings objects to life. The domain terms (solid, fixture, item, tag, stage, expire and the rest) are in [`CONTEXT.md`](../../../CONTEXT.md).
 
 | # | Change | Source | Sections |
 |---|---|---|---|
@@ -124,7 +99,7 @@ Decided with the owner in the design session for slice 3 ([#4](https://github.co
 
 ## Changes in v5 (from v4)
 
-Decided with the owner while building slice 2 ([#3](https://github.com/Keazra/terra-sprites/issues/3)): the controls and the hand are reworked around a mouse-driven cursor, and the slice's refinements to terrain and the map view are recorded. The domain terms are in [`CONTEXT.md`](../../CONTEXT.md).
+Decided with the owner while building slice 2 ([#3](https://github.com/Keazra/terra-sprites/issues/3)): the controls and the hand are reworked around a mouse-driven cursor, and the slice's refinements to terrain and the map view are recorded. The domain terms are in [`CONTEXT.md`](../../../CONTEXT.md).
 
 | # | Change | Source | Sections |
 |---|---|---|---|
@@ -356,7 +331,7 @@ Before step 1, the world keeps every sprite's chemical levels as they stand, so 
 **Commands carry values, never references.** A genome loaded from a file is parsed by the UI and put inside the command in full. This keeps the command log self-contained.
 
 **Events** each carry the tick and the entity IDs involved. The M1 set:
-- `ActionStarted`, `ActionEnded { outcome, action }`: `action` is the ended action's view, with its target and whether it made its attempt, so the screen can describe it afterwards (§6.1)
+- `ActionStarted`, `ActionEnded { outcome }`
 - `Ate`, `Drank`, `Played`, `Hit`, `Pricked`
 - `Rewarded`, `Corrected`
 - `Spawned`
@@ -770,7 +745,7 @@ This keeps credit assignment clean. If thorns scratched sprites walking past, th
 
 ### 4.2 Loci
 
-Loci are listed in `data/loci.ron` with stable IDs. Each has a kind: `(id: 32, name: "ate", kind: Pulse)`. Which loci the brain feels is listed in `brain_io.ron` (§5.2), not here. The kinds are `BodySensor`, `Pulse` and `ReceptorTarget`. Chemical levels aren't listed: they're referenced as `Chem(id)`. IDs and names are unique.
+Loci are listed in `data/loci.ron` with stable IDs. Each has a kind and a `brain_visible` flag: `(id: 32, name: "ate", kind: Pulse, brain_visible: true)`. The kinds are `BodySensor`, `Pulse` and `ReceptorTarget`. Chemical levels aren't listed: they're referenced as `Chem(id)`. IDs and names are unique.
 
 | Kind | Loci | Brain-visible |
 |---|---|---|
@@ -970,10 +945,9 @@ Every input and output has a stable, append-only ID (Appendix A). Each input bel
 | Group | Inputs | Attention | Concepts |
 |---|---|---|---|
 | **State** (35) | 7 drives, 16 hormones, `nearby_sprites`, `age`, `always`, 9 event pulses | ✓ | ✓ |
-| **Target** (8) | 6 × `AttendedCategory` (BerryBush, Berry, Thornbush, Water, Ball, Sprite), `TargetDistance` (normalized path cost: the cost over 10 × the flood's reach, capped at 1), `TargetAdjacent` | ✗ | ✓ |
+| **Target** (8) | 6 × `AttendedCategory` (BerryBush, Berry, Thornbush, Water, Ball, Sprite), `TargetDistance` (normalized path cost), `TargetAdjacent` | ✗ | ✓ |
 
 - **Target inputs are outputs of attention.** They never feed back into attention.
-- **What the file holds:** the State inputs, each with its stable input ID and the chemical or locus it reads, e.g. `(id: 1, name: "hunger", reads: Chem("hunger"))`, `(id: 27, name: "ate", reads: Locus("ate"))`. A name that isn't a chemical or locus of the right kind (a drive or hormone; a body sensor or pulse) is a load error, as is a duplicate ID or name. The Target inputs and the verbs are fixed in code, which gives them their meaning, as it does categories. Their names, used in genome files, are `attended_berry_bush` … `attended_sprite`, `target_distance` and `target_adjacent`, and the verb names.
 - **Not brain inputs:**
   - physical chemicals, because the brain feels the body only through drives
   - `reward` and `punishment`, because they're learning signals
@@ -1010,7 +984,6 @@ It only wins decisions where learning finds it useful.
 - **Score per category:** `score_c = Σᵢ xᵢ·A[i][c] + salience_gain × (1 − candidate_distance_c)`. Here *i* ranges over **State** inputs only, and `candidate_distance_c` is that candidate's own normalized path cost.
 - **With no current action:** attention **samples** a category with softmax(score / τ_att), where **τ_att = τ_att_base × `exploration_mod`**.
 - **With any action still running**, targetless ones included: attention is **noise-free**. It changes target only if a rival's score beats the current target's by `attention_margin`. Ties go to the lower `CategoryId`. That switch ends a target-bound action.
-- **An action keeps its target.** A target-bound verb is aimed at its category's candidate as it was when the verb was chosen, and stays aimed at that instance for the whole action. A closer instance of the same category appearing later doesn't retarget it; the Target inputs describe the instance the action is aimed at.
 
 ### 5.4 Concept lobe
 
@@ -1028,7 +1001,7 @@ It only wins decisions where learning finds it useful.
 ### 5.5 Decision and action lifecycle
 
 **Step 5 runs in this order:**
-1. **5.0 Check the current action.** It ends as `failed` if its target no longer exists or has become unreachable, and as `timed_out` if the action has hit the timeout. A Wander whose destination the flood no longer reaches ends as `failed`, unless the sprite is keeping to a committed path (§3.7).
+1. **5.0 Check the current action.** It ends if its target no longer exists or has become unreachable, or if the action has hit the timeout. A Wander whose destination the flood no longer reaches ends as `failed`, unless the sprite is keeping to a committed path (§3.7).
 2. **5a Attention** (§5.3).
 3. **5b Decision:**
    - **Score** each *available* verb: `s_v = Σₖ aₖ·W[k][v]`.
@@ -1046,17 +1019,16 @@ World randomness is separate: plant rules and the order actions resolve in. It c
 | Verb | Behaviour | Ends |
 |---|---|---|
 | Approach | Walks to a goal tile | On arrival |
-| Eat / Drink / Hit / Play | Walks to a goal tile, then makes **one attempt** on the tick it arrives, in the same step 6 (at once, if it starts on a goal tile) | After the attempt, whether `applied` or `failed` |
+| Eat / Drink / Hit / Play | Walks to a goal tile, then makes **one attempt** | After the attempt, whether `applied` or `failed` |
 | Retreat | Each step goes to the walkable, free neighbour that increases the **Chebyshev distance** from the target the most. Ties follow fixed direction order N, NE, E, SE, S, SW, W, NW. Path distance isn't used, because it would need a second flood run from the target. | After 6 steps |
 | Rest | Stays put and sets `resting` | After 10 ticks, `applied` |
 | Wander | Follows the flood path to the destination chosen at 5b | On arrival, `applied` |
 
 - Any action that moves ends with outcome **`blocked`** when blocked re-planning finds no way forward (§3.7).
-- **The stand-in chooser (slice 5 only).** Until the brain arrived in slice 6, 5b was a stand-in behind the same interface that picked Wander or Rest at even odds. The brain has replaced it.
-- **Verbs by slice.** Slice 6 makes Approach, Eat, Drink, Rest and Wander available; Hit, Play and Retreat are masked, as if no verb table offered them, until slice 7.
+- **The stand-in chooser (slice 5 only).** Until the brain arrives in slice 6, 5b is a stand-in behind the same interface. With no current action, it picks Wander or Rest at even odds, drawing on the world RNG, and samples a Wander destination as above. It never switches a running action. Slice 6 replaces it.
 - **Every** action that hasn't ended otherwise ends at the **action timeout** of 60 ticks, with outcome `timed_out`.
 - Bout lengths and the timeout are set in `physiology.ron`.
-- **Outcomes:** `applied` / `walking` / `blocked` / `failed` / `interrupted` / `timed_out`. `walking` and `blocked` can also be per-tick outcomes of an action that's still running. `interrupted` ends an action the sprite changed its mind about: attention switched away from its target (§5.3), or another verb beat it by more than `switch_margin` (5b).
+- **Outcomes:** `applied` / `walking` / `blocked` / `failed` / `timed_out`. `walking` and `blocked` can also be per-tick outcomes of an action that's still running.
 
 ### 5.6 Learning (step 4)
 
@@ -1085,7 +1057,7 @@ World randomness is separate: plant rules and the order actions resolve in. It c
 
 | ID | Gene | Semantics |
 |---|---|---|
-| 7 | `BrainParam(param_id, value)` | One gene per parameter, clamped to a range set in `physiology.ron` (Appendix B). A parameter with no gene takes its default from the same place. |
+| 7 | `BrainParam(param_id, value)` | One gene per parameter, clamped to a range set in `physiology.ron` (Appendix B) |
 | 8 | `Instinct(inputs: [(InputId, negated)] ≤3, verb, weight)` | Creates or merges the concept with this signature and sets its starting W link to `verb`. A single input refers to that input's singleton. |
 | 9 | `AttentionInstinct(InputId, CategoryId, weight)` | The starting A link. **Only State inputs are allowed.** Anything else is flagged and not expressed. |
 
@@ -1104,10 +1076,6 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 | Loneliness | → Sprite | loneliness → Approach, Play | |
 | Pain | — | pain → Retreat | |
 | Crowdedness | → Sprite | crowdedness → Retreat; **`crowdedness & Sprite → Hit` (0.2)** | Sprites sometimes hit their neighbours. Correct training should reduce this. |
-| Nothing pressing | — | `always` → Wander (mild) | |
-
-- **A content sprite wanders.** The `always → Wander` instinct is a mild habit that any grown need outweighs. Without it, a sprite with nothing pressing would pick at random among its available verbs, and half the time walk up to a bush for a bite it doesn't need.
-- **The genome grows with the brain.** Each instinct joins the starter genome in the slice that makes its verb available (§5.5): hunger, thirst, tiredness and the Wander habit in slice 6; the rest with slice 7. The Thornbush mistake ships in slice 6, before learning (slice 8) can correct it.
 
 ### 5.8.1 Budget
 
@@ -1176,10 +1144,10 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 
 | Tab | Shows |
 |---|---|
-| **Body** | What the sprite is doing, in plain words (below); age and lifespan; speed and sense radius as expressed; a bar for each drive, with its level and an arrow for its change over the last tick (`▲` rising, `▼` falling, none when steady); the physical levels; the observed list (below) |
+| **Body** | What the sprite is doing, in plain words (below); age and lifespan; speed and sense radius as expressed; a bar for each drive, with its level and an arrow for its change over the last tick (`▲` rising, `▼` falling, none when steady); the physical levels |
 | **Brain** | Output of `explain()` |
 | **Chem** | One list: each chemical on its own line with its level and its change per tick (`-.0002`, blank when it rounds to 0), the physical chemicals, then a blank line and the signal chemicals, plus `last_r` from slice 8. The 16 hormones sit in a 4×4 grid of levels below, so all of it fits at 100×30. Reward and punishment are consumed every tick, so their levels always read 0 between ticks. |
-| **Genome** | Genes grouped under headings: traits first, on one line (`speed 7.21 · sense 9.87 · lifespan 61,204`), then half-lives, reactions, emitters, receptors, starting levels, brain settings (`tau base .2`), instincts (`thirst & not target adjacent → drink -.5`) and attention instincts (`hunger → attends to berry bush +.8`), and unknown genes last, each group in genome order. Each gene is a plain line with 3 significant figures, so spawn variation shows: `low energy → hunger +.00428 past .515`, `hunger falls → reward +1.02 past .0198`, `hunger halves every 2,041 ticks`. A line too long for the tab wraps, indented. A flagged, unexpressed or unknown gene is dimmed, with its reason on the line below (§4.3). `g` exports to RON. |
+| **Genome** | Genes grouped under headings: traits first, on one line (`speed 7.21 · sense 9.87 · lifespan 61,204`), then half-lives, reactions, emitters, receptors and starting levels, and unknown genes last, each group in genome order. Each gene is a plain line with 3 significant figures, so spawn variation shows: `low energy → hunger +.00428 past .515`, `hunger falls → reward +1.02 past .0198`, `hunger halves every 2,041 ticks`. A line too long for the tab wraps, indented. A flagged, unexpressed or unknown gene is dimmed, with its reason on the line below (§4.3). `g` exports to RON. |
 | **World** | The data pack's identity; population and deaths by cause (counted by the sim, so they're saved); each object type in ID order with its count, the count in each stage (left out for a type with only one stage), and the total of each counter (such as the fruit on all bushes). It's drawn from the data, so a pack's new object types appear with no new code. |
 
 - **The Body tab's action line** describes what the sprite is doing, in the present tense, naming its target, with no coordinates. It never speaks as the sprite: the Brain tab shows *why*, and a line in the sprite's own voice could contradict it. When an action ends, its ending stays until the next one starts.
@@ -1192,35 +1160,11 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
   | Gave up, no way through | `Gave up: the way was blocked` | `WANDER → (61,40) · blocked` |
   | Gave up at the timeout | `Gave up: it took too long` | `WANDER → (61,40) · timed_out` |
   | Gave up, destination out of reach | `Gave up: it couldn't get there` | `WANDER → (61,40) · failed` |
-  | Changed its mind | `Changed its mind` | `WANDER → (61,40) · interrupted` |
   | Resting | `Resting · 6 ticks left` | `REST · 4 of 10 ticks` |
   | Rested | `Rested` | `REST · applied` |
 
-  | Going to eat | `Going to eat the berry bush · 3 tiles to go` | `EAT → berry_bush #812 · walking (3 tiles)` |
-  | Ate | `Ate from the berry bush` | `EAT → berry_bush #812 · applied` |
-  | Ate a berry whole | `Ate the berry` | `EAT → berry #9 · applied` |
-  | Couldn't eat | `Couldn't eat from the berry bush` | `EAT → berry_bush #812 · failed` |
-  | Going to drink | `Going to drink · 2 tiles to go` | `DRINK → water (40,12) · walking (2 tiles)` |
-  | Drank | `Drank` | `DRINK → water (40,12) · applied` |
-  | Going over | `Going over to Sprite #530 · 4 tiles to go` | `APPROACH → sprite #530 · walking (4 tiles)` |
-  | Got there | `Got to Sprite #530` | `APPROACH → sprite #530 · applied` |
-
-  Gave-up lines keep the Wander wording. A target that vanished reads `Gave up: the berry was gone`. Later verbs (Hit, Play, Retreat) follow the same pattern.
-- **The observed list** ends the Body tab: what the player has watched the selected sprite finish since selecting it, newest first, at most 500 lines.
-
-  ```
-   Observed
-          just now · Rested
-       8 ticks ago · Wandered off, but gave
-                     up: the way was blocked
-       9 ticks ago · Wandered off ×2
-   1,296 ticks ago · Rested
-  ```
-
-  - One line per finished action, in the past tense: what it did ("Wandered off", "Rested", "Ate from the berry bush", "Ate the berry", "Drank", "Went over to Sprite #530"), or, if it went badly, what it set out to do and how that went ("Went to eat the berry bush, but it was empty", "…, but changed its mind", "Wandered off, but gave up: the way was blocked").
-  - Lines that read the same in a row merge into one with a count (`×3`); its time is when the latest of them finished. The times count up live and are right-aligned; a long line wraps under its own text.
-  - It starts afresh when another sprite is selected (reselecting the same one keeps it), and reads "nothing yet" until something finishes.
-- **The detail view** (`v`, in every build) shows the exact workings behind what the screen describes in words. It switches the action line to the exact verb, destination and outcome, and, while the action is under way, marks where the selected sprite is heading on the map with `X`: a Wander's destination, or the goal tile an Eat, Drink or Approach is walking to. A sprite standing on the destination is drawn over the mark. It stays on until `v` is pressed again, whatever is selected.
+  Later verbs follow the same pattern: `Going to eat the berry bush · 3 tiles to go`, `Ate from the berry bush`, `Couldn't eat from the berry bush`.
+- **The detail view** (`v`, in every build) shows the exact workings behind what the screen describes in words. It switches the action line to the exact verb, destination and outcome, and, while the action is under way, marks the selected sprite's Wander destination on the map with `X`. A sprite standing on the destination is drawn over the mark. It stays on until `v` is pressed again, whatever is selected.
 - **The inspector and the selection:**
   - The Body, Brain, Chem and Genome tabs show the selected sprite. With none selected, they read "No sprite selected: click one, or press Tab".
   - Selecting a sprite while the World tab is open switches to Body. From any other tab, the tab stays.
@@ -1623,25 +1567,6 @@ IDs are stable and append-only. Gaps are left for growth, and the ranges are a c
 | 9 | Mate | reserved for M2 |
 | 10 | Speak | reserved for M4 |
 
-**Brain parameters** (in `BrainParam` genes, and in `physiology.ron` by name):
-
-| ID | Parameter |
-|---|---|
-| 1 | learning_rate (η) |
-| 2 | trace_decay (λ) |
-| 3 | relax_rate |
-| 4 | consolidate_rate |
-| 5 | tau_base |
-| 6 | tau_att_base |
-| 7 | switch_margin |
-| 8 | attention_margin |
-| 9 | salience_gain |
-| 10 | pool_size |
-| 11 | max_arity |
-| 12 | recruit_threshold |
-| 13 | novelty_threshold |
-| 14 | forget_ticks |
-
 **Traits:**
 
 | ID | Trait |
@@ -1664,24 +1589,24 @@ This file fixes the **mechanisms and ranges**. The starting values are tuned wit
 - **Injury from starvation, dehydration and old age:** amounts per tick, and the fade time of the cause-of-death tallies (they halve about every 350 ticks, §4.10).
 - **First-cut timescales,** for a sprite at rest, which the starting values aim for: full hydration lasts about 3,000 ticks and full energy about 6,000; once either runs out, injury kills in about 1,000 more; a sprite past its lifespan dies within about 2,000.
 - **Trait ranges:** speed 4–12, sense_radius 6–14, lifespan 20,000–200,000.
-- **BrainParam ranges (initial),** each with a default for a genome that has no gene for it:
+- **BrainParam ranges (initial):**
 
-| Parameter | Range | Default |
-|---|---|---|
-| η (`learning_rate`) | 0.001–0.5 | 0.05 |
-| λ (`trace_decay`) | 0.5–0.99 | 0.9 |
-| `relax_rate` | 0–0.01 | 0.001 |
-| `consolidate_rate` | 0–0.001 | 0.0001 |
-| `tau_base` | 0.05–2.0 | 0.2 |
-| `tau_att_base` | 0.05–2.0 | 0.2 |
-| `switch_margin` | 0–1 | 0.2 |
-| `attention_margin` | 0–1 | 0.2 |
-| `salience_gain` | 0–2 | 0.5 |
-| `pool_size` | 0–64 | 32 |
-| `max_arity` | 1–3 | 3 |
-| `recruit_threshold` | 0–1 | 0.3 |
-| `novelty_threshold` | 0–1 | 0.5 |
-| `forget_ticks` | 100–100,000 | 5,000 |
+| Parameter | Range |
+|---|---|
+| η (`learning_rate`) | 0.001–0.5 |
+| λ (`trace_decay`) | 0.5–0.99 |
+| `relax_rate` | 0–0.01 |
+| `consolidate_rate` | 0–0.001 |
+| `tau_base` | 0.05–2.0 |
+| `tau_att_base` | 0.05–2.0 |
+| `switch_margin` | 0–1 |
+| `attention_margin` | 0–1 |
+| `salience_gain` | 0–2 |
+| `pool_size` | 0–64 |
+| `max_arity` | 1–3 |
+| `recruit_threshold` | 0–1 |
+| `novelty_threshold` | 0–1 |
+| `forget_ticks` | 100–100,000 |
 
 - **Receptor target ranges:** `learning_rate_mod` 0.5–2.0, `exploration_mod` 0.25–4.0, both neutral at 1.0.
 - **Hand stimuli:** Reward's `reward` amount; Correct's `punishment` and `pain` amounts.
