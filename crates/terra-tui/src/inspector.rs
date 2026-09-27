@@ -706,11 +706,17 @@ fn scored(head: &str, name: &str, number: &str) -> Vec<String> {
 
 /// The Chem tab (design §6.1): each chemical on its own line with its level
 /// and its change per tick, the physical chemicals, then the signal
-/// chemicals; then the hormones' levels, four to a line.
+/// chemicals, with what the sprite felt on the reward line; then the
+/// hormones' levels, four to a line.
 fn chem_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
     let chemicals: Vec<ChemicalLevel> = sprite.chemicals().collect();
     let line = |c: &ChemicalLevel| {
-        let amount = change(c.change).unwrap_or_default();
+        // Reward is used up every tick, so its line shows what learning
+        // took in instead of a change: `last_r` (design §6.1).
+        let amount = match c.name {
+            "reward" => format!("felt {}", signed_level(sprite.felt())),
+            _ => change(c.change).unwrap_or_default(),
+        };
         let name = display_name(c.name);
         let text = format!(" {name:<13}{:>4}  {amount}", level(c.level));
         text.trim_end().to_string()
