@@ -15,7 +15,8 @@ use crate::world::WorldState;
 #[serde(bound(serialize = "[f32; N]: Serialize, [bool; N]: Serialize"))]
 pub(crate) struct LearnableLinks<const N: usize> {
     w: Vec<[f32; N]>,
-    long: Vec<[f32; N]>,
+    /// The consolidated weight `w_long` each working weight relaxes towards.
+    settled: Vec<[f32; N]>,
     /// The instinct each link was born with.
     birth: Vec<[f32; N]>,
     /// Whether each link has been a lesson yet.
@@ -27,14 +28,14 @@ impl<const N: usize> LearnableLinks<N> {
     pub(crate) fn new(birth: Vec<[f32; N]>) -> LearnableLinks<N> {
         LearnableLinks {
             w: birth.clone(),
-            long: birth.clone(),
+            settled: birth.clone(),
             taught: vec![[false; N]; birth.len()],
             birth,
         }
     }
 
     /// Every row's working weights.
-    pub(crate) fn rows(&self) -> &[[f32; N]] {
+    pub(crate) fn working(&self) -> &[[f32; N]] {
         &self.w
     }
 
@@ -46,7 +47,7 @@ impl<const N: usize> LearnableLinks<N> {
     /// The consolidated weight of the link in `row` and `column`.
     #[cfg(test)]
     pub(crate) fn settled(&self, row: usize, column: usize) -> f32 {
-        self.long[row][column]
+        self.settled[row][column]
     }
 
     /// Moves the link in `row` and `column` by `by`, keeping it within
@@ -75,7 +76,7 @@ impl<const N: usize> LearnableLinks<N> {
     /// The links whose working weight is `threshold` or more from birth for
     /// the first time, as `(row, column, rose)`, in row then column order.
     /// Each is marked, so it's a lesson only once (design §5.6).
-    pub(crate) fn lessons(&mut self, threshold: f32) -> impl Iterator<Item = (usize, usize, bool)> {
+    pub(crate) fn lessons(&mut self, threshold: f32) -> Vec<(usize, usize, bool)> {
         let mut found = Vec::new();
         for (row, taught) in self.taught.iter_mut().enumerate() {
             for (column, taught) in taught.iter_mut().enumerate() {
@@ -86,18 +87,18 @@ impl<const N: usize> LearnableLinks<N> {
                 }
             }
         }
-        found.into_iter()
+        found
     }
 
     /// One tick of the two timescales: `w` relaxes towards `w_long` by
     /// `relax_rate`, and `w_long` consolidates towards `w` by
     /// `consolidate_rate`, both from the values before the tick.
     pub(crate) fn relax(&mut self, relax_rate: f32, consolidate_rate: f32) {
-        for (w, long) in self.w.iter_mut().zip(&mut self.long) {
-            for (w, long) in w.iter_mut().zip(long.iter_mut()) {
-                let (was, settled) = (*w, *long);
-                *w = was + relax_rate * (settled - was);
-                *long = settled + consolidate_rate * (was - settled);
+        for (w, settled) in self.w.iter_mut().zip(&mut self.settled) {
+            for (w, settled) in w.iter_mut().zip(settled.iter_mut()) {
+                let (was, long) = (*w, *settled);
+                *w = was + relax_rate * (long - was);
+                *settled = long + consolidate_rate * (was - long);
             }
         }
     }
@@ -106,7 +107,7 @@ impl<const N: usize> LearnableLinks<N> {
 /// The most entries a trace keeps (design §5.6).
 pub(crate) const TRACE_CAP: usize = 512;
 
-/// The least weight an entry keeps its place in the trace with.
+/// The least weight an entry keeps its place in the trace with (design §5.6).
 const TRACE_FLOOR: f32 = 0.01;
 
 /// The weight step 4 at tick `now` gives the trace entry from tick `then`
@@ -145,8 +146,7 @@ pub(crate) fn run(state: &mut WorldState, data: &DataPack, events: &mut Vec<Even
         body.chems[indices.reward] = 0.0;
         body.chems[indices.punishment] = 0.0;
         brain.felt = r;
-        for lesson in brain.learn(tick, r, body.loci[indices.learning_rate_mod], data) {
-            let (link, good) = lesson.named(brain, data);
+        for (link, good) in brain.learn(tick, r, body.loci[indices.learning_rate_mod], data) {
             events.push(Event {
                 tick,
                 kind: EventKind::LearnedMilestone { id, link, good },
