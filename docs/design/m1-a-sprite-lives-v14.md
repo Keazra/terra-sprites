@@ -15,14 +15,14 @@ Decided with the owner in the design session for slice 7c ([#8](https://github.c
 |---|---|---|---|
 | 1 | **Playing with another sprite eases boredom much less than kicking a ball:** 0.15 where a kick eases it by 0.5. It still eases loneliness by 0.5, since company is the cure for that. | Owner request, after trying 7a | §4.5, §5.8 |
 | 2 | **Being hit draws attention to sprites,** which means the attacker while the `was_hit` pulse is live (§3.6), so a hit sprite turns to whoever hit it. Pain draws attention to nothing, or a sprite pricked by a thornbush would stare at a passer-by. | Slice 7c design session | §5.8 |
-| 3 | **Fight or flight, a lean for now.** Pain leads to Retreat, the stronger answer; being hit while attending a sprite leads to Hit, a little weaker, so roughly one hit in four is hit back. A sprite that's busy when hit switches deterministically to whichever answer is stronger in it (§5.5), so spawn variation, not chance, decides: about one sprite in four hits back. Only an idle sprite chooses by chance. Real temperament waits for [#53](https://github.com/Keazra/terra-sprites/issues/53). | Owner decision; the lean found while building | §5.8 |
+| 3 | **Fight or flight, a lean for now.** Pain leads to Retreat, the stronger answer; being hit while attending a sprite leads to Hit, a little weaker. A sprite that's busy when hit switches deterministically to whichever answer is stronger in it (§5.5), so spawn variation, not chance, decides: about one sprite in four hits back. Only an idle sprite chooses by chance. Real temperament waits for [#53](https://github.com/Keazra/terra-sprites/issues/53). | Owner decision; the lean found while building | §5.8 |
 | 4 | **A retreat runs straight away.** Among the free neighbours that gain the most distance, it takes the one pointing most directly away from the target; the direction order breaks only exact ties. v13's direction order alone sent a sprite fleeing due north's threat off to the south-east. | Owner decision | §3.7, §5.5 |
 | 5 | **A cornered retreat.** With no step further away, a retreat ends `blocked` at once if walls, water or solid objects are all that's in the way, and after `replan_after` blocked ticks (3) if a sprite is. Either way the sprite is **cornered**: a new `cornered` pulse fires, and the brain chooses again. | Owner decision | §3.7, §4.2, §5.5 |
 | 6 | **A cornered sprite fights:** a new instinct makes `cornered & attended sprite` lead to Hit, strongly. So a sprite backed against a lake by a bully turns on it, while one cornered by a thornbush just chooses again. | Owner request | §5.8 |
 | 7 | **`cornered` is brain input 64.** State inputs 1–35 were all taken; IDs 36–63 are kept for Target inputs (36–43 used), so State inputs carry on from 64. | Slice 7c design session | §5.2, Appendix A |
 | 8 | **A pulse's source is the latest.** Every `Signal(Target, …)` records the actor as the pulse's source; if two land on one sprite in a tick, the one resolved last counts. The source is world state, hashed and saved with the pulse. | Slice 7c design session | §3.5.2, §4.2 |
 | 9 | **Crowding's instincts arrive with Retreat,** as v12 planned: crowdedness draws attention to sprites and leads to Retreat, and the deliberate mistake `crowdedness & attended sprite → Hit`, raised from 0.2 to 0.6 so it shows: about one crowded choice in ten is a hit. At 0.2 a crowded sprite hit about 1 time in 25 when mildly crowded and practically never when packed, no more than any other slip. Pain leads to Retreat. | v12 plan; the weight by owner decision, after measuring | §5.8 |
-| 10 | **Retreat's words.** The Body tab reads `Backing away from Sprite #7 · 4 steps to go`, then `Backed away from Sprite #7`; cornered, `Backed into a corner`. The observed list reads "Backed away from Sprite #7", or "…, but was cornered". A retreat gets no event log line: it does nothing to anyone. | Owner decision | §6.1 |
+| 10 | **Retreat's words.** The Body tab reads `Backing away from Sprite #7 · 4 steps to go` (`· waiting for room` while a sprite is in the way), then `Backed away from Sprite #7`; cornered, `Backed into a corner`. The observed list reads "Backed away from Sprite #7", or "…, but was cornered". A retreat gets no event log line: it does nothing to anyone. | Owner decision | §6.1 |
 | 11 | **A retreat carries on out of reach.** 5.0 ends an aimed action whose target has become unreachable, but getting out of reach is what a retreat is for: it ends only when its bout is done, it's cornered, its target is gone, or at the timeout. | Slice 7c, agreed with the owner before building | §5.5 |
 
 ---
@@ -844,7 +844,7 @@ Before 7b, any item ahead stopped it. A tile holding several things uses the str
   - **A blocked tick** is one where the sprite had the points for its next step but couldn't take it: a sprite stood there, or the step has become impossible (a bush grew since the flood).
 - **Several steps a tick:** a sprite takes as many steps in a tick as its points pay for, so speed 12 on grass is 1.2 steps a tick. A swap ends both sprites' walking for the tick.
   - **No path found** (for example, a sprite resting in the only corridor, or on the Wander destination itself): **the action ends with outcome `blocked`**, freeing the brain to choose again.
-  - **Retreat** doesn't use the search. It moves by straight-line distance (§5.5), so for Retreat "no path" means no free neighbour increases the Chebyshev distance from the target: the sprite is **cornered**. If a sprite stands on a neighbour that would increase it, that's a blocked tick, and the retreat ends `blocked` after `replan_after` of them in a row; if walls, water or solid objects are all that's in the way, it ends `blocked` at once. Either way it fires the `cornered` pulse (§4.2).
+  - **Retreat** doesn't use the search. It moves by straight-line distance (§5.5), so for Retreat "no path" means no free neighbour increases the Chebyshev distance from the target. If walls, water or solid objects are all that's in the way, the sprite is **cornered** at once. If sprites stand on every neighbour that would increase it, that's a blocked tick, and after `replan_after` of them in a row it's cornered too. A cornered retreat ends `blocked` and fires the `cornered` pulse (§4.2).
   - **Cost:** the search only runs after 3 blocked ticks, which is rare, so it doesn't threaten the §3.9 performance target.
 - **Why a seeded shuffle and not ID order:** both are deterministic. But ID order would favour older sprites in every contest, and M2 evolution would pick up that bias.
 - **Energy:** each step costs energy under physiology rules (§4.8).
@@ -907,7 +907,7 @@ Loci are listed in `data/loci.ron` with stable IDs. Each has a kind: `(id: 32, n
   - Writes go to `incoming`: at step 1 (the hand) and at step 6 (verb effects, and `cornered` when a retreat finds no step away, §3.7).
   - At step 3a, `live` is replaced by `incoming`, and `incoming` is emptied.
   - Reads use `live`: emitters at step 3, and the brain at step 5.
-- **Pulse sources:** a pulse a verb writes on its target carries the actor as its source, so `was_hit` records the **attacker**. It's latched with the pulse and lasts as long; if two land in a tick, the one resolved last counts. Sources are world state, hashed and saved.
+- **Pulse sources:** a pulse a verb writes on its target carries the actor as its source, so `was_hit` records the **attacker**. It's latched with the pulse and lasts as long; if two land in a tick, the one resolved last counts, and a pulse a sprite's own verb writes on it has no source, so it clears one. Sources are world state, hashed and saved.
 - **Modulator neutral points:** `learning_rate_mod` and `exploration_mod` rest at 1.0 when no receptor writes them.
 
 ### 4.3 Gene types for biochemistry
@@ -1172,7 +1172,7 @@ World randomness is separate: plant rules and the order actions resolve in. It c
 | Rest | Stays put and sets `resting` | After 10 ticks, `applied` |
 | Wander | Follows the flood path to the destination chosen at 5b | On arrival, `applied` |
 
-- Any action that moves ends with outcome **`blocked`** when blocked re-planning finds no way forward (§3.7).
+- Any action that moves ends with outcome **`blocked`** when blocked re-planning finds no way forward (§3.7). A retreat doesn't re-plan: it ends `blocked` when it's cornered (§3.7).
 - **The stand-in chooser (slice 5 only).** Until the brain arrived in slice 6, 5b was a stand-in behind the same interface that picked Wander or Rest at even odds. The brain has replaced it.
 - **Verbs by slice.** Slice 6 makes Approach, Eat, Drink, Rest and Wander available. Slice 7a adds Hit and Play; Retreat stayed masked, as if no verb table offered it, until slice 7c.
 - **A free neighbour,** for Retreat, is a walkable tile with no sprite and no solid object that the step reaches without cutting a corner (§3.1). An item doesn't stop it. A target on the sprite's own tile (an item it stands on) is at distance 0, so any free neighbour gains distance, and the direction order alone chooses.
@@ -1349,6 +1349,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
   | Hit | `Hit Sprite #7` | `HIT → sprite #7 · applied` |
   | Hurt doing it | `Hit the thornbush, and got hurt` | `HIT → thornbush #77 · applied` |
   | Backing away | `Backing away from Sprite #7 · 4 steps to go` | `RETREAT → sprite #7 · walking (4 steps)` |
+  | Held up by a sprite | `Backing away from Sprite #7 · waiting for room` | `RETREAT → sprite #7 · blocked (2 ticks)` |
   | Backed away | `Backed away from Sprite #7` | `RETREAT → sprite #7 · applied` |
   | Cornered | `Backed into a corner` | `RETREAT → sprite #7 · blocked` |
 

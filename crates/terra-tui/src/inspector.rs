@@ -246,6 +246,9 @@ fn aimed_line(action: &ActionView, data: &DataPack) -> Option<String> {
                 counted(steps_left, walked(action.verb))
             )
         }
+        Progress::Waiting { .. } if action.verb == Verb::Retreat => {
+            format!("{going} · waiting for room")
+        }
         Progress::Waiting { .. } => format!("{going} · waiting to get past"),
         Progress::Resting { .. } => return None,
         Progress::Ended(Outcome::Applied) => done_line(action, &what, data),
@@ -1429,7 +1432,7 @@ mod tests {
             ),
             (
                 sprite(Waiting { blocked_ticks: 2 }),
-                "Backing away from Sprite #7 · waiting to get past",
+                "Backing away from Sprite #7 · waiting for room",
                 "RETREAT → sprite #7 · blocked (2 ticks)",
             ),
             (
