@@ -620,6 +620,14 @@ fn brain_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
     lines.into_iter().map(Line::from).collect()
 }
 
+/// A lesson as the event log says it (design §6.1): "Sprite #12 learned:
+/// attended thornbush → eat is bad", "… is good" for a link that rose.
+pub(crate) fn learned_line(id: EntityId, link: &Link, good: bool) -> String {
+    let verdict = if good { "good" } else { "bad" };
+    let link = link_name(link).replace(BOUND, " ");
+    format!("{} learned: {link} is {verdict}", sprite_label(id))
+}
+
 /// The memory's two columns, a link's weight now and at birth, each
 /// right-aligned.
 fn columns(now: &str, birth: &str) -> String {

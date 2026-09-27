@@ -5,7 +5,7 @@ use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
-    ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Map, Outcome, Pos,
+    ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Link, Map, Outcome, Pos,
     Progress, Removal, Scenario, ScriptedAction, Target, Verb, World, WorldConfig,
 };
 use terra_tui::app::{App, Tab};
@@ -787,6 +787,50 @@ fn the_event_log_shows_every_play_and_hit_and_whatever_hurt_a_sprite() {
             "22  Sprite #6 hit a ball",
             "21  Sprite #3 played with a thornbush and got hurt",
             "20  Sprite #3 tried to eat a thornbush and got hurt",
+        ]
+    );
+}
+
+#[test]
+fn the_event_log_says_what_a_sprite_learned_is_good_or_bad() {
+    let world = garden(pack());
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    let learned = |tick, id, link, good| Event {
+        tick,
+        kind: EventKind::LearnedMilestone {
+            id: EntityId(id),
+            link,
+            good,
+        },
+    };
+    let thorn_eat = Link::Decision {
+        inputs: vec![("attended_thornbush".into(), false)],
+        verb: Verb::Eat,
+    };
+    let ball_play = Link::Decision {
+        inputs: vec![("boredom".into(), false), ("attended_ball".into(), false)],
+        verb: Verb::Play,
+    };
+    let thorn_look = Link::Attention {
+        input: "hunger".into(),
+        category: "thornbush".into(),
+    };
+    app.record(
+        &[
+            learned(30, 12, thorn_eat, false),
+            learned(31, 12, thorn_look, false),
+            learned(32, 9, ball_play, true),
+        ],
+        &world,
+    );
+    let screen = lines(&render(&app, &world, 100, 30));
+    let log: Vec<&str> = screen[25..28].iter().map(|row| inside(row)).collect();
+    assert_eq!(
+        log,
+        [
+            "32  Sprite #9 learned: boredom & attended ball → play is good",
+            "31  Sprite #12 learned: hunger → attends to thornbush is bad",
+            "30  Sprite #12 learned: attended thornbush → eat is bad",
         ]
     );
 }
