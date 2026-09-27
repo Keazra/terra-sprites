@@ -55,7 +55,8 @@ fn learning_uses_up_reward_and_punishment_and_the_sprite_felt_the_difference() {
         at(1, 1),
         r#"Emitter(locus: Locus("pricked"), mode: Level, gain: 0.3, chem: "punishment"),
            Emitter(locus: Locus("pricked"), mode: Level, gain: 0.1, chem: "reward"),"#,
-        &[ScriptedAction::Eat { at: thornbush }],
+        // A rest after, so it doesn't bite again.
+        &[ScriptedAction::Eat { at: thornbush }, ScriptedAction::Rest],
     );
     world.step();
     let sprite = world.sprites().next().expect("the sprite");

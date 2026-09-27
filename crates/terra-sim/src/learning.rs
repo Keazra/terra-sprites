@@ -7,6 +7,65 @@ use crate::data::DataPack;
 use crate::registry::{Category, Verb};
 use crate::world::WorldState;
 
+/// Links that learn (design §5.6): a row per concept or input, a column per
+/// verb or category. Each link has a working weight `w`, which learning
+/// moves, and a consolidated one `w_long`; both start at the instinct.
+#[derive(Debug, Clone, Serialize)]
+#[serde(bound(serialize = "[f32; N]: Serialize"))]
+pub(crate) struct LearnableLinks<const N: usize> {
+    w: Vec<[f32; N]>,
+    long: Vec<[f32; N]>,
+    /// The instinct each link was born with.
+    birth: Vec<[f32; N]>,
+}
+
+impl<const N: usize> LearnableLinks<N> {
+    /// Links born at the weights `birth` gives.
+    pub(crate) fn new(birth: Vec<[f32; N]>) -> LearnableLinks<N> {
+        LearnableLinks {
+            w: birth.clone(),
+            long: birth.clone(),
+            birth,
+        }
+    }
+
+    /// Every row's working weights.
+    pub(crate) fn rows(&self) -> &[[f32; N]] {
+        &self.w
+    }
+
+    /// The working weight of the link in `row` and `column`.
+    pub(crate) fn get(&self, row: usize, column: usize) -> f32 {
+        self.w[row][column]
+    }
+
+    /// The consolidated weight of the link in `row` and `column`.
+    #[cfg(test)]
+    pub(crate) fn settled(&self, row: usize, column: usize) -> f32 {
+        self.long[row][column]
+    }
+
+    /// Moves the link in `row` and `column` by `by`, keeping it within
+    /// [−1, 1].
+    pub(crate) fn nudge(&mut self, row: usize, column: usize, by: f32) {
+        let w = &mut self.w[row][column];
+        *w = (*w + by).clamp(-1.0, 1.0);
+    }
+
+    /// One tick of the two timescales: `w` relaxes towards `w_long` by
+    /// `relax_rate`, and `w_long` consolidates towards `w` by
+    /// `consolidate_rate`, both from the values before the tick.
+    pub(crate) fn relax(&mut self, relax_rate: f32, consolidate_rate: f32) {
+        for (w, long) in self.w.iter_mut().zip(&mut self.long) {
+            for (w, long) in w.iter_mut().zip(long.iter_mut()) {
+                let (was, settled) = (*w, *long);
+                *w = was + relax_rate * (settled - was);
+                *long = settled + consolidate_rate * (was - settled);
+            }
+        }
+    }
+}
+
 /// The most entries a trace keeps (design §5.6).
 pub(crate) const TRACE_CAP: usize = 512;
 
@@ -39,14 +98,16 @@ pub(crate) struct TraceEntry {
 }
 
 /// Step 4 for every sprite: reads `r = reward − punishment`, resets both to
-/// 0, and keeps `r` as what the sprite felt.
+/// 0, keeps `r` as what the sprite felt, and learns from it.
 pub(crate) fn run(state: &mut WorldState, data: &DataPack) {
     let indices = &data.physiology().indices;
+    let tick = state.tick;
     for (body, brain) in state.sprites.minds_mut() {
         let r = body.chems[indices.reward] - body.chems[indices.punishment];
         body.chems[indices.reward] = 0.0;
         body.chems[indices.punishment] = 0.0;
         brain.felt = r;
+        brain.learn(tick, r, body.loci[indices.learning_rate_mod], data);
     }
 }
 

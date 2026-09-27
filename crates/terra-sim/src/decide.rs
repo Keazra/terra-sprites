@@ -139,7 +139,8 @@ pub(crate) fn decide(
     let inputs = brain.inputs(&sprite.body, aim, data);
     let activations = brain.activations(&inputs);
     let scores = brain.scores(&activations);
-    let offered = available(candidate.map(|c| c.table.as_slice()));
+    let beside = candidate.is_some_and(|c| c.aim.adjacent);
+    let offered = available(candidate.map(|c| c.table.as_slice()), beside);
     let current = sprite.action.as_ref().filter(|_| running).map(|a| a.verb);
     let chosen = match current {
         Some(verb) => brain.switch(verb, &scores, &offered),
