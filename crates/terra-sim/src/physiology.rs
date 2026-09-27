@@ -423,12 +423,7 @@ impl Indices {
         let pulse = |name: &str| {
             loci.iter()
                 .position(|l| l.name == name && l.kind == LocusKind::Pulse)
-                .ok_or_else(|| {
-                    (
-                        "loci.ron",
-                        format!("sprites need a pulse called `{name}`"),
-                    )
-                })
+                .ok_or_else(|| ("loci.ron", format!("sprites need a pulse called `{name}`")))
         };
         Ok(Indices {
             energy: chem("energy")?,

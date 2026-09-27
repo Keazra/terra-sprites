@@ -9,6 +9,9 @@ use terra_sim::{
 
 const STARTER: &str = include_str!("../../../data/genomes/starter.ron");
 
+/// Makes a sprite's genome from the data pack.
+type MakeGenome = fn(&DataPack) -> Genome;
+
 fn builtin() -> DataPack {
     DataPack::builtin().expect("built-in data pack is valid")
 }
@@ -48,7 +51,7 @@ fn watcher(data: &DataPack) -> Genome {
 /// order given, each starting on the scripted actions given for its tile.
 fn scene(
     rows: &[&str],
-    sprites: &[(Pos, fn(&DataPack) -> Genome)],
+    sprites: &[(Pos, MakeGenome)],
     scripted: &[(Pos, ScriptedAction)],
 ) -> World {
     scene_with(rows, &[], sprites, scripted, 1)
@@ -58,7 +61,7 @@ fn scene(
 fn scene_with(
     rows: &[&str],
     objects: &[(Pos, &str)],
-    sprites: &[(Pos, fn(&DataPack) -> Genome)],
+    sprites: &[(Pos, MakeGenome)],
     scripted: &[(Pos, ScriptedAction)],
     seed: u64,
 ) -> World {
@@ -114,11 +117,19 @@ fn a_hit_sprite_turns_to_its_attacker_while_it_feels_the_hit() {
         (attacker, ScriptedAction::Hit { at: me }),
         (attacker, ScriptedAction::Rest),
     ];
-    let sprites = [(bystander, walker as fn(&DataPack) -> Genome), (me, watcher), (attacker, walker)];
+    let sprites = [
+        (bystander, walker as MakeGenome),
+        (me, watcher),
+        (attacker, walker),
+    ];
     let mut world = scene(&["....."], &sprites, &script);
     let me = id_at(&world, me);
     world.step();
-    assert_eq!(attends(&world, me), Some(bystander), "before the hit is felt");
+    assert_eq!(
+        attends(&world, me),
+        Some(bystander),
+        "before the hit is felt"
+    );
     world.step();
     assert_eq!(attends(&world, me), Some(attacker), "feeling the hit");
     world.step();
@@ -133,7 +144,7 @@ fn a_sprite_pricked_by_a_thornbush_backs_away_from_it() {
     let mut backed_away = 0;
     for seed in 0..10 {
         let script = [(me, ScriptedAction::Eat { at: thornbush })];
-        let sprites = [(me, starter as fn(&DataPack) -> Genome)];
+        let sprites = [(me, starter as MakeGenome)];
         let mut world = scene_with(&rows, &[(thornbush, "thornbush")], &sprites, &script, seed);
         let id = id_at(&world, me);
         let bush = world.object_at(thornbush).expect("the thornbush").id();
@@ -239,7 +250,7 @@ fn a_sprite_cornered_by_its_attacker_turns_on_it() {
             (attacker, ScriptedAction::Hit { at: me }),
             (attacker, ScriptedAction::Rest),
         ];
-        let sprites = [(me, starter as fn(&DataPack) -> Genome), (attacker, walker)];
+        let sprites = [(me, starter as MakeGenome), (attacker, walker)];
         let mut world = scene_with(&["......"], &[], &sprites, &script, seed);
         let (id, them) = (id_at(&world, me), id_at(&world, attacker));
         // What the sprite does next, once a retreat of its has been cornered.
