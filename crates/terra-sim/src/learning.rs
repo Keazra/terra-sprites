@@ -7,6 +7,23 @@ use crate::data::DataPack;
 use crate::registry::{Category, Verb};
 use crate::world::WorldState;
 
+/// The most entries a trace keeps (design §5.6).
+pub(crate) const TRACE_CAP: usize = 512;
+
+/// The least weight an entry keeps its place in the trace with.
+const TRACE_FLOOR: f32 = 0.01;
+
+/// The weight step 4 at tick `now` gives the trace entry from tick `then`
+/// (design §5.6): λ^(now − then).
+pub(crate) fn weight(trace_decay: f32, now: u64, then: u64) -> f32 {
+    libm::powf(trace_decay, (now - then) as f32)
+}
+
+/// Whether the entry from tick `then` still counts at tick `now`'s step 4.
+pub(crate) fn still_counts(trace_decay: f32, now: u64, then: u64) -> bool {
+    weight(trace_decay, now, then) >= TRACE_FLOOR
+}
+
 /// One tick of a brain's trace (design §5.6): what it felt and chose at
 /// that tick's step 5.
 #[derive(Debug, Clone, PartialEq, Serialize)]

@@ -11,7 +11,7 @@ use crate::brain_io::Source;
 use crate::data::DataPack;
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, LocusRef};
-use crate::learning::TraceEntry;
+use crate::learning::{TRACE_CAP, TraceEntry, still_counts};
 use crate::perception::Target;
 use crate::random::unit;
 use crate::registry::{BrainParam, Category, Verb};
@@ -239,6 +239,16 @@ impl Brain {
             verb: snapshot.verb,
             attended: snapshot.attended,
         });
+        // Drop what the next step 4 would credit too little, oldest first.
+        let decay = self.params.get(BrainParam::TraceDecay);
+        while self
+            .trace
+            .front()
+            .is_some_and(|e| !still_counts(decay, tick + 1, e.tick))
+            || self.trace.len() > TRACE_CAP
+        {
+            self.trace.pop_front();
+        }
     }
 
     /// What the brain did at its latest step 5, explained (design §5.9), or
@@ -711,5 +721,48 @@ mod tests {
         let cold = pick_first(0.1, &mut rng);
         assert!((650..800).contains(&warm), "{warm}");
         assert!(cold > 990, "{cold}");
+    }
+
+    /// A snapshot of step 5 at `tick`, having chosen `verb` while attending
+    /// to `attended`, with `activations`.
+    fn snapshot(
+        tick: u64,
+        activations: Vec<f32>,
+        verb: Verb,
+        attended: Option<Category>,
+    ) -> Snapshot {
+        Snapshot {
+            tick,
+            inputs: Vec::new(),
+            activations,
+            attention: BTreeMap::new(),
+            attended,
+            target: None,
+            scores: [0.0; VERBS.len()],
+            verb: Some(verb),
+        }
+    }
+
+    /// Has `brain` decide and commit on each of `ticks`.
+    fn decide_on(brain: &mut Brain, ticks: std::ops::Range<u64>) {
+        for tick in ticks {
+            brain.snapshot = Some(snapshot(tick, Vec::new(), Verb::Rest, None));
+            brain.commit(tick);
+        }
+    }
+
+    #[test]
+    fn the_trace_keeps_an_entry_while_its_weight_at_the_next_step_4_is_at_least_one_in_a_hundred() {
+        // 0.9^43 is about .0108 and 0.9^44 about .0097, so after committing
+        // tick 99 the next step 4 (tick 100) credits ticks 57 to 99.
+        let mut quick = brain(&[r#"BrainParam(param: "trace_decay", value: 0.9)"#]);
+        decide_on(&mut quick, 0..100);
+        let ticks: Vec<u64> = quick.trace.iter().map(|e| e.tick).collect();
+        assert_eq!(ticks, (57..100).collect::<Vec<u64>>());
+        // 0.99^458 is about .0100 and 0.99^459 about .0099.
+        let mut slow = brain(&[r#"BrainParam(param: "trace_decay", value: 0.99)"#]);
+        decide_on(&mut slow, 0..1000);
+        assert_eq!(slow.trace.len(), 458);
+        assert_eq!(slow.trace.front().map(|e| e.tick), Some(542));
     }
 }
