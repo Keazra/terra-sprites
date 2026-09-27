@@ -1,84 +1,15 @@
-# Terra Sprites — M1 "A Sprite Lives" design (v9)
+# Terra Sprites — M1 "A Sprite Lives" design (v6)
 
 - **Status:** Final
-- **Date:** 2026-09-25
-- **Supersedes:** [v8](m1-a-sprite-lives-v8.md) (earlier: [v7](m1-a-sprite-lives-v7.md), [v6](m1-a-sprite-lives-v6.md), [v5](m1-a-sprite-lives-v5.md), [v4](m1-a-sprite-lives-v4.md), [v3](m1-a-sprite-lives-v3.md), [v2](m1-a-sprite-lives-v2.md), [v1](m1-a-sprite-lives.md))
+- **Date:** 2026-09-24
+- **Supersedes:** [v5](m1-a-sprite-lives-v5.md) (earlier: [v4](m1-a-sprite-lives-v4.md), [v3](m1-a-sprite-lives-v3.md), [v2](m1-a-sprite-lives-v2.md), [v1](m1-a-sprite-lives.md))
 - **Covers:** Milestone 1 in full detail, plus the architecture decisions that every later milestone depends on
 
 ---
 
-## Changes from v8
+## Changes from v5
 
-Decided with the owner in the design session for slice 5 ([#6](https://github.com/Keazra/terra-sprites/issues/6)), which makes sprites move. It also folds in [#29](https://github.com/Keazra/terra-sprites/issues/29), the self-check every tick. The new domain terms (action, verb, outcome, timeout, move points, perception flood, reachable, destination, goal tile, candidate, swap, committed path and detail view) are in [`CONTEXT.md`](../../CONTEXT.md).
-
-| # | Change | Source | Sections |
-|---|---|---|---|
-| 1 | **Speed keeps its decimals.** Move points are counted in tenths: a sprite gains `round(speed × 10)` tenths a tick, and a step costs its terrain cost × 10. Spawn variation gives speeds like 7.4, and a 7.4 sprite now walks a little faster than a 7.0 one, as it pays energy for 7.4. | Owner decision | §3.7, §4.8 |
-| 2 | **The flood reaches whole tiles:** the sense radius rounded to the nearest tile, so 9.87 reaches 10. A Wander's "more than half the radius" still uses the trait as it is. | Owner decision | §3.6, §5.5 |
-| 3 | **Walking around another sprite:** the flood prices a tile holding another sprite at 30 more, three grass steps, so a sprite detours up to about 3 tiles rather than wait behind it. | Slice 5 design session | §3.6, App. B |
-| 4 | **Stamina doesn't stop walking.** A sprite with no stamina left still walks; low stamina only raises tiredness (§4.5), which the brain can answer by resting. | Slice 5 design session | §3.7 |
-| 5 | **A sprite on the Wander destination:** the wanderer waits, re-plans after 3 blocked ticks, finds no way onto the tile, and ends `blocked`. No special case. | Slice 5 design session | §3.7, §5.5 |
-| 6 | **Wander and Rest end `applied`** when they finish: on arrival, and after the bout. | Slice 5 design session | §5.5 |
-| 7 | **The stand-in chooser.** Until the brain arrives in slice 6, a stand-in behind the same interface picks Wander or Rest at even odds, from the world RNG, and never switches a running action. | Owner decision | §5.5 |
-| 8 | **The Body tab says what the sprite is doing in plain words,** in the present tense, naming its target, with no coordinates: "Wandering off · 5 tiles to go", "Resting · 6 ticks left". It describes, and never speaks as the sprite: the Brain tab shows why, and a line in the sprite's voice could contradict it. | Owner decision, after pushback on a first-person voice | §6.1 |
-| 9 | **The detail view.** `v` switches the action line to the exact verb, destination and outcome (`WANDER → (61,40) · walking (5 tiles)`), and marks the selected sprite's destination on the map with `X` (CP437 has no `×`). It works in every build, and stays on until `v` is pressed again. | Owner idea | §6.1, §6.2, §6.5 |
-| 10 | **The event log leaves out action events** (`ActionStarted`, `ActionEnded`). With 30 sprites they come about 3 for every tick, and would bury deaths. | Owner decision | §6.1 |
-| 11 | **The self-check runs after every tick** in debug builds and tests, at the end of step 7, and names the tick that broke a rule. It costs about 1.2 ms a tick on the default map in a debug build, adding about 30 s to the debug test run; release builds skip it. | Owner decision ([#29](https://github.com/Keazra/terra-sprites/issues/29)) | §7.1 |
-| 12 | **A flood refreshes 8 ticks after the sprite's last one,** not on a shared tick, so floods don't all land at once. | Slice 5 | §3.6, App. B |
-| 13 | **A sprite takes as many steps in a tick as its points pay for,** so speed above a terrain's cost still counts (speed 12 on grass is 1.2 steps a tick). A swap ends both sprites' walking for the tick. | Slice 5 | §3.7 |
-| 14 | **A Wander ends as failed at 5.0** once the flood no longer reaches its destination (a bush grew there, say), unless the sprite is keeping to a committed path. A Wander that starts with a destination the flood doesn't reach fails at once, as one with none does. | Slice 5 | §5.5 |
-| 15 | **A step that has become impossible,** onto a bush that grew since the flood, counts as a blocked tick, like a step onto a sprite. | Slice 5 | §3.7 |
-| 16 | **A hand-made world can start sprites on scripted actions** (Wander to a tile, or Rest), in order, before the stand-in or the brain takes over, so tests and lab scenarios can set up exact situations. | Slice 5 | §7.1 |
-| 17 | **The clock runs 8× slower: 1× is 1.25 ticks a second**, today's ⅛×, and every speed step moves down with it (⅛× is 5/32 of a tick a second, 16× is 20 ticks a second). At 10 ticks a second, sprites walked about 7 tiles a second, too fast to watch. Nothing in the sim changes, since everything counts in ticks: at 1× a rest takes 8 s, a full stomach lasts about 80 minutes and a starter sprite's life about 13 hours; `+` speeds it up. The UI clock counts rates in 32nds of a tick a second, so ⅛× stays exact. | Owner feedback after trying slice 5 | §4.8, §6.6 |
-
----
-
-## Changes in v8 (from v7)
-
-Decided with the owner while starting slice 4b ([#5](https://github.com/Keazra/terra-sprites/issues/5)), which lets the player select a sprite and look inside it.
-
-| # | Change | Source | Sections |
-|---|---|---|---|
-| 1 | **The Chem tab is one list,** not two columns. Each chemical has its own line, with its level and its change per tick: the physical chemicals, a blank line, then the signal chemicals, with the 16 hormones in a 4×4 grid of levels below. Two columns of name, level and change need about 46 columns, and the inspector has 44 inside; a change rounded to fit would read `.000` for most of them. The list still fits at 100×30. | Owner decision | §6.1 |
-| 2 | **Change per tick** is a level now minus the level one tick ago, shown to 4 decimals (`-.0002`), and left blank when it rounds to 0. The sim keeps each sprite's levels from one tick ago for it, before step 1 (§2.4). Nothing in the sim reads them, so they're left out of the state hash and of saves: after a load, every change reads blank for one tick. | Slice 4b | §2.4, §2.8, §6.1 |
-| 3 | **The inspector's title** is the selected sprite and the tabs, with the open one in brackets: `Sprite #530 ── [Body] Chem Genome World`. With no sprite selected, it's the tabs alone. A label too long to fit is shortened, never the tab names. The tabs go Body, Brain, Chem, Genome, World; `[` and `]` wrap around, and the game starts on World. | Slice 4b | §6.1 |
-| 4 | **The Body tab** shows age and lifespan; speed and sense radius as expressed; a bar for each drive with its level and an arrow for its change over the last tick (`▲` rising, `▼` falling); and the physical levels. The current action joins it when sprites act. | Slice 4b | §6.1 |
-| 5 | **The Genome tab** groups genes under headings: traits first, on one line, then half-lives, reactions, emitters, receptors and starting levels, with unknown genes last, each group in genome order. Numbers show 3 significant figures, so spawn variation shows: `low energy → hunger +.00428 past .515`. A flagged, unexpressed or unknown gene is dimmed, with its reason on the line below. | Slice 4b | §6.1 |
-| 6 | **`Tab` / `Shift+Tab` wrap around.** With no sprite selected, `Tab` starts from the lowest ID and `Shift+Tab` from the highest. After the selected sprite dies, they carry on from its ID. | Slice 4b | §6.5 |
-| 7 | **Scrolling a tab:** `PgUp` / `PgDn` move a page, and each notch of the wheel over the inspector 3 lines. Scrolling stops at the top and at the end, and goes back to the top when the tab or the selection changes. | Slice 4b | §6.1, §6.5 |
-| 8 | **`last_r` joins the Chem tab with learning** (slice 8), like the Brain tab. | Slice 4b | §6.1 |
-| 9 | **The sim counts deaths by cause** for the World tab, as part of the world state, so the counts survive a save. | Slice 4b | §6.1 |
-
----
-
-## Changes in v7 (from v6)
-
-Decided with the owner in the design session for slice 4 ([#5](https://github.com/Keazra/terra-sprites/issues/5)), which gives sprites bodies. The new domain terms (sprite, genome, gene, chemical, drive, locus, pulse, physiology, cause of death, selection, inspector, event log and the rest) are in [`CONTEXT.md`](../../CONTEXT.md).
-
-| # | Change | Source | Sections |
-|---|---|---|---|
-| 1 | **Physiology and physics are separate words.** **Physiology** is the body's fixed rules (`physiology.ron`: metabolism, digestion, water loss, healing, and injury from need and age). **Physics** is how things move and block. v6 used "physics" for both. | Owner decision | §2.4, §3.7, §4.1–§4.5 |
-| 2 | **The genome file format.** Genes are written by type name, and chemicals and loci by name: `Emitter(locus: Chem("energy"), mode: Level, invert: true, threshold: 0.5, gain: 0.02, chem: "hunger")`. Fields at their defaults may be left out. Any gene may also be written by number, `Gene(type, version, payload)`: that is how an unknown gene is written, and it reads back unchanged. The file carries a `format` number, so a later build can upgrade an old file. A file that names a gene type this build has never heard of is refused, with a message naming it. | Slice 4 design session | §2.8 |
-| 3 | **Duplicate genes.** A gene that sets one value (a chemical's `HalfLife` or `InitialConcentration`, a `Trait`, a `BrainParam`, an `Instinct`'s link, an `AttentionInstinct`'s link) is expressed only if no earlier gene set that value; later ones are **unexpressed**. Genes that add up (`Reaction`, `Emitter`, `Receptor`) all apply. So a gene can be marked in three ways: **flagged** (it breaks the restrictions), **unexpressed** (an earlier gene overrides it) or **unknown** (this build can't read it). | Slice 4 design session | §4.3 |
-| 4 | **The starter genome must be clean.** A flagged or unknown gene in the data pack's starter genome is a load error, because it would silently do nothing. Any other genome just has the gene marked. | Slice 4 design session | §4.3 |
-| 5 | **The first population doesn't all run dry at once.** Sprites placed by world generation start with energy and hydration drawn uniformly between 60% and 100% of the newborn level, so they don't all get hungry, get thirsty or die on the same tick. Sprites born or spawned later start at the fixed newborn levels. | Slice 4 design session | §3.2, §4.7 |
-| 6 | **The preset sets the sprite count** as a plain number, `sprites: 30` (20–100), not as a density. World generation puts each sprite on a random empty walkable tile, after the objects. | Slice 4 design session | §3.2, §3.9 |
-| 7 | **The cause of death is a fading tally.** Each source of injury keeps one running total that halves about every 350 ticks. This replaces the exact 500-tick window: 5 numbers per sprite instead of 2,500, with nearly the same answer. | Slice 4 design session | §4.10, App. B |
-| 8 | **Causes of death come from the data.** Physiology's three are built in: starvation, dehydration and **old age** (no longer "senescence"). Injury that an object verb injects is "hurt by *object type*", named after the type whose verb table did it, such as a thornbush or a sprite, so a new harmful object needs no code. | Slice 4 design session, from the owner's principle that the data names things | §3.5.2, §4.10 |
-| 9 | **`Died` carries the sprite's name, once it has one** (change 16), because the sprite has left the world by the time the event log prints the event: `Died { name, cause, age }`, with no name for an unnamed sprite. | Slice 4 design session | §2.5 |
-| 10 | **The event log leaves out object events.** `ObjectSpawned` and `ObjectRemoved` happen dozens of times a minute and would bury everything else; the World tab counts objects instead. "Events panel" becomes **event log** throughout. | Slice 4 design session | §6.1 |
-| 11 | **Selection details.** The selected sprite is drawn `☻` in the cp437 theme, and as `@` in reverse video in the ascii theme (`&` is already the berry bush). `Tab` / `Shift+Tab` centre the viewport on the sprite they select if it's off-screen. With no sprite selected, the sprite tabs say how to select one. Selecting a sprite from the World tab switches to Body. When the selected sprite dies, its tabs say how and at what age, until another is selected. | Owner decision (the ascii glyph); slice 4 design session | §6.1, §6.2, §6.5 |
-| 12 | **The Chem and Genome tabs fit the inspector.** Chem shows body chemicals and signal chemicals in two columns, each with its level and change per tick, with the 16 hormones in a 4×4 grid below. Genome shows genes grouped by type as plain lines (`low energy → hunger +.020 past .50`), each flagged, unexpressed or unknown gene marked with its reason. `PgUp` / `PgDn`, and the mouse wheel over the inspector, scroll a tab too long to fit. | Slice 4 design session | §6.1, §6.5 |
-| 13 | **Organs and organ failure are out of scope for M1** ([#31](https://github.com/Keazra/terra-sprites/issues/31)). The model leaves room for them: an organ's health would be a physical chemical, and its failure one more source of injury. | Owner idea, parked | §1.3 |
-| 14 | **First-cut physiology timescales,** for a sprite at rest: full hydration lasts about 3,000 ticks and full energy about 6,000; once either runs out, injury kills in about 1,000 more; a sprite past its lifespan dies within about 2,000. Slice 17 tunes them. | Slice 4 design session | App. B |
-| 15 | **No level ever leaves [0, 1], even partway through step 3.** Physiology, each reaction and each emitter clamp what they write, instead of one clamp at (f). v6's single clamp let a drive at 0, pushed below 0 by a relief emitter, look like a fall to its Fall emitter, so a sprite at rest dripped reward every tick, and eating when full was rewarded, against §4.5. Found in the slice 4 code review. | Owner decision | §2.4, §4.4 |
-| 16 | **Sprites start unnamed.** v6 named every sprite with a syllable generator applied to its ID. Now a sprite has no name until the player gives it one with `r`: a name the player makes up, or one generated at random. The player has to care first. Until then the screen shows a sprite by its ID, as "Sprite #530". | Owner decision, after trying the build | §2.5, §6.1, §6.5 |
-
----
-
-## Changes in v6 (from v5)
-
-Decided with the owner in the design session for slice 3 ([#4](https://github.com/Keazra/terra-sprites/issues/4)), which brings objects to life. The domain terms (solid, fixture, item, tag, stage, expire and the rest) are in [`CONTEXT.md`](../../CONTEXT.md).
+Decided with the owner in the design session for slice 3 ([#4](https://github.com/Keazra/terra-sprites/issues/4)), which brings objects to life. The domain terms (solid, fixture, item, tag, stage, expire and the rest) are in [`CONTEXT.md`](../../../CONTEXT.md).
 
 | # | Change | Source | Sections |
 |---|---|---|---|
@@ -99,7 +30,7 @@ Decided with the owner in the design session for slice 3 ([#4](https://github.co
 
 ## Changes in v5 (from v4)
 
-Decided with the owner while building slice 2 ([#3](https://github.com/Keazra/terra-sprites/issues/3)): the controls and the hand are reworked around a mouse-driven cursor, and the slice's refinements to terrain and the map view are recorded. The domain terms are in [`CONTEXT.md`](../../CONTEXT.md).
+Decided with the owner while building slice 2 ([#3](https://github.com/Keazra/terra-sprites/issues/3)): the controls and the hand are reworked around a mouse-driven cursor, and the slice's refinements to terrain and the map view are recorded. The domain terms are in [`CONTEXT.md`](../../../CONTEXT.md).
 
 | # | Change | Source | Sections |
 |---|---|---|---|
@@ -215,7 +146,6 @@ Terra Sprites is a terminal artificial-life game inspired by *Creatures*. Sprite
 - More than one type of nutrient
 - Sprites carrying objects (only the hand can carry things)
 - Line of sight, swimming
-- Organs and organ failure ([#31](https://github.com/Keazra/terra-sprites/issues/31))
 - Critters, language
 - A diegetic information mode
 - The tile-window front end
@@ -299,7 +229,7 @@ world.check_invariants();                                // debug/test builds
 |---|---|---|
 | 1 | **Commands** | Apply the commands stamped for this tick, in the order they were submitted. The hand's direct chemical injections happen here, and its pulses go into the target's `incoming` buffer. Invalid commands are rejected with a `CommandRejected` event. |
 | 2 | **Environment** | Object rules run (stages, counters, spawning, spreading, expiry). This covers the objects that exist **when step 2 begins**, in ascending ID order, with rules in the order listed (§3.5). Objects created during step 2 first run next tick. |
-| 3 | **Biochemistry** | For every sprite, **held or not**: (a) pulse latch: `live ← incoming` and `incoming` is emptied; (b) physiology; (c) reactions; (d) half-life decay; (e1) Level emitters; (e2) Rise/Fall emitters; (f) receptors. No level leaves [0, 1] at any point (§4.4). Then **death check #1**: if `injury ≥ 1.0` the sprite is marked **dying**. |
+| 3 | **Biochemistry** | For every sprite, **held or not**: (a) pulse latch: `live ← incoming` and `incoming` is emptied; (b) physics; (c) reactions; (d) half-life decay; (e1) Level emitters; (e2) Rise/Fall emitters; (f) clamp to [0, 1]; (g) receptors. Then **death check #1**: if `injury ≥ 1.0` the sprite is marked **dying**. |
 | 4 | **Learning** | For every sprite not marked dying: read `r = reward − punishment`, then **reset both to 0** (learning consumes them). Reinforce using the trace ring buffer (the freshest entry is from the previous tick), relax the two-timescale weights, then recruitment (§5.6). |
 | 5 | **Sense and decide** | For every sprite that is neither dying nor held: refresh the perception flood if needed (§3.6), then **5.0** check the current action, **5a** attention, **5b** decision (§5.5). The activations are snapshotted. |
 | 6 | **Resolve actions** | In an order shuffled each tick by the world RNG: movement steps (including head-on swaps, §3.7) and verb effects. Effects inject physical chemicals and write `incoming` pulses. Then each deciding sprite **commits one trace entry**: its snapshot plus the outcome. This happens every tick, whether the action just started or is continuing. |
@@ -313,8 +243,6 @@ world.check_invariants();                                // debug/test builds
 - **Reward only credits the past.** Reward and punishment produced at step 3 are consumed at step 4 of the same tick, so they credit entries up to the previous tick and never linger onto later decisions.
 - **A sprite whose injury crosses 1.0 at step 3 makes no decision that tick.**
 - **Held sprites** run steps 3 and 4 but skip steps 5 and 6. They make no decisions and commit no trace entries.
-
-Before step 1, the world keeps every sprite's chemical levels as they stand, so the Chem tab can show each one's change over the tick (§6.1). It's bookkeeping, not a step: nothing in the sim reads those levels.
 
 ### 2.5 Commands and events
 
@@ -335,7 +263,7 @@ Before step 1, the world keeps every sprite's chemical levels as they stand, so 
 - `Ate`, `Drank`, `Played`, `Hit`, `Pricked`
 - `Rewarded`, `Corrected`
 - `Spawned`
-- `Died { name, cause, age }`: the sprite has left the world by the time the event log prints this, so the event carries its name, or none for an unnamed sprite (§6.5). The causes are in §4.10.
+- `Died { cause, age }`
 - `LearnedMilestone { link, delta }`
 - `ObjectSpawned { object_type, pos }`: an object was created during the tick (by a lifecycle rule; later also by the hand)
 - `ObjectRemoved { object_type, reason }`: an object left the world. The reason is `Expired` (its last stage ended), `Destroyed` (`DestroySelf`) or `Replaced` (`ReplaceWith`). A berry that sprouts emits `ObjectRemoved { reason: Replaced }` for the berry and `ObjectSpawned` for the bush.
@@ -379,7 +307,7 @@ A replay file contains:
   - the entity ID counter and every entity
   - the hand
   - per sprite:
-    - chemicals, both pulse buffers, and `last_r` (§5.6). Not the levels from one tick ago that the Chem tab's changes come from: nothing in the sim reads them, so after a load every change reads blank for one tick
+    - chemicals, both pulse buffers, and `last_r` (§5.6)
     - the brain (links, concept pool, trace ring buffer)
     - the current action, including any Wander destination, bout progress and committed path (§3.7)
     - movement state (move points, blocked-tick counter, last step direction)
@@ -404,26 +332,6 @@ A replay file contains:
   - it is inherited unchanged (M2)
   - it's shown in the genome viewer as "unknown gene type N"
   - it round-trips through load and save byte for byte
-
-**Genome files** (RON: the starter genome, and genome files the player loads or exports):
-
-```ron
-(
-    format: 1,
-    genes: [
-        Trait(trait: "speed", value: 7),
-        Emitter(locus: Chem("energy"), mode: Level, invert: true, threshold: 0.5, gain: 0.02, chem: "hunger"),
-        Emitter(locus: Locus("ate"), mode: Level, gain: -0.6, chem: "hunger"),
-        Gene(type: 42, version: 1, payload: "93a4c2"),
-    ],
-)
-```
-
-- Genes are written by **type name**, with chemicals, loci and traits **by name**, as in `objects.ron`. Loading resolves the names to stable IDs.
-- Fields at their defaults may be left out (`invert: false`, `threshold: 0`).
-- **Any gene may be written by number** as `Gene(type, version, payload)`, with the payload's bytes in hex. A build that knows the type decodes it, migrating an older version; one that doesn't keeps it as an unknown gene. Exporting writes known genes by name and unknown ones by number, so an unknown gene reads back unchanged.
-- **`format`** numbers the file's layout, so a later build can upgrade an older file. A file whose format is newer than the build is refused.
-- **Limit:** a file that names a gene type this build has never heard of can't be kept as an unknown gene, since its number isn't known. It is refused, with a message naming the type.
 
 **Registries** (chemicals, loci, brain inputs and outputs, categories, object types, gene types, brain parameters):
 - Append-only, and IDs are never reused.
@@ -472,8 +380,6 @@ A replay file contains:
    - **Objects:** each object type's count comes from the preset's densities (§3.9). Solid objects are placed first, then items, each type in ID order. Each object goes on a tile drawn uniformly from the type's remaining candidates: mainland tiles where it may go. A tile found unusable is set aside for the rest of that type (one that would cut a path might become usable once a neighbour fills in, but checking again would slow generation). If the map runs out of room, generation places what fits and carries on.
    - **Generation always keeps paths open:** a solid object goes only where `KeepsPathsOpen` (§3.3) holds, so no world starts out split.
    - **Objects start partway through their lives.** For an object with stages, generation draws every stage's duration, then an age uniformly within their total, and starts the object at that point: in the stage the age falls in, with that stage's remaining time. Its counters start at 0, and no `OnStageEnter` fires for the stage it starts in. Without this, every bush would start as a seedling (no fruit for 1,500 ticks or more) and they'd all expire in the same few thousand ticks.
-   - **Sprites** are placed after the objects: the preset's count (§3.9), each on a tile drawn uniformly from the walkable mainland tiles that hold no object and no sprite. Each is made from the starter genome with spawn variation (§4.9).
-   - **The first population doesn't all run dry at once.** Each sprite world generation places starts with its energy and its hydration each drawn uniformly between 60% and 100% of the newborn level (§4.7). Without this, sprites that all start full would all get hungry, get thirsty, and die of neglect on the same tick.
 
 Property tests check full connectivity across many seeds.
 
@@ -555,7 +461,7 @@ An object is **solid** if nothing can move through it, and a **fixture** if it's
 | `SpreadTo(type, radius, [conditions])` | Draws **one** tile uniformly from the (2·radius+1)² square around this object, cut down to the map (one RNG draw). If the tile passes placement and the conditions, which are evaluated *at that tile*, the object is created there. Otherwise nothing happens. The object's own tile is in the square and always fails placement; that's harmless. |
 | `ReplaceWith(type)` | Replaces this object with a new one (new ID, first stage) on the same tile. This object is taken off the tile first, then placement is checked for the new type, e.g. terrain that allows fixtures and no sprite on the tile. If that fails, nothing happens and this object stays. |
 | `DestroySelf` | Removes the object |
-| `Inject(Actor \| Target, chemical, amount)` | Adds to a chemical. **Only physical chemicals are allowed.** Anything else is a load error. Injury it adds is put down to this object type, for the cause of death (§4.10). |
+| `Inject(Actor \| Target, chemical, amount)` | Adds to a chemical. **Only physical chemicals are allowed.** Anything else is a load error. |
 | `Signal(Actor \| Target, locus)` | Writes a pulse to the `incoming` buffer. A pulse on the Target records the Actor as its source. |
 | `Push(max_tiles)` | Moves this item up to `max_tiles` away from the actor, in the direction from actor to item snapped to 8 directions (if both are on the same tile, the actor's last step direction, or N if it has none). It stops before non-walkable tiles and tiles holding an object. Sprites don't stop it. |
 
@@ -654,9 +560,9 @@ The rule constants above are starting values, tuned with the lab runner.
 ### 3.6 Perception, reachability and goal tiles
 
 **The flood:**
-- Each sprite has one **bounded Dijkstra flood**. It covers walkable tiles within its `sense_radius` (Chebyshev distance), rounded to the nearest whole tile (9.87 reaches 10), using step costs.
-- Tiles holding another sprite can be crossed at a penalty of 30, three grass steps (set in `physiology.ron`), since sprites move. So a sprite detours up to about 3 tiles to go around another, and beyond that walks up and waits (§3.7).
-- The flood is recomputed when the sprite enters a new tile, or 8 ticks after its last one.
+- Each sprite has one **bounded Dijkstra flood**. It covers walkable tiles within its `sense_radius` (Chebyshev distance), using step costs.
+- Tiles holding another sprite can be crossed at a penalty (set in `physiology.ron`), since sprites move.
+- The flood is recomputed when the sprite enters a new tile, or every 8 ticks.
 - It provides both distances and paths. **No separate A* is needed.**
 
 **Goal tiles:**
@@ -680,7 +586,6 @@ The rule constants above are starting values, tuned with the lab runner.
 ### 3.7 Movement timing and conflicts
 
 - **Move points:** a moving sprite gains `speed` points per tick (the Trait gene, 4–12). When its points reach the cost of its next step, it tries the step.
-  - **Counted in tenths,** so speed keeps its decimals: a sprite gains `round(speed × 10)` tenths a tick, and a step costs its §3.1 cost × 10 (an orthogonal grass step, 100). A sprite of speed 7.4 gains 74 a tick, so it walks a little faster than one of 7.0, and it pays energy for 7.4 (§4.8).
 - **Carry-over:** after a step, leftover points carry over, capped at one step's cost. A blocked sprite banks points only up to the cost of its next step.
   - Example: speed 5 on grass is one orthogonal step every 2 ticks.
 - **Conflicts:**
@@ -695,14 +600,11 @@ The rule constants above are starting values, tuned with the lab runner.
   - **The search:** a separate, one-off bounded Dijkstra from the sprite, with the same radius and step costs as the perception flood (§3.6), except that **tiles holding sprites can't be entered**. It looks for a path to the action's goal tiles, or to the Wander destination. It doesn't replace the perception flood, isn't used for perception, and isn't cached.
   - **Path found:** the path becomes the action's **committed path**, stored with the action and saved (§2.8). The sprite follows it step by step, and regular flood refreshes **don't override it**. Without this, the next refresh (which allows occupied tiles at a penalty) could route the sprite straight back into the blocked tile.
   - **Committed path dropped:** if the sprite is blocked again, the 3-tick count and the search start over. If the action's target is a sprite and that target moves, the path is dropped and normal flood-based planning resumes. The path also ends with the action.
-  - **A blocked tick** is one where the sprite had the points for its next step but couldn't take it: a sprite stood there, or the step has become impossible (a bush grew since the flood).
-- **Several steps a tick:** a sprite takes as many steps in a tick as its points pay for, so speed 12 on grass is 1.2 steps a tick. A swap ends both sprites' walking for the tick.
-  - **No path found** (for example, a sprite resting in the only corridor, or on the Wander destination itself): **the action ends with outcome `blocked`**, freeing the brain to choose again.
+  - **No path found** (for example, a sprite resting in the only corridor): **the action ends with outcome `blocked`**, freeing the brain to choose again.
   - **Retreat** doesn't use the search. It moves by straight-line distance (§5.5), so for Retreat "no path" means no free neighbour increases the Chebyshev distance from the target.
   - **Cost:** the search only runs after 3 blocked ticks, which is rare, so it doesn't threaten the §3.9 performance target.
 - **Why a seeded shuffle and not ID order:** both are deterministic. But ID order would favour older sprites in every contest, and M2 evolution would pick up that bias.
-- **Energy:** each step costs energy under physiology rules (§4.8).
-- **Stamina doesn't stop walking.** Each step drains stamina and rest restores it (§4.4), but a sprite with none left still walks. Low stamina only raises tiredness (§4.5), which the brain can answer by resting.
+- **Energy:** each step costs energy under physics rules (§4.8).
 
 ### 3.8 No incidental harm
 
@@ -713,7 +615,6 @@ This keeps credit assignment clean. If thorns scratched sprites walking past, th
 ### 3.9 Defaults and performance
 
 - **Defaults:** 256×160 map; 30 starter sprites (configurable, 20–100).
-- **The sprite count is a plain number** in the preset, `sprites: 30`, from 20 to 100. It isn't a density: the population is a design target, not ecology, so it stays the same on any map size. A preset that leaves it out gets no sprites, as a type it doesn't name gets no objects.
 - **Plants and toys are set by density**, so a bigger map gets proportionally more and food stays as easy to find: about 150 berry bushes, 40 thornbushes and 6 balls per 15,360 tiles (a 160×96 area). On the default map that is about 400 berry bushes, 107 thornbushes and 16 balls. The sprite count doesn't scale; it stays in the 20–100 range.
 - **In the preset**, densities are counts per area:
 
@@ -735,13 +636,13 @@ This keeps credit assignment clean. If thorns scratched sprites walking past, th
 
 | Class | Chemicals | Changed by | Can evolve? |
 |---|---|---|---|
-| **Physical** | `energy`, `hydration`, `stamina`, `food` (gut), `water` (gut), `injury` | Physiology (`physiology.ron`) and object verbs **only** | No |
+| **Physical** | `energy`, `hydration`, `stamina`, `food` (gut), `water` (gut), `injury` | Physics (`physiology.ron`) and object verbs **only** | No |
 | **Signal** | Drives: `hunger`, `thirst`, `pain`, `tiredness`, `boredom`, `loneliness`, `crowdedness`. Learning signals: `reward`, `punishment` | Genome, and the hand | Yes |
 | **Hormone** | `h0`–`h15`, unnamed | Genome | Yes. These are spare channels evolution can put to use. |
 
 - Chemicals are listed in `data/chemicals.ron` with stable IDs (Appendix A), one entry each, `(id: 1, name: "energy", class: Physical)`. The hormones are listed one by one, `h0` to `h15`. IDs and names are unique.
 - Concentrations are `f32` values in [0, 1], one array per sprite.
-- If physiology were evolvable, M2 evolution would simply remove the costs, so this split is fixed now in M1.
+- If physics were evolvable, M2 evolution would simply remove the costs, so this split is fixed now in M1.
 
 ### 4.2 Loci
 
@@ -750,7 +651,7 @@ Loci are listed in `data/loci.ron` with stable IDs. Each has a kind and a `brain
 | Kind | Loci | Brain-visible |
 |---|---|---|
 | **Chemical level** | Any chemical, referenced as `Chem(id)`. Genes can read physical chemicals too. | Drives and hormones only (§5.2) |
-| **Body sensors** (physiology fills these in every tick) | `always` (= 1) | ✓ |
+| **Body sensors** (physics fills these in every tick) | `always` (= 1) | ✓ |
 | | `age` (normalized by lifespan) | ✓ |
 | | `nearby_sprites` (sprites within 3 tiles ÷ 4, capped at 1) | ✓ |
 | | `moving` (1 if the sprite stepped during the previous tick), `resting` (1 while a Rest action is running) | ✗ physiology only: they reflect the current action every tick, so as brain inputs they would loop output back into input |
@@ -773,28 +674,20 @@ Loci are listed in `data/loci.ron` with stable IDs. Each has a kind and a `brain
 | 3 | `Emitter(locus, mode, invert, threshold, gain, chem)` | Mode **Level**: signal = the locus value, or `1 − value` if `invert` is set. **Rise** / **Fall**: signal = the locus's positive / negative change since the previous tick. Emits `gain × max(0, signal − threshold)`. Gain may be negative, which removes chemical. |
 | 4 | `Receptor(chem, threshold, gain, target_locus)` | Each tick, `target = clamp(1.0 + Σ over receptors aimed at it of gain × max(0, level − threshold), target range)`. 1.0 is the neutral point. |
 | 5 | `InitialConcentration(chem, value)` | The starting level of a chemical at birth |
-| 6 | `Trait(trait_id, value)` | An evolvable body trait. Clamped to a range set by physiology, with a cost set by physiology (§4.8). |
+| 6 | `Trait(trait_id, value)` | An evolvable body trait. Clamped to a range set by physics, with a cost set by physics (§4.8). |
 
 **Restrictions**, which close every route by which genes could change physical chemistry:
 
 | Gene | Physical chemicals | Signal chemicals and hormones |
 |---|---|---|
-| `HalfLife` | ✗ (decay rates are fixed physiology) | ✓ |
+| `HalfLife` | ✗ (decay rates are fixed physics) | ✓ |
 | `Emitter`: chemical written | ✗ | ✓ |
 | `Emitter`: locus read | ✓ (reading only) | ✓ |
-| `InitialConcentration` | ✗ (newborn physical levels are fixed physiology) | ✓ |
+| `InitialConcentration` | ✗ (newborn physical levels are fixed physics) | ✓ |
 | `Reaction` | **Catalyst only:** identical coefficients on both sides, e.g. `hunger + food → food` | ✓ |
 | `Receptor` | Reads any chemical; writes only receptor-target loci | — |
 
 A gene that breaks these restrictions is **flagged when decoded, not expressed**, and marked in the genome viewer.
-
-**Duplicate genes.** Some genes set one value; the rest add up.
-- **Genes that set one value:** `HalfLife` and `InitialConcentration` (per chemical), `Trait` (per trait), `BrainParam` (per parameter), `Instinct` (per concept signature and verb) and `AttentionInstinct` (per input and category). The first such gene in genome order is expressed. A later one that sets the same value is **unexpressed**, and marked as such in the genome viewer.
-- **Genes that add up:** `Reaction`, `Emitter` and `Receptor`. Every one of them applies.
-
-So a gene can be marked in three ways: **flagged** (it breaks the restrictions), **unexpressed** (an earlier gene sets the same value) or **unknown** (this build can't read it, §2.8).
-
-**The starter genome must be clean.** A flagged or unknown gene in the data pack's starter genome is a **load error**, because it would silently do nothing. Any other genome just has the gene marked.
 
 `reward` and `punishment` are consumed by learning every tick (§5.6), so a `HalfLife` gene on them is valid but has no effect.
 
@@ -814,27 +707,18 @@ So a gene can be marked in three ways: **flagged** (it breaks the restrictions),
 
 If M2 adds structural mutation, every mutated gene must be validated again against the restrictions above.
 
-**Value ranges,** checked when a genome is read (a gene outside them is an error in the file, not a flagged gene):
-- `HalfLife` ticks: at least 1.
-- `Reaction` rate: 0 to 1, so a reaction never uses more than its reactants hold. A reaction needs one or two reactants, since they set its extent, and at most two products. Each coefficient is at least 1.
-- Thresholds: at least 0. They can be above 1, because some loci are: receptor targets reach 4.
-- `InitialConcentration` value: 0 to 1.
-- Gains and trait values: any number. A trait is clamped to its range when expressed.
-
-Spawn variation keeps each value within its range after varying it.
-
 ### 4.4 Inside step 3
 
 For each sprite:
 1. **(a) Pulse latch** (§4.2).
-2. **(b) Physiology** (`physiology.ron`, fixed, not evolvable):
+2. **(b) Physics** (`physiology.ron`, fixed, not evolvable):
    - basal metabolism, plus the cost of `sense_radius`
    - energy spent on steps taken last tick, which depends on `speed`
    - digestion (`food → energy`, `water → hydration`)
    - hydration loss
    - stamina drains per step and recovers while idle (faster while `resting`)
    - injury heals slowly
-   - starvation, dehydration and old age add injury (§4.10)
+   - starvation, dehydration and senescence add injury (§4.10)
 3. **(c) Reactions**, in genome order.
 4. **(d) Half-life decay.**
 5. **(e) Emitters, in two passes.** Both run **after** reactions.
@@ -842,9 +726,8 @@ For each sprite:
    - **(e2) Rise/Fall emitters** run in genome order. Their "change" is the locus value now (after reactions, decay, e1, and any earlier e2 emitter) minus its value at the end of the previous tick's step 3.
    - Each emitter sees the effects of every emitter before it. This guarantees that a drive knocked down by a pulse-keyed Level emitter produces its Fall reward **in the same tick**, ready for step 4.
    - A chain of Rise/Fall emitters, such as injury → pain → punishment, works within one tick if its genes are in chain order. The starter genome orders them that way; evolution can reorder them.
-6. **(f) Receptors** update the modulators.
-
-**No level ever leaves [0, 1], even partway through.** Physiology clamps its chemicals once it's done: it works on them below 0 only to tell that energy or hydration has run out. Each reaction and each emitter then clamps what it writes, and decay can't leave the range. So no gene ever reads a level outside [0, 1], and a Rise or Fall emitter only sees a change that really happened: a drive at 0 that a relief emitter pushes down stays at 0, and releases no reward.
+6. **(f) Clamp** every concentration to [0, 1].
+7. **(g) Receptors** update the modulators.
 
 Then **death check #1** runs (§2.4).
 
@@ -861,7 +744,7 @@ Then **death check #1** runs (§2.4).
 2. Hunger is a brain input. The sprite decides *Eat berry bush* at tick *t*.
 3. The verb injects `food` 0.3 and pulses `ate` (step 6 of *t*).
 4. At tick *t+1*:
-   - the pulse is latched, and physiology starts digesting food into energy over the following ticks
+   - the pulse is latched, and physics starts digesting food into energy over the following ticks
    - **(e1)** a negative-gain Level emitter on the `ate` pulse drops `hunger` sharply, in this one tick
    - **(e2)** a **Fall** emitter on `hunger`, with a deadband, releases `reward`
    - step 4 consumes the reward and credits the Eat entry from tick *t* most
@@ -897,18 +780,18 @@ Only hunger, thirst, tiredness and pain are tied to physical need in M1. Whether
 
 ### 4.7 Newborn state
 
-- Physical chemicals start at fixed levels from `physiology.ron`. The one exception is the first population, which world generation places with its energy and hydration drawn between 60% and 100% of those levels (§3.2).
+- Physical chemicals start at fixed levels from `physiology.ron`.
 - Signal chemicals and hormones start at their `InitialConcentration` genes, or 0.
 
 ### 4.8 Traits and their costs
 
 | Trait | Range (`physiology.ron`) | Physical cost |
 |---|---|---|
-| `speed` | 4–12 move points per tick, counted in tenths (§3.7) | Energy per step ∝ (speed / 8)² |
+| `speed` | 4–12 move points per tick | Energy per step ∝ (speed / 8)² |
 | `sense_radius` | 6–14 tiles | Basal metabolism grows linearly with the radius |
-| `lifespan` | 20,000–200,000 ticks | Once exceeded, old age adds `injury` every tick |
+| `lifespan` | 20,000–200,000 ticks | Once exceeded, senescence adds `injury` every tick |
 
-The starter genome's traits are speed 7, sense_radius 10 and lifespan 60,000 ticks (about 13 hours at 1×, 50 minutes at 16×). A genome with no `Trait` gene for a trait gets the middle of its range.
+The starter genome's traits are speed 7, sense_radius 10 and lifespan 60,000 ticks (100 minutes at 1×).
 
 ### 4.9 Spawn variation
 
@@ -916,12 +799,8 @@ A sprite spawned from the starter genome (`SpawnSprite { genome: None }`, or the
 
 ### 4.10 Death
 
-- **There is one route to death: `injury ≥ 1.0`.** Starvation (energy at 0), dehydration (hydration at 0) and old age (age past lifespan) all add injury every tick.
-- **The sources of injury:**
-  - **Physiology's three,** built in: starvation, dehydration and old age.
-  - **Hurt by *object type*:** injury an object verb injects (§3.5.2) is put down to the object type whose verb table did it. A thornbush's `Eat` hurts the eater, so that is "hurt by thornbush"; a sprite's `Hit` hurts the target, so that is "hurt by sprite". A new harmful object type needs no code.
-- **Cause of death: a fading tally.** Each source keeps a running total of the injury it has added, and every total halves about every 350 ticks (the fade time is in `physiology.ron`), so recent injury counts most. `Died.cause` is the source with the biggest total. This needs one number per source per sprite, where an exact window of the last 500 ticks would need 500.
-- **Healing** lowers `injury` but not the tallies. They only fade.
+- **There is one route to death: `injury ≥ 1.0`.** Starvation (energy at 0), dehydration (hydration at 0) and senescence (age past lifespan) all add injury every tick.
+- **Cause of death:** injury is tracked by source over the last 500 ticks, and `Died.cause` is the biggest contributor. The sources are starvation, dehydration, senescence, thorns and sprite hits.
 
 ---
 
@@ -1001,12 +880,12 @@ It only wins decisions where learning finds it useful.
 ### 5.5 Decision and action lifecycle
 
 **Step 5 runs in this order:**
-1. **5.0 Check the current action.** It ends if its target no longer exists or has become unreachable, or if the action has hit the timeout. A Wander whose destination the flood no longer reaches ends as `failed`, unless the sprite is keeping to a committed path (§3.7).
+1. **5.0 Check the current action.** It ends if its target no longer exists or has become unreachable, or if the action has hit the timeout.
 2. **5a Attention** (§5.3).
 3. **5b Decision:**
    - **Score** each *available* verb: `s_v = Σₖ aₖ·W[k][v]`.
    - **With no current action:** sample a verb from softmax(s / τ), where **τ = τ_base × `exploration_mod`**, drawing on the world RNG.
-     - If the chosen verb is **Wander**, its destination is sampled now: uniformly from the reachable tiles in the flood whose Chebyshev distance from the sprite is more than `sense_radius / 2`, the trait as it is, not rounded as the flood's reach is. If there are none, it samples from all reachable tiles other than the sprite's own. If there are none at all, Wander ends straight away with outcome `failed`.
+     - If the chosen verb is **Wander**, its destination is sampled now: uniformly from the reachable tiles in the flood whose Chebyshev distance from the sprite is more than `sense_radius / 2`. If there are none, it samples from all reachable tiles other than the sprite's own. If there are none at all, Wander ends straight away with outcome `failed`.
    - **With a current action, verb c:** it continues unless some available verb v has `s_v > s_c + switch_margin`. If one does, the sprite switches **deterministically** to the highest-scoring such verb, with ties going to the lower `OutputId`.
 4. **Snapshot** the activations (inputs, concept activations, chosen verb, attended category), ready for the trace entry committed at step 6.
 
@@ -1021,11 +900,10 @@ World randomness is separate: plant rules and the order actions resolve in. It c
 | Approach | Walks to a goal tile | On arrival |
 | Eat / Drink / Hit / Play | Walks to a goal tile, then makes **one attempt** | After the attempt, whether `applied` or `failed` |
 | Retreat | Each step goes to the walkable, free neighbour that increases the **Chebyshev distance** from the target the most. Ties follow fixed direction order N, NE, E, SE, S, SW, W, NW. Path distance isn't used, because it would need a second flood run from the target. | After 6 steps |
-| Rest | Stays put and sets `resting` | After 10 ticks, `applied` |
-| Wander | Follows the flood path to the destination chosen at 5b | On arrival, `applied` |
+| Rest | Stays put and sets `resting` | After 10 ticks |
+| Wander | Follows the flood path to the destination chosen at 5b | On arrival |
 
 - Any action that moves ends with outcome **`blocked`** when blocked re-planning finds no way forward (§3.7).
-- **The stand-in chooser (slice 5 only).** Until the brain arrives in slice 6, 5b is a stand-in behind the same interface. With no current action, it picks Wander or Rest at even odds, drawing on the world RNG, and samples a Wander destination as above. It never switches a running action. Slice 6 replaces it.
 - **Every** action that hasn't ended otherwise ends at the **action timeout** of 60 ticks, with outcome `timed_out`.
 - Bout lengths and the timeout are set in `physiology.ron`.
 - **Outcomes:** `applied` / `walking` / `blocked` / `failed` / `timed_out`. `walking` and `blocked` can also be per-tick outcomes of an action that's still running.
@@ -1103,7 +981,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 ```
  Terra Sprites │ tick 48,210 │ ► 4x │ seed 7 │ sprites 27 │ saved 2m ago                     ? help
 ┌─ Map ────────────────────────────────────────────┐┌─ Mira #12 ── [Body] Brain Chem Genome World ┐
-│..,,,..~~~~≈≈≈≈~~..........♣....#########........ ││ Going to eat the berry bush · 3 tiles to go │
+│..,,,..~~~~≈≈≈≈~~..........♣....#########........ ││ EAT → berry bush · walking (3 tiles)        │
 │.,,,...~~~≈≈≈≈≈~~....♣.........########....♠..... ││ age 3,410 · speed 7 · sense 10              │
 │..,,...~~~~≈≈≈~~..........☺.......#####.......♣.. ││ hunger     ███████░░░ .71 ▲                 │
 │...,....~~~~~~~.....•.........☺.....##....☺...... ││ thirst     ██░░░░░░░░ .18                   │
@@ -1140,37 +1018,17 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
   - A map smaller than the space gets a map view shrunk to fit it, at the top-left.
   - Its border is **double-lined** (`═ ║`) on any side where the terrarium's wall is in view, and single-lined where the map carries on.
   - The cursor is 3×3 tiles and follows the mouse (§6.5).
-- **Inspector tabs** (`[` and `]`, wrapping around). The game starts on World. The inspector's title is the selected sprite and the tabs, with the open one in brackets; with no sprite selected, it's the tabs alone. A sprite's label too long to fit is shortened, never the tab names.
+- **Inspector tabs** (`[` and `]`):
 
 | Tab | Shows |
 |---|---|
-| **Body** | What the sprite is doing, in plain words (below); age and lifespan; speed and sense radius as expressed; a bar for each drive, with its level and an arrow for its change over the last tick (`▲` rising, `▼` falling, none when steady); the physical levels |
+| **Body** | Current action and outcome, drive bars with trend arrows, physical levels, traits |
 | **Brain** | Output of `explain()` |
-| **Chem** | One list: each chemical on its own line with its level and its change per tick (`-.0002`, blank when it rounds to 0), the physical chemicals, then a blank line and the signal chemicals, plus `last_r` from slice 8. The 16 hormones sit in a 4×4 grid of levels below, so all of it fits at 100×30. Reward and punishment are consumed every tick, so their levels always read 0 between ticks. |
-| **Genome** | Genes grouped under headings: traits first, on one line (`speed 7.21 · sense 9.87 · lifespan 61,204`), then half-lives, reactions, emitters, receptors and starting levels, and unknown genes last, each group in genome order. Each gene is a plain line with 3 significant figures, so spawn variation shows: `low energy → hunger +.00428 past .515`, `hunger falls → reward +1.02 past .0198`, `hunger halves every 2,041 ticks`. A line too long for the tab wraps, indented. A flagged, unexpressed or unknown gene is dimmed, with its reason on the line below (§4.3). `g` exports to RON. |
-| **World** | The data pack's identity; population and deaths by cause (counted by the sim, so they're saved); each object type in ID order with its count, the count in each stage (left out for a type with only one stage), and the total of each counter (such as the fruit on all bushes). It's drawn from the data, so a pack's new object types appear with no new code. |
+| **Chem** | Every chemical with its level and change per tick, plus `last_r`. Reward and punishment are consumed every tick, so their levels always read 0 between ticks. |
+| **Genome** | Genes grouped by type; flagged, unexpressed and unknown genes are marked; `g` exports to RON |
+| **World** | The data pack's identity; population and deaths by cause; each object type in ID order with its count, the count in each stage (left out for a type with only one stage), and the total of each counter (such as the fruit on all bushes). It's drawn from the data, so a pack's new object types appear with no new code. |
 
-- **The Body tab's action line** describes what the sprite is doing, in the present tense, naming its target, with no coordinates. It never speaks as the sprite: the Brain tab shows *why*, and a line in the sprite's own voice could contradict it. When an action ends, its ending stays until the next one starts.
-
-  | Moment | Line | Detail view (`v`) |
-  |---|---|---|
-  | Wandering | `Wandering off · 5 tiles to go` | `WANDER → (61,40) · walking (5 tiles)` |
-  | Held up behind another sprite | `Wandering off · waiting to get past` | `WANDER → (61,40) · blocked (2 ticks)` |
-  | Arrived | `Arrived` | `WANDER → (61,40) · applied` |
-  | Gave up, no way through | `Gave up: the way was blocked` | `WANDER → (61,40) · blocked` |
-  | Gave up at the timeout | `Gave up: it took too long` | `WANDER → (61,40) · timed_out` |
-  | Gave up, destination out of reach | `Gave up: it couldn't get there` | `WANDER → (61,40) · failed` |
-  | Resting | `Resting · 6 ticks left` | `REST · 4 of 10 ticks` |
-  | Rested | `Rested` | `REST · applied` |
-
-  Later verbs follow the same pattern: `Going to eat the berry bush · 3 tiles to go`, `Ate from the berry bush`, `Couldn't eat from the berry bush`.
-- **The detail view** (`v`, in every build) shows the exact workings behind what the screen describes in words. It switches the action line to the exact verb, destination and outcome, and, while the action is under way, marks the selected sprite's Wander destination on the map with `X`. A sprite standing on the destination is drawn over the mark. It stays on until `v` is pressed again, whatever is selected.
-- **The inspector and the selection:**
-  - The Body, Brain, Chem and Genome tabs show the selected sprite. With none selected, they read "No sprite selected: click one, or press Tab".
-  - Selecting a sprite while the World tab is open switches to Body. From any other tab, the tab stays.
-  - When the selected sprite dies, its tabs read "Mira #12 died of dehydration at age 4,012" until another sprite is selected.
-  - A tab too long to fit scrolls a page with `PgUp` / `PgDn`, or 3 lines per notch of the mouse wheel over the inspector. It stops at the top and at the end, and goes back to the top when the tab or the selection changes.
-- **Event log:** each event shows its sprite by name and ID, as "Mira #12", or "Sprite #530" for a sprite with no name (§6.5). Newest first, filtered to all / the selected sprite / major events only (deaths, learning milestones, rejected commands). It never shows object events (`ObjectSpawned`, `ObjectRemoved`): they happen dozens of times a minute and would bury everything else, and the World tab counts objects instead. Nor does it show action events (`ActionStarted`, `ActionEnded`): with 30 sprites they come about 3 for every tick. The Body tab shows the selected sprite's action instead, and emotes show resting and giving up on the map (§6.3).
+- **Events panel:** filtered to all / the selected sprite / major events only (deaths, learning milestones, rejected commands).
 - **Status line:** the tile under the cursor, the cursor mode, what the hand holds (in every mode), and hints for the active keys. A prompt such as "Quit? (y/n)" takes its place while open.
   - The tile names its terrain and any object on it, with the object's stage if it has stages: `(61,40) grass · berry bush (mature)`.
   - **Display names** are the data's names with `_` shown as a space (`berry_bush` → "berry bush"), so `objects.ron` needs no separate display name.
@@ -1197,11 +1055,9 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 | Berry | `•` | `%` | red |
 | Ball | `○` | `o` | white |
 | Sprite | `☺` | `@` | by colour mode (§6.3) |
-| Selected sprite | `☻` | `@` in reverse video (`&` is the berry bush) | by colour mode (§6.3) |
 | Cursor arrows | `↓ ↑ → ←` | `v ^ > <` | the cursor mode's colour |
 | Mode marks: Select / Hand / Reward / Correct | `♦` `∩` `♥` `‼` | `S` `H` `R` `C` | the mode's colour |
 | Status marks: idle / lift / drop / empty hand / sent / applied / rejected | `·` `↑` `↓` `░` `+` `☼` `?` | `-` `^` `v` `_` `+` `*` `?` | the mode's colour |
-| Destination marker (detail view) | `X` | `X` | white |
 
 - Every **kind** of thing on the map has a unique glyph. Colour is used only for **state**, and the status line always names what's under the cursor. The cursor's arrows and marks are UI drawn over the map, and may share glyphs with each other (lift and drop are arrows).
 - **`--ascii` swaps only what themes cover:** the map's glyphs, the cursor and the emotes. Frames and text stay CP437 in every theme.
@@ -1238,7 +1094,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 
 ### 6.4 `InfoPolicy`
 
-- **Every** information display asks `InfoPolicy::can_view(panel, subject)` before showing anything. That includes map colours, emotes, the event log, counts in the top bar, the sprite list, the tile-info line and every inspector tab.
+- **Every** information display asks `InfoPolicy::can_view(panel, subject)` before showing anything. That includes map colours, emotes, the events panel, counts in the top bar, the sprite list, the tile-info line and every inspector tab.
 - In M1 the answer is always yes.
 - A future diegetic Play mode is a new policy. The policy only controls what the UI **reveals**. A physical in-world scanner would be a separate sim feature with its own state and commands.
 
@@ -1273,7 +1129,7 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 | `Z` | **Reward** | `♥` | green | sends `Reward` to the sprite there | feedback (below) |
 | `X` | **Correct** | `‼` | light red | sends `Correct` to the sprite there | feedback (below) |
 
-- **The mouse wheel cycles the modes:** a notch down picks the next (Select → Hand → Reward → Correct, then back to Select), a notch up the previous. A wheel event also points, like every mouse event. The wheel doesn't scroll the map. Over the inspector, it scrolls the open tab instead (§6.1).
+- **The mouse wheel cycles the modes:** a notch down picks the next (Select → Hand → Reward → Correct, then back to Select), a notch up the previous. A wheel event also points, like every mouse event. The wheel doesn't scroll the map.
 - **Place menu:** berry, ball, bush seedling, new sprite (starter genome + variation), sprite from a genome file. The chosen item waits in the hand's marks, and the next click on a tile sends `Place { tile, object_type }` or `SpawnSprite`.
 - **Feedback:** in Reward and Correct mode, each click flashes `+` in both status marks at once ("sent"). When the sim reports back, they flash `☼` (applied) or `?` (rejected). Flashes last about 0.3 s of **real** time and are driven by events, like emotes (§6.3). In Hand mode a rejected `Grab`, `Drop` or `Place` flashes `?`.
 - **Nothing to act on:** a click in Hand, Reward or Correct mode with nothing on the tile to act on sends no command and flashes `?` at once.
@@ -1285,27 +1141,25 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 
 | Key | Action |
 |---|---|
-| `Tab` / `Shift+Tab` | Select the next / previous sprite by ID, wrapping around, and centre the viewport on it if it's out of view. With none selected, start from the lowest / highest ID; after the selected sprite dies, carry on from its ID |
-| `PgUp` / `PgDn` | Scroll the open inspector tab by a page |
+| `Tab` / `Shift+Tab` | Cycle through sprites |
 | `f` | Follow the selected sprite |
 | `b` | Cycle the colour mode |
-| `[` / `]` | Previous / next inspector tab, wrapping around |
+| `[` / `]` | Switch inspector tabs |
 | `g` | Export the genome (Genome tab) |
-| `r` | Name the selected sprite: a name you type, or one generated at random |
+| `r` | Rename the selected sprite |
 | `l` | Open the sprite list |
-| `v` | Switch the detail view on or off: the exact action line, and the selected sprite's destination on the map (§6.1) |
 | `?` | Open help |
 | `Esc` | Close a menu or overlay; otherwise back to Select; from Select, ask to quit |
 | `Ctrl+C` | Quit at once |
 
 - A rejected command shows its reason on the status line and in the event log.
-- **Names:** a sprite has no name until the player gives it one with `r`, either a name they make up or one generated at random. The player has to care first. Until then the screen shows a sprite by its ID, as "Sprite #530".
+- **Names:** sprite names come from a fixed syllable generator applied to the sprite's ID. It uses no RNG draws, so names are deterministic.
 
 ### 6.6 Time and the frame loop
 
-- **Keys:** `space` pauses and resumes; `.` steps one tick while paused; `+` and `-` step through ⅛×, ¼×, ½×, 1× (1.25 ticks per second), 2×, 4×, 8×, 16× (20 ticks per second) and **Max**. Each step halves or doubles the rate. The game starts at 1×; `-` stops at ⅛× (5/32 of a tick a second) and `+` at Max. The top bar labels the slow speeds `1/2x`, `1/4x` and `1/8x`.
+- **Keys:** `space` pauses and resumes; `.` steps one tick while paused; `+` and `-` step through ⅛×, ¼×, ½×, 1× (10 ticks per second), 2×, 4×, 8×, 16× and **Max**. Each step halves or doubles the rate. The game starts at 1×; `-` stops at ⅛× (1.25 ticks/s) and `+` at Max. The top bar labels the slow speeds `1/2x`, `1/4x` and `1/8x`.
 - **Quitting:** `Esc` (from Select, with no menu open) asks "Quit? (y/n)". `y` or a second `Esc` quits; any other key cancels. `Ctrl+C` quits at once.
-- **Exact pacing:** the UI clock counts owed ticks in integer maths, with rates in 32nds of a tick per second, so every speed (including ⅛×) runs at exactly its nominal rate with no drift.
+- **Exact pacing:** the UI clock counts owed ticks in integer maths, with rates in eighths of a tick per second, so every speed (including ⅛×) runs at exactly its nominal rate with no drift.
 - **Held keys:**
   - **1× is a stop for held keys.** A held `+` or `-` stops at 1×; a fresh press is needed to go past it, in either direction.
   - **16× is a stop for a held `+`.** Max runs as fast as the computer allows, so reaching it takes a fresh press. A held `-` coming down from Max passes 16× and stops only at 1×.
@@ -1344,13 +1198,12 @@ Implementation is **test-first, one vertical slice at a time.** Everything in `t
 
 - **`World::state_hash()`:** xxh3 with a fixed seed over a canonical serialization of the world.
 - **Replay checkpoints:** a hash every 1,000 ticks, and playback reports the first divergence (§2.7).
-- **`World::check_invariants()`:** runs at the end of every tick, after step 7, in debug builds and tests, and panics naming the tick and the broken rule, so a violation fails on the tick that caused it. On the default map it costs about 1.2 ms a tick in a debug build (a tick itself took 0.8 ms at slice 5), which adds about 30 s to the debug test run; release builds skip it. It checks:
+- **`World::check_invariants()`:** runs every tick in debug builds and tests. It checks:
   - the occupancy index matches entity positions
   - concentrations are within [0, 1]
   - no tile holds more than one object, and every solid object stands on terrain that allows fixtures
   - held entities appear in neither the index nor perception
   - IDs only go up
-- **Scripted actions:** a hand-made world (`Scenario`) can start sprites on scripted actions, a Wander to a tile or a Rest, in order, before the stand-in or the brain chooses for them. Tests and lab scenarios use them to set up exact situations, such as two sprites meeting in a corridor.
 - **Lab runner:** `cargo run -p terra-sim --example lab -- scenarios/<name>.ron --seeds 10` prints metrics. The scenarios double as tests and as the main tuning tool.
 - **Trainer hook:** a scenario can include a trainer. It reads tick *t*'s events and submits commands stamped *t+1* through the same queue as the player.
 
@@ -1579,15 +1432,14 @@ IDs are stable and append-only. Gaps are left for growth, and the ranges are a c
 
 This file fixes the **mechanisms and ranges**. The starting values are tuned with the lab runner.
 
-- **Newborn physical levels:** energy, hydration, stamina, injury (0), gut contents (0). The first population starts with energy and hydration between 60% and 100% of these (§3.2).
+- **Newborn physical levels:** energy, hydration, stamina, injury (0), gut contents (0).
 - **Metabolism:**
   - basal energy per tick
   - cost per tile of sense radius
   - base step energy cost × (speed / 8)²
 - **Digestion:** `food → energy` and `water → hydration` rates.
 - **Hydration, stamina and healing:** hydration loss per tick; stamina drain per step, recovery while idle, recovery while resting; healing per tick.
-- **Injury from starvation, dehydration and old age:** amounts per tick, and the fade time of the cause-of-death tallies (they halve about every 350 ticks, §4.10).
-- **First-cut timescales,** for a sprite at rest, which the starting values aim for: full hydration lasts about 3,000 ticks and full energy about 6,000; once either runs out, injury kills in about 1,000 more; a sprite past its lifespan dies within about 2,000.
+- **Injury from starvation, dehydration and senescence:** amounts per tick, and the window used to attribute cause of death (500 ticks).
 - **Trait ranges:** speed 4–12, sense_radius 6–14, lifespan 20,000–200,000.
 - **BrainParam ranges (initial):**
 
@@ -1614,8 +1466,8 @@ This file fixes the **mechanisms and ranges**. The starting values are tuned wit
   - Retreat bout: 6 steps
   - Rest bout: 10 ticks
   - action timeout: 60 ticks
-  - flood refresh: 8 ticks after the sprite's last flood
-  - occupied-tile penalty: 30 (three grass steps)
+  - flood refresh: every 8 ticks
+  - occupied-tile penalty
   - re-plan after 3 blocked ticks
   - `nearby_sprites` radius (3) and normalization (4)
 - **Spawn variation:** ±10%.

@@ -1,36 +1,15 @@
-# Terra Sprites — M1 "A Sprite Lives" design (v6)
+# Terra Sprites — M1 "A Sprite Lives" design (v5)
 
 - **Status:** Final
-- **Date:** 2026-09-24
-- **Supersedes:** [v5](m1-a-sprite-lives-v5.md) (earlier: [v4](m1-a-sprite-lives-v4.md), [v3](m1-a-sprite-lives-v3.md), [v2](m1-a-sprite-lives-v2.md), [v1](m1-a-sprite-lives.md))
+- **Date:** 2026-09-23
+- **Supersedes:** [v4](m1-a-sprite-lives-v4.md) (earlier: [v3](m1-a-sprite-lives-v3.md), [v2](m1-a-sprite-lives-v2.md), [v1](m1-a-sprite-lives.md))
 - **Covers:** Milestone 1 in full detail, plus the architecture decisions that every later milestone depends on
 
 ---
 
-## Changes from v5
+## Changes from v4
 
-Decided with the owner in the design session for slice 3 ([#4](https://github.com/Keazra/terra-sprites/issues/4)), which brings objects to life. The domain terms (solid, fixture, item, tag, stage, expire and the rest) are in [`CONTEXT.md`](../../CONTEXT.md).
-
-| # | Change | Source | Sections |
-|---|---|---|---|
-| 1 | **Solid and fixture are separate ideas.** Solid means nothing can move through it; a fixture is attached to the ground. Deep water isn't walkable but isn't solid: crossing it is a matter of ability (swimming, out of scope for M1). | Owner decision | §3.1, §3.3 |
-| 2 | **Tags replace `placement`.** An object type lists its tags, `tags: [Solid, Fixture]`; having a tag means yes. The set is closed, and M1 loads only two combinations: both (bushes) or neither (items). A solid object that isn't a fixture, which would be pushable, is a load error until entity tags are designed ([#27](https://github.com/Keazra/terra-sprites/issues/27)). | Owner decision | §3.3, §3.4, §3.5 |
-| 3 | **One object per tile.** A tile holds at most one sprite and at most one object; a sprite can share a tile with an item, never with a solid object. So a berry drops beside its bush, never under it, and every tile shows at most one object. | Owner decision | §3.3, §3.4, §3.5.2 |
-| 4 | **Terrain says whether fixtures may stand on it.** `terrain.ron` gains `allows_fixtures`: grass, dirt and sand allow them, shallow water doesn't, so no bush grows in a pond. | Owner decision | §3.1, §3.3 |
-| 5 | **The ring rule is gone; keeping paths open is the data's choice.** v5 kept every fixture in a ring of 8 open tiles, so no two could touch: two boulders couldn't lie side by side, and a berry, which drops beside its bush, could never sprout while its parent lived (the bush population halved every ~20,000 ticks). Now solid objects may stand side by side anywhere, and a new location condition, **`KeepsPathsOpen`**, lets a rule refuse a tile where a solid object would split the open tiles around it. The built-in berry sprouting and thornbush spreading use it; world generation always applies it. | Owner decision, after a population check | §3.2, §3.3, §3.5 |
-| 6 | **An object's turn is fully specified:** the stage clock first, then its rules in order; an expiring object runs only its `OnExpire` rules; `DestroySelf` or a successful `ReplaceWith` ends the turn. Where `SpawnNearby` and `SpreadTo` look, and how a uniform choice makes exactly one draw, are spelled out. | Slice 3 design session | §3.5.2 |
-| 7 | **Objects start partway through their lives.** World generation gives each object a random point in its lifespan, so the world has fruit early and bushes don't all expire together. | Slice 3 design session | §3.2 |
-| 8 | **`ObjectExpired` becomes `ObjectRemoved { reason }`** (`Expired`, `Destroyed` or `Replaced`), because objects also leave by being eaten or replaced. | Slice 3 design session | §2.5 |
-| 9 | **The preset sets densities** as counts per area, checked against the data pack when the preset is parsed. | Slice 3 design session | §2.2, §3.9 |
-| 10 | **Registry file formats** for `chemicals.ron` and `loci.ron`, both arriving in slice 3 so every name in `objects.ron` can be checked when it loads. | Slice 3 design session | §3.5.2, §4.1, §4.2 |
-| 11 | **UI details for objects:** the World tab's contents, display names, and how a theme falls back when it has no glyph for an object's visual state. The top bar drops its food counts; the World tab has them. | Slice 3 design session | §6.1, §6.2 |
-| 12 | **Held `+` also stops at 16×.** Max, the jump to "as fast as the computer allows", takes a fresh press. | Owner feedback ([#28](https://github.com/Keazra/terra-sprites/issues/28)) | §6.6 |
-
----
-
-## Changes in v5 (from v4)
-
-Decided with the owner while building slice 2 ([#3](https://github.com/Keazra/terra-sprites/issues/3)): the controls and the hand are reworked around a mouse-driven cursor, and the slice's refinements to terrain and the map view are recorded. The domain terms are in [`CONTEXT.md`](../../CONTEXT.md).
+Decided with the owner while building slice 2 ([#3](https://github.com/Keazra/terra-sprites/issues/3)): the controls and the hand are reworked around a mouse-driven cursor, and the slice's refinements to terrain and the map view are recorded. The domain terms are in [`CONTEXT.md`](../../../CONTEXT.md).
 
 | # | Change | Source | Sections |
 |---|---|---|---|
@@ -202,8 +181,7 @@ terra-sprites/
 ### 2.2 Simulation API (shape)
 
 ```rust
-let config = WorldConfig::from_ron(text, &data_pack)?;   // a preset names object types, so it's checked against the pack
-let mut world = World::new(config, data_pack, seed);    // can't fail: config and pack were validated when parsed
+let mut world = World::new(config, data_pack, seed);    // config and pack were validated when parsed
 world.submit(Command::Reward { sprite });                // stamped for tick now+1, applied at step 1
 let events: Vec<Event> = world.step();                   // advances exactly one tick
 world.state_hash();                                      // u64, stable across runs
@@ -250,7 +228,7 @@ world.check_invariants();                                // debug/test builds
 |---|---|---|
 | `Reward { sprite }` | A pet or hug: injects `reward` directly; pulses `petted` | The sprite is missing, dead or held |
 | `Correct { sprite }` | An electric shock: injects `punishment` and `pain` directly; pulses `shocked` | The sprite is missing, dead or held |
-| `Grab { tile }` | Picks up the sprite on the tile if there is one, otherwise the item | The hand is full, there's nothing grabbable, or the only thing there is a fixture |
+| `Grab { tile }` | Picks up the sprite on the tile if there is one, otherwise the loose item | The hand is full, there's nothing grabbable, or the only thing there is a fixture |
 | `Drop { tile }` | Puts the held entity on the tile | The hand is empty, or placement rules are violated (§3.3–3.4) |
 | `Place { tile, object_type }` | Creates a berry, a ball or a berry-bush seedling | Placement rules are violated, or the type can't be placed |
 | `SpawnSprite { tile, genome: Option<Genome> }` | Creates a sprite. `None` means the starter genome with spawn variation (§4.9) | The tile is occupied or not walkable, or the genome fails validation |
@@ -265,8 +243,7 @@ world.check_invariants();                                // debug/test builds
 - `Spawned`
 - `Died { cause, age }`
 - `LearnedMilestone { link, delta }`
-- `ObjectSpawned { object_type, pos }`: an object was created during the tick (by a lifecycle rule; later also by the hand)
-- `ObjectRemoved { object_type, reason }`: an object left the world. The reason is `Expired` (its last stage ended), `Destroyed` (`DestroySelf`) or `Replaced` (`ReplaceWith`). A berry that sprouts emits `ObjectRemoved { reason: Replaced }` for the berry and `ObjectSpawned` for the bush.
+- `ObjectSpawned` / `ObjectExpired`
 - `HandEmptied { reason }`
 - `CommandRejected { command, reason }`
 
@@ -355,19 +332,17 @@ A replay file contains:
 - Movement is 8-directional.
 - Terrain properties come from `data/terrain.ron`:
 
-| Terrain | Walkable | Step cost | Fertility | Drinkable | Allows fixtures |
-|---|---|---|---|---|---|
-| Grass | ✓ | 10 | 1.0 | | ✓ |
-| Dirt | ✓ | 10 | 0.5 | | ✓ |
-| Sand | ✓ | 15 | 0.0 | | ✓ |
-| Shallow water | ✓ | 25 | 0.0 | ✓ | |
-| Deep water | ✗ | – | – | | – |
-| Rock | ✗ | – | – | | – |
+| Terrain | Walkable | Step cost | Fertility | Drinkable |
+|---|---|---|---|---|
+| Grass | ✓ | 10 | 1.0 | |
+| Dirt | ✓ | 10 | 0.5 | |
+| Sand | ✓ | 15 | 0.0 | |
+| Shallow water | ✓ | 25 | 0.0 | ✓ |
+| Deep water | ✗ | – | – | |
+| Rock | ✗ | – | – | |
 
-- Every walkable terrain states all four properties; an unwalkable one states only that it isn't walkable.
-- **Walkable is not the opposite of solid.** Rock is **solid**: nothing can ever move through it. Deep water isn't walkable, but it isn't solid either: crossing it is a matter of ability, and swimming is out of scope for M1 (§1.3; entity tags, [#27](https://github.com/Keazra/terra-sprites/issues/27)). In M1 both simply can't be entered.
 - An orthogonal step costs the destination tile's step cost. A diagonal step costs `cost × 14 / 10`, in integer maths.
-- **No corner-cutting:** a diagonal step is allowed only if both tiles beside the diagonal are walkable and hold no solid object.
+- **No corner-cutting:** a diagonal step is allowed only if both tiles beside the diagonal are walkable and free of fixtures.
 
 ### 3.2 World generation and connectivity
 
@@ -377,41 +352,20 @@ A replay file contains:
    - Every other region of **≥64 tiles** is joined to the mainland, largest first, along the route that **carves the fewest tiles, then takes the fewest steps**. The route uses orthogonal steps only, so it never depends on a diagonal, and the connection it carves is one tile wide. Deep water becomes shallow water; any other unwalkable terrain becomes dirt. A route that crosses another region joins that region too.
    - Regions **under 64 tiles** become rock.
 4. **Placement:** sprites and objects are placed on the mainland, obeying the rules in §3.3–3.4.
-   - **Objects:** each object type's count comes from the preset's densities (§3.9). Solid objects are placed first, then items, each type in ID order. Each object goes on a tile drawn uniformly from the type's remaining candidates: mainland tiles where it may go. A tile found unusable is set aside for the rest of that type (one that would cut a path might become usable once a neighbour fills in, but checking again would slow generation). If the map runs out of room, generation places what fits and carries on.
-   - **Generation always keeps paths open:** a solid object goes only where `KeepsPathsOpen` (§3.3) holds, so no world starts out split.
-   - **Objects start partway through their lives.** For an object with stages, generation draws every stage's duration, then an age uniformly within their total, and starts the object at that point: in the stage the age falls in, with that stage's remaining time. Its counters start at 0, and no `OnStageEnter` fires for the stage it starts in. Without this, every bush would start as a seedling (no fruit for 1,500 ticks or more) and they'd all expire in the same few thousand ticks.
 
 Property tests check full connectivity across many seeds.
 
-### 3.3 Solid objects and keeping paths open
+### 3.3 The fixture ring rule
 
-An object is **solid** if nothing can move through it, and a **fixture** if it's attached to the ground (§3.5.1). In M1 these always go together: every solid object is a fixture, and every other object is an **item**.
+A **fixture** is an object that blocks movement. A fixture may only be placed, spawned, spread or created by `ReplaceWith` onto a tile that meets all of these:
+- the tile is walkable, holds no sprite, and holds no fixture
+- **all 8 neighbouring tiles are walkable and free of fixtures**
 
-**Where a solid object may stand** is physics, and nothing more: a walkable tile whose terrain allows fixtures (§3.1), holding no sprite and no object. Solid objects may stand side by side, in clumps and hedges, beside rock, water or the wall.
-
-**Keeping paths open is the data's choice.** A solid object can cut a path: one thornbush in a one-tile corridor cuts off everything beyond it, and a diagonal line of bushes is a wall, because sprites can't cut corners. The engine doesn't forbid this everywhere. Instead, the rule vocabulary has a location condition a rule can ask for (§3.5.2):
-
-- **`KeepsPathsOpen`** holds at a tile if a solid object there would leave **the open tiles on its four sides (N, E, S, W) still joined to one another by stepping around it**, through the 8 tiles that surround it. An open tile is walkable and holds no solid object. The tile's own contents don't matter, so a berry can ask it of its own tile before becoming a bush.
-
-**Why it's enough:** any path through the tile enters and leaves by two of its four side tiles, and the condition says those two are joined around it, so the path can go around instead. A diagonal step past the tile is only allowed when both tiles beside it are open, and those are two of its side tiles, so it goes around too. Every rule that makes a solid object only where `KeepsPathsOpen` holds therefore **never splits the map or traps a sprite**. A property test checks this under random sequences of placements and removals.
-
-| Case | `KeepsPathsOpen` |
-|---|---|
-| Beside another bush in open ground, or in a 2×2 clump | holds |
-| The end of a line of bushes, or beside rock or the wall | holds, while the other sides stay joined |
-| Plugging a one-tile corridor | fails: its two open sides can't reach each other around it |
-| The piece that would close a loop, or carry a line to the wall | fails |
-
-- The built-in berry sprouting and thornbush spreading ask for it (§3.5.3), and world generation always does (§3.2). A data pack that leaves it out gets objects that can wall things off; that's its author's choice.
-- **It only looks at the 8 tiles around, so it errs on the safe side:** it can refuse a tile whose sides would still meet the long way round. That's the price of a check that costs nothing.
-- **A removal can leave a pocket.** Solid objects may fill a dead end; if the one at the end later expires, its tile can be left closed off by the others. The pocket held nothing but that object, so no sprite is ever in one, and an item that later drops there just expires.
-- It's judged when an object appears. A solid object that could be pushed could later be shoved into a corridor, so it would need a rule of its own; that's another reason M1 doesn't allow one (§3.5.1).
+**Why this is enough:** every fixture is surrounded by a ring of walkable tiles, so any path through the fixture's tile can go around the ring instead. Any diagonal step the fixture forbids under the no-corner-cutting rule connects two tiles of that ring, which are joined by orthogonal steps. So **no ecology outcome can ever disconnect the map or trap a sprite.** A property test checks this invariant under random sequences of placements and removals.
 
 ### 3.4 Space rules
 
-- A tile holds **at most one sprite** and **at most one object**.
-- A sprite can stand on an item. It can never share a tile with a solid object.
-- An **item** may go on any walkable tile that holds no object, whether or not a sprite stands there, and whatever the terrain allows for fixtures.
+- A tile holds **at most one sprite**, **at most one fixture** and **at most one loose item** (a berry or a ball). Items don't block movement, and a sprite can stand on an item.
 - Sprites interact with their own tile or an adjacent one (the 8-neighbourhood).
 - Only the hand carries things in M1.
 
@@ -423,9 +377,9 @@ An object is **solid** if nothing can move through it, and a **fixture** if it's
 |---|---|
 | `id` | Stable `ObjectTypeId` |
 | `name` | Referenced by rules and themes |
-| `category` | Stable `CategoryId` (Appendix A), which is what brains perceive |
-| `tags` | The object's **tags**, e.g. `[Solid, Fixture]`. Having a tag means yes; lacking it means no; leaving the field out means no tags. `Solid`: nothing can move through it (§3.3). `Fixture`: attached to the ground, so nothing can push, pull or carry it. |
-| `pseudo` | `true` for Water and Sprite: a verb table only, no instances, tags or lifecycle |
+| `category` | Stable `CategoryId`, which is what brains perceive |
+| `placement` | `Fixture` (blocks movement; ring rule applies) or `Item` (loose-item slot) |
+| `pseudo` | `true` for Water and Sprite: a verb table only, no instances or lifecycle |
 | `counters` | Named integer counters with maximums, e.g. `{"fruit": 6}` |
 | `stages` | `[(name, ticks: (min, max), next: Stage(name) \| Expire)]`. The duration is drawn from the world RNG when the stage is entered. An object with no stages is permanent. |
 | `rules` | `[(trigger, if: [conditions], do: [effects])]` |
@@ -433,8 +387,6 @@ An object is **solid** if nothing can move through it, and a **fixture** if it's
 | `visual` | `[(if: [conditions], state: name)]`: the first match names the visual state the theme draws. If nothing matches, the state is `"default"`. `Chance` is not allowed here, so rendering never uses the RNG. |
 
 **Glyphs and colours are not in `objects.ron`.** Themes map `(object name, visual state)` to how it looks (§6.2).
-
-**Tags are a closed set.** M1 knows `Solid` and `Fixture`, and loads only two combinations: **both** (a solid fixture, like a bush) or **neither** (an item, like a berry). Anything else is a load error. A solid object without `Fixture` would be pushable, and a fixture without `Solid` could be walked over (a floor switch); both wait for the entity-tags design ([#27](https://github.com/Keazra/terra-sprites/issues/27)). Tags belong to the object type; tags gained or lost in play are part of that design too.
 
 #### 3.5.2 Rule vocabulary (closed)
 
@@ -449,7 +401,6 @@ An object is **solid** if nothing can move through it, and a **fixture** if it's
 - `Chance(p)`, which draws from the world RNG
 - `Fertility(cmp, f)`, which is a **location** condition
 - `DensityBelow(type, radius, max)`, which is true when fewer than `max` objects of `type` are within the Chebyshev `radius`. It is a **location** condition.
-- `KeepsPathsOpen`, which is true when a solid object on the tile would leave the open tiles on its four sides joined around it (§3.3). It is a **location** condition.
 
 **Effects:**
 
@@ -457,46 +408,30 @@ An object is **solid** if nothing can move through it, and a **fixture** if it's
 |---|---|
 | `AddCounter(name, Δ)` | Clamps to [0, max] |
 | `RequireCounter(name, n)` | **In a verb only:** if the counter is below *n*, the verb **fails**. Later effects don't run, and the outcome is `failed`. |
-| `SpawnNearby(type, radius)` | Creates an object on a tile within the Chebyshev radius (on the map, this object's own tile included) where the new type may go (§3.3–3.4), chosen uniformly among those candidates (one RNG draw if there's at least one). A fixed scan order would make bushes drift in one direction. Does nothing, with no draw, if there are no candidates. |
-| `SpreadTo(type, radius, [conditions])` | Draws **one** tile uniformly from the (2·radius+1)² square around this object, cut down to the map (one RNG draw). If the tile passes placement and the conditions, which are evaluated *at that tile*, the object is created there. Otherwise nothing happens. The object's own tile is in the square and always fails placement; that's harmless. |
-| `ReplaceWith(type)` | Replaces this object with a new one (new ID, first stage) on the same tile. This object is taken off the tile first, then placement is checked for the new type, e.g. terrain that allows fixtures and no sprite on the tile. If that fails, nothing happens and this object stays. |
+| `SpawnNearby(type, radius)` | Creates an object on a free, valid tile within the radius, chosen uniformly among the candidates (one RNG draw if there's at least one). A fixed scan order would make bushes drift in one direction. Does nothing, with no draw, if there are no candidates. |
+| `SpreadTo(type, radius, [conditions])` | Draws **one** candidate tile uniformly from within the radius (one RNG draw). If the tile passes placement and the conditions, which are evaluated *at that tile*, the object is created there. Otherwise nothing happens. |
+| `ReplaceWith(type)` | Replaces this object with a new one (new ID, first stage) on the same tile. Placement is checked for the new type, e.g. the fixture ring rule and no sprite on the tile. Does nothing if that fails. |
 | `DestroySelf` | Removes the object |
 | `Inject(Actor \| Target, chemical, amount)` | Adds to a chemical. **Only physical chemicals are allowed.** Anything else is a load error. |
 | `Signal(Actor \| Target, locus)` | Writes a pulse to the `incoming` buffer. A pulse on the Target records the Actor as its source. |
-| `Push(max_tiles)` | Moves this item up to `max_tiles` away from the actor, in the direction from actor to item snapped to 8 directions (if both are on the same tile, the actor's last step direction, or N if it has none). It stops before non-walkable tiles and tiles holding an object. Sprites don't stop it. |
+| `Push(max_tiles)` | Moves this item up to `max_tiles` away from the actor, in the direction from actor to item snapped to 8 directions (if both are on the same tile, the actor's last step direction, or N if it has none). It stops before non-walkable tiles, fixtures, or tiles holding a loose item. Sprites don't stop it. |
 
 **Verb-only effects:** `Inject`, `Signal`, `Push` and `RequireCounter` need an actor, so they may only appear in a `verbs` table. Using one in a lifecycle rule is a **load error**.
 
 **Evaluation semantics:**
 - Step 2 covers the objects that exist when it begins, in ascending ID order, with rules in the order listed. Objects created during step 2 (by `SpawnNearby`, `SpreadTo` or `ReplaceWith`) first run their rules next tick. Objects placed by the hand at step 1 already exist, so they run in the same tick.
-- **An object's turn,** in this order:
-  1. **The stage clock.** If the current stage has run its full duration, the object enters the next stage (drawing that stage's duration), or, if it was the last stage, it is **expiring**. At most one transition happens per turn.
-  2. **Its rules, in the order listed.** A rule runs if its trigger fires this turn: `Every(n)` when `(tick + object_id) % n == 0`; `OnStageEnter(s)` if the object entered `s` this turn; `OnExpire` if it's expiring. **An expiring object runs only its `OnExpire` rules.** A new object enters its first stage on its first turn, so `OnStageEnter` fires for that stage then (not for an object that world generation starts partway through a stage, §3.2).
-  3. **`DestroySelf`, or a `ReplaceWith` that succeeds, ends the turn.** The object is gone, so no later effect or rule runs.
-  4. An expiring object that is still there after its rules is removed.
 - **Conditions are evaluated left to right and stop at the first false one.** So a `Chance` after a false condition doesn't draw from the RNG.
 - **Convention:** put location conditions before `Chance`.
 - Effects run in order.
-- **Draws:** `Chance(p)` takes one 32-bit draw and succeeds if its top 24 bits, as a fraction of 2²⁴, are below `p`. A uniform choice among *n* candidates takes one 64-bit draw *x* and picks index `(x × n) >> 64`. Its bias is below one in 2⁵⁰, and unlike rejection sampling it always takes exactly one draw.
-- `DensityBelow` counts every object of the type on a tile within the radius, including the object evaluating it if it's of that type.
 - **Held objects have no tile.** Location conditions evaluate as false, and effects that need a tile (`SpawnNearby`, `SpreadTo`, `ReplaceWith`) do nothing. Stage timers, counters and `Chance` keep running. An object that expires while held empties the hand and emits `HandEmptied`.
 - Names of chemicals, loci and types are resolved to stable IDs when the file is loaded. An unknown name is a load error.
-- **Load errors** (every one names the object type and what's wrong):
-  - an unknown object type, chemical, locus, stage or counter name, or a duplicate `id` or `name`
-  - a verb-only effect in a lifecycle rule
-  - `Inject` of a chemical that isn't physical; `Signal` of a locus that isn't a pulse
-  - `Chance` in a visual rule
-  - a stage whose `ticks` minimum is below 1 or above its maximum; a stage name used twice in one type; a counter maximum of 0; `Every(0)`; a `Chance` outside [0, 1]
-  - a tag combination M1 doesn't support (§3.5.1)
-  - a pseudo type with tags, counters, stages, rules or visual rules; a spawn, spread, replacement or `DensityBelow` that names a pseudo type
-  - a verb table for a verb other than Eat, Drink, Hit and Play: the others move, rest or are reserved, and never act through a target's table (§5.2)
 
 **Scope rule:** any later object type that fits this vocabulary needs **no new code**. A genuinely new behaviour means adding one case to the rule enum. (M3 critters are agents, not objects.)
 
 #### 3.5.3 M1 object types
 
 ```ron
-(id: 1, name: "berry_bush", category: BerryBush, tags: [Solid, Fixture],
+(id: 1, name: "berry_bush", category: BerryBush, placement: Fixture,
  counters: {"fruit": 6},
  stages: [(name: "seedling", ticks: (1500, 2500),   next: Stage("mature")),
           (name: "mature",   ticks: (20000, 30000), next: Expire)],
@@ -513,20 +448,20 @@ An object is **solid** if nothing can move through it, and a **fixture** if it's
  visual: [(if: [InStage("seedling")], state: "seedling"),
           (if: [Counter("fruit", Ge, 1)], state: "fruiting")])
 
-(id: 2, name: "berry", category: Berry,
+(id: 2, name: "berry", category: Berry, placement: Item,
  stages: [(name: "fresh", ticks: (1500, 2500), next: Expire)],
  rules: [
    (trigger: OnExpire,
-    if: [Fertility(Ge, 0.5), DensityBelow("berry_bush", 4, 3), KeepsPathsOpen, Chance(0.1)],
+    if: [Fertility(Ge, 0.5), DensityBelow("berry_bush", 4, 3), Chance(0.1)],
     do: [ReplaceWith("berry_bush")]),
  ],
  verbs: { Eat: [Inject(Actor, "food", 0.3), Signal(Actor, "ate"), DestroySelf] })
 
-(id: 3, name: "thornbush", category: Thornbush, tags: [Solid, Fixture],
+(id: 3, name: "thornbush", category: Thornbush, placement: Fixture,
  stages: [(name: "grown", ticks: (40000, 60000), next: Expire)],
  rules: [
    (trigger: Every(2000), if: [Chance(0.1)],
-    do: [SpreadTo("thornbush", 4, [DensityBelow("thornbush", 4, 2), KeepsPathsOpen])]),
+    do: [SpreadTo("thornbush", 4, [DensityBelow("thornbush", 4, 2)])]),
  ],
  verbs: {
    Eat:  [Inject(Actor, "injury", 0.05), Signal(Actor, "pricked")],
@@ -534,7 +469,7 @@ An object is **solid** if nothing can move through it, and a **fixture** if it's
    Play: [Inject(Actor, "injury", 0.03), Signal(Actor, "pricked")],
  })
 
-(id: 4, name: "ball", category: Ball,
+(id: 4, name: "ball", category: Ball, placement: Item,
  verbs: {
    Play: [Push(4), Signal(Actor, "played")],
    Hit:  [Push(2), Signal(Actor, "did_hit")],
@@ -551,7 +486,7 @@ An object is **solid** if nothing can move through it, and a **fixture** if it's
 ```
 
 **The resulting ecology:**
-- **Food:** bushes carry fruit. Overripe fruit drops as berries, which are eaten or expire. Expiring berries sometimes sprout new bushes on fertile land that isn't crowded. Food therefore has a geography, spreads, and can be overgrazed.
+- **Food:** bushes carry fruit. Overripe fruit drops as berries, which are eaten or rot. Rotting berries sometimes sprout new bushes on fertile land that isn't crowded. Food therefore has a geography, spreads, and can be overgrazed.
 - **Thornbushes** give no food and spread slowly. They exist so sprites have something to learn to avoid. **Every contact verb hurts, deliberately, including Play:** thorns hurt whatever you do to them, and only Approach and Retreat are safe. Scenario A1 counts only thornbush Eats. Harm from Play also teaches sprites to pay less attention to thornbushes, which is a legitimate part of the lesson.
 - **Balls** are permanent toys.
 
@@ -569,7 +504,7 @@ The rule constants above are starting values, tuned with the lab runner.
 
 | Target | Goal tiles |
 |---|---|
-| Solid object | Any walkable neighbour |
+| Fixture | Any walkable neighbour |
 | Item | Its own tile or any neighbour |
 | Water | The shallow-water tile itself or any neighbour |
 | Sprite | Any neighbour. The path is re-planned whenever the target moves. |
@@ -616,14 +551,6 @@ This keeps credit assignment clean. If thorns scratched sprites walking past, th
 
 - **Defaults:** 256×160 map; 30 starter sprites (configurable, 20–100).
 - **Plants and toys are set by density**, so a bigger map gets proportionally more and food stays as easy to find: about 150 berry bushes, 40 thornbushes and 6 balls per 15,360 tiles (a 160×96 area). On the default map that is about 400 berry bushes, 107 thornbushes and 16 balls. The sprite count doesn't scale; it stays in the 20–100 range.
-- **In the preset**, densities are counts per area:
-
-  ```ron
-  objects: {"berry_bush": 150, "thornbush": 40, "ball": 6},
-  per_tiles: 15360,
-  ```
-
-  A map of *t* tiles gets `(n × t + per_tiles / 2) / per_tiles` objects of a type with count *n*, in integer maths (rounding halves up): exactly 400, 107 and 16 on the default map. Each name must be an object type in the data pack that isn't a pseudo type, so the preset is parsed against the pack (§2.2). A type the preset doesn't name gets none.
 - **Performance target:** **≥200 ticks per second with 100 sprites** in a release build.
 
 ---
@@ -640,13 +567,13 @@ This keeps credit assignment clean. If thorns scratched sprites walking past, th
 | **Signal** | Drives: `hunger`, `thirst`, `pain`, `tiredness`, `boredom`, `loneliness`, `crowdedness`. Learning signals: `reward`, `punishment` | Genome, and the hand | Yes |
 | **Hormone** | `h0`–`h15`, unnamed | Genome | Yes. These are spare channels evolution can put to use. |
 
-- Chemicals are listed in `data/chemicals.ron` with stable IDs (Appendix A), one entry each, `(id: 1, name: "energy", class: Physical)`. The hormones are listed one by one, `h0` to `h15`. IDs and names are unique.
+- Chemicals are listed in `data/chemicals.ron` with stable IDs (Appendix A).
 - Concentrations are `f32` values in [0, 1], one array per sprite.
 - If physics were evolvable, M2 evolution would simply remove the costs, so this split is fixed now in M1.
 
 ### 4.2 Loci
 
-Loci are listed in `data/loci.ron` with stable IDs. Each has a kind and a `brain_visible` flag: `(id: 32, name: "ate", kind: Pulse, brain_visible: true)`. The kinds are `BodySensor`, `Pulse` and `ReceptorTarget`. Chemical levels aren't listed: they're referenced as `Chem(id)`. IDs and names are unique.
+Loci are listed in `data/loci.ron` with stable IDs. Each has a kind and a `brain_visible` flag.
 
 | Kind | Loci | Brain-visible |
 |---|---|---|
@@ -979,7 +906,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 - All text uses only CP437 characters (§6.2).
 
 ```
- Terra Sprites │ tick 48,210 │ ► 4x │ seed 7 │ sprites 27 │ saved 2m ago                     ? help
+ Terra Sprites │ tick 48,210 │ ► 4x │ seed 7 │ sprites 27 │ bushes 141 │ saved 2m ago       ? help
 ┌─ Map ────────────────────────────────────────────┐┌─ Mira #12 ── [Body] Brain Chem Genome World ┐
 │..,,,..~~~~≈≈≈≈~~..........♣....#########........ ││ EAT → berry bush · walking (3 tiles)        │
 │.,,,...~~~≈≈≈≈≈~~....♣.........########....♠..... ││ age 3,410 · speed 7 · sense 10              │
@@ -1012,7 +939,7 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 ```
 
 **Panels:**
-- **Top bar:** tick, speed, seed, population, save status. Object counts, food included, are the World tab's job.
+- **Top bar:** tick, speed, seed, population, food counts, save status.
 - **Map view:**
   - Its viewport scrolls with `W` `A` `S` `D` or the arrow keys, or follows the selected sprite (`f`).
   - A map smaller than the space gets a map view shrunk to fit it, at the top-left.
@@ -1026,12 +953,10 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 | **Brain** | Output of `explain()` |
 | **Chem** | Every chemical with its level and change per tick, plus `last_r`. Reward and punishment are consumed every tick, so their levels always read 0 between ticks. |
 | **Genome** | Genes grouped by type; flagged, unexpressed and unknown genes are marked; `g` exports to RON |
-| **World** | The data pack's identity; population and deaths by cause; each object type in ID order with its count, the count in each stage (left out for a type with only one stage), and the total of each counter (such as the fruit on all bushes). It's drawn from the data, so a pack's new object types appear with no new code. |
+| **World** | Population, food counts, deaths by cause, and the data pack's identity |
 
 - **Events panel:** filtered to all / the selected sprite / major events only (deaths, learning milestones, rejected commands).
 - **Status line:** the tile under the cursor, the cursor mode, what the hand holds (in every mode), and hints for the active keys. A prompt such as "Quit? (y/n)" takes its place while open.
-  - The tile names its terrain and any object on it, with the object's stage if it has stages: `(61,40) grass · berry bush (mature)`.
-  - **Display names** are the data's names with `_` shown as a space (`berry_bush` → "berry bush"), so `objects.ron` needs no separate display name.
 - **Overlays:** `?` for help (keys, colour legend, save path), `l` for a sortable sprite list to jump to.
 
 ### 6.2 Semantic tiles and themes
@@ -1040,9 +965,6 @@ The M1 demo is watching learning happen, so the starter instincts are good but n
 - **Themes** (`themes/*.ron`) map each semantic tile to a character, colours and modifiers.
   - Themes are **UI assets**. They aren't part of the sim data pack, and don't affect saves or replays.
   - The future Tiles milestone adds themes that map to a sheet index and tint instead.
-- **Objects are keyed by name and visual state**, e.g. `object("berry_bush", "fruiting")`. An object matching none of its visual rules is in the state `"default"`: the bare berry bush is `object("berry_bush", "default")`.
-  - **Fallback:** a theme with no entry for an object's state uses that object's `"default"` entry, and failing that a `?` glyph. So a data pack's new object types still draw in any theme.
-  - A test checks that each built-in theme covers every visual state of every object type in the built-in pack.
 - **All UI text is limited to CP437 characters**, so any CP437 bitmap font or tileset can render every panel.
 
 | Thing | `cp437` (default) | `ascii` (`--ascii`) | Colour |
@@ -1125,7 +1047,7 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 | Key | Mode | Mark | Colour | A click on the cursor's tile… | `Y` / `N` |
 |---|---|---|---|---|---|
 | `E` | **Select** (the default) | `♦` | white | selects the sprite there; on an empty tile, clears the selection | `·` / `·` |
-| `Q` | **Hand** | `∩` | yellow | with the hand empty, sends `Grab` (a sprite is taken before an item); holding something, sends `Drop`. Pressing `Q` again opens the Place menu | empty: `↑` / `░`; holding: `↓` / the held thing's glyph |
+| `Q` | **Hand** | `∩` | yellow | with the hand empty, sends `Grab` (a sprite is taken before a loose item); holding something, sends `Drop`. Pressing `Q` again opens the Place menu | empty: `↑` / `░`; holding: `↓` / the held thing's glyph |
 | `Z` | **Reward** | `♥` | green | sends `Reward` to the sprite there | feedback (below) |
 | `X` | **Correct** | `‼` | light red | sends `Correct` to the sprite there | feedback (below) |
 
@@ -1133,7 +1055,7 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 - **Place menu:** berry, ball, bush seedling, new sprite (starter genome + variation), sprite from a genome file. The chosen item waits in the hand's marks, and the next click on a tile sends `Place { tile, object_type }` or `SpawnSprite`.
 - **Feedback:** in Reward and Correct mode, each click flashes `+` in both status marks at once ("sent"). When the sim reports back, they flash `☼` (applied) or `?` (rejected). Flashes last about 0.3 s of **real** time and are driven by events, like emotes (§6.3). In Hand mode a rejected `Grab`, `Drop` or `Place` flashes `?`.
 - **Nothing to act on:** a click in Hand, Reward or Correct mode with nothing on the tile to act on sends no command and flashes `?` at once.
-- **Switching modes keeps each mode's state.** What the hand holds, or a Place item not yet put down, waits in reserve while other modes are in use; the selection stays in every mode. While the hand holds something, the status line shows it in every mode (`hand: Mira`), because a held sprite can't eat or drink (§2.4) and a held berry can expire.
+- **Switching modes keeps each mode's state.** What the hand holds, or a Place item not yet put down, waits in reserve while other modes are in use; the selection stays in every mode. While the hand holds something, the status line shows it in every mode (`hand: Mira`), because a held sprite can't eat or drink (§2.4) and a held berry can rot.
 - **Leaving a mode:** a right-click or `Esc` returns to Select. `Esc` first closes any open menu or overlay. From Select, `Esc` asks to quit (§6.6).
 - **Pausing queues actions.** Commands are stamped for the next tick (§2.5), so clicks made while paused apply, in click order, when time next moves (`space` or `.`). Hand mode's marks follow the queue: after a queued `Grab`, `Y` shows `↓` and `N` the thing being grabbed. If the sim rejects it, `?` flashes and the marks return to the hand's real state.
 
@@ -1162,7 +1084,6 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 - **Exact pacing:** the UI clock counts owed ticks in integer maths, with rates in eighths of a tick per second, so every speed (including ⅛×) runs at exactly its nominal rate with no drift.
 - **Held keys:**
   - **1× is a stop for held keys.** A held `+` or `-` stops at 1×; a fresh press is needed to go past it, in either direction.
-  - **16× is a stop for a held `+`.** Max runs as fast as the computer allows, so reaching it takes a fresh press. A held `-` coming down from Max passes 16× and stops only at 1×.
   - **`space` toggles pause only on a fresh press,** so holding it doesn't flicker.
   - **Holding `.` keeps stepping,** one tick per repeat.
   - **Telling a hold from a press:** a key counts as held when the terminal reports it as repeating, or when it's pressed again with no release in between. The second rule is only trusted where the terminal reports releases: Windows always does, and any other terminal is trusted once a release arrives. Keys are tracked by physical key, so a `+` whose release is reported as `=` (Shift released first) still counts as released.
@@ -1201,7 +1122,7 @@ Implementation is **test-first, one vertical slice at a time.** Everything in `t
 - **`World::check_invariants()`:** runs every tick in debug builds and tests. It checks:
   - the occupancy index matches entity positions
   - concentrations are within [0, 1]
-  - no tile holds more than one object, and every solid object stands on terrain that allows fixtures
+  - every fixture has its clear ring
   - held entities appear in neither the index nor perception
   - IDs only go up
 - **Lab runner:** `cargo run -p terra-sim --example lab -- scenarios/<name>.ron --seeds 10` prints metrics. The scenarios double as tests and as the main tuning tool.
@@ -1233,7 +1154,7 @@ Implementation is **test-first, one vertical slice at a time.** Everything in `t
    - **Commands:** every rejection path.
 2. **Property tests (`proptest`):**
    - The map is connected for any seed.
-   - Among random placements and removals, placing a solid object where `KeepsPathsOpen` holds never splits the open ground into more pieces.
+   - Random sequences of fixture placements and removals never disconnect it.
    - Concentrations always stay in bounds.
    - **Genes can't change physical chemistry directly.** This runs on the pure step-3 function with identical scripted physical inputs for 1,000 ticks: step flags, `resting`, verb injections, pulses and `nearby_sprites`. A random genome runs beside a control genome, and **their physical chemical arrays must be bit-identical on every tick**. Both genomes share identical `Trait` genes, since traits change physical costs legitimately; every other gene type varies randomly.
 3. **Determinism tests:**
