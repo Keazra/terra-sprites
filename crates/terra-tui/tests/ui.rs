@@ -1079,6 +1079,60 @@ fn the_brain_tab_shows_attention_scores_and_what_adds_most_to_the_decision() {
     assert!(text[8..].iter().all(String::is_empty), "{text:?}");
 }
 
+/// A hungry sprite beside a thornbush, drawn to it and to eating, whose
+/// every prick punishes it by 1, learning at η .5 and λ .5 with no fading.
+const THORN_GENOME: &str = r#"(format: 1, genes: [
+    InitialConcentration(chem: "hunger", value: 1.0),
+    Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),
+    BrainParam(param: "learning_rate", value: 0.5),
+    BrainParam(param: "trace_decay", value: 0.5),
+    BrainParam(param: "relax_rate", value: 0.0),
+    BrainParam(param: "tau_base", value: 0.05),
+    BrainParam(param: "tau_att_base", value: 0.05),
+    AttentionInstinct(input: "hunger", category: Thornbush, weight: 1.0),
+    Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
+])"#;
+
+#[test]
+fn the_brain_tab_shows_the_links_furthest_from_birth_as_memory() {
+    // It bites at tick 0; at tick 1 learning moves each link from a concept
+    // active then by .5 × −1 × .5 = −.25: hunger, always, attended
+    // thornbush and target adjacent to eat, and hunger and always to
+    // attending to thornbushes. Six tie; the five first in link order show.
+    let objects = [(Pos { x: 3, y: 3 }, "thornbush")];
+    let (world, mut app) = one_sprite_among(THORN_GENOME, &objects, &[], 2);
+    open(&mut app, &world, Tab::Brain);
+    let (_, text) = inspector(&app, &world);
+    let at = text
+        .iter()
+        .position(|row| row.starts_with("MEMORY"))
+        .unwrap_or_else(|| panic!("{text:?}"));
+    assert_eq!(text[at - 1], "", "a blank row before it");
+    assert_eq!(
+        text[at..at + 7],
+        [
+            "MEMORY                          now  birth",
+            "hunger → eat                 +.75  +1.00",
+            "always → eat                 -.25    .00",
+            "attended thornbush → eat     -.25    .00",
+            "target adjacent → eat        -.25    .00",
+            "hunger → attends to          +.75  +1.00",
+            "thornbush",
+        ]
+    );
+}
+
+#[test]
+fn the_brain_tab_leaves_memory_out_until_a_link_has_moved() {
+    let (world, mut app) = one_sprite(HUNGRY_GENOME, 1);
+    open(&mut app, &world, Tab::Brain);
+    let (_, text) = inspector(&app, &world);
+    assert!(
+        !text.iter().any(|row| row.starts_with("MEMORY")),
+        "{text:?}"
+    );
+}
+
 #[test]
 fn the_attention_marker_shades_the_one_thing_the_selected_sprite_attends_to() {
     // Away from the cursor, which starts on the map's centre, (5, 2).
