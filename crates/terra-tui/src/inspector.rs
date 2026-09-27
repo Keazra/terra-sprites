@@ -241,7 +241,10 @@ fn aimed_line(action: &ActionView, data: &DataPack) -> Option<String> {
     };
     Some(match action.progress {
         Progress::Walking { steps_left } => {
-            format!("{going} · {} to go", counted(steps_left, walked(action.verb)))
+            format!(
+                "{going} · {} to go",
+                counted(steps_left, walked(action.verb))
+            )
         }
         Progress::Waiting { .. } => format!("{going} · waiting to get past"),
         Progress::Resting { .. } => return None,
@@ -268,7 +271,11 @@ fn aimed_line(action: &ActionView, data: &DataPack) -> Option<String> {
 /// What a walking action counts down: a retreat, the steps of its bout;
 /// any other, the tiles of its path.
 fn walked(verb: Verb) -> &'static str {
-    if verb == Verb::Retreat { "step" } else { "tile" }
+    if verb == Verb::Retreat {
+        "step"
+    } else {
+        "tile"
+    }
 }
 
 /// A finished action in the past tense, for the Body tab's observed list
