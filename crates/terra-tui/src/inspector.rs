@@ -5,7 +5,8 @@ use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
     ActionView, ChemicalKind, ChemicalLevel, DataPack, DeathCause, EmitterMode, EntityId,
-    Expression, GeneView, ObjectView, Outcome, Progress, SpriteView, Target, Trait, Verb, World,
+    Expression, GeneView, Link, ObjectView, Outcome, Progress, SpriteView, Target, Trait, Verb,
+    World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -604,7 +605,45 @@ fn brain_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
         let amount = signed_level(contribution.amount);
         lines.extend(scored("   ", &concept_name(&contribution.inputs), &amount));
     }
+    if !explained.memory.is_empty() {
+        lines.push(String::new());
+        lines.extend(scored(" ", "MEMORY", &columns("now", "birth")));
+    }
+    for memory in &explained.memory {
+        let birth = match memory.birth {
+            0.0 => level(0.0),
+            birth => signed_level(birth),
+        };
+        let numbers = columns(&signed_level(memory.now), &birth);
+        lines.extend(scored("   ", &link_name(&memory.link), &numbers));
+    }
     lines.into_iter().map(Line::from).collect()
+}
+
+/// The memory's two columns, a link's weight now and at birth, each
+/// right-aligned.
+fn columns(now: &str, birth: &str) -> String {
+    format!("{now:>5}  {birth:>5}")
+}
+
+/// A link as the Genome tab words the instinct it began as: `attended
+/// thornbush → eat`, `hunger → attends to thornbush`.
+fn link_name(link: &Link) -> String {
+    match link {
+        Link::Decision { inputs, verb } => {
+            let inputs: Vec<(&str, bool)> = inputs.iter().map(|(i, n)| (i.as_str(), *n)).collect();
+            format!(
+                "{} → {}",
+                concept_name(&inputs),
+                verb_name(*verb).to_lowercase()
+            )
+        }
+        Link::Attention { input, category } => format!(
+            "{} → attends to {}",
+            unbroken(&display_name(input)),
+            unbroken(&display_name(category))
+        ),
+    }
 }
 
 /// A concept by its inputs, as the Brain tab and the Genome tab's instincts
