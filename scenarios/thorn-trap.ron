@@ -1,0 +1,10 @@
+// The thorn trap (design §7.3, v12 change 11, v15 change 8): the default
+// world for 30,000 ticks. Slice 8 passes if the median number of sprites
+// killed by thornbushes over 10 seeds is at most a third of `main`'s before
+// learning. Too slow for CI; run it with the lab runner:
+// cargo run --release -p terra-sim --example lab -- scenarios/thorn-trap.ron --seeds 10
+(
+    world: Generated,
+    ticks: 30000,
+    windows: [(0, 30000)],
+)
