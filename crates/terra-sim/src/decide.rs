@@ -59,8 +59,10 @@ pub(crate) fn decide(
     // What walking the flood's reach on grass costs: a grass step is 10
     // terrain units (design §5.2).
     let reach = 10.0 * f32::from(flood.reach());
+    let was_hit = data.physiology().indices.was_hit;
+    let attacker = sprite.body.sources.get(&was_hit).copied();
     let candidates: BTreeMap<Category, Candidate> = flood
-        .candidates(ground, id)
+        .candidates(ground, id, attacker)
         .into_iter()
         .map(|(category, (target, cost))| {
             let goal = state
@@ -174,6 +176,10 @@ pub(crate) fn decide(
             (flood.wander_destination(sense_radius, rng), None)
         }
         Verb::Rest => (None, None),
+        Verb::Retreat => {
+            let candidate = candidate.expect("an aimed verb is offered only with a target");
+            (None, Some((candidate.target, candidate.type_id)))
+        }
         _ => {
             let candidate = candidate.expect("an aimed verb is offered only with a target");
             (
@@ -212,6 +218,14 @@ fn start_scripted(state: &mut WorldState, data: &DataPack, id: EntityId, events:
         }
         ScriptedAction::Play { at } => (Verb::Play, None, state.contact_target(id, at)),
         ScriptedAction::Hit { at } => (Verb::Hit, None, state.contact_target(id, at)),
+        ScriptedAction::Retreat { at } => {
+            let target = state
+                .sprite_target(at)
+                .filter(|&t| t != Target::Sprite(id))
+                .or_else(|| state.object_target(at))
+                .or_else(|| state.water_target(data, at));
+            (Verb::Retreat, None, target)
+        }
     };
     let flood = state
         .sprites
@@ -220,8 +234,10 @@ fn start_scripted(state: &mut WorldState, data: &DataPack, id: EntityId, events:
         .flood
         .as_ref();
     let flood = flood.expect("step 5 made the flood");
+    // A retreat heads for no goal tile: it backs away (design §5.5).
     let destination = match target {
-        Some(target) => state.goal_for(data, flood, target),
+        Some(target) if verb.heads_for_goal() => state.goal_for(data, flood, target),
+        Some(_) => None,
         None => destination,
     };
     let target = target.and_then(|t| Some((t, state.type_of(data, t)?)));
