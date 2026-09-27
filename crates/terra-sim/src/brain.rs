@@ -155,42 +155,6 @@ pub enum Link {
     Attention { input: String, category: String },
 }
 
-/// A link that has just moved `lesson_threshold` from its instinct value
-/// (design §5.6): `good` if it rose.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum Lesson {
-    /// The link from the concept at `concept` in the brain to `verb`.
-    Decision {
-        concept: usize,
-        verb: Verb,
-        good: bool,
-    },
-    /// The link from the input at `input` in the pack to `category`.
-    Attention {
-        input: usize,
-        category: Category,
-        good: bool,
-    },
-}
-
-impl Lesson {
-    /// The link it's about, named, and whether it rose.
-    pub(crate) fn named(self, brain: &Brain, data: &DataPack) -> (Link, bool) {
-        match self {
-            Lesson::Decision {
-                concept,
-                verb,
-                good,
-            } => (brain.decision_link(concept, verb, data), good),
-            Lesson::Attention {
-                input,
-                category,
-                good,
-            } => (attention_link(input, category, data), good),
-        }
-    }
-}
-
 /// The link from the input at `input` in the pack to `category`, named.
 fn attention_link(input: usize, category: Category, data: &DataPack) -> Link {
     Link::Attention {
@@ -228,8 +192,8 @@ pub struct Explanation<'a> {
     /// nothing is left out.
     pub contributions: Vec<Contribution<'a>>,
     /// The links, of both kinds, furthest from birth, largest first, ties
-    /// in link order: decision links, then attention links. One whose
-    /// distance rounds to .00 is left out.
+    /// in link order: decision links, then attention links. A link that
+    /// hasn't moved is left out.
     pub memory: Vec<Memory>,
 }
 
@@ -307,15 +271,16 @@ impl Brain {
     /// verb gains η × mod × r × λ^(tick − its tick) × each concept's
     /// activation from that concept; if the verb was aimed at a target,
     /// its attended category gains the same from each State input. Links
-    /// stay within [−1, 1]. Returns the lessons it learned: links that moved
-    /// `lesson_threshold` from birth for the first time, decision links first.
+    /// stay within [−1, 1]. Returns the lessons it learned, decision links
+    /// first: each link that moved `lesson_threshold` from birth for the first
+    /// time, with whether it rose.
     pub(crate) fn learn(
         &mut self,
         tick: u64,
         r: f32,
         learning_rate_mod: f32,
         data: &DataPack,
-    ) -> Vec<Lesson> {
+    ) -> Vec<(Link, bool)> {
         let (relax, consolidate) = (
             self.params.get(BrainParam::RelaxRate),
             self.params.get(BrainParam::ConsolidateRate),
@@ -350,23 +315,18 @@ impl Brain {
             }
         }
         let threshold = data.physiology().lesson_threshold;
-        let decisions =
-            self.decision
-                .lessons(threshold)
-                .map(|(concept, c, good)| Lesson::Decision {
-                    concept,
-                    verb: VERBS[c],
-                    good,
-                });
-        let attention =
-            self.attention
-                .lessons(threshold)
-                .map(|(input, c, good)| Lesson::Attention {
-                    input,
-                    category: Category::ALL[c],
-                    good,
-                });
-        decisions.chain(attention).collect()
+        let decisions: Vec<(Link, bool)> = self
+            .decision
+            .lessons(threshold)
+            .into_iter()
+            .map(|(k, v, good)| (self.decision_link(k, VERBS[v], data), good))
+            .collect();
+        let attention = self
+            .attention
+            .lessons(threshold)
+            .into_iter()
+            .map(|(i, c, good)| (attention_link(i, Category::ALL[c], data), good));
+        decisions.into_iter().chain(attention).collect()
     }
 
     /// Commits this tick's trace entry at the end of step 6 (design §5.6),
@@ -413,7 +373,7 @@ impl Brain {
                 .concepts
                 .iter()
                 .zip(&snapshot.activations)
-                .zip(self.decision.rows())
+                .zip(self.decision.working())
                 .map(|((signature, &activation), links)| Contribution {
                     inputs: signature
                         .iter()
@@ -436,7 +396,7 @@ impl Brain {
         })
     }
 
-    /// The links furthest from birth (design §5.9).
+    /// The links furthest from birth (design §5.9), of those that have moved.
     fn memory(&self, data: &DataPack) -> Vec<Memory> {
         let decisions = self
             .decision
@@ -448,7 +408,6 @@ impl Brain {
             .map(|(i, c, now, birth)| (attention_link(i, Category::ALL[c], data), now, birth));
         let mut memory: Vec<Memory> = decisions
             .chain(attention)
-            .filter(|&(_, now, birth)| (now - birth).abs() >= 0.005)
             .map(|(link, now, birth)| Memory { link, now, birth })
             .collect();
         // A stable sort keeps a tie in link order.
@@ -569,7 +528,7 @@ impl Brain {
     /// the decision links, in `VERBS` order.
     pub(crate) fn scores(&self, activations: &[f32]) -> [f32; VERBS.len()] {
         let mut scores = [0.0; VERBS.len()];
-        for (a, links) in activations.iter().zip(self.decision.rows()) {
+        for (a, links) in activations.iter().zip(self.decision.working()) {
             for (score, w) in scores.iter_mut().zip(links) {
                 *score += a * w;
             }
@@ -1141,25 +1100,20 @@ mod tests {
         // −.4 × .5 = −.2 a time: the third takes both links past −.5 from birth.
         assert_eq!(brain.learn(10, -1.0, 1.0, &data), []);
         assert_eq!(brain.learn(10, -1.0, 1.0, &data), []);
-        let (eat, thornbush) = (Verb::Eat, Category::Thornbush);
+        let eat = |input: &str| Link::Decision {
+            inputs: vec![(input.to_string(), false)],
+            verb: Verb::Eat,
+        };
+        let attends = Link::Attention {
+            input: "hunger".into(),
+            category: "thornbush".into(),
+        };
         assert_eq!(
             brain.learn(10, -1.0, 1.0, &data),
             [
-                Lesson::Decision {
-                    concept: input("hunger"),
-                    verb: eat,
-                    good: false
-                },
-                Lesson::Decision {
-                    concept: input("attended_thornbush"),
-                    verb: eat,
-                    good: false
-                },
-                Lesson::Attention {
-                    input: input("hunger"),
-                    category: thornbush,
-                    good: false
-                },
+                (eat("hunger"), false),
+                (eat("attended_thornbush"), false),
+                (attends, false),
             ]
         );
         assert_eq!(brain.learn(10, -1.0, 1.0, &data), [], "each lesson once");

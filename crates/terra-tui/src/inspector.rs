@@ -605,11 +605,17 @@ fn brain_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
         let amount = signed_level(contribution.amount);
         lines.extend(scored("   ", &concept_name(&contribution.inputs), &amount));
     }
-    if !explained.memory.is_empty() {
+    // A link whose move rounds to nothing has nothing worth showing.
+    let remembered: Vec<_> = explained
+        .memory
+        .iter()
+        .filter(|m| level((m.now - m.birth).abs()) != ".00")
+        .collect();
+    if !remembered.is_empty() {
         lines.push(String::new());
         lines.extend(scored(" ", "MEMORY", &columns("now", "birth")));
     }
-    for memory in &explained.memory {
+    for memory in remembered {
         let birth = match memory.birth {
             0.0 => level(0.0),
             birth => signed_level(birth),
