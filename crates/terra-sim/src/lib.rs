@@ -35,7 +35,7 @@ mod world;
 
 pub use action::{ActionView, Hurt, Outcome, Progress, ScriptedAction};
 pub use biochem::Traits;
-pub use brain::{Contribution, Explanation};
+pub use brain::{Contribution, Explanation, Link};
 pub use config::{ConfigError, WorldConfig};
 pub use data::{DataError, DataPack};
 pub use events::{DeathCause, Event, EventKind, Removal};

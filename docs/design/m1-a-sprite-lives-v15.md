@@ -14,7 +14,7 @@ Decided with the owner in the design session for slice 8 ([#9](https://github.co
 | # | Change | Source | Sections |
 |---|---|---|---|
 | 1 | **The Brain tab's third part is MEMORY:** the five links that have moved furthest from birth, both kinds (a concept to a verb, and a State input to a category), each with its value now and at birth, in two right-aligned columns. It's left out until a link has moved. "Memory" is the player's word for what a sprite has come to associate; memory in a wider sense (places, individuals, fading) is its own design ([#40](https://github.com/Keazra/terra-sprites/issues/40)). | Owner decision | §5.9, §6.1 |
-| 2 | **Lessons, for both kinds of link.** `LearnedMilestone` fires once per link, the first time its working weight is `learned_milestone` (0.5, in `physiology.ron`) or more from its instinct value, for attention links as well as decision links. It never fires again for that link. | Owner decision | §2.5, §5.6, App. B |
+| 2 | **Lessons, for both kinds of link.** `LearnedMilestone { id, link, good }` fires once per link, the first time its working weight is `lesson_threshold` (0.5, in `physiology.ron`) or more from its instinct value, for attention links as well as decision links. It never fires again for that link. It carries whether the link rose (`good`) rather than v14's `delta`: that's all the event log says, and events compare exactly, which a float doesn't. | Owner decision | §2.5, §5.6, App. B |
 | 3 | **The event log words a lesson as good or bad:** "Sprite #12 learned: attended thornbush → eat is bad", "Sprite #12 learned: hunger → attends to thornbush is bad", "… is good" when the link rose. Sprites are to learn what's good or bad, so that's what the line says, with no number. | Owner decision | §6.1 |
 | 4 | **The Chem tab shows `last_r` as "felt" on the reward line:** `reward  .00  felt -.42`. Reward and punishment are consumed every tick, so their own levels always read 0; the tab stays at 21 rows. | Owner decision | §6.1 |
 | 5 | **The Brain tab can't be a tick behind the links.** Step 4 (learning) runs before step 5 in the same tick, so the links `explain` reads after a tick are the ones step 5 scored with. Only a sprite that didn't decide this tick (on a scripted action) shows an older decision, which the links have since moved on from; that's accepted. | Slice 8 design session | §5.9 |
@@ -453,7 +453,7 @@ Before step 1, the world keeps every sprite's chemical levels as they stand, so 
 - `Rewarded`, `Corrected`
 - `Spawned`
 - `Died { name, cause, age }`: the sprite has left the world by the time the event log prints this, so the event carries its name, or none for an unnamed sprite (§6.5). The causes are in §4.10.
-- `LearnedMilestone { link, delta }`: a lesson (§5.6), once per link; `link` is a decision link (concept and verb) or an attention link (State input and category), and `delta` its working weight less its instinct value
+- `LearnedMilestone { link, good }`: a lesson (§5.6), once per link; `link` is a decision link (concept and verb) or an attention link (State input and category), named, and `good` whether it rose
 - `ObjectSpawned { object_type, pos }`: an object was created during the tick (by a lifecycle rule; later also by the hand)
 - `ObjectRemoved { object_type, reason }`: an object left the world. The reason is `Expired` (its last stage ended), `Destroyed` (`DestroySelf`) or `Replaced` (`ReplaceWith`). A berry that sprouts emits `ObjectRemoved { reason: Replaced }` for the berry and `ObjectSpawned` for the bush.
 - `HandEmptied { reason }`
@@ -1219,7 +1219,7 @@ World randomness is separate: plant rules and the order actions resolve in. It c
   - All weights are clamped to [−1, 1].
   - When r = 0, the reinforcement pass is skipped, so it costs nothing.
 - **Recruitment** (§5.4) is evaluated against the entry with the largest `weight_j × |r|`.
-- **Lessons:** a `LearnedMilestone` event fires the first time a link's working weight `w` is `learned_milestone` (0.5) or more away from its instinct value, for attention links A as well as decision links W. Each link fires at most once in a sprite's life; which have fired is saved state.
+- **Lessons:** a `LearnedMilestone` event fires the first time a link's working weight `w` is `lesson_threshold` (0.5) or more away from its instinct value, for attention links A as well as decision links W. Each link fires at most once in a sprite's life; which have fired is saved state.
 
 ### 5.7 Genes for the brain
 
@@ -1880,7 +1880,7 @@ This file fixes the **mechanisms and ranges**. The starting values are tuned wit
   - re-plan after 3 blocked ticks
   - `nearby_sprites` radius (3) and normalization (4)
 - **Spawn variation:** ±10%.
-- **Lesson threshold** (`learned_milestone`): 0.5.
+- **Lesson threshold** (`lesson_threshold`): 0.5.
 
 ## Appendix C — Risks
 

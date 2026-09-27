@@ -32,6 +32,8 @@ pub(crate) struct Physiology {
     pub(crate) receptor_targets: BTreeMap<LocusId, (f32, f32)>,
     pub(crate) nearby_sprites: NearbySprites,
     pub(crate) spawn_variation: f32,
+    /// How far a link moves from birth to be a lesson (design §5.6).
+    pub(crate) lesson_threshold: f32,
     pub(crate) actions: Actions,
     pub(crate) movement: Movement,
     pub(crate) indices: Indices,
@@ -55,6 +57,7 @@ pub(crate) struct PhysiologyEntry {
     receptor_targets: BTreeMap<String, (f32, f32)>,
     nearby_sprites: NearbySprites,
     spawn_variation: f32,
+    lesson_threshold: f32,
     actions: Actions,
     movement: Movement,
 }
@@ -325,6 +328,7 @@ impl PhysiologyEntry {
             receptor_targets,
             nearby_sprites: self.nearby_sprites,
             spawn_variation: self.spawn_variation,
+            lesson_threshold: self.lesson_threshold,
             actions: self.actions,
             movement: self.movement,
             indices,

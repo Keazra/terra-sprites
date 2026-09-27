@@ -541,7 +541,7 @@ impl World {
         self.apply_commands(); // 1
         self.run_environment(&mut events); // 2
         let dying = self.run_biochemistry(); // 3
-        self.run_learning(); // 4
+        self.run_learning(&mut events); // 4
         self.sense_and_decide(&dying, &mut events); // 5
         self.resolve_actions(&dying, &mut events); // 6
         self.finish_tick(&dying, &mut events); // 7
@@ -689,8 +689,8 @@ impl World {
     }
 
     /// Step 4: reinforcement from consumed reward and punishment.
-    fn run_learning(&mut self) {
-        learning::run(&mut self.state, &self.data);
+    fn run_learning(&mut self, events: &mut Vec<Event>) {
+        learning::run(&mut self.state, &self.data, events);
     }
 
     /// Step 5: perception, attention and decisions.
