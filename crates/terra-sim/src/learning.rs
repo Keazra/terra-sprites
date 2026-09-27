@@ -56,6 +56,22 @@ impl<const N: usize> LearnableLinks<N> {
         *w = (*w + by).clamp(-1.0, 1.0);
     }
 
+    /// Every link that has moved from birth, as `(row, column, now, birth)`,
+    /// in row then column order.
+    pub(crate) fn moved(&self) -> impl Iterator<Item = (usize, usize, f32, f32)> + '_ {
+        self.w
+            .iter()
+            .zip(&self.birth)
+            .enumerate()
+            .flat_map(|(row, (w, birth))| {
+                w.iter()
+                    .zip(birth)
+                    .enumerate()
+                    .filter(|(_, (now, birth))| now != birth)
+                    .map(move |(column, (&now, &birth))| (row, column, now, birth))
+            })
+    }
+
     /// The links whose working weight is `threshold` or more from birth for
     /// the first time, as `(row, column, rose)`, in row then column order.
     /// Each is marked, so it's a lesson only once (design §5.6).
