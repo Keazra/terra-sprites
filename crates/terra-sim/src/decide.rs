@@ -236,8 +236,8 @@ fn start_scripted(state: &mut WorldState, data: &DataPack, id: EntityId, events:
     let flood = flood.expect("step 5 made the flood");
     // A retreat heads for no goal tile: it backs away (design §5.5).
     let destination = match target {
-        Some(_) if verb == Verb::Retreat => None,
-        Some(target) => state.goal_for(data, flood, target),
+        Some(target) if verb.heads_for_goal() => state.goal_for(data, flood, target),
+        Some(_) => None,
         None => destination,
     };
     let target = target.and_then(|t| Some((t, state.type_of(data, t)?)));

@@ -115,7 +115,7 @@ pub(crate) struct Action {
     /// Where it's heading: a Wander's destination, or the goal tile an
     /// aimed action is walking to, found again at every 5.0.
     pub(crate) destination: Option<Pos>,
-    /// What an Approach, Eat or Drink is aimed at (design §5.3).
+    /// What an aimed action is aimed at (design §5.3).
     pub(crate) target: Option<Target>,
     /// The stable ID of the target's object type.
     pub(crate) target_type: Option<u16>,
@@ -134,7 +134,7 @@ pub(crate) struct Action {
     /// Ticks in a row it had the points for its next step but couldn't take it.
     pub(crate) blocked_ticks: u32,
     /// The steps a Retreat has taken.
-    pub(crate) steps: u32,
+    pub(crate) retreat_steps: u32,
     /// The rest of the way round blocking sprites that blocked re-planning
     /// found, which the sprite keeps to while it lasts (design §3.7).
     pub(crate) committed: Option<Vec<Pos>>,
@@ -174,7 +174,7 @@ impl Action {
             started: tick,
             ticks: 0,
             blocked_ticks: 0,
-            steps: 0,
+            retreat_steps: 0,
             committed: None,
             ended: None,
             scripted,
@@ -200,7 +200,7 @@ pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
     } else if action.verb == Verb::Retreat {
         let bout = data.physiology().actions.retreat_bout;
         Progress::Walking {
-            steps_left: bout.saturating_sub(action.steps),
+            steps_left: bout.saturating_sub(action.retreat_steps),
         }
     } else {
         let steps_left = way_ahead(sprite).map_or(0, |way| way.len() as u32);
@@ -261,7 +261,7 @@ pub(crate) fn sense_and_decide(
             // what it's for (design §5.5).
             let aim = action
                 .target
-                .filter(|_| action.verb != Verb::Retreat)
+                .filter(|_| action.verb.heads_for_goal())
                 .map(|target| state.goal_for(data, flood, target));
             let there = action
                 .target
@@ -335,8 +335,8 @@ pub(crate) fn start(
     });
     let flood = sprite.flood.as_ref().expect("step 5 made the flood");
     let lost = verb == Verb::Wander && destination.is_none_or(|to| flood.cost(to).is_none());
-    let homeless = verb.is_aimed() && verb != Verb::Retreat && destination.is_none();
-    if lost || homeless || (verb == Verb::Retreat && target.is_none()) {
+    let homeless = verb.heads_for_goal() && destination.is_none();
+    if lost || homeless || (verb.is_aimed() && target.is_none()) {
         end(&mut action, id, Outcome::Failed, tick, events);
     } else if verb == Verb::Wander && destination == Some(sprite.pos) {
         // Already there.
@@ -404,7 +404,7 @@ pub(crate) fn resolve(
         let arrived = sprite
             .action
             .as_ref()
-            .filter(|a| a.verb != Verb::Retreat)
+            .filter(|a| a.verb.heads_for_goal())
             .and_then(|a| a.target)
             .is_some_and(|target| state.on_goal_tile(data, sprite.pos, target));
         let sprite = state.sprites.get_mut(id).expect("the same sprite");
@@ -654,6 +654,21 @@ fn stepped(state: &mut WorldState, id: EntityId, cost: u32, events: &mut Vec<Eve
     arrived
 }
 
+/// `sprite` had the points for a step costing `cost` tenths but couldn't
+/// take it: it banks points only up to that step's cost, and counts a
+/// blocked tick, starting the count again if that drops a committed path.
+/// Returns the blocked ticks in a row.
+fn held_up(sprite: &mut Sprite, cost: u32) -> u32 {
+    sprite.move_points = sprite.move_points.min(cost);
+    let action = sprite.action.as_mut().expect("an action");
+    action.blocked_ticks = if action.committed.take().is_some() {
+        1
+    } else {
+        action.blocked_ticks + 1
+    };
+    action.blocked_ticks
+}
+
 /// Sprite `id` had the points for its next step but couldn't take it: it
 /// banks points only up to `cost`, the step's cost, and counts a blocked
 /// tick. Blocked on its committed path, it drops the path and starts
@@ -663,17 +678,11 @@ fn stepped(state: &mut WorldState, id: EntityId, cost: u32, events: &mut Vec<Eve
 fn wait(state: &mut WorldState, data: &DataPack, id: EntityId, cost: u32, events: &mut Vec<Event>) {
     let replan_after = data.physiology().movement.replan_after;
     let sprite = state.sprites.get_mut(id).expect("the walker");
-    sprite.move_points = sprite.move_points.min(cost);
-    let action = sprite.action.as_mut().expect("an action");
-    action.blocked_ticks = if action.committed.take().is_some() {
-        1
-    } else {
-        action.blocked_ticks + 1
-    };
-    if action.blocked_ticks < replan_after {
+    if held_up(sprite, cost) < replan_after {
         return;
     }
-    let destination = action.destination.expect("a walker has a destination");
+    let destination = sprite.action.as_ref().and_then(|a| a.destination);
+    let destination = destination.expect("a walker has a destination");
     let sprite = state.sprites.get(id).expect("the walker");
     let way = flood(state, data, sprite, Occupied::Closed).path_to(destination);
     let action = state
@@ -716,16 +725,12 @@ fn retreat(
         let (next, tenths) = match step_away(state, data, sprite.pos, there) {
             Away::Step(next, cost) => (next, cost * 10),
             Away::HeldUp(cost) => {
-                let replan_after = data.physiology().movement.replan_after;
-                let sprite = state.sprites.get_mut(id).expect("the retreater");
                 let tenths = cost * 10;
                 if sprite.move_points < tenths {
                     return;
                 }
-                sprite.move_points = tenths;
-                let action = sprite.action.as_mut().expect("a retreat");
-                action.blocked_ticks += 1;
-                if action.blocked_ticks >= replan_after {
+                let sprite = state.sprites.get_mut(id).expect("the retreater");
+                if held_up(sprite, tenths) >= data.physiology().movement.replan_after {
                     cornered(state, data, id, events);
                 }
                 return;
@@ -740,13 +745,11 @@ fn retreat(
         }
         state.sprites.move_to(id, next);
         moved.insert(id);
+        stepped(state, id, tenths, events);
         let sprite = state.sprites.get_mut(id).expect("the retreater");
-        sprite.move_points -= tenths;
-        sprite.did.steps += 1;
         let action = sprite.action.as_mut().expect("a retreat");
-        action.steps += 1;
-        action.blocked_ticks = 0;
-        if action.steps >= bout {
+        action.retreat_steps += 1;
+        if action.retreat_steps >= bout {
             end(action, id, Outcome::Applied, state.tick, events);
             sprite.move_points = sprite.move_points.min(tenths);
             return;
