@@ -199,6 +199,10 @@ impl Sprites {
                     "{id:?} has a locus at {value}, which isn't a number"
                 ));
             }
+            sprite
+                .brain
+                .check()
+                .map_err(|broken| format!("{id:?} {broken}"))?;
         }
         Ok(())
     }

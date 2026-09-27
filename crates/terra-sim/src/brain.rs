@@ -266,12 +266,12 @@ impl Brain {
         }
     }
 
-    /// Step 4 at `tick` (design §5.6): every link relaxes a tick; then `r`, scaled by
-    /// `learning_rate_mod`, credited back along the trace. Each entry's
-    /// verb gains η × mod × r × λ^(tick − its tick) × each concept's
-    /// activation from that concept; if the verb was aimed at a target,
-    /// its attended category gains the same from each State input. Links
-    /// stay within [−1, 1]. Returns the lessons it learned, decision links
+    /// Step 4 at `tick` (design §2.4, §5.6): `r`, scaled by
+    /// `learning_rate_mod`, is credited back along the trace, then every
+    /// link relaxes a tick. Each entry's verb gains η × mod × r × λ^(tick −
+    /// its tick) × each concept's activation from that concept; if the verb
+    /// was aimed at a target, its attended category gains the same from each
+    /// State input. Links stay within [−1, 1]. Returns the lessons it learned, decision links
     /// first: each link that moved `lesson_threshold` from birth for the first
     /// time, with whether it rose.
     pub(crate) fn learn(
@@ -281,14 +281,9 @@ impl Brain {
         learning_rate_mod: f32,
         data: &DataPack,
     ) -> Vec<(Link, bool)> {
-        let (relax, consolidate) = (
-            self.params.get(BrainParam::RelaxRate),
-            self.params.get(BrainParam::ConsolidateRate),
-        );
-        self.decision.relax(relax, consolidate);
-        self.attention.relax(relax, consolidate);
         if r == 0.0 {
-            // Relaxing only takes a link back towards birth.
+            // Relaxing only takes a link back towards birth: no lessons.
+            self.relax();
             return Vec::new();
         }
         let rate = self.params.get(BrainParam::LearningRate) * learning_rate_mod * r;
@@ -314,6 +309,7 @@ impl Brain {
                 }
             }
         }
+        self.relax();
         let threshold = data.physiology().lesson_threshold;
         let decisions: Vec<(Link, bool)> = self
             .decision
@@ -329,19 +325,52 @@ impl Brain {
         decisions.into_iter().chain(attention).collect()
     }
 
+    /// One tick of the two timescales for every link (design §5.6).
+    fn relax(&mut self) {
+        let (relax, consolidate) = (
+            self.params.get(BrainParam::RelaxRate),
+            self.params.get(BrainParam::ConsolidateRate),
+        );
+        self.decision.relax(relax, consolidate);
+        self.attention.relax(relax, consolidate);
+    }
+
+    /// Checks the brain's learned state (design §5.6): links within [−1, 1],
+    /// a felt value that's a number, and a trace within its cap.
+    pub(crate) fn check(&self) -> Result<(), String> {
+        self.decision.check()?;
+        self.attention.check()?;
+        if !self.felt.is_finite() {
+            return Err(format!("felt {}, which isn't a number", self.felt));
+        }
+        if self.trace.len() > TRACE_CAP {
+            return Err(format!(
+                "has {} trace entries, over {TRACE_CAP}",
+                self.trace.len()
+            ));
+        }
+        Ok(())
+    }
+
+    /// Sets a decision link to `w`, unchecked, to test the checks.
+    #[cfg(test)]
+    pub(crate) fn break_a_link_for_test(&mut self, w: f32) {
+        self.decision.set(0, 0, w);
+    }
+
     /// Commits this tick's trace entry at the end of step 6 (design §5.6),
-    /// if the brain decided at this tick's step 5.
+    /// if the brain decided at this tick's step 5, then drops the entries the
+    /// next step 4 would credit too little, whether it decided or not.
     pub(crate) fn commit(&mut self, tick: u64) {
-        let Some(snapshot) = self.snapshot.as_ref().filter(|s| s.tick == tick) else {
-            return;
-        };
-        self.trace.push_back(TraceEntry {
-            tick,
-            activations: snapshot.activations.clone(),
-            verb: snapshot.verb,
-            attended: snapshot.attended,
-        });
-        // Drop what the next step 4 would credit too little, oldest first.
+        if let Some(snapshot) = self.snapshot.as_ref().filter(|s| s.tick == tick) {
+            self.trace.push_back(TraceEntry {
+                tick,
+                activations: snapshot.activations.clone(),
+                verb: snapshot.verb,
+                attended: snapshot.attended,
+            });
+        }
+        // Oldest first.
         let decay = self.params.get(BrainParam::TraceDecay);
         while self
             .trace
@@ -1069,18 +1098,17 @@ mod tests {
             r#"BrainParam(param: "consolidate_rate", value: 0.001)"#,
         ]);
         decide(&mut brain, 9, Verb::Eat, None, &[("always", 1.0)]);
-        // The reward lifts w from 0 to .25; w_long is still 0.
+        // The reward lifts w from 0 to .25, then the links relax a tick
+        // (design §2.4): w += .01 × (0 − .25) and w_long += .001 × (.25 − 0),
+        // both from the values before relaxing.
         brain.learn(10, 1.0, 1.0, &data);
         let eat = |brain: &Brain| brain.decision.get(input("always"), column(Verb::Eat));
-        assert!(close(eat(&brain), 0.25), "{}", eat(&brain));
-        brain.learn(11, 0.0, 1.0, &data);
-        // w += .01 × (0 − .25); w_long += .001 × (.25 − 0), from the same old values.
         assert!(close(eat(&brain), 0.2475), "{}", eat(&brain));
         let long = brain.decision.settled(input("always"), column(Verb::Eat));
         assert!(close(long, 0.00025), "{long}");
         // In the end both settle on the same weight: c·w + r·w_long is kept,
         // so (.001 × .25 + .01 × 0) / .011.
-        for tick in 12..20_000 {
+        for tick in 11..20_000 {
             brain.learn(tick, 0.0, 1.0, &data);
         }
         assert!((eat(&brain) - 0.25 / 11.0).abs() < 1e-4, "{}", eat(&brain));
@@ -1167,5 +1195,40 @@ mod tests {
                 "{link:?} {now} {birth}"
             );
         }
+    }
+
+    #[test]
+    fn an_instinct_past_one_is_born_at_one() {
+        let brain = brain(&[
+            r#"Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.5)"#,
+            r#"AttentionInstinct(input: "hunger", category: Berry, weight: -1.2)"#,
+        ]);
+        assert_eq!(brain.decision.get(input("hunger"), column(Verb::Eat)), 1.0);
+        assert_eq!(
+            brain
+                .attention
+                .get(input("hunger"), category_column(Category::Berry)),
+            -1.0
+        );
+    }
+
+    #[test]
+    fn a_brain_that_stops_deciding_still_drops_what_no_longer_counts() {
+        // A sprite held by the hand, or on a scripted action, commits no
+        // entries, but the ones it has still fade out: 0.9^43 is the last
+        // that counts.
+        let mut brain = brain(&[r#"BrainParam(param: "trace_decay", value: 0.9)"#]);
+        decide_on(&mut brain, 0..3);
+        brain.commit(40);
+        assert_eq!(brain.trace.len(), 3, "0.9^(41 − 0) still counts");
+        brain.commit(43);
+        let ticks: Vec<u64> = brain.trace.iter().map(|e| e.tick).collect();
+        assert_eq!(
+            ticks,
+            [1, 2],
+            "at tick 44's step 4, tick 0's weight is 0.9^44"
+        );
+        brain.commit(100);
+        assert!(brain.trace.is_empty());
     }
 }

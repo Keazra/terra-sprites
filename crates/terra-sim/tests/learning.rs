@@ -118,3 +118,36 @@ fn a_sprite_that_keeps_biting_a_thornbush_learns_it_is_bad_once() {
         .count();
     assert_eq!(times, 1, "announced once");
 }
+
+#[test]
+fn a_sprite_rewarded_for_eating_learns_eating_and_looking_at_the_bush_are_good() {
+    // Always hungry, beside a fruiting bush; every bite rewards it by 1.
+    let bush = at(2, 1);
+    let mut world = world(
+        &[".....", ".....", "....."],
+        &[(bush, "berry_bush")],
+        at(1, 1),
+        r#"InitialConcentration(chem: "hunger", value: 1.0),
+           Emitter(locus: Locus("ate"), mode: Level, gain: 1.0, chem: "reward"),
+           Instinct(inputs: [("hunger", false)], verb: Eat, weight: 0.1),
+           BrainParam(param: "learning_rate", value: 0.5),
+           BrainParam(param: "tau_base", value: 0.05),"#,
+        &[],
+    );
+    world
+        .start_object(bush, "mature", &[("fruit", 6)])
+        .expect("a bush with fruit");
+    let id = world.sprites().next().expect("the sprite").id();
+    let learned: Vec<(EntityId, Link, bool)> =
+        (0..100).flat_map(|_| lessons(&world.step())).collect();
+    let eat = Link::Decision {
+        inputs: vec![("hunger".into(), false)],
+        verb: Verb::Eat,
+    };
+    let look = Link::Attention {
+        input: "hunger".into(),
+        category: "berry_bush".into(),
+    };
+    assert!(learned.contains(&(id, eat, true)), "{learned:?}");
+    assert!(learned.contains(&(id, look, true)), "{learned:?}");
+}

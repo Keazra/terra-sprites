@@ -541,7 +541,7 @@ impl World {
         self.apply_commands(); // 1
         self.run_environment(&mut events); // 2
         let dying = self.run_biochemistry(); // 3
-        self.run_learning(&mut events); // 4
+        self.run_learning(&dying, &mut events); // 4
         self.sense_and_decide(&dying, &mut events); // 5
         self.resolve_actions(&dying, &mut events); // 6
         self.finish_tick(&dying, &mut events); // 7
@@ -688,9 +688,10 @@ impl World {
         dying
     }
 
-    /// Step 4: reinforcement from consumed reward and punishment.
-    fn run_learning(&mut self, events: &mut Vec<Event>) {
-        learning::run(&mut self.state, &self.data, events);
+    /// Step 4: reinforcement from consumed reward and punishment, for every
+    /// sprite not marked dying.
+    fn run_learning(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
+        learning::run(&mut self.state, &self.data, dying, events);
     }
 
     /// Step 5: perception, attention and decisions.
@@ -1248,5 +1249,80 @@ mod tests {
             world.step();
         }
         assert_eq!(trace_ticks(&world, id), [] as [u64; 0]);
+    }
+
+    /// A trace entry for sprite `id` at `tick`, choosing Eat with every
+    /// concept fully active.
+    fn eat_entry(world: &World, id: EntityId, tick: u64) -> crate::learning::TraceEntry {
+        let brain = &world.state.sprites.get(id).expect("the sprite").brain;
+        crate::learning::TraceEntry {
+            tick,
+            activations: vec![1.0; brain.concepts.len()],
+            verb: Some(Verb::Eat),
+            attended: None,
+        }
+    }
+
+    #[test]
+    fn a_sprite_marked_dying_learns_nothing_at_step_4() {
+        let (mut world, first, second) = field_with_sprites();
+        let reward = world.data.physiology().indices.reward;
+        for id in [first, second] {
+            let entry = eat_entry(&world, id, 0);
+            let sprite = world.state.sprites.get_mut(id).expect("a sprite");
+            sprite.brain.trace.push_back(entry);
+            sprite.body.chems[reward] = 0.5;
+        }
+        world.state.tick = 1;
+        let mut events = Vec::new();
+        learning::run(&mut world.state, &world.data, &[second], &mut events);
+        let sprite = |id| world.state.sprites.get(id).expect("a sprite");
+        assert_eq!(sprite(first).brain.felt, 0.5, "the living one learns");
+        assert_eq!(sprite(first).body.chems[reward], 0.0);
+        assert_eq!(sprite(second).brain.felt, 0.0, "the dying one doesn't");
+        assert_eq!(
+            sprite(second).body.chems[reward],
+            0.5,
+            "nor uses up its reward"
+        );
+    }
+
+    #[test]
+    fn the_state_hash_covers_every_sprite_s_learned_links() {
+        let (mut world, _, second) = field_with_sprites();
+        let entry = eat_entry(&world, second, 0);
+        let before = world.state_hash();
+        let data = world.data.clone();
+        let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
+        brain.trace.push_back(entry);
+        let traced = world.state_hash();
+        assert_ne!(traced, before, "the trace is hashed");
+        let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
+        brain.learn(1, 1.0, 1.0, &data);
+        assert_ne!(world.state_hash(), traced, "the links are hashed");
+    }
+
+    #[test]
+    fn a_learned_link_past_one_or_not_a_number_breaks_an_invariant() {
+        for broken in [1.5, f32::NAN] {
+            let (mut world, first, _) = field_with_sprites();
+            assert_eq!(world.check_invariants(), Ok(()));
+            let brain = &mut world.state.sprites.get_mut(first).expect("a sprite").brain;
+            brain.break_a_link_for_test(broken);
+            assert!(world.check_invariants().is_err(), "{broken}");
+        }
+    }
+
+    #[test]
+    fn a_felt_value_that_is_not_a_number_breaks_an_invariant() {
+        let (mut world, first, _) = field_with_sprites();
+        world
+            .state
+            .sprites
+            .get_mut(first)
+            .expect("a sprite")
+            .brain
+            .felt = f32::NAN;
+        assert!(world.check_invariants().is_err());
     }
 }
