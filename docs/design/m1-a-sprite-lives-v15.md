@@ -21,6 +21,7 @@ Decided with the owner in the design session for slice 8 ([#9](https://github.co
 | 6 | **Lab scenario files.** A lab scenario is RON text: a world (a hand-drawn map with a key, or a generated world from a preset), how many ticks to run, and the windows to count in. For each seed and window it counts applied actions by verb and target type, and deaths by cause, and the runner prints each seed and the median. The A1 test reads the same file. `terra-sim` parses it from text; only the lab example reads files. | Owner decision | §7.1 |
 | 7 | **A1's world may be shaped to meet its baseline:** a small walled arena where thornbushes outnumber berry bushes, and a sprite that starts with half its energy, so it is hungry early. The pass bar (≤ 50%) and the minimum (≥ 20 Eats in ticks 0–5k) don't change. | Owner decision | §7.3 |
 | 8 | **The thorn trap is measured, not tested in CI.** A lab scenario runs the default world for 30,000 ticks over 10 seeds and counts deaths by thornbush, on `main` and on slice 8's branch. Slice 8 passes it if the median falls to a third of `main`'s or less; if not, the fallbacks of v12 change 11 go to the owner with the numbers. Ten runs of 30 sprites are too slow for CI. | Owner decision | §5.8, §7.3 |
+| 9 | **No Approach to something the sprite is already beside.** Approach is offered only while the sprite isn't on one of its target's goal tiles, since there it would do nothing. A lonely sprite with no one about went over to whatever it attended to, and one already beside it arrived at once and chose again every tick: about 4,000 Approaches in 8,000 ticks, before learning. With learning, each meal or drink credited those Approach ticks too, together about 9× the credit of the drink itself at λ = .9, until Approach outscored drinking and the sprite died of thirst. Without the no-op, the same sprite made 1,313 Approaches and ate and drank normally. A shorter trace (λ = .5) was the alternative, and was turned down because it starves long walks of credit. | Owner decision, after measuring while building | §5.2 |
 
 ---
 
@@ -1121,7 +1122,7 @@ Every input and output has a stable, append-only ID (Appendix A). Each input bel
 
 | Kind | Verbs | Available when |
 |---|---|---|
-| **Movement** | Approach, Retreat | Any attended target, whatever its verb table says |
+| **Movement** | Approach, Retreat | Any attended target, whatever its verb table says; Approach only while the sprite isn't on one of the target's goal tiles, where it would do nothing (v15) |
 | **Interaction** | Eat, Drink, Hit, Play | The attended category's verb table includes the verb |
 | **Targetless** | Rest, Wander | Always |
 
