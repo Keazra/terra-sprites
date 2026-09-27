@@ -382,7 +382,8 @@ fn event_text(event: &Event, data: &DataPack) -> Option<String> {
         EventKind::ActionEnded { id, action, .. } => inspector::logged_line(*id, action, data),
         EventKind::ObjectSpawned { .. }
         | EventKind::ObjectRemoved { .. }
-        | EventKind::ActionStarted { .. } => None,
+        | EventKind::ActionStarted { .. }
+        | EventKind::LearnedMilestone { .. } => None,
     }
 }
 

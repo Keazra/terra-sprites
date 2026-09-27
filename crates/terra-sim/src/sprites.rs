@@ -110,11 +110,11 @@ impl Sprites {
         self.by_id.values_mut().map(|sprite| &mut sprite.body)
     }
 
-    /// Every sprite's body and brain, in ascending ID order, to change.
-    pub(crate) fn minds_mut(&mut self) -> impl Iterator<Item = (&mut Body, &mut Brain)> {
+    /// Every sprite's ID, body and brain, in ascending ID order, to change.
+    pub(crate) fn minds_mut(&mut self) -> impl Iterator<Item = (EntityId, &mut Body, &mut Brain)> {
         self.by_id
-            .values_mut()
-            .map(|sprite| (&mut sprite.body, &mut sprite.brain))
+            .iter_mut()
+            .map(|(&id, sprite)| (id, &mut sprite.body, &mut sprite.brain))
     }
 
     /// The sprite `id`, if it exists, to change.

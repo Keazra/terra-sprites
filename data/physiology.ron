@@ -67,6 +67,10 @@
     // drawn between 1 − this and 1 + this.
     spawn_variation: 0.1,
 
+    // A link that learning moves this far from the instinct it was born
+    // with is a lesson, which the event log announces once (design §5.6).
+    lesson_threshold: 0.5,
+
     // How long actions last (design §5.5): a rest in ticks, a retreat in
     // steps. An action still going at the timeout, in ticks, ends as timed out.
     actions: (rest_bout: 10, retreat_bout: 6, timeout: 60),

@@ -1,6 +1,7 @@
 //! What happened during a tick, reported by `World::step` (design §2.5).
 
 use crate::action::{ActionView, Outcome};
+use crate::brain::Link;
 use crate::map::Pos;
 use crate::objects::EntityId;
 use crate::registry::Verb;
@@ -39,6 +40,13 @@ pub enum EventKind {
         cause: DeathCause,
         /// Its age in ticks.
         age: u64,
+    },
+    /// A sprite learned a lesson (design §5.6): one of its links moved half a
+    /// point from birth for the first time, up if `good`.
+    LearnedMilestone {
+        id: EntityId,
+        link: Link,
+        good: bool,
     },
     /// An object left the world.
     ObjectRemoved {

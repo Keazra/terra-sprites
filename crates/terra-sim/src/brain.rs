@@ -141,6 +141,69 @@ pub(crate) struct Snapshot {
     pub(crate) verb: Option<Verb>,
 }
 
+/// A link, named (design §5.6): from a concept to a verb, or from a State
+/// input to a category.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Link {
+    /// A concept's link to a verb: the concept's inputs by name, each with
+    /// whether it's negated.
+    Decision {
+        inputs: Vec<(String, bool)>,
+        verb: Verb,
+    },
+    /// A State input's link to a category, as brain inputs name it (`thornbush`).
+    Attention { input: String, category: String },
+}
+
+/// A link that has just moved `lesson_threshold` from its instinct value
+/// (design §5.6): `good` if it rose.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum Lesson {
+    /// The link from the concept at `concept` in the brain to `verb`.
+    Decision {
+        concept: usize,
+        verb: Verb,
+        good: bool,
+    },
+    /// The link from the input at `input` in the pack to `category`.
+    Attention {
+        input: usize,
+        category: Category,
+        good: bool,
+    },
+}
+
+impl Lesson {
+    /// The link it's about, named, and whether it rose.
+    pub(crate) fn named(self, brain: &Brain, data: &DataPack) -> (Link, bool) {
+        let names = data.brain_inputs_in_order();
+        match self {
+            Lesson::Decision {
+                concept,
+                verb,
+                good,
+            } => {
+                let inputs = brain.concepts[concept]
+                    .iter()
+                    .map(|&(i, negated)| (names[i].name.clone(), negated))
+                    .collect();
+                (Link::Decision { inputs, verb }, good)
+            }
+            Lesson::Attention {
+                input,
+                category,
+                good,
+            } => {
+                let link = Link::Attention {
+                    input: names[input].name.clone(),
+                    category: category.name().to_string(),
+                };
+                (link, good)
+            }
+        }
+    }
+}
+
 /// What a brain did at its latest step 5, explained (design §5.9): what it
 /// could attend to, and why it's doing what it's doing.
 #[derive(Debug, Clone, PartialEq)]
@@ -232,8 +295,15 @@ impl Brain {
     /// verb gains η × mod × r × λ^(tick − its tick) × each concept's
     /// activation from that concept; if the verb was aimed at a target,
     /// its attended category gains the same from each State input. Links
-    /// stay within [−1, 1].
-    pub(crate) fn learn(&mut self, tick: u64, r: f32, learning_rate_mod: f32, data: &DataPack) {
+    /// stay within [−1, 1]. Returns the lessons it learned: links that moved
+    /// `lesson_threshold` from birth for the first time, decision links first.
+    pub(crate) fn learn(
+        &mut self,
+        tick: u64,
+        r: f32,
+        learning_rate_mod: f32,
+        data: &DataPack,
+    ) -> Vec<Lesson> {
         let (relax, consolidate) = (
             self.params.get(BrainParam::RelaxRate),
             self.params.get(BrainParam::ConsolidateRate),
@@ -241,7 +311,8 @@ impl Brain {
         self.decision.relax(relax, consolidate);
         self.attention.relax(relax, consolidate);
         if r == 0.0 {
-            return;
+            // Relaxing only takes a link back towards birth.
+            return Vec::new();
         }
         let rate = self.params.get(BrainParam::LearningRate) * learning_rate_mod * r;
         let decay = self.params.get(BrainParam::TraceDecay);
@@ -266,6 +337,24 @@ impl Brain {
                 }
             }
         }
+        let threshold = data.physiology().lesson_threshold;
+        let decisions =
+            self.decision
+                .lessons(threshold)
+                .map(|(concept, c, good)| Lesson::Decision {
+                    concept,
+                    verb: VERBS[c],
+                    good,
+                });
+        let attention =
+            self.attention
+                .lessons(threshold)
+                .map(|(input, c, good)| Lesson::Attention {
+                    input,
+                    category: Category::ALL[c],
+                    good,
+                });
+        decisions.chain(attention).collect()
     }
 
     /// Commits this tick's trace entry at the end of step 6 (design §5.6),
@@ -992,5 +1081,43 @@ mod tests {
             brain.learn(tick, 0.0, 1.0, &data);
         }
         assert!((eat(&brain) - 0.25 / 11.0).abs() < 1e-4, "{}", eat(&brain));
+    }
+
+    #[test]
+    fn a_link_that_moves_half_a_point_from_birth_is_a_lesson_once() {
+        let data = builtin();
+        let mut brain = brain(&[
+            r#"BrainParam(param: "learning_rate", value: 0.4)"#,
+            r#"BrainParam(param: "trace_decay", value: 0.5)"#,
+            r#"BrainParam(param: "relax_rate", value: 0.0)"#,
+            r#"AttentionInstinct(input: "hunger", category: Thornbush, weight: 0.3)"#,
+        ]);
+        let set = [("hunger", 1.0), ("attended_thornbush", 1.0)];
+        decide(&mut brain, 9, Verb::Eat, Some(Category::Thornbush), &set);
+        // −.4 × .5 = −.2 a time: the third takes both links past −.5 from birth.
+        assert_eq!(brain.learn(10, -1.0, 1.0, &data), []);
+        assert_eq!(brain.learn(10, -1.0, 1.0, &data), []);
+        let (eat, thornbush) = (Verb::Eat, Category::Thornbush);
+        assert_eq!(
+            brain.learn(10, -1.0, 1.0, &data),
+            [
+                Lesson::Decision {
+                    concept: input("hunger"),
+                    verb: eat,
+                    good: false
+                },
+                Lesson::Decision {
+                    concept: input("attended_thornbush"),
+                    verb: eat,
+                    good: false
+                },
+                Lesson::Attention {
+                    input: input("hunger"),
+                    category: thornbush,
+                    good: false
+                },
+            ]
+        );
+        assert_eq!(brain.learn(10, -1.0, 1.0, &data), [], "each lesson once");
     }
 }
