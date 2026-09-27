@@ -236,11 +236,12 @@ fn aimed_line(action: &ActionView, data: &DataPack) -> Option<String> {
         Verb::Approach => format!("Going over to {what}"),
         Verb::Play => format!("Going to play with {what}"),
         Verb::Hit => format!("Going to hit {what}"),
+        Verb::Retreat => format!("Backing away from {what}"),
         _ => return None,
     };
     Some(match action.progress {
         Progress::Walking { steps_left } => {
-            format!("{going} · {} to go", counted(steps_left, "tile"))
+            format!("{going} · {} to go", counted(steps_left, walked(action.verb)))
         }
         Progress::Waiting { .. } => format!("{going} · waiting to get past"),
         Progress::Resting { .. } => return None,
@@ -257,8 +258,17 @@ fn aimed_line(action: &ActionView, data: &DataPack) -> Option<String> {
         Progress::Ended(Outcome::Failed) if action.target_gone => {
             format!("Gave up: {what} was gone")
         }
+        Progress::Ended(Outcome::Blocked) if action.verb == Verb::Retreat => {
+            "Backed into a corner".into()
+        }
         Progress::Ended(outcome) => return ended_line(outcome),
     })
+}
+
+/// What a walking action counts down: a retreat, the steps of its bout;
+/// any other, the tiles of its path.
+fn walked(verb: Verb) -> &'static str {
+    if verb == Verb::Retreat { "step" } else { "tile" }
 }
 
 /// A finished action in the past tense, for the Body tab's observed list
@@ -276,15 +286,17 @@ pub(crate) fn observed_line(action: &ActionView, data: &DataPack) -> String {
         Verb::Approach => format!("Went over to {what}"),
         Verb::Play => format!("Went to play with {what}"),
         Verb::Hit => format!("Went to hit {what}"),
+        Verb::Retreat => format!("Backed away from {what}"),
         verb => verb_name(verb).to_lowercase(),
     };
     let how = match outcome {
         Outcome::Applied => {
             return match action.verb {
-                Verb::Wander | Verb::Rest | Verb::Approach => set_out,
+                Verb::Wander | Verb::Rest | Verb::Approach | Verb::Retreat => set_out,
                 _ => done_line(action, &what, data),
             };
         }
+        Outcome::Blocked if action.verb == Verb::Retreat => "was cornered".into(),
         Outcome::Failed if action.attempted => match action.verb {
             Verb::Eat | Verb::Drink => "it was empty".to_string(),
             _ => "couldn't".into(),
@@ -352,6 +364,7 @@ fn deed(action: &ActionView, what: &str, data: &DataPack) -> String {
         Verb::Play if pushes(Verb::Play) => format!("kicked {what}"),
         Verb::Play => format!("played with {what}"),
         Verb::Hit => format!("hit {what}"),
+        Verb::Retreat => format!("backed away from {what}"),
         _ => format!("got to {what}"),
     }
 }
@@ -463,7 +476,9 @@ fn exact_line(action: &ActionView, data: &DataPack) -> String {
         (None, None) => verb.to_string(),
     };
     let state = match action.progress {
-        Progress::Walking { steps_left } => format!("walking ({})", counted(steps_left, "tile")),
+        Progress::Walking { steps_left } => {
+            format!("walking ({})", counted(steps_left, walked(action.verb)))
+        }
         Progress::Waiting { blocked_ticks } => {
             format!("blocked ({})", counted(blocked_ticks, "tick"))
         }
@@ -1379,6 +1394,69 @@ mod tests {
             ),
         ];
         for (view, line) in cases {
+            assert_eq!(observed_line(&view, &pack()), line, "{view:?}");
+        }
+    }
+
+    #[test]
+    fn a_retreat_says_it_is_backing_away_and_whether_it_was_cornered() {
+        use Outcome::*;
+        use Progress::*;
+        // Object types: thornbush 3, sprite 101.
+        let sprite = |p| aimed(Verb::Retreat, Target::Sprite(EntityId(7)), 101, p);
+        let thorns = |p| aimed(Verb::Retreat, Target::Object(EntityId(77)), 3, p);
+        let gone = |view: ActionView| ActionView {
+            target_gone: true,
+            ..view
+        };
+        let cases = [
+            (
+                sprite(Walking { steps_left: 4 }),
+                "Backing away from Sprite #7 · 4 steps to go",
+                "RETREAT → sprite #7 · walking (4 steps)",
+            ),
+            (
+                thorns(Walking { steps_left: 1 }),
+                "Backing away from the thornbush · 1 step to go",
+                "RETREAT → thornbush #77 · walking (1 step)",
+            ),
+            (
+                sprite(Waiting { blocked_ticks: 2 }),
+                "Backing away from Sprite #7 · waiting to get past",
+                "RETREAT → sprite #7 · blocked (2 ticks)",
+            ),
+            (
+                sprite(Ended(Applied)),
+                "Backed away from Sprite #7",
+                "RETREAT → sprite #7 · applied",
+            ),
+            (
+                sprite(Ended(Blocked)),
+                "Backed into a corner",
+                "RETREAT → sprite #7 · blocked",
+            ),
+            (
+                gone(sprite(Ended(Failed))),
+                "Gave up: Sprite #7 was gone",
+                "RETREAT → sprite #7 · failed",
+            ),
+        ];
+        for (view, plain, exact) in cases {
+            assert_eq!(action_line(&view, false, &pack()), plain, "{view:?}");
+            assert_eq!(action_line(&view, true, &pack()), exact, "{view:?}");
+        }
+        let observed = [
+            (sprite(Ended(Applied)), "Backed away from Sprite #7"),
+            (
+                sprite(Ended(Blocked)),
+                "Backed away from Sprite #7, but was cornered",
+            ),
+            (
+                thorns(Ended(Interrupted)),
+                "Backed away from the thornbush, but changed its mind",
+            ),
+        ];
+        for (view, line) in observed {
             assert_eq!(observed_line(&view, &pack()), line, "{view:?}");
         }
     }
