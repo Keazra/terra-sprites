@@ -196,8 +196,12 @@ fn a_hit_sprite_mostly_backs_away_from_its_attacker_and_sometimes_hits_back() {
             _ => {}
         }
     }
+    // About one sprite in three hits back. The instincts alone make it one
+    // in four, but learning punishes the wander the hit interrupted, so
+    // hitting back clears the switch margin a little more often (design
+    // v15 change 10).
     assert!(
-        backed_away > 2 * hit_back && hit_back >= 3,
+        2 * backed_away >= 3 * hit_back && hit_back >= 3,
         "backed away {backed_away}, hit back {hit_back}, of 40"
     );
 }
