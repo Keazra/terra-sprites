@@ -319,3 +319,13 @@ fn a_retreat_s_progress_counts_the_steps_it_has_left() {
     assert_eq!(action.progress, Progress::Walking { steps_left: 4 });
     assert_eq!(action.destination, None, "a retreat heads for no tile");
 }
+
+#[test]
+fn a_retreat_never_cuts_a_corner_past_rock() {
+    // Rock west of it: the step south-west would cut its corner, so it
+    // takes the next most direct, south.
+    let rows = [".....", ".....", ".#...", ".....", "....."];
+    let mut world = retreating(&rows, &[(at(3, 1), "thornbush")], at(2, 2), at(3, 1));
+    world.step();
+    assert_eq!(where_is(&world), at(2, 3));
+}
