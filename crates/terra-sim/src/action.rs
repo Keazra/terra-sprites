@@ -55,12 +55,15 @@ pub enum ScriptedAction {
     Play { at: Pos },
     /// Hit the sprite on `at`, or else the object there.
     Hit { at: Pos },
+    /// Back away from the sprite on `at`, or else the object there, or else the water.
+    Retreat { at: Pos },
 }
 
 /// How far an action has got.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Progress {
-    /// On its way, with this many steps of its path left.
+    /// On its way, with this many steps of its path left, or of its
+    /// retreat's bout.
     Walking { steps_left: u32 },
     /// Held up: it had the points for its next step but couldn't take it,
     /// this many ticks in a row.
@@ -112,7 +115,7 @@ pub(crate) struct Action {
     /// Where it's heading: a Wander's destination, or the goal tile an
     /// aimed action is walking to, found again at every 5.0.
     pub(crate) destination: Option<Pos>,
-    /// What an Approach, Eat or Drink is aimed at (design §5.3).
+    /// What an aimed action is aimed at (design §5.3).
     pub(crate) target: Option<Target>,
     /// The stable ID of the target's object type.
     pub(crate) target_type: Option<u16>,
@@ -130,6 +133,8 @@ pub(crate) struct Action {
     pub(crate) ticks: u32,
     /// Ticks in a row it had the points for its next step but couldn't take it.
     pub(crate) blocked_ticks: u32,
+    /// The steps a Retreat has taken.
+    pub(crate) retreat_steps: u32,
     /// The rest of the way round blocking sprites that blocked re-planning
     /// found, which the sprite keeps to while it lasts (design §3.7).
     pub(crate) committed: Option<Vec<Pos>>,
@@ -169,6 +174,7 @@ impl Action {
             started: tick,
             ticks: 0,
             blocked_ticks: 0,
+            retreat_steps: 0,
             committed: None,
             ended: None,
             scripted,
@@ -190,6 +196,11 @@ pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
     } else if action.blocked_ticks > 0 {
         Progress::Waiting {
             blocked_ticks: action.blocked_ticks,
+        }
+    } else if action.verb == Verb::Retreat {
+        let bout = data.physiology().actions.retreat_bout;
+        Progress::Walking {
+            steps_left: bout.saturating_sub(action.retreat_steps),
         }
     } else {
         let steps_left = way_ahead(sprite).map_or(0, |way| way.len() as u32);
@@ -245,9 +256,12 @@ pub(crate) fn sense_and_decide(
             let action = sprite.action.as_ref().expect("an action");
             // An aimed action heads for its target's nearest goal tile as
             // things stand now (design §3.6), so it follows a target that
-            // moves; a target that's gone, or out of reach, ends it.
+            // moves; a target that's gone, or out of reach, ends it. A
+            // retreat heads for no goal tile, and getting out of reach is
+            // what it's for (design §5.5).
             let aim = action
                 .target
+                .filter(|_| action.verb.heads_for_goal())
                 .map(|target| state.goal_for(data, flood, target));
             let there = action
                 .target
@@ -321,7 +335,8 @@ pub(crate) fn start(
     });
     let flood = sprite.flood.as_ref().expect("step 5 made the flood");
     let lost = verb == Verb::Wander && destination.is_none_or(|to| flood.cost(to).is_none());
-    if lost || (verb.is_aimed() && destination.is_none()) {
+    let homeless = verb.heads_for_goal() && destination.is_none();
+    if lost || homeless || (verb.is_aimed() && target.is_none()) {
         end(&mut action, id, Outcome::Failed, tick, events);
     } else if verb == Verb::Wander && destination == Some(sprite.pos) {
         // Already there.
@@ -385,9 +400,11 @@ pub(crate) fn resolve(
         let sprite = state.sprites.get(id).expect("a sprite taking its turn");
         // An aimed action already on a goal tile acts where it stands: it
         // has no walking to do, so it banks no points for later (design §3.7).
+        // A retreat has no goal tile.
         let arrived = sprite
             .action
             .as_ref()
+            .filter(|a| a.verb.heads_for_goal())
             .and_then(|a| a.target)
             .is_some_and(|target| state.on_goal_tile(data, sprite.pos, target));
         let sprite = state.sprites.get_mut(id).expect("the same sprite");
@@ -415,6 +432,11 @@ pub(crate) fn resolve(
             sprite.did.rested = true;
             if action.ticks >= rest_bout {
                 end(action, id, Outcome::Applied, state.tick, events);
+            }
+        } else if action.verb == Verb::Retreat {
+            let target = action.target.expect("a retreat has a target");
+            if !moved.contains(&id) {
+                retreat(state, data, id, target, &mut moved, events);
             }
         } else if let Some(target) = action.target {
             let pos = sprite.pos;
@@ -468,13 +490,14 @@ fn shuffle(ids: &mut [EntityId], rng: &mut ChaCha8Rng) {
     }
 }
 
-/// Whether `sprite` is doing an action that walks.
+/// Whether `sprite` is doing an action that walks: to a destination, or
+/// away from its target.
 fn is_walking(sprite: &Sprite) -> bool {
     is_acting(sprite)
         && sprite
             .action
             .as_ref()
-            .is_some_and(|a| a.destination.is_some())
+            .is_some_and(|a| a.destination.is_some() || a.verb == Verb::Retreat)
 }
 
 /// The flood `sprite` would make from where it stands now, treating other
@@ -631,6 +654,21 @@ fn stepped(state: &mut WorldState, id: EntityId, cost: u32, events: &mut Vec<Eve
     arrived
 }
 
+/// `sprite` had the points for a step costing `cost` tenths but couldn't
+/// take it: it banks points only up to that step's cost, and counts a
+/// blocked tick, starting the count again if that drops a committed path.
+/// Returns the blocked ticks in a row.
+fn held_up(sprite: &mut Sprite, cost: u32) -> u32 {
+    sprite.move_points = sprite.move_points.min(cost);
+    let action = sprite.action.as_mut().expect("an action");
+    action.blocked_ticks = if action.committed.take().is_some() {
+        1
+    } else {
+        action.blocked_ticks + 1
+    };
+    action.blocked_ticks
+}
+
 /// Sprite `id` had the points for its next step but couldn't take it: it
 /// banks points only up to `cost`, the step's cost, and counts a blocked
 /// tick. Blocked on its committed path, it drops the path and starts
@@ -640,17 +678,11 @@ fn stepped(state: &mut WorldState, id: EntityId, cost: u32, events: &mut Vec<Eve
 fn wait(state: &mut WorldState, data: &DataPack, id: EntityId, cost: u32, events: &mut Vec<Event>) {
     let replan_after = data.physiology().movement.replan_after;
     let sprite = state.sprites.get_mut(id).expect("the walker");
-    sprite.move_points = sprite.move_points.min(cost);
-    let action = sprite.action.as_mut().expect("an action");
-    action.blocked_ticks = if action.committed.take().is_some() {
-        1
-    } else {
-        action.blocked_ticks + 1
-    };
-    if action.blocked_ticks < replan_after {
+    if held_up(sprite, cost) < replan_after {
         return;
     }
-    let destination = action.destination.expect("a walker has a destination");
+    let destination = sprite.action.as_ref().and_then(|a| a.destination);
+    let destination = destination.expect("a walker has a destination");
     let sprite = state.sprites.get(id).expect("the walker");
     let way = flood(state, data, sprite, Occupied::Closed).path_to(destination);
     let action = state
@@ -667,4 +699,136 @@ fn wait(state: &mut WorldState, data: &DataPack, id: EntityId, cost: u32, events
         }
         None => end(action, id, Outcome::Blocked, state.tick, events),
     }
+}
+
+/// Sprite `id`'s turn to back away from `target` (design §5.5): it steps
+/// while its points last, and is done after `retreat_bout` steps, keeping
+/// at most the last step's worth of points, as an arrival does (§3.7).
+/// With no step away it's cornered (§3.7): the retreat ends as blocked, and
+/// the sprite feels the `cornered` pulse. If sprites stand on every step
+/// away, it waits as a walker does, banking points only up to the step's
+/// cost, and is cornered after `replan_after` blocked ticks in a row.
+fn retreat(
+    state: &mut WorldState,
+    data: &DataPack,
+    id: EntityId,
+    target: Target,
+    moved: &mut BTreeSet<EntityId>,
+    events: &mut Vec<Event>,
+) {
+    let bout = data.physiology().actions.retreat_bout;
+    loop {
+        let Some((there, _)) = state.whereabouts(data, target) else {
+            return;
+        };
+        let sprite = state.sprites.get(id).expect("the retreater");
+        let (next, tenths) = match step_away(state, data, sprite.pos, there) {
+            Away::Step(next, cost) => (next, cost * 10),
+            Away::HeldUp(cost) => {
+                let tenths = cost * 10;
+                if sprite.move_points < tenths {
+                    return;
+                }
+                let sprite = state.sprites.get_mut(id).expect("the retreater");
+                if held_up(sprite, tenths) >= data.physiology().movement.replan_after {
+                    cornered(state, data, id, events);
+                }
+                return;
+            }
+            Away::Cornered => {
+                cornered(state, data, id, events);
+                return;
+            }
+        };
+        if sprite.move_points < tenths {
+            return;
+        }
+        state.sprites.move_to(id, next);
+        moved.insert(id);
+        stepped(state, id, tenths, events);
+        let sprite = state.sprites.get_mut(id).expect("the retreater");
+        let action = sprite.action.as_mut().expect("a retreat");
+        action.retreat_steps += 1;
+        if action.retreat_steps >= bout {
+            end(action, id, Outcome::Applied, state.tick, events);
+            sprite.move_points = sprite.move_points.min(tenths);
+            return;
+        }
+    }
+}
+
+/// Sprite `id`'s retreat is cornered: it ends as blocked, and the sprite
+/// feels the `cornered` pulse (design §3.7).
+fn cornered(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec<Event>) {
+    let sprite = state.sprites.get_mut(id).expect("the retreater");
+    sprite.body.incoming[data.physiology().indices.cornered] = 1.0;
+    let action = sprite.action.as_mut().expect("a retreat");
+    end(action, id, Outcome::Blocked, state.tick, events);
+}
+
+/// Which way a retreating sprite can back away.
+enum Away {
+    /// A step onto this tile, costing this much in terrain units.
+    Step(Pos, u32),
+    /// Sprites stand on every step away: the best of them would cost this much.
+    HeldUp(u32),
+    /// No step gains any distance, sprites or not.
+    Cornered,
+}
+
+/// How a sprite on `from` backs away from `there`: onto the free neighbour
+/// that gains the most Chebyshev distance from `there`, and among those the
+/// one pointing most directly away, ties going by direction order (design
+/// §5.5). A free neighbour is one physics lets it step onto with no sprite
+/// there.
+fn step_away(state: &WorldState, data: &DataPack, from: Pos, there: Pos) -> Away {
+    let now = chebyshev(from, there);
+    let away = (
+        i64::from(from.x) - i64::from(there.x),
+        i64::from(from.y) - i64::from(there.y),
+    );
+    let best = |free: bool| {
+        let mut best: Option<(Pos, u32, u16, i64)> = None;
+        for dir in Dir::ALL {
+            let Some(next) = state.map.neighbour(from, dir) else {
+                continue;
+            };
+            let Some(cost) = step_cost(&state.map, &state.objects, data, from, dir) else {
+                continue;
+            };
+            let gained = chebyshev(next, there);
+            if gained <= now || free && state.sprites.at(next).is_some() {
+                continue;
+            }
+            let directness = directness(dir, away);
+            if best.is_none_or(|(_, _, g, d)| (gained, directness) > (g, d)) {
+                best = Some((next, cost, gained, directness));
+            }
+        }
+        best
+    };
+    match (best(true), best(false)) {
+        (Some((next, cost, ..)), _) => Away::Step(next, cost),
+        (None, Some((_, cost, ..))) => Away::HeldUp(cost),
+        (None, None) => Away::Cornered,
+    }
+}
+
+/// How directly a step in `dir` points along `line`: the cosine of the
+/// angle between them, squared with its sign kept, times a factor the same
+/// for every step along that line (twice the line's squared length), so it
+/// stays an exact whole number.
+fn directness(dir: Dir, line: (i64, i64)) -> i64 {
+    let (dx, dy) = dir.offset();
+    let dot = i64::from(dx) * line.0 + i64::from(dy) * line.1;
+    // A diagonal step is √2 long: dividing the square by 2 is dividing the
+    // cosine by √2.
+    let length_squared = i64::from(dx * dx + dy * dy);
+    dot * dot.abs() * 2 / length_squared
+}
+
+/// The Chebyshev distance between two tiles: the most tiles apart they are
+/// along either axis.
+fn chebyshev(a: Pos, b: Pos) -> u16 {
+    a.x.abs_diff(b.x).max(a.y.abs_diff(b.y))
 }

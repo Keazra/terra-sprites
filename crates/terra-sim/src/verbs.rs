@@ -60,12 +60,14 @@ pub(crate) fn attempt(
             Effect::Signal(party, locus) => {
                 if let Some(sprite) = party_sprite(actor, target, party) {
                     let index = data.locus_index(locus).expect("a checked effect");
-                    state
-                        .sprites
-                        .get_mut(sprite)
-                        .expect("a sprite")
-                        .body
-                        .incoming[index] = 1.0;
+                    let body = &mut state.sprites.get_mut(sprite).expect("a sprite").body;
+                    body.incoming[index] = 1.0;
+                    // A pulse on the target records the actor as its source;
+                    // the latest written counts (design §3.5.2).
+                    match party {
+                        Party::Target => body.incoming_sources.insert(index, actor),
+                        Party::Actor => body.incoming_sources.remove(&index),
+                    };
                 }
             }
             Effect::Push(tiles) => {

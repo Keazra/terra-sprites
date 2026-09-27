@@ -94,12 +94,14 @@ pub(crate) struct Movement {
     pub(crate) replan_after: u32,
 }
 
-/// How long actions last (design §5.5), in ticks.
+/// How long actions last (design §5.5).
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Actions {
-    /// How long a Rest lasts.
+    /// How long a Rest lasts, in ticks.
     pub(crate) rest_bout: u32,
+    /// How many steps a Retreat takes.
+    pub(crate) retreat_bout: u32,
     /// How long any action may last.
     pub(crate) timeout: u32,
 }
@@ -304,6 +306,9 @@ impl PhysiologyEntry {
                 return Err(format!("`{name}` must be at least 1 tick"));
             }
         }
+        if self.actions.retreat_bout == 0 {
+            return Err("`actions.retreat_bout` must be at least 1 step".into());
+        }
 
         Ok(Physiology {
             newborn,
@@ -369,11 +374,17 @@ pub(crate) struct Indices {
     pub(crate) resting: usize,
     /// The receptor target that scales the brain's temperatures (design §5.3, §5.5).
     pub(crate) exploration_mod: usize,
+    /// The pulse a retreat that finds no step away fires (design §3.7).
+    pub(crate) cornered: usize,
+    /// The pulse whose source is the attacker, the Sprite candidate while
+    /// it's live (design §3.6).
+    pub(crate) was_hit: usize,
 }
 
 impl Indices {
-    /// Finds each physical chemical and body sensor physiology needs, and
-    /// the receptor target the brain reads, or says which file lacks one.
+    /// Finds each physical chemical and body sensor physiology needs, the
+    /// receptor target the brain reads, and the pulses a cornered retreat
+    /// fires and an attacker is known by, or says which file lacks one.
     pub(crate) fn find(
         chemicals: &[Chemical],
         loci: &[Locus],
@@ -409,6 +420,11 @@ impl Indices {
                     )
                 })
         };
+        let pulse = |name: &str| {
+            loci.iter()
+                .position(|l| l.name == name && l.kind == LocusKind::Pulse)
+                .ok_or_else(|| ("loci.ron", format!("sprites need a pulse called `{name}`")))
+        };
         Ok(Indices {
             energy: chem("energy")?,
             hydration: chem("hydration")?,
@@ -422,6 +438,8 @@ impl Indices {
             moving: sensor("moving")?,
             resting: sensor("resting")?,
             exploration_mod: target("exploration_mod")?,
+            cornered: pulse("cornered")?,
+            was_hit: pulse("was_hit")?,
         })
     }
 }

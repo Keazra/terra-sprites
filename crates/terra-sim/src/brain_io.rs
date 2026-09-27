@@ -1,6 +1,6 @@
 //! The brain's I/O registry (design §5.2, Appendix A): every brain input, with
 //! its stable ID. The State inputs come from `brain_io.ron`; the Target inputs
-//! are fixed here, after them, because attention gives them their meaning.
+//! are fixed here, because attention gives them their meaning.
 
 use serde::{Deserialize, Serialize};
 
@@ -16,8 +16,12 @@ pub(crate) const BRAIN_IO: &str = "brain_io.ron";
 #[serde(transparent)]
 pub(crate) struct InputId(pub(crate) u16);
 
-/// The first Target input's ID. State inputs are numbered below it.
-const FIRST_TARGET: u16 = 36;
+/// The IDs kept for Target inputs, the first of them used from
+/// `FIRST_TARGET` up. State inputs take any other ID from 1.
+const TARGET_IDS: std::ops::RangeInclusive<u16> = 36..=63;
+
+/// The first Target input's ID.
+const FIRST_TARGET: u16 = *TARGET_IDS.start();
 
 /// What a brain input reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,9 +71,10 @@ fn target_inputs() -> impl Iterator<Item = (String, Source)> {
         ])
 }
 
-/// Every brain input, in ID order: the State inputs `entries` list, then
-/// the Target inputs. An entry that reads anything but a drive, a hormone, a
-/// body sensor or a pulse, or clashes with another input, is an error.
+/// Every brain input, in ID order: the State inputs `entries` list, and the
+/// Target inputs. An entry that reads anything but a drive, a hormone, a
+/// body sensor or a pulse, takes an ID kept for Target inputs, or clashes
+/// with another input, is an error.
 pub(crate) fn brain_inputs(
     entries: Vec<InputEntry>,
     chemicals: &[Chemical],
@@ -110,12 +115,13 @@ pub(crate) fn brain_inputs(
                 LocusRef::Locus(locus.id)
             }
         };
-        if entry.id == 0 || entry.id >= FIRST_TARGET {
+        if entry.id == 0 || TARGET_IDS.contains(&entry.id) {
             return Err(invalid(format!(
-                "`{}` has the id {}, but State inputs are numbered 1 to {}",
+                "`{}` has the id {}, but State inputs are numbered from 1, and {} to {} are kept for Target inputs",
                 entry.name,
                 entry.id,
-                FIRST_TARGET - 1
+                TARGET_IDS.start(),
+                TARGET_IDS.end()
             )));
         }
         inputs.push(BrainInput {
@@ -124,7 +130,6 @@ pub(crate) fn brain_inputs(
             source: Source::State(source),
         });
     }
-    inputs.sort_by_key(|input| input.id);
     inputs.extend(
         target_inputs()
             .zip(FIRST_TARGET..)
@@ -134,6 +139,7 @@ pub(crate) fn brain_inputs(
                 source,
             }),
     );
+    inputs.sort_by_key(|input| input.id);
     check_unique(
         BRAIN_IO,
         inputs.iter().map(|input| (input.id.0, input.name.as_str())),

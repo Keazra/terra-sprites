@@ -76,6 +76,12 @@ impl Verb {
         matches!(self, Verb::Approach | Verb::Retreat) || self.is_interaction()
     }
 
+    /// Whether the verb walks to a goal tile of its target (design §3.6,
+    /// §5.5): an aimed verb other than Retreat, which backs away from it.
+    pub(crate) fn heads_for_goal(self) -> bool {
+        self.is_aimed() && self != Verb::Retreat
+    }
+
     /// Whether the verb's ID is only reserved, for a later milestone.
     pub(crate) fn is_reserved(self) -> bool {
         matches!(self, Verb::Mate | Verb::Speak)

@@ -189,8 +189,12 @@ _Avoid_: slot, input (brain inputs are a different list)
 A locus that physiology fills in every tick, such as the sprite's age or how many sprites are near it.
 
 **Pulse**:
-A locus that marks something that just happened to the sprite, such as eating or being petted. It lasts one tick.
+A locus that marks something that just happened to the sprite, such as eating or being petted. It lasts one tick. A pulse another sprite's verb caused records that sprite as its source.
 _Avoid_: event (events are what the world reports)
+
+**Attacker**:
+The sprite whose hit a sprite has just felt: the source of its `was_hit` pulse. While the pulse lasts, the attacker is the sprite it would aim at.
+_Avoid_: aggressor, enemy
 
 **Trait**:
 A body property the genome sets, within limits and at a cost that physiology fixes: speed, sense radius or lifespan.
@@ -261,6 +265,14 @@ _Avoid_: pass, collision
 **Committed path**:
 A way around blocking sprites that a stuck sprite found, and keeps to until it arrives, is blocked again or its action ends.
 _Avoid_: detour, reroute
+
+**Retreat**:
+Backing away from a target, a step at a time, straight away from it, for a few steps. The screen says "backing away".
+_Avoid_: flee, run away (for the verb)
+
+**Cornered**:
+Said of a retreating sprite with no step that takes it further from its target. Its retreat ends, and it feels a `cornered` pulse.
+_Avoid_: trapped, stuck (a stuck walker is blocked)
 
 **Target**:
 The thing an action is aimed at, such as the berry bush a sprite is going to eat from. An action keeps the same target from start to end. Wander and Rest have none.

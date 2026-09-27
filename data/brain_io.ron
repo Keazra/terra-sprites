@@ -5,8 +5,9 @@
 // Not brain inputs: physical chemicals (the brain feels the body only through
 // drives), reward and punishment (learning signals), the `moving` and
 // `resting` sensors (as inputs they'd loop an action back into itself) and
-// receptor targets. The Target inputs, from 36 on, are fixed in code:
-// attended_berry_bush … attended_sprite, target_distance, target_adjacent.
+// receptor targets. The Target inputs are fixed in code, and IDs 36 to 63
+// are kept for them (36 to 43 so far: attended_berry_bush … attended_sprite,
+// target_distance, target_adjacent), so State inputs carry on from 64.
 [
     (id: 1,  name: "hunger",        reads: Chem("hunger")),
     (id: 2,  name: "thirst",        reads: Chem("thirst")),
@@ -46,4 +47,6 @@
     (id: 33, name: "did_hit",       reads: Locus("did_hit")),
     (id: 34, name: "petted",        reads: Locus("petted")),
     (id: 35, name: "shocked",       reads: Locus("shocked")),
+
+    (id: 64, name: "cornered",      reads: Locus("cornered")),
 ]

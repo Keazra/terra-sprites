@@ -3,7 +3,8 @@
 //! minds when a drive grows.
 
 use terra_sim::{
-    DataPack, EntityId, Event, EventKind, Genome, Map, Outcome, Pos, Scenario, Verb, World,
+    DataPack, EntityId, Event, EventKind, Genome, Map, Outcome, Pos, Scenario, ScriptedAction,
+    Verb, World,
 };
 
 const STARTER: &str = include_str!("../../../data/genomes/starter.ron");
@@ -405,4 +406,47 @@ fn a_lonely_sprite_goes_over_to_another_or_plays_with_it() {
         });
         assert!(sought_company, "seed {seed}: a lonely sprite seeks company");
     }
+}
+
+/// How much a bored starter sprite's boredom falls from playing with what's
+/// on `with`, a ball or another sprite, beside it: its boredom as the tick
+/// that plays leaves it, less its boredom the tick after, when it feels it.
+fn boredom_eased_by_playing(objects: &[(Pos, &str)], sprites_at: &[Pos], with: Pos) -> f32 {
+    let data = builtin();
+    let bored = || {
+        starter_with(
+            &[r#"InitialConcentration(chem: "boredom", value: 0.9)"#],
+            &data,
+        )
+    };
+    let me = at(1, 1);
+    let mut sprites = vec![(me, Some(bored()))];
+    sprites.extend(sprites_at.iter().map(|&pos| (pos, Some(bored()))));
+    let scripted = [(me, ScriptedAction::Play { at: with })];
+    let scenario = Scenario {
+        map: Map::from_ascii(&[".....", ".....", "....."], &data).expect("valid drawing"),
+        objects,
+        sprites: &sprites,
+        scripted: &scripted,
+    };
+    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    let boredom = |world: &World| {
+        let sprite = world.sprite_at(me).expect("the player");
+        sprite.chemical("boredom").expect("boredom")
+    };
+    world.step();
+    let before = boredom(&world);
+    world.step();
+    before - boredom(&world)
+}
+
+#[test]
+fn playing_with_another_sprite_eases_boredom_much_less_than_kicking_a_ball() {
+    let kick = boredom_eased_by_playing(&[(at(2, 1), "ball")], &[], at(2, 1));
+    let social = boredom_eased_by_playing(&[], &[at(2, 1)], at(2, 1));
+    assert!(kick > 0.4, "a kick eases boredom by .5: {kick}");
+    assert!(
+        social > 0.1 && social < kick / 3.0,
+        "social play eases it by .15, less than a third as much: {social}"
+    );
 }

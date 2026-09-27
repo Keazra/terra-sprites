@@ -213,6 +213,7 @@ impl Flood {
         &self,
         ground: Ground,
         me: EntityId,
+        attacker: Option<EntityId>,
     ) -> BTreeMap<Category, (Target, u32)> {
         let map = ground.map;
         let mut best: BTreeMap<Category, (u32, u64, Target)> = BTreeMap::new();
@@ -256,9 +257,20 @@ impl Flood {
                 }
             }
         }
-        best.into_iter()
+        let mut candidates: BTreeMap<Category, (Target, u32)> = best
+            .into_iter()
             .map(|(category, (cost, _, target))| (category, (target, cost)))
-            .collect()
+            .collect();
+        // While it feels a hit, the Sprite candidate is the attacker, if
+        // it can reach it (design §3.6).
+        let attacker = attacker.filter(|&id| id != me).and_then(|id| {
+            let pos = ground.sprites.get(id)?.pos;
+            Some((Target::Sprite(id), self.goal_cost(map, pos, false)?))
+        });
+        if let Some(attacker) = attacker {
+            candidates.insert(Category::Sprite, attacker);
+        }
+        candidates
     }
 
     /// The cost of the cheapest way to a goal tile of a thing on `pos`: a
@@ -373,6 +385,16 @@ mod tests {
         objects: &[(Pos, &str)],
         sprites: &[Pos],
     ) -> BTreeMap<Category, (Target, u32)> {
+        candidates_hit_by(rows, objects, sprites, None)
+    }
+
+    /// `candidates_of`, for a sprite 1 that feels a hit by `attacker`.
+    fn candidates_hit_by(
+        rows: &[&str],
+        objects: &[(Pos, &str)],
+        sprites: &[Pos],
+        attacker: Option<EntityId>,
+    ) -> BTreeMap<Category, (Target, u32)> {
         let (map, objects, sprites_placed, data) = parts_with(rows, objects, sprites);
         let ground = Ground {
             map: &map,
@@ -381,7 +403,7 @@ mod tests {
             data: &data,
         };
         let flood = Flood::new(ground, sprites[0], 10, Occupied::Penalty(30), 0);
-        flood.candidates(ground, EntityId(1))
+        flood.candidates(ground, EntityId(1), attacker)
     }
 
     #[test]
@@ -429,6 +451,21 @@ mod tests {
         let found = candidates_of(&rows, &berries, &[at(2, 0)]);
         // Taken from beside it, one diagonal step away.
         assert_eq!(found[&Category::Berry], (Target::Object(EntityId(102)), 14));
+    }
+
+    #[test]
+    fn a_hit_sprite_s_sprite_candidate_is_its_attacker_if_it_can_reach_it() {
+        let sprites = [at(0, 0), at(1, 0), at(4, 0)];
+        let found = candidates_hit_by(&["....."], &[], &sprites, Some(EntityId(3)));
+        assert_eq!(found[&Category::Sprite].0, Target::Sprite(EntityId(3)));
+    }
+
+    #[test]
+    fn an_attacker_out_of_reach_leaves_the_nearest_sprite_the_candidate() {
+        // The attacker is walled off, across rock.
+        let sprites = [at(0, 0), at(1, 0), at(4, 0)];
+        let found = candidates_hit_by(&["...#."], &[], &sprites, Some(EntityId(3)));
+        assert_eq!(found[&Category::Sprite], (Target::Sprite(EntityId(2)), 0));
     }
 
     #[test]
