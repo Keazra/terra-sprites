@@ -701,6 +701,7 @@ impl World {
     /// Step 6: movement and verb effects, then trace entries.
     fn resolve_actions(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
         action::resolve(&mut self.state, &self.data, dying, events);
+        learning::commit(&mut self.state);
     }
 
     /// Step 7: death check #2 marks the sprites step 6's verbs injured to 1;
@@ -1196,5 +1197,56 @@ mod tests {
             .expect("the bush");
         world.state.objects.get_mut(id).expect("the bush").counters[0] = 7;
         assert!(world.check_invariants().is_err());
+    }
+
+    /// A sprite of `genes` on (1, 1) of the field with a bush, doing
+    /// `script` first.
+    fn field_with_one(genes: &str, script: &[ScriptedAction]) -> (World, EntityId) {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let rows = [".......", ".......", ".......", ".....~.", "......."];
+        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
+        let text = format!("(format: 1, genes: [{genes}])");
+        let genome = Genome::from_ron(&text, &data).expect("a valid genome");
+        let at = Pos { x: 1, y: 1 };
+        let scripted: Vec<(Pos, ScriptedAction)> = script.iter().map(|&s| (at, s)).collect();
+        let scenario = Scenario {
+            map,
+            objects: &[(Pos { x: 2, y: 2 }, "berry_bush")],
+            sprites: &[(at, Some(genome))],
+            scripted: &scripted,
+        };
+        let world = World::from_scenario(scenario, data, 7).expect("valid scenario");
+        let id = world.sprites().next().expect("the sprite").id();
+        (world, id)
+    }
+
+    /// The ticks of the entries in sprite `id`'s trace, oldest first.
+    fn trace_ticks(world: &World, id: EntityId) -> Vec<u64> {
+        let sprite = world.state.sprites.get(id).expect("the sprite");
+        sprite.brain.trace.iter().map(|entry| entry.tick).collect()
+    }
+
+    #[test]
+    fn a_deciding_sprite_adds_one_trace_entry_every_tick_even_while_its_action_continues() {
+        // It rests for 10 ticks: one choice, then 4 ticks carrying on.
+        let (mut world, id) = field_with_one(
+            r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0)"#,
+            &[],
+        );
+        let started = (0..5)
+            .flat_map(|_| world.step())
+            .filter(|e| matches!(e.kind, EventKind::ActionStarted { .. }))
+            .count();
+        assert_eq!(started, 1, "one rest, still going");
+        assert_eq!(trace_ticks(&world, id), [0, 1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn a_sprite_on_a_scripted_action_adds_no_trace_entries() {
+        let (mut world, id) = field_with_one("", &[ScriptedAction::Rest]);
+        for _ in 0..5 {
+            world.step();
+        }
+        assert_eq!(trace_ticks(&world, id), [] as [u64; 0]);
     }
 }
