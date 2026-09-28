@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 
-use crate::brain::VERBS;
+use crate::brain::{Learned, VERBS};
 use crate::data::DataPack;
 use crate::events::{Event, EventKind};
 use crate::objects::EntityId;
@@ -84,9 +84,8 @@ pub(crate) struct Experience {
     pub(crate) new_things: f32,
     /// The sprites it remembers (design v18 §5.6), by ID.
     pub(crate) individuals: BTreeMap<EntityId, Individual>,
-    /// Which learned values have been lessons, by their place in the brain's
-    /// list of what it learns.
-    pub(crate) taught: BTreeSet<usize>,
+    /// Which learned values have been lessons (design §5.6).
+    pub(crate) taught: BTreeSet<Learned>,
     /// Each need's level at the last step 4, to read its relief from.
     pub(crate) needs_before: Option<Vec<f32>>,
 }

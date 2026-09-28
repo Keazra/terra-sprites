@@ -178,7 +178,7 @@ pub(crate) struct Snapshot {
 /// What something learned is about (design v18 §5.9): a kind of thing, named
 /// as brain inputs name categories (`berry_bush`, and `sprite` for sprites
 /// in general), or a particular sprite.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum Thing {
     Kind(String),
     Sprite(EntityId),
@@ -193,7 +193,7 @@ impl From<&str> for Thing {
 
 /// Something a sprite has learned, named (design §5.6, §5.9). Needs are
 /// named as brain inputs name them (`hunger`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum Learned {
     /// What a thing is worth: for a need, or in general (`None`).
     Worth { thing: Thing, need: Option<String> },
@@ -415,13 +415,16 @@ impl Brain {
     }
 
     /// The learned values that are `lesson_threshold` or more from 0 for the
-    /// first time, as `(learned, rose)`, in listed order. Each is marked, so
-    /// it's a lesson only once (design §5.6).
+    /// first time, as `(learned, rose)`, in listed order. Each is marked by
+    /// what it's about, so it's a lesson only once (design §5.6), however
+    /// the sprites it remembers come and go (design v18).
     fn lessons(&mut self, data: &DataPack) -> Vec<(Learned, bool)> {
         let threshold = data.physiology().lesson_threshold;
         let mut found = Vec::new();
-        for (i, learned) in self.learned(data).into_iter().enumerate() {
-            if learned.amount.abs() >= threshold && self.experience.taught.insert(i) {
+        for learned in self.learned(data) {
+            if learned.amount.abs() >= threshold
+                && self.experience.taught.insert(learned.learned.clone())
+            {
                 found.push((learned.learned, learned.amount > 0.0));
             }
         }
@@ -564,12 +567,6 @@ impl Brain {
                 amount: value,
             });
         }
-        memory.push(Memory {
-            learned: Learned::Fear {
-                thing: thing(Category::Sprite),
-            },
-            amount: in_general.fear,
-        });
         for (&category, habits) in Category::ALL.iter().zip(&self.experience.habits) {
             for (&verb, &value) in VERBS.iter().zip(habits) {
                 let learned = Learned::Habit {
@@ -614,6 +611,14 @@ impl Brain {
                 memory.push(Memory { learned, amount });
             }
         }
+        // Fear of sprites in general comes of the sprites above, so it's
+        // listed, and a lesson, after them.
+        memory.push(Memory {
+            learned: Learned::Fear {
+                thing: thing(Category::Sprite),
+            },
+            amount: in_general.fear,
+        });
         memory
     }
 
