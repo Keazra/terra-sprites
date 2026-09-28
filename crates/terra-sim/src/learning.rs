@@ -69,6 +69,10 @@ const KINDS: usize = Category::ALL.len();
 pub(crate) struct Experience {
     /// Worth for each need, in the pack's needs order, by category (0 to 1).
     pub(crate) worth: Vec<[f32; KINDS]>,
+    /// General good, from `reward`, by category (0 to 1).
+    pub(crate) good: [f32; KINDS],
+    /// Bad, from `punishment`, by category (−1 to 0).
+    pub(crate) bad: [f32; KINDS],
     /// Each need's level at the last step 4, to read its relief from.
     pub(crate) needs_before: Option<Vec<f32>>,
 }
@@ -78,6 +82,8 @@ impl Experience {
     pub(crate) fn new(needs: usize) -> Experience {
         Experience {
             worth: vec![[0.0; KINDS]; needs],
+            good: [0.0; KINDS],
+            bad: [0.0; KINDS],
             needs_before: None,
         }
     }
@@ -92,10 +98,13 @@ pub(crate) struct Touch {
 }
 
 /// What step 4 reads for one sprite (design §5.6).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct Signals {
     /// Each need's level now, in the pack's needs order.
     pub(crate) needs: Vec<f32>,
+    /// The general good and bad channels: `reward` and `punishment`.
+    pub(crate) reward: f32,
+    pub(crate) punishment: f32,
     /// Whether a `was_hit` pulse is live: its attacker is the thing touched
     /// if the sprite touched nothing itself.
     pub(crate) attacked: bool,
@@ -156,12 +165,14 @@ pub(crate) fn run(
         .minds_mut()
         .filter(|(id, ..)| !dying.contains(id));
     for (id, body, brain) in living {
-        let r = body.chems[indices.reward] - body.chems[indices.punishment];
+        let (reward, punishment) = (body.chems[indices.reward], body.chems[indices.punishment]);
         body.chems[indices.reward] = 0.0;
         body.chems[indices.punishment] = 0.0;
-        brain.felt = r;
+        brain.felt = reward - punishment;
         let signals = Signals {
             needs: brain.need_levels(body, data),
+            reward,
+            punishment,
             attacked: body.loci[indices.was_hit] > 0.0,
         };
         let rate = body.loci[indices.learning_rate_mod];

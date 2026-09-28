@@ -1311,7 +1311,7 @@ mod tests {
         let needs = data.need_places().len();
         let hunger = |level| crate::learning::Signals {
             needs: [vec![level], vec![0.0; needs - 1]].concat(),
-            attacked: false,
+            ..Default::default()
         };
         brain.learn(0, &hunger(1.0), 1.0, &data);
         let touched = world.state_hash();
