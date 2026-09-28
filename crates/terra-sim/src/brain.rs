@@ -168,7 +168,7 @@ pub enum Learned {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Memory {
     pub learned: Learned,
-    pub value: f32,
+    pub amount: f32,
 }
 
 /// How many learned things the memory lists (design §5.9).
@@ -344,8 +344,8 @@ impl Brain {
         let threshold = data.physiology().lesson_threshold;
         let mut found = Vec::new();
         for (i, learned) in self.learned(data).into_iter().enumerate() {
-            if learned.value.abs() >= threshold && self.experience.taught.insert(i) {
-                found.push((learned.learned, learned.value > 0.0));
+            if learned.amount.abs() >= threshold && self.experience.taught.insert(i) {
+                found.push((learned.learned, learned.amount > 0.0));
             }
         }
         found
@@ -419,9 +419,9 @@ impl Brain {
     /// five (design §5.9); ties keep the order they're listed in.
     pub(crate) fn memory(&self, data: &DataPack) -> Vec<Memory> {
         let mut memory = self.learned(data);
-        memory.retain(|m| m.value != 0.0);
+        memory.retain(|m| m.amount != 0.0);
         // A stable sort keeps a tie in listed order.
-        memory.sort_by(|a, b| b.value.abs().total_cmp(&a.value.abs()));
+        memory.sort_by(|a, b| b.amount.abs().total_cmp(&a.amount.abs()));
         memory.truncate(MEMORY_SIZE);
         memory
     }
@@ -439,7 +439,7 @@ impl Brain {
                         thing: category.name().to_string(),
                         need: Some(inputs[place].name.clone()),
                     },
-                    value,
+                    amount: value,
                 });
             }
         }
@@ -449,13 +449,19 @@ impl Brain {
                 thing: thing(category),
                 need: None,
             };
-            memory.push(Memory { learned, value });
+            memory.push(Memory {
+                learned,
+                amount: value,
+            });
         }
         for (&category, &value) in Category::ALL.iter().zip(&self.experience.bad) {
             let learned = Learned::Bad {
                 thing: thing(category),
             };
-            memory.push(Memory { learned, value });
+            memory.push(Memory {
+                learned,
+                amount: value,
+            });
         }
         for (&category, habits) in Category::ALL.iter().zip(&self.experience.habits) {
             for (&verb, &value) in VERBS.iter().zip(habits) {
@@ -463,12 +469,15 @@ impl Brain {
                     thing: thing(category),
                     verb,
                 };
-                memory.push(Memory { learned, value });
+                memory.push(Memory {
+                    learned,
+                    amount: value,
+                });
             }
         }
         memory.push(Memory {
             learned: Learned::NewThings,
-            value: self.experience.new_things,
+            amount: self.experience.new_things,
         });
         memory
     }
@@ -599,7 +608,7 @@ impl Brain {
         };
         if let (Some((verb, _)), Some(category)) = (decision, snapshot.attended) {
             let worth = self.params.get(BrainParam::ValueGain)
-                * self.value(category, &snapshot.inputs, data);
+                * self.worth(category, &snapshot.inputs, data);
             let side = match verb {
                 Verb::Retreat => -1.0,
                 Verb::Rest | Verb::Wander => 0.0,
@@ -692,7 +701,7 @@ impl Brain {
                     .iter()
                     .map(|&i| inputs[i] * self.attention.get(i, c))
                     .sum();
-                let worth = value_gain * self.value(category, inputs, data);
+                let worth = value_gain * self.worth(category, inputs, data);
                 let curious = curiosity * self.novelty(category) * boldness;
                 (
                     category,
@@ -752,7 +761,7 @@ impl Brain {
             }
         }
         if let Some(category) = aimed {
-            let worth = self.params.get(BrainParam::ValueGain) * self.value(category, inputs, data);
+            let worth = self.params.get(BrainParam::ValueGain) * self.worth(category, inputs, data);
             let habits = &self.experience.habits[kind(category)];
             for ((score, verb), habit) in scores.iter_mut().zip(VERBS).zip(habits) {
                 *score += habit
@@ -769,7 +778,7 @@ impl Brain {
     /// What `category` is worth to the sprite now (design §5.6): each need's
     /// level, from `inputs`, times its worth for that need, plus its general
     /// good and its bad.
-    fn value(&self, category: Category, inputs: &[f32], data: &DataPack) -> f32 {
+    fn worth(&self, category: Category, inputs: &[f32], data: &DataPack) -> f32 {
         let c = kind(category);
         let experience = &self.experience;
         let for_needs: f32 = data

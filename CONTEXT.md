@@ -345,8 +345,8 @@ The need whose instinct did most to make a sprite choose a verb. A fruitless try
 _Avoid_: reason, goal
 
 **Familiarity**:
-How well a sprite knows a kind of thing, from having attended to it. Something unfamiliar is new to it.
-_Avoid_: novelty (its opposite), knowledge
+How well a sprite knows a kind of thing, from having attended to it. Its opposite is **novelty**: how new the kind still is to the sprite.
+_Avoid_: knowledge
 
 **Curiosity**:
 A sprite's pull towards kinds of thing that are new to it. Being hurt when it investigates teaches it that new things are bad.

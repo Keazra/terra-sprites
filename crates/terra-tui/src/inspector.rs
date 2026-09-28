@@ -617,15 +617,15 @@ fn brain_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
     let remembered: Vec<_> = sprite
         .memory()
         .into_iter()
-        .filter(|m| level(m.value.abs()) != ".00")
+        .filter(|m| level(m.amount.abs()) != ".00")
         .collect();
     if !remembered.is_empty() {
         lines.push(String::new());
         lines.push(" MEMORY".into());
     }
     for memory in remembered {
-        let value = signed_level(memory.value);
-        lines.extend(scored("   ", &learned_name(&memory.learned), &value));
+        let amount = signed_level(memory.amount);
+        lines.extend(scored("   ", &learned_name(&memory.learned), &amount));
     }
     lines.into_iter().map(Line::from).collect()
 }

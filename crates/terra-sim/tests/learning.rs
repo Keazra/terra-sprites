@@ -83,7 +83,7 @@ fn memory(world: &World) -> Vec<(Learned, f32)> {
     sprite
         .memory()
         .into_iter()
-        .map(|m| (m.learned, m.value))
+        .map(|m| (m.learned, m.amount))
         .collect()
 }
 
