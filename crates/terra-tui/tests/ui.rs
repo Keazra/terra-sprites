@@ -791,19 +791,33 @@ fn the_event_log_shows_every_play_and_hit_and_whatever_hurt_a_sprite() {
     );
 }
 
+/// The event log's rows, newest first, once an app on `world` has recorded a
+/// lesson for each of `lessons`: (tick, sprite ID, what it learned, good).
+fn logged_lessons(world: &World, lessons: Vec<(u64, u64, Learned, bool)>) -> Vec<String> {
+    let mut app = app_for(world, Theme::cp437(), 100, 30);
+    let events: Vec<Event> = lessons
+        .into_iter()
+        .map(|(tick, id, learned, good)| Event {
+            tick,
+            kind: EventKind::LearnedMilestone {
+                id: EntityId(id),
+                learned,
+                good,
+            },
+        })
+        .collect();
+    app.record(&events, world);
+    let screen = lines(&render(&app, world, 100, 30));
+    screen[25..25 + events.len()]
+        .iter()
+        .map(|row| inside(row).to_string())
+        .collect()
+}
+
 #[test]
 fn the_event_log_says_what_a_sprite_learned_in_plain_words() {
     // Design v16 §6.1.
     let world = garden(pack());
-    let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    let learned = |tick, id, learned, good| Event {
-        tick,
-        kind: EventKind::LearnedMilestone {
-            id: EntityId(id),
-            learned,
-            good,
-        },
-    };
     let thorns_bad = Learned::Bad {
         thing: "thornbush".into(),
     };
@@ -815,16 +829,14 @@ fn the_event_log_says_what_a_sprite_learned_in_plain_words() {
         thing: "ball".into(),
         verb: Verb::Eat,
     };
-    app.record(
-        &[
-            learned(30, 12, thorns_bad, false),
-            learned(31, 12, water_for_thirst, true),
-            learned(32, 9, eating_balls, false),
-        ],
+    let log = logged_lessons(
         &world,
+        vec![
+            (30, 12, thorns_bad, false),
+            (31, 12, water_for_thirst, true),
+            (32, 9, eating_balls, false),
+        ],
     );
-    let screen = lines(&render(&app, &world, 100, 30));
-    let log: Vec<&str> = screen[25..28].iter().map(|row| inside(row)).collect();
     assert_eq!(
         log,
         [
@@ -847,15 +859,6 @@ fn a_lesson_words_a_kind_of_thing_as_its_object_type_names_it() {
         .replace(balls, "");
     let pack = DataPack::from_sources(&builtin_with("objects.ron", &objects)).expect("valid pack");
     let world = garden(pack);
-    let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    let learned = |tick, id, learned, good| Event {
-        tick,
-        kind: EventKind::LearnedMilestone {
-            id: EntityId(id),
-            learned,
-            good,
-        },
-    };
     let thorns_bad = Learned::Bad {
         thing: "thornbush".into(),
     };
@@ -867,16 +870,14 @@ fn a_lesson_words_a_kind_of_thing_as_its_object_type_names_it() {
         thing: "ball".into(),
         verb: Verb::Play,
     };
-    app.record(
-        &[
-            learned(30, 12, thorns_bad, false),
-            learned(31, 12, ball_for_boredom, true),
-            learned(32, 9, playing_with_balls, true),
-        ],
+    let log = logged_lessons(
         &world,
+        vec![
+            (30, 12, thorns_bad, false),
+            (31, 12, ball_for_boredom, true),
+            (32, 9, playing_with_balls, true),
+        ],
     );
-    let screen = lines(&render(&app, &world, 100, 30));
-    let log: Vec<&str> = screen[25..28].iter().map(|row| inside(row)).collect();
     assert_eq!(
         log,
         [
@@ -1247,7 +1248,7 @@ fn the_attention_marker_shades_the_one_thing_the_selected_sprite_attends_to() {
 
 #[test]
 fn the_brain_tab_shows_memory_before_the_first_decision() {
-    // Design v17 §6.1. A scripted bite at tick 0 pricks; at tick 1, still on
+    // Design v17 §6.1. A scripted bite at tick 0 hurts; at tick 1, still on
     // its scripted rest, it learns thornbushes are bad: .8 × a punishment of 1.
     let objects = [(Pos { x: 3, y: 3 }, "thornbush")];
     let scripted = [

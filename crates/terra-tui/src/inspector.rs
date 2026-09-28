@@ -569,7 +569,7 @@ const CONCEPTS_SHOWN: usize = 5;
 /// which it can have before it first decides.
 fn brain_tab(sprite: &SpriteView, data: &DataPack) -> Vec<Line<'static>> {
     let mut lines = match sprite.explain() {
-        Some(explained) => decided(&explained),
+        Some(explained) => explained_lines(&explained),
         None => vec![" Nothing decided yet".to_string()],
     };
     // What has learned only a rounding's worth has nothing worth showing.
@@ -593,7 +593,7 @@ fn brain_tab(sprite: &SpriteView, data: &DataPack) -> Vec<Line<'static>> {
 /// to, with its score, the attended one marked; then the verb chosen, with
 /// its score, and the concepts adding most to it, largest first. A snapshot
 /// always has a verb; "none" only guards against one that doesn't.
-fn decided(explained: &Explanation) -> Vec<String> {
+fn explained_lines(explained: &Explanation) -> Vec<String> {
     let mut lines = vec![" ATTENTION".to_string()];
     if explained.attention.is_empty() {
         lines.push("   nothing in sight".into());
