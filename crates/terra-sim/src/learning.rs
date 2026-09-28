@@ -76,6 +76,10 @@ pub(crate) struct Experience {
     pub(crate) bad: [f32; KINDS],
     /// Habits: doing each verb, in `VERBS` order, to each category.
     pub(crate) habits: [[f32; VERBS.len()]; KINDS],
+    /// How familiar each category is (0 to 1).
+    pub(crate) familiarity: [f32; KINDS],
+    /// The worth of new things.
+    pub(crate) new_things: f32,
     /// Each need's level at the last step 4, to read its relief from.
     pub(crate) needs_before: Option<Vec<f32>>,
 }
@@ -88,6 +92,8 @@ impl Experience {
             good: [0.0; KINDS],
             bad: [0.0; KINDS],
             habits: [[0.0; VERBS.len()]; KINDS],
+            familiarity: [0.0; KINDS],
+            new_things: 0.0,
             needs_before: None,
         }
     }
@@ -99,6 +105,8 @@ impl Experience {
 pub(crate) struct Touch {
     pub(crate) tick: u64,
     pub(crate) category: Category,
+    /// How new the category was to the sprite then (design §5.6).
+    pub(crate) novelty: f32,
 }
 
 /// What step 4 reads for one sprite (design §5.6).

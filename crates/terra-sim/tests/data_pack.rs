@@ -786,7 +786,7 @@ fn every_brain_parameter_has_a_range_and_a_default_within_it() {
 #[test]
 fn the_brain_needs_the_exploration_mod_receptor_target() {
     let loci = include_str!("../../../data/loci.ron");
-    let renamed = loci.replace(r#"name: "exploration_mod""#, r#"name: "curiosity_mod""#);
+    let renamed = loci.replace(r#"name: "exploration_mod""#, r#"name: "whim_mod""#);
     assert_ne!(renamed, loci);
     assert_invalid("loci.ron", &renamed, "exploration_mod");
 }

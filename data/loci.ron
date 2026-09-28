@@ -27,4 +27,5 @@
 
     (id: 64, name: "learning_rate_mod", kind: ReceptorTarget),
     (id: 65, name: "exploration_mod",   kind: ReceptorTarget),
+    (id: 66, name: "curiosity_mod",     kind: ReceptorTarget),  // wariness lowers it (design v16 §5.3)
 ]

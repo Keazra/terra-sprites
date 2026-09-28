@@ -70,6 +70,7 @@
     receptor_targets: {
         "learning_rate_mod": (0.5, 2.0),
         "exploration_mod": (0.25, 4.0),
+        "curiosity_mod": (0.0, 2.0),
     },
 
     // The `nearby_sprites` body sensor counts the other sprites within
