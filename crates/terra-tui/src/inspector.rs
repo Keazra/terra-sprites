@@ -102,7 +102,7 @@ pub(crate) fn first_shown(scroll: usize, length: usize, rows: usize) -> usize {
 fn sprite_tab(tab: Tab, sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
     match tab {
         Tab::Body => body_tab(sprite, app, world),
-        Tab::Brain => brain_tab(sprite),
+        Tab::Brain => brain_tab(sprite, world.data()),
         Tab::Chem => chem_tab(sprite),
         Tab::Genome => genome_tab(sprite),
         Tab::World => Vec::new(),
@@ -568,7 +568,7 @@ const CONCEPTS_SHOWN: usize = 5;
 /// with its score, the attended one marked; then the verb chosen, with its
 /// score, and the concepts adding most to it, largest first. A snapshot
 /// always has a verb; "none" only guards against one that doesn't.
-fn brain_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
+fn brain_tab(sprite: &SpriteView, data: &DataPack) -> Vec<Line<'static>> {
     let Some(explained) = sprite.explain() else {
         return vec![Line::from(" Nothing decided yet")];
     };
@@ -627,7 +627,7 @@ fn brain_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
     }
     for memory in remembered {
         let amount = signed_level(memory.amount);
-        lines.extend(scored("   ", &learned_name(&memory.learned), &amount));
+        lines.extend(scored("   ", &learned_name(&memory.learned, data), &amount));
     }
     lines.into_iter().map(Line::from).collect()
 }
@@ -635,11 +635,11 @@ fn brain_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
 /// A lesson as the event log says it (design §6.1): "Sprite #12 learned:
 /// thornbushes are bad", "… water is good for thirst", "… eating balls is
 /// bad".
-pub(crate) fn learned_line(id: EntityId, learned: &Learned, good: bool) -> String {
+pub(crate) fn learned_line(id: EntityId, learned: &Learned, good: bool, data: &DataPack) -> String {
     let verdict = if good { "good" } else { "bad" };
     let what = match learned {
-        Learned::Worth { .. } | Learned::Bad { .. } => learned_name(learned),
-        Learned::Habit { .. } => format!("{} is {verdict}", learned_name(learned)),
+        Learned::Worth { .. } | Learned::Bad { .. } => learned_name(learned, data),
+        Learned::Habit { .. } => format!("{} is {verdict}", learned_name(learned, data)),
         Learned::NewThings => format!("new things are {verdict}"),
     };
     format!("{} learned: {what}", sprite_label(id))
@@ -647,43 +647,36 @@ pub(crate) fn learned_line(id: EntityId, learned: &Learned, good: bool) -> Strin
 
 /// Something learned, as the memory words it: `thornbushes are bad`,
 /// `water is good for thirst`, `eating balls`, `new things`.
-fn learned_name(learned: &Learned) -> String {
+fn learned_name(learned: &Learned, data: &DataPack) -> String {
     match learned {
         Learned::Worth {
             thing,
             need: Some(need),
         } => {
-            let (things, be) = things(thing);
+            let (things, be) = things(thing, data);
             format!("{things} {be} good for {}", display_name(need))
         }
         Learned::Worth { thing, need: None } => {
-            let (things, be) = things(thing);
+            let (things, be) = things(thing, data);
             format!("{things} {be} good")
         }
         Learned::Bad { thing } => {
-            let (things, be) = things(thing);
+            let (things, be) = things(thing, data);
             format!("{things} {be} bad")
         }
-        Learned::Habit { thing, verb } => format!("{} {}", doing(*verb), things(thing).0),
+        Learned::Habit { thing, verb } => format!("{} {}", doing(*verb), things(thing, data).0),
         Learned::NewThings => "new things".into(),
     }
 }
 
-/// A kind of thing in general, with the verb "to be" to go with it:
-/// `thornbushes are`, `berries are`, `water is`.
-fn things(thing: &str) -> (String, &'static str) {
-    let name = display_name(thing);
-    if name == "water" {
-        return (name, "is");
+/// A kind of thing in general, with the verb "to be" to go with it, as its
+/// object type names it (design §3.5.1): `thornbushes are`, `water is`. A
+/// kind with no plural isn't counted, so it keeps its name and takes "is".
+fn things(thing: &str, data: &DataPack) -> (String, &'static str) {
+    match data.plural_of(thing) {
+        Some(plural) => (plural.to_string(), "are"),
+        None => (display_name(thing), "is"),
     }
-    let plural = if name.ends_with("sh") {
-        format!("{name}es")
-    } else if let Some(stem) = name.strip_suffix('y') {
-        format!("{stem}ies")
-    } else {
-        format!("{name}s")
-    };
-    (plural, "are")
 }
 
 /// A verb as a habit words doing it to something: `eating`, `playing with`.
