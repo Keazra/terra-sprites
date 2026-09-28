@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 
 use crate::action::{Outcome, ScriptedAction, end, is_acting, start};
-use crate::brain::{Aim, Snapshot, SpriteFocus, available};
+use crate::brain::{Aim, Snapshot, SpriteScoring, available, best_above};
 use crate::data::DataPack;
 use crate::events::Event;
 use crate::map::Pos;
@@ -63,27 +63,20 @@ pub(crate) fn decide(
     // Each sprite in reach is weighed on its own, and the one that draws the
     // eye most stands for sprites, unless the attacker does while a hit is
     // felt (design v18 §3.6).
-    let felt = |target: Target| attacker.is_some_and(|a| target == Target::Sprite(a));
+    let is_attacker = |target: Target| attacker.is_some_and(|a| target == Target::Sprite(a));
     if !found
         .get(&Category::Sprite)
-        .is_some_and(|&(target, _)| felt(target))
+        .is_some_and(|&(target, _)| is_attacker(target))
     {
         let inputs = sprite.brain.inputs(&sprite.body, None, data);
         let drawn = flood.sprites(ground, id).into_iter().map(|(other, cost)| {
             let draw = sprite
                 .brain
                 .draw(other, normalized(cost, reach), &inputs, data);
-            (other, cost, draw)
+            ((other, cost), draw)
         });
         // Ties go to the lower ID, which comes first.
-        let best = drawn.fold(
-            None,
-            |best: Option<(EntityId, u32, f32)>, next| match best {
-                Some(top) if top.2 >= next.2 => Some(top),
-                _ => Some(next),
-            },
-        );
-        if let Some((other, cost, _)) = best {
+        if let Some((other, cost)) = best_above(drawn, f32::NEG_INFINITY) {
             found.insert(Category::Sprite, (Target::Sprite(other), cost));
         }
     }
@@ -130,15 +123,16 @@ pub(crate) fn decide(
     let exploration = sprite.body.loci[data.physiology().indices.exploration_mod];
     // The sprite that stands for sprites while attention scores: a running
     // action's target, or else the candidate (design v18 §5.3).
-    let as_sprite = |target: Option<Target>| match target {
-        Some(Target::Sprite(other)) => Some(other),
-        _ => None,
-    };
-    let candidate_sprite = as_sprite(candidates.get(&Category::Sprite).map(|c| c.target));
+    let candidate_sprite = candidates
+        .get(&Category::Sprite)
+        .and_then(|c| c.target.sprite());
     // Fear always catches the eye, so a sprite hit or cornered keeps it on
     // whoever did it (design v18 §5.3).
-    let focus = SpriteFocus {
-        sprite: as_sprite(action.and_then(|a| a.target)).or(candidate_sprite),
+    let scoring = SpriteScoring {
+        sprite: action
+            .and_then(|a| a.target)
+            .and_then(Target::sprite)
+            .or(candidate_sprite),
         quiet: false,
     };
     // But while a hit is felt or the sprite is cornered, what it does is
@@ -162,7 +156,7 @@ pub(crate) fn decide(
     // 5a: attention, from the State inputs alone.
     let state_only = brain.inputs(&sprite.body, None, data);
     let curiosity_mod = sprite.body.loci[data.physiology().indices.curiosity_mod];
-    let attention = brain.attention_scores(&state_only, &distances, curiosity_mod, focus, data);
+    let attention = brain.attention_scores(&state_only, &distances, curiosity_mod, scoring, data);
     let attended = brain.attend(&attention, running, exploration, rng);
     let mut running = running;
     if let Some(aim) = aimed
@@ -187,10 +181,10 @@ pub(crate) fn decide(
         .filter(|_| running)
         .and_then(|a| a.target);
     let aimed_sprite = match aimed_target {
-        Some(target) => as_sprite(Some(target)),
+        Some(target) => target.sprite(),
         None => candidate_sprite,
     };
-    let decision_focus = SpriteFocus {
+    let decision_scoring = SpriteScoring {
         sprite: aimed_sprite,
         quiet,
     };
@@ -198,7 +192,7 @@ pub(crate) fn decide(
         &activations,
         &inputs,
         aim.map(|a| a.category),
-        decision_focus,
+        decision_scoring,
         data,
     );
     let beside = candidate.is_some_and(|c| c.aim.adjacent);
@@ -228,8 +222,8 @@ pub(crate) fn decide(
         scores,
         verb,
         motive,
-        sprite_seen: focus.sprite,
-        focus: decision_focus,
+        sprite_seen: scoring.sprite,
+        scoring: decision_scoring,
     });
     let Some(verb) = chosen else {
         return;

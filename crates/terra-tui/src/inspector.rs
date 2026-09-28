@@ -628,7 +628,7 @@ fn explained_lines(explained: &Explanation) -> Vec<String> {
         let name = match &contribution.part {
             Part::Concept(inputs) => concept_name(inputs),
             // Neutral, since worth adds to a verb or takes from it either
-            // way: a bad thing's pushes towards backing away.
+            // way: a bad thing's takes from going near it.
             Part::Worth(thing) => format!("worth: {}", thing_name(thing)),
             Part::Fear(thing) => format!("fear: {}", thing_name(thing)),
             Part::Habit(thing) => {
@@ -699,8 +699,8 @@ fn thing_name(thing: &Thing) -> String {
 
 /// A thing with the verb "to be" to go with it: a kind in general, as its
 /// object type names it (design §3.5.1), `thornbushes are`, `water is`, or
-/// a particular sprite, `Sprite #7 is` (design v18). A kind with no plural
-/// isn't counted, so it keeps its name and takes "is".
+/// a particular sprite, `Sprite #7 is` (design v18 §6.1). A kind with no
+/// plural isn't counted, so it keeps its name and takes "is".
 fn things(thing: &Thing, data: &DataPack) -> (String, &'static str) {
     match thing {
         Thing::Kind(kind) => match data.plural_of(kind) {

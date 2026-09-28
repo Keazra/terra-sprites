@@ -137,19 +137,23 @@ pub(crate) enum BrainParam {
     Curiosity = 22,
     FamiliarityRate = 23,
     Disappointment = 24,
-    /// How fast a particular sprite is learned good, and bad (design v18 §5.6).
+    /// How fast a particular sprite is learned good (design v18 §5.6).
     IndividualRateGood = 25,
+    /// How fast a particular sprite is learned bad (design v18 §5.6).
     IndividualRateBad = 26,
-    /// How fast whoever hurt it is feared, and how slowly that fades.
+    /// How fast whoever hurt it is feared (design v18 §5.6).
     FearRate = 27,
+    /// How much fear fades each tick (design v18 §5.6).
     FearFade = 28,
-    /// How many sprites it knows before sprites in general are judged in full.
+    /// How many sprites it knows before sprites in general are judged in
+    /// full (design v18 §5.6).
     Generalise = 29,
-    /// How strongly fear catches the eye (design v18 §5.3), and pulls
-    /// towards backing away (§5.5), and the distance, as a share of sight,
-    /// at which it stops pulling.
+    /// How strongly fear catches the eye (design v18 §5.3).
     Vigilance = 30,
+    /// How strongly fear pulls towards backing away (design v18 §5.5).
     Flight = 31,
+    /// The distance, as a share of sight, at which fear stops pulling
+    /// (design v18 §5.3).
     FearReach = 32,
 }
 
