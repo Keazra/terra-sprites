@@ -1,7 +1,7 @@
 //! Step 4 (design §5.6): each sprite reads its needs' relief and uses up its
 //! reward and punishment, and learns what things are worth and its habits.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 
@@ -82,6 +82,8 @@ pub(crate) struct Experience {
     pub(crate) familiarity: [f32; KINDS],
     /// The worth of new things.
     pub(crate) new_things: f32,
+    /// The sprites it remembers (design v18 §5.6), by ID.
+    pub(crate) individuals: BTreeMap<EntityId, Individual>,
     /// Which learned values have been lessons, by their place in the brain's
     /// list of what it learns.
     pub(crate) taught: BTreeSet<usize>,
@@ -99,6 +101,7 @@ impl Experience {
             habits: [[0.0; VERBS.len()]; KINDS],
             familiarity: [0.0; KINDS],
             new_things: 0.0,
+            individuals: BTreeMap::new(),
             taught: BTreeSet::new(),
             needs_before: None,
         }
@@ -115,7 +118,40 @@ impl Experience {
         within(&self.bad, (-1.0, 0.0), "a bad")?;
         within(self.habits.iter().flatten(), (-1.0, 1.0), "a habit")?;
         within(&self.familiarity, (0.0, 1.0), "a familiarity")?;
-        within([&self.new_things], (-1.0, 1.0), "the worth of new things")
+        within([&self.new_things], (-1.0, 1.0), "the worth of new things")?;
+        for individual in self.individuals.values() {
+            within(&individual.worth, (0.0, 1.0), "a sprite's worth")?;
+            within([&individual.good], (0.0, 1.0), "a sprite's good")?;
+            within([&individual.bad], (-1.0, 0.0), "a sprite's bad")?;
+            within([&individual.fear], (-1.0, 0.0), "a sprite's fear")?;
+        }
+        Ok(())
+    }
+}
+
+/// What a sprite has learned about one other sprite (design v18 §5.6): its
+/// worth for each need and in general, how bad it is, and how frightening.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub(crate) struct Individual {
+    /// Worth for each need, in the pack's needs order (0 to 1).
+    pub(crate) worth: Vec<f32>,
+    /// General good, from `reward` (0 to 1).
+    pub(crate) good: f32,
+    /// Bad, from hurting itself on it (−1 to 0).
+    pub(crate) bad: f32,
+    /// Fear, from its hurting the sprite (−1 to 0).
+    pub(crate) fear: f32,
+}
+
+impl Individual {
+    /// A sprite newly remembered, for `needs` needs: nothing learned yet.
+    pub(crate) fn new(needs: usize) -> Individual {
+        Individual {
+            worth: vec![0.0; needs],
+            good: 0.0,
+            bad: 0.0,
+            fear: 0.0,
+        }
     }
 }
 
@@ -138,6 +174,8 @@ fn within<'a>(
 pub(crate) struct Touch {
     pub(crate) tick: u64,
     pub(crate) category: Category,
+    /// Which sprite, if it was one (design v18 §5.6).
+    pub(crate) sprite: Option<EntityId>,
     /// How new the category was to the sprite then (design §5.6).
     pub(crate) novelty: f32,
 }
@@ -154,9 +192,11 @@ pub(crate) struct Signals {
     pub(crate) punishment: f32,
     /// Whether a `fruitless` pulse is live: its latest try did nothing.
     pub(crate) fruitless: bool,
-    /// Whether a `was_hit` pulse is live: its punishment teaches habits,
-    /// not what anything is worth (design §5.6).
+    /// Whether a `was_hit` pulse is live: its punishment teaches fear of
+    /// the attacker and habits, not what anything is worth (design v18 §5.6).
     pub(crate) hit: bool,
+    /// Who hit it, the `was_hit` pulse's source, if one is live.
+    pub(crate) attacker: Option<EntityId>,
 }
 
 /// The most entries a trace keeps (design §5.6).
@@ -223,6 +263,7 @@ pub(crate) fn run(
             punishment,
             fruitless: body.loci[indices.fruitless] > 0.0,
             hit: body.loci[indices.was_hit] > 0.0,
+            attacker: body.sources.get(&indices.was_hit).copied(),
         };
         let rate = body.loci[indices.learning_rate_mod];
         for (learned, good) in brain.learn(tick, &signals, rate, data) {

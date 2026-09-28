@@ -2,7 +2,8 @@
 //! learns what things are worth and its habits.
 
 use terra_sim::{
-    DataPack, Event, EventKind, Genome, Learned, Map, Pos, Scenario, ScriptedAction, World,
+    DataPack, EntityId, Event, EventKind, Genome, Learned, Map, Pos, Scenario, ScriptedAction,
+    Thing, World,
 };
 
 fn builtin() -> DataPack {
@@ -23,6 +24,7 @@ fn genome(genes: &str, data: &DataPack) -> Genome {
             BrainParam(param: "worth_fade_good", value: 0.0),
             BrainParam(param: "worth_fade_bad", value: 0.0),
             BrainParam(param: "habit_fade", value: 0.0),
+            BrainParam(param: "fear_fade", value: 0.0),
         ])"#
     );
     Genome::from_ron(&text, data).expect("a valid genome")
@@ -238,5 +240,108 @@ fn a_sprite_that_keeps_biting_a_thornbush_learns_each_lesson_once() {
         learned,
         [(thorns_bad, false), (Learned::NewThings, false)],
         "each once"
+    );
+}
+
+/// A world drawn from `rows` with sprites of `genes` on each of `sprites`,
+/// each doing its part of `script`.
+fn scene(rows: &[&str], sprites: &[(Pos, &str)], script: &[(Pos, ScriptedAction)]) -> World {
+    let data = builtin();
+    let map = Map::from_ascii(rows, &data).expect("valid drawing");
+    let sprites: Vec<(Pos, Option<Genome>)> = sprites
+        .iter()
+        .map(|&(pos, genes)| (pos, Some(genome(genes, &data))))
+        .collect();
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: script,
+    };
+    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+}
+
+/// What sprite `id` has learned, as `(learned, value)`.
+fn memory_of(world: &World, id: EntityId) -> Vec<(Learned, f32)> {
+    let sprite = world.sprite(id).expect("the sprite");
+    sprite
+        .memory()
+        .into_iter()
+        .map(|m| (m.learned, m.amount))
+        .collect()
+}
+
+/// A sprite whose every hit it feels punishes it by .5.
+const HIT_HURTS: &str =
+    r#"Emitter(locus: Locus("was_hit"), mode: Level, gain: 0.5, chem: "punishment"),"#;
+
+#[test]
+fn a_sprite_that_is_hit_fears_its_attacker_and_learns_nothing_bad_of_sprites() {
+    // Design v18 §5.6: a hurt done to it teaches fear of whoever did it,
+    // fear_rate (1) × the hit's punishment (.5), and no badness or worth.
+    let (me, attacker) = (at(1, 1), at(2, 1));
+    let mut world = scene(
+        &["....", "....", "...."],
+        &[(me, HIT_HURTS), (attacker, "")],
+        &[
+            (me, ScriptedAction::Rest),
+            (attacker, ScriptedAction::Hit { at: me }),
+            (attacker, ScriptedAction::Rest),
+        ],
+    );
+    let (me, attacker) = (
+        world.sprite_at(me).expect("me").id(),
+        world.sprite_at(attacker).expect("the attacker").id(),
+    );
+    world.step();
+    world.step();
+    let fear = Learned::Fear {
+        thing: Thing::Sprite(attacker),
+    };
+    assert_eq!(
+        memory_of(&world, me),
+        [(fear, -0.5)],
+        "frightening, and nothing else"
+    );
+}
+
+/// A bored sprite whose play with another sprite halves its boredom.
+const BORED: &str = r#"InitialConcentration(chem: "boredom", value: 1.0),
+    Emitter(locus: Locus("played_social"), mode: Level, gain: -0.5, chem: "boredom"),"#;
+
+#[test]
+fn playing_with_a_sprite_teaches_what_that_one_is_worth_not_sprites_in_general() {
+    // Design v18 §5.6: boredom falls by .5, its relief, and the sprite
+    // played with is the thing touched: .5 × individual_rate_good (.8).
+    let (me, partner) = (at(1, 1), at(2, 1));
+    let mut world = scene(
+        &["....", "....", "...."],
+        &[(me, BORED), (partner, "")],
+        &[
+            (me, ScriptedAction::Play { at: partner }),
+            (me, ScriptedAction::Rest),
+            (partner, ScriptedAction::Rest),
+        ],
+    );
+    let (me, partner) = (
+        world.sprite_at(me).expect("me").id(),
+        world.sprite_at(partner).expect("the partner").id(),
+    );
+    world.step();
+    world.step();
+    let worth = |thing: Thing| Learned::Worth {
+        thing,
+        need: Some("boredom".into()),
+    };
+    let memory = memory_of(&world, me);
+    let value = |learned: &Learned| memory.iter().find(|(l, _)| l == learned).map(|&(_, v)| v);
+    assert!(
+        value(&worth(Thing::Sprite(partner))).is_some_and(|v| close(v, 0.4)),
+        "{memory:?}"
+    );
+    assert_eq!(
+        value(&worth("sprite".into())),
+        None,
+        "nothing learned about sprites in general: {memory:?}"
     );
 }

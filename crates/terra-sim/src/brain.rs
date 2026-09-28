@@ -12,8 +12,9 @@ use crate::data::DataPack;
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, LocusRef};
 use crate::learning::{
-    Experience, Links, Signals, TRACE_CAP, Touch, TraceEntry, still_counts, weight,
+    Experience, Individual, Links, Signals, TRACE_CAP, Touch, TraceEntry, still_counts, weight,
 };
+use crate::objects::EntityId;
 use crate::perception::Target;
 use crate::random::unit;
 use crate::registry::{BrainParam, Category, Verb};
@@ -153,16 +154,34 @@ pub(crate) struct Snapshot {
     pub(crate) motive: Option<usize>,
 }
 
-/// Something a sprite has learned, named (design §5.6, §5.9). Things are
-/// named as brain inputs name categories (`berry_bush`), needs as brain
-/// inputs name them (`hunger`).
+/// What something learned is about (design v18 §5.9): a kind of thing, named
+/// as brain inputs name categories (`berry_bush`, and `sprite` for sprites
+/// in general), or a particular sprite.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Thing {
+    Kind(String),
+    Sprite(EntityId),
+}
+
+impl From<&str> for Thing {
+    /// The kind of thing called `kind`.
+    fn from(kind: &str) -> Thing {
+        Thing::Kind(kind.to_string())
+    }
+}
+
+/// Something a sprite has learned, named (design §5.6, §5.9). Needs are
+/// named as brain inputs name them (`hunger`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Learned {
-    /// What a kind of thing is worth: for a need, or in general (`None`).
-    Worth { thing: String, need: Option<String> },
-    /// How bad a kind of thing is.
-    Bad { thing: String },
-    /// A habit: doing a verb to a kind of thing.
+    /// What a thing is worth: for a need, or in general (`None`).
+    Worth { thing: Thing, need: Option<String> },
+    /// How bad a thing is: it hurt the sprite when it touched it.
+    Bad { thing: Thing },
+    /// How frightening a thing is (design v18): it hurt the sprite by its
+    /// own doing.
+    Fear { thing: Thing },
+    /// A habit: doing a verb to a kind of thing, by its category's name.
     Habit { thing: String, verb: Verb },
     /// The worth of new things.
     NewThings,
@@ -290,22 +309,56 @@ impl Brain {
     ) -> Vec<(Learned, bool)> {
         let physiology = data.physiology();
         let relief = &signals.relief;
+        // A hurt done to it teaches fear of whoever did it (design v18 §5.6).
+        if signals.hit
+            && let Some(attacker) = signals.attacker
+        {
+            let rate = self.params.get(BrainParam::FearRate) * learning_rate_mod;
+            let individual = self
+                .experience
+                .individuals
+                .entry(attacker)
+                .or_insert_with(|| Individual::new(relief.len()));
+            individual.fear = (individual.fear - rate * signals.punishment).max(-1.0);
+        }
         let touched = self
             .touched
             .filter(|t| tick - t.tick <= physiology.touch_window)
-            .map(|t| (t.category, t.novelty));
-        if let Some((category, novelty)) = touched {
+            .map(|t| (t.category, t.sprite, t.novelty));
+        if let Some((category, sprite, novelty)) = touched {
             let good = self.params.get(BrainParam::WorthRateGood) * learning_rate_mod;
             let bad = self.params.get(BrainParam::WorthRateBad) * learning_rate_mod;
-            let c = category.index();
-            let experience = &mut self.experience;
-            for (worth, &relief) in experience.worth.iter_mut().zip(relief) {
-                worth[c] = (worth[c] + good * relief).min(1.0);
-            }
-            // A hit's punishment teaches habits, not worth (design §5.6).
+            // A hit's punishment teaches fear and habits, not worth (design
+            // v18 §5.6).
             let punishment = if signals.hit { 0.0 } else { signals.punishment };
-            experience.good[c] = (experience.good[c] + good * signals.reward).min(1.0);
-            experience.bad[c] = (experience.bad[c] - bad * punishment).max(-1.0);
+            match sprite {
+                // A sprite is learned about as that one sprite, fast; sprites
+                // in general only through the ones it knows (design v18 §5.6).
+                Some(sprite) => {
+                    let good = self.params.get(BrainParam::IndividualRateGood) * learning_rate_mod;
+                    let bad = self.params.get(BrainParam::IndividualRateBad) * learning_rate_mod;
+                    let individual = self
+                        .experience
+                        .individuals
+                        .entry(sprite)
+                        .or_insert_with(|| Individual::new(relief.len()));
+                    for (worth, &relief) in individual.worth.iter_mut().zip(relief) {
+                        *worth = (*worth + good * relief).min(1.0);
+                    }
+                    individual.good = (individual.good + good * signals.reward).min(1.0);
+                    individual.bad = (individual.bad - bad * punishment).max(-1.0);
+                }
+                None => {
+                    let c = category.index();
+                    let experience = &mut self.experience;
+                    for (worth, &relief) in experience.worth.iter_mut().zip(relief) {
+                        worth[c] = (worth[c] + good * relief).min(1.0);
+                    }
+                    experience.good[c] = (experience.good[c] + good * signals.reward).min(1.0);
+                    experience.bad[c] = (experience.bad[c] - bad * punishment).max(-1.0);
+                }
+            }
+            let experience = &mut self.experience;
             // How it went with something new teaches the worth of new things.
             let relieved: f32 = relief.iter().sum();
             let felt = good * (relieved + signals.reward) - bad * punishment;
@@ -439,14 +492,14 @@ impl Brain {
             for (&category, &value) in Category::ALL.iter().zip(worth) {
                 memory.push(Memory {
                     learned: Learned::Worth {
-                        thing: category.name().to_string(),
+                        thing: category.name().into(),
                         need: Some(inputs[place].name.clone()),
                     },
                     amount: value,
                 });
             }
         }
-        let thing = |category: Category| category.name().to_string();
+        let thing = |category: Category| Thing::from(category.name());
         for (&category, &value) in Category::ALL.iter().zip(&self.experience.good) {
             let learned = Learned::Worth {
                 thing: thing(category),
@@ -469,7 +522,7 @@ impl Brain {
         for (&category, habits) in Category::ALL.iter().zip(&self.experience.habits) {
             for (&verb, &value) in VERBS.iter().zip(habits) {
                 let learned = Learned::Habit {
-                    thing: thing(category),
+                    thing: category.name().to_string(),
                     verb,
                 };
                 memory.push(Memory {
@@ -482,6 +535,34 @@ impl Brain {
             learned: Learned::NewThings,
             amount: self.experience.new_things,
         });
+        // The sprites it remembers (design v18), in ID order.
+        for (&id, individual) in &self.experience.individuals {
+            let thing = || Thing::Sprite(id);
+            for (&value, &place) in individual.worth.iter().zip(data.need_places()) {
+                let learned = Learned::Worth {
+                    thing: thing(),
+                    need: Some(inputs[place].name.clone()),
+                };
+                memory.push(Memory {
+                    learned,
+                    amount: value,
+                });
+            }
+            let values = [
+                (
+                    Learned::Worth {
+                        thing: thing(),
+                        need: None,
+                    },
+                    individual.good,
+                ),
+                (Learned::Bad { thing: thing() }, individual.bad),
+                (Learned::Fear { thing: thing() }, individual.fear),
+            ];
+            for (learned, amount) in values {
+                memory.push(Memory { learned, amount });
+            }
+        }
         memory
     }
 
@@ -1202,6 +1283,7 @@ mod tests {
         brain.touched = Some(Touch {
             tick: 9,
             category: Category::Berry,
+            sprite: None,
             novelty: 1.0,
         });
         for (tick, hunger) in [(10, 1.0), (11, 0.0)] {
@@ -1241,6 +1323,7 @@ mod tests {
         let touch = Touch {
             tick: 1,
             category: Category::BerryBush,
+            sprite: None,
             novelty: 1.0,
         };
         brain.touched = Some(touch);
@@ -1271,6 +1354,7 @@ mod tests {
         brain.touched = Some(Touch {
             tick: 2,
             category: Category::BerryBush,
+            sprite: None,
             novelty: 1.0,
         });
         let signals = hunger_at(&mut brain, &data, 0.0);
@@ -1387,6 +1471,7 @@ mod tests {
         brain.touched = Some(Touch {
             tick: 9,
             category: Category::Ball,
+            sprite: None,
             novelty: 1.0,
         });
         let mut needs = vec![0.0; data.need_places().len()];
@@ -1418,6 +1503,7 @@ mod tests {
         brain.touched = Some(Touch {
             tick: 9,
             category: Category::Ball,
+            sprite: None,
             novelty: 1.0,
         });
         let fruitless = Signals {
@@ -1506,6 +1592,7 @@ mod tests {
         brain.touched = Some(Touch {
             tick: 1,
             category: Category::Thornbush,
+            sprite: None,
             novelty: 0.5,
         });
         let hurt = Signals {
@@ -1565,6 +1652,7 @@ mod tests {
         brain.touched = Some(Touch {
             tick: 9,
             category: Category::Sprite,
+            sprite: None,
             novelty: 1.0,
         });
         let hit_back = Signals {
