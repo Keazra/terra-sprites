@@ -127,8 +127,6 @@ pub(crate) struct Brain {
     pub(crate) experience: Experience,
     /// What it last tried a verb on, and when (design §5.6).
     pub(crate) touched: Option<Touch>,
-    /// Each need's singleton, in the pack's needs order, to find a motive.
-    need_rows: Vec<usize>,
 }
 
 /// What the brain saw and did at a step 5.
@@ -150,6 +148,9 @@ pub(crate) struct Snapshot {
     pub(crate) scores: [f32; VERBS.len()],
     /// The verb it's doing, if any.
     pub(crate) verb: Option<Verb>,
+    /// The verb's motive (design §5.5): the need, by its place in the pack's
+    /// needs, whose instinct did most to choose it.
+    pub(crate) motive: Option<usize>,
 }
 
 /// Something a sprite has learned, named (design §5.6, §5.9). Things are
@@ -273,7 +274,6 @@ impl Brain {
             trace: VecDeque::new(),
             experience: Experience::new(data.need_places().len()),
             touched: None,
-            need_rows: data.need_places().to_vec(),
         }
     }
 
@@ -515,9 +515,7 @@ impl Brain {
     /// next step 4 would credit too little, whether it decided or not.
     pub(crate) fn commit(&mut self, tick: u64) {
         if let Some(snapshot) = self.snapshot.as_ref().filter(|s| s.tick == tick) {
-            let motive = snapshot
-                .verb
-                .and_then(|verb| self.motive(verb, &snapshot.activations));
+            let motive = snapshot.motive;
             if let Some(category) = snapshot.attended {
                 // Attending to a kind of thing makes it familiar (design §5.6).
                 let rate = self.params.get(BrainParam::FamiliarityRate);
@@ -527,7 +525,6 @@ impl Brain {
             self.trace.push_back(TraceEntry {
                 motive,
                 tick,
-                activations: snapshot.activations.clone(),
                 verb: snapshot.verb,
                 attended: snapshot.attended,
             });
@@ -548,12 +545,12 @@ impl Brain {
     /// (design §5.5): of the needs, the one whose singleton pushed the verb
     /// most through its instinct, by its place in the pack's needs; ties to
     /// the lower input ID. None if no need pushed it.
-    fn motive(&self, verb: Verb, activations: &[f32]) -> Option<usize> {
+    pub(crate) fn motive(&self, verb: Verb, activations: &[f32], data: &DataPack) -> Option<usize> {
         let v = column(verb);
         // The singletons come first, one per input, so a need's place in the
         // inputs is its singleton's place in the concepts.
-        let mut pushes: Vec<(usize, usize, f32)> = self
-            .need_rows
+        let mut pushes: Vec<(usize, usize, f32)> = data
+            .need_places()
             .iter()
             .enumerate()
             .map(|(need, &row)| {
@@ -1133,6 +1130,7 @@ mod tests {
             target: None,
             scores: [0.0; VERBS.len()],
             verb: Some(verb),
+            motive: None,
         }
     }
 
@@ -1179,7 +1177,11 @@ mod tests {
         set: &[(&str, f32)],
     ) {
         let a = activations(brain, set);
-        brain.snapshot = Some(snapshot(tick, a, verb, attended));
+        let motive = brain.motive(verb, &a, &builtin());
+        brain.snapshot = Some(Snapshot {
+            motive,
+            ..snapshot(tick, a, verb, attended)
+        });
         brain.commit(tick);
     }
 

@@ -107,15 +107,21 @@ impl Verb {
 /// `BrainParam` gene. The discriminants are the stable parameter IDs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub(crate) enum BrainParam {
+    /// Does nothing since v16, when learning became worth and habits; kept
+    /// for its ID, since genomes may carry it.
     LearningRate = 1,
     TraceDecay = 2,
+    /// Does nothing since v16; kept for its ID.
     RelaxRate = 3,
+    /// Does nothing since v16; kept for its ID.
     ConsolidateRate = 4,
     TauBase = 5,
     TauAttBase = 6,
     SwitchMargin = 7,
     AttentionMargin = 8,
     SalienceGain = 9,
+    /// This and the next four do nothing while the recruitable pool is on
+    /// hold (design v16 §5.4); kept for their IDs.
     PoolSize = 10,
     MaxArity = 11,
     RecruitThreshold = 12,

@@ -1269,13 +1269,10 @@ mod tests {
         assert_eq!(trace_ticks(&world, id), [] as [u64; 0]);
     }
 
-    /// A trace entry for sprite `id` at `tick`, choosing Eat with every
-    /// concept fully active.
-    fn eat_entry(world: &World, id: EntityId, tick: u64) -> TraceEntry {
-        let brain = &world.state.sprites.get(id).expect("the sprite").brain;
+    /// A trace entry at `tick`, choosing Eat.
+    fn eat_entry(tick: u64) -> TraceEntry {
         TraceEntry {
             tick,
-            activations: vec![1.0; brain.concepts.len()],
             verb: Some(Verb::Eat),
             attended: None,
             motive: None,
@@ -1287,7 +1284,7 @@ mod tests {
         let (mut world, first, second) = field_with_sprites();
         let reward = world.data.physiology().indices.reward;
         for id in [first, second] {
-            let entry = eat_entry(&world, id, 0);
+            let entry = eat_entry(0);
             let sprite = world.state.sprites.get_mut(id).expect("a sprite");
             sprite.brain.trace.push_back(entry);
             sprite.body.chems[reward] = 0.5;
@@ -1330,7 +1327,7 @@ mod tests {
     #[test]
     fn the_state_hash_covers_what_every_sprite_has_learned() {
         let (mut world, _, second) = field_with_sprites();
-        let entry = eat_entry(&world, second, 0);
+        let entry = eat_entry(0);
         let before = world.state_hash();
         let data = world.data.clone();
         let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
