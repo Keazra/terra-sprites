@@ -11,6 +11,7 @@ The owner's preferences and the project's conventions, for any agent session, lo
 - **A choice with real trade-offs comes with its pros and cons,** each option's, in plain words, before the question. In slice 8 the owner had to ask for them before choosing how to break the thorn trap.
 - **When measuring shows a design won't work,** stop and bring the numbers, what was tried and the options, rather than retuning quietly. Slice 8's decisions to drop no-op Approaches and to shorten the trace were made that way (design v15, changes 9–10).
 - **When something they asked for can't be done as written,** say so before building, with options, rather than quietly doing something else. If an agreed detail changes during the work, say so in the PR.
+- **When they raise a broad idea, lay out what it could mean before narrowing it.** In slice 9 "the simulated fly brain" was first read as one mechanism, a concept pool, and measured. The owner had meant the brain as a whole, so the idea had to be revisited: first say which readings there are, and ask.
 
 ## The owner's design principles
 
@@ -20,6 +21,8 @@ The owner's preferences and the project's conventions, for any agent session, lo
 - **The player has to care first.** Sprites start unnamed; the player names the ones they care about.
 - **Terra Sprites is a stepping stone** to a larger game: one adventurer in a world of NPCs that run on the Sprite system, with skills a player can lock and a character that can live on as an NPC ([#47](https://github.com/Keazra/terra-sprites/issues/47)). Nothing is built for it yet, but keep `terra-sim` a general engine, and when a design choice comes up, say whether it helps or hinders reusing sprites as NPCs.
 - **Sprites are blank slates.** They should learn what's good or bad, pass on their genes, and later teach the next generation, so instincts stay general and make mistakes rather than holding knowledge a sprite should earn. "Bored → play with whatever it's looking at", thornbushes included, stays, even when it costs lives until learning arrives (design v12, change 11).
+  - **Not competent from the start** (design v16): the starter genome is very basic. Needs lead to actions, and sprites know their own kind and fight or flee, but they know nothing of food, water, toys or danger. They're a species dropped into a world they don't know, meant to evolve fast; the gene types can still express smarter instincts, so evolution can grow them.
+- **Real science is inspiration, not a blueprint.** The owner cares how a real system works, such as the fruit-fly brain behind design v16, abstracted for sprites, which are visual, social and tactile. A copy of its parts isn't the goal.
 
 ## Design documents
 
