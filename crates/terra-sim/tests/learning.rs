@@ -468,3 +468,38 @@ fn a_sprite_that_dies_is_forgotten() {
         memory_of(&world, me)
     );
 }
+
+#[test]
+fn each_sprite_feared_is_a_lesson_once_and_sprites_in_general_once_they_turn() {
+    // Design v18 §5.6. Each bully's hit punishes by .6, so each is feared
+    // at −.6, a lesson; with the third, sprites in general are −.6 too. The
+    // bullies hit highest ID first, so each newcomer is listed before the
+    // sprites already remembered.
+    let me = at(2, 2);
+    let bullies = [at(3, 2), at(1, 2), at(2, 1)];
+    let hurts = r#"Emitter(locus: Locus("was_hit"), mode: Level, gain: 0.6, chem: "punishment"),"#;
+    let mut sprites = vec![(me, hurts)];
+    let mut script = vec![(me, ScriptedAction::Rest); 4];
+    for (i, &bully) in bullies.iter().enumerate() {
+        sprites.push((bully, ""));
+        script.extend(vec![(bully, ScriptedAction::Rest); 2 - i]);
+        script.push((bully, ScriptedAction::Hit { at: me }));
+        script.extend(vec![(bully, ScriptedAction::Rest); 3]);
+    }
+    let mut world = scene(&["....."; 5], &sprites, &script);
+    let ids: Vec<EntityId> = bullies
+        .iter()
+        .map(|&b| world.sprite_at(b).expect("a bully").id())
+        .collect();
+    let learned: Vec<(Learned, bool)> = (0..40).flat_map(|_| lessons(&world.step())).collect();
+    let fear = |thing: Thing| (Learned::Fear { thing }, false);
+    assert_eq!(
+        learned,
+        [
+            fear(Thing::Sprite(ids[2])),
+            fear(Thing::Sprite(ids[1])),
+            fear(Thing::Sprite(ids[0])),
+            fear("sprite".into()),
+        ]
+    );
+}
