@@ -1309,7 +1309,7 @@ mod tests {
         // Design v16 §5.6, for a lab scenario's control run (§7.1).
         let (mut world, first, _) = field_with_sprites();
         world.state.learning = false;
-        let indices = world.data.physiology().indices.clone();
+        let indices = world.data.physiology().indices;
         let sprite = world.state.sprites.get_mut(first).expect("a sprite");
         sprite.brain.touched = Some(crate::learning::Touch {
             tick: 0,
