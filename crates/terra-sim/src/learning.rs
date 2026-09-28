@@ -1,5 +1,7 @@
-//! Step 4 (design §5.6): each sprite uses up its reward and punishment, and
-//! learns from the difference.
+//! Step 4 (design §5.6): each sprite reads its needs' relief and uses up its
+//! reward and punishment, and learns what things are worth and its habits.
+
+use std::collections::BTreeSet;
 
 use serde::Serialize;
 
@@ -80,6 +82,9 @@ pub(crate) struct Experience {
     pub(crate) familiarity: [f32; KINDS],
     /// The worth of new things.
     pub(crate) new_things: f32,
+    /// Which learned values have been lessons, by their place in the brain's
+    /// list of what it learns.
+    pub(crate) taught: BTreeSet<usize>,
     /// Each need's level at the last step 4, to read its relief from.
     pub(crate) needs_before: Option<Vec<f32>>,
 }
@@ -94,6 +99,7 @@ impl Experience {
             habits: [[0.0; VERBS.len()]; KINDS],
             familiarity: [0.0; KINDS],
             new_things: 0.0,
+            taught: BTreeSet::new(),
             needs_before: None,
         }
     }
