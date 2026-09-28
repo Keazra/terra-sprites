@@ -10,6 +10,7 @@ use serde::Serialize;
 use crate::data::DataPack;
 use crate::decide::decide;
 use crate::events::{Event, EventKind};
+use crate::learning::Touch;
 use crate::map::{Dir, Pos};
 use crate::objects::EntityId;
 use crate::perception::{Flood, Ground, Occupied, Target};
@@ -464,6 +465,8 @@ fn act(
 ) {
     let verb = state.sprites.get(id).expect("the actor").action.as_ref();
     let verb = verb.expect("an action").verb;
+    // Read before the try, which may use the target up, as eating a berry does.
+    let category = crate::decide::category_of(state, data, target);
     let (outcome, hurt) = match verb {
         Verb::Approach => (Outcome::Applied, Hurt::default()),
         verb => verbs::attempt(state, data, id, verb, target, events),
@@ -480,6 +483,16 @@ fn act(
     action.target_gone = gone;
     action.hurt = hurt;
     end(action, id, outcome, state.tick, events);
+    if verb.is_interaction() {
+        // What it tried is what the next few ticks' feelings are about
+        // (design §5.6).
+        let brain = &mut state.sprites.get_mut(id).expect("the actor").brain;
+        brain.touched = Some(Touch {
+            tick: state.tick,
+            category,
+            novelty: brain.novelty(category),
+        });
+    }
 }
 
 /// Shuffles `ids` with the world RNG: Fisher–Yates, one draw per place but the first.
@@ -761,7 +774,7 @@ fn retreat(
 /// feels the `cornered` pulse (design §3.7).
 fn cornered(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec<Event>) {
     let sprite = state.sprites.get_mut(id).expect("the retreater");
-    sprite.body.incoming[data.physiology().indices.cornered] = 1.0;
+    sprite.body.pulse(data.physiology().indices.cornered, None);
     let action = sprite.action.as_mut().expect("a retreat");
     end(action, id, Outcome::Blocked, state.tick, events);
 }

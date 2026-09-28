@@ -22,8 +22,6 @@ struct Candidate {
     /// Its nearest reachable goal tile.
     goal: Pos,
     aim: Aim,
-    /// The verbs its type's verb table has.
-    table: Vec<Verb>,
     /// The stable ID of its type.
     type_id: u16,
 }
@@ -75,14 +73,12 @@ pub(crate) fn decide(
             };
             let kind = state.kind_of(data, target).expect("a candidate is there");
             let object_type = &data.object_types()[kind];
-            let table = object_type.verbs.keys().copied().collect();
             let type_id = object_type.id;
             let candidate = Candidate {
                 type_id,
                 target,
                 goal,
                 aim,
-                table,
             };
             (category, candidate)
         })
@@ -121,7 +117,8 @@ pub(crate) fn decide(
 
     // 5a: attention, from the State inputs alone.
     let state_only = brain.inputs(&sprite.body, None, data);
-    let attention = brain.attention_scores(&state_only, &distances, data);
+    let curiosity_mod = sprite.body.loci[data.physiology().indices.curiosity_mod];
+    let attention = brain.attention_scores(&state_only, &distances, curiosity_mod, data);
     let attended = brain.attend(&attention, running, exploration, rng);
     let mut running = running;
     if let Some(aim) = aimed
@@ -138,9 +135,9 @@ pub(crate) fn decide(
     // 5b: the decision.
     let inputs = brain.inputs(&sprite.body, aim, data);
     let activations = brain.activations(&inputs);
-    let scores = brain.scores(&activations);
+    let scores = brain.scores(&activations, &inputs, aim.map(|a| a.category), data);
     let beside = candidate.is_some_and(|c| c.aim.adjacent);
-    let offered = available(candidate.map(|c| c.table.as_slice()), beside);
+    let offered = available(candidate.is_some(), beside);
     let current = sprite.action.as_ref().filter(|_| running).map(|a| a.verb);
     let chosen = match current {
         Some(verb) => brain.switch(verb, &scores, &offered),
@@ -154,6 +151,8 @@ pub(crate) fn decide(
     let target = running_target
         .and_then(|a| a.target)
         .or(candidate.map(|c| c.target));
+    let verb = chosen.or(current);
+    let motive = verb.and_then(|verb| brain.motive(verb, &activations, data));
     brain.snapshot = Some(Snapshot {
         tick: state.tick,
         inputs,
@@ -162,7 +161,8 @@ pub(crate) fn decide(
         attended,
         target,
         scores,
-        verb: chosen.or(current),
+        verb,
+        motive,
     });
     let Some(verb) = chosen else {
         return;
@@ -257,7 +257,7 @@ fn start_scripted(state: &mut WorldState, data: &DataPack, id: EntityId, events:
 }
 
 /// The category `target` is perceived as.
-fn category_of(state: &WorldState, data: &DataPack, target: Target) -> Category {
+pub(crate) fn category_of(state: &WorldState, data: &DataPack, target: Target) -> Category {
     match target {
         Target::Object(id) => data.object_types()[state.objects.kind(id)].category,
         Target::Water(_) => Category::Water,

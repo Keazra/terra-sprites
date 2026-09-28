@@ -173,10 +173,18 @@ A chemical the genome makes to tell the brain something: a drive or a learning s
 
 **Drive**:
 A signal chemical the sprite feels as an urge: hunger, thirst, pain, tiredness, boredom, loneliness or crowdedness.
-_Avoid_: need, emotion, mood
+_Avoid_: emotion, mood
+
+**Need**:
+A drive whose relief teaches a sprite what things are good for: hunger, thirst, tiredness, boredom, loneliness or crowdedness. Pain is a drive but not a need.
+_Avoid_: want, desire
+
+**Relief**:
+A need falling, by enough in a tick to count. It teaches that the thing touched is good for that need.
+_Avoid_: satisfaction, drive reduction
 
 **Learning signal**:
-The reward or punishment chemical, which learning uses up every tick.
+The reward or punishment chemical: the general good and bad that always count, such as a pet or a hurt. Learning uses both up every tick.
 
 **Hormone**:
 One of sixteen unnamed chemicals that only the genome uses, spare for evolution to put to work.
@@ -281,7 +289,7 @@ _Avoid_: goal (a goal tile is where the sprite stands to act)
 ### The brain
 
 **Brain**:
-What chooses a sprite's actions: it notices one kind of thing nearby, and picks a verb to do about it.
+What chooses a sprite's actions: it notices one kind of thing nearby, and picks a verb to do about it. Instinct and learning compete in it.
 _Avoid_: AI, mind, controller
 
 **Brain input**:
@@ -293,11 +301,11 @@ The brain noticing one kind of thing nearby, such as berries or water, out of ev
 _Avoid_: focus, perception
 
 **Concept**:
-Something the brain recognises from its inputs: one input on its own, or a combination such as "hungry and next to the target". Concepts are what the brain's choices are weighed on.
+Something the brain recognises from its inputs: one input on its own, or a combination such as "hungry and next to the target". Concepts are what instincts are weighed on.
 _Avoid_: neuron, feature
 
 **Instinct**:
-A built-in leaning a sprite is born with, set by its genome, such as "hunger leads to eating" or "hunger draws attention to berry bushes". Learning can later change it.
+A built-in leaning a sprite is born with, set by its genome, such as "hunger leads to eating" or "loneliness draws attention to other sprites". It never changes in a sprite's life: learning can outvote it, never erase it.
 _Avoid_: reflex, rule (rules belong to objects)
 
 **Brain parameter**:
@@ -305,23 +313,55 @@ A setting of how the brain works, such as how much chance is in its choices, set
 _Avoid_: hyperparameter
 
 **Link**:
-How strongly one thing leads to another in the brain: a concept to a verb ("hunger → eat"), or a brain input to a kind of thing to attend to ("hunger → attends to berry bush"). A sprite's instincts set where each starts, and learning moves it.
+How strongly one thing leads to another in an instinct: a concept to a verb ("hunger → eat"), or a brain input to a kind of thing to attend to ("loneliness → attends to sprite"). The genome sets it, and it doesn't learn.
 _Avoid_: weight, synapse, connection
 
 **Trace**:
-The brain's record of what it felt and chose on each of its last few dozen ticks, most recent strongest. A reward or punishment is credited back along it.
+The brain's record of what it attended to and chose on each of its last few ticks, most recent strongest. Habits are credited back along it.
 _Avoid_: history, memory (memory is what was learned)
 
 **Felt**:
-The reward a sprite took in on its last tick, less the punishment: what learning used up. The design calls it `last_r`.
+The good a sprite took in on its last tick, its relief and reward, less the punishment. The design calls it `last_r`.
 _Avoid_: last r, reinforcement (on screen)
 
+**Worth**:
+What a kind of thing is to a sprite, learned from experience: good for some of its needs, and good or bad in general. It draws the sprite's eye and steps towards the thing, or makes it back away.
+_Avoid_: value, valence, preference
+
+**Habit**:
+What a sprite has learned about doing one verb to one kind of thing, such as "eating balls doesn't work" or "hitting sprites is bad".
+_Avoid_: skill (a later design, #48), reflex
+
+**Thing touched**:
+What a feeling is about: the thing the sprite tried a verb on a moment ago. Worth is learned about it and nothing else. A sprite that hit it isn't one, yet.
+_Avoid_: target (for this), culprit
+
+**Fruitless try**:
+A try at a verb on a thing that has no rule for it, or whose rule can't be met, such as eating a ball or a bare bush. Nothing happens, and the sprite feels it.
+_Avoid_: fizzle, failed attempt (failed is an outcome)
+
+**Motive**:
+The need whose instinct did most to make a sprite choose a verb. A fruitless try disappoints it.
+_Avoid_: reason, goal
+
+**Familiarity**:
+How well a sprite knows a kind of thing, from having attended to it. Its opposite is **novelty**: how new the kind still is to the sprite.
+_Avoid_: knowledge
+
+**Curiosity**:
+A sprite's pull towards kinds of thing that are new to it. Being hurt when it investigates teaches it that new things are bad.
+_Avoid_: exploration (exploring is how sure its choices are)
+
+**Wariness**:
+A passing mood, raised by a run of hurts, that makes a sprite less curious for a while.
+_Avoid_: fear (a later design, #53)
+
 **Memory**:
-What a sprite has learned from experience: how far its links have moved from what it was born with.
+What a sprite has learned from experience: the worth of things, and its habits.
 _Avoid_: learned links, knowledge
 
 **Lesson**:
-A link that has moved half a point from where the sprite was born with it. The event log announces each lesson once, as good or bad.
+A worth or habit that has reached half a point from nothing. The event log announces each lesson once, as good or bad.
 _Avoid_: milestone (on screen)
 
 ### The screen

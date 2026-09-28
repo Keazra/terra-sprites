@@ -5,7 +5,7 @@ use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
-    ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Link, Map, Outcome, Pos,
+    ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Learned, Map, Outcome, Pos,
     Progress, Removal, Scenario, ScriptedAction, Target, Verb, World, WorldConfig,
 };
 use terra_tui::app::{App, Tab};
@@ -792,34 +792,34 @@ fn the_event_log_shows_every_play_and_hit_and_whatever_hurt_a_sprite() {
 }
 
 #[test]
-fn the_event_log_says_what_a_sprite_learned_is_good_or_bad() {
+fn the_event_log_says_what_a_sprite_learned_in_plain_words() {
+    // Design v16 §6.1.
     let world = garden(pack());
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    let learned = |tick, id, link, good| Event {
+    let learned = |tick, id, learned, good| Event {
         tick,
         kind: EventKind::LearnedMilestone {
             id: EntityId(id),
-            link,
+            learned,
             good,
         },
     };
-    let thorn_eat = Link::Decision {
-        inputs: vec![("attended_thornbush".into(), false)],
+    let thorns_bad = Learned::Bad {
+        thing: "thornbush".into(),
+    };
+    let water_for_thirst = Learned::Worth {
+        thing: "water".into(),
+        need: Some("thirst".into()),
+    };
+    let eating_balls = Learned::Habit {
+        thing: "ball".into(),
         verb: Verb::Eat,
-    };
-    let ball_play = Link::Decision {
-        inputs: vec![("boredom".into(), false), ("attended_ball".into(), false)],
-        verb: Verb::Play,
-    };
-    let thorn_look = Link::Attention {
-        input: "hunger".into(),
-        category: "thornbush".into(),
     };
     app.record(
         &[
-            learned(30, 12, thorn_eat, false),
-            learned(31, 12, thorn_look, false),
-            learned(32, 9, ball_play, true),
+            learned(30, 12, thorns_bad, false),
+            learned(31, 12, water_for_thirst, true),
+            learned(32, 9, eating_balls, false),
         ],
         &world,
     );
@@ -828,9 +828,9 @@ fn the_event_log_says_what_a_sprite_learned_is_good_or_bad() {
     assert_eq!(
         log,
         [
-            "32  Sprite #9 learned: boredom & attended ball → play is good",
-            "31  Sprite #12 learned: hunger → attends to thornbush is bad",
-            "30  Sprite #12 learned: attended thornbush → eat is bad",
+            "32  Sprite #9 learned: eating balls is bad",
+            "31  Sprite #12 learned: water is good for thirst",
+            "30  Sprite #12 learned: thornbushes are bad",
         ]
     );
 }
@@ -1080,9 +1080,11 @@ fn the_decision_marker_flashes_an_x_where_the_selected_sprite_is_heading() {
 }
 
 /// A hungry sprite whose instincts point it at berries and to eating, with
-/// a nudge against eating for no reason and a mild habit of wandering.
+/// a nudge against eating for no reason and a mild habit of wandering, and
+/// no curiosity, so its attention is its instincts and nearness alone.
 const HUNGRY_GENOME: &str = r#"(format: 1, genes: [
     InitialConcentration(chem: "hunger", value: 0.8),
+    BrainParam(param: "curiosity", value: 0.0),
     BrainParam(param: "tau_base", value: 0.05),
     BrainParam(param: "tau_att_base", value: 0.05),
     AttentionInstinct(input: "hunger", category: Berry, weight: 1.0),
@@ -1123,28 +1125,23 @@ fn the_brain_tab_shows_attention_scores_and_what_adds_most_to_the_decision() {
     assert!(text[8..].iter().all(String::is_empty), "{text:?}");
 }
 
-/// A hungry sprite beside a thornbush, drawn to it and to eating, whose
-/// every prick punishes it by 1, learning at η .5 and λ .5 with no fading.
-const THORN_GENOME: &str = r#"(format: 1, genes: [
+/// A hungry sprite drawn to a berry and to eating it, whose eating halves
+/// its hunger, as the starter genome's does.
+const BERRY_GENOME: &str = r#"(format: 1, genes: [
     InitialConcentration(chem: "hunger", value: 1.0),
-    Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),
-    BrainParam(param: "learning_rate", value: 0.5),
-    BrainParam(param: "trace_decay", value: 0.5),
-    BrainParam(param: "relax_rate", value: 0.0),
+    Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "hunger"),
     BrainParam(param: "tau_base", value: 0.05),
     BrainParam(param: "tau_att_base", value: 0.05),
-    AttentionInstinct(input: "hunger", category: Thornbush, weight: 1.0),
+    AttentionInstinct(input: "hunger", category: Berry, weight: 1.0),
     Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
 ])"#;
 
 #[test]
-fn the_brain_tab_shows_the_links_furthest_from_birth_as_memory() {
-    // It bites at tick 0; at tick 1 learning moves each link from a concept
-    // active then by .5 × −1 × .5 = −.25: hunger, always, attended
-    // thornbush and target adjacent to eat, and hunger and always to
-    // attending to thornbushes. Six tie; the five first in link order show.
-    let objects = [(Pos { x: 3, y: 3 }, "thornbush")];
-    let (world, mut app) = one_sprite_among(THORN_GENOME, &objects, &[], 2);
+fn the_brain_tab_shows_what_the_sprite_has_learned_as_memory() {
+    // It eats the berry beside it at tick 0; at tick 1 its hunger falls by
+    // .5, and it learns berries are good for hunger: .5 × .5.
+    let objects = [(Pos { x: 3, y: 3 }, "berry")];
+    let (world, mut app) = one_sprite_among(BERRY_GENOME, &objects, &[], 2);
     open(&mut app, &world, Tab::Brain);
     let (_, text) = inspector(&app, &world);
     let at = text
@@ -1153,21 +1150,13 @@ fn the_brain_tab_shows_the_links_furthest_from_birth_as_memory() {
         .unwrap_or_else(|| panic!("{text:?}"));
     assert_eq!(text[at - 1], "", "a blank row before it");
     assert_eq!(
-        text[at..at + 7],
-        [
-            "MEMORY                          now  birth",
-            "hunger → eat                 +.75  +1.00",
-            "always → eat                 -.25    .00",
-            "attended thornbush → eat     -.25    .00",
-            "target adjacent → eat        -.25    .00",
-            "hunger → attends to          +.75  +1.00",
-            "thornbush",
-        ]
+        text[at..at + 2],
+        ["MEMORY", "berries are good for hunger         +.25"]
     );
 }
 
 #[test]
-fn the_brain_tab_leaves_memory_out_until_a_link_has_moved() {
+fn the_brain_tab_leaves_memory_out_until_it_has_learned_something() {
     let (world, mut app) = one_sprite(HUNGRY_GENOME, 1);
     open(&mut app, &world, Tab::Brain);
     let (_, text) = inspector(&app, &world);
@@ -1261,6 +1250,33 @@ fn the_chem_tab_lists_every_chemical_with_its_level_and_change_per_tick() {
         ],
         "all of it fits at 100×30"
     );
+}
+
+/// A hungry sprite drawn to a thornbush and to eating it, whose every prick
+/// punishes it by 1.
+const THORN_GENOME: &str = r#"(format: 1, genes: [
+    InitialConcentration(chem: "hunger", value: 1.0),
+    Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),
+    BrainParam(param: "tau_base", value: 0.05),
+    BrainParam(param: "tau_att_base", value: 0.05),
+    AttentionInstinct(input: "hunger", category: Thornbush, weight: 1.0),
+    Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
+])"#;
+
+#[test]
+fn the_brain_tab_names_a_thing_s_worth_neutrally_whatever_its_sign() {
+    // Its bite at tick 0 pricks, and at tick 1 it learns thornbushes are bad;
+    // that worth takes from biting and adds to backing away, so the row
+    // reads "worth: thornbush" either way, beside "habit: …".
+    let objects = [(Pos { x: 3, y: 3 }, "thornbush")];
+    let (world, mut app) = one_sprite_among(THORN_GENOME, &objects, &[], 2);
+    open(&mut app, &world, Tab::Brain);
+    let (_, text) = inspector(&app, &world);
+    assert!(
+        text.iter().any(|row| row.starts_with("worth: thornbush")),
+        "{text:?}"
+    );
+    assert!(!text.iter().any(|row| row.contains("worth it")), "{text:?}");
 }
 
 #[test]

@@ -32,8 +32,12 @@ pub(crate) struct Physiology {
     pub(crate) receptor_targets: BTreeMap<LocusId, (f32, f32)>,
     pub(crate) nearby_sprites: NearbySprites,
     pub(crate) spawn_variation: f32,
-    /// How far a link moves from birth to be a lesson (design §5.6).
+    /// How far a learned value gets from 0 to be a lesson (design §5.6).
     pub(crate) lesson_threshold: f32,
+    /// The least fall of a need in a tick that is relief (design §5.6).
+    pub(crate) relief_deadband: f32,
+    /// How many ticks after a try its target is still the thing touched.
+    pub(crate) touch_window: u64,
     pub(crate) actions: Actions,
     pub(crate) movement: Movement,
     pub(crate) indices: Indices,
@@ -58,6 +62,8 @@ pub(crate) struct PhysiologyEntry {
     nearby_sprites: NearbySprites,
     spawn_variation: f32,
     lesson_threshold: f32,
+    relief_deadband: f32,
+    touch_window: u64,
     actions: Actions,
     movement: Movement,
 }
@@ -329,6 +335,8 @@ impl PhysiologyEntry {
             nearby_sprites: self.nearby_sprites,
             spawn_variation: self.spawn_variation,
             lesson_threshold: self.lesson_threshold,
+            relief_deadband: self.relief_deadband,
+            touch_window: self.touch_window,
             actions: self.actions,
             movement: self.movement,
             indices,
@@ -383,17 +391,22 @@ pub(crate) struct Indices {
     pub(crate) exploration_mod: usize,
     /// The receptor target that scales learning (design §5.6).
     pub(crate) learning_rate_mod: usize,
+    /// The receptor target that scales curiosity (design §5.3).
+    pub(crate) curiosity_mod: usize,
     /// The pulse a retreat that finds no step away fires (design §3.7).
     pub(crate) cornered: usize,
     /// The pulse whose source is the attacker, the Sprite candidate while
     /// it's live (design §3.6).
     pub(crate) was_hit: usize,
+    /// The pulse a fruitless try fires (design §5.2).
+    pub(crate) fruitless: usize,
 }
 
 impl Indices {
     /// Finds each physical chemical and body sensor physiology needs, the
     /// receptor target the brain reads, and the pulses a cornered retreat
-    /// fires and an attacker is known by, or says which file lacks one.
+    /// and a fruitless try fire and an attacker is known by, or says which
+    /// file lacks one.
     pub(crate) fn find(
         chemicals: &[Chemical],
         loci: &[Locus],
@@ -461,8 +474,10 @@ impl Indices {
             resting: sensor("resting")?,
             exploration_mod: target("exploration_mod")?,
             learning_rate_mod: target("learning_rate_mod")?,
+            curiosity_mod: target("curiosity_mod")?,
             cornered: pulse("cornered")?,
             was_hit: pulse("was_hit")?,
+            fruitless: pulse("fruitless")?,
         })
     }
 }

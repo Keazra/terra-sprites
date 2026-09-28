@@ -8,7 +8,7 @@ use xxhash_rust::xxh3::xxh3_64_with_seed;
 
 use crate::action::{self, ActionView, ScriptedAction};
 use crate::biochem::{self, Senses, Traits};
-use crate::brain::Explanation;
+use crate::brain::{Explanation, Memory};
 use crate::config::WorldConfig;
 use crate::data::DataPack;
 use crate::ecology::{self, holds_without_drawing, new_object, square};
@@ -51,6 +51,9 @@ pub(crate) struct WorldState {
     pub(crate) sprites: Sprites,
     /// How many sprites have died of each cause, for the causes any has.
     pub(crate) deaths: BTreeMap<DeathCause, u64>,
+    /// Whether sprites learn at step 4; a lab scenario's control run
+    /// switches it off (design §5.6, §7.1).
+    pub(crate) learning: bool,
 }
 
 impl WorldState {
@@ -265,6 +268,12 @@ impl<'a> SpriteView<'a> {
     /// `None` before its first decision.
     pub fn explain(&self) -> Option<Explanation<'a>> {
         self.sprite.brain.explain(&self.world.data)
+    }
+
+    /// What it has learned, furthest from nothing first, up to five
+    /// (design §5.9).
+    pub fn memory(&self) -> Vec<Memory> {
+        self.sprite.brain.memory(&self.world.data)
     }
 
     /// The reward less the punishment it took in on its last tick, which
@@ -511,6 +520,12 @@ impl World {
         Ok(())
     }
 
+    /// Stops every sprite learning from here on, for a lab scenario's
+    /// control run (design §7.1).
+    pub(crate) fn switch_off_learning(&mut self) {
+        self.state.learning = false;
+    }
+
     fn with(map: Map, data: DataPack, rng: ChaCha8Rng) -> World {
         let objects = Objects::new(&map);
         let sprites = Sprites::new(&map);
@@ -523,6 +538,7 @@ impl World {
                 objects,
                 sprites,
                 deaths: BTreeMap::new(),
+                learning: true,
             },
             data,
             checked_next_id: Cell::new(1),
@@ -767,9 +783,11 @@ impl World {
 mod tests {
     use super::*;
     use crate::action::Outcome;
+    use crate::brain::Brain;
+    use crate::learning::{Signals, Touch, TraceEntry};
     use crate::map::Dir;
     use crate::objects::Roll;
-    use crate::registry::Verb;
+    use crate::registry::{Category, Verb};
 
     /// A 7×5 field of grass, with a pool of shallow water at (5, 3), and a
     /// berry bush at (2, 2), before any step.
@@ -1251,15 +1269,13 @@ mod tests {
         assert_eq!(trace_ticks(&world, id), [] as [u64; 0]);
     }
 
-    /// A trace entry for sprite `id` at `tick`, choosing Eat with every
-    /// concept fully active.
-    fn eat_entry(world: &World, id: EntityId, tick: u64) -> crate::learning::TraceEntry {
-        let brain = &world.state.sprites.get(id).expect("the sprite").brain;
-        crate::learning::TraceEntry {
+    /// A trace entry at `tick`, choosing Eat.
+    fn eat_entry(tick: u64) -> TraceEntry {
+        TraceEntry {
             tick,
-            activations: vec![1.0; brain.concepts.len()],
             verb: Some(Verb::Eat),
             attended: None,
+            motive: None,
         }
     }
 
@@ -1268,7 +1284,7 @@ mod tests {
         let (mut world, first, second) = field_with_sprites();
         let reward = world.data.physiology().indices.reward;
         for id in [first, second] {
-            let entry = eat_entry(&world, id, 0);
+            let entry = eat_entry(0);
             let sprite = world.state.sprites.get_mut(id).expect("a sprite");
             sprite.brain.trace.push_back(entry);
             sprite.body.chems[reward] = 0.5;
@@ -1288,9 +1304,30 @@ mod tests {
     }
 
     #[test]
-    fn the_state_hash_covers_every_sprite_s_learned_links() {
+    fn with_learning_switched_off_step_4_uses_up_reward_and_learns_nothing() {
+        // Design v16 §5.6, for a lab scenario's control run (§7.1).
+        let (mut world, first, _) = field_with_sprites();
+        world.state.learning = false;
+        let indices = world.data.physiology().indices;
+        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        sprite.brain.touched = Some(Touch {
+            tick: 0,
+            category: Category::BerryBush,
+            novelty: 1.0,
+        });
+        sprite.body.chems[indices.reward] = 0.5;
+        let mut events = Vec::new();
+        learning::run(&mut world.state, &world.data, &[], &mut events);
+        let sprite = world.state.sprites.get(first).expect("a sprite");
+        assert_eq!(sprite.brain.felt, 0.5, "felt, and used up");
+        assert_eq!(sprite.body.chems[indices.reward], 0.0);
+        assert_eq!(sprite.brain.memory(&world.data), [], "learned nothing");
+    }
+
+    #[test]
+    fn the_state_hash_covers_what_every_sprite_has_learned() {
         let (mut world, _, second) = field_with_sprites();
-        let entry = eat_entry(&world, second, 0);
+        let entry = eat_entry(0);
         let before = world.state_hash();
         let data = world.data.clone();
         let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
@@ -1298,8 +1335,27 @@ mod tests {
         let traced = world.state_hash();
         assert_ne!(traced, before, "the trace is hashed");
         let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
-        brain.learn(1, 1.0, 1.0, &data);
-        assert_ne!(world.state_hash(), traced, "the links are hashed");
+        brain.touched = Some(Touch {
+            tick: 0,
+            category: Category::BerryBush,
+            novelty: 1.0,
+        });
+        let hunger = |brain: &mut Brain, level| {
+            let needs = [vec![level], vec![0.0; data.need_places().len() - 1]].concat();
+            Signals {
+                relief: brain.relief(&needs, &data),
+                needs,
+                ..Default::default()
+            }
+        };
+        let signals = hunger(brain, 1.0);
+        brain.learn(0, &signals, 1.0, &data);
+        let touched = world.state_hash();
+        assert_ne!(touched, traced, "what it touched is hashed");
+        let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
+        let signals = hunger(brain, 0.5);
+        brain.learn(1, &signals, 1.0, &data);
+        assert_ne!(world.state_hash(), touched, "what it learned is hashed");
     }
 
     #[test]
@@ -1310,6 +1366,23 @@ mod tests {
             let brain = &mut world.state.sprites.get_mut(first).expect("a sprite").brain;
             brain.break_a_link_for_test(broken);
             assert!(world.check_invariants().is_err(), "{broken}");
+        }
+    }
+
+    #[test]
+    fn a_learned_value_out_of_its_range_or_not_a_number_breaks_an_invariant() {
+        // Design v16 §5.6: worth and good 0 to 1, bad −1 to 0, the rest −1 to 1.
+        let breaks: [fn(&mut Brain); 5] = [
+            |brain| brain.experience.worth[0][0] = -0.1,
+            |brain| brain.experience.good[0] = 1.5,
+            |brain| brain.experience.bad[0] = 0.2,
+            |brain| brain.experience.habits[0][0] = f32::NAN,
+            |brain| brain.experience.familiarity[0] = 2.0,
+        ];
+        for (i, broken) in breaks.into_iter().enumerate() {
+            let (mut world, first, _) = field_with_sprites();
+            broken(&mut world.state.sprites.get_mut(first).expect("a sprite").brain);
+            assert!(world.check_invariants().is_err(), "break {i}");
         }
     }
 

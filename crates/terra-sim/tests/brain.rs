@@ -3,8 +3,8 @@
 //! minds when a drive grows.
 
 use terra_sim::{
-    DataPack, EntityId, Event, EventKind, Genome, Map, Outcome, Pos, Scenario, ScriptedAction,
-    Verb, World,
+    DataPack, EntityId, Event, EventKind, Genome, Map, Outcome, Part, Pos, Scenario,
+    ScriptedAction, Verb, World,
 };
 
 const STARTER: &str = include_str!("../../../data/genomes/starter.ron");
@@ -173,6 +173,9 @@ fn eating_and_drinking_relieve_hunger_and_thirst_the_next_tick() {
 
 #[test]
 fn a_content_sprite_mostly_wanders() {
+    // Design v16 §5.8: `always → Wander` wins most choices; with nothing
+    // pressing, a sprite also idly tries things on what it looks at, since
+    // it may try anything (about 3 choices in 10, measured).
     let data = builtin();
     let content = starter_with(&[], &data);
     let mut world = world(&FIELD, &[(at(8, 3), "berry_bush")], at(1, 3), content, 3);
@@ -184,7 +187,7 @@ fn a_content_sprite_mostly_wanders() {
     let wanders = verbs.iter().filter(|&&v| v == Verb::Wander).count();
     assert!(verbs.len() >= 20, "{verbs:?}");
     assert!(
-        wanders * 10 >= verbs.len() * 7,
+        wanders * 2 > verbs.len(),
         "{wanders} of {}: {verbs:?}",
         verbs.len()
     );
@@ -299,20 +302,20 @@ fn explain_gives_attention_scores_and_the_concepts_behind_the_verb() {
     let (verb, score) = explained.decision.expect("a verb");
     assert_eq!(verb, Verb::Eat);
     // Largest first, whatever the sign: hunger, hunger and not there yet, always.
-    let concepts: Vec<(Vec<(&str, bool)>, f32)> = explained
+    let concepts: Vec<(Part, f32)> = explained
         .contributions
         .iter()
-        .map(|c| (c.inputs.clone(), c.amount))
+        .map(|c| (c.part.clone(), c.amount))
         .collect();
     assert_eq!(
         concepts,
         [
-            (vec![("hunger", false)], hunger),
+            (Part::Concept(vec![("hunger", false)]), hunger),
             (
-                vec![("hunger", false), ("target_adjacent", true)],
+                Part::Concept(vec![("hunger", false), ("target_adjacent", true)]),
                 hunger * 0.5
             ),
-            (vec![("always", false)], -0.1),
+            (Part::Concept(vec![("always", false)]), -0.1),
         ]
     );
     let total: f32 = concepts.iter().map(|(_, amount)| amount).sum();

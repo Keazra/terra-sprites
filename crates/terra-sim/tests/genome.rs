@@ -264,10 +264,7 @@ fn a_genome_file_reads_the_brain_genes_by_name_and_writes_them_back() {
 
 #[test]
 fn a_brain_gene_naming_something_the_build_lacks_is_an_error_naming_it() {
-    assert_invalid(
-        &[r#"BrainParam(param: "curiosity", value: 0.2)"#],
-        "curiosity",
-    );
+    assert_invalid(&[r#"BrainParam(param: "whimsy", value: 0.2)"#], "whimsy");
     assert_invalid(
         &[r#"Instinct(inputs: [("glee", false)], verb: Eat, weight: 1.0)"#],
         "glee",
