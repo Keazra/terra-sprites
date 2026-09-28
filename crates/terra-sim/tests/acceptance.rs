@@ -15,31 +15,37 @@ fn thornbush_contacts(window: &Window, data: &DataPack) -> u64 {
         .sum()
 }
 
+/// Applied thornbush contacts over all of `windows`.
+fn all_contacts(windows: &[Window], data: &DataPack) -> u64 {
+    windows.iter().map(|w| thornbush_contacts(w, data)).sum()
+}
+
 #[test]
 fn a1_a_sprite_learns_to_keep_away_from_thornbushes() {
+    // Design v16 §7.3: a learner against the same seed without learning.
     let data = builtin();
     let text = include_str!("../../../scenarios/a1-thornbush.ron");
     let lab = LabScenario::from_ron(text, &data).expect("a valid scenario");
-    let (mut first, mut last) = (Vec::new(), Vec::new());
+    let (mut learners, mut controls) = (Vec::new(), Vec::new());
     for seed in 1..=10 {
         let run = lab.run(data.clone(), seed);
-        let windows = &run.windows;
         // A dead sprite touches no thornbushes, which would pass hollowly.
-        let deaths: Vec<_> = windows.iter().flat_map(|w| w.deaths.keys()).collect();
+        let deaths: Vec<_> = run.windows.iter().flat_map(|w| w.deaths.keys()).collect();
         assert!(
             deaths.is_empty(),
-            "seed {seed}: the sprite died: {deaths:?}"
+            "seed {seed}: the learner died: {deaths:?}"
         );
-        first.push(thornbush_contacts(&windows[0], &data));
-        last.push(thornbush_contacts(&windows[windows.len() - 1], &data));
+        learners.push(all_contacts(&run.windows, &data));
+        let control = run.control.expect("A1 asks for a control run");
+        controls.push(all_contacts(&control, &data));
     }
-    let (early, late) = (median(&first), median(&last));
+    let (learner, control) = (median(&learners), median(&controls));
     assert!(
-        early >= 20.0,
-        "badly calibrated: a median of {early} contacts in ticks 0–5,000 ({first:?}), needing 20"
+        control >= 20.0,
+        "badly calibrated: the control's median is {control} contacts ({controls:?}), needing 20"
     );
     assert!(
-        late <= early / 2.0,
-        "ticks 15,000–20,000 had a median of {late} contacts ({last:?}), against {early} ({first:?})"
+        learner <= control / 2.0,
+        "the learner's median is {learner} contacts ({learners:?}), against the control's {control} ({controls:?})"
     );
 }
