@@ -105,6 +105,33 @@ impl Experience {
     }
 }
 
+impl Experience {
+    /// Checks every learned value is a number within its range (design
+    /// §5.6): worth, good and familiarity 0 to 1, bad −1 to 0, habits and
+    /// the worth of new things −1 to 1. Says which isn't.
+    pub(crate) fn check(&self) -> Result<(), String> {
+        within(self.worth.iter().flatten(), (0.0, 1.0), "a worth")?;
+        within(&self.good, (0.0, 1.0), "a good")?;
+        within(&self.bad, (-1.0, 0.0), "a bad")?;
+        within(self.habits.iter().flatten(), (-1.0, 1.0), "a habit")?;
+        within(&self.familiarity, (0.0, 1.0), "a familiarity")?;
+        within([&self.new_things], (-1.0, 1.0), "the worth of new things")
+    }
+}
+
+/// Checks each of `values` is a number from `low` to `high`, or says which
+/// of `what` isn't.
+fn within<'a>(
+    values: impl IntoIterator<Item = &'a f32>,
+    (low, high): (f32, f32),
+    what: &str,
+) -> Result<(), String> {
+    match values.into_iter().find(|v| !(low..=high).contains(*v)) {
+        Some(v) => Err(format!("{what} at {v}, outside {low} to {high}")),
+        None => Ok(()),
+    }
+}
+
 /// What a sprite tried a verb on, and when (design §5.6): the thing a
 /// feeling is about, for `touch_window` ticks.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]

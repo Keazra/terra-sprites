@@ -81,8 +81,8 @@
     // drawn between 1 − this and 1 + this.
     spawn_variation: 0.1,
 
-    // A link that learning moves this far from the instinct it was born
-    // with is a lesson, which the event log announces once (design §5.6).
+    // A learned value this far from 0 is a lesson, which the event log
+    // announces once (design v16 §5.6).
     lesson_threshold: 0.5,
 
     // Learning (design v16 §5.6): the least fall of a need in a tick that
