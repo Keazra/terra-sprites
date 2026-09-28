@@ -345,3 +345,42 @@ fn playing_with_a_sprite_teaches_what_that_one_is_worth_not_sprites_in_general()
         "nothing learned about sprites in general: {memory:?}"
     );
 }
+
+#[test]
+fn sprites_in_general_are_feared_only_once_several_have_hurt_it() {
+    // Design v18 §5.6: sprites in general are the mean over the sprites it
+    // remembers, at no strength with one, half with two and in full from
+    // generalise (3). Each bully's hit punishes by .5, so each is −.5.
+    let me = at(2, 2);
+    let bullies = [at(3, 2), at(1, 2), at(2, 1)];
+    for (n, expected) in [(1, None), (2, Some(-0.25)), (3, Some(-0.5))] {
+        let mut sprites = vec![(me, HIT_HURTS)];
+        let mut script = vec![(me, ScriptedAction::Rest); 4];
+        for (i, &bully) in bullies[..n].iter().enumerate() {
+            sprites.push((bully, ""));
+            // Ten ticks apart, since a tick has one attacker; then it rests
+            // out the run, so it hits only once.
+            script.extend(vec![(bully, ScriptedAction::Rest); i]);
+            script.push((bully, ScriptedAction::Hit { at: me }));
+            script.extend(vec![(bully, ScriptedAction::Rest); 3]);
+        }
+        let mut world = scene(&["....."; 5], &sprites, &script);
+        let me = world.sprite_at(me).expect("me").id();
+        for _ in 0..25 {
+            world.step();
+        }
+        let memory = memory_of(&world, me);
+        let in_general = Learned::Fear {
+            thing: "sprite".into(),
+        };
+        let value = memory
+            .iter()
+            .find(|(l, _)| *l == in_general)
+            .map(|&(_, v)| v);
+        assert_eq!(
+            value.map(|v| (v * 100.0).round() / 100.0),
+            expected,
+            "{n} bullies: {memory:?}"
+        );
+    }
+}

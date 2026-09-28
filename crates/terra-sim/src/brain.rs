@@ -488,7 +488,18 @@ impl Brain {
     fn learned(&self, data: &DataPack) -> Vec<Memory> {
         let inputs = data.brain_inputs_in_order();
         let mut memory: Vec<Memory> = Vec::new();
-        for (worth, &place) in self.experience.worth.iter().zip(data.need_places()) {
+        // Sprites in general are the summary of the ones it knows (design
+        // v18 §5.6), never learned directly.
+        let in_general = self.sprites_in_general(data.need_places().len());
+        let sprites = Category::Sprite.index();
+        let mut worth = self.experience.worth.clone();
+        for (worth, &summary) in worth.iter_mut().zip(&in_general.worth) {
+            worth[sprites] = summary;
+        }
+        let (mut good, mut bad) = (self.experience.good, self.experience.bad);
+        good[sprites] = in_general.good;
+        bad[sprites] = in_general.bad;
+        for (worth, &place) in worth.iter().zip(data.need_places()) {
             for (&category, &value) in Category::ALL.iter().zip(worth) {
                 memory.push(Memory {
                     learned: Learned::Worth {
@@ -500,7 +511,7 @@ impl Brain {
             }
         }
         let thing = |category: Category| Thing::from(category.name());
-        for (&category, &value) in Category::ALL.iter().zip(&self.experience.good) {
+        for (&category, &value) in Category::ALL.iter().zip(&good) {
             let learned = Learned::Worth {
                 thing: thing(category),
                 need: None,
@@ -510,7 +521,7 @@ impl Brain {
                 amount: value,
             });
         }
-        for (&category, &value) in Category::ALL.iter().zip(&self.experience.bad) {
+        for (&category, &value) in Category::ALL.iter().zip(&bad) {
             let learned = Learned::Bad {
                 thing: thing(category),
             };
@@ -519,6 +530,12 @@ impl Brain {
                 amount: value,
             });
         }
+        memory.push(Memory {
+            learned: Learned::Fear {
+                thing: thing(Category::Sprite),
+            },
+            amount: in_general.fear,
+        });
         for (&category, habits) in Category::ALL.iter().zip(&self.experience.habits) {
             for (&verb, &value) in VERBS.iter().zip(habits) {
                 let learned = Learned::Habit {
@@ -564,6 +581,30 @@ impl Brain {
             }
         }
         memory
+    }
+
+    /// Sprites in general (design v18 §5.6): each value's mean over the
+    /// sprites it remembers, at no strength while it knows one, and in full
+    /// once it knows `generalise`. For `needs` needs.
+    pub(crate) fn sprites_in_general(&self, needs: usize) -> Individual {
+        let known = &self.experience.individuals;
+        let n = known.len() as f32;
+        let generalise = self.params.get(BrainParam::Generalise);
+        let strength = ((n - 1.0) / (generalise - 1.0)).clamp(0.0, 1.0);
+        let mut summary = Individual::new(needs);
+        if strength == 0.0 {
+            return summary;
+        }
+        let share = strength / n;
+        for individual in known.values() {
+            for (summary, worth) in summary.worth.iter_mut().zip(&individual.worth) {
+                *summary += share * worth;
+            }
+            summary.good += share * individual.good;
+            summary.bad += share * individual.bad;
+            summary.fear += share * individual.fear;
+        }
+        summary
     }
 
     /// Checks the brain's state (design §5.6): instinct links within
