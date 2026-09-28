@@ -83,7 +83,7 @@ pub(crate) struct Experience {
     /// The worth of new things.
     pub(crate) new_things: f32,
     /// The sprites it remembers (design v18 §5.6), by ID.
-    pub(crate) individuals: BTreeMap<EntityId, Individual>,
+    pub(crate) individuals: BTreeMap<EntityId, SpriteMemory>,
     /// Which learned values have been lessons (design §5.6).
     pub(crate) taught: BTreeSet<Learned>,
     /// Each need's level at the last step 4, to read its relief from.
@@ -129,18 +129,31 @@ impl Experience {
 }
 
 impl Experience {
+    /// What it remembers of `sprite`, remembering it afresh, for `needs`
+    /// needs, if it doesn't yet (design v18 §5.6).
+    pub(crate) fn remember(&mut self, sprite: EntityId, needs: usize) -> &mut SpriteMemory {
+        self.individuals
+            .entry(sprite)
+            .or_insert_with(|| SpriteMemory::new(needs))
+    }
+
     /// Forgets every remembered sprite that everything learned about is
     /// nearer 0 than `below` (design v18 §5.6).
     pub(crate) fn forget_faded(&mut self, below: f32) {
-        self.individuals
-            .retain(|_, individual| !individual.faded(below));
+        self.individuals.retain(|_, memory| !memory.faded(below));
+    }
+
+    /// Forgets every remembered sprite not in `alive`: a sprite that has
+    /// died is forgotten (design v18 §5.6).
+    pub(crate) fn forget_dead(&mut self, alive: &BTreeSet<EntityId>) {
+        self.individuals.retain(|sprite, _| alive.contains(sprite));
     }
 }
 
 /// What a sprite has learned about one other sprite (design v18 §5.6): its
 /// worth for each need and in general, how bad it is, and how frightening.
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub(crate) struct Individual {
+pub(crate) struct SpriteMemory {
     /// Worth for each need, in the pack's needs order (0 to 1).
     pub(crate) worth: Vec<f32>,
     /// General good, from `reward` (0 to 1).
@@ -151,7 +164,7 @@ pub(crate) struct Individual {
     pub(crate) fear: f32,
 }
 
-impl Individual {
+impl SpriteMemory {
     /// Whether everything learned about it is nearer 0 than `below`.
     pub(crate) fn faded(&self, below: f32) -> bool {
         let values = self.worth.iter().chain([&self.good, &self.bad, &self.fear]);
@@ -159,8 +172,8 @@ impl Individual {
     }
 
     /// A sprite newly remembered, for `needs` needs: nothing learned yet.
-    pub(crate) fn new(needs: usize) -> Individual {
-        Individual {
+    pub(crate) fn new(needs: usize) -> SpriteMemory {
+        SpriteMemory {
             worth: vec![0.0; needs],
             good: 0.0,
             bad: 0.0,
@@ -271,10 +284,7 @@ pub(crate) fn run(
         let (reward, punishment) = (body.chems[indices.reward], body.chems[indices.punishment]);
         body.chems[indices.reward] = 0.0;
         body.chems[indices.punishment] = 0.0;
-        brain
-            .experience
-            .individuals
-            .retain(|sprite, _| alive.contains(sprite));
+        brain.experience.forget_dead(&alive);
         let needs = brain.need_levels(body, data);
         let relief = brain.relief(&needs, data);
         brain.felt = relief.iter().sum::<f32>() + reward - punishment;

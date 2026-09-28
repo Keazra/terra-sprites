@@ -487,14 +487,10 @@ fn act(
         // What it tried is what the next few ticks' feelings are about
         // (design §5.6).
         let brain = &mut state.sprites.get_mut(id).expect("the actor").brain;
-        let sprite = match target {
-            Target::Sprite(sprite) => Some(sprite),
-            _ => None,
-        };
         brain.touched = Some(Touch {
             tick: state.tick,
             category,
-            sprite,
+            sprite: target.sprite(),
             novelty: brain.novelty(category),
         });
     }
