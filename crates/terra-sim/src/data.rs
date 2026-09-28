@@ -298,14 +298,13 @@ impl DataPack {
 
     /// How the screen says the kind of thing called `category` in general,
     /// such as "thornbushes" (design §3.5.1, §6.1): the plural of the first
-    /// object type, in ID order, that brains perceive as that kind. `None`
-    /// when that type gives none, as water doesn't, or no type is that kind.
+    /// object type, in ID order, that brains perceive as that kind and gives
+    /// one. `None` when none does, as water doesn't, or no type is that kind.
     pub fn plural_of(&self, category: &str) -> Option<&str> {
         self.object_types
             .iter()
-            .find(|t| t.category.name() == category)?
-            .plural
-            .as_deref()
+            .filter(|t| t.category.name() == category)
+            .find_map(|t| t.plural.as_deref())
     }
 
     /// Whether `verb` on an object of the type with the stable ID
