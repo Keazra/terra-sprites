@@ -865,7 +865,11 @@ fn a_pseudo_type_s_verbs_only_inject_and_signal() {
             r#"(id: 100, name: "water", category: Water, pseudo: true,
                 verbs: {{ Drink: [{effect}] }})"#
         );
-        let words = ["water", effect.split('(').next().expect("a name"), "Inject"];
+        let words = [
+            "water",
+            effect.split('(').next().expect("a name"),
+            "a pseudo type's verbs may only Inject and Signal",
+        ];
         assert_invalid_objects(&[&bush(1, "bush", ""), &water], &words);
     }
 }
