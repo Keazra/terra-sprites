@@ -398,3 +398,52 @@ fn a_sprite_does_not_back_away_from_one_it_fears_that_is_far_off() {
     let choice = next_choice(&mut world, me, 20).map(|(verb, _)| verb);
     assert_eq!(choice, Some(Verb::Rest));
 }
+
+#[test]
+fn a_starter_sprite_hit_by_a_bully_backs_away_from_it_far_more_than_from_a_stranger() {
+    // Design v18 §5.5, the bully arena of slice 9c's prototype (#62): a
+    // starter sprite fears the one that hit it, not sprites in general, so
+    // it backs away from the bully far more than from a stranger. On v17's
+    // brain the two were about even (4 and 3.5 in 400 ticks).
+    let (me, bully, stranger) = (at(5, 3), at(6, 3), at(9, 5));
+    let (mut from_bully, mut from_stranger) = (0, 0);
+    for seed in 1..=5 {
+        let script = [
+            (me, ScriptedAction::Rest),
+            (bully, ScriptedAction::Hit { at: me }),
+        ];
+        let sprites = [
+            (me, starter as MakeGenome),
+            (bully, starter),
+            (stranger, starter),
+        ];
+        let mut world = scene_with(&["............"; 8], &[], &sprites, &script, seed);
+        let (id, them, other) = (
+            id_at(&world, me),
+            id_at(&world, bully),
+            id_at(&world, stranger),
+        );
+        for _ in 0..400 {
+            for event in world.step() {
+                if let EventKind::ActionEnded {
+                    id: who,
+                    verb: Verb::Retreat,
+                    action,
+                    ..
+                } = event.kind
+                    && who == id
+                {
+                    match action.target {
+                        Some(Target::Sprite(t)) if t == them => from_bully += 1,
+                        Some(Target::Sprite(t)) if t == other => from_stranger += 1,
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        from_bully > 3 * from_stranger,
+        "backed away from the bully {from_bully} times, from the stranger {from_stranger}"
+    );
+}
