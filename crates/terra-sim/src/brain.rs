@@ -93,6 +93,14 @@ fn index(param: BrainParam) -> usize {
 /// by this signature, never by its place in the brain.
 pub(crate) type Signature = Vec<(usize, bool)>;
 
+/// Which sprite stands for sprites while the brain scores (design v18
+/// §5.3, §5.5), and whether a hit is still felt, which quiets fear.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub(crate) struct SpriteFocus {
+    pub(crate) sprite: Option<EntityId>,
+    pub(crate) hit: bool,
+}
+
 /// What a sprite knows about the thing it attends to, for the Target inputs.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Aim {
@@ -811,6 +819,7 @@ impl Brain {
         inputs: &[f32],
         candidates: &BTreeMap<Category, f32>,
         curiosity_mod: f32,
+        focus: SpriteFocus,
         data: &DataPack,
     ) -> BTreeMap<Category, f32> {
         let state: Vec<usize> = data
@@ -823,6 +832,7 @@ impl Brain {
         let salience = self.params.get(BrainParam::SalienceGain);
         let value_gain = self.params.get(BrainParam::ValueGain);
         let curiosity = self.params.get(BrainParam::Curiosity);
+        let vigilance = self.params.get(BrainParam::Vigilance);
         let boldness = (1.0 + self.experience.new_things).max(0.0) * curiosity_mod;
         candidates
             .iter()
@@ -832,14 +842,65 @@ impl Brain {
                     .iter()
                     .map(|&i| inputs[i] * self.attention.get(i, c))
                     .sum();
-                let worth = value_gain * self.worth(category, inputs, data);
+                let worth = value_gain * self.worth_of(category, focus.sprite, inputs, data);
                 let curious = curiosity * self.novelty(category) * boldness;
+                // Fear catches the eye (design v18 §5.3).
+                let watchful = vigilance * self.fright(category, focus, distance, data);
                 (
                     category,
-                    instinct + salience * (1.0 - distance) + worth + curious,
+                    instinct + salience * (1.0 - distance) + worth + curious + watchful,
                 )
             })
             .collect()
+    }
+
+    /// How much `sprite`, at normalized `distance`, draws the eye beyond the
+    /// instincts every sprite shares (design v18 §3.6, §5.3): its nearness,
+    /// what it's worth, and how frightening it is while near.
+    pub(crate) fn draw(
+        &self,
+        sprite: EntityId,
+        distance: f32,
+        inputs: &[f32],
+        data: &DataPack,
+    ) -> f32 {
+        let focus = SpriteFocus {
+            sprite: Some(sprite),
+            hit: false,
+        };
+        self.params.get(BrainParam::SalienceGain) * (1.0 - distance)
+            + self.params.get(BrainParam::ValueGain)
+                * self.worth_of(Category::Sprite, focus.sprite, inputs, data)
+            + self.params.get(BrainParam::Vigilance)
+                * self.fright(Category::Sprite, focus, distance, data)
+    }
+
+    /// How frightening `category`'s thing is at normalized `distance` (design
+    /// v18 §5.3), from 0 to 1: for sprites, the one in `focus`, fading to
+    /// nothing at `fear_reach`, and nothing while a hit is felt; nothing is
+    /// feared but sprites in M1.
+    fn fright(
+        &self,
+        category: Category,
+        focus: SpriteFocus,
+        distance: f32,
+        data: &DataPack,
+    ) -> f32 {
+        if category != Category::Sprite || focus.hit {
+            return 0.0;
+        }
+        let fear = self.sprite(focus.sprite, data.need_places().len()).fear;
+        let reach = self.params.get(BrainParam::FearReach);
+        -fear * (1.0 - distance / reach).max(0.0)
+    }
+
+    /// What the brain knows of `sprite` (design v18 §5.6): what it remembers
+    /// of it, or sprites in general for one it doesn't remember, or none.
+    fn sprite(&self, sprite: Option<EntityId>, needs: usize) -> Individual {
+        sprite
+            .and_then(|sprite| self.experience.individuals.get(&sprite))
+            .cloned()
+            .unwrap_or_else(|| self.sprites_in_general(needs))
     }
 
     /// Where attention goes (design §5.3). Choosing afresh, with no action
@@ -905,6 +966,28 @@ impl Brain {
     /// level, from `inputs`, times its worth for that need, plus its general
     /// good and its bad.
     fn worth(&self, category: Category, inputs: &[f32], data: &DataPack) -> f32 {
+        self.worth_of(category, None, inputs, data)
+    }
+
+    /// What `category`'s thing is worth to the sprite now (design §5.6): for
+    /// sprites, `sprite`, or sprites in general (design v18).
+    fn worth_of(
+        &self,
+        category: Category,
+        sprite: Option<EntityId>,
+        inputs: &[f32],
+        data: &DataPack,
+    ) -> f32 {
+        if category == Category::Sprite {
+            let known = self.sprite(sprite, data.need_places().len());
+            let for_needs: f32 = data
+                .need_places()
+                .iter()
+                .zip(&known.worth)
+                .map(|(&place, worth)| inputs[place] * worth)
+                .sum();
+            return for_needs + known.good + known.bad;
+        }
         let c = category.index();
         let experience = &self.experience;
         let for_needs: f32 = data
@@ -1121,12 +1204,13 @@ mod tests {
             ("target_distance", 1.0),
             ("target_adjacent", 1.0),
         ]);
-        let scores = brain.attention_scores(&hungry, &candidates, 0.0, &data);
+        let scores =
+            brain.attention_scores(&hungry, &candidates, 0.0, SpriteFocus::default(), &data);
         // 0.5 × 0.8 learned, plus 0.5 × (1 − 0.4) salience.
         assert_eq!(scores[&Category::BerryBush], 0.4 + 0.3);
         assert_eq!(scores[&Category::Water], 0.5, "salience alone");
         assert_eq!(
-            brain.attention_scores(&also_aimed, &candidates, 0.0, &data),
+            brain.attention_scores(&also_aimed, &candidates, 0.0, SpriteFocus::default(), &data),
             scores
         );
     }
@@ -1443,10 +1527,22 @@ mod tests {
         brain.experience.worth[0][Category::Berry.index()] = 0.5;
         brain.experience.bad[Category::Thornbush.index()] = -0.4;
         let candidates = BTreeMap::from([(Category::Berry, 1.0), (Category::Thornbush, 1.0)]);
-        let full = brain.attention_scores(&inputs(&[]), &candidates, 0.0, &data);
+        let full = brain.attention_scores(
+            &inputs(&[]),
+            &candidates,
+            0.0,
+            SpriteFocus::default(),
+            &data,
+        );
         assert_eq!(full[&Category::Berry], 0.0, "no hunger, no pull");
         assert_eq!(full[&Category::Thornbush], -0.4, "bad counts always");
-        let hungry = brain.attention_scores(&inputs(&[("hunger", 0.8)]), &candidates, 0.0, &data);
+        let hungry = brain.attention_scores(
+            &inputs(&[("hunger", 0.8)]),
+            &candidates,
+            0.0,
+            SpriteFocus::default(),
+            &data,
+        );
         assert!(close(hungry[&Category::Berry], 0.4), "{hungry:?}");
     }
 
@@ -1623,7 +1719,9 @@ mod tests {
         brain.experience.familiarity[Category::Ball.index()] = 0.5;
         let candidates = BTreeMap::from([(Category::Berry, 1.0), (Category::Ball, 1.0)]);
         let x = inputs(&[]);
-        let score = |brain: &Brain, mood: f32| brain.attention_scores(&x, &candidates, mood, &data);
+        let score = |brain: &Brain, mood: f32| {
+            brain.attention_scores(&x, &candidates, mood, SpriteFocus::default(), &data)
+        };
         let calm = score(&brain, 1.0);
         assert!(close(calm[&Category::Berry], 0.3), "{calm:?}");
         assert!(
