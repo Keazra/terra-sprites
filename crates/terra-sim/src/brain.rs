@@ -416,6 +416,9 @@ impl Brain {
                 *habit = (*habit + step).clamp(-1.0, 1.0);
             }
         }
+        // A sprite touched that taught it nothing isn't remembered, so it
+        // doesn't count towards sprites in general (design v18 §5.6).
+        self.experience.forget_faded(physiology.forget_below);
         let lessons = self.lessons(data);
         self.fade(physiology.forget_below);
         lessons
@@ -473,9 +476,7 @@ impl Brain {
             individual.bad *= bad;
             individual.fear *= fear;
         }
-        experience
-            .individuals
-            .retain(|_, individual| !individual.faded(forget_below));
+        experience.forget_faded(forget_below);
     }
 
     /// How new `category` is to the sprite (design §5.6): 1 − familiarity.

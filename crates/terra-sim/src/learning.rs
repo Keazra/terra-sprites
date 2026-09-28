@@ -128,6 +128,15 @@ impl Experience {
     }
 }
 
+impl Experience {
+    /// Forgets every remembered sprite that everything learned about is
+    /// nearer 0 than `below` (design v18 §5.6).
+    pub(crate) fn forget_faded(&mut self, below: f32) {
+        self.individuals
+            .retain(|_, individual| !individual.faded(below));
+    }
+}
+
 /// What a sprite has learned about one other sprite (design v18 §5.6): its
 /// worth for each need and in general, how bad it is, and how frightening.
 #[derive(Debug, Clone, PartialEq, Serialize)]

@@ -503,3 +503,44 @@ fn each_sprite_feared_is_a_lesson_once_and_sprites_in_general_once_they_turn() {
         ]
     );
 }
+
+#[test]
+fn touching_a_sprite_it_learns_nothing_about_changes_nothing_about_sprites_in_general() {
+    // Design v18 §5.6. Two bullies at −.8 each make sprites in general
+    // −.4, at half strength, no lesson. Then it hits a stranger, which
+    // teaches it nothing: sprites in general are still −.4, so still no
+    // lesson, and it remembers only the two bullies.
+    let (me, bully, other_bully, stranger) = (at(2, 2), at(3, 2), at(1, 2), at(2, 3));
+    let hurts = r#"Emitter(locus: Locus("was_hit"), mode: Level, gain: 0.8, chem: "punishment"),"#;
+    let mut script = vec![(me, ScriptedAction::Rest); 2];
+    script.push((me, ScriptedAction::Hit { at: stranger }));
+    script.push((me, ScriptedAction::Rest));
+    script.push((bully, ScriptedAction::Hit { at: me }));
+    script.extend(vec![(bully, ScriptedAction::Rest); 4]);
+    script.push((other_bully, ScriptedAction::Rest));
+    script.push((other_bully, ScriptedAction::Hit { at: me }));
+    script.extend(vec![(other_bully, ScriptedAction::Rest); 3]);
+    script.extend(vec![(stranger, ScriptedAction::Rest); 4]);
+    let mut world = scene(
+        &["....."; 5],
+        &[(me, hurts), (bully, ""), (other_bully, ""), (stranger, "")],
+        &script,
+    );
+    let (me, stranger) = (
+        world.sprite_at(me).expect("me").id(),
+        world.sprite_at(stranger).expect("the stranger").id(),
+    );
+    let learned: Vec<(Learned, bool)> = (0..35).flat_map(|_| lessons(&world.step())).collect();
+    let in_general = Learned::Fear {
+        thing: "sprite".into(),
+    };
+    assert!(
+        !learned.iter().any(|(l, _)| *l == in_general),
+        "{learned:?}"
+    );
+    assert!(
+        !remembers(&world, me, stranger),
+        "{:?}",
+        memory_of(&world, me)
+    );
+}
