@@ -605,7 +605,9 @@ fn brain_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
         let amount = signed_level(contribution.amount);
         let name = match &contribution.part {
             Part::Concept(inputs) => concept_name(inputs),
-            Part::Worth(thing) => format!("{} is worth it", display_name(thing)),
+            // Neutral, since worth adds to a verb or takes from it either
+            // way: a bad thing's pushes towards backing away.
+            Part::Worth(thing) => format!("worth: {}", display_name(thing)),
             Part::Habit(thing) => {
                 let verb = explained.decision.map_or("", |(verb, _)| verb_name(verb));
                 format!("habit: {} {}", verb.to_lowercase(), display_name(thing))

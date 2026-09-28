@@ -1264,6 +1264,22 @@ const THORN_GENOME: &str = r#"(format: 1, genes: [
 ])"#;
 
 #[test]
+fn the_brain_tab_names_a_thing_s_worth_neutrally_whatever_its_sign() {
+    // Its bite at tick 0 pricks, and at tick 1 it learns thornbushes are bad;
+    // that worth takes from biting and adds to backing away, so the row
+    // reads "worth: thornbush" either way, beside "habit: …".
+    let objects = [(Pos { x: 3, y: 3 }, "thornbush")];
+    let (world, mut app) = one_sprite_among(THORN_GENOME, &objects, &[], 2);
+    open(&mut app, &world, Tab::Brain);
+    let (_, text) = inspector(&app, &world);
+    assert!(
+        text.iter().any(|row| row.starts_with("worth: thornbush")),
+        "{text:?}"
+    );
+    assert!(!text.iter().any(|row| row.contains("worth it")), "{text:?}");
+}
+
+#[test]
 fn the_chem_tab_shows_what_was_felt_on_the_reward_line() {
     // The bite at tick 0 pricks; at tick 1 learning uses up a punishment of 1.
     let objects = [(Pos { x: 3, y: 3 }, "thornbush")];
