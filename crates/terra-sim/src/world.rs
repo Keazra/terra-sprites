@@ -1308,6 +1308,7 @@ mod tests {
         brain.touched = Some(crate::learning::Touch {
             tick: 0,
             category: crate::registry::Category::BerryBush,
+            novelty: 1.0,
         });
         let needs = data.need_places().len();
         let hunger = |level| crate::learning::Signals {

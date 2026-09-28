@@ -294,9 +294,11 @@ impl Brain {
         let touched = self
             .touched
             .filter(|t| tick - t.tick <= physiology.touch_window)
-            .map(|t| t.category)
-            .or(signals.attacked.then_some(Category::Sprite));
-        if let Some(category) = touched {
+            .map(|t| (t.category, t.novelty))
+            .or(signals
+                .attacked
+                .then(|| (Category::Sprite, self.novelty(Category::Sprite))));
+        if let Some((category, novelty)) = touched {
             let good = self.params.get(BrainParam::WorthRateGood) * learning_rate_mod;
             let bad = self.params.get(BrainParam::WorthRateBad) * learning_rate_mod;
             let c = kind(category);
@@ -306,6 +308,10 @@ impl Brain {
             }
             experience.good[c] = (experience.good[c] + good * signals.reward).min(1.0);
             experience.bad[c] = (experience.bad[c] - bad * signals.punishment).max(-1.0);
+            // How it went with something new teaches the worth of new things.
+            let relieved: f32 = relief.iter().sum();
+            let felt = good * (relieved + signals.reward) - bad * signals.punishment;
+            experience.new_things = (experience.new_things + felt * novelty).clamp(-1.0, 1.0);
         }
         // Habits, along the trace: each aimed verb and the thing it attended.
         // A fruitless try disappoints the need that chose it.
@@ -353,12 +359,18 @@ impl Brain {
         for value in good_values {
             *value *= good;
         }
+        experience.new_things *= good;
         for value in &mut experience.bad {
             *value *= bad;
         }
         for value in experience.habits.iter_mut().flatten() {
             *value *= habit;
         }
+    }
+
+    /// How new `category` is to the sprite (design §5.6): 1 − familiarity.
+    pub(crate) fn novelty(&self, category: Category) -> f32 {
+        1.0 - self.experience.familiarity[kind(category)]
     }
 
     /// Each need's level (design §5.2), in the pack's needs order.
@@ -414,6 +426,10 @@ impl Brain {
                 memory.push(Memory { learned, value });
             }
         }
+        memory.push(Memory {
+            learned: Learned::NewThings,
+            value: self.experience.new_things,
+        });
         memory.retain(|m| m.value != 0.0);
         // A stable sort keeps a tie in listed order.
         memory.sort_by(|a, b| b.value.abs().total_cmp(&a.value.abs()));
@@ -452,6 +468,12 @@ impl Brain {
             let motive = snapshot
                 .verb
                 .and_then(|verb| self.motive(verb, &snapshot.activations));
+            if let Some(category) = snapshot.attended {
+                // Attending to a kind of thing makes it familiar (design §5.6).
+                let rate = self.params.get(BrainParam::FamiliarityRate);
+                let familiar = &mut self.experience.familiarity[kind(category)];
+                *familiar = (*familiar + rate).min(1.0);
+            }
             self.trace.push_back(TraceEntry {
                 motive,
                 tick,
@@ -588,6 +610,7 @@ impl Brain {
         &self,
         inputs: &[f32],
         candidates: &BTreeMap<Category, f32>,
+        curiosity_mod: f32,
         data: &DataPack,
     ) -> BTreeMap<Category, f32> {
         let state: Vec<usize> = data
@@ -599,6 +622,8 @@ impl Brain {
             .collect();
         let salience = self.params.get(BrainParam::SalienceGain);
         let value_gain = self.params.get(BrainParam::ValueGain);
+        let curiosity = self.params.get(BrainParam::Curiosity);
+        let boldness = (1.0 + self.experience.new_things).max(0.0) * curiosity_mod;
         candidates
             .iter()
             .map(|(&category, &distance)| {
@@ -608,7 +633,11 @@ impl Brain {
                     .map(|&i| inputs[i] * self.attention.get(i, c))
                     .sum();
                 let worth = value_gain * self.value(category, inputs, data);
-                (category, instinct + salience * (1.0 - distance) + worth)
+                let curious = curiosity * self.novelty(category) * boldness;
+                (
+                    category,
+                    instinct + salience * (1.0 - distance) + worth + curious,
+                )
             })
             .collect()
     }
@@ -898,12 +927,12 @@ mod tests {
             ("target_distance", 1.0),
             ("target_adjacent", 1.0),
         ]);
-        let scores = brain.attention_scores(&hungry, &candidates, &data);
+        let scores = brain.attention_scores(&hungry, &candidates, 0.0, &data);
         // 0.5 × 0.8 learned, plus 0.5 × (1 − 0.4) salience.
         assert_eq!(scores[&Category::BerryBush], 0.4 + 0.3);
         assert_eq!(scores[&Category::Water], 0.5, "salience alone");
         assert_eq!(
-            brain.attention_scores(&also_aimed, &candidates, &data),
+            brain.attention_scores(&also_aimed, &candidates, 0.0, &data),
             scores
         );
     }
@@ -1109,6 +1138,7 @@ mod tests {
         brain.touched = Some(Touch {
             tick: 9,
             category: Category::Berry,
+            novelty: 1.0,
         });
         let needs = data.need_places().len();
         let hungry = |level| Signals {
@@ -1150,6 +1180,7 @@ mod tests {
         let touch = Touch {
             tick: 1,
             category: Category::BerryBush,
+            novelty: 1.0,
         };
         brain.touched = Some(touch);
         brain.learn(1, &hunger_at(&data, 0.5, false), 1.0, &data);
@@ -1174,6 +1205,7 @@ mod tests {
         brain.touched = Some(Touch {
             tick: 2,
             category: Category::BerryBush,
+            novelty: 1.0,
         });
         brain.learn(6, &hunger_at(&data, 0.0, false), 1.0, &data);
         assert_eq!(bush_for_hunger(&brain), 0.0);
@@ -1197,10 +1229,10 @@ mod tests {
         brain.experience.worth[0][kind(Category::Berry)] = 0.5;
         brain.experience.bad[kind(Category::Thornbush)] = -0.4;
         let candidates = BTreeMap::from([(Category::Berry, 1.0), (Category::Thornbush, 1.0)]);
-        let full = brain.attention_scores(&inputs(&[]), &candidates, &data);
+        let full = brain.attention_scores(&inputs(&[]), &candidates, 0.0, &data);
         assert_eq!(full[&Category::Berry], 0.0, "no hunger, no pull");
         assert_eq!(full[&Category::Thornbush], -0.4, "bad counts always");
-        let hungry = brain.attention_scores(&inputs(&[("hunger", 0.8)]), &candidates, &data);
+        let hungry = brain.attention_scores(&inputs(&[("hunger", 0.8)]), &candidates, 0.0, &data);
         assert!(close(hungry[&Category::Berry], 0.4), "{hungry:?}");
     }
 
@@ -1279,6 +1311,7 @@ mod tests {
         brain.touched = Some(Touch {
             tick: 9,
             category: Category::Ball,
+            novelty: 1.0,
         });
         let mut needs = vec![0.0; data.need_places().len()];
         needs[0] = 0.8;
@@ -1309,6 +1342,7 @@ mod tests {
         brain.touched = Some(Touch {
             tick: 9,
             category: Category::Ball,
+            novelty: 1.0,
         });
         let fruitless = Signals {
             needs: vec![1.0; data.need_places().len()],
@@ -1350,6 +1384,70 @@ mod tests {
             experience.habits[thorn][column(Verb::Eat)],
             -0.2 * 0.995
         ));
+    }
+
+    #[test]
+    fn attending_to_a_kind_of_thing_makes_it_familiar() {
+        // Design v16 §5.6: familiarity_rate (.002) each tick attended.
+        let mut brain = brain(&[]);
+        for tick in 0..10 {
+            decide(&mut brain, tick, Verb::Rest, Some(Category::Ball), &[]);
+        }
+        let familiar = brain.experience.familiarity[kind(Category::Ball)];
+        assert!(close(familiar, 0.02), "{familiar}");
+        assert_eq!(brain.experience.familiarity[kind(Category::Berry)], 0.0);
+    }
+
+    #[test]
+    fn unfamiliar_kinds_of_thing_draw_the_eye_as_boldly_as_the_sprite_is_bold() {
+        // Design v16 §5.3: curiosity (.3) × novelty × max(0, 1 + new things)
+        // × curiosity_mod; salience is 0 at distance 1.
+        let data = builtin();
+        let mut brain = brain(&[]);
+        brain.experience.familiarity[kind(Category::Ball)] = 0.5;
+        let candidates = BTreeMap::from([(Category::Berry, 1.0), (Category::Ball, 1.0)]);
+        let x = inputs(&[]);
+        let score = |brain: &Brain, mood: f32| brain.attention_scores(&x, &candidates, mood, &data);
+        let calm = score(&brain, 1.0);
+        assert!(close(calm[&Category::Berry], 0.3), "{calm:?}");
+        assert!(
+            close(calm[&Category::Ball], 0.15),
+            "half familiar, half the pull"
+        );
+        let wary = score(&brain, 0.5);
+        assert!(close(wary[&Category::Berry], 0.15), "wariness halves it");
+        brain.experience.new_things = -0.5;
+        let shy = score(&brain, 1.0);
+        assert!(close(shy[&Category::Berry], 0.15), "a shy sprite, half");
+    }
+
+    #[test]
+    fn a_hurt_from_something_new_teaches_that_new_things_are_bad() {
+        // Design v16 §5.6: (good − worth_rate_bad (.8) × punishment) × how
+        // new the thing touched was.
+        let data = builtin();
+        let mut brain = unfading(&[]);
+        brain.touched = Some(Touch {
+            tick: 1,
+            category: Category::Thornbush,
+            novelty: 0.5,
+        });
+        let hurt = Signals {
+            needs: vec![0.0; data.need_places().len()],
+            punishment: 1.0,
+            ..Default::default()
+        };
+        brain.learn(1, &hurt, 1.0, &data);
+        assert!(
+            close(brain.experience.new_things, -0.8 * 0.5),
+            "{}",
+            brain.experience.new_things
+        );
+        let memory = brain.memory(&data);
+        assert!(
+            memory.iter().any(|m| m.learned == Learned::NewThings),
+            "{memory:?}"
+        );
     }
 
     #[test]

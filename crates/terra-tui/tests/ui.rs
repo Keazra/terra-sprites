@@ -1080,9 +1080,11 @@ fn the_decision_marker_flashes_an_x_where_the_selected_sprite_is_heading() {
 }
 
 /// A hungry sprite whose instincts point it at berries and to eating, with
-/// a nudge against eating for no reason and a mild habit of wandering.
+/// a nudge against eating for no reason and a mild habit of wandering, and
+/// no curiosity, so its attention is its instincts and nearness alone.
 const HUNGRY_GENOME: &str = r#"(format: 1, genes: [
     InitialConcentration(chem: "hunger", value: 0.8),
+    BrainParam(param: "curiosity", value: 0.0),
     BrainParam(param: "tau_base", value: 0.05),
     BrainParam(param: "tau_att_base", value: 0.05),
     AttentionInstinct(input: "hunger", category: Berry, weight: 1.0),

@@ -490,6 +490,7 @@ fn act(
         brain.touched = Some(Touch {
             tick: state.tick,
             category,
+            novelty: brain.novelty(category),
         });
     }
 }

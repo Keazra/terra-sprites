@@ -85,6 +85,14 @@ fn memory(world: &World) -> Vec<(Learned, f32)> {
         .collect()
 }
 
+/// What the one sprite has learned `learned` is worth, or 0.
+fn value_of(world: &World, learned: &Learned) -> f32 {
+    memory(world)
+        .into_iter()
+        .find(|(l, _)| l == learned)
+        .map_or(0.0, |(_, value)| value)
+}
+
 fn close(a: f32, b: f32) -> bool {
     (a - b).abs() < 1e-5
 }
@@ -116,14 +124,15 @@ fn a_hungry_sprite_that_eats_from_a_bush_learns_the_bush_is_good_for_hunger() {
         "nothing learned before the bite is felt"
     );
     world.step();
-    let learned = memory(&world);
     let good_for_hunger = Learned::Worth {
         thing: "berry_bush".into(),
         need: Some("hunger".into()),
     };
-    assert_eq!(learned.len(), 1, "{learned:?}");
-    assert_eq!(learned[0].0, good_for_hunger);
-    assert!(close(learned[0].1, 0.25), "{learned:?}");
+    assert!(
+        close(value_of(&world, &good_for_hunger), 0.25),
+        "{:?}",
+        memory(&world)
+    );
 }
 
 #[test]
@@ -146,13 +155,18 @@ fn a_prick_makes_only_the_thornbush_touched_bad_not_what_was_looked_at_before() 
     for _ in 0..6 {
         world.step();
     }
-    let learned = memory(&world);
     let thorns_bad = Learned::Bad {
         thing: "thornbush".into(),
     };
-    assert_eq!(learned.len(), 1, "{learned:?}");
-    assert_eq!(learned[0].0, thorns_bad);
-    assert!(close(learned[0].1, -0.8), "{learned:?}");
+    let bush_bad = Learned::Bad {
+        thing: "berry_bush".into(),
+    };
+    assert!(
+        close(value_of(&world, &thorns_bad), -0.8),
+        "{:?}",
+        memory(&world)
+    );
+    assert_eq!(value_of(&world, &bush_bad), 0.0, "looked at, never touched");
 }
 
 #[test]
@@ -172,8 +186,9 @@ fn a_reward_makes_the_thing_touched_good_in_general() {
         thing: "ball".into(),
         need: None,
     };
-    let learned = memory(&world);
-    assert_eq!(learned.len(), 1, "{learned:?}");
-    assert_eq!(learned[0].0, balls_good);
-    assert!(close(learned[0].1, 0.25), "{learned:?}");
+    assert!(
+        close(value_of(&world, &balls_good), 0.25),
+        "{:?}",
+        memory(&world)
+    );
 }

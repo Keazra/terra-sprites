@@ -391,6 +391,8 @@ pub(crate) struct Indices {
     pub(crate) exploration_mod: usize,
     /// The receptor target that scales learning (design §5.6).
     pub(crate) learning_rate_mod: usize,
+    /// The receptor target that scales curiosity (design §5.3).
+    pub(crate) curiosity_mod: usize,
     /// The pulse a retreat that finds no step away fires (design §3.7).
     pub(crate) cornered: usize,
     /// The pulse whose source is the attacker, the Sprite candidate while
@@ -472,6 +474,7 @@ impl Indices {
             resting: sensor("resting")?,
             exploration_mod: target("exploration_mod")?,
             learning_rate_mod: target("learning_rate_mod")?,
+            curiosity_mod: target("curiosity_mod")?,
             cornered: pulse("cornered")?,
             was_hit: pulse("was_hit")?,
             fruitless: pulse("fruitless")?,
