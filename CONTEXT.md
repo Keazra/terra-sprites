@@ -65,7 +65,7 @@ _Avoid_: settings, options
 A sprite or an object. Each has an ID that is never reused.
 
 **Object**:
-An entity that isn't a sprite, such as a berry bush, a berry or a ball. Its **object type** says how it lives and what verbs do to it.
+An entity that isn't a sprite, such as a berry bush, a berry or a ball. Its **object type** says how it lives, what verbs do to it, and what it's called, one and many ("berry bush", "berry bushes").
 _Avoid_: thing, prop
 
 **Fixture**:

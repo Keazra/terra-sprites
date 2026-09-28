@@ -296,6 +296,17 @@ impl DataPack {
             .map(|t| t.name.as_str())
     }
 
+    /// How the screen says the kind of thing called `category` in general,
+    /// such as "thornbushes" (design §3.5.1, §6.1): the plural of the first
+    /// object type, in ID order, that brains perceive as that kind and gives
+    /// one. `None` when none does, as water doesn't, or no type is that kind.
+    pub fn plural_of(&self, category: &str) -> Option<&str> {
+        self.object_types
+            .iter()
+            .filter(|t| t.category.name() == category)
+            .find_map(|t| t.plural.as_deref())
+    }
+
     /// Whether `verb` on an object of the type with the stable ID
     /// `object_type` pushes it (design §3.5.2): whether that verb's effects
     /// hold a `Push`. So the screen can tell a kick from other play.
