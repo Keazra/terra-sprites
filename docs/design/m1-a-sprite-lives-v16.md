@@ -1397,7 +1397,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 │                                            │
 │ DECISION: EAT                         1.42 │
 │   hunger                              +.91 │
-│   berry bush is worth it              +.40 │
+│   worth: berry bush                   +.40 │
 │   habit: eat berry bush               +.11 │
 │                                            │
 │ MEMORY                                     │
