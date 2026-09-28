@@ -474,7 +474,7 @@ fn the_built_in_pack_describes_its_object_types_for_display() {
 }
 
 #[test]
-fn a_kind_of_thing_takes_its_plural_from_the_first_object_type_of_that_kind() {
+fn a_kind_of_thing_takes_its_plural_from_the_first_object_type_of_that_kind_to_give_one() {
     let pack = DataPack::builtin().expect("built-in data pack is valid");
     let kinds = [
         "berry_bush",
@@ -505,6 +505,22 @@ fn a_kind_of_thing_takes_its_plural_from_the_first_object_type_of_that_kind() {
         bush(2, "bramble", r#"plural: "brambles""#),
         bush(1, "shrub", r#"plural: "shrubs""#)
     );
+    let pack = builtin_with("objects.ron", &text).expect("a valid pack");
+    assert_eq!(pack.plural_of("berry_bush"), Some("shrubs"));
+
+    // One that forgot its plural doesn't make the whole kind uncounted.
+    let text = format!(
+        "[{}, {}]",
+        bush(1, "shrub", ""),
+        bush(2, "bramble", r#"plural: "brambles""#)
+    );
+    let pack = builtin_with("objects.ron", &text).expect("a valid pack");
+    assert_eq!(pack.plural_of("berry_bush"), Some("brambles"));
+}
+
+#[test]
+fn an_object_type_s_plural_loses_any_spaces_at_either_end() {
+    let text = format!("[{}]", bush(1, "shrub", r#"plural: "  shrubs ""#));
     let pack = builtin_with("objects.ron", &text).expect("a valid pack");
     assert_eq!(pack.plural_of("berry_bush"), Some("shrubs"));
 }

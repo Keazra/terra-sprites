@@ -306,9 +306,13 @@ enum EffectEntry {
 impl TypeEntry {
     /// The validated type, or what's wrong with the entry.
     fn resolve(self, names: &Names) -> Result<ObjectType, String> {
-        if self.plural.as_ref().is_some_and(|p| p.trim().is_empty()) {
-            return Err("has an empty plural: leave it out for a thing you don't count".into());
-        }
+        // Spaces at either end would put stray gaps in the screen's sentences.
+        let plural = match self.plural.as_deref().map(str::trim) {
+            Some("") => {
+                return Err("has an empty plural: leave it out for a thing you don't count".into());
+            }
+            plural => plural.map(str::to_string),
+        };
         let solid = self.tags.contains(&Tag::Solid);
         let fixture = self.tags.contains(&Tag::Fixture);
         match (solid, fixture) {
@@ -439,7 +443,7 @@ impl TypeEntry {
         Ok(ObjectType {
             id: self.id,
             name: self.name,
-            plural: self.plural,
+            plural,
             category: self.category,
             solid,
             pseudo: self.pseudo,

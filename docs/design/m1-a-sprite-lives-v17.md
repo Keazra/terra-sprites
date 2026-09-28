@@ -13,7 +13,7 @@ Decided with the owner in the session for slice 9b ([#10](https://github.com/Kea
 
 | # | Change | Source | Sections |
 |---|---|---|---|
-| 1 | **Each object type names itself in full.** An object type may give a `plural`, shown as written ("berry bushes"). One that leaves it out is a thing you don't count, such as water, and reads with "is". The Brain tab's memory and the event log's lessons word a kind of thing by the plural of the first object type, in ID order, that brains perceive as that kind: "thornbushes are bad", "water is good for thirst". The screen no longer works plurals out with English spelling rules. The owner's rule: each thing we add is its own self-contained thing. | Owner decision | §3.5.1, §6.1 |
+| 1 | **Each object type names itself in full.** An object type may give a `plural`, shown as written ("berry bushes"), less any spaces at either end. One that leaves it out is a thing you don't count, such as water, and reads with "is". The Brain tab's memory and the event log's lessons word a kind of thing by the plural of the first object type, in ID order, that brains perceive as that kind and gives one: "thornbushes are bad", "water is good for thirst". So a look-alike that forgets its plural doesn't make its whole kind uncounted (found in review). The screen no longer works plurals out with English spelling rules. The owner's rule: each thing we add is its own self-contained thing. | Owner decision | §3.5.1, §6.1 |
 | 2 | **The Brain tab shows memory before a sprite's first decision:** "Nothing decided yet", then its memory, since a sprite on a scripted action learns before it decides. | Owner decision | §6.1 |
 
 ---
@@ -674,7 +674,7 @@ An object is **solid** if nothing can move through it, and a **fixture** if it's
 |---|---|
 | `id` | Stable `ObjectTypeId` |
 | `name` | Referenced by rules and themes |
-| `plural` | How the screen says the kind in general, shown as written: `"berry bushes"` (v17). Left out for a thing you don't count, such as water, which then reads with "is" ("water is good for thirst"). The sim never reads it. |
+| `plural` | How the screen says the kind in general, shown as written, less any spaces at either end: `"berry bushes"` (v17). Left out for a thing you don't count, such as water, which then reads with "is" ("water is good for thirst"). The sim never reads it. |
 | `category` | Stable `CategoryId` (Appendix A), which is what brains perceive |
 | `tags` | The object's **tags**, e.g. `[Solid, Fixture]`. Having a tag means yes; lacking it means no; leaving the field out means no tags. `Solid`: nothing can move through it (§3.3). `Fixture`: attached to the ground, so nothing can push, pull or carry it. |
 | `pseudo` | `true` for Water and Sprite: a verb table only, no instances, tags or lifecycle |
@@ -1422,7 +1422,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 - **Attention** lists each category in reach with its score, highest first, and marks the attended one `►`. With nothing in reach it reads "nothing in sight".
 - **The decision** names the verb chosen, or kept, at the latest step 5, with its score, then the five parts adding most to it, largest first whatever the sign: instinct concepts, named by their inputs as the Genome tab names instincts; the attended thing's worth; and its habit for the verb. One whose part rounds to `.00` is left out. A name too long for its row wraps between words.
 - **Memory** lists the sprite's learned values furthest from 0 (§5.9), each with its value, worded as the event log words a lesson. The part is left out while nothing has been learned.
-- **A kind of thing, in general,** is worded by the `plural` of the first object type, in ID order, that brains perceive as that kind (§3.5.1): "thornbushes are bad". A type with no plural, such as water, reads with "is"; so does a kind no object type is perceived as, by its own name.
+- **A kind of thing, in general,** is worded by the `plural` of the first object type, in ID order, that brains perceive as that kind and gives one (§3.5.1): "thornbushes are bad". A kind none of whose types gives a plural, such as water, reads with "is"; so does a kind no object type is perceived as, by its own name.
 - Before a sprite's first decision, attention and the decision read "Nothing decided yet", as they do while a sprite in a hand-made world works through its scripted actions. Its memory still shows below (v17), since such a sprite can learn before it decides:
 
   ```
