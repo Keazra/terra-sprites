@@ -17,6 +17,10 @@ fn genome(genes: &str, data: &DataPack) -> Genome {
             Trait(trait: "speed", value: 10.0),
             Trait(trait: "sense_radius", value: 10.0),
             {genes}
+            // No fading, so what is learned reads exactly.
+            BrainParam(param: "worth_fade_good", value: 0.0),
+            BrainParam(param: "worth_fade_bad", value: 0.0),
+            BrainParam(param: "habit_fade", value: 0.0),
         ])"#
     );
     Genome::from_ron(&text, data).expect("a valid genome")
