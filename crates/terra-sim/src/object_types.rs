@@ -18,6 +18,10 @@ pub(crate) const OBJECTS: &str = "objects.ron";
 pub(crate) struct ObjectType {
     pub(crate) id: u16,
     pub(crate) name: String,
+    /// How the screen says the kind in general, such as "berry bushes"; none
+    /// for a thing you don't count, such as water (design §3.5.1). The sim
+    /// never reads it.
+    pub(crate) plural: Option<String>,
     pub(crate) category: Category,
     /// Nothing can move through it. In M1 every solid object is also a fixture,
     /// and every other object is an item (design §3.5.1).
@@ -210,6 +214,7 @@ enum Section {
 pub(crate) struct TypeEntry {
     id: u16,
     name: String,
+    plural: Option<String>,
     category: Category,
     #[serde(default)]
     tags: Vec<Tag>,
@@ -301,6 +306,9 @@ enum EffectEntry {
 impl TypeEntry {
     /// The validated type, or what's wrong with the entry.
     fn resolve(self, names: &Names) -> Result<ObjectType, String> {
+        if self.plural.as_ref().is_some_and(|p| p.trim().is_empty()) {
+            return Err("has an empty plural: leave it out for a thing you don't count".into());
+        }
         let solid = self.tags.contains(&Tag::Solid);
         let fixture = self.tags.contains(&Tag::Fixture);
         match (solid, fixture) {
@@ -431,6 +439,7 @@ impl TypeEntry {
         Ok(ObjectType {
             id: self.id,
             name: self.name,
+            plural: self.plural,
             category: self.category,
             solid,
             pseudo: self.pseudo,
