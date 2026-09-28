@@ -1962,3 +1962,95 @@ fn a_hurt_sprite_takes_turns_with_a_red_bang_for_a_second() {
         assert_eq!(at(&app, biter_cell).0, sprite_glyph);
     }
 }
+
+/// A sprite that attends to sprites, would rather rest a little, and feels
+/// every hit as a punishment of 1.
+const SKITTISH_GENOME: &str = r#"(format: 1, genes: [
+    Trait(trait: "speed", value: 10.0),
+    Trait(trait: "sense_radius", value: 10.0),
+    BrainParam(param: "tau_base", value: 0.05),
+    AttentionInstinct(input: "always", category: Sprite, weight: 1.0),
+    Instinct(inputs: [("always", false)], verb: Rest, weight: 0.3),
+    Emitter(locus: Locus("was_hit"), mode: Level, gain: 1.0, chem: "punishment"),
+])"#;
+
+/// A skittish sprite, #1, hit by a bully, #2, that then rests beside it,
+/// `ticks` ticks on, with an app that logged every tick and selects #1.
+fn hit_by_a_bully(ticks: u32) -> (World, App) {
+    let pack = pack();
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let genome = |text: &str| terra_sim::Genome::from_ron(text, &pack).expect("a valid genome");
+    let walker = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
+    let (me, bully) = (Pos { x: 2, y: 3 }, Pos { x: 3, y: 3 });
+    let sprites = [
+        (me, Some(genome(SKITTISH_GENOME))),
+        (bully, Some(genome(walker))),
+    ];
+    let scripted = [
+        (bully, ScriptedAction::Hit { at: me }),
+        (bully, ScriptedAction::Rest),
+    ];
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: &scripted,
+    };
+    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    for _ in 0..ticks {
+        let events = world.step();
+        app.record(&events, &world);
+    }
+    app.apply(Action::SelectNext, &world);
+    (world, app)
+}
+
+#[test]
+fn the_brain_tab_names_the_sprite_it_attends_to_and_how_frightening_it_is() {
+    // Design v18 §6.1. Hit at tick 0, it learns at tick 1 to fear the
+    // bully, −1 × fear_fade's little; from tick 2 it backs away from it:
+    // flight (.8) × its fear, with the bully beside it.
+    let (world, mut app) = hit_by_a_bully(3);
+    open(&mut app, &world, Tab::Brain);
+    let (_, text) = inspector(&app, &world);
+    let row = |start: &str| text.iter().find(|row| row.starts_with(start)).cloned();
+    assert!(text[1].starts_with("► Sprite #2"), "{text:?}");
+    assert!(
+        row("DECISION: RETREAT").is_some_and(|r| r.ends_with(".80")),
+        "{text:?}"
+    );
+    assert!(
+        row("fear: Sprite #2").is_some_and(|r| r.ends_with("+.80")),
+        "{text:?}"
+    );
+    assert!(
+        row("Sprite #2 is frightening").is_some_and(|r| r.ends_with("-1.00")),
+        "{text:?}"
+    );
+    let screen = lines(&render(&app, &world, 100, 30));
+    assert!(
+        screen
+            .iter()
+            .any(|row| row.contains("Sprite #1 learned: Sprite #2 is frightening")),
+        "{screen:?}"
+    );
+}
+
+#[test]
+fn the_event_log_says_when_sprites_in_general_turn_frightening() {
+    // Design v18 §6.1.
+    let world = garden(pack());
+    let log = logged_lessons(
+        &world,
+        vec![(
+            40,
+            3,
+            Learned::Fear {
+                thing: "sprite".into(),
+            },
+            false,
+        )],
+    );
+    assert_eq!(log, ["40  Sprite #3 learned: sprites are frightening"]);
+}
