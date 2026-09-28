@@ -1373,6 +1373,23 @@ mod tests {
     }
 
     #[test]
+    fn a_learned_value_out_of_its_range_or_not_a_number_breaks_an_invariant() {
+        // Design v16 §5.6: worth and good 0 to 1, bad −1 to 0, the rest −1 to 1.
+        let breaks: [fn(&mut Brain); 5] = [
+            |brain| brain.experience.worth[0][0] = -0.1,
+            |brain| brain.experience.good[0] = 1.5,
+            |brain| brain.experience.bad[0] = 0.2,
+            |brain| brain.experience.habits[0][0] = f32::NAN,
+            |brain| brain.experience.familiarity[0] = 2.0,
+        ];
+        for (i, broken) in breaks.into_iter().enumerate() {
+            let (mut world, first, _) = field_with_sprites();
+            broken(&mut world.state.sprites.get_mut(first).expect("a sprite").brain);
+            assert!(world.check_invariants().is_err(), "break {i}");
+        }
+    }
+
+    #[test]
     fn a_felt_value_that_is_not_a_number_breaks_an_invariant() {
         let (mut world, first, _) = field_with_sprites();
         world

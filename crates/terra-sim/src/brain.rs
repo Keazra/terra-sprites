@@ -473,11 +473,13 @@ impl Brain {
         memory
     }
 
-    /// Checks the brain's learned state (design §5.6): links within [−1, 1],
-    /// a felt value that's a number, and a trace within its cap.
+    /// Checks the brain's state (design §5.6): instinct links within
+    /// [−1, 1], what it has learned within its ranges, a felt value that's a
+    /// number, and a trace within its cap.
     pub(crate) fn check(&self) -> Result<(), String> {
         self.decision.check()?;
         self.attention.check()?;
+        self.experience.check()?;
         if !self.felt.is_finite() {
             return Err(format!("felt {}, which isn't a number", self.felt));
         }
