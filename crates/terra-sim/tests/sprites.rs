@@ -513,3 +513,76 @@ fn the_world_counts_deaths_by_cause() {
     world.step();
     assert_eq!(counts(&world), [0, 1, 0], "the count outlives the sprite");
 }
+
+/// The starter genome's genes, as a starter sprite expresses them.
+fn starter_genes(world: &World) -> Vec<GeneView<'_>> {
+    let sprite = world.sprites().next().expect("the sprite");
+    sprite.genes().into_iter().map(|(gene, _)| gene).collect()
+}
+
+#[test]
+fn a_starter_sprite_is_drawn_by_instinct_only_to_its_own_kind() {
+    // Design v16 §5.8: it knows nothing of food, water or toys.
+    let world = lone_sprite(builtin(), None);
+    let drawn_to: BTreeSet<&str> = starter_genes(&world)
+        .iter()
+        .filter_map(|gene| match gene {
+            GeneView::AttentionInstinct { category, .. } => Some(*category),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(drawn_to, BTreeSet::from(["sprite"]));
+}
+
+#[test]
+fn a_starter_sprite_s_relief_is_read_from_its_needs_not_made_into_reward() {
+    // Design v16 §4.5: the needs' fall is relief already; Fall emitters into
+    // reward would count it twice.
+    let world = lone_sprite(builtin(), None);
+    let needs: Vec<&str> = world.data().needs().collect();
+    for gene in starter_genes(&world) {
+        if let GeneView::Emitter { locus, chem, .. } = gene {
+            assert!(
+                !(chem == "reward" && needs.contains(&locus)),
+                "{locus} → reward"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_starter_sprite_grows_restless_with_need_and_wary_after_hurts() {
+    // Design v16 §4.5: receptors on needs raise exploration_mod; pain feeds a
+    // hormone whose receptor lowers curiosity_mod.
+    let world = lone_sprite(builtin(), None);
+    let genes = starter_genes(&world);
+    let receptors: Vec<(&str, f32, &str)> = genes
+        .iter()
+        .filter_map(|gene| match gene {
+            GeneView::Receptor {
+                chem, gain, target, ..
+            } => Some((*chem, *gain, *target)),
+            _ => None,
+        })
+        .collect();
+    for need in ["hunger", "thirst"] {
+        assert!(
+            receptors.iter().any(|&(chem, gain, target)| chem == need
+                && gain > 0.0
+                && target == "exploration_mod"),
+            "{need} makes it restless: {receptors:?}"
+        );
+    }
+    let wariness = receptors
+        .iter()
+        .find(|&&(_, gain, target)| gain < 0.0 && target == "curiosity_mod")
+        .map(|&(chem, ..)| chem)
+        .expect("something lowers curiosity");
+    assert!(
+        genes.iter().any(|gene| matches!(
+            gene,
+            GeneView::Emitter { locus: "pain", chem, gain, .. } if *chem == wariness && *gain > 0.0
+        )),
+        "pain feeds {wariness}"
+    );
+}

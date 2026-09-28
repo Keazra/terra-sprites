@@ -1260,26 +1260,17 @@ mod tests {
     }
 
     #[test]
-    fn eating_when_full_earns_almost_nothing_and_eating_when_hungry_earns_in_proportion() {
-        let mut full = starter();
-        full.step();
-        full.pulse("ate");
-        full.step();
-        assert_eq!(full.level("reward"), 0.0, "hunger at 0 can't fall");
-
+    fn eating_drops_a_hungry_starter_s_hunger_at_once_and_makes_no_reward() {
+        // Design v16 §4.5: the brain reads hunger's fall as relief itself, so
+        // the starter genome turns no fall into reward.
         let mut hungry = starter();
         hungry.set("hunger", 0.8);
         hungry.step();
         let before = hungry.level("hunger");
         hungry.pulse("ate");
         hungry.step();
-        // The ate pulse drops hunger by 0.5; the Fall emitter's deadband is 0.02.
         assert!((before - hungry.level("hunger") - 0.5).abs() < 0.01);
-        assert!(
-            (hungry.level("reward") - 0.48).abs() < 0.01,
-            "{}",
-            hungry.level("reward")
-        );
+        assert_eq!(hungry.level("reward"), 0.0);
     }
 
     #[test]

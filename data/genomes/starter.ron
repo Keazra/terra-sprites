@@ -3,17 +3,15 @@
 // how that feels.
 //
 // Drives rise from a need and fall sharply when a one-shot action relieves
-// it (a pulse-keyed Level emitter), so the Fall emitters release reward on
-// the tick after the action, in proportion to the need. Relief is gradual
-// only where the relieving action is itself ongoing (resting, staying near
-// others). Each Fall emitter has a deadband of 0.02 per tick, so slow drifts
-// never drip reward.
+// it (a pulse-keyed Level emitter). The brain reads a need's fall as relief
+// (design v16 §5.6), which teaches that the thing touched is good for it.
+// Relief is gradual only where the relieving action is itself ongoing
+// (resting, staying near others).
 //
-// The brain (design §5.8): instincts that are good but not perfect, so
-// there's something to learn. Each joins in the slice that makes its verb
-// available: slice 6 has eating, drinking, resting and wandering; slice 7a
-// playing, and going over to others; slice 7c backing away, fighting back,
-// and crowding.
+// The brain (design v16 §5.8): very basic instincts. They connect needs to
+// actions, know the sprite's own kind, and fight or flee; they know nothing
+// of food, water, toys or danger. The species is dropped into a world it
+// doesn't know and learns it.
 //
 // The values are first cuts; slice 17 tunes them.
 (
@@ -58,23 +56,32 @@
         Emitter(locus: Locus("was_hit"), mode: Level, gain: 0.3, chem: "pain"),
         HalfLife(chem: "pain", ticks: 20),
 
-        // Learning signals. Rise and Fall emitters run after every Level
-        // emitter, in this order, so injury → pain → punishment completes in one tick.
+        // Punishment. Rise emitters run after every Level emitter, in this
+        // order, so injury → pain → punishment completes in one tick. Relief
+        // needs no gene: the brain reads it from the needs themselves.
         Emitter(locus: Chem("injury"), mode: Rise, gain: 10.0, chem: "pain"),
         Emitter(locus: Chem("pain"), mode: Rise, gain: 1.0, chem: "punishment"),
-        Emitter(locus: Chem("hunger"), mode: Fall, threshold: 0.02, gain: 1.0, chem: "reward"),
-        Emitter(locus: Chem("thirst"), mode: Fall, threshold: 0.02, gain: 1.0, chem: "reward"),
-        Emitter(locus: Chem("tiredness"), mode: Fall, threshold: 0.02, gain: 1.0, chem: "reward"),
-        Emitter(locus: Chem("boredom"), mode: Fall, threshold: 0.02, gain: 1.0, chem: "reward"),
-        Emitter(locus: Chem("loneliness"), mode: Fall, threshold: 0.02, gain: 1.0, chem: "reward"),
-        Emitter(locus: Chem("crowdedness"), mode: Fall, threshold: 0.02, gain: 1.0, chem: "reward"),
+
+        // Need makes a sprite restless (design v16 §4.5): the more pressing
+        // hunger, thirst or boredom, the less sure its choices, so a sprite
+        // that doesn't know where water is tries more things.
+        Receptor(chem: "hunger", threshold: 0.2, gain: 1.0, target: "exploration_mod"),
+        Receptor(chem: "thirst", threshold: 0.2, gain: 1.0, target: "exploration_mod"),
+        Receptor(chem: "boredom", threshold: 0.2, gain: 0.5, target: "exploration_mod"),
+
+        // Wariness (design v16 §4.5): pain feeds h0, which fades over a few
+        // hundred ticks and lowers curiosity, so a run of hurts makes a sprite
+        // shy of the unfamiliar for a while.
+        Emitter(locus: Chem("pain"), mode: Level, threshold: 0.1, gain: 0.05, chem: "h0"),
+        HalfLife(chem: "h0", ticks: 300),
+        Receptor(chem: "h0", gain: -2.0, target: "curiosity_mod"),
 
         // How the brain works. Choices are fairly sure of themselves: with
-        // no drive pressing a sprite wanders, and a drive of .5 wins most choices.
-        // It learns fast over a short trace, so a prick is blamed on the
-        // pokes just before it, not on everything it did for 40 ticks
-        // (design v15 change 10).
-        BrainParam(param: "learning_rate", value: 0.2),
+        // no drive pressing a sprite wanders, and a drive of .5 wins most
+        // choices. Habits are credited over a short trace, so a hurt is
+        // blamed on what it did just before it (design v15 change 10). How
+        // fast it learns worth and habits, and how curious it is, are
+        // physiology's defaults (design v16, Appendix B).
         BrainParam(param: "trace_decay", value: 0.5),
         BrainParam(param: "tau_base", value: 0.1),
         BrainParam(param: "tau_att_base", value: 0.2),
@@ -82,21 +89,16 @@
         BrainParam(param: "attention_margin", value: 0.2),
         BrainParam(param: "salience_gain", value: 0.5),
 
-        // Hunger draws attention to food, and a little to thornbushes: the
-        // deliberate mistake, which learning corrects.
-        AttentionInstinct(input: "hunger", category: BerryBush, weight: 1.0),
-        AttentionInstinct(input: "hunger", category: Berry, weight: 1.0),
-        AttentionInstinct(input: "hunger", category: Thornbush, weight: 0.3),
-        AttentionInstinct(input: "thirst", category: Water, weight: 1.0),
-        // Boredom draws attention to balls, and loneliness to other sprites.
-        AttentionInstinct(input: "boredom", category: Ball, weight: 1.0),
+        // It knows its own kind: loneliness draws its eye to other sprites.
+        // Nothing draws it to food, water or toys; it learns what they're for.
         AttentionInstinct(input: "loneliness", category: Sprite, weight: 1.0),
         // Being hit draws attention to sprites, which means the attacker.
         AttentionInstinct(input: "was_hit", category: Sprite, weight: 1.0),
         // Crowding draws attention to sprites.
         AttentionInstinct(input: "crowdedness", category: Sprite, weight: 1.0),
 
-        // Hunger leads to eating whatever is attended, not berries in particular.
+        // Each need leads to its action, on whatever is attended: hunger to
+        // eating, thirst to drinking. Trying it on the wrong thing does nothing.
         Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
         Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
         Instinct(inputs: [("tiredness", false)], verb: Rest, weight: 1.0),
