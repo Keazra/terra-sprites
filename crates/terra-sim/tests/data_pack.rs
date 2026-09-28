@@ -679,7 +679,7 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
         (43, "target_adjacent"),
     ]);
     // State inputs carry on from 64, past the IDs kept for Target inputs.
-    expected.push((64, "cornered"));
+    expected.extend([(64, "cornered"), (65, "fruitless")]);
     assert_eq!(inputs, expected);
 }
 

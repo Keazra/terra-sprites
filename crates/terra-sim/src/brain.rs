@@ -709,7 +709,7 @@ mod tests {
             r#"Instinct(inputs: [("hunger", false), ("target_adjacent", true)], verb: Eat, weight: 0.3)"#,
         ]);
         let n = builtin().brain_inputs().count();
-        assert_eq!(n, 44, "36 State inputs and 8 Target inputs");
+        assert_eq!(n, 45, "37 State inputs and 8 Target inputs");
         // One singleton per input, and one conjunction for both genes naming it.
         assert_eq!(brain.concepts.len(), n + 1);
         assert_eq!(

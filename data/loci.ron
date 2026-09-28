@@ -23,6 +23,7 @@
     (id: 39, name: "petted",            kind: Pulse),
     (id: 40, name: "shocked",           kind: Pulse),
     (id: 41, name: "cornered",          kind: Pulse),  // a retreat found no step away
+    (id: 42, name: "fruitless",         kind: Pulse),  // a try that did nothing (design v16 §5.2)
 
     (id: 64, name: "learning_rate_mod", kind: ReceptorTarget),
     (id: 65, name: "exploration_mod",   kind: ReceptorTarget),
