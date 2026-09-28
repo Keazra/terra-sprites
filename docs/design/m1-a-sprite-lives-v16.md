@@ -1078,7 +1078,7 @@ Then **death check #1** runs (§2.4).
 - Learning **consumes** `reward` and `punishment` every tick (§5.6), so they never linger.
 
 **Moods and modulators** (v16):
-- **Need makes a sprite restless.** Receptors on the needs raise `exploration_mod`, so a pressing need makes attention and choice less sure: a thirsty sprite that doesn't know where water is tries more things.
+- **Need makes a sprite restless.** Receptors on hunger, thirst and boredom raise `exploration_mod`, so a pressing need makes attention and choice less sure: a thirsty sprite that doesn't know where water is tries more things. Tiredness doesn't, since a tired sprite rests, and loneliness and crowdedness already draw its eye to sprites.
 - **Wariness.** A Level emitter on `pain` feeds hormone `h0`, which decays over a few hundred ticks, and a negative-gain receptor on `h0` lowers `curiosity_mod`. A run of hurts makes a sprite wary of the unfamiliar for a while. The hormone is unnamed in the data; the starter genome's comment names it.
 - Both are genes, so they vary and can evolve. Their values are tuned in slice 9.
 
@@ -1275,13 +1275,13 @@ World randomness is separate: plant rules and the order actions resolve in. It c
 - **Relief** for each need: its fall since the previous tick's step 4, when that fall is at least `relief_deadband` (physiology, 0.02), else 0. Relief is read straight from the needs (§5.2), so a drive knocked down by eating is relief whatever emitter did it. A slow drift never counts.
 - **Good:** `reward`. **Bad:** `punishment`. Both are then **reset to 0**: learning consumes them, so they never linger (the reasoning of v12 still holds: a lingering reward credits what the sprite did after it).
 - The sprite's **`last_r`** ("felt", saved state, §6.1) is `Σ relief + reward − punishment`.
-- Every rate below is scaled by `learning_rate_mod`.
+- Every learning rate below (worth, bad and habits) is scaled by `learning_rate_mod`; fading and familiarity aren't.
 
 **The thing touched** is the target of the sprite's latest attempt (an interaction's one try, applied or failed) if it was within `touch_window` ticks (physiology, 3). It is what the feeling is about. With nothing touched, worth learns nothing that tick; habits still do.
 - **Not the attacker** (v16, measured): being hit teaches the habits along the trace, but not the worth of sprites. All sprites are one kind, so one bully would make a sprite shy of every sprite, and fight or flight collapsed to flight (change 16). Fearing individuals fast and kinds slowly is the next slice (change 17).
 - **Why not the trace** (v16, measured): crediting worth back along the trace blamed each thornbush prick partly on the berry bush or water the sprite had looked at a moment before. Bad lessons fade slowly, so in the A1 arena berries, bushes and water all ended near −0.5, and meals fell by two-thirds. Crediting only the thing touched made thornbushes alone bad (−0.93) and meals recovered. It suits a species that knows the world by touch, and it is how blame should work ([#57](https://github.com/Keazra/terra-sprites/issues/57)).
 
-**Worth and bad,** for the thing touched, category *c*:
+**Worth and bad,** for the thing touched, category *c*. A hit's punishment (a `was_hit` pulse live) counts for habits only, not here, even when the sprite had just touched a sprite itself (change 16):
 - `G_n[c] += worth_rate_good × relief_n` for each need; `G[c] += worth_rate_good × reward`; `B[c] −= worth_rate_bad × punishment`.
 - `new_things += (worth_rate_good × (Σ relief + reward) − worth_rate_bad × punishment) × novelty`, where `novelty` is how new the thing was when the sprite attended to it at that tick's step 5. A sprite hurt whenever it investigates grows shy of the unfamiliar; one rewarded for it grows bold.
 
@@ -1696,7 +1696,7 @@ Implementation is **test-first, one vertical slice at a time.** Everything in `t
      - sampling only at boundaries, deterministic switching and tie-breaks
      - Wander destination sampling, Retreat's Chebyshev step choice and direction order, action bounds and outcomes
      - one trace entry per tick, including while an action continues
-     - learning consumes reward and punishment, and `last_r` records good less bad
+     - learning consumes reward and punishment, and `last_r` records relief and reward less punishment
      - relief: a need's fall at or over the deadband, and not a slower one; pain's fall is never relief
      - worth goes to the thing touched, within the touch window; nothing touched, or only an attacker, no worth
      - each need's worth counts in proportion to that need; bad counts always
