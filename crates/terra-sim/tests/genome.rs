@@ -263,6 +263,26 @@ fn a_genome_file_reads_the_brain_genes_by_name_and_writes_them_back() {
 }
 
 #[test]
+fn a_genome_can_set_how_individuals_and_fear_are_learned() {
+    // Design v18 §5.7, Appendix A.
+    let genes = [
+        ("individual_rate_good", "0.7"),
+        ("individual_rate_bad", "0.6"),
+        ("fear_rate", "0.9"),
+        ("fear_fade", "0.0001"),
+        ("generalise", "4.0"),
+        ("vigilance", "1.2"),
+        ("flight", "0.5"),
+        ("fear_reach", "0.4"),
+    ]
+    .map(|(param, value)| format!(r#"BrainParam(param: "{param}", value: {value})"#));
+    let text = genome_file(&genes.each_ref().map(String::as_str));
+    let data = builtin();
+    let genome = Genome::from_ron(&text, &data).expect("a valid genome");
+    assert_eq!(genome.to_ron(&data), text);
+}
+
+#[test]
 fn a_brain_gene_naming_something_the_build_lacks_is_an_error_naming_it() {
     assert_invalid(&[r#"BrainParam(param: "whimsy", value: 0.2)"#], "whimsy");
     assert_invalid(
