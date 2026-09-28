@@ -9,119 +9,53 @@ use crate::objects::EntityId;
 use crate::registry::{Category, Verb};
 use crate::world::WorldState;
 
-/// Links that learn (design §5.6): a row per concept or input, a column per
-/// verb or category. Each link has a working weight `w`, which learning
-/// moves, and a consolidated one `w_long`; both start at the instinct.
+/// Instinct links (design §5.1, §5.4): a row per concept or input, a column
+/// per verb or category, each at the weight the genome gave it. They never
+/// change in a sprite's life; learning is worth and habits (§5.6).
 #[derive(Debug, Clone, Serialize)]
-#[serde(bound(serialize = "[f32; N]: Serialize, [bool; N]: Serialize"))]
-pub(crate) struct LearnableLinks<const N: usize> {
+#[serde(bound(serialize = "[f32; N]: Serialize"))]
+pub(crate) struct Links<const N: usize> {
     w: Vec<[f32; N]>,
-    /// The consolidated weight `w_long` each working weight relaxes towards.
-    settled: Vec<[f32; N]>,
-    /// The instinct each link was born with.
-    birth: Vec<[f32; N]>,
-    /// Whether each link has been a lesson yet.
-    taught: Vec<[bool; N]>,
 }
 
-impl<const N: usize> LearnableLinks<N> {
-    /// Links born at the weights `birth` gives, each clamped to [−1, 1] like
-    /// every link (design §5.6): spawn variation can take a 1.0 instinct past 1.
-    pub(crate) fn new(mut birth: Vec<[f32; N]>) -> LearnableLinks<N> {
+impl<const N: usize> Links<N> {
+    /// Links at the weights `birth` gives, each clamped to [−1, 1]: spawn
+    /// variation can take a 1.0 instinct past 1.
+    pub(crate) fn new(mut birth: Vec<[f32; N]>) -> Links<N> {
         for w in birth.iter_mut().flatten() {
             *w = w.clamp(-1.0, 1.0);
         }
-        LearnableLinks {
-            w: birth.clone(),
-            settled: birth.clone(),
-            taught: vec![[false; N]; birth.len()],
-            birth,
-        }
+        Links { w: birth }
     }
 
-    /// Every row's working weights.
-    pub(crate) fn working(&self) -> &[[f32; N]] {
+    /// Every row's weights.
+    pub(crate) fn rows(&self) -> &[[f32; N]] {
         &self.w
     }
 
-    /// The working weight of the link in `row` and `column`.
+    /// The weight of the link in `row` and `column`.
     pub(crate) fn get(&self, row: usize, column: usize) -> f32 {
         self.w[row][column]
     }
 
-    /// The consolidated weight of the link in `row` and `column`.
-    #[cfg(test)]
-    pub(crate) fn settled(&self, row: usize, column: usize) -> f32 {
-        self.settled[row][column]
-    }
-
-    /// Moves the link in `row` and `column` by `by`, keeping it within
-    /// [−1, 1].
-    pub(crate) fn nudge(&mut self, row: usize, column: usize, by: f32) {
-        let w = &mut self.w[row][column];
-        *w = (*w + by).clamp(-1.0, 1.0);
-    }
-
-    /// Checks every working and consolidated weight is a number within
-    /// [−1, 1] (design §5.6), or says which isn't.
+    /// Checks every weight is a number within [−1, 1], or says which isn't.
     pub(crate) fn check(&self) -> Result<(), String> {
-        let weights = self.w.iter().chain(&self.settled).flatten();
-        match weights.copied().find(|w| !(-1.0..=1.0).contains(w)) {
+        match self
+            .w
+            .iter()
+            .flatten()
+            .copied()
+            .find(|w| !(-1.0..=1.0).contains(w))
+        {
             Some(w) => Err(format!("a link at {w}, outside -1 to 1")),
             None => Ok(()),
         }
     }
 
-    /// Sets the working weight in `row` and `column`, unchecked.
+    /// Sets the weight in `row` and `column`, unchecked.
     #[cfg(test)]
     pub(crate) fn set(&mut self, row: usize, column: usize, w: f32) {
         self.w[row][column] = w;
-    }
-
-    /// Every link that has moved from birth, as `(row, column, now, birth)`,
-    /// in row then column order.
-    pub(crate) fn moved(&self) -> impl Iterator<Item = (usize, usize, f32, f32)> + '_ {
-        self.w
-            .iter()
-            .zip(&self.birth)
-            .enumerate()
-            .flat_map(|(row, (w, birth))| {
-                w.iter()
-                    .zip(birth)
-                    .enumerate()
-                    .filter(|(_, (now, birth))| now != birth)
-                    .map(move |(column, (&now, &birth))| (row, column, now, birth))
-            })
-    }
-
-    /// The links whose working weight is `threshold` or more from birth for
-    /// the first time, as `(row, column, rose)`, in row then column order.
-    /// Each is marked, so it's a lesson only once (design §5.6).
-    pub(crate) fn lessons(&mut self, threshold: f32) -> Vec<(usize, usize, bool)> {
-        let mut found = Vec::new();
-        for (row, taught) in self.taught.iter_mut().enumerate() {
-            for (column, taught) in taught.iter_mut().enumerate() {
-                let moved = self.w[row][column] - self.birth[row][column];
-                if !*taught && moved.abs() >= threshold {
-                    *taught = true;
-                    found.push((row, column, moved > 0.0));
-                }
-            }
-        }
-        found
-    }
-
-    /// One tick of the two timescales: `w` relaxes towards `w_long` by
-    /// `relax_rate`, and `w_long` consolidates towards `w` by
-    /// `consolidate_rate`, both from the values before the tick.
-    pub(crate) fn relax(&mut self, relax_rate: f32, consolidate_rate: f32) {
-        for (w, settled) in self.w.iter_mut().zip(&mut self.settled) {
-            for (w, settled) in w.iter_mut().zip(settled.iter_mut()) {
-                let (was, long) = (*w, *settled);
-                *w = was + relax_rate * (long - was);
-                *settled = long + consolidate_rate * (was - long);
-            }
-        }
     }
 }
 
