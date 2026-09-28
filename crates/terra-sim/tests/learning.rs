@@ -2,7 +2,8 @@
 //! learns what things are worth and its habits.
 
 use terra_sim::{
-    DataPack, Event, EventKind, Genome, Learned, Map, Pos, Scenario, ScriptedAction, World,
+    DataPack, EntityId, Event, EventKind, Genome, Learned, Map, Pos, Scenario, ScriptedAction,
+    Thing, World,
 };
 
 fn builtin() -> DataPack {
@@ -23,6 +24,7 @@ fn genome(genes: &str, data: &DataPack) -> Genome {
             BrainParam(param: "worth_fade_good", value: 0.0),
             BrainParam(param: "worth_fade_bad", value: 0.0),
             BrainParam(param: "habit_fade", value: 0.0),
+            BrainParam(param: "fear_fade", value: 0.0),
         ])"#
     );
     Genome::from_ron(&text, data).expect("a valid genome")
@@ -238,5 +240,307 @@ fn a_sprite_that_keeps_biting_a_thornbush_learns_each_lesson_once() {
         learned,
         [(thorns_bad, false), (Learned::NewThings, false)],
         "each once"
+    );
+}
+
+/// A world drawn from `rows` with sprites of `genes` on each of `sprites`,
+/// each doing its part of `script`.
+fn scene(rows: &[&str], sprites: &[(Pos, &str)], script: &[(Pos, ScriptedAction)]) -> World {
+    let data = builtin();
+    let map = Map::from_ascii(rows, &data).expect("valid drawing");
+    let sprites: Vec<(Pos, Option<Genome>)> = sprites
+        .iter()
+        .map(|&(pos, genes)| (pos, Some(genome(genes, &data))))
+        .collect();
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: script,
+    };
+    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+}
+
+/// What sprite `id` has learned, as `(learned, value)`.
+fn memory_of(world: &World, id: EntityId) -> Vec<(Learned, f32)> {
+    let sprite = world.sprite(id).expect("the sprite");
+    sprite
+        .memory()
+        .into_iter()
+        .map(|m| (m.learned, m.amount))
+        .collect()
+}
+
+/// A sprite whose every hit it feels punishes it by .5.
+const HIT_HURTS: &str =
+    r#"Emitter(locus: Locus("was_hit"), mode: Level, gain: 0.5, chem: "punishment"),"#;
+
+#[test]
+fn a_sprite_that_is_hit_fears_its_attacker_and_learns_nothing_bad_of_sprites() {
+    // Design v18 §5.6: a hurt done to it teaches fear of whoever did it,
+    // fear_rate (1) × the hit's punishment (.5), and no badness or worth.
+    let (me, attacker) = (at(1, 1), at(2, 1));
+    let mut world = scene(
+        &["....", "....", "...."],
+        &[(me, HIT_HURTS), (attacker, "")],
+        &[
+            (me, ScriptedAction::Rest),
+            (attacker, ScriptedAction::Hit { at: me }),
+            (attacker, ScriptedAction::Rest),
+        ],
+    );
+    let (me, attacker) = (
+        world.sprite_at(me).expect("me").id(),
+        world.sprite_at(attacker).expect("the attacker").id(),
+    );
+    world.step();
+    world.step();
+    let fear = Learned::Fear {
+        thing: Thing::Sprite(attacker),
+    };
+    assert_eq!(
+        memory_of(&world, me),
+        [(fear, -0.5)],
+        "frightening, and nothing else"
+    );
+}
+
+/// A bored sprite whose play with another sprite halves its boredom.
+const BORED: &str = r#"InitialConcentration(chem: "boredom", value: 1.0),
+    Emitter(locus: Locus("played_social"), mode: Level, gain: -0.5, chem: "boredom"),"#;
+
+#[test]
+fn playing_with_a_sprite_teaches_what_that_one_is_worth_not_sprites_in_general() {
+    // Design v18 §5.6: boredom falls by .5, its relief, and the sprite
+    // played with is the thing touched: .5 × individual_rate_good (.8).
+    let (me, partner) = (at(1, 1), at(2, 1));
+    let mut world = scene(
+        &["....", "....", "...."],
+        &[(me, BORED), (partner, "")],
+        &[
+            (me, ScriptedAction::Play { at: partner }),
+            (me, ScriptedAction::Rest),
+            (partner, ScriptedAction::Rest),
+        ],
+    );
+    let (me, partner) = (
+        world.sprite_at(me).expect("me").id(),
+        world.sprite_at(partner).expect("the partner").id(),
+    );
+    world.step();
+    world.step();
+    let worth = |thing: Thing| Learned::Worth {
+        thing,
+        need: Some("boredom".into()),
+    };
+    let memory = memory_of(&world, me);
+    let value = |learned: &Learned| memory.iter().find(|(l, _)| l == learned).map(|&(_, v)| v);
+    assert!(
+        value(&worth(Thing::Sprite(partner))).is_some_and(|v| close(v, 0.4)),
+        "{memory:?}"
+    );
+    assert_eq!(
+        value(&worth("sprite".into())),
+        None,
+        "nothing learned about sprites in general: {memory:?}"
+    );
+}
+
+#[test]
+fn sprites_in_general_are_feared_only_once_several_have_hurt_it() {
+    // Design v18 §5.6: sprites in general are the mean over the sprites it
+    // remembers, at no strength with one, half with two and in full from
+    // generalise (3). Each bully's hit punishes by .5, so each is −.5.
+    let me = at(2, 2);
+    let bullies = [at(3, 2), at(1, 2), at(2, 1)];
+    for (n, expected) in [(1, None), (2, Some(-0.25)), (3, Some(-0.5))] {
+        let mut sprites = vec![(me, HIT_HURTS)];
+        let mut script = vec![(me, ScriptedAction::Rest); 4];
+        for (i, &bully) in bullies[..n].iter().enumerate() {
+            sprites.push((bully, ""));
+            // Ten ticks apart, since a tick has one attacker; then it rests
+            // out the run, so it hits only once.
+            script.extend(vec![(bully, ScriptedAction::Rest); i]);
+            script.push((bully, ScriptedAction::Hit { at: me }));
+            script.extend(vec![(bully, ScriptedAction::Rest); 3]);
+        }
+        let mut world = scene(&["....."; 5], &sprites, &script);
+        let me = world.sprite_at(me).expect("me").id();
+        for _ in 0..25 {
+            world.step();
+        }
+        let memory = memory_of(&world, me);
+        let in_general = Learned::Fear {
+            thing: "sprite".into(),
+        };
+        let value = memory
+            .iter()
+            .find(|(l, _)| *l == in_general)
+            .map(|&(_, v)| v);
+        assert_eq!(
+            value.map(|v| (v * 100.0).round() / 100.0),
+            expected,
+            "{n} bullies: {memory:?}"
+        );
+    }
+}
+
+/// Whether sprite `id` remembers anything about sprite `other`.
+fn remembers(world: &World, id: EntityId, other: EntityId) -> bool {
+    memory_of(world, id)
+        .iter()
+        .any(|(learned, _)| match learned {
+            Learned::Worth { thing, .. } | Learned::Bad { thing } | Learned::Fear { thing } => {
+                *thing == Thing::Sprite(other)
+            }
+            _ => false,
+        })
+}
+
+#[test]
+fn a_sprite_whose_fear_has_faded_to_almost_nothing_is_forgotten() {
+    // Design v18 §5.6: fear of .5 fading by .01 a tick is under
+    // forget_below (.01) after about 390 ticks, and then forgotten.
+    let (me, attacker) = (at(1, 1), at(2, 1));
+    let fading = format!(r#"{HIT_HURTS} BrainParam(param: "fear_fade", value: 0.01),"#);
+    let mut script = vec![(me, ScriptedAction::Rest); 60];
+    script.push((attacker, ScriptedAction::Hit { at: me }));
+    script.extend(vec![(attacker, ScriptedAction::Rest); 60]);
+    let mut world = scene(
+        &["....", "....", "...."],
+        &[(me, &fading), (attacker, "")],
+        &script,
+    );
+    let (me, attacker) = (
+        world.sprite_at(me).expect("me").id(),
+        world.sprite_at(attacker).expect("the attacker").id(),
+    );
+    world.step();
+    world.step();
+    assert!(remembers(&world, me, attacker), "hit, and remembered");
+    for _ in 0..500 {
+        world.step();
+    }
+    assert!(
+        !remembers(&world, me, attacker),
+        "{:?}",
+        memory_of(&world, me)
+    );
+}
+
+#[test]
+fn a_sprite_that_dies_is_forgotten() {
+    // Design v18 §5.6. After its hit the attacker bites a thornbush until
+    // the pricks kill it; fear doesn't fade in these genomes.
+    let (me, attacker, thornbush) = (at(1, 1), at(2, 1), at(3, 1));
+    let mut script = vec![(me, ScriptedAction::Rest); 50];
+    script.push((attacker, ScriptedAction::Hit { at: me }));
+    script.extend(vec![(attacker, ScriptedAction::Eat { at: thornbush }); 100]);
+    let data = builtin();
+    let sprites = [
+        (me, Some(genome(HIT_HURTS, &data))),
+        (attacker, Some(genome("", &data))),
+    ];
+    let scenario = Scenario {
+        map: Map::from_ascii(&["....", "....", "...."], &data).expect("valid drawing"),
+        objects: &[(thornbush, "thornbush")],
+        sprites: &sprites,
+        scripted: &script,
+    };
+    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    let (me, attacker) = (
+        world.sprite_at(me).expect("me").id(),
+        world.sprite_at(attacker).expect("the attacker").id(),
+    );
+    world.step();
+    world.step();
+    assert!(remembers(&world, me, attacker), "hit, and remembered");
+    let mut ticks = 0;
+    while world.sprite(attacker).is_some() {
+        world.step();
+        ticks += 1;
+        assert!(ticks < 500, "the attacker should have died of its pricks");
+    }
+    world.step();
+    assert!(
+        !remembers(&world, me, attacker),
+        "{:?}",
+        memory_of(&world, me)
+    );
+}
+
+#[test]
+fn each_sprite_feared_is_a_lesson_once_and_sprites_in_general_once_they_turn() {
+    // Design v18 §5.6. Each bully's hit punishes by .6, so each is feared
+    // at −.6, a lesson; with the third, sprites in general are −.6 too. The
+    // bullies hit highest ID first, so each newcomer is listed before the
+    // sprites already remembered.
+    let me = at(2, 2);
+    let bullies = [at(3, 2), at(1, 2), at(2, 1)];
+    let hurts = r#"Emitter(locus: Locus("was_hit"), mode: Level, gain: 0.6, chem: "punishment"),"#;
+    let mut sprites = vec![(me, hurts)];
+    let mut script = vec![(me, ScriptedAction::Rest); 4];
+    for (i, &bully) in bullies.iter().enumerate() {
+        sprites.push((bully, ""));
+        script.extend(vec![(bully, ScriptedAction::Rest); 2 - i]);
+        script.push((bully, ScriptedAction::Hit { at: me }));
+        script.extend(vec![(bully, ScriptedAction::Rest); 3]);
+    }
+    let mut world = scene(&["....."; 5], &sprites, &script);
+    let ids: Vec<EntityId> = bullies
+        .iter()
+        .map(|&b| world.sprite_at(b).expect("a bully").id())
+        .collect();
+    let learned: Vec<(Learned, bool)> = (0..40).flat_map(|_| lessons(&world.step())).collect();
+    let fear = |thing: Thing| (Learned::Fear { thing }, false);
+    assert_eq!(
+        learned,
+        [
+            fear(Thing::Sprite(ids[2])),
+            fear(Thing::Sprite(ids[1])),
+            fear(Thing::Sprite(ids[0])),
+            fear("sprite".into()),
+        ]
+    );
+}
+
+#[test]
+fn touching_a_sprite_it_learns_nothing_about_changes_nothing_about_sprites_in_general() {
+    // Design v18 §5.6. Two bullies at −.8 each make sprites in general
+    // −.4, at half strength, no lesson. Then it hits a stranger, which
+    // teaches it nothing: sprites in general are still −.4, so still no
+    // lesson, and it remembers only the two bullies.
+    let (me, bully, other_bully, stranger) = (at(2, 2), at(3, 2), at(1, 2), at(2, 3));
+    let hurts = r#"Emitter(locus: Locus("was_hit"), mode: Level, gain: 0.8, chem: "punishment"),"#;
+    let mut script = vec![(me, ScriptedAction::Rest); 2];
+    script.push((me, ScriptedAction::Hit { at: stranger }));
+    script.push((me, ScriptedAction::Rest));
+    script.push((bully, ScriptedAction::Hit { at: me }));
+    script.extend(vec![(bully, ScriptedAction::Rest); 4]);
+    script.push((other_bully, ScriptedAction::Rest));
+    script.push((other_bully, ScriptedAction::Hit { at: me }));
+    script.extend(vec![(other_bully, ScriptedAction::Rest); 3]);
+    script.extend(vec![(stranger, ScriptedAction::Rest); 4]);
+    let mut world = scene(
+        &["....."; 5],
+        &[(me, hurts), (bully, ""), (other_bully, ""), (stranger, "")],
+        &script,
+    );
+    let (me, stranger) = (
+        world.sprite_at(me).expect("me").id(),
+        world.sprite_at(stranger).expect("the stranger").id(),
+    );
+    let learned: Vec<(Learned, bool)> = (0..35).flat_map(|_| lessons(&world.step())).collect();
+    let in_general = Learned::Fear {
+        thing: "sprite".into(),
+    };
+    assert!(
+        !learned.iter().any(|(l, _)| *l == in_general),
+        "{learned:?}"
+    );
+    assert!(
+        !remembers(&world, me, stranger),
+        "{:?}",
+        memory_of(&world, me)
     );
 }

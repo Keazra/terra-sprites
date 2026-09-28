@@ -1313,6 +1313,7 @@ mod tests {
         sprite.brain.touched = Some(Touch {
             tick: 0,
             category: Category::BerryBush,
+            sprite: None,
             novelty: 1.0,
         });
         sprite.body.chems[indices.reward] = 0.5;
@@ -1338,6 +1339,7 @@ mod tests {
         brain.touched = Some(Touch {
             tick: 0,
             category: Category::BerryBush,
+            sprite: None,
             novelty: 1.0,
         });
         let hunger = |brain: &mut Brain, level| {

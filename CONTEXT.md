@@ -297,7 +297,7 @@ Something the brain feels, such as hunger, a pulse, or how far away its target i
 _Avoid_: sense, locus (a locus is what genes read)
 
 **Attention**:
-The brain noticing one kind of thing nearby, such as berries or water, out of every kind it could reach. What it attends to is where its verbs aim.
+The brain noticing one kind of thing nearby, such as berries or water, out of every kind it could reach. For sprites, it's one particular sprite: the one that draws the eye most. What it attends to is where its verbs aim.
 _Avoid_: focus, perception
 
 **Concept**:
@@ -325,15 +325,31 @@ The good a sprite took in on its last tick, its relief and reward, less the puni
 _Avoid_: last r, reinforcement (on screen)
 
 **Worth**:
-What a kind of thing is to a sprite, learned from experience: good for some of its needs, and good or bad in general. It draws the sprite's eye and steps towards the thing, or makes it back away.
+What a kind of thing, or a particular sprite, is to a sprite, learned from experience: good for some of its needs, and good or bad in general. It draws the sprite's eye and steps towards the thing, or keeps it from touching it.
 _Avoid_: value, valence, preference
+
+**Bad**:
+What a sprite learns about something that hurt it when it touched it, such as a thornbush it bit: don't touch it, don't go over to it. A bad thing isn't frightening, since it won't come after you.
+_Avoid_: dangerous, harmful
+
+**Fear**:
+What a sprite learns about someone that hurt it by its own doing, such as a sprite that hit it. A frightening sprite catches its eye and makes it back away while it's near; fear never makes it attack. On screen: "Sprite #7 is frightening".
+_Avoid_: bad (bad is about touching), wariness (a passing mood), threat
+
+**Individual**:
+A particular sprite that another remembers, with what it has learned about it: its worth and how frightening it is. Individuals are learned fast, fade, and are forgotten once faded or dead.
+_Avoid_: acquaintance, contact, relationship
+
+**Sprites in general**:
+What a sprite thinks of sprites it doesn't know: a summary of the individuals it remembers, which counts for nothing while it knows only one. So one bully doesn't make it shy of everyone, but three might.
+_Avoid_: the sprite kind (on screen), stereotype
 
 **Habit**:
 What a sprite has learned about doing one verb to one kind of thing, such as "eating balls doesn't work" or "hitting sprites is bad".
 _Avoid_: skill (a later design, #48), reflex
 
 **Thing touched**:
-What a feeling is about: the thing the sprite tried a verb on a moment ago. Worth is learned about it and nothing else. A sprite that hit it isn't one, yet.
+What a feeling is about: the thing the sprite tried a verb on a moment ago, or the particular sprite. Worth is learned about it and nothing else. A sprite that hit it isn't one: that teaches fear of the sprite instead.
 _Avoid_: target (for this), culprit
 
 **Fruitless try**:
@@ -354,14 +370,14 @@ _Avoid_: exploration (exploring is how sure its choices are)
 
 **Wariness**:
 A passing mood, raised by a run of hurts, that makes a sprite less curious for a while.
-_Avoid_: fear (a later design, #53)
+_Avoid_: fear (fear is of someone in particular)
 
 **Memory**:
-What a sprite has learned from experience: the worth of things, and its habits.
+What a sprite has learned from experience: the worth of things and of individuals, its fears, and its habits.
 _Avoid_: learned links, knowledge
 
 **Lesson**:
-A worth or habit that has reached half a point from nothing. The event log announces each lesson once, as good or bad.
+A worth, fear or habit that has reached half a point from nothing. The event log announces each lesson once, as good or bad, or frightening.
 _Avoid_: milestone (on screen)
 
 ### The screen

@@ -6,7 +6,7 @@ use ratatui::text::Line;
 use terra_sim::{
     ActionView, ChemicalKind, ChemicalLevel, DataPack, DeathCause, EmitterMode, EntityId,
     Explanation, Expression, GeneView, Learned, ObjectView, Outcome, Part, Progress, SpriteView,
-    Target, Trait, Verb, World,
+    Target, Thing, Trait, Verb, World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -598,16 +598,16 @@ fn explained_lines(explained: &Explanation) -> Vec<String> {
     if explained.attention.is_empty() {
         lines.push("   nothing in sight".into());
     }
-    for &(category, score) in &explained.attention {
-        let marker = if explained.attended == Some(category) {
+    for (thing, score) in &explained.attention {
+        let marker = if explained.attended.as_ref() == Some(thing) {
             "►"
         } else {
             " "
         };
         lines.extend(scored(
             &format!(" {marker} "),
-            &display_name(category),
-            &level(score),
+            &thing_name(thing),
+            &level(*score),
         ));
     }
     lines.push(String::new());
@@ -628,8 +628,9 @@ fn explained_lines(explained: &Explanation) -> Vec<String> {
         let name = match &contribution.part {
             Part::Concept(inputs) => concept_name(inputs),
             // Neutral, since worth adds to a verb or takes from it either
-            // way: a bad thing's pushes towards backing away.
-            Part::Worth(thing) => format!("worth: {}", display_name(thing)),
+            // way: a bad thing's takes from going near it.
+            Part::Worth(thing) => format!("worth: {}", thing_name(thing)),
+            Part::Fear(thing) => format!("fear: {}", thing_name(thing)),
             Part::Habit(thing) => {
                 let verb = explained.decision.map_or("", |(verb, _)| verb_name(verb));
                 format!("habit: {} {}", verb.to_lowercase(), display_name(thing))
@@ -646,7 +647,9 @@ fn explained_lines(explained: &Explanation) -> Vec<String> {
 pub(crate) fn learned_line(id: EntityId, learned: &Learned, good: bool, data: &DataPack) -> String {
     let verdict = if good { "good" } else { "bad" };
     let what = match learned {
-        Learned::Worth { .. } | Learned::Bad { .. } => learned_name(learned, data),
+        Learned::Worth { .. } | Learned::Bad { .. } | Learned::Fear { .. } => {
+            learned_name(learned, data)
+        }
         Learned::Habit { .. } => format!("{} is {verdict}", learned_name(learned, data)),
         Learned::NewThings => format!("new things are {verdict}"),
     };
@@ -654,7 +657,8 @@ pub(crate) fn learned_line(id: EntityId, learned: &Learned, good: bool, data: &D
 }
 
 /// Something learned, as the memory words it: `thornbushes are bad`,
-/// `water is good for thirst`, `eating balls`, `new things`.
+/// `water is good for thirst`, `Sprite #7 is frightening`, `eating balls`,
+/// `new things`.
 fn learned_name(learned: &Learned, data: &DataPack) -> String {
     match learned {
         Learned::Worth {
@@ -672,18 +676,38 @@ fn learned_name(learned: &Learned, data: &DataPack) -> String {
             let (things, be) = things(thing, data);
             format!("{things} {be} bad")
         }
-        Learned::Habit { thing, verb } => format!("{} {}", doing(*verb), things(thing, data).0),
+        Learned::Fear { thing } => {
+            let (things, be) = things(thing, data);
+            format!("{things} {be} frightening")
+        }
+        Learned::Habit { thing, verb } => {
+            let kind = Thing::from(thing.as_str());
+            format!("{} {}", doing(*verb), things(&kind, data).0)
+        }
         Learned::NewThings => "new things".into(),
     }
 }
 
-/// A kind of thing in general, with the verb "to be" to go with it, as its
-/// object type names it (design §3.5.1): `thornbushes are`, `water is`. A
-/// kind with no plural isn't counted, so it keeps its name and takes "is".
-fn things(thing: &str, data: &DataPack) -> (String, &'static str) {
-    match data.plural_of(thing) {
-        Some(plural) => (plural.to_string(), "are"),
-        None => (display_name(thing), "is"),
+/// A thing as the Brain tab names it (design v18 §6.1): a kind by its
+/// display name, `berry bush`, a sprite as the log names it, `Sprite #7`.
+fn thing_name(thing: &Thing) -> String {
+    match thing {
+        Thing::Kind(kind) => display_name(kind),
+        Thing::Sprite(id) => sprite_label(*id),
+    }
+}
+
+/// A thing with the verb "to be" to go with it: a kind in general, as its
+/// object type names it (design §3.5.1), `thornbushes are`, `water is`, or
+/// a particular sprite, `Sprite #7 is` (design v18 §6.1). A kind with no
+/// plural isn't counted, so it keeps its name and takes "is".
+fn things(thing: &Thing, data: &DataPack) -> (String, &'static str) {
+    match thing {
+        Thing::Kind(kind) => match data.plural_of(kind) {
+            Some(plural) => (plural.to_string(), "are"),
+            None => (display_name(kind), "is"),
+        },
+        Thing::Sprite(id) => (sprite_label(*id), "is"),
     }
 }
 

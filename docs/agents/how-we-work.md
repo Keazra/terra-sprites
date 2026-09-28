@@ -6,6 +6,7 @@ The owner's preferences and the project's conventions, for any agent session, lo
 
 - **They review by feel, after trying the build** in Windows Terminal, and change direction when something feels off. Don't build on a direction they haven't confirmed.
 - **Plain words, from the start.** Write questions and options for someone who hasn't read the code: say what the player sees or what changes, not step letters, gene jargon or type names. A question once had to be asked again because it wasn't plain.
+  - **Name a place by what it's for, not by its file:** "a word list of its own", not `themes/words.ron`. Slice 9b's question about where plurals should live had to be asked again for that reason.
 - **They reply only to what they disagree with.** Give a recommendation with each question or list; silence accepts it. Keep going on anything they don't object to.
 - **A real decision gets a real question.** Use `AskUserQuestion` with the recommended option first. For anything about layout, give each option an ASCII mockup preview: the owner chose the Chem tab's layout that way.
 - **A choice with real trade-offs comes with its pros and cons,** each option's, in plain words, before the question. In slice 8 the owner had to ask for them before choosing how to break the thorn trap.
@@ -20,6 +21,7 @@ The owner's preferences and the project's conventions, for any agent session, lo
   - **The aim is easy modding,** as in the Creatures games, whose fun included how simple it was to make new species and new items. When a design choice comes up, say whether it makes adding a species or an item easier or harder.
 - **The player has to care first.** Sprites start unnamed; the player names the ones they care about.
 - **Terra Sprites is a stepping stone** to a larger game: one adventurer in a world of NPCs that run on the Sprite system, with skills a player can lock and a character that can live on as an NPC ([#47](https://github.com/Keazra/terra-sprites/issues/47)). Nothing is built for it yet, but keep `terra-sim` a general engine, and when a design choice comes up, say whether it helps or hinders reusing sprites as NPCs.
+- **Realism settles behaviour questions.** When two behaviours both work, the owner asks which is more realistic. Answer with how real animals behave, then recommend. In slice 9c, fear was kept quiet in a cornered sprite's choice because cornered animals fight.
 - **Sprites are blank slates.** They should learn what's good or bad, pass on their genes, and later teach the next generation, so instincts stay general and make mistakes rather than holding knowledge a sprite should earn. "Bored → play with whatever it's looking at", thornbushes included, stays, even when it costs lives until learning arrives (design v12, change 11).
 
 ## Design documents
@@ -42,6 +44,8 @@ Each slice is a GitHub issue ("Slice N: …") in the M1 milestone, worked as in 
 7. Answer outside reviews (below), then merge when the owner says so: a merge commit, not a squash, then delete the branch and pull `main`. PR descriptions and review replies cite the slice's commits by hash, and a squash would drop them from `main`'s history.
 
 A slice too big for one PR ships as two ("4a", "4b"); only the last PR's description says "Closes #N".
+
+**A prototype's totals can hide a particular case,** so the existing behaviour tests are the check while building on its numbers. In slice 9c the default world's numbers looked fine, but the old cornered-sprite test showed fear stopping a cornered sprite from turning on its attacker (4 times in 10, against 8 or more). When a fix comes out of such a case, measure it in the prototype again before bringing it to the owner.
 
 ## Outside reviews
 
