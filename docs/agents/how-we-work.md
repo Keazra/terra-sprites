@@ -15,6 +15,7 @@ The owner's preferences and the project's conventions, for any agent session, lo
 ## The owner's design principles
 
 - **The engine enforces physics only.** Behaviour and safety policies belong in each object's data rules, and the data names things. For example, the cause of death "hurt by thornbush" comes from the object type, not from a list in the code.
+  - **The one exception is content safety.** A rule the project must never break, whatever a genome or data pack says, is enforced in the engine, because data can be edited and genes evolve. For now there is one: attraction and mating attempts only ever between adults ([#69](https://github.com/Keazra/terra-sprites/issues/69), for M2).
 - **Solid means impassable, whatever a sprite has learned.**
 - **The player has to care first.** Sprites start unnamed; the player names the ones they care about.
 - **Terra Sprites is a stepping stone** to a larger game: one adventurer in a world of NPCs that run on the Sprite system, with skills a player can lock and a character that can live on as an NPC ([#47](https://github.com/Keazra/terra-sprites/issues/47)). Nothing is built for it yet, but keep `terra-sim` a general engine, and when a design choice comes up, say whether it helps or hinders reusing sprites as NPCs.
