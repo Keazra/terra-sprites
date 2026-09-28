@@ -286,3 +286,205 @@ fn a_sprite_cornered_by_its_attacker_turns_on_it() {
     }
     assert!(turned >= 8, "turned on the attacker in {turned} of 10");
 }
+
+/// A watcher that feels every hit as a punishment of 1.
+fn fearful_watcher(data: &DataPack) -> Genome {
+    let text = r#"(format: 1, genes: [
+        Trait(trait: "speed", value: 10.0),
+        Trait(trait: "sense_radius", value: 10.0),
+        BrainParam(param: "tau_base", value: 0.05),
+        AttentionInstinct(input: "always", category: Sprite, weight: 1.0),
+        Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),
+        Emitter(locus: Locus("was_hit"), mode: Level, gain: 1.0, chem: "punishment"),
+    ])"#;
+    Genome::from_ron(text, data).expect("a valid genome")
+}
+
+#[test]
+fn a_feared_sprite_catches_the_eye_over_a_nearer_stranger() {
+    // Design v18 §5.3. The bully hits and walks off to stand 3 tiles away;
+    // the stranger stands beside the watcher. Nearness alone favours the
+    // stranger (salience .5 against .4); fear of the bully, 1 × vigilance
+    // (.8) × what's left of it at that distance (.6), adds .48.
+    let (stranger, me, bully) = (at(0, 0), at(1, 0), at(2, 0));
+    let script = [
+        (stranger, ScriptedAction::Rest),
+        (bully, ScriptedAction::Hit { at: me }),
+        (
+            bully,
+            ScriptedAction::Wander {
+                destination: at(4, 0),
+            },
+        ),
+        (bully, ScriptedAction::Rest),
+    ];
+    let sprites = [
+        (stranger, walker as MakeGenome),
+        (me, fearful_watcher),
+        (bully, walker),
+    ];
+    let mut world = scene(&["......."], &sprites, &script);
+    let (me, bully) = (id_at(&world, me), id_at(&world, bully));
+    for _ in 0..12 {
+        world.step();
+    }
+    let bully_at = world.sprite(bully).expect("the bully").pos();
+    assert_eq!(bully_at, at(4, 0), "the bully has walked off");
+    assert_eq!(attends(&world, me), Some(bully_at));
+}
+
+/// A sprite that attends to sprites, would rather rest a little, and feels
+/// every hit as a punishment of 1: so fear alone would make it back away.
+fn skittish(data: &DataPack) -> Genome {
+    let text = r#"(format: 1, genes: [
+        Trait(trait: "speed", value: 10.0),
+        Trait(trait: "sense_radius", value: 10.0),
+        BrainParam(param: "tau_base", value: 0.05),
+        AttentionInstinct(input: "always", category: Sprite, weight: 1.0),
+        Instinct(inputs: [("always", false)], verb: Rest, weight: 0.3),
+        Emitter(locus: Locus("was_hit"), mode: Level, gain: 1.0, chem: "punishment"),
+    ])"#;
+    Genome::from_ron(text, data).expect("a valid genome")
+}
+
+#[test]
+fn a_sprite_backs_away_from_one_it_fears_once_the_hit_is_no_longer_felt() {
+    // Design v18 §5.5. The bully hits at tick 0 and stays beside it. While
+    // the hit is felt, at tick 1, fear is quiet and the sprite keeps
+    // resting; from tick 2, flight (.8) × its fear (1) beats resting's .3 by
+    // more than the switch margin (.2), and it backs away from the bully.
+    let (me, bully) = (at(1, 0), at(2, 0));
+    let script = [
+        (bully, ScriptedAction::Hit { at: me }),
+        (bully, ScriptedAction::Rest),
+    ];
+    let sprites = [(me, skittish as MakeGenome), (bully, walker)];
+    let mut world = scene(&["......"], &sprites, &script);
+    let (me, bully) = (id_at(&world, me), id_at(&world, bully));
+    world.step();
+    world.step();
+    let resting = world.sprite(me).and_then(|s| s.action()).map(|a| a.verb);
+    assert_eq!(resting, Some(Verb::Rest), "quiet while the hit is felt");
+    assert_eq!(
+        next_choice(&mut world, me, 1),
+        Some((Verb::Retreat, Some(Target::Sprite(bully))))
+    );
+}
+
+#[test]
+fn a_sprite_does_not_back_away_from_one_it_fears_that_is_far_off() {
+    // Design v18 §5.5: fear pulls only within fear_reach (half of sight).
+    // The bully hits, then walks off to stand 7 tiles away, out of reach of
+    // fear's pull, and the sprite goes on resting.
+    let (me, bully) = (at(1, 0), at(2, 0));
+    let mut script = vec![
+        (bully, ScriptedAction::Hit { at: me }),
+        (
+            bully,
+            ScriptedAction::Wander {
+                destination: at(8, 0),
+            },
+        ),
+    ];
+    // It stays there for the rest of the test.
+    script.extend(vec![(bully, ScriptedAction::Rest); 5]);
+    let sprites = [(me, skittish as MakeGenome), (bully, walker)];
+    let mut world = scene(&[".........."], &sprites, &script);
+    let me = id_at(&world, me);
+    for _ in 0..12 {
+        world.step();
+    }
+    assert_eq!(world.sprite(me).expect("me").pos(), at(1, 0), "still there");
+    let choice = next_choice(&mut world, me, 20).map(|(verb, _)| verb);
+    assert_eq!(choice, Some(Verb::Rest));
+}
+
+#[test]
+fn a_starter_sprite_hit_by_a_bully_backs_away_from_it_far_more_than_from_a_stranger() {
+    // Design v18 §5.5, the bully arena of slice 9c's prototype (#62): a
+    // starter sprite fears the one that hit it, not sprites in general, so
+    // it backs away from the bully far more than from a stranger. On v17's
+    // brain the two were about even (4 and 3.5 in 400 ticks).
+    let (me, bully, stranger) = (at(5, 3), at(6, 3), at(9, 5));
+    let (mut from_bully, mut from_stranger) = (0, 0);
+    for seed in 1..=5 {
+        let script = [
+            (me, ScriptedAction::Rest),
+            (bully, ScriptedAction::Hit { at: me }),
+        ];
+        let sprites = [
+            (me, starter as MakeGenome),
+            (bully, starter),
+            (stranger, starter),
+        ];
+        let mut world = scene_with(&["............"; 8], &[], &sprites, &script, seed);
+        let (id, them, other) = (
+            id_at(&world, me),
+            id_at(&world, bully),
+            id_at(&world, stranger),
+        );
+        for _ in 0..400 {
+            for event in world.step() {
+                if let EventKind::ActionEnded {
+                    id: who,
+                    verb: Verb::Retreat,
+                    action,
+                    ..
+                } = event.kind
+                    && who == id
+                {
+                    match action.target {
+                        Some(Target::Sprite(t)) if t == them => from_bully += 1,
+                        Some(Target::Sprite(t)) if t == other => from_stranger += 1,
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        from_bully > 3 * from_stranger,
+        "backed away from the bully {from_bully} times, from the stranger {from_stranger}"
+    );
+}
+
+/// A skittish sprite in the middle of a 14×3 field, hit in turn by the
+/// first `bullies` of three sprites around it, ten ticks apart, which then
+/// walk off beyond fear's reach; a stranger rests beside it. What it
+/// chooses first once its own rests are over.
+fn hurt_by(bullies: usize) -> (Option<(Verb, Option<Target>)>, EntityId) {
+    let me = at(6, 1);
+    let spots = [at(5, 1), at(7, 1), at(6, 0)];
+    let far = [at(0, 0), at(13, 0), at(13, 2)];
+    let stranger = at(6, 2);
+    let mut script = vec![(me, ScriptedAction::Rest); 6];
+    script.extend(vec![(stranger, ScriptedAction::Rest); 12]);
+    let mut sprites = vec![(me, skittish as MakeGenome), (stranger, walker)];
+    for (i, (&bully, &away)) in spots.iter().zip(&far).enumerate().take(bullies) {
+        script.extend(vec![(bully, ScriptedAction::Rest); i]);
+        script.push((bully, ScriptedAction::Hit { at: me }));
+        script.push((bully, ScriptedAction::Wander { destination: away }));
+        script.extend(vec![(bully, ScriptedAction::Rest); 10]);
+        sprites.push((bully, walker));
+    }
+    let mut world = scene(&[".............."; 3], &sprites, &script);
+    let (me, stranger) = (id_at(&world, me), id_at(&world, stranger));
+    for _ in 0..59 {
+        world.step();
+    }
+    (next_choice(&mut world, me, 5), stranger)
+}
+
+#[test]
+fn a_sprite_hurt_by_three_different_sprites_backs_away_from_a_stranger() {
+    // Design v18 §5.6: three bullies at −1 each make sprites in general
+    // −1, and a stranger is judged by them: flight (.8) beats resting (.3).
+    // One bully leaves sprites in general alone, and it goes on resting.
+    let (choice, stranger) = hurt_by(3);
+    assert_eq!(
+        choice,
+        Some((Verb::Retreat, Some(Target::Sprite(stranger))))
+    );
+    let (choice, _) = hurt_by(1);
+    assert_eq!(choice.map(|(verb, _)| verb), Some(Verb::Rest));
+}

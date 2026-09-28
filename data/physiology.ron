@@ -64,6 +64,16 @@
         "curiosity":         (range: (0.0, 1.0),     default: 0.3),
         "familiarity_rate":  (range: (0.0, 0.05),    default: 0.002),
         "disappointment":    (range: (0.0, 1.0),     default: 0.3),
+        // Individuals and fear (design v18 §5.3, §5.5, §5.6), from slice 9c's
+        // prototype (#62).
+        "individual_rate_good": (range: (0.0, 1.0),  default: 0.8),
+        "individual_rate_bad":  (range: (0.0, 1.0),  default: 0.9),
+        "fear_rate":         (range: (0.0, 1.0),     default: 1.0),
+        "fear_fade":         (range: (0.0, 0.01),    default: 0.00005),
+        "generalise":        (range: (2.0, 10.0),    default: 3.0),
+        "vigilance":         (range: (0.0, 2.0),     default: 0.8),
+        "flight":            (range: (0.0, 2.0),     default: 0.8),
+        "fear_reach":        (range: (0.1, 1.0),     default: 0.5),
     },
     // The range of each receptor target in `loci.ron`. Each rests at 1.0 when
     // no receptor writes it.
@@ -90,6 +100,9 @@
     // is still the thing a feeling is about.
     relief_deadband: 0.02,
     touch_window: 3,
+    // A remembered sprite is forgotten once everything learned about it has
+    // faded nearer 0 than this (design v18 §5.6).
+    forget_below: 0.01,
 
     // How long actions last (design §5.5): a rest in ticks, a retreat in
     // steps. An action still going at the timeout, in ticks, ends as timed out.

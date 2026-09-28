@@ -4,7 +4,7 @@
 
 use terra_sim::{
     DataPack, EntityId, Event, EventKind, Genome, Map, Outcome, Part, Pos, Scenario,
-    ScriptedAction, Verb, World,
+    ScriptedAction, Thing, Verb, World,
 };
 
 const STARTER: &str = include_str!("../../../data/genomes/starter.ron");
@@ -296,9 +296,13 @@ fn explain_gives_attention_scores_and_the_concepts_behind_the_verb() {
     let sprite = world.sprite(id).expect("the sprite");
     let hunger = sprite.chemical("hunger").expect("hunger");
     let explained = sprite.explain().expect("step 5 ran");
-    assert_eq!(explained.attended, Some("berry"));
-    let categories: Vec<&str> = explained.attention.iter().map(|&(c, _)| c).collect();
-    assert_eq!(categories, ["berry", "berry_bush"], "highest first");
+    assert_eq!(explained.attended, Some("berry".into()));
+    let categories: Vec<Thing> = explained.attention.iter().map(|(c, _)| c.clone()).collect();
+    assert_eq!(
+        categories,
+        [Thing::from("berry"), "berry_bush".into()],
+        "highest first"
+    );
     let (verb, score) = explained.decision.expect("a verb");
     assert_eq!(verb, Verb::Eat);
     // Largest first, whatever the sign: hunger, hunger and not there yet, always.
