@@ -12,7 +12,7 @@ use crate::data::DataPack;
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, LocusRef};
 use crate::learning::{
-    Experience, Links, Signals, TRACE_CAP, Touch, TraceEntry, kind, still_counts, weight,
+    Experience, Links, Signals, TRACE_CAP, Touch, TraceEntry, still_counts, weight,
 };
 use crate::perception::Target;
 use crate::random::unit;
@@ -31,20 +31,23 @@ pub(crate) const VERBS: [Verb; 8] = [
     Verb::Wander,
 ];
 
+/// Which way a thing's worth pushes a verb aimed at it (design §5.5):
+/// towards it for Approach and the interactions, away for Retreat, not at
+/// all for the targetless verbs.
+fn side(verb: Verb) -> f32 {
+    match verb {
+        Verb::Retreat => -1.0,
+        Verb::Rest | Verb::Wander => 0.0,
+        _ => 1.0,
+    }
+}
+
 /// Where `verb` is in `VERBS`.
 fn column(verb: Verb) -> usize {
     VERBS
         .iter()
         .position(|&v| v == verb)
         .expect("a verb the brain scores")
-}
-
-/// Where `category` is in `Category::ALL`, its column in the attention links.
-fn category_column(category: Category) -> usize {
-    Category::ALL
-        .iter()
-        .position(|&c| c == category)
-        .expect("every category is in ALL")
 }
 
 /// The brain's parameters (design §5.7): each from the first `BrainParam`
@@ -255,7 +258,7 @@ impl Brain {
                     input,
                     category,
                     weight,
-                } => attention[place(input)][category_column(category)] = weight,
+                } => attention[place(input)][category.index()] = weight,
                 _ => {}
             }
         }
@@ -294,7 +297,7 @@ impl Brain {
         if let Some((category, novelty)) = touched {
             let good = self.params.get(BrainParam::WorthRateGood) * learning_rate_mod;
             let bad = self.params.get(BrainParam::WorthRateBad) * learning_rate_mod;
-            let c = kind(category);
+            let c = category.index();
             let experience = &mut self.experience;
             for (worth, &relief) in experience.worth.iter_mut().zip(relief) {
                 worth[c] = (worth[c] + good * relief).min(1.0);
@@ -328,7 +331,7 @@ impl Brain {
                     _ => 0.0,
                 };
                 let step = rate * (r - disappointed) * weight(decay, tick, entry.tick);
-                let habit = &mut self.experience.habits[kind(category)][column(verb)];
+                let habit = &mut self.experience.habits[category.index()][column(verb)];
                 *habit = (*habit + step).clamp(-1.0, 1.0);
             }
         }
@@ -380,7 +383,7 @@ impl Brain {
 
     /// How new `category` is to the sprite (design §5.6): 1 − familiarity.
     pub(crate) fn novelty(&self, category: Category) -> f32 {
-        1.0 - self.experience.familiarity[kind(category)]
+        1.0 - self.experience.familiarity[category.index()]
     }
 
     /// Each need's relief this tick (design §5.6): its fall since the last
@@ -518,7 +521,7 @@ impl Brain {
             if let Some(category) = snapshot.attended {
                 // Attending to a kind of thing makes it familiar (design §5.6).
                 let rate = self.params.get(BrainParam::FamiliarityRate);
-                let familiar = &mut self.experience.familiarity[kind(category)];
+                let familiar = &mut self.experience.familiarity[category.index()];
                 *familiar = (*familiar + rate).min(1.0);
             }
             self.trace.push_back(TraceEntry {
@@ -609,12 +612,8 @@ impl Brain {
         if let (Some((verb, _)), Some(category)) = (decision, snapshot.attended) {
             let worth = self.params.get(BrainParam::ValueGain)
                 * self.worth(category, &snapshot.inputs, data);
-            let side = match verb {
-                Verb::Retreat => -1.0,
-                Verb::Rest | Verb::Wander => 0.0,
-                _ => 1.0,
-            };
-            let habit = self.experience.habits[kind(category)][column(verb)];
+            let side = side(verb);
+            let habit = self.experience.habits[category.index()][column(verb)];
             contributions.extend([
                 Contribution {
                     part: Part::Worth(category.name()),
@@ -696,7 +695,7 @@ impl Brain {
         candidates
             .iter()
             .map(|(&category, &distance)| {
-                let c = category_column(category);
+                let c = category.index();
                 let instinct: f32 = state
                     .iter()
                     .map(|&i| inputs[i] * self.attention.get(i, c))
@@ -762,14 +761,9 @@ impl Brain {
         }
         if let Some(category) = aimed {
             let worth = self.params.get(BrainParam::ValueGain) * self.worth(category, inputs, data);
-            let habits = &self.experience.habits[kind(category)];
+            let habits = &self.experience.habits[category.index()];
             for ((score, verb), habit) in scores.iter_mut().zip(VERBS).zip(habits) {
-                *score += habit
-                    + match verb {
-                        Verb::Retreat => -worth,
-                        Verb::Rest | Verb::Wander => 0.0,
-                        _ => worth,
-                    };
+                *score += habit + side(verb) * worth;
             }
         }
         scores
@@ -779,7 +773,7 @@ impl Brain {
     /// level, from `inputs`, times its worth for that need, plus its general
     /// good and its bad.
     fn worth(&self, category: Category, inputs: &[f32], data: &DataPack) -> f32 {
-        let c = kind(category);
+        let c = category.index();
         let experience = &self.experience;
         let for_needs: f32 = data
             .need_places()
@@ -868,7 +862,6 @@ mod tests {
     use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
-    use crate::learning::kind;
 
     fn builtin() -> DataPack {
         DataPack::builtin().expect("built-in data pack is valid")
@@ -1218,7 +1211,7 @@ mod tests {
         assert_eq!(eat(&brain, "always"), 0.0);
         let berry = brain
             .attention
-            .get(input("hunger"), category_column(Category::Berry));
+            .get(input("hunger"), Category::Berry.index());
         assert_eq!(berry, 0.4);
     }
 
@@ -1235,7 +1228,7 @@ mod tests {
 
     /// What `brain` has learned berry bushes are worth for hunger.
     fn bush_for_hunger(brain: &Brain) -> f32 {
-        brain.experience.worth[0][kind(Category::BerryBush)]
+        brain.experience.worth[0][Category::BerryBush.index()]
     }
 
     #[test]
@@ -1298,7 +1291,7 @@ mod tests {
             ..Default::default()
         };
         brain.learn(10, &hit, 1.0, &data);
-        assert_eq!(brain.experience.bad[kind(Category::Sprite)], 0.0);
+        assert_eq!(brain.experience.bad[Category::Sprite.index()], 0.0);
         assert_eq!(brain.experience.new_things, 0.0);
     }
 
@@ -1307,8 +1300,8 @@ mod tests {
         // Design v16 §5.3: value_gain (1) × Σ need × worth, plus good and bad.
         let data = builtin();
         let mut brain = brain(&[]);
-        brain.experience.worth[0][kind(Category::Berry)] = 0.5;
-        brain.experience.bad[kind(Category::Thornbush)] = -0.4;
+        brain.experience.worth[0][Category::Berry.index()] = 0.5;
+        brain.experience.bad[Category::Thornbush.index()] = -0.4;
         let candidates = BTreeMap::from([(Category::Berry, 1.0), (Category::Thornbush, 1.0)]);
         let full = brain.attention_scores(&inputs(&[]), &candidates, 0.0, &data);
         assert_eq!(full[&Category::Berry], 0.0, "no hunger, no pull");
@@ -1324,7 +1317,7 @@ mod tests {
         use Verb::*;
         let data = builtin();
         let mut brain = brain(&[]);
-        brain.experience.good[kind(Category::Ball)] = 0.3;
+        brain.experience.good[Category::Ball.index()] = 0.3;
         let x = inputs(&[]);
         let scores = brain.scores(&brain.activations(&x), &x, Some(Category::Ball), &data);
         for verb in [Approach, Eat, Drink, Hit, Play] {
@@ -1352,7 +1345,7 @@ mod tests {
             ..Default::default()
         };
         brain.learn(10, &hurt, 1.0, &data);
-        let habit = |verb| brain.experience.habits[kind(Category::Berry)][column(verb)];
+        let habit = |verb| brain.experience.habits[Category::Berry.index()][column(verb)];
         assert!(close(habit(Verb::Eat), -0.3 * 0.5), "{}", habit(Verb::Eat));
         assert!(close(habit(Verb::Approach), -0.3 * 0.25));
         assert_eq!(habit(Verb::Rest), 0.0, "Rest aims at nothing");
@@ -1368,7 +1361,7 @@ mod tests {
     fn a_habit_counts_for_its_verb_on_the_thing_attended() {
         let data = builtin();
         let mut brain = brain(&[]);
-        brain.experience.habits[kind(Category::Ball)][column(Verb::Eat)] = -0.4;
+        brain.experience.habits[Category::Ball.index()][column(Verb::Eat)] = -0.4;
         let x = inputs(&[]);
         let scores = brain.scores(&brain.activations(&x), &x, Some(Category::Ball), &data);
         assert_eq!(scores[column(Verb::Eat)], -0.4);
@@ -1402,7 +1395,7 @@ mod tests {
             ..Default::default()
         };
         brain.learn(10, &fruitless, 1.0, &data);
-        let habit = brain.experience.habits[kind(Category::Ball)][column(Verb::Eat)];
+        let habit = brain.experience.habits[Category::Ball.index()][column(Verb::Eat)];
         assert!(close(habit, -0.3 * 0.3 * 0.8 * 0.9), "{habit}");
         assert_eq!(bush_for_hunger(&brain), 0.0, "worth isn't touched");
     }
@@ -1432,7 +1425,7 @@ mod tests {
         };
         brain.learn(10, &fruitless, 1.0, &data);
         assert_eq!(
-            brain.experience.habits[kind(Category::Ball)][column(Verb::Play)],
+            brain.experience.habits[Category::Ball.index()][column(Verb::Play)],
             0.0
         );
     }
@@ -1447,7 +1440,7 @@ mod tests {
             r#"BrainParam(param: "worth_fade_bad", value: 0.001)"#,
             r#"BrainParam(param: "habit_fade", value: 0.005)"#,
         ]);
-        let (berry, thorn) = (kind(Category::Berry), kind(Category::Thornbush));
+        let (berry, thorn) = (Category::Berry.index(), Category::Thornbush.index());
         brain.experience.worth[0][berry] = 0.5;
         brain.experience.good[berry] = 0.4;
         brain.experience.bad[thorn] = -0.5;
@@ -1474,9 +1467,9 @@ mod tests {
         for tick in 0..10 {
             decide(&mut brain, tick, Verb::Rest, Some(Category::Ball), &[]);
         }
-        let familiar = brain.experience.familiarity[kind(Category::Ball)];
+        let familiar = brain.experience.familiarity[Category::Ball.index()];
         assert!(close(familiar, 0.02), "{familiar}");
-        assert_eq!(brain.experience.familiarity[kind(Category::Berry)], 0.0);
+        assert_eq!(brain.experience.familiarity[Category::Berry.index()], 0.0);
     }
 
     #[test]
@@ -1485,7 +1478,7 @@ mod tests {
         // × curiosity_mod; salience is 0 at distance 1.
         let data = builtin();
         let mut brain = brain(&[]);
-        brain.experience.familiarity[kind(Category::Ball)] = 0.5;
+        brain.experience.familiarity[Category::Ball.index()] = 0.5;
         let candidates = BTreeMap::from([(Category::Berry, 1.0), (Category::Ball, 1.0)]);
         let x = inputs(&[]);
         let score = |brain: &Brain, mood: f32| brain.attention_scores(&x, &candidates, mood, &data);
@@ -1537,8 +1530,8 @@ mod tests {
         let data = builtin();
         let mut brain =
             brain(&[r#"Instinct(inputs: [("boredom", false)], verb: Play, weight: 1.0)"#]);
-        brain.experience.good[kind(Category::Ball)] = 0.3;
-        brain.experience.habits[kind(Category::Ball)][column(Verb::Play)] = -0.2;
+        brain.experience.good[Category::Ball.index()] = 0.3;
+        brain.experience.habits[Category::Ball.index()][column(Verb::Play)] = -0.2;
         let x = inputs(&[("boredom", 0.5)]);
         brain.snapshot = Some(Snapshot {
             inputs: x.clone(),
@@ -1579,9 +1572,9 @@ mod tests {
             ..Default::default()
         };
         brain.learn(10, &hit_back, 1.0, &data);
-        assert_eq!(brain.experience.bad[kind(Category::Sprite)], 0.0);
+        assert_eq!(brain.experience.bad[Category::Sprite.index()], 0.0);
         assert_eq!(brain.experience.new_things, 0.0);
-        let habit = brain.experience.habits[kind(Category::Sprite)][column(Verb::Hit)];
+        let habit = brain.experience.habits[Category::Sprite.index()][column(Verb::Hit)];
         assert!(habit < 0.0, "the habit still learns: {habit}");
     }
 
@@ -1595,7 +1588,7 @@ mod tests {
         assert_eq!(
             brain
                 .attention
-                .get(input("hunger"), category_column(Category::Berry)),
+                .get(input("hunger"), Category::Berry.index()),
             -1.0
         );
     }
