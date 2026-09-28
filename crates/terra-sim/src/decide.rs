@@ -134,7 +134,7 @@ pub(crate) fn decide(
     // 5b: the decision.
     let inputs = brain.inputs(&sprite.body, aim, data);
     let activations = brain.activations(&inputs);
-    let scores = brain.scores(&activations);
+    let scores = brain.scores(&activations, &inputs, aim.map(|a| a.category), data);
     let beside = candidate.is_some_and(|c| c.aim.adjacent);
     let offered = available(candidate.is_some(), beside);
     let current = sprite.action.as_ref().filter(|_| running).map(|a| a.verb);

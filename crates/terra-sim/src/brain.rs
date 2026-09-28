@@ -499,15 +499,17 @@ impl Brain {
             .map(|(i, _)| i)
             .collect();
         let salience = self.params.get(BrainParam::SalienceGain);
+        let value_gain = self.params.get(BrainParam::ValueGain);
         candidates
             .iter()
             .map(|(&category, &distance)| {
                 let c = category_column(category);
-                let learned: f32 = state
+                let instinct: f32 = state
                     .iter()
                     .map(|&i| inputs[i] * self.attention.get(i, c))
                     .sum();
-                (category, learned + salience * (1.0 - distance))
+                let worth = value_gain * self.value(category, inputs, data);
+                (category, instinct + salience * (1.0 - distance) + worth)
             })
             .collect()
     }
@@ -545,16 +547,48 @@ impl Brain {
         self.attended
     }
 
-    /// Each verb's score (design §5.5): the concepts' activations through
-    /// the decision links, in `VERBS` order.
-    pub(crate) fn scores(&self, activations: &[f32]) -> [f32; VERBS.len()] {
+    /// Each verb's score (design §5.5), in `VERBS` order: the concepts'
+    /// activations through the instinct links, and for the thing `aimed`
+    /// at, its worth, which draws the sprite to it or makes it back away.
+    pub(crate) fn scores(
+        &self,
+        activations: &[f32],
+        inputs: &[f32],
+        aimed: Option<Category>,
+        data: &DataPack,
+    ) -> [f32; VERBS.len()] {
         let mut scores = [0.0; VERBS.len()];
         for (a, links) in activations.iter().zip(self.decision.rows()) {
             for (score, w) in scores.iter_mut().zip(links) {
                 *score += a * w;
             }
         }
+        if let Some(category) = aimed {
+            let worth = self.params.get(BrainParam::ValueGain) * self.value(category, inputs, data);
+            for (score, verb) in scores.iter_mut().zip(VERBS) {
+                *score += match verb {
+                    Verb::Retreat => -worth,
+                    Verb::Rest | Verb::Wander => 0.0,
+                    _ => worth,
+                };
+            }
+        }
         scores
+    }
+
+    /// What `category` is worth to the sprite now (design §5.6): each need's
+    /// level, from `inputs`, times its worth for that need, plus its general
+    /// good and its bad.
+    fn value(&self, category: Category, inputs: &[f32], data: &DataPack) -> f32 {
+        let c = kind(category);
+        let experience = &self.experience;
+        let for_needs: f32 = data
+            .need_places()
+            .iter()
+            .zip(&experience.worth)
+            .map(|(&place, worth)| inputs[place] * worth[c])
+            .sum();
+        for_needs + experience.good[c] + experience.bad[c]
     }
 
     /// A verb sampled from the `available` ones, by softmax(score / τ), τ
@@ -726,12 +760,13 @@ mod tests {
 
     #[test]
     fn verb_scores_are_activations_through_the_instinct_links() {
+        let data = builtin();
         let brain = brain(&[
             r#"Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0)"#,
             r#"Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3)"#,
         ]);
         let x = inputs(&[("hunger", 0.6), ("always", 1.0)]);
-        let scores = brain.scores(&brain.activations(&x));
+        let scores = brain.scores(&brain.activations(&x), &x, None, &data);
         assert_eq!(scores[column(Verb::Eat)], 0.6);
         assert_eq!(scores[column(Verb::Wander)], 0.3);
         assert_eq!(scores[column(Verb::Drink)], 0.0);
@@ -1041,6 +1076,41 @@ mod tests {
         brain.learn(2, &hunger_at(&data, 0.5, true), 1.0, &data);
         let sprite_for_hunger = brain.experience.worth[0][kind(Category::Sprite)];
         assert!(close(sprite_for_hunger, 0.25), "{sprite_for_hunger}");
+    }
+
+    #[test]
+    fn a_thing_s_worth_for_a_need_counts_as_much_as_the_sprite_needs_it() {
+        // Design v16 §5.3: value_gain (1) × Σ need × worth, plus good and bad.
+        let data = builtin();
+        let mut brain = brain(&[]);
+        brain.experience.worth[0][kind(Category::Berry)] = 0.5;
+        brain.experience.bad[kind(Category::Thornbush)] = -0.4;
+        let candidates = BTreeMap::from([(Category::Berry, 1.0), (Category::Thornbush, 1.0)]);
+        let full = brain.attention_scores(&inputs(&[]), &candidates, &data);
+        assert_eq!(full[&Category::Berry], 0.0, "no hunger, no pull");
+        assert_eq!(full[&Category::Thornbush], -0.4, "bad counts always");
+        let hungry = brain.attention_scores(&inputs(&[("hunger", 0.8)]), &candidates, &data);
+        assert!(close(hungry[&Category::Berry], 0.4), "{hungry:?}");
+    }
+
+    #[test]
+    fn a_worthwhile_target_draws_the_sprite_to_it_and_a_bad_one_makes_it_back_away() {
+        // Design v16 §5.5: + worth for Approach and the interactions, − for
+        // Retreat, nothing for Rest and Wander.
+        use Verb::*;
+        let data = builtin();
+        let mut brain = brain(&[]);
+        brain.experience.good[kind(Category::Ball)] = 0.3;
+        let x = inputs(&[]);
+        let scores = brain.scores(&brain.activations(&x), &x, Some(Category::Ball), &data);
+        for verb in [Approach, Eat, Drink, Hit, Play] {
+            assert_eq!(scores[column(verb)], 0.3, "{verb:?}");
+        }
+        assert_eq!(scores[column(Retreat)], -0.3);
+        assert_eq!(scores[column(Rest)], 0.0);
+        assert_eq!(scores[column(Wander)], 0.0);
+        let unaimed = brain.scores(&brain.activations(&x), &x, None, &data);
+        assert_eq!(unaimed, [0.0; VERBS.len()], "nothing attended, no worth");
     }
 
     #[test]
