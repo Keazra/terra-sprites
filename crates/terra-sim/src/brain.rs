@@ -337,8 +337,23 @@ impl Brain {
                 *habit = (*habit + step).clamp(-1.0, 1.0);
             }
         }
+        let lessons = self.lessons(data);
         self.fade();
-        Vec::new()
+        lessons
+    }
+
+    /// The learned values that are `lesson_threshold` or more from 0 for the
+    /// first time, as `(learned, rose)`, in listed order. Each is marked, so
+    /// it's a lesson only once (design §5.6).
+    fn lessons(&mut self, data: &DataPack) -> Vec<(Learned, bool)> {
+        let threshold = data.physiology().lesson_threshold;
+        let mut found = Vec::new();
+        for (i, learned) in self.learned(data).into_iter().enumerate() {
+            if learned.value.abs() >= threshold && self.experience.taught.insert(i) {
+                found.push((learned.learned, learned.value > 0.0));
+            }
+        }
+        found
     }
 
     /// One tick of fading (design §5.6): good and bad and habits each by
@@ -390,6 +405,18 @@ impl Brain {
     /// What the sprite has learned, furthest from nothing first, up to
     /// five (design §5.9); ties keep the order they're listed in.
     pub(crate) fn memory(&self, data: &DataPack) -> Vec<Memory> {
+        let mut memory = self.learned(data);
+        memory.retain(|m| m.value != 0.0);
+        // A stable sort keeps a tie in listed order.
+        memory.sort_by(|a, b| b.value.abs().total_cmp(&a.value.abs()));
+        memory.truncate(MEMORY_SIZE);
+        memory
+    }
+
+    /// Every value a brain learns, named, always in the same order: worth
+    /// for each need then general good, bad, habits, and new things, each in
+    /// category order (design §5.6).
+    fn learned(&self, data: &DataPack) -> Vec<Memory> {
         let inputs = data.brain_inputs_in_order();
         let mut memory: Vec<Memory> = Vec::new();
         for (worth, &place) in self.experience.worth.iter().zip(data.need_places()) {
@@ -430,10 +457,6 @@ impl Brain {
             learned: Learned::NewThings,
             value: self.experience.new_things,
         });
-        memory.retain(|m| m.value != 0.0);
-        // A stable sort keeps a tie in listed order.
-        memory.sort_by(|a, b| b.value.abs().total_cmp(&a.value.abs()));
-        memory.truncate(MEMORY_SIZE);
         memory
     }
 

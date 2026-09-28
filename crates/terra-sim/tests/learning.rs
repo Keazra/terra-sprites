@@ -1,7 +1,9 @@
 //! Learning (design §5.6): step 4 consumes reward and punishment, and
 //! learns what things are worth and its habits.
 
-use terra_sim::{DataPack, Genome, Learned, Map, Pos, Scenario, ScriptedAction, World};
+use terra_sim::{
+    DataPack, Event, EventKind, Genome, Learned, Map, Pos, Scenario, ScriptedAction, World,
+};
 
 fn builtin() -> DataPack {
     DataPack::builtin().expect("built-in data pack is valid")
@@ -190,5 +192,45 @@ fn a_reward_makes_the_thing_touched_good_in_general() {
         close(value_of(&world, &balls_good), 0.25),
         "{:?}",
         memory(&world)
+    );
+}
+
+/// The lessons in `events`, as `(learned, good)`.
+fn lessons(events: &[Event]) -> Vec<(Learned, bool)> {
+    events
+        .iter()
+        .filter_map(|e| match &e.kind {
+            EventKind::LearnedMilestone { learned, good, .. } => Some((learned.clone(), *good)),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_sprite_that_keeps_biting_a_thornbush_learns_each_lesson_once() {
+    // Design v16 §5.6: a lesson is a learned value's first time half a
+    // point from nothing. The first prick makes the new thornbush −.8 bad,
+    // and new things −.8 too; later pricks teach nothing new.
+    let thornbush = at(2, 1);
+    let mut world = world(
+        &[".....", ".....", "....."],
+        &[(thornbush, "thornbush")],
+        at(1, 1),
+        r#"Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),"#,
+        &[
+            ScriptedAction::Eat { at: thornbush },
+            ScriptedAction::Eat { at: thornbush },
+            ScriptedAction::Eat { at: thornbush },
+            ScriptedAction::Rest,
+        ],
+    );
+    let learned: Vec<(Learned, bool)> = (0..8).flat_map(|_| lessons(&world.step())).collect();
+    let thorns_bad = Learned::Bad {
+        thing: "thornbush".into(),
+    };
+    assert_eq!(
+        learned,
+        [(thorns_bad, false), (Learned::NewThings, false)],
+        "each once"
     );
 }
