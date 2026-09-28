@@ -6,7 +6,7 @@ use ratatui::text::Line;
 use terra_sim::{
     ActionView, ChemicalKind, ChemicalLevel, DataPack, DeathCause, EmitterMode, EntityId,
     Explanation, Expression, GeneView, Learned, ObjectView, Outcome, Part, Progress, SpriteView,
-    Target, Trait, Verb, World,
+    Target, Thing, Trait, Verb, World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -646,7 +646,9 @@ fn explained_lines(explained: &Explanation) -> Vec<String> {
 pub(crate) fn learned_line(id: EntityId, learned: &Learned, good: bool, data: &DataPack) -> String {
     let verdict = if good { "good" } else { "bad" };
     let what = match learned {
-        Learned::Worth { .. } | Learned::Bad { .. } => learned_name(learned, data),
+        Learned::Worth { .. } | Learned::Bad { .. } | Learned::Fear { .. } => {
+            learned_name(learned, data)
+        }
         Learned::Habit { .. } => format!("{} is {verdict}", learned_name(learned, data)),
         Learned::NewThings => format!("new things are {verdict}"),
     };
@@ -654,7 +656,8 @@ pub(crate) fn learned_line(id: EntityId, learned: &Learned, good: bool, data: &D
 }
 
 /// Something learned, as the memory words it: `thornbushes are bad`,
-/// `water is good for thirst`, `eating balls`, `new things`.
+/// `water is good for thirst`, `Sprite #7 is frightening`, `eating balls`,
+/// `new things`.
 fn learned_name(learned: &Learned, data: &DataPack) -> String {
     match learned {
         Learned::Worth {
@@ -672,18 +675,29 @@ fn learned_name(learned: &Learned, data: &DataPack) -> String {
             let (things, be) = things(thing, data);
             format!("{things} {be} bad")
         }
-        Learned::Habit { thing, verb } => format!("{} {}", doing(*verb), things(thing, data).0),
+        Learned::Fear { thing } => {
+            let (things, be) = things(thing, data);
+            format!("{things} {be} frightening")
+        }
+        Learned::Habit { thing, verb } => {
+            let kind = Thing::from(thing.as_str());
+            format!("{} {}", doing(*verb), things(&kind, data).0)
+        }
         Learned::NewThings => "new things".into(),
     }
 }
 
-/// A kind of thing in general, with the verb "to be" to go with it, as its
-/// object type names it (design §3.5.1): `thornbushes are`, `water is`. A
-/// kind with no plural isn't counted, so it keeps its name and takes "is".
-fn things(thing: &str, data: &DataPack) -> (String, &'static str) {
-    match data.plural_of(thing) {
-        Some(plural) => (plural.to_string(), "are"),
-        None => (display_name(thing), "is"),
+/// A thing with the verb "to be" to go with it: a kind in general, as its
+/// object type names it (design §3.5.1), `thornbushes are`, `water is`, or
+/// a particular sprite, `Sprite #7 is` (design v18). A kind with no plural
+/// isn't counted, so it keeps its name and takes "is".
+fn things(thing: &Thing, data: &DataPack) -> (String, &'static str) {
+    match thing {
+        Thing::Kind(kind) => match data.plural_of(kind) {
+            Some(plural) => (plural.to_string(), "are"),
+            None => (display_name(kind), "is"),
+        },
+        Thing::Sprite(id) => (sprite_label(*id), "is"),
     }
 }
 
