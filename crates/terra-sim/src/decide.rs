@@ -22,8 +22,6 @@ struct Candidate {
     /// Its nearest reachable goal tile.
     goal: Pos,
     aim: Aim,
-    /// The verbs its type's verb table has.
-    table: Vec<Verb>,
     /// The stable ID of its type.
     type_id: u16,
 }
@@ -75,14 +73,12 @@ pub(crate) fn decide(
             };
             let kind = state.kind_of(data, target).expect("a candidate is there");
             let object_type = &data.object_types()[kind];
-            let table = object_type.verbs.keys().copied().collect();
             let type_id = object_type.id;
             let candidate = Candidate {
                 type_id,
                 target,
                 goal,
                 aim,
-                table,
             };
             (category, candidate)
         })
@@ -140,7 +136,7 @@ pub(crate) fn decide(
     let activations = brain.activations(&inputs);
     let scores = brain.scores(&activations);
     let beside = candidate.is_some_and(|c| c.aim.adjacent);
-    let offered = available(candidate.map(|c| c.table.as_slice()), beside);
+    let offered = available(candidate.is_some(), beside);
     let current = sprite.action.as_ref().filter(|_| running).map(|a| a.verb);
     let chosen = match current {
         Some(verb) => brain.switch(verb, &scores, &offered),
