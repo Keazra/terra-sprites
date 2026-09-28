@@ -173,6 +173,9 @@ fn eating_and_drinking_relieve_hunger_and_thirst_the_next_tick() {
 
 #[test]
 fn a_content_sprite_mostly_wanders() {
+    // Design v16 §5.8: `always → Wander` wins most choices; with nothing
+    // pressing, a sprite also idly tries things on what it looks at, since
+    // it may try anything (about 3 choices in 10, measured).
     let data = builtin();
     let content = starter_with(&[], &data);
     let mut world = world(&FIELD, &[(at(8, 3), "berry_bush")], at(1, 3), content, 3);
@@ -184,7 +187,7 @@ fn a_content_sprite_mostly_wanders() {
     let wanders = verbs.iter().filter(|&&v| v == Verb::Wander).count();
     assert!(verbs.len() >= 20, "{verbs:?}");
     assert!(
-        wanders * 10 >= verbs.len() * 7,
+        wanders * 2 > verbs.len(),
         "{wanders} of {}: {verbs:?}",
         verbs.len()
     );
