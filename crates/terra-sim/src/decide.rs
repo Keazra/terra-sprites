@@ -137,7 +137,10 @@ pub(crate) fn decide(
     let candidate_sprite = as_sprite(candidates.get(&Category::Sprite).map(|c| c.target));
     let focus = SpriteFocus {
         sprite: as_sprite(action.and_then(|a| a.target)).or(candidate_sprite),
-        hit: sprite.body.loci[was_hit] > 0.0,
+        // Fear is quiet while a hit is felt or the sprite is cornered:
+        // those moments are instinct's (design v18 §5.3, §5.5).
+        quiet: sprite.body.loci[was_hit] > 0.0
+            || sprite.body.loci[data.physiology().indices.cornered] > 0.0,
     };
     // A running action's category is scored by the instance it's aimed at,
     // which a nearer one of the same category doesn't replace (design §5.3).
@@ -173,7 +176,28 @@ pub(crate) fn decide(
     // 5b: the decision.
     let inputs = brain.inputs(&sprite.body, aim, data);
     let activations = brain.activations(&inputs);
-    let scores = brain.scores(&activations, &inputs, aim.map(|a| a.category), data);
+    // The sprite the decision is about, as `aim` is: a running action's
+    // target, or else the candidate (design v18 §5.5).
+    let running_target = sprite
+        .action
+        .as_ref()
+        .filter(|_| running)
+        .and_then(|a| a.target);
+    let aimed_sprite = match running_target {
+        Some(target) => as_sprite(Some(target)),
+        None => candidate_sprite,
+    };
+    let decision_focus = SpriteFocus {
+        sprite: aimed_sprite,
+        ..focus
+    };
+    let scores = brain.scores(
+        &activations,
+        &inputs,
+        aim.map(|a| a.category),
+        decision_focus,
+        data,
+    );
     let beside = candidate.is_some_and(|c| c.aim.adjacent);
     let offered = available(candidate.is_some(), beside);
     let current = sprite.action.as_ref().filter(|_| running).map(|a| a.verb);

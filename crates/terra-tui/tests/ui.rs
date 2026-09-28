@@ -1330,8 +1330,8 @@ fn the_chem_tab_lists_every_chemical_with_its_level_and_change_per_tick() {
     );
 }
 
-/// A hungry sprite drawn to a thornbush and to eating it, whose every prick
-/// punishes it by 1.
+/// A hungry sprite drawn to a thornbush and to eating it, even more so
+/// beside it, whose every prick punishes it by 1.
 const THORN_GENOME: &str = r#"(format: 1, genes: [
     InitialConcentration(chem: "hunger", value: 1.0),
     Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),
@@ -1339,13 +1339,14 @@ const THORN_GENOME: &str = r#"(format: 1, genes: [
     BrainParam(param: "tau_att_base", value: 0.05),
     AttentionInstinct(input: "hunger", category: Thornbush, weight: 1.0),
     Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
+    Instinct(inputs: [("hunger", false), ("target_adjacent", false)], verb: Eat, weight: 1.0),
 ])"#;
 
 #[test]
 fn the_brain_tab_names_a_thing_s_worth_neutrally_whatever_its_sign() {
     // Its bite at tick 0 pricks, and at tick 1 it learns thornbushes are bad;
-    // that worth takes from biting and adds to backing away, so the row
-    // reads "worth: thornbush" either way, beside "habit: …".
+    // so hungry, it bites again, and that worth takes from biting. The row
+    // reads "worth: thornbush" whatever its sign, beside "habit: …".
     let objects = [(Pos { x: 3, y: 3 }, "thornbush")];
     let (world, mut app) = one_sprite_among(THORN_GENOME, &objects, &[], 2);
     open(&mut app, &world, Tab::Brain);
