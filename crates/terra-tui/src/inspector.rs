@@ -5,8 +5,8 @@ use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
     ActionView, ChemicalKind, ChemicalLevel, DataPack, DeathCause, EmitterMode, EntityId,
-    Expression, GeneView, Learned, ObjectView, Outcome, Part, Progress, SpriteView, Target, Trait,
-    Verb, World,
+    Explanation, Expression, GeneView, Learned, ObjectView, Outcome, Part, Progress, SpriteView,
+    Target, Trait, Verb, World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -564,14 +564,36 @@ fn trait_text(which: Trait, value: f32) -> String {
 /// How many concepts the Brain tab lists under the decision.
 const CONCEPTS_SHOWN: usize = 5;
 
-/// The Brain tab (design §5.9, §6.1): each category attention could go to,
-/// with its score, the attended one marked; then the verb chosen, with its
-/// score, and the concepts adding most to it, largest first. A snapshot
-/// always has a verb; "none" only guards against one that doesn't.
+/// The Brain tab (design §5.9, §6.1): what the sprite attended to and
+/// decided at its latest step 5, or "Nothing decided yet"; then its memory,
+/// which it can have before it first decides.
 fn brain_tab(sprite: &SpriteView, data: &DataPack) -> Vec<Line<'static>> {
-    let Some(explained) = sprite.explain() else {
-        return vec![Line::from(" Nothing decided yet")];
+    let mut lines = match sprite.explain() {
+        Some(explained) => decided(&explained),
+        None => vec![" Nothing decided yet".to_string()],
     };
+    // What has learned only a rounding's worth has nothing worth showing.
+    let remembered: Vec<_> = sprite
+        .memory()
+        .into_iter()
+        .filter(|m| level(m.amount.abs()) != ".00")
+        .collect();
+    if !remembered.is_empty() {
+        lines.push(String::new());
+        lines.push(" MEMORY".into());
+    }
+    for memory in remembered {
+        let amount = signed_level(memory.amount);
+        lines.extend(scored("   ", &learned_name(&memory.learned, data), &amount));
+    }
+    lines.into_iter().map(Line::from).collect()
+}
+
+/// The Brain tab's attention and decision: each category attention could go
+/// to, with its score, the attended one marked; then the verb chosen, with
+/// its score, and the concepts adding most to it, largest first. A snapshot
+/// always has a verb; "none" only guards against one that doesn't.
+fn decided(explained: &Explanation) -> Vec<String> {
     let mut lines = vec![" ATTENTION".to_string()];
     if explained.attention.is_empty() {
         lines.push("   nothing in sight".into());
@@ -615,21 +637,7 @@ fn brain_tab(sprite: &SpriteView, data: &DataPack) -> Vec<Line<'static>> {
         };
         lines.extend(scored("   ", &name, &amount));
     }
-    // What has learned only a rounding's worth has nothing worth showing.
-    let remembered: Vec<_> = sprite
-        .memory()
-        .into_iter()
-        .filter(|m| level(m.amount.abs()) != ".00")
-        .collect();
-    if !remembered.is_empty() {
-        lines.push(String::new());
-        lines.push(" MEMORY".into());
-    }
-    for memory in remembered {
-        let amount = signed_level(memory.amount);
-        lines.extend(scored("   ", &learned_name(&memory.learned, data), &amount));
-    }
-    lines.into_iter().map(Line::from).collect()
+    lines
 }
 
 /// A lesson as the event log says it (design §6.1): "Sprite #12 learned:
