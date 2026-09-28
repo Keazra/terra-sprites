@@ -5,8 +5,8 @@ use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
     ActionView, ChemicalKind, ChemicalLevel, DataPack, DeathCause, EmitterMode, EntityId,
-    Expression, GeneView, Learned, ObjectView, Outcome, Progress, SpriteView, Target, Trait, Verb,
-    World,
+    Expression, GeneView, Learned, ObjectView, Outcome, Part, Progress, SpriteView, Target, Trait,
+    Verb, World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -596,14 +596,22 @@ fn brain_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
         }
         None => lines.push(" DECISION: none".into()),
     }
-    // A concept whose part rounds to nothing adds nothing worth showing.
+    // A part that rounds to nothing adds nothing worth showing.
     let shown = explained
         .contributions
         .iter()
         .filter(|c| level(c.amount.abs()) != ".00");
     for contribution in shown.take(CONCEPTS_SHOWN) {
         let amount = signed_level(contribution.amount);
-        lines.extend(scored("   ", &concept_name(&contribution.inputs), &amount));
+        let name = match &contribution.part {
+            Part::Concept(inputs) => concept_name(inputs),
+            Part::Worth(thing) => format!("{} is worth it", display_name(thing)),
+            Part::Habit(thing) => {
+                let verb = explained.decision.map_or("", |(verb, _)| verb_name(verb));
+                format!("habit: {} {}", verb.to_lowercase(), display_name(thing))
+            }
+        };
+        lines.extend(scored("   ", &name, &amount));
     }
     // What has learned only a rounding's worth has nothing worth showing.
     let remembered: Vec<_> = sprite
