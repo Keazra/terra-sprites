@@ -51,6 +51,9 @@ pub(crate) struct WorldState {
     pub(crate) sprites: Sprites,
     /// How many sprites have died of each cause, for the causes any has.
     pub(crate) deaths: BTreeMap<DeathCause, u64>,
+    /// Whether sprites learn at step 4; a lab scenario's control run
+    /// switches it off (design §5.6, §7.1).
+    pub(crate) learning: bool,
 }
 
 impl WorldState {
@@ -517,6 +520,12 @@ impl World {
         Ok(())
     }
 
+    /// Stops every sprite learning from here on, for a lab scenario's
+    /// control run (design §7.1).
+    pub(crate) fn switch_off_learning(&mut self) {
+        self.state.learning = false;
+    }
+
     fn with(map: Map, data: DataPack, rng: ChaCha8Rng) -> World {
         let objects = Objects::new(&map);
         let sprites = Sprites::new(&map);
@@ -529,6 +538,7 @@ impl World {
                 objects,
                 sprites,
                 deaths: BTreeMap::new(),
+                learning: true,
             },
             data,
             checked_next_id: Cell::new(1),
@@ -1292,6 +1302,27 @@ mod tests {
             0.5,
             "nor uses up its reward"
         );
+    }
+
+    #[test]
+    fn with_learning_switched_off_step_4_uses_up_reward_and_learns_nothing() {
+        // Design v16 §5.6, for a lab scenario's control run (§7.1).
+        let (mut world, first, _) = field_with_sprites();
+        world.state.learning = false;
+        let indices = world.data.physiology().indices.clone();
+        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        sprite.brain.touched = Some(crate::learning::Touch {
+            tick: 0,
+            category: crate::registry::Category::BerryBush,
+            novelty: 1.0,
+        });
+        sprite.body.chems[indices.reward] = 0.5;
+        let mut events = Vec::new();
+        learning::run(&mut world.state, &world.data, &[], &mut events);
+        let sprite = world.state.sprites.get(first).expect("a sprite");
+        assert_eq!(sprite.brain.felt, 0.5, "felt, and used up");
+        assert_eq!(sprite.body.chems[indices.reward], 0.0);
+        assert_eq!(sprite.brain.memory(&world.data), [], "learned nothing");
     }
 
     #[test]

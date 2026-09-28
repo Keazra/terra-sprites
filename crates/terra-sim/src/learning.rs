@@ -183,6 +183,7 @@ pub(crate) fn run(
 ) {
     let indices = &data.physiology().indices;
     let tick = state.tick;
+    let learning = state.learning;
     let living = state
         .sprites
         .minds_mut()
@@ -192,6 +193,9 @@ pub(crate) fn run(
         body.chems[indices.reward] = 0.0;
         body.chems[indices.punishment] = 0.0;
         brain.felt = reward - punishment;
+        if !learning {
+            continue;
+        }
         let signals = Signals {
             needs: brain.need_levels(body, data),
             reward,

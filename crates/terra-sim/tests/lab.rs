@@ -114,7 +114,8 @@ fn a_run_counts_applied_actions_and_deaths_in_each_window() {
     assert_eq!(
         run,
         LabRun {
-            windows: windows.to_vec()
+            windows: windows.to_vec(),
+            control: None,
         }
     );
     assert!(
@@ -141,18 +142,21 @@ fn the_report_lists_each_window_with_a_column_per_seed_and_the_median() {
             1,
             LabRun {
                 windows: vec![window(23, 40, 1)],
+                control: None,
             },
         ),
         (
             2,
             LabRun {
                 windows: vec![window(9, 38, 0)],
+                control: None,
             },
         ),
         (
             3,
             LabRun {
                 windows: vec![window(12, 51, 0)],
+                control: None,
             },
         ),
     ];
@@ -164,5 +168,66 @@ ticks 0 to 5,000              seed 1    seed 2    seed 3    median
   wander                          40        38        51        40
   died: hurt by thornbush          1         0         0         0
 "
+    );
+}
+
+#[test]
+fn the_report_lists_the_control_runs_after_the_learning_runs() {
+    let data = builtin();
+    let window = |eats| Window {
+        from: 0,
+        to: 5000,
+        applied: BTreeMap::from([((Verb::Eat, Some(3)), eats)]),
+        deaths: BTreeMap::new(),
+    };
+    let runs = [
+        (
+            1,
+            LabRun {
+                windows: vec![window(3)],
+                control: Some(vec![window(30)]),
+            },
+        ),
+        (
+            2,
+            LabRun {
+                windows: vec![window(5)],
+                control: Some(vec![window(24)]),
+            },
+        ),
+    ];
+    assert_eq!(
+        report(&runs, &data),
+        "ticks 0 to 5,000              seed 1    seed 2    median
+  eat thornbush                    3         5         4
+
+control, without learning
+ticks 0 to 5,000              seed 1    seed 2    median
+  eat thornbush                   30        24        27
+"
+    );
+}
+
+#[test]
+fn a_scenario_can_ask_for_a_control_run_of_each_seed_without_learning() {
+    // Design v16 §7.1: the learning run is unchanged, and a second run of
+    // the same seed, with learning switched off, is counted in the same
+    // windows.
+    let data = builtin();
+    let with_control = ARENA.replace(
+        "ticks: 3000,",
+        "ticks: 3000,
+    control: NoLearning,",
+    );
+    let plain = LabScenario::from_ron(ARENA, &data).expect("a valid scenario");
+    let controlled = LabScenario::from_ron(&with_control, &data).expect("a valid scenario");
+    let (run, plain_run) = (controlled.run(data.clone(), 5), plain.run(data.clone(), 5));
+    assert_eq!(run.windows, plain_run.windows);
+    let control = run.control.expect("a control run");
+    let spans: Vec<(u64, u64)> = control.iter().map(|w| (w.from, w.to)).collect();
+    assert_eq!(spans, [(0, 1000), (2000, 3000)]);
+    assert!(
+        control[0].applied.values().sum::<u64>() > 0,
+        "its sprite lived too"
     );
 }

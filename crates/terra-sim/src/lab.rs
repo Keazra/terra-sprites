@@ -21,6 +21,17 @@ pub struct LabScenario {
     world: LabWorld,
     ticks: u64,
     windows: Vec<(u64, u64)>,
+    control: Control,
+}
+
+/// A second run of each seed to compare with, if any (design §7.1).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+enum Control {
+    /// None.
+    #[default]
+    NoControl,
+    /// The same world with learning switched off.
+    NoLearning,
 }
 
 /// A lab scenario file.
@@ -29,6 +40,9 @@ pub struct LabScenario {
 struct LabFile {
     world: LabWorld,
     ticks: u64,
+    /// A control run of each seed, if any.
+    #[serde(default)]
+    control: Control,
     /// Tick ranges, each from its first tick up to but not including its last.
     windows: Vec<(u64, u64)>,
 }
@@ -88,6 +102,8 @@ impl std::error::Error for LabError {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LabRun {
     pub windows: Vec<Window>,
+    /// The control run's windows, if the scenario asks for one.
+    pub control: Option<Vec<Window>>,
 }
 
 /// What happened in one window of a run.
@@ -130,6 +146,7 @@ impl LabScenario {
             world: file.world,
             ticks: file.ticks,
             windows: file.windows,
+            control: file.control,
         };
         // Building it once finds anything that can't go where it's drawn.
         lab.world(data.clone(), 0)?;
@@ -138,7 +155,20 @@ impl LabScenario {
 
     /// Runs the scenario for `seed`, counting each window.
     pub fn run(&self, data: DataPack, seed: u64) -> LabRun {
-        let mut world = self.world(data, seed).expect("checked when read");
+        let control = (self.control == Control::NoLearning).then(|| {
+            let mut world = self.world(data.clone(), seed).expect("checked when read");
+            world.switch_off_learning();
+            self.count(world)
+        });
+        let world = self.world(data, seed).expect("checked when read");
+        LabRun {
+            windows: self.count(world),
+            control,
+        }
+    }
+
+    /// Runs `world` for the scenario's ticks, counting each window.
+    fn count(&self, mut world: World) -> Vec<Window> {
         let mut windows: Vec<Window> = self
             .windows
             .iter()
@@ -177,7 +207,7 @@ impl LabScenario {
                 }
             }
         }
-        LabRun { windows }
+        windows
     }
 
     /// The scenario's world for `seed`. A drawn one gets its objects in
@@ -225,14 +255,37 @@ impl LabScenario {
 }
 
 /// Each window of `runs`, one per seed, as a table: a row for each count
-/// any seed has, a column for each seed, and the median.
+/// any seed has, a column for each seed, and the median; then the same for
+/// the control runs, if there are any.
 pub fn report(runs: &[(u64, LabRun)], data: &DataPack) -> String {
+    let learning: Vec<(u64, &[Window])> = runs
+        .iter()
+        .map(|(seed, run)| (*seed, run.windows.as_slice()))
+        .collect();
+    let mut out = windows_report(&learning, data);
+    let controls: Option<Vec<(u64, &[Window])>> = runs
+        .iter()
+        .map(|(seed, run)| run.control.as_deref().map(|windows| (*seed, windows)))
+        .collect();
+    if let Some(controls) = controls.filter(|c| !c.is_empty()) {
+        out.push_str(
+            "
+control, without learning
+",
+        );
+        out.push_str(&windows_report(&controls, data));
+    }
+    out
+}
+
+/// Each window of `runs`, with a column per seed and the median.
+fn windows_report(runs: &[(u64, &[Window])], data: &DataPack) -> String {
     let mut out = String::new();
     let Some((_, first)) = runs.first() else {
         return out;
     };
-    for (w, window) in first.windows.iter().enumerate() {
-        let windows: Vec<&Window> = runs.iter().map(|(_, run)| &run.windows[w]).collect();
+    for (w, window) in first.iter().enumerate() {
+        let windows: Vec<&Window> = runs.iter().map(|(_, run)| &run[w]).collect();
         let head = format!(
             "ticks {} to {}",
             thousands(window.from),
