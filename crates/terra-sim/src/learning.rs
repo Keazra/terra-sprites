@@ -125,9 +125,6 @@ pub(crate) struct Signals {
     pub(crate) punishment: f32,
     /// Whether a `fruitless` pulse is live: its latest try did nothing.
     pub(crate) fruitless: bool,
-    /// Whether a `was_hit` pulse is live: its attacker is the thing touched
-    /// if the sprite touched nothing itself.
-    pub(crate) attacked: bool,
 }
 
 /// Where `category` is in `Category::ALL`.
@@ -201,7 +198,6 @@ pub(crate) fn run(
             reward,
             punishment,
             fruitless: body.loci[indices.fruitless] > 0.0,
-            attacked: body.loci[indices.was_hit] > 0.0,
         };
         let rate = body.loci[indices.learning_rate_mod];
         for (learned, good) in brain.learn(tick, &signals, rate, data) {

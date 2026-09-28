@@ -305,10 +305,7 @@ impl Brain {
         let touched = self
             .touched
             .filter(|t| tick - t.tick <= physiology.touch_window)
-            .map(|t| (t.category, t.novelty))
-            .or(signals
-                .attacked
-                .then(|| (Category::Sprite, self.novelty(Category::Sprite))));
+            .map(|t| (t.category, t.novelty));
         if let Some((category, novelty)) = touched {
             let good = self.params.get(BrainParam::WorthRateGood) * learning_rate_mod;
             let bad = self.params.get(BrainParam::WorthRateBad) * learning_rate_mod;
@@ -1199,7 +1196,6 @@ mod tests {
         let needs = data.need_places().len();
         let hungry = |level| Signals {
             needs: [vec![level], vec![0.0; needs - 1]].concat(),
-            attacked: true,
             ..Default::default()
         };
         brain.learn(10, &hungry(1.0), 1.0, &data);
@@ -1214,11 +1210,10 @@ mod tests {
     }
 
     /// Step 4's signals with hunger at `hunger`, every other need at 0.
-    fn hunger_at(data: &DataPack, hunger: f32, attacked: bool) -> Signals {
+    fn hunger_at(data: &DataPack, hunger: f32) -> Signals {
         let needs = data.need_places().len();
         Signals {
             needs: [vec![hunger], vec![0.0; needs - 1]].concat(),
-            attacked,
             ..Default::default()
         }
     }
@@ -1239,10 +1234,10 @@ mod tests {
             novelty: 1.0,
         };
         brain.touched = Some(touch);
-        brain.learn(1, &hunger_at(&data, 0.5, false), 1.0, &data);
-        brain.learn(2, &hunger_at(&data, 0.49, false), 1.0, &data);
+        brain.learn(1, &hunger_at(&data, 0.5), 1.0, &data);
+        brain.learn(2, &hunger_at(&data, 0.49), 1.0, &data);
         assert_eq!(bush_for_hunger(&brain), 0.0, "a slow drift isn't relief");
-        brain.learn(3, &hunger_at(&data, 0.44, false), 1.0, &data);
+        brain.learn(3, &hunger_at(&data, 0.44), 1.0, &data);
         assert!(
             close(bush_for_hunger(&brain), 0.5 * 0.05),
             "{}",
@@ -1254,8 +1249,8 @@ mod tests {
     fn with_nothing_touched_relief_teaches_nothing() {
         let data = builtin();
         let mut brain = brain(&[]);
-        brain.learn(1, &hunger_at(&data, 1.0, false), 1.0, &data);
-        brain.learn(2, &hunger_at(&data, 0.5, false), 1.0, &data);
+        brain.learn(1, &hunger_at(&data, 1.0), 1.0, &data);
+        brain.learn(2, &hunger_at(&data, 0.5), 1.0, &data);
         assert_eq!(bush_for_hunger(&brain), 0.0);
         // A touch longer ago than the window (3 ticks) is forgotten too.
         brain.touched = Some(Touch {
@@ -1263,18 +1258,27 @@ mod tests {
             category: Category::BerryBush,
             novelty: 1.0,
         });
-        brain.learn(6, &hunger_at(&data, 0.0, false), 1.0, &data);
+        brain.learn(6, &hunger_at(&data, 0.0), 1.0, &data);
         assert_eq!(bush_for_hunger(&brain), 0.0);
     }
 
     #[test]
-    fn an_attacker_is_the_thing_touched_when_the_sprite_touched_nothing() {
+    fn being_hit_teaches_nothing_about_what_sprites_are_worth() {
+        // Design v16 §5.6: all sprites are one kind, so one attacker would
+        // make a sprite shy of every sprite. The hit's punishment, with a
+        // sprite attended and nothing touched, teaches no worth. Fear of
+        // individuals and kinds is its own slice.
         let data = builtin();
         let mut brain = unfading(&[]);
-        brain.learn(1, &hunger_at(&data, 1.0, true), 1.0, &data);
-        brain.learn(2, &hunger_at(&data, 0.5, true), 1.0, &data);
-        let sprite_for_hunger = brain.experience.worth[0][kind(Category::Sprite)];
-        assert!(close(sprite_for_hunger, 0.25), "{sprite_for_hunger}");
+        decide(&mut brain, 9, Verb::Wander, Some(Category::Sprite), &[]);
+        let hit = Signals {
+            needs: vec![0.0; data.need_places().len()],
+            punishment: 1.0,
+            ..Default::default()
+        };
+        brain.learn(10, &hit, 1.0, &data);
+        assert_eq!(brain.experience.bad[kind(Category::Sprite)], 0.0);
+        assert_eq!(brain.experience.new_things, 0.0);
     }
 
     #[test]
