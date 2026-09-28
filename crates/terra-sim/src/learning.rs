@@ -109,6 +109,8 @@ pub(crate) struct Signals {
     /// The general good and bad channels: `reward` and `punishment`.
     pub(crate) reward: f32,
     pub(crate) punishment: f32,
+    /// Whether a `fruitless` pulse is live: its latest try did nothing.
+    pub(crate) fruitless: bool,
     /// Whether a `was_hit` pulse is live: its attacker is the thing touched
     /// if the sprite touched nothing itself.
     pub(crate) attacked: bool,
@@ -151,6 +153,9 @@ pub(crate) struct TraceEntry {
     pub(crate) verb: Option<Verb>,
     /// The category attention was on, if any.
     pub(crate) attended: Option<Category>,
+    /// The verb's motive (design §5.5): the need, by its place in the pack's
+    /// needs, whose instinct did most to choose it.
+    pub(crate) motive: Option<usize>,
 }
 
 /// Step 4 for every sprite not `dying` (design §2.4): reads each need's
@@ -177,6 +182,7 @@ pub(crate) fn run(
             needs: brain.need_levels(body, data),
             reward,
             punishment,
+            fruitless: body.loci[indices.fruitless] > 0.0,
             attacked: body.loci[indices.was_hit] > 0.0,
         };
         let rate = body.loci[indices.learning_rate_mod];

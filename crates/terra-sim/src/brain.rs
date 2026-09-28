@@ -124,6 +124,8 @@ pub(crate) struct Brain {
     pub(crate) experience: Experience,
     /// What it last tried a verb on, and when (design §5.6).
     pub(crate) touched: Option<Touch>,
+    /// Each need's singleton, in the pack's needs order, to find a motive.
+    need_rows: Vec<usize>,
 }
 
 /// What the brain saw and did at a step 5.
@@ -257,6 +259,7 @@ impl Brain {
             trace: VecDeque::new(),
             experience: Experience::new(data.need_places().len()),
             touched: None,
+            need_rows: data.need_places().to_vec(),
         }
     }
 
@@ -305,18 +308,27 @@ impl Brain {
             experience.bad[c] = (experience.bad[c] - bad * signals.punishment).max(-1.0);
         }
         // Habits, along the trace: each aimed verb and the thing it attended.
+        // A fruitless try disappoints the need that chose it.
         let r = signals.reward - signals.punishment;
-        if r != 0.0 {
-            let rate = self.params.get(BrainParam::HabitRate) * learning_rate_mod * r;
+        let tried = self.touched.filter(|_| signals.fruitless).map(|t| t.tick);
+        if r != 0.0 || tried.is_some() {
+            let rate = self.params.get(BrainParam::HabitRate) * learning_rate_mod;
+            let disappointment = self.params.get(BrainParam::Disappointment);
             let decay = self.params.get(BrainParam::TraceDecay);
             for entry in &self.trace {
                 let (Some(verb), Some(category)) = (entry.verb, entry.attended) else {
                     continue;
                 };
-                if verb.is_aimed() {
-                    let habit = &mut self.experience.habits[kind(category)][column(verb)];
-                    *habit = (*habit + rate * weight(decay, tick, entry.tick)).clamp(-1.0, 1.0);
+                if !verb.is_aimed() {
+                    continue;
                 }
+                let disappointed = match entry.motive {
+                    Some(need) if tried == Some(entry.tick) => disappointment * signals.needs[need],
+                    _ => 0.0,
+                };
+                let step = rate * (r - disappointed) * weight(decay, tick, entry.tick);
+                let habit = &mut self.experience.habits[kind(category)][column(verb)];
+                *habit = (*habit + step).clamp(-1.0, 1.0);
             }
         }
         Vec::new()
@@ -410,7 +422,11 @@ impl Brain {
     /// next step 4 would credit too little, whether it decided or not.
     pub(crate) fn commit(&mut self, tick: u64) {
         if let Some(snapshot) = self.snapshot.as_ref().filter(|s| s.tick == tick) {
+            let motive = snapshot
+                .verb
+                .and_then(|verb| self.motive(verb, &snapshot.activations));
             self.trace.push_back(TraceEntry {
+                motive,
                 tick,
                 activations: snapshot.activations.clone(),
                 verb: snapshot.verb,
@@ -427,6 +443,38 @@ impl Brain {
         {
             self.trace.pop_front();
         }
+    }
+
+    /// The motive for choosing `verb` with these concept `activations`
+    /// (design §5.5): of the needs, the one whose singleton pushed the verb
+    /// most through its instinct, by its place in the pack's needs; ties to
+    /// the lower input ID. None if no need pushed it.
+    fn motive(&self, verb: Verb, activations: &[f32]) -> Option<usize> {
+        let v = column(verb);
+        // The singletons come first, one per input, so a need's place in the
+        // inputs is its singleton's place in the concepts.
+        let mut pushes: Vec<(usize, usize, f32)> = self
+            .need_rows
+            .iter()
+            .enumerate()
+            .map(|(need, &row)| {
+                let a = activations.get(row).copied().unwrap_or(0.0);
+                (row, need, a * self.decision.get(row, v))
+            })
+            .filter(|&(_, _, part)| part > 0.0)
+            .collect();
+        // Inputs are in ID order, so the lower row is the lower input ID.
+        pushes.sort_by_key(|&(row, ..)| row);
+        pushes
+            .into_iter()
+            .fold(
+                None,
+                |best: Option<(usize, f32)>, (_, need, part)| match best {
+                    Some((_, top)) if top >= part => best,
+                    _ => Some((need, part)),
+                },
+            )
+            .map(|(need, _)| need)
     }
 
     /// What the brain did at its latest step 5, explained (design §5.9), or
@@ -1177,6 +1225,64 @@ mod tests {
         assert_eq!(scores[column(Verb::Play)], 0.0);
         let at_a_berry = brain.scores(&brain.activations(&x), &x, Some(Category::Berry), &data);
         assert_eq!(at_a_berry[column(Verb::Eat)], 0.0);
+    }
+
+    #[test]
+    fn a_fruitless_try_disappoints_the_need_that_chose_it_in_the_habit() {
+        // Design v16 §5.5–5.6: hunger's .8 × 1 pushed Eat more than boredom's
+        // 1 × .2, so hunger is the motive: disappointment (.3) × hunger (.8),
+        // at habit_rate .3 and λ .9 for the entry a tick old.
+        let data = builtin();
+        let mut brain = brain(&[
+            r#"Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0)"#,
+            r#"Instinct(inputs: [("boredom", false)], verb: Eat, weight: 0.2)"#,
+        ]);
+        let set = [("hunger", 0.8), ("boredom", 1.0)];
+        decide(&mut brain, 9, Verb::Eat, Some(Category::Ball), &set);
+        brain.touched = Some(Touch {
+            tick: 9,
+            category: Category::Ball,
+        });
+        let mut needs = vec![0.0; data.need_places().len()];
+        needs[0] = 0.8;
+        let fruitless = Signals {
+            needs,
+            fruitless: true,
+            ..Default::default()
+        };
+        brain.learn(10, &fruitless, 1.0, &data);
+        let habit = brain.experience.habits[kind(Category::Ball)][column(Verb::Eat)];
+        assert!(close(habit, -0.3 * 0.3 * 0.8 * 0.9), "{habit}");
+        assert_eq!(bush_for_hunger(&brain), 0.0, "worth isn't touched");
+    }
+
+    #[test]
+    fn a_fruitless_try_no_need_chose_costs_nothing() {
+        // Curiosity or a habit, not a need, chose to play with the ball.
+        let data = builtin();
+        let mut brain =
+            brain(&[r#"Instinct(inputs: [("always", false)], verb: Play, weight: 0.5)"#]);
+        decide(
+            &mut brain,
+            9,
+            Verb::Play,
+            Some(Category::Ball),
+            &[("always", 1.0)],
+        );
+        brain.touched = Some(Touch {
+            tick: 9,
+            category: Category::Ball,
+        });
+        let fruitless = Signals {
+            needs: vec![1.0; data.need_places().len()],
+            fruitless: true,
+            ..Default::default()
+        };
+        brain.learn(10, &fruitless, 1.0, &data);
+        assert_eq!(
+            brain.experience.habits[kind(Category::Ball)][column(Verb::Play)],
+            0.0
+        );
     }
 
     #[test]
