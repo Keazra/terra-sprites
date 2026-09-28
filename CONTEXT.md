@@ -333,7 +333,7 @@ What a sprite has learned about doing one verb to one kind of thing, such as "ea
 _Avoid_: skill (a later design, #48), reflex
 
 **Thing touched**:
-What a feeling is about: the thing the sprite tried a verb on a moment ago, or the sprite that just hit it. Worth is learned about it and nothing else.
+What a feeling is about: the thing the sprite tried a verb on a moment ago. Worth is learned about it and nothing else. A sprite that hit it isn't one, yet.
 _Avoid_: target (for this), culprit
 
 **Fruitless try**:

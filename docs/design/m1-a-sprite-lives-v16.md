@@ -28,6 +28,9 @@ Decided with the owner in the design session for slice 9 ([#10](https://github.c
 | 13 | **A1 compares a learner with a non-learner.** The new brain learns thornbushes from about 3 pricks, so it can't show A1's 20 early contacts and a halving. Each seed runs twice, once with learning switched off; the learner's thornbush contacts over the whole run must be at most half the non-learner's. | Owner decision, after measuring | §7.1, §7.3 |
 | 14 | **The recruitable concept pool is on hold.** Measured recruited on reward and fly-style (random at birth), it changed no behaviour. Its parameters keep their IDs. | Owner decision, after measuring | §5.4 |
 | 15 | **Later, recorded here:** habituation (its own slice after the core brain; measured, it isn't what stops a bored sprite fiddling, which is mostly a toyless arena), decisions that build up over time (with body language), individuals and places ([#40](https://github.com/Keazra/terra-sprites/issues/40)), the hand as a being sprites learn about ([#60](https://github.com/Keazra/terra-sprites/issues/60)), and genes that switch on at life stages (M2, [#49](https://github.com/Keazra/terra-sprites/issues/49)). | Owner decision | §5.6 |
+| 16 | **Being hit teaches habits, not what sprites are worth.** The attacker isn't the thing touched: the hit's punishment teaches the habits along the trace, but not the worth of sprites. Measured (default world, 30 sprites, 30,000 ticks, 10 seeds) with the attacker as the thing touched: one hit taught "sprites are bad", no sprite hit back (0 of 40, against about 1 in 3), a cornered sprite turned on its attacker 1 time in 10 (against 8 or more), and sprite hits fell from a median of 30.5 to 20.5. All sprites are one kind, so one bully made a sprite shy of every sprite. Without it, fight or flight is as before (hits 31.5) and thornbush contacts fall just as far (about 58, against 322 before v16). | Owner decision, after measuring | §5.6 |
+| 17 | **Fear individuals fast, kinds slowly** (the owner's rule, for the next slice): a sprite that hits another should become feared at once, while a kind should be feared only slowly, from several of its individuals; three different Spriggans in a short span should do it, one fellow sprite's hit not. It needs memory of individuals ([#40](https://github.com/Keazra/terra-sprites/issues/40)), and shapes fear ([#53](https://github.com/Keazra/terra-sprites/issues/53)) and Spriggans ([#55](https://github.com/Keazra/terra-sprites/issues/55)). | Owner decision | §5.6 |
+| 18 | **What was learned is read on its own:** `SpriteView::memory` lists it, since a sprite on a scripted action has learned things before it decides anything; `explain` no longer carries it. The lesson event is `LearnedMilestone { id, learned, good }`. | Found while building | §2.5, §5.9 |
 
 ---
 
@@ -479,7 +482,7 @@ Before step 1, the world keeps every sprite's chemical levels as they stand, so 
 - `Rewarded`, `Corrected`
 - `Spawned`
 - `Died { name, cause, age }`: the sprite has left the world by the time the event log prints this, so the event carries its name, or none for an unnamed sprite (§6.5). The causes are in §4.10.
-- `LearnedMilestone { lesson, good }`: a lesson (§5.6), once per learned value; `lesson` names it (a kind of thing's worth for a need, its general good or its bad; a habit, a kind of thing and a verb; or new things), and `good` whether it rose
+- `LearnedMilestone { learned, good }`: a lesson (§5.6), once per learned value; `learned` names it (a kind of thing's worth for a need, its general good or its bad; a habit, a kind of thing and a verb; or new things), and `good` whether it rose
 - `ObjectSpawned { object_type, pos }`: an object was created during the tick (by a lifecycle rule; later also by the hand)
 - `ObjectRemoved { object_type, reason }`: an object left the world. The reason is `Expired` (its last stage ended), `Destroyed` (`DestroySelf`) or `Replaced` (`ReplaceWith`). A berry that sprouts emits `ObjectRemoved { reason: Replaced }` for the berry and `ObjectSpawned` for the bush.
 - `HandEmptied { reason }`
@@ -1274,7 +1277,8 @@ World randomness is separate: plant rules and the order actions resolve in. It c
 - The sprite's **`last_r`** ("felt", saved state, §6.1) is `Σ relief + reward − punishment`.
 - Every rate below is scaled by `learning_rate_mod`.
 
-**The thing touched** is the target of the sprite's latest attempt (an interaction's one try, applied or failed) if it was within `touch_window` ticks (physiology, 3), or else the attacker of a `was_hit` pulse that is live. It is what the feeling is about. With nothing touched, worth learns nothing that tick; habits still do.
+**The thing touched** is the target of the sprite's latest attempt (an interaction's one try, applied or failed) if it was within `touch_window` ticks (physiology, 3). It is what the feeling is about. With nothing touched, worth learns nothing that tick; habits still do.
+- **Not the attacker** (v16, measured): being hit teaches the habits along the trace, but not the worth of sprites. All sprites are one kind, so one bully would make a sprite shy of every sprite, and fight or flight collapsed to flight (change 16). Fearing individuals fast and kinds slowly is the next slice (change 17).
 - **Why not the trace** (v16, measured): crediting worth back along the trace blamed each thornbush prick partly on the berry bush or water the sprite had looked at a moment before. Bad lessons fade slowly, so in the A1 arena berries, bushes and water all ended near −0.5, and meals fell by two-thirds. Crediting only the thing touched made thornbushes alone bad (−0.93) and meals recovered. It suits a species that knows the world by touch, and it is how blame should work ([#57](https://github.com/Keazra/terra-sprites/issues/57)).
 
 **Worth and bad,** for the thing touched, category *c*:
@@ -1350,7 +1354,8 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 `Brain::explain()` returns, and the front end reads it as `SpriteView::explain`:
 - the attention scores, highest first, from the snapshot step 5 keeps
 - what adds to or takes from the current verb's score, largest first whatever the sign, from the same snapshot: each instinct concept, the attended thing's habit for the verb, and its worth
-- the sprite's **memory** (v16): its learned values furthest from 0, largest first, of every kind (a worth for a need, a general good, a bad, a habit, the worth of new things), up to five. One that rounds to `.00` is left out. Step 4 runs before step 5, so the values `explain` reads are the ones step 5 scored with.
+
+`SpriteView::memory` returns the sprite's **memory** (v16): its learned values furthest from 0, largest first, of every kind (a worth for a need, a general good, a bad, a habit, the worth of new things), up to five; ties keep that order. The Brain tab leaves out one that rounds to `.00`. It is read on its own, not through `explain`, since a sprite has learned things before it first decides. Step 4 runs before step 5, so the values the tab shows are the ones step 5 scored with.
 
 ---
 
@@ -1693,7 +1698,7 @@ Implementation is **test-first, one vertical slice at a time.** Everything in `t
      - one trace entry per tick, including while an action continues
      - learning consumes reward and punishment, and `last_r` records good less bad
      - relief: a need's fall at or over the deadband, and not a slower one; pain's fall is never relief
-     - worth goes to the thing touched, within the touch window, or the attacker; nothing touched, no worth
+     - worth goes to the thing touched, within the touch window; nothing touched, or only an attacker, no worth
      - each need's worth counts in proportion to that need; bad counts always
      - habits along the trace with ring-buffer weighting; disappointment only for a fruitless try with a motive
      - the motive: the need whose instinct pushed the verb most, ties to the lower input
