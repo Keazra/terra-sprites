@@ -3,6 +3,7 @@
 
 use serde::Serialize;
 
+use crate::brain::VERBS;
 use crate::data::DataPack;
 use crate::events::{Event, EventKind};
 use crate::objects::EntityId;
@@ -73,6 +74,8 @@ pub(crate) struct Experience {
     pub(crate) good: [f32; KINDS],
     /// Bad, from `punishment`, by category (−1 to 0).
     pub(crate) bad: [f32; KINDS],
+    /// Habits: doing each verb, in `VERBS` order, to each category.
+    pub(crate) habits: [[f32; VERBS.len()]; KINDS],
     /// Each need's level at the last step 4, to read its relief from.
     pub(crate) needs_before: Option<Vec<f32>>,
 }
@@ -84,6 +87,7 @@ impl Experience {
             worth: vec![[0.0; KINDS]; needs],
             good: [0.0; KINDS],
             bad: [0.0; KINDS],
+            habits: [[0.0; VERBS.len()]; KINDS],
             needs_before: None,
         }
     }
