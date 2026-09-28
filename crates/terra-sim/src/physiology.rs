@@ -32,8 +32,12 @@ pub(crate) struct Physiology {
     pub(crate) receptor_targets: BTreeMap<LocusId, (f32, f32)>,
     pub(crate) nearby_sprites: NearbySprites,
     pub(crate) spawn_variation: f32,
-    /// How far a link moves from birth to be a lesson (design §5.6).
+    /// How far a learned value gets from 0 to be a lesson (design §5.6).
     pub(crate) lesson_threshold: f32,
+    /// The least fall of a need in a tick that is relief (design §5.6).
+    pub(crate) relief_deadband: f32,
+    /// How many ticks after a try its target is still the thing touched.
+    pub(crate) touch_window: u64,
     pub(crate) actions: Actions,
     pub(crate) movement: Movement,
     pub(crate) indices: Indices,
@@ -58,6 +62,8 @@ pub(crate) struct PhysiologyEntry {
     nearby_sprites: NearbySprites,
     spawn_variation: f32,
     lesson_threshold: f32,
+    relief_deadband: f32,
+    touch_window: u64,
     actions: Actions,
     movement: Movement,
 }
@@ -329,6 +335,8 @@ impl PhysiologyEntry {
             nearby_sprites: self.nearby_sprites,
             spawn_variation: self.spawn_variation,
             lesson_threshold: self.lesson_threshold,
+            relief_deadband: self.relief_deadband,
+            touch_window: self.touch_window,
             actions: self.actions,
             movement: self.movement,
             indices,

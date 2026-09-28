@@ -112,10 +112,20 @@ pub(crate) enum BrainParam {
     RecruitThreshold = 12,
     NoveltyThreshold = 13,
     ForgetTicks = 14,
+    WorthRateGood = 15,
+    WorthRateBad = 16,
+    WorthFadeGood = 17,
+    WorthFadeBad = 18,
+    HabitRate = 19,
+    HabitFade = 20,
+    ValueGain = 21,
+    Curiosity = 22,
+    FamiliarityRate = 23,
+    Disappointment = 24,
 }
 
 impl BrainParam {
-    pub(crate) const ALL: [BrainParam; 14] = [
+    pub(crate) const ALL: [BrainParam; 24] = [
         BrainParam::LearningRate,
         BrainParam::TraceDecay,
         BrainParam::RelaxRate,
@@ -130,6 +140,16 @@ impl BrainParam {
         BrainParam::RecruitThreshold,
         BrainParam::NoveltyThreshold,
         BrainParam::ForgetTicks,
+        BrainParam::WorthRateGood,
+        BrainParam::WorthRateBad,
+        BrainParam::WorthFadeGood,
+        BrainParam::WorthFadeBad,
+        BrainParam::HabitRate,
+        BrainParam::HabitFade,
+        BrainParam::ValueGain,
+        BrainParam::Curiosity,
+        BrainParam::FamiliarityRate,
+        BrainParam::Disappointment,
     ];
 
     /// The parameter's name in genome files and `physiology.ron`.
@@ -149,6 +169,16 @@ impl BrainParam {
             BrainParam::RecruitThreshold => "recruit_threshold",
             BrainParam::NoveltyThreshold => "novelty_threshold",
             BrainParam::ForgetTicks => "forget_ticks",
+            BrainParam::WorthRateGood => "worth_rate_good",
+            BrainParam::WorthRateBad => "worth_rate_bad",
+            BrainParam::WorthFadeGood => "worth_fade_good",
+            BrainParam::WorthFadeBad => "worth_fade_bad",
+            BrainParam::HabitRate => "habit_rate",
+            BrainParam::HabitFade => "habit_fade",
+            BrainParam::ValueGain => "value_gain",
+            BrainParam::Curiosity => "curiosity",
+            BrainParam::FamiliarityRate => "familiarity_rate",
+            BrainParam::Disappointment => "disappointment",
         }
     }
 

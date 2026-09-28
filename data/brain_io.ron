@@ -8,7 +8,8 @@
 // receptor targets. The Target inputs are fixed in code, and IDs 36 to 63
 // are kept for them (36 to 43 so far: attended_berry_bush … attended_sprite,
 // target_distance, target_adjacent), so State inputs carry on from 64.
-[
+(
+inputs: [
     (id: 1,  name: "hunger",        reads: Chem("hunger")),
     (id: 2,  name: "thirst",        reads: Chem("thirst")),
     (id: 3,  name: "pain",          reads: Chem("pain")),
@@ -50,4 +51,10 @@
 
     (id: 64, name: "cornered",      reads: Locus("cornered")),
     (id: 65, name: "fruitless",     reads: Locus("fruitless")),
-]
+],
+
+// The needs (design v16 §5.2, §5.6): the drives whose relief teaches a
+// sprite what things are good for, each a State input that reads a drive.
+// Pain is a drive but not a need: its fall is a hurt fading, not relief.
+needs: ["hunger", "thirst", "tiredness", "boredom", "loneliness", "crowdedness"],
+)

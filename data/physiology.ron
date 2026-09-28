@@ -51,6 +51,19 @@
         "recruit_threshold": (range: (0.0, 1.0),     default: 0.3),
         "novelty_threshold": (range: (0.0, 1.0),     default: 0.5),
         "forget_ticks":      (range: (100.0, 100000.0), default: 5000.0),
+        // Learning (design v16 §5.6). Since v16 learning_rate, relax_rate and
+        // consolidate_rate do nothing, nor do pool_size to forget_ticks while
+        // the recruitable pool is on hold; genomes may still carry them.
+        "worth_rate_good":   (range: (0.0, 1.0),     default: 0.5),
+        "worth_rate_bad":    (range: (0.0, 1.0),     default: 0.8),
+        "worth_fade_good":   (range: (0.0, 0.01),    default: 0.0002),
+        "worth_fade_bad":    (range: (0.0, 0.01),    default: 0.00005),
+        "habit_rate":        (range: (0.0, 1.0),     default: 0.3),
+        "habit_fade":        (range: (0.0, 0.01),    default: 0.0002),
+        "value_gain":        (range: (0.0, 2.0),     default: 1.0),
+        "curiosity":         (range: (0.0, 1.0),     default: 0.3),
+        "familiarity_rate":  (range: (0.0, 0.05),    default: 0.002),
+        "disappointment":    (range: (0.0, 1.0),     default: 0.3),
     },
     // The range of each receptor target in `loci.ron`. Each rests at 1.0 when
     // no receptor writes it.
@@ -70,6 +83,12 @@
     // A link that learning moves this far from the instinct it was born
     // with is a lesson, which the event log announces once (design §5.6).
     lesson_threshold: 0.5,
+
+    // Learning (design v16 §5.6): the least fall of a need in a tick that
+    // counts as relief, and how many ticks after a try the thing tried on
+    // is still the thing a feeling is about.
+    relief_deadband: 0.02,
+    touch_window: 3,
 
     // How long actions last (design §5.5): a rest in ticks, a retreat in
     // steps. An action still going at the timeout, in ticks, ends as timed out.
