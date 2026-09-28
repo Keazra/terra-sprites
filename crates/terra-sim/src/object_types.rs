@@ -409,7 +409,7 @@ impl TypeEntry {
                     let on_a_body = matches!(effect, EffectEntry::Inject(..) | EffectEntry::Signal(..));
                     if self.pseudo && !on_a_body {
                         return Err(format!(
-                            "the {verb:?} verb: `{name}` acts on an object, but a pseudo type's                              verbs may only Inject and Signal"
+                            "the {verb:?} verb: `{name}` acts on an object, but a pseudo type's verbs may only Inject and Signal"
                         ));
                     }
                 }
