@@ -12,7 +12,7 @@ use crate::data::DataPack;
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, LocusRef};
 use crate::learning::{
-    Experience, Links, Signals, TRACE_CAP, Touch, TraceEntry, kind, still_counts,
+    Experience, Links, Signals, TRACE_CAP, Touch, TraceEntry, kind, still_counts, weight,
 };
 use crate::perception::Target;
 use crate::random::unit;
@@ -304,6 +304,21 @@ impl Brain {
             experience.good[c] = (experience.good[c] + good * signals.reward).min(1.0);
             experience.bad[c] = (experience.bad[c] - bad * signals.punishment).max(-1.0);
         }
+        // Habits, along the trace: each aimed verb and the thing it attended.
+        let r = signals.reward - signals.punishment;
+        if r != 0.0 {
+            let rate = self.params.get(BrainParam::HabitRate) * learning_rate_mod * r;
+            let decay = self.params.get(BrainParam::TraceDecay);
+            for entry in &self.trace {
+                let (Some(verb), Some(category)) = (entry.verb, entry.attended) else {
+                    continue;
+                };
+                if verb.is_aimed() {
+                    let habit = &mut self.experience.habits[kind(category)][column(verb)];
+                    *habit = (*habit + rate * weight(decay, tick, entry.tick)).clamp(-1.0, 1.0);
+                }
+            }
+        }
         Vec::new()
     }
 
@@ -350,6 +365,15 @@ impl Brain {
                 thing: thing(category),
             };
             memory.push(Memory { learned, value });
+        }
+        for (&category, habits) in Category::ALL.iter().zip(&self.experience.habits) {
+            for (&verb, &value) in VERBS.iter().zip(habits) {
+                let learned = Learned::Habit {
+                    thing: thing(category),
+                    verb,
+                };
+                memory.push(Memory { learned, value });
+            }
         }
         memory.retain(|m| m.value != 0.0);
         // A stable sort keeps a tie in listed order.
@@ -565,12 +589,14 @@ impl Brain {
         }
         if let Some(category) = aimed {
             let worth = self.params.get(BrainParam::ValueGain) * self.value(category, inputs, data);
-            for (score, verb) in scores.iter_mut().zip(VERBS) {
-                *score += match verb {
-                    Verb::Retreat => -worth,
-                    Verb::Rest | Verb::Wander => 0.0,
-                    _ => worth,
-                };
+            let habits = &self.experience.habits[kind(category)];
+            for ((score, verb), habit) in scores.iter_mut().zip(VERBS).zip(habits) {
+                *score += habit
+                    + match verb {
+                        Verb::Retreat => -worth,
+                        Verb::Rest | Verb::Wander => 0.0,
+                        _ => worth,
+                    };
             }
         }
         scores
@@ -1111,6 +1137,46 @@ mod tests {
         assert_eq!(scores[column(Wander)], 0.0);
         let unaimed = brain.scores(&brain.activations(&x), &x, None, &data);
         assert_eq!(unaimed, [0.0; VERBS.len()], "nothing attended, no worth");
+    }
+
+    #[test]
+    fn good_less_bad_teaches_habits_along_the_trace_the_most_recent_most() {
+        // Design v16 §5.6: habit_rate (.3) × (reward − punishment) × λ^age,
+        // for entries whose verb was aimed at the thing they attended.
+        let data = builtin();
+        let mut brain = brain(&[r#"BrainParam(param: "trace_decay", value: 0.5)"#]);
+        decide(&mut brain, 7, Verb::Rest, Some(Category::Berry), &[]);
+        decide(&mut brain, 8, Verb::Approach, Some(Category::Berry), &[]);
+        decide(&mut brain, 9, Verb::Eat, Some(Category::Berry), &[]);
+        let hurt = Signals {
+            needs: vec![0.0; data.need_places().len()],
+            punishment: 1.0,
+            ..Default::default()
+        };
+        brain.learn(10, &hurt, 1.0, &data);
+        let habit = |verb| brain.experience.habits[kind(Category::Berry)][column(verb)];
+        assert!(close(habit(Verb::Eat), -0.3 * 0.5), "{}", habit(Verb::Eat));
+        assert!(close(habit(Verb::Approach), -0.3 * 0.25));
+        assert_eq!(habit(Verb::Rest), 0.0, "Rest aims at nothing");
+        let eating_berries = Learned::Habit {
+            thing: "berry".into(),
+            verb: Verb::Eat,
+        };
+        let memory = brain.memory(&data);
+        assert_eq!(memory[0].learned, eating_berries, "{memory:?}");
+    }
+
+    #[test]
+    fn a_habit_counts_for_its_verb_on_the_thing_attended() {
+        let data = builtin();
+        let mut brain = brain(&[]);
+        brain.experience.habits[kind(Category::Ball)][column(Verb::Eat)] = -0.4;
+        let x = inputs(&[]);
+        let scores = brain.scores(&brain.activations(&x), &x, Some(Category::Ball), &data);
+        assert_eq!(scores[column(Verb::Eat)], -0.4);
+        assert_eq!(scores[column(Verb::Play)], 0.0);
+        let at_a_berry = brain.scores(&brain.activations(&x), &x, Some(Category::Berry), &data);
+        assert_eq!(at_a_berry[column(Verb::Eat)], 0.0);
     }
 
     #[test]
