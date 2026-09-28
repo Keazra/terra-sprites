@@ -191,13 +191,24 @@ pub struct Explanation<'a> {
     pub contributions: Vec<Contribution<'a>>,
 }
 
-/// How much one concept adds to a verb's score (design §5.9).
+/// How much one part of the brain adds to a verb's score (design §5.9).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Contribution<'a> {
-    /// The concept's inputs by name, each with whether it's negated.
-    pub inputs: Vec<(&'a str, bool)>,
-    /// Its activation times its link to the verb.
+    pub part: Part<'a>,
+    /// What it adds, or takes away if negative.
     pub amount: f32,
+}
+
+/// A part of the brain that adds to a verb's score (design §5.5, §5.9).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Part<'a> {
+    /// An instinct: a concept's inputs by name, each with whether it's
+    /// negated, through its link to the verb.
+    Concept(Vec<(&'a str, bool)>),
+    /// What the thing attended to is worth, by its category's name.
+    Worth(&'static str),
+    /// The habit of doing the verb to the thing attended to.
+    Habit(&'static str),
 }
 
 impl Brain {
@@ -571,17 +582,39 @@ impl Brain {
                 .zip(&snapshot.activations)
                 .zip(self.decision.rows())
                 .map(|((signature, &activation), links)| Contribution {
-                    inputs: signature
-                        .iter()
-                        .map(|&(i, negated)| (names[i].name.as_str(), negated))
-                        .collect(),
+                    part: Part::Concept(
+                        signature
+                            .iter()
+                            .map(|&(i, negated)| (names[i].name.as_str(), negated))
+                            .collect(),
+                    ),
                     amount: activation * links[column(verb)],
                 })
-                .filter(|c| c.amount != 0.0)
                 .collect(),
             None => Vec::new(),
         };
-        // A stable sort keeps a tie in concept order.
+        if let (Some((verb, _)), Some(category)) = (decision, snapshot.attended) {
+            let worth = self.params.get(BrainParam::ValueGain)
+                * self.value(category, &snapshot.inputs, data);
+            let side = match verb {
+                Verb::Retreat => -1.0,
+                Verb::Rest | Verb::Wander => 0.0,
+                _ => 1.0,
+            };
+            let habit = self.experience.habits[kind(category)][column(verb)];
+            contributions.extend([
+                Contribution {
+                    part: Part::Worth(category.name()),
+                    amount: side * worth,
+                },
+                Contribution {
+                    part: Part::Habit(category.name()),
+                    amount: habit,
+                },
+            ]);
+        }
+        contributions.retain(|c| c.amount != 0.0);
+        // A stable sort keeps a tie in listed order: concepts, worth, habit.
         contributions.sort_by(|a, b| b.amount.abs().total_cmp(&a.amount.abs()));
         Some(Explanation {
             attention,
@@ -1470,6 +1503,35 @@ mod tests {
         assert!(
             memory.iter().any(|m| m.learned == Learned::NewThings),
             "{memory:?}"
+        );
+    }
+
+    #[test]
+    fn a_choice_is_explained_by_its_instincts_the_thing_s_worth_and_the_habit() {
+        // Design v16 §5.9: largest first whatever the sign.
+        let data = builtin();
+        let mut brain =
+            brain(&[r#"Instinct(inputs: [("boredom", false)], verb: Play, weight: 1.0)"#]);
+        brain.experience.good[kind(Category::Ball)] = 0.3;
+        brain.experience.habits[kind(Category::Ball)][column(Verb::Play)] = -0.2;
+        let x = inputs(&[("boredom", 0.5)]);
+        brain.snapshot = Some(Snapshot {
+            inputs: x.clone(),
+            ..snapshot(9, brain.activations(&x), Verb::Play, Some(Category::Ball))
+        });
+        let explained = brain.explain(&data).expect("a decision");
+        let parts: Vec<(Part, f32)> = explained
+            .contributions
+            .into_iter()
+            .map(|c| (c.part, c.amount))
+            .collect();
+        assert_eq!(
+            parts,
+            [
+                (Part::Concept(vec![("boredom", false)]), 0.5),
+                (Part::Worth("ball"), 0.3),
+                (Part::Habit("ball"), -0.2),
+            ]
         );
     }
 

@@ -3,8 +3,8 @@
 //! minds when a drive grows.
 
 use terra_sim::{
-    DataPack, EntityId, Event, EventKind, Genome, Map, Outcome, Pos, Scenario, ScriptedAction,
-    Verb, World,
+    DataPack, EntityId, Event, EventKind, Genome, Map, Outcome, Part, Pos, Scenario,
+    ScriptedAction, Verb, World,
 };
 
 const STARTER: &str = include_str!("../../../data/genomes/starter.ron");
@@ -299,20 +299,20 @@ fn explain_gives_attention_scores_and_the_concepts_behind_the_verb() {
     let (verb, score) = explained.decision.expect("a verb");
     assert_eq!(verb, Verb::Eat);
     // Largest first, whatever the sign: hunger, hunger and not there yet, always.
-    let concepts: Vec<(Vec<(&str, bool)>, f32)> = explained
+    let concepts: Vec<(Part, f32)> = explained
         .contributions
         .iter()
-        .map(|c| (c.inputs.clone(), c.amount))
+        .map(|c| (c.part.clone(), c.amount))
         .collect();
     assert_eq!(
         concepts,
         [
-            (vec![("hunger", false)], hunger),
+            (Part::Concept(vec![("hunger", false)]), hunger),
             (
-                vec![("hunger", false), ("target_adjacent", true)],
+                Part::Concept(vec![("hunger", false), ("target_adjacent", true)]),
                 hunger * 0.5
             ),
-            (vec![("always", false)], -0.1),
+            (Part::Concept(vec![("always", false)]), -0.1),
         ]
     );
     let total: f32 = concepts.iter().map(|(_, amount)| amount).sum();
