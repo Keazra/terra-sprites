@@ -1246,6 +1246,31 @@ fn the_attention_marker_shades_the_one_thing_the_selected_sprite_attends_to() {
 }
 
 #[test]
+fn the_brain_tab_shows_memory_before_the_first_decision() {
+    // Design v17 §6.1. A scripted bite at tick 0 pricks; at tick 1, still on
+    // its scripted rest, it learns thornbushes are bad: .8 × a punishment of 1.
+    let objects = [(Pos { x: 3, y: 3 }, "thornbush")];
+    let scripted = [
+        ScriptedAction::Eat {
+            at: Pos { x: 3, y: 3 },
+        },
+        ScriptedAction::Rest,
+    ];
+    let (world, mut app) = one_sprite_among(THORN_GENOME, &objects, &scripted, 2);
+    open(&mut app, &world, Tab::Brain);
+    let (_, text) = inspector(&app, &world);
+    assert_eq!(
+        text[..4],
+        [
+            "Nothing decided yet",
+            "",
+            "MEMORY",
+            "thornbushes are bad                 -.80",
+        ]
+    );
+}
+
+#[test]
 fn the_brain_tab_says_when_nothing_has_been_decided_or_is_in_sight() {
     let (world, mut app) = one_sprite(HUNGRY_GENOME, 0);
     open(&mut app, &world, Tab::Brain);
