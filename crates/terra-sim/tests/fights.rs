@@ -286,3 +286,49 @@ fn a_sprite_cornered_by_its_attacker_turns_on_it() {
     }
     assert!(turned >= 8, "turned on the attacker in {turned} of 10");
 }
+
+/// A watcher that feels every hit as a punishment of 1.
+fn fearful_watcher(data: &DataPack) -> Genome {
+    let text = r#"(format: 1, genes: [
+        Trait(trait: "speed", value: 10.0),
+        Trait(trait: "sense_radius", value: 10.0),
+        BrainParam(param: "tau_base", value: 0.05),
+        AttentionInstinct(input: "always", category: Sprite, weight: 1.0),
+        Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),
+        Emitter(locus: Locus("was_hit"), mode: Level, gain: 1.0, chem: "punishment"),
+    ])"#;
+    Genome::from_ron(text, data).expect("a valid genome")
+}
+
+#[test]
+fn a_feared_sprite_catches_the_eye_over_a_nearer_stranger() {
+    // Design v18 §5.3. The bully hits and walks off to stand 3 tiles away;
+    // the stranger stands beside the watcher. Nearness alone favours the
+    // stranger (salience .5 against .4); fear of the bully, 1 × vigilance
+    // (.8) × what's left of it at that distance (.6), adds .48.
+    let (stranger, me, bully) = (at(0, 0), at(1, 0), at(2, 0));
+    let script = [
+        (stranger, ScriptedAction::Rest),
+        (bully, ScriptedAction::Hit { at: me }),
+        (
+            bully,
+            ScriptedAction::Wander {
+                destination: at(4, 0),
+            },
+        ),
+        (bully, ScriptedAction::Rest),
+    ];
+    let sprites = [
+        (stranger, walker as MakeGenome),
+        (me, fearful_watcher),
+        (bully, walker),
+    ];
+    let mut world = scene(&["......."], &sprites, &script);
+    let (me, bully) = (id_at(&world, me), id_at(&world, bully));
+    for _ in 0..12 {
+        world.step();
+    }
+    let bully_at = world.sprite(bully).expect("the bully").pos();
+    assert_eq!(bully_at, at(4, 0), "the bully has walked off");
+    assert_eq!(attends(&world, me), Some(bully_at));
+}

@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 
 use crate::action::{Outcome, ScriptedAction, end, is_acting, start};
-use crate::brain::{Aim, Snapshot, available};
+use crate::brain::{Aim, Snapshot, SpriteFocus, available};
 use crate::data::DataPack;
 use crate::events::Event;
 use crate::map::Pos;
@@ -59,8 +59,35 @@ pub(crate) fn decide(
     let reach = 10.0 * f32::from(flood.reach());
     let was_hit = data.physiology().indices.was_hit;
     let attacker = sprite.body.sources.get(&was_hit).copied();
-    let candidates: BTreeMap<Category, Candidate> = flood
-        .candidates(ground, id, attacker)
+    let mut found = flood.candidates(ground, id, attacker);
+    // Each sprite in reach is weighed on its own, and the one that draws the
+    // eye most stands for sprites, unless the attacker does while a hit is
+    // felt (design v18 §3.6).
+    let felt = |target: Target| attacker.is_some_and(|a| target == Target::Sprite(a));
+    if !found
+        .get(&Category::Sprite)
+        .is_some_and(|&(target, _)| felt(target))
+    {
+        let inputs = sprite.brain.inputs(&sprite.body, None, data);
+        let drawn = flood.sprites(ground, id).into_iter().map(|(other, cost)| {
+            let draw = sprite
+                .brain
+                .draw(other, normalized(cost, reach), &inputs, data);
+            (other, cost, draw)
+        });
+        // Ties go to the lower ID, which comes first.
+        let best = drawn.fold(
+            None,
+            |best: Option<(EntityId, u32, f32)>, next| match best {
+                Some(top) if top.2 >= next.2 => Some(top),
+                _ => Some(next),
+            },
+        );
+        if let Some((other, cost, _)) = best {
+            found.insert(Category::Sprite, (Target::Sprite(other), cost));
+        }
+    }
+    let candidates: BTreeMap<Category, Candidate> = found
         .into_iter()
         .map(|(category, (target, cost))| {
             let goal = state
@@ -101,6 +128,17 @@ pub(crate) fn decide(
         }
     });
     let exploration = sprite.body.loci[data.physiology().indices.exploration_mod];
+    // The sprite that stands for sprites while attention scores: a running
+    // action's target, or else the candidate (design v18 §5.3).
+    let as_sprite = |target: Option<Target>| match target {
+        Some(Target::Sprite(other)) => Some(other),
+        _ => None,
+    };
+    let candidate_sprite = as_sprite(candidates.get(&Category::Sprite).map(|c| c.target));
+    let focus = SpriteFocus {
+        sprite: as_sprite(action.and_then(|a| a.target)).or(candidate_sprite),
+        hit: sprite.body.loci[was_hit] > 0.0,
+    };
     // A running action's category is scored by the instance it's aimed at,
     // which a nearer one of the same category doesn't replace (design §5.3).
     let mut distances: BTreeMap<Category, f32> = candidates
@@ -118,7 +156,7 @@ pub(crate) fn decide(
     // 5a: attention, from the State inputs alone.
     let state_only = brain.inputs(&sprite.body, None, data);
     let curiosity_mod = sprite.body.loci[data.physiology().indices.curiosity_mod];
-    let attention = brain.attention_scores(&state_only, &distances, curiosity_mod, data);
+    let attention = brain.attention_scores(&state_only, &distances, curiosity_mod, focus, data);
     let attended = brain.attend(&attention, running, exploration, rng);
     let mut running = running;
     if let Some(aim) = aimed

@@ -209,6 +209,30 @@ impl Flood {
     /// its tile index. A thing is reachable if the flood reached one of its
     /// goal tiles: beside it, or, for an item or water, its own tile too.
     /// `me` is the sprite the flood is for, which is never its own candidate.
+    /// Every other sprite the flood reaches, with the path cost to its
+    /// nearest goal tile, in ID order (design v18 §3.6).
+    pub(crate) fn sprites(&self, ground: Ground, me: EntityId) -> Vec<(EntityId, u32)> {
+        let map = ground.map;
+        let mut found = Vec::new();
+        // Sprites just outside the square can have goal tiles inside it.
+        let x0 = self.corner.x.saturating_sub(1);
+        let y0 = self.corner.y.saturating_sub(1);
+        let x1 = (self.corner.x + self.width).min(map.width() - 1);
+        let y1 = (self.corner.y + self.height).min(map.height() - 1);
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                let pos = Pos { x, y };
+                if let Some(id) = ground.sprites.at(pos).filter(|&id| id != me)
+                    && let Some(cost) = self.goal_cost(map, pos, false)
+                {
+                    found.push((id, cost));
+                }
+            }
+        }
+        found.sort_by_key(|&(id, _)| id);
+        found
+    }
+
     pub(crate) fn candidates(
         &self,
         ground: Ground,
