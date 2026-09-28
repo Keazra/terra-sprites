@@ -135,13 +135,16 @@ pub(crate) fn decide(
         _ => None,
     };
     let candidate_sprite = as_sprite(candidates.get(&Category::Sprite).map(|c| c.target));
+    // Fear always catches the eye, so a sprite hit or cornered keeps it on
+    // whoever did it (design v18 §5.3).
     let focus = SpriteFocus {
         sprite: as_sprite(action.and_then(|a| a.target)).or(candidate_sprite),
-        // Fear is quiet while a hit is felt or the sprite is cornered:
-        // those moments are instinct's (design v18 §5.3, §5.5).
-        quiet: sprite.body.loci[was_hit] > 0.0
-            || sprite.body.loci[data.physiology().indices.cornered] > 0.0,
+        quiet: false,
     };
+    // But while a hit is felt or the sprite is cornered, what it does is
+    // instinct's, and fear is quiet in the decision (design v18 §5.5).
+    let quiet = sprite.body.loci[was_hit] > 0.0
+        || sprite.body.loci[data.physiology().indices.cornered] > 0.0;
     // A running action's category is scored by the instance it's aimed at,
     // which a nearer one of the same category doesn't replace (design §5.3).
     let mut distances: BTreeMap<Category, f32> = candidates
@@ -189,7 +192,7 @@ pub(crate) fn decide(
     };
     let decision_focus = SpriteFocus {
         sprite: aimed_sprite,
-        ..focus
+        quiet,
     };
     let scores = brain.scores(
         &activations,
