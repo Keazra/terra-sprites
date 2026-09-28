@@ -598,16 +598,16 @@ fn explained_lines(explained: &Explanation) -> Vec<String> {
     if explained.attention.is_empty() {
         lines.push("   nothing in sight".into());
     }
-    for &(category, score) in &explained.attention {
-        let marker = if explained.attended == Some(category) {
+    for (thing, score) in &explained.attention {
+        let marker = if explained.attended.as_ref() == Some(thing) {
             "►"
         } else {
             " "
         };
         lines.extend(scored(
             &format!(" {marker} "),
-            &display_name(category),
-            &level(score),
+            &thing_name(thing),
+            &level(*score),
         ));
     }
     lines.push(String::new());
@@ -629,7 +629,8 @@ fn explained_lines(explained: &Explanation) -> Vec<String> {
             Part::Concept(inputs) => concept_name(inputs),
             // Neutral, since worth adds to a verb or takes from it either
             // way: a bad thing's pushes towards backing away.
-            Part::Worth(thing) => format!("worth: {}", display_name(thing)),
+            Part::Worth(thing) => format!("worth: {}", thing_name(thing)),
+            Part::Fear(thing) => format!("fear: {}", thing_name(thing)),
             Part::Habit(thing) => {
                 let verb = explained.decision.map_or("", |(verb, _)| verb_name(verb));
                 format!("habit: {} {}", verb.to_lowercase(), display_name(thing))
@@ -684,6 +685,15 @@ fn learned_name(learned: &Learned, data: &DataPack) -> String {
             format!("{} {}", doing(*verb), things(&kind, data).0)
         }
         Learned::NewThings => "new things".into(),
+    }
+}
+
+/// A thing as the Brain tab names it (design v18 §6.1): a kind by its
+/// display name, `berry bush`, a sprite as the log names it, `Sprite #7`.
+fn thing_name(thing: &Thing) -> String {
+    match thing {
+        Thing::Kind(kind) => display_name(kind),
+        Thing::Sprite(id) => sprite_label(*id),
     }
 }
 

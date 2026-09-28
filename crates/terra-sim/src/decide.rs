@@ -178,12 +178,12 @@ pub(crate) fn decide(
     let activations = brain.activations(&inputs);
     // The sprite the decision is about, as `aim` is: a running action's
     // target, or else the candidate (design v18 §5.5).
-    let running_target = sprite
+    let aimed_target = sprite
         .action
         .as_ref()
         .filter(|_| running)
         .and_then(|a| a.target);
-    let aimed_sprite = match running_target {
+    let aimed_sprite = match aimed_target {
         Some(target) => as_sprite(Some(target)),
         None => candidate_sprite,
     };
@@ -225,6 +225,8 @@ pub(crate) fn decide(
         scores,
         verb,
         motive,
+        sprite_seen: focus.sprite,
+        focus: decision_focus,
     });
     let Some(verb) = chosen else {
         return;

@@ -108,7 +108,7 @@ pub(crate) type Signature = Vec<(usize, bool)>;
 /// Which sprite stands for sprites while the brain scores (design v18
 /// §5.3, §5.5), and whether fear is quiet: a hit is still felt, or the
 /// sprite is cornered, moments that are instinct's.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize)]
 pub(crate) struct SpriteFocus {
     pub(crate) sprite: Option<EntityId>,
     pub(crate) quiet: bool,
@@ -173,6 +173,10 @@ pub(crate) struct Snapshot {
     /// The verb's motive (design §5.5): the need, by its place in the pack's
     /// needs, whose instinct did most to choose it.
     pub(crate) motive: Option<usize>,
+    /// The sprite attention scored sprites by (design v18 §5.3).
+    pub(crate) sprite_seen: Option<EntityId>,
+    /// The sprite the decision was about, and whether fear was quiet (§5.5).
+    pub(crate) focus: SpriteFocus,
 }
 
 /// What something learned is about (design v18 §5.9): a kind of thing, named
@@ -222,11 +226,12 @@ const MEMORY_SIZE: usize = 5;
 /// could attend to, and why it's doing what it's doing.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Explanation<'a> {
-    /// Each candidate category's attention score, as `(category, score)`,
-    /// highest first, ties to the lower category.
-    pub attention: Vec<(&'static str, f32)>,
-    /// The category attention is on, if any.
-    pub attended: Option<&'static str>,
+    /// Each candidate category's attention score, highest first, ties to
+    /// the lower category: a kind of thing, or for sprites the one scored
+    /// (design v18).
+    pub attention: Vec<(Thing, f32)>,
+    /// What attention is on, if anything.
+    pub attended: Option<Thing>,
     /// The verb it chose or kept doing, with its score.
     pub decision: Option<(Verb, f32)>,
     /// The concepts adding to or taking from that verb's score, largest
@@ -249,8 +254,10 @@ pub enum Part<'a> {
     /// An instinct: a concept's inputs by name, each with whether it's
     /// negated, through its link to the verb.
     Concept(Vec<(&'a str, bool)>),
-    /// What the thing attended to is worth, by its category's name.
-    Worth(&'static str),
+    /// What the thing attended to is worth: a kind, or a particular sprite.
+    Worth(Thing),
+    /// How frightening the thing attended to is (design v18 §5.5).
+    Fear(Thing),
     /// The habit of doing the verb to the thing attended to.
     Habit(&'static str),
 }
@@ -738,10 +745,15 @@ impl Brain {
     /// `None` if it hasn't decided anything yet.
     pub(crate) fn explain<'a>(&self, data: &'a DataPack) -> Option<Explanation<'a>> {
         let snapshot = self.snapshot.as_ref()?;
-        let mut attention: Vec<(&'static str, f32)> = snapshot
+        // Sprites are named by the one scored (design v18 §5.9).
+        let seen = |category: Category| match (category, snapshot.sprite_seen) {
+            (Category::Sprite, Some(sprite)) => Thing::Sprite(sprite),
+            _ => Thing::from(category.name()),
+        };
+        let mut attention: Vec<(Thing, f32)> = snapshot
             .attention
             .iter()
-            .map(|(category, &score)| (category.name(), score))
+            .map(|(&category, &score)| (seen(category), score))
             .collect();
         // A stable sort keeps a tie in category order.
         attention.sort_by(|a, b| b.1.total_cmp(&a.1));
@@ -768,14 +780,25 @@ impl Brain {
             None => Vec::new(),
         };
         if let (Some((verb, _)), Some(category)) = (decision, snapshot.attended) {
-            let worth = self.params.get(BrainParam::ValueGain)
-                * self.worth(category, &snapshot.inputs, data);
-            let side = side(verb);
+            // The same parts `scores` adds, for the thing aimed at.
+            let (focus, inputs) = (snapshot.focus, &snapshot.inputs);
+            let value_gain = self.params.get(BrainParam::ValueGain);
+            let flight = self.params.get(BrainParam::Flight);
+            let worth = value_gain * self.worth_of(category, focus.sprite, inputs, data);
+            let fear = self.fright(category, focus, target_distance(inputs, data), data);
             let habit = self.experience.habits[category.index()][column(verb)];
+            let thing = match (category, focus.sprite) {
+                (Category::Sprite, Some(sprite)) => Thing::Sprite(sprite),
+                _ => Thing::from(category.name()),
+            };
             contributions.extend([
                 Contribution {
-                    part: Part::Worth(category.name()),
-                    amount: side * worth,
+                    part: Part::Worth(thing.clone()),
+                    amount: side(verb) * worth,
+                },
+                Contribution {
+                    part: Part::Fear(thing),
+                    amount: fear_push(verb, flight, value_gain) * fear,
                 },
                 Contribution {
                     part: Part::Habit(category.name()),
@@ -784,11 +807,12 @@ impl Brain {
             ]);
         }
         contributions.retain(|c| c.amount != 0.0);
-        // A stable sort keeps a tie in listed order: concepts, worth, habit.
+        // A stable sort keeps a tie in listed order: concepts, worth, fear,
+        // habit.
         contributions.sort_by(|a, b| b.amount.abs().total_cmp(&a.amount.abs()));
         Some(Explanation {
             attention,
-            attended: snapshot.attended.map(Category::name),
+            attended: snapshot.attended.map(seen),
             decision,
             contributions,
         })
@@ -987,10 +1011,6 @@ impl Brain {
     /// What `category` is worth to the sprite now (design §5.6): each need's
     /// level, from `inputs`, times its worth for that need, plus its general
     /// good and its bad.
-    fn worth(&self, category: Category, inputs: &[f32], data: &DataPack) -> f32 {
-        self.worth_of(category, None, inputs, data)
-    }
-
     /// What `category`'s thing is worth to the sprite now (design §5.6): for
     /// sprites, `sprite`, or sprites in general (design v18).
     fn worth_of(
@@ -1386,6 +1406,8 @@ mod tests {
             scores: [0.0; VERBS.len()],
             verb: Some(verb),
             motive: None,
+            sprite_seen: None,
+            focus: SpriteFocus::default(),
         }
     }
 
@@ -1898,7 +1920,7 @@ mod tests {
             parts,
             [
                 (Part::Concept(vec![("boredom", false)]), 0.5),
-                (Part::Worth("ball"), 0.3),
+                (Part::Worth("ball".into()), 0.3),
                 (Part::Habit("ball"), -0.2),
             ]
         );
