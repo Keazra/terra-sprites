@@ -121,3 +121,55 @@ fn a_hungry_sprite_that_eats_from_a_bush_learns_the_bush_is_good_for_hunger() {
     assert_eq!(learned[0].0, good_for_hunger);
     assert!(close(learned[0].1, 0.25), "{learned:?}");
 }
+
+#[test]
+fn a_prick_makes_only_the_thornbush_touched_bad_not_what_was_looked_at_before() {
+    // Design v16 §5.6: bad goes to the thing touched. The sprite walks past
+    // a berry bush to bite a thornbush; each prick punishes it by 1, so bad
+    // is −(.8 × 1) at worth_rate_bad's .8.
+    let (bush, thornbush) = (at(2, 1), at(4, 1));
+    let mut world = world(
+        &["......", "......", "......"],
+        &[(bush, "berry_bush"), (thornbush, "thornbush")],
+        at(1, 1),
+        r#"Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),"#,
+        &[
+            ScriptedAction::Approach { at: bush },
+            ScriptedAction::Eat { at: thornbush },
+            ScriptedAction::Rest,
+        ],
+    );
+    for _ in 0..6 {
+        world.step();
+    }
+    let learned = memory(&world);
+    let thorns_bad = Learned::Bad {
+        thing: "thornbush".into(),
+    };
+    assert_eq!(learned.len(), 1, "{learned:?}");
+    assert_eq!(learned[0].0, thorns_bad);
+    assert!(close(learned[0].1, -0.8), "{learned:?}");
+}
+
+#[test]
+fn a_reward_makes_the_thing_touched_good_in_general() {
+    // A pet-like reward of .5 as it plays with a ball: .5 × .5.
+    let ball = at(2, 1);
+    let mut world = world(
+        &[".....", ".....", "....."],
+        &[(ball, "ball")],
+        at(1, 1),
+        r#"Emitter(locus: Locus("played"), mode: Level, gain: 0.5, chem: "reward"),"#,
+        &[ScriptedAction::Play { at: ball }, ScriptedAction::Rest],
+    );
+    world.step();
+    world.step();
+    let balls_good = Learned::Worth {
+        thing: "ball".into(),
+        need: None,
+    };
+    let learned = memory(&world);
+    assert_eq!(learned.len(), 1, "{learned:?}");
+    assert_eq!(learned[0].0, balls_good);
+    assert!(close(learned[0].1, 0.25), "{learned:?}");
+}

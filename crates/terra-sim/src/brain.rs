@@ -295,10 +295,14 @@ impl Brain {
             .or(signals.attacked.then_some(Category::Sprite));
         if let Some(category) = touched {
             let good = self.params.get(BrainParam::WorthRateGood) * learning_rate_mod;
+            let bad = self.params.get(BrainParam::WorthRateBad) * learning_rate_mod;
             let c = kind(category);
-            for (worth, &relief) in self.experience.worth.iter_mut().zip(&relief) {
+            let experience = &mut self.experience;
+            for (worth, &relief) in experience.worth.iter_mut().zip(&relief) {
                 worth[c] = (worth[c] + good * relief).min(1.0);
             }
+            experience.good[c] = (experience.good[c] + good * signals.reward).min(1.0);
+            experience.bad[c] = (experience.bad[c] - bad * signals.punishment).max(-1.0);
         }
         Vec::new()
     }
@@ -332,6 +336,20 @@ impl Brain {
                     value,
                 });
             }
+        }
+        let thing = |category: Category| category.name().to_string();
+        for (&category, &value) in Category::ALL.iter().zip(&self.experience.good) {
+            let learned = Learned::Worth {
+                thing: thing(category),
+                need: None,
+            };
+            memory.push(Memory { learned, value });
+        }
+        for (&category, &value) in Category::ALL.iter().zip(&self.experience.bad) {
+            let learned = Learned::Bad {
+                thing: thing(category),
+            };
+            memory.push(Memory { learned, value });
         }
         memory.retain(|m| m.value != 0.0);
         // A stable sort keeps a tie in listed order.
@@ -950,6 +968,7 @@ mod tests {
         let hungry = |level| Signals {
             needs: [vec![level], vec![0.0; needs - 1]].concat(),
             attacked: true,
+            ..Default::default()
         };
         brain.learn(10, &hungry(1.0), 1.0, &data);
         brain.learn(11, &hungry(0.0), 1.0, &data);
@@ -968,6 +987,7 @@ mod tests {
         Signals {
             needs: [vec![hunger], vec![0.0; needs - 1]].concat(),
             attacked,
+            ..Default::default()
         }
     }
 
