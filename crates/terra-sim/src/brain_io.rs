@@ -44,7 +44,15 @@ pub(crate) struct BrainInput {
     pub(crate) source: Source,
 }
 
-/// One entry of `brain_io.ron`.
+/// `brain_io.ron`: the State inputs, and which drives are needs.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct BrainIoFile {
+    inputs: Vec<InputEntry>,
+    needs: Vec<String>,
+}
+
+/// One entry of `brain_io.ron`'s inputs.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct InputEntry {
@@ -71,11 +79,47 @@ fn target_inputs() -> impl Iterator<Item = (String, Source)> {
         ])
 }
 
+/// Every brain input, in ID order, and the needs, as places in that order
+/// (design §5.2). A need that isn't a State input reading a drive, or is
+/// named twice, is an error.
+pub(crate) fn brain_io(
+    file: BrainIoFile,
+    chemicals: &[Chemical],
+    loci: &[Locus],
+) -> Result<(Vec<BrainInput>, Vec<usize>), DataError> {
+    let inputs = brain_inputs(file.inputs, chemicals, loci)?;
+    let mut needs: Vec<usize> = Vec::new();
+    for name in &file.needs {
+        let invalid = |problem: &str| DataError::Invalid {
+            file: BRAIN_IO.into(),
+            message: format!("the need `{name}` {problem}"),
+        };
+        let place = inputs
+            .iter()
+            .position(|input| &input.name == name)
+            .ok_or_else(|| invalid("isn't a brain input"))?;
+        let reads_a_drive = match inputs[place].source {
+            Source::State(LocusRef::Chem(id)) => chemicals
+                .iter()
+                .any(|c| c.id == id && c.kind() == ChemicalKind::Drive),
+            _ => false,
+        };
+        if !reads_a_drive {
+            return Err(invalid("doesn't read a drive"));
+        }
+        if needs.contains(&place) {
+            return Err(invalid("is named twice"));
+        }
+        needs.push(place);
+    }
+    Ok((inputs, needs))
+}
+
 /// Every brain input, in ID order: the State inputs `entries` list, and the
 /// Target inputs. An entry that reads anything but a drive, a hormone, a
 /// body sensor or a pulse, takes an ID kept for Target inputs, or clashes
 /// with another input, is an error.
-pub(crate) fn brain_inputs(
+fn brain_inputs(
     entries: Vec<InputEntry>,
     chemicals: &[Chemical],
     loci: &[Locus],

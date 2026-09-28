@@ -1,9 +1,8 @@
-//! Learning (design §5.6): step 4 consumes reward and punishment, credits
-//! them back along the trace, and moves the sprite's links.
+//! Learning (design §5.6): step 4 consumes reward and punishment, and
+//! learns what things are worth and its habits.
 
 use terra_sim::{
-    DataPack, EntityId, Event, EventKind, Genome, Link, Map, Pos, Scenario, ScriptedAction, Verb,
-    World,
+    DataPack, Event, EventKind, Genome, Learned, Map, Pos, Scenario, ScriptedAction, World,
 };
 
 fn builtin() -> DataPack {
@@ -20,6 +19,10 @@ fn genome(genes: &str, data: &DataPack) -> Genome {
             Trait(trait: "speed", value: 10.0),
             Trait(trait: "sense_radius", value: 10.0),
             {genes}
+            // No fading, so what is learned reads exactly.
+            BrainParam(param: "worth_fade_good", value: 0.0),
+            BrainParam(param: "worth_fade_bad", value: 0.0),
+            BrainParam(param: "habit_fade", value: 0.0),
         ])"#
     );
     Genome::from_ron(&text, data).expect("a valid genome")
@@ -74,80 +77,166 @@ fn learning_uses_up_reward_and_punishment_and_the_sprite_felt_the_difference() {
     assert_eq!(sprite.felt(), 0.0, "a one-off, gone the tick after");
 }
 
-/// The lessons in `events`, as `(sprite, link, good)`.
-fn lessons(events: &[Event]) -> Vec<(EntityId, Link, bool)> {
+/// What the one sprite has learned, as `(learned, value)`.
+fn memory(world: &World) -> Vec<(Learned, f32)> {
+    let sprite = world.sprites().next().expect("the sprite");
+    sprite
+        .memory()
+        .into_iter()
+        .map(|m| (m.learned, m.amount))
+        .collect()
+}
+
+/// What the one sprite has learned `learned` is worth, or 0.
+fn value_of(world: &World, learned: &Learned) -> f32 {
+    memory(world)
+        .into_iter()
+        .find(|(l, _)| l == learned)
+        .map_or(0.0, |(_, value)| value)
+}
+
+fn close(a: f32, b: f32) -> bool {
+    (a - b).abs() < 1e-5
+}
+
+/// A sprite's genome that is hungry and whose eating halves its hunger, as
+/// the starter genome's `ate` emitter does.
+const HUNGRY: &str = r#"InitialConcentration(chem: "hunger", value: 1.0),
+    Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "hunger"),"#;
+
+#[test]
+fn a_hungry_sprite_that_eats_from_a_bush_learns_the_bush_is_good_for_hunger() {
+    // Design v16 §5.6: hunger falls by .5, its relief, and the bush it bit
+    // is the thing touched: .5 × worth_rate_good (.5).
+    let bush = at(2, 1);
+    let mut world = world(
+        &[".....", ".....", "....."],
+        &[(bush, "berry_bush")],
+        at(1, 1),
+        HUNGRY,
+        &[ScriptedAction::Eat { at: bush }, ScriptedAction::Rest],
+    );
+    world
+        .start_object(bush, "mature", &[("fruit", 3)])
+        .expect("a bush with fruit");
+    world.step();
+    assert_eq!(
+        memory(&world),
+        [],
+        "nothing learned before the bite is felt"
+    );
+    world.step();
+    let good_for_hunger = Learned::Worth {
+        thing: "berry_bush".into(),
+        need: Some("hunger".into()),
+    };
+    assert!(
+        close(value_of(&world, &good_for_hunger), 0.25),
+        "{:?}",
+        memory(&world)
+    );
+    let sprite = world.sprites().next().expect("the sprite");
+    assert!(
+        close(sprite.felt(), 0.5),
+        "it felt the relief: {}",
+        sprite.felt()
+    );
+}
+
+#[test]
+fn a_prick_makes_only_the_thornbush_touched_bad_not_what_was_looked_at_before() {
+    // Design v16 §5.6: bad goes to the thing touched. The sprite walks past
+    // a berry bush to bite a thornbush; each prick punishes it by 1, so bad
+    // is −(.8 × 1) at worth_rate_bad's .8.
+    let (bush, thornbush) = (at(2, 1), at(4, 1));
+    let mut world = world(
+        &["......", "......", "......"],
+        &[(bush, "berry_bush"), (thornbush, "thornbush")],
+        at(1, 1),
+        r#"Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),"#,
+        &[
+            ScriptedAction::Approach { at: bush },
+            ScriptedAction::Eat { at: thornbush },
+            ScriptedAction::Rest,
+        ],
+    );
+    for _ in 0..6 {
+        world.step();
+    }
+    let thorns_bad = Learned::Bad {
+        thing: "thornbush".into(),
+    };
+    let bush_bad = Learned::Bad {
+        thing: "berry_bush".into(),
+    };
+    assert!(
+        close(value_of(&world, &thorns_bad), -0.8),
+        "{:?}",
+        memory(&world)
+    );
+    assert_eq!(value_of(&world, &bush_bad), 0.0, "looked at, never touched");
+}
+
+#[test]
+fn a_reward_makes_the_thing_touched_good_in_general() {
+    // A pet-like reward of .5 as it plays with a ball: .5 × .5.
+    let ball = at(2, 1);
+    let mut world = world(
+        &[".....", ".....", "....."],
+        &[(ball, "ball")],
+        at(1, 1),
+        r#"Emitter(locus: Locus("played"), mode: Level, gain: 0.5, chem: "reward"),"#,
+        &[ScriptedAction::Play { at: ball }, ScriptedAction::Rest],
+    );
+    world.step();
+    world.step();
+    let balls_good = Learned::Worth {
+        thing: "ball".into(),
+        need: None,
+    };
+    assert!(
+        close(value_of(&world, &balls_good), 0.25),
+        "{:?}",
+        memory(&world)
+    );
+}
+
+/// The lessons in `events`, as `(learned, good)`.
+fn lessons(events: &[Event]) -> Vec<(Learned, bool)> {
     events
         .iter()
         .filter_map(|e| match &e.kind {
-            EventKind::LearnedMilestone { id, link, good } => Some((*id, link.clone(), *good)),
+            EventKind::LearnedMilestone { learned, good, .. } => Some((learned.clone(), *good)),
             _ => None,
         })
         .collect()
 }
 
 #[test]
-fn a_sprite_that_keeps_biting_a_thornbush_learns_it_is_bad_once() {
-    // Always hungry, it attends to the one thornbush and eats from it; each
-    // prick punishes it.
-    let thornbush = at(3, 1);
-    let mut world = world(
-        &["......", "......", "......"],
-        &[(thornbush, "thornbush")],
-        at(1, 1),
-        r#"InitialConcentration(chem: "hunger", value: 1.0),
-           Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),
-           AttentionInstinct(input: "hunger", category: Thornbush, weight: 1.0),
-           Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
-           BrainParam(param: "learning_rate", value: 0.2),"#,
-        &[],
-    );
-    let id = world.sprites().next().expect("the sprite").id();
-    let learned: Vec<(EntityId, Link, bool)> =
-        (0..300).flat_map(|_| lessons(&world.step())).collect();
-    let thorn_eat = Link::Decision {
-        inputs: vec![("attended_thornbush".into(), false)],
-        verb: Verb::Eat,
-    };
-    assert!(
-        learned.contains(&(id, thorn_eat.clone(), false)),
-        "{learned:?}"
-    );
-    let times = learned
-        .iter()
-        .filter(|(_, link, _)| *link == thorn_eat)
-        .count();
-    assert_eq!(times, 1, "announced once");
-}
-
-#[test]
-fn a_sprite_rewarded_for_eating_learns_eating_and_looking_at_the_bush_are_good() {
-    // Always hungry, beside a fruiting bush; every bite rewards it by 1.
-    let bush = at(2, 1);
+fn a_sprite_that_keeps_biting_a_thornbush_learns_each_lesson_once() {
+    // Design v16 §5.6: a lesson is a learned value's first time half a
+    // point from nothing. The first prick makes the new thornbush −.8 bad,
+    // and new things −.8 too; later pricks teach nothing new.
+    let thornbush = at(2, 1);
     let mut world = world(
         &[".....", ".....", "....."],
-        &[(bush, "berry_bush")],
+        &[(thornbush, "thornbush")],
         at(1, 1),
-        r#"InitialConcentration(chem: "hunger", value: 1.0),
-           Emitter(locus: Locus("ate"), mode: Level, gain: 1.0, chem: "reward"),
-           Instinct(inputs: [("hunger", false)], verb: Eat, weight: 0.1),
-           BrainParam(param: "learning_rate", value: 0.5),
-           BrainParam(param: "tau_base", value: 0.05),"#,
-        &[],
+        r#"Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),"#,
+        &[
+            ScriptedAction::Eat { at: thornbush },
+            ScriptedAction::Eat { at: thornbush },
+            ScriptedAction::Eat { at: thornbush },
+            ScriptedAction::Rest,
+        ],
     );
-    world
-        .start_object(bush, "mature", &[("fruit", 6)])
-        .expect("a bush with fruit");
-    let id = world.sprites().next().expect("the sprite").id();
-    let learned: Vec<(EntityId, Link, bool)> =
-        (0..100).flat_map(|_| lessons(&world.step())).collect();
-    let eat = Link::Decision {
-        inputs: vec![("hunger".into(), false)],
-        verb: Verb::Eat,
+    let learned: Vec<(Learned, bool)> = (0..8).flat_map(|_| lessons(&world.step())).collect();
+    let thorns_bad = Learned::Bad {
+        thing: "thornbush".into(),
     };
-    let look = Link::Attention {
-        input: "hunger".into(),
-        category: "berry_bush".into(),
-    };
-    assert!(learned.contains(&(id, eat, true)), "{learned:?}");
-    assert!(learned.contains(&(id, look, true)), "{learned:?}");
+    assert_eq!(
+        learned,
+        [(thorns_bad, false), (Learned::NewThings, false)],
+        "each once"
+    );
 }

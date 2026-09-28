@@ -575,3 +575,80 @@ fn an_ended_action_says_which_sprites_its_attempt_hurt() {
         assert_eq!(hurt_by_first_ending(&world.step()), expected, "{what}");
     }
 }
+
+/// A world like `world`'s, whose walker turns a `fruitless` pulse into `h1`,
+/// so a test can see the pulse.
+fn feeling_world(objects: &[(Pos, &str)], sprite: Pos, script: &[ScriptedAction]) -> World {
+    let data = builtin();
+    let map = Map::from_ascii(&[".....", ".....", "....."], &data).expect("valid drawing");
+    let text = r#"(format: 1, genes: [
+        Trait(trait: "speed", value: 10.0),
+        Trait(trait: "sense_radius", value: 10.0),
+        Emitter(locus: Locus("fruitless"), mode: Level, gain: 0.5, chem: "h1"),
+    ])"#;
+    let genome = Genome::from_ron(text, &data).expect("a valid genome");
+    let sprites = [(sprite, Some(genome))];
+    let scripted: Vec<(Pos, ScriptedAction)> = script.iter().map(|&s| (sprite, s)).collect();
+    let scenario = Scenario {
+        map,
+        objects,
+        sprites: &sprites,
+        scripted: &scripted,
+    };
+    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+}
+
+/// How much `h1` the one sprite has: what its `fruitless` pulses made.
+fn felt_fruitless(world: &World) -> f32 {
+    let sprite = world.sprite(the_sprite(world)).expect("the sprite");
+    sprite.chemical("h1").expect("a hormone")
+}
+
+#[test]
+fn trying_to_eat_a_ball_does_nothing_and_the_sprite_feels_it_was_fruitless() {
+    // Design v16 §5.2: a ball's verb table has no Eat, so the try is fruitless.
+    let ball = at(2, 1);
+    let mut world = feeling_world(
+        &[(ball, "ball")],
+        at(1, 1),
+        &[ScriptedAction::Eat { at: ball }],
+    );
+    let events = world.step();
+    assert_eq!(endings(&events), [(Verb::Eat, Outcome::Failed)]);
+    assert_eq!(felt_fruitless(&world), 0.0, "the pulse is felt next tick");
+    world.step();
+    assert_eq!(felt_fruitless(&world), 0.5);
+    assert!(world.object_at(ball).is_some(), "the ball is untouched");
+}
+
+#[test]
+fn trying_a_bush_with_no_fruit_is_fruitless_too() {
+    let bush = at(2, 1);
+    let mut world = feeling_world(
+        &[(bush, "berry_bush")],
+        at(1, 1),
+        &[ScriptedAction::Eat { at: bush }],
+    );
+    world
+        .start_object(bush, "mature", &[("fruit", 0)])
+        .expect("a bare bush");
+    world.step();
+    world.step();
+    assert_eq!(felt_fruitless(&world), 0.5);
+}
+
+#[test]
+fn a_try_that_works_is_not_fruitless() {
+    let bush = at(2, 1);
+    let mut world = feeling_world(
+        &[(bush, "berry_bush")],
+        at(1, 1),
+        &[ScriptedAction::Eat { at: bush }],
+    );
+    world
+        .start_object(bush, "mature", &[("fruit", 3)])
+        .expect("a bush with fruit");
+    world.step();
+    world.step();
+    assert_eq!(felt_fruitless(&world), 0.0);
+}

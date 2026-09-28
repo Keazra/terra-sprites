@@ -1,8 +1,8 @@
-// A1, the thornbush lesson (design §7.3, v15 change 11): one starter sprite
-// in a small walled arena where thornbushes outnumber berry bushes. Its
-// thornbush contacts (bites, plays and hits) in the last 5,000 ticks must be
-// at most half those in the first 5,000, median of 10 seeds, with at least
-// 20 in the first. The middle windows are for watching it learn.
+// A1, the thornbush lesson (design v16 §7.3): one starter sprite in a small
+// walled arena where thornbushes outnumber berry bushes. Its thornbush
+// contacts (bites, plays and hits) over the whole run must be at most half
+// those of the same seed with learning switched off, median of 10 seeds,
+// with at least 20 in the control. The windows are for watching it learn.
 (
     world: Drawn(
         rows: [
@@ -20,5 +20,6 @@
         key: {'S': Sprite, 'T': Object("thornbush"), 'B': Object("berry_bush")},
     ),
     ticks: 20000,
+    control: NoLearning,
     windows: [(0, 5000), (5000, 10000), (10000, 15000), (15000, 20000)],
 )

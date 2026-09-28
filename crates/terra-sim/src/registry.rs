@@ -25,6 +25,15 @@ impl Category {
         Category::Sprite,
     ];
 
+    /// Where the category is in `ALL`: its place in whatever a brain keeps
+    /// per category.
+    pub(crate) fn index(self) -> usize {
+        Category::ALL
+            .iter()
+            .position(|&c| c == self)
+            .expect("every category is in ALL")
+    }
+
     /// The category's name in brain input names, such as `attended_berry_bush`.
     pub(crate) fn name(self) -> &'static str {
         match self {
@@ -98,24 +107,40 @@ impl Verb {
 /// `BrainParam` gene. The discriminants are the stable parameter IDs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub(crate) enum BrainParam {
+    /// Does nothing since v16, when learning became worth and habits; kept
+    /// for its ID, since genomes may carry it.
     LearningRate = 1,
     TraceDecay = 2,
+    /// Does nothing since v16; kept for its ID.
     RelaxRate = 3,
+    /// Does nothing since v16; kept for its ID.
     ConsolidateRate = 4,
     TauBase = 5,
     TauAttBase = 6,
     SwitchMargin = 7,
     AttentionMargin = 8,
     SalienceGain = 9,
+    /// This and the next four do nothing while the recruitable pool is on
+    /// hold (design v16 §5.4); kept for their IDs.
     PoolSize = 10,
     MaxArity = 11,
     RecruitThreshold = 12,
     NoveltyThreshold = 13,
     ForgetTicks = 14,
+    WorthRateGood = 15,
+    WorthRateBad = 16,
+    WorthFadeGood = 17,
+    WorthFadeBad = 18,
+    HabitRate = 19,
+    HabitFade = 20,
+    ValueGain = 21,
+    Curiosity = 22,
+    FamiliarityRate = 23,
+    Disappointment = 24,
 }
 
 impl BrainParam {
-    pub(crate) const ALL: [BrainParam; 14] = [
+    pub(crate) const ALL: [BrainParam; 24] = [
         BrainParam::LearningRate,
         BrainParam::TraceDecay,
         BrainParam::RelaxRate,
@@ -130,6 +155,16 @@ impl BrainParam {
         BrainParam::RecruitThreshold,
         BrainParam::NoveltyThreshold,
         BrainParam::ForgetTicks,
+        BrainParam::WorthRateGood,
+        BrainParam::WorthRateBad,
+        BrainParam::WorthFadeGood,
+        BrainParam::WorthFadeBad,
+        BrainParam::HabitRate,
+        BrainParam::HabitFade,
+        BrainParam::ValueGain,
+        BrainParam::Curiosity,
+        BrainParam::FamiliarityRate,
+        BrainParam::Disappointment,
     ];
 
     /// The parameter's name in genome files and `physiology.ron`.
@@ -149,6 +184,16 @@ impl BrainParam {
             BrainParam::RecruitThreshold => "recruit_threshold",
             BrainParam::NoveltyThreshold => "novelty_threshold",
             BrainParam::ForgetTicks => "forget_ticks",
+            BrainParam::WorthRateGood => "worth_rate_good",
+            BrainParam::WorthRateBad => "worth_rate_bad",
+            BrainParam::WorthFadeGood => "worth_fade_good",
+            BrainParam::WorthFadeBad => "worth_fade_bad",
+            BrainParam::HabitRate => "habit_rate",
+            BrainParam::HabitFade => "habit_fade",
+            BrainParam::ValueGain => "value_gain",
+            BrainParam::Curiosity => "curiosity",
+            BrainParam::FamiliarityRate => "familiarity_rate",
+            BrainParam::Disappointment => "disappointment",
         }
     }
 

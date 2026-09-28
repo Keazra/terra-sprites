@@ -5,8 +5,8 @@ use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
     ActionView, ChemicalKind, ChemicalLevel, DataPack, DeathCause, EmitterMode, EntityId,
-    Expression, GeneView, Link, ObjectView, Outcome, Progress, SpriteView, Target, Trait, Verb,
-    World,
+    Expression, GeneView, Learned, ObjectView, Outcome, Part, Progress, SpriteView, Target, Trait,
+    Verb, World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -596,67 +596,109 @@ fn brain_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
         }
         None => lines.push(" DECISION: none".into()),
     }
-    // A concept whose part rounds to nothing adds nothing worth showing.
+    // A part that rounds to nothing adds nothing worth showing.
     let shown = explained
         .contributions
         .iter()
         .filter(|c| level(c.amount.abs()) != ".00");
     for contribution in shown.take(CONCEPTS_SHOWN) {
         let amount = signed_level(contribution.amount);
-        lines.extend(scored("   ", &concept_name(&contribution.inputs), &amount));
+        let name = match &contribution.part {
+            Part::Concept(inputs) => concept_name(inputs),
+            // Neutral, since worth adds to a verb or takes from it either
+            // way: a bad thing's pushes towards backing away.
+            Part::Worth(thing) => format!("worth: {}", display_name(thing)),
+            Part::Habit(thing) => {
+                let verb = explained.decision.map_or("", |(verb, _)| verb_name(verb));
+                format!("habit: {} {}", verb.to_lowercase(), display_name(thing))
+            }
+        };
+        lines.extend(scored("   ", &name, &amount));
     }
-    // A link whose move rounds to nothing has nothing worth showing.
-    let remembered: Vec<_> = explained
-        .memory
-        .iter()
-        .filter(|m| level((m.now - m.birth).abs()) != ".00")
+    // What has learned only a rounding's worth has nothing worth showing.
+    let remembered: Vec<_> = sprite
+        .memory()
+        .into_iter()
+        .filter(|m| level(m.amount.abs()) != ".00")
         .collect();
     if !remembered.is_empty() {
         lines.push(String::new());
-        lines.extend(scored(" ", "MEMORY", &columns("now", "birth")));
+        lines.push(" MEMORY".into());
     }
     for memory in remembered {
-        let birth = match memory.birth {
-            0.0 => level(0.0),
-            birth => signed_level(birth),
-        };
-        let numbers = columns(&signed_level(memory.now), &birth);
-        lines.extend(scored("   ", &link_name(&memory.link), &numbers));
+        let amount = signed_level(memory.amount);
+        lines.extend(scored("   ", &learned_name(&memory.learned), &amount));
     }
     lines.into_iter().map(Line::from).collect()
 }
 
 /// A lesson as the event log says it (design §6.1): "Sprite #12 learned:
-/// attended thornbush → eat is bad", "… is good" for a link that rose.
-pub(crate) fn learned_line(id: EntityId, link: &Link, good: bool) -> String {
+/// thornbushes are bad", "… water is good for thirst", "… eating balls is
+/// bad".
+pub(crate) fn learned_line(id: EntityId, learned: &Learned, good: bool) -> String {
     let verdict = if good { "good" } else { "bad" };
-    let link = link_name(link).replace(BOUND, " ");
-    format!("{} learned: {link} is {verdict}", sprite_label(id))
+    let what = match learned {
+        Learned::Worth { .. } | Learned::Bad { .. } => learned_name(learned),
+        Learned::Habit { .. } => format!("{} is {verdict}", learned_name(learned)),
+        Learned::NewThings => format!("new things are {verdict}"),
+    };
+    format!("{} learned: {what}", sprite_label(id))
 }
 
-/// The memory's two columns, a link's weight now and at birth, each
-/// right-aligned.
-fn columns(now: &str, birth: &str) -> String {
-    format!("{now:>5}  {birth:>5}")
-}
-
-/// A link as the Genome tab words the instinct it began as: `attended
-/// thornbush → eat`, `hunger → attends to thornbush`.
-fn link_name(link: &Link) -> String {
-    match link {
-        Link::Decision { inputs, verb } => {
-            let inputs: Vec<(&str, bool)> = inputs.iter().map(|(i, n)| (i.as_str(), *n)).collect();
-            format!(
-                "{} → {}",
-                concept_name(&inputs),
-                verb_name(*verb).to_lowercase()
-            )
+/// Something learned, as the memory words it: `thornbushes are bad`,
+/// `water is good for thirst`, `eating balls`, `new things`.
+fn learned_name(learned: &Learned) -> String {
+    match learned {
+        Learned::Worth {
+            thing,
+            need: Some(need),
+        } => {
+            let (things, be) = things(thing);
+            format!("{things} {be} good for {}", display_name(need))
         }
-        Link::Attention { input, category } => format!(
-            "{} → attends to {}",
-            unbroken(&display_name(input)),
-            unbroken(&display_name(category))
-        ),
+        Learned::Worth { thing, need: None } => {
+            let (things, be) = things(thing);
+            format!("{things} {be} good")
+        }
+        Learned::Bad { thing } => {
+            let (things, be) = things(thing);
+            format!("{things} {be} bad")
+        }
+        Learned::Habit { thing, verb } => format!("{} {}", doing(*verb), things(thing).0),
+        Learned::NewThings => "new things".into(),
+    }
+}
+
+/// A kind of thing in general, with the verb "to be" to go with it:
+/// `thornbushes are`, `berries are`, `water is`.
+fn things(thing: &str) -> (String, &'static str) {
+    let name = display_name(thing);
+    if name == "water" {
+        return (name, "is");
+    }
+    let plural = if name.ends_with("sh") {
+        format!("{name}es")
+    } else if let Some(stem) = name.strip_suffix('y') {
+        format!("{stem}ies")
+    } else {
+        format!("{name}s")
+    };
+    (plural, "are")
+}
+
+/// A verb as a habit words doing it to something: `eating`, `playing with`.
+fn doing(verb: Verb) -> &'static str {
+    match verb {
+        Verb::Approach => "going to",
+        Verb::Eat => "eating",
+        Verb::Drink => "drinking from",
+        Verb::Hit => "hitting",
+        Verb::Play => "playing with",
+        Verb::Retreat => "backing away from",
+        Verb::Rest => "resting by",
+        Verb::Wander => "wandering from",
+        Verb::Mate => "mating with",
+        Verb::Speak => "speaking to",
     }
 }
 

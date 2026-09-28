@@ -362,6 +362,17 @@ impl Body {
             .0
     }
 
+    /// Writes the pulse at `index` for step 3 to latch (design §4.2), with
+    /// `source` as its source: the sprite whose verb caused it, or none, which
+    /// clears an earlier one. The latest written counts.
+    pub(crate) fn pulse(&mut self, index: usize, source: Option<EntityId>) {
+        self.incoming[index] = 1.0;
+        match source {
+            Some(source) => self.incoming_sources.insert(index, source),
+            None => self.incoming_sources.remove(&index),
+        };
+    }
+
     /// Adds `amount` to the chemical at `index`, within 0 to 1. Injury,
     /// at `injury`, is put down to `cause` in full, as physiology's is,
     /// even where the level stops at 1.
@@ -1260,26 +1271,17 @@ mod tests {
     }
 
     #[test]
-    fn eating_when_full_earns_almost_nothing_and_eating_when_hungry_earns_in_proportion() {
-        let mut full = starter();
-        full.step();
-        full.pulse("ate");
-        full.step();
-        assert_eq!(full.level("reward"), 0.0, "hunger at 0 can't fall");
-
+    fn eating_drops_a_hungry_starter_s_hunger_at_once_and_makes_no_reward() {
+        // Design v16 §4.5: the brain reads hunger's fall as relief itself, so
+        // the starter genome turns no fall into reward.
         let mut hungry = starter();
         hungry.set("hunger", 0.8);
         hungry.step();
         let before = hungry.level("hunger");
         hungry.pulse("ate");
         hungry.step();
-        // The ate pulse drops hunger by 0.5; the Fall emitter's deadband is 0.02.
         assert!((before - hungry.level("hunger") - 0.5).abs() < 0.01);
-        assert!(
-            (hungry.level("reward") - 0.48).abs() < 0.01,
-            "{}",
-            hungry.level("reward")
-        );
+        assert_eq!(hungry.level("reward"), 0.0);
     }
 
     #[test]

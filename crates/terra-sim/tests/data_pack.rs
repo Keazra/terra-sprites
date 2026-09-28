@@ -679,7 +679,7 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
         (43, "target_adjacent"),
     ]);
     // State inputs carry on from 64, past the IDs kept for Target inputs.
-    expected.push((64, "cornered"));
+    expected.extend([(64, "cornered"), (65, "fruitless")]);
     assert_eq!(inputs, expected);
 }
 
@@ -702,26 +702,64 @@ fn a_brain_input_reads_a_drive_hormone_body_sensor_or_pulse_that_exists() {
         (r#"Chem("reward")"#, "reward"),
         (r#"Locus("exploration_mod")"#, "exploration_mod"),
     ] {
-        let text = format!(r#"[(id: 1, name: "odd", reads: {reads})]"#);
+        let text = format!(r#"(inputs: [(id: 1, name: "odd", reads: {reads})], needs: [])"#);
         assert_invalid("brain_io.ron", &text, word);
     }
 }
 
 #[test]
 fn brain_input_ids_and_names_are_unique_and_clear_of_the_target_inputs() {
-    let same_id =
-        r#"[(id: 1, name: "a", reads: Chem("hunger")), (id: 1, name: "b", reads: Chem("thirst"))]"#;
+    let same_id = r#"(inputs: [(id: 1, name: "a", reads: Chem("hunger")), (id: 1, name: "b", reads: Chem("thirst"))], needs: [])"#;
     assert_invalid("brain_io.ron", same_id, "1");
-    let same_name =
-        r#"[(id: 1, name: "a", reads: Chem("hunger")), (id: 2, name: "a", reads: Chem("thirst"))]"#;
+    let same_name = r#"(inputs: [(id: 1, name: "a", reads: Chem("hunger")), (id: 2, name: "a", reads: Chem("thirst"))], needs: [])"#;
     assert_invalid("brain_io.ron", same_name, "`a`");
-    let target_name = r#"[(id: 1, name: "target_adjacent", reads: Chem("hunger"))]"#;
+    let target_name =
+        r#"(inputs: [(id: 1, name: "target_adjacent", reads: Chem("hunger"))], needs: [])"#;
     assert_invalid("brain_io.ron", target_name, "target_adjacent");
     // 36 to 63 are kept for Target inputs.
     for id in [36, 63] {
-        let target_id = format!(r#"[(id: {id}, name: "hungry", reads: Chem("hunger"))]"#);
+        let target_id =
+            format!(r#"(inputs: [(id: {id}, name: "hungry", reads: Chem("hunger"))], needs: [])"#);
         assert_invalid("brain_io.ron", &target_id, &id.to_string());
     }
+}
+
+#[test]
+fn a_need_is_a_state_input_that_reads_a_drive_named_once() {
+    // Design v16 §5.2.
+    let inputs = r#"inputs: [
+        (id: 1, name: "hungry", reads: Chem("hunger")),
+        (id: 2, name: "h", reads: Chem("h0")),
+        (id: 3, name: "ate", reads: Locus("ate")),
+    ]"#;
+    for (needs, word) in [
+        (r#"["peckish"]"#, "peckish"),
+        (r#"["h"]"#, "`h`"),
+        (r#"["ate"]"#, "`ate`"),
+        (r#"["target_adjacent"]"#, "target_adjacent"),
+        (r#"["hungry", "hungry"]"#, "twice"),
+    ] {
+        let text = format!("({inputs}, needs: {needs})");
+        assert_invalid("brain_io.ron", &text, word);
+    }
+}
+
+#[test]
+fn the_needs_are_the_drives_whose_relief_teaches() {
+    let data = DataPack::builtin().expect("built-in data pack is valid");
+    let needs: Vec<&str> = data.needs().collect();
+    assert_eq!(
+        needs,
+        [
+            "hunger",
+            "thirst",
+            "tiredness",
+            "boredom",
+            "loneliness",
+            "crowdedness"
+        ],
+        "pain is a drive but not a need"
+    );
 }
 
 #[test]
@@ -730,8 +768,8 @@ fn every_brain_parameter_has_a_range_and_a_default_within_it() {
     assert_invalid_physiology(tau, "", "tau_base");
     assert_invalid_physiology(
         tau,
-        &format!(r#"{tau} "curiosity": (range: (0.0, 1.0), default: 0.5),"#),
-        "curiosity",
+        &format!(r#"{tau} "wonder": (range: (0.0, 1.0), default: 0.5),"#),
+        "wonder",
     );
     assert_invalid_physiology(
         tau,
@@ -748,7 +786,7 @@ fn every_brain_parameter_has_a_range_and_a_default_within_it() {
 #[test]
 fn the_brain_needs_the_exploration_mod_receptor_target() {
     let loci = include_str!("../../../data/loci.ron");
-    let renamed = loci.replace(r#"name: "exploration_mod""#, r#"name: "curiosity_mod""#);
+    let renamed = loci.replace(r#"name: "exploration_mod""#, r#"name: "whim_mod""#);
     assert_ne!(renamed, loci);
     assert_invalid("loci.ron", &renamed, "exploration_mod");
 }
