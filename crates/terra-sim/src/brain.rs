@@ -771,8 +771,8 @@ impl Brain {
         };
         if let (Some((verb, _)), Some(category)) = (decision, snapshot.attended) {
             let scoring = snapshot.scoring;
-            let [worth, fear, habit] =
-                self.aimed_parts(verb, category, scoring, &snapshot.inputs, data);
+            let parts = self.aimed_parts(category, scoring, &snapshot.inputs, data);
+            let [worth, fear, habit] = parts[column(verb)];
             let thing = thing_of(category, scoring.sprite);
             contributions.extend([
                 Contribution {
@@ -981,34 +981,38 @@ impl Brain {
             }
         }
         if let Some(category) = aimed {
-            for (score, verb) in scores.iter_mut().zip(VERBS) {
-                let parts = self.aimed_parts(verb, category, scoring, inputs, data);
+            let parts = self.aimed_parts(category, scoring, inputs, data);
+            for (score, parts) in scores.iter_mut().zip(parts) {
                 *score += parts.iter().sum::<f32>();
             }
         }
         scores
     }
 
-    /// What `category`'s thing, aimed at, adds to `verb`'s score (design
-    /// v18 §5.5): its worth, how frightening it is, and the habit.
+    /// What `category`'s thing, aimed at, adds to each verb's score, in
+    /// `VERBS` order (design v18 §5.5): its worth, how frightening it is, and
+    /// the habit. Its worth and fear are the same for every verb, so they're
+    /// worked out once.
     fn aimed_parts(
         &self,
-        verb: Verb,
         category: Category,
         scoring: SpriteScoring,
         inputs: &[f32],
         data: &DataPack,
-    ) -> [f32; 3] {
+    ) -> [[f32; 3]; VERBS.len()] {
         let value_gain = self.params.get(BrainParam::ValueGain);
         let flight = self.params.get(BrainParam::Flight);
         let worth = value_gain * self.worth_of(category, scoring.sprite, inputs, data);
         let fear = self.fright(category, scoring, target_distance(inputs, data), data);
-        let habit = self.experience.habits[category.index()][column(verb)];
-        [
-            side(verb) * worth,
-            fear_push(verb, flight, value_gain) * fear,
-            habit,
-        ]
+        let habits = &self.experience.habits[category.index()];
+        std::array::from_fn(|i| {
+            let verb = VERBS[i];
+            [
+                side(verb) * worth,
+                fear_push(verb, flight, value_gain) * fear,
+                habits[i],
+            ]
+        })
     }
 
     /// What `category`'s thing is worth to the sprite now (design §5.6):
