@@ -29,6 +29,7 @@ pub(crate) fn attempt(
         return (Outcome::Failed, hurt);
     };
     let Some(effects) = data.object_types()[kind].verbs.get(&verb) else {
+        fruitless(state, data, actor);
         return (Outcome::Failed, hurt);
     };
     for effect in effects {
@@ -39,6 +40,7 @@ pub(crate) fn attempt(
                 };
                 let object = state.objects.get(id).expect("the target");
                 if object.counters[counter] < least {
+                    fruitless(state, data, actor);
                     return (Outcome::Failed, hurt);
                 }
             }
@@ -101,4 +103,12 @@ fn party_sprite(actor: EntityId, target: Target, party: Party) -> Option<EntityI
         (Party::Target, Target::Sprite(id)) => Some(id),
         (Party::Target, _) => None,
     }
+}
+
+/// A try that did nothing (design §5.2): the actor feels a `fruitless` pulse.
+fn fruitless(state: &mut WorldState, data: &DataPack, actor: EntityId) {
+    let index = data.physiology().indices.fruitless;
+    let body = &mut state.sprites.get_mut(actor).expect("the actor").body;
+    body.incoming[index] = 1.0;
+    body.incoming_sources.remove(&index);
 }

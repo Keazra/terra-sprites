@@ -49,4 +49,5 @@
     (id: 35, name: "shocked",       reads: Locus("shocked")),
 
     (id: 64, name: "cornered",      reads: Locus("cornered")),
+    (id: 65, name: "fruitless",     reads: Locus("fruitless")),
 ]

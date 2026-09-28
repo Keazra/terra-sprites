@@ -388,12 +388,15 @@ pub(crate) struct Indices {
     /// The pulse whose source is the attacker, the Sprite candidate while
     /// it's live (design §3.6).
     pub(crate) was_hit: usize,
+    /// The pulse a fruitless try fires (design §5.2).
+    pub(crate) fruitless: usize,
 }
 
 impl Indices {
     /// Finds each physical chemical and body sensor physiology needs, the
     /// receptor target the brain reads, and the pulses a cornered retreat
-    /// fires and an attacker is known by, or says which file lacks one.
+    /// and a fruitless try fire and an attacker is known by, or says which
+    /// file lacks one.
     pub(crate) fn find(
         chemicals: &[Chemical],
         loci: &[Locus],
@@ -463,6 +466,7 @@ impl Indices {
             learning_rate_mod: target("learning_rate_mod")?,
             cornered: pulse("cornered")?,
             was_hit: pulse("was_hit")?,
+            fruitless: pulse("fruitless")?,
         })
     }
 }
