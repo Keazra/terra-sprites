@@ -151,6 +151,8 @@ pub(crate) fn decide(
     let target = running_target
         .and_then(|a| a.target)
         .or(candidate.map(|c| c.target));
+    let verb = chosen.or(current);
+    let motive = verb.and_then(|verb| brain.motive(verb, &activations, data));
     brain.snapshot = Some(Snapshot {
         tick: state.tick,
         inputs,
@@ -159,7 +161,8 @@ pub(crate) fn decide(
         attended,
         target,
         scores,
-        verb: chosen.or(current),
+        verb,
+        motive,
     });
     let Some(verb) = chosen else {
         return;

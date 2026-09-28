@@ -27,9 +27,9 @@ pub struct LabScenario {
 /// A second run of each seed to compare with, if any (design §7.1).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 enum Control {
-    /// None.
+    /// Just the learning run.
     #[default]
-    NoControl,
+    Off,
     /// The same world with learning switched off.
     NoLearning,
 }

@@ -181,9 +181,6 @@ pub(crate) fn still_counts(trace_decay: f32, now: u64, then: u64) -> bool {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct TraceEntry {
     pub(crate) tick: u64,
-    /// Every concept's activation, in the brain's concept order. The
-    /// singletons come first, one per input, so they're the inputs too.
-    pub(crate) activations: Vec<f32>,
     /// The verb it chose or kept doing, if any.
     pub(crate) verb: Option<Verb>,
     /// The category attention was on, if any.
