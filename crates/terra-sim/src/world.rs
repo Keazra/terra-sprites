@@ -1266,6 +1266,7 @@ mod tests {
             activations: vec![1.0; brain.concepts.len()],
             verb: Some(Verb::Eat),
             attended: None,
+            motive: None,
         }
     }
 
