@@ -384,3 +384,87 @@ fn sprites_in_general_are_feared_only_once_several_have_hurt_it() {
         );
     }
 }
+
+/// Whether sprite `id` remembers anything about sprite `other`.
+fn remembers(world: &World, id: EntityId, other: EntityId) -> bool {
+    memory_of(world, id)
+        .iter()
+        .any(|(learned, _)| match learned {
+            Learned::Worth { thing, .. } | Learned::Bad { thing } | Learned::Fear { thing } => {
+                *thing == Thing::Sprite(other)
+            }
+            _ => false,
+        })
+}
+
+#[test]
+fn a_sprite_whose_fear_has_faded_to_almost_nothing_is_forgotten() {
+    // Design v18 §5.6: fear of .5 fading by .01 a tick is under
+    // forget_below (.01) after about 390 ticks, and then forgotten.
+    let (me, attacker) = (at(1, 1), at(2, 1));
+    let fading = format!(r#"{HIT_HURTS} BrainParam(param: "fear_fade", value: 0.01),"#);
+    let mut script = vec![(me, ScriptedAction::Rest); 60];
+    script.push((attacker, ScriptedAction::Hit { at: me }));
+    script.extend(vec![(attacker, ScriptedAction::Rest); 60]);
+    let mut world = scene(
+        &["....", "....", "...."],
+        &[(me, &fading), (attacker, "")],
+        &script,
+    );
+    let (me, attacker) = (
+        world.sprite_at(me).expect("me").id(),
+        world.sprite_at(attacker).expect("the attacker").id(),
+    );
+    world.step();
+    world.step();
+    assert!(remembers(&world, me, attacker), "hit, and remembered");
+    for _ in 0..500 {
+        world.step();
+    }
+    assert!(
+        !remembers(&world, me, attacker),
+        "{:?}",
+        memory_of(&world, me)
+    );
+}
+
+#[test]
+fn a_sprite_that_dies_is_forgotten() {
+    // Design v18 §5.6. After its hit the attacker bites a thornbush until
+    // the pricks kill it; fear doesn't fade in these genomes.
+    let (me, attacker, thornbush) = (at(1, 1), at(2, 1), at(3, 1));
+    let mut script = vec![(me, ScriptedAction::Rest); 50];
+    script.push((attacker, ScriptedAction::Hit { at: me }));
+    script.extend(vec![(attacker, ScriptedAction::Eat { at: thornbush }); 100]);
+    let data = builtin();
+    let sprites = [
+        (me, Some(genome(HIT_HURTS, &data))),
+        (attacker, Some(genome("", &data))),
+    ];
+    let scenario = Scenario {
+        map: Map::from_ascii(&["....", "....", "...."], &data).expect("valid drawing"),
+        objects: &[(thornbush, "thornbush")],
+        sprites: &sprites,
+        scripted: &script,
+    };
+    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    let (me, attacker) = (
+        world.sprite_at(me).expect("me").id(),
+        world.sprite_at(attacker).expect("the attacker").id(),
+    );
+    world.step();
+    world.step();
+    assert!(remembers(&world, me, attacker), "hit, and remembered");
+    let mut ticks = 0;
+    while world.sprite(attacker).is_some() {
+        world.step();
+        ticks += 1;
+        assert!(ticks < 500, "the attacker should have died of its pricks");
+    }
+    world.step();
+    assert!(
+        !remembers(&world, me, attacker),
+        "{:?}",
+        memory_of(&world, me)
+    );
+}

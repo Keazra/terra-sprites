@@ -144,6 +144,12 @@ pub(crate) struct Individual {
 }
 
 impl Individual {
+    /// Whether everything learned about it is nearer 0 than `below`.
+    pub(crate) fn faded(&self, below: f32) -> bool {
+        let values = self.worth.iter().chain([&self.good, &self.bad, &self.fear]);
+        values.into_iter().all(|v| v.abs() < below)
+    }
+
     /// A sprite newly remembered, for `needs` needs: nothing learned yet.
     pub(crate) fn new(needs: usize) -> Individual {
         Individual {
@@ -242,6 +248,13 @@ pub(crate) fn run(
     let indices = &data.physiology().indices;
     let tick = state.tick;
     let learning = state.learning;
+    // A sprite that has died is forgotten (design v18 §5.6).
+    let alive: BTreeSet<EntityId> = state
+        .sprites
+        .iter()
+        .map(|(id, _)| id)
+        .filter(|id| !dying.contains(id))
+        .collect();
     let living = state
         .sprites
         .minds_mut()
@@ -250,6 +263,10 @@ pub(crate) fn run(
         let (reward, punishment) = (body.chems[indices.reward], body.chems[indices.punishment]);
         body.chems[indices.reward] = 0.0;
         body.chems[indices.punishment] = 0.0;
+        brain
+            .experience
+            .individuals
+            .retain(|sprite, _| alive.contains(sprite));
         let needs = brain.need_levels(body, data);
         let relief = brain.relief(&needs, data);
         brain.felt = relief.iter().sum::<f32>() + reward - punishment;
