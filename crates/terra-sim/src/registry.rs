@@ -137,10 +137,24 @@ pub(crate) enum BrainParam {
     Curiosity = 22,
     FamiliarityRate = 23,
     Disappointment = 24,
+    /// How fast a particular sprite is learned good, and bad (design v18 §5.6).
+    IndividualRateGood = 25,
+    IndividualRateBad = 26,
+    /// How fast whoever hurt it is feared, and how slowly that fades.
+    FearRate = 27,
+    FearFade = 28,
+    /// How many sprites it knows before sprites in general are judged in full.
+    Generalise = 29,
+    /// How strongly fear catches the eye (design v18 §5.3), and pulls
+    /// towards backing away (§5.5), and the distance, as a share of sight,
+    /// at which it stops pulling.
+    Vigilance = 30,
+    Flight = 31,
+    FearReach = 32,
 }
 
 impl BrainParam {
-    pub(crate) const ALL: [BrainParam; 24] = [
+    pub(crate) const ALL: [BrainParam; 32] = [
         BrainParam::LearningRate,
         BrainParam::TraceDecay,
         BrainParam::RelaxRate,
@@ -165,6 +179,14 @@ impl BrainParam {
         BrainParam::Curiosity,
         BrainParam::FamiliarityRate,
         BrainParam::Disappointment,
+        BrainParam::IndividualRateGood,
+        BrainParam::IndividualRateBad,
+        BrainParam::FearRate,
+        BrainParam::FearFade,
+        BrainParam::Generalise,
+        BrainParam::Vigilance,
+        BrainParam::Flight,
+        BrainParam::FearReach,
     ];
 
     /// The parameter's name in genome files and `physiology.ron`.
@@ -194,6 +216,14 @@ impl BrainParam {
             BrainParam::Curiosity => "curiosity",
             BrainParam::FamiliarityRate => "familiarity_rate",
             BrainParam::Disappointment => "disappointment",
+            BrainParam::IndividualRateGood => "individual_rate_good",
+            BrainParam::IndividualRateBad => "individual_rate_bad",
+            BrainParam::FearRate => "fear_rate",
+            BrainParam::FearFade => "fear_fade",
+            BrainParam::Generalise => "generalise",
+            BrainParam::Vigilance => "vigilance",
+            BrainParam::Flight => "flight",
+            BrainParam::FearReach => "fear_reach",
         }
     }
 
