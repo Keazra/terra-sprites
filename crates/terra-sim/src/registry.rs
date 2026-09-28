@@ -25,6 +25,15 @@ impl Category {
         Category::Sprite,
     ];
 
+    /// Where the category is in `ALL`: its place in whatever a brain keeps
+    /// per category.
+    pub(crate) fn index(self) -> usize {
+        Category::ALL
+            .iter()
+            .position(|&c| c == self)
+            .expect("every category is in ALL")
+    }
+
     /// The category's name in brain input names, such as `attended_berry_bush`.
     pub(crate) fn name(self) -> &'static str {
         match self {

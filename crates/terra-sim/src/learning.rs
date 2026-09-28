@@ -159,14 +159,6 @@ pub(crate) struct Signals {
     pub(crate) hit: bool,
 }
 
-/// Where `category` is in `Category::ALL`.
-pub(crate) fn kind(category: Category) -> usize {
-    Category::ALL
-        .iter()
-        .position(|&c| c == category)
-        .expect("every category is in ALL")
-}
-
 /// The most entries a trace keeps (design §5.6).
 pub(crate) const TRACE_CAP: usize = 512;
 
