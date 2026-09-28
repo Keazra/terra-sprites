@@ -389,7 +389,7 @@ impl Brain {
             }
         }
         let lessons = self.lessons(data);
-        self.fade();
+        self.fade(physiology.forget_below);
         lessons
     }
 
@@ -407,9 +407,10 @@ impl Brain {
         found
     }
 
-    /// One tick of fading (design §5.6): good and bad and habits each by
-    /// their own rate.
-    fn fade(&mut self) {
+    /// One tick of fading (design §5.6): good and bad, fear and habits each
+    /// by their own rate. A remembered sprite faded until everything about
+    /// it is nearer 0 than `forget_below` is forgotten (design v18).
+    fn fade(&mut self, forget_below: f32) {
         let keep = |param| 1.0 - self.params.get(param);
         let (good, bad, habit) = (
             keep(BrainParam::WorthFadeGood),
@@ -432,6 +433,18 @@ impl Brain {
         for value in experience.habits.iter_mut().flatten() {
             *value *= habit;
         }
+        let fear = keep(BrainParam::FearFade);
+        for individual in experience.individuals.values_mut() {
+            for value in &mut individual.worth {
+                *value *= good;
+            }
+            individual.good *= good;
+            individual.bad *= bad;
+            individual.fear *= fear;
+        }
+        experience
+            .individuals
+            .retain(|_, individual| !individual.faded(forget_below));
     }
 
     /// How new `category` is to the sprite (design §5.6): 1 − familiarity.
