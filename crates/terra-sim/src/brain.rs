@@ -617,6 +617,7 @@ mod tests {
     use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
+    use crate::learning::kind;
 
     fn builtin() -> DataPack {
         DataPack::builtin().expect("built-in data pack is valid")
@@ -959,6 +960,67 @@ mod tests {
             .attention
             .get(input("hunger"), category_column(Category::Berry));
         assert_eq!(berry, 0.4);
+    }
+
+    /// Step 4's signals with hunger at `hunger`, every other need at 0.
+    fn hunger_at(data: &DataPack, hunger: f32, attacked: bool) -> Signals {
+        let needs = data.need_places().len();
+        Signals {
+            needs: [vec![hunger], vec![0.0; needs - 1]].concat(),
+            attacked,
+        }
+    }
+
+    /// What `brain` has learned berry bushes are worth for hunger.
+    fn bush_for_hunger(brain: &Brain) -> f32 {
+        brain.experience.worth[0][kind(Category::BerryBush)]
+    }
+
+    #[test]
+    fn a_need_s_fall_is_relief_only_at_or_past_the_deadband() {
+        // physiology.ron: relief_deadband .02, worth_rate_good .5 by default.
+        let data = builtin();
+        let mut brain = brain(&[]);
+        let touch = Touch {
+            tick: 1,
+            category: Category::BerryBush,
+        };
+        brain.touched = Some(touch);
+        brain.learn(1, &hunger_at(&data, 0.5, false), 1.0, &data);
+        brain.learn(2, &hunger_at(&data, 0.49, false), 1.0, &data);
+        assert_eq!(bush_for_hunger(&brain), 0.0, "a slow drift isn't relief");
+        brain.learn(3, &hunger_at(&data, 0.44, false), 1.0, &data);
+        assert!(
+            close(bush_for_hunger(&brain), 0.5 * 0.05),
+            "{}",
+            bush_for_hunger(&brain)
+        );
+    }
+
+    #[test]
+    fn with_nothing_touched_relief_teaches_nothing() {
+        let data = builtin();
+        let mut brain = brain(&[]);
+        brain.learn(1, &hunger_at(&data, 1.0, false), 1.0, &data);
+        brain.learn(2, &hunger_at(&data, 0.5, false), 1.0, &data);
+        assert_eq!(bush_for_hunger(&brain), 0.0);
+        // A touch longer ago than the window (3 ticks) is forgotten too.
+        brain.touched = Some(Touch {
+            tick: 2,
+            category: Category::BerryBush,
+        });
+        brain.learn(6, &hunger_at(&data, 0.0, false), 1.0, &data);
+        assert_eq!(bush_for_hunger(&brain), 0.0);
+    }
+
+    #[test]
+    fn an_attacker_is_the_thing_touched_when_the_sprite_touched_nothing() {
+        let data = builtin();
+        let mut brain = brain(&[]);
+        brain.learn(1, &hunger_at(&data, 1.0, true), 1.0, &data);
+        brain.learn(2, &hunger_at(&data, 0.5, true), 1.0, &data);
+        let sprite_for_hunger = brain.experience.worth[0][kind(Category::Sprite)];
+        assert!(close(sprite_for_hunger, 0.25), "{sprite_for_hunger}");
     }
 
     #[test]
