@@ -332,3 +332,69 @@ fn a_feared_sprite_catches_the_eye_over_a_nearer_stranger() {
     assert_eq!(bully_at, at(4, 0), "the bully has walked off");
     assert_eq!(attends(&world, me), Some(bully_at));
 }
+
+/// A sprite that attends to sprites, would rather rest a little, and feels
+/// every hit as a punishment of 1: so fear alone would make it back away.
+fn skittish(data: &DataPack) -> Genome {
+    let text = r#"(format: 1, genes: [
+        Trait(trait: "speed", value: 10.0),
+        Trait(trait: "sense_radius", value: 10.0),
+        BrainParam(param: "tau_base", value: 0.05),
+        AttentionInstinct(input: "always", category: Sprite, weight: 1.0),
+        Instinct(inputs: [("always", false)], verb: Rest, weight: 0.3),
+        Emitter(locus: Locus("was_hit"), mode: Level, gain: 1.0, chem: "punishment"),
+    ])"#;
+    Genome::from_ron(text, data).expect("a valid genome")
+}
+
+#[test]
+fn a_sprite_backs_away_from_one_it_fears_once_the_hit_is_no_longer_felt() {
+    // Design v18 §5.5. The bully hits at tick 0 and stays beside it. While
+    // the hit is felt, at tick 1, fear is quiet and the sprite keeps
+    // resting; from tick 2, flight (.8) × its fear (1) beats resting's .3 by
+    // more than the switch margin (.2), and it backs away from the bully.
+    let (me, bully) = (at(1, 0), at(2, 0));
+    let script = [
+        (bully, ScriptedAction::Hit { at: me }),
+        (bully, ScriptedAction::Rest),
+    ];
+    let sprites = [(me, skittish as MakeGenome), (bully, walker)];
+    let mut world = scene(&["......"], &sprites, &script);
+    let (me, bully) = (id_at(&world, me), id_at(&world, bully));
+    world.step();
+    world.step();
+    let resting = world.sprite(me).and_then(|s| s.action()).map(|a| a.verb);
+    assert_eq!(resting, Some(Verb::Rest), "quiet while the hit is felt");
+    assert_eq!(
+        next_choice(&mut world, me, 1),
+        Some((Verb::Retreat, Some(Target::Sprite(bully))))
+    );
+}
+
+#[test]
+fn a_sprite_does_not_back_away_from_one_it_fears_that_is_far_off() {
+    // Design v18 §5.5: fear pulls only within fear_reach (half of sight).
+    // The bully hits, then walks off to stand 7 tiles away, out of reach of
+    // fear's pull, and the sprite goes on resting.
+    let (me, bully) = (at(1, 0), at(2, 0));
+    let mut script = vec![
+        (bully, ScriptedAction::Hit { at: me }),
+        (
+            bully,
+            ScriptedAction::Wander {
+                destination: at(8, 0),
+            },
+        ),
+    ];
+    // It stays there for the rest of the test.
+    script.extend(vec![(bully, ScriptedAction::Rest); 5]);
+    let sprites = [(me, skittish as MakeGenome), (bully, walker)];
+    let mut world = scene(&[".........."], &sprites, &script);
+    let me = id_at(&world, me);
+    for _ in 0..12 {
+        world.step();
+    }
+    assert_eq!(world.sprite(me).expect("me").pos(), at(1, 0), "still there");
+    let choice = next_choice(&mut world, me, 20).map(|(verb, _)| verb);
+    assert_eq!(choice, Some(Verb::Rest));
+}

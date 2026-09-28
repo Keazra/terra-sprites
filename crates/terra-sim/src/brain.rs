@@ -32,14 +32,26 @@ pub(crate) const VERBS: [Verb; 8] = [
     Verb::Wander,
 ];
 
-/// Which way a thing's worth pushes a verb aimed at it (design §5.5):
-/// towards it for Approach and the interactions, away for Retreat, not at
-/// all for the targetless verbs.
+/// Which way a thing's worth pushes a verb aimed at it (design v18 §5.5):
+/// towards it for Approach and the interactions, and not at all for
+/// Retreat, which is fear's (a bad thing is left alone, not fled), or the
+/// targetless verbs.
 fn side(verb: Verb) -> f32 {
     match verb {
-        Verb::Retreat => -1.0,
-        Verb::Rest | Verb::Wander => 0.0,
+        Verb::Retreat | Verb::Rest | Verb::Wander => 0.0,
         _ => 1.0,
+    }
+}
+
+/// How fear pushes a verb aimed at a frightening thing (design v18 §5.5):
+/// `flight` towards Retreat, `value_gain` away from Approach, Eat, Drink
+/// and Play, and never towards or away from Hit, since fear that pushed
+/// Hit started feuds (#62).
+fn fear_push(verb: Verb, flight: f32, value_gain: f32) -> f32 {
+    match verb {
+        Verb::Retreat => flight,
+        Verb::Approach | Verb::Eat | Verb::Drink | Verb::Play => -value_gain,
+        _ => 0.0,
     }
 }
 
@@ -94,11 +106,12 @@ fn index(param: BrainParam) -> usize {
 pub(crate) type Signature = Vec<(usize, bool)>;
 
 /// Which sprite stands for sprites while the brain scores (design v18
-/// §5.3, §5.5), and whether a hit is still felt, which quiets fear.
+/// §5.3, §5.5), and whether fear is quiet: a hit is still felt, or the
+/// sprite is cornered, moments that are instinct's.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub(crate) struct SpriteFocus {
     pub(crate) sprite: Option<EntityId>,
-    pub(crate) hit: bool,
+    pub(crate) quiet: bool,
 }
 
 /// What a sprite knows about the thing it attends to, for the Target inputs.
@@ -866,7 +879,7 @@ impl Brain {
     ) -> f32 {
         let focus = SpriteFocus {
             sprite: Some(sprite),
-            hit: false,
+            quiet: false,
         };
         self.params.get(BrainParam::SalienceGain) * (1.0 - distance)
             + self.params.get(BrainParam::ValueGain)
@@ -877,7 +890,7 @@ impl Brain {
 
     /// How frightening `category`'s thing is at normalized `distance` (design
     /// v18 §5.3), from 0 to 1: for sprites, the one in `focus`, fading to
-    /// nothing at `fear_reach`, and nothing while a hit is felt; nothing is
+    /// nothing at `fear_reach`, and nothing while fear is quiet; nothing is
     /// feared but sprites in M1.
     fn fright(
         &self,
@@ -886,7 +899,7 @@ impl Brain {
         distance: f32,
         data: &DataPack,
     ) -> f32 {
-        if category != Category::Sprite || focus.hit {
+        if category != Category::Sprite || focus.quiet {
             return 0.0;
         }
         let fear = self.sprite(focus.sprite, data.need_places().len()).fear;
@@ -944,6 +957,7 @@ impl Brain {
         activations: &[f32],
         inputs: &[f32],
         aimed: Option<Category>,
+        focus: SpriteFocus,
         data: &DataPack,
     ) -> [f32; VERBS.len()] {
         let mut scores = [0.0; VERBS.len()];
@@ -953,10 +967,13 @@ impl Brain {
             }
         }
         if let Some(category) = aimed {
-            let worth = self.params.get(BrainParam::ValueGain) * self.worth(category, inputs, data);
+            let value_gain = self.params.get(BrainParam::ValueGain);
+            let flight = self.params.get(BrainParam::Flight);
+            let worth = value_gain * self.worth_of(category, focus.sprite, inputs, data);
+            let fear = self.fright(category, focus, target_distance(inputs, data), data);
             let habits = &self.experience.habits[category.index()];
             for ((score, verb), habit) in scores.iter_mut().zip(VERBS).zip(habits) {
-                *score += habit + side(verb) * worth;
+                *score += habit + side(verb) * worth + fear_push(verb, flight, value_gain) * fear;
             }
         }
         scores
@@ -1040,6 +1057,14 @@ pub(crate) fn available(target: bool, beside: bool) -> Vec<Verb> {
             _ => target,
         })
         .collect()
+}
+
+/// The `target_distance` input's value in `inputs` (design §5.2).
+fn target_distance(inputs: &[f32], data: &DataPack) -> f32 {
+    data.brain_inputs_in_order()
+        .iter()
+        .position(|input| matches!(input.source, Source::TargetDistance))
+        .map_or(0.0, |place| inputs[place])
 }
 
 /// The item scoring more than `bar` that scores most, ties to the first.
@@ -1183,7 +1208,13 @@ mod tests {
             r#"Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3)"#,
         ]);
         let x = inputs(&[("hunger", 0.6), ("always", 1.0)]);
-        let scores = brain.scores(&brain.activations(&x), &x, None, &data);
+        let scores = brain.scores(
+            &brain.activations(&x),
+            &x,
+            None,
+            SpriteFocus::default(),
+            &data,
+        );
         assert_eq!(scores[column(Verb::Eat)], 0.6);
         assert_eq!(scores[column(Verb::Wander)], 0.3);
         assert_eq!(scores[column(Verb::Drink)], 0.0);
@@ -1547,23 +1578,85 @@ mod tests {
     }
 
     #[test]
-    fn a_worthwhile_target_draws_the_sprite_to_it_and_a_bad_one_makes_it_back_away() {
-        // Design v16 §5.5: + worth for Approach and the interactions, − for
-        // Retreat, nothing for Rest and Wander.
+    fn a_worthwhile_target_draws_the_sprite_to_it_and_a_bad_one_is_left_alone() {
+        // Design v18 §5.5: + worth for Approach and the interactions, and
+        // nothing for Retreat, Rest and Wander: badness no longer backs away.
+        use Verb::*;
+        let data = builtin();
+        for worth in [0.3, -0.3] {
+            let mut brain = brain(&[]);
+            if worth > 0.0 {
+                brain.experience.good[Category::Ball.index()] = worth;
+            } else {
+                brain.experience.bad[Category::Ball.index()] = worth;
+            }
+            let x = inputs(&[]);
+            let none = SpriteFocus::default();
+            let scores = brain.scores(
+                &brain.activations(&x),
+                &x,
+                Some(Category::Ball),
+                none,
+                &data,
+            );
+            for verb in [Approach, Eat, Drink, Hit, Play] {
+                assert_eq!(scores[column(verb)], worth, "{verb:?}");
+            }
+            for verb in [Retreat, Rest, Wander] {
+                assert_eq!(scores[column(verb)], 0.0, "{verb:?}");
+            }
+            let unaimed = brain.scores(&brain.activations(&x), &x, None, none, &data);
+            assert_eq!(unaimed, [0.0; VERBS.len()], "nothing attended, no worth");
+        }
+    }
+
+    #[test]
+    fn a_frightening_sprite_near_is_backed_away_from_and_not_gone_near_but_never_hit() {
+        // Design v18 §5.5: a fear of .5 adds flight (.8) × .5 to Retreat and
+        // takes value_gain (1) × .5 from Approach, Eat, Drink and Play, but
+        // not from Hit; it fades to nothing at fear_reach (.5), and is quiet
+        // while a hit is felt or the sprite is cornered.
         use Verb::*;
         let data = builtin();
         let mut brain = brain(&[]);
-        brain.experience.good[Category::Ball.index()] = 0.3;
-        let x = inputs(&[]);
-        let scores = brain.scores(&brain.activations(&x), &x, Some(Category::Ball), &data);
-        for verb in [Approach, Eat, Drink, Hit, Play] {
-            assert_eq!(scores[column(verb)], 0.3, "{verb:?}");
+        let bully = EntityId(7);
+        let mut known = Individual::new(data.need_places().len());
+        known.fear = -0.5;
+        brain.experience.individuals.insert(bully, known);
+        let focus = SpriteFocus {
+            sprite: Some(bully),
+            quiet: false,
+        };
+        let scores = |distance: f32, focus: SpriteFocus| {
+            let x = inputs(&[("target_distance", distance)]);
+            brain.scores(
+                &brain.activations(&x),
+                &x,
+                Some(Category::Sprite),
+                focus,
+                &data,
+            )
+        };
+        let near = scores(0.0, focus);
+        assert!(close(near[column(Retreat)], 0.4), "{near:?}");
+        for verb in [Approach, Eat, Drink, Play] {
+            assert!(close(near[column(verb)], -0.5), "{verb:?}: {near:?}");
         }
-        assert_eq!(scores[column(Retreat)], -0.3);
-        assert_eq!(scores[column(Rest)], 0.0);
-        assert_eq!(scores[column(Wander)], 0.0);
-        let unaimed = brain.scores(&brain.activations(&x), &x, None, &data);
-        assert_eq!(unaimed, [0.0; VERBS.len()], "nothing attended, no worth");
+        for verb in [Hit, Rest, Wander] {
+            assert_eq!(near[column(verb)], 0.0, "{verb:?}");
+        }
+        let halfway = scores(0.25, focus);
+        assert!(close(halfway[column(Retreat)], 0.2), "{halfway:?}");
+        assert_eq!(
+            scores(0.5, focus),
+            [0.0; VERBS.len()],
+            "out of fear's reach"
+        );
+        let quiet = SpriteFocus {
+            quiet: true,
+            ..focus
+        };
+        assert_eq!(scores(0.0, quiet), [0.0; VERBS.len()], "quiet");
     }
 
     #[test]
@@ -1599,10 +1692,22 @@ mod tests {
         let mut brain = brain(&[]);
         brain.experience.habits[Category::Ball.index()][column(Verb::Eat)] = -0.4;
         let x = inputs(&[]);
-        let scores = brain.scores(&brain.activations(&x), &x, Some(Category::Ball), &data);
+        let scores = brain.scores(
+            &brain.activations(&x),
+            &x,
+            Some(Category::Ball),
+            SpriteFocus::default(),
+            &data,
+        );
         assert_eq!(scores[column(Verb::Eat)], -0.4);
         assert_eq!(scores[column(Verb::Play)], 0.0);
-        let at_a_berry = brain.scores(&brain.activations(&x), &x, Some(Category::Berry), &data);
+        let at_a_berry = brain.scores(
+            &brain.activations(&x),
+            &x,
+            Some(Category::Berry),
+            SpriteFocus::default(),
+            &data,
+        );
         assert_eq!(at_a_berry[column(Verb::Eat)], 0.0);
     }
 
