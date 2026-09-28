@@ -594,17 +594,16 @@ impl Brain {
 }
 
 /// The verbs a sprite may choose (design §5.2): Rest and Wander always;
-/// with a target, Retreat, the interactions `table` has, where `table` is
-/// its type's verb table, and Approach unless the sprite is already
-/// `beside` it, on one of its goal tiles, where Approach would do nothing.
-pub(crate) fn available(target: Option<&[Verb]>, beside: bool) -> Vec<Verb> {
+/// with a target, every other verb, since a sprite may try anything on
+/// anything (v16), but Approach only while it isn't already `beside` the
+/// target, on one of its goal tiles, where Approach would do nothing.
+pub(crate) fn available(target: bool, beside: bool) -> Vec<Verb> {
     VERBS
         .into_iter()
         .filter(|&verb| match verb {
             Verb::Rest | Verb::Wander => true,
-            Verb::Approach => target.is_some() && !beside,
-            Verb::Retreat => target.is_some(),
-            verb => target.is_some_and(|table| table.contains(&verb)),
+            Verb::Approach => target && !beside,
+            _ => target,
         })
         .collect()
 }
@@ -771,39 +770,26 @@ mod tests {
     }
 
     #[test]
-    fn verbs_are_masked_by_kind_and_by_the_target_s_verb_table() {
+    fn with_a_target_every_verb_can_be_tried_whatever_its_verb_table_says() {
         use Verb::*;
         assert_eq!(
-            available(None, false),
+            available(false, false),
             [Rest, Wander],
             "no target: targetless only"
         );
-        // Retreat, like Approach, needs only a target.
+        // Design v16 §5.2: a verb table says what a try does, not what's allowed.
         assert_eq!(
-            available(Some(&[]), false),
-            [Approach, Retreat, Rest, Wander]
-        );
-        assert_eq!(
-            available(Some(&[Eat, Hit]), false),
-            [Approach, Eat, Hit, Retreat, Rest, Wander]
-        );
-        assert_eq!(
-            available(Some(&[Drink]), false),
-            [Approach, Drink, Retreat, Rest, Wander]
-        );
-        assert_eq!(
-            available(Some(&[Hit, Play]), false),
-            [Approach, Hit, Play, Retreat, Rest, Wander]
+            available(true, false),
+            [Approach, Eat, Drink, Hit, Play, Retreat, Rest, Wander]
         );
     }
 
     #[test]
     fn approach_is_not_offered_to_a_sprite_already_beside_its_target() {
         use Verb::*;
-        assert_eq!(available(Some(&[Eat]), true), [Eat, Retreat, Rest, Wander]);
         assert_eq!(
-            available(Some(&[Eat]), false),
-            [Approach, Eat, Retreat, Rest, Wander]
+            available(true, true),
+            [Eat, Drink, Hit, Play, Retreat, Rest, Wander]
         );
     }
 
@@ -868,7 +854,7 @@ mod tests {
         let mut brain = brain(&[]);
         let scores = BTreeMap::from([(Category::Water, 0.3), (Category::Ball, 0.5)]);
         let verbs = [0.1; VERBS.len()];
-        let available = available(Some(&[Verb::Eat]), false);
+        let available = available(true, false);
         let mut rng = ChaCha8Rng::seed_from_u64(7);
         let untouched = rng.clone();
         // An action running: attention and switching draw nothing.
