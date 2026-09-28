@@ -362,6 +362,17 @@ impl Body {
             .0
     }
 
+    /// Writes the pulse at `index` for step 3 to latch (design §4.2), with
+    /// `source` as its source: the sprite whose verb caused it, or none, which
+    /// clears an earlier one. The latest written counts.
+    pub(crate) fn pulse(&mut self, index: usize, source: Option<EntityId>) {
+        self.incoming[index] = 1.0;
+        match source {
+            Some(source) => self.incoming_sources.insert(index, source),
+            None => self.incoming_sources.remove(&index),
+        };
+    }
+
     /// Adds `amount` to the chemical at `index`, within 0 to 1. Injury,
     /// at `injury`, is put down to `cause` in full, as physiology's is,
     /// even where the level stops at 1.
