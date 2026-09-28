@@ -447,3 +447,44 @@ fn a_starter_sprite_hit_by_a_bully_backs_away_from_it_far_more_than_from_a_stran
         "backed away from the bully {from_bully} times, from the stranger {from_stranger}"
     );
 }
+
+/// A skittish sprite in the middle of a 14×3 field, hit in turn by the
+/// first `bullies` of three sprites around it, ten ticks apart, which then
+/// walk off beyond fear's reach; a stranger rests beside it. What it
+/// chooses first once its own rests are over.
+fn hurt_by(bullies: usize) -> (Option<(Verb, Option<Target>)>, EntityId) {
+    let me = at(6, 1);
+    let spots = [at(5, 1), at(7, 1), at(6, 0)];
+    let far = [at(0, 0), at(13, 0), at(13, 2)];
+    let stranger = at(6, 2);
+    let mut script = vec![(me, ScriptedAction::Rest); 6];
+    script.extend(vec![(stranger, ScriptedAction::Rest); 12]);
+    let mut sprites = vec![(me, skittish as MakeGenome), (stranger, walker)];
+    for (i, (&bully, &away)) in spots.iter().zip(&far).enumerate().take(bullies) {
+        script.extend(vec![(bully, ScriptedAction::Rest); i]);
+        script.push((bully, ScriptedAction::Hit { at: me }));
+        script.push((bully, ScriptedAction::Wander { destination: away }));
+        script.extend(vec![(bully, ScriptedAction::Rest); 10]);
+        sprites.push((bully, walker));
+    }
+    let mut world = scene(&[".............."; 3], &sprites, &script);
+    let (me, stranger) = (id_at(&world, me), id_at(&world, stranger));
+    for _ in 0..59 {
+        world.step();
+    }
+    (next_choice(&mut world, me, 5), stranger)
+}
+
+#[test]
+fn a_sprite_hurt_by_three_different_sprites_backs_away_from_a_stranger() {
+    // Design v18 §5.6: three bullies at −1 each make sprites in general
+    // −1, and a stranger is judged by them: flight (.8) beats resting (.3).
+    // One bully leaves sprites in general alone, and it goes on resting.
+    let (choice, stranger) = hurt_by(3);
+    assert_eq!(
+        choice,
+        Some((Verb::Retreat, Some(Target::Sprite(stranger))))
+    );
+    let (choice, _) = hurt_by(1);
+    assert_eq!(choice.map(|(verb, _)| verb), Some(Verb::Rest));
+}
