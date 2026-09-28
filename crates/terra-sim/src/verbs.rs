@@ -63,13 +63,10 @@ pub(crate) fn attempt(
                 if let Some(sprite) = party_sprite(actor, target, party) {
                     let index = data.locus_index(locus).expect("a checked effect");
                     let body = &mut state.sprites.get_mut(sprite).expect("a sprite").body;
-                    body.incoming[index] = 1.0;
-                    // A pulse on the target records the actor as its source;
-                    // the latest written counts (design §3.5.2).
-                    match party {
-                        Party::Target => body.incoming_sources.insert(index, actor),
-                        Party::Actor => body.incoming_sources.remove(&index),
-                    };
+                    // A pulse on the target records the actor as its source
+                    // (design §3.5.2).
+                    let source = (party == Party::Target).then_some(actor);
+                    body.pulse(index, source);
                 }
             }
             Effect::Push(tiles) => {
@@ -109,6 +106,5 @@ fn party_sprite(actor: EntityId, target: Target, party: Party) -> Option<EntityI
 fn fruitless(state: &mut WorldState, data: &DataPack, actor: EntityId) {
     let index = data.physiology().indices.fruitless;
     let body = &mut state.sprites.get_mut(actor).expect("the actor").body;
-    body.incoming[index] = 1.0;
-    body.incoming_sources.remove(&index);
+    body.pulse(index, None);
 }

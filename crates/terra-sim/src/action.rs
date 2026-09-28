@@ -774,7 +774,7 @@ fn retreat(
 /// feels the `cornered` pulse (design §3.7).
 fn cornered(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec<Event>) {
     let sprite = state.sprites.get_mut(id).expect("the retreater");
-    sprite.body.incoming[data.physiology().indices.cornered] = 1.0;
+    sprite.body.pulse(data.physiology().indices.cornered, None);
     let action = sprite.action.as_mut().expect("a retreat");
     end(action, id, Outcome::Blocked, state.tick, events);
 }
