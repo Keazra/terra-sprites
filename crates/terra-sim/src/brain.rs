@@ -331,7 +331,34 @@ impl Brain {
                 *habit = (*habit + step).clamp(-1.0, 1.0);
             }
         }
+        self.fade();
         Vec::new()
+    }
+
+    /// One tick of fading (design §5.6): good and bad and habits each by
+    /// their own rate.
+    fn fade(&mut self) {
+        let keep = |param| 1.0 - self.params.get(param);
+        let (good, bad, habit) = (
+            keep(BrainParam::WorthFadeGood),
+            keep(BrainParam::WorthFadeBad),
+            keep(BrainParam::HabitFade),
+        );
+        let experience = &mut self.experience;
+        let good_values = experience
+            .worth
+            .iter_mut()
+            .flatten()
+            .chain(&mut experience.good);
+        for value in good_values {
+            *value *= good;
+        }
+        for value in &mut experience.bad {
+            *value *= bad;
+        }
+        for value in experience.habits.iter_mut().flatten() {
+            *value *= habit;
+        }
     }
 
     /// Each need's level (design §5.2), in the pack's needs order.
@@ -756,6 +783,16 @@ mod tests {
         Brain::new(&genome, &data)
     }
 
+    /// A brain of `genes` whose learned values never fade, so they read exactly.
+    fn unfading(genes: &[&str]) -> Brain {
+        let no_fade = [
+            r#"BrainParam(param: "worth_fade_good", value: 0.0)"#,
+            r#"BrainParam(param: "worth_fade_bad", value: 0.0)"#,
+            r#"BrainParam(param: "habit_fade", value: 0.0)"#,
+        ];
+        brain(&[genes, &no_fade].concat())
+    }
+
     fn params(genes: &[&str]) -> BrainParams {
         brain(genes).params
     }
@@ -1109,7 +1146,7 @@ mod tests {
     fn a_need_s_fall_is_relief_only_at_or_past_the_deadband() {
         // physiology.ron: relief_deadband .02, worth_rate_good .5 by default.
         let data = builtin();
-        let mut brain = brain(&[]);
+        let mut brain = unfading(&[]);
         let touch = Touch {
             tick: 1,
             category: Category::BerryBush,
@@ -1145,7 +1182,7 @@ mod tests {
     #[test]
     fn an_attacker_is_the_thing_touched_when_the_sprite_touched_nothing() {
         let data = builtin();
-        let mut brain = brain(&[]);
+        let mut brain = unfading(&[]);
         brain.learn(1, &hunger_at(&data, 1.0, true), 1.0, &data);
         brain.learn(2, &hunger_at(&data, 0.5, true), 1.0, &data);
         let sprite_for_hunger = brain.experience.worth[0][kind(Category::Sprite)];
@@ -1192,7 +1229,7 @@ mod tests {
         // Design v16 §5.6: habit_rate (.3) × (reward − punishment) × λ^age,
         // for entries whose verb was aimed at the thing they attended.
         let data = builtin();
-        let mut brain = brain(&[r#"BrainParam(param: "trace_decay", value: 0.5)"#]);
+        let mut brain = unfading(&[r#"BrainParam(param: "trace_decay", value: 0.5)"#]);
         decide(&mut brain, 7, Verb::Rest, Some(Category::Berry), &[]);
         decide(&mut brain, 8, Verb::Approach, Some(Category::Berry), &[]);
         decide(&mut brain, 9, Verb::Eat, Some(Category::Berry), &[]);
@@ -1233,7 +1270,7 @@ mod tests {
         // 1 × .2, so hunger is the motive: disappointment (.3) × hunger (.8),
         // at habit_rate .3 and λ .9 for the entry a tick old.
         let data = builtin();
-        let mut brain = brain(&[
+        let mut brain = unfading(&[
             r#"Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0)"#,
             r#"Instinct(inputs: [("boredom", false)], verb: Eat, weight: 0.2)"#,
         ]);
@@ -1283,6 +1320,36 @@ mod tests {
             brain.experience.habits[kind(Category::Ball)][column(Verb::Play)],
             0.0
         );
+    }
+
+    #[test]
+    fn learned_values_fade_each_tick_at_their_channel_s_rate() {
+        // Design v16 §5.6: good by worth_fade_good, bad by worth_fade_bad,
+        // habits by habit_fade.
+        let data = builtin();
+        let mut brain = brain(&[
+            r#"BrainParam(param: "worth_fade_good", value: 0.01)"#,
+            r#"BrainParam(param: "worth_fade_bad", value: 0.001)"#,
+            r#"BrainParam(param: "habit_fade", value: 0.005)"#,
+        ]);
+        let (berry, thorn) = (kind(Category::Berry), kind(Category::Thornbush));
+        brain.experience.worth[0][berry] = 0.5;
+        brain.experience.good[berry] = 0.4;
+        brain.experience.bad[thorn] = -0.5;
+        brain.experience.habits[thorn][column(Verb::Eat)] = -0.2;
+        let quiet = Signals {
+            needs: vec![0.0; data.need_places().len()],
+            ..Default::default()
+        };
+        brain.learn(1, &quiet, 1.0, &data);
+        let experience = &brain.experience;
+        assert!(close(experience.worth[0][berry], 0.5 * 0.99));
+        assert!(close(experience.good[berry], 0.4 * 0.99));
+        assert!(close(experience.bad[thorn], -0.5 * 0.999));
+        assert!(close(
+            experience.habits[thorn][column(Verb::Eat)],
+            -0.2 * 0.995
+        ));
     }
 
     #[test]
