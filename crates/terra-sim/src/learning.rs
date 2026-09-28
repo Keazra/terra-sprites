@@ -120,11 +120,16 @@ pub(crate) struct Touch {
 pub(crate) struct Signals {
     /// Each need's level now, in the pack's needs order.
     pub(crate) needs: Vec<f32>,
+    /// Each need's relief this tick, in the same order.
+    pub(crate) relief: Vec<f32>,
     /// The general good and bad channels: `reward` and `punishment`.
     pub(crate) reward: f32,
     pub(crate) punishment: f32,
     /// Whether a `fruitless` pulse is live: its latest try did nothing.
     pub(crate) fruitless: bool,
+    /// Whether a `was_hit` pulse is live: its punishment teaches habits,
+    /// not what anything is worth (design §5.6).
+    pub(crate) hit: bool,
 }
 
 /// Where `category` is in `Category::ALL`.
@@ -189,15 +194,19 @@ pub(crate) fn run(
         let (reward, punishment) = (body.chems[indices.reward], body.chems[indices.punishment]);
         body.chems[indices.reward] = 0.0;
         body.chems[indices.punishment] = 0.0;
-        brain.felt = reward - punishment;
+        let needs = brain.need_levels(body, data);
+        let relief = brain.relief(&needs, data);
+        brain.felt = relief.iter().sum::<f32>() + reward - punishment;
         if !learning {
             continue;
         }
         let signals = Signals {
-            needs: brain.need_levels(body, data),
+            needs,
+            relief,
             reward,
             punishment,
             fruitless: body.loci[indices.fruitless] > 0.0,
+            hit: body.loci[indices.was_hit] > 0.0,
         };
         let rate = body.loci[indices.learning_rate_mod];
         for (learned, good) in brain.learn(tick, &signals, rate, data) {

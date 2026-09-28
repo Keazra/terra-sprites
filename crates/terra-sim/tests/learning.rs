@@ -135,6 +135,12 @@ fn a_hungry_sprite_that_eats_from_a_bush_learns_the_bush_is_good_for_hunger() {
         "{:?}",
         memory(&world)
     );
+    let sprite = world.sprites().next().expect("the sprite");
+    assert!(
+        close(sprite.felt(), 0.5),
+        "it felt the relief: {}",
+        sprite.felt()
+    );
 }
 
 #[test]

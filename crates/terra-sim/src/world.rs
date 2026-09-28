@@ -783,9 +783,11 @@ impl World {
 mod tests {
     use super::*;
     use crate::action::Outcome;
+    use crate::brain::Brain;
+    use crate::learning::{Signals, Touch, TraceEntry};
     use crate::map::Dir;
     use crate::objects::Roll;
-    use crate::registry::Verb;
+    use crate::registry::{Category, Verb};
 
     /// A 7×5 field of grass, with a pool of shallow water at (5, 3), and a
     /// berry bush at (2, 2), before any step.
@@ -1269,9 +1271,9 @@ mod tests {
 
     /// A trace entry for sprite `id` at `tick`, choosing Eat with every
     /// concept fully active.
-    fn eat_entry(world: &World, id: EntityId, tick: u64) -> crate::learning::TraceEntry {
+    fn eat_entry(world: &World, id: EntityId, tick: u64) -> TraceEntry {
         let brain = &world.state.sprites.get(id).expect("the sprite").brain;
-        crate::learning::TraceEntry {
+        TraceEntry {
             tick,
             activations: vec![1.0; brain.concepts.len()],
             verb: Some(Verb::Eat),
@@ -1311,9 +1313,9 @@ mod tests {
         world.state.learning = false;
         let indices = world.data.physiology().indices;
         let sprite = world.state.sprites.get_mut(first).expect("a sprite");
-        sprite.brain.touched = Some(crate::learning::Touch {
+        sprite.brain.touched = Some(Touch {
             tick: 0,
-            category: crate::registry::Category::BerryBush,
+            category: Category::BerryBush,
             novelty: 1.0,
         });
         sprite.body.chems[indices.reward] = 0.5;
@@ -1336,21 +1338,26 @@ mod tests {
         let traced = world.state_hash();
         assert_ne!(traced, before, "the trace is hashed");
         let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
-        brain.touched = Some(crate::learning::Touch {
+        brain.touched = Some(Touch {
             tick: 0,
-            category: crate::registry::Category::BerryBush,
+            category: Category::BerryBush,
             novelty: 1.0,
         });
-        let needs = data.need_places().len();
-        let hunger = |level| crate::learning::Signals {
-            needs: [vec![level], vec![0.0; needs - 1]].concat(),
-            ..Default::default()
+        let hunger = |brain: &mut Brain, level| {
+            let needs = [vec![level], vec![0.0; data.need_places().len() - 1]].concat();
+            Signals {
+                relief: brain.relief(&needs, &data),
+                needs,
+                ..Default::default()
+            }
         };
-        brain.learn(0, &hunger(1.0), 1.0, &data);
+        let signals = hunger(brain, 1.0);
+        brain.learn(0, &signals, 1.0, &data);
         let touched = world.state_hash();
         assert_ne!(touched, traced, "what it touched is hashed");
         let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
-        brain.learn(1, &hunger(0.5), 1.0, &data);
+        let signals = hunger(brain, 0.5);
+        brain.learn(1, &signals, 1.0, &data);
         assert_ne!(world.state_hash(), touched, "what it learned is hashed");
     }
 

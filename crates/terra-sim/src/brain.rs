@@ -286,22 +286,7 @@ impl Brain {
         data: &DataPack,
     ) -> Vec<(Learned, bool)> {
         let physiology = data.physiology();
-        let relief: Vec<f32> = match &self.experience.needs_before {
-            Some(before) => before
-                .iter()
-                .zip(&signals.needs)
-                .map(|(&was, &now)| was - now)
-                .map(|fall| {
-                    if fall >= physiology.relief_deadband {
-                        fall
-                    } else {
-                        0.0
-                    }
-                })
-                .collect(),
-            None => vec![0.0; signals.needs.len()],
-        };
-        self.experience.needs_before = Some(signals.needs.clone());
+        let relief = &signals.relief;
         let touched = self
             .touched
             .filter(|t| tick - t.tick <= physiology.touch_window)
@@ -311,14 +296,16 @@ impl Brain {
             let bad = self.params.get(BrainParam::WorthRateBad) * learning_rate_mod;
             let c = kind(category);
             let experience = &mut self.experience;
-            for (worth, &relief) in experience.worth.iter_mut().zip(&relief) {
+            for (worth, &relief) in experience.worth.iter_mut().zip(relief) {
                 worth[c] = (worth[c] + good * relief).min(1.0);
             }
+            // A hit's punishment teaches habits, not worth (design §5.6).
+            let punishment = if signals.hit { 0.0 } else { signals.punishment };
             experience.good[c] = (experience.good[c] + good * signals.reward).min(1.0);
-            experience.bad[c] = (experience.bad[c] - bad * signals.punishment).max(-1.0);
+            experience.bad[c] = (experience.bad[c] - bad * punishment).max(-1.0);
             // How it went with something new teaches the worth of new things.
             let relieved: f32 = relief.iter().sum();
-            let felt = good * (relieved + signals.reward) - bad * signals.punishment;
+            let felt = good * (relieved + signals.reward) - bad * punishment;
             experience.new_things = (experience.new_things + felt * novelty).clamp(-1.0, 1.0);
         }
         // Habits, along the trace: each aimed verb and the thing it attended.
@@ -394,6 +381,24 @@ impl Brain {
     /// How new `category` is to the sprite (design §5.6): 1 − familiarity.
     pub(crate) fn novelty(&self, category: Category) -> f32 {
         1.0 - self.experience.familiarity[kind(category)]
+    }
+
+    /// Each need's relief this tick (design §5.6): its fall since the last
+    /// step 4, if at least `relief_deadband`, else 0. Remembers `needs` for
+    /// the next.
+    pub(crate) fn relief(&mut self, needs: &[f32], data: &DataPack) -> Vec<f32> {
+        let deadband = data.physiology().relief_deadband;
+        let relief = match &self.experience.needs_before {
+            Some(before) => before
+                .iter()
+                .zip(needs)
+                .map(|(&was, &now)| was - now)
+                .map(|fall| if fall >= deadband { fall } else { 0.0 })
+                .collect(),
+            None => vec![0.0; needs.len()],
+        };
+        self.experience.needs_before = Some(needs.to_vec());
+        relief
     }
 
     /// Each need's level (design §5.2), in the pack's needs order.
@@ -1193,13 +1198,10 @@ mod tests {
             category: Category::Berry,
             novelty: 1.0,
         });
-        let needs = data.need_places().len();
-        let hungry = |level| Signals {
-            needs: [vec![level], vec![0.0; needs - 1]].concat(),
-            ..Default::default()
-        };
-        brain.learn(10, &hungry(1.0), 1.0, &data);
-        brain.learn(11, &hungry(0.0), 1.0, &data);
+        for (tick, hunger) in [(10, 1.0), (11, 0.0)] {
+            let signals = hunger_at(&mut brain, &data, hunger);
+            brain.learn(tick, &signals, 1.0, &data);
+        }
         let eat = |brain: &Brain, name| brain.decision.get(input(name), column(Verb::Eat));
         assert_eq!(eat(&brain, "hunger"), 0.7);
         assert_eq!(eat(&brain, "always"), 0.0);
@@ -1209,11 +1211,13 @@ mod tests {
         assert_eq!(berry, 0.4);
     }
 
-    /// Step 4's signals with hunger at `hunger`, every other need at 0.
-    fn hunger_at(data: &DataPack, hunger: f32) -> Signals {
-        let needs = data.need_places().len();
+    /// Step 4's signals for `brain` with hunger at `hunger`, every other
+    /// need at 0, and the relief since its last step 4.
+    fn hunger_at(brain: &mut Brain, data: &DataPack, hunger: f32) -> Signals {
+        let needs = [vec![hunger], vec![0.0; data.need_places().len() - 1]].concat();
         Signals {
-            needs: [vec![hunger], vec![0.0; needs - 1]].concat(),
+            relief: brain.relief(&needs, data),
+            needs,
             ..Default::default()
         }
     }
@@ -1234,10 +1238,13 @@ mod tests {
             novelty: 1.0,
         };
         brain.touched = Some(touch);
-        brain.learn(1, &hunger_at(&data, 0.5), 1.0, &data);
-        brain.learn(2, &hunger_at(&data, 0.49), 1.0, &data);
+        let signals = hunger_at(&mut brain, &data, 0.5);
+        brain.learn(1, &signals, 1.0, &data);
+        let signals = hunger_at(&mut brain, &data, 0.49);
+        brain.learn(2, &signals, 1.0, &data);
         assert_eq!(bush_for_hunger(&brain), 0.0, "a slow drift isn't relief");
-        brain.learn(3, &hunger_at(&data, 0.44), 1.0, &data);
+        let signals = hunger_at(&mut brain, &data, 0.44);
+        brain.learn(3, &signals, 1.0, &data);
         assert!(
             close(bush_for_hunger(&brain), 0.5 * 0.05),
             "{}",
@@ -1249,8 +1256,10 @@ mod tests {
     fn with_nothing_touched_relief_teaches_nothing() {
         let data = builtin();
         let mut brain = brain(&[]);
-        brain.learn(1, &hunger_at(&data, 1.0), 1.0, &data);
-        brain.learn(2, &hunger_at(&data, 0.5), 1.0, &data);
+        let signals = hunger_at(&mut brain, &data, 1.0);
+        brain.learn(1, &signals, 1.0, &data);
+        let signals = hunger_at(&mut brain, &data, 0.5);
+        brain.learn(2, &signals, 1.0, &data);
         assert_eq!(bush_for_hunger(&brain), 0.0);
         // A touch longer ago than the window (3 ticks) is forgotten too.
         brain.touched = Some(Touch {
@@ -1258,7 +1267,8 @@ mod tests {
             category: Category::BerryBush,
             novelty: 1.0,
         });
-        brain.learn(6, &hunger_at(&data, 0.0), 1.0, &data);
+        let signals = hunger_at(&mut brain, &data, 0.0);
+        brain.learn(6, &signals, 1.0, &data);
         assert_eq!(bush_for_hunger(&brain), 0.0);
     }
 
@@ -1537,6 +1547,31 @@ mod tests {
                 (Part::Habit("ball"), -0.2),
             ]
         );
+    }
+
+    #[test]
+    fn a_hit_back_and_forth_teaches_nothing_about_what_sprites_are_worth() {
+        // Design v16 §5.6, change 16: the sprite hit a sprite, the thing
+        // touched, and a hit back within the touch window punishes it.
+        let data = builtin();
+        let mut brain = unfading(&[]);
+        decide(&mut brain, 9, Verb::Hit, Some(Category::Sprite), &[]);
+        brain.touched = Some(Touch {
+            tick: 9,
+            category: Category::Sprite,
+            novelty: 1.0,
+        });
+        let hit_back = Signals {
+            needs: vec![0.0; data.need_places().len()],
+            punishment: 1.0,
+            hit: true,
+            ..Default::default()
+        };
+        brain.learn(10, &hit_back, 1.0, &data);
+        assert_eq!(brain.experience.bad[kind(Category::Sprite)], 0.0);
+        assert_eq!(brain.experience.new_things, 0.0);
+        let habit = brain.experience.habits[kind(Category::Sprite)][column(Verb::Hit)];
+        assert!(habit < 0.0, "the habit still learns: {habit}");
     }
 
     #[test]
