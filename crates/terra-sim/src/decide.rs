@@ -253,7 +253,7 @@ fn start_scripted(state: &mut WorldState, data: &DataPack, id: EntityId, events:
 }
 
 /// The category `target` is perceived as.
-fn category_of(state: &WorldState, data: &DataPack, target: Target) -> Category {
+pub(crate) fn category_of(state: &WorldState, data: &DataPack, target: Target) -> Category {
     match target {
         Target::Object(id) => data.object_types()[state.objects.kind(id)].category,
         Target::Water(_) => Category::Water,

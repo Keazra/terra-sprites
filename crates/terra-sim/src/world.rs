@@ -8,7 +8,7 @@ use xxhash_rust::xxh3::xxh3_64_with_seed;
 
 use crate::action::{self, ActionView, ScriptedAction};
 use crate::biochem::{self, Senses, Traits};
-use crate::brain::Explanation;
+use crate::brain::{Explanation, Memory};
 use crate::config::WorldConfig;
 use crate::data::DataPack;
 use crate::ecology::{self, holds_without_drawing, new_object, square};
@@ -265,6 +265,12 @@ impl<'a> SpriteView<'a> {
     /// `None` before its first decision.
     pub fn explain(&self) -> Option<Explanation<'a>> {
         self.sprite.brain.explain(&self.world.data)
+    }
+
+    /// What it has learned, furthest from nothing first, up to five
+    /// (design §5.9).
+    pub fn memory(&self) -> Vec<Memory> {
+        self.sprite.brain.memory(&self.world.data)
     }
 
     /// The reward less the punishment it took in on its last tick, which
@@ -1288,7 +1294,7 @@ mod tests {
     }
 
     #[test]
-    fn the_state_hash_covers_every_sprite_s_learned_links() {
+    fn the_state_hash_covers_what_every_sprite_has_learned() {
         let (mut world, _, second) = field_with_sprites();
         let entry = eat_entry(&world, second, 0);
         let before = world.state_hash();
@@ -1298,8 +1304,21 @@ mod tests {
         let traced = world.state_hash();
         assert_ne!(traced, before, "the trace is hashed");
         let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
-        brain.learn(1, 1.0, 1.0, &data);
-        assert_ne!(world.state_hash(), traced, "the links are hashed");
+        brain.touched = Some(crate::learning::Touch {
+            tick: 0,
+            category: crate::registry::Category::BerryBush,
+        });
+        let needs = data.need_places().len();
+        let hunger = |level| crate::learning::Signals {
+            needs: [vec![level], vec![0.0; needs - 1]].concat(),
+            attacked: false,
+        };
+        brain.learn(0, &hunger(1.0), 1.0, &data);
+        let touched = world.state_hash();
+        assert_ne!(touched, traced, "what it touched is hashed");
+        let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
+        brain.learn(1, &hunger(0.5), 1.0, &data);
+        assert_ne!(world.state_hash(), touched, "what it learned is hashed");
     }
 
     #[test]

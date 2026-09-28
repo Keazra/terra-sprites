@@ -1,7 +1,7 @@
 //! Learning (design §5.6): step 4 consumes reward and punishment, and
 //! learns what things are worth and its habits.
 
-use terra_sim::{DataPack, Genome, Map, Pos, Scenario, ScriptedAction, World};
+use terra_sim::{DataPack, Genome, Learned, Map, Pos, Scenario, ScriptedAction, World};
 
 fn builtin() -> DataPack {
     DataPack::builtin().expect("built-in data pack is valid")
@@ -69,4 +69,55 @@ fn learning_uses_up_reward_and_punishment_and_the_sprite_felt_the_difference() {
     world.step();
     let sprite = world.sprites().next().expect("the sprite");
     assert_eq!(sprite.felt(), 0.0, "a one-off, gone the tick after");
+}
+
+/// What the one sprite has learned, as `(learned, value)`.
+fn memory(world: &World) -> Vec<(Learned, f32)> {
+    let sprite = world.sprites().next().expect("the sprite");
+    sprite
+        .memory()
+        .into_iter()
+        .map(|m| (m.learned, m.value))
+        .collect()
+}
+
+fn close(a: f32, b: f32) -> bool {
+    (a - b).abs() < 1e-5
+}
+
+/// A sprite's genome that is hungry and whose eating halves its hunger, as
+/// the starter genome's `ate` emitter does.
+const HUNGRY: &str = r#"InitialConcentration(chem: "hunger", value: 1.0),
+    Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "hunger"),"#;
+
+#[test]
+fn a_hungry_sprite_that_eats_from_a_bush_learns_the_bush_is_good_for_hunger() {
+    // Design v16 §5.6: hunger falls by .5, its relief, and the bush it bit
+    // is the thing touched: .5 × worth_rate_good (.5).
+    let bush = at(2, 1);
+    let mut world = world(
+        &[".....", ".....", "....."],
+        &[(bush, "berry_bush")],
+        at(1, 1),
+        HUNGRY,
+        &[ScriptedAction::Eat { at: bush }, ScriptedAction::Rest],
+    );
+    world
+        .start_object(bush, "mature", &[("fruit", 3)])
+        .expect("a bush with fruit");
+    world.step();
+    assert_eq!(
+        memory(&world),
+        [],
+        "nothing learned before the bite is felt"
+    );
+    world.step();
+    let learned = memory(&world);
+    let good_for_hunger = Learned::Worth {
+        thing: "berry_bush".into(),
+        need: Some("hunger".into()),
+    };
+    assert_eq!(learned.len(), 1, "{learned:?}");
+    assert_eq!(learned[0].0, good_for_hunger);
+    assert!(close(learned[0].1, 0.25), "{learned:?}");
 }

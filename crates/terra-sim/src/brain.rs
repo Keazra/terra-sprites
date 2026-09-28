@@ -11,7 +11,9 @@ use crate::brain_io::Source;
 use crate::data::DataPack;
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, LocusRef};
-use crate::learning::{Links, TRACE_CAP, TraceEntry, still_counts};
+use crate::learning::{
+    Experience, Links, Signals, TRACE_CAP, Touch, TraceEntry, kind, still_counts,
+};
 use crate::perception::Target;
 use crate::random::unit;
 use crate::registry::{BrainParam, Category, Verb};
@@ -118,6 +120,10 @@ pub(crate) struct Brain {
     pub(crate) felt: f32,
     /// What it felt and chose on its recent ticks, oldest first (design §5.6).
     pub(crate) trace: VecDeque<TraceEntry>,
+    /// What it has learned (design §5.6).
+    pub(crate) experience: Experience,
+    /// What it last tried a verb on, and when (design §5.6).
+    pub(crate) touched: Option<Touch>,
 }
 
 /// What the brain saw and did at a step 5.
@@ -141,31 +147,29 @@ pub(crate) struct Snapshot {
     pub(crate) verb: Option<Verb>,
 }
 
-/// A link, named (design §5.6): from a concept to a verb, or from a State
-/// input to a category.
+/// Something a sprite has learned, named (design §5.6, §5.9). Things are
+/// named as brain inputs name categories (`berry_bush`), needs as brain
+/// inputs name them (`hunger`).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Link {
-    /// A concept's link to a verb: the concept's inputs by name, each with
-    /// whether it's negated.
-    Decision {
-        inputs: Vec<(String, bool)>,
-        verb: Verb,
-    },
-    /// A State input's link to a category, as brain inputs name it (`thornbush`).
-    Attention { input: String, category: String },
+pub enum Learned {
+    /// What a kind of thing is worth: for a need, or in general (`None`).
+    Worth { thing: String, need: Option<String> },
+    /// How bad a kind of thing is.
+    Bad { thing: String },
+    /// A habit: doing a verb to a kind of thing.
+    Habit { thing: String, verb: Verb },
+    /// The worth of new things.
+    NewThings,
 }
 
-/// How far one link has come from birth (design §5.9).
+/// One thing a sprite has learned, and how far it has got from nothing.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Memory {
-    pub link: Link,
-    /// Its working weight now.
-    pub now: f32,
-    /// The instinct it was born with.
-    pub birth: f32,
+    pub learned: Learned,
+    pub value: f32,
 }
 
-/// How many links the memory lists (design §5.9).
+/// How many learned things the memory lists (design §5.9).
 const MEMORY_SIZE: usize = 5;
 
 /// What a brain did at its latest step 5, explained (design §5.9): what it
@@ -183,10 +187,6 @@ pub struct Explanation<'a> {
     /// first whatever the sign, ties in concept order. A concept adding
     /// nothing is left out.
     pub contributions: Vec<Contribution<'a>>,
-    /// The links, of both kinds, furthest from birth, largest first, ties
-    /// in link order: decision links, then attention links. A link that
-    /// hasn't moved is left out.
-    pub memory: Vec<Memory>,
 }
 
 /// How much one concept adds to a verb's score (design §5.9).
@@ -255,18 +255,89 @@ impl Brain {
             snapshot: None,
             felt: 0.0,
             trace: VecDeque::new(),
+            experience: Experience::new(data.need_places().len()),
+            touched: None,
         }
     }
 
-    /// Step 4 at `tick` (design §2.4, §5.6). Instinct links never change.
+    /// Step 4 at `tick` (design §2.4, §5.6), from `signals`, every rate
+    /// scaled by `learning_rate_mod`. Instinct links never change. Each
+    /// need's relief teaches what the thing touched is worth for it. Returns
+    /// the lessons it learned.
     pub(crate) fn learn(
         &mut self,
-        _tick: u64,
-        _r: f32,
-        _learning_rate_mod: f32,
-        _data: &DataPack,
-    ) -> Vec<(Link, bool)> {
+        tick: u64,
+        signals: &Signals,
+        learning_rate_mod: f32,
+        data: &DataPack,
+    ) -> Vec<(Learned, bool)> {
+        let physiology = data.physiology();
+        let relief: Vec<f32> = match &self.experience.needs_before {
+            Some(before) => before
+                .iter()
+                .zip(&signals.needs)
+                .map(|(&was, &now)| was - now)
+                .map(|fall| {
+                    if fall >= physiology.relief_deadband {
+                        fall
+                    } else {
+                        0.0
+                    }
+                })
+                .collect(),
+            None => vec![0.0; signals.needs.len()],
+        };
+        self.experience.needs_before = Some(signals.needs.clone());
+        let touched = self
+            .touched
+            .filter(|t| tick - t.tick <= physiology.touch_window)
+            .map(|t| t.category)
+            .or(signals.attacked.then_some(Category::Sprite));
+        if let Some(category) = touched {
+            let good = self.params.get(BrainParam::WorthRateGood) * learning_rate_mod;
+            let c = kind(category);
+            for (worth, &relief) in self.experience.worth.iter_mut().zip(&relief) {
+                worth[c] = (worth[c] + good * relief).min(1.0);
+            }
+        }
         Vec::new()
+    }
+
+    /// Each need's level (design §5.2), in the pack's needs order.
+    pub(crate) fn need_levels(&self, body: &Body, data: &DataPack) -> Vec<f32> {
+        let inputs = data.brain_inputs_in_order();
+        data.need_places()
+            .iter()
+            .map(|&place| match inputs[place].source {
+                Source::State(LocusRef::Chem(id)) => {
+                    body.chems[data.chemical_index(id).expect("a checked need")]
+                }
+                _ => unreachable!("a need reads a drive"),
+            })
+            .collect()
+    }
+
+    /// What the sprite has learned, furthest from nothing first, up to
+    /// five (design §5.9); ties keep the order they're listed in.
+    pub(crate) fn memory(&self, data: &DataPack) -> Vec<Memory> {
+        let inputs = data.brain_inputs_in_order();
+        let mut memory: Vec<Memory> = Vec::new();
+        for (worth, &place) in self.experience.worth.iter().zip(data.need_places()) {
+            for (&category, &value) in Category::ALL.iter().zip(worth) {
+                memory.push(Memory {
+                    learned: Learned::Worth {
+                        thing: category.name().to_string(),
+                        need: Some(inputs[place].name.clone()),
+                    },
+                    value,
+                });
+            }
+        }
+        memory.retain(|m| m.value != 0.0);
+        // A stable sort keeps a tie in listed order.
+        memory.sort_by(|a, b| b.value.abs().total_cmp(&a.value.abs()));
+        memory.truncate(MEMORY_SIZE);
+        memory
     }
 
     /// Checks the brain's learned state (design §5.6): links within [−1, 1],
@@ -355,13 +426,7 @@ impl Brain {
             attended: snapshot.attended.map(Category::name),
             decision,
             contributions,
-            memory: self.memory(data),
         })
-    }
-
-    /// What the sprite has learned, furthest from nothing first (design §5.9).
-    fn memory(&self, _data: &DataPack) -> Vec<Memory> {
-        Vec::new()
     }
 
     /// Every input's value (design §5.2), in the pack's input order: State
@@ -876,8 +941,17 @@ mod tests {
         ]);
         let set = [("hunger", 1.0), ("always", 1.0)];
         decide(&mut brain, 9, Verb::Eat, Some(Category::Berry), &set);
-        brain.learn(10, 1.0, 1.0, &data);
-        brain.learn(11, -1.0, 1.0, &data);
+        brain.touched = Some(Touch {
+            tick: 9,
+            category: Category::Berry,
+        });
+        let needs = data.need_places().len();
+        let hungry = |level| Signals {
+            needs: [vec![level], vec![0.0; needs - 1]].concat(),
+            attacked: true,
+        };
+        brain.learn(10, &hungry(1.0), 1.0, &data);
+        brain.learn(11, &hungry(0.0), 1.0, &data);
         let eat = |brain: &Brain, name| brain.decision.get(input(name), column(Verb::Eat));
         assert_eq!(eat(&brain, "hunger"), 0.7);
         assert_eq!(eat(&brain, "always"), 0.0);

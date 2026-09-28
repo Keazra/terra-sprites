@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use ron::extensions::Extensions;
 use serde::Deserialize;
 
-use crate::brain_io::{BRAIN_IO, BrainInput, InputEntry, InputId, brain_inputs};
+use crate::brain_io::{BRAIN_IO, BrainInput, BrainIoFile, InputId, brain_io};
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, GenomeError};
 use crate::object_types::{Effect, OBJECTS, ObjectType, TypeEntry, object_types};
@@ -21,6 +21,8 @@ pub struct DataPack {
     loci: Vec<Locus>,
     /// Every brain input, in ID order.
     brain_inputs: Vec<BrainInput>,
+    /// The needs (design §5.2), as places in `brain_inputs`.
+    needs: Vec<usize>,
     /// In ascending ID order.
     object_types: Vec<ObjectType>,
     physiology: Physiology,
@@ -194,11 +196,8 @@ impl DataPack {
         )?;
         let loci: Vec<Locus> = parse(sources, LOCI)?;
         check_unique(LOCI, loci.iter().map(|l| (l.id.0, l.name.as_str())))?;
-        let brain_inputs = brain_inputs(
-            parse::<Vec<InputEntry>>(sources, BRAIN_IO)?,
-            &chemicals,
-            &loci,
-        )?;
+        let (brain_inputs, needs) =
+            brain_io(parse::<BrainIoFile>(sources, BRAIN_IO)?, &chemicals, &loci)?;
         let object_types = object_types(
             parse::<Vec<TypeEntry>>(sources, OBJECTS)?,
             &chemicals,
@@ -221,6 +220,7 @@ impl DataPack {
             chemicals,
             loci,
             brain_inputs,
+            needs,
             object_types,
             physiology,
             starter: Genome { genes: Vec::new() },
@@ -250,6 +250,18 @@ impl DataPack {
     /// Every brain input, in ID order: a brain's inputs are in this order.
     pub(crate) fn brain_inputs_in_order(&self) -> &[BrainInput] {
         &self.brain_inputs
+    }
+
+    /// The needs (design §5.2), by name, in `brain_io.ron`'s order.
+    pub fn needs(&self) -> impl Iterator<Item = &str> {
+        self.needs
+            .iter()
+            .map(|&place| self.brain_inputs[place].name.as_str())
+    }
+
+    /// The needs, as places in the brain's inputs, in `brain_io.ron`'s order.
+    pub(crate) fn need_places(&self) -> &[usize] {
+        &self.needs
     }
 
     /// The brain input with the ID `id`.
