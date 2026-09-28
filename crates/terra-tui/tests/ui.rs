@@ -836,6 +836,58 @@ fn the_event_log_says_what_a_sprite_learned_in_plain_words() {
 }
 
 #[test]
+fn a_lesson_words_a_kind_of_thing_as_its_object_type_names_it() {
+    // Design v17 §3.5.1: thornbushes renamed brambles, and balls with no
+    // plural, as if they were a thing you don't count.
+    let builtin = include_str!("../../../data/objects.ron");
+    let (thorns, balls) = (r#"plural: "thornbushes""#, r#" plural: "balls","#);
+    assert!(builtin.contains(thorns) && builtin.contains(balls));
+    let objects = builtin
+        .replace(thorns, r#"plural: "brambles""#)
+        .replace(balls, "");
+    let pack = DataPack::from_sources(&builtin_with("objects.ron", &objects)).expect("valid pack");
+    let world = garden(pack);
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    let learned = |tick, id, learned, good| Event {
+        tick,
+        kind: EventKind::LearnedMilestone {
+            id: EntityId(id),
+            learned,
+            good,
+        },
+    };
+    let thorns_bad = Learned::Bad {
+        thing: "thornbush".into(),
+    };
+    let ball_for_boredom = Learned::Worth {
+        thing: "ball".into(),
+        need: Some("boredom".into()),
+    };
+    let playing_with_balls = Learned::Habit {
+        thing: "ball".into(),
+        verb: Verb::Play,
+    };
+    app.record(
+        &[
+            learned(30, 12, thorns_bad, false),
+            learned(31, 12, ball_for_boredom, true),
+            learned(32, 9, playing_with_balls, true),
+        ],
+        &world,
+    );
+    let screen = lines(&render(&app, &world, 100, 30));
+    let log: Vec<&str> = screen[25..28].iter().map(|row| inside(row)).collect();
+    assert_eq!(
+        log,
+        [
+            "32  Sprite #9 learned: playing with ball is good",
+            "31  Sprite #12 learned: ball is good for boredom",
+            "30  Sprite #12 learned: brambles are bad",
+        ]
+    );
+}
+
+#[test]
 fn a_screen_under_30_rows_has_no_event_log() {
     let world = garden(pack());
     let app = app_for(&world, Theme::cp437(), 100, 29);
