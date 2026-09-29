@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::brain_io::InputId;
 use crate::data::DataPack;
-use crate::registry::{BrainParam, Category, ChemId, LocusId, Trait, Verb};
+use crate::registry::{BrainParam, CategoryId, ChemId, LocusId, Trait, Verb};
 
 /// The genome file format this build writes, and the newest it reads.
 const FORMAT: u32 = 1;
@@ -82,7 +82,7 @@ pub(crate) enum Gene {
     /// Type 9: a State input starts with `weight` towards attending to `category`.
     AttentionInstinct {
         input: InputId,
-        category: Category,
+        category: CategoryId,
         weight: f32,
     },
     /// A gene this build can't read: an unknown type, or a payload version
@@ -152,7 +152,7 @@ pub enum GeneView<'a> {
     /// Type 9: an input starts with `weight` towards attending to a category.
     AttentionInstinct {
         input: &'a str,
-        category: &'static str,
+        category: &'a str,
         weight: f32,
     },
     /// A gene this build can't read, with the length of its payload.
@@ -294,7 +294,7 @@ impl Gene {
                 weight,
             } => GeneView::AttentionInstinct {
                 input: input(id),
-                category: category.name(),
+                category: &data.category(category).expect("a checked gene").name,
                 weight,
             },
             Gene::Unknown {
@@ -445,9 +445,14 @@ impl Gene {
                 finite("weight", weight)?;
             }
             Gene::AttentionInstinct {
-                input: id, weight, ..
+                input: id,
+                category,
+                weight,
             } => {
                 input(id)?;
+                data.category(category).ok_or_else(|| {
+                    format!("refers to category {}, which isn't in the pack", category.0)
+                })?;
                 finite("weight", weight)?;
             }
             Gene::Unknown { .. } => {}
@@ -544,8 +549,9 @@ impl Gene {
                 category,
                 weight,
             } => format!(
-                "AttentionInstinct(input: {:?}, category: {category:?}, weight: {weight:?})",
-                input(id)
+                "AttentionInstinct(input: {:?}, category: {:?}, weight: {weight:?})",
+                input(id),
+                data.category(category).expect("a checked gene").name
             ),
             Gene::Unknown {
                 type_id,
@@ -617,7 +623,7 @@ enum GeneEntry {
     },
     AttentionInstinct {
         input: String,
-        category: Category,
+        category: String,
         weight: f32,
     },
     /// Any gene, by number: its type ID, payload version and payload bytes in hex.
@@ -755,7 +761,9 @@ impl GeneEntry {
                 weight,
             } => Gene::AttentionInstinct {
                 input: input(&name)?,
-                category,
+                category: data
+                    .category_named(&category)
+                    .ok_or_else(|| format!("names the unknown category `{category}`"))?,
                 weight,
             },
             GeneEntry::Gene {
@@ -900,10 +908,7 @@ fn decode(type_id: u16, version: u8, payload: Vec<u8>) -> Result<Gene, String> {
         }
         9 => {
             let (input, category, weight): (InputId, u16, f32) = read(&payload)?;
-            let category = Category::ALL
-                .into_iter()
-                .find(|&c| c as u16 == category)
-                .ok_or_else(|| format!("refers to category {category}, which doesn't exist"))?;
+            let category = CategoryId(category);
             Gene::AttentionInstinct {
                 input,
                 category,

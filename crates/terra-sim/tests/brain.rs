@@ -277,7 +277,7 @@ fn explain_gives_attention_scores_and_the_concepts_behind_the_verb() {
             InitialConcentration(chem: "hunger", value: 0.8),
             BrainParam(param: "tau_base", value: 0.05),
             BrainParam(param: "tau_att_base", value: 0.05),
-            AttentionInstinct(input: "hunger", category: Berry, weight: 1.0),
+            AttentionInstinct(input: "hunger", category: "fruit", weight: 1.0),
             Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
             Instinct(inputs: [("hunger", false), ("target_adjacent", true)], verb: Eat, weight: 0.5),
             Instinct(inputs: [("always", false)], verb: Eat, weight: -0.1),

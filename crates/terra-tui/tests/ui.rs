@@ -1140,7 +1140,7 @@ const HUNGRY_GENOME: &str = r#"(format: 1, genes: [
     BrainParam(param: "curiosity", value: 0.0),
     BrainParam(param: "tau_base", value: 0.05),
     BrainParam(param: "tau_att_base", value: 0.05),
-    AttentionInstinct(input: "hunger", category: Berry, weight: 1.0),
+    AttentionInstinct(input: "hunger", category: "fruit", weight: 1.0),
     Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
     Instinct(inputs: [("hunger", false), ("target_adjacent", true)], verb: Eat, weight: 0.5),
     Instinct(inputs: [("always", false)], verb: Eat, weight: -0.1),
@@ -1185,7 +1185,7 @@ const BERRY_GENOME: &str = r#"(format: 1, genes: [
     Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "hunger"),
     BrainParam(param: "tau_base", value: 0.05),
     BrainParam(param: "tau_att_base", value: 0.05),
-    AttentionInstinct(input: "hunger", category: Berry, weight: 1.0),
+    AttentionInstinct(input: "hunger", category: "fruit", weight: 1.0),
     Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
 ])"#;
 
@@ -1337,7 +1337,7 @@ const THORN_GENOME: &str = r#"(format: 1, genes: [
     Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),
     BrainParam(param: "tau_base", value: 0.05),
     BrainParam(param: "tau_att_base", value: 0.05),
-    AttentionInstinct(input: "hunger", category: Thornbush, weight: 1.0),
+    AttentionInstinct(input: "hunger", category: "thornbush", weight: 1.0),
     Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
     Instinct(inputs: [("hunger", false), ("target_adjacent", false)], verb: Eat, weight: 1.0),
 ])"#;
@@ -1376,7 +1376,7 @@ fn the_chem_tab_shows_what_was_felt_on_the_reward_line() {
 #[test]
 fn the_genome_tab_shows_brain_settings_instincts_and_attention_instincts() {
     let genome = r#"(format: 1, genes: [
-        AttentionInstinct(input: "hunger", category: BerryBush, weight: 0.8),
+        AttentionInstinct(input: "hunger", category: "bush", weight: 0.8),
         Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
         BrainParam(param: "tau_base", value: 0.2),
         Instinct(inputs: [("thirst", false), ("target_adjacent", true)], verb: Drink, weight: -0.5),
@@ -1395,7 +1395,7 @@ fn the_genome_tab_shows_brain_settings_instincts_and_attention_instincts() {
             "hunger → eat +1",
             "thirst & not target adjacent → drink -.5",
             "ATTENTION INSTINCTS",
-            "hunger → attends to berry bush +.8",
+            "hunger → attends to bush +.8",
             "",
             "",
         ]
@@ -1969,7 +1969,7 @@ const SKITTISH_GENOME: &str = r#"(format: 1, genes: [
     Trait(trait: "speed", value: 10.0),
     Trait(trait: "sense_radius", value: 10.0),
     BrainParam(param: "tau_base", value: 0.05),
-    AttentionInstinct(input: "always", category: Sprite, weight: 1.0),
+    AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
     Instinct(inputs: [("always", false)], verb: Rest, weight: 0.3),
     Emitter(locus: Locus("was_hit"), mode: Level, gain: 1.0, chem: "punishment"),
 ])"#;

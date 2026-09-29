@@ -9,22 +9,21 @@ use crate::brain::{Learned, VERBS};
 use crate::data::DataPack;
 use crate::events::{Event, EventKind};
 use crate::objects::EntityId;
-use crate::registry::{Category, Verb};
+use crate::registry::{CategoryId, Verb};
 use crate::world::WorldState;
 
 /// Instinct links (design §5.1, §5.4): a row per concept or input, a column
 /// per verb or category, each at the weight the genome gave it. They never
 /// change in a sprite's life; learning is worth and habits (§5.6).
 #[derive(Debug, Clone, Serialize)]
-#[serde(bound(serialize = "[f32; N]: Serialize"))]
-pub(crate) struct Links<const N: usize> {
-    w: Vec<[f32; N]>,
+pub(crate) struct Links {
+    w: Vec<Vec<f32>>,
 }
 
-impl<const N: usize> Links<N> {
+impl Links {
     /// Links at the weights `birth` gives, each clamped to [−1, 1]: spawn
     /// variation can take a 1.0 instinct past 1.
-    pub(crate) fn new(mut birth: Vec<[f32; N]>) -> Links<N> {
+    pub(crate) fn new(mut birth: Vec<Vec<f32>>) -> Links {
         for w in birth.iter_mut().flatten() {
             *w = w.clamp(-1.0, 1.0);
         }
@@ -32,7 +31,7 @@ impl<const N: usize> Links<N> {
     }
 
     /// Every row's weights.
-    pub(crate) fn rows(&self) -> &[[f32; N]] {
+    pub(crate) fn rows(&self) -> &[Vec<f32>] {
         &self.w
     }
 
@@ -62,24 +61,22 @@ impl<const N: usize> Links<N> {
     }
 }
 
-/// How many kinds of thing there are to learn about.
-const KINDS: usize = Category::ALL.len();
-
-/// What a brain has learned (design §5.6), all starting at 0: what each kind
-/// of thing is worth for each need and in general, and how bad it is; its
-/// habits; how familiar each kind is; and the worth of new things.
+/// What a brain has learned (design §5.6), all starting at 0: what each
+/// category is worth for each need and in general, and how bad it is; its
+/// habits; how familiar each category is; and the worth of new things. Each
+/// is kept per category in the pack's order.
 #[derive(Debug, Clone, Default, Serialize)]
 pub(crate) struct Experience {
     /// Worth for each need, in the pack's needs order, by category (0 to 1).
-    pub(crate) worth: Vec<[f32; KINDS]>,
+    pub(crate) worth: Vec<Vec<f32>>,
     /// General good, from `reward`, by category (0 to 1).
-    pub(crate) good: [f32; KINDS],
+    pub(crate) good: Vec<f32>,
     /// Bad, from `punishment`, by category (−1 to 0).
-    pub(crate) bad: [f32; KINDS],
+    pub(crate) bad: Vec<f32>,
     /// Habits: doing each verb, in `VERBS` order, to each category.
-    pub(crate) habits: [[f32; VERBS.len()]; KINDS],
+    pub(crate) habits: Vec<[f32; VERBS.len()]>,
     /// How familiar each category is (0 to 1).
-    pub(crate) familiarity: [f32; KINDS],
+    pub(crate) familiarity: Vec<f32>,
     /// The worth of new things.
     pub(crate) new_things: f32,
     /// The sprites it remembers (design v18 §5.6), by ID.
@@ -91,14 +88,15 @@ pub(crate) struct Experience {
 }
 
 impl Experience {
-    /// A newborn's: nothing learned, for `needs` needs.
-    pub(crate) fn new(needs: usize) -> Experience {
+    /// A newborn's: nothing learned, for `needs` needs and `categories`
+    /// categories.
+    pub(crate) fn new(needs: usize, categories: usize) -> Experience {
         Experience {
-            worth: vec![[0.0; KINDS]; needs],
-            good: [0.0; KINDS],
-            bad: [0.0; KINDS],
-            habits: [[0.0; VERBS.len()]; KINDS],
-            familiarity: [0.0; KINDS],
+            worth: vec![vec![0.0; categories]; needs],
+            good: vec![0.0; categories],
+            bad: vec![0.0; categories],
+            habits: vec![[0.0; VERBS.len()]; categories],
+            familiarity: vec![0.0; categories],
             new_things: 0.0,
             individuals: BTreeMap::new(),
             taught: BTreeSet::new(),
@@ -200,7 +198,7 @@ fn within<'a>(
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub(crate) struct Touch {
     pub(crate) tick: u64,
-    pub(crate) category: Category,
+    pub(crate) category: CategoryId,
     /// Which sprite, if it was one (design v18 §5.6).
     pub(crate) sprite: Option<EntityId>,
     /// How new the category was to the sprite then (design §5.6).
@@ -251,7 +249,7 @@ pub(crate) struct TraceEntry {
     /// The verb it chose or kept doing, if any.
     pub(crate) verb: Option<Verb>,
     /// The category attention was on, if any.
-    pub(crate) attended: Option<Category>,
+    pub(crate) attended: Option<CategoryId>,
     /// The verb's motive (design §5.5): the need, by its place in the pack's
     /// needs, whose instinct did most to choose it.
     pub(crate) motive: Option<usize>,
@@ -312,9 +310,9 @@ pub(crate) fn run(
 
 /// The end of step 6 for every sprite: each brain that decided this tick
 /// commits its trace entry.
-pub(crate) fn commit(state: &mut WorldState) {
+pub(crate) fn commit(state: &mut WorldState, data: &DataPack) {
     let tick = state.tick;
     for (_, _, brain) in state.sprites.minds_mut() {
-        brain.commit(tick);
+        brain.commit(tick, data);
     }
 }

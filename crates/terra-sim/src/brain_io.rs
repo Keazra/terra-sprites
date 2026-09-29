@@ -1,12 +1,14 @@
 //! The brain's I/O registry (design §5.2, Appendix A): every brain input, with
 //! its stable ID. The State inputs come from `brain_io.ron`; the Target inputs
-//! are fixed here, because attention gives them their meaning.
+//! are one for each category (design v19 §3.5.5), then two fixed here, because
+//! attention gives them their meaning.
 
 use serde::{Deserialize, Serialize};
 
+use crate::categories::{Category, attended_input};
 use crate::data::{DataError, check_unique};
 use crate::genome::LocusRef;
-use crate::registry::{Category, Chemical, ChemicalKind, Locus, LocusKind};
+use crate::registry::{CategoryId, Chemical, ChemicalKind, Locus, LocusKind};
 
 /// The brain I/O registry, relative to the pack root.
 pub(crate) const BRAIN_IO: &str = "brain_io.ron";
@@ -16,12 +18,8 @@ pub(crate) const BRAIN_IO: &str = "brain_io.ron";
 #[serde(transparent)]
 pub(crate) struct InputId(pub(crate) u16);
 
-/// The IDs kept for Target inputs, the first of them used from
-/// `FIRST_TARGET` up. State inputs take any other ID from 1.
+/// The IDs kept for Target inputs. State inputs take any other ID from 1.
 const TARGET_IDS: std::ops::RangeInclusive<u16> = 36..=63;
-
-/// The first Target input's ID.
-const FIRST_TARGET: u16 = *TARGET_IDS.start();
 
 /// What a brain input reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,7 +27,7 @@ pub(crate) enum Source {
     /// A State input: a drive, a hormone, a body sensor or a pulse.
     State(LocusRef),
     /// 1 while attention is on this category, else 0.
-    Attended(Category),
+    Attended(CategoryId),
     /// The attended target's path cost, over the flood's reach.
     TargetDistance,
     /// 1 while the sprite stands on one of its target's goal tiles, else 0.
@@ -68,14 +66,21 @@ enum ReadsEntry {
     Locus(String),
 }
 
-/// The Target inputs, fixed in code, in ID order from `FIRST_TARGET`.
-fn target_inputs() -> impl Iterator<Item = (String, Source)> {
-    Category::ALL
-        .into_iter()
-        .map(|c| (format!("attended_{}", c.name()), Source::Attended(c)))
+/// The Target inputs as `(id, name, source)`: one for each of the
+/// `categories`, then the two fixed in code (design v19 §3.5.5).
+fn target_inputs(categories: &[Category]) -> impl Iterator<Item = (u16, String, Source)> {
+    categories
+        .iter()
+        .map(|c| {
+            (
+                attended_input(c.id),
+                format!("attended_{}", c.name),
+                Source::Attended(c.id),
+            )
+        })
         .chain([
-            ("target_distance".into(), Source::TargetDistance),
-            ("target_adjacent".into(), Source::TargetAdjacent),
+            (42, "target_distance".into(), Source::TargetDistance),
+            (43, "target_adjacent".into(), Source::TargetAdjacent),
         ])
 }
 
@@ -84,10 +89,11 @@ fn target_inputs() -> impl Iterator<Item = (String, Source)> {
 /// named twice, is an error.
 pub(crate) fn brain_io(
     file: BrainIoFile,
+    categories: &[Category],
     chemicals: &[Chemical],
     loci: &[Locus],
 ) -> Result<(Vec<BrainInput>, Vec<usize>), DataError> {
-    let inputs = brain_inputs(file.inputs, chemicals, loci)?;
+    let inputs = brain_inputs(file.inputs, categories, chemicals, loci)?;
     let mut needs: Vec<usize> = Vec::new();
     for name in &file.needs {
         let invalid = |problem: &str| DataError::Invalid {
@@ -121,6 +127,7 @@ pub(crate) fn brain_io(
 /// with another input, is an error.
 fn brain_inputs(
     entries: Vec<InputEntry>,
+    categories: &[Category],
     chemicals: &[Chemical],
     loci: &[Locus],
 ) -> Result<Vec<BrainInput>, DataError> {
@@ -175,13 +182,11 @@ fn brain_inputs(
         });
     }
     inputs.extend(
-        target_inputs()
-            .zip(FIRST_TARGET..)
-            .map(|((name, source), id)| BrainInput {
-                id: InputId(id),
-                name,
-                source,
-            }),
+        target_inputs(categories).map(|(id, name, source)| BrainInput {
+            id: InputId(id),
+            name,
+            source,
+        }),
     );
     inputs.sort_by_key(|input| input.id);
     check_unique(
