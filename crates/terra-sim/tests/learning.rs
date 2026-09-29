@@ -379,6 +379,38 @@ fn a_hungry_sprite_beside_a_thornbush_it_knows_is_bad_notices_the_berry_bush_beh
 }
 
 #[test]
+fn attention_names_the_thing_it_scored_and_its_worth_names_it_too() {
+    // Design v19 §5.9, §6.1: an attention row names the object type scored,
+    // not its category, and so does its worth in the decision. The only
+    // bush in sight is a thornbush, which a bite has made −.8 bad.
+    let thornbush = at(2, 1);
+    let mut world = world_in(
+        bushes(),
+        &["......"; 3],
+        &[(thornbush, "thornbush")],
+        at(1, 1),
+        r#"Instinct(inputs: [("always", false)], verb: Eat, weight: 1.0),
+           BrainParam(param: "tau_base", value: 0.05),
+           Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),"#,
+        &[ScriptedAction::Eat { at: thornbush }],
+    );
+    world.step();
+    world.step();
+    let sprite = world.sprites().next().expect("the sprite");
+    let explained = sprite.explain().expect("it decided");
+    let thornbushes = Thing::from("thornbush");
+    let rows: Vec<&Thing> = explained.attention.iter().map(|(thing, _)| thing).collect();
+    assert_eq!(rows, [&thornbushes]);
+    assert_eq!(explained.attended, Some(thornbushes.clone()));
+    let worth = explained
+        .contributions
+        .iter()
+        .find(|c| matches!(c.part, Part::Worth(_)))
+        .map(|c| (c.part.clone(), c.amount));
+    assert_eq!(worth, Some((Part::Worth(thornbushes), -0.8)));
+}
+
+#[test]
 fn a_reward_after_eating_from_a_thornbush_teaches_the_habit_for_thornbushes_not_every_bush() {
     // Design v19 §5.6: the trace records the object type attended, and
     // habits are credited to it. A sprite that always wants to eat, and is
