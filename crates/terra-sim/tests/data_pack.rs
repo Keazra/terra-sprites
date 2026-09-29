@@ -516,7 +516,7 @@ fn each_category_is_worded_in_general_by_its_plural() {
     let names = ["bush", "fruit", "water", "toy", "sprite"];
     assert_eq!(
         names.map(|name| pack.category_plural(name)),
-        [Some("bushes"), None, None, Some("toys"), Some("sprites"),],
+        [Some("bushes"), None, None, Some("toys"), Some("sprites")],
         "fruit and water aren't counted"
     );
     assert_eq!(pack.category_plural("dragon"), None, "no such category");
