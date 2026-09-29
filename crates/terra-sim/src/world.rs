@@ -21,7 +21,7 @@ use crate::map::{Map, MapError, Pos};
 use crate::objects::{EntityId, Object, Objects};
 use crate::perception::{Flood, Target, goal_tiles};
 use crate::regions::Regions;
-use crate::registry::ChemicalKind;
+use crate::registry::{CategoryId, ChemicalKind};
 use crate::rolling;
 use crate::sprites::{Sprite, Sprites};
 use crate::variation::varied;
@@ -163,11 +163,19 @@ impl WorldState {
             .map(|kind| data.object_types()[kind].id)
     }
 
+    /// The category `target` is perceived as (design v19 §3.5.5).
+    pub(crate) fn category_of(&self, data: &DataPack, target: Target) -> CategoryId {
+        match target {
+            Target::Object(id) => data.object_types()[self.objects.kind(id)].category,
+            Target::Water(_) => data.water_category(),
+            Target::Sprite(_) => data.sprite_category(),
+        }
+    }
+
     /// What a sprite learns about `target` as (design v19 §5.6): its object
     /// type, or its category if it has none.
     pub(crate) fn subject_of(&self, data: &DataPack, target: Target) -> Subject {
-        let category = crate::decide::target_category(self, data, target);
-        Subject::of(category, self.type_of(data, target))
+        Subject::of(self.category_of(data, target), self.type_of(data, target))
     }
 
     /// Whether `pos` is a goal tile of `target` (design §3.6): beside it, or

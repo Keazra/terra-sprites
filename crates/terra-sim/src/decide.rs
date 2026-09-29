@@ -78,7 +78,7 @@ pub(crate) fn decide(
     }
     // Each category's candidate is the thing that draws the eye most (design
     // v19 §3.6); ties go to the lower ID, which comes first.
-    let inputs = sprite.brain.inputs(&sprite.body, None, data);
+    let state_only = sprite.brain.inputs(&sprite.body, None, data);
     let curiosity_mod = sprite.body.loci[data.physiology().indices.curiosity_mod];
     let found: BTreeMap<CategoryId, (Target, u32)> = offered
         .into_iter()
@@ -86,11 +86,11 @@ pub(crate) fn decide(
             let drawn = things.into_iter().map(|(target, cost)| {
                 let subject = state.subject_of(data, target);
                 let distance = normalized(cost, reach);
-                let draw = (sprite.brain).draw(
+                let draw = sprite.brain.draw(
                     subject,
                     target.sprite(),
                     distance,
-                    &inputs,
+                    &state_only,
                     curiosity_mod,
                     data,
                 );
@@ -109,7 +109,7 @@ pub(crate) fn decide(
             let type_id = state.type_of(data, target);
             let aim = Aim {
                 category,
-                subject: Subject::of(category, type_id),
+                subject: state.subject_of(data, target),
                 distance: normalized(cost, reach),
                 adjacent: state.on_goal_tile(data, sprite.pos, target),
             };
@@ -126,7 +126,7 @@ pub(crate) fn decide(
     // category's candidate now (design §5.3).
     let aimed = action.and_then(|a| a.target).map(|target| {
         let (category, adjacent) = (
-            target_category(state, data, target),
+            state.category_of(data, target),
             state.on_goal_tile(data, sprite.pos, target),
         );
         let cost = state
@@ -161,12 +161,12 @@ pub(crate) fn decide(
         || sprite.body.loci[data.physiology().indices.cornered] > 0.0;
     // A running action's category is scored by the instance it's aimed at,
     // which a nearer one of the same category doesn't replace (design §5.3).
-    let mut distances: BTreeMap<CategoryId, (Subject, f32)> = candidates
+    let mut in_sight: BTreeMap<CategoryId, (Subject, f32)> = candidates
         .iter()
         .map(|(&category, c)| (category, (c.aim.subject, c.aim.distance)))
         .collect();
     if let Some(aim) = aimed {
-        distances.insert(aim.category, (aim.subject, aim.distance));
+        in_sight.insert(aim.category, (aim.subject, aim.distance));
     }
 
     let sprite = state.sprites.get_mut(id).expect("the same sprite");
@@ -174,9 +174,8 @@ pub(crate) fn decide(
     let brain = &mut sprite.brain;
 
     // 5a: attention, from the State inputs alone.
-    let state_only = brain.inputs(&sprite.body, None, data);
-    let attention = brain.attention_scores(&state_only, &distances, curiosity_mod, scoring, data);
-    let scored = distances
+    let attention = brain.attention_scores(&state_only, &in_sight, curiosity_mod, scoring, data);
+    let scored = in_sight
         .iter()
         .map(|(&c, &(subject, _))| (c, subject))
         .collect();
@@ -340,15 +339,6 @@ fn start_scripted(state: &mut WorldState, data: &DataPack, id: EntityId, events:
         state.tick,
         events,
     );
-}
-
-/// The category `target` is perceived as.
-pub(crate) fn target_category(state: &WorldState, data: &DataPack, target: Target) -> CategoryId {
-    match target {
-        Target::Object(id) => data.object_types()[state.objects.kind(id)].category,
-        Target::Water(_) => data.water_category(),
-        Target::Sprite(_) => data.sprite_category(),
-    }
 }
 
 /// `cost` over the cost of walking the flood's `reach`, capped at 1.
