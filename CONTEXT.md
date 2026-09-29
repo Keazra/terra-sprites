@@ -1,6 +1,6 @@
 # Terra Sprites
 
-An ASCII artificial-life game: sprites live, learn and die in a terrarium, a small simulated world that the player watches and touches through the hand.
+An ASCII artificial-life game: sprites live, learn and die in a terrarium, a small simulated world that the player watches and touches through the Cursor.
 
 ## Language
 
@@ -77,7 +77,7 @@ An object attached to the ground, so nothing can push, pull or carry it, such as
 _Avoid_: obstacle
 
 **Item**:
-An object that is neither solid nor a fixture, so a sprite can stand on it and the hand can carry it, such as a berry or a ball.
+An object that is neither solid nor a fixture, so a sprite can stand on it and the Cursor can carry it, such as a berry or a ball.
 _Avoid_: loose item, pickup
 
 **Tag**:
@@ -231,7 +231,7 @@ _Avoid_: senescence
 What caused most of a sprite's recent injury, with the most recent counting most: starvation, dehydration, old age, or being hurt by an object type, such as a thornbush, or by another sprite.
 
 **Hurt**:
-Injury that something did to a sprite: a thornbush it touched, another sprite's hit, or the hand's Correct. Starvation, dehydration and old age injure a sprite but don't hurt it.
+Injury or pain that something did to a sprite: a thornbush it touched, another sprite's hit, or the Cursor's zap or shock. A zap or shock hurts without injuring. Starvation, dehydration and old age injure a sprite but don't hurt it.
 _Avoid_: damage, pricked (a thornbush word; the data names things, the screen says "hurt")
 
 ### Actions and movement
@@ -361,7 +361,7 @@ What a sprite has learned about doing one verb to one object type, or to sprites
 _Avoid_: skill (a later design, #48), reflex
 
 **Thing touched**:
-What a feeling is about: the thing the sprite tried a verb on a moment ago, or the particular sprite. Worth is learned about it and nothing else. A sprite that hit it isn't one: that teaches fear of the sprite instead.
+What a feeling is about: the thing the sprite tried a verb on a moment ago, or the particular sprite. Worth is learned about it and nothing else. A sprite that hit it isn't one: that teaches fear of the sprite instead. For the Cursor's touch, "a moment ago" stretches to its reach back.
 _Avoid_: target (for this), culprit
 
 **Fruitless try**:
@@ -403,20 +403,24 @@ The part of the map currently shown in the map view.
 _Avoid_: camera
 
 **Cursor**:
-The 3×3 marker on the map that follows the pointer. A click acts on the tile at its centre, as the cursor mode says.
-_Avoid_: selection (the selection is the chosen sprite)
+The player's hard-light projection into the terrarium: to the sprites the player is an advanced creature, and this is how they reach in. It shows on the map as a 3×3 grid that follows the pointer, unless it's locked on to a sprite, and a click acts as the cursor mode says. In M1 sprites can't see it, so its touch is a feeling from nowhere. It holds at most one thing.
+_Avoid_: hand, orb, selection (the selection is the chosen sprite)
 
 **Pointer**:
-Where the mouse is on screen. The cursor follows it over the map view.
+Where the mouse is on screen. The Cursor follows it over the map view, unless it's locked on.
 _Avoid_: mouse cursor
 
 **Cursor mode**:
-What a click on the map does: Select, Hand, Reward or Correct.
+What a click on the map does: Select, Train or Grab. `Q` and `E` do what the left and right click do.
 _Avoid_: tool
 
 **Selection**:
-The sprite the inspector shows, chosen by clicking it or with `Tab`.
+The sprite the inspector shows, chosen by clicking it or with `Tab`. The Cursor can lock on to it.
 _Avoid_: focus, target
+
+**Lock on**:
+To fix the Cursor on the selected sprite, so it moves with the sprite in every mode and a pet or a shock needs no aim. A right click in Select mode locks on or lets go; selecting another sprite moves the lock, and the sprite's death lets it go.
+_Avoid_: follow, track (those are the view following the selected sprite, with `T`)
 
 **Inspector**:
 The side panel of tabs about the selected sprite (Body, Brain, Chem, Genome) or the world (World).
@@ -453,24 +457,45 @@ What the map view draws for a tile, named by meaning (such as grass terrain) rat
 A mapping from semantic tiles to glyphs and colours.
 _Avoid_: skin
 
-### The hand
+### The Cursor
 
-**Hand**:
-The player's way of acting on the terrarium: rewarding, correcting, grabbing, dropping and placing. It holds at most one thing.
+**Train mode**:
+The cursor mode for teaching: a left click rewards the target, a right click corrects it. The target is the sprite the Cursor is locked on to, or else the one under it.
+_Avoid_: Reward mode, Correct mode (merged into Train)
+
+**Grab mode**:
+The cursor mode that picks things up, puts them down and places new ones (slice 11).
+_Avoid_: Hand mode
 
 **Reward**:
-A pet or hug from the hand, which raises the sprite's reward chemical.
+The Cursor's good touch, which raises the sprite's reward chemical: a **pet**, or amplified, a **hug**.
 _Avoid_: tickle, positive
 
 **Correct**:
-An electric shock from the hand, which hurts the sprite and raises its punishment chemical.
+The Cursor's bad touch, which hurts the sprite without injuring it and raises its punishment chemical: a **zap**, or amplified, a **shock**.
 _Avoid_: slap, punish, negative
+
+**Amplified**:
+A Reward or Correct given with Shift (on `Q` or `E`) or Ctrl (on a click): a hug rather than a pet, a shock rather than a zap.
+_Avoid_: strong, heavy
+
+**Reach back**:
+How many ticks back a Reward or Correct looks for the sprite's latest attempt, which its feeling is then about: about two seconds of the player's time at the speed they're playing.
+_Avoid_: reach (a flood's reach is where a sprite can walk), touch window (that's for every other feeling)
 
 ### Testing and tuning
 
 **Lab scenario**:
 A file describing a world to run for many seeds and what to count in it, such as the thornbush bites in the first and the last 5,000 ticks. It is both a test and the main tool for tuning.
 _Avoid_: benchmark, experiment
+
+**Trainer**:
+What a lab scenario can use in place of a player: it answers a kind of applied action with a pet or a zap for the one who did it, through the same commands a player's clicks send.
+_Avoid_: teacher, bot
+
+**Control run**:
+The same seed run again for comparison, without the one thing being measured: without learning (A1), or without the trainer (A2, A3).
+_Avoid_: baseline (that's a measurement on `main`)
 
 ### Zones (a later milestone)
 
