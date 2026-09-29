@@ -1,0 +1,27 @@
+// A2, reward training (design v21 §7.3): one starter sprite with balls, food
+// and water. During training the trainer pets it the tick after each applied
+// Play on a ball; it stops at 9,900, and a washout follows. Over ticks
+// 10,000 to 20,000, with no trainer, its applied Plays on balls must be at
+// least 1.5× those of the same seed never trained (median of 10 seeds), with
+// at least 20 in the control.
+(
+    world: Drawn(
+        rows: [
+            "....................",
+            "..B.......o.....B...",
+            "......o.............",
+            "...........~~.......",
+            "..o.......~~~~...o..",
+            "......S...~~~~......",
+            "...B.......~~.....o.",
+            "..........o.........",
+            "..B....o.......B....",
+            "....................",
+        ],
+        key: {'S': Sprite, 'o': Object("ball"), 'B': Object("berry_bush")},
+    ),
+    ticks: 20000,
+    trainer: (on: (Play, "ball"), give: Pet, until: 9900),
+    control: NoTrainer,
+    windows: [(0, 9900), (10000, 20000)],
+)
