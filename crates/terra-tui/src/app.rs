@@ -238,7 +238,8 @@ impl App {
                 | EventKind::ObjectRemoved { .. }
                 | EventKind::ActionStarted { .. }
                 | EventKind::Rewarded { .. }
-                | EventKind::Corrected { .. } => false,
+                | EventKind::Corrected { .. }
+                | EventKind::CommandRejected { .. } => false,
                 EventKind::LearnedMilestone { .. } => true,
                 EventKind::ActionEnded { id, ref action, .. } => {
                     inspector::logged_line(id, action, world.data()).is_some()

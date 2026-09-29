@@ -3,7 +3,8 @@
 //! from them.
 
 use terra_sim::{
-    Command, DataPack, EntityId, EventKind, Genome, Map, Pos, Scenario, ScriptedAction, World,
+    Command, DataPack, EntityId, EventKind, Genome, Map, Pos, Rejection, Scenario, ScriptedAction,
+    World,
 };
 
 fn builtin() -> DataPack {
@@ -205,4 +206,77 @@ fn a_pet_and_a_zap_each_reach_the_sprite_as_their_own_sense() {
         (sprite.chemical("h0"), sprite.chemical("h1")),
         (Some(0.0), Some(0.2))
     );
+}
+
+#[test]
+fn commands_wait_for_the_next_tick_then_apply_in_the_order_sent_and_levels_stop_at_full() {
+    // Design v21 §2.5: each command applies on its own, in order, at step 1
+    // of the next tick, and three pets in a tick give one full dose.
+    let (mut world, id) = resting_sprite();
+    for _ in 0..3 {
+        world.submit(pet(id));
+    }
+    world.submit(zap(id));
+    let events = world.step();
+    let cursor: Vec<&EventKind> = events
+        .iter()
+        .map(|e| &e.kind)
+        .filter(|k| matches!(k, EventKind::Rewarded { .. } | EventKind::Corrected { .. }))
+        .collect();
+    let petted = EventKind::Rewarded {
+        id,
+        amplified: false,
+    };
+    let zapped = EventKind::Corrected {
+        id,
+        amplified: false,
+    };
+    assert_eq!(cursor, [&petted, &petted, &petted, &zapped]);
+    let sprite = world.sprite(id).expect("the sprite");
+    assert!(close(sprite.felt(), 1.0 - 0.5), "{}", sprite.felt());
+    // Nothing waits for the tick after.
+    let events = world.step();
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e.kind, EventKind::Rewarded { .. })),
+        "{events:?}"
+    );
+}
+
+#[test]
+fn a_command_for_a_sprite_that_is_gone_is_refused_and_touches_no_one() {
+    // Design v21 §2.5: a sprite that died has left the world, so it's gone,
+    // as one that never was is.
+    let (mut world, id) = resting_sprite();
+    let nobody = EntityId(999);
+    world.submit(pet(nobody));
+    world.submit(zap(nobody));
+    let events = world.step();
+    let refused: Vec<&EventKind> = events
+        .iter()
+        .map(|e| &e.kind)
+        .filter(|k| matches!(k, EventKind::CommandRejected { .. }))
+        .collect();
+    assert_eq!(
+        refused,
+        [
+            &EventKind::CommandRejected {
+                command: pet(nobody),
+                reason: Rejection::Gone
+            },
+            &EventKind::CommandRejected {
+                command: zap(nobody),
+                reason: Rejection::Gone
+            },
+        ]
+    );
+    assert!(
+        !events.iter().any(|e| matches!(
+            e.kind,
+            EventKind::Rewarded { .. } | EventKind::Corrected { .. }
+        )),
+        "{events:?}"
+    );
+    assert_eq!(world.sprite(id).expect("the sprite").felt(), 0.0);
 }

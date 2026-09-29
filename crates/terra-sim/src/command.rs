@@ -31,35 +31,49 @@ pub enum Command {
     },
 }
 
+/// Why a command was refused (design §2.5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rejection {
+    /// The sprite isn't in the world: it never was, or it has died.
+    Gone,
+}
+
 /// Step 1 (design §2.4): applies the commands stamped for this tick, in the
 /// order they were submitted.
 pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Event>) {
     let physiology = data.physiology();
     let (cursor, indices) = (&physiology.cursor, &physiology.indices);
     for command in std::mem::take(&mut state.commands) {
+        let (Command::Reward { sprite, .. } | Command::Correct { sprite, .. }) = command;
+        let Some(body) = state.sprites.get_mut(sprite).map(|s| &mut s.body) else {
+            events.push(Event {
+                tick: state.tick,
+                kind: EventKind::CommandRejected {
+                    command,
+                    reason: Rejection::Gone,
+                },
+            });
+            continue;
+        };
         let kind = match command {
-            Command::Reward {
-                sprite: id,
-                amplified,
-                ..
-            } => {
-                let body = &mut state.sprites.get_mut(id).expect("a sprite").body;
+            Command::Reward { amplified, .. } => {
                 let reward = if amplified { cursor.hug } else { cursor.pet };
                 raise(body, indices.reward, reward);
                 body.pulse(indices.petted, None);
-                EventKind::Rewarded { id, amplified }
+                EventKind::Rewarded {
+                    id: sprite,
+                    amplified,
+                }
             }
-            Command::Correct {
-                sprite: id,
-                amplified,
-                ..
-            } => {
-                let body = &mut state.sprites.get_mut(id).expect("a sprite").body;
+            Command::Correct { amplified, .. } => {
                 let touch = if amplified { cursor.shock } else { cursor.zap };
                 raise(body, indices.punishment, touch.punishment);
                 raise(body, indices.pain, touch.pain);
                 body.pulse(indices.shocked, None);
-                EventKind::Corrected { id, amplified }
+                EventKind::Corrected {
+                    id: sprite,
+                    amplified,
+                }
             }
         };
         events.push(Event {
