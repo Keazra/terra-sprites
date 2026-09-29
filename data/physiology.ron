@@ -74,6 +74,8 @@
         "vigilance":         (range: (0.0, 2.0),     default: 0.8),
         "flight":            (range: (0.0, 2.0),     default: 0.8),
         "fear_reach":        (range: (0.1, 1.0),     default: 0.5),
+        // Category summaries (design v19 §5.6), at generalise's value.
+        "generalise_types":  (range: (2.0, 10.0),    default: 3.0),
     },
     // The range of each receptor target in `loci.ron`. Each rests at 1.0 when
     // no receptor writes it.

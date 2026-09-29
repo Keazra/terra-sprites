@@ -12,7 +12,8 @@ use crate::data::DataPack;
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, LocusRef};
 use crate::learning::{
-    Experience, Links, Signals, SpriteMemory, TRACE_CAP, Touch, TraceEntry, still_counts, weight,
+    Experience, Links, Signals, SpriteMemory, Subject, TRACE_CAP, Touch, TraceEntry, still_counts,
+    weight,
 };
 use crate::objects::EntityId;
 use crate::perception::Target;
@@ -68,14 +69,18 @@ fn column(verb: Verb) -> usize {
 /// default where no gene does.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct BrainParams {
-    /// In `BrainParam::ALL` order.
-    values: [f32; BrainParam::ALL.len()],
+    /// In `BrainParam::ALL` order. A `Vec`, since serde serialises arrays
+    /// only up to 32 long.
+    values: Vec<f32>,
 }
 
 impl BrainParams {
     pub(crate) fn express(genome: &Genome, data: &DataPack) -> BrainParams {
         let ranges = &data.physiology().brain;
-        let mut values = BrainParam::ALL.map(|param| ranges.of(param).default);
+        let mut values: Vec<f32> = BrainParam::ALL
+            .iter()
+            .map(|&param| ranges.of(param).default)
+            .collect();
         for (gene, expression) in genome.genes.iter().zip(expressions(genome, data)) {
             if let (&Gene::BrainParam { param, value }, Expression::Expressed) = (gene, expression)
             {
@@ -118,6 +123,8 @@ pub(crate) struct SpriteScoring {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Aim {
     pub(crate) category: CategoryId,
+    /// What it's learned about as (design v19 §5.6).
+    pub(crate) subject: Subject,
     /// Its path cost, normalized (design §5.2): 0 on it, 1 at the edge of sight.
     pub(crate) distance: f32,
     /// Whether the sprite stands on one of its goal tiles.
@@ -162,10 +169,15 @@ pub(crate) struct Snapshot {
     pub(crate) activations: Vec<f32>,
     /// Each candidate category's attention score.
     pub(crate) attention: BTreeMap<CategoryId, f32>,
+    /// What each category's score was for, learned about as (design v19
+    /// §5.9): its candidate, or the thing a running action is aimed at.
+    pub(crate) scored: BTreeMap<CategoryId, Subject>,
     pub(crate) attended: Option<CategoryId>,
     /// The one thing attention is on: a running action's target, or else the
     /// attended category's candidate.
     pub(crate) target: Option<Target>,
+    /// What that thing is learned about as (design v19 §5.6).
+    pub(crate) subject: Option<Subject>,
     /// Each verb's score, in `VERBS` order.
     pub(crate) scores: [f32; VERBS.len()],
     /// The verb it's doing, if any.
@@ -179,19 +191,25 @@ pub(crate) struct Snapshot {
     pub(crate) scoring: SpriteScoring,
 }
 
-/// What something learned is about (design v18 §5.9): a category, named by
-/// its first object type until slice 9e (`berry_bush`, and `sprite` for
-/// sprites in general; design v19 §6.1), or a particular sprite.
+/// What something learned is about (design v19 §5.9, §6.1).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum Thing {
-    Kind(String),
+    /// An object type, by name (`berry_bush`).
+    ObjectType(String),
+    /// A category, by name (`bush`): its summary, what the sprite thinks of
+    /// the things in it it hasn't met (design v19 §5.6). The sprite
+    /// category's is sprites in general (design v18 §5.6). Water or sprites
+    /// in a pack with no object type for them are learned about as their
+    /// category too.
+    Category(String),
+    /// A particular sprite (design v18 §5.6).
     Sprite(EntityId),
 }
 
 impl From<&str> for Thing {
-    /// The kind of thing called `kind`.
-    fn from(kind: &str) -> Thing {
-        Thing::Kind(kind.to_string())
+    /// The object type called `object_type`.
+    fn from(object_type: &str) -> Thing {
+        Thing::ObjectType(object_type.to_string())
     }
 }
 
@@ -206,9 +224,8 @@ pub enum Learned {
     /// How frightening a thing is (design v18 §5.6): it hurt the sprite by
     /// its own doing.
     Fear { thing: Thing },
-    /// A habit: doing a verb to a category, named by its first object type
-    /// until slice 9e (design v19 §6.1), as a category in `Thing` is.
-    Habit { thing: String, verb: Verb },
+    /// A habit: doing a verb to an object type (design v19 §5.6).
+    Habit { thing: Thing, verb: Verb },
     /// The worth of new things.
     NewThings,
 }
@@ -223,13 +240,23 @@ pub struct Memory {
 /// How many learned things the memory lists (design §5.9).
 const MEMORY_SIZE: usize = 5;
 
+/// What a sprite thinks of the things in a category it hasn't met (design
+/// v19 §5.6): the category's summary of each need's worth, of general good
+/// and of bad.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Summary {
+    pub(crate) worth: Vec<f32>,
+    pub(crate) good: f32,
+    pub(crate) bad: f32,
+}
+
 /// What a brain did at its latest step 5, explained (design §5.9): what it
 /// could attend to, and why it's doing what it's doing.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Explanation<'a> {
     /// Each candidate category's attention score, highest first, ties to
-    /// the lower category: a kind of thing, or for sprites the one scored
-    /// (design v18 §5.9).
+    /// the lower category, named by what was scored: its object type, or
+    /// for sprites the one scored (design v19 §5.9).
     pub attention: Vec<(Thing, f32)>,
     /// What attention is on, if anything.
     pub attended: Option<Thing>,
@@ -255,12 +282,13 @@ pub enum Part<'a> {
     /// An instinct: a concept's inputs by name, each with whether it's
     /// negated, through its link to the verb.
     Concept(Vec<(&'a str, bool)>),
-    /// What the thing attended to is worth: a kind, or a particular sprite.
+    /// What the thing attended to is worth: an object type, or a particular
+    /// sprite.
     Worth(Thing),
     /// How frightening the thing attended to is (design v18 §5.5).
     Fear(Thing),
     /// The habit of doing the verb to the thing attended to.
-    Habit(&'a str),
+    Habit(Thing),
 }
 
 impl Brain {
@@ -320,7 +348,7 @@ impl Brain {
             snapshot: None,
             felt: 0.0,
             trace: VecDeque::new(),
-            experience: Experience::new(data.need_places().len(), data.categories().len()),
+            experience: Experience::default(),
             touched: None,
         }
     }
@@ -349,8 +377,8 @@ impl Brain {
         let touched = self
             .touched
             .filter(|t| tick - t.tick <= physiology.touch_window)
-            .map(|t| (t.category, t.sprite, t.novelty));
-        if let Some((category, sprite, novelty)) = touched {
+            .map(|t| (t.subject, t.sprite, t.novelty));
+        if let Some((subject, sprite, novelty)) = touched {
             let good = self.params.get(BrainParam::WorthRateGood) * learning_rate_mod;
             let bad = self.params.get(BrainParam::WorthRateBad) * learning_rate_mod;
             // A hit's punishment teaches fear and habits, not worth (design
@@ -369,14 +397,17 @@ impl Brain {
                     known.good = (known.good + good * signals.reward).min(1.0);
                     known.bad = (known.bad - bad * punishment).max(-1.0);
                 }
+                // Anything else is learned about as its object type (design
+                // v19 §5.6).
                 None => {
-                    let c = data.category_index(category);
-                    let experience = &mut self.experience;
-                    for (worth, &relief) in experience.worth.iter_mut().zip(relief) {
-                        worth[c] = (worth[c] + good * relief).min(1.0);
+                    let known = self
+                        .experience
+                        .learn_about(subject, data.need_places().len());
+                    for (worth, &relief) in known.worth.iter_mut().zip(relief) {
+                        *worth = (*worth + good * relief).min(1.0);
                     }
-                    experience.good[c] = (experience.good[c] + good * signals.reward).min(1.0);
-                    experience.bad[c] = (experience.bad[c] - bad * punishment).max(-1.0);
+                    known.good = (known.good + good * signals.reward).min(1.0);
+                    known.bad = (known.bad - bad * punishment).max(-1.0);
                 }
             }
             let experience = &mut self.experience;
@@ -393,8 +424,9 @@ impl Brain {
             let rate = self.params.get(BrainParam::HabitRate) * learning_rate_mod;
             let disappointment = self.params.get(BrainParam::Disappointment);
             let decay = self.params.get(BrainParam::TraceDecay);
+            let needs = data.need_places().len();
             for entry in &self.trace {
-                let (Some(verb), Some(category)) = (entry.verb, entry.attended) else {
+                let (Some(verb), Some(subject)) = (entry.verb, entry.subject) else {
                     continue;
                 };
                 if !verb.is_aimed() {
@@ -405,8 +437,8 @@ impl Brain {
                     _ => 0.0,
                 };
                 let step = rate * (r - disappointed) * weight(decay, tick, entry.tick);
-                let habit =
-                    &mut self.experience.habits[data.category_index(category)][column(verb)];
+                let known = self.experience.learn_about(subject, needs);
+                let habit = &mut known.habits[column(verb)];
                 *habit = (*habit + step).clamp(-1.0, 1.0);
             }
         }
@@ -446,21 +478,17 @@ impl Brain {
             keep(BrainParam::HabitFade),
         );
         let experience = &mut self.experience;
-        let good_values = experience
-            .worth
-            .iter_mut()
-            .flatten()
-            .chain(&mut experience.good);
-        for value in good_values {
-            *value *= good;
+        for known in experience.types.values_mut() {
+            for value in &mut known.worth {
+                *value *= good;
+            }
+            known.good *= good;
+            known.bad *= bad;
+            for value in &mut known.habits {
+                *value *= habit;
+            }
         }
         experience.new_things *= good;
-        for value in &mut experience.bad {
-            *value *= bad;
-        }
-        for value in experience.habits.iter_mut().flatten() {
-            *value *= habit;
-        }
         let fear = keep(BrainParam::FearFade);
         for individual in experience.individuals.values_mut() {
             for value in &mut individual.worth {
@@ -473,9 +501,11 @@ impl Brain {
         experience.forget_faded(forget_below);
     }
 
-    /// How new `category` is to the sprite (design §5.6): 1 − familiarity.
-    pub(crate) fn novelty(&self, category: CategoryId, data: &DataPack) -> f32 {
-        1.0 - self.experience.familiarity[data.category_index(category)]
+    /// How new a thing learned about as `subject` is to the sprite (design
+    /// §5.6): 1 − familiarity.
+    pub(crate) fn novelty(&self, subject: Subject) -> f32 {
+        let known = self.experience.types.get(&subject);
+        1.0 - known.map_or(0.0, |known| known.familiarity)
     }
 
     /// Each need's relief this tick (design §5.6): its fall since the last
@@ -523,57 +553,77 @@ impl Brain {
 
     /// Every value a brain learns, named, always in the same order: worth
     /// for each need then general good, bad, habits, and new things, each in
-    /// category order (design §5.6).
+    /// category order, and within a category in object type order (design
+    /// §5.6).
     fn learned(&self, data: &DataPack) -> Vec<Memory> {
         let inputs = data.brain_inputs_in_order();
         let mut memory: Vec<Memory> = Vec::new();
         // Sprites in general are the summary of the ones it knows (design
         // v18 §5.6), never learned directly.
         let in_general = self.sprites_in_general(data.need_places().len());
-        let sprites = data.category_index(data.sprite_category());
-        let mut worth = self.experience.worth.clone();
-        for (worth, &summary) in worth.iter_mut().zip(&in_general.worth) {
-            worth[sprites] = summary;
-        }
-        let (mut good, mut bad) = (self.experience.good.clone(), self.experience.bad.clone());
-        good[sprites] = in_general.good;
-        bad[sprites] = in_general.bad;
         let categories = data.categories();
-        let thing = |category: CategoryId| Thing::from(data.category_label(category));
-        for (worth, &place) in worth.iter().zip(data.need_places()) {
-            for (category, &value) in categories.iter().zip(worth) {
+        let summaries: BTreeMap<CategoryId, Summary> = categories
+            .iter()
+            .map(|category| (category.id, self.category_summary(category.id, data)))
+            .collect();
+        // Each thing's worth for each need, general good and bad.
+        let mut things: Vec<(Thing, &[f32], f32, f32)> = Vec::new();
+        for category in categories {
+            if category.id == data.sprite_category() {
+                let thing = category_thing(category.id, data);
+                things.push((thing, &in_general.worth, in_general.good, in_general.bad));
+                continue;
+            }
+            let types = self.experience.types.iter();
+            for (&subject, known) in types.filter(|(s, _)| s.category(data) == category.id) {
+                let thing = subject_thing(subject, data);
+                things.push((thing, &known.worth, known.good, known.bad));
+            }
+            // Then the category's summary, never learned directly (design
+            // v19 §5.6).
+            let summary = &summaries[&category.id];
+            let thing = category_thing(category.id, data);
+            things.push((thing, &summary.worth, summary.good, summary.bad));
+        }
+        for (need, &place) in data.need_places().iter().enumerate() {
+            for (thing, worth, ..) in &things {
                 memory.push(Memory {
                     learned: Learned::Worth {
-                        thing: thing(category.id),
+                        thing: thing.clone(),
                         need: Some(inputs[place].name.clone()),
                     },
-                    amount: value,
+                    amount: worth[need],
                 });
             }
         }
-        for (category, &value) in categories.iter().zip(&good) {
+        for &(ref thing, _, good, _) in &things {
             let learned = Learned::Worth {
-                thing: thing(category.id),
+                thing: thing.clone(),
                 need: None,
             };
             memory.push(Memory {
                 learned,
-                amount: value,
+                amount: good,
             });
         }
-        for (category, &value) in categories.iter().zip(&bad) {
+        for &(ref thing, _, _, bad) in &things {
             let learned = Learned::Bad {
-                thing: thing(category.id),
+                thing: thing.clone(),
             };
             memory.push(Memory {
                 learned,
-                amount: value,
+                amount: bad,
             });
         }
-        for (category, habits) in categories.iter().zip(&self.experience.habits) {
-            for (&verb, &value) in VERBS.iter().zip(habits) {
+        // Habits are about object types, sprites' too (design v19 §5.6).
+        let habits = categories.iter().flat_map(|category| {
+            let types = self.experience.types.iter();
+            types.filter(move |(s, _)| s.category(data) == category.id)
+        });
+        for (&subject, known) in habits {
+            for (&verb, &value) in VERBS.iter().zip(&known.habits) {
                 let learned = Learned::Habit {
-                    thing: data.category_label(category.id).to_string(),
+                    thing: subject_thing(subject, data),
                     verb,
                 };
                 memory.push(Memory {
@@ -618,7 +668,7 @@ impl Brain {
         // listed, and a lesson, after them.
         memory.push(Memory {
             learned: Learned::Fear {
-                thing: thing(data.sprite_category()),
+                thing: category_thing(data.sprite_category(), data),
             },
             amount: in_general.fear,
         });
@@ -630,14 +680,11 @@ impl Brain {
     /// once it knows `generalise`. For `needs` needs.
     pub(crate) fn sprites_in_general(&self, needs: usize) -> SpriteMemory {
         let known = &self.experience.individuals;
-        let n = known.len() as f32;
-        let generalise = self.params.get(BrainParam::Generalise);
-        let strength = ((n - 1.0) / (generalise - 1.0)).clamp(0.0, 1.0);
+        let share = summary_share(known.len(), self.params.get(BrainParam::Generalise));
         let mut summary = SpriteMemory::new(needs);
-        if strength == 0.0 {
+        if share == 0.0 {
             return summary;
         }
-        let share = strength / n;
         for individual in known.values() {
             for (summary, worth) in summary.worth.iter_mut().zip(&individual.worth) {
                 *summary += share * worth;
@@ -645,6 +692,36 @@ impl Brain {
             summary.good += share * individual.good;
             summary.bad += share * individual.bad;
             summary.fear += share * individual.fear;
+        }
+        summary
+    }
+
+    /// `category`'s summary (design v19 §5.6): each value's mean over the
+    /// object types in it the sprite knows, at no strength while it knows
+    /// one, and in full once it knows `generalise_types`.
+    pub(crate) fn category_summary(&self, category: CategoryId, data: &DataPack) -> Summary {
+        let known: Vec<_> = self
+            .experience
+            .types
+            .iter()
+            .filter(|(subject, memory)| memory.touched && subject.category(data) == category)
+            .map(|(_, memory)| memory)
+            .collect();
+        let share = summary_share(known.len(), self.params.get(BrainParam::GeneraliseTypes));
+        let mut summary = Summary {
+            worth: vec![0.0; data.need_places().len()],
+            good: 0.0,
+            bad: 0.0,
+        };
+        if share == 0.0 {
+            return summary;
+        }
+        for known in known {
+            for (summary, worth) in summary.worth.iter_mut().zip(&known.worth) {
+                *summary += share * worth;
+            }
+            summary.good += share * known.good;
+            summary.bad += share * known.bad;
         }
         summary
     }
@@ -680,17 +757,20 @@ impl Brain {
     pub(crate) fn commit(&mut self, tick: u64, data: &DataPack) {
         if let Some(snapshot) = self.snapshot.as_ref().filter(|s| s.tick == tick) {
             let motive = snapshot.motive;
-            if let Some(category) = snapshot.attended {
-                // Attending to a kind of thing makes it familiar (design §5.6).
+            if let Some(subject) = snapshot.subject {
+                // Attending to an object type makes it familiar (design v19
+                // §5.6).
                 let rate = self.params.get(BrainParam::FamiliarityRate);
-                let familiar = &mut self.experience.familiarity[data.category_index(category)];
-                *familiar = (*familiar + rate).min(1.0);
+                let known = self
+                    .experience
+                    .learn_about(subject, data.need_places().len());
+                known.familiarity = (known.familiarity + rate).min(1.0);
             }
             self.trace.push_back(TraceEntry {
                 motive,
                 tick,
                 verb: snapshot.verb,
-                attended: snapshot.attended,
+                subject: snapshot.subject,
             });
         }
         // Oldest first.
@@ -741,12 +821,13 @@ impl Brain {
     /// `None` if it hasn't decided anything yet.
     pub(crate) fn explain<'a>(&self, data: &'a DataPack) -> Option<Explanation<'a>> {
         let snapshot = self.snapshot.as_ref()?;
-        // Sprites are named by the one scored (design v18 §5.9).
-        let seen = |category: CategoryId| thing_of(category, snapshot.sprite_seen, data);
+        // Each row is named by what was scored: its object type, or for
+        // sprites the one scored (design v19 §5.9).
+        let seen = |subject: Subject| thing_named(subject, snapshot.sprite_seen, data);
         let mut attention: Vec<(Thing, f32)> = snapshot
             .attention
             .iter()
-            .map(|(&category, &score)| (seen(category), score))
+            .map(|(category, &score)| (seen(snapshot.scored[category]), score))
             .collect();
         // A stable sort keeps a tie in category order.
         attention.sort_by(|a, b| b.1.total_cmp(&a.1));
@@ -772,11 +853,11 @@ impl Brain {
                 .collect(),
             None => Vec::new(),
         };
-        if let (Some((verb, _)), Some(category)) = (decision, snapshot.attended) {
+        if let (Some((verb, _)), Some(subject)) = (decision, snapshot.subject) {
             let scoring = snapshot.scoring;
-            let parts = self.aimed_parts(category, scoring, &snapshot.inputs, data);
+            let parts = self.aimed_parts(subject, scoring, &snapshot.inputs, data);
             let [worth, fear, habit] = parts[column(verb)];
-            let thing = thing_of(category, scoring.sprite, data);
+            let thing = thing_named(subject, scoring.sprite, data);
             contributions.extend([
                 Contribution {
                     part: Part::Worth(thing.clone()),
@@ -787,7 +868,7 @@ impl Brain {
                     amount: fear,
                 },
                 Contribution {
-                    part: Part::Habit(data.category_label(category)),
+                    part: Part::Habit(subject_thing(subject, data)),
                     amount: habit,
                 },
             ]);
@@ -798,7 +879,7 @@ impl Brain {
         contributions.sort_by(|a, b| b.amount.abs().total_cmp(&a.amount.abs()));
         Some(Explanation {
             attention,
-            attended: snapshot.attended.map(seen),
+            attended: snapshot.subject.map(seen),
             decision,
             contributions,
         })
@@ -840,12 +921,13 @@ impl Brain {
 
     /// Each candidate category's attention score (design §5.3): the State
     /// inputs through the attention links, plus salience for nearness.
-    /// `candidates` gives each category's normalized distance. Target
-    /// inputs never count, whatever `inputs` holds for them.
+    /// `candidates` gives what each category's candidate is learned about as
+    /// and its normalized distance. Target inputs never count, whatever
+    /// `inputs` holds for them.
     pub(crate) fn attention_scores(
         &self,
         inputs: &[f32],
-        candidates: &BTreeMap<CategoryId, f32>,
+        candidates: &BTreeMap<CategoryId, (Subject, f32)>,
         curiosity_mod: f32,
         scoring: SpriteScoring,
         data: &DataPack,
@@ -861,17 +943,17 @@ impl Brain {
         let value_gain = self.params.get(BrainParam::ValueGain);
         let curiosity = self.params.get(BrainParam::Curiosity);
         let vigilance = self.params.get(BrainParam::Vigilance);
-        let boldness = (1.0 + self.experience.new_things).max(0.0) * curiosity_mod;
+        let boldness = self.boldness(curiosity_mod);
         candidates
             .iter()
-            .map(|(&category, &distance)| {
+            .map(|(&category, &(subject, distance))| {
                 let c = data.category_index(category);
                 let instinct: f32 = state
                     .iter()
                     .map(|&i| inputs[i] * self.attention.get(i, c))
                     .sum();
-                let worth = value_gain * self.worth_of(category, scoring.sprite, inputs, data);
-                let curious = curiosity * self.novelty(category, data) * boldness;
+                let worth = value_gain * self.worth_of(subject, scoring.sprite, inputs, data);
+                let curious = curiosity * self.novelty(subject) * boldness;
                 // Fear catches the eye (design v18 §5.3).
                 let watchful = vigilance * self.fright(category, scoring, distance, data);
                 (
@@ -882,25 +964,38 @@ impl Brain {
             .collect()
     }
 
-    /// How much `sprite`, at normalized `distance`, draws the eye beyond the
-    /// instincts every sprite shares (design v18 §3.6, §5.3): its nearness,
-    /// what it's worth, and how frightening it is while near.
+    /// How much a thing learned about as `subject`, the particular `sprite`
+    /// if it's one, at normalized `distance`, draws the eye beyond the
+    /// instincts about its category (design v19 §3.6, §5.3): its nearness,
+    /// what it's worth, how new it is, and, for a sprite, how frightening it
+    /// is while near. `inputs` gives the State inputs, and `curiosity_mod`
+    /// the receptor target wariness lowers.
     pub(crate) fn draw(
         &self,
-        sprite: EntityId,
+        subject: Subject,
+        sprite: Option<EntityId>,
         distance: f32,
         inputs: &[f32],
+        curiosity_mod: f32,
         data: &DataPack,
     ) -> f32 {
         let scoring = SpriteScoring {
-            sprite: Some(sprite),
+            sprite,
             quiet: false,
         };
+        let boldness = self.boldness(curiosity_mod);
         self.params.get(BrainParam::SalienceGain) * (1.0 - distance)
-            + self.params.get(BrainParam::ValueGain)
-                * self.worth_of(data.sprite_category(), scoring.sprite, inputs, data)
+            + self.params.get(BrainParam::ValueGain) * self.worth_of(subject, sprite, inputs, data)
+            + self.params.get(BrainParam::Curiosity) * self.novelty(subject) * boldness
             + self.params.get(BrainParam::Vigilance)
-                * self.fright(data.sprite_category(), scoring, distance, data)
+                * self.fright(subject.category(data), scoring, distance, data)
+    }
+
+    /// How boldly the unfamiliar draws the eye (design §5.3): the worth of
+    /// new things, lifted by 1 and never below 0, times `curiosity_mod`, the
+    /// receptor target wariness lowers.
+    fn boldness(&self, curiosity_mod: f32) -> f32 {
+        (1.0 + self.experience.new_things).max(0.0) * curiosity_mod
     }
 
     /// How frightening `category`'s thing is at normalized `distance` (design
@@ -968,12 +1063,13 @@ impl Brain {
 
     /// Each verb's score (design §5.5), in `VERBS` order: the concepts'
     /// activations through the instinct links, and for the thing `aimed`
-    /// at, its worth, which draws the sprite to it or makes it back away.
+    /// at, learned about as that subject, its worth, which draws the sprite
+    /// to it or makes it back away.
     pub(crate) fn scores(
         &self,
         activations: &[f32],
         inputs: &[f32],
-        aimed: Option<CategoryId>,
+        aimed: Option<Subject>,
         scoring: SpriteScoring,
         data: &DataPack,
     ) -> [f32; VERBS.len()] {
@@ -983,8 +1079,8 @@ impl Brain {
                 *score += a * w;
             }
         }
-        if let Some(category) = aimed {
-            let parts = self.aimed_parts(category, scoring, inputs, data);
+        if let Some(subject) = aimed {
+            let parts = self.aimed_parts(subject, scoring, inputs, data);
             for (score, parts) in scores.iter_mut().zip(parts) {
                 *score += parts.iter().sum::<f32>();
             }
@@ -992,22 +1088,27 @@ impl Brain {
         scores
     }
 
-    /// What `category`'s thing, aimed at, adds to each verb's score, in
-    /// `VERBS` order (design v18 §5.5): its worth, how frightening it is, and
-    /// the habit. Its worth and fear are the same for every verb, so they're
-    /// worked out once.
+    /// What a thing learned about as `subject`, aimed at, adds to each verb's
+    /// score, in `VERBS` order (design v18 §5.5): its worth, how frightening
+    /// it is, and the habit. Its worth and fear are the same for every verb,
+    /// so they're worked out once.
     fn aimed_parts(
         &self,
-        category: CategoryId,
+        subject: Subject,
         scoring: SpriteScoring,
         inputs: &[f32],
         data: &DataPack,
     ) -> [[f32; 3]; VERBS.len()] {
         let value_gain = self.params.get(BrainParam::ValueGain);
         let flight = self.params.get(BrainParam::Flight);
-        let worth = value_gain * self.worth_of(category, scoring.sprite, inputs, data);
+        let category = subject.category(data);
+        let worth = value_gain * self.worth_of(subject, scoring.sprite, inputs, data);
         let fear = self.fright(category, scoring, target_distance(inputs, data), data);
-        let habits = &self.experience.habits[data.category_index(category)];
+        let habits = self
+            .experience
+            .types
+            .get(&subject)
+            .map_or([0.0; VERBS.len()], |known| known.habits);
         std::array::from_fn(|i| {
             let verb = VERBS[i];
             [
@@ -1018,33 +1119,37 @@ impl Brain {
         })
     }
 
-    /// What `category`'s thing is worth to the sprite now (design §5.6):
-    /// each need's level, from `inputs`, times its worth for that need, plus
-    /// its general good and its bad. For sprites, `sprite`'s, or sprites in
-    /// general's (design v18 §5.6).
+    /// What a thing learned about as `subject` is worth to the sprite now
+    /// (design §5.6): each need's level, from `inputs`, times its worth for
+    /// that need, plus its general good and its bad. For an object type it
+    /// doesn't know, its category's summary (design v19 §5.6); for sprites,
+    /// `sprite`'s, or sprites in general's (design v18 §5.6).
     fn worth_of(
         &self,
-        category: CategoryId,
+        subject: Subject,
         sprite: Option<EntityId>,
         inputs: &[f32],
         data: &DataPack,
     ) -> f32 {
-        let for_needs = |worth: &mut dyn Iterator<Item = f32>| -> f32 {
+        let for_needs = |worth: &[f32]| -> f32 {
             data.need_places()
                 .iter()
                 .zip(worth)
                 .map(|(&place, worth)| inputs[place] * worth)
                 .sum()
         };
-        if category == data.sprite_category() {
+        let now = |worth: &[f32], good: f32, bad: f32| for_needs(worth) + good + bad;
+        if subject.category(data) == data.sprite_category() {
             let known = self.memory_of(sprite, data.need_places().len());
-            return for_needs(&mut known.worth.iter().copied()) + known.good + known.bad;
+            return now(&known.worth, known.good, known.bad);
         }
-        let c = data.category_index(category);
-        let experience = &self.experience;
-        for_needs(&mut experience.worth.iter().map(|worth| worth[c]))
-            + experience.good[c]
-            + experience.bad[c]
+        match self.experience.types.get(&subject).filter(|t| t.touched) {
+            Some(known) => now(&known.worth, known.good, known.bad),
+            None => {
+                let summary = self.category_summary(subject.category(data), data);
+                now(&summary.worth, summary.good, summary.bad)
+            }
+        }
     }
 
     /// A verb sampled from the `available` ones, by softmax(score / τ), τ
@@ -1090,13 +1195,42 @@ pub(crate) fn available(target: bool, beside: bool) -> Vec<Verb> {
         .collect()
 }
 
-/// What a thing of `category` is called, for sprites the particular
-/// `sprite` if there is one (design v18 §5.9).
-fn thing_of(category: CategoryId, sprite: Option<EntityId>, data: &DataPack) -> Thing {
+/// What a thing learned about as `subject` is called, for sprites the
+/// particular `sprite` if there is one (design v18, v19 §5.9).
+fn thing_named(subject: Subject, sprite: Option<EntityId>, data: &DataPack) -> Thing {
     match sprite {
-        Some(sprite) if category == data.sprite_category() => Thing::Sprite(sprite),
-        _ => Thing::from(data.category_label(category)),
+        Some(sprite) if subject.category(data) == data.sprite_category() => Thing::Sprite(sprite),
+        _ => subject_thing(subject, data),
     }
+}
+
+/// Each one's share of a summary over `n` things known (design v18, v19
+/// §5.6): its mean, at no strength while it knows one, and in full once it
+/// knows `generalise`. 0 while the summary counts for nothing.
+fn summary_share(n: usize, generalise: f32) -> f32 {
+    let n = n as f32;
+    let strength = ((n - 1.0) / (generalise - 1.0)).clamp(0.0, 1.0);
+    if strength == 0.0 { 0.0 } else { strength / n }
+}
+
+/// What something learned about as `subject` is called (design v19 §6.1):
+/// its object type, or its category if it has none.
+fn subject_thing(subject: Subject, data: &DataPack) -> Thing {
+    match subject {
+        Subject::ObjectType(id) => Thing::from(
+            data.object_type(id)
+                .expect("an object type in the pack")
+                .name
+                .as_str(),
+        ),
+        Subject::Category(category) => category_thing(category, data),
+    }
+}
+
+/// The category `category`, named (design v19 §6.1).
+fn category_thing(category: CategoryId, data: &DataPack) -> Thing {
+    let category = data.category(category).expect("a category in the pack");
+    Thing::Category(category.name.clone())
 }
 
 /// The `target_distance` input's value in `inputs` (design §5.2).
@@ -1142,6 +1276,7 @@ mod tests {
     use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
+    use crate::learning::TypeMemory;
 
     fn builtin() -> DataPack {
         DataPack::builtin().expect("built-in data pack is valid")
@@ -1153,11 +1288,43 @@ mod tests {
     const THORNBUSH: CategoryId = CategoryId(3);
     const WATER: CategoryId = CategoryId(4);
     const TOY: CategoryId = CategoryId(5);
-    const SPRITE: CategoryId = CategoryId(6);
+
+    /// The built-in pack's object types (design §3.5.3), as sprites learn
+    /// about them.
+    mod types {
+        use crate::learning::Subject;
+
+        pub(super) const BERRY_BUSH: Subject = Subject::ObjectType(1);
+        pub(super) const BERRY: Subject = Subject::ObjectType(2);
+        pub(super) const THORNBUSH: Subject = Subject::ObjectType(3);
+        pub(super) const BALL: Subject = Subject::ObjectType(4);
+        pub(super) const WATER: Subject = Subject::ObjectType(100);
+        pub(super) const SPRITE: Subject = Subject::ObjectType(101);
+    }
 
     /// Where `category` is in what a brain keeps per category.
     fn at(category: CategoryId) -> usize {
         builtin().category_index(category)
+    }
+
+    /// What `brain` has learned about `subject`, or nothing.
+    fn about(brain: &Brain, subject: Subject) -> TypeMemory {
+        let needs = builtin().need_places().len();
+        brain
+            .experience
+            .types
+            .get(&subject)
+            .cloned()
+            .unwrap_or_else(|| TypeMemory::new(needs))
+    }
+
+    /// What `brain` has learned about `subject`, having touched one, to set
+    /// it.
+    fn teach(brain: &mut Brain, subject: Subject) -> &mut TypeMemory {
+        let needs = builtin().need_places().len();
+        let known = brain.experience.learn_about(subject, needs);
+        known.touched = true;
+        known
     }
 
     fn brain(genes: &[&str]) -> Brain {
@@ -1280,7 +1447,10 @@ mod tests {
             r#"AttentionInstinct(input: "hunger", category: "bush", weight: 0.8)"#,
             r#"BrainParam(param: "salience_gain", value: 0.5)"#,
         ]);
-        let candidates = BTreeMap::from([(BUSH, 0.4), (WATER, 0.0)]);
+        let candidates = BTreeMap::from([
+            (BUSH, (types::BERRY_BUSH, 0.4)),
+            (WATER, (types::WATER, 0.0)),
+        ]);
         let hungry = inputs(&[("hunger", 0.5)]);
         let also_aimed = inputs(&[
             ("hunger", 0.5),
@@ -1420,20 +1590,22 @@ mod tests {
     }
 
     /// A snapshot of step 5 at `tick`, having chosen `verb` while attending
-    /// to `attended`, with `activations`.
+    /// to a thing learned about as `attended`, with `activations`.
     fn snapshot(
         tick: u64,
         activations: Vec<f32>,
         verb: Verb,
-        attended: Option<CategoryId>,
+        attended: Option<Subject>,
     ) -> Snapshot {
         Snapshot {
             tick,
             inputs: Vec::new(),
             activations,
             attention: BTreeMap::new(),
-            attended,
+            scored: BTreeMap::new(),
+            attended: attended.map(|s| s.category(&builtin())),
             target: None,
+            subject: attended,
             scores: [0.0; VERBS.len()],
             verb: Some(verb),
             motive: None,
@@ -1475,13 +1647,14 @@ mod tests {
         a
     }
 
-    /// Has `brain` decide `verb` at `tick`, attending to `attended`, with
-    /// the singletons `set` names active, and commit it.
+    /// Has `brain` decide `verb` at `tick`, attending to a thing learned
+    /// about as `attended`, with the singletons `set` names active, and
+    /// commit it.
     fn decide(
         brain: &mut Brain,
         tick: u64,
         verb: Verb,
-        attended: Option<CategoryId>,
+        attended: Option<Subject>,
         set: &[(&str, f32)],
     ) {
         let a = activations(brain, set);
@@ -1506,10 +1679,10 @@ mod tests {
             r#"AttentionInstinct(input: "hunger", category: "fruit", weight: 0.4)"#,
         ]);
         let set = [("hunger", 1.0), ("always", 1.0)];
-        decide(&mut brain, 9, Verb::Eat, Some(FRUIT), &set);
+        decide(&mut brain, 9, Verb::Eat, Some(types::BERRY), &set);
         brain.touched = Some(Touch {
             tick: 9,
-            category: FRUIT,
+            subject: types::BERRY,
             sprite: None,
             novelty: 1.0,
         });
@@ -1537,7 +1710,7 @@ mod tests {
 
     /// What `brain` has learned berry bushes are worth for hunger.
     fn bush_for_hunger(brain: &Brain) -> f32 {
-        brain.experience.worth[0][at(BUSH)]
+        about(brain, types::BERRY_BUSH).worth[0]
     }
 
     #[test]
@@ -1547,7 +1720,7 @@ mod tests {
         let mut brain = unfading(&[]);
         let touch = Touch {
             tick: 1,
-            category: BUSH,
+            subject: types::BERRY_BUSH,
             sprite: None,
             novelty: 1.0,
         };
@@ -1578,7 +1751,7 @@ mod tests {
         // A touch longer ago than the window (3 ticks) is forgotten too.
         brain.touched = Some(Touch {
             tick: 2,
-            category: BUSH,
+            subject: types::BERRY_BUSH,
             sprite: None,
             novelty: 1.0,
         });
@@ -1591,18 +1764,18 @@ mod tests {
     fn being_hit_teaches_nothing_about_what_sprites_are_worth() {
         // Design v16 §5.6: all sprites are one kind, so one attacker would
         // make a sprite shy of every sprite. The hit's punishment, with a
-        // sprite attended and nothing touched, teaches no worth. Fear of
-        // individuals and kinds is its own slice.
+        // sprite attended and nothing touched, teaches no worth. Fear of the
+        // one who hit it is learned apart (design v18 §5.6).
         let data = builtin();
         let mut brain = unfading(&[]);
-        decide(&mut brain, 9, Verb::Wander, Some(SPRITE), &[]);
+        decide(&mut brain, 9, Verb::Wander, Some(types::SPRITE), &[]);
         let hit = Signals {
             needs: vec![0.0; data.need_places().len()],
             punishment: 1.0,
             ..Default::default()
         };
         brain.learn(10, &hit, 1.0, &data);
-        assert_eq!(brain.experience.bad[at(SPRITE)], 0.0);
+        assert_eq!(about(&brain, types::SPRITE).bad, 0.0);
         assert_eq!(brain.experience.new_things, 0.0);
     }
 
@@ -1611,9 +1784,12 @@ mod tests {
         // Design v16 §5.3: value_gain (1) × Σ need × worth, plus good and bad.
         let data = builtin();
         let mut brain = brain(&[]);
-        brain.experience.worth[0][at(FRUIT)] = 0.5;
-        brain.experience.bad[at(THORNBUSH)] = -0.4;
-        let candidates = BTreeMap::from([(FRUIT, 1.0), (THORNBUSH, 1.0)]);
+        teach(&mut brain, types::BERRY).worth[0] = 0.5;
+        teach(&mut brain, types::THORNBUSH).bad = -0.4;
+        let candidates = BTreeMap::from([
+            (FRUIT, (types::BERRY, 1.0)),
+            (THORNBUSH, (types::THORNBUSH, 1.0)),
+        ]);
         let full = brain.attention_scores(
             &inputs(&[]),
             &candidates,
@@ -1642,13 +1818,14 @@ mod tests {
         for worth in [0.3, -0.3] {
             let mut brain = brain(&[]);
             if worth > 0.0 {
-                brain.experience.good[at(TOY)] = worth;
+                teach(&mut brain, types::BALL).good = worth;
             } else {
-                brain.experience.bad[at(TOY)] = worth;
+                teach(&mut brain, types::BALL).bad = worth;
             }
             let x = inputs(&[]);
             let none = SpriteScoring::default();
-            let scores = brain.scores(&brain.activations(&x), &x, Some(TOY), none, &data);
+            let ball = Some(types::BALL);
+            let scores = brain.scores(&brain.activations(&x), &x, ball, none, &data);
             for verb in [Approach, Eat, Drink, Hit, Play] {
                 assert_eq!(scores[column(verb)], worth, "{verb:?}");
             }
@@ -1679,7 +1856,8 @@ mod tests {
         };
         let scores = |distance: f32, scoring: SpriteScoring| {
             let x = inputs(&[("target_distance", distance)]);
-            brain.scores(&brain.activations(&x), &x, Some(SPRITE), scoring, &data)
+            let sprite = Some(types::SPRITE);
+            brain.scores(&brain.activations(&x), &x, sprite, scoring, &data)
         };
         let near = scores(0.0, scoring);
         assert!(close(near[column(Retreat)], 0.4), "{near:?}");
@@ -1709,16 +1887,16 @@ mod tests {
         // for entries whose verb was aimed at the thing they attended.
         let data = builtin();
         let mut brain = unfading(&[r#"BrainParam(param: "trace_decay", value: 0.5)"#]);
-        decide(&mut brain, 7, Verb::Rest, Some(FRUIT), &[]);
-        decide(&mut brain, 8, Verb::Approach, Some(FRUIT), &[]);
-        decide(&mut brain, 9, Verb::Eat, Some(FRUIT), &[]);
+        decide(&mut brain, 7, Verb::Rest, Some(types::BERRY), &[]);
+        decide(&mut brain, 8, Verb::Approach, Some(types::BERRY), &[]);
+        decide(&mut brain, 9, Verb::Eat, Some(types::BERRY), &[]);
         let hurt = Signals {
             needs: vec![0.0; data.need_places().len()],
             punishment: 1.0,
             ..Default::default()
         };
         brain.learn(10, &hurt, 1.0, &data);
-        let habit = |verb| brain.experience.habits[at(FRUIT)][column(verb)];
+        let habit = |verb| about(&brain, types::BERRY).habits[column(verb)];
         assert!(close(habit(Verb::Eat), -0.3 * 0.5), "{}", habit(Verb::Eat));
         assert!(close(habit(Verb::Approach), -0.3 * 0.25));
         assert_eq!(habit(Verb::Rest), 0.0, "Rest aims at nothing");
@@ -1734,12 +1912,12 @@ mod tests {
     fn a_habit_counts_for_its_verb_on_the_thing_attended() {
         let data = builtin();
         let mut brain = brain(&[]);
-        brain.experience.habits[at(TOY)][column(Verb::Eat)] = -0.4;
+        teach(&mut brain, types::BALL).habits[column(Verb::Eat)] = -0.4;
         let x = inputs(&[]);
         let scores = brain.scores(
             &brain.activations(&x),
             &x,
-            Some(TOY),
+            Some(types::BALL),
             SpriteScoring::default(),
             &data,
         );
@@ -1748,7 +1926,7 @@ mod tests {
         let at_a_berry = brain.scores(
             &brain.activations(&x),
             &x,
-            Some(FRUIT),
+            Some(types::BERRY),
             SpriteScoring::default(),
             &data,
         );
@@ -1766,10 +1944,10 @@ mod tests {
             r#"Instinct(inputs: [("boredom", false)], verb: Eat, weight: 0.2)"#,
         ]);
         let set = [("hunger", 0.8), ("boredom", 1.0)];
-        decide(&mut brain, 9, Verb::Eat, Some(TOY), &set);
+        decide(&mut brain, 9, Verb::Eat, Some(types::BALL), &set);
         brain.touched = Some(Touch {
             tick: 9,
-            category: TOY,
+            subject: types::BALL,
             sprite: None,
             novelty: 1.0,
         });
@@ -1781,7 +1959,7 @@ mod tests {
             ..Default::default()
         };
         brain.learn(10, &fruitless, 1.0, &data);
-        let habit = brain.experience.habits[at(TOY)][column(Verb::Eat)];
+        let habit = about(&brain, types::BALL).habits[column(Verb::Eat)];
         assert!(close(habit, -0.3 * 0.3 * 0.8 * 0.9), "{habit}");
         assert_eq!(bush_for_hunger(&brain), 0.0, "worth isn't touched");
     }
@@ -1792,10 +1970,16 @@ mod tests {
         let data = builtin();
         let mut brain =
             brain(&[r#"Instinct(inputs: [("always", false)], verb: Play, weight: 0.5)"#]);
-        decide(&mut brain, 9, Verb::Play, Some(TOY), &[("always", 1.0)]);
+        decide(
+            &mut brain,
+            9,
+            Verb::Play,
+            Some(types::BALL),
+            &[("always", 1.0)],
+        );
         brain.touched = Some(Touch {
             tick: 9,
-            category: TOY,
+            subject: types::BALL,
             sprite: None,
             novelty: 1.0,
         });
@@ -1805,7 +1989,7 @@ mod tests {
             ..Default::default()
         };
         brain.learn(10, &fruitless, 1.0, &data);
-        assert_eq!(brain.experience.habits[at(TOY)][column(Verb::Play)], 0.0);
+        assert_eq!(about(&brain, types::BALL).habits[column(Verb::Play)], 0.0);
     }
 
     #[test]
@@ -1818,46 +2002,76 @@ mod tests {
             r#"BrainParam(param: "worth_fade_bad", value: 0.001)"#,
             r#"BrainParam(param: "habit_fade", value: 0.005)"#,
         ]);
-        let (berry, thorn) = (at(FRUIT), at(THORNBUSH));
-        brain.experience.worth[0][berry] = 0.5;
-        brain.experience.good[berry] = 0.4;
-        brain.experience.bad[thorn] = -0.5;
-        brain.experience.habits[thorn][column(Verb::Eat)] = -0.2;
+        teach(&mut brain, types::BERRY).worth[0] = 0.5;
+        teach(&mut brain, types::BERRY).good = 0.4;
+        teach(&mut brain, types::THORNBUSH).bad = -0.5;
+        teach(&mut brain, types::THORNBUSH).habits[column(Verb::Eat)] = -0.2;
         let quiet = Signals {
             needs: vec![0.0; data.need_places().len()],
             ..Default::default()
         };
         brain.learn(1, &quiet, 1.0, &data);
-        let experience = &brain.experience;
-        assert!(close(experience.worth[0][berry], 0.5 * 0.99));
-        assert!(close(experience.good[berry], 0.4 * 0.99));
-        assert!(close(experience.bad[thorn], -0.5 * 0.999));
-        assert!(close(
-            experience.habits[thorn][column(Verb::Eat)],
-            -0.2 * 0.995
-        ));
+        let (berries, thornbushes) = (about(&brain, types::BERRY), about(&brain, types::THORNBUSH));
+        assert!(close(berries.worth[0], 0.5 * 0.99));
+        assert!(close(berries.good, 0.4 * 0.99));
+        assert!(close(thornbushes.bad, -0.5 * 0.999));
+        assert!(close(thornbushes.habits[column(Verb::Eat)], -0.2 * 0.995));
     }
 
     #[test]
-    fn attending_to_a_kind_of_thing_makes_it_familiar() {
+    fn attending_to_an_object_type_makes_it_familiar() {
         // Design v16 §5.6: familiarity_rate (.002) each tick attended.
         let mut brain = brain(&[]);
         for tick in 0..10 {
-            decide(&mut brain, tick, Verb::Rest, Some(TOY), &[]);
+            decide(&mut brain, tick, Verb::Rest, Some(types::BALL), &[]);
         }
-        let familiar = brain.experience.familiarity[at(TOY)];
+        let familiar = about(&brain, types::BALL).familiarity;
         assert!(close(familiar, 0.02), "{familiar}");
-        assert_eq!(brain.experience.familiarity[at(FRUIT)], 0.0);
+        assert_eq!(about(&brain, types::BERRY).familiarity, 0.0);
+    }
+
+    /// The built-in pack with thornbushes in the bush category (design v19
+    /// §3.5.5).
+    fn bushes() -> DataPack {
+        let sources: Vec<(&str, String)> = DataPack::builtin_sources()
+            .iter()
+            .map(|&(path, text)| match path {
+                "objects.ron" => (
+                    path,
+                    text.replace(r#"category: "thornbush""#, r#"category: "bush""#),
+                ),
+                _ => (path, text.to_string()),
+            })
+            .collect();
+        let sources: Vec<(&str, &str)> = sources.iter().map(|(p, t)| (*p, t.as_str())).collect();
+        DataPack::from_sources(&sources).expect("a valid test pack")
     }
 
     #[test]
-    fn unfamiliar_kinds_of_thing_draw_the_eye_as_boldly_as_the_sprite_is_bold() {
+    fn attending_to_berry_bushes_leaves_thornbushes_new_though_both_are_bushes() {
+        // Design v19 §5.6: newness is about the object type, so an apple is
+        // new to a sprite that knows only berries. familiarity_rate (.002)
+        // each tick attended.
+        let data = bushes();
+        let mut brain = brain(&[]);
+        for tick in 0..10 {
+            let attending = snapshot(tick, Vec::new(), Verb::Rest, Some(types::BERRY_BUSH));
+            brain.snapshot = Some(attending);
+            brain.commit(tick, &data);
+        }
+        let known = brain.novelty(types::BERRY_BUSH);
+        assert!(close(known, 1.0 - 0.02), "{known}");
+        assert_eq!(brain.novelty(types::THORNBUSH), 1.0);
+    }
+
+    #[test]
+    fn unfamiliar_object_types_draw_the_eye_as_boldly_as_the_sprite_is_bold() {
         // Design v16 §5.3: curiosity (.3) × novelty × max(0, 1 + new things)
         // × curiosity_mod; salience is 0 at distance 1.
         let data = builtin();
         let mut brain = brain(&[]);
-        brain.experience.familiarity[at(TOY)] = 0.5;
-        let candidates = BTreeMap::from([(FRUIT, 1.0), (TOY, 1.0)]);
+        teach(&mut brain, types::BALL).familiarity = 0.5;
+        let candidates = BTreeMap::from([(FRUIT, (types::BERRY, 1.0)), (TOY, (types::BALL, 1.0))]);
         let x = inputs(&[]);
         let score = |brain: &Brain, mood: f32| {
             brain.attention_scores(&x, &candidates, mood, SpriteScoring::default(), &data)
@@ -1880,7 +2094,7 @@ mod tests {
         let mut brain = unfading(&[]);
         brain.touched = Some(Touch {
             tick: 1,
-            category: THORNBUSH,
+            subject: types::THORNBUSH,
             sprite: None,
             novelty: 0.5,
         });
@@ -1908,12 +2122,12 @@ mod tests {
         let data = builtin();
         let mut brain =
             brain(&[r#"Instinct(inputs: [("boredom", false)], verb: Play, weight: 1.0)"#]);
-        brain.experience.good[at(TOY)] = 0.3;
-        brain.experience.habits[at(TOY)][column(Verb::Play)] = -0.2;
+        teach(&mut brain, types::BALL).good = 0.3;
+        teach(&mut brain, types::BALL).habits[column(Verb::Play)] = -0.2;
         let x = inputs(&[("boredom", 0.5)]);
         brain.snapshot = Some(Snapshot {
             inputs: x.clone(),
-            ..snapshot(9, brain.activations(&x), Verb::Play, Some(TOY))
+            ..snapshot(9, brain.activations(&x), Verb::Play, Some(types::BALL))
         });
         let explained = brain.explain(&data).expect("a decision");
         let parts: Vec<(Part, f32)> = explained
@@ -1926,7 +2140,7 @@ mod tests {
             [
                 (Part::Concept(vec![("boredom", false)]), 0.5),
                 (Part::Worth("ball".into()), 0.3),
-                (Part::Habit("ball"), -0.2),
+                (Part::Habit("ball".into()), -0.2),
             ]
         );
     }
@@ -1937,10 +2151,10 @@ mod tests {
         // touched, and a hit back within the touch window punishes it.
         let data = builtin();
         let mut brain = unfading(&[]);
-        decide(&mut brain, 9, Verb::Hit, Some(SPRITE), &[]);
+        decide(&mut brain, 9, Verb::Hit, Some(types::SPRITE), &[]);
         brain.touched = Some(Touch {
             tick: 9,
-            category: SPRITE,
+            subject: types::SPRITE,
             sprite: None,
             novelty: 1.0,
         });
@@ -1951,9 +2165,9 @@ mod tests {
             ..Default::default()
         };
         brain.learn(10, &hit_back, 1.0, &data);
-        assert_eq!(brain.experience.bad[at(SPRITE)], 0.0);
+        assert_eq!(about(&brain, types::SPRITE).bad, 0.0);
         assert_eq!(brain.experience.new_things, 0.0);
-        let habit = brain.experience.habits[at(SPRITE)][column(Verb::Hit)];
+        let habit = about(&brain, types::SPRITE).habits[column(Verb::Hit)];
         assert!(habit < 0.0, "the habit still learns: {habit}");
     }
 

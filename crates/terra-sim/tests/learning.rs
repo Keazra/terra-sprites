@@ -2,8 +2,8 @@
 //! learns what things are worth and its habits.
 
 use terra_sim::{
-    DataPack, EntityId, Event, EventKind, Genome, Learned, Map, Pos, Scenario, ScriptedAction,
-    Thing, World,
+    DataPack, EntityId, Event, EventKind, Genome, Learned, Map, Part, Pos, Scenario,
+    ScriptedAction, Thing, Verb, World,
 };
 
 fn builtin() -> DataPack {
@@ -39,7 +39,49 @@ fn world(
     genes: &str,
     script: &[ScriptedAction],
 ) -> World {
-    let data = builtin();
+    world_in(builtin(), rows, objects, sprite, genes, script)
+}
+
+/// A third bush, brambles, which prick as thornbushes do.
+const BRAMBLE: &str = r#"(id: 5, name: "bramble", plural: "brambles",
+     category: "bush", tags: [Solid, Fixture], size: Large, hardness: 1.0,
+     verbs: {
+         Eat:  [Inject(Actor, "injury", 0.05), Signal(Actor, "pricked")],
+         Play: [Inject(Actor, "injury", 0.03), Signal(Actor, "pricked")],
+     }),
+"#;
+
+/// The built-in pack with every bush in the bush category (design v19
+/// §3.5.5): thornbushes join berry bushes, and a third bush, brambles.
+fn bushes() -> DataPack {
+    let sources: Vec<(&str, String)> = DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, text)| {
+            let text = if path == "objects.ron" {
+                text.replace(r#"category: "thornbush""#, r#"category: "bush""#)
+                    .replace(
+                        "    // Pseudo types",
+                        &format!("    {BRAMBLE}\n    // Pseudo types"),
+                    )
+            } else {
+                text.to_string()
+            };
+            (path, text)
+        })
+        .collect();
+    let sources: Vec<(&str, &str)> = sources.iter().map(|(p, t)| (*p, t.as_str())).collect();
+    DataPack::from_sources(&sources).expect("a valid test pack")
+}
+
+/// `world`, in the pack `data`.
+fn world_in(
+    data: DataPack,
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    sprite: Pos,
+    genes: &str,
+    script: &[ScriptedAction],
+) -> World {
     let map = Map::from_ascii(rows, &data).expect("valid drawing");
     let sprites = [(sprite, Some(genome(genes, &data)))];
     let scripted: Vec<(Pos, ScriptedAction)> = script.iter().map(|&s| (sprite, s)).collect();
@@ -155,7 +197,7 @@ fn a_prick_makes_only_the_thornbush_touched_bad_not_what_was_looked_at_before() 
         &["......", "......", "......"],
         &[(bush, "berry_bush"), (thornbush, "thornbush")],
         at(1, 1),
-        r#"Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),"#,
+        PRICKS_HURT,
         &[
             ScriptedAction::Approach { at: bush },
             ScriptedAction::Eat { at: thornbush },
@@ -177,6 +219,302 @@ fn a_prick_makes_only_the_thornbush_touched_bad_not_what_was_looked_at_before() 
         memory(&world)
     );
     assert_eq!(value_of(&world, &bush_bad), 0.0, "looked at, never touched");
+}
+
+/// A sprite whose every prick punishes it by 1.
+const PRICKS_HURT: &str =
+    r#"Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),"#;
+
+#[test]
+fn a_prick_makes_thornbushes_bad_and_leaves_berry_bushes_as_they_were_though_both_are_bushes() {
+    // Design v19 §5.6: what a sprite learns is about the object type it
+    // touched, never its category. The sprite eats from a berry bush, which
+    // teaches it nothing, then bites a thornbush: −(.8 × 1).
+    let (bush, thornbush) = (at(2, 1), at(4, 1));
+    let mut world = world_in(
+        bushes(),
+        &["......", "......", "......"],
+        &[(bush, "berry_bush"), (thornbush, "thornbush")],
+        at(3, 1),
+        PRICKS_HURT,
+        &[
+            ScriptedAction::Eat { at: bush },
+            ScriptedAction::Eat { at: thornbush },
+            ScriptedAction::Rest,
+        ],
+    );
+    for _ in 0..6 {
+        world.step();
+    }
+    let thorns_bad = Learned::Bad {
+        thing: "thornbush".into(),
+    };
+    let bushes_bad = Learned::Bad {
+        thing: "berry_bush".into(),
+    };
+    assert!(
+        close(value_of(&world, &thorns_bad), -0.8),
+        "{:?}",
+        memory(&world)
+    );
+    assert_eq!(value_of(&world, &bushes_bad), 0.0, "{:?}", memory(&world));
+}
+
+#[test]
+fn what_a_sprite_thinks_of_bushes_counts_for_nothing_with_one_type_known_half_with_two_and_fully_with_three()
+ {
+    // Design v19 §5.6: a category's summary is the mean over the object
+    // types in it the sprite knows × clamp((n − 1) / (generalise_types − 1)),
+    // generalise_types 3. A type is known once touched: a prick makes
+    // thornbushes, then brambles, −.8 bad, and a bite of a berry bush with no
+    // fruit teaches nothing, but it's known.
+    let (thornbush, bramble, bush) = (at(2, 1), at(4, 1), at(3, 2));
+    let bites = [
+        ScriptedAction::Eat { at: thornbush },
+        ScriptedAction::Eat { at: bramble },
+        ScriptedAction::Eat { at: bush },
+    ];
+    let bushes_bad = Learned::Bad {
+        thing: Thing::Category("bush".into()),
+    };
+    for (n, expected) in [(1, 0.0), (2, -0.8 * 0.5), (3, -1.6 / 3.0)] {
+        let script = [&bites[..n], &[ScriptedAction::Rest]].concat();
+        let mut world = world_in(
+            bushes(),
+            &["......", "......", "......"],
+            &[
+                (thornbush, "thornbush"),
+                (bramble, "bramble"),
+                (bush, "berry_bush"),
+            ],
+            at(3, 1),
+            PRICKS_HURT,
+            &script,
+        );
+        for _ in 0..6 {
+            world.step();
+        }
+        assert!(
+            close(value_of(&world, &bushes_bad), expected),
+            "{n} known: {:?}",
+            memory(&world)
+        );
+    }
+}
+
+#[test]
+fn what_a_sprite_thinks_of_bushes_is_a_lesson_once_it_is_half_a_point_from_nothing() {
+    // Design v19 §5.6: lessons fire for a category's summary too. Knowing
+    // three types of bush, two of them −.8 bad, bushes are −.53 bad in full.
+    let (thornbush, bramble, bush) = (at(2, 1), at(4, 1), at(3, 2));
+    let mut world = world_in(
+        bushes(),
+        &["......"; 3],
+        &[
+            (thornbush, "thornbush"),
+            (bramble, "bramble"),
+            (bush, "berry_bush"),
+        ],
+        at(3, 1),
+        PRICKS_HURT,
+        &[
+            ScriptedAction::Eat { at: thornbush },
+            ScriptedAction::Eat { at: bramble },
+            ScriptedAction::Eat { at: bush },
+            ScriptedAction::Rest,
+        ],
+    );
+    let learned: Vec<(Learned, bool)> = (0..6).flat_map(|_| lessons(&world.step())).collect();
+    let bushes_bad = Learned::Bad {
+        thing: Thing::Category("bush".into()),
+    };
+    assert!(learned.contains(&(bushes_bad, false)), "{learned:?}");
+}
+
+#[test]
+fn a_type_of_bush_the_sprite_has_never_touched_is_judged_by_the_bushes_it_knows() {
+    // Design v19 §5.6: an object type the sprite doesn't know is judged by
+    // its category's summary. Pricked by a thornbush and a bramble, −.8
+    // each, it thinks bushes −.4 bad (half strength, knowing two), and
+    // walks off to a berry bush it has never touched: its worth takes
+    // value_gain (1) × .4 from going near it. The first two are out of
+    // sight by then.
+    let (thornbush, bramble, bush) = (at(1, 1), at(3, 1), at(22, 1));
+    let mut world = world_in(
+        bushes(),
+        &["........................"; 3],
+        &[
+            (thornbush, "thornbush"),
+            (bramble, "bramble"),
+            (bush, "berry_bush"),
+        ],
+        at(2, 1),
+        &format!(
+            r#"{PRICKS_HURT}
+               Instinct(inputs: [("always", false)], verb: Approach, weight: 1.0),
+               BrainParam(param: "tau_base", value: 0.05),"#
+        ),
+        &[
+            ScriptedAction::Eat { at: thornbush },
+            ScriptedAction::Eat { at: bramble },
+            // In two legs, since it walks only as far as it can see.
+            ScriptedAction::Wander {
+                destination: at(11, 1),
+            },
+            ScriptedAction::Wander {
+                destination: at(19, 1),
+            },
+        ],
+    );
+    let berry_bush = Part::Worth(Thing::from("berry_bush"));
+    // The verb it chooses once it's there, and what the berry bush's worth
+    // adds to it, with every part for the message.
+    let explained = (0..200).find_map(|_| {
+        world.step();
+        let sprite = world.sprites().next().expect("the sprite");
+        let explained = sprite.explain()?;
+        let verb = explained.decision.map(|(verb, _)| verb);
+        let worth = explained
+            .contributions
+            .iter()
+            .find(|c| c.part == berry_bush)
+            .map(|c| c.amount);
+        Some((verb, worth, format!("{:?}", explained.contributions)))
+    });
+    let (verb, worth, parts) = explained.expect("it decides once it's there");
+    assert_eq!(verb, Some(Verb::Approach));
+    assert!(worth.is_some_and(|w| close(w, -0.4)), "{parts}");
+}
+
+#[test]
+fn in_a_pack_with_no_object_type_for_water_water_is_learned_about_as_its_category() {
+    // Design v19 §3.5.5, §5.6: water tiles are perceived as the water
+    // category, and with no object type for them, that's what is learned
+    // about. With no verb table, a drink does nothing, but the sprite's
+    // genome rewards it by .5 every tick, and the tick after the drink that
+    // is credited to the water: .5 × worth_rate_good (.5).
+    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, text)| match path {
+            "objects.ron" => (
+                path,
+                r#"[(id: 5, name: "pebble", category: "toy", size: Small, hardness: 0.5)]"#,
+            ),
+            _ => (path, text),
+        })
+        .collect();
+    let data = DataPack::from_sources(&sources).expect("a valid test pack");
+    let water = at(2, 0);
+    let mut world = world_in(
+        data,
+        &["..~..", ".....", "....."],
+        &[],
+        at(1, 0),
+        r#"Emitter(locus: Locus("always"), mode: Level, gain: 0.5, chem: "reward"),"#,
+        &[ScriptedAction::Drink { at: water }, ScriptedAction::Rest],
+    );
+    world.step();
+    world.step();
+    let water_good = Learned::Worth {
+        thing: Thing::Category("water".into()),
+        need: None,
+    };
+    assert!(
+        close(value_of(&world, &water_good), 0.25),
+        "{:?}",
+        memory(&world)
+    );
+}
+
+#[test]
+fn a_hungry_sprite_beside_a_thornbush_it_knows_is_bad_notices_the_berry_bush_behind_it() {
+    // Design v19 §3.6, §5.3: each category's candidate is the thing that
+    // draws the eye most, its nearness, worth and newness, not just the
+    // nearest. A bite has made the thornbush beside it −.8 bad; the berry
+    // bush two tiles on is new, and worth nothing yet.
+    let (thornbush, bush) = (at(2, 1), at(4, 1));
+    let mut world = world_in(
+        bushes(),
+        &["......"; 3],
+        &[(thornbush, "thornbush"), (bush, "berry_bush")],
+        at(1, 1),
+        &format!(
+            r#"{PRICKS_HURT}
+               InitialConcentration(chem: "hunger", value: 0.8),
+               Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),"#
+        ),
+        &[ScriptedAction::Eat { at: thornbush }],
+    );
+    world.step();
+    world.step();
+    let sprite = world.sprites().next().expect("the sprite");
+    assert_eq!(sprite.attending_to(), Some(bush), "{:?}", sprite.explain());
+}
+
+#[test]
+fn attention_names_the_thing_it_scored_and_its_worth_names_it_too() {
+    // Design v19 §5.9, §6.1: an attention row names the object type scored,
+    // not its category, and so does its worth in the decision. The only
+    // bush in sight is a thornbush, which a bite has made −.8 bad.
+    let thornbush = at(2, 1);
+    let mut world = world_in(
+        bushes(),
+        &["......"; 3],
+        &[(thornbush, "thornbush")],
+        at(1, 1),
+        &format!(
+            r#"{PRICKS_HURT}
+               Instinct(inputs: [("always", false)], verb: Eat, weight: 1.0),
+               BrainParam(param: "tau_base", value: 0.05),"#
+        ),
+        &[ScriptedAction::Eat { at: thornbush }],
+    );
+    world.step();
+    world.step();
+    let sprite = world.sprites().next().expect("the sprite");
+    let explained = sprite.explain().expect("it decided");
+    let thornbushes = Thing::from("thornbush");
+    let rows: Vec<&Thing> = explained.attention.iter().map(|(thing, _)| thing).collect();
+    assert_eq!(rows, [&thornbushes]);
+    assert_eq!(explained.attended, Some(thornbushes.clone()));
+    let worth = explained
+        .contributions
+        .iter()
+        .find(|c| matches!(c.part, Part::Worth(_)))
+        .map(|c| (c.part.clone(), c.amount));
+    assert_eq!(worth, Some((Part::Worth(thornbushes), -0.8)));
+}
+
+#[test]
+fn a_reward_after_eating_from_a_thornbush_teaches_the_habit_for_thornbushes_not_every_bush() {
+    // Design v19 §5.6: the trace records the object type attended, and
+    // habits are credited to it. A sprite that always wants to eat, and is
+    // rewarded by each prick, eats from the thornbush beside it; the berry
+    // bush further off is a bush too.
+    let (thornbush, bush) = (at(2, 1), at(6, 1));
+    let mut world = world_in(
+        bushes(),
+        &["........", "........", "........"],
+        &[(thornbush, "thornbush"), (bush, "berry_bush")],
+        at(1, 1),
+        r#"Instinct(inputs: [("always", false)], verb: Eat, weight: 1.0),
+           Emitter(locus: Locus("pricked"), mode: Level, gain: 0.5, chem: "reward"),"#,
+        &[],
+    );
+    for _ in 0..20 {
+        world.step();
+    }
+    let habit = |thing: &str| {
+        value_of(
+            &world,
+            &Learned::Habit {
+                thing: thing.into(),
+                verb: Verb::Eat,
+            },
+        )
+    };
+    assert!(habit("thornbush") > 0.0, "{:?}", memory(&world));
+    assert_eq!(habit("berry_bush"), 0.0, "{:?}", memory(&world));
 }
 
 #[test]
@@ -224,7 +562,7 @@ fn a_sprite_that_keeps_biting_a_thornbush_learns_each_lesson_once() {
         &[".....", ".....", "....."],
         &[(thornbush, "thornbush")],
         at(1, 1),
-        r#"Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),"#,
+        PRICKS_HURT,
         &[
             ScriptedAction::Eat { at: thornbush },
             ScriptedAction::Eat { at: thornbush },
@@ -340,7 +678,7 @@ fn playing_with_a_sprite_teaches_what_that_one_is_worth_not_sprites_in_general()
         "{memory:?}"
     );
     assert_eq!(
-        value(&worth("sprite".into())),
+        value(&worth(Thing::Category("sprite".into()))),
         None,
         "nothing learned about sprites in general: {memory:?}"
     );
@@ -371,7 +709,7 @@ fn sprites_in_general_are_feared_only_once_several_have_hurt_it() {
         }
         let memory = memory_of(&world, me);
         let in_general = Learned::Fear {
-            thing: "sprite".into(),
+            thing: Thing::Category("sprite".into()),
         };
         let value = memory
             .iter()
@@ -499,7 +837,7 @@ fn each_sprite_feared_is_a_lesson_once_and_sprites_in_general_once_they_turn() {
             fear(Thing::Sprite(ids[2])),
             fear(Thing::Sprite(ids[1])),
             fear(Thing::Sprite(ids[0])),
-            fear("sprite".into()),
+            fear(Thing::Category("sprite".into())),
         ]
     );
 }
@@ -532,7 +870,7 @@ fn touching_a_sprite_it_learns_nothing_about_changes_nothing_about_sprites_in_ge
     );
     let learned: Vec<(Learned, bool)> = (0..35).flat_map(|_| lessons(&world.step())).collect();
     let in_general = Learned::Fear {
-        thing: "sprite".into(),
+        thing: Thing::Category("sprite".into()),
     };
     assert!(
         !learned.iter().any(|(l, _)| *l == in_general),

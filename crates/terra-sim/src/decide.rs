@@ -9,6 +9,7 @@ use crate::action::{Outcome, ScriptedAction, end, is_acting, start};
 use crate::brain::{Aim, Snapshot, SpriteScoring, available, best_above};
 use crate::data::DataPack;
 use crate::events::Event;
+use crate::learning::Subject;
 use crate::map::Pos;
 use crate::objects::EntityId;
 use crate::perception::{Ground, Target};
@@ -60,39 +61,58 @@ pub(crate) fn decide(
     let reach = 10.0 * f32::from(flood.reach());
     let was_hit = data.physiology().indices.was_hit;
     let attacker = sprite.body.sources.get(&was_hit).copied();
-    let mut found = flood.candidates(ground, id, attacker);
-    // Each sprite in reach is weighed on its own, and the one that draws the
-    // eye most stands for sprites, unless the attacker does while a hit is
-    // felt (design v18 §3.6).
+    let mut offered = flood.candidates(ground, id, attacker);
+    // Each sprite in reach is weighed on its own, unless the attacker stands
+    // for sprites while a hit is felt (design v18 §3.6).
     let is_attacker = |target: Target| attacker.is_some_and(|a| target == Target::Sprite(a));
-    if !found
+    if !offered
         .get(&data.sprite_category())
-        .is_some_and(|&(target, _)| is_attacker(target))
+        .is_some_and(|things| things.iter().any(|&(target, _)| is_attacker(target)))
     {
-        let inputs = sprite.brain.inputs(&sprite.body, None, data);
-        let drawn = flood.sprites(ground, id).into_iter().map(|(other, cost)| {
-            let draw = sprite
-                .brain
-                .draw(other, normalized(cost, reach), &inputs, data);
-            ((other, cost), draw)
-        });
-        // Ties go to the lower ID, which comes first.
-        if let Some((other, cost)) = best_above(drawn, f32::NEG_INFINITY) {
-            found.insert(data.sprite_category(), (Target::Sprite(other), cost));
+        let sprites = flood.sprites(ground, id).into_iter();
+        let sprites: Vec<(Target, u32)> =
+            sprites.map(|(s, cost)| (Target::Sprite(s), cost)).collect();
+        if !sprites.is_empty() {
+            offered.insert(data.sprite_category(), sprites);
         }
     }
+    // Each category's candidate is the thing that draws the eye most (design
+    // v19 §3.6); ties go to the lower ID, which comes first.
+    let state_only = sprite.brain.inputs(&sprite.body, None, data);
+    let curiosity_mod = sprite.body.loci[data.physiology().indices.curiosity_mod];
+    let found: BTreeMap<CategoryId, (Target, u32)> = offered
+        .into_iter()
+        .map(|(category, things)| {
+            let drawn = things.into_iter().map(|(target, cost)| {
+                let subject = state.subject_of(data, target);
+                let distance = normalized(cost, reach);
+                let draw = sprite.brain.draw(
+                    subject,
+                    target.sprite(),
+                    distance,
+                    &state_only,
+                    curiosity_mod,
+                    data,
+                );
+                ((target, cost), draw)
+            });
+            let best = best_above(drawn, f32::NEG_INFINITY);
+            (category, best.expect("a category offers something"))
+        })
+        .collect();
     let candidates: BTreeMap<CategoryId, Candidate> = found
         .into_iter()
         .map(|(category, (target, cost))| {
             let goal = state
                 .goal_for(data, flood, target)
                 .expect("a candidate is reachable");
+            let type_id = state.type_of(data, target);
             let aim = Aim {
                 category,
+                subject: state.subject_of(data, target),
                 distance: normalized(cost, reach),
                 adjacent: state.on_goal_tile(data, sprite.pos, target),
             };
-            let type_id = state.type_of(data, target);
             let candidate = Candidate {
                 type_id,
                 target,
@@ -106,7 +126,7 @@ pub(crate) fn decide(
     // category's candidate now (design §5.3).
     let aimed = action.and_then(|a| a.target).map(|target| {
         let (category, adjacent) = (
-            target_category(state, data, target),
+            state.category_of(data, target),
             state.on_goal_tile(data, sprite.pos, target),
         );
         let cost = state
@@ -115,6 +135,7 @@ pub(crate) fn decide(
             .map_or(u32::MAX, |(_, cost)| cost);
         Aim {
             category,
+            subject: state.subject_of(data, target),
             distance: normalized(cost, reach),
             adjacent,
         }
@@ -140,12 +161,12 @@ pub(crate) fn decide(
         || sprite.body.loci[data.physiology().indices.cornered] > 0.0;
     // A running action's category is scored by the instance it's aimed at,
     // which a nearer one of the same category doesn't replace (design §5.3).
-    let mut distances: BTreeMap<CategoryId, f32> = candidates
+    let mut in_sight: BTreeMap<CategoryId, (Subject, f32)> = candidates
         .iter()
-        .map(|(&category, candidate)| (category, candidate.aim.distance))
+        .map(|(&category, c)| (category, (c.aim.subject, c.aim.distance)))
         .collect();
     if let Some(aim) = aimed {
-        distances.insert(aim.category, aim.distance);
+        in_sight.insert(aim.category, (aim.subject, aim.distance));
     }
 
     let sprite = state.sprites.get_mut(id).expect("the same sprite");
@@ -153,9 +174,11 @@ pub(crate) fn decide(
     let brain = &mut sprite.brain;
 
     // 5a: attention, from the State inputs alone.
-    let state_only = brain.inputs(&sprite.body, None, data);
-    let curiosity_mod = sprite.body.loci[data.physiology().indices.curiosity_mod];
-    let attention = brain.attention_scores(&state_only, &distances, curiosity_mod, scoring, data);
+    let attention = brain.attention_scores(&state_only, &in_sight, curiosity_mod, scoring, data);
+    let scored = in_sight
+        .iter()
+        .map(|(&c, &(subject, _))| (c, subject))
+        .collect();
     let attended = brain.attend(&attention, running, exploration, rng);
     let mut running = running;
     if let Some(aim) = aimed
@@ -190,7 +213,7 @@ pub(crate) fn decide(
     let scores = brain.scores(
         &activations,
         &inputs,
-        aim.map(|a| a.category),
+        aim.map(|a| a.subject),
         decision_scoring,
         data,
     );
@@ -216,8 +239,10 @@ pub(crate) fn decide(
         inputs,
         activations,
         attention,
+        scored,
         attended,
         target,
+        subject: aim.map(|a| a.subject),
         scores,
         verb,
         motive,
@@ -314,15 +339,6 @@ fn start_scripted(state: &mut WorldState, data: &DataPack, id: EntityId, events:
         state.tick,
         events,
     );
-}
-
-/// The category `target` is perceived as.
-pub(crate) fn target_category(state: &WorldState, data: &DataPack, target: Target) -> CategoryId {
-    match target {
-        Target::Object(id) => data.object_types()[state.objects.kind(id)].category,
-        Target::Water(_) => data.water_category(),
-        Target::Sprite(_) => data.sprite_category(),
-    }
 }
 
 /// `cost` over the cost of walking the flood's `reach`, capped at 1.

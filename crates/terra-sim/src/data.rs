@@ -436,6 +436,11 @@ impl DataPack {
         &self.object_types
     }
 
+    /// The object type with the stable ID `id`.
+    pub(crate) fn object_type(&self, id: u16) -> Option<&ObjectType> {
+        self.object_types.iter().find(|t| t.id == id)
+    }
+
     /// The index of the object type called `name`.
     pub(crate) fn object_type_named(&self, name: &str) -> Option<usize> {
         self.object_types.iter().position(|t| t.name == name)
@@ -478,18 +483,6 @@ impl DataPack {
     pub(crate) fn sprite_category(&self) -> CategoryId {
         self.category_named(SPRITE)
             .expect("a checked pack has sprites")
-    }
-
-    /// What the screen and the brain's memory call the category `id` until
-    /// slice 9e: its first object type in ID order, or its own name if none
-    /// is in it (design v19 §6.1).
-    pub(crate) fn category_label(&self, id: CategoryId) -> &str {
-        self.object_types
-            .iter()
-            .find(|t| t.category == id)
-            .map(|t| t.name.as_str())
-            .or_else(|| self.category(id).map(|c| c.name.as_str()))
-            .expect("a category in the pack")
     }
 
     /// The index of the pseudo type of `category`, the verb table of water or
