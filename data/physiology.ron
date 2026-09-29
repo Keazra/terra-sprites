@@ -116,12 +116,15 @@
     // row, a sprite looks for a way round the sprites in its way.
     movement: (flood_refresh: 8, occupied_penalty: 30, replan_after: 3),
 
-    // The Cursor's touch (design v21 §4.6): the levels it raises. A starting
-    // point for the lab's strength sweep.
+    // The Cursor's touch (design v21 §4.6): the levels it raises, a starting
+    // point for the lab's strength sweep; and the longest its feeling looks
+    // back for the sprite's latest try, in ticks (§5.6): two seconds at 16×.
+    // A shorter reach back than `touch_window` is taken as that.
     cursor: (
         pet: 0.5,
         hug: 1.0,
         zap: (punishment: 0.5, pain: 0.3),
         shock: (punishment: 1.0, pain: 0.6),
+        max_reach_back: 40,
     ),
 )

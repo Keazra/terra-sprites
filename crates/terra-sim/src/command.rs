@@ -44,8 +44,13 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
     let physiology = data.physiology();
     let (cursor, indices) = (&physiology.cursor, &physiology.indices);
     for command in std::mem::take(&mut state.commands) {
-        let (Command::Reward { sprite, .. } | Command::Correct { sprite, .. }) = command;
-        let Some(body) = state.sprites.get_mut(sprite).map(|s| &mut s.body) else {
+        let (Command::Reward {
+            sprite, reach_back, ..
+        }
+        | Command::Correct {
+            sprite, reach_back, ..
+        }) = command;
+        let Some(touched) = state.sprites.get_mut(sprite) else {
             events.push(Event {
                 tick: state.tick,
                 kind: EventKind::CommandRejected {
@@ -55,6 +60,13 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
             });
             continue;
         };
+        // Several in a tick look back as far as the furthest (design v21
+        // §2.5, §5.6).
+        let reach_back =
+            u64::from(reach_back).clamp(physiology.touch_window, cursor.max_reach_back);
+        let brain = &mut touched.brain;
+        brain.reach_back = brain.reach_back.max(Some(reach_back));
+        let body = &mut touched.body;
         let kind = match command {
             Command::Reward { amplified, .. } => {
                 let reward = if amplified { cursor.hug } else { cursor.pet };

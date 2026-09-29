@@ -122,6 +122,9 @@ pub(crate) struct Cursor {
     pub(crate) zap: Correction,
     /// What a shock, an amplified zap, injects.
     pub(crate) shock: Correction,
+    /// The longest a Reward or Correct looks back for the sprite's latest
+    /// try, in ticks (design v21 §5.6).
+    pub(crate) max_reach_back: u64,
 }
 
 /// What the Cursor's Correct injects (design v21 §4.6). It hurts, but adds
@@ -347,6 +350,24 @@ impl PhysiologyEntry {
         }
         if self.actions.retreat_bout == 0 {
             return Err("`actions.retreat_bout` must be at least 1 step".into());
+        }
+
+        let cursor = self.cursor;
+        for (name, level) in [
+            ("cursor.pet", cursor.pet),
+            ("cursor.hug", cursor.hug),
+            ("cursor.zap.punishment", cursor.zap.punishment),
+            ("cursor.zap.pain", cursor.zap.pain),
+            ("cursor.shock.punishment", cursor.shock.punishment),
+            ("cursor.shock.pain", cursor.shock.pain),
+        ] {
+            fraction(name, level)?;
+        }
+        if cursor.max_reach_back < self.touch_window {
+            return Err(format!(
+                "`cursor.max_reach_back` is {}, but must be at least `touch_window`, {}",
+                cursor.max_reach_back, self.touch_window
+            ));
         }
 
         Ok(Physiology {

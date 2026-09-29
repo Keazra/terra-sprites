@@ -156,6 +156,9 @@ pub(crate) struct Brain {
     pub(crate) experience: Experience,
     /// What it last tried a verb on, and when (design §5.6).
     pub(crate) touched: Option<Touch>,
+    /// How far back the Cursor's touch this tick looks, from step 1 to
+    /// step 4 (design v21 §5.6); `None` untouched.
+    pub(crate) reach_back: Option<u64>,
 }
 
 /// What the brain saw and did at a step 5.
@@ -350,6 +353,7 @@ impl Brain {
             trace: VecDeque::new(),
             experience: Experience::default(),
             touched: None,
+            reach_back: None,
         }
     }
 
@@ -374,54 +378,80 @@ impl Brain {
             let attacker = self.experience.remember(attacker, relief.len());
             attacker.fear = (attacker.fear - rate * signals.punishment).max(-1.0);
         }
-        let touched = self
-            .touched
-            .filter(|t| tick - t.tick <= physiology.touch_window)
-            .map(|t| (t.subject, t.sprite, t.novelty));
-        if let Some((subject, sprite, novelty)) = touched {
+        // What the feelings are about: the latest try, while it's recent
+        // (design §5.6). Relief looks back the touch window; reward and
+        // punishment in a tick the Cursor touched the sprite look back its
+        // reach back (design v21 §5.6).
+        let within = |ticks: u64| self.touched.filter(|t| tick - t.tick <= ticks);
+        let near = within(physiology.touch_window);
+        let felt = signals.reach_back.map_or(near, within);
+        if let Some(Touch {
+            subject,
+            sprite,
+            novelty,
+            ..
+        }) = felt.or(near)
+        {
             let good = self.params.get(BrainParam::WorthRateGood) * learning_rate_mod;
             let bad = self.params.get(BrainParam::WorthRateBad) * learning_rate_mod;
-            // A hit's punishment teaches fear and habits, not worth (design
-            // v18 §5.6).
-            let punishment = if signals.hit { 0.0 } else { signals.punishment };
+            let relief: &[f32] = if near.is_some() { relief } else { &[] };
+            let (reward, punishment) = match felt {
+                // A hit's punishment teaches fear and habits, not worth
+                // (design v18 §5.6).
+                Some(_) if signals.hit => (signals.reward, 0.0),
+                Some(_) => (signals.reward, signals.punishment),
+                None => (0.0, 0.0),
+            };
+            let needs = data.need_places().len();
             match sprite {
                 // A sprite is learned about as that one sprite, fast; sprites
                 // in general only through the ones it knows (design v18 §5.6).
                 Some(sprite) => {
                     let good = self.params.get(BrainParam::IndividualRateGood) * learning_rate_mod;
                     let bad = self.params.get(BrainParam::IndividualRateBad) * learning_rate_mod;
-                    let known = self.experience.remember(sprite, relief.len());
+                    let known = self.experience.remember(sprite, needs);
                     for (worth, &relief) in known.worth.iter_mut().zip(relief) {
                         *worth = (*worth + good * relief).min(1.0);
                     }
-                    known.good = (known.good + good * signals.reward).min(1.0);
+                    known.good = (known.good + good * reward).min(1.0);
                     known.bad = (known.bad - bad * punishment).max(-1.0);
                 }
                 // Anything else is learned about as its object type (design
                 // v19 §5.6).
                 None => {
-                    let known = self
-                        .experience
-                        .learn_about(subject, data.need_places().len());
+                    let known = self.experience.learn_about(subject, needs);
                     for (worth, &relief) in known.worth.iter_mut().zip(relief) {
                         *worth = (*worth + good * relief).min(1.0);
                     }
-                    known.good = (known.good + good * signals.reward).min(1.0);
+                    known.good = (known.good + good * reward).min(1.0);
                     known.bad = (known.bad - bad * punishment).max(-1.0);
                 }
             }
             let experience = &mut self.experience;
             // How it went with something new teaches the worth of new things.
             let relieved: f32 = relief.iter().sum();
-            let felt = good * (relieved + signals.reward) - bad * punishment;
+            let felt = good * (relieved + reward) - bad * punishment;
             experience.new_things = (experience.new_things + felt * novelty).clamp(-1.0, 1.0);
         }
         // Habits, along the trace: each aimed verb and the thing it attended.
-        // A fruitless try disappoints the need that chose it.
+        // A fruitless try disappoints the need that chose it. In a tick the
+        // Cursor touched the sprite, its feeling goes to the habit of the
+        // latest try within its reach back instead, at full weight (design
+        // v21 §5.6).
+        let rate = self.params.get(BrainParam::HabitRate) * learning_rate_mod;
         let r = signals.reward - signals.punishment;
+        let (r, cursor) = match felt {
+            Some(touch) if signals.reach_back.is_some() => (0.0, Some((touch, r))),
+            _ => (r, None),
+        };
+        if let Some((touch, r)) = cursor {
+            let needs = data.need_places().len();
+            let known = self.experience.learn_about(touch.subject, needs);
+            let habit = &mut known.habits[column(touch.verb)];
+            *habit = (*habit + rate * r).clamp(-1.0, 1.0);
+        }
         let tried = self.touched.filter(|_| signals.fruitless).map(|t| t.tick);
         if r != 0.0 || tried.is_some() {
-            let rate = self.params.get(BrainParam::HabitRate) * learning_rate_mod;
             let disappointment = self.params.get(BrainParam::Disappointment);
             let decay = self.params.get(BrainParam::TraceDecay);
             let needs = data.need_places().len();
@@ -1681,6 +1711,7 @@ mod tests {
         decide(&mut brain, 9, Verb::Eat, Some(types::BERRY), &set);
         brain.touched = Some(Touch {
             tick: 9,
+            verb: Verb::Eat,
             subject: types::BERRY,
             sprite: None,
             novelty: 1.0,
@@ -1719,6 +1750,7 @@ mod tests {
         let mut brain = unfading(&[]);
         let touch = Touch {
             tick: 1,
+            verb: Verb::Eat,
             subject: types::BERRY_BUSH,
             sprite: None,
             novelty: 1.0,
@@ -1750,6 +1782,7 @@ mod tests {
         // A touch longer ago than the window (3 ticks) is forgotten too.
         brain.touched = Some(Touch {
             tick: 2,
+            verb: Verb::Eat,
             subject: types::BERRY_BUSH,
             sprite: None,
             novelty: 1.0,
@@ -1946,6 +1979,7 @@ mod tests {
         decide(&mut brain, 9, Verb::Eat, Some(types::BALL), &set);
         brain.touched = Some(Touch {
             tick: 9,
+            verb: Verb::Eat,
             subject: types::BALL,
             sprite: None,
             novelty: 1.0,
@@ -1978,6 +2012,7 @@ mod tests {
         );
         brain.touched = Some(Touch {
             tick: 9,
+            verb: Verb::Play,
             subject: types::BALL,
             sprite: None,
             novelty: 1.0,
@@ -2076,6 +2111,7 @@ mod tests {
         let mut brain = unfading(&[]);
         brain.touched = Some(Touch {
             tick: 1,
+            verb: Verb::Eat,
             subject: types::THORNBUSH,
             sprite: None,
             novelty: 0.5,
@@ -2136,6 +2172,7 @@ mod tests {
         decide(&mut brain, 9, Verb::Hit, Some(types::SPRITE), &[]);
         brain.touched = Some(Touch {
             tick: 9,
+            verb: Verb::Hit,
             subject: types::SPRITE,
             sprite: None,
             novelty: 1.0,
