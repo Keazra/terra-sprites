@@ -92,6 +92,26 @@ pub(crate) enum Gene {
         version: u8,
         payload: Vec<u8>,
     },
+    /// A gene that names a category this world doesn't have (design v19
+    /// §5.7), kept exactly as it was written. It has no effect.
+    Unmatched(Written),
+}
+
+/// How an unmatched gene was written, so it's written back the same way.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub(crate) enum Written {
+    /// An attention instinct by name, with its names as written.
+    AttentionInstinct {
+        input: String,
+        category: String,
+        weight: f32,
+    },
+    /// Any gene by number, as an unknown gene is.
+    ByNumber {
+        type_id: u16,
+        version: u8,
+        payload: Vec<u8>,
+    },
 }
 
 /// A chemical and its coefficient in a reaction.
@@ -214,7 +234,7 @@ impl Genome {
 
 impl Gene {
     /// The gene with what it refers to named from `data`.
-    pub(crate) fn view<'a>(&self, data: &'a DataPack) -> GeneView<'a> {
+    pub(crate) fn view<'a>(&'a self, data: &'a DataPack) -> GeneView<'a> {
         let chem = |id: ChemId| data.chemical(id).expect("a checked gene").name.as_str();
         let locus = |id: LocusId| data.locus(id).expect("a checked gene").name.as_str();
         let input = |id: InputId| data.brain_input(id).expect("a checked gene").name.as_str();
@@ -301,10 +321,24 @@ impl Gene {
                 type_id,
                 version,
                 ref payload,
-            } => GeneView::Unknown {
+            }
+            | Gene::Unmatched(Written::ByNumber {
+                type_id,
+                version,
+                ref payload,
+            }) => GeneView::Unknown {
                 type_id,
                 version,
                 bytes: payload.len(),
+            },
+            Gene::Unmatched(Written::AttentionInstinct {
+                ref input,
+                ref category,
+                weight,
+            }) => GeneView::AttentionInstinct {
+                input,
+                category,
+                weight,
             },
         }
     }
@@ -445,17 +479,12 @@ impl Gene {
                 finite("weight", weight)?;
             }
             Gene::AttentionInstinct {
-                input: id,
-                category,
-                weight,
+                input: id, weight, ..
             } => {
                 input(id)?;
-                data.category(category).ok_or_else(|| {
-                    format!("refers to category {}, which isn't in the pack", category.0)
-                })?;
                 finite("weight", weight)?;
             }
-            Gene::Unknown { .. } => {}
+            Gene::Unknown { .. } | Gene::Unmatched(_) => {}
         }
         Ok(())
     }
@@ -557,10 +586,22 @@ impl Gene {
                 type_id,
                 version,
                 ref payload,
-            } => {
+            }
+            | Gene::Unmatched(Written::ByNumber {
+                type_id,
+                version,
+                ref payload,
+            }) => {
                 let hex: String = payload.iter().map(|byte| format!("{byte:02x}")).collect();
                 format!("Gene(type: {type_id}, version: {version}, payload: {hex:?})")
             }
+            Gene::Unmatched(Written::AttentionInstinct {
+                ref input,
+                ref category,
+                weight,
+            }) => format!(
+                "AttentionInstinct(input: {input:?}, category: {category:?}, weight: {weight:?})"
+            ),
         }
     }
 }
@@ -759,18 +800,40 @@ impl GeneEntry {
                 input: name,
                 category,
                 weight,
-            } => Gene::AttentionInstinct {
-                input: input(&name)?,
-                category: data
-                    .category_named(&category)
-                    .ok_or_else(|| format!("names the unknown category `{category}`"))?,
-                weight,
-            },
+            } => {
+                let id = input(&name)?;
+                match data.category_named(&category) {
+                    Some(category) => Gene::AttentionInstinct {
+                        input: id,
+                        category,
+                        weight,
+                    },
+                    None => Gene::Unmatched(Written::AttentionInstinct {
+                        input: name,
+                        category,
+                        weight,
+                    }),
+                }
+            }
             GeneEntry::Gene {
                 type_id,
                 version,
                 payload,
-            } => decode(type_id, version, hex(&payload)?)?,
+            } => {
+                let payload = hex(&payload)?;
+                match decode(type_id, version, payload.clone())? {
+                    Gene::AttentionInstinct { category, .. }
+                        if data.category(category).is_none() =>
+                    {
+                        Gene::Unmatched(Written::ByNumber {
+                            type_id,
+                            version,
+                            payload,
+                        })
+                    }
+                    gene => gene,
+                }
+            }
         })
     }
 }

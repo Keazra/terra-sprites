@@ -167,6 +167,20 @@ fn an_unknown_gene_is_kept_and_written_back_by_number() {
 }
 
 #[test]
+fn an_attention_instinct_naming_a_category_the_world_lacks_is_kept_as_written() {
+    // An unmatched gene (design v19 change 8), such as one from a newer
+    // version of the game, whether written by name or by number.
+    let data = builtin();
+    let text = genome_file(&[
+        r#"AttentionInstinct(input: "hunger", category: "tree", weight: 0.8)"#,
+        // [input 1, category 26, 0.8]: the pack has no category 26.
+        r#"Gene(type: 9, version: 1, payload: "93011aca3f4ccccd")"#,
+    ]);
+    let genome = Genome::from_ron(&text, &data).expect("a valid genome");
+    assert_eq!(genome.to_ron(&data), text);
+}
+
+#[test]
 fn a_gene_written_by_number_must_be_readable_if_its_type_is_known() {
     // Chemical 99 isn't in the pack.
     assert_invalid(&[r#"Gene(type: 1, version: 1, payload: "92631e")"#], "99");

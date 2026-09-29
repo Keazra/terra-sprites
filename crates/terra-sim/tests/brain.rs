@@ -3,7 +3,7 @@
 //! minds when a drive grows.
 
 use terra_sim::{
-    DataPack, EntityId, Event, EventKind, Genome, Map, Outcome, Part, Pos, Scenario,
+    DataPack, EntityId, Event, EventKind, Expression, Genome, Map, Outcome, Part, Pos, Scenario,
     ScriptedAction, Thing, Verb, World,
 };
 
@@ -83,6 +83,35 @@ const FIELD: [&str; 7] = [
     "...........",
     "...........",
 ];
+
+#[test]
+fn an_instinct_naming_a_category_the_world_lacks_is_unmatched_and_changes_nothing() {
+    // Design v19 §5.7: such a gene is kept, but has no effect.
+    let data = builtin();
+    let hungry = r#"InitialConcentration(chem: "hunger", value: 0.9)"#;
+    let unmatched = r#"AttentionInstinct(input: "hunger", category: "tree", weight: 1.0)"#;
+    let run = |genes: &[&str]| {
+        let genome = starter_with(genes, &data);
+        let mut world = world(&FIELD, &[(at(8, 3), "berry_bush")], at(1, 3), genome, 7);
+        let marks: Vec<Expression> = world
+            .sprites()
+            .next()
+            .expect("the sprite")
+            .genes()
+            .into_iter()
+            .map(|(_, how)| how)
+            .collect();
+        let events: Vec<Event> = (0..2_000).flat_map(|_| world.step()).collect();
+        (marks, events)
+    };
+    let (marks, events) = run(&[hungry, unmatched]);
+    let (_, plain) = run(&[hungry]);
+    assert_eq!(marks.last(), Some(&Expression::Unmatched));
+    assert_eq!(
+        events, plain,
+        "the sprite lives exactly as it would without it"
+    );
+}
 
 #[test]
 fn a_hungry_sprite_walks_to_a_bush_and_eats() {

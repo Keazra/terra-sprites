@@ -1374,6 +1374,28 @@ fn the_chem_tab_shows_what_was_felt_on_the_reward_line() {
 }
 
 #[test]
+fn the_genome_tab_marks_an_instinct_naming_a_category_the_world_lacks() {
+    // An unmatched gene (design v19 §5.7), dimmed with its reason, as the
+    // other marks are.
+    let genome = r#"(format: 1, genes: [
+        AttentionInstinct(input: "hunger", category: "tree", weight: 0.8),
+    ])"#;
+    let (world, mut app) = one_sprite(genome, 0);
+    open(&mut app, &world, Tab::Genome);
+    let rows = right_part(&render(&app, &world, 100, 30), 46);
+    let text: Vec<&str> = rows[2..8].iter().map(|row| inside(row)).collect();
+    assert_eq!(
+        text[..2],
+        ["ATTENTION INSTINCTS", "hunger → attends to tree +.8"]
+    );
+    assert!(
+        text.join(" ")
+            .contains("unmatched: names a category this world doesn't have"),
+        "{text:?}"
+    );
+}
+
+#[test]
 fn the_genome_tab_shows_brain_settings_instincts_and_attention_instincts() {
     let genome = r#"(format: 1, genes: [
         AttentionInstinct(input: "hunger", category: "bush", weight: 0.8),

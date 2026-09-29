@@ -916,6 +916,9 @@ fn genome_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
                 Expression::Flagged(reason) => format!("flagged: {reason}"),
                 Expression::Unexpressed => "unexpressed: an earlier gene sets this".into(),
                 Expression::Unknown => "unknown: this version can't read it".into(),
+                Expression::Unmatched => {
+                    "unmatched: names a category this world doesn't have".into()
+                }
             };
             let dim = Style::default().fg(Color::DarkGray);
             lines.extend(wrapped(&gene_text(gene), 1, dim));

@@ -21,6 +21,9 @@ pub enum Expression {
     Unexpressed,
     /// This build can't read it.
     Unknown,
+    /// It names a category this world doesn't have (design v19 §5.7), so it
+    /// has no effect.
+    Unmatched,
 }
 
 /// The one value a gene sets, for the genes that set one. The others add up.
@@ -55,7 +58,8 @@ impl Setting {
             Gene::Reaction { .. }
             | Gene::Emitter { .. }
             | Gene::Receptor { .. }
-            | Gene::Unknown { .. } => None,
+            | Gene::Unknown { .. }
+            | Gene::Unmatched(_) => None,
         }
     }
 }
@@ -67,8 +71,10 @@ pub(crate) fn expressions(genome: &Genome, data: &DataPack) -> Vec<Expression> {
         .genes
         .iter()
         .map(|gene| {
-            if let Gene::Unknown { .. } = gene {
-                return Expression::Unknown;
+            match gene {
+                Gene::Unknown { .. } => return Expression::Unknown,
+                Gene::Unmatched(_) => return Expression::Unmatched,
+                _ => {}
             }
             if let Some(reason) = breaks_restrictions(gene, data) {
                 return Expression::Flagged(reason);
@@ -150,7 +156,8 @@ fn breaks_restrictions(gene: &Gene, data: &DataPack) -> Option<String> {
         | Gene::Trait { .. }
         | Gene::BrainParam { .. }
         | Gene::Instinct { .. }
-        | Gene::Unknown { .. } => None,
+        | Gene::Unknown { .. }
+        | Gene::Unmatched(_) => None,
     }
 }
 

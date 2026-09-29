@@ -62,7 +62,7 @@ pub(crate) fn varied(genome: &Genome, data: &DataPack, rng: &mut ChaCha8Rng) -> 
                 }
                 Gene::Instinct { ref mut weight, .. }
                 | Gene::AttentionInstinct { ref mut weight, .. } => *weight = vary(*weight),
-                Gene::Unknown { .. } => {}
+                Gene::Unknown { .. } | Gene::Unmatched(_) => {}
             }
             gene
         })

@@ -6,7 +6,7 @@ use serde::Deserialize;
 use crate::brain_io::{BRAIN_IO, BrainInput, BrainIoFile, InputId, brain_io};
 use crate::categories::{CATEGORIES, Category, SPRITE, WATER, categories};
 use crate::expression::{Expression, expressions};
-use crate::genome::{Gene, Genome, GenomeError};
+use crate::genome::{Gene, Genome, GenomeError, Written};
 use crate::object_types::{Effect, OBJECTS, ObjectType, TypeEntry, object_types};
 use crate::physiology::{Indices, PHYSIOLOGY, Physiology, PhysiologyEntry};
 use crate::registry::{CategoryId, ChemId, Chemical, Locus, LocusId, Verb};
@@ -528,6 +528,17 @@ fn starter_genome(text: &str, data: &DataPack) -> Result<Genome, DataError> {
             (Expression::Unknown, &Gene::Unknown { type_id, .. }) => {
                 return Err(invalid(format!(
                     "gene {number} is of type {type_id}, which this build can't read"
+                )));
+            }
+            (Expression::Unmatched, gene) => {
+                let category = match gene {
+                    Gene::Unmatched(Written::AttentionInstinct { category, .. }) => {
+                        format!("`{category}`")
+                    }
+                    _ => "one".into(),
+                };
+                return Err(invalid(format!(
+                    "gene {number} names {category}, a category the pack doesn't have"
                 )));
             }
             _ => {}

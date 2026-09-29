@@ -257,7 +257,9 @@ impl Program {
                 Gene::BrainParam { .. }
                 | Gene::Instinct { .. }
                 | Gene::AttentionInstinct { .. } => {}
-                Gene::Unknown { .. } => unreachable!("an unknown gene isn't expressed"),
+                Gene::Unknown { .. } | Gene::Unmatched(_) => {
+                    unreachable!("an unknown or unmatched gene isn't expressed")
+                }
             }
         }
         Program {
