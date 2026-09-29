@@ -47,6 +47,8 @@ The game's content is data in `data/*.ron` (terrain, chemicals, loci, brain inpu
 
 Sessions start and end with the `handover` skill (`/handover start`, `/handover end`), which runs each slice. How the owner likes to work, and the project's conventions, are in `docs/agents/how-we-work.md`. Read it before starting.
 
+The skills live in the repo, in `.claude/skills/`. If `/handover`, or any skill the workflow names, isn't available to you (cloud sessions haven't always loaded the repo's skills), read its `.claude/skills/<name>/SKILL.md` and follow it as written.
+
 ## Git and GitHub
 
 - Work on a feature branch and open a PR. Never commit to `main` directly: it moves only through merged PRs.
