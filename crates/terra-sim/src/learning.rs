@@ -91,7 +91,7 @@ impl Subject {
 }
 
 /// What a sprite has learned about one object type (design v19 §5.6): its
-/// worth for each need and in general, and how bad it is.
+/// worth for each need and in general, how bad it is, and its habits.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct TypeMemory {
     /// Worth for each need, in the pack's needs order (0 to 1).
@@ -100,6 +100,8 @@ pub(crate) struct TypeMemory {
     pub(crate) good: f32,
     /// Bad, from `punishment` (−1 to 0).
     pub(crate) bad: f32,
+    /// Habits: doing each verb to it, in `VERBS` order.
+    pub(crate) habits: [f32; VERBS.len()],
 }
 
 impl TypeMemory {
@@ -109,21 +111,20 @@ impl TypeMemory {
             worth: vec![0.0; needs],
             good: 0.0,
             bad: 0.0,
+            habits: [0.0; VERBS.len()],
         }
     }
 }
 
 /// What a brain has learned (design §5.6), all starting at 0: what each
-/// object type is worth for each need and in general, and how bad it is; its
+/// object type is worth for each need and in general, how bad it is, and its
 /// habits; how familiar each category is; and the worth of new things.
-/// Habits and familiarity are kept per category in the pack's order.
+/// Familiarity is kept per category in the pack's order.
 #[derive(Debug, Clone, Default, Serialize)]
 pub(crate) struct Experience {
     /// What it has learned about each object type (design v19 §5.6). Object
     /// types are never forgotten.
     pub(crate) types: BTreeMap<Subject, TypeMemory>,
-    /// Habits: doing each verb, in `VERBS` order, to each category.
-    pub(crate) habits: Vec<[f32; VERBS.len()]>,
     /// How familiar each category is (0 to 1).
     pub(crate) familiarity: Vec<f32>,
     /// The worth of new things.
@@ -141,7 +142,6 @@ impl Experience {
     pub(crate) fn new(categories: usize) -> Experience {
         Experience {
             types: BTreeMap::new(),
-            habits: vec![[0.0; VERBS.len()]; categories],
             familiarity: vec![0.0; categories],
             new_things: 0.0,
             individuals: BTreeMap::new(),
@@ -160,8 +160,8 @@ impl Experience {
             within(&known.worth, (0.0, 1.0), "a worth")?;
             within([&known.good], (0.0, 1.0), "a good")?;
             within([&known.bad], (-1.0, 0.0), "a bad")?;
+            within(&known.habits, (-1.0, 1.0), "a habit")?;
         }
-        within(self.habits.iter().flatten(), (-1.0, 1.0), "a habit")?;
         within(&self.familiarity, (0.0, 1.0), "a familiarity")?;
         within([&self.new_things], (-1.0, 1.0), "the worth of new things")?;
         for individual in self.individuals.values() {
@@ -306,8 +306,9 @@ pub(crate) struct TraceEntry {
     pub(crate) tick: u64,
     /// The verb it chose or kept doing, if any.
     pub(crate) verb: Option<Verb>,
-    /// The category attention was on, if any.
-    pub(crate) attended: Option<CategoryId>,
+    /// What the thing attention was on, if any, is learned about as (design
+    /// v19 §5.6).
+    pub(crate) subject: Option<Subject>,
     /// The verb's motive (design §5.5): the need, by its place in the pack's
     /// needs, whose instinct did most to choose it.
     pub(crate) motive: Option<usize>,

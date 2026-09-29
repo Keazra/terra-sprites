@@ -1281,7 +1281,7 @@ mod tests {
         TraceEntry {
             tick,
             verb: Some(Verb::Eat),
-            attended: None,
+            subject: None,
             motive: None,
         }
     }
@@ -1392,7 +1392,7 @@ mod tests {
             |brain| known(brain).worth[0] = -0.1,
             |brain| known(brain).good = 1.5,
             |brain| known(brain).bad = 0.2,
-            |brain| brain.experience.habits[0][0] = f32::NAN,
+            |brain| known(brain).habits[0] = f32::NAN,
             |brain| brain.experience.familiarity[0] = 2.0,
         ];
         for (i, broken) in breaks.into_iter().enumerate() {
