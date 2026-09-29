@@ -53,6 +53,10 @@ A slice too big for one PR ships as two ("4a", "4b"); only the last PR's descrip
 
 **A slice that promises no visible change proves it.** Run the lab scenarios with the same seeds on `main` and on the branch, and compare the reports byte for byte. Slice 9d, which moved the categories into data, was checked that way: A1 and the thorn trap came out identical.
 
+**A slice that reworks the code and changes behaviour ships the rework first,** proved identical that way, and the behaviour change after it, measured on its own. Then a number that moves can only be the change's doing. Slice 9e shipped as 9e-a (learning per object type, identical reports) and 9e-b (thornbushes join the bushes).
+
+**When a decision waits on a measurement, agree the bar before measuring.** Take the baseline on `main`, and settle with the owner, in numbers, what counts as passing, so the result can't choose its own bar. The bar for moving thornbushes into the bushes was set that way (#77): no worse than `main`, allowing 10% for noise.
+
 **A prototype's totals can hide a particular case,** so the existing behaviour tests are the check while building on its numbers. In slice 9c the default world's numbers looked fine, but the old cornered-sprite test showed fear stopping a cornered sprite from turning on its attacker (4 times in 10, against 8 or more). When a fix comes out of such a case, measure it in the prototype again before bringing it to the owner.
 
 ## Outside reviews
