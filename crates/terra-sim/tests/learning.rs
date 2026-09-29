@@ -356,6 +356,29 @@ fn a_kind_of_bush_the_sprite_has_never_touched_is_judged_by_the_bushes_it_knows(
 }
 
 #[test]
+fn a_hungry_sprite_beside_a_thornbush_it_knows_is_bad_notices_the_berry_bush_behind_it() {
+    // Design v19 §3.6, §5.3: each category's candidate is the thing that
+    // draws the eye most, its nearness, worth and newness, not just the
+    // nearest. A bite has made the thornbush beside it −.8 bad; the berry
+    // bush two tiles on is new, and worth nothing yet.
+    let (thornbush, bush) = (at(2, 1), at(4, 1));
+    let mut world = world_in(
+        bushes(),
+        &["......"; 3],
+        &[(thornbush, "thornbush"), (bush, "berry_bush")],
+        at(1, 1),
+        r#"InitialConcentration(chem: "hunger", value: 0.8),
+           Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
+           Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),"#,
+        &[ScriptedAction::Eat { at: thornbush }],
+    );
+    world.step();
+    world.step();
+    let sprite = world.sprites().next().expect("the sprite");
+    assert_eq!(sprite.attending_to(), Some(bush), "{:?}", sprite.explain());
+}
+
+#[test]
 fn a_reward_after_eating_from_a_thornbush_teaches_the_habit_for_thornbushes_not_every_bush() {
     // Design v19 §5.6: the trace records the object type attended, and
     // habits are credited to it. A sprite that always wants to eat, and is
