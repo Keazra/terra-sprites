@@ -187,6 +187,10 @@ _Avoid_: emotion, mood
 A drive whose relief teaches a sprite what things are good for: hunger, thirst, tiredness, boredom, loneliness or crowdedness. Pain is a drive but not a need.
 _Avoid_: want, desire
 
+**First-order need**:
+A need that comes before a sprite's likes: hunger or thirst. The more it presses, the less what the sprite merely likes pulls on it, though never to nothing. The other needs are second-order.
+_Avoid_: primary need, survival need, blocker (it quiets, never blocks)
+
 **Relief**:
 A need falling, by enough in a tick to count. It teaches that the thing touched is good for that need.
 _Avoid_: satisfaction, drive reduction

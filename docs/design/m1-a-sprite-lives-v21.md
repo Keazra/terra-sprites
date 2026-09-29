@@ -9,7 +9,7 @@
 
 ## Changes from v20
 
-Slice 10 ([#11](https://github.com/Keazra/terra-sprites/issues/11)), the Cursor teaches, settled with the owner before building. The owner asked for a diegetic outlook: what the player controls is a thing in the terrarium, so it gets a name and a place in the lore, and whether sprites can perceive it is a design question of its own. New and changed terms are in [`CONTEXT.md`](../../CONTEXT.md): the Cursor, lock on, Train mode, Grab mode, pet, hug, zap, shock, amplified, reach back, hurt.
+Slice 10 ([#11](https://github.com/Keazra/terra-sprites/issues/11)), the Cursor teaches, settled with the owner before building. The owner asked for a diegetic outlook: what the player controls is a thing in the terrarium, so it gets a name and a place in the lore, and whether sprites can perceive it is a design question of its own. New and changed terms are in [`CONTEXT.md`](../../CONTEXT.md): the Cursor, lock on, Train mode, Grab mode, pet, hug, zap, shock, amplified, reach back, hurt, first-order need.
 
 | # | Change | Source | Sections |
 |---|---|---|---|
@@ -24,6 +24,10 @@ Slice 10 ([#11](https://github.com/Keazra/terra-sprites/issues/11)), the Cursor 
 | 9 | **Emotes for the Cursor.** A pet or a hug shows Pleased (`♥`) now; its other trigger, a big good feeling, stays with slice 14. A zap or a shock shows a new emote, **Shocked**, a yellow `‼` (a yellow `!` in `--ascii`), instead of Hurt. The owner asked for `🗲`, which isn't CP437 and which Windows Terminal may draw as a box or at double width; the tile front end can draw a real bolt. | Owner decision | §6.2, §6.3 |
 | 10 | **A hurt is injury or pain** that something did to a sprite. A zap or a shock hurts without injuring. | Follows from 3 | §4.10, §6.3 |
 | 11 | **The lab's trainer.** A lab scenario may give a trainer: on each applied verb of its kind on its target type, it gives the actor a pet or a zap, a set number of ticks later, with a set reach back. Its control run is the same seed without the trainer (learning stays on). The report also counts each run's lessons. A2 and A3 are counted as A1 is: the trained runs' median against the controls' median. Two measurements go with the slice's PR: a strength sweep (how many pets or zaps a lesson takes at a few strengths), and A2 with the trainer delayed 20 ticks. | Owner decision | §7.1, §7.3 |
+| 13 | **Hunger and thirst quiet what a sprite merely likes.** A thing's general good, and every good habit, count × (1 − `quieting` × urgency²), where urgency is the highest of the sprite's **first-order needs**, hunger and thirst (a list in `brain_io.ron`, §5.2), and `quieting` a new brain parameter (34, 0–1, default 0.8). So a pressing need quiets likes but never switches them off, as the owner asked: a suppressant, not a blocker. Squared, as the owner described it: a little thirst hardly matters (a like keeps 93% at thirst .3), and near dying of thirst it takes a great deal to choose anything else (20% at 1). What a thing is worth for a need, bad things, fear and bad habits are never quieted. **Found measuring A2** (prototype on `prototype/slice-10-training`): the trainer's sprite died of thirst in every seed. About 10 pets made "balls are good" and "kicking balls is good" near 1; its eye never left the ball, though it wasn't bored, and having never learned what water is for, it never turned to it. Petting a quarter as strongly, or at most once per 100 ticks, didn't save it. Real animals don't do this: a thirsty dog ignores its favourite toy. With `quieting` 0.8 the sprite lives through every seed; at 0.5, 2 of 10 still died. Urgency straight rather than squared gave the same results everywhere (A2 20× against 21×); the squared form was chosen for how it feels. Good eating and drinking habits are quieted like the rest: exempting them, which would have needed a list of verbs in the engine, changed no result. The owner's fuller pecking order, where hunger and thirst also quiet the second-order drives (boredom, loneliness, crowdedness), was measured too: it helped nothing here and made A3 fail (0.89×), so it's left for [#50](https://github.com/Keazra/terra-sprites/issues/50), as a suppressant or amplifier between tiers, never a blocker. | Owner decision, after measuring | §5.2, §5.6, App. A, App. B |
+| 14 | **Bad habits fade as slowly as bad things.** A habit below 0 fades at a new brain parameter, `habit_fade_bad` (35, default 0.00005, as `worth_fade_bad`); one above 0 keeps `habit_fade` (0.0002). v16 already had bad worth learned fast and fading slowly. **Found measuring A3:** the zaps (about 6) all landed in the first 3,000 ticks and hitting stopped, but the habit "hitting sprites is bad" faded from about −0.5 to −0.1 by tick 12,000 and hitting returned then, to the untrained level (0.99×). The sprites' sense that the others were bad stayed strong but didn't stop them hitting; the habit did. | Owner decision, after measuring | §5.6, App. A, App. B |
+| 15 | **A3's trainer shocks.** With the slower fade the zap's lesson still falls short (0.64× against a bar of 0.5×); the shock's passes (0.06×). Punishment that lasts is a strong one, and the zap stays the gentle, everyday nudge. | Owner decision, after measuring | §7.3 |
+| 16 | **Measured with changes 13–15,** medians of 10 seeds: A1 unchanged (the learner's thornbush contacts 2 against its control's 39, as on `main`; it lives through every seed). A2: the trained sprite lives through every seed and kicks balls 20× as often as its control after training. A3: 0.06×. The thorn trap, against `main` at 361f19a: thornbush touches 53.5 against 58 (the sum of each verb's median), berry bush meals 270 against 262.5, no deaths by thornbush, hunger or thirst on the median, and 1 death of thirst in all 300 sprite lives against 3. So the everyday world is no worse, and slightly better. Change 14 alone gives the same thorn-trap numbers: without pets, likes are rare in the default world. | Measured | §7.3 |
 | 12 | **Slice 10 ships as two PRs.** 10a: the commands, pets and shocks, the reach back, the trainer, A2, A3 and the measurements, with Select and Train modes, `Q`/`E`, the lock, the status line, the event log, the observed list and the emotes. 10b: the wheel, the Cursor's colours and marks, and the sent, applied and rejected flashes. Only 10b's PR closes #11. | Owner decision | — |
 
 ---
@@ -1278,6 +1282,7 @@ Every input and output has a stable, append-only ID (Appendix A). Each input bel
 - **Target inputs are outputs of attention.** They never feed back into attention.
 - **What the file holds:** the State inputs, each with its stable input ID and the chemical or locus it reads, e.g. `(id: 1, name: "hunger", reads: Chem("hunger"))`, `(id: 27, name: "ate", reads: Locus("ate"))`. A name that isn't a chemical or locus of the right kind (a drive or hormone; a body sensor or pulse) is a load error, as is a duplicate ID or name. The verbs, `target_distance` and `target_adjacent` are fixed in code, which gives them their meaning; the attended inputs follow the category list (v19, §3.5.5). Target inputs take IDs 36 to 63 (36, 37 and 39–43 so far: 38 was `attended_thornbush`, retired with its category in v20), and State inputs any other ID from 1: 1–35, then from 64 (from slice 7c). A State input numbered 36 to 63 is a load error. Their names, used in genome files, are `attended_<category>` (`attended_bush` … `attended_sprite`), `target_distance` and `target_adjacent`, and the verb names.
 - **The needs** (v16): the file also lists which drives are **needs**, the ones whose relief teaches worth: `needs: ["hunger", "thirst", "tiredness", "boredom", "loneliness", "crowdedness"]`. Each must be a drive that is a State input; anything else is a load error. Pain is a drive but not a need: its fall is a hurt fading, not relief. The data names the channels, so a pack with a new drive adds a channel with no code.
+- **The first-order needs** (v21): `first_order: ["hunger", "thirst"]`, the needs that come before a sprite's likes. While one presses, what the sprite merely likes pulls less (§5.6). Each must be a need; the others are second-order. A pecking order between the second-order needs themselves waits for [#50](https://github.com/Keazra/terra-sprites/issues/50).
 - **Not brain inputs:**
   - physical chemicals, because the brain feels the body only through drives
   - `reward` and `punishment`, because they're learning signals
@@ -1390,7 +1395,9 @@ World randomness is separate: plant rules and the order actions resolve in. It c
 
 In this section, *c* is an object type (v19). Sprites are learned about one by one for worth and fear, and as a whole for habits and familiarity.
 
-**A thing's worth now:** `value_c = Σ_n level_n × G_n[c] + G[c] + B[c]`, over the needs *n*. A berry learned good for hunger counts for a lot when the sprite is starving and nothing when it's full; a thornbush learned bad counts always. For an object type the sprite doesn't know yet, the values are its category's summary (below).
+**A thing's worth now:** `value_c = Σ_n level_n × G_n[c] + quiet × G[c] + B[c]`, over the needs *n*. A berry learned good for hunger counts for a lot when the sprite is starving and nothing when it's full; a thornbush learned bad counts always. For an object type the sprite doesn't know yet, the values are its category's summary (below).
+
+**First-order needs quiet what's merely liked** (v21). `quiet = 1 − quieting × urgency²`, where urgency is the highest level of the sprite's first-order needs (hunger and thirst, §5.2) and `quieting` a brain parameter (0.8 by default). Squared, a little hunger or thirst hardly quiets anything, and a desperate one quiets most. It scales a thing's general good in its worth, and every good habit in the decision (§5.5); worth for a need, bad, fear and bad habits are never quieted. So a starving sprite still likes its ball a little, but its eye turns to what might feed it. It never blocks: at full urgency a fifth of a like is left.
 
 **The learning signals,** read at step 4:
 - **Relief** for each need: its fall since the previous tick's step 4, when that fall is at least `relief_deadband` (physiology, 0.02), else 0. Relief is read straight from the needs (§5.2), so a drive knocked down by eating is relief whatever emitter did it. A slow drift never counts.
@@ -1426,7 +1433,7 @@ With no attempt within the reach back, the tick teaches as any other: no worth, 
 - **Relief doesn't teach habits:** it teaches worth, which draws the sprite back. Measured, habits from good less bad and disappointment were enough.
 - **Praise credits both** (owner decision): a pet just after a sprite tries to eat a ball raises the ball's general good *and* the habit of eating balls. Players can teach tricks and quirks, on purpose or by accident, and without more praise the habit fades.
 
-**Fading.** Every tick, after learning: each `G_n` and `G` and `new_things` is multiplied by `1 − worth_fade_good`, each `B` by `1 − worth_fade_bad`, each `F` by `1 − fear_fade` and each habit by `1 − habit_fade`. The starter genome's defaults learn bad faster than good and fade it about four times more slowly (Appendix B).
+**Fading.** Every tick, after learning: each `G_n` and `G` and `new_things` is multiplied by `1 − worth_fade_good`, each `B` by `1 − worth_fade_bad`, each `F` by `1 − fear_fade`, each good habit by `1 − habit_fade` and each bad habit by `1 − habit_fade_bad` (v21). The starter genome's defaults learn bad faster than good and fade it about four times more slowly (Appendix B), habits as well as worth since v21.
 
 **Forgetting** (v18). A remembered sprite all of whose values are under `forget_below` (physiology, 0.01) is forgotten, and so is one that has died, at step 4. There's no limit on how many a sprite remembers.
 
@@ -1913,14 +1920,14 @@ Implementation is **test-first, one vertical slice at a time.** Everything in `t
 - **Measurement:** ticks 10,000–20,000, with **no trainer in either run**, so we measure what was learned, not ongoing reward.
 - **Counts:** only actions with outcome `applied` are counted.
 - **Control:** each trained run is compared with a matched control (same seed, no trainer, learning on), taking the **median across 10 seeds**. As in A1, the trained runs' median is compared with the controls' median (v21).
-- **The trainer** gives the light touch, a pet or a zap, with no delay and the default reach back (v21).
+- **The trainer** pets for A2, the light touch, and shocks for A3 (v21 change 15), each with no delay and the default reach back (v21).
 - **Minimum baseline:** a scenario only counts if the control has **≥20 counted actions** in the measurement window. Below that, the test **fails** as badly calibrated.
 
 | # | Scenario | Trainer during training | Pass condition |
 |---|---|---|---|
 | A1 | 1 sprite; berry bushes, thornbushes, water. The world may be shaped to meet the baseline: a small walled arena where thornbushes outnumber berry bushes | none | Applied thornbush contacts (Eat, Play and Hit on a thornbush) over ticks 0–20,000 ≤ 50% of the control's, where the control is the same seed with learning switched off (v16, §7.1). The control needs ≥20 such contacts; below that the test fails as badly calibrated. The learning sprite must live through the run. |
 | A2 | 1 sprite; balls, food, water | Each applied Play on a Ball at tick *t* < 9,900 → a pet, `Reward(actor)`, stamped *t+1* | Applied Play-on-Ball count ≥ 1.5× control |
-| A3 | 4 sprites in a small arena; food, water | Each applied Hit on a Sprite at tick *t* < 9,900 → a zap, `Correct(actor)`, meaning **the hitter**, stamped *t+1* | Applied Hit-on-Sprite count, all sprites combined, ≤ 0.5× control |
+| A3 | 4 sprites in a small arena; food, water | Each applied Hit on a Sprite at tick *t* < 9,900 → a shock, `Correct(actor, amplified)`, meaning **the hitter**, stamped *t+1* | Applied Hit-on-Sprite count, all sprites combined, ≤ 0.5× control |
 
 **Measured with slice 10's PR** (v21), not CI tests:
 - **The strength sweep:** A2's and A3's trained runs with the pet or zap at a few strengths (¼, ½ and full), to see how many a lesson takes and what they do to the result.
@@ -2118,6 +2125,8 @@ IDs are stable and append-only. Gaps are left for growth, and the ranges are a c
 | 31 | flight (v18) |
 | 32 | fear_reach (v18) |
 | 33 | generalise_types (v19) |
+| 34 | quieting (v21) |
+| 35 | habit_fade_bad (v21) |
 
 Since v16, `learning_rate`, `relax_rate` and `consolidate_rate` do nothing (learning is worth and habits, §5.6), nor do 10–14 while the recruitable pool is on hold (§5.4). Their IDs stay taken.
 
@@ -2180,6 +2189,8 @@ This file fixes the **mechanisms and ranges**. The starting values are tuned wit
 | `flight` (v18) | 0–2 | 0.8 |
 | `fear_reach` (v18) | 0.1–1 | 0.5 |
 | `generalise_types` (v19) | 2–10 | 3 |
+| `quieting` (v21) | 0–1 | 0.8 |
+| `habit_fade_bad` (v21) | 0–0.01 | 0.00005 |
 
 The v16 defaults are the prototype's (#10), a starting point for slice 9's tuning, and the v18 ones slice 9c's prototype's (#62). `generalise_types` starts at `generalise`'s value. Rows for parameters that do nothing since v16 stay, since a genome may still carry their genes.
 
