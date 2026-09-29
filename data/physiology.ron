@@ -76,6 +76,11 @@
         "fear_reach":        (range: (0.1, 1.0),     default: 0.5),
         // Category summaries (design v19 §5.6), at generalise's value.
         "generalise_types":  (range: (2.0, 10.0),    default: 3.0),
+        // A pressing first-order need quiets what a sprite merely likes, by
+        // at most this much, never all of it; and bad habits fade as slowly
+        // as bad things (design v21 §5.6).
+        "quieting":          (range: (0.0, 1.0),     default: 0.8),
+        "habit_fade_bad":    (range: (0.0, 0.01),    default: 0.00005),
     },
     // The range of each receptor target in `loci.ron`. Each rests at 1.0 when
     // no receptor writes it.
