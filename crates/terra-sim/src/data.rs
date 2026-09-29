@@ -485,18 +485,6 @@ impl DataPack {
             .expect("a checked pack has sprites")
     }
 
-    /// What the screen and the brain's memory call the category `id` until
-    /// slice 9e: its first object type in ID order, or its own name if none
-    /// is in it (design v19 §6.1).
-    pub(crate) fn category_label(&self, id: CategoryId) -> &str {
-        self.object_types
-            .iter()
-            .find(|t| t.category == id)
-            .map(|t| t.name.as_str())
-            .or_else(|| self.category(id).map(|c| c.name.as_str()))
-            .expect("a category in the pack")
-    }
-
     /// The index of the pseudo type of `category`, the verb table of water or
     /// of sprites, if the pack has one.
     pub(crate) fn pseudo_type(&self, category: CategoryId) -> Option<usize> {

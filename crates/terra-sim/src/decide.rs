@@ -175,8 +175,11 @@ pub(crate) fn decide(
 
     // 5a: attention, from the State inputs alone.
     let state_only = brain.inputs(&sprite.body, None, data);
-    let curiosity_mod = sprite.body.loci[data.physiology().indices.curiosity_mod];
     let attention = brain.attention_scores(&state_only, &distances, curiosity_mod, scoring, data);
+    let scored = distances
+        .iter()
+        .map(|(&c, &(subject, _))| (c, subject))
+        .collect();
     let attended = brain.attend(&attention, running, exploration, rng);
     let mut running = running;
     if let Some(aim) = aimed
@@ -237,6 +240,7 @@ pub(crate) fn decide(
         inputs,
         activations,
         attention,
+        scored,
         attended,
         target,
         subject: aim.map(|a| a.subject),

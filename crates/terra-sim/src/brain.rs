@@ -169,6 +169,9 @@ pub(crate) struct Snapshot {
     pub(crate) activations: Vec<f32>,
     /// Each candidate category's attention score.
     pub(crate) attention: BTreeMap<CategoryId, f32>,
+    /// What each category's score was for, learned about as (design v19
+    /// §5.9): its candidate, or the thing a running action is aimed at.
+    pub(crate) scored: BTreeMap<CategoryId, Subject>,
     pub(crate) attended: Option<CategoryId>,
     /// The one thing attention is on: a running action's target, or else the
     /// attended category's candidate.
@@ -823,12 +826,13 @@ impl Brain {
     /// `None` if it hasn't decided anything yet.
     pub(crate) fn explain<'a>(&self, data: &'a DataPack) -> Option<Explanation<'a>> {
         let snapshot = self.snapshot.as_ref()?;
-        // Sprites are named by the one scored (design v18 §5.9).
-        let seen = |category: CategoryId| thing_of(category, snapshot.sprite_seen, data);
+        // Each row is named by what was scored: its object type, or for
+        // sprites the one scored (design v19 §5.9).
+        let seen = |subject: Subject| thing_named(subject, snapshot.sprite_seen, data);
         let mut attention: Vec<(Thing, f32)> = snapshot
             .attention
             .iter()
-            .map(|(&category, &score)| (seen(category), score))
+            .map(|(category, &score)| (seen(snapshot.scored[category]), score))
             .collect();
         // A stable sort keeps a tie in category order.
         attention.sort_by(|a, b| b.1.total_cmp(&a.1));
@@ -854,13 +858,11 @@ impl Brain {
                 .collect(),
             None => Vec::new(),
         };
-        if let (Some((verb, _)), Some(category), Some(subject)) =
-            (decision, snapshot.attended, snapshot.subject)
-        {
+        if let (Some((verb, _)), Some(subject)) = (decision, snapshot.subject) {
             let scoring = snapshot.scoring;
             let parts = self.aimed_parts(subject, scoring, &snapshot.inputs, data);
             let [worth, fear, habit] = parts[column(verb)];
-            let thing = thing_of(category, scoring.sprite, data);
+            let thing = thing_named(subject, scoring.sprite, data);
             contributions.extend([
                 Contribution {
                     part: Part::Worth(thing.clone()),
@@ -882,7 +884,7 @@ impl Brain {
         contributions.sort_by(|a, b| b.amount.abs().total_cmp(&a.amount.abs()));
         Some(Explanation {
             attention,
-            attended: snapshot.attended.map(seen),
+            attended: snapshot.subject.map(seen),
             decision,
             contributions,
         })
@@ -1190,12 +1192,12 @@ pub(crate) fn available(target: bool, beside: bool) -> Vec<Verb> {
         .collect()
 }
 
-/// What a thing of `category` is called, for sprites the particular
-/// `sprite` if there is one (design v18 §5.9).
-fn thing_of(category: CategoryId, sprite: Option<EntityId>, data: &DataPack) -> Thing {
+/// What a thing learned about as `subject` is called, for sprites the
+/// particular `sprite` if there is one (design v18, v19 §5.9).
+fn thing_named(subject: Subject, sprite: Option<EntityId>, data: &DataPack) -> Thing {
     match sprite {
-        Some(sprite) if category == data.sprite_category() => Thing::Sprite(sprite),
-        _ => Thing::from(data.category_label(category)),
+        Some(sprite) if subject.category(data) == data.sprite_category() => Thing::Sprite(sprite),
+        _ => subject_thing(subject, data),
     }
 }
 
@@ -1588,6 +1590,7 @@ mod tests {
             inputs: Vec::new(),
             activations,
             attention: BTreeMap::new(),
+            scored: BTreeMap::new(),
             attended: attended.map(|s| s.category(&builtin())),
             target: None,
             subject: attended,
