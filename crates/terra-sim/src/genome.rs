@@ -122,15 +122,17 @@ pub(crate) enum AsWritten {
 }
 
 impl AsWritten {
-    /// The missing category it names, as written, if it was written by
-    /// name: an attention instinct's category, or an instinct's attended input.
+    /// The missing category it names, if it was written by name: an
+    /// attention instinct's category, or the category of an instinct's
+    /// attended input (`tree` for `attended_tree`).
     pub(crate) fn missing<'a>(&'a self, data: &DataPack) -> Option<&'a str> {
         match self {
             AsWritten::AttentionInstinct { category, .. } => Some(category),
             AsWritten::Instinct { inputs, .. } => inputs
                 .iter()
                 .map(|(name, _)| name.as_str())
-                .find(|name| missing_named(name, data)),
+                .find(|name| missing_named(name, data))
+                .and_then(|name| name.strip_prefix(ATTENDED)),
             AsWritten::ByNumber { .. } => None,
         }
     }
@@ -513,9 +515,14 @@ impl Gene {
                 finite("weight", weight)?;
             }
             Gene::AttentionInstinct {
-                input: id, weight, ..
+                input: id,
+                category,
+                weight,
             } => {
                 input(id)?;
+                data.category(category).ok_or_else(|| {
+                    format!("refers to category {}, which isn't in the pack", category.0)
+                })?;
                 finite("weight", weight)?;
             }
             Gene::Unknown { .. } | Gene::Unmatched(_) => {}
@@ -1063,4 +1070,25 @@ fn decode(type_id: u16, version: u8, payload: Vec<u8>) -> Result<Gene, String> {
             payload,
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn checking_an_attention_instinct_checks_its_category_is_in_the_pack() {
+        // As every other reference is checked. A gene read from a genome file
+        // never fails this: a missing category makes it unmatched instead
+        // (design v19 §5.7).
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let gene = |category| Gene::AttentionInstinct {
+            input: InputId(1),
+            category: CategoryId(category),
+            weight: 0.5,
+        };
+        assert_eq!(gene(6).check(&data), Ok(()));
+        let error = gene(26).check(&data).expect_err("no category 26");
+        assert!(error.contains("category 26"), "{error}");
+    }
 }
