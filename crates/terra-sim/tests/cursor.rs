@@ -375,7 +375,11 @@ fn a_pet_after_its_reach_back_has_passed_teaches_nothing_of_the_last_try() {
 fn a_reach_back_below_the_touch_window_or_past_the_longest_is_taken_as_that_bound() {
     // Design v21 §2.5: at least touch_window (3), at most max_reach_back (40).
     assert_eq!(pet_after_a_kick(3, 0), (0.25, 0.15), "0 is taken as 3");
-    assert_eq!(pet_after_a_kick(40, 1000), (0.25, 0.15), "1,000 is taken as 40");
+    assert_eq!(
+        pet_after_a_kick(40, 1000),
+        (0.25, 0.15),
+        "1,000 is taken as 40"
+    );
     assert_eq!(pet_after_a_kick(41, 1000), (0.0, 0.0));
 }
 
