@@ -6,20 +6,26 @@ The owner's preferences and the project's conventions, for any agent session, lo
 
 - **They review by feel, after trying the build** in Windows Terminal, and change direction when something feels off. Don't build on a direction they haven't confirmed.
 - **Plain words, from the start.** Write questions and options for someone who hasn't read the code: say what the player sees or what changes, not step letters, gene jargon or type names. A question once had to be asked again because it wasn't plain.
+  - **Name a place by what it's for, not by its file:** "a word list of its own", not `themes/words.ron`. Slice 9b's question about where plurals should live had to be asked again for that reason.
 - **They reply only to what they disagree with.** Give a recommendation with each question or list; silence accepts it. Keep going on anything they don't object to.
 - **A real decision gets a real question.** Use `AskUserQuestion` with the recommended option first. For anything about layout, give each option an ASCII mockup preview: the owner chose the Chem tab's layout that way.
 - **A choice with real trade-offs comes with its pros and cons,** each option's, in plain words, before the question. In slice 8 the owner had to ask for them before choosing how to break the thorn trap.
 - **When measuring shows a design won't work,** stop and bring the numbers, what was tried and the options, rather than retuning quietly. Slice 8's decisions to drop no-op Approaches and to shorten the trace were made that way (design v15, changes 9–10).
 - **When something they asked for can't be done as written,** say so before building, with options, rather than quietly doing something else. If an agreed detail changes during the work, say so in the PR.
 - **When they raise a broad idea, lay out what it could mean before narrowing it.** In slice 9 "the simulated fly brain" was first read as one mechanism, a concept pool, and measured. The owner had meant the brain as a whole, so the idea had to be revisited: first say which readings there are, and ask.
+- **`/grill-with-docs`** is the owner's name for the `grilling` skill together with `domain-modeling`: questions in rounds, with each settled term written into `CONTEXT.md` as it's decided, and the decisions in a new design revision.
+- **Other agents may work in the same folder.** The owner runs tools such as Antigravity alongside a session, so untracked files you didn't make are theirs: leave them unstaged and untouched, and pull before pushing in case they committed to the branch.
 
 ## The owner's design principles
 
 - **The engine enforces physics only.** Behaviour and safety policies belong in each object's data rules, and the data names things. For example, the cause of death "hurt by thornbush" comes from the object type, not from a list in the code.
   - **The one exception is content safety.** A rule the project must never break, whatever a genome or data pack says, is enforced in the engine, because data can be edited and genes evolve. For now there is one: attraction and mating attempts only ever between adults ([#69](https://github.com/Keazra/terra-sprites/issues/69), for M2).
 - **Solid means impassable, whatever a sprite has learned.**
+- **Each thing we add is its own self-contained thing.** What it is, what it does and what it's called live in its own entry, not spread across lists in the code or other files. So its plural sits beside its name in `objects.ron` (design v17), rather than in a word list of its own.
+  - **The aim is easy modding,** as in the Creatures games, whose fun included how simple it was to make new species and new items. When a design choice comes up, say whether it makes adding a species or an item easier or harder.
 - **The player has to care first.** Sprites start unnamed; the player names the ones they care about.
 - **Terra Sprites is a stepping stone** to a larger game: one adventurer in a world of NPCs that run on the Sprite system, with skills a player can lock and a character that can live on as an NPC ([#47](https://github.com/Keazra/terra-sprites/issues/47)). Nothing is built for it yet, but keep `terra-sim` a general engine, and when a design choice comes up, say whether it helps or hinders reusing sprites as NPCs.
+- **Realism settles behaviour questions.** When two behaviours both work, the owner asks which is more realistic. Answer with how real animals behave, then recommend. In slice 9c, fear was kept quiet in a cornered sprite's choice because cornered animals fight.
 - **Sprites are blank slates.** They should learn what's good or bad, pass on their genes, and later teach the next generation, so instincts stay general and make mistakes rather than holding knowledge a sprite should earn. "Bored → play with whatever it's looking at", thornbushes included, stays, even when it costs lives until learning arrives (design v12, change 11).
   - **Not competent from the start** (design v16): the starter genome is very basic. Needs lead to actions, and sprites know their own kind and fight or flee, but they know nothing of food, water, toys or danger. They're a species dropped into a world they don't know, meant to evolve fast; the gene types can still express smarter instincts, so evolution can grow them.
 - **Real science is inspiration, not a blueprint.** The owner cares how a real system works, such as the fruit-fly brain behind design v16, abstracted for sprites, which are visual, social and tactile. A copy of its parts isn't the goal.
@@ -44,6 +50,10 @@ Each slice is a GitHub issue ("Slice N: …") in the M1 milestone, worked as in 
 7. Answer outside reviews (below), then merge when the owner says so: a merge commit, not a squash, then delete the branch and pull `main`. PR descriptions and review replies cite the slice's commits by hash, and a squash would drop them from `main`'s history.
 
 A slice too big for one PR ships as two ("4a", "4b"); only the last PR's description says "Closes #N".
+
+**A slice that promises no visible change proves it.** Run the lab scenarios with the same seeds on `main` and on the branch, and compare the reports byte for byte. Slice 9d, which moved the categories into data, was checked that way: A1 and the thorn trap came out identical.
+
+**A prototype's totals can hide a particular case,** so the existing behaviour tests are the check while building on its numbers. In slice 9c the default world's numbers looked fine, but the old cornered-sprite test showed fear stopping a cornered sprite from turning on its attacker (4 times in 10, against 8 or more). When a fix comes out of such a case, measure it in the prototype again before bringing it to the owner.
 
 ## Outside reviews
 

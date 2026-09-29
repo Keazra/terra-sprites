@@ -38,6 +38,9 @@ pub(crate) struct Physiology {
     pub(crate) relief_deadband: f32,
     /// How many ticks after a try its target is still the thing touched.
     pub(crate) touch_window: u64,
+    /// A remembered sprite is forgotten once everything learned about it is
+    /// nearer 0 than this (design v18 §5.6).
+    pub(crate) forget_below: f32,
     pub(crate) actions: Actions,
     pub(crate) movement: Movement,
     pub(crate) indices: Indices,
@@ -64,6 +67,7 @@ pub(crate) struct PhysiologyEntry {
     lesson_threshold: f32,
     relief_deadband: f32,
     touch_window: u64,
+    forget_below: f32,
     actions: Actions,
     movement: Movement,
 }
@@ -337,6 +341,7 @@ impl PhysiologyEntry {
             lesson_threshold: self.lesson_threshold,
             relief_deadband: self.relief_deadband,
             touch_window: self.touch_window,
+            forget_below: self.forget_below,
             actions: self.actions,
             movement: self.movement,
             indices,

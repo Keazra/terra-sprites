@@ -6,8 +6,11 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
+use crate::categories::Category;
 use crate::data::{DataError, check_unique};
-use crate::registry::{Category, ChemId, Chemical, ChemicalClass, Locus, LocusId, LocusKind, Verb};
+use crate::registry::{
+    CategoryId, ChemId, Chemical, ChemicalClass, Locus, LocusId, LocusKind, Verb,
+};
 
 /// The object types file, relative to the pack root.
 pub(crate) const OBJECTS: &str = "objects.ron";
@@ -18,7 +21,11 @@ pub(crate) const OBJECTS: &str = "objects.ron";
 pub(crate) struct ObjectType {
     pub(crate) id: u16,
     pub(crate) name: String,
-    pub(crate) category: Category,
+    /// How the screen says the kind in general, such as "berry bushes"; none
+    /// for a thing you don't count, such as water (design §3.5.1). The sim
+    /// never reads it.
+    pub(crate) plural: Option<String>,
+    pub(crate) category: CategoryId,
     /// Nothing can move through it. In M1 every solid object is also a fixture,
     /// and every other object is an item (design §3.5.1).
     pub(crate) solid: bool,
@@ -145,6 +152,7 @@ pub(crate) enum Party {
 /// Parses and validates `objects.ron`, returning the types in ascending ID order.
 pub(crate) fn object_types(
     text_entries: Vec<TypeEntry>,
+    categories: &[Category],
     chemicals: &[Chemical],
     loci: &[Locus],
 ) -> Result<Vec<ObjectType>, DataError> {
@@ -160,6 +168,7 @@ pub(crate) fn object_types(
             .enumerate()
             .map(|(index, t)| (t.name.clone(), (index, t.pseudo)))
             .collect(),
+        categories,
         chemicals,
         loci,
     };
@@ -179,11 +188,21 @@ pub(crate) fn object_types(
 struct Names<'a> {
     /// Object type name → (index in the sorted list, whether it's a pseudo type).
     types: BTreeMap<String, (usize, bool)>,
+    categories: &'a [Category],
     chemicals: &'a [Chemical],
     loci: &'a [Locus],
 }
 
 impl Names<'_> {
+    /// The category called `name`.
+    fn category(&self, name: &str) -> Result<CategoryId, String> {
+        self.categories
+            .iter()
+            .find(|c| c.name == name)
+            .map(|c| c.id)
+            .ok_or_else(|| format!("names the unknown category `{name}`"))
+    }
+
     /// The index of the object type called `name`, which must be a real (not pseudo) type.
     fn real_type(&self, name: &str) -> Result<usize, String> {
         match self.types.get(name) {
@@ -210,7 +229,8 @@ enum Section {
 pub(crate) struct TypeEntry {
     id: u16,
     name: String,
-    category: Category,
+    plural: Option<String>,
+    category: String,
     #[serde(default)]
     tags: Vec<Tag>,
     #[serde(default)]
@@ -301,6 +321,14 @@ enum EffectEntry {
 impl TypeEntry {
     /// The validated type, or what's wrong with the entry.
     fn resolve(self, names: &Names) -> Result<ObjectType, String> {
+        // Spaces at either end would put stray gaps in the screen's sentences.
+        let plural = match self.plural.as_deref().map(str::trim) {
+            Some("") => {
+                return Err("has an empty plural: leave it out for a thing you don't count".into());
+            }
+            plural => plural.map(str::to_string),
+        };
+        let category = names.category(&self.category)?;
         let solid = self.tags.contains(&Tag::Solid);
         let fixture = self.tags.contains(&Tag::Fixture);
         match (solid, fixture) {
@@ -401,7 +429,7 @@ impl TypeEntry {
                     let on_a_body = matches!(effect, EffectEntry::Inject(..) | EffectEntry::Signal(..));
                     if self.pseudo && !on_a_body {
                         return Err(format!(
-                            "the {verb:?} verb: `{name}` acts on an object, but a pseudo type's                              verbs may only Inject and Signal"
+                            "the {verb:?} verb: `{name}` acts on an object, but a pseudo type's verbs may only Inject and Signal"
                         ));
                     }
                 }
@@ -431,7 +459,8 @@ impl TypeEntry {
         Ok(ObjectType {
             id: self.id,
             name: self.name,
-            category: self.category,
+            plural,
+            category,
             solid,
             pseudo: self.pseudo,
             build,

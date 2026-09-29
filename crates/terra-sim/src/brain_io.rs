@@ -1,12 +1,14 @@
 //! The brain's I/O registry (design §5.2, Appendix A): every brain input, with
 //! its stable ID. The State inputs come from `brain_io.ron`; the Target inputs
-//! are fixed here, because attention gives them their meaning.
+//! are one for each category (design v19 §3.5.5), then two fixed here, because
+//! attention gives them their meaning.
 
 use serde::{Deserialize, Serialize};
 
+use crate::categories::Category;
 use crate::data::{DataError, check_unique};
 use crate::genome::LocusRef;
-use crate::registry::{Category, Chemical, ChemicalKind, Locus, LocusKind};
+use crate::registry::{CategoryId, Chemical, ChemicalKind, Locus, LocusKind};
 
 /// The brain I/O registry, relative to the pack root.
 pub(crate) const BRAIN_IO: &str = "brain_io.ron";
@@ -16,12 +18,32 @@ pub(crate) const BRAIN_IO: &str = "brain_io.ron";
 #[serde(transparent)]
 pub(crate) struct InputId(pub(crate) u16);
 
-/// The IDs kept for Target inputs, the first of them used from
-/// `FIRST_TARGET` up. State inputs take any other ID from 1.
-const TARGET_IDS: std::ops::RangeInclusive<u16> = 36..=63;
+/// The IDs kept for Target inputs: one for each category, and
+/// `target_distance` and `target_adjacent`. State inputs take any other ID
+/// from 1.
+pub(crate) const TARGET_IDS: std::ops::RangeInclusive<u16> = 36..=63;
 
-/// The first Target input's ID.
-const FIRST_TARGET: u16 = *TARGET_IDS.start();
+/// The IDs of the two Target inputs fixed in code.
+const TARGET_DISTANCE: u16 = 42;
+const TARGET_ADJACENT: u16 = 43;
+
+/// How many categories the Target IDs have room for: the rest of them.
+pub(crate) const MOST_CATEGORIES: u16 = *TARGET_IDS.end() - *TARGET_IDS.start() + 1 - 2;
+
+/// How the name of a category's brain input starts: `attended_bush`.
+pub(crate) const ATTENDED: &str = "attended_";
+
+/// The ID of the brain input that's 1 while attention is on the category
+/// `id` (design v19 §3.5.5): the Target IDs in order from category 1,
+/// stepping over the two fixed ones, so `35 + id` up to 6, then `37 + id`.
+pub(crate) fn attended_input(id: CategoryId) -> u16 {
+    let input = *TARGET_IDS.start() - 1 + id.0;
+    if input >= TARGET_DISTANCE {
+        input + 2
+    } else {
+        input
+    }
+}
 
 /// What a brain input reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,7 +51,7 @@ pub(crate) enum Source {
     /// A State input: a drive, a hormone, a body sensor or a pulse.
     State(LocusRef),
     /// 1 while attention is on this category, else 0.
-    Attended(Category),
+    Attended(CategoryId),
     /// The attended target's path cost, over the flood's reach.
     TargetDistance,
     /// 1 while the sprite stands on one of its target's goal tiles, else 0.
@@ -68,14 +90,29 @@ enum ReadsEntry {
     Locus(String),
 }
 
-/// The Target inputs, fixed in code, in ID order from `FIRST_TARGET`.
-fn target_inputs() -> impl Iterator<Item = (String, Source)> {
-    Category::ALL
-        .into_iter()
-        .map(|c| (format!("attended_{}", c.name()), Source::Attended(c)))
+/// The Target inputs as `(id, name, source)`: one for each of the
+/// `categories`, then the two fixed in code (design v19 §3.5.5).
+fn target_inputs(categories: &[Category]) -> impl Iterator<Item = (u16, String, Source)> {
+    categories
+        .iter()
+        .map(|c| {
+            (
+                attended_input(c.id),
+                format!("{ATTENDED}{}", c.name),
+                Source::Attended(c.id),
+            )
+        })
         .chain([
-            ("target_distance".into(), Source::TargetDistance),
-            ("target_adjacent".into(), Source::TargetAdjacent),
+            (
+                TARGET_DISTANCE,
+                "target_distance".into(),
+                Source::TargetDistance,
+            ),
+            (
+                TARGET_ADJACENT,
+                "target_adjacent".into(),
+                Source::TargetAdjacent,
+            ),
         ])
 }
 
@@ -84,10 +121,11 @@ fn target_inputs() -> impl Iterator<Item = (String, Source)> {
 /// named twice, is an error.
 pub(crate) fn brain_io(
     file: BrainIoFile,
+    categories: &[Category],
     chemicals: &[Chemical],
     loci: &[Locus],
 ) -> Result<(Vec<BrainInput>, Vec<usize>), DataError> {
-    let inputs = brain_inputs(file.inputs, chemicals, loci)?;
+    let inputs = brain_inputs(file.inputs, categories, chemicals, loci)?;
     let mut needs: Vec<usize> = Vec::new();
     for name in &file.needs {
         let invalid = |problem: &str| DataError::Invalid {
@@ -121,6 +159,7 @@ pub(crate) fn brain_io(
 /// with another input, is an error.
 fn brain_inputs(
     entries: Vec<InputEntry>,
+    categories: &[Category],
     chemicals: &[Chemical],
     loci: &[Locus],
 ) -> Result<Vec<BrainInput>, DataError> {
@@ -175,13 +214,11 @@ fn brain_inputs(
         });
     }
     inputs.extend(
-        target_inputs()
-            .zip(FIRST_TARGET..)
-            .map(|((name, source), id)| BrainInput {
-                id: InputId(id),
-                name,
-                source,
-            }),
+        target_inputs(categories).map(|(id, name, source)| BrainInput {
+            id: InputId(id),
+            name,
+            source,
+        }),
     );
     inputs.sort_by_key(|input| input.id);
     check_unique(

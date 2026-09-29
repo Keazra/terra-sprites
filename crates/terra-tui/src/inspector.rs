@@ -5,8 +5,8 @@ use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
     ActionView, ChemicalKind, ChemicalLevel, DataPack, DeathCause, EmitterMode, EntityId,
-    Expression, GeneView, Learned, ObjectView, Outcome, Part, Progress, SpriteView, Target, Trait,
-    Verb, World,
+    Explanation, Expression, GeneView, Learned, ObjectView, Outcome, Part, Progress, SpriteView,
+    Target, Thing, Trait, Verb, World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -102,7 +102,7 @@ pub(crate) fn first_shown(scroll: usize, length: usize, rows: usize) -> usize {
 fn sprite_tab(tab: Tab, sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
     match tab {
         Tab::Body => body_tab(sprite, app, world),
-        Tab::Brain => brain_tab(sprite),
+        Tab::Brain => brain_tab(sprite, world.data()),
         Tab::Chem => chem_tab(sprite),
         Tab::Genome => genome_tab(sprite),
         Tab::World => Vec::new(),
@@ -564,28 +564,50 @@ fn trait_text(which: Trait, value: f32) -> String {
 /// How many concepts the Brain tab lists under the decision.
 const CONCEPTS_SHOWN: usize = 5;
 
-/// The Brain tab (design §5.9, §6.1): each category attention could go to,
-/// with its score, the attended one marked; then the verb chosen, with its
-/// score, and the concepts adding most to it, largest first. A snapshot
-/// always has a verb; "none" only guards against one that doesn't.
-fn brain_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
-    let Some(explained) = sprite.explain() else {
-        return vec![Line::from(" Nothing decided yet")];
+/// The Brain tab (design §5.9, §6.1): what the sprite attended to and
+/// decided at its latest step 5, or "Nothing decided yet"; then its memory,
+/// which it can have before it first decides.
+fn brain_tab(sprite: &SpriteView, data: &DataPack) -> Vec<Line<'static>> {
+    let mut lines = match sprite.explain() {
+        Some(explained) => explained_lines(&explained),
+        None => vec![" Nothing decided yet".to_string()],
     };
+    // What has learned only a rounding's worth has nothing worth showing.
+    let remembered: Vec<_> = sprite
+        .memory()
+        .into_iter()
+        .filter(|m| level(m.amount.abs()) != ".00")
+        .collect();
+    if !remembered.is_empty() {
+        lines.push(String::new());
+        lines.push(" MEMORY".into());
+    }
+    for memory in remembered {
+        let amount = signed_level(memory.amount);
+        lines.extend(scored("   ", &learned_name(&memory.learned, data), &amount));
+    }
+    lines.into_iter().map(Line::from).collect()
+}
+
+/// The Brain tab's attention and decision: each category attention could go
+/// to, with its score, the attended one marked; then the verb chosen, with
+/// its score, and the concepts adding most to it, largest first. A snapshot
+/// always has a verb; "none" only guards against one that doesn't.
+fn explained_lines(explained: &Explanation) -> Vec<String> {
     let mut lines = vec![" ATTENTION".to_string()];
     if explained.attention.is_empty() {
         lines.push("   nothing in sight".into());
     }
-    for &(category, score) in &explained.attention {
-        let marker = if explained.attended == Some(category) {
+    for (thing, score) in &explained.attention {
+        let marker = if explained.attended.as_ref() == Some(thing) {
             "►"
         } else {
             " "
         };
         lines.extend(scored(
             &format!(" {marker} "),
-            &display_name(category),
-            &level(score),
+            &thing_name(thing),
+            &level(*score),
         ));
     }
     lines.push(String::new());
@@ -606,8 +628,9 @@ fn brain_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
         let name = match &contribution.part {
             Part::Concept(inputs) => concept_name(inputs),
             // Neutral, since worth adds to a verb or takes from it either
-            // way: a bad thing's pushes towards backing away.
-            Part::Worth(thing) => format!("worth: {}", display_name(thing)),
+            // way: a bad thing's takes from going near it.
+            Part::Worth(thing) => format!("worth: {}", thing_name(thing)),
+            Part::Fear(thing) => format!("fear: {}", thing_name(thing)),
             Part::Habit(thing) => {
                 let verb = explained.decision.map_or("", |(verb, _)| verb_name(verb));
                 format!("habit: {} {}", verb.to_lowercase(), display_name(thing))
@@ -615,75 +638,77 @@ fn brain_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
         };
         lines.extend(scored("   ", &name, &amount));
     }
-    // What has learned only a rounding's worth has nothing worth showing.
-    let remembered: Vec<_> = sprite
-        .memory()
-        .into_iter()
-        .filter(|m| level(m.amount.abs()) != ".00")
-        .collect();
-    if !remembered.is_empty() {
-        lines.push(String::new());
-        lines.push(" MEMORY".into());
-    }
-    for memory in remembered {
-        let amount = signed_level(memory.amount);
-        lines.extend(scored("   ", &learned_name(&memory.learned), &amount));
-    }
-    lines.into_iter().map(Line::from).collect()
+    lines
 }
 
 /// A lesson as the event log says it (design §6.1): "Sprite #12 learned:
 /// thornbushes are bad", "… water is good for thirst", "… eating balls is
 /// bad".
-pub(crate) fn learned_line(id: EntityId, learned: &Learned, good: bool) -> String {
+pub(crate) fn learned_line(id: EntityId, learned: &Learned, good: bool, data: &DataPack) -> String {
     let verdict = if good { "good" } else { "bad" };
     let what = match learned {
-        Learned::Worth { .. } | Learned::Bad { .. } => learned_name(learned),
-        Learned::Habit { .. } => format!("{} is {verdict}", learned_name(learned)),
+        Learned::Worth { .. } | Learned::Bad { .. } | Learned::Fear { .. } => {
+            learned_name(learned, data)
+        }
+        Learned::Habit { .. } => format!("{} is {verdict}", learned_name(learned, data)),
         Learned::NewThings => format!("new things are {verdict}"),
     };
     format!("{} learned: {what}", sprite_label(id))
 }
 
 /// Something learned, as the memory words it: `thornbushes are bad`,
-/// `water is good for thirst`, `eating balls`, `new things`.
-fn learned_name(learned: &Learned) -> String {
+/// `water is good for thirst`, `Sprite #7 is frightening`, `eating balls`,
+/// `new things`.
+fn learned_name(learned: &Learned, data: &DataPack) -> String {
     match learned {
         Learned::Worth {
             thing,
             need: Some(need),
         } => {
-            let (things, be) = things(thing);
+            let (things, be) = things(thing, data);
             format!("{things} {be} good for {}", display_name(need))
         }
         Learned::Worth { thing, need: None } => {
-            let (things, be) = things(thing);
+            let (things, be) = things(thing, data);
             format!("{things} {be} good")
         }
         Learned::Bad { thing } => {
-            let (things, be) = things(thing);
+            let (things, be) = things(thing, data);
             format!("{things} {be} bad")
         }
-        Learned::Habit { thing, verb } => format!("{} {}", doing(*verb), things(thing).0),
+        Learned::Fear { thing } => {
+            let (things, be) = things(thing, data);
+            format!("{things} {be} frightening")
+        }
+        Learned::Habit { thing, verb } => {
+            let kind = Thing::from(thing.as_str());
+            format!("{} {}", doing(*verb), things(&kind, data).0)
+        }
         Learned::NewThings => "new things".into(),
     }
 }
 
-/// A kind of thing in general, with the verb "to be" to go with it:
-/// `thornbushes are`, `berries are`, `water is`.
-fn things(thing: &str) -> (String, &'static str) {
-    let name = display_name(thing);
-    if name == "water" {
-        return (name, "is");
+/// A thing as the Brain tab names it (design v18 §6.1): a kind by its
+/// display name, `berry bush`, a sprite as the log names it, `Sprite #7`.
+fn thing_name(thing: &Thing) -> String {
+    match thing {
+        Thing::Kind(kind) => display_name(kind),
+        Thing::Sprite(id) => sprite_label(*id),
     }
-    let plural = if name.ends_with("sh") {
-        format!("{name}es")
-    } else if let Some(stem) = name.strip_suffix('y') {
-        format!("{stem}ies")
-    } else {
-        format!("{name}s")
-    };
-    (plural, "are")
+}
+
+/// A thing with the verb "to be" to go with it: a kind in general, as its
+/// object type names it (design §3.5.1), `thornbushes are`, `water is`, or
+/// a particular sprite, `Sprite #7 is` (design v18 §6.1). A kind with no
+/// plural isn't counted, so it keeps its name and takes "is".
+fn things(thing: &Thing, data: &DataPack) -> (String, &'static str) {
+    match thing {
+        Thing::Kind(kind) => match data.plural_of(kind) {
+            Some(plural) => (plural.to_string(), "are"),
+            None => (display_name(kind), "is"),
+        },
+        Thing::Sprite(id) => (sprite_label(*id), "is"),
+    }
 }
 
 /// A verb as a habit words doing it to something: `eating`, `playing with`.
@@ -891,6 +916,9 @@ fn genome_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
                 Expression::Flagged(reason) => format!("flagged: {reason}"),
                 Expression::Unexpressed => "unexpressed: an earlier gene sets this".into(),
                 Expression::Unknown => "unknown: this version can't read it".into(),
+                Expression::Unmatched => {
+                    "unmatched: names a category this world doesn't have".into()
+                }
             };
             let dim = Style::default().fg(Color::DarkGray);
             lines.extend(wrapped(&gene_text(gene), 1, dim));

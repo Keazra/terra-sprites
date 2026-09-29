@@ -791,19 +791,33 @@ fn the_event_log_shows_every_play_and_hit_and_whatever_hurt_a_sprite() {
     );
 }
 
+/// The event log's rows, newest first, once an app on `world` has recorded a
+/// lesson for each of `lessons`: (tick, sprite ID, what it learned, good).
+fn logged_lessons(world: &World, lessons: Vec<(u64, u64, Learned, bool)>) -> Vec<String> {
+    let mut app = app_for(world, Theme::cp437(), 100, 30);
+    let events: Vec<Event> = lessons
+        .into_iter()
+        .map(|(tick, id, learned, good)| Event {
+            tick,
+            kind: EventKind::LearnedMilestone {
+                id: EntityId(id),
+                learned,
+                good,
+            },
+        })
+        .collect();
+    app.record(&events, world);
+    let screen = lines(&render(&app, world, 100, 30));
+    screen[25..25 + events.len()]
+        .iter()
+        .map(|row| inside(row).to_string())
+        .collect()
+}
+
 #[test]
 fn the_event_log_says_what_a_sprite_learned_in_plain_words() {
     // Design v16 §6.1.
     let world = garden(pack());
-    let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    let learned = |tick, id, learned, good| Event {
-        tick,
-        kind: EventKind::LearnedMilestone {
-            id: EntityId(id),
-            learned,
-            good,
-        },
-    };
     let thorns_bad = Learned::Bad {
         thing: "thornbush".into(),
     };
@@ -815,22 +829,61 @@ fn the_event_log_says_what_a_sprite_learned_in_plain_words() {
         thing: "ball".into(),
         verb: Verb::Eat,
     };
-    app.record(
-        &[
-            learned(30, 12, thorns_bad, false),
-            learned(31, 12, water_for_thirst, true),
-            learned(32, 9, eating_balls, false),
-        ],
+    let log = logged_lessons(
         &world,
+        vec![
+            (30, 12, thorns_bad, false),
+            (31, 12, water_for_thirst, true),
+            (32, 9, eating_balls, false),
+        ],
     );
-    let screen = lines(&render(&app, &world, 100, 30));
-    let log: Vec<&str> = screen[25..28].iter().map(|row| inside(row)).collect();
     assert_eq!(
         log,
         [
             "32  Sprite #9 learned: eating balls is bad",
             "31  Sprite #12 learned: water is good for thirst",
             "30  Sprite #12 learned: thornbushes are bad",
+        ]
+    );
+}
+
+#[test]
+fn a_lesson_words_a_kind_of_thing_as_its_object_type_names_it() {
+    // Design v17 §3.5.1: thornbushes renamed brambles, and balls with no
+    // plural, as if they were a thing you don't count.
+    let builtin = include_str!("../../../data/objects.ron");
+    let (thorns, balls) = (r#"plural: "thornbushes""#, r#" plural: "balls","#);
+    assert!(builtin.contains(thorns) && builtin.contains(balls));
+    let objects = builtin
+        .replace(thorns, r#"plural: "brambles""#)
+        .replace(balls, "");
+    let pack = DataPack::from_sources(&builtin_with("objects.ron", &objects)).expect("valid pack");
+    let world = garden(pack);
+    let thorns_bad = Learned::Bad {
+        thing: "thornbush".into(),
+    };
+    let ball_for_boredom = Learned::Worth {
+        thing: "ball".into(),
+        need: Some("boredom".into()),
+    };
+    let playing_with_balls = Learned::Habit {
+        thing: "ball".into(),
+        verb: Verb::Play,
+    };
+    let log = logged_lessons(
+        &world,
+        vec![
+            (30, 12, thorns_bad, false),
+            (31, 12, ball_for_boredom, true),
+            (32, 9, playing_with_balls, true),
+        ],
+    );
+    assert_eq!(
+        log,
+        [
+            "32  Sprite #9 learned: playing with ball is good",
+            "31  Sprite #12 learned: ball is good for boredom",
+            "30  Sprite #12 learned: brambles are bad",
         ]
     );
 }
@@ -1087,7 +1140,7 @@ const HUNGRY_GENOME: &str = r#"(format: 1, genes: [
     BrainParam(param: "curiosity", value: 0.0),
     BrainParam(param: "tau_base", value: 0.05),
     BrainParam(param: "tau_att_base", value: 0.05),
-    AttentionInstinct(input: "hunger", category: Berry, weight: 1.0),
+    AttentionInstinct(input: "hunger", category: "fruit", weight: 1.0),
     Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
     Instinct(inputs: [("hunger", false), ("target_adjacent", true)], verb: Eat, weight: 0.5),
     Instinct(inputs: [("always", false)], verb: Eat, weight: -0.1),
@@ -1132,7 +1185,7 @@ const BERRY_GENOME: &str = r#"(format: 1, genes: [
     Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "hunger"),
     BrainParam(param: "tau_base", value: 0.05),
     BrainParam(param: "tau_att_base", value: 0.05),
-    AttentionInstinct(input: "hunger", category: Berry, weight: 1.0),
+    AttentionInstinct(input: "hunger", category: "fruit", weight: 1.0),
     Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
 ])"#;
 
@@ -1194,6 +1247,31 @@ fn the_attention_marker_shades_the_one_thing_the_selected_sprite_attends_to() {
 }
 
 #[test]
+fn the_brain_tab_shows_memory_before_the_first_decision() {
+    // Design v17 §6.1. A scripted bite at tick 0 hurts; at tick 1, still on
+    // its scripted rest, it learns thornbushes are bad: .8 × a punishment of 1.
+    let objects = [(Pos { x: 3, y: 3 }, "thornbush")];
+    let scripted = [
+        ScriptedAction::Eat {
+            at: Pos { x: 3, y: 3 },
+        },
+        ScriptedAction::Rest,
+    ];
+    let (world, mut app) = one_sprite_among(THORN_GENOME, &objects, &scripted, 2);
+    open(&mut app, &world, Tab::Brain);
+    let (_, text) = inspector(&app, &world);
+    assert_eq!(
+        text[..4],
+        [
+            "Nothing decided yet",
+            "",
+            "MEMORY",
+            "thornbushes are bad                 -.80",
+        ]
+    );
+}
+
+#[test]
 fn the_brain_tab_says_when_nothing_has_been_decided_or_is_in_sight() {
     let (world, mut app) = one_sprite(HUNGRY_GENOME, 0);
     open(&mut app, &world, Tab::Brain);
@@ -1252,22 +1330,23 @@ fn the_chem_tab_lists_every_chemical_with_its_level_and_change_per_tick() {
     );
 }
 
-/// A hungry sprite drawn to a thornbush and to eating it, whose every prick
-/// punishes it by 1.
+/// A hungry sprite drawn to a thornbush and to eating it, even more so
+/// beside it, whose every prick punishes it by 1.
 const THORN_GENOME: &str = r#"(format: 1, genes: [
     InitialConcentration(chem: "hunger", value: 1.0),
     Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),
     BrainParam(param: "tau_base", value: 0.05),
     BrainParam(param: "tau_att_base", value: 0.05),
-    AttentionInstinct(input: "hunger", category: Thornbush, weight: 1.0),
+    AttentionInstinct(input: "hunger", category: "thornbush", weight: 1.0),
     Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
+    Instinct(inputs: [("hunger", false), ("target_adjacent", false)], verb: Eat, weight: 1.0),
 ])"#;
 
 #[test]
 fn the_brain_tab_names_a_thing_s_worth_neutrally_whatever_its_sign() {
     // Its bite at tick 0 pricks, and at tick 1 it learns thornbushes are bad;
-    // that worth takes from biting and adds to backing away, so the row
-    // reads "worth: thornbush" either way, beside "habit: …".
+    // so hungry, it bites again, and that worth takes from biting. The row
+    // reads "worth: thornbush" whatever its sign, beside "habit: …".
     let objects = [(Pos { x: 3, y: 3 }, "thornbush")];
     let (world, mut app) = one_sprite_among(THORN_GENOME, &objects, &[], 2);
     open(&mut app, &world, Tab::Brain);
@@ -1295,9 +1374,38 @@ fn the_chem_tab_shows_what_was_felt_on_the_reward_line() {
 }
 
 #[test]
+fn the_genome_tab_marks_genes_naming_a_category_the_world_lacks() {
+    // Unmatched genes (design v19 §5.7), dimmed with their reason as the
+    // other marks are: an attention instinct and an instinct by name, and a
+    // gene by number, which shows as its number.
+    let genome = r#"(format: 1, genes: [
+        AttentionInstinct(input: "hunger", category: "tree", weight: 0.8),
+        Instinct(inputs: [("hunger", false), ("attended_tree", false)], verb: Eat, weight: 0.5),
+        Gene(type: 9, version: 1, payload: "93011aca3f4ccccd"),
+    ])"#;
+    let (world, mut app) = one_sprite(genome, 0);
+    open(&mut app, &world, Tab::Genome);
+    let rows = right_part(&render(&app, &world, 100, 40), 46);
+    let text = rows[2..30]
+        .iter()
+        .map(|row| inside(row))
+        .collect::<Vec<_>>()
+        .join(" ");
+    for gene in [
+        "hunger & attended tree → eat +.5",
+        "hunger → attends to tree +.8",
+        "type 9, version 1, 8 bytes",
+    ] {
+        assert!(text.contains(gene), "{gene:?} in {text:?}");
+    }
+    let reason = "unmatched: names a category this world doesn't have";
+    assert_eq!(text.matches(reason).count(), 3, "{text:?}");
+}
+
+#[test]
 fn the_genome_tab_shows_brain_settings_instincts_and_attention_instincts() {
     let genome = r#"(format: 1, genes: [
-        AttentionInstinct(input: "hunger", category: BerryBush, weight: 0.8),
+        AttentionInstinct(input: "hunger", category: "bush", weight: 0.8),
         Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
         BrainParam(param: "tau_base", value: 0.2),
         Instinct(inputs: [("thirst", false), ("target_adjacent", true)], verb: Drink, weight: -0.5),
@@ -1316,7 +1424,7 @@ fn the_genome_tab_shows_brain_settings_instincts_and_attention_instincts() {
             "hunger → eat +1",
             "thirst & not target adjacent → drink -.5",
             "ATTENTION INSTINCTS",
-            "hunger → attends to berry bush +.8",
+            "hunger → attends to bush +.8",
             "",
             "",
         ]
@@ -1882,4 +1990,96 @@ fn a_hurt_sprite_takes_turns_with_a_red_bang_for_a_second() {
         assert_eq!(at(&app, other_cell), bang);
         assert_eq!(at(&app, biter_cell).0, sprite_glyph);
     }
+}
+
+/// A sprite that attends to sprites, would rather rest a little, and feels
+/// every hit as a punishment of 1.
+const SKITTISH_GENOME: &str = r#"(format: 1, genes: [
+    Trait(trait: "speed", value: 10.0),
+    Trait(trait: "sense_radius", value: 10.0),
+    BrainParam(param: "tau_base", value: 0.05),
+    AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
+    Instinct(inputs: [("always", false)], verb: Rest, weight: 0.3),
+    Emitter(locus: Locus("was_hit"), mode: Level, gain: 1.0, chem: "punishment"),
+])"#;
+
+/// A skittish sprite, #1, hit by a bully, #2, that then rests beside it,
+/// `ticks` ticks on, with an app that logged every tick and selects #1.
+fn hit_by_a_bully(ticks: u32) -> (World, App) {
+    let pack = pack();
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let genome = |text: &str| terra_sim::Genome::from_ron(text, &pack).expect("a valid genome");
+    let walker = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
+    let (me, bully) = (Pos { x: 2, y: 3 }, Pos { x: 3, y: 3 });
+    let sprites = [
+        (me, Some(genome(SKITTISH_GENOME))),
+        (bully, Some(genome(walker))),
+    ];
+    let scripted = [
+        (bully, ScriptedAction::Hit { at: me }),
+        (bully, ScriptedAction::Rest),
+    ];
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: &scripted,
+    };
+    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    for _ in 0..ticks {
+        let events = world.step();
+        app.record(&events, &world);
+    }
+    app.apply(Action::SelectNext, &world);
+    (world, app)
+}
+
+#[test]
+fn the_brain_tab_names_the_sprite_it_attends_to_and_how_frightening_it_is() {
+    // Design v18 §6.1. Hit at tick 0, it learns at tick 1 to fear the
+    // bully, −1 × fear_fade's little; from tick 2 it backs away from it:
+    // flight (.8) × its fear, with the bully beside it.
+    let (world, mut app) = hit_by_a_bully(3);
+    open(&mut app, &world, Tab::Brain);
+    let (_, text) = inspector(&app, &world);
+    let row = |start: &str| text.iter().find(|row| row.starts_with(start)).cloned();
+    assert!(text[1].starts_with("► Sprite #2"), "{text:?}");
+    assert!(
+        row("DECISION: RETREAT").is_some_and(|r| r.ends_with(".80")),
+        "{text:?}"
+    );
+    assert!(
+        row("fear: Sprite #2").is_some_and(|r| r.ends_with("+.80")),
+        "{text:?}"
+    );
+    assert!(
+        row("Sprite #2 is frightening").is_some_and(|r| r.ends_with("-1.00")),
+        "{text:?}"
+    );
+    let screen = lines(&render(&app, &world, 100, 30));
+    assert!(
+        screen
+            .iter()
+            .any(|row| row.contains("Sprite #1 learned: Sprite #2 is frightening")),
+        "{screen:?}"
+    );
+}
+
+#[test]
+fn the_event_log_says_when_sprites_in_general_turn_frightening() {
+    // Design v18 §6.1.
+    let world = garden(pack());
+    let log = logged_lessons(
+        &world,
+        vec![(
+            40,
+            3,
+            Learned::Fear {
+                thing: "sprite".into(),
+            },
+            false,
+        )],
+    );
+    assert_eq!(log, ["40  Sprite #3 learned: sprites are frightening"]);
 }

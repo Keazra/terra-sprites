@@ -159,7 +159,7 @@ impl Action {
     fn new(
         verb: Verb,
         destination: Option<Pos>,
-        target: Option<(Target, u16)>,
+        target: Option<(Target, Option<u16>)>,
         scripted: bool,
         tick: u64,
     ) -> Action {
@@ -167,7 +167,7 @@ impl Action {
             verb,
             destination,
             target: target.map(|(target, _)| target),
-            target_type: target.map(|(_, kind)| kind),
+            target_type: target.and_then(|(_, kind)| kind),
             attempted: false,
             target_at: None,
             target_gone: false,
@@ -316,7 +316,8 @@ pub(crate) fn sense_and_decide(
 /// its flood doesn't reach, ends at once, as failed (design §5.5); one to the
 /// tile it stands on ends at once, as applied. An aimed action heads for its
 /// target's nearest goal tile, its destination; with none, it ends at once,
-/// as failed. A target comes with the stable ID of its type. A `scripted`
+/// as failed. A target comes with the stable ID of its type, if it has one
+/// (design v19 §3.5.5). A `scripted`
 /// action is left be by the brain.
 #[expect(clippy::too_many_arguments, reason = "an action's every part")]
 pub(crate) fn start(
@@ -324,7 +325,7 @@ pub(crate) fn start(
     id: EntityId,
     verb: Verb,
     destination: Option<Pos>,
-    target: Option<(Target, u16)>,
+    target: Option<(Target, Option<u16>)>,
     scripted: bool,
     tick: u64,
     events: &mut Vec<Event>,
@@ -466,7 +467,7 @@ fn act(
     let verb = state.sprites.get(id).expect("the actor").action.as_ref();
     let verb = verb.expect("an action").verb;
     // Read before the try, which may use the target up, as eating a berry does.
-    let category = crate::decide::category_of(state, data, target);
+    let category = crate::decide::target_category(state, data, target);
     let (outcome, hurt) = match verb {
         Verb::Approach => (Outcome::Applied, Hurt::default()),
         verb => verbs::attempt(state, data, id, verb, target, events),
@@ -490,7 +491,8 @@ fn act(
         brain.touched = Some(Touch {
             tick: state.tick,
             category,
-            novelty: brain.novelty(category),
+            sprite: target.sprite(),
+            novelty: brain.novelty(category, data),
         });
     }
 }

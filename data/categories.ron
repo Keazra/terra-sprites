@@ -1,0 +1,20 @@
+// Categories (design v19 §3.5.5): what a sprite perceives a thing as. Things
+// share a category because they look alike to a sprite, never because of what
+// they do to it: a bush and a berry are different categories, though berries
+// grow on bushes. IDs are permanent and append-only: never renumber or reuse
+// one. Each category's brain input, attended_<name>, takes the ID 35 + id for
+// IDs 1 to 6, and 37 + id from 7, so category IDs go up to 26.
+//
+// Each category has:
+//   name    what object types, genomes and brain inputs call it
+//   plural  how the screen says the category in general, as written:
+//           "bushes"; left out for one you don't count, such as water
+[
+    (id: 1, name: "bush",      plural: "bushes"),
+    (id: 2, name: "fruit"),
+    // Until slice 9e, when thornbushes join bush and this ID is retired.
+    (id: 3, name: "thornbush", plural: "thornbushes"),
+    (id: 4, name: "water"),
+    (id: 5, name: "toy",       plural: "toys"),
+    (id: 6, name: "sprite",    plural: "sprites"),
+]

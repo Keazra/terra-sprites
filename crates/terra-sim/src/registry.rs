@@ -1,51 +1,14 @@
-//! The registries (design §2.8, Appendix A): stable, append-only IDs. Chemicals
-//! and loci are data, listed in the pack. Categories, verbs and traits are closed
-//! enums, because code gives each one its meaning.
+//! The registries (design §2.8, Appendix A): stable, append-only IDs.
+//! Chemicals, loci and categories are data, listed in the pack. Verbs and
+//! traits are closed enums, because code gives each one its meaning.
 
 use serde::{Deserialize, Serialize};
 
-/// What brains perceive an object as. The discriminants are the stable `CategoryId`s.
+/// A category's permanent ID (design v19 §3.5.5): what brains perceive a
+/// thing as.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub(crate) enum Category {
-    BerryBush = 1,
-    Berry = 2,
-    Thornbush = 3,
-    Water = 4,
-    Ball = 5,
-    Sprite = 6,
-}
-
-impl Category {
-    pub(crate) const ALL: [Category; 6] = [
-        Category::BerryBush,
-        Category::Berry,
-        Category::Thornbush,
-        Category::Water,
-        Category::Ball,
-        Category::Sprite,
-    ];
-
-    /// Where the category is in `ALL`: its place in whatever a brain keeps
-    /// per category.
-    pub(crate) fn index(self) -> usize {
-        Category::ALL
-            .iter()
-            .position(|&c| c == self)
-            .expect("every category is in ALL")
-    }
-
-    /// The category's name in brain input names, such as `attended_berry_bush`.
-    pub(crate) fn name(self) -> &'static str {
-        match self {
-            Category::BerryBush => "berry_bush",
-            Category::Berry => "berry",
-            Category::Thornbush => "thornbush",
-            Category::Water => "water",
-            Category::Ball => "ball",
-            Category::Sprite => "sprite",
-        }
-    }
-}
+#[serde(transparent)]
+pub(crate) struct CategoryId(pub(crate) u16);
 
 /// A kind of action, and a brain output (design §5.2). The discriminants are
 /// the stable verb IDs.
@@ -137,10 +100,28 @@ pub(crate) enum BrainParam {
     Curiosity = 22,
     FamiliarityRate = 23,
     Disappointment = 24,
+    /// How fast a particular sprite is learned good (design v18 §5.6).
+    IndividualRateGood = 25,
+    /// How fast a particular sprite is learned bad (design v18 §5.6).
+    IndividualRateBad = 26,
+    /// How fast whoever hurt it is feared (design v18 §5.6).
+    FearRate = 27,
+    /// How much fear fades each tick (design v18 §5.6).
+    FearFade = 28,
+    /// How many sprites it knows before sprites in general are judged in
+    /// full (design v18 §5.6).
+    Generalise = 29,
+    /// How strongly fear catches the eye (design v18 §5.3).
+    Vigilance = 30,
+    /// How strongly fear pulls towards backing away (design v18 §5.5).
+    Flight = 31,
+    /// The distance, as a share of sight, at which fear stops pulling
+    /// (design v18 §5.3).
+    FearReach = 32,
 }
 
 impl BrainParam {
-    pub(crate) const ALL: [BrainParam; 24] = [
+    pub(crate) const ALL: [BrainParam; 32] = [
         BrainParam::LearningRate,
         BrainParam::TraceDecay,
         BrainParam::RelaxRate,
@@ -165,6 +146,14 @@ impl BrainParam {
         BrainParam::Curiosity,
         BrainParam::FamiliarityRate,
         BrainParam::Disappointment,
+        BrainParam::IndividualRateGood,
+        BrainParam::IndividualRateBad,
+        BrainParam::FearRate,
+        BrainParam::FearFade,
+        BrainParam::Generalise,
+        BrainParam::Vigilance,
+        BrainParam::Flight,
+        BrainParam::FearReach,
     ];
 
     /// The parameter's name in genome files and `physiology.ron`.
@@ -194,6 +183,14 @@ impl BrainParam {
             BrainParam::Curiosity => "curiosity",
             BrainParam::FamiliarityRate => "familiarity_rate",
             BrainParam::Disappointment => "disappointment",
+            BrainParam::IndividualRateGood => "individual_rate_good",
+            BrainParam::IndividualRateBad => "individual_rate_bad",
+            BrainParam::FearRate => "fear_rate",
+            BrainParam::FearFade => "fear_fade",
+            BrainParam::Generalise => "generalise",
+            BrainParam::Vigilance => "vigilance",
+            BrainParam::Flight => "flight",
+            BrainParam::FearReach => "fear_reach",
         }
     }
 
