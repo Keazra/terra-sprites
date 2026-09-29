@@ -476,8 +476,7 @@ fn the_built_in_pack_describes_its_object_types_for_display() {
 
 #[test]
 fn each_object_type_is_in_the_category_it_names() {
-    // Design v19 §3.5.3, §3.5.5: thornbushes keep a category of their own
-    // until slice 9e.
+    // Design v20 §3.5.3, §3.5.5: thornbushes are bushes, as berry bushes are.
     let pack = DataPack::builtin().expect("built-in data pack is valid");
     let types = [
         "berry_bush",
@@ -492,7 +491,7 @@ fn each_object_type_is_in_the_category_it_names() {
         [
             Some("bush"),
             Some("fruit"),
-            Some("thornbush"),
+            Some("bush"),
             Some("toy"),
             Some("water"),
             Some("sprite"),
@@ -504,8 +503,8 @@ fn each_object_type_is_in_the_category_it_names() {
 /// The built-in categories plus `extra`, as `categories.ron`.
 fn categories_with(extra: &str) -> String {
     format!(
-        r#"[(id: 1, name: "bush"), (id: 2, name: "fruit"), (id: 3, name: "thornbush"),
-            (id: 4, name: "water"), (id: 5, name: "toy"), (id: 6, name: "sprite"), {extra}]"#
+        r#"[(id: 1, name: "bush"), (id: 2, name: "fruit"), (id: 4, name: "water"),
+            (id: 5, name: "toy"), (id: 6, name: "sprite"), {extra}]"#
     )
 }
 
@@ -514,17 +513,10 @@ fn each_category_is_worded_in_general_by_its_plural() {
     // Design v19 §3.5.5: as an object type's is, less any spaces at either
     // end, and never empty.
     let pack = DataPack::builtin().expect("built-in data pack is valid");
-    let names = ["bush", "fruit", "thornbush", "water", "toy", "sprite"];
+    let names = ["bush", "fruit", "water", "toy", "sprite"];
     assert_eq!(
         names.map(|name| pack.category_plural(name)),
-        [
-            Some("bushes"),
-            None,
-            Some("thornbushes"),
-            None,
-            Some("toys"),
-            Some("sprites"),
-        ],
+        [Some("bushes"), None, None, Some("toys"), Some("sprites"),],
         "fruit and water aren't counted"
     );
     assert_eq!(pack.category_plural("dragon"), None, "no such category");
@@ -845,11 +837,11 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
     ];
     expected.extend(pulses.iter().enumerate().map(|(i, &p)| (i as u16 + 27, p)));
     // The Target inputs, numbered from 36: one for each category, then the
-    // two fixed in code (design v19 §3.5.5, Appendix A).
+    // two fixed in code (design v19 §3.5.5, Appendix A). 38 was
+    // attended_thornbush, until thornbushes joined bush (v20).
     expected.extend([
         (36, "attended_bush"),
         (37, "attended_fruit"),
-        (38, "attended_thornbush"),
         (39, "attended_water"),
         (40, "attended_toy"),
         (41, "attended_sprite"),
@@ -876,7 +868,6 @@ fn a_category_s_brain_input_takes_its_id_from_the_category_s() {
         [
             (36, "attended_bush"),
             (37, "attended_fruit"),
-            (38, "attended_thornbush"),
             (39, "attended_water"),
             (40, "attended_toy"),
             (41, "attended_sprite"),

@@ -51,18 +51,16 @@ const BRAMBLE: &str = r#"(id: 5, name: "bramble", plural: "brambles",
      }),
 "#;
 
-/// The built-in pack with every bush in the bush category (design v19
-/// §3.5.5): thornbushes join berry bushes, and a third bush, brambles.
-fn bushes() -> DataPack {
+/// The built-in pack with a third bush, brambles (design v19 §3.5.5).
+fn with_brambles() -> DataPack {
     let sources: Vec<(&str, String)> = DataPack::builtin_sources()
         .iter()
         .map(|&(path, text)| {
             let text = if path == "objects.ron" {
-                text.replace(r#"category: "thornbush""#, r#"category: "bush""#)
-                    .replace(
-                        "    // Pseudo types",
-                        &format!("    {BRAMBLE}\n    // Pseudo types"),
-                    )
+                text.replace(
+                    "    // Pseudo types",
+                    &format!("    {BRAMBLE}\n    // Pseudo types"),
+                )
             } else {
                 text.to_string()
             };
@@ -231,8 +229,7 @@ fn a_prick_makes_thornbushes_bad_and_leaves_berry_bushes_as_they_were_though_bot
     // touched, never its category. The sprite eats from a berry bush, which
     // teaches it nothing, then bites a thornbush: −(.8 × 1).
     let (bush, thornbush) = (at(2, 1), at(4, 1));
-    let mut world = world_in(
-        bushes(),
+    let mut world = world(
         &["......", "......", "......"],
         &[(bush, "berry_bush"), (thornbush, "thornbush")],
         at(3, 1),
@@ -280,7 +277,7 @@ fn what_a_sprite_thinks_of_bushes_counts_for_nothing_with_one_type_known_half_wi
     for (n, expected) in [(1, 0.0), (2, -0.8 * 0.5), (3, -1.6 / 3.0)] {
         let script = [&bites[..n], &[ScriptedAction::Rest]].concat();
         let mut world = world_in(
-            bushes(),
+            with_brambles(),
             &["......", "......", "......"],
             &[
                 (thornbush, "thornbush"),
@@ -308,7 +305,7 @@ fn what_a_sprite_thinks_of_bushes_is_a_lesson_once_it_is_half_a_point_from_nothi
     // three types of bush, two of them −.8 bad, bushes are −.53 bad in full.
     let (thornbush, bramble, bush) = (at(2, 1), at(4, 1), at(3, 2));
     let mut world = world_in(
-        bushes(),
+        with_brambles(),
         &["......"; 3],
         &[
             (thornbush, "thornbush"),
@@ -341,7 +338,7 @@ fn a_type_of_bush_the_sprite_has_never_touched_is_judged_by_the_bushes_it_knows(
     // sight by then.
     let (thornbush, bramble, bush) = (at(1, 1), at(3, 1), at(22, 1));
     let mut world = world_in(
-        bushes(),
+        with_brambles(),
         &["........................"; 3],
         &[
             (thornbush, "thornbush"),
@@ -433,8 +430,7 @@ fn a_hungry_sprite_beside_a_thornbush_it_knows_is_bad_notices_the_berry_bush_beh
     // nearest. A bite has made the thornbush beside it −.8 bad; the berry
     // bush two tiles on is new, and worth nothing yet.
     let (thornbush, bush) = (at(2, 1), at(4, 1));
-    let mut world = world_in(
-        bushes(),
+    let mut world = world(
         &["......"; 3],
         &[(thornbush, "thornbush"), (bush, "berry_bush")],
         at(1, 1),
@@ -457,8 +453,7 @@ fn attention_names_the_thing_it_scored_and_its_worth_names_it_too() {
     // not its category, and so does its worth in the decision. The only
     // bush in sight is a thornbush, which a bite has made −.8 bad.
     let thornbush = at(2, 1);
-    let mut world = world_in(
-        bushes(),
+    let mut world = world(
         &["......"; 3],
         &[(thornbush, "thornbush")],
         at(1, 1),
@@ -492,8 +487,7 @@ fn a_reward_after_eating_from_a_thornbush_teaches_the_habit_for_thornbushes_not_
     // rewarded by each prick, eats from the thornbush beside it; the berry
     // bush further off is a bush too.
     let (thornbush, bush) = (at(2, 1), at(6, 1));
-    let mut world = world_in(
-        bushes(),
+    let mut world = world(
         &["........", "........", "........"],
         &[(thornbush, "thornbush"), (bush, "berry_bush")],
         at(1, 1),

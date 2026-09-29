@@ -1285,7 +1285,6 @@ mod tests {
     /// The built-in pack's categories (design v19 §3.5.5, Appendix A).
     const BUSH: CategoryId = CategoryId(1);
     const FRUIT: CategoryId = CategoryId(2);
-    const THORNBUSH: CategoryId = CategoryId(3);
     const WATER: CategoryId = CategoryId(4);
     const TOY: CategoryId = CategoryId(5);
 
@@ -1398,7 +1397,7 @@ mod tests {
             r#"Instinct(inputs: [("hunger", false), ("target_adjacent", true)], verb: Eat, weight: 0.3)"#,
         ]);
         let n = builtin().brain_inputs().count();
-        assert_eq!(n, 45, "37 State inputs and 8 Target inputs");
+        assert_eq!(n, 44, "37 State inputs and 7 Target inputs");
         // One singleton per input, and one conjunction for both genes naming it.
         assert_eq!(brain.concepts.len(), n + 1);
         assert_eq!(
@@ -1788,7 +1787,7 @@ mod tests {
         teach(&mut brain, types::THORNBUSH).bad = -0.4;
         let candidates = BTreeMap::from([
             (FRUIT, (types::BERRY, 1.0)),
-            (THORNBUSH, (types::THORNBUSH, 1.0)),
+            (BUSH, (types::THORNBUSH, 1.0)),
         ]);
         let full = brain.attention_scores(
             &inputs(&[]),
@@ -1798,7 +1797,7 @@ mod tests {
             &data,
         );
         assert_eq!(full[&FRUIT], 0.0, "no hunger, no pull");
-        assert_eq!(full[&THORNBUSH], -0.4, "bad counts always");
+        assert_eq!(full[&BUSH], -0.4, "bad counts always");
         let hungry = brain.attention_scores(
             &inputs(&[("hunger", 0.8)]),
             &candidates,
@@ -2030,29 +2029,12 @@ mod tests {
         assert_eq!(about(&brain, types::BERRY).familiarity, 0.0);
     }
 
-    /// The built-in pack with thornbushes in the bush category (design v19
-    /// §3.5.5).
-    fn bushes() -> DataPack {
-        let sources: Vec<(&str, String)> = DataPack::builtin_sources()
-            .iter()
-            .map(|&(path, text)| match path {
-                "objects.ron" => (
-                    path,
-                    text.replace(r#"category: "thornbush""#, r#"category: "bush""#),
-                ),
-                _ => (path, text.to_string()),
-            })
-            .collect();
-        let sources: Vec<(&str, &str)> = sources.iter().map(|(p, t)| (*p, t.as_str())).collect();
-        DataPack::from_sources(&sources).expect("a valid test pack")
-    }
-
     #[test]
     fn attending_to_berry_bushes_leaves_thornbushes_new_though_both_are_bushes() {
         // Design v19 §5.6: newness is about the object type, so an apple is
         // new to a sprite that knows only berries. familiarity_rate (.002)
-        // each tick attended.
-        let data = bushes();
+        // each tick attended. Both bushes are in the bush category.
+        let data = builtin();
         let mut brain = brain(&[]);
         for tick in 0..10 {
             let attending = snapshot(tick, Vec::new(), Verb::Rest, Some(types::BERRY_BUSH));
