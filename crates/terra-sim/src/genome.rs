@@ -6,8 +6,7 @@ use std::fmt::Write as _;
 
 use serde::{Deserialize, Serialize};
 
-use crate::brain_io::{InputId, TARGET_IDS};
-use crate::categories::ATTENDED;
+use crate::brain_io::{ATTENDED, InputId, TARGET_IDS};
 use crate::data::DataPack;
 use crate::registry::{BrainParam, CategoryId, ChemId, LocusId, Trait, Verb};
 
@@ -95,12 +94,12 @@ pub(crate) enum Gene {
     },
     /// A gene that names a category this world doesn't have (design v19
     /// §5.7), kept exactly as it was written. It has no effect.
-    Unmatched(Written),
+    Unmatched(AsWritten),
 }
 
 /// How an unmatched gene was written, so it's written back the same way.
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub(crate) enum Written {
+pub(crate) enum AsWritten {
     /// An attention instinct by name, with its names as written.
     AttentionInstinct {
         input: String,
@@ -120,6 +119,21 @@ pub(crate) enum Written {
         version: u8,
         payload: Vec<u8>,
     },
+}
+
+impl AsWritten {
+    /// The missing category it names, as written, if it was written by
+    /// name: an attention instinct's category, or an instinct's attended input.
+    pub(crate) fn missing<'a>(&'a self, data: &DataPack) -> Option<&'a str> {
+        match self {
+            AsWritten::AttentionInstinct { category, .. } => Some(category),
+            AsWritten::Instinct { inputs, .. } => inputs
+                .iter()
+                .map(|(name, _)| name.as_str())
+                .find(|name| missing_named(name, data)),
+            AsWritten::ByNumber { .. } => None,
+        }
+    }
 }
 
 /// A chemical and its coefficient in a reaction.
@@ -330,7 +344,7 @@ impl Gene {
                 version,
                 ref payload,
             }
-            | Gene::Unmatched(Written::ByNumber {
+            | Gene::Unmatched(AsWritten::ByNumber {
                 type_id,
                 version,
                 ref payload,
@@ -339,7 +353,7 @@ impl Gene {
                 version,
                 bytes: payload.len(),
             },
-            Gene::Unmatched(Written::AttentionInstinct {
+            Gene::Unmatched(AsWritten::AttentionInstinct {
                 ref input,
                 ref category,
                 weight,
@@ -348,7 +362,7 @@ impl Gene {
                 category,
                 weight,
             },
-            Gene::Unmatched(Written::Instinct {
+            Gene::Unmatched(AsWritten::Instinct {
                 ref inputs,
                 verb,
                 weight,
@@ -607,7 +621,7 @@ impl Gene {
                 version,
                 ref payload,
             }
-            | Gene::Unmatched(Written::ByNumber {
+            | Gene::Unmatched(AsWritten::ByNumber {
                 type_id,
                 version,
                 ref payload,
@@ -615,14 +629,14 @@ impl Gene {
                 let hex: String = payload.iter().map(|byte| format!("{byte:02x}")).collect();
                 format!("Gene(type: {type_id}, version: {version}, payload: {hex:?})")
             }
-            Gene::Unmatched(Written::AttentionInstinct {
+            Gene::Unmatched(AsWritten::AttentionInstinct {
                 ref input,
                 ref category,
                 weight,
             }) => format!(
                 "AttentionInstinct(input: {input:?}, category: {category:?}, weight: {weight:?})"
             ),
-            Gene::Unmatched(Written::Instinct {
+            Gene::Unmatched(AsWritten::Instinct {
                 ref inputs,
                 verb,
                 weight,
@@ -823,18 +837,14 @@ impl GeneEntry {
                 verb,
                 weight,
             } => {
-                // An attended input the pack lacks is a missing category's
-                // (design v19 §5.7); any other unknown input is an error.
-                let missing = |name: &str| {
-                    data.brain_input_named(name).is_none() && name.starts_with(ATTENDED)
-                };
+                // Any unknown input but a missing category's is an error.
                 let ids = inputs
                     .iter()
-                    .filter(|(name, _)| !missing(name))
+                    .filter(|(name, _)| !missing_named(name, data))
                     .map(|(name, negated)| Ok((input(name)?, *negated)))
                     .collect::<Result<_, String>>()?;
-                if inputs.iter().any(|(name, _)| missing(name)) {
-                    Gene::Unmatched(Written::Instinct {
+                if inputs.iter().any(|(name, _)| missing_named(name, data)) {
+                    Gene::Unmatched(AsWritten::Instinct {
                         inputs,
                         verb,
                         weight,
@@ -859,7 +869,7 @@ impl GeneEntry {
                         category,
                         weight,
                     },
-                    None => Gene::Unmatched(Written::AttentionInstinct {
+                    None => Gene::Unmatched(AsWritten::AttentionInstinct {
                         input: name,
                         category,
                         weight,
@@ -872,33 +882,39 @@ impl GeneEntry {
                 payload,
             } => {
                 let payload = hex(&payload)?;
-                // An attended input the pack lacks is a missing category's.
-                let missing =
-                    |id: InputId| data.brain_input(id).is_none() && TARGET_IDS.contains(&id.0);
-                match decode(type_id, version, payload.clone())? {
-                    Gene::AttentionInstinct { category, .. }
-                        if data.category(category).is_none() =>
-                    {
-                        Gene::Unmatched(Written::ByNumber {
-                            type_id,
-                            version,
-                            payload,
-                        })
-                    }
-                    Gene::Instinct { ref inputs, .. }
-                        if inputs.iter().any(|&(id, _)| missing(id)) =>
-                    {
-                        Gene::Unmatched(Written::ByNumber {
-                            type_id,
-                            version,
-                            payload,
-                        })
-                    }
-                    gene => gene,
+                let gene = decode(type_id, version, payload.clone())?;
+                if names_a_missing_category(&gene, data) {
+                    Gene::Unmatched(AsWritten::ByNumber {
+                        type_id,
+                        version,
+                        payload,
+                    })
+                } else {
+                    gene
                 }
             }
         })
     }
+}
+
+/// Whether `gene`, read by number, names a category the pack doesn't have
+/// (design v19 §5.7): an attention instinct's category, or an instinct's
+/// attended input.
+fn names_a_missing_category(gene: &Gene, data: &DataPack) -> bool {
+    match gene {
+        Gene::AttentionInstinct { category, .. } => data.category(*category).is_none(),
+        Gene::Instinct { inputs, .. } => inputs.iter().any(|&(id, _)| {
+            // A Target input the pack lacks is a missing category's.
+            data.brain_input(id).is_none() && TARGET_IDS.contains(&id.0)
+        }),
+        _ => false,
+    }
+}
+
+/// Whether the brain input called `name` is a missing category's: an
+/// attended input the pack lacks (design v19 §5.7).
+fn missing_named(name: &str, data: &DataPack) -> bool {
+    data.brain_input_named(name).is_none() && name.starts_with(ATTENDED)
 }
 
 /// The bytes a payload's hex digits spell.

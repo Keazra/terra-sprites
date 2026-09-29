@@ -466,7 +466,7 @@ fn act(
     let verb = state.sprites.get(id).expect("the actor").action.as_ref();
     let verb = verb.expect("an action").verb;
     // Read before the try, which may use the target up, as eating a berry does.
-    let category = crate::decide::category_of(state, data, target);
+    let category = crate::decide::target_category(state, data, target);
     let (outcome, hurt) = match verb {
         Verb::Approach => (Outcome::Applied, Hurt::default()),
         verb => verbs::attempt(state, data, id, verb, target, events),
