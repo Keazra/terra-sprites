@@ -4,8 +4,8 @@
 use std::collections::BTreeMap;
 
 use terra_sim::{
-    DataPack, DeathCause, Event, EventKind, LabError, LabRun, LabScenario, Map, Outcome, Pos,
-    Scenario, Verb, Window, World, report,
+    CursorTouch, DataPack, DeathCause, Event, EventKind, LabError, LabRun, LabScenario, Learned,
+    Map, Outcome, Pos, Scenario, Verb, Window, Without, World, report,
 };
 
 fn builtin() -> DataPack {
@@ -70,6 +70,9 @@ fn tally(events: &[Event], window: &mut Window) {
                     .or_insert(0) += 1
             }
             EventKind::Died { cause, .. } => *window.deaths.entry(*cause).or_insert(0) += 1,
+            EventKind::LearnedMilestone { learned, good, .. } => {
+                *window.lessons.entry((learned.clone(), *good)).or_insert(0) += 1
+            }
             _ => {}
         }
     }
@@ -101,6 +104,8 @@ fn a_run_counts_applied_actions_and_deaths_in_each_window() {
         to,
         applied: BTreeMap::new(),
         deaths: BTreeMap::new(),
+        touches: BTreeMap::new(),
+        lessons: BTreeMap::new(),
     });
     for _ in 0..3000 {
         let events = world.step();
@@ -116,11 +121,16 @@ fn a_run_counts_applied_actions_and_deaths_in_each_window() {
         LabRun {
             windows: windows.to_vec(),
             control: None,
+            without: None,
         }
     );
     assert!(
         run.windows[0].applied.values().sum::<u64>() > 0,
         "the sprite did something"
+    );
+    assert!(
+        run.windows.iter().any(|w| !w.lessons.is_empty()),
+        "and learned something"
     );
 }
 
@@ -136,6 +146,8 @@ fn the_report_lists_each_window_with_a_column_per_seed_and_the_median() {
             ((Verb::Wander, None), wanders),
         ]),
         deaths: BTreeMap::from([(DeathCause::HurtBy(3), thorn_deaths)]),
+        touches: BTreeMap::new(),
+        lessons: BTreeMap::new(),
     };
     let runs = [
         (
@@ -143,6 +155,7 @@ fn the_report_lists_each_window_with_a_column_per_seed_and_the_median() {
             LabRun {
                 windows: vec![window(23, 40, 1)],
                 control: None,
+                without: None,
             },
         ),
         (
@@ -150,6 +163,7 @@ fn the_report_lists_each_window_with_a_column_per_seed_and_the_median() {
             LabRun {
                 windows: vec![window(9, 38, 0)],
                 control: None,
+                without: None,
             },
         ),
         (
@@ -157,6 +171,7 @@ fn the_report_lists_each_window_with_a_column_per_seed_and_the_median() {
             LabRun {
                 windows: vec![window(12, 51, 0)],
                 control: None,
+                without: None,
             },
         ),
     ];
@@ -179,6 +194,8 @@ fn the_report_lists_the_control_runs_after_the_learning_runs() {
         to: 5000,
         applied: BTreeMap::from([((Verb::Eat, Some(3)), eats)]),
         deaths: BTreeMap::new(),
+        touches: BTreeMap::new(),
+        lessons: BTreeMap::new(),
     };
     let runs = [
         (
@@ -186,6 +203,7 @@ fn the_report_lists_the_control_runs_after_the_learning_runs() {
             LabRun {
                 windows: vec![window(3)],
                 control: Some(vec![window(30)]),
+                without: Some(Without::Learning),
             },
         ),
         (
@@ -193,6 +211,7 @@ fn the_report_lists_the_control_runs_after_the_learning_runs() {
             LabRun {
                 windows: vec![window(5)],
                 control: Some(vec![window(24)]),
+                without: Some(Without::Learning),
             },
         ),
     ];
@@ -223,11 +242,132 @@ fn a_scenario_can_ask_for_a_control_run_of_each_seed_without_learning() {
     let controlled = LabScenario::from_ron(&with_control, &data).expect("a valid scenario");
     let (run, plain_run) = (controlled.run(data.clone(), 5), plain.run(data.clone(), 5));
     assert_eq!(run.windows, plain_run.windows);
+    assert_eq!(run.without, Some(Without::Learning));
     let control = run.control.expect("a control run");
     let spans: Vec<(u64, u64)> = control.iter().map(|w| (w.from, w.to)).collect();
     assert_eq!(spans, [(0, 1000), (2000, 3000)]);
     assert!(
         control[0].applied.values().sum::<u64>() > 0,
         "its sprite lived too"
+    );
+}
+
+/// A sprite with balls to play with, and a trainer that pets it for each
+/// applied Play on a ball until tick 2,000.
+const PLAYGROUND: &str = r#"(
+    world: Drawn(
+        rows: [
+            "........",
+            ".S..o...",
+            "....o.~~",
+            "..B...~~",
+        ],
+        key: {'S': Sprite, 'o': Object("ball"), 'B': Object("berry_bush")},
+    ),
+    ticks: 3000,
+    trainer: (on: (Play, "ball"), give: Pet, until: 2000),
+    control: NoTrainer,
+    windows: [(0, 2000), (0, 3000)],
+)"#;
+
+#[test]
+fn a_trainer_must_answer_an_object_type_and_a_control_without_it_needs_one() {
+    let data = builtin();
+    let unicorn = PLAYGROUND.replace("(Play, \"ball\")", "(Play, \"unicorn\")");
+    assert_eq!(
+        LabScenario::from_ron(&unicorn, &data).err(),
+        Some(LabError::UnknownTarget("unicorn".into()))
+    );
+    let untrained = PLAYGROUND.replace(
+        "trainer: (on: (Play, \"ball\"), give: Pet, until: 2000),",
+        "",
+    );
+    assert_eq!(
+        LabScenario::from_ron(&untrained, &data).err(),
+        Some(LabError::NoTrainer)
+    );
+}
+
+#[test]
+fn a_trainer_pets_the_sprite_for_each_applied_play_on_a_ball_until_it_stops() {
+    // Design v21 §7.1: each applied Play on a ball before tick 2,000 gets a
+    // pet the tick after; later ones get none.
+    let data = builtin();
+    let lab = LabScenario::from_ron(PLAYGROUND, &data).expect("a valid scenario");
+    let run = lab.run(data.clone(), 3);
+    let plays = run.windows[0].applied_on(Verb::Play, "ball", &data);
+    assert!(plays > 1, "the sprite played: {plays}");
+    assert_eq!(
+        run.windows[1].touches,
+        BTreeMap::from([(CursorTouch::Pet, plays)])
+    );
+}
+
+#[test]
+fn a_trainer_waits_its_delay_before_each_touch() {
+    // A delay as long as the run: no pet lands within it.
+    let data = builtin();
+    let late = PLAYGROUND.replace("give: Pet,", "give: Pet, delay: 3000,");
+    let lab = LabScenario::from_ron(&late, &data).expect("a valid scenario");
+    let run = lab.run(data.clone(), 3);
+    assert!(run.windows[0].applied_on(Verb::Play, "ball", &data) > 0);
+    assert_eq!(run.windows[1].touches, BTreeMap::new());
+}
+
+#[test]
+fn a_trainer_s_control_run_is_the_same_seed_without_it() {
+    // Design v21 §7.3: learning stays on; only the trainer is missing.
+    let data = builtin();
+    let lab = LabScenario::from_ron(PLAYGROUND, &data).expect("a valid scenario");
+    let run = lab.run(data.clone(), 3);
+    assert_eq!(run.without, Some(Without::Trainer));
+    let control = run.control.expect("a control run");
+    assert!(control.iter().all(|w| w.touches.is_empty()));
+    assert!(control[0].applied.values().sum::<u64>() > 0, "it lived too");
+}
+
+#[test]
+fn the_report_counts_the_cursor_s_touches_and_lessons_and_names_the_control() {
+    let data = builtin();
+    // Object types: ball 4.
+    let window = |pets: u64, lessons: u64| Window {
+        from: 0,
+        to: 5000,
+        applied: BTreeMap::from([((Verb::Play, Some(4)), 7)]),
+        deaths: BTreeMap::new(),
+        touches: if pets > 0 {
+            BTreeMap::from([(CursorTouch::Pet, pets)])
+        } else {
+            BTreeMap::new()
+        },
+        lessons: if lessons > 0 {
+            let balls_good = Learned::Worth {
+                thing: "ball".into(),
+                need: None,
+            };
+            BTreeMap::from([((balls_good, true), lessons)])
+        } else {
+            BTreeMap::new()
+        },
+    };
+    let runs = [(
+        1,
+        LabRun {
+            windows: vec![window(7, 1)],
+            control: Some(vec![window(0, 0)]),
+            without: Some(Without::Trainer),
+        },
+    )];
+    assert_eq!(
+        report(&runs, &data),
+        "ticks 0 to 5,000              seed 1    median
+  play ball                        7         7
+  given: pet                       7         7
+  lesson: ball is good             1         1
+
+control, without the trainer
+ticks 0 to 5,000              seed 1    median
+  play ball                        7         7
+"
     );
 }
