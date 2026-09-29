@@ -55,7 +55,7 @@ A slice too big for one PR ships as two ("4a", "4b"); only the last PR's descrip
 
 **A slice that reworks the code and changes behaviour ships the rework first,** proved identical that way, and the behaviour change after it, measured on its own. Then a number that moves can only be the change's doing. Slice 9e shipped as 9e-a (learning per object type, identical reports) and 9e-b (thornbushes join the bushes).
 
-**When a decision waits on a measurement, agree the bar before measuring.** Take the baseline on `main`, and settle with the owner, in numbers, what counts as passing, so the result can't choose its own bar. The bar for moving thornbushes into the bushes was set that way (#77): no worse than `main`, allowing 10% for noise.
+**When a decision waits on a measurement, agree the bar before measuring.** Take the baseline on `main`, and settle with the owner, in numbers, what counts as passing, so the result can't choose its own bar. The bar for moving thornbushes into the bushes was set that way (#77): no worse than `main`, allowing 10% for noise. **Say how each number is counted,** too: the lab prints each verb's median, and #77's baseline of 60 thornbush touches was three of them added, where the median of each seed's total was 61. Slice 9e-b had to check its bar both ways.
 
 **A prototype's totals can hide a particular case,** so the existing behaviour tests are the check while building on its numbers. In slice 9c the default world's numbers looked fine, but the old cornered-sprite test showed fear stopping a cornered sprite from turning on its attacker (4 times in 10, against 8 or more). When a fix comes out of such a case, measure it in the prototype again before bringing it to the owner.
 
@@ -66,6 +66,13 @@ The owner runs Gemini, and sometimes Codex, on each PR. They post Gemini's findi
 - Check each claim against the code before acting on it, and fix what holds up, test-first.
 - Reply on every thread, saying what changed (with the commit) or why not, then resolve it. With `gh`: GraphQL `addPullRequestReviewThreadReply` (pass the body with `-F body=@file`), then `resolveReviewThread`.
 - Update the PR description to match.
+
+## Cloud sessions
+
+- **Update Rust before running the checks:** `rustup update stable`. The container's toolchain can be older than the stable CI uses, and an older clippy flags lints CI doesn't: in slice 9e-b, 1.94 flagged `nonminimal_bool` in `inspector.rs`, on `main` too.
+- **The session names its own branch** (`claude/…`). The project's is `feat/slice-N-<slug>`, so ask the owner which to use before the first push.
+- **There's no `gh`;** the GitHub tools do the same work. A review thread gets a reply to its comment, then is resolved by its thread ID.
+- **A branch on GitHub can't be deleted from a session:** the git proxy refuses with a 403. The owner deletes a merged branch from its PR page.
 
 ## Triage
 
