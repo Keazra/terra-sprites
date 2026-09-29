@@ -91,8 +91,8 @@ impl Subject {
 }
 
 /// What a sprite has learned about one object type (design v19 §5.6): its
-/// worth for each need and in general, how bad it is, its habits, and how
-/// familiar it is.
+/// worth for each need and in general, how bad it is, its habits, how
+/// familiar it is, and whether it knows it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct TypeMemory {
     /// Worth for each need, in the pack's needs order (0 to 1).
@@ -105,6 +105,9 @@ pub(crate) struct TypeMemory {
     pub(crate) habits: [f32; VERBS.len()],
     /// How familiar it is, from attending to it (0 to 1).
     pub(crate) familiarity: f32,
+    /// Whether it has touched one: until then, it's judged by its
+    /// category's summary.
+    pub(crate) known: bool,
 }
 
 impl TypeMemory {
@@ -116,6 +119,7 @@ impl TypeMemory {
             bad: 0.0,
             habits: [0.0; VERBS.len()],
             familiarity: 0.0,
+            known: false,
         }
     }
 }

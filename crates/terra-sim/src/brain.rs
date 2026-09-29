@@ -69,14 +69,18 @@ fn column(verb: Verb) -> usize {
 /// default where no gene does.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct BrainParams {
-    /// In `BrainParam::ALL` order.
-    values: [f32; BrainParam::ALL.len()],
+    /// In `BrainParam::ALL` order. A `Vec`, since serde serialises arrays
+    /// only up to 32 long.
+    values: Vec<f32>,
 }
 
 impl BrainParams {
     pub(crate) fn express(genome: &Genome, data: &DataPack) -> BrainParams {
         let ranges = &data.physiology().brain;
-        let mut values = BrainParam::ALL.map(|param| ranges.of(param).default);
+        let mut values: Vec<f32> = BrainParam::ALL
+            .iter()
+            .map(|&param| ranges.of(param).default)
+            .collect();
         for (gene, expression) in genome.genes.iter().zip(expressions(genome, data)) {
             if let (&Gene::BrainParam { param, value }, Expression::Expressed) = (gene, expression)
             {
@@ -232,6 +236,16 @@ pub struct Memory {
 
 /// How many learned things the memory lists (design §5.9).
 const MEMORY_SIZE: usize = 5;
+
+/// What a sprite thinks of the things in a category it hasn't met (design
+/// v19 §5.6): the category's summary of each need's worth, of general good
+/// and of bad.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Summary {
+    pub(crate) worth: Vec<f32>,
+    pub(crate) good: f32,
+    pub(crate) bad: f32,
+}
 
 /// What a brain did at its latest step 5, explained (design §5.9): what it
 /// could attend to, and why it's doing what it's doing.
@@ -544,6 +558,10 @@ impl Brain {
         // v18 §5.6), never learned directly.
         let in_general = self.sprites_in_general(data.need_places().len());
         let categories = data.categories();
+        let summaries: BTreeMap<CategoryId, Summary> = categories
+            .iter()
+            .map(|category| (category.id, self.category_summary(category.id, data)))
+            .collect();
         // Each thing's worth for each need, general good and bad.
         let mut things: Vec<(Thing, &[f32], f32, f32)> = Vec::new();
         for category in categories {
@@ -557,6 +575,11 @@ impl Brain {
                 let thing = subject_thing(subject, data);
                 things.push((thing, &known.worth, known.good, known.bad));
             }
+            // Then the category's summary, never learned directly (design
+            // v19 §5.6).
+            let summary = &summaries[&category.id];
+            let thing = category_thing(category.id, data);
+            things.push((thing, &summary.worth, summary.good, summary.bad));
         }
         for (need, &place) in data.need_places().iter().enumerate() {
             for (thing, worth, ..) in &things {
@@ -668,6 +691,39 @@ impl Brain {
             summary.good += share * individual.good;
             summary.bad += share * individual.bad;
             summary.fear += share * individual.fear;
+        }
+        summary
+    }
+
+    /// `category`'s summary (design v19 §5.6): each value's mean over the
+    /// object types in it the sprite knows, at no strength while it knows
+    /// one, and in full once it knows `generalise_types`.
+    pub(crate) fn category_summary(&self, category: CategoryId, data: &DataPack) -> Summary {
+        let known: Vec<_> = self
+            .experience
+            .types
+            .iter()
+            .filter(|(subject, known)| known.known && subject.category(data) == category)
+            .map(|(_, known)| known)
+            .collect();
+        let n = known.len() as f32;
+        let generalise = self.params.get(BrainParam::GeneraliseTypes);
+        let strength = ((n - 1.0) / (generalise - 1.0)).clamp(0.0, 1.0);
+        let mut summary = Summary {
+            worth: vec![0.0; data.need_places().len()],
+            good: 0.0,
+            bad: 0.0,
+        };
+        if strength == 0.0 {
+            return summary;
+        }
+        let share = strength / n;
+        for known in known {
+            for (summary, worth) in summary.worth.iter_mut().zip(&known.worth) {
+                *summary += share * worth;
+            }
+            summary.good += share * known.good;
+            summary.bad += share * known.bad;
         }
         summary
     }
@@ -1057,8 +1113,9 @@ impl Brain {
 
     /// What a thing learned about as `subject` is worth to the sprite now
     /// (design §5.6): each need's level, from `inputs`, times its worth for
-    /// that need, plus its general good and its bad. For sprites, `sprite`'s,
-    /// or sprites in general's (design v18 §5.6).
+    /// that need, plus its general good and its bad. For an object type it
+    /// doesn't know, its category's summary (design v19 §5.6); for sprites,
+    /// `sprite`'s, or sprites in general's (design v18 §5.6).
     fn worth_of(
         &self,
         subject: Subject,
@@ -1077,9 +1134,12 @@ impl Brain {
             let known = self.memory_of(sprite, data.need_places().len());
             return for_needs(&known.worth) + known.good + known.bad;
         }
-        match self.experience.types.get(&subject) {
+        match self.experience.types.get(&subject).filter(|t| t.known) {
             Some(known) => for_needs(&known.worth) + known.good + known.bad,
-            None => 0.0,
+            None => {
+                let summary = self.category_summary(subject.category(data), data);
+                for_needs(&summary.worth) + summary.good + summary.bad
+            }
         }
     }
 
@@ -1240,10 +1300,13 @@ mod tests {
             .unwrap_or_else(|| TypeMemory::new(needs))
     }
 
-    /// What `brain` has learned about `subject`, to set it.
+    /// What `brain` has learned about `subject`, having touched one, to set
+    /// it.
     fn teach(brain: &mut Brain, subject: Subject) -> &mut TypeMemory {
         let needs = builtin().need_places().len();
-        brain.experience.learn_about(subject, needs)
+        let known = brain.experience.learn_about(subject, needs);
+        known.known = true;
+        known
     }
 
     fn brain(genes: &[&str]) -> Brain {

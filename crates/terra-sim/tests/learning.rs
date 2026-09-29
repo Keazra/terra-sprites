@@ -261,6 +261,48 @@ fn a_prick_makes_thornbushes_bad_and_leaves_berry_bushes_as_they_were_though_bot
 }
 
 #[test]
+fn what_a_sprite_thinks_of_bushes_counts_for_nothing_with_one_kind_known_half_with_two_and_fully_with_three()
+ {
+    // Design v19 §5.6: a category's summary is the mean over the object
+    // types in it the sprite knows × clamp((n − 1) / (generalise_types − 1)),
+    // generalise_types 3. A type is known once touched: a prick makes
+    // thornbushes, then brambles, −.8 bad, and a bite of a berry bush with no
+    // fruit teaches nothing, but it's known.
+    let (thornbush, bramble, bush) = (at(2, 1), at(4, 1), at(3, 2));
+    let bites = [
+        ScriptedAction::Eat { at: thornbush },
+        ScriptedAction::Eat { at: bramble },
+        ScriptedAction::Eat { at: bush },
+    ];
+    let bushes_bad = Learned::Bad {
+        thing: Thing::Category("bush".into()),
+    };
+    for (n, expected) in [(1, 0.0), (2, -0.8 * 0.5), (3, -1.6 / 3.0)] {
+        let script = [&bites[..n], &[ScriptedAction::Rest]].concat();
+        let mut world = world_in(
+            bushes(),
+            &["......", "......", "......"],
+            &[
+                (thornbush, "thornbush"),
+                (bramble, "bramble"),
+                (bush, "berry_bush"),
+            ],
+            at(3, 1),
+            PRICKS_HURT,
+            &script,
+        );
+        for _ in 0..6 {
+            world.step();
+        }
+        assert!(
+            close(value_of(&world, &bushes_bad), expected),
+            "{n} known: {:?}",
+            memory(&world)
+        );
+    }
+}
+
+#[test]
 fn a_reward_after_eating_from_a_thornbush_teaches_the_habit_for_thornbushes_not_every_bush() {
     // Design v19 §5.6: the trace records the object type attended, and
     // habits are credited to it. A sprite that always wants to eat, and is

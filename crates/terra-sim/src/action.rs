@@ -488,6 +488,9 @@ fn act(
         // What it tried is what the next few ticks' feelings are about
         // (design §5.6).
         let brain = &mut state.sprites.get_mut(id).expect("the actor").brain;
+        // Touching one, it knows its object type (design v19 §5.6).
+        let needs = data.need_places().len();
+        brain.experience.learn_about(subject, needs).known = true;
         brain.touched = Some(Touch {
             tick: state.tick,
             subject,
