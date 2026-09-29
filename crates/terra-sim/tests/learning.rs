@@ -2,8 +2,8 @@
 //! learns what things are worth and its habits.
 
 use terra_sim::{
-    DataPack, EntityId, Event, EventKind, Genome, Learned, Map, Pos, Scenario, ScriptedAction,
-    Thing, Verb, World,
+    DataPack, EntityId, Event, EventKind, Genome, Learned, Map, Part, Pos, Scenario,
+    ScriptedAction, Thing, Verb, World,
 };
 
 fn builtin() -> DataPack {
@@ -300,6 +300,59 @@ fn what_a_sprite_thinks_of_bushes_counts_for_nothing_with_one_kind_known_half_wi
             memory(&world)
         );
     }
+}
+
+#[test]
+fn a_kind_of_bush_the_sprite_has_never_touched_is_judged_by_the_bushes_it_knows() {
+    // Design v19 §5.6: an object type the sprite doesn't know is judged by
+    // its category's summary. Pricked by a thornbush and a bramble, −.8
+    // each, it thinks bushes −.4 bad (half strength, knowing two), and
+    // walks off to a berry bush it has never touched: its worth takes
+    // value_gain (1) × .4 from going near it. The first two are out of
+    // sight by then.
+    let (thornbush, bramble, bush) = (at(1, 1), at(3, 1), at(22, 1));
+    let mut world = world_in(
+        bushes(),
+        &["........................"; 3],
+        &[
+            (thornbush, "thornbush"),
+            (bramble, "bramble"),
+            (bush, "berry_bush"),
+        ],
+        at(2, 1),
+        r#"Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),
+           Instinct(inputs: [("always", false)], verb: Approach, weight: 1.0),
+           BrainParam(param: "tau_base", value: 0.05),"#,
+        &[
+            ScriptedAction::Eat { at: thornbush },
+            ScriptedAction::Eat { at: bramble },
+            // In two legs, since it walks only as far as it can see.
+            ScriptedAction::Wander {
+                destination: at(11, 1),
+            },
+            ScriptedAction::Wander {
+                destination: at(19, 1),
+            },
+        ],
+    );
+    let berry_bush = Part::Worth(Thing::from("berry_bush"));
+    // The verb it chooses once it's there, and what the berry bush's worth
+    // adds to it, with every part for the message.
+    let explained = (0..200).find_map(|_| {
+        world.step();
+        let sprite = world.sprites().next().expect("the sprite");
+        let explained = sprite.explain()?;
+        let verb = explained.decision.map(|(verb, _)| verb);
+        let worth = explained
+            .contributions
+            .iter()
+            .find(|c| c.part == berry_bush)
+            .map(|c| c.amount);
+        Some((verb, worth, format!("{:?}", explained.contributions)))
+    });
+    let (verb, worth, parts) = explained.expect("it decides once it's there");
+    assert_eq!(verb, Some(Verb::Approach));
+    assert!(worth.is_some_and(|w| close(w, -0.4)), "{parts}");
 }
 
 #[test]
