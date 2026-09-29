@@ -185,7 +185,7 @@ const SOLIDS: &str = r#"[
     (id: 2, name: "seed", category: "fruit", size: Small, hardness: 0.5,
      stages: [(name: "dormant", ticks: (2, 2), next: Expire)],
      rules: [(trigger: OnExpire, do: [ReplaceWith("shrub")])]),
-    (id: 3, name: "creeper", category: "thornbush", size: Large, hardness: 1.0, tags: [Solid, Fixture],
+    (id: 3, name: "creeper", category: "bush", size: Large, hardness: 1.0, tags: [Solid, Fixture],
      rules: [(trigger: Every(1), do: [SpreadTo("creeper", 1, [])])]),
     (id: 4, name: "spawner", category: "toy", size: Small, hardness: 0.5,
      rules: [(trigger: Every(1), do: [SpawnNearby("shrub", 1)])]),

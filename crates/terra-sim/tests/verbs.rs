@@ -45,7 +45,7 @@ fn object(world: &World, pos: Pos) -> ObjectView<'_> {
     world.object_at(pos).expect("an object there")
 }
 
-/// The one sprite's ID.
+/// The ID of the sprite placed first: the one sprite, or the one acting.
 fn the_sprite(world: &World) -> EntityId {
     world.sprites().next().expect("a sprite").id()
 }
@@ -579,16 +579,33 @@ fn an_ended_action_says_which_sprites_its_attempt_hurt() {
 /// A world like `world`'s, whose walker turns a `fruitless` pulse into `h1`,
 /// so a test can see the pulse.
 fn feeling_world(objects: &[(Pos, &str)], sprite: Pos, script: &[ScriptedAction]) -> World {
-    let data = builtin();
-    let map = Map::from_ascii(&[".....", ".....", "....."], &data).expect("valid drawing");
+    let rows = [".....", ".....", "....."];
+    feeling_world_in(builtin(), &rows, objects, sprite, script, &[])
+}
+
+/// A world like `feeling_world`'s, in `data`, drawn from `rows`, with a
+/// walker on each of `others`, resting as many times as `script` has actions.
+fn feeling_world_in(
+    data: DataPack,
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    sprite: Pos,
+    script: &[ScriptedAction],
+    others: &[Pos],
+) -> World {
+    let map = Map::from_ascii(rows, &data).expect("valid drawing");
     let text = r#"(format: 1, genes: [
         Trait(trait: "speed", value: 10.0),
         Trait(trait: "sense_radius", value: 10.0),
         Emitter(locus: Locus("fruitless"), mode: Level, gain: 0.5, chem: "h1"),
     ])"#;
     let genome = Genome::from_ron(text, &data).expect("a valid genome");
-    let sprites = [(sprite, Some(genome))];
-    let scripted: Vec<(Pos, ScriptedAction)> = script.iter().map(|&s| (sprite, s)).collect();
+    let mut sprites = vec![(sprite, Some(genome))];
+    let mut scripted: Vec<(Pos, ScriptedAction)> = script.iter().map(|&s| (sprite, s)).collect();
+    for &other in others {
+        sprites.push((other, Some(walker(&data))));
+        scripted.extend(script.iter().map(|_| (other, ScriptedAction::Rest)));
+    }
     let scenario = Scenario {
         map,
         objects,
@@ -598,7 +615,8 @@ fn feeling_world(objects: &[(Pos, &str)], sprite: Pos, script: &[ScriptedAction]
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }
 
-/// How much `h1` the one sprite has: what its `fruitless` pulses made.
+/// How much `h1` the sprite placed first has: what its `fruitless` pulses
+/// made.
 fn felt_fruitless(world: &World) -> f32 {
     let sprite = world.sprite(the_sprite(world)).expect("the sprite");
     sprite.chemical("h1").expect("a hormone")
@@ -635,6 +653,41 @@ fn trying_a_bush_with_no_fruit_is_fruitless_too() {
     world.step();
     world.step();
     assert_eq!(felt_fruitless(&world), 0.5);
+}
+
+#[test]
+fn trying_water_or_a_sprite_with_no_object_type_is_fruitless_too() {
+    // Design v20 §5.2: in a pack with no object type for water or sprites,
+    // they have no verb table, so no verb has a rule on them.
+    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, text)| match path {
+            "objects.ron" => (
+                path,
+                r#"[(id: 5, name: "pebble", category: "toy", size: Small, hardness: 0.5)]"#,
+            ),
+            _ => (path, text),
+        })
+        .collect();
+    let data = DataPack::from_sources(&sources).expect("a valid test pack");
+    let (me, water, other) = (at(1, 0), at(2, 0), at(1, 1));
+    let cases: [(Verb, ScriptedAction, &[Pos]); 2] = [
+        (Verb::Drink, ScriptedAction::Drink { at: water }, &[]),
+        (Verb::Play, ScriptedAction::Play { at: other }, &[other]),
+    ];
+    for (verb, act, others) in cases {
+        let script = [act, ScriptedAction::Rest];
+        let rows = ["..~..", ".....", "....."];
+        let mut world = feeling_world_in(data.clone(), &rows, &[], me, &script, others);
+        let events = world.step();
+        assert!(
+            endings(&events).contains(&(verb, Outcome::Failed)),
+            "{verb:?}: {:?}",
+            endings(&events)
+        );
+        world.step();
+        assert_eq!(felt_fruitless(&world), 0.5, "{verb:?}");
+    }
 }
 
 #[test]
