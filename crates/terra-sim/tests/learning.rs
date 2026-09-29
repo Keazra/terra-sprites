@@ -261,7 +261,7 @@ fn a_prick_makes_thornbushes_bad_and_leaves_berry_bushes_as_they_were_though_bot
 }
 
 #[test]
-fn what_a_sprite_thinks_of_bushes_counts_for_nothing_with_one_kind_known_half_with_two_and_fully_with_three()
+fn what_a_sprite_thinks_of_bushes_counts_for_nothing_with_one_type_known_half_with_two_and_fully_with_three()
  {
     // Design v19 §5.6: a category's summary is the mean over the object
     // types in it the sprite knows × clamp((n − 1) / (generalise_types − 1)),
@@ -332,7 +332,7 @@ fn what_a_sprite_thinks_of_bushes_is_a_lesson_once_it_is_half_a_point_from_nothi
 }
 
 #[test]
-fn a_kind_of_bush_the_sprite_has_never_touched_is_judged_by_the_bushes_it_knows() {
+fn a_type_of_bush_the_sprite_has_never_touched_is_judged_by_the_bushes_it_knows() {
     // Design v19 §5.6: an object type the sprite doesn't know is judged by
     // its category's summary. Pricked by a thornbush and a bramble, −.8
     // each, it thinks bushes −.4 bad (half strength, knowing two), and
