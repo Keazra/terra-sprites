@@ -6,7 +6,7 @@ use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
     ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Learned, Map, Outcome, Pos,
-    Progress, Removal, Scenario, ScriptedAction, Target, Verb, World, WorldConfig,
+    Progress, Removal, Scenario, ScriptedAction, Target, Thing, Verb, World, WorldConfig,
 };
 use terra_tui::app::{App, Tab};
 use terra_tui::input::Action;
@@ -2076,7 +2076,7 @@ fn the_event_log_says_when_sprites_in_general_turn_frightening() {
             40,
             3,
             Learned::Fear {
-                thing: "sprite".into(),
+                thing: Thing::Category("sprite".into()),
             },
             false,
         )],

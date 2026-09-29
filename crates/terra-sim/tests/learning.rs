@@ -453,7 +453,7 @@ fn playing_with_a_sprite_teaches_what_that_one_is_worth_not_sprites_in_general()
         "{memory:?}"
     );
     assert_eq!(
-        value(&worth("sprite".into())),
+        value(&worth(Thing::Category("sprite".into()))),
         None,
         "nothing learned about sprites in general: {memory:?}"
     );
@@ -484,7 +484,7 @@ fn sprites_in_general_are_feared_only_once_several_have_hurt_it() {
         }
         let memory = memory_of(&world, me);
         let in_general = Learned::Fear {
-            thing: "sprite".into(),
+            thing: Thing::Category("sprite".into()),
         };
         let value = memory
             .iter()
@@ -612,7 +612,7 @@ fn each_sprite_feared_is_a_lesson_once_and_sprites_in_general_once_they_turn() {
             fear(Thing::Sprite(ids[2])),
             fear(Thing::Sprite(ids[1])),
             fear(Thing::Sprite(ids[0])),
-            fear("sprite".into()),
+            fear(Thing::Category("sprite".into())),
         ]
     );
 }
@@ -645,7 +645,7 @@ fn touching_a_sprite_it_learns_nothing_about_changes_nothing_about_sprites_in_ge
     );
     let learned: Vec<(Learned, bool)> = (0..35).flat_map(|_| lessons(&world.step())).collect();
     let in_general = Learned::Fear {
-        thing: "sprite".into(),
+        thing: Thing::Category("sprite".into()),
     };
     assert!(
         !learned.iter().any(|(l, _)| *l == in_general),
