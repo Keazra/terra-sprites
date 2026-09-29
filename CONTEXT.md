@@ -65,8 +65,12 @@ _Avoid_: settings, options
 A sprite or an object. Each has an ID that is never reused.
 
 **Object**:
-An entity that isn't a sprite, such as a berry bush, a berry or a ball. Its **object type** says how it lives, what verbs do to it, and what it's called, one and many ("berry bush", "berry bushes").
+An entity that isn't a sprite, such as a berry bush, a berry or a ball. Its **object type** says what category it's in, how it lives, what verbs do to it, and what it's called, one and many ("berry bush", "berry bushes").
 _Avoid_: thing, prop
+
+**Category**:
+What a sprite perceives a thing as, such as a bush, fruit, water or a sprite. Things share a category because they look alike to a sprite, never because of what they do to it, so a sprite still has to learn what each one does. A bush and a berry are different categories, though berries grow on bushes. Each object type is in one category, and every sprite is a sprite.
+_Avoid_: kind, class, genus, plant (a botanist's class, not what a sprite tells apart)
 
 **Fixture**:
 An object attached to the ground, so nothing can push, pull or carry it, such as a bush. Being a fixture and being solid are separate: a crate could be solid yet pushable.
@@ -220,7 +224,7 @@ Being past its lifespan, which injures a sprite a little every tick.
 _Avoid_: senescence
 
 **Cause of death**:
-What caused most of a sprite's recent injury, with the most recent counting most: starvation, dehydration, old age, or being hurt by a kind of object, such as a thornbush or another sprite.
+What caused most of a sprite's recent injury, with the most recent counting most: starvation, dehydration, old age, or being hurt by an object type, such as a thornbush, or by another sprite.
 
 **Hurt**:
 Injury that something did to a sprite: a thornbush it touched, another sprite's hit, or the hand's Correct. Starvation, dehydration and old age injure a sprite but don't hurt it.
@@ -261,7 +265,7 @@ The tile a wandering sprite is walking to, picked when it starts to wander.
 A tile a sprite can act on its target from, such as any walkable tile beside a bush.
 
 **Candidate**:
-The nearest reachable thing of each kind around a sprite: the one its verbs would aim at.
+The thing in each category around a sprite that draws its eye most, of those it can reach: the one its verbs would aim at. Among things of one object type, it's the nearest.
 
 **Scripted action**:
 An action a hand-made world starts a sprite on, in place of what it would choose, so a test or a lab scenario can set up an exact situation. Nothing to do with lifecycle rules.
@@ -289,7 +293,7 @@ _Avoid_: goal (a goal tile is where the sprite stands to act)
 ### The brain
 
 **Brain**:
-What chooses a sprite's actions: it notices one kind of thing nearby, and picks a verb to do about it. Instinct and learning compete in it.
+What chooses a sprite's actions: it notices one category of thing nearby, and picks a verb to do about it. Instinct and learning compete in it.
 _Avoid_: AI, mind, controller
 
 **Brain input**:
@@ -297,7 +301,7 @@ Something the brain feels, such as hunger, a pulse, or how far away its target i
 _Avoid_: sense, locus (a locus is what genes read)
 
 **Attention**:
-The brain noticing one kind of thing nearby, such as berries or water, out of every kind it could reach. For sprites, it's one particular sprite: the one that draws the eye most. What it attends to is where its verbs aim.
+The brain noticing one category nearby, such as water, out of every category it could reach, and within it the one thing that draws the eye most, such as one particular sprite. What it attends to is where its verbs aim.
 _Avoid_: focus, perception
 
 **Concept**:
@@ -313,7 +317,7 @@ A setting of how the brain works, such as how much chance is in its choices, set
 _Avoid_: hyperparameter
 
 **Link**:
-How strongly one thing leads to another in an instinct: a concept to a verb ("hunger → eat"), or a brain input to a kind of thing to attend to ("loneliness → attends to sprite"). The genome sets it, and it doesn't learn.
+How strongly one thing leads to another in an instinct: a concept to a verb ("hunger → eat"), or a brain input to a category to attend to ("loneliness → attends to sprite"). The genome sets it, and it doesn't learn.
 _Avoid_: weight, synapse, connection
 
 **Trace**:
@@ -325,7 +329,7 @@ The good a sprite took in on its last tick, its relief and reward, less the puni
 _Avoid_: last r, reinforcement (on screen)
 
 **Worth**:
-What a kind of thing, or a particular sprite, is to a sprite, learned from experience: good for some of its needs, and good or bad in general. It draws the sprite's eye and steps towards the thing, or keeps it from touching it.
+What an object type, or a particular sprite, is to a sprite, learned from experience: good for some of its needs, and good or bad in general. It draws the sprite's eye and steps towards the thing, or keeps it from touching it.
 _Avoid_: value, valence, preference
 
 **Bad**:
@@ -340,12 +344,16 @@ _Avoid_: bad (bad is about touching), wariness (a passing mood), threat
 A particular sprite that another remembers, with what it has learned about it: its worth and how frightening it is. Individuals are learned fast, fade, and are forgotten once faded or dead.
 _Avoid_: acquaintance, contact, relationship
 
+**Category summary**:
+What a sprite thinks of the things in a category it hasn't met: the average of those it knows in it, which counts for nothing while it knows only one. So one thornbush doesn't make every bush bad. On screen it reads as the category: "bushes are bad".
+_Avoid_: stereotype, prior
+
 **Sprites in general**:
-What a sprite thinks of sprites it doesn't know: a summary of the individuals it remembers, which counts for nothing while it knows only one. So one bully doesn't make it shy of everyone, but three might.
+The sprite category's summary: what a sprite thinks of sprites it doesn't know, from the individuals it remembers. So one bully doesn't make it shy of everyone, but three might.
 _Avoid_: the sprite kind (on screen), stereotype
 
 **Habit**:
-What a sprite has learned about doing one verb to one kind of thing, such as "eating balls doesn't work" or "hitting sprites is bad".
+What a sprite has learned about doing one verb to one object type, or to sprites, such as "eating balls doesn't work" or "hitting sprites is bad".
 _Avoid_: skill (a later design, #48), reflex
 
 **Thing touched**:
@@ -361,11 +369,11 @@ The need whose instinct did most to make a sprite choose a verb. A fruitless try
 _Avoid_: reason, goal
 
 **Familiarity**:
-How well a sprite knows a kind of thing, from having attended to it. Its opposite is **novelty**: how new the kind still is to the sprite.
+How well a sprite knows an object type, or sprites, from having attended to it. Its opposite is **novelty**: how new the thing still is to the sprite. An apple is new to a sprite that knows only berries.
 _Avoid_: knowledge
 
 **Curiosity**:
-A sprite's pull towards kinds of thing that are new to it. Being hurt when it investigates teaches it that new things are bad.
+A sprite's pull towards things that are new to it. Being hurt when it investigates teaches it that new things are bad.
 _Avoid_: exploration (exploring is how sure its choices are)
 
 **Wariness**:
