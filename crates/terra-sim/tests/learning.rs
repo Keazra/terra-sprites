@@ -303,6 +303,35 @@ fn what_a_sprite_thinks_of_bushes_counts_for_nothing_with_one_kind_known_half_wi
 }
 
 #[test]
+fn what_a_sprite_thinks_of_bushes_is_a_lesson_once_it_is_half_a_point_from_nothing() {
+    // Design v19 §5.6: lessons fire for a category's summary too. Knowing
+    // three kinds of bush, two of them −.8 bad, bushes are −.53 bad in full.
+    let (thornbush, bramble, bush) = (at(2, 1), at(4, 1), at(3, 2));
+    let mut world = world_in(
+        bushes(),
+        &["......"; 3],
+        &[
+            (thornbush, "thornbush"),
+            (bramble, "bramble"),
+            (bush, "berry_bush"),
+        ],
+        at(3, 1),
+        PRICKS_HURT,
+        &[
+            ScriptedAction::Eat { at: thornbush },
+            ScriptedAction::Eat { at: bramble },
+            ScriptedAction::Eat { at: bush },
+            ScriptedAction::Rest,
+        ],
+    );
+    let learned: Vec<(Learned, bool)> = (0..6).flat_map(|_| lessons(&world.step())).collect();
+    let bushes_bad = Learned::Bad {
+        thing: Thing::Category("bush".into()),
+    };
+    assert!(learned.contains(&(bushes_bad, false)), "{learned:?}");
+}
+
+#[test]
 fn a_kind_of_bush_the_sprite_has_never_touched_is_judged_by_the_bushes_it_knows() {
     // Design v19 §5.6: an object type the sprite doesn't know is judged by
     // its category's summary. Pricked by a thornbush and a bramble, −.8
