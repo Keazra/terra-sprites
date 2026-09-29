@@ -967,27 +967,31 @@ impl Brain {
             .collect()
     }
 
-    /// How much `sprite`, learned about as `subject` (design v19 §5.6), at
-    /// normalized `distance`, draws the eye beyond the instincts every
-    /// sprite shares (design v18 §3.6, §5.3): its nearness, what it's worth,
-    /// and how frightening it is while near.
+    /// How much a thing learned about as `subject`, the particular `sprite`
+    /// if it's one, at normalized `distance`, draws the eye beyond the
+    /// instincts about its category (design v19 §3.6, §5.3): its nearness,
+    /// what it's worth, how new it is, and, for a sprite, how frightening it
+    /// is while near. `inputs` gives the State inputs, and `curiosity_mod`
+    /// the receptor target wariness lowers.
     pub(crate) fn draw(
         &self,
-        sprite: EntityId,
         subject: Subject,
+        sprite: Option<EntityId>,
         distance: f32,
         inputs: &[f32],
+        curiosity_mod: f32,
         data: &DataPack,
     ) -> f32 {
         let scoring = SpriteScoring {
-            sprite: Some(sprite),
+            sprite,
             quiet: false,
         };
+        let boldness = (1.0 + self.experience.new_things).max(0.0) * curiosity_mod;
         self.params.get(BrainParam::SalienceGain) * (1.0 - distance)
-            + self.params.get(BrainParam::ValueGain)
-                * self.worth_of(subject, scoring.sprite, inputs, data)
+            + self.params.get(BrainParam::ValueGain) * self.worth_of(subject, sprite, inputs, data)
+            + self.params.get(BrainParam::Curiosity) * self.novelty(subject) * boldness
             + self.params.get(BrainParam::Vigilance)
-                * self.fright(data.sprite_category(), scoring, distance, data)
+                * self.fright(subject.category(data), scoring, distance, data)
     }
 
     /// How frightening `category`'s thing is at normalized `distance` (design
