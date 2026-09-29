@@ -255,7 +255,7 @@ fn a_genome_file_reads_the_brain_genes_by_name_and_writes_them_back() {
         r#"BrainParam(param: "tau_base", value: 0.2)"#,
         r#"Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0)"#,
         r#"Instinct(inputs: [("hunger", false), ("target_adjacent", true)], verb: Approach, weight: 0.5)"#,
-        r#"AttentionInstinct(input: "hunger", category: BerryBush, weight: 0.8)"#,
+        r#"AttentionInstinct(input: "hunger", category: "bush", weight: 0.8)"#,
     ]);
     let data = builtin();
     let genome = Genome::from_ron(&text, &data).expect("a valid genome");
@@ -290,7 +290,7 @@ fn a_brain_gene_naming_something_the_build_lacks_is_an_error_naming_it() {
         "glee",
     );
     assert_invalid(
-        &[r#"AttentionInstinct(input: "glee", category: Berry, weight: 1.0)"#],
+        &[r#"AttentionInstinct(input: "glee", category: "fruit", weight: 1.0)"#],
         "glee",
     );
 }
@@ -329,7 +329,7 @@ fn brain_gene_values_must_be_numbers() {
         "weight",
     );
     assert_invalid(
-        &[r#"AttentionInstinct(input: "hunger", category: Berry, weight: inf)"#],
+        &[r#"AttentionInstinct(input: "hunger", category: "fruit", weight: inf)"#],
         "weight",
     );
 }
@@ -340,7 +340,7 @@ fn a_brain_gene_written_by_number_reads_the_same_as_by_name() {
     // tau_base is parameter 5, and 0.5 is the f32 0xca3f000000.
     // Instinct (type 8): [[[input ID, negated]], verb ID, weight]; hunger is
     // input 1 and Eat is verb 2. AttentionInstinct (type 9): [input ID,
-    // category ID, weight]; Berry is category 2.
+    // category ID, weight]; fruit is category 2.
     let data = builtin();
     let by_number = genome_file(&[
         r#"Gene(type: 7, version: 1, payload: "9205ca3f000000")"#,
@@ -350,7 +350,7 @@ fn a_brain_gene_written_by_number_reads_the_same_as_by_name() {
     let by_name = genome_file(&[
         r#"BrainParam(param: "tau_base", value: 0.5)"#,
         r#"Instinct(inputs: [("hunger", false)], verb: Eat, weight: 0.5)"#,
-        r#"AttentionInstinct(input: "hunger", category: Berry, weight: 0.5)"#,
+        r#"AttentionInstinct(input: "hunger", category: "fruit", weight: 0.5)"#,
     ]);
     let genome = Genome::from_ron(&by_number, &data).expect("a valid genome");
     assert_eq!(genome.to_ron(&data), by_name);

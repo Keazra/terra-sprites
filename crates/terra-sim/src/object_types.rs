@@ -6,9 +6,11 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
-use crate::categories::CategoryEntry;
+use crate::categories::Category;
 use crate::data::{DataError, check_unique};
-use crate::registry::{Category, ChemId, Chemical, ChemicalClass, Locus, LocusId, LocusKind, Verb};
+use crate::registry::{
+    CategoryId, ChemId, Chemical, ChemicalClass, Locus, LocusId, LocusKind, Verb,
+};
 
 /// The object types file, relative to the pack root.
 pub(crate) const OBJECTS: &str = "objects.ron";
@@ -23,7 +25,7 @@ pub(crate) struct ObjectType {
     /// for a thing you don't count, such as water (design §3.5.1). The sim
     /// never reads it.
     pub(crate) plural: Option<String>,
-    pub(crate) category: Category,
+    pub(crate) category: CategoryId,
     /// Nothing can move through it. In M1 every solid object is also a fixture,
     /// and every other object is an item (design §3.5.1).
     pub(crate) solid: bool,
@@ -150,7 +152,7 @@ pub(crate) enum Party {
 /// Parses and validates `objects.ron`, returning the types in ascending ID order.
 pub(crate) fn object_types(
     text_entries: Vec<TypeEntry>,
-    categories: &[CategoryEntry],
+    categories: &[Category],
     chemicals: &[Chemical],
     loci: &[Locus],
 ) -> Result<Vec<ObjectType>, DataError> {
@@ -186,24 +188,19 @@ pub(crate) fn object_types(
 struct Names<'a> {
     /// Object type name → (index in the sorted list, whether it's a pseudo type).
     types: BTreeMap<String, (usize, bool)>,
-    categories: &'a [CategoryEntry],
+    categories: &'a [Category],
     chemicals: &'a [Chemical],
     loci: &'a [Locus],
 }
 
 impl Names<'_> {
     /// The category called `name`.
-    fn category(&self, name: &str) -> Result<Category, String> {
-        let id = self
-            .categories
+    fn category(&self, name: &str) -> Result<CategoryId, String> {
+        self.categories
             .iter()
             .find(|c| c.name == name)
             .map(|c| c.id)
-            .ok_or_else(|| format!("names the unknown category `{name}`"))?;
-        Category::ALL
-            .into_iter()
-            .find(|&c| c as u16 == id)
-            .ok_or_else(|| format!("names the category `{name}`, which brains don't know yet"))
+            .ok_or_else(|| format!("names the unknown category `{name}`"))
     }
 
     /// The index of the object type called `name`, which must be a real (not pseudo) type.

@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use crate::brain_io::{InputId, Source};
 use crate::data::DataPack;
 use crate::genome::{Gene, Genome, Term};
-use crate::registry::{BrainParam, Category, ChemId, ChemicalClass, LocusKind, Trait, Verb};
+use crate::registry::{BrainParam, CategoryId, ChemId, ChemicalClass, LocusKind, Trait, Verb};
 
 /// How a gene is expressed (design §4.3).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,7 +32,7 @@ enum Setting {
     BrainParam(BrainParam),
     /// A concept's signature, its inputs in ID order, and a verb.
     Instinct(Vec<(InputId, bool)>, Verb),
-    AttentionInstinct(InputId, Category),
+    AttentionInstinct(InputId, CategoryId),
 }
 
 impl Setting {
@@ -285,9 +285,9 @@ mod tests {
                 r#"Instinct(inputs: [("pain", false), ("hunger", false)], verb: Eat, weight: 0.5)"#,
                 r#"Instinct(inputs: [("hunger", false), ("pain", false)], verb: Rest, weight: 1.0)"#,
                 r#"Instinct(inputs: [("hunger", false), ("pain", true)], verb: Eat, weight: 1.0)"#,
-                r#"AttentionInstinct(input: "hunger", category: Berry, weight: 0.8)"#,
-                r#"AttentionInstinct(input: "hunger", category: Berry, weight: 0.4)"#,
-                r#"AttentionInstinct(input: "hunger", category: BerryBush, weight: 0.8)"#,
+                r#"AttentionInstinct(input: "hunger", category: "fruit", weight: 0.8)"#,
+                r#"AttentionInstinct(input: "hunger", category: "fruit", weight: 0.4)"#,
+                r#"AttentionInstinct(input: "hunger", category: "bush", weight: 0.8)"#,
             ]),
             [
                 Expressed,
@@ -307,14 +307,14 @@ mod tests {
     #[test]
     fn attention_instincts_may_use_only_state_inputs() {
         assert_flagged(
-            r#"AttentionInstinct(input: "target_distance", category: Berry, weight: 0.5)"#,
+            r#"AttentionInstinct(input: "target_distance", category: "fruit", weight: 0.5)"#,
             "target_distance",
         );
         assert_flagged(
-            r#"AttentionInstinct(input: "attended_berry", category: Berry, weight: 0.5)"#,
-            "attended_berry",
+            r#"AttentionInstinct(input: "attended_fruit", category: "fruit", weight: 0.5)"#,
+            "attended_fruit",
         );
-        assert_expressed(r#"AttentionInstinct(input: "always", category: Berry, weight: 0.5)"#);
+        assert_expressed(r#"AttentionInstinct(input: "always", category: "fruit", weight: 0.5)"#);
     }
 
     #[test]

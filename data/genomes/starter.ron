@@ -91,11 +91,11 @@
 
         // It knows its own kind: loneliness draws its eye to other sprites.
         // Nothing draws it to food, water or toys; it learns what they're for.
-        AttentionInstinct(input: "loneliness", category: Sprite, weight: 1.0),
+        AttentionInstinct(input: "loneliness", category: "sprite", weight: 1.0),
         // Being hit draws attention to sprites, which means the attacker.
-        AttentionInstinct(input: "was_hit", category: Sprite, weight: 1.0),
+        AttentionInstinct(input: "was_hit", category: "sprite", weight: 1.0),
         // Crowding draws attention to sprites.
-        AttentionInstinct(input: "crowdedness", category: Sprite, weight: 1.0),
+        AttentionInstinct(input: "crowdedness", category: "sprite", weight: 1.0),
 
         // Each need leads to its action, on whatever is attended: hunger to
         // eating, thirst to drinking. Trying it on the wrong thing does nothing.

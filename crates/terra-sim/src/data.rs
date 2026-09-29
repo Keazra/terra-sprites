@@ -4,12 +4,12 @@ use ron::extensions::Extensions;
 use serde::Deserialize;
 
 use crate::brain_io::{BRAIN_IO, BrainInput, BrainIoFile, InputId, brain_io};
-use crate::categories::{CATEGORIES, CategoryEntry, categories};
+use crate::categories::{CATEGORIES, Category, SPRITE, WATER, categories};
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, GenomeError};
 use crate::object_types::{Effect, OBJECTS, ObjectType, TypeEntry, object_types};
 use crate::physiology::{Indices, PHYSIOLOGY, Physiology, PhysiologyEntry};
-use crate::registry::{Category, ChemId, Chemical, Locus, LocusId, Verb};
+use crate::registry::{CategoryId, ChemId, Chemical, Locus, LocusId, Verb};
 use crate::terrain::{Terrain, TerrainProps};
 
 /// A validated data pack: everything a world needs from `data/`.
@@ -25,7 +25,7 @@ pub struct DataPack {
     /// The needs (design §5.2), as places in `brain_inputs`.
     needs: Vec<usize>,
     /// What sprites perceive things as (design v19 §3.5.5), in ascending ID order.
-    categories: Vec<CategoryEntry>,
+    categories: Vec<Category>,
     /// In ascending ID order.
     object_types: Vec<ObjectType>,
     physiology: Physiology,
@@ -200,9 +200,13 @@ impl DataPack {
         )?;
         let loci: Vec<Locus> = parse(sources, LOCI)?;
         check_unique(LOCI, loci.iter().map(|l| (l.id.0, l.name.as_str())))?;
-        let (brain_inputs, needs) =
-            brain_io(parse::<BrainIoFile>(sources, BRAIN_IO)?, &chemicals, &loci)?;
         let categories = categories(parse(sources, CATEGORIES)?)?;
+        let (brain_inputs, needs) = brain_io(
+            parse::<BrainIoFile>(sources, BRAIN_IO)?,
+            &categories,
+            &chemicals,
+            &loci,
+        )?;
         let object_types = object_types(
             parse::<Vec<TypeEntry>>(sources, OBJECTS)?,
             &categories,
@@ -306,22 +310,15 @@ impl DataPack {
     /// The name of the category the object type called `object_type` is in
     /// (design v19 §3.5.5): what sprites perceive its objects as.
     pub fn category_of(&self, object_type: &str) -> Option<&str> {
-        let category = self.named(object_type)?.category as u16;
-        self.categories
-            .iter()
-            .find(|c| c.id == category)
-            .map(|c| c.name.as_str())
+        let category = self.named(object_type)?.category;
+        self.category(category).map(|c| c.name.as_str())
     }
 
-    /// How the screen says the kind of thing called `category` in general,
-    /// such as "thornbushes" (design §3.5.1, §6.1): the plural of the first
-    /// object type, in ID order, that brains perceive as that kind and gives
-    /// one. `None` when none does, as water doesn't, or no type is that kind.
-    pub fn plural_of(&self, category: &str) -> Option<&str> {
-        self.object_types
-            .iter()
-            .filter(|t| t.category.name() == category)
-            .find_map(|t| t.plural.as_deref())
+    /// How the screen says the object type called `object_type` in general,
+    /// such as "thornbushes" (design §3.5.1, §6.1). `None` for one you don't
+    /// count, such as water, or no such type.
+    pub fn plural_of(&self, object_type: &str) -> Option<&str> {
+        self.named(object_type)?.plural.as_deref()
     }
 
     /// Whether `verb` on an object of the type with the stable ID
@@ -436,9 +433,60 @@ impl DataPack {
         self.object_types.iter().position(|t| t.name == name)
     }
 
+    /// Every category, in ascending ID order: a brain keeps what it knows per
+    /// category in this order.
+    pub(crate) fn categories(&self) -> &[Category] {
+        &self.categories
+    }
+
+    /// The category with the ID `id`.
+    pub(crate) fn category(&self, id: CategoryId) -> Option<&Category> {
+        self.categories.iter().find(|c| c.id == id)
+    }
+
+    /// Where the category `id` is in the pack's order, which must have it.
+    pub(crate) fn category_index(&self, id: CategoryId) -> usize {
+        self.categories
+            .iter()
+            .position(|c| c.id == id)
+            .expect("a category in the pack")
+    }
+
+    /// The ID of the category called `name`.
+    pub(crate) fn category_named(&self, name: &str) -> Option<CategoryId> {
+        self.categories
+            .iter()
+            .find(|c| c.name == name)
+            .map(|c| c.id)
+    }
+
+    /// The category water tiles are perceived as (design v19 §3.5.5).
+    pub(crate) fn water_category(&self) -> CategoryId {
+        self.category_named(WATER)
+            .expect("a checked pack has water")
+    }
+
+    /// The category sprites are perceived as (design v19 §3.5.5).
+    pub(crate) fn sprite_category(&self) -> CategoryId {
+        self.category_named(SPRITE)
+            .expect("a checked pack has sprites")
+    }
+
+    /// What the screen and the brain's memory call the category `id` until
+    /// slice 9e: its first object type in ID order, or its own name if none
+    /// is in it (design v19 §6.1).
+    pub(crate) fn category_label(&self, id: CategoryId) -> &str {
+        self.object_types
+            .iter()
+            .find(|t| t.category == id)
+            .map(|t| t.name.as_str())
+            .or_else(|| self.category(id).map(|c| c.name.as_str()))
+            .expect("a category in the pack")
+    }
+
     /// The index of the pseudo type of `category`, the verb table of water or
     /// of sprites, if the pack has one.
-    pub(crate) fn pseudo_type(&self, category: Category) -> Option<usize> {
+    pub(crate) fn pseudo_type(&self, category: CategoryId) -> Option<usize> {
         self.object_types
             .iter()
             .position(|t| t.pseudo && t.category == category)

@@ -95,7 +95,7 @@ mod tests {
         Trait(trait: "speed", value: 7.0),
         BrainParam(param: "tau_base", value: 0.5),
         Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
-        AttentionInstinct(input: "thirst", category: Water, weight: 0.8),
+        AttentionInstinct(input: "thirst", category: "water", weight: 0.8),
         Gene(type: 900, version: 1, payload: "c0ffee"),
     ])"#;
 

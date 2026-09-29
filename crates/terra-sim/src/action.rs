@@ -491,7 +491,7 @@ fn act(
             tick: state.tick,
             category,
             sprite: target.sprite(),
-            novelty: brain.novelty(category),
+            novelty: brain.novelty(category, data),
         });
     }
 }
