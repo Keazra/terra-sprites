@@ -12,12 +12,14 @@ The owner's preferences and the project's conventions, for any agent session, lo
 - **A choice with real trade-offs comes with its pros and cons,** each option's, in plain words, before the question. In slice 8 the owner had to ask for them before choosing how to break the thorn trap.
 - **When measuring shows a design won't work,** stop and bring the numbers, what was tried and the options, rather than retuning quietly. Slice 8's decisions to drop no-op Approaches and to shorten the trace were made that way (design v15, changes 9–10).
 - **When something they asked for can't be done as written,** say so before building, with options, rather than quietly doing something else. If an agreed detail changes during the work, say so in the PR.
+- **When they raise a broad idea, lay out what it could mean before narrowing it.** In slice 9 "the simulated fly brain" was first read as one mechanism, a concept pool, and measured. The owner had meant the brain as a whole, so the idea had to be revisited: first say which readings there are, and ask.
 - **`/grill-with-docs`** is the owner's name for the `grilling` skill together with `domain-modeling`: questions in rounds, with each settled term written into `CONTEXT.md` as it's decided, and the decisions in a new design revision.
 - **Other agents may work in the same folder.** The owner runs tools such as Antigravity alongside a session, so untracked files you didn't make are theirs: leave them unstaged and untouched, and pull before pushing in case they committed to the branch.
 
 ## The owner's design principles
 
 - **The engine enforces physics only.** Behaviour and safety policies belong in each object's data rules, and the data names things. For example, the cause of death "hurt by thornbush" comes from the object type, not from a list in the code.
+  - **The one exception is content safety.** A rule the project must never break, whatever a genome or data pack says, is enforced in the engine, because data can be edited and genes evolve. For now there is one: attraction and mating attempts only ever between adults ([#69](https://github.com/Keazra/terra-sprites/issues/69), for M2).
 - **Solid means impassable, whatever a sprite has learned.**
 - **Each thing we add is its own self-contained thing.** What it is, what it does and what it's called live in its own entry, not spread across lists in the code or other files. So its plural sits beside its name in `objects.ron` (design v17), rather than in a word list of its own.
   - **The aim is easy modding,** as in the Creatures games, whose fun included how simple it was to make new species and new items. When a design choice comes up, say whether it makes adding a species or an item easier or harder.
@@ -25,6 +27,8 @@ The owner's preferences and the project's conventions, for any agent session, lo
 - **Terra Sprites is a stepping stone** to a larger game: one adventurer in a world of NPCs that run on the Sprite system, with skills a player can lock and a character that can live on as an NPC ([#47](https://github.com/Keazra/terra-sprites/issues/47)). Nothing is built for it yet, but keep `terra-sim` a general engine, and when a design choice comes up, say whether it helps or hinders reusing sprites as NPCs.
 - **Realism settles behaviour questions.** When two behaviours both work, the owner asks which is more realistic. Answer with how real animals behave, then recommend. In slice 9c, fear was kept quiet in a cornered sprite's choice because cornered animals fight.
 - **Sprites are blank slates.** They should learn what's good or bad, pass on their genes, and later teach the next generation, so instincts stay general and make mistakes rather than holding knowledge a sprite should earn. "Bored → play with whatever it's looking at", thornbushes included, stays, even when it costs lives until learning arrives (design v12, change 11).
+  - **Not competent from the start** (design v16): the starter genome is very basic. Needs lead to actions, and sprites know their own kind and fight or flee, but they know nothing of food, water, toys or danger. They're a species dropped into a world they don't know, meant to evolve fast; the gene types can still express smarter instincts, so evolution can grow them.
+- **Real science is inspiration, not a blueprint.** The owner cares how a real system works, such as the fruit-fly brain behind design v16, abstracted for sprites, which are visual, social and tactile. A copy of its parts isn't the goal.
 
 ## Design documents
 
