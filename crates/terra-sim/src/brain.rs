@@ -325,7 +325,7 @@ impl Brain {
             snapshot: None,
             felt: 0.0,
             trace: VecDeque::new(),
-            experience: Experience::new(data.categories().len()),
+            experience: Experience::default(),
             touched: None,
         }
     }
@@ -478,9 +478,11 @@ impl Brain {
         experience.forget_faded(forget_below);
     }
 
-    /// How new `category` is to the sprite (design §5.6): 1 − familiarity.
-    pub(crate) fn novelty(&self, category: CategoryId, data: &DataPack) -> f32 {
-        1.0 - self.experience.familiarity[data.category_index(category)]
+    /// How new a thing learned about as `subject` is to the sprite (design
+    /// §5.6): 1 − familiarity.
+    pub(crate) fn novelty(&self, subject: Subject) -> f32 {
+        let known = self.experience.types.get(&subject);
+        1.0 - known.map_or(0.0, |known| known.familiarity)
     }
 
     /// Each need's relief this tick (design §5.6): its fall since the last
@@ -696,11 +698,14 @@ impl Brain {
     pub(crate) fn commit(&mut self, tick: u64, data: &DataPack) {
         if let Some(snapshot) = self.snapshot.as_ref().filter(|s| s.tick == tick) {
             let motive = snapshot.motive;
-            if let Some(category) = snapshot.attended {
-                // Attending to a kind of thing makes it familiar (design §5.6).
+            if let Some(subject) = snapshot.subject {
+                // Attending to an object type makes it familiar (design v19
+                // §5.6).
                 let rate = self.params.get(BrainParam::FamiliarityRate);
-                let familiar = &mut self.experience.familiarity[data.category_index(category)];
-                *familiar = (*familiar + rate).min(1.0);
+                let known = self
+                    .experience
+                    .learn_about(subject, data.need_places().len());
+                known.familiarity = (known.familiarity + rate).min(1.0);
             }
             self.trace.push_back(TraceEntry {
                 motive,
@@ -890,7 +895,7 @@ impl Brain {
                     .map(|&i| inputs[i] * self.attention.get(i, c))
                     .sum();
                 let worth = value_gain * self.worth_of(subject, scoring.sprite, inputs, data);
-                let curious = curiosity * self.novelty(category, data) * boldness;
+                let curious = curiosity * self.novelty(subject) * boldness;
                 // Fear catches the eye (design v18 §5.3).
                 let watchful = vigilance * self.fright(category, scoring, distance, data);
                 (
@@ -1195,7 +1200,6 @@ mod tests {
     const THORNBUSH: CategoryId = CategoryId(3);
     const WATER: CategoryId = CategoryId(4);
     const TOY: CategoryId = CategoryId(5);
-    const SPRITE: CategoryId = CategoryId(6);
 
     /// The built-in pack's object types (design §3.5.3), as sprites learn
     /// about them.
@@ -1586,7 +1590,6 @@ mod tests {
         decide(&mut brain, 9, Verb::Eat, Some(types::BERRY), &set);
         brain.touched = Some(Touch {
             tick: 9,
-            category: FRUIT,
             subject: types::BERRY,
             sprite: None,
             novelty: 1.0,
@@ -1625,7 +1628,6 @@ mod tests {
         let mut brain = unfading(&[]);
         let touch = Touch {
             tick: 1,
-            category: BUSH,
             subject: types::BERRY_BUSH,
             sprite: None,
             novelty: 1.0,
@@ -1657,7 +1659,6 @@ mod tests {
         // A touch longer ago than the window (3 ticks) is forgotten too.
         brain.touched = Some(Touch {
             tick: 2,
-            category: BUSH,
             subject: types::BERRY_BUSH,
             sprite: None,
             novelty: 1.0,
@@ -1854,7 +1855,6 @@ mod tests {
         decide(&mut brain, 9, Verb::Eat, Some(types::BALL), &set);
         brain.touched = Some(Touch {
             tick: 9,
-            category: TOY,
             subject: types::BALL,
             sprite: None,
             novelty: 1.0,
@@ -1887,7 +1887,6 @@ mod tests {
         );
         brain.touched = Some(Touch {
             tick: 9,
-            category: TOY,
             subject: types::BALL,
             sprite: None,
             novelty: 1.0,
@@ -1934,9 +1933,43 @@ mod tests {
         for tick in 0..10 {
             decide(&mut brain, tick, Verb::Rest, Some(types::BALL), &[]);
         }
-        let familiar = brain.experience.familiarity[at(TOY)];
+        let familiar = about(&brain, types::BALL).familiarity;
         assert!(close(familiar, 0.02), "{familiar}");
-        assert_eq!(brain.experience.familiarity[at(FRUIT)], 0.0);
+        assert_eq!(about(&brain, types::BERRY).familiarity, 0.0);
+    }
+
+    /// The built-in pack with thornbushes in the bush category (design v19
+    /// §3.5.5).
+    fn bushes() -> DataPack {
+        let sources: Vec<(&str, String)> = DataPack::builtin_sources()
+            .iter()
+            .map(|&(path, text)| match path {
+                "objects.ron" => (
+                    path,
+                    text.replace(r#"category: "thornbush""#, r#"category: "bush""#),
+                ),
+                _ => (path, text.to_string()),
+            })
+            .collect();
+        let sources: Vec<(&str, &str)> = sources.iter().map(|(p, t)| (*p, t.as_str())).collect();
+        DataPack::from_sources(&sources).expect("a valid test pack")
+    }
+
+    #[test]
+    fn attending_to_berry_bushes_leaves_thornbushes_new_though_both_are_bushes() {
+        // Design v19 §5.6: newness is about the object type, so an apple is
+        // new to a sprite that knows only berries. familiarity_rate (.002)
+        // each tick attended.
+        let data = bushes();
+        let mut brain = brain(&[]);
+        for tick in 0..10 {
+            let attending = snapshot(tick, Vec::new(), Verb::Rest, Some(types::BERRY_BUSH));
+            brain.snapshot = Some(attending);
+            brain.commit(tick, &data);
+        }
+        let known = brain.novelty(types::BERRY_BUSH);
+        assert!(close(known, 1.0 - 0.02), "{known}");
+        assert_eq!(brain.novelty(types::THORNBUSH), 1.0);
     }
 
     #[test]
@@ -1945,7 +1978,7 @@ mod tests {
         // × curiosity_mod; salience is 0 at distance 1.
         let data = builtin();
         let mut brain = brain(&[]);
-        brain.experience.familiarity[at(TOY)] = 0.5;
+        teach(&mut brain, types::BALL).familiarity = 0.5;
         let candidates = BTreeMap::from([(FRUIT, (types::BERRY, 1.0)), (TOY, (types::BALL, 1.0))]);
         let x = inputs(&[]);
         let score = |brain: &Brain, mood: f32| {
@@ -1969,7 +2002,6 @@ mod tests {
         let mut brain = unfading(&[]);
         brain.touched = Some(Touch {
             tick: 1,
-            category: THORNBUSH,
             subject: types::THORNBUSH,
             sprite: None,
             novelty: 0.5,
@@ -2030,7 +2062,6 @@ mod tests {
         decide(&mut brain, 9, Verb::Hit, Some(types::SPRITE), &[]);
         brain.touched = Some(Touch {
             tick: 9,
-            category: SPRITE,
             subject: types::SPRITE,
             sprite: None,
             novelty: 1.0,

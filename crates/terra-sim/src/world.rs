@@ -1320,7 +1320,6 @@ mod tests {
         let sprite = world.state.sprites.get_mut(first).expect("a sprite");
         sprite.brain.touched = Some(Touch {
             tick: 0,
-            category: bush,
             subject: Subject::Category(bush),
             sprite: None,
             novelty: 1.0,
@@ -1348,7 +1347,6 @@ mod tests {
         let bush = data.category_named("bush").expect("a category");
         brain.touched = Some(Touch {
             tick: 0,
-            category: bush,
             subject: Subject::Category(bush),
             sprite: None,
             novelty: 1.0,
@@ -1393,7 +1391,7 @@ mod tests {
             |brain| known(brain).good = 1.5,
             |brain| known(brain).bad = 0.2,
             |brain| known(brain).habits[0] = f32::NAN,
-            |brain| brain.experience.familiarity[0] = 2.0,
+            |brain| known(brain).familiarity = 2.0,
         ];
         for (i, broken) in breaks.into_iter().enumerate() {
             let (mut world, first, _) = field_with_sprites();
