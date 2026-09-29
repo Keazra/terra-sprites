@@ -257,10 +257,10 @@ impl Flood {
         // By category and object type, by its index; none for water or a
         // sprite, each of one type.
         let mut best: BTreeMap<(CategoryId, Option<usize>), (u32, u64, Target)> = BTreeMap::new();
-        let mut offer = |kind, target, id, cost| {
-            let better = best.get(&kind).is_none_or(|&(c, i, _)| (cost, id) < (c, i));
+        let mut offer = |key, target, id, cost| {
+            let better = best.get(&key).is_none_or(|&(c, i, _)| (cost, id) < (c, i));
             if better {
-                best.insert(kind, (cost, id, target));
+                best.insert(key, (cost, id, target));
             }
         };
         for pos in self.tiles_near(map) {
@@ -269,8 +269,8 @@ impl Flood {
                 let object_type = &ground.data.object_types()[index];
                 let own_tile = !object_type.solid;
                 if let Some(cost) = self.goal_cost(map, pos, own_tile) {
-                    let kind = (object_type.category, Some(index));
-                    offer(kind, Target::Object(id), id.0, cost);
+                    let key = (object_type.category, Some(index));
+                    offer(key, Target::Object(id), id.0, cost);
                 }
             }
             if ground.data.terrain(map.terrain(pos)).is_drinkable()

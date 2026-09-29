@@ -255,8 +255,8 @@ pub(crate) struct Summary {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Explanation<'a> {
     /// Each candidate category's attention score, highest first, ties to
-    /// the lower category: a kind of thing, or for sprites the one scored
-    /// (design v18 §5.9).
+    /// the lower category, named by what was scored: its object type, or
+    /// for sprites the one scored (design v19 §5.9).
     pub attention: Vec<(Thing, f32)>,
     /// What attention is on, if anything.
     pub attended: Option<Thing>,
@@ -282,7 +282,8 @@ pub enum Part<'a> {
     /// An instinct: a concept's inputs by name, each with whether it's
     /// negated, through its link to the verb.
     Concept(Vec<(&'a str, bool)>),
-    /// What the thing attended to is worth: a kind, or a particular sprite.
+    /// What the thing attended to is worth: an object type, or a particular
+    /// sprite.
     Worth(Thing),
     /// How frightening the thing attended to is (design v18 §5.5).
     Fear(Thing),
@@ -2007,7 +2008,7 @@ mod tests {
     }
 
     #[test]
-    fn attending_to_a_kind_of_thing_makes_it_familiar() {
+    fn attending_to_an_object_type_makes_it_familiar() {
         // Design v16 §5.6: familiarity_rate (.002) each tick attended.
         let mut brain = brain(&[]);
         for tick in 0..10 {
@@ -2053,7 +2054,7 @@ mod tests {
     }
 
     #[test]
-    fn unfamiliar_kinds_of_thing_draw_the_eye_as_boldly_as_the_sprite_is_bold() {
+    fn unfamiliar_object_types_draw_the_eye_as_boldly_as_the_sprite_is_bold() {
         // Design v16 §5.3: curiosity (.3) × novelty × max(0, 1 + new things)
         // × curiosity_mod; salience is 0 at distance 1.
         let data = builtin();
