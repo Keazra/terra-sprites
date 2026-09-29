@@ -39,7 +39,49 @@ fn world(
     genes: &str,
     script: &[ScriptedAction],
 ) -> World {
-    let data = builtin();
+    world_in(builtin(), rows, objects, sprite, genes, script)
+}
+
+/// A third kind of bush, which pricks as a thornbush does.
+const BRAMBLE: &str = r#"(id: 5, name: "bramble", plural: "brambles",
+     category: "bush", tags: [Solid, Fixture], size: Large, hardness: 1.0,
+     verbs: {
+         Eat:  [Inject(Actor, "injury", 0.05), Signal(Actor, "pricked")],
+         Play: [Inject(Actor, "injury", 0.03), Signal(Actor, "pricked")],
+     }),
+"#;
+
+/// The built-in pack with every bush in the bush category (design v19
+/// §3.5.5): thornbushes join berry bushes, and a third kind, brambles.
+fn bushes() -> DataPack {
+    let sources: Vec<(&str, String)> = DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, text)| {
+            let text = if path == "objects.ron" {
+                text.replace(r#"category: "thornbush""#, r#"category: "bush""#)
+                    .replace(
+                        "    // Pseudo types",
+                        &format!("    {BRAMBLE}\n    // Pseudo types"),
+                    )
+            } else {
+                text.to_string()
+            };
+            (path, text)
+        })
+        .collect();
+    let sources: Vec<(&str, &str)> = sources.iter().map(|(p, t)| (*p, t.as_str())).collect();
+    DataPack::from_sources(&sources).expect("a valid test pack")
+}
+
+/// `world`, in the pack `data`.
+fn world_in(
+    data: DataPack,
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    sprite: Pos,
+    genes: &str,
+    script: &[ScriptedAction],
+) -> World {
     let map = Map::from_ascii(rows, &data).expect("valid drawing");
     let sprites = [(sprite, Some(genome(genes, &data)))];
     let scripted: Vec<(Pos, ScriptedAction)> = script.iter().map(|&s| (sprite, s)).collect();
@@ -177,6 +219,45 @@ fn a_prick_makes_only_the_thornbush_touched_bad_not_what_was_looked_at_before() 
         memory(&world)
     );
     assert_eq!(value_of(&world, &bush_bad), 0.0, "looked at, never touched");
+}
+
+/// A sprite whose every prick punishes it by 1.
+const PRICKS_HURT: &str =
+    r#"Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),"#;
+
+#[test]
+fn a_prick_makes_thornbushes_bad_and_leaves_berry_bushes_as_they_were_though_both_are_bushes() {
+    // Design v19 §5.6: what a sprite learns is about the object type it
+    // touched, never its category. The sprite eats from a berry bush, which
+    // teaches it nothing, then bites a thornbush: −(.8 × 1).
+    let (bush, thornbush) = (at(2, 1), at(4, 1));
+    let mut world = world_in(
+        bushes(),
+        &["......", "......", "......"],
+        &[(bush, "berry_bush"), (thornbush, "thornbush")],
+        at(3, 1),
+        PRICKS_HURT,
+        &[
+            ScriptedAction::Eat { at: bush },
+            ScriptedAction::Eat { at: thornbush },
+            ScriptedAction::Rest,
+        ],
+    );
+    for _ in 0..6 {
+        world.step();
+    }
+    let thorns_bad = Learned::Bad {
+        thing: "thornbush".into(),
+    };
+    let bushes_bad = Learned::Bad {
+        thing: "berry_bush".into(),
+    };
+    assert!(
+        close(value_of(&world, &thorns_bad), -0.8),
+        "{:?}",
+        memory(&world)
+    );
+    assert_eq!(value_of(&world, &bushes_bad), 0.0, "{:?}", memory(&world));
 }
 
 #[test]

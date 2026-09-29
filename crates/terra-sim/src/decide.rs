@@ -9,6 +9,7 @@ use crate::action::{Outcome, ScriptedAction, end, is_acting, start};
 use crate::brain::{Aim, Snapshot, SpriteScoring, available, best_above};
 use crate::data::DataPack;
 use crate::events::Event;
+use crate::learning::Subject;
 use crate::map::Pos;
 use crate::objects::EntityId;
 use crate::perception::{Ground, Target};
@@ -71,9 +72,10 @@ pub(crate) fn decide(
     {
         let inputs = sprite.brain.inputs(&sprite.body, None, data);
         let drawn = flood.sprites(ground, id).into_iter().map(|(other, cost)| {
+            let subject = state.subject_of(data, Target::Sprite(other));
             let draw = sprite
                 .brain
-                .draw(other, normalized(cost, reach), &inputs, data);
+                .draw(other, subject, normalized(cost, reach), &inputs, data);
             ((other, cost), draw)
         });
         // Ties go to the lower ID, which comes first.
@@ -87,12 +89,13 @@ pub(crate) fn decide(
             let goal = state
                 .goal_for(data, flood, target)
                 .expect("a candidate is reachable");
+            let type_id = state.type_of(data, target);
             let aim = Aim {
                 category,
+                subject: Subject::of(category, type_id),
                 distance: normalized(cost, reach),
                 adjacent: state.on_goal_tile(data, sprite.pos, target),
             };
-            let type_id = state.type_of(data, target);
             let candidate = Candidate {
                 type_id,
                 target,
@@ -115,6 +118,7 @@ pub(crate) fn decide(
             .map_or(u32::MAX, |(_, cost)| cost);
         Aim {
             category,
+            subject: state.subject_of(data, target),
             distance: normalized(cost, reach),
             adjacent,
         }
@@ -140,12 +144,12 @@ pub(crate) fn decide(
         || sprite.body.loci[data.physiology().indices.cornered] > 0.0;
     // A running action's category is scored by the instance it's aimed at,
     // which a nearer one of the same category doesn't replace (design §5.3).
-    let mut distances: BTreeMap<CategoryId, f32> = candidates
+    let mut distances: BTreeMap<CategoryId, (Subject, f32)> = candidates
         .iter()
-        .map(|(&category, candidate)| (category, candidate.aim.distance))
+        .map(|(&category, c)| (category, (c.aim.subject, c.aim.distance)))
         .collect();
     if let Some(aim) = aimed {
-        distances.insert(aim.category, aim.distance);
+        distances.insert(aim.category, (aim.subject, aim.distance));
     }
 
     let sprite = state.sprites.get_mut(id).expect("the same sprite");
@@ -190,7 +194,7 @@ pub(crate) fn decide(
     let scores = brain.scores(
         &activations,
         &inputs,
-        aim.map(|a| a.category),
+        aim.map(|a| a.subject),
         decision_scoring,
         data,
     );
@@ -218,6 +222,7 @@ pub(crate) fn decide(
         attention,
         attended,
         target,
+        subject: aim.map(|a| a.subject),
         scores,
         verb,
         motive,

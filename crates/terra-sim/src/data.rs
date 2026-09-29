@@ -436,6 +436,11 @@ impl DataPack {
         &self.object_types
     }
 
+    /// The object type with the stable ID `id`.
+    pub(crate) fn object_type(&self, id: u16) -> Option<&ObjectType> {
+        self.object_types.iter().find(|t| t.id == id)
+    }
+
     /// The index of the object type called `name`.
     pub(crate) fn object_type_named(&self, name: &str) -> Option<usize> {
         self.object_types.iter().position(|t| t.name == name)
