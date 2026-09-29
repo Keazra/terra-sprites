@@ -12,8 +12,7 @@
 [
     (id: 1, name: "bush",      plural: "bushes"),
     (id: 2, name: "fruit"),
-    // Until slice 9e, when thornbushes join bush and this ID is retired.
-    (id: 3, name: "thornbush", plural: "thornbushes"),
+    // 3 was thornbush, until thornbushes joined bush (design v20). Never reuse it.
     (id: 4, name: "water"),
     (id: 5, name: "toy",       plural: "toys"),
     (id: 6, name: "sprite",    plural: "sprites"),

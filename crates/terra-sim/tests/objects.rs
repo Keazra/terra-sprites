@@ -525,7 +525,7 @@ fn spread_to_draws_once_whatever_the_square_holds() {
 /// A solid fixture with no rules unless `extra` adds some.
 fn shrub(extra: &str) -> String {
     format!(
-        r#"(id: 4, name: "shrub", category: "thornbush", size: Large, hardness: 1.0, tags: [Solid, Fixture],
+        r#"(id: 4, name: "shrub", category: "bush", size: Large, hardness: 1.0, tags: [Solid, Fixture],
             counters: {{"n": 100}},
             stages: [(name: "shoot", ticks: (5, 5), next: Stage("grown")),
                      (name: "grown", ticks: (5, 5), next: Expire)],

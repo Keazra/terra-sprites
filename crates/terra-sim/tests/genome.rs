@@ -209,6 +209,24 @@ fn an_instinct_built_on_a_missing_category_s_input_is_kept_as_written() {
 }
 
 #[test]
+fn a_genome_from_before_thornbushes_joined_the_bushes_keeps_its_thornbush_genes() {
+    // Design v20 §3.5.5: category 3 was thornbush, and input 38 its
+    // attended_thornbush. Both are retired and never reused, so genes naming
+    // them stay unmatched (v19 §5.7), by name or by number.
+    let data = builtin();
+    let text = genome_file(&[
+        r#"AttentionInstinct(input: "hunger", category: "thornbush", weight: 0.8)"#,
+        // [input 1, category 3, 0.8].
+        r#"Gene(type: 9, version: 1, payload: "930103ca3f4ccccd")"#,
+        r#"Instinct(inputs: [("hunger", false), ("attended_thornbush", false)], verb: Eat, weight: 0.5)"#,
+        // [[[1, false], [38, false]], Eat, 0.5].
+        r#"Gene(type: 8, version: 1, payload: "93929201c29226c202ca3f000000")"#,
+    ]);
+    let genome = Genome::from_ron(&text, &data).expect("a valid genome");
+    assert_eq!(genome.to_ron(&data), text);
+}
+
+#[test]
 fn a_gene_written_by_number_must_be_readable_if_its_type_is_known() {
     // Chemical 99 isn't in the pack.
     assert_invalid(&[r#"Gene(type: 1, version: 1, payload: "92631e")"#], "99");
