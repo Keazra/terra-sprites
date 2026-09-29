@@ -680,14 +680,11 @@ impl Brain {
     /// once it knows `generalise`. For `needs` needs.
     pub(crate) fn sprites_in_general(&self, needs: usize) -> SpriteMemory {
         let known = &self.experience.individuals;
-        let n = known.len() as f32;
-        let generalise = self.params.get(BrainParam::Generalise);
-        let strength = ((n - 1.0) / (generalise - 1.0)).clamp(0.0, 1.0);
+        let share = summary_share(known.len(), self.params.get(BrainParam::Generalise));
         let mut summary = SpriteMemory::new(needs);
-        if strength == 0.0 {
+        if share == 0.0 {
             return summary;
         }
-        let share = strength / n;
         for individual in known.values() {
             for (summary, worth) in summary.worth.iter_mut().zip(&individual.worth) {
                 *summary += share * worth;
@@ -707,21 +704,18 @@ impl Brain {
             .experience
             .types
             .iter()
-            .filter(|(subject, known)| known.known && subject.category(data) == category)
-            .map(|(_, known)| known)
+            .filter(|(subject, memory)| memory.touched && subject.category(data) == category)
+            .map(|(_, memory)| memory)
             .collect();
-        let n = known.len() as f32;
-        let generalise = self.params.get(BrainParam::GeneraliseTypes);
-        let strength = ((n - 1.0) / (generalise - 1.0)).clamp(0.0, 1.0);
+        let share = summary_share(known.len(), self.params.get(BrainParam::GeneraliseTypes));
         let mut summary = Summary {
             worth: vec![0.0; data.need_places().len()],
             good: 0.0,
             bad: 0.0,
         };
-        if strength == 0.0 {
+        if share == 0.0 {
             return summary;
         }
-        let share = strength / n;
         for known in known {
             for (summary, worth) in summary.worth.iter_mut().zip(&known.worth) {
                 *summary += share * worth;
@@ -949,7 +943,7 @@ impl Brain {
         let value_gain = self.params.get(BrainParam::ValueGain);
         let curiosity = self.params.get(BrainParam::Curiosity);
         let vigilance = self.params.get(BrainParam::Vigilance);
-        let boldness = (1.0 + self.experience.new_things).max(0.0) * curiosity_mod;
+        let boldness = self.boldness(curiosity_mod);
         candidates
             .iter()
             .map(|(&category, &(subject, distance))| {
@@ -989,12 +983,19 @@ impl Brain {
             sprite,
             quiet: false,
         };
-        let boldness = (1.0 + self.experience.new_things).max(0.0) * curiosity_mod;
+        let boldness = self.boldness(curiosity_mod);
         self.params.get(BrainParam::SalienceGain) * (1.0 - distance)
             + self.params.get(BrainParam::ValueGain) * self.worth_of(subject, sprite, inputs, data)
             + self.params.get(BrainParam::Curiosity) * self.novelty(subject) * boldness
             + self.params.get(BrainParam::Vigilance)
                 * self.fright(subject.category(data), scoring, distance, data)
+    }
+
+    /// How boldly the unfamiliar draws the eye (design §5.3): the worth of
+    /// new things, lifted by 1 and never below 0, times `curiosity_mod`, the
+    /// receptor target wariness lowers.
+    fn boldness(&self, curiosity_mod: f32) -> f32 {
+        (1.0 + self.experience.new_things).max(0.0) * curiosity_mod
     }
 
     /// How frightening `category`'s thing is at normalized `distance` (design
@@ -1137,15 +1138,16 @@ impl Brain {
                 .map(|(&place, worth)| inputs[place] * worth)
                 .sum()
         };
+        let now = |worth: &[f32], good: f32, bad: f32| for_needs(worth) + good + bad;
         if subject.category(data) == data.sprite_category() {
             let known = self.memory_of(sprite, data.need_places().len());
-            return for_needs(&known.worth) + known.good + known.bad;
+            return now(&known.worth, known.good, known.bad);
         }
-        match self.experience.types.get(&subject).filter(|t| t.known) {
-            Some(known) => for_needs(&known.worth) + known.good + known.bad,
+        match self.experience.types.get(&subject).filter(|t| t.touched) {
+            Some(known) => now(&known.worth, known.good, known.bad),
             None => {
                 let summary = self.category_summary(subject.category(data), data);
-                for_needs(&summary.worth) + summary.good + summary.bad
+                now(&summary.worth, summary.good, summary.bad)
             }
         }
     }
@@ -1200,6 +1202,15 @@ fn thing_named(subject: Subject, sprite: Option<EntityId>, data: &DataPack) -> T
         Some(sprite) if subject.category(data) == data.sprite_category() => Thing::Sprite(sprite),
         _ => subject_thing(subject, data),
     }
+}
+
+/// Each one's share of a summary over `n` things known (design v18, v19
+/// §5.6): its mean, at no strength while it knows one, and in full once it
+/// knows `generalise`. 0 while the summary counts for nothing.
+fn summary_share(n: usize, generalise: f32) -> f32 {
+    let n = n as f32;
+    let strength = ((n - 1.0) / (generalise - 1.0)).clamp(0.0, 1.0);
+    if strength == 0.0 { 0.0 } else { strength / n }
 }
 
 /// What something learned about as `subject` is called (design v19 §6.1):
@@ -1312,7 +1323,7 @@ mod tests {
     fn teach(brain: &mut Brain, subject: Subject) -> &mut TypeMemory {
         let needs = builtin().need_places().len();
         let known = brain.experience.learn_about(subject, needs);
-        known.known = true;
+        known.touched = true;
         known
     }
 
@@ -1753,8 +1764,8 @@ mod tests {
     fn being_hit_teaches_nothing_about_what_sprites_are_worth() {
         // Design v16 §5.6: all sprites are one kind, so one attacker would
         // make a sprite shy of every sprite. The hit's punishment, with a
-        // sprite attended and nothing touched, teaches no worth. Fear of
-        // individuals and kinds is its own slice.
+        // sprite attended and nothing touched, teaches no worth. Fear of the
+        // one who hit it is learned apart (design v18 §5.6).
         let data = builtin();
         let mut brain = unfading(&[]);
         decide(&mut brain, 9, Verb::Wander, Some(types::SPRITE), &[]);

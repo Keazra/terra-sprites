@@ -105,9 +105,9 @@ pub(crate) struct TypeMemory {
     pub(crate) habits: [f32; VERBS.len()],
     /// How familiar it is, from attending to it (0 to 1).
     pub(crate) familiarity: f32,
-    /// Whether it has touched one: until then, it's judged by its
-    /// category's summary.
-    pub(crate) known: bool,
+    /// Whether it has touched one, and so knows it: until then, it's
+    /// judged by its category's summary.
+    pub(crate) touched: bool,
 }
 
 impl TypeMemory {
@@ -119,7 +119,7 @@ impl TypeMemory {
             bad: 0.0,
             habits: [0.0; VERBS.len()],
             familiarity: 0.0,
-            known: false,
+            touched: false,
         }
     }
 }
@@ -250,7 +250,7 @@ pub(crate) struct Touch {
     pub(crate) subject: Subject,
     /// Which sprite, if it was one (design v18 §5.6).
     pub(crate) sprite: Option<EntityId>,
-    /// How new the category was to the sprite then (design §5.6).
+    /// How new its object type was to the sprite then (design v19 §5.6).
     pub(crate) novelty: f32,
 }
 

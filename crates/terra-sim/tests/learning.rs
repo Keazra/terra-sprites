@@ -42,7 +42,7 @@ fn world(
     world_in(builtin(), rows, objects, sprite, genes, script)
 }
 
-/// A third kind of bush, which pricks as a thornbush does.
+/// A third bush, brambles, which prick as thornbushes do.
 const BRAMBLE: &str = r#"(id: 5, name: "bramble", plural: "brambles",
      category: "bush", tags: [Solid, Fixture], size: Large, hardness: 1.0,
      verbs: {
@@ -52,7 +52,7 @@ const BRAMBLE: &str = r#"(id: 5, name: "bramble", plural: "brambles",
 "#;
 
 /// The built-in pack with every bush in the bush category (design v19
-/// §3.5.5): thornbushes join berry bushes, and a third kind, brambles.
+/// §3.5.5): thornbushes join berry bushes, and a third bush, brambles.
 fn bushes() -> DataPack {
     let sources: Vec<(&str, String)> = DataPack::builtin_sources()
         .iter()
@@ -197,7 +197,7 @@ fn a_prick_makes_only_the_thornbush_touched_bad_not_what_was_looked_at_before() 
         &["......", "......", "......"],
         &[(bush, "berry_bush"), (thornbush, "thornbush")],
         at(1, 1),
-        r#"Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),"#,
+        PRICKS_HURT,
         &[
             ScriptedAction::Approach { at: bush },
             ScriptedAction::Eat { at: thornbush },
@@ -305,7 +305,7 @@ fn what_a_sprite_thinks_of_bushes_counts_for_nothing_with_one_type_known_half_wi
 #[test]
 fn what_a_sprite_thinks_of_bushes_is_a_lesson_once_it_is_half_a_point_from_nothing() {
     // Design v19 §5.6: lessons fire for a category's summary too. Knowing
-    // three kinds of bush, two of them −.8 bad, bushes are −.53 bad in full.
+    // three types of bush, two of them −.8 bad, bushes are −.53 bad in full.
     let (thornbush, bramble, bush) = (at(2, 1), at(4, 1), at(3, 2));
     let mut world = world_in(
         bushes(),
@@ -349,9 +349,11 @@ fn a_type_of_bush_the_sprite_has_never_touched_is_judged_by_the_bushes_it_knows(
             (bush, "berry_bush"),
         ],
         at(2, 1),
-        r#"Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),
-           Instinct(inputs: [("always", false)], verb: Approach, weight: 1.0),
-           BrainParam(param: "tau_base", value: 0.05),"#,
+        &format!(
+            r#"{PRICKS_HURT}
+               Instinct(inputs: [("always", false)], verb: Approach, weight: 1.0),
+               BrainParam(param: "tau_base", value: 0.05),"#
+        ),
         &[
             ScriptedAction::Eat { at: thornbush },
             ScriptedAction::Eat { at: bramble },
@@ -385,6 +387,46 @@ fn a_type_of_bush_the_sprite_has_never_touched_is_judged_by_the_bushes_it_knows(
 }
 
 #[test]
+fn in_a_pack_with_no_object_type_for_water_water_is_learned_about_as_its_category() {
+    // Design v19 §3.5.5, §5.6: water tiles are perceived as the water
+    // category, and with no object type for them, that's what is learned
+    // about. With no verb table, a drink does nothing, but the sprite's
+    // genome rewards it by .5 every tick, and the tick after the drink that
+    // is credited to the water: .5 × worth_rate_good (.5).
+    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, text)| match path {
+            "objects.ron" => (
+                path,
+                r#"[(id: 5, name: "pebble", category: "toy", size: Small, hardness: 0.5)]"#,
+            ),
+            _ => (path, text),
+        })
+        .collect();
+    let data = DataPack::from_sources(&sources).expect("a valid test pack");
+    let water = at(2, 0);
+    let mut world = world_in(
+        data,
+        &["..~..", ".....", "....."],
+        &[],
+        at(1, 0),
+        r#"Emitter(locus: Locus("always"), mode: Level, gain: 0.5, chem: "reward"),"#,
+        &[ScriptedAction::Drink { at: water }, ScriptedAction::Rest],
+    );
+    world.step();
+    world.step();
+    let water_good = Learned::Worth {
+        thing: Thing::Category("water".into()),
+        need: None,
+    };
+    assert!(
+        close(value_of(&world, &water_good), 0.25),
+        "{:?}",
+        memory(&world)
+    );
+}
+
+#[test]
 fn a_hungry_sprite_beside_a_thornbush_it_knows_is_bad_notices_the_berry_bush_behind_it() {
     // Design v19 §3.6, §5.3: each category's candidate is the thing that
     // draws the eye most, its nearness, worth and newness, not just the
@@ -396,9 +438,11 @@ fn a_hungry_sprite_beside_a_thornbush_it_knows_is_bad_notices_the_berry_bush_beh
         &["......"; 3],
         &[(thornbush, "thornbush"), (bush, "berry_bush")],
         at(1, 1),
-        r#"InitialConcentration(chem: "hunger", value: 0.8),
-           Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
-           Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),"#,
+        &format!(
+            r#"{PRICKS_HURT}
+               InitialConcentration(chem: "hunger", value: 0.8),
+               Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),"#
+        ),
         &[ScriptedAction::Eat { at: thornbush }],
     );
     world.step();
@@ -418,9 +462,11 @@ fn attention_names_the_thing_it_scored_and_its_worth_names_it_too() {
         &["......"; 3],
         &[(thornbush, "thornbush")],
         at(1, 1),
-        r#"Instinct(inputs: [("always", false)], verb: Eat, weight: 1.0),
-           BrainParam(param: "tau_base", value: 0.05),
-           Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),"#,
+        &format!(
+            r#"{PRICKS_HURT}
+               Instinct(inputs: [("always", false)], verb: Eat, weight: 1.0),
+               BrainParam(param: "tau_base", value: 0.05),"#
+        ),
         &[ScriptedAction::Eat { at: thornbush }],
     );
     world.step();
@@ -516,7 +562,7 @@ fn a_sprite_that_keeps_biting_a_thornbush_learns_each_lesson_once() {
         &[".....", ".....", "....."],
         &[(thornbush, "thornbush")],
         at(1, 1),
-        r#"Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),"#,
+        PRICKS_HURT,
         &[
             ScriptedAction::Eat { at: thornbush },
             ScriptedAction::Eat { at: thornbush },

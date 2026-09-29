@@ -848,7 +848,7 @@ fn the_event_log_says_what_a_sprite_learned_in_plain_words() {
 }
 
 #[test]
-fn a_lesson_words_a_kind_of_thing_as_its_object_type_names_it() {
+fn a_lesson_words_an_object_type_as_it_names_itself() {
     // Design v17 §3.5.1: thornbushes renamed brambles, and balls with no
     // plural, as if they were a thing you don't count.
     let builtin = include_str!("../../../data/objects.ron");
@@ -1293,7 +1293,7 @@ fn bushes() -> DataPack {
 fn the_brain_tab_shows_what_the_sprite_thinks_of_a_category_once_it_counts() {
     // Design v19 §5.6, §6.1: a bite of a thornbush makes it −.8 bad, and a
     // bite of a berry bush with no fruit teaches nothing, but the sprite
-    // knows both kinds of bush now: bushes are the mean, −.4, at half
+    // knows both types of bush now: bushes are the mean, −.4, at half
     // strength, −.2. A category reads as its own plural.
     let (thornbush, bush) = (Pos { x: 3, y: 3 }, Pos { x: 1, y: 3 });
     let objects = [(thornbush, "thornbush"), (bush, "berry_bush")];
