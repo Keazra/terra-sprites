@@ -531,14 +531,20 @@ fn starter_genome(text: &str, data: &DataPack) -> Result<Genome, DataError> {
                 )));
             }
             (Expression::Unmatched, gene) => {
-                let category = match gene {
+                // What it names that's missing, if it was written by name.
+                let named = match gene {
                     Gene::Unmatched(Written::AttentionInstinct { category, .. }) => {
-                        format!("`{category}`")
+                        Some(category.as_str())
                     }
-                    _ => "one".into(),
+                    Gene::Unmatched(Written::Instinct { inputs, .. }) => inputs
+                        .iter()
+                        .map(|(name, _)| name.as_str())
+                        .find(|&name| data.brain_input_named(name).is_none()),
+                    _ => None,
                 };
+                let named = named.map(|name| format!(" (`{name}`)")).unwrap_or_default();
                 return Err(invalid(format!(
-                    "gene {number} names {category}, a category the pack doesn't have"
+                    "gene {number} names a category the pack doesn't have{named}"
                 )));
             }
             _ => {}

@@ -6,7 +6,8 @@ use std::fmt::Write as _;
 
 use serde::{Deserialize, Serialize};
 
-use crate::brain_io::InputId;
+use crate::brain_io::{InputId, TARGET_IDS};
+use crate::categories::ATTENDED;
 use crate::data::DataPack;
 use crate::registry::{BrainParam, CategoryId, ChemId, LocusId, Trait, Verb};
 
@@ -104,6 +105,13 @@ pub(crate) enum Written {
     AttentionInstinct {
         input: String,
         category: String,
+        weight: f32,
+    },
+    /// An instinct by name whose inputs include a missing category's
+    /// `attended_<category>`, with its names as written.
+    Instinct {
+        inputs: Vec<(String, bool)>,
+        verb: Verb,
         weight: f32,
     },
     /// Any gene by number, as an unknown gene is.
@@ -338,6 +346,18 @@ impl Gene {
             }) => GeneView::AttentionInstinct {
                 input,
                 category,
+                weight,
+            },
+            Gene::Unmatched(Written::Instinct {
+                ref inputs,
+                verb,
+                weight,
+            }) => GeneView::Instinct {
+                inputs: inputs
+                    .iter()
+                    .map(|(name, negated)| (name.as_str(), *negated))
+                    .collect(),
+                verb,
                 weight,
             },
         }
@@ -602,6 +622,20 @@ impl Gene {
             }) => format!(
                 "AttentionInstinct(input: {input:?}, category: {category:?}, weight: {weight:?})"
             ),
+            Gene::Unmatched(Written::Instinct {
+                ref inputs,
+                verb,
+                weight,
+            }) => {
+                let written: Vec<String> = inputs
+                    .iter()
+                    .map(|(name, negated)| format!("({name:?}, {negated})"))
+                    .collect();
+                format!(
+                    "Instinct(inputs: [{}], verb: {verb:?}, weight: {weight:?})",
+                    written.join(", ")
+                )
+            }
         }
     }
 }
@@ -788,14 +822,31 @@ impl GeneEntry {
                 inputs,
                 verb,
                 weight,
-            } => Gene::Instinct {
-                inputs: inputs
+            } => {
+                // An attended input the pack lacks is a missing category's
+                // (design v19 §5.7); any other unknown input is an error.
+                let missing = |name: &str| {
+                    data.brain_input_named(name).is_none() && name.starts_with(ATTENDED)
+                };
+                let ids = inputs
                     .iter()
+                    .filter(|(name, _)| !missing(name))
                     .map(|(name, negated)| Ok((input(name)?, *negated)))
-                    .collect::<Result<_, String>>()?,
-                verb,
-                weight,
-            },
+                    .collect::<Result<_, String>>()?;
+                if inputs.iter().any(|(name, _)| missing(name)) {
+                    Gene::Unmatched(Written::Instinct {
+                        inputs,
+                        verb,
+                        weight,
+                    })
+                } else {
+                    Gene::Instinct {
+                        inputs: ids,
+                        verb,
+                        weight,
+                    }
+                }
+            }
             GeneEntry::AttentionInstinct {
                 input: name,
                 category,
@@ -821,9 +872,21 @@ impl GeneEntry {
                 payload,
             } => {
                 let payload = hex(&payload)?;
+                // An attended input the pack lacks is a missing category's.
+                let missing =
+                    |id: InputId| data.brain_input(id).is_none() && TARGET_IDS.contains(&id.0);
                 match decode(type_id, version, payload.clone())? {
                     Gene::AttentionInstinct { category, .. }
                         if data.category(category).is_none() =>
+                    {
+                        Gene::Unmatched(Written::ByNumber {
+                            type_id,
+                            version,
+                            payload,
+                        })
+                    }
+                    Gene::Instinct { ref inputs, .. }
+                        if inputs.iter().any(|&(id, _)| missing(id)) =>
                     {
                         Gene::Unmatched(Written::ByNumber {
                             type_id,

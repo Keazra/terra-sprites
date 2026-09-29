@@ -85,11 +85,13 @@ const FIELD: [&str; 7] = [
 ];
 
 #[test]
-fn an_instinct_naming_a_category_the_world_lacks_is_unmatched_and_changes_nothing() {
-    // Design v19 §5.7: such a gene is kept, but has no effect.
+fn instincts_naming_a_category_the_world_lacks_are_unmatched_and_change_nothing() {
+    // Design v19 §5.7: such a gene is kept, but has no effect, whether it's
+    // an attention instinct or an instinct built on the category's input.
     let data = builtin();
     let hungry = r#"InitialConcentration(chem: "hunger", value: 0.9)"#;
-    let unmatched = r#"AttentionInstinct(input: "hunger", category: "tree", weight: 1.0)"#;
+    let attends = r#"AttentionInstinct(input: "hunger", category: "tree", weight: 1.0)"#;
+    let eats = r#"Instinct(inputs: [("hunger", false), ("attended_tree", false)], verb: Eat, weight: 1.0)"#;
     let run = |genes: &[&str]| {
         let genome = starter_with(genes, &data);
         let mut world = world(&FIELD, &[(at(8, 3), "berry_bush")], at(1, 3), genome, 7);
@@ -104,9 +106,12 @@ fn an_instinct_naming_a_category_the_world_lacks_is_unmatched_and_changes_nothin
         let events: Vec<Event> = (0..2_000).flat_map(|_| world.step()).collect();
         (marks, events)
     };
-    let (marks, events) = run(&[hungry, unmatched]);
+    let (marks, events) = run(&[hungry, attends, eats]);
     let (_, plain) = run(&[hungry]);
-    assert_eq!(marks.last(), Some(&Expression::Unmatched));
+    assert_eq!(
+        marks[marks.len() - 2..],
+        [Expression::Unmatched, Expression::Unmatched]
+    );
     assert_eq!(
         events, plain,
         "the sprite lives exactly as it would without it"

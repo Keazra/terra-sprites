@@ -63,6 +63,9 @@ pub(crate) fn categories(mut entries: Vec<Category>) -> Result<Vec<Category>, Da
     Ok(entries)
 }
 
+/// How the name of a category's brain input starts: `attended_bush`.
+pub(crate) const ATTENDED: &str = "attended_";
+
 /// The ID of the brain input that's 1 while attention is on the category
 /// `id` (design v19 §3.5.5): `35 + id` up to 6, then `37 + id`, past
 /// `target_distance` and `target_adjacent`.
