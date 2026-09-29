@@ -914,6 +914,7 @@ A **category** is what a sprite perceives a thing as. Attention chooses between 
 - **IDs are permanent and append-only;** a retired ID is never reused. Category 3, `thornbush`, is used until slice 9e moves thornbushes into bush (v19 change 3).
 - **`plural`** is how the screen says the category in general, as an object type's is (§3.5.1): "bushes are bad". It's left out for one you don't count, which then reads with "is": "fruit is good for hunger".
 - **Each object type names one category.** A name that isn't in the list is a load error, as are a duplicate ID or name. A category no object type names is allowed.
+- **`water` and `sprite` must be in the list.** Water tiles and sprites are physics, not objects, so no object type can say what they are: the engine perceives them as the categories with these two names, and a list without either is a load error. Their pseudo types' verb tables are found through them, as before (found while building slice 9d: test worlds that replace the object types have no pseudo types, and their sprites must still be perceived).
 - **Each category has a Target input,** `attended_<name>` (§5.2). Its ID follows from the category's: `35 + id` for IDs 1–6, and `37 + id` from 7, past `target_distance` and `target_adjacent`. So the list holds IDs up to 26.
 - **Mods choose from this list and never add to it** (§1.4). The core game adds categories in its own updates; a world keeps the copy of the pack it was made with (§2.8), so a new category never changes an existing world.
 
