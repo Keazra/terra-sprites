@@ -9,6 +9,7 @@ use xxhash_rust::xxh3::xxh3_64_with_seed;
 use crate::action::{self, ActionView, ScriptedAction};
 use crate::biochem::{self, Senses, Traits};
 use crate::brain::{Explanation, Memory};
+use crate::command::{self, Command};
 use crate::config::WorldConfig;
 use crate::data::DataPack;
 use crate::ecology::{self, holds_without_drawing, new_object, square};
@@ -54,6 +55,8 @@ pub(crate) struct WorldState {
     /// Whether sprites learn at step 4; a lab scenario's control run
     /// switches it off (design §5.6, §7.1).
     pub(crate) learning: bool,
+    /// The commands submitted for the next tick, in order (design §2.5).
+    pub(crate) commands: Vec<Command>,
 }
 
 impl WorldState {
@@ -554,6 +557,7 @@ impl World {
                 sprites,
                 deaths: BTreeMap::new(),
                 learning: true,
+                commands: Vec::new(),
             },
             data,
             checked_next_id: Cell::new(1),
@@ -569,7 +573,7 @@ impl World {
     pub fn step(&mut self) -> Vec<Event> {
         let mut events = Vec::new();
         self.remember_levels();
-        self.apply_commands(); // 1
+        self.apply_commands(&mut events); // 1
         self.run_environment(&mut events); // 2
         let dying = self.run_biochemistry(); // 3
         self.run_learning(&dying, &mut events); // 4
@@ -582,6 +586,12 @@ impl World {
             panic!("a broken invariant at the end of tick {tick}: {broken}");
         }
         events
+    }
+
+    /// Submits `command`, stamped for the next tick: it's applied at that
+    /// tick's step 1, after any submitted before it (design §2.5).
+    pub fn submit(&mut self, command: Command) {
+        self.state.commands.push(command);
     }
 
     /// The world's map.
@@ -679,7 +689,9 @@ impl World {
     }
 
     /// Step 1: apply the commands stamped for this tick.
-    fn apply_commands(&mut self) {}
+    fn apply_commands(&mut self, events: &mut Vec<Event>) {
+        command::apply(&mut self.state, &self.data, events);
+    }
 
     /// Step 2: objects run their lifecycle rules, then rolling items roll.
     fn run_environment(&mut self, events: &mut Vec<Event>) {

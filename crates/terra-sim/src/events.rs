@@ -48,6 +48,9 @@ pub enum EventKind {
         learned: Learned,
         good: bool,
     },
+    /// The Cursor rewarded a sprite (design v21 §4.6): a pet, or amplified,
+    /// a hug.
+    Rewarded { id: EntityId, amplified: bool },
     /// An object left the world.
     ObjectRemoved {
         id: EntityId,

@@ -236,7 +236,8 @@ impl App {
             let logged = match event.kind {
                 EventKind::ObjectSpawned { .. }
                 | EventKind::ObjectRemoved { .. }
-                | EventKind::ActionStarted { .. } => false,
+                | EventKind::ActionStarted { .. }
+                | EventKind::Rewarded { .. } => false,
                 EventKind::LearnedMilestone { .. } => true,
                 EventKind::ActionEnded { id, ref action, .. } => {
                     inspector::logged_line(id, action, world.data()).is_some()
