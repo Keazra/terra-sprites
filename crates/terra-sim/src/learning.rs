@@ -61,22 +61,78 @@ impl Links {
     }
 }
 
+/// What a sprite learns about a thing as (design v19 §5.6): its object type,
+/// by its stable ID, or its category, for water or sprites in a pack with no
+/// object type for them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub(crate) enum Subject {
+    ObjectType(u16),
+    Category(CategoryId),
+}
+
+impl Subject {
+    /// What a thing of `category`, and of the object type with the stable ID
+    /// `object_type` if it has one, is learned about as.
+    pub(crate) fn of(category: CategoryId, object_type: Option<u16>) -> Subject {
+        object_type.map_or(Subject::Category(category), Subject::ObjectType)
+    }
+
+    /// The category it's in.
+    pub(crate) fn category(self, data: &DataPack) -> CategoryId {
+        match self {
+            Subject::ObjectType(id) => {
+                data.object_type(id)
+                    .expect("an object type in the pack")
+                    .category
+            }
+            Subject::Category(category) => category,
+        }
+    }
+}
+
+/// What a sprite has learned about one object type (design v19 §5.6): its
+/// worth for each need and in general, how bad it is, its habits, how
+/// familiar it is, and whether it knows it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub(crate) struct TypeMemory {
+    /// Worth for each need, in the pack's needs order (0 to 1).
+    pub(crate) worth: Vec<f32>,
+    /// General good, from `reward` (0 to 1).
+    pub(crate) good: f32,
+    /// Bad, from `punishment` (−1 to 0).
+    pub(crate) bad: f32,
+    /// Habits: doing each verb to it, in `VERBS` order.
+    pub(crate) habits: [f32; VERBS.len()],
+    /// How familiar it is, from attending to it (0 to 1).
+    pub(crate) familiarity: f32,
+    /// Whether it has touched one, and so knows it: until then, it's
+    /// judged by its category's summary.
+    pub(crate) touched: bool,
+}
+
+impl TypeMemory {
+    /// An object type newly learned about, for `needs` needs: nothing yet.
+    pub(crate) fn new(needs: usize) -> TypeMemory {
+        TypeMemory {
+            worth: vec![0.0; needs],
+            good: 0.0,
+            bad: 0.0,
+            habits: [0.0; VERBS.len()],
+            familiarity: 0.0,
+            touched: false,
+        }
+    }
+}
+
 /// What a brain has learned (design §5.6), all starting at 0: what each
-/// category is worth for each need and in general, and how bad it is; its
-/// habits; how familiar each category is; and the worth of new things. Each
-/// is kept per category in the pack's order.
+/// object type is worth for each need and in general, how bad it is, its
+/// habits and how familiar it is; the sprites it remembers; and the worth of
+/// new things.
 #[derive(Debug, Clone, Default, Serialize)]
 pub(crate) struct Experience {
-    /// Worth for each need, in the pack's needs order, by category (0 to 1).
-    pub(crate) worth: Vec<Vec<f32>>,
-    /// General good, from `reward`, by category (0 to 1).
-    pub(crate) good: Vec<f32>,
-    /// Bad, from `punishment`, by category (−1 to 0).
-    pub(crate) bad: Vec<f32>,
-    /// Habits: doing each verb, in `VERBS` order, to each category.
-    pub(crate) habits: Vec<[f32; VERBS.len()]>,
-    /// How familiar each category is (0 to 1).
-    pub(crate) familiarity: Vec<f32>,
+    /// What it has learned about each object type (design v19 §5.6). Object
+    /// types are never forgotten.
+    pub(crate) types: BTreeMap<Subject, TypeMemory>,
     /// The worth of new things.
     pub(crate) new_things: f32,
     /// The sprites it remembers (design v18 §5.6), by ID.
@@ -88,33 +144,17 @@ pub(crate) struct Experience {
 }
 
 impl Experience {
-    /// A newborn's: nothing learned, for `needs` needs and `categories`
-    /// categories.
-    pub(crate) fn new(needs: usize, categories: usize) -> Experience {
-        Experience {
-            worth: vec![vec![0.0; categories]; needs],
-            good: vec![0.0; categories],
-            bad: vec![0.0; categories],
-            habits: vec![[0.0; VERBS.len()]; categories],
-            familiarity: vec![0.0; categories],
-            new_things: 0.0,
-            individuals: BTreeMap::new(),
-            taught: BTreeSet::new(),
-            needs_before: None,
-        }
-    }
-}
-
-impl Experience {
     /// Checks every learned value is a number within its range (design
     /// §5.6): worth, good and familiarity 0 to 1, bad −1 to 0, habits and
     /// the worth of new things −1 to 1. Says which isn't.
     pub(crate) fn check(&self) -> Result<(), String> {
-        within(self.worth.iter().flatten(), (0.0, 1.0), "a worth")?;
-        within(&self.good, (0.0, 1.0), "a good")?;
-        within(&self.bad, (-1.0, 0.0), "a bad")?;
-        within(self.habits.iter().flatten(), (-1.0, 1.0), "a habit")?;
-        within(&self.familiarity, (0.0, 1.0), "a familiarity")?;
+        for known in self.types.values() {
+            within(&known.worth, (0.0, 1.0), "a worth")?;
+            within([&known.good], (0.0, 1.0), "a good")?;
+            within([&known.bad], (-1.0, 0.0), "a bad")?;
+            within(&known.habits, (-1.0, 1.0), "a habit")?;
+            within([&known.familiarity], (0.0, 1.0), "a familiarity")?;
+        }
         within([&self.new_things], (-1.0, 1.0), "the worth of new things")?;
         for individual in self.individuals.values() {
             within(&individual.worth, (0.0, 1.0), "a sprite's worth")?;
@@ -127,6 +167,14 @@ impl Experience {
 }
 
 impl Experience {
+    /// What it has learned about `subject`, starting afresh, for `needs`
+    /// needs, if it has learned nothing yet (design v19 §5.6).
+    pub(crate) fn learn_about(&mut self, subject: Subject, needs: usize) -> &mut TypeMemory {
+        self.types
+            .entry(subject)
+            .or_insert_with(|| TypeMemory::new(needs))
+    }
+
     /// What it remembers of `sprite`, remembering it afresh, for `needs`
     /// needs, if it doesn't yet (design v18 §5.6).
     pub(crate) fn remember(&mut self, sprite: EntityId, needs: usize) -> &mut SpriteMemory {
@@ -198,10 +246,11 @@ fn within<'a>(
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub(crate) struct Touch {
     pub(crate) tick: u64,
-    pub(crate) category: CategoryId,
+    /// What it's learned about as (design v19 §5.6).
+    pub(crate) subject: Subject,
     /// Which sprite, if it was one (design v18 §5.6).
     pub(crate) sprite: Option<EntityId>,
-    /// How new the category was to the sprite then (design §5.6).
+    /// How new its object type was to the sprite then (design v19 §5.6).
     pub(crate) novelty: f32,
 }
 
@@ -248,8 +297,9 @@ pub(crate) struct TraceEntry {
     pub(crate) tick: u64,
     /// The verb it chose or kept doing, if any.
     pub(crate) verb: Option<Verb>,
-    /// The category attention was on, if any.
-    pub(crate) attended: Option<CategoryId>,
+    /// What the thing attention was on, if any, is learned about as (design
+    /// v19 §5.6).
+    pub(crate) subject: Option<Subject>,
     /// The verb's motive (design §5.5): the need, by its place in the pack's
     /// needs, whose instinct did most to choose it.
     pub(crate) motive: Option<usize>,

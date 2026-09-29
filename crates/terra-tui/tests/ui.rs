@@ -6,7 +6,7 @@ use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
     ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Learned, Map, Outcome, Pos,
-    Progress, Removal, Scenario, ScriptedAction, Target, Verb, World, WorldConfig,
+    Progress, Removal, Scenario, ScriptedAction, Target, Thing, Verb, World, WorldConfig,
 };
 use terra_tui::app::{App, Tab};
 use terra_tui::input::Action;
@@ -848,7 +848,7 @@ fn the_event_log_says_what_a_sprite_learned_in_plain_words() {
 }
 
 #[test]
-fn a_lesson_words_a_kind_of_thing_as_its_object_type_names_it() {
+fn a_lesson_words_an_object_type_as_it_names_itself() {
     // Design v17 §3.5.1: thornbushes renamed brambles, and balls with no
     // plural, as if they were a thing you don't count.
     let builtin = include_str!("../../../data/objects.ron");
@@ -1019,7 +1019,17 @@ fn one_sprite_among(
     scripted: &[ScriptedAction],
     ticks: u32,
 ) -> (World, App) {
-    let pack = pack();
+    one_sprite_in(pack(), genome, objects, scripted, ticks)
+}
+
+/// `one_sprite_among`, in `pack`.
+fn one_sprite_in(
+    pack: DataPack,
+    genome: &str,
+    objects: &[(Pos, &str)],
+    scripted: &[ScriptedAction],
+    ticks: u32,
+) -> (World, App) {
     let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
     let genome = terra_sim::Genome::from_ron(genome, &pack).expect("a valid genome");
     let start = Pos { x: 2, y: 3 };
@@ -1267,6 +1277,67 @@ fn the_brain_tab_shows_memory_before_the_first_decision() {
             "",
             "MEMORY",
             "thornbushes are bad                 -.80",
+        ]
+    );
+}
+
+/// The built-in pack with thornbushes in the bush category (design v19
+/// §3.5.5).
+fn bushes() -> DataPack {
+    let builtin = include_str!("../../../data/objects.ron");
+    let objects = builtin.replace(r#"category: "thornbush""#, r#"category: "bush""#);
+    DataPack::from_sources(&builtin_with("objects.ron", &objects)).expect("valid pack")
+}
+
+#[test]
+fn the_brain_tab_shows_what_the_sprite_thinks_of_a_category_once_it_counts() {
+    // Design v19 §5.6, §6.1: a bite of a thornbush makes it −.8 bad, and a
+    // bite of a berry bush with no fruit teaches nothing, but the sprite
+    // knows both types of bush now: bushes are the mean, −.4, at half
+    // strength, −.2. A category reads as its own plural.
+    let (thornbush, bush) = (Pos { x: 3, y: 3 }, Pos { x: 1, y: 3 });
+    let objects = [(thornbush, "thornbush"), (bush, "berry_bush")];
+    let scripted = [
+        ScriptedAction::Eat { at: thornbush },
+        ScriptedAction::Eat { at: bush },
+        ScriptedAction::Rest,
+    ];
+    let genome = r#"(format: 1, genes: [
+        Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),
+    ])"#;
+    let (world, mut app) = one_sprite_in(bushes(), genome, &objects, &scripted, 3);
+    open(&mut app, &world, Tab::Brain);
+    let (_, text) = inspector(&app, &world);
+    assert!(
+        text.contains(&"bushes are bad                      -.20".to_string()),
+        "{text:?}"
+    );
+}
+
+#[test]
+fn a_lesson_about_a_category_words_it_as_the_category_names_itself() {
+    // Design v19 §3.5.5, §6.1: bushes are counted; fruit isn't, so it
+    // keeps its name and takes "is".
+    let world = garden(pack());
+    let bushes_bad = Learned::Bad {
+        thing: Thing::Category("bush".into()),
+    };
+    let fruit_for_hunger = Learned::Worth {
+        thing: Thing::Category("fruit".into()),
+        need: Some("hunger".into()),
+    };
+    let log = logged_lessons(
+        &world,
+        vec![
+            (30, 12, bushes_bad, false),
+            (31, 12, fruit_for_hunger, true),
+        ],
+    );
+    assert_eq!(
+        log,
+        [
+            "31  Sprite #12 learned: fruit is good for hunger",
+            "30  Sprite #12 learned: bushes are bad",
         ]
     );
 }
@@ -2076,7 +2147,7 @@ fn the_event_log_says_when_sprites_in_general_turn_frightening() {
             40,
             3,
             Learned::Fear {
-                thing: "sprite".into(),
+                thing: Thing::Category("sprite".into()),
             },
             false,
         )],

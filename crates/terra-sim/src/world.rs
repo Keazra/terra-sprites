@@ -16,12 +16,12 @@ use crate::events::{DeathCause, Event, EventKind};
 use crate::expression::{Expression, expressions};
 use crate::generate::{generate, place_objects, place_sprites};
 use crate::genome::{GeneView, Genome};
-use crate::learning;
+use crate::learning::{self, Subject};
 use crate::map::{Map, MapError, Pos};
 use crate::objects::{EntityId, Object, Objects};
 use crate::perception::{Flood, Target, goal_tiles};
 use crate::regions::Regions;
-use crate::registry::ChemicalKind;
+use crate::registry::{CategoryId, ChemicalKind};
 use crate::rolling;
 use crate::sprites::{Sprite, Sprites};
 use crate::variation::varied;
@@ -161,6 +161,21 @@ impl WorldState {
     pub(crate) fn type_of(&self, data: &DataPack, target: Target) -> Option<u16> {
         self.kind_of(data, target)
             .map(|kind| data.object_types()[kind].id)
+    }
+
+    /// The category `target` is perceived as (design v19 §3.5.5).
+    pub(crate) fn category_of(&self, data: &DataPack, target: Target) -> CategoryId {
+        match target {
+            Target::Object(id) => data.object_types()[self.objects.kind(id)].category,
+            Target::Water(_) => data.water_category(),
+            Target::Sprite(_) => data.sprite_category(),
+        }
+    }
+
+    /// What a sprite learns about `target` as (design v19 §5.6): its object
+    /// type, or its category if it has none.
+    pub(crate) fn subject_of(&self, data: &DataPack, target: Target) -> Subject {
+        Subject::of(self.category_of(data, target), self.type_of(data, target))
     }
 
     /// Whether `pos` is a goal tile of `target` (design §3.6): beside it, or
@@ -784,7 +799,7 @@ mod tests {
     use super::*;
     use crate::action::Outcome;
     use crate::brain::Brain;
-    use crate::learning::{Signals, Touch, TraceEntry};
+    use crate::learning::{Signals, Touch, TraceEntry, TypeMemory};
     use crate::map::Dir;
     use crate::objects::Roll;
     use crate::registry::Verb;
@@ -1274,7 +1289,7 @@ mod tests {
         TraceEntry {
             tick,
             verb: Some(Verb::Eat),
-            attended: None,
+            subject: None,
             motive: None,
         }
     }
@@ -1313,7 +1328,7 @@ mod tests {
         let sprite = world.state.sprites.get_mut(first).expect("a sprite");
         sprite.brain.touched = Some(Touch {
             tick: 0,
-            category: bush,
+            subject: Subject::Category(bush),
             sprite: None,
             novelty: 1.0,
         });
@@ -1337,9 +1352,10 @@ mod tests {
         let traced = world.state_hash();
         assert_ne!(traced, before, "the trace is hashed");
         let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
+        let bush = data.category_named("bush").expect("a category");
         brain.touched = Some(Touch {
             tick: 0,
-            category: data.category_named("bush").expect("a category"),
+            subject: Subject::Category(bush),
             sprite: None,
             novelty: 1.0,
         });
@@ -1375,12 +1391,15 @@ mod tests {
     #[test]
     fn a_learned_value_out_of_its_range_or_not_a_number_breaks_an_invariant() {
         // Design v16 §5.6: worth and good 0 to 1, bad −1 to 0, the rest −1 to 1.
+        fn known(brain: &mut Brain) -> &mut TypeMemory {
+            brain.experience.learn_about(Subject::ObjectType(1), 1)
+        }
         let breaks: [fn(&mut Brain); 5] = [
-            |brain| brain.experience.worth[0][0] = -0.1,
-            |brain| brain.experience.good[0] = 1.5,
-            |brain| brain.experience.bad[0] = 0.2,
-            |brain| brain.experience.habits[0][0] = f32::NAN,
-            |brain| brain.experience.familiarity[0] = 2.0,
+            |brain| known(brain).worth[0] = -0.1,
+            |brain| known(brain).good = 1.5,
+            |brain| known(brain).bad = 0.2,
+            |brain| known(brain).habits[0] = f32::NAN,
+            |brain| known(brain).familiarity = 2.0,
         ];
         for (i, broken) in breaks.into_iter().enumerate() {
             let (mut world, first, _) = field_with_sprites();

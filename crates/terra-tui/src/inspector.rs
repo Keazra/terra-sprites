@@ -633,7 +633,7 @@ fn explained_lines(explained: &Explanation) -> Vec<String> {
             Part::Fear(thing) => format!("fear: {}", thing_name(thing)),
             Part::Habit(thing) => {
                 let verb = explained.decision.map_or("", |(verb, _)| verb_name(verb));
-                format!("habit: {} {}", verb.to_lowercase(), display_name(thing))
+                format!("habit: {} {}", verb.to_lowercase(), thing_name(thing))
             }
         };
         lines.extend(scored("   ", &name, &amount));
@@ -680,33 +680,35 @@ fn learned_name(learned: &Learned, data: &DataPack) -> String {
             let (things, be) = things(thing, data);
             format!("{things} {be} frightening")
         }
-        Learned::Habit { thing, verb } => {
-            let kind = Thing::from(thing.as_str());
-            format!("{} {}", doing(*verb), things(&kind, data).0)
-        }
+        Learned::Habit { thing, verb } => format!("{} {}", doing(*verb), things(thing, data).0),
         Learned::NewThings => "new things".into(),
     }
 }
 
-/// A thing as the Brain tab names it (design v18 §6.1): a kind by its
-/// display name, `berry bush`, a sprite as the log names it, `Sprite #7`.
+/// A thing as the Brain tab names it (design v19 §6.1): an object type or
+/// a category by its display name, `berry bush`, a sprite as the log names
+/// it, `Sprite #7`.
 fn thing_name(thing: &Thing) -> String {
     match thing {
-        Thing::Kind(kind) => display_name(kind),
+        Thing::ObjectType(name) | Thing::Category(name) => display_name(name),
         Thing::Sprite(id) => sprite_label(*id),
     }
 }
 
-/// A thing with the verb "to be" to go with it: a kind in general, as its
-/// object type names it (design §3.5.1), `thornbushes are`, `water is`, or
-/// a particular sprite, `Sprite #7 is` (design v18 §6.1). A kind with no
-/// plural isn't counted, so it keeps its name and takes "is".
+/// A thing with the verb "to be" to go with it: an object type in general,
+/// as it names itself (design §3.5.1), `thornbushes are`, `water is`; a
+/// category's summary, as the category names itself (design v19 §6.1),
+/// `bushes are`, `fruit is`; or a particular sprite, `Sprite #7 is` (design
+/// v18 §6.1). One with no plural isn't counted, so it keeps its name and
+/// takes "is".
 fn things(thing: &Thing, data: &DataPack) -> (String, &'static str) {
+    let counted = |name: &str, plural: Option<&str>| match plural {
+        Some(plural) => (plural.to_string(), "are"),
+        None => (display_name(name), "is"),
+    };
     match thing {
-        Thing::Kind(kind) => match data.plural_of(kind) {
-            Some(plural) => (plural.to_string(), "are"),
-            None => (display_name(kind), "is"),
-        },
+        Thing::ObjectType(name) => counted(name, data.plural_of(name)),
+        Thing::Category(name) => counted(name, data.category_plural(name)),
         Thing::Sprite(id) => (sprite_label(*id), "is"),
     }
 }
