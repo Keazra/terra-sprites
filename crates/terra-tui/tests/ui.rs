@@ -1281,14 +1281,6 @@ fn the_brain_tab_shows_memory_before_the_first_decision() {
     );
 }
 
-/// The built-in pack with thornbushes in the bush category (design v19
-/// §3.5.5).
-fn bushes() -> DataPack {
-    let builtin = include_str!("../../../data/objects.ron");
-    let objects = builtin.replace(r#"category: "thornbush""#, r#"category: "bush""#);
-    DataPack::from_sources(&builtin_with("objects.ron", &objects)).expect("valid pack")
-}
-
 #[test]
 fn the_brain_tab_shows_what_the_sprite_thinks_of_a_category_once_it_counts() {
     // Design v19 §5.6, §6.1: a bite of a thornbush makes it −.8 bad, and a
@@ -1305,7 +1297,7 @@ fn the_brain_tab_shows_what_the_sprite_thinks_of_a_category_once_it_counts() {
     let genome = r#"(format: 1, genes: [
         Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),
     ])"#;
-    let (world, mut app) = one_sprite_in(bushes(), genome, &objects, &scripted, 3);
+    let (world, mut app) = one_sprite_among(genome, &objects, &scripted, 3);
     open(&mut app, &world, Tab::Brain);
     let (_, text) = inspector(&app, &world);
     assert!(
@@ -1401,14 +1393,14 @@ fn the_chem_tab_lists_every_chemical_with_its_level_and_change_per_tick() {
     );
 }
 
-/// A hungry sprite drawn to a thornbush and to eating it, even more so
-/// beside it, whose every prick punishes it by 1.
+/// A hungry sprite drawn to bushes and to eating them, even more so
+/// beside one, whose every prick punishes it by 1.
 const THORN_GENOME: &str = r#"(format: 1, genes: [
     InitialConcentration(chem: "hunger", value: 1.0),
     Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),
     BrainParam(param: "tau_base", value: 0.05),
     BrainParam(param: "tau_att_base", value: 0.05),
-    AttentionInstinct(input: "hunger", category: "thornbush", weight: 1.0),
+    AttentionInstinct(input: "hunger", category: "bush", weight: 1.0),
     Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
     Instinct(inputs: [("hunger", false), ("target_adjacent", false)], verb: Eat, weight: 1.0),
 ])"#;

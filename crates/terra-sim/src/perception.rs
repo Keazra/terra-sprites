@@ -488,10 +488,7 @@ mod tests {
             &[(at(5, 0), "thornbush")],
             &[at(0, 0), at(3, 0)],
         );
-        assert_eq!(
-            found["thornbush"],
-            [(Target::Object(EntityId(101)), 40 + 30)]
-        );
+        assert_eq!(found["bush"], [(Target::Object(EntityId(101)), 40 + 30)]);
         assert_eq!(found["sprite"], [(Target::Sprite(EntityId(2)), 20)]);
     }
 

@@ -66,7 +66,7 @@
      }),
 
     (id: 3, name: "thornbush", plural: "thornbushes",
-     category: "thornbush", tags: [Solid, Fixture], size: Large, hardness: 1.0,
+     category: "bush", tags: [Solid, Fixture], size: Large, hardness: 1.0,
      stages: [(name: "grown", ticks: (40000, 60000), next: Expire)],
      rules: [
          (trigger: Every(2000), if: [Chance(0.1)],
