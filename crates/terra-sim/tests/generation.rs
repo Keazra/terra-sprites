@@ -206,7 +206,7 @@ fn generated_objects_expire_spread_out_not_all_at_once() {
 
 #[test]
 fn a_generated_object_gets_no_on_stage_enter_for_the_stage_it_starts_in() {
-    let herb = r#"(id: 1, name: "herb", category: BerryBush, size: Small, hardness: 0.5, counters: {"entered": 9},
+    let herb = r#"(id: 1, name: "herb", category: "bush", size: Small, hardness: 0.5, counters: {"entered": 9},
         stages: [(name: "a", ticks: (50, 50), next: Stage("b")),
                  (name: "b", ticks: (50, 50), next: Expire)],
         rules: [(trigger: OnStageEnter("a"), do: [AddCounter("entered", 1)]),

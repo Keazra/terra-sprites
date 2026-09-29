@@ -6,8 +6,11 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
+use crate::categories::Category;
 use crate::data::{DataError, check_unique};
-use crate::registry::{Category, ChemId, Chemical, ChemicalClass, Locus, LocusId, LocusKind, Verb};
+use crate::registry::{
+    CategoryId, ChemId, Chemical, ChemicalClass, Locus, LocusId, LocusKind, Verb,
+};
 
 /// The object types file, relative to the pack root.
 pub(crate) const OBJECTS: &str = "objects.ron";
@@ -22,7 +25,7 @@ pub(crate) struct ObjectType {
     /// for a thing you don't count, such as water (design §3.5.1). The sim
     /// never reads it.
     pub(crate) plural: Option<String>,
-    pub(crate) category: Category,
+    pub(crate) category: CategoryId,
     /// Nothing can move through it. In M1 every solid object is also a fixture,
     /// and every other object is an item (design §3.5.1).
     pub(crate) solid: bool,
@@ -149,6 +152,7 @@ pub(crate) enum Party {
 /// Parses and validates `objects.ron`, returning the types in ascending ID order.
 pub(crate) fn object_types(
     text_entries: Vec<TypeEntry>,
+    categories: &[Category],
     chemicals: &[Chemical],
     loci: &[Locus],
 ) -> Result<Vec<ObjectType>, DataError> {
@@ -164,6 +168,7 @@ pub(crate) fn object_types(
             .enumerate()
             .map(|(index, t)| (t.name.clone(), (index, t.pseudo)))
             .collect(),
+        categories,
         chemicals,
         loci,
     };
@@ -183,11 +188,21 @@ pub(crate) fn object_types(
 struct Names<'a> {
     /// Object type name → (index in the sorted list, whether it's a pseudo type).
     types: BTreeMap<String, (usize, bool)>,
+    categories: &'a [Category],
     chemicals: &'a [Chemical],
     loci: &'a [Locus],
 }
 
 impl Names<'_> {
+    /// The category called `name`.
+    fn category(&self, name: &str) -> Result<CategoryId, String> {
+        self.categories
+            .iter()
+            .find(|c| c.name == name)
+            .map(|c| c.id)
+            .ok_or_else(|| format!("names the unknown category `{name}`"))
+    }
+
     /// The index of the object type called `name`, which must be a real (not pseudo) type.
     fn real_type(&self, name: &str) -> Result<usize, String> {
         match self.types.get(name) {
@@ -215,7 +230,7 @@ pub(crate) struct TypeEntry {
     id: u16,
     name: String,
     plural: Option<String>,
-    category: Category,
+    category: String,
     #[serde(default)]
     tags: Vec<Tag>,
     #[serde(default)]
@@ -313,6 +328,7 @@ impl TypeEntry {
             }
             plural => plural.map(str::to_string),
         };
+        let category = names.category(&self.category)?;
         let solid = self.tags.contains(&Tag::Solid);
         let fixture = self.tags.contains(&Tag::Fixture);
         match (solid, fixture) {
@@ -444,7 +460,7 @@ impl TypeEntry {
             id: self.id,
             name: self.name,
             plural,
-            category: self.category,
+            category,
             solid,
             pseudo: self.pseudo,
             build,

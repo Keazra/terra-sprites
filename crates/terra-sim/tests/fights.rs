@@ -41,7 +41,7 @@ fn watcher(data: &DataPack) -> Genome {
         Trait(trait: "speed", value: 10.0),
         Trait(trait: "sense_radius", value: 10.0),
         BrainParam(param: "tau_base", value: 0.05),
-        AttentionInstinct(input: "always", category: Sprite, weight: 1.0),
+        AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
         Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),
     ])"#;
     Genome::from_ron(text, data).expect("a valid genome")
@@ -293,7 +293,7 @@ fn fearful_watcher(data: &DataPack) -> Genome {
         Trait(trait: "speed", value: 10.0),
         Trait(trait: "sense_radius", value: 10.0),
         BrainParam(param: "tau_base", value: 0.05),
-        AttentionInstinct(input: "always", category: Sprite, weight: 1.0),
+        AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
         Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),
         Emitter(locus: Locus("was_hit"), mode: Level, gain: 1.0, chem: "punishment"),
     ])"#;
@@ -340,7 +340,7 @@ fn skittish(data: &DataPack) -> Genome {
         Trait(trait: "speed", value: 10.0),
         Trait(trait: "sense_radius", value: 10.0),
         BrainParam(param: "tau_base", value: 0.05),
-        AttentionInstinct(input: "always", category: Sprite, weight: 1.0),
+        AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
         Instinct(inputs: [("always", false)], verb: Rest, weight: 0.3),
         Emitter(locus: Locus("was_hit"), mode: Level, gain: 1.0, chem: "punishment"),
     ])"#;

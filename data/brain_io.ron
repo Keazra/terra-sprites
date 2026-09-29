@@ -5,9 +5,10 @@
 // Not brain inputs: physical chemicals (the brain feels the body only through
 // drives), reward and punishment (learning signals), the `moving` and
 // `resting` sensors (as inputs they'd loop an action back into itself) and
-// receptor targets. The Target inputs are fixed in code, and IDs 36 to 63
-// are kept for them (36 to 43 so far: attended_berry_bush … attended_sprite,
-// target_distance, target_adjacent), so State inputs carry on from 64.
+// receptor targets. The Target inputs are one for each category in
+// categories.ron, attended_<category>, then target_distance (42) and
+// target_adjacent (43), and IDs 36 to 63 are kept for them, so State inputs
+// carry on from 64.
 (
 inputs: [
     (id: 1,  name: "hunger",        reads: Chem("hunger")),

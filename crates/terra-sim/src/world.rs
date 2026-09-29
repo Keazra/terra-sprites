@@ -21,7 +21,7 @@ use crate::map::{Map, MapError, Pos};
 use crate::objects::{EntityId, Object, Objects};
 use crate::perception::{Flood, Target, goal_tiles};
 use crate::regions::Regions;
-use crate::registry::{Category, ChemicalKind};
+use crate::registry::ChemicalKind;
 use crate::rolling;
 use crate::sprites::{Sprite, Sprites};
 use crate::variation::varied;
@@ -152,8 +152,8 @@ impl WorldState {
     pub(crate) fn kind_of(&self, data: &DataPack, target: Target) -> Option<usize> {
         match target {
             Target::Object(id) => self.objects.get(id).map(|o| o.kind),
-            Target::Water(_) => data.pseudo_type(Category::Water),
-            Target::Sprite(_) => data.pseudo_type(Category::Sprite),
+            Target::Water(_) => data.pseudo_type(data.water_category()),
+            Target::Sprite(_) => data.pseudo_type(data.sprite_category()),
         }
     }
 
@@ -718,7 +718,7 @@ impl World {
     /// Step 6: movement and verb effects, then trace entries.
     fn resolve_actions(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
         action::resolve(&mut self.state, &self.data, dying, events);
-        learning::commit(&mut self.state);
+        learning::commit(&mut self.state, &self.data);
     }
 
     /// Step 7: death check #2 marks the sprites step 6's verbs injured to 1;
@@ -787,7 +787,7 @@ mod tests {
     use crate::learning::{Signals, Touch, TraceEntry};
     use crate::map::Dir;
     use crate::objects::Roll;
-    use crate::registry::{Category, Verb};
+    use crate::registry::Verb;
 
     /// A 7×5 field of grass, with a pool of shallow water at (5, 3), and a
     /// berry bush at (2, 2), before any step.
@@ -1309,10 +1309,11 @@ mod tests {
         let (mut world, first, _) = field_with_sprites();
         world.state.learning = false;
         let indices = world.data.physiology().indices;
+        let bush = world.data.category_named("bush").expect("a category");
         let sprite = world.state.sprites.get_mut(first).expect("a sprite");
         sprite.brain.touched = Some(Touch {
             tick: 0,
-            category: Category::BerryBush,
+            category: bush,
             sprite: None,
             novelty: 1.0,
         });
@@ -1338,7 +1339,7 @@ mod tests {
         let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
         brain.touched = Some(Touch {
             tick: 0,
-            category: Category::BerryBush,
+            category: data.category_named("bush").expect("a category"),
             sprite: None,
             novelty: 1.0,
         });

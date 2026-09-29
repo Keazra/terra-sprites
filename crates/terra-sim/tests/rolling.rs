@@ -503,10 +503,10 @@ fn a_ball_crushes_a_berry_in_its_way_and_rolls_on() {
 }
 
 /// An item smaller than a ball, and harder.
-const PEBBLE: &str = r#"(id: 5, name: "pebble", category: Berry, size: Small, hardness: 0.9)"#;
+const PEBBLE: &str = r#"(id: 5, name: "pebble", category: "fruit", size: Small, hardness: 0.9)"#;
 
 /// An item as big as a sprite, which nothing fixes to the ground.
-const CRATE: &str = r#"(id: 6, name: "crate", category: Ball, size: Large, hardness: 0.5)"#;
+const CRATE: &str = r#"(id: 6, name: "crate", category: "toy", size: Large, hardness: 0.5)"#;
 
 #[test]
 fn a_ball_knocks_on_a_smaller_harder_item_rather_than_crushing_it() {
@@ -613,7 +613,7 @@ fn a_ball_beside_a_diagonal_is_not_a_wall_for_a_ball_glancing_off() {
 }
 
 /// A small, soft item that rolls when played with.
-const PIP: &str = r#"(id: 5, name: "pip", category: Berry, size: Small, hardness: 0.1,
+const PIP: &str = r#"(id: 5, name: "pip", category: "fruit", size: Small, hardness: 0.1,
     verbs: { Play: [Push(4)] })"#;
 
 #[test]
