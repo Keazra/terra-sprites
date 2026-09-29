@@ -181,6 +181,20 @@ fn an_attention_instinct_naming_a_category_the_world_lacks_is_kept_as_written() 
 }
 
 #[test]
+fn an_instinct_built_on_a_missing_category_s_input_is_kept_as_written() {
+    // attended_tree names a category too, so the instinct is unmatched
+    // (design v19 §5.7), by name or by number.
+    let data = builtin();
+    let text = genome_file(&[
+        r#"Instinct(inputs: [("hunger", false), ("attended_tree", false)], verb: Eat, weight: 0.5)"#,
+        // [[[1, false], [45, false]], Eat, 0.5]: input 45 would be category 8's.
+        r#"Gene(type: 8, version: 1, payload: "93929201c2922dc202ca3f000000")"#,
+    ]);
+    let genome = Genome::from_ron(&text, &data).expect("a valid genome");
+    assert_eq!(genome.to_ron(&data), text);
+}
+
+#[test]
 fn a_gene_written_by_number_must_be_readable_if_its_type_is_known() {
     // Chemical 99 isn't in the pack.
     assert_invalid(&[r#"Gene(type: 1, version: 1, payload: "92631e")"#], "99");

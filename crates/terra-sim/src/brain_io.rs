@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::categories::{Category, attended_input};
+use crate::categories::{ATTENDED, Category, attended_input};
 use crate::data::{DataError, check_unique};
 use crate::genome::LocusRef;
 use crate::registry::{CategoryId, Chemical, ChemicalKind, Locus, LocusKind};
@@ -19,7 +19,7 @@ pub(crate) const BRAIN_IO: &str = "brain_io.ron";
 pub(crate) struct InputId(pub(crate) u16);
 
 /// The IDs kept for Target inputs. State inputs take any other ID from 1.
-const TARGET_IDS: std::ops::RangeInclusive<u16> = 36..=63;
+pub(crate) const TARGET_IDS: std::ops::RangeInclusive<u16> = 36..=63;
 
 /// What a brain input reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,7 +74,7 @@ fn target_inputs(categories: &[Category]) -> impl Iterator<Item = (u16, String, 
         .map(|c| {
             (
                 attended_input(c.id),
-                format!("attended_{}", c.name),
+                format!("{ATTENDED}{}", c.name),
                 Source::Attended(c.id),
             )
         })
