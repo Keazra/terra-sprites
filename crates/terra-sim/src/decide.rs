@@ -12,7 +12,7 @@ use crate::events::Event;
 use crate::map::Pos;
 use crate::objects::EntityId;
 use crate::perception::{Ground, Target};
-use crate::registry::{Category, Verb};
+use crate::registry::{CategoryId, Verb};
 use crate::world::WorldState;
 
 /// Something the sprite could aim at, as it stands this tick.
@@ -22,8 +22,9 @@ struct Candidate {
     /// Its nearest reachable goal tile.
     goal: Pos,
     aim: Aim,
-    /// The stable ID of its type.
-    type_id: u16,
+    /// The stable ID of its type: none for water or a sprite in a pack with
+    /// no object type for them (design v19 §3.5.5).
+    type_id: Option<u16>,
 }
 
 /// Step 5a and 5b for sprite `id`, after 5.0 (design §5.5). A scripted
@@ -65,7 +66,7 @@ pub(crate) fn decide(
     // felt (design v18 §3.6).
     let is_attacker = |target: Target| attacker.is_some_and(|a| target == Target::Sprite(a));
     if !found
-        .get(&Category::Sprite)
+        .get(&data.sprite_category())
         .is_some_and(|&(target, _)| is_attacker(target))
     {
         let inputs = sprite.brain.inputs(&sprite.body, None, data);
@@ -77,10 +78,10 @@ pub(crate) fn decide(
         });
         // Ties go to the lower ID, which comes first.
         if let Some((other, cost)) = best_above(drawn, f32::NEG_INFINITY) {
-            found.insert(Category::Sprite, (Target::Sprite(other), cost));
+            found.insert(data.sprite_category(), (Target::Sprite(other), cost));
         }
     }
-    let candidates: BTreeMap<Category, Candidate> = found
+    let candidates: BTreeMap<CategoryId, Candidate> = found
         .into_iter()
         .map(|(category, (target, cost))| {
             let goal = state
@@ -91,9 +92,7 @@ pub(crate) fn decide(
                 distance: normalized(cost, reach),
                 adjacent: state.on_goal_tile(data, sprite.pos, target),
             };
-            let kind = state.kind_of(data, target).expect("a candidate is there");
-            let object_type = &data.object_types()[kind];
-            let type_id = object_type.id;
+            let type_id = state.type_of(data, target);
             let candidate = Candidate {
                 type_id,
                 target,
@@ -107,7 +106,7 @@ pub(crate) fn decide(
     // category's candidate now (design §5.3).
     let aimed = action.and_then(|a| a.target).map(|target| {
         let (category, adjacent) = (
-            category_of(state, data, target),
+            target_category(state, data, target),
             state.on_goal_tile(data, sprite.pos, target),
         );
         let cost = state
@@ -124,7 +123,7 @@ pub(crate) fn decide(
     // The sprite that stands for sprites while attention scores: a running
     // action's target, or else the candidate (design v18 §5.3).
     let candidate_sprite = candidates
-        .get(&Category::Sprite)
+        .get(&data.sprite_category())
         .and_then(|c| c.target.sprite());
     // Fear always catches the eye, so a sprite hit or cornered keeps it on
     // whoever did it (design v18 §5.3).
@@ -141,7 +140,7 @@ pub(crate) fn decide(
         || sprite.body.loci[data.physiology().indices.cornered] > 0.0;
     // A running action's category is scored by the instance it's aimed at,
     // which a nearer one of the same category doesn't replace (design §5.3).
-    let mut distances: BTreeMap<Category, f32> = candidates
+    let mut distances: BTreeMap<CategoryId, f32> = candidates
         .iter()
         .map(|(&category, candidate)| (category, candidate.aim.distance))
         .collect();
@@ -303,7 +302,7 @@ fn start_scripted(state: &mut WorldState, data: &DataPack, id: EntityId, events:
         Some(_) => None,
         None => destination,
     };
-    let target = target.and_then(|t| Some((t, state.type_of(data, t)?)));
+    let target = target.map(|t| (t, state.type_of(data, t)));
     let sprite = state.sprites.get_mut(id).expect("the same sprite");
     start(
         sprite,
@@ -318,11 +317,11 @@ fn start_scripted(state: &mut WorldState, data: &DataPack, id: EntityId, events:
 }
 
 /// The category `target` is perceived as.
-pub(crate) fn category_of(state: &WorldState, data: &DataPack, target: Target) -> Category {
+pub(crate) fn target_category(state: &WorldState, data: &DataPack, target: Target) -> CategoryId {
     match target {
         Target::Object(id) => data.object_types()[state.objects.kind(id)].category,
-        Target::Water(_) => Category::Water,
-        Target::Sprite(_) => Category::Sprite,
+        Target::Water(_) => data.water_category(),
+        Target::Sprite(_) => data.sprite_category(),
     }
 }
 

@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use crate::brain_io::{InputId, Source};
 use crate::data::DataPack;
 use crate::genome::{Gene, Genome, Term};
-use crate::registry::{BrainParam, Category, ChemId, ChemicalClass, LocusKind, Trait, Verb};
+use crate::registry::{BrainParam, CategoryId, ChemId, ChemicalClass, LocusKind, Trait, Verb};
 
 /// How a gene is expressed (design §4.3).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,6 +21,9 @@ pub enum Expression {
     Unexpressed,
     /// This build can't read it.
     Unknown,
+    /// It names a category this world doesn't have (design v19 §5.7), so it
+    /// has no effect.
+    Unmatched,
 }
 
 /// The one value a gene sets, for the genes that set one. The others add up.
@@ -32,7 +35,7 @@ enum Setting {
     BrainParam(BrainParam),
     /// A concept's signature, its inputs in ID order, and a verb.
     Instinct(Vec<(InputId, bool)>, Verb),
-    AttentionInstinct(InputId, Category),
+    AttentionInstinct(InputId, CategoryId),
 }
 
 impl Setting {
@@ -55,7 +58,8 @@ impl Setting {
             Gene::Reaction { .. }
             | Gene::Emitter { .. }
             | Gene::Receptor { .. }
-            | Gene::Unknown { .. } => None,
+            | Gene::Unknown { .. }
+            | Gene::Unmatched(_) => None,
         }
     }
 }
@@ -67,8 +71,10 @@ pub(crate) fn expressions(genome: &Genome, data: &DataPack) -> Vec<Expression> {
         .genes
         .iter()
         .map(|gene| {
-            if let Gene::Unknown { .. } = gene {
-                return Expression::Unknown;
+            match gene {
+                Gene::Unknown { .. } => return Expression::Unknown,
+                Gene::Unmatched(_) => return Expression::Unmatched,
+                _ => {}
             }
             if let Some(reason) = breaks_restrictions(gene, data) {
                 return Expression::Flagged(reason);
@@ -150,7 +156,8 @@ fn breaks_restrictions(gene: &Gene, data: &DataPack) -> Option<String> {
         | Gene::Trait { .. }
         | Gene::BrainParam { .. }
         | Gene::Instinct { .. }
-        | Gene::Unknown { .. } => None,
+        | Gene::Unknown { .. }
+        | Gene::Unmatched(_) => None,
     }
 }
 
@@ -285,9 +292,9 @@ mod tests {
                 r#"Instinct(inputs: [("pain", false), ("hunger", false)], verb: Eat, weight: 0.5)"#,
                 r#"Instinct(inputs: [("hunger", false), ("pain", false)], verb: Rest, weight: 1.0)"#,
                 r#"Instinct(inputs: [("hunger", false), ("pain", true)], verb: Eat, weight: 1.0)"#,
-                r#"AttentionInstinct(input: "hunger", category: Berry, weight: 0.8)"#,
-                r#"AttentionInstinct(input: "hunger", category: Berry, weight: 0.4)"#,
-                r#"AttentionInstinct(input: "hunger", category: BerryBush, weight: 0.8)"#,
+                r#"AttentionInstinct(input: "hunger", category: "fruit", weight: 0.8)"#,
+                r#"AttentionInstinct(input: "hunger", category: "fruit", weight: 0.4)"#,
+                r#"AttentionInstinct(input: "hunger", category: "bush", weight: 0.8)"#,
             ]),
             [
                 Expressed,
@@ -307,14 +314,14 @@ mod tests {
     #[test]
     fn attention_instincts_may_use_only_state_inputs() {
         assert_flagged(
-            r#"AttentionInstinct(input: "target_distance", category: Berry, weight: 0.5)"#,
+            r#"AttentionInstinct(input: "target_distance", category: "fruit", weight: 0.5)"#,
             "target_distance",
         );
         assert_flagged(
-            r#"AttentionInstinct(input: "attended_berry", category: Berry, weight: 0.5)"#,
-            "attended_berry",
+            r#"AttentionInstinct(input: "attended_fruit", category: "fruit", weight: 0.5)"#,
+            "attended_fruit",
         );
-        assert_expressed(r#"AttentionInstinct(input: "always", category: Berry, weight: 0.5)"#);
+        assert_expressed(r#"AttentionInstinct(input: "always", category: "fruit", weight: 0.5)"#);
     }
 
     #[test]

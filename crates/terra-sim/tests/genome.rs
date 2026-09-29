@@ -167,6 +167,48 @@ fn an_unknown_gene_is_kept_and_written_back_by_number() {
 }
 
 #[test]
+fn the_starter_genome_names_categories_by_name_and_reads_back_the_same() {
+    // Genome files name categories by name (design v19 §5.7).
+    let data = builtin();
+    let starter = include_str!("../../../data/genomes/starter.ron");
+    let written = Genome::from_ron(starter, &data)
+        .expect("the starter genome loads")
+        .to_ron(&data);
+    let lonely = r#"AttentionInstinct(input: "loneliness", category: "sprite", weight: 1.0)"#;
+    assert!(written.contains(lonely), "{written}");
+    let again = Genome::from_ron(&written, &data).expect("it reads back");
+    assert_eq!(again.to_ron(&data), written);
+}
+
+#[test]
+fn an_attention_instinct_naming_a_category_the_world_lacks_is_kept_as_written() {
+    // An unmatched gene (design v19 §5.7), such as one from a newer
+    // version of the game, whether written by name or by number.
+    let data = builtin();
+    let text = genome_file(&[
+        r#"AttentionInstinct(input: "hunger", category: "tree", weight: 0.8)"#,
+        // [input 1, category 26, 0.8]: the pack has no category 26.
+        r#"Gene(type: 9, version: 1, payload: "93011aca3f4ccccd")"#,
+    ]);
+    let genome = Genome::from_ron(&text, &data).expect("a valid genome");
+    assert_eq!(genome.to_ron(&data), text);
+}
+
+#[test]
+fn an_instinct_built_on_a_missing_category_s_input_is_kept_as_written() {
+    // attended_tree names a category too, so the instinct is unmatched
+    // (design v19 §5.7), by name or by number.
+    let data = builtin();
+    let text = genome_file(&[
+        r#"Instinct(inputs: [("hunger", false), ("attended_tree", false)], verb: Eat, weight: 0.5)"#,
+        // [[[1, false], [45, false]], Eat, 0.5]: input 45 would be category 8's.
+        r#"Gene(type: 8, version: 1, payload: "93929201c2922dc202ca3f000000")"#,
+    ]);
+    let genome = Genome::from_ron(&text, &data).expect("a valid genome");
+    assert_eq!(genome.to_ron(&data), text);
+}
+
+#[test]
 fn a_gene_written_by_number_must_be_readable_if_its_type_is_known() {
     // Chemical 99 isn't in the pack.
     assert_invalid(&[r#"Gene(type: 1, version: 1, payload: "92631e")"#], "99");
@@ -255,7 +297,7 @@ fn a_genome_file_reads_the_brain_genes_by_name_and_writes_them_back() {
         r#"BrainParam(param: "tau_base", value: 0.2)"#,
         r#"Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0)"#,
         r#"Instinct(inputs: [("hunger", false), ("target_adjacent", true)], verb: Approach, weight: 0.5)"#,
-        r#"AttentionInstinct(input: "hunger", category: BerryBush, weight: 0.8)"#,
+        r#"AttentionInstinct(input: "hunger", category: "bush", weight: 0.8)"#,
     ]);
     let data = builtin();
     let genome = Genome::from_ron(&text, &data).expect("a valid genome");
@@ -290,7 +332,7 @@ fn a_brain_gene_naming_something_the_build_lacks_is_an_error_naming_it() {
         "glee",
     );
     assert_invalid(
-        &[r#"AttentionInstinct(input: "glee", category: Berry, weight: 1.0)"#],
+        &[r#"AttentionInstinct(input: "glee", category: "fruit", weight: 1.0)"#],
         "glee",
     );
 }
@@ -329,7 +371,7 @@ fn brain_gene_values_must_be_numbers() {
         "weight",
     );
     assert_invalid(
-        &[r#"AttentionInstinct(input: "hunger", category: Berry, weight: inf)"#],
+        &[r#"AttentionInstinct(input: "hunger", category: "fruit", weight: inf)"#],
         "weight",
     );
 }
@@ -340,7 +382,7 @@ fn a_brain_gene_written_by_number_reads_the_same_as_by_name() {
     // tau_base is parameter 5, and 0.5 is the f32 0xca3f000000.
     // Instinct (type 8): [[[input ID, negated]], verb ID, weight]; hunger is
     // input 1 and Eat is verb 2. AttentionInstinct (type 9): [input ID,
-    // category ID, weight]; Berry is category 2.
+    // category ID, weight]; fruit is category 2.
     let data = builtin();
     let by_number = genome_file(&[
         r#"Gene(type: 7, version: 1, payload: "9205ca3f000000")"#,
@@ -350,7 +392,7 @@ fn a_brain_gene_written_by_number_reads_the_same_as_by_name() {
     let by_name = genome_file(&[
         r#"BrainParam(param: "tau_base", value: 0.5)"#,
         r#"Instinct(inputs: [("hunger", false)], verb: Eat, weight: 0.5)"#,
-        r#"AttentionInstinct(input: "hunger", category: Berry, weight: 0.5)"#,
+        r#"AttentionInstinct(input: "hunger", category: "fruit", weight: 0.5)"#,
     ]);
     let genome = Genome::from_ron(&by_number, &data).expect("a valid genome");
     assert_eq!(genome.to_ron(&data), by_name);

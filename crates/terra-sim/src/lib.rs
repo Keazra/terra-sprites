@@ -7,6 +7,7 @@ mod action;
 mod biochem;
 mod brain;
 mod brain_io;
+mod categories;
 mod config;
 mod data;
 mod decide;

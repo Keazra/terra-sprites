@@ -3,7 +3,7 @@
 //! minds when a drive grows.
 
 use terra_sim::{
-    DataPack, EntityId, Event, EventKind, Genome, Map, Outcome, Part, Pos, Scenario,
+    DataPack, EntityId, Event, EventKind, Expression, Genome, Map, Outcome, Part, Pos, Scenario,
     ScriptedAction, Thing, Verb, World,
 };
 
@@ -83,6 +83,40 @@ const FIELD: [&str; 7] = [
     "...........",
     "...........",
 ];
+
+#[test]
+fn instincts_naming_a_category_the_world_lacks_are_unmatched_and_change_nothing() {
+    // Design v19 §5.7: such a gene is kept, but has no effect, whether it's
+    // an attention instinct or an instinct built on the category's input.
+    let data = builtin();
+    let hungry = r#"InitialConcentration(chem: "hunger", value: 0.9)"#;
+    let attends = r#"AttentionInstinct(input: "hunger", category: "tree", weight: 1.0)"#;
+    let eats = r#"Instinct(inputs: [("hunger", false), ("attended_tree", false)], verb: Eat, weight: 1.0)"#;
+    let run = |genes: &[&str]| {
+        let genome = starter_with(genes, &data);
+        let mut world = world(&FIELD, &[(at(8, 3), "berry_bush")], at(1, 3), genome, 7);
+        let marks: Vec<Expression> = world
+            .sprites()
+            .next()
+            .expect("the sprite")
+            .genes()
+            .into_iter()
+            .map(|(_, how)| how)
+            .collect();
+        let events: Vec<Event> = (0..2_000).flat_map(|_| world.step()).collect();
+        (marks, events)
+    };
+    let (marks, events) = run(&[hungry, attends, eats]);
+    let (_, plain) = run(&[hungry]);
+    assert_eq!(
+        marks[marks.len() - 2..],
+        [Expression::Unmatched, Expression::Unmatched]
+    );
+    assert_eq!(
+        events, plain,
+        "the sprite lives exactly as it would without it"
+    );
+}
 
 #[test]
 fn a_hungry_sprite_walks_to_a_bush_and_eats() {
@@ -277,7 +311,7 @@ fn explain_gives_attention_scores_and_the_concepts_behind_the_verb() {
             InitialConcentration(chem: "hunger", value: 0.8),
             BrainParam(param: "tau_base", value: 0.05),
             BrainParam(param: "tau_att_base", value: 0.05),
-            AttentionInstinct(input: "hunger", category: Berry, weight: 1.0),
+            AttentionInstinct(input: "hunger", category: "fruit", weight: 1.0),
             Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
             Instinct(inputs: [("hunger", false), ("target_adjacent", true)], verb: Eat, weight: 0.5),
             Instinct(inputs: [("always", false)], verb: Eat, weight: -0.1),

@@ -1,51 +1,14 @@
-//! The registries (design §2.8, Appendix A): stable, append-only IDs. Chemicals
-//! and loci are data, listed in the pack. Categories, verbs and traits are closed
-//! enums, because code gives each one its meaning.
+//! The registries (design §2.8, Appendix A): stable, append-only IDs.
+//! Chemicals, loci and categories are data, listed in the pack. Verbs and
+//! traits are closed enums, because code gives each one its meaning.
 
 use serde::{Deserialize, Serialize};
 
-/// What brains perceive an object as. The discriminants are the stable `CategoryId`s.
+/// A category's permanent ID (design v19 §3.5.5): what brains perceive a
+/// thing as.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub(crate) enum Category {
-    BerryBush = 1,
-    Berry = 2,
-    Thornbush = 3,
-    Water = 4,
-    Ball = 5,
-    Sprite = 6,
-}
-
-impl Category {
-    pub(crate) const ALL: [Category; 6] = [
-        Category::BerryBush,
-        Category::Berry,
-        Category::Thornbush,
-        Category::Water,
-        Category::Ball,
-        Category::Sprite,
-    ];
-
-    /// Where the category is in `ALL`: its place in whatever a brain keeps
-    /// per category.
-    pub(crate) fn index(self) -> usize {
-        Category::ALL
-            .iter()
-            .position(|&c| c == self)
-            .expect("every category is in ALL")
-    }
-
-    /// The category's name in brain input names, such as `attended_berry_bush`.
-    pub(crate) fn name(self) -> &'static str {
-        match self {
-            Category::BerryBush => "berry_bush",
-            Category::Berry => "berry",
-            Category::Thornbush => "thornbush",
-            Category::Water => "water",
-            Category::Ball => "ball",
-            Category::Sprite => "sprite",
-        }
-    }
-}
+#[serde(transparent)]
+pub(crate) struct CategoryId(pub(crate) u16);
 
 /// A kind of action, and a brain output (design §5.2). The discriminants are
 /// the stable verb IDs.

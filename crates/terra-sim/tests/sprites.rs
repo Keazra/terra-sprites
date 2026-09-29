@@ -181,15 +181,15 @@ fn a_sprite_that_never_hungers_or_thirsts_dies_of_old_age() {
 
 /// Object types for testing where solid objects may go.
 const SOLIDS: &str = r#"[
-    (id: 1, name: "shrub", category: BerryBush, size: Large, hardness: 1.0, tags: [Solid, Fixture]),
-    (id: 2, name: "seed", category: Berry, size: Small, hardness: 0.5,
+    (id: 1, name: "shrub", category: "bush", size: Large, hardness: 1.0, tags: [Solid, Fixture]),
+    (id: 2, name: "seed", category: "fruit", size: Small, hardness: 0.5,
      stages: [(name: "dormant", ticks: (2, 2), next: Expire)],
      rules: [(trigger: OnExpire, do: [ReplaceWith("shrub")])]),
-    (id: 3, name: "creeper", category: Thornbush, size: Large, hardness: 1.0, tags: [Solid, Fixture],
+    (id: 3, name: "creeper", category: "thornbush", size: Large, hardness: 1.0, tags: [Solid, Fixture],
      rules: [(trigger: Every(1), do: [SpreadTo("creeper", 1, [])])]),
-    (id: 4, name: "spawner", category: Ball, size: Small, hardness: 0.5,
+    (id: 4, name: "spawner", category: "toy", size: Small, hardness: 0.5,
      rules: [(trigger: Every(1), do: [SpawnNearby("shrub", 1)])]),
-    (id: 5, name: "pebble", category: Ball, size: Small, hardness: 0.5),
+    (id: 5, name: "pebble", category: "toy", size: Small, hardness: 0.5),
 ]"#;
 
 /// A 5×5 field of grass holding `objects` and newborn starter sprites on
@@ -213,6 +213,28 @@ fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> Result<World, terra_sim::S
         data,
         1,
     )
+}
+
+#[test]
+fn sprites_see_water_and_each_other_in_a_pack_with_no_object_types_for_them() {
+    // Water tiles and sprites are perceived by their categories (design v19
+    // §3.5.5). With no object types to give them verb tables, a verb on one
+    // does nothing, as on anything without a rule for it.
+    let objects_ron = include_str!("../../../data/objects.ron");
+    let data = builtin_changing("objects.ron", &[(objects_ron, SOLIDS)]);
+    let map = Map::from_ascii(&["..~..", ".....", "....."], &data).expect("valid drawing");
+    let sprites = [(Pos { x: 0, y: 1 }, None), (Pos { x: 4, y: 1 }, None)];
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: &[],
+    };
+    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    for _ in 0..2_000 {
+        world.step();
+    }
+    assert_eq!(world.sprites().count(), 2, "both still living");
 }
 
 fn type_at(world: &World, pos: Pos) -> Option<String> {
