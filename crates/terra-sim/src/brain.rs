@@ -12,8 +12,8 @@ use crate::data::DataPack;
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, LocusRef};
 use crate::learning::{
-    Experience, Links, Signals, SpriteMemory, Subject, TRACE_CAP, Touch, TraceEntry, TypeMemory,
-    still_counts, weight,
+    Experience, Links, Signals, SpriteMemory, Subject, TRACE_CAP, Touch, TraceEntry, still_counts,
+    weight,
 };
 use crate::objects::EntityId;
 use crate::perception::Target;
@@ -377,7 +377,9 @@ impl Brain {
                 // Anything else is learned about as its object type (design
                 // v19 §5.6).
                 None => {
-                    let known = self.experience.learn_about(subject, data.need_places().len());
+                    let known = self
+                        .experience
+                        .learn_about(subject, data.need_places().len());
                     for (worth, &relief) in known.worth.iter_mut().zip(relief) {
                         *worth = (*worth + good * relief).min(1.0);
                     }
@@ -399,8 +401,9 @@ impl Brain {
             let rate = self.params.get(BrainParam::HabitRate) * learning_rate_mod;
             let disappointment = self.params.get(BrainParam::Disappointment);
             let decay = self.params.get(BrainParam::TraceDecay);
+            let needs = data.need_places().len();
             for entry in &self.trace {
-                let (Some(verb), Some(category)) = (entry.verb, entry.attended) else {
+                let (Some(verb), Some(subject)) = (entry.verb, entry.subject) else {
                     continue;
                 };
                 if !verb.is_aimed() {
@@ -411,8 +414,8 @@ impl Brain {
                     _ => 0.0,
                 };
                 let step = rate * (r - disappointed) * weight(decay, tick, entry.tick);
-                let habit =
-                    &mut self.experience.habits[data.category_index(category)][column(verb)];
+                let known = self.experience.learn_about(subject, needs);
+                let habit = &mut known.habits[column(verb)];
                 *habit = (*habit + step).clamp(-1.0, 1.0);
             }
         }
@@ -458,11 +461,11 @@ impl Brain {
             }
             known.good *= good;
             known.bad *= bad;
+            for value in &mut known.habits {
+                *value *= habit;
+            }
         }
         experience.new_things *= good;
-        for value in experience.habits.iter_mut().flatten() {
-            *value *= habit;
-        }
         let fear = keep(BrainParam::FearFade);
         for individual in experience.individuals.values_mut() {
             for value in &mut individual.worth {
@@ -534,56 +537,59 @@ impl Brain {
         // v18 §5.6), never learned directly.
         let in_general = self.sprites_in_general(data.need_places().len());
         let categories = data.categories();
-        let mut things: Vec<(Thing, TypeMemory)> = Vec::new();
+        // Each thing's worth for each need, general good and bad.
+        let mut things: Vec<(Thing, &[f32], f32, f32)> = Vec::new();
         for category in categories {
             if category.id == data.sprite_category() {
-                let summary = TypeMemory {
-                    worth: in_general.worth.clone(),
-                    good: in_general.good,
-                    bad: in_general.bad,
-                };
-                things.push((Thing::from(data.category_label(category.id)), summary));
+                let thing = Thing::from(data.category_label(category.id));
+                things.push((thing, &in_general.worth, in_general.good, in_general.bad));
                 continue;
             }
             let types = self.experience.types.iter();
             for (&subject, known) in types.filter(|(s, _)| s.category(data) == category.id) {
-                things.push((subject_thing(subject, data), known.clone()));
+                let thing = subject_thing(subject, data);
+                things.push((thing, &known.worth, known.good, known.bad));
             }
         }
         for (need, &place) in data.need_places().iter().enumerate() {
-            for (thing, known) in &things {
+            for (thing, worth, ..) in &things {
                 memory.push(Memory {
                     learned: Learned::Worth {
                         thing: thing.clone(),
                         need: Some(inputs[place].name.clone()),
                     },
-                    amount: known.worth[need],
+                    amount: worth[need],
                 });
             }
         }
-        for (thing, known) in &things {
+        for &(ref thing, _, good, _) in &things {
             let learned = Learned::Worth {
                 thing: thing.clone(),
                 need: None,
             };
             memory.push(Memory {
                 learned,
-                amount: known.good,
+                amount: good,
             });
         }
-        for (thing, known) in &things {
+        for &(ref thing, _, _, bad) in &things {
             let learned = Learned::Bad {
                 thing: thing.clone(),
             };
             memory.push(Memory {
                 learned,
-                amount: known.bad,
+                amount: bad,
             });
         }
-        for (category, habits) in categories.iter().zip(&self.experience.habits) {
-            for (&verb, &value) in VERBS.iter().zip(habits) {
+        // Habits are about object types, sprites' too (design v19 §5.6).
+        let habits = categories.iter().flat_map(|category| {
+            let types = self.experience.types.iter();
+            types.filter(move |(s, _)| s.category(data) == category.id)
+        });
+        for (&subject, known) in habits {
+            for (&verb, &value) in VERBS.iter().zip(&known.habits) {
                 let learned = Learned::Habit {
-                    thing: data.category_label(category.id).to_string(),
+                    thing: subject_name(subject, data).to_string(),
                     verb,
                 };
                 memory.push(Memory {
@@ -700,7 +706,7 @@ impl Brain {
                 motive,
                 tick,
                 verb: snapshot.verb,
-                attended: snapshot.attended,
+                subject: snapshot.subject,
             });
         }
         // Oldest first.
@@ -799,7 +805,7 @@ impl Brain {
                     amount: fear,
                 },
                 Contribution {
-                    part: Part::Habit(data.category_label(category)),
+                    part: Part::Habit(subject_name(subject, data)),
                     amount: habit,
                 },
             ]);
@@ -1024,7 +1030,11 @@ impl Brain {
         let category = subject.category(data);
         let worth = value_gain * self.worth_of(subject, scoring.sprite, inputs, data);
         let fear = self.fright(category, scoring, target_distance(inputs, data), data);
-        let habits = &self.experience.habits[data.category_index(category)];
+        let habits = self
+            .experience
+            .types
+            .get(&subject)
+            .map_or([0.0; VERBS.len()], |known| known.habits);
         std::array::from_fn(|i| {
             let verb = VERBS[i];
             [
@@ -1118,11 +1128,16 @@ fn thing_of(category: CategoryId, sprite: Option<EntityId>, data: &DataPack) -> 
 /// What something learned about as `subject` is called (design v19 §6.1):
 /// its object type, or its category if it has none.
 fn subject_thing(subject: Subject, data: &DataPack) -> Thing {
+    Thing::from(subject_name(subject, data))
+}
+
+/// The name of `subject`'s object type, or of its category if it has none.
+fn subject_name(subject: Subject, data: &DataPack) -> &str {
     let name = match subject {
         Subject::ObjectType(id) => data.object_type(id).map(|t| t.name.as_str()),
         Subject::Category(category) => data.category(category).map(|c| c.name.as_str()),
     };
-    Thing::from(name.expect("a subject in the pack"))
+    name.expect("a subject in the pack")
 }
 
 /// The `target_distance` input's value in `inputs` (design §5.2).
@@ -1168,6 +1183,7 @@ mod tests {
     use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
+    use crate::learning::TypeMemory;
 
     fn builtin() -> DataPack {
         DataPack::builtin().expect("built-in data pack is valid")
@@ -1787,7 +1803,7 @@ mod tests {
             ..Default::default()
         };
         brain.learn(10, &hurt, 1.0, &data);
-        let habit = |verb| brain.experience.habits[at(FRUIT)][column(verb)];
+        let habit = |verb| about(&brain, types::BERRY).habits[column(verb)];
         assert!(close(habit(Verb::Eat), -0.3 * 0.5), "{}", habit(Verb::Eat));
         assert!(close(habit(Verb::Approach), -0.3 * 0.25));
         assert_eq!(habit(Verb::Rest), 0.0, "Rest aims at nothing");
@@ -1803,7 +1819,7 @@ mod tests {
     fn a_habit_counts_for_its_verb_on_the_thing_attended() {
         let data = builtin();
         let mut brain = brain(&[]);
-        brain.experience.habits[at(TOY)][column(Verb::Eat)] = -0.4;
+        teach(&mut brain, types::BALL).habits[column(Verb::Eat)] = -0.4;
         let x = inputs(&[]);
         let scores = brain.scores(
             &brain.activations(&x),
@@ -1851,7 +1867,7 @@ mod tests {
             ..Default::default()
         };
         brain.learn(10, &fruitless, 1.0, &data);
-        let habit = brain.experience.habits[at(TOY)][column(Verb::Eat)];
+        let habit = about(&brain, types::BALL).habits[column(Verb::Eat)];
         assert!(close(habit, -0.3 * 0.3 * 0.8 * 0.9), "{habit}");
         assert_eq!(bush_for_hunger(&brain), 0.0, "worth isn't touched");
     }
@@ -1882,7 +1898,7 @@ mod tests {
             ..Default::default()
         };
         brain.learn(10, &fruitless, 1.0, &data);
-        assert_eq!(brain.experience.habits[at(TOY)][column(Verb::Play)], 0.0);
+        assert_eq!(about(&brain, types::BALL).habits[column(Verb::Play)], 0.0);
     }
 
     #[test]
@@ -1898,8 +1914,7 @@ mod tests {
         teach(&mut brain, types::BERRY).worth[0] = 0.5;
         teach(&mut brain, types::BERRY).good = 0.4;
         teach(&mut brain, types::THORNBUSH).bad = -0.5;
-        let thorn = at(THORNBUSH);
-        brain.experience.habits[thorn][column(Verb::Eat)] = -0.2;
+        teach(&mut brain, types::THORNBUSH).habits[column(Verb::Eat)] = -0.2;
         let quiet = Signals {
             needs: vec![0.0; data.need_places().len()],
             ..Default::default()
@@ -1909,10 +1924,7 @@ mod tests {
         assert!(close(berries.worth[0], 0.5 * 0.99));
         assert!(close(berries.good, 0.4 * 0.99));
         assert!(close(thornbushes.bad, -0.5 * 0.999));
-        assert!(close(
-            brain.experience.habits[thorn][column(Verb::Eat)],
-            -0.2 * 0.995
-        ));
+        assert!(close(thornbushes.habits[column(Verb::Eat)], -0.2 * 0.995));
     }
 
     #[test]
@@ -1987,7 +1999,7 @@ mod tests {
         let mut brain =
             brain(&[r#"Instinct(inputs: [("boredom", false)], verb: Play, weight: 1.0)"#]);
         teach(&mut brain, types::BALL).good = 0.3;
-        brain.experience.habits[at(TOY)][column(Verb::Play)] = -0.2;
+        teach(&mut brain, types::BALL).habits[column(Verb::Play)] = -0.2;
         let x = inputs(&[("boredom", 0.5)]);
         brain.snapshot = Some(Snapshot {
             inputs: x.clone(),
@@ -2032,7 +2044,7 @@ mod tests {
         brain.learn(10, &hit_back, 1.0, &data);
         assert_eq!(about(&brain, types::SPRITE).bad, 0.0);
         assert_eq!(brain.experience.new_things, 0.0);
-        let habit = brain.experience.habits[at(SPRITE)][column(Verb::Hit)];
+        let habit = about(&brain, types::SPRITE).habits[column(Verb::Hit)];
         assert!(habit < 0.0, "the habit still learns: {habit}");
     }
 

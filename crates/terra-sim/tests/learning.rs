@@ -3,7 +3,7 @@
 
 use terra_sim::{
     DataPack, EntityId, Event, EventKind, Genome, Learned, Map, Pos, Scenario, ScriptedAction,
-    Thing, World,
+    Thing, Verb, World,
 };
 
 fn builtin() -> DataPack {
@@ -258,6 +258,38 @@ fn a_prick_makes_thornbushes_bad_and_leaves_berry_bushes_as_they_were_though_bot
         memory(&world)
     );
     assert_eq!(value_of(&world, &bushes_bad), 0.0, "{:?}", memory(&world));
+}
+
+#[test]
+fn a_reward_after_eating_from_a_thornbush_teaches_the_habit_for_thornbushes_not_every_bush() {
+    // Design v19 §5.6: the trace records the object type attended, and
+    // habits are credited to it. A sprite that always wants to eat, and is
+    // rewarded by each prick, eats from the thornbush beside it; the berry
+    // bush further off is a bush too.
+    let (thornbush, bush) = (at(2, 1), at(6, 1));
+    let mut world = world_in(
+        bushes(),
+        &["........", "........", "........"],
+        &[(thornbush, "thornbush"), (bush, "berry_bush")],
+        at(1, 1),
+        r#"Instinct(inputs: [("always", false)], verb: Eat, weight: 1.0),
+           Emitter(locus: Locus("pricked"), mode: Level, gain: 0.5, chem: "reward"),"#,
+        &[],
+    );
+    for _ in 0..20 {
+        world.step();
+    }
+    let habit = |thing: &str| {
+        value_of(
+            &world,
+            &Learned::Habit {
+                thing: thing.into(),
+                verb: Verb::Eat,
+            },
+        )
+    };
+    assert!(habit("thornbush") > 0.0, "{:?}", memory(&world));
+    assert_eq!(habit("berry_bush"), 0.0, "{:?}", memory(&world));
 }
 
 #[test]
