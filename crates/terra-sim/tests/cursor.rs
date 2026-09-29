@@ -31,6 +31,7 @@ fn genome(genes: &str, data: &DataPack) -> Genome {
             BrainParam(param: "worth_fade_good", value: 0.0),
             BrainParam(param: "worth_fade_bad", value: 0.0),
             BrainParam(param: "habit_fade", value: 0.0),
+            BrainParam(param: "habit_fade_bad", value: 0.0),
             BrainParam(param: "fear_fade", value: 0.0),
         ])"#
     );

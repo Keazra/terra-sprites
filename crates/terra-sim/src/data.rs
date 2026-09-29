@@ -24,6 +24,8 @@ pub struct DataPack {
     brain_inputs: Vec<BrainInput>,
     /// The needs (design §5.2), as places in `brain_inputs`.
     needs: Vec<usize>,
+    /// The first-order needs, as places in `brain_inputs` (design v21 §5.2).
+    first_order: Vec<usize>,
     /// What sprites perceive things as (design v19 §3.5.5), in ascending ID order.
     categories: Vec<Category>,
     /// In ascending ID order.
@@ -201,7 +203,7 @@ impl DataPack {
         let loci: Vec<Locus> = parse(sources, LOCI)?;
         check_unique(LOCI, loci.iter().map(|l| (l.id.0, l.name.as_str())))?;
         let categories = categories(parse(sources, CATEGORIES)?)?;
-        let (brain_inputs, needs) = brain_io(
+        let brain_io = brain_io(
             parse::<BrainIoFile>(sources, BRAIN_IO)?,
             &categories,
             &chemicals,
@@ -229,8 +231,9 @@ impl DataPack {
             terrain,
             chemicals,
             loci,
-            brain_inputs,
-            needs,
+            brain_inputs: brain_io.inputs,
+            needs: brain_io.needs,
+            first_order: brain_io.first_order,
             categories,
             object_types,
             physiology,
@@ -273,6 +276,19 @@ impl DataPack {
     /// The needs, as places in the brain's inputs, in `brain_io.ron`'s order.
     pub(crate) fn need_places(&self) -> &[usize] {
         &self.needs
+    }
+
+    /// The first-order needs (design v21 §5.2), by name, in `brain_io.ron`'s
+    /// order: the needs that come before a sprite's likes.
+    pub fn first_order_needs(&self) -> impl Iterator<Item = &str> {
+        self.first_order
+            .iter()
+            .map(|&place| self.brain_inputs[place].name.as_str())
+    }
+
+    /// The first-order needs, as places in the brain's inputs.
+    pub(crate) fn first_order_places(&self) -> &[usize] {
+        &self.first_order
     }
 
     /// The brain input with the ID `id`.

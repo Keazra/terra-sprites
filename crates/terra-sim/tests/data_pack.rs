@@ -982,6 +982,30 @@ fn the_needs_are_the_drives_whose_relief_teaches() {
 }
 
 #[test]
+fn the_first_order_needs_are_hunger_and_thirst() {
+    // Design v21 §5.2: they come before a sprite's likes.
+    let data = DataPack::builtin().expect("built-in data pack is valid");
+    let first: Vec<&str> = data.first_order_needs().collect();
+    assert_eq!(first, ["hunger", "thirst"]);
+}
+
+#[test]
+fn a_first_order_need_is_a_need_named_once() {
+    // Design v21 §5.2.
+    let inputs = r#"inputs: [
+        (id: 1, name: "hungry", reads: Chem("hunger")),
+        (id: 2, name: "thirsty", reads: Chem("thirst")),
+    ]"#;
+    for (first, word) in [
+        (r#"["thirsty"]"#, "thirsty"),
+        (r#"["hungry", "hungry"]"#, "twice"),
+    ] {
+        let text = format!(r#"({inputs}, needs: ["hungry"], first_order: {first})"#);
+        assert_invalid("brain_io.ron", &text, word);
+    }
+}
+
+#[test]
 fn every_brain_parameter_has_a_range_and_a_default_within_it() {
     let tau = r#""tau_base":          (range: (0.05, 2.0),    default: 0.2),"#;
     assert_invalid_physiology(tau, "", "tau_base");
