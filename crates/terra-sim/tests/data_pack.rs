@@ -674,6 +674,18 @@ fn physiology_rates_are_not_negative() {
 }
 
 #[test]
+fn the_cursor_s_touch_raises_levels_by_fractions_and_reaches_back_at_least_the_touch_window() {
+    // Design v21 §4.6, §2.5.
+    assert_invalid_physiology("pet: 0.5", "pet: 1.5", "cursor.pet");
+    assert_invalid_physiology(
+        "zap: (punishment: 0.5, pain: 0.3)",
+        "zap: (punishment: 0.5, pain: -0.3)",
+        "cursor.zap",
+    );
+    assert_invalid_physiology("max_reach_back: 40", "max_reach_back: 2", "max_reach_back");
+}
+
+#[test]
 fn causes_of_death_fade_over_at_least_one_tick() {
     assert_invalid_physiology("cause_fade: 350", "cause_fade: 0", "cause_fade");
 }

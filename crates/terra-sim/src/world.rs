@@ -1340,6 +1340,7 @@ mod tests {
         let sprite = world.state.sprites.get_mut(first).expect("a sprite");
         sprite.brain.touched = Some(Touch {
             tick: 0,
+            verb: Verb::Eat,
             subject: Subject::Category(bush),
             sprite: None,
             novelty: 1.0,
@@ -1350,6 +1351,40 @@ mod tests {
         let sprite = world.state.sprites.get(first).expect("a sprite");
         assert_eq!(sprite.brain.felt, 0.5, "felt, and used up");
         assert_eq!(sprite.body.chems[indices.reward], 0.0);
+        assert_eq!(sprite.brain.memory(&world.data), [], "learned nothing");
+    }
+
+    #[test]
+    fn with_learning_switched_off_the_cursor_s_touch_lands_and_teaches_nothing() {
+        // Design v21 §5.6: a control run's sprites still feel a pet, and its
+        // reach back is used up with it.
+        let (mut world, first, _) = field_with_sprites();
+        world.state.learning = false;
+        let bush = world.data.category_named("bush").expect("a category");
+        world
+            .state
+            .sprites
+            .get_mut(first)
+            .expect("a sprite")
+            .brain
+            .touched = Some(Touch {
+            tick: 0,
+            verb: Verb::Eat,
+            subject: Subject::Category(bush),
+            sprite: None,
+            novelty: 1.0,
+        });
+        world.submit(Command::Reward {
+            sprite: first,
+            amplified: false,
+            reach_back: 10,
+        });
+        let mut events = Vec::new();
+        world.apply_commands(&mut events);
+        learning::run(&mut world.state, &world.data, &[], &mut events);
+        let sprite = world.state.sprites.get(first).expect("a sprite");
+        assert_eq!(sprite.brain.felt, 0.5, "felt, and used up");
+        assert_eq!(sprite.brain.reach_back, None, "used up");
         assert_eq!(sprite.brain.memory(&world.data), [], "learned nothing");
     }
 
@@ -1367,6 +1402,7 @@ mod tests {
         let bush = data.category_named("bush").expect("a category");
         brain.touched = Some(Touch {
             tick: 0,
+            verb: Verb::Eat,
             subject: Subject::Category(bush),
             sprite: None,
             novelty: 1.0,

@@ -3,8 +3,8 @@
 //! from them.
 
 use terra_sim::{
-    Command, DataPack, EntityId, EventKind, Genome, Map, Pos, Rejection, Scenario, ScriptedAction,
-    World,
+    Command, DataPack, EntityId, EventKind, Genome, Learned, Map, Pos, Rejection, Scenario,
+    ScriptedAction, Thing, Verb, World,
 };
 
 fn builtin() -> DataPack {
@@ -279,4 +279,196 @@ fn a_command_for_a_sprite_that_is_gone_is_refused_and_touches_no_one() {
         "{events:?}"
     );
     assert_eq!(world.sprite(id).expect("the sprite").felt(), 0.0);
+}
+
+/// A sprite of `genes` that kicks the ball beside it at tick 0, then rests
+/// until tick 50, trying nothing else, and its ID.
+fn kicker(genes: &str) -> (World, EntityId) {
+    let ball = at(3, 1);
+    let mut script = vec![ScriptedAction::Play { at: ball }];
+    script.extend([ScriptedAction::Rest; 5]);
+    let world = world(
+        &["......", "......", "......"],
+        &[(ball, "ball")],
+        at(2, 1),
+        genes,
+        &script,
+    );
+    let id = world.sprites().next().expect("the sprite").id();
+    (world, id)
+}
+
+/// What sprite `id` has learned `learned` is worth, or 0.
+fn value_of(world: &World, id: EntityId, learned: &Learned) -> f32 {
+    let sprite = world.sprite(id).expect("the sprite");
+    sprite
+        .memory()
+        .into_iter()
+        .find(|m| &m.learned == learned)
+        .map_or(0.0, |m| m.amount)
+}
+
+fn balls_good() -> Learned {
+    Learned::Worth {
+        thing: "ball".into(),
+        need: None,
+    }
+}
+
+fn kicking_balls() -> Learned {
+    Learned::Habit {
+        thing: "ball".into(),
+        verb: Verb::Play,
+    }
+}
+
+/// Runs `world` until its tick is `tick`.
+fn run_to(world: &mut World, tick: u64) {
+    while world.tick() < tick {
+        world.step();
+    }
+}
+
+#[test]
+fn a_pet_within_its_reach_back_makes_the_last_thing_tried_and_that_habit_good() {
+    // Design v21 §5.6: the kick at tick 0 is 6 ticks old when the pet lands,
+    // past the touch window's 3 but within its reach back of 10. So balls
+    // are good, .5 × worth_rate_good (.5), and so is kicking them, at full
+    // weight: .5 × habit_rate (.3).
+    let (mut world, id) = kicker("");
+    run_to(&mut world, 6);
+    world.submit(Command::Reward {
+        sprite: id,
+        amplified: false,
+        reach_back: 10,
+    });
+    world.step();
+    assert!(close(value_of(&world, id, &balls_good()), 0.25));
+    assert!(close(value_of(&world, id, &kicking_balls()), 0.15));
+}
+
+/// Kicks the ball at tick 0, and pets the sprite at `tick` with `reach_back`.
+/// Returns what it then thinks of balls, and of kicking them.
+fn pet_after_a_kick(tick: u64, reach_back: u16) -> (f32, f32) {
+    let (mut world, id) = kicker("");
+    run_to(&mut world, tick);
+    world.submit(Command::Reward {
+        sprite: id,
+        amplified: false,
+        reach_back,
+    });
+    world.step();
+    (
+        value_of(&world, id, &balls_good()),
+        value_of(&world, id, &kicking_balls()),
+    )
+}
+
+#[test]
+fn a_pet_after_its_reach_back_has_passed_teaches_nothing_of_the_last_try() {
+    // Design v21 §5.6: 6 ticks after the kick, a reach back of 5 misses it.
+    assert_eq!(pet_after_a_kick(6, 5), (0.0, 0.0));
+    assert_eq!(pet_after_a_kick(5, 5), (0.25, 0.15), "just within");
+}
+
+#[test]
+fn a_reach_back_below_the_touch_window_or_past_the_longest_is_taken_as_that_bound() {
+    // Design v21 §2.5: at least touch_window (3), at most max_reach_back (40).
+    assert_eq!(pet_after_a_kick(3, 0), (0.25, 0.15), "0 is taken as 3");
+    assert_eq!(pet_after_a_kick(40, 1000), (0.25, 0.15), "1,000 is taken as 40");
+    assert_eq!(pet_after_a_kick(41, 1000), (0.0, 0.0));
+}
+
+/// A tired sprite whose resting eases its tiredness by .05 a tick.
+const TIRED_RESTER: &str = r#"InitialConcentration(chem: "tiredness", value: 1.0),
+    Emitter(locus: Locus("resting"), mode: Level, gain: -0.05, chem: "tiredness"),"#;
+
+#[test]
+fn in_a_tick_the_cursor_touches_a_sprite_relief_still_looks_back_only_the_touch_window() {
+    // Design v21 §5.6: the pet at tick 6 reaches back to the kick, but the
+    // relief of resting that tick doesn't: the kick is past the touch window.
+    let (mut world, id) = kicker(TIRED_RESTER);
+    let balls_restful = Learned::Worth {
+        thing: "ball".into(),
+        need: Some("tiredness".into()),
+    };
+    run_to(&mut world, 6);
+    let before = value_of(&world, id, &balls_restful);
+    assert!(before > 0.0, "resting just after the kick taught it");
+    world.submit(Command::Reward {
+        sprite: id,
+        amplified: false,
+        reach_back: 10,
+    });
+    world.step();
+    assert_eq!(value_of(&world, id, &balls_restful), before);
+    assert!(close(value_of(&world, id, &balls_good()), 0.25));
+}
+
+/// A world drawn from `rows` with sprites of `genes` on each of `sprites`,
+/// each doing its part of `script`.
+fn scene(rows: &[&str], sprites: &[(Pos, &str)], script: &[(Pos, ScriptedAction)]) -> World {
+    let data = builtin();
+    let map = Map::from_ascii(rows, &data).expect("valid drawing");
+    let sprites: Vec<(Pos, Option<Genome>)> = sprites
+        .iter()
+        .map(|&(pos, genes)| (pos, Some(genome(genes, &data))))
+        .collect();
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: script,
+    };
+    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+}
+
+#[test]
+fn a_zap_while_the_sprite_was_just_hit_teaches_fear_of_the_hitter() {
+    // Design v21 §5.6, v18 §5.6: with a `was_hit` pulse live, punishment
+    // teaches fear of the attacker, a zap's too: the hit's .5 and the zap's
+    // .5, at fear_rate 1. Nothing is bad.
+    let (me, attacker) = (at(1, 1), at(2, 1));
+    let mut world = scene(
+        &["....", "....", "...."],
+        &[
+            (
+                me,
+                r#"Emitter(locus: Locus("was_hit"), mode: Level, gain: 0.5, chem: "punishment"),"#,
+            ),
+            (attacker, ""),
+        ],
+        &[
+            (me, ScriptedAction::Rest),
+            (attacker, ScriptedAction::Hit { at: me }),
+            (attacker, ScriptedAction::Rest),
+        ],
+    );
+    let (me, attacker) = (
+        world.sprite_at(me).expect("me").id(),
+        world.sprite_at(attacker).expect("the attacker").id(),
+    );
+    world.step();
+    world.submit(zap(me));
+    world.step();
+    let memory: Vec<(Learned, f32)> = world
+        .sprite(me)
+        .expect("me")
+        .memory()
+        .into_iter()
+        .map(|m| (m.learned, m.amount))
+        .collect();
+    let fear = Learned::Fear {
+        thing: Thing::Sprite(attacker),
+    };
+    assert_eq!(memory, [(fear, -1.0)], "frightening, and nothing else");
+}
+
+#[test]
+fn commands_waiting_for_the_next_tick_are_part_of_the_world_s_state() {
+    // Design v21 §2.8: they're saved, so they're hashed.
+    let (mut world, id) = resting_sprite();
+    let before = world.state_hash();
+    world.submit(pet(id));
+    assert_ne!(world.state_hash(), before);
 }

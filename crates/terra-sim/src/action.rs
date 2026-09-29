@@ -493,6 +493,7 @@ fn act(
         brain.experience.learn_about(subject, needs).touched = true;
         brain.touched = Some(Touch {
             tick: state.tick,
+            verb,
             subject,
             sprite: target.sprite(),
             novelty: brain.novelty(subject),
