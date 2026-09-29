@@ -584,7 +584,7 @@ fn feeling_world(objects: &[(Pos, &str)], sprite: Pos, script: &[ScriptedAction]
 }
 
 /// A world like `feeling_world`'s, in `data`, drawn from `rows`, with a
-/// walker on each of `others`, resting for the first two ticks.
+/// walker on each of `others`, resting as many times as `script` has actions.
 fn feeling_world_in(
     data: DataPack,
     rows: &[&str],
@@ -604,7 +604,7 @@ fn feeling_world_in(
     let mut scripted: Vec<(Pos, ScriptedAction)> = script.iter().map(|&s| (sprite, s)).collect();
     for &other in others {
         sprites.push((other, Some(walker(&data))));
-        scripted.extend([(other, ScriptedAction::Rest); 2]);
+        scripted.extend(script.iter().map(|_| (other, ScriptedAction::Rest)));
     }
     let scenario = Scenario {
         map,
