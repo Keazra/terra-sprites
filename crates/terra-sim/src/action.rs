@@ -468,6 +468,7 @@ fn act(
     let verb = verb.expect("an action").verb;
     // Read before the try, which may use the target up, as eating a berry does.
     let category = crate::decide::target_category(state, data, target);
+    let subject = state.subject_of(data, target);
     let (outcome, hurt) = match verb {
         Verb::Approach => (Outcome::Applied, Hurt::default()),
         verb => verbs::attempt(state, data, id, verb, target, events),
@@ -491,6 +492,7 @@ fn act(
         brain.touched = Some(Touch {
             tick: state.tick,
             category,
+            subject,
             sprite: target.sprite(),
             novelty: brain.novelty(category, data),
         });
