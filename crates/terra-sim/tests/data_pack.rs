@@ -510,6 +510,35 @@ fn categories_with(extra: &str) -> String {
 }
 
 #[test]
+fn each_category_is_worded_in_general_by_its_plural() {
+    // Design v19 §3.5.5: as an object type's is, less any spaces at either
+    // end, and never empty.
+    let pack = DataPack::builtin().expect("built-in data pack is valid");
+    let names = ["bush", "fruit", "thornbush", "water", "toy", "sprite"];
+    assert_eq!(
+        names.map(|name| pack.category_plural(name)),
+        [
+            Some("bushes"),
+            None,
+            Some("thornbushes"),
+            None,
+            Some("toys"),
+            Some("sprites"),
+        ],
+        "fruit and water aren't counted"
+    );
+    assert_eq!(pack.category_plural("dragon"), None, "no such category");
+
+    let text = categories_with(r#"(id: 7, name: "tree", plural: "  trees ")"#);
+    let pack = builtin_with("categories.ron", &text).expect("a valid pack");
+    assert_eq!(pack.category_plural("tree"), Some("trees"));
+    for plural in [r#""""#, r#""  ""#] {
+        let text = categories_with(&format!(r#"(id: 7, name: "tree", plural: {plural})"#));
+        assert_invalid("categories.ron", &text, "`tree` has an empty plural");
+    }
+}
+
+#[test]
 fn a_pack_without_a_categories_file_is_rejected() {
     assert_eq!(
         builtin_without("categories.ron").unwrap_err(),

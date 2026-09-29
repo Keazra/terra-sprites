@@ -167,8 +167,22 @@ fn an_unknown_gene_is_kept_and_written_back_by_number() {
 }
 
 #[test]
+fn the_starter_genome_names_categories_by_name_and_reads_back_the_same() {
+    // Genome files name categories by name (design v19 §5.7).
+    let data = builtin();
+    let starter = include_str!("../../../data/genomes/starter.ron");
+    let written = Genome::from_ron(starter, &data)
+        .expect("the starter genome loads")
+        .to_ron(&data);
+    let lonely = r#"AttentionInstinct(input: "loneliness", category: "sprite", weight: 1.0)"#;
+    assert!(written.contains(lonely), "{written}");
+    let again = Genome::from_ron(&written, &data).expect("it reads back");
+    assert_eq!(again.to_ron(&data), written);
+}
+
+#[test]
 fn an_attention_instinct_naming_a_category_the_world_lacks_is_kept_as_written() {
-    // An unmatched gene (design v19 change 8), such as one from a newer
+    // An unmatched gene (design v19 §5.7), such as one from a newer
     // version of the game, whether written by name or by number.
     let data = builtin();
     let text = genome_file(&[

@@ -107,7 +107,7 @@ pub(crate) fn decide(
     // category's candidate now (design §5.3).
     let aimed = action.and_then(|a| a.target).map(|target| {
         let (category, adjacent) = (
-            category_of(state, data, target),
+            target_category(state, data, target),
             state.on_goal_tile(data, sprite.pos, target),
         );
         let cost = state
@@ -318,7 +318,7 @@ fn start_scripted(state: &mut WorldState, data: &DataPack, id: EntityId, events:
 }
 
 /// The category `target` is perceived as.
-pub(crate) fn category_of(state: &WorldState, data: &DataPack, target: Target) -> CategoryId {
+pub(crate) fn target_category(state: &WorldState, data: &DataPack, target: Target) -> CategoryId {
     match target {
         Target::Object(id) => data.object_types()[state.objects.kind(id)].category,
         Target::Water(_) => data.water_category(),

@@ -6,7 +6,7 @@ use serde::Deserialize;
 use crate::brain_io::{BRAIN_IO, BrainInput, BrainIoFile, InputId, brain_io};
 use crate::categories::{CATEGORIES, Category, SPRITE, WATER, categories};
 use crate::expression::{Expression, expressions};
-use crate::genome::{Gene, Genome, GenomeError, Written};
+use crate::genome::{Gene, Genome, GenomeError};
 use crate::object_types::{Effect, OBJECTS, ObjectType, TypeEntry, object_types};
 use crate::physiology::{Indices, PHYSIOLOGY, Physiology, PhysiologyEntry};
 use crate::registry::{CategoryId, ChemId, Chemical, Locus, LocusId, Verb};
@@ -314,6 +314,14 @@ impl DataPack {
         self.category(category).map(|c| c.name.as_str())
     }
 
+    /// How the screen says the category called `category` in general, such
+    /// as "bushes" (design v19 §3.5.5). `None` for one you don't count, such
+    /// as water, or no such category.
+    pub fn category_plural(&self, category: &str) -> Option<&str> {
+        let id = self.category_named(category)?;
+        self.category(id)?.plural.as_deref()
+    }
+
     /// How the screen says the object type called `object_type` in general,
     /// such as "thornbushes" (design §3.5.1, §6.1). `None` for one you don't
     /// count, such as water, or no such type.
@@ -531,15 +539,8 @@ fn starter_genome(text: &str, data: &DataPack) -> Result<Genome, DataError> {
                 )));
             }
             (Expression::Unmatched, gene) => {
-                // What it names that's missing, if it was written by name.
                 let named = match gene {
-                    Gene::Unmatched(Written::AttentionInstinct { category, .. }) => {
-                        Some(category.as_str())
-                    }
-                    Gene::Unmatched(Written::Instinct { inputs, .. }) => inputs
-                        .iter()
-                        .map(|(name, _)| name.as_str())
-                        .find(|&name| data.brain_input_named(name).is_none()),
+                    Gene::Unmatched(written) => written.missing(data),
                     _ => None,
                 };
                 let named = named.map(|name| format!(" (`{name}`)")).unwrap_or_default();

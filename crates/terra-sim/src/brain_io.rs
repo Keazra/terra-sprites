@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::categories::{ATTENDED, Category, attended_input};
+use crate::categories::Category;
 use crate::data::{DataError, check_unique};
 use crate::genome::LocusRef;
 use crate::registry::{CategoryId, Chemical, ChemicalKind, Locus, LocusKind};
@@ -18,8 +18,32 @@ pub(crate) const BRAIN_IO: &str = "brain_io.ron";
 #[serde(transparent)]
 pub(crate) struct InputId(pub(crate) u16);
 
-/// The IDs kept for Target inputs. State inputs take any other ID from 1.
+/// The IDs kept for Target inputs: one for each category, and
+/// `target_distance` and `target_adjacent`. State inputs take any other ID
+/// from 1.
 pub(crate) const TARGET_IDS: std::ops::RangeInclusive<u16> = 36..=63;
+
+/// The IDs of the two Target inputs fixed in code.
+const TARGET_DISTANCE: u16 = 42;
+const TARGET_ADJACENT: u16 = 43;
+
+/// How many categories the Target IDs have room for: the rest of them.
+pub(crate) const MOST_CATEGORIES: u16 = *TARGET_IDS.end() - *TARGET_IDS.start() + 1 - 2;
+
+/// How the name of a category's brain input starts: `attended_bush`.
+pub(crate) const ATTENDED: &str = "attended_";
+
+/// The ID of the brain input that's 1 while attention is on the category
+/// `id` (design v19 §3.5.5): the Target IDs in order from category 1,
+/// stepping over the two fixed ones, so `35 + id` up to 6, then `37 + id`.
+pub(crate) fn attended_input(id: CategoryId) -> u16 {
+    let input = *TARGET_IDS.start() - 1 + id.0;
+    if input >= TARGET_DISTANCE {
+        input + 2
+    } else {
+        input
+    }
+}
 
 /// What a brain input reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,8 +103,16 @@ fn target_inputs(categories: &[Category]) -> impl Iterator<Item = (u16, String, 
             )
         })
         .chain([
-            (42, "target_distance".into(), Source::TargetDistance),
-            (43, "target_adjacent".into(), Source::TargetAdjacent),
+            (
+                TARGET_DISTANCE,
+                "target_distance".into(),
+                Source::TargetDistance,
+            ),
+            (
+                TARGET_ADJACENT,
+                "target_adjacent".into(),
+                Source::TargetAdjacent,
+            ),
         ])
 }
 

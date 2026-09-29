@@ -206,7 +206,8 @@ pub enum Learned {
     /// How frightening a thing is (design v18 §5.6): it hurt the sprite by
     /// its own doing.
     Fear { thing: Thing },
-    /// A habit: doing a verb to a category, named as `Thing::Kind` names it.
+    /// A habit: doing a verb to a category, named by its first object type
+    /// until slice 9e (design v19 §6.1), as a category in `Thing` is.
     Habit { thing: String, verb: Verb },
     /// The worth of new things.
     NewThings,

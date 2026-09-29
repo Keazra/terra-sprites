@@ -3,14 +3,16 @@
 
 use serde::Deserialize;
 
+use crate::brain_io::MOST_CATEGORIES;
 use crate::data::{DataError, check_unique};
 use crate::registry::CategoryId;
 
 /// The categories file, relative to the pack root.
 pub(crate) const CATEGORIES: &str = "categories.ron";
 
-/// The categories the engine perceives physics as: water tiles and sprites,
-/// which aren't objects, so no object type can say what they are.
+/// The categories water tiles and sprites are perceived as. They aren't
+/// objects, so no object type can say what they are, and every world has
+/// them, so the list must too.
 pub(crate) const WATER: &str = "water";
 pub(crate) const SPRITE: &str = "sprite";
 
@@ -23,18 +25,11 @@ pub(crate) struct Category {
     /// How the screen says the category in general, such as "bushes"; none
     /// for one you don't count, such as water.
     #[serde(default)]
-    #[expect(
-        dead_code,
-        reason = "the screen words a category's summary by it from slice 9e (design v19 §6.1)"
-    )]
     pub(crate) plural: Option<String>,
 }
 
-/// The IDs a category can have: each one's brain input needs an ID of its
-/// own among those kept for Target inputs (design v19 §3.5.5).
-const IDS: std::ops::RangeInclusive<u16> = 1..=26;
-
-/// The categories `categories.ron` lists, in ascending ID order.
+/// The categories `categories.ron` lists, in ascending ID order, each
+/// plural without spaces at either end.
 pub(crate) fn categories(mut entries: Vec<Category>) -> Result<Vec<Category>, DataError> {
     let invalid = |message: String| DataError::Invalid {
         file: CATEGORIES.into(),
@@ -44,31 +39,35 @@ pub(crate) fn categories(mut entries: Vec<Category>) -> Result<Vec<Category>, Da
         CATEGORIES,
         entries.iter().map(|c| (c.id.0, c.name.as_str())),
     )?;
-    if let Some(c) = entries.iter().find(|c| !IDS.contains(&c.id.0)) {
+    // Each category's brain input needs an ID of its own (design v19 §3.5.5).
+    if let Some(c) = entries
+        .iter()
+        .find(|c| !(1..=MOST_CATEGORIES).contains(&c.id.0))
+    {
         return Err(invalid(format!(
-            "the id {} is outside {} to {}: each category's brain input needs an ID of its own",
-            c.id.0,
-            IDS.start(),
-            IDS.end()
+            "the id {} is outside 1 to {MOST_CATEGORIES}: each category's brain input needs an ID of its own",
+            c.id.0
         )));
     }
-    for physics in [WATER, SPRITE] {
-        if !entries.iter().any(|c| c.name == physics) {
+    for name in [WATER, SPRITE] {
+        if !entries.iter().any(|c| c.name == name) {
             return Err(invalid(format!(
-                "`{physics}` is missing: the world always has it, so brains must perceive it"
+                "`{name}` is missing: every world has it, so brains must perceive it"
             )));
+        }
+    }
+    for c in &mut entries {
+        // Spaces at either end would put stray gaps in the screen's sentences.
+        if let Some(plural) = &mut c.plural {
+            *plural = plural.trim().to_string();
+            if plural.is_empty() {
+                return Err(invalid(format!(
+                    "`{}` has an empty plural: leave it out for one you don't count",
+                    c.name
+                )));
+            }
         }
     }
     entries.sort_by_key(|c| c.id);
     Ok(entries)
-}
-
-/// How the name of a category's brain input starts: `attended_bush`.
-pub(crate) const ATTENDED: &str = "attended_";
-
-/// The ID of the brain input that's 1 while attention is on the category
-/// `id` (design v19 §3.5.5): `35 + id` up to 6, then `37 + id`, past
-/// `target_distance` and `target_adjacent`.
-pub(crate) fn attended_input(id: CategoryId) -> u16 {
-    if id.0 <= 6 { 35 + id.0 } else { 37 + id.0 }
 }

@@ -1374,25 +1374,32 @@ fn the_chem_tab_shows_what_was_felt_on_the_reward_line() {
 }
 
 #[test]
-fn the_genome_tab_marks_an_instinct_naming_a_category_the_world_lacks() {
-    // An unmatched gene (design v19 §5.7), dimmed with its reason, as the
-    // other marks are.
+fn the_genome_tab_marks_genes_naming_a_category_the_world_lacks() {
+    // Unmatched genes (design v19 §5.7), dimmed with their reason as the
+    // other marks are: an attention instinct and an instinct by name, and a
+    // gene by number, which shows as its number.
     let genome = r#"(format: 1, genes: [
         AttentionInstinct(input: "hunger", category: "tree", weight: 0.8),
+        Instinct(inputs: [("hunger", false), ("attended_tree", false)], verb: Eat, weight: 0.5),
+        Gene(type: 9, version: 1, payload: "93011aca3f4ccccd"),
     ])"#;
     let (world, mut app) = one_sprite(genome, 0);
     open(&mut app, &world, Tab::Genome);
-    let rows = right_part(&render(&app, &world, 100, 30), 46);
-    let text: Vec<&str> = rows[2..8].iter().map(|row| inside(row)).collect();
-    assert_eq!(
-        text[..2],
-        ["ATTENTION INSTINCTS", "hunger → attends to tree +.8"]
-    );
-    assert!(
-        text.join(" ")
-            .contains("unmatched: names a category this world doesn't have"),
-        "{text:?}"
-    );
+    let rows = right_part(&render(&app, &world, 100, 40), 46);
+    let text = rows[2..30]
+        .iter()
+        .map(|row| inside(row))
+        .collect::<Vec<_>>()
+        .join(" ");
+    for gene in [
+        "hunger & attended tree → eat +.5",
+        "hunger → attends to tree +.8",
+        "type 9, version 1, 8 bytes",
+    ] {
+        assert!(text.contains(gene), "{gene:?} in {text:?}");
+    }
+    let reason = "unmatched: names a category this world doesn't have";
+    assert_eq!(text.matches(reason).count(), 3, "{text:?}");
 }
 
 #[test]
