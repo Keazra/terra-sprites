@@ -713,11 +713,19 @@ fn every_receptor_target_has_a_range_and_nothing_else_does() {
 #[test]
 fn a_starter_genome_with_a_flagged_unknown_or_unmatched_gene_does_not_load() {
     let starter = |gene: &str| format!("(format: 1, genes: [{gene}])");
-    // Each would silently do nothing (design §4.3, v19 §5.7).
+    // Each would silently do nothing (design §4.3, v19 §5.7). An unmatched
+    // gene names the category it's missing, however it names it.
     assert_invalid(
         "genomes/starter.ron",
         &starter(r#"AttentionInstinct(input: "hunger", category: "tree", weight: 1.0)"#),
-        "tree",
+        "(`tree`)",
+    );
+    assert_invalid(
+        "genomes/starter.ron",
+        &starter(
+            r#"Instinct(inputs: [("hunger", false), ("attended_tree", false)], verb: Eat, weight: 1.0)"#,
+        ),
+        "(`tree`)",
     );
     assert_invalid(
         "genomes/starter.ron",
