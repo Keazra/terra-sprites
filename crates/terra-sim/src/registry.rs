@@ -118,10 +118,13 @@ pub(crate) enum BrainParam {
     /// The distance, as a share of sight, at which fear stops pulling
     /// (design v18 §5.3).
     FearReach = 32,
+    /// How many object types in a category it knows before the category's
+    /// summary counts in full (design v19 §5.6).
+    GeneraliseTypes = 33,
 }
 
 impl BrainParam {
-    pub(crate) const ALL: [BrainParam; 32] = [
+    pub(crate) const ALL: [BrainParam; 33] = [
         BrainParam::LearningRate,
         BrainParam::TraceDecay,
         BrainParam::RelaxRate,
@@ -154,6 +157,7 @@ impl BrainParam {
         BrainParam::Vigilance,
         BrainParam::Flight,
         BrainParam::FearReach,
+        BrainParam::GeneraliseTypes,
     ];
 
     /// The parameter's name in genome files and `physiology.ron`.
@@ -191,6 +195,7 @@ impl BrainParam {
             BrainParam::Vigilance => "vigilance",
             BrainParam::Flight => "flight",
             BrainParam::FearReach => "fear_reach",
+            BrainParam::GeneraliseTypes => "generalise_types",
         }
     }
 
