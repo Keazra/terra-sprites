@@ -91,7 +91,8 @@ impl Subject {
 }
 
 /// What a sprite has learned about one object type (design v19 §5.6): its
-/// worth for each need and in general, how bad it is, and its habits.
+/// worth for each need and in general, how bad it is, its habits, and how
+/// familiar it is.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct TypeMemory {
     /// Worth for each need, in the pack's needs order (0 to 1).
@@ -102,6 +103,8 @@ pub(crate) struct TypeMemory {
     pub(crate) bad: f32,
     /// Habits: doing each verb to it, in `VERBS` order.
     pub(crate) habits: [f32; VERBS.len()],
+    /// How familiar it is, from attending to it (0 to 1).
+    pub(crate) familiarity: f32,
 }
 
 impl TypeMemory {
@@ -112,21 +115,20 @@ impl TypeMemory {
             good: 0.0,
             bad: 0.0,
             habits: [0.0; VERBS.len()],
+            familiarity: 0.0,
         }
     }
 }
 
 /// What a brain has learned (design §5.6), all starting at 0: what each
-/// object type is worth for each need and in general, how bad it is, and its
-/// habits; how familiar each category is; and the worth of new things.
-/// Familiarity is kept per category in the pack's order.
+/// object type is worth for each need and in general, how bad it is, its
+/// habits and how familiar it is; the sprites it remembers; and the worth of
+/// new things.
 #[derive(Debug, Clone, Default, Serialize)]
 pub(crate) struct Experience {
     /// What it has learned about each object type (design v19 §5.6). Object
     /// types are never forgotten.
     pub(crate) types: BTreeMap<Subject, TypeMemory>,
-    /// How familiar each category is (0 to 1).
-    pub(crate) familiarity: Vec<f32>,
     /// The worth of new things.
     pub(crate) new_things: f32,
     /// The sprites it remembers (design v18 §5.6), by ID.
@@ -135,20 +137,6 @@ pub(crate) struct Experience {
     pub(crate) taught: BTreeSet<Learned>,
     /// Each need's level at the last step 4, to read its relief from.
     pub(crate) needs_before: Option<Vec<f32>>,
-}
-
-impl Experience {
-    /// A newborn's: nothing learned, for `categories` categories.
-    pub(crate) fn new(categories: usize) -> Experience {
-        Experience {
-            types: BTreeMap::new(),
-            familiarity: vec![0.0; categories],
-            new_things: 0.0,
-            individuals: BTreeMap::new(),
-            taught: BTreeSet::new(),
-            needs_before: None,
-        }
-    }
 }
 
 impl Experience {
@@ -161,8 +149,8 @@ impl Experience {
             within([&known.good], (0.0, 1.0), "a good")?;
             within([&known.bad], (-1.0, 0.0), "a bad")?;
             within(&known.habits, (-1.0, 1.0), "a habit")?;
+            within([&known.familiarity], (0.0, 1.0), "a familiarity")?;
         }
-        within(&self.familiarity, (0.0, 1.0), "a familiarity")?;
         within([&self.new_things], (-1.0, 1.0), "the worth of new things")?;
         for individual in self.individuals.values() {
             within(&individual.worth, (0.0, 1.0), "a sprite's worth")?;
@@ -254,7 +242,6 @@ fn within<'a>(
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub(crate) struct Touch {
     pub(crate) tick: u64,
-    pub(crate) category: CategoryId,
     /// What it's learned about as (design v19 §5.6).
     pub(crate) subject: Subject,
     /// Which sprite, if it was one (design v18 §5.6).
