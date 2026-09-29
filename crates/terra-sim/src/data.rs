@@ -4,6 +4,7 @@ use ron::extensions::Extensions;
 use serde::Deserialize;
 
 use crate::brain_io::{BRAIN_IO, BrainInput, BrainIoFile, InputId, brain_io};
+use crate::categories::{CATEGORIES, CategoryEntry, categories};
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, GenomeError};
 use crate::object_types::{Effect, OBJECTS, ObjectType, TypeEntry, object_types};
@@ -23,6 +24,8 @@ pub struct DataPack {
     brain_inputs: Vec<BrainInput>,
     /// The needs (design §5.2), as places in `brain_inputs`.
     needs: Vec<usize>,
+    /// What sprites perceive things as (design v19 §3.5.5), in ascending ID order.
+    categories: Vec<CategoryEntry>,
     /// In ascending ID order.
     object_types: Vec<ObjectType>,
     physiology: Physiology,
@@ -59,6 +62,7 @@ const BUILTIN: &[(&str, &str)] = &[
     (CHEMICALS, include_str!("../../../data/chemicals.ron")),
     (LOCI, include_str!("../../../data/loci.ron")),
     (BRAIN_IO, include_str!("../../../data/brain_io.ron")),
+    (CATEGORIES, include_str!("../../../data/categories.ron")),
     (OBJECTS, include_str!("../../../data/objects.ron")),
     (PHYSIOLOGY, include_str!("../../../data/physiology.ron")),
     (STARTER, include_str!("../../../data/genomes/starter.ron")),
@@ -198,8 +202,10 @@ impl DataPack {
         check_unique(LOCI, loci.iter().map(|l| (l.id.0, l.name.as_str())))?;
         let (brain_inputs, needs) =
             brain_io(parse::<BrainIoFile>(sources, BRAIN_IO)?, &chemicals, &loci)?;
+        let categories = categories(parse(sources, CATEGORIES)?)?;
         let object_types = object_types(
             parse::<Vec<TypeEntry>>(sources, OBJECTS)?,
+            &categories,
             &chemicals,
             &loci,
         )?;
@@ -221,6 +227,7 @@ impl DataPack {
             loci,
             brain_inputs,
             needs,
+            categories,
             object_types,
             physiology,
             starter: Genome { genes: Vec::new() },
@@ -294,6 +301,16 @@ impl DataPack {
             .iter()
             .find(|t| t.id == id)
             .map(|t| t.name.as_str())
+    }
+
+    /// The name of the category the object type called `object_type` is in
+    /// (design v19 §3.5.5): what sprites perceive its objects as.
+    pub fn category_of(&self, object_type: &str) -> Option<&str> {
+        let category = self.named(object_type)?.category as u16;
+        self.categories
+            .iter()
+            .find(|c| c.id == category)
+            .map(|c| c.name.as_str())
     }
 
     /// How the screen says the kind of thing called `category` in general,
