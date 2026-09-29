@@ -43,6 +43,8 @@ pub(crate) struct Physiology {
     pub(crate) forget_below: f32,
     pub(crate) actions: Actions,
     pub(crate) movement: Movement,
+    /// What the Cursor's touch does (design v21 §4.6).
+    pub(crate) cursor: Cursor,
     pub(crate) indices: Indices,
 }
 
@@ -70,6 +72,7 @@ pub(crate) struct PhysiologyEntry {
     forget_below: f32,
     actions: Actions,
     movement: Movement,
+    cursor: Cursor,
 }
 
 /// A brain parameter's range and default (design §5.7, Appendix B).
@@ -105,6 +108,14 @@ pub(crate) struct Movement {
     pub(crate) occupied_penalty: u32,
     /// How many blocked ticks in a row start the search for a way round.
     pub(crate) replan_after: u32,
+}
+
+/// What the Cursor's touch does (design v21 §4.6): the levels it raises.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Cursor {
+    /// The reward a pet injects.
+    pub(crate) pet: f32,
 }
 
 /// How long actions last (design §5.5).
@@ -344,6 +355,7 @@ impl PhysiologyEntry {
             forget_below: self.forget_below,
             actions: self.actions,
             movement: self.movement,
+            cursor: self.cursor,
             indices,
         })
     }
@@ -405,6 +417,8 @@ pub(crate) struct Indices {
     pub(crate) was_hit: usize,
     /// The pulse a fruitless try fires (design §5.2).
     pub(crate) fruitless: usize,
+    /// The pulse the Cursor's Reward fires (design v21 §4.6).
+    pub(crate) petted: usize,
 }
 
 impl Indices {
@@ -483,6 +497,7 @@ impl Indices {
             cornered: pulse("cornered")?,
             was_hit: pulse("was_hit")?,
             fruitless: pulse("fruitless")?,
+            petted: pulse("petted")?,
         })
     }
 }

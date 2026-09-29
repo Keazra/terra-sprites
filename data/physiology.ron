@@ -115,4 +115,8 @@
     // units (a grass step is 10). After `replan_after` blocked ticks in a
     // row, a sprite looks for a way round the sprites in its way.
     movement: (flood_refresh: 8, occupied_penalty: 30, replan_after: 3),
+
+    // The Cursor's touch (design v21 §4.6): the levels it raises. A starting
+    // point for the lab's strength sweep.
+    cursor: (pet: 0.5),
 )

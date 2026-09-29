@@ -385,7 +385,8 @@ fn event_text(event: &Event, data: &DataPack) -> Option<String> {
         }
         EventKind::ObjectSpawned { .. }
         | EventKind::ObjectRemoved { .. }
-        | EventKind::ActionStarted { .. } => None,
+        | EventKind::ActionStarted { .. }
+        | EventKind::Rewarded { .. } => None,
     }
 }
 
