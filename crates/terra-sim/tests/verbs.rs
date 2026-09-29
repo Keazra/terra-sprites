@@ -45,7 +45,7 @@ fn object(world: &World, pos: Pos) -> ObjectView<'_> {
     world.object_at(pos).expect("an object there")
 }
 
-/// The one sprite's ID.
+/// The ID of the sprite placed first: the one sprite, or the one acting.
 fn the_sprite(world: &World) -> EntityId {
     world.sprites().next().expect("a sprite").id()
 }
@@ -584,7 +584,7 @@ fn feeling_world(objects: &[(Pos, &str)], sprite: Pos, script: &[ScriptedAction]
 }
 
 /// A world like `feeling_world`'s, in `data`, drawn from `rows`, with a
-/// resting walker on each of `others`.
+/// walker on each of `others`, resting for the first two ticks.
 fn feeling_world_in(
     data: DataPack,
     rows: &[&str],
@@ -615,7 +615,8 @@ fn feeling_world_in(
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }
 
-/// How much `h1` the one sprite has: what its `fruitless` pulses made.
+/// How much `h1` the sprite placed first has: what its `fruitless` pulses
+/// made.
 fn felt_fruitless(world: &World) -> f32 {
     let sprite = world.sprite(the_sprite(world)).expect("the sprite");
     sprite.chemical("h1").expect("a hormone")
@@ -656,8 +657,8 @@ fn trying_a_bush_with_no_fruit_is_fruitless_too() {
 
 #[test]
 fn trying_water_or_a_sprite_with_no_object_type_is_fruitless_too() {
-    // Design v16 §5.2, v19 §3.5.5: in a pack with no object type for water
-    // or sprites, they have no verb table, so no verb has a rule on them.
+    // Design v20 §5.2: in a pack with no object type for water or sprites,
+    // they have no verb table, so no verb has a rule on them.
     let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
         .iter()
         .map(|&(path, text)| match path {
@@ -670,15 +671,14 @@ fn trying_water_or_a_sprite_with_no_object_type_is_fruitless_too() {
         .collect();
     let data = DataPack::from_sources(&sources).expect("a valid test pack");
     let (me, water, other) = (at(1, 0), at(2, 0), at(1, 1));
-    let cases = [
-        (Verb::Drink, ScriptedAction::Drink { at: water }, None),
-        (Verb::Play, ScriptedAction::Play { at: other }, Some(other)),
+    let cases: [(Verb, ScriptedAction, &[Pos]); 2] = [
+        (Verb::Drink, ScriptedAction::Drink { at: water }, &[]),
+        (Verb::Play, ScriptedAction::Play { at: other }, &[other]),
     ];
-    for (verb, act, other) in cases {
-        let others: Vec<Pos> = other.into_iter().collect();
+    for (verb, act, others) in cases {
         let script = [act, ScriptedAction::Rest];
         let rows = ["..~..", ".....", "....."];
-        let mut world = feeling_world_in(data.clone(), &rows, &[], me, &script, &others);
+        let mut world = feeling_world_in(data.clone(), &rows, &[], me, &script, others);
         let events = world.step();
         assert!(
             endings(&events).contains(&(verb, Outcome::Failed)),

@@ -26,12 +26,11 @@ pub(crate) fn attempt(
 ) -> (Outcome, Hurt) {
     let mut hurt = Hurt::default();
     // Water or a sprite in a pack with no object type for it has no verb
-    // table, so no rule for any verb (design v19 §3.5.5).
-    let Some(kind) = state.kind_of(data, target) else {
-        fruitless(state, data, actor);
-        return (Outcome::Failed, hurt);
-    };
-    let Some(effects) = data.object_types()[kind].verbs.get(&verb) else {
+    // table, so no rule for any verb (design v20 §5.2).
+    let rule = state
+        .kind_of(data, target)
+        .and_then(|kind| Some((kind, data.object_types()[kind].verbs.get(&verb)?)));
+    let Some((kind, effects)) = rule else {
         fruitless(state, data, actor);
         return (Outcome::Failed, hurt);
     };

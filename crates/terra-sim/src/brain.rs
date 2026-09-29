@@ -1282,7 +1282,7 @@ mod tests {
         DataPack::builtin().expect("built-in data pack is valid")
     }
 
-    /// The built-in pack's categories (design v19 §3.5.5, Appendix A).
+    /// The built-in pack's categories (design v20 §3.5.5, Appendix A).
     const BUSH: CategoryId = CategoryId(1);
     const FRUIT: CategoryId = CategoryId(2);
     const WATER: CategoryId = CategoryId(4);

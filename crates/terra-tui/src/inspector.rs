@@ -1703,7 +1703,7 @@ mod tests {
     #[test]
     fn a_scored_name_too_long_for_its_row_wraps_under_itself() {
         let name = concept_name(&[
-            ("attended_berry_bush", true),
+            ("attended_sprite", true),
             ("target_adjacent", true),
             ("hunger", false),
         ]);
@@ -1711,7 +1711,7 @@ mod tests {
         assert_eq!(
             lines,
             [
-                "   not attended berry bush &           +.40",
+                "   not attended sprite &               +.40",
                 "     not target adjacent & hunger",
             ],
             "each input kept whole"
@@ -1722,17 +1722,17 @@ mod tests {
     #[test]
     fn a_wrapped_line_has_the_room_the_number_leaves_on_the_first() {
         let name = concept_name(&[
-            ("attended_berry_bush", true),
-            ("attended_thornbush", true),
-            ("tiredness", false),
+            ("attended_sprite", true),
+            ("target_distance", true),
+            ("tiredness", true),
         ]);
-        // The second row is 34 columns, which only fits because no number
+        // The second row is 35 columns, which only fits because no number
         // follows it.
         assert_eq!(
             scored("   ", &name, "+.40"),
             [
-                "   not attended berry bush &           +.40",
-                "     not attended thornbush & tiredness",
+                "   not attended sprite &               +.40",
+                "     not target distance & not tiredness",
             ]
         );
     }
