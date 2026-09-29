@@ -2,6 +2,7 @@
 
 use crate::action::{ActionView, Outcome};
 use crate::brain::Learned;
+use crate::command::{Command, Rejection};
 use crate::map::Pos;
 use crate::objects::EntityId;
 use crate::registry::Verb;
@@ -54,6 +55,8 @@ pub enum EventKind {
     /// The Cursor corrected a sprite (design v21 §4.6): a zap, or amplified,
     /// a shock.
     Corrected { id: EntityId, amplified: bool },
+    /// A command was refused, and did nothing (design §2.5).
+    CommandRejected { command: Command, reason: Rejection },
     /// An object left the world.
     ObjectRemoved {
         id: EntityId,
