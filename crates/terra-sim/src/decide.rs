@@ -22,8 +22,9 @@ struct Candidate {
     /// Its nearest reachable goal tile.
     goal: Pos,
     aim: Aim,
-    /// The stable ID of its type.
-    type_id: u16,
+    /// The stable ID of its type: none for water or a sprite in a pack with
+    /// no object type for them (design v19 §3.5.5).
+    type_id: Option<u16>,
 }
 
 /// Step 5a and 5b for sprite `id`, after 5.0 (design §5.5). A scripted
@@ -91,9 +92,7 @@ pub(crate) fn decide(
                 distance: normalized(cost, reach),
                 adjacent: state.on_goal_tile(data, sprite.pos, target),
             };
-            let kind = state.kind_of(data, target).expect("a candidate is there");
-            let object_type = &data.object_types()[kind];
-            let type_id = object_type.id;
+            let type_id = state.type_of(data, target);
             let candidate = Candidate {
                 type_id,
                 target,
@@ -303,7 +302,7 @@ fn start_scripted(state: &mut WorldState, data: &DataPack, id: EntityId, events:
         Some(_) => None,
         None => destination,
     };
-    let target = target.and_then(|t| Some((t, state.type_of(data, t)?)));
+    let target = target.map(|t| (t, state.type_of(data, t)));
     let sprite = state.sprites.get_mut(id).expect("the same sprite");
     start(
         sprite,
