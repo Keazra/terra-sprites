@@ -118,5 +118,10 @@
 
     // The Cursor's touch (design v21 §4.6): the levels it raises. A starting
     // point for the lab's strength sweep.
-    cursor: (pet: 0.5),
+    cursor: (
+        pet: 0.5,
+        hug: 1.0,
+        zap: (punishment: 0.5, pain: 0.3),
+        shock: (punishment: 1.0, pain: 0.6),
+    ),
 )

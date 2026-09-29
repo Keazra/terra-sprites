@@ -237,7 +237,8 @@ impl App {
                 EventKind::ObjectSpawned { .. }
                 | EventKind::ObjectRemoved { .. }
                 | EventKind::ActionStarted { .. }
-                | EventKind::Rewarded { .. } => false,
+                | EventKind::Rewarded { .. }
+                | EventKind::Corrected { .. } => false,
                 EventKind::LearnedMilestone { .. } => true,
                 EventKind::ActionEnded { id, ref action, .. } => {
                     inspector::logged_line(id, action, world.data()).is_some()
