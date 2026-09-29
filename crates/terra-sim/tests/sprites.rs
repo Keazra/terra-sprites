@@ -215,6 +215,28 @@ fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> Result<World, terra_sim::S
     )
 }
 
+#[test]
+fn sprites_see_water_and_each_other_in_a_pack_with_no_object_types_for_them() {
+    // Water tiles and sprites are perceived by their categories (design v19
+    // §3.5.5). With no object types to give them verb tables, a verb on one
+    // does nothing, as on anything without a rule for it.
+    let objects_ron = include_str!("../../../data/objects.ron");
+    let data = builtin_changing("objects.ron", &[(objects_ron, SOLIDS)]);
+    let map = Map::from_ascii(&["..~..", ".....", "....."], &data).expect("valid drawing");
+    let sprites = [(Pos { x: 0, y: 1 }, None), (Pos { x: 4, y: 1 }, None)];
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: &[],
+    };
+    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    for _ in 0..2_000 {
+        world.step();
+    }
+    assert_eq!(world.sprites().count(), 2, "both still living");
+}
+
 fn type_at(world: &World, pos: Pos) -> Option<String> {
     world.object_at(pos).map(|o| o.type_name().to_string())
 }
