@@ -12,10 +12,10 @@ use crate::registry::Verb;
 use crate::rolling;
 use crate::world::WorldState;
 
-/// Sprite `actor` applies `verb` to `target`, once: `failed` if the target's
-/// verb table has no such verb or a `RequireCounter` isn't met, and then
-/// nothing after it happens; `applied` otherwise. With the outcome comes
-/// which sprites it hurt.
+/// Sprite `actor` applies `verb` to `target`, once: `failed` if the target
+/// has no verb table, its verb table has no such verb, or a `RequireCounter`
+/// isn't met, and then nothing after it happens; `applied` otherwise. With
+/// the outcome comes which sprites it hurt.
 pub(crate) fn attempt(
     state: &mut WorldState,
     data: &DataPack,
@@ -25,7 +25,10 @@ pub(crate) fn attempt(
     events: &mut Vec<Event>,
 ) -> (Outcome, Hurt) {
     let mut hurt = Hurt::default();
+    // Water or a sprite in a pack with no object type for it has no verb
+    // table, so no rule for any verb (design v19 §3.5.5).
     let Some(kind) = state.kind_of(data, target) else {
+        fruitless(state, data, actor);
         return (Outcome::Failed, hurt);
     };
     let Some(effects) = data.object_types()[kind].verbs.get(&verb) else {
