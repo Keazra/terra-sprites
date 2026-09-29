@@ -3,6 +3,7 @@
 
 use serde::Serialize;
 
+use crate::biochem::Body;
 use crate::data::DataPack;
 use crate::events::{Event, EventKind};
 use crate::objects::EntityId;
@@ -20,29 +21,55 @@ pub enum Command {
         /// attempt (design v21 §5.6).
         reach_back: u16,
     },
+    /// The Cursor's bad touch (design v21 §4.6): a zap, or amplified, a
+    /// shock. It hurts without injuring.
+    Correct {
+        sprite: EntityId,
+        amplified: bool,
+        /// As for `Reward`.
+        reach_back: u16,
+    },
 }
 
 /// Step 1 (design §2.4): applies the commands stamped for this tick, in the
 /// order they were submitted.
 pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Event>) {
     let physiology = data.physiology();
-    let indices = &physiology.indices;
+    let (cursor, indices) = (&physiology.cursor, &physiology.indices);
     for command in std::mem::take(&mut state.commands) {
-        match command {
+        let kind = match command {
             Command::Reward {
                 sprite: id,
                 amplified,
                 ..
             } => {
-                let sprite = state.sprites.get_mut(id).expect("a sprite in the world");
-                let reward = &mut sprite.body.chems[indices.reward];
-                *reward = (*reward + physiology.cursor.pet).min(1.0);
-                sprite.body.pulse(indices.petted, None);
-                events.push(Event {
-                    tick: state.tick,
-                    kind: EventKind::Rewarded { id, amplified },
-                });
+                let body = &mut state.sprites.get_mut(id).expect("a sprite").body;
+                let reward = if amplified { cursor.hug } else { cursor.pet };
+                raise(body, indices.reward, reward);
+                body.pulse(indices.petted, None);
+                EventKind::Rewarded { id, amplified }
             }
-        }
+            Command::Correct {
+                sprite: id,
+                amplified,
+                ..
+            } => {
+                let body = &mut state.sprites.get_mut(id).expect("a sprite").body;
+                let touch = if amplified { cursor.shock } else { cursor.zap };
+                raise(body, indices.punishment, touch.punishment);
+                raise(body, indices.pain, touch.pain);
+                body.pulse(indices.shocked, None);
+                EventKind::Corrected { id, amplified }
+            }
+        };
+        events.push(Event {
+            tick: state.tick,
+            kind,
+        });
     }
+}
+
+/// Raises `body`'s chemical at `index` by `amount`, no further than 1.
+fn raise(body: &mut Body, index: usize, amount: f32) {
+    body.chems[index] = (body.chems[index] + amount).min(1.0);
 }

@@ -97,3 +97,112 @@ fn a_pet_gives_the_sprite_a_good_feeling_of_a_half_on_the_next_tick() {
     let sprite = world.sprite(id).expect("the sprite");
     assert!(close(sprite.felt(), 0.5), "{}", sprite.felt());
 }
+
+#[test]
+fn a_hug_gives_the_sprite_a_full_good_feeling() {
+    // Design v21 §4.6: amplified, a Reward is a hug, reward 1.
+    let (mut world, id) = resting_sprite();
+    world.submit(Command::Reward {
+        sprite: id,
+        amplified: true,
+        reach_back: 3,
+    });
+    let events = world.step();
+    assert!(
+        events.iter().any(|e| e.kind
+            == EventKind::Rewarded {
+                id,
+                amplified: true
+            }),
+        "{events:?}"
+    );
+    let sprite = world.sprite(id).expect("the sprite");
+    assert!(close(sprite.felt(), 1.0), "{}", sprite.felt());
+}
+
+fn zap(sprite: EntityId) -> Command {
+    Command::Correct {
+        sprite,
+        amplified: false,
+        reach_back: 3,
+    }
+}
+
+#[test]
+fn a_zap_gives_a_bad_feeling_of_a_half_and_some_pain_but_no_injury() {
+    // Design v21 §4.6: a zap injects punishment .5 and pain .3, and never
+    // injures.
+    let (mut world, id) = resting_sprite();
+    world.submit(zap(id));
+    let events = world.step();
+    assert!(
+        events.iter().any(|e| e.kind
+            == EventKind::Corrected {
+                id,
+                amplified: false
+            }),
+        "{events:?}"
+    );
+    let sprite = world.sprite(id).expect("the sprite");
+    assert!(close(sprite.felt(), -0.5), "{}", sprite.felt());
+    assert!(close(sprite.chemical("pain").expect("pain"), 0.3));
+    assert_eq!(sprite.chemical("injury"), Some(0.0));
+}
+
+#[test]
+fn a_shock_gives_a_full_bad_feeling_and_more_pain_but_no_injury() {
+    // Design v21 §4.6: amplified, a Correct is a shock: punishment 1, pain .6.
+    let (mut world, id) = resting_sprite();
+    world.submit(Command::Correct {
+        sprite: id,
+        amplified: true,
+        reach_back: 3,
+    });
+    let events = world.step();
+    assert!(
+        events.iter().any(|e| e.kind
+            == EventKind::Corrected {
+                id,
+                amplified: true
+            }),
+        "{events:?}"
+    );
+    let sprite = world.sprite(id).expect("the sprite");
+    assert!(close(sprite.felt(), -1.0), "{}", sprite.felt());
+    assert!(close(sprite.chemical("pain").expect("pain"), 0.6));
+    assert_eq!(sprite.chemical("injury"), Some(0.0));
+}
+
+#[test]
+fn a_pet_and_a_zap_each_reach_the_sprite_as_their_own_sense() {
+    // Design v21 §4.6: a pet pulses `petted`, a zap `shocked`, which genes
+    // can react to. Here each raises its own hormone at step 3.
+    let world_with_senses = || {
+        let world = world(
+            &[".....", ".....", "....."],
+            &[],
+            at(2, 1),
+            r#"Emitter(locus: Locus("petted"), mode: Level, gain: 0.2, chem: "h0"),
+               Emitter(locus: Locus("shocked"), mode: Level, gain: 0.2, chem: "h1"),"#,
+            &[ScriptedAction::Rest],
+        );
+        let id = world.sprites().next().expect("the sprite").id();
+        (world, id)
+    };
+    let (mut petted, id) = world_with_senses();
+    petted.submit(pet(id));
+    petted.step();
+    let sprite = petted.sprite(id).expect("the sprite");
+    assert_eq!(
+        (sprite.chemical("h0"), sprite.chemical("h1")),
+        (Some(0.2), Some(0.0))
+    );
+    let (mut zapped, id) = world_with_senses();
+    zapped.submit(zap(id));
+    zapped.step();
+    let sprite = zapped.sprite(id).expect("the sprite");
+    assert_eq!(
+        (sprite.chemical("h0"), sprite.chemical("h1")),
+        (Some(0.0), Some(0.2))
+    );
+}

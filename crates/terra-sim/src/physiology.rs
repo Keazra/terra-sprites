@@ -116,6 +116,21 @@ pub(crate) struct Movement {
 pub(crate) struct Cursor {
     /// The reward a pet injects.
     pub(crate) pet: f32,
+    /// The reward a hug, an amplified pet, injects.
+    pub(crate) hug: f32,
+    /// What a zap injects.
+    pub(crate) zap: Correction,
+    /// What a shock, an amplified zap, injects.
+    pub(crate) shock: Correction,
+}
+
+/// What the Cursor's Correct injects (design v21 §4.6). It hurts, but adds
+/// no injury.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Correction {
+    pub(crate) punishment: f32,
+    pub(crate) pain: f32,
 }
 
 /// How long actions last (design §5.5).
@@ -399,6 +414,8 @@ pub(crate) struct Indices {
     /// The learning signals, which step 4 uses up (design §5.6).
     pub(crate) reward: usize,
     pub(crate) punishment: usize,
+    /// The drive the Cursor's Correct raises (design v21 §4.6).
+    pub(crate) pain: usize,
     pub(crate) always: usize,
     pub(crate) age: usize,
     pub(crate) nearby_sprites: usize,
@@ -417,8 +434,9 @@ pub(crate) struct Indices {
     pub(crate) was_hit: usize,
     /// The pulse a fruitless try fires (design §5.2).
     pub(crate) fruitless: usize,
-    /// The pulse the Cursor's Reward fires (design v21 §4.6).
+    /// The pulses the Cursor's Reward and Correct fire (design v21 §4.6).
     pub(crate) petted: usize,
+    pub(crate) shocked: usize,
 }
 
 impl Indices {
@@ -448,7 +466,7 @@ impl Indices {
                 .ok_or_else(|| {
                     (
                         "chemicals.ron",
-                        format!("learning needs a signal chemical called `{name}`"),
+                        format!("sprites need a signal chemical called `{name}`"),
                     )
                 })
         };
@@ -486,6 +504,7 @@ impl Indices {
             injury: chem("injury")?,
             reward: signal("reward")?,
             punishment: signal("punishment")?,
+            pain: signal("pain")?,
             always: sensor("always")?,
             age: sensor("age")?,
             nearby_sprites: sensor("nearby_sprites")?,
@@ -498,6 +517,7 @@ impl Indices {
             was_hit: pulse("was_hit")?,
             fruitless: pulse("fruitless")?,
             petted: pulse("petted")?,
+            shocked: pulse("shocked")?,
         })
     }
 }
