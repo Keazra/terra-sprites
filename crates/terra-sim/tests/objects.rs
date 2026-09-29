@@ -133,7 +133,7 @@ fn solid_objects_may_stand_side_by_side_and_items_in_shallow_water() {
 /// then it expires. `extra` adds fields.
 fn sprout(extra: &str) -> String {
     format!(
-        r#"(id: 1, name: "sprout", category: BerryBush, size: Small, hardness: 0.5,
+        r#"(id: 1, name: "sprout", category: "bush", size: Small, hardness: 0.5,
             counters: {{"n": 100}},
             stages: [(name: "a", ticks: (3, 3), next: Stage("b")),
                      (name: "b", ticks: (2, 2), next: Expire)],
@@ -179,7 +179,7 @@ fn an_object_moves_through_its_stages_then_expires() {
 /// A permanent type (no stages) with a counter `n` up to `max`. `extra` adds fields.
 fn ticker(max: u16, extra: &str) -> String {
     format!(
-        r#"(id: 2, name: "ticker", category: Ball, size: Small, hardness: 0.5, counters: {{"n": {max}}}, {extra})"#
+        r#"(id: 2, name: "ticker", category: "toy", size: Small, hardness: 0.5, counters: {{"n": {max}}}, {extra})"#
     )
 }
 
@@ -273,7 +273,7 @@ fn counter_compares_a_counter_with_a_value() {
     ];
     for (cmp, ticks) in expected {
         let counter = format!(
-            r#"(id: 2, name: "ticker", category: Ball, size: Small, hardness: 0.5, counters: {{"n": 100, "m": 100}},
+            r#"(id: 2, name: "ticker", category: "toy", size: Small, hardness: 0.5, counters: {{"n": 100, "m": 100}},
                 rules: [(trigger: Every(1), do: [AddCounter("n", 1)]),
                         (trigger: Every(1), if: [Counter("n", {cmp}, 3)], do: [AddCounter("m", 1)])])"#
         );
@@ -299,7 +299,7 @@ fn fertility_compares_the_fertility_of_the_objects_tile() {
 }
 
 /// A permanent item type with no rules.
-const PEBBLE: &str = r#"(id: 3, name: "pebble", category: Berry, size: Small, hardness: 0.5)"#;
+const PEBBLE: &str = r#"(id: 3, name: "pebble", category: "fruit", size: Small, hardness: 0.5)"#;
 
 #[test]
 fn density_below_counts_objects_of_a_type_within_a_chebyshev_radius() {
@@ -525,7 +525,7 @@ fn spread_to_draws_once_whatever_the_square_holds() {
 /// A solid fixture with no rules unless `extra` adds some.
 fn shrub(extra: &str) -> String {
     format!(
-        r#"(id: 4, name: "shrub", category: Thornbush, size: Large, hardness: 1.0, tags: [Solid, Fixture],
+        r#"(id: 4, name: "shrub", category: "thornbush", size: Large, hardness: 1.0, tags: [Solid, Fixture],
             counters: {{"n": 100}},
             stages: [(name: "shoot", ticks: (5, 5), next: Stage("grown")),
                      (name: "grown", ticks: (5, 5), next: Expire)],
@@ -536,7 +536,7 @@ fn shrub(extra: &str) -> String {
 /// An item that lasts 2 ticks, then runs `on_expire`.
 fn seed(on_expire: &str) -> String {
     format!(
-        r#"(id: 5, name: "seed", category: Berry, size: Small, hardness: 0.5,
+        r#"(id: 5, name: "seed", category: "fruit", size: Small, hardness: 0.5,
             stages: [(name: "ripe", ticks: (2, 2), next: Expire)],
             rules: [(trigger: OnExpire, do: [{on_expire}])])"#
     )

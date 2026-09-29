@@ -287,7 +287,7 @@ fn assert_invalid_objects(types: &[&str], words: &[&str]) {
 /// basics: large and hard, two stages, `young` then `old`, and a `fruit` counter.
 fn bush(id: u16, name: &str, fields: &str) -> String {
     format!(
-        r#"(id: {id}, name: "{name}", category: BerryBush, tags: [Solid, Fixture],
+        r#"(id: {id}, name: "{name}", category: "bush", tags: [Solid, Fixture],
             size: Large, hardness: 1.0,
             counters: {{"fruit": 6}},
             stages: [(name: "young", ticks: (10, 20), next: Stage("old")),
@@ -331,7 +331,7 @@ fn every_name_objects_ron_uses_must_exist() {
     for (fields, unknown) in cases {
         assert_invalid_objects(&[&bush(1, "bush", fields)], &["bush", unknown]);
     }
-    let dead_end = r#"(id: 1, name: "bush", category: BerryBush, size: Large, hardness: 1.0,
+    let dead_end = r#"(id: 1, name: "bush", category: "bush", size: Large, hardness: 1.0,
         stages: [(name: "young", ticks: (10, 20), next: Stage("adult"))])"#;
     assert_invalid_objects(&[dead_end], &["adult"]);
 }
@@ -375,20 +375,20 @@ fn chance_must_be_a_probability_and_is_not_allowed_in_visual_rules() {
 fn stages_counters_and_triggers_need_sensible_numbers() {
     let stage = |ticks: &str| {
         format!(
-            r#"(id: 1, name: "bush", category: BerryBush, size: Large, hardness: 1.0,
+            r#"(id: 1, name: "bush", category: "bush", size: Large, hardness: 1.0,
                 stages: [(name: "young", ticks: {ticks}, next: Expire)])"#
         )
     };
     assert_invalid_objects(&[&stage("(0, 10)")], &["bush", "young"]);
     assert_invalid_objects(&[&stage("(20, 10)")], &["bush", "young"]);
 
-    let no_fruit = r#"(id: 1, name: "bush", category: BerryBush, size: Large, hardness: 1.0, counters: {"fruit": 0})"#;
+    let no_fruit = r#"(id: 1, name: "bush", category: "bush", size: Large, hardness: 1.0, counters: {"fruit": 0})"#;
     assert_invalid_objects(&[no_fruit], &["bush", "fruit"]);
 
     let never = "rules: [(trigger: Every(0), do: [DestroySelf])]";
     assert_invalid_objects(&[&bush(1, "bush", never)], &["bush", "Every(0)"]);
 
-    let twice = r#"(id: 1, name: "bush", category: BerryBush, size: Large, hardness: 1.0,
+    let twice = r#"(id: 1, name: "bush", category: "bush", size: Large, hardness: 1.0,
         stages: [(name: "young", ticks: (1, 2), next: Stage("young")),
                  (name: "young", ticks: (1, 2), next: Expire)])"#;
     assert_invalid_objects(&[twice], &["bush", "young"]);
@@ -398,7 +398,7 @@ fn stages_counters_and_triggers_need_sensible_numbers() {
 fn an_object_type_is_solid_and_a_fixture_or_neither() {
     let with_tags = |tags: &str| {
         format!(
-            r#"(id: 1, name: "crate", category: Ball, size: Medium, hardness: 0.5, tags: {tags})"#
+            r#"(id: 1, name: "crate", category: "toy", size: Medium, hardness: 0.5, tags: {tags})"#
         )
     };
     assert_invalid_objects(&[&with_tags("[Solid]")], &["crate", "solid", "fixture"]);
@@ -421,14 +421,15 @@ fn a_pseudo_type_is_a_verb_table_and_nothing_else() {
         ("rules: [(trigger: Every(5), do: [DestroySelf])]", "rules"),
         (r#"visual: [(state: "wet")]"#, "visual"),
     ] {
-        let water = format!(r#"(id: 100, name: "water", category: Water, pseudo: true, {fields})"#);
+        let water =
+            format!(r#"(id: 100, name: "water", category: "water", pseudo: true, {fields})"#);
         assert_invalid_objects(&[&water], &["water", what]);
     }
 }
 
 #[test]
 fn only_real_object_types_can_be_spawned_spread_replaced_or_counted() {
-    let water = r#"(id: 100, name: "water", category: Water, pseudo: true)"#;
+    let water = r#"(id: 100, name: "water", category: "water", pseudo: true)"#;
     for fields in [
         r#"rules: [(trigger: Every(5), do: [SpawnNearby("water", 1)])]"#,
         r#"rules: [(trigger: Every(5), do: [SpreadTo("water", 1, [])])]"#,
@@ -471,6 +472,168 @@ fn the_built_in_pack_describes_its_object_types_for_display() {
         pack.stage_names("shrub").is_empty(),
         "an unknown type has nothing"
     );
+}
+
+#[test]
+fn each_object_type_is_in_the_category_it_names() {
+    // Design v19 §3.5.3, §3.5.5: thornbushes keep a category of their own
+    // until slice 9e.
+    let pack = DataPack::builtin().expect("built-in data pack is valid");
+    let types = [
+        "berry_bush",
+        "berry",
+        "thornbush",
+        "ball",
+        "water",
+        "sprite",
+    ];
+    assert_eq!(
+        types.map(|object_type| pack.category_of(object_type)),
+        [
+            Some("bush"),
+            Some("fruit"),
+            Some("thornbush"),
+            Some("toy"),
+            Some("water"),
+            Some("sprite"),
+        ]
+    );
+    assert_eq!(pack.category_of("dragon"), None, "no such object type");
+}
+
+/// The built-in categories plus `extra`, as `categories.ron`.
+fn categories_with(extra: &str) -> String {
+    format!(
+        r#"[(id: 1, name: "bush"), (id: 2, name: "fruit"), (id: 3, name: "thornbush"),
+            (id: 4, name: "water"), (id: 5, name: "toy"), (id: 6, name: "sprite"), {extra}]"#
+    )
+}
+
+#[test]
+fn each_category_is_worded_in_general_by_its_plural() {
+    // Design v19 §3.5.5: as an object type's is, less any spaces at either
+    // end, and never empty.
+    let pack = DataPack::builtin().expect("built-in data pack is valid");
+    let names = ["bush", "fruit", "thornbush", "water", "toy", "sprite"];
+    assert_eq!(
+        names.map(|name| pack.category_plural(name)),
+        [
+            Some("bushes"),
+            None,
+            Some("thornbushes"),
+            None,
+            Some("toys"),
+            Some("sprites"),
+        ],
+        "fruit and water aren't counted"
+    );
+    assert_eq!(pack.category_plural("dragon"), None, "no such category");
+
+    let text = categories_with(r#"(id: 7, name: "tree", plural: "  trees ")"#);
+    let pack = builtin_with("categories.ron", &text).expect("a valid pack");
+    assert_eq!(pack.category_plural("tree"), Some("trees"));
+    for plural in [r#""""#, r#""  ""#] {
+        let text = categories_with(&format!(r#"(id: 7, name: "tree", plural: {plural})"#));
+        assert_invalid("categories.ron", &text, "`tree` has an empty plural");
+    }
+}
+
+#[test]
+fn a_pack_without_a_categories_file_is_rejected() {
+    assert_eq!(
+        builtin_without("categories.ron").unwrap_err(),
+        DataError::MissingFile("categories.ron".into())
+    );
+}
+
+#[test]
+fn category_ids_and_names_are_unique_and_from_1_to_26() {
+    // Each category's brain input takes an ID from 36 to 63 (design v19 §3.5.5).
+    let file = "categories.ron";
+    assert_invalid(
+        file,
+        &categories_with(r#"(id: 1, name: "tree")"#),
+        "the id 1",
+    );
+    assert_invalid(file, &categories_with(r#"(id: 7, name: "bush")"#), "`bush`");
+    for id in [0, 27] {
+        let text = categories_with(&format!(r#"(id: {id}, name: "tree")"#));
+        assert_invalid(file, &text, &format!("the id {id}"));
+    }
+    let text = categories_with(r#"(id: 26, name: "tree")"#);
+    assert!(builtin_with(file, &text).is_ok(), "26 is the last ID");
+}
+
+#[test]
+fn the_categories_include_water_and_sprites() {
+    // Water tiles and sprites are physics, not objects: the engine perceives
+    // them as these two categories, whatever else the list holds.
+    for missing in ["water", "sprite"] {
+        let text =
+            categories_with("").replace(&format!(r#", name: "{missing}")"#), r#", name: "moss")"#);
+        assert_invalid("categories.ron", &text, &format!("`{missing}`"));
+    }
+}
+
+#[test]
+fn an_object_type_names_a_category_in_the_list() {
+    let shrub = r#"(id: 1, name: "shrub", category: "tree", tags: [Solid, Fixture],
+        size: Large, hardness: 1.0)"#;
+    assert_invalid_objects(&[shrub], &["shrub", "unknown category `tree`"]);
+}
+
+#[test]
+fn each_object_type_is_worded_in_general_by_its_own_plural() {
+    // Design v19 §6.1, replacing v17's wording of a kind by the first object
+    // type perceived as it.
+    let pack = DataPack::builtin().expect("built-in data pack is valid");
+    let types = [
+        "berry_bush",
+        "berry",
+        "thornbush",
+        "water",
+        "ball",
+        "sprite",
+    ];
+    assert_eq!(
+        types.map(|object_type| pack.plural_of(object_type)),
+        [
+            Some("berry bushes"),
+            Some("berries"),
+            Some("thornbushes"),
+            None,
+            Some("balls"),
+            Some("sprites"),
+        ],
+        "water isn't counted"
+    );
+    assert_eq!(pack.plural_of("dragon"), None, "no such object type");
+
+    // Two bushes in one category each keep their own, and one that gives
+    // none isn't counted.
+    let text = format!(
+        "[{}, {}]",
+        bush(1, "shrub", ""),
+        bush(2, "bramble", r#"plural: "brambles""#)
+    );
+    let pack = builtin_with("objects.ron", &text).expect("a valid pack");
+    assert_eq!(pack.plural_of("bramble"), Some("brambles"));
+    assert_eq!(pack.plural_of("shrub"), None);
+}
+
+#[test]
+fn an_object_type_s_plural_loses_any_spaces_at_either_end() {
+    let text = format!("[{}]", bush(1, "shrub", r#"plural: "  shrubs ""#));
+    let pack = builtin_with("objects.ron", &text).expect("a valid pack");
+    assert_eq!(pack.plural_of("shrub"), Some("shrubs"));
+}
+
+#[test]
+fn an_object_type_s_plural_may_not_be_empty() {
+    for plural in [r#""""#, r#""  ""#] {
+        let fields = format!("plural: {plural}");
+        assert_invalid_objects(&[&bush(1, "bush", &fields)], &["bush", "plural"]);
+    }
 }
 
 const BUILTIN_PHYSIOLOGY: &str = include_str!("../../../data/physiology.ron");
@@ -548,8 +711,22 @@ fn every_receptor_target_has_a_range_and_nothing_else_does() {
 }
 
 #[test]
-fn a_starter_genome_with_a_flagged_or_unknown_gene_does_not_load() {
+fn a_starter_genome_with_a_flagged_unknown_or_unmatched_gene_does_not_load() {
     let starter = |gene: &str| format!("(format: 1, genes: [{gene}])");
+    // Each would silently do nothing (design §4.3, v19 §5.7). An unmatched
+    // gene names the category it's missing, however it names it.
+    assert_invalid(
+        "genomes/starter.ron",
+        &starter(r#"AttentionInstinct(input: "hunger", category: "tree", weight: 1.0)"#),
+        "(`tree`)",
+    );
+    assert_invalid(
+        "genomes/starter.ron",
+        &starter(
+            r#"Instinct(inputs: [("hunger", false), ("attended_tree", false)], verb: Eat, weight: 1.0)"#,
+        ),
+        "(`tree`)",
+    );
     assert_invalid(
         "genomes/starter.ron",
         &starter(r#"HalfLife(chem: "energy", ticks: 10)"#),
@@ -667,13 +844,14 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
         "shocked",
     ];
     expected.extend(pulses.iter().enumerate().map(|(i, &p)| (i as u16 + 27, p)));
-    // The Target inputs are fixed in code, numbered from 36 (Appendix A).
+    // The Target inputs, numbered from 36: one for each category, then the
+    // two fixed in code (design v19 §3.5.5, Appendix A).
     expected.extend([
-        (36, "attended_berry_bush"),
-        (37, "attended_berry"),
+        (36, "attended_bush"),
+        (37, "attended_fruit"),
         (38, "attended_thornbush"),
         (39, "attended_water"),
-        (40, "attended_ball"),
+        (40, "attended_toy"),
         (41, "attended_sprite"),
         (42, "target_distance"),
         (43, "target_adjacent"),
@@ -681,6 +859,44 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
     // State inputs carry on from 64, past the IDs kept for Target inputs.
     expected.extend([(64, "cornered"), (65, "fruitless")]);
     assert_eq!(inputs, expected);
+}
+
+#[test]
+fn a_category_s_brain_input_takes_its_id_from_the_category_s() {
+    // 35 + id for categories 1 to 6, and 37 + id from 7, past target_distance
+    // and target_adjacent (design v19 §3.5.5).
+    let text = categories_with(r#"(id: 7, name: "tree"), (id: 26, name: "shell")"#);
+    let pack = builtin_with("categories.ron", &text).expect("a valid pack");
+    let targets: Vec<(u16, &str)> = pack
+        .brain_inputs()
+        .filter(|&(id, _)| (36..=63).contains(&id))
+        .collect();
+    assert_eq!(
+        targets,
+        [
+            (36, "attended_bush"),
+            (37, "attended_fruit"),
+            (38, "attended_thornbush"),
+            (39, "attended_water"),
+            (40, "attended_toy"),
+            (41, "attended_sprite"),
+            (42, "target_distance"),
+            (43, "target_adjacent"),
+            (44, "attended_tree"),
+            (63, "attended_shell"),
+        ]
+    );
+
+    // A retired category leaves its input's ID unused.
+    let text = r#"[(id: 1, name: "bush"), (id: 2, name: "fruit"), (id: 4, name: "water"),
+        (id: 5, name: "toy"), (id: 6, name: "sprite"), (id: 8, name: "thornbush")]"#;
+    let pack = builtin_with("categories.ron", text).expect("a valid pack");
+    let ids: Vec<u16> = pack
+        .brain_inputs()
+        .map(|(id, _)| id)
+        .filter(|id| (36..=63).contains(id))
+        .collect();
+    assert_eq!(ids, [36, 37, 39, 40, 41, 42, 43, 45]);
 }
 
 #[test]
@@ -808,7 +1024,7 @@ fn only_an_item_can_be_pushed() {
     // which have no objects to push.
     let bush = bush(1, "bush", "verbs: { Play: [Push(2)] }");
     assert_invalid_objects(&[&bush], &["bush", "Push", "item"]);
-    let water = r#"(id: 100, name: "water", category: Water, pseudo: true,
+    let water = r#"(id: 100, name: "water", category: "water", pseudo: true,
         verbs: { Play: [Push(2)] })"#;
     assert_invalid_objects(&[water], &["water", "Push", "item"]);
 }
@@ -818,17 +1034,21 @@ fn a_pseudo_type_s_verbs_only_inject_and_signal() {
     // Water and sprites aren't objects, so nothing else a verb does applies.
     for effect in ["DestroySelf", r#"SpawnNearby("bush", 1)"#] {
         let water = format!(
-            r#"(id: 100, name: "water", category: Water, pseudo: true,
+            r#"(id: 100, name: "water", category: "water", pseudo: true,
                 verbs: {{ Drink: [{effect}] }})"#
         );
-        let words = ["water", effect.split('(').next().expect("a name"), "Inject"];
+        let words = [
+            "water",
+            effect.split('(').next().expect("a name"),
+            "a pseudo type's verbs may only Inject and Signal",
+        ];
         assert_invalid_objects(&[&bush(1, "bush", ""), &water], &words);
     }
 }
 
 /// An item type called `pebble`, with `fields`.
 fn pebble(fields: &str) -> String {
-    format!(r#"(id: 5, name: "pebble", category: Ball, {fields})"#)
+    format!(r#"(id: 5, name: "pebble", category: "toy", {fields})"#)
 }
 
 #[test]
@@ -860,7 +1080,7 @@ fn hardness_is_from_0_to_1() {
 fn a_pseudo_type_gives_both_a_size_and_a_hardness_or_neither() {
     // Sprites have a size and water doesn't, which the data says, not the code.
     let water = |fields: &str| {
-        format!(r#"(id: 100, name: "water", category: Water, pseudo: true, {fields})"#)
+        format!(r#"(id: 100, name: "water", category: "water", pseudo: true, {fields})"#)
     };
     assert_invalid_objects(
         &[&bush(1, "bush", ""), &water("size: Large")],
