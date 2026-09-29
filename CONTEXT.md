@@ -165,6 +165,10 @@ A gene that sets something an earlier gene in the genome already set, so it has 
 **Unknown gene**:
 A gene this version of the game can't read. It's kept exactly as it is, and has no effect.
 
+**Unmatched gene**:
+A gene that names a category this world doesn't have, such as one from a newer version of the game. It's kept exactly as it is, and has no effect.
+_Avoid_: orphan gene, unknown gene (that one can't be read at all)
+
 **Chemical**:
 A named level in a sprite's body, from 0 to 1. Every chemical is physical, a signal or a hormone.
 _Avoid_: stat
