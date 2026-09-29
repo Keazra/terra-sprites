@@ -493,6 +493,43 @@ fn each_object_type_is_in_the_category_it_names() {
     assert_eq!(pack.category_of("dragon"), None, "no such object type");
 }
 
+/// The built-in categories plus `extra`, as `categories.ron`.
+fn categories_with(extra: &str) -> String {
+    format!(
+        r#"[(id: 1, name: "bush"), (id: 2, name: "fruit"), (id: 3, name: "thornbush"),
+            (id: 4, name: "water"), (id: 5, name: "toy"), (id: 6, name: "sprite"), {extra}]"#
+    )
+}
+
+#[test]
+fn a_pack_without_a_categories_file_is_rejected() {
+    assert_eq!(
+        builtin_without("categories.ron").unwrap_err(),
+        DataError::MissingFile("categories.ron".into())
+    );
+}
+
+#[test]
+fn category_ids_and_names_are_unique_and_from_1_to_26() {
+    // Each category's brain input takes an ID from 36 to 63 (design v19 §3.5.5).
+    let file = "categories.ron";
+    assert_invalid(file, &categories_with(r#"(id: 1, name: "tree")"#), "the id 1");
+    assert_invalid(file, &categories_with(r#"(id: 7, name: "bush")"#), "`bush`");
+    for id in [0, 27] {
+        let text = categories_with(&format!(r#"(id: {id}, name: "tree")"#));
+        assert_invalid(file, &text, &format!("the id {id}"));
+    }
+    let text = categories_with(r#"(id: 26, name: "tree")"#);
+    assert!(builtin_with(file, &text).is_ok(), "26 is the last ID");
+}
+
+#[test]
+fn an_object_type_names_a_category_in_the_list() {
+    let shrub = r#"(id: 1, name: "shrub", category: "tree", tags: [Solid, Fixture],
+        size: Large, hardness: 1.0)"#;
+    assert_invalid_objects(&[shrub], &["shrub", "unknown category `tree`"]);
+}
+
 #[test]
 fn a_kind_of_thing_takes_its_plural_from_the_first_object_type_of_that_kind_to_give_one() {
     let pack = DataPack::builtin().expect("built-in data pack is valid");
