@@ -184,19 +184,25 @@ pub(crate) struct Snapshot {
     pub(crate) scoring: SpriteScoring,
 }
 
-/// What something learned is about (design v18 §5.9): a category, named by
-/// its first object type until slice 9e (`berry_bush`, and `sprite` for
-/// sprites in general; design v19 §6.1), or a particular sprite.
+/// What something learned is about (design v19 §5.9, §6.1).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum Thing {
-    Kind(String),
+    /// An object type, by name (`berry_bush`).
+    ObjectType(String),
+    /// A category, by name (`bush`): its summary, what the sprite thinks of
+    /// the things in it it hasn't met (design v19 §5.6). The sprite
+    /// category's is sprites in general (design v18 §5.6). Water or sprites
+    /// in a pack with no object type for them are learned about as their
+    /// category too.
+    Category(String),
+    /// A particular sprite (design v18 §5.6).
     Sprite(EntityId),
 }
 
 impl From<&str> for Thing {
-    /// The kind of thing called `kind`.
-    fn from(kind: &str) -> Thing {
-        Thing::Kind(kind.to_string())
+    /// The object type called `object_type`.
+    fn from(object_type: &str) -> Thing {
+        Thing::ObjectType(object_type.to_string())
     }
 }
 
@@ -211,9 +217,8 @@ pub enum Learned {
     /// How frightening a thing is (design v18 §5.6): it hurt the sprite by
     /// its own doing.
     Fear { thing: Thing },
-    /// A habit: doing a verb to a category, named by its first object type
-    /// until slice 9e (design v19 §6.1), as a category in `Thing` is.
-    Habit { thing: String, verb: Verb },
+    /// A habit: doing a verb to an object type (design v19 §5.6).
+    Habit { thing: Thing, verb: Verb },
     /// The worth of new things.
     NewThings,
 }
@@ -265,7 +270,7 @@ pub enum Part<'a> {
     /// How frightening the thing attended to is (design v18 §5.5).
     Fear(Thing),
     /// The habit of doing the verb to the thing attended to.
-    Habit(&'a str),
+    Habit(Thing),
 }
 
 impl Brain {
@@ -543,7 +548,7 @@ impl Brain {
         let mut things: Vec<(Thing, &[f32], f32, f32)> = Vec::new();
         for category in categories {
             if category.id == data.sprite_category() {
-                let thing = Thing::from(data.category_label(category.id));
+                let thing = category_thing(category.id, data);
                 things.push((thing, &in_general.worth, in_general.good, in_general.bad));
                 continue;
             }
@@ -591,7 +596,7 @@ impl Brain {
         for (&subject, known) in habits {
             for (&verb, &value) in VERBS.iter().zip(&known.habits) {
                 let learned = Learned::Habit {
-                    thing: subject_name(subject, data).to_string(),
+                    thing: subject_thing(subject, data),
                     verb,
                 };
                 memory.push(Memory {
@@ -636,7 +641,7 @@ impl Brain {
         // listed, and a lesson, after them.
         memory.push(Memory {
             learned: Learned::Fear {
-                thing: Thing::from(data.category_label(data.sprite_category())),
+                thing: category_thing(data.sprite_category(), data),
             },
             amount: in_general.fear,
         });
@@ -810,7 +815,7 @@ impl Brain {
                     amount: fear,
                 },
                 Contribution {
-                    part: Part::Habit(subject_name(subject, data)),
+                    part: Part::Habit(subject_thing(subject, data)),
                     amount: habit,
                 },
             ]);
@@ -1133,16 +1138,21 @@ fn thing_of(category: CategoryId, sprite: Option<EntityId>, data: &DataPack) -> 
 /// What something learned about as `subject` is called (design v19 §6.1):
 /// its object type, or its category if it has none.
 fn subject_thing(subject: Subject, data: &DataPack) -> Thing {
-    Thing::from(subject_name(subject, data))
+    match subject {
+        Subject::ObjectType(id) => Thing::from(
+            data.object_type(id)
+                .expect("an object type in the pack")
+                .name
+                .as_str(),
+        ),
+        Subject::Category(category) => category_thing(category, data),
+    }
 }
 
-/// The name of `subject`'s object type, or of its category if it has none.
-fn subject_name(subject: Subject, data: &DataPack) -> &str {
-    let name = match subject {
-        Subject::ObjectType(id) => data.object_type(id).map(|t| t.name.as_str()),
-        Subject::Category(category) => data.category(category).map(|c| c.name.as_str()),
-    };
-    name.expect("a subject in the pack")
+/// The category `category`, named (design v19 §6.1).
+fn category_thing(category: CategoryId, data: &DataPack) -> Thing {
+    let category = data.category(category).expect("a category in the pack");
+    Thing::Category(category.name.clone())
 }
 
 /// The `target_distance` input's value in `inputs` (design §5.2).
@@ -2048,7 +2058,7 @@ mod tests {
             [
                 (Part::Concept(vec![("boredom", false)]), 0.5),
                 (Part::Worth("ball".into()), 0.3),
-                (Part::Habit("ball"), -0.2),
+                (Part::Habit("ball".into()), -0.2),
             ]
         );
     }
