@@ -11,7 +11,7 @@ use crate::biochem::{self, Senses, Traits};
 use crate::brain::{Explanation, Memory};
 use crate::command::{self, Command};
 use crate::config::WorldConfig;
-use crate::cursor::{Cursor, CursorView};
+use crate::cursor::Cursor;
 use crate::data::DataPack;
 use crate::ecology::{self, holds_without_drawing, new_object, square};
 use crate::events::{DeathCause, Emptied, Event, EventKind};
@@ -424,6 +424,49 @@ impl<'a> ObjectView<'a> {
     }
 }
 
+/// A read-only view of the Cursor, as far as it touches the world (design
+/// v23 §6.5).
+pub struct CursorView<'a> {
+    world: &'a World,
+}
+
+impl<'a> CursorView<'a> {
+    /// The sprite the Cursor leads, if any.
+    pub fn leads(&self) -> Option<EntityId> {
+        self.world.state.cursor.leads()
+    }
+
+    /// The item the Cursor holds, if any.
+    pub fn holds(&self) -> Option<HeldView<'a>> {
+        let id = self.world.state.cursor.holds()?;
+        let object = self.world.state.objects.get(id)?;
+        Some(HeldView {
+            id,
+            object,
+            world: self.world,
+        })
+    }
+}
+
+/// A read-only view of the item the Cursor holds: an object off the map.
+pub struct HeldView<'a> {
+    id: EntityId,
+    object: &'a Object,
+    world: &'a World,
+}
+
+impl<'a> HeldView<'a> {
+    /// The item's entity ID.
+    pub fn id(&self) -> EntityId {
+        self.id
+    }
+
+    /// The name of the item's type, as `objects.ron` gives it.
+    pub fn type_name(&self) -> &'a str {
+        &self.world.data.object_types()[self.object.kind].name
+    }
+}
+
 impl World {
     /// A new world, generated from `config` and `seed`.
     pub fn new(config: WorldConfig, data: DataPack, seed: u64) -> World {
@@ -608,13 +651,18 @@ impl World {
         &self.data
     }
 
-    /// Every object, in ascending ID order.
+    /// Every object on the map, in ascending ID order: an item the Cursor
+    /// holds is off it (`World::cursor`).
     pub fn objects(&self) -> impl Iterator<Item = ObjectView<'_>> {
-        self.state.objects.iter().map(|(id, object)| ObjectView {
-            id,
-            object,
-            world: self,
-        })
+        self.state
+            .objects
+            .iter()
+            .filter(|(_, object)| !object.held)
+            .map(|(id, object)| ObjectView {
+                id,
+                object,
+                world: self,
+            })
     }
 
     /// Every sprite, in ascending ID order.
@@ -663,9 +711,7 @@ impl World {
 
     /// The Cursor, as far as it touches the world (design v23 §6.5).
     pub fn cursor(&self) -> CursorView<'_> {
-        CursorView {
-            cursor: &self.state.cursor,
-        }
+        CursorView { world: self }
     }
 
     /// How many sprites have died of `cause` since the world began.

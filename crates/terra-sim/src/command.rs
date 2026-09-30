@@ -30,6 +30,9 @@ pub enum Command {
     Correct { sprite: EntityId, amplified: bool },
     /// Takes hold of a sprite, which the Cursor then leads (design v23 §6.5).
     TakeHold { sprite: EntityId },
+    /// Picks up an item, which the Cursor then holds, off the map (design
+    /// v23 §6.5).
+    PickUp { item: EntityId },
     /// Lets go of the sprite the Cursor leads, which chooses for itself
     /// again at its next step 5 (design v23 §6.5).
     LetGo,
@@ -56,7 +59,10 @@ impl CursorTouch {
         match *command {
             Command::Reward { amplified, .. } => Some(CursorTouch::rewarding(amplified)),
             Command::Correct { amplified, .. } => Some(CursorTouch::correcting(amplified)),
-            Command::TakeHold { .. } | Command::LetGo | Command::MoveCursor { .. } => None,
+            Command::TakeHold { .. }
+            | Command::PickUp { .. }
+            | Command::LetGo
+            | Command::MoveCursor { .. } => None,
         }
     }
 
@@ -139,6 +145,7 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
             } => reward(state, data, sprite, amplified, reach_back),
             Command::Correct { sprite, amplified } => correct(state, data, sprite, amplified),
             Command::TakeHold { sprite } => take_hold(state, sprite, events),
+            Command::PickUp { item } => pick_up(state, data, item),
             Command::LetGo => let_go(state),
             // Nothing to report: it moves many times a second while leading.
             Command::MoveCursor { tile } => {
@@ -233,4 +240,21 @@ fn let_go(state: &mut WorldState) -> Result<EventKind, Rejection> {
     let led = state.sprites.get_mut(sprite).expect("the led sprite");
     led.lead = None;
     Ok(EventKind::LetGo { sprite })
+}
+
+/// The Cursor picks up `item`, and holds it off the map, at rest (design
+/// v23 §6.5).
+fn pick_up(
+    state: &mut WorldState,
+    data: &DataPack,
+    item: EntityId,
+) -> Result<EventKind, Rejection> {
+    if let Some(grip) = state.cursor.grip {
+        return Err(Rejection::Busy(grip));
+    }
+    let object = state.objects.get(item).ok_or(Rejection::Gone)?;
+    let object_type = data.object_types()[object.kind].name.clone();
+    state.objects.lift(item);
+    state.cursor.grip = Some(Grip::Holds(item));
+    Ok(EventKind::PickedUp { item, object_type })
 }

@@ -1200,6 +1200,7 @@ pub(crate) fn event_line(event: &Event, data: &DataPack) -> Option<String> {
                     (touch.name(), sprite)
                 }
                 terra_sim::Command::TakeHold { .. }
+                | terra_sim::Command::PickUp { .. }
                 | terra_sim::Command::LetGo
                 | terra_sim::Command::MoveCursor { .. } => {
                     return None;
@@ -1212,9 +1213,10 @@ pub(crate) fn event_line(event: &Event, data: &DataPack) -> Option<String> {
             };
             Some(format!("Couldn't {verb} {}: {why}", sprite_label(sprite)))
         }
-        EventKind::TookHold { .. } | EventKind::LetGo { .. } | EventKind::CursorEmptied { .. } => {
-            None
-        }
+        EventKind::TookHold { .. }
+        | EventKind::LetGo { .. }
+        | EventKind::PickedUp { .. }
+        | EventKind::CursorEmptied { .. } => None,
         EventKind::ObjectSpawned { .. }
         | EventKind::ObjectRemoved { .. }
         | EventKind::ActionStarted { .. } => None,
