@@ -111,6 +111,12 @@ impl DeathCause {
 pub enum Emptied {
     /// The sprite it led died.
     Died { sprite: EntityId },
+    /// The item it held left the world by itself: it expired, say.
+    Removed {
+        item: EntityId,
+        object_type: String,
+        reason: Removal,
+    },
 }
 
 /// Why an object left the world.

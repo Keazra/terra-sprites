@@ -3,7 +3,7 @@
 
 use terra_sim::{
     Blocker, Command, DataPack, Emptied, EntityId, Event, EventKind, Grip, Map, Outcome, Pos,
-    Rejection, Scenario, ScriptedAction, Terrain, World,
+    Rejection, Removal, Scenario, ScriptedAction, Terrain, World,
 };
 
 fn builtin() -> DataPack {
@@ -436,11 +436,102 @@ fn a_rolling_ball_picked_up_stops_rolling() {
     let ball = object_on(&world, at(2, 1));
     world.step();
     world.step();
-    assert_eq!(world.object_at(at(3, 1)).map(|o| o.id()), Some(ball), "rolling");
+    assert_eq!(
+        world.object_at(at(3, 1)).map(|o| o.id()),
+        Some(ball),
+        "rolling"
+    );
     world.submit(Command::PickUp { item: ball });
     world.submit(Command::PutDown { tile: at(3, 1) });
     for _ in 0..4 {
         world.step();
     }
-    assert_eq!(world.object_at(at(3, 1)).map(|o| o.id()), Some(ball), "at rest");
+    assert_eq!(
+        world.object_at(at(3, 1)).map(|o| o.id()),
+        Some(ball),
+        "at rest"
+    );
+}
+
+/// The built-in pack, but a berry lasts 3 ticks and always sprouts when it
+/// expires, wherever it is.
+fn short_lived_sprouting_berries() -> DataPack {
+    builtin_changing(
+        "objects.ron",
+        &[
+            (
+                r#"stages: [(name: "fresh", ticks: (1500, 2500), next: Expire)],"#,
+                r#"stages: [(name: "fresh", ticks: (3, 3), next: Expire)],"#,
+            ),
+            (
+                r#"if: [Fertility(Ge, 0.5), DensityBelow("berry_bush", 4, 3), KeepsPathsOpen, Chance(0.1)],"#,
+                "if: [],",
+            ),
+        ],
+    )
+}
+
+#[test]
+fn a_held_berry_expires_and_empties_the_cursor_but_never_sprouts() {
+    let data = short_lived_sprouting_berries();
+    let map = Map::from_ascii(&["....."], &data).expect("valid drawing");
+    let scenario = Scenario {
+        map,
+        objects: &[(at(2, 0), "berry")],
+        sprites: &[],
+        scripted: &[],
+    };
+    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    let berry = object_on(&world, at(2, 0));
+    world.submit(Command::PickUp { item: berry });
+    let mut events = Vec::new();
+    for _ in 0..6 {
+        events.extend(world.step());
+    }
+    assert!(
+        events.iter().any(|e| e.kind
+            == EventKind::CursorEmptied {
+                reason: Emptied::Removed {
+                    item: berry,
+                    object_type: "berry".into(),
+                    reason: Removal::Expired
+                }
+            }),
+        "{events:?}"
+    );
+    assert!(world.cursor().holds().is_none());
+    assert_eq!(world.objects().count(), 0, "it didn't sprout: {events:?}");
+}
+
+#[test]
+fn a_held_items_location_conditions_are_false() {
+    // Anywhere on the map, this berry destroys itself on its first turn.
+    let data = builtin_changing(
+        "objects.ron",
+        &[(
+            r#"if: [Fertility(Ge, 0.5), DensityBelow("berry_bush", 4, 3), KeepsPathsOpen, Chance(0.1)],
+          do: [ReplaceWith("berry_bush")]),"#,
+            r#"if: [], do: []),
+         (trigger: Every(1), if: [Fertility(Ge, 0.0)], do: [DestroySelf]),"#,
+        )],
+    );
+    let map = Map::from_ascii(&["....."], &data).expect("valid drawing");
+    let objects = [(at(2, 0), "berry"), (at(4, 0), "berry")];
+    let scenario = Scenario {
+        map,
+        objects: &objects,
+        sprites: &[],
+        scripted: &[],
+    };
+    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    let held = object_on(&world, at(2, 0));
+    world.submit(Command::PickUp { item: held });
+    for _ in 0..3 {
+        world.step();
+    }
+    assert!(
+        world.object_at(at(4, 0)).is_none(),
+        "the one on the map went"
+    );
+    assert_eq!(world.cursor().holds().map(|h| h.id()), Some(held));
 }
