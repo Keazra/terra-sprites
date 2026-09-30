@@ -216,20 +216,13 @@ fn hanging(head: &str, text: &str) -> Vec<String> {
     lines
 }
 
-/// What a sprite is doing, as the Body tab's first line says it (design
-/// §6.1): in plain words, describing and never speaking as the sprite; or,
-/// in the detail view, exactly, with its verb, destination or target, and
-/// outcome.
 /// While the Cursor leads `sprite`, what the Body tab says in place of an
 /// action (design v23 §6.1): "Being led · 4 tiles behind", or once caught
-/// up "Being led"; in the detail view `LED → (61,40) · walking (4 tiles)`.
+/// up, as close as it can get, "Being led"; in the detail view
+/// `LED → (61,40) · walking (4 tiles)`, with the Cursor's tile.
 fn led_line(sprite: &SpriteView, detail: bool, world: &World) -> Option<String> {
-    let cursor = world.cursor();
-    let tile = cursor
-        .tile()
-        .filter(|_| cursor.leads() == Some(sprite.id()))?;
-    let pos = sprite.pos();
-    let behind = u32::from(pos.x.abs_diff(tile.x).max(pos.y.abs_diff(tile.y)));
+    let behind = sprite.lead_steps_left()?;
+    let tile = world.cursor().tile()?;
     Some(match (detail, behind) {
         (false, 0) => "Being led".into(),
         (false, _) => format!("Being led · {} behind", counted(behind, "tile")),
@@ -243,6 +236,10 @@ fn led_line(sprite: &SpriteView, detail: bool, world: &World) -> Option<String> 
     })
 }
 
+/// What a sprite is doing, as the Body tab's first line says it (design
+/// §6.1): in plain words, describing and never speaking as the sprite; or,
+/// in the detail view, exactly, with its verb, destination or target, and
+/// outcome.
 fn action_line(action: &ActionView, detail: bool, data: &DataPack) -> String {
     let plain = match action.verb {
         _ if detail => None,

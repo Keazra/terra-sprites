@@ -229,6 +229,16 @@ pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
     })
 }
 
+/// While the Cursor leads `sprite`, the steps left on its way to where it's
+/// heading, as near the Cursor as it can get (design v23 §6.5): 0 once
+/// it's there.
+pub(crate) fn lead_steps_left(sprite: &Sprite) -> Option<u32> {
+    sprite
+        .lead
+        .as_ref()
+        .map(|_| way_ahead(sprite).map_or(0, |way| way.len() as u32))
+}
+
 /// Whether `sprite` has an action that hasn't ended.
 pub(crate) fn is_acting(sprite: &Sprite) -> bool {
     sprite.action.as_ref().is_some_and(|a| a.ended.is_none())

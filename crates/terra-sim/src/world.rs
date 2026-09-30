@@ -285,6 +285,13 @@ impl<'a> SpriteView<'a> {
         action::view(self.sprite, &self.world.data)
     }
 
+    /// While the Cursor leads it, the steps left on its way to where it's
+    /// heading, as near the Cursor as it can get: 0 once it's there, or as
+    /// close as it can get (design v23 §6.5). `None` while it isn't led.
+    pub fn lead_steps_left(&self) -> Option<u32> {
+        action::lead_steps_left(self.sprite)
+    }
+
     /// What its brain did at the latest step 5, explained (design §5.9), or
     /// `None` before its first decision.
     pub fn explain(&self) -> Option<Explanation<'a>> {
