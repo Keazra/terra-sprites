@@ -2235,6 +2235,36 @@ fn with_room_the_status_line_hints_at_the_mode_keys() {
     assert!(status.contains("Z/X mode"), "{status}");
 }
 
+#[test]
+fn a_train_click_with_nothing_to_act_on_says_so_in_the_hints_place_for_3_seconds() {
+    // Design v22 §6.1: it sends nothing, so the event log has nothing to say.
+    let world = drawn_world(&SMALL_MAP);
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::Mode(CursorMode::Train), &world);
+    let status = |app: &App| lines(&render(app, &world, 100, 30))[29].clone();
+    let empty = Position::new(1 + 1, 2 + 1);
+    for (button, amplified, expected) in [
+        (Button::Left, false, "No sprite here to pet"),
+        (Button::Left, true, "No sprite here to hug"),
+        (Button::Right, false, "No sprite here to zap"),
+        (Button::Right, true, "No sprite here to shock"),
+    ] {
+        let click = Action::Click {
+            at: empty,
+            button,
+            amplified,
+        };
+        app.apply(click, &world);
+        let line = status(&app);
+        assert!(line.trim_end().ends_with(expected), "{line}");
+        assert!(!line.contains("WASD scroll"), "in the hints' place: {line}");
+    }
+    app.animate(Duration::from_millis(2_900));
+    assert!(status(&app).contains("No sprite here"), "still");
+    app.animate(Duration::from_millis(200));
+    assert!(status(&app).contains("WASD scroll"), "the hints are back");
+}
+
 /// The Cursor's events for sprite 12, at `tick`: a pet, hug, zap or shock by
 /// name, or one refused.
 fn touched(tick: u64, what: &str) -> Event {

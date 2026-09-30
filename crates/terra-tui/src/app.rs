@@ -206,6 +206,9 @@ pub struct App {
     sent_at: Option<Duration>,
     /// The world's latest report on a command, and when it began to show.
     report: Option<(StatusMark, Duration)>,
+    /// What the status line says in the key hints' place, and since when
+    /// (design v22 §6.1).
+    notice: Option<(String, Duration)>,
 }
 
 /// How long the Decision marker shows, and then doesn't: once a second in
@@ -221,6 +224,9 @@ const EMOTE_FOR: Duration = Duration::from_secs(1);
 
 /// How long the status marks flash, in real time (design v21 §6.5).
 const MARK_FLASH_FOR: Duration = Duration::from_millis(300);
+
+/// How long the status line's notice shows, in real time (design v22 §6.1).
+const NOTICE_FOR: Duration = Duration::from_secs(3);
 
 impl App {
     /// A new UI for `map`, with the cursor at the map's centre and the viewport
@@ -255,6 +261,7 @@ impl App {
             commands: Vec::new(),
             sent_at: None,
             report: None,
+            notice: None,
         };
         app.centre_on(cursor);
         app
@@ -426,6 +433,13 @@ impl App {
             .filter(|&(_, at)| showing(at))
             .max_by_key(|&(_, at)| at)
             .map_or(StatusMark::Idle, |(mark, _)| mark)
+    }
+
+    /// What the status line says in the key hints' place, while it shows:
+    /// why a click did nothing (design v22 §6.1).
+    pub fn notice(&self) -> Option<&str> {
+        let (notice, at) = self.notice.as_ref()?;
+        (self.running_for - *at < NOTICE_FOR).then_some(notice.as_str())
     }
 
     /// Flashes the world's report on a command in the status marks, once
@@ -626,20 +640,24 @@ impl App {
                 _ => {}
             },
             (CursorMode::Train, button) => {
+                let touch = match (button, amplified) {
+                    (Button::Left, false) => CursorTouch::Pet,
+                    (Button::Left, true) => CursorTouch::Hug,
+                    (Button::Right, false) => CursorTouch::Zap,
+                    (Button::Right, true) => CursorTouch::Shock,
+                };
                 // With nothing to act on, nothing is sent, so `?` flashes at
-                // once (design v21 §6.5).
+                // once, and the status line says why (design v22 §6.5).
                 let Some(sprite) = self.locked().or(sprite) else {
                     self.report = Some((StatusMark::Rejected, self.running_for));
+                    self.notice = Some((
+                        format!("No sprite here to {}", touch.name()),
+                        self.running_for,
+                    ));
                     return;
                 };
-                self.commands.push(match button {
-                    Button::Left => Command::Reward {
-                        sprite,
-                        amplified,
-                        reach_back: self.clock.reach_back(),
-                    },
-                    Button::Right => Command::Correct { sprite, amplified },
-                });
+                self.commands
+                    .push(touch.command(sprite, self.clock.reach_back()));
                 self.sent_at = Some(self.running_for);
             }
         }
