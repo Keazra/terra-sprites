@@ -192,6 +192,20 @@ fn the_cursor_centre_is_reverse_video_and_its_marks_take_the_modes_colour() {
 }
 
 #[test]
+fn in_train_mode_the_cursor_is_light_magenta_in_every_theme() {
+    // Design v22 §6.5: it stands out on grass, where it mostly sits.
+    let world = drawn_world(&SMALL_MAP);
+    for theme in [Theme::cp437(), Theme::ascii()] {
+        let mut app = app_for(&world, theme, 40, 8);
+        app.apply(Action::Mode(CursorMode::Train), &world);
+        let screen = render(&app, &world, 40, 8);
+        // The cursor's mode mark, at the top left of its centre (6, 4).
+        assert_eq!(screen[(5, 3)].fg, Color::LightMagenta);
+        assert_eq!(screen[(6, 3)].fg, Color::LightMagenta, "and its arrows");
+    }
+}
+
+#[test]
 fn map_tiles_take_their_theme_colours() {
     let world = drawn_world(&SMALL_MAP);
     let mut app = app_for(&world, Theme::cp437(), 40, 8);
