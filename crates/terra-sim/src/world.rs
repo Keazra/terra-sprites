@@ -130,11 +130,11 @@ impl WorldState {
 
     /// Where `target` is, and whether a sprite may act on it from its own
     /// tile (an item or water) as well as from beside it (design §3.6).
-    /// `None` if it's gone.
+    /// `None` if it's gone, off the map in the Cursor included.
     pub(crate) fn whereabouts(&self, data: &DataPack, target: Target) -> Option<(Pos, bool)> {
         match target {
             Target::Object(id) => {
-                let object = self.objects.get(id)?;
+                let object = self.objects.get(id).filter(|o| !o.held)?;
                 Some((object.pos, !data.object_types()[object.kind].solid))
             }
             Target::Water(pos) => Some((pos, true)),
