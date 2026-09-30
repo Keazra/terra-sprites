@@ -54,6 +54,17 @@ fn lines(buffer: &Buffer) -> Vec<String> {
         .collect()
 }
 
+/// The status line of a 100×30 screen.
+fn status_line(app: &App, world: &World) -> String {
+    lines(&render(app, world, 100, 30))[29].clone()
+}
+
+/// The status line up to its key hints, which the gap of two spaces before
+/// them marks.
+fn before_hints(status: &str) -> &str {
+    status.split("  ").next().expect("a status line")
+}
+
 /// Renders one frame of the default world and returns the top line as text.
 fn top_bar(app: &App) -> String {
     let world = generated_world();
@@ -192,6 +203,56 @@ fn the_cursor_centre_is_reverse_video_and_its_marks_take_the_modes_colour() {
 }
 
 #[test]
+fn in_train_mode_the_cursor_is_light_magenta_in_every_theme() {
+    // Design v22 §6.5: it stands out on grass, where it mostly sits.
+    let world = drawn_world(&SMALL_MAP);
+    for theme in [Theme::cp437(), Theme::ascii()] {
+        let mut app = app_for(&world, theme, 40, 8);
+        app.apply(Action::Mode(CursorMode::Train), &world);
+        let screen = render(&app, &world, 40, 8);
+        // The cursor's mode mark, at the top left of its centre (6, 4).
+        assert_eq!(screen[(5, 3)].fg, Color::LightMagenta);
+        assert_eq!(screen[(6, 3)].fg, Color::LightMagenta, "and its arrows");
+    }
+}
+
+#[test]
+fn locked_on_the_cursor_s_arrows_are_solid() {
+    // Design v22 §6.2: they clamp the sprite. The ASCII theme has no solid
+    // arrows; its status line says the Cursor is locked on.
+    let world = garden_with_sprites();
+    let on_it = Position::new(1 + 2, 2 + 3);
+    for (theme, expected) in [
+        (Theme::cp437(), [".♦▼·......", ".►☻◄..○...", ".·▲♦......"]),
+        (Theme::ascii(), [".Sv-......", ".>@<..o...", ".-^S......"]),
+    ] {
+        let mut app = app_for(&world, theme, 40, 10);
+        app.apply(Action::right_click(on_it), &world);
+        let map_rows: Vec<String> = lines(&render(&app, &world, 40, 10))[4..7]
+            .iter()
+            .map(|row| row.chars().skip(1).take(10).collect())
+            .collect();
+        assert_eq!(map_rows, expected);
+    }
+}
+
+#[test]
+fn the_status_marks_show_what_the_cursor_reports() {
+    // Design v21 §6.5: a Train click flashes `+` in both status marks, top
+    // right and bottom left, in the mode's colour.
+    let world = garden_with_sprites();
+    let on_it = Position::new(1 + 2, 2 + 3);
+    let mut app = app_for(&world, Theme::cp437(), 40, 10);
+    app.apply(Action::Mode(CursorMode::Train), &world);
+    app.apply(Action::left_click(on_it), &world);
+    let screen = render(&app, &world, 40, 10);
+    for (column, row) in [(4, 4), (2, 6)] {
+        assert_eq!(screen[(column, row)].symbol(), "+", "({column}, {row})");
+        assert_eq!(screen[(column, row)].fg, Color::LightMagenta);
+    }
+}
+
+#[test]
 fn map_tiles_take_their_theme_colours() {
     let world = drawn_world(&SMALL_MAP);
     let mut app = app_for(&world, Theme::cp437(), 40, 8);
@@ -296,15 +357,18 @@ fn the_status_line_names_the_terrain_under_the_cursor() {
         let mut app = app_for(&world, Theme::cp437(), 40, 8);
         // Tiles are drawn from screen cell (1, 2).
         app.apply(Action::Point(Position::new(1 + x, 2 + y)), &world);
-        assert_eq!(lines(&render(&app, &world, 40, 8))[7], expected);
+        assert_eq!(
+            before_hints(&lines(&render(&app, &world, 40, 8))[7]),
+            expected
+        );
     }
 }
 
 #[test]
 fn with_room_the_status_line_also_shows_the_keys() {
     let world = drawn_world(&SMALL_MAP);
-    let app = app_for(&world, Theme::cp437(), 100, 30);
-    let status = lines(&render(&app, &world, 100, 30))[29].clone();
+    let app = app_for(&world, Theme::cp437(), 120, 30);
+    let status = lines(&render(&app, &world, 120, 30))[29].clone();
     assert!(
         status.starts_with(" (5,2) shallow water │ SELECT"),
         "{status}"
@@ -472,7 +536,10 @@ fn the_status_line_names_the_object_under_the_cursor_with_its_stage() {
     ];
     for ((x, y), expected) in cases {
         let app = pointing_at(&world, Theme::cp437(), 50, 9, x, y);
-        assert_eq!(lines(&render(&app, &world, 50, 9))[8], expected);
+        assert_eq!(
+            before_hints(&lines(&render(&app, &world, 50, 9))[8]),
+            expected
+        );
     }
 }
 
@@ -488,7 +555,10 @@ fn the_status_line_shows_a_sprite_under_the_cursor_by_its_id() {
         " (7,1) grass · Sprite #{} · berry (fresh) │ SELECT",
         sprite.id().0
     );
-    assert_eq!(lines(&render(&app, &world, 60, 9))[8], expected);
+    assert_eq!(
+        before_hints(&lines(&render(&app, &world, 60, 9))[8]),
+        expected
+    );
 }
 
 #[test]
@@ -1641,6 +1711,7 @@ fn the_wheel_over_the_inspector_scrolls_3_lines_a_notch_and_elsewhere_does_not()
         &world,
     );
     assert_eq!(first_and_last(&app, &world).0, "always → boredom +.003");
+    assert_eq!(app.mode(), CursorMode::Select, "the mode stays");
     app.apply(
         Action::Wheel {
             at: Position::new(3, 3),
@@ -2156,14 +2227,9 @@ fn the_status_line_names_train_mode_and_what_the_cursor_is_locked_on_to() {
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     let on_it = Position::new(1 + 2, 2 + 3);
     app.apply(Action::left_click(on_it), &world);
-    let right = Action::Click {
-        at: on_it,
-        button: Button::Right,
-        amplified: false,
-    };
-    app.apply(right, &world);
+    app.apply(Action::right_click(on_it), &world);
     app.apply(Action::Mode(CursorMode::Train), &world);
-    let status = lines(&render(&app, &world, 100, 30))[29].clone();
+    let status = status_line(&app, &world);
     let expected = format!(
         " (2,3) grass · Sprite #{0} │ TRAIN │ locked on Sprite #{0}",
         id.0
@@ -2172,11 +2238,68 @@ fn the_status_line_names_train_mode_and_what_the_cursor_is_locked_on_to() {
 }
 
 #[test]
-fn with_room_the_status_line_hints_at_the_mode_keys() {
+fn the_key_hints_lead_with_the_mode_keys() {
+    // Design v22 §6.1.
     let world = drawn_world(&SMALL_MAP);
-    let app = app_for(&world, Theme::cp437(), 100, 30);
-    let status = lines(&render(&app, &world, 100, 30))[29].clone();
-    assert!(status.contains("Z/X mode"), "{status}");
+    let app = app_for(&world, Theme::cp437(), 120, 30);
+    let status = lines(&render(&app, &world, 120, 30))[29].clone();
+    assert!(
+        status
+            .ends_with("Z select  X train  WASD scroll  space pause  . step  +/- speed  esc quit"),
+        "{status}"
+    );
+}
+
+#[test]
+fn short_of_room_whole_key_hints_drop_from_the_end() {
+    // Design v22 §6.1: at 100 columns, with a sprite under the Cursor and a
+    // lock on, the mode keys and the first hints after them still show.
+    let world = garden_with_sprites();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    let on_it = Position::new(1 + 2, 2 + 3);
+    app.apply(Action::right_click(on_it), &world);
+    app.apply(Action::Mode(CursorMode::Train), &world);
+    let status = status_line(&app, &world);
+    assert!(status.contains("│ locked on Sprite #"), "{status}");
+    assert!(
+        status.ends_with("  Z select  X train  WASD scroll  space pause"),
+        "{status}"
+    );
+}
+
+#[test]
+fn a_train_click_with_nothing_to_act_on_says_so_in_the_hints_place_for_3_seconds() {
+    // Design v22 §6.1: it sends nothing, so the event log has nothing to say.
+    let world = drawn_world(&SMALL_MAP);
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::Mode(CursorMode::Train), &world);
+    let empty = Position::new(1 + 1, 2 + 1);
+    for (button, amplified, expected) in [
+        (Button::Left, false, "No sprite here to pet"),
+        (Button::Left, true, "No sprite here to hug"),
+        (Button::Right, false, "No sprite here to zap"),
+        (Button::Right, true, "No sprite here to shock"),
+    ] {
+        let click = Action::Click {
+            at: empty,
+            button,
+            amplified,
+        };
+        app.apply(click, &world);
+        let line = status_line(&app, &world);
+        assert!(line.trim_end().ends_with(expected), "{line}");
+        assert!(!line.contains("WASD scroll"), "in the hints' place: {line}");
+    }
+    app.animate(Duration::from_millis(2_900));
+    assert!(
+        status_line(&app, &world).contains("No sprite here"),
+        "still"
+    );
+    app.animate(Duration::from_millis(200));
+    assert!(
+        status_line(&app, &world).contains("WASD scroll"),
+        "the hints are back"
+    );
 }
 
 /// The Cursor's events for sprite 12, at `tick`: a pet, hug, zap or shock by
@@ -2361,4 +2484,42 @@ fn lines_that_read_the_same_merge_though_their_events_differ() {
             "",
         ]
     );
+}
+
+#[test]
+fn a_refused_command_says_why_in_the_hints_place_for_3_seconds() {
+    // Design v22 §6.1: worded as the event log words it.
+    let world = drawn_world(&SMALL_MAP);
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.record(&[touched(1, "refused pet")], &world);
+    let line = status_line(&app, &world);
+    assert!(
+        line.trim_end()
+            .ends_with("Couldn't pet Sprite #12: it's gone"),
+        "{line}"
+    );
+    assert!(!line.contains("WASD scroll"), "in the hints' place: {line}");
+    app.animate(Duration::from_millis(3_100));
+    assert!(
+        status_line(&app, &world).contains("WASD scroll"),
+        "the hints are back"
+    );
+}
+
+#[test]
+fn a_refusal_shows_even_when_the_status_line_is_crowded() {
+    // Design v22 §6.1: locked on to a sprite standing on a berry, the line
+    // is too full for the reason, so what's under the Cursor is cut short.
+    let world = garden_with_sprites();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    let on_it = Position::new(1 + 7, 2 + 1);
+    app.apply(Action::right_click(on_it), &world);
+    app.record(&[touched(1, "refused pet")], &world);
+    let status = status_line(&app, &world);
+    assert!(status.starts_with(" (7,1) grass · Sprite #"), "{status}");
+    assert!(
+        status.ends_with("  Couldn't pet Sprite #12: it's gone"),
+        "{status}"
+    );
+    assert!(status.chars().count() <= 100);
 }

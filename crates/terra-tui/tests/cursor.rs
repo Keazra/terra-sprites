@@ -1,12 +1,14 @@
 //! The Cursor on screen (design v21 §6.5): its modes, Train's pets and zaps,
 //! and locking on.
 
+use std::time::Duration;
+
 use ratatui::layout::{Position, Rect};
 use terra_sim::{
-    Command, DataPack, DeathCause, EntityId, Event, EventKind, Map, Pos, Scenario, ScriptedAction,
-    World,
+    Command, DataPack, DeathCause, EntityId, Event, EventKind, Map, Pos, Rejection, Scenario,
+    ScriptedAction, World,
 };
-use terra_tui::app::{App, Areas, CursorMode, Flow, Screen};
+use terra_tui::app::{App, Areas, CursorMode, Flow, Screen, StatusMark};
 use terra_tui::input::{Action, Button};
 use terra_tui::theme::Theme;
 
@@ -94,6 +96,40 @@ fn z_and_x_pick_select_and_train_and_escape_goes_back_to_select() {
         Screen::QuitPrompt,
         "from Select, Esc asks to quit"
     );
+}
+
+#[test]
+fn the_wheel_cycles_the_cursor_modes_wrapping_round() {
+    // Design v21 §6.5: a notch down is the next mode, up the previous; with
+    // Select and Train alone, either way goes to the other.
+    let world = field(&[]);
+    let mut app = app(&world);
+    let wheel = |notches| Action::Wheel {
+        at: Position::new(4, 2),
+        notches,
+    };
+    apply(&mut app, &world, wheel(1));
+    assert_eq!(app.mode(), CursorMode::Train);
+    apply(&mut app, &world, wheel(1));
+    assert_eq!(app.mode(), CursorMode::Select, "wrapping round");
+    apply(&mut app, &world, wheel(-1));
+    assert_eq!(app.mode(), CursorMode::Train);
+    apply(&mut app, &world, wheel(3));
+    assert_eq!(app.mode(), CursorMode::Select, "a notch a mode");
+}
+
+#[test]
+fn the_wheel_off_the_map_leaves_the_mode_alone() {
+    // Design v22 §6.5: over the event log or the bars it does nothing. The
+    // map view's tiles are drawn at cells (0, 0) to (9, 5).
+    let world = field(&[]);
+    let mut app = app(&world);
+    let off_the_map = Action::Wheel {
+        at: Position::new(20, 12),
+        notches: 1,
+    };
+    apply(&mut app, &world, off_the_map);
+    assert_eq!(app.mode(), CursorMode::Select);
 }
 
 #[test]
@@ -353,7 +389,8 @@ fn q_and_e_act_where_the_cursor_is() {
     );
 }
 
-/// The Cursor touching sprite `id` on `tick`: a pet, hug, zap or shock.
+/// The Cursor touching sprite `id` on `tick`: a pet, hug, zap or shock, or
+/// a pet refused.
 fn touched(tick: u64, id: EntityId, what: &str) -> Event {
     let kind = match what {
         "pet" => EventKind::Rewarded {
@@ -371,6 +408,10 @@ fn touched(tick: u64, id: EntityId, what: &str) -> Event {
         "shock" => EventKind::Corrected {
             id,
             amplified: true,
+        },
+        "refused pet" => EventKind::CommandRejected {
+            command: pet(id, 3),
+            reason: Rejection::Gone,
         },
         _ => unreachable!("{what}"),
     };
@@ -404,4 +445,191 @@ fn the_observed_list_tells_what_the_sprite_felt_not_where_it_came_from() {
             ("Felt a gentle touch out of nowhere", 1),
         ]
     );
+}
+
+/// Moves the app's real-time clock on by `millis` milliseconds.
+fn wait(app: &mut App, millis: u64) {
+    app.animate(Duration::from_millis(millis));
+}
+
+#[test]
+fn a_train_click_that_sends_a_command_flashes_sent_for_a_moment() {
+    // Design v21 §6.5: about 0.3 s of real time. A Select click sends
+    // nothing, so it doesn't flash.
+    let world = field(&[at(4, 2)]);
+    let mut app = app(&world);
+    click(&mut app, &world, at(4, 2), Button::Left);
+    assert_eq!(app.status_mark(), StatusMark::Idle);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    click(&mut app, &world, at(4, 2), Button::Left);
+    assert_eq!(app.status_mark(), StatusMark::Sent);
+    wait(&mut app, 290);
+    assert_eq!(app.status_mark(), StatusMark::Sent);
+    wait(&mut app, 20);
+    assert_eq!(app.status_mark(), StatusMark::Idle);
+}
+
+#[test]
+fn the_world_s_report_flashes_applied_or_rejected() {
+    // Design v21 §6.5: `☼` when a pet or zap applied, `?` when it was
+    // refused.
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    app.record(&[touched(1, id, "zap")], &world);
+    assert_eq!(app.status_mark(), StatusMark::Applied);
+    wait(&mut app, 310);
+    assert_eq!(app.status_mark(), StatusMark::Idle);
+    app.record(&[touched(2, id, "refused pet")], &world);
+    assert_eq!(app.status_mark(), StatusMark::Rejected);
+    wait(&mut app, 310);
+    assert_eq!(app.status_mark(), StatusMark::Idle);
+}
+
+#[test]
+fn a_report_waits_until_sent_has_shown() {
+    // Design v22 §6.5: at speed a command can apply in the frame it was
+    // sent, so both flashes show, one after the other.
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    click(&mut app, &world, at(4, 2), Button::Left);
+    app.record(&[touched(1, id, "pet")], &world);
+    assert_eq!(app.status_mark(), StatusMark::Sent);
+    wait(&mut app, 290);
+    assert_eq!(app.status_mark(), StatusMark::Sent);
+    wait(&mut app, 20);
+    assert_eq!(app.status_mark(), StatusMark::Applied);
+    wait(&mut app, 280);
+    assert_eq!(app.status_mark(), StatusMark::Applied);
+    wait(&mut app, 20);
+    assert_eq!(app.status_mark(), StatusMark::Idle);
+}
+
+#[test]
+fn a_new_click_flashes_sent_at_once_even_over_a_report() {
+    // Design v21 §6.5: each click flashes `+` at once.
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    app.record(&[touched(1, id, "pet")], &world);
+    wait(&mut app, 100);
+    click(&mut app, &world, at(4, 2), Button::Left);
+    assert_eq!(app.status_mark(), StatusMark::Sent);
+}
+
+#[test]
+fn a_refusal_wins_over_a_command_applied_with_it() {
+    // Design v22 §6.5: a refusal is what needs noticing, so `☼` doesn't
+    // replace a `?` still to show or showing.
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    let refused = touched(1, id, "refused pet");
+    app.record(&[refused, touched(1, id, "pet")], &world);
+    assert_eq!(app.status_mark(), StatusMark::Rejected, "in one tick");
+    wait(&mut app, 100);
+    app.record(&[touched(2, id, "pet")], &world);
+    assert_eq!(app.status_mark(), StatusMark::Rejected, "while it shows");
+}
+
+#[test]
+fn while_paused_sent_flashes_at_the_click_and_the_report_when_time_moves() {
+    // Design v22 §6.5: the command waits for the next tick.
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::TogglePause);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    click(&mut app, &world, at(4, 2), Button::Left);
+    assert_eq!(app.status_mark(), StatusMark::Sent);
+    wait(&mut app, 5_000);
+    assert_eq!(app.status_mark(), StatusMark::Idle, "paused, nothing yet");
+    app.record(&[touched(1, id, "pet")], &world);
+    assert_eq!(app.status_mark(), StatusMark::Applied, "time moved");
+}
+
+#[test]
+fn a_train_click_with_nothing_to_act_on_flashes_rejected_at_once() {
+    // Design v21 §6.5: it sends nothing, so there's no `+` to wait for,
+    // even after a click that did send.
+    let world = field(&[at(4, 2)]);
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    click(&mut app, &world, at(4, 2), Button::Left);
+    click(&mut app, &world, at(1, 1), Button::Right);
+    assert_eq!(app.status_mark(), StatusMark::Rejected);
+    assert_eq!(app.take_commands().len(), 1, "only the first click sent");
+}
+
+#[test]
+fn a_flash_carries_on_through_a_change_of_mode() {
+    // Design v22 §6.5.
+    let world = field(&[at(4, 2)]);
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    click(&mut app, &world, at(4, 2), Button::Left);
+    apply(&mut app, &world, Action::Mode(CursorMode::Select));
+    assert_eq!(app.status_mark(), StatusMark::Sent);
+}
+
+#[test]
+fn a_miss_then_a_quick_pet_shows_the_pet_applied() {
+    // Design v22 §6.5: a refusal wins over a command applied with it, not
+    // over a later click's.
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    click(&mut app, &world, at(1, 1), Button::Left);
+    assert_eq!(app.status_mark(), StatusMark::Rejected, "the miss");
+    wait(&mut app, 130);
+    click(&mut app, &world, at(4, 2), Button::Left);
+    app.record(&[touched(1, id, "pet")], &world);
+    assert_eq!(app.status_mark(), StatusMark::Sent);
+    wait(&mut app, 300);
+    assert_eq!(app.status_mark(), StatusMark::Applied, "the pet worked");
+}
+
+#[test]
+fn a_refused_pet_then_a_quick_one_that_works_shows_the_second_applied() {
+    // Design v22 §6.5: the marks follow the latest click, so its `+` puts
+    // the first click's refusal, still waiting to show, behind it.
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    click(&mut app, &world, at(4, 2), Button::Left);
+    wait(&mut app, 10);
+    app.record(&[touched(1, id, "refused pet")], &world);
+    wait(&mut app, 90);
+    click(&mut app, &world, at(4, 2), Button::Left);
+    wait(&mut app, 10);
+    app.record(&[touched(2, id, "pet")], &world);
+    wait(&mut app, 190);
+    assert_eq!(app.status_mark(), StatusMark::Sent, "the second click's +");
+    wait(&mut app, 110);
+    assert_eq!(app.status_mark(), StatusMark::Applied, "the second pet");
+}
+
+#[test]
+fn a_new_click_s_sent_isnt_cut_short_by_an_earlier_click_s_result() {
+    // Design v22 §6.5: while paused, the first pet's `☼`, still waiting its
+    // turn, would read as the second pet landing.
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    click(&mut app, &world, at(4, 2), Button::Left);
+    wait(&mut app, 10);
+    app.record(&[touched(1, id, "pet")], &world);
+    apply(&mut app, &world, Action::TogglePause);
+    wait(&mut app, 90);
+    click(&mut app, &world, at(4, 2), Button::Left);
+    wait(&mut app, 250);
+    assert_eq!(app.status_mark(), StatusMark::Sent);
+    wait(&mut app, 100);
+    assert_eq!(app.status_mark(), StatusMark::Idle, "paused: nothing yet");
 }

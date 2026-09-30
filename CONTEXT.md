@@ -426,6 +426,10 @@ _Avoid_: focus, target
 To fix the Cursor on the selected sprite, so it moves with the sprite in every mode and a pet or a shock needs no aim. A right click in Select mode locks on or lets go; selecting another sprite moves the lock, and the sprite's death lets it go.
 _Avoid_: follow, track (those are the view following the selected sprite, with `T`)
 
+**Status marks**:
+The two corners of the Cursor, top right and bottom left, that report on it: in Train mode they flash `+` when a click is sent, then `☼` when it applied or `?` when it was refused; in Grab mode they show what the Cursor holds. The other two corners are the mode marks, which show the cursor mode.
+_Avoid_: indicators, lights, flash (on its own)
+
 **Inspector**:
 The side panel of tabs about the selected sprite (Body, Brain, Chem, Genome) or the world (World).
 _Avoid_: sidebar, details
