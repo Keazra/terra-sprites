@@ -1,9 +1,8 @@
 //! The player's commands (design §2.5): what the Cursor does to the world,
 //! applied at step 1 of the tick they're stamped for.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-use crate::biochem::Body;
 use crate::data::DataPack;
 use crate::events::{Event, EventKind};
 use crate::objects::EntityId;
@@ -19,13 +18,90 @@ pub enum Command {
         amplified: bool,
         /// How many ticks back its feeling looks for the sprite's latest
         /// attempt (design v21 §5.6).
-        reach_back: u16,
+        reach_back: u64,
     },
     /// The Cursor's bad touch (design v21 §4.6): a zap, or amplified, a
     /// shock. It hurts without injuring. Its feeling looks back only the
     /// touch window, whatever the speed, so a late shock can't land on the
     /// wrong thing (design v21 §5.6).
     Correct { sprite: EntityId, amplified: bool },
+}
+
+/// One of the Cursor's four touches (design v21 §4.6): a Reward or a
+/// Correct, amplified or not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+pub enum CursorTouch {
+    Pet,
+    /// An amplified pet.
+    Hug,
+    Zap,
+    /// An amplified zap.
+    Shock,
+}
+
+impl CursorTouch {
+    /// The touch `command` gives.
+    pub fn of(command: &Command) -> CursorTouch {
+        match *command {
+            Command::Reward { amplified, .. } => CursorTouch::rewarding(amplified),
+            Command::Correct { amplified, .. } => CursorTouch::correcting(amplified),
+        }
+    }
+
+    /// The touch an event reports, if it reports one.
+    pub fn reported(kind: &EventKind) -> Option<CursorTouch> {
+        match *kind {
+            EventKind::Rewarded { amplified, .. } => Some(CursorTouch::rewarding(amplified)),
+            EventKind::Corrected { amplified, .. } => Some(CursorTouch::correcting(amplified)),
+            _ => None,
+        }
+    }
+
+    fn rewarding(amplified: bool) -> CursorTouch {
+        if amplified {
+            CursorTouch::Hug
+        } else {
+            CursorTouch::Pet
+        }
+    }
+
+    fn correcting(amplified: bool) -> CursorTouch {
+        if amplified {
+            CursorTouch::Shock
+        } else {
+            CursorTouch::Zap
+        }
+    }
+
+    /// Whether it's a Correct: a zap or a shock.
+    pub fn corrects(self) -> bool {
+        matches!(self, CursorTouch::Zap | CursorTouch::Shock)
+    }
+
+    /// The command that gives `sprite` this touch, a pet or hug looking
+    /// `reach_back` ticks back.
+    pub fn command(self, sprite: EntityId, reach_back: u64) -> Command {
+        let amplified = matches!(self, CursorTouch::Hug | CursorTouch::Shock);
+        if self.corrects() {
+            Command::Correct { sprite, amplified }
+        } else {
+            Command::Reward {
+                sprite,
+                amplified,
+                reach_back,
+            }
+        }
+    }
+
+    /// Its name: `pet`, `hug`, `zap` or `shock`.
+    pub fn name(self) -> &'static str {
+        match self {
+            CursorTouch::Pet => "pet",
+            CursorTouch::Hug => "hug",
+            CursorTouch::Zap => "zap",
+            CursorTouch::Shock => "shock",
+        }
+    }
 }
 
 /// Why a command was refused (design §2.5).
@@ -62,13 +138,12 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
                 reach_back,
                 ..
             } => {
-                let reach_back =
-                    u64::from(reach_back).clamp(physiology.touch_window, cursor.max_reach_back);
+                let reach_back = reach_back.clamp(physiology.touch_window, cursor.max_reach_back);
                 let brain = &mut touched.brain;
                 brain.reach_back = brain.reach_back.max(Some(reach_back));
                 let body = &mut touched.body;
                 let reward = if amplified { cursor.hug } else { cursor.pet };
-                raise(body, indices.reward, reward);
+                body.raise(indices.reward, reward);
                 body.pulse(indices.petted, None);
                 EventKind::Rewarded {
                     id: sprite,
@@ -77,9 +152,9 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
             }
             Command::Correct { amplified, .. } => {
                 let body = &mut touched.body;
-                let touch = if amplified { cursor.shock } else { cursor.zap };
-                raise(body, indices.punishment, touch.punishment);
-                raise(body, indices.pain, touch.pain);
+                let correction = if amplified { cursor.shock } else { cursor.zap };
+                body.raise(indices.punishment, correction.punishment);
+                body.raise(indices.pain, correction.pain);
                 body.pulse(indices.shocked, None);
                 EventKind::Corrected {
                     id: sprite,
@@ -92,9 +167,4 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
             kind,
         });
     }
-}
-
-/// Raises `body`'s chemical at `index` by `amount`, no further than 1.
-fn raise(body: &mut Body, index: usize, amount: f32) {
-    body.chems[index] = (body.chems[index] + amount).min(1.0);
 }

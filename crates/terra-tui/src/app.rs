@@ -6,7 +6,8 @@ use std::time::Duration;
 use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
 use terra_sim::{
-    ActionView, Command, DeathCause, EntityId, Event, EventKind, Map, Pos, Target, World,
+    ActionView, Command, CursorTouch, DeathCause, EntityId, Event, EventKind, Map, Pos, Target,
+    World,
 };
 
 use crate::clock::Clock;
@@ -246,10 +247,10 @@ impl App {
                 self.note_hurt(id, action);
                 self.note_done_to_selected(event.tick, id, action, world);
             }
-            if let EventKind::Rewarded { id, amplified } | EventKind::Corrected { id, amplified } =
-                event.kind
+            if let (EventKind::Rewarded { id, .. } | EventKind::Corrected { id, .. }, Some(touch)) =
+                (&event.kind, CursorTouch::reported(&event.kind))
             {
-                self.note_touch(event.tick, id, &event.kind, amplified);
+                self.note_touch(event.tick, *id, touch);
             }
             if let EventKind::Died { id, cause, age } = event.kind
                 && self.selection == Some(Selection::Living(id))
@@ -308,12 +309,12 @@ impl App {
     /// on the observed list if it's the selected sprite's, told as the
     /// sprite felt it, from nowhere, since it can't see the Cursor (design
     /// v21 §6.1, §6.3).
-    fn note_touch(&mut self, tick: u64, id: EntityId, kind: &EventKind, amplified: bool) {
-        let (emote, line) = match (kind, amplified) {
-            (EventKind::Rewarded { .. }, false) => (Emote::Pleased, "a gentle touch"),
-            (EventKind::Rewarded { .. }, true) => (Emote::Pleased, "a warm embrace"),
-            (_, false) => (Emote::Shocked, "a zap"),
-            (_, true) => (Emote::Shocked, "a jolt"),
+    fn note_touch(&mut self, tick: u64, id: EntityId, touch: CursorTouch) {
+        let (emote, line) = match touch {
+            CursorTouch::Pet => (Emote::Pleased, "a gentle touch"),
+            CursorTouch::Hug => (Emote::Pleased, "a warm embrace"),
+            CursorTouch::Zap => (Emote::Shocked, "a zap"),
+            CursorTouch::Shock => (Emote::Shocked, "a jolt"),
         };
         self.emotes.insert(id, (emote, self.running_for));
         if self.selection == Some(Selection::Living(id)) {

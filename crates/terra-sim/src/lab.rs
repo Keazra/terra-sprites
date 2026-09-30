@@ -10,12 +10,11 @@ use serde::Deserialize;
 
 use crate::action::Outcome;
 use crate::brain::{Learned, Thing};
-use crate::command::Command;
+use crate::command::{Command, CursorTouch};
 use crate::config::WorldConfig;
 use crate::data::DataPack;
 use crate::events::{DeathCause, EventKind};
 use crate::map::{Map, MapError, Pos};
-use crate::objects::EntityId;
 use crate::registry::Verb;
 use crate::world::{Scenario, ScenarioError, World};
 
@@ -51,56 +50,6 @@ pub enum Without {
     Trainer,
 }
 
-/// One of the Cursor's four touches (design v21 §4.6).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
-pub enum CursorTouch {
-    Pet,
-    /// An amplified pet.
-    Hug,
-    Zap,
-    /// An amplified zap.
-    Shock,
-}
-
-impl CursorTouch {
-    /// The touch an event reports, if it reports one.
-    fn of(kind: &EventKind) -> Option<CursorTouch> {
-        match *kind {
-            EventKind::Rewarded { amplified, .. } => {
-                Some(if amplified { Self::Hug } else { Self::Pet })
-            }
-            EventKind::Corrected { amplified, .. } => {
-                Some(if amplified { Self::Shock } else { Self::Zap })
-            }
-            _ => None,
-        }
-    }
-
-    /// The command that gives `sprite` this touch, a pet or hug looking
-    /// `reach_back` ticks back.
-    fn command(self, sprite: EntityId, reach_back: u16) -> Command {
-        let amplified = matches!(self, Self::Hug | Self::Shock);
-        match self {
-            Self::Pet | Self::Hug => Command::Reward {
-                sprite,
-                amplified,
-                reach_back,
-            },
-            Self::Zap | Self::Shock => Command::Correct { sprite, amplified },
-        }
-    }
-
-    /// Its name in a report.
-    fn name(self) -> &'static str {
-        match self {
-            Self::Pet => "pet",
-            Self::Hug => "hug",
-            Self::Zap => "zap",
-            Self::Shock => "shock",
-        }
-    }
-}
-
 /// A lab scenario's trainer (design v21 §7.1), checked: it answers each
 /// applied `verb` on an object of the type `target` with `give` for the one
 /// who did it, `delay` ticks later, for actions before `until`.
@@ -111,7 +60,7 @@ struct Trainer {
     target: u16,
     give: CursorTouch,
     delay: u64,
-    reach_back: u16,
+    reach_back: u64,
     until: u64,
 }
 
@@ -129,7 +78,7 @@ struct TrainerFile {
     /// The reach back its pets or hugs carry; the pack's touch window if
     /// left out. A zap or shock takes none (design v21 §5.6).
     #[serde(default)]
-    reach_back: Option<u16>,
+    reach_back: Option<u64>,
     /// It answers actions before this tick.
     until: u64,
 }
@@ -279,23 +228,19 @@ impl LabScenario {
         let trainer = file
             .trainer
             .map(|trainer| {
-                let correcting = matches!(trainer.give, CursorTouch::Zap | CursorTouch::Shock);
-                if correcting && trainer.reach_back.is_some() {
+                if trainer.give.corrects() && trainer.reach_back.is_some() {
                     return Err(LabError::ReachBackOnCorrect);
                 }
                 let (verb, name) = trainer.on;
                 let index = data
                     .object_type_named(&name)
                     .ok_or(LabError::UnknownTarget(name))?;
-                let touch_window = data.physiology().touch_window;
                 Ok(Trainer {
                     verb,
                     target: data.object_types()[index].id,
                     give: trainer.give,
                     delay: trainer.delay,
-                    reach_back: trainer
-                        .reach_back
-                        .unwrap_or(u16::try_from(touch_window).unwrap_or(u16::MAX)),
+                    reach_back: trainer.reach_back.unwrap_or(data.physiology().touch_window),
                     until: trainer.until,
                 })
             })
@@ -401,7 +346,7 @@ impl LabScenario {
                             *window.lessons.entry((learned.clone(), *good)).or_insert(0) += 1;
                         }
                         kind => {
-                            if let Some(touch) = CursorTouch::of(kind) {
+                            if let Some(touch) = CursorTouch::reported(kind) {
                                 *window.touches.entry(touch).or_insert(0) += 1;
                             }
                         }
@@ -498,46 +443,44 @@ fn windows_report(runs: &[(u64, &[Window])], data: &DataPack) -> String {
             out.push_str(&format!("{:>10}", format!("seed {seed}")));
         }
         out.push_str(&format!("{:>10}\n", "median"));
-        let applied: BTreeSet<(Verb, Option<u16>)> = windows
-            .iter()
-            .flat_map(|w| w.applied.keys().copied())
-            .collect();
-        for key in applied {
-            let counts = windows
-                .iter()
-                .map(|w| w.applied.get(&key).copied().unwrap_or(0));
-            out.push_str(&row(&applied_name(key, data), counts));
-        }
-        let causes: BTreeSet<DeathCause> = windows
-            .iter()
-            .flat_map(|w| w.deaths.keys().copied())
-            .collect();
-        for cause in causes {
-            let counts = windows
-                .iter()
-                .map(|w| w.deaths.get(&cause).copied().unwrap_or(0));
-            out.push_str(&row(&format!("died: {}", cause_name(cause, data)), counts));
-        }
-        let touches: BTreeSet<CursorTouch> = windows
-            .iter()
-            .flat_map(|w| w.touches.keys().copied())
-            .collect();
-        for touch in touches {
-            let counts = windows
-                .iter()
-                .map(|w| w.touches.get(&touch).copied().unwrap_or(0));
-            out.push_str(&row(&format!("given: {}", touch.name()), counts));
-        }
-        let lessons: BTreeSet<&(Learned, bool)> =
-            windows.iter().flat_map(|w| w.lessons.keys()).collect();
-        for lesson in lessons {
-            let counts = windows
-                .iter()
-                .map(|w| w.lessons.get(lesson).copied().unwrap_or(0));
-            out.push_str(&row(&format!("lesson: {}", lesson_name(lesson)), counts));
-        }
+        out.push_str(&rows(
+            &windows,
+            |w| &w.applied,
+            |&key| applied_name(key, data),
+        ));
+        out.push_str(&rows(
+            &windows,
+            |w| &w.deaths,
+            |&cause| format!("died: {}", cause_name(cause, data)),
+        ));
+        out.push_str(&rows(
+            &windows,
+            |w| &w.touches,
+            |touch| format!("given: {}", touch.name()),
+        ));
+        out.push_str(&rows(
+            &windows,
+            |w| &w.lessons,
+            |lesson| format!("lesson: {}", lesson_name(lesson)),
+        ));
     }
     out
+}
+
+/// A report row, named by `name`, for each key any of `windows` counts in
+/// the counts `of` picks out, in key order.
+fn rows<K: Ord>(
+    windows: &[&Window],
+    of: impl Fn(&Window) -> &BTreeMap<K, u64>,
+    name: impl Fn(&K) -> String,
+) -> String {
+    let keys: BTreeSet<&K> = windows.iter().flat_map(|w| of(w).keys()).collect();
+    keys.into_iter()
+        .map(|key| {
+            let counts = windows.iter().map(|w| of(w).get(key).copied().unwrap_or(0));
+            row(&name(key), counts)
+        })
+        .collect()
 }
 
 /// A lesson in a report: what was learned, and which way it went.
@@ -564,7 +507,7 @@ fn thing_name(thing: &Thing) -> String {
     match thing {
         Thing::ObjectType(name) => name.clone(),
         Thing::Category(name) => format!("{name} in general"),
-        Thing::Sprite(id) => format!("sprite #{}", id.0),
+        Thing::Sprite(id) => format!("Sprite #{}", id.0),
     }
 }
 

@@ -279,7 +279,7 @@ impl std::fmt::Display for LocusId {
 pub(crate) enum ChemicalClass {
     /// Changed only by physiology and object verbs.
     Physical,
-    /// Drives and learning signals: changed by the genome and the hand.
+    /// Drives and learning signals: changed by the genome and the Cursor.
     Signal,
     /// Spare channels the genome may put to use.
     Hormone,
@@ -330,7 +330,7 @@ impl Chemical {
 pub(crate) enum LocusKind {
     /// Filled in by physiology every tick.
     BodySensor,
-    /// An event that lasts one tick, written by the hand and by verbs.
+    /// An event that lasts one tick, written by the Cursor and by verbs.
     Pulse,
     /// Written by receptors.
     ReceptorTarget,

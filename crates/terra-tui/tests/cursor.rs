@@ -61,7 +61,7 @@ fn sprite_on(world: &World, pos: Pos) -> EntityId {
     world.sprite_at(pos).expect("a sprite").id()
 }
 
-fn pet(sprite: EntityId, reach_back: u16) -> Command {
+fn pet(sprite: EntityId, reach_back: u64) -> Command {
     Command::Reward {
         sprite,
         amplified: false,

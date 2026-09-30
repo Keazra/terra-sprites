@@ -2300,7 +2300,7 @@ mod tests {
 
     #[test]
     fn a_brain_that_stops_deciding_still_drops_what_no_longer_counts() {
-        // A sprite held by the hand, or on a scripted action, commits no
+        // A sprite held by the Cursor, or on a scripted action, commits no
         // entries, but the ones it has still fade out: 0.9^43 is the last
         // that counts.
         let mut brain = brain(&[r#"BrainParam(param: "trace_decay", value: 0.9)"#]);
