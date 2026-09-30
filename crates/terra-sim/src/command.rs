@@ -131,6 +131,9 @@ pub enum Rejection {
     Busy(Grip),
     /// The Cursor leads no sprite to let go of.
     NotLeading,
+    /// A fixture can't be picked up: it's attached to the ground (design
+    /// §3.3).
+    Rooted,
 }
 
 /// Step 1 (design §2.4): applies the commands stamped for this tick, in the
@@ -253,7 +256,13 @@ fn pick_up(
         return Err(Rejection::Busy(grip));
     }
     let object = state.objects.get(item).ok_or(Rejection::Gone)?;
-    let object_type = data.object_types()[object.kind].name.clone();
+    let object_type = &data.object_types()[object.kind];
+    // In M1 every fixture is solid, and every solid object a fixture
+    // (design §3.3).
+    if object_type.solid {
+        return Err(Rejection::Rooted);
+    }
+    let object_type = object_type.name.clone();
     state.objects.lift(item);
     state.cursor.grip = Some(Grip::Holds(item));
     Ok(EventKind::PickedUp { item, object_type })

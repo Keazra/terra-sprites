@@ -1209,7 +1209,7 @@ pub(crate) fn event_line(event: &Event, data: &DataPack) -> Option<String> {
             let why = match reason {
                 Rejection::Gone => "it's gone",
                 // A touch is never refused for the Cursor's grip.
-                Rejection::Busy(_) | Rejection::NotLeading => return None,
+                Rejection::Busy(_) | Rejection::NotLeading | Rejection::Rooted => return None,
             };
             Some(format!("Couldn't {verb} {}: {why}", sprite_label(sprite)))
         }
