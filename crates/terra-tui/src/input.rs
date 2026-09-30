@@ -92,6 +92,15 @@ impl Action {
             amplified: false,
         }
     }
+
+    /// A plain right click on `at`.
+    pub fn right_click(at: Position) -> Action {
+        Action::Click {
+            at,
+            button: Button::Right,
+            amplified: false,
+        }
+    }
 }
 
 /// How far Shift scrolls the viewport, in tiles (design §6.5).

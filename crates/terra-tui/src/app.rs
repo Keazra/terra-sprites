@@ -51,6 +51,24 @@ impl CursorMode {
             CursorMode::Train => "TRAIN",
         }
     }
+
+    /// The mode `steps` along from this one, wrapping round.
+    fn along(self, steps: i32) -> CursorMode {
+        along(&CursorMode::ALL, self, steps)
+    }
+}
+
+/// What the Cursor's status marks show (design v22 §6.5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatusMark {
+    /// Nothing to report.
+    Idle,
+    /// A click has just sent a command.
+    Sent,
+    /// The world has just applied one.
+    Applied,
+    /// The world has just refused one.
+    Rejected,
 }
 
 /// How many lines the observed list keeps (design §6.1).
@@ -117,10 +135,18 @@ impl Tab {
     }
 
     /// The tab `steps` along from this one, wrapping around.
-    fn along(self, steps: isize) -> Tab {
-        let here = Tab::ALL.iter().position(|&tab| tab == self).expect("a tab") as isize;
-        Tab::ALL[(here + steps).rem_euclid(Tab::ALL.len() as isize) as usize]
+    fn along(self, steps: i32) -> Tab {
+        along(&Tab::ALL, self, steps)
     }
+}
+
+/// The one of `all` that's `steps` along from `here`, wrapping round.
+fn along<T: Copy + PartialEq>(all: &[T], here: T, steps: i32) -> T {
+    let here = all
+        .iter()
+        .position(|&one| one == here)
+        .expect("one of them") as i32;
+    all[(here + steps).rem_euclid(all.len() as i32) as usize]
 }
 
 /// Where on screen the panels the app works with are drawn.
@@ -182,6 +208,13 @@ pub struct App {
     emotes: BTreeMap<EntityId, (Emote, Duration)>,
     /// The commands the player's clicks made, for the world (design §6.8).
     commands: Vec<Command>,
+    /// When, in `running_for`, a click last sent a command (design v22 §6.5).
+    sent_at: Option<Duration>,
+    /// The world's latest report on a command, and when it began to show.
+    report: Option<(StatusMark, Duration)>,
+    /// Why the player's latest click was refused, which the status line
+    /// says in the key hints' place, and since when (design v22 §6.1).
+    refusal: Option<(String, Duration)>,
 }
 
 /// How long the Decision marker shows, and then doesn't: once a second in
@@ -194,6 +227,13 @@ const EMOTE_HALF: Duration = Duration::from_millis(250);
 
 /// How long an emote lasts, in real time, whatever the speed (design §6.3).
 const EMOTE_FOR: Duration = Duration::from_secs(1);
+
+/// How long the status marks flash, in real time (design v21 §6.5).
+const MARK_FLASH_FOR: Duration = Duration::from_millis(300);
+
+/// How long the status line says why a click was refused, in real time
+/// (design v22 §6.1).
+const REFUSAL_FOR: Duration = Duration::from_secs(3);
 
 impl App {
     /// A new UI for `map`, with the cursor at the map's centre and the viewport
@@ -226,6 +266,9 @@ impl App {
             running_for: Duration::ZERO,
             emotes: BTreeMap::new(),
             commands: Vec::new(),
+            sent_at: None,
+            report: None,
+            refusal: None,
         };
         app.centre_on(cursor);
         app
@@ -251,6 +294,15 @@ impl App {
                 (&event.kind, CursorTouch::reported(&event.kind))
             {
                 self.note_touch(event.tick, *id, touch);
+                self.flash_report(StatusMark::Applied);
+            }
+            if let EventKind::CommandRejected { .. } = event.kind {
+                self.flash_report(StatusMark::Rejected);
+                // And why, on the status line, as the log words it (design
+                // v22 §6.1).
+                if let Some(why) = inspector::event_line(event, world.data()) {
+                    self.refusal = Some((why, self.running_for));
+                }
             }
             if let EventKind::Died { id, cause, age } = event.kind
                 && self.selection == Some(Selection::Living(id))
@@ -375,6 +427,51 @@ impl App {
     /// selecting it, newest first (design §6.1).
     pub fn observed(&self) -> impl Iterator<Item = &Observed> {
         self.observed.iter()
+    }
+
+    /// What the Cursor's status marks show now (design v22 §6.5): of the
+    /// flashes under way, the one that began last.
+    pub fn status_mark(&self) -> StatusMark {
+        let sent = self.sent_at.map(|at| (StatusMark::Sent, at));
+        // Last, so a report wins a tie: within a frame, it's the later news.
+        [sent, self.report]
+            .into_iter()
+            .flatten()
+            .filter(|&(_, from)| self.shows(from, MARK_FLASH_FOR))
+            .max_by_key(|&(_, at)| at)
+            .map_or(StatusMark::Idle, |(mark, _)| mark)
+    }
+
+    /// Why the player's latest click was refused, while the status line
+    /// says so (design v22 §6.1).
+    pub fn refusal(&self) -> Option<&str> {
+        let (why, from) = self.refusal.as_ref()?;
+        self.shows(*from, REFUSAL_FOR).then_some(why.as_str())
+    }
+
+    /// Whether something that shows from `from`, for `lasting`, shows now.
+    fn shows(&self, from: Duration, lasting: Duration) -> bool {
+        self.running_for
+            .checked_sub(from)
+            .is_some_and(|since| since < lasting)
+    }
+
+    /// Flashes the world's report on a command in the status marks, once
+    /// the latest `+` has shown for its time, so both flashes show however
+    /// soon the report comes. A refusal still to show, or showing, isn't
+    /// replaced by an applied command: it's what needs noticing (design v22
+    /// §6.5). A click that sends clears it, so it's never an earlier
+    /// click's.
+    fn flash_report(&mut self, mark: StatusMark) {
+        let now = self.running_for;
+        if let Some((StatusMark::Rejected, at)) = self.report
+            && mark == StatusMark::Applied
+            && now < at + MARK_FLASH_FOR
+        {
+            return;
+        }
+        let from = self.sent_at.map_or(now, |at| now.max(at + MARK_FLASH_FOR));
+        self.report = Some((mark, from));
     }
 
     /// Takes the commands the player's clicks have made since last taken,
@@ -510,10 +607,14 @@ impl App {
                 let page = self.inspector_rows() as i32;
                 self.scroll_tab(pages * page, world);
             }
+            // The wheel scrolls the inspector's tab, and over the map cycles
+            // the cursor modes (design v22 §6.5).
             Action::Wheel { at, notches } => {
                 self.point(at);
                 if self.inspector.is_some_and(|area| area.contains(at)) {
                     self.scroll_tab(notches * WHEEL_LINES, world);
+                } else if self.tile_at(at).is_some() {
+                    self.mode = self.mode.along(notches);
                 }
             }
             Action::ToggleDetail => self.detail = !self.detail,
@@ -556,17 +657,28 @@ impl App {
                 _ => {}
             },
             (CursorMode::Train, button) => {
+                let touch = match (button, amplified) {
+                    (Button::Left, false) => CursorTouch::Pet,
+                    (Button::Left, true) => CursorTouch::Hug,
+                    (Button::Right, false) => CursorTouch::Zap,
+                    (Button::Right, true) => CursorTouch::Shock,
+                };
+                // With nothing to act on, nothing is sent, so `?` flashes at
+                // once, and the status line says why (design v22 §6.5).
                 let Some(sprite) = self.locked().or(sprite) else {
+                    self.report = Some((StatusMark::Rejected, self.running_for));
+                    self.refusal = Some((
+                        format!("No sprite here to {}", touch.name()),
+                        self.running_for,
+                    ));
                     return;
                 };
-                self.commands.push(match button {
-                    Button::Left => Command::Reward {
-                        sprite,
-                        amplified,
-                        reach_back: self.clock.reach_back(),
-                    },
-                    Button::Right => Command::Correct { sprite, amplified },
-                });
+                self.commands
+                    .push(touch.command(sprite, self.clock.reach_back()));
+                // The marks follow the latest click: an earlier click's
+                // report, not shown yet, is behind it (design v22 §6.5).
+                self.sent_at = Some(self.running_for);
+                self.report = None;
             }
         }
     }

@@ -193,9 +193,9 @@ fn attended_by(app: &App, world: &World) -> Option<Pos> {
 }
 
 /// Draws the 3×3 cursor around its target tile, which the tile loop has already
-/// drawn in reverse video. The arrows and marks take the mode mark's colour. The
-/// cursor is drawn only while its target is in view, and pieces outside the map
-/// view's tiles are left off.
+/// drawn in reverse video. The arrows, solid while locked on, and the marks
+/// take the mode mark's colour. The cursor is drawn only while its target is
+/// in view, and pieces outside the map view's tiles are left off.
 ///
 /// ```text
 /// M ↓ Y      M: the mode mark
@@ -206,15 +206,20 @@ fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App) {
     let Some(centre) = app.cell_of(app.cursor()) else {
         return;
     };
-    let (arrows, status) = (app.theme.arrows(), app.theme.status_marks());
+    let arrows = if app.locked().is_some() {
+        app.theme.locked_arrows()
+    } else {
+        app.theme.arrows()
+    };
+    let status = app.theme.status_marks().glyph(app.status_mark());
     let mark = app.theme.mode_mark(app.mode());
     let pieces = [
         (-1, -1, mark.symbol),
         (0, -1, arrows.down),
-        (1, -1, status.idle),
+        (1, -1, status),
         (-1, 0, arrows.right),
         (1, 0, arrows.left),
-        (-1, 1, status.idle),
+        (-1, 1, status),
         (0, 1, arrows.up),
         (1, 1, mark.symbol),
     ];
@@ -286,12 +291,21 @@ fn top_bar_line(app: &App, world: &World) -> Line<'static> {
     Line::from(text).style(Style::default().add_modifier(Modifier::REVERSED))
 }
 
-/// The keys that work now, shown at the right of the status line when there is room.
-const KEY_HINTS: &str = "Z/X mode  WASD scroll  space pause  . step  +/- speed  esc quit ";
+/// The keys that work now, shown at the right of the status line as far as
+/// there's room. The mode keys come first, as one hint, so they're the last
+/// to go (design v22 §6.1).
+const KEY_HINTS: [&str; 6] = [
+    "Z select  X train",
+    "WASD scroll",
+    "space pause",
+    ". step",
+    "+/- speed",
+    "esc quit",
+];
 
 /// The tile under the cursor, with any sprite and object on it, and the
-/// cursor mode, then key hints if they fit in
-/// `width` cells. An open prompt takes the line over.
+/// cursor mode, then at the right the key hints that fit in `width` cells, or
+/// why a click was refused in their place. An open prompt takes the line over.
 fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     if app.screen() == Screen::QuitPrompt {
         return Line::from(" Quit? (y/n)");
@@ -315,11 +329,44 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         " ({},{}) {terrain}{sprite}{object} │ {mode}{locked}",
         cursor.x, cursor.y
     );
-    let used = tile.chars().count() + KEY_HINTS.chars().count();
-    match usize::from(width).checked_sub(used) {
-        Some(gap) if gap >= 2 => Line::from(format!("{tile}{}{KEY_HINTS}", " ".repeat(gap))),
-        _ => Line::from(tile),
+    // At the right, after a gap of 2 and before a space at the end: why a
+    // click did nothing, for a while, or else the key hints that fit (design
+    // v22 §6.1). The reason matters more than the end of the tile's part,
+    // which is cut short to make room for it.
+    let width = usize::from(width);
+    let (tile, right): (String, String) = match app.refusal() {
+        Some(why) => {
+            let room = width.saturating_sub(why.chars().count() + 3);
+            (tile.chars().take(room).collect(), why.to_string())
+        }
+        None => {
+            let room = width.saturating_sub(tile.chars().count() + 3);
+            let hints = hints_within(room);
+            (tile, hints)
+        }
+    };
+    if right.is_empty() {
+        return Line::from(tile);
     }
+    let gap = width.saturating_sub(tile.chars().count() + right.chars().count() + 1);
+    Line::from(format!("{tile}{}{right} ", " ".repeat(gap)))
+}
+
+/// As many of the key hints as fit in `room` columns, whole and in order.
+fn hints_within(room: usize) -> String {
+    let mut hints = String::new();
+    for hint in KEY_HINTS {
+        let longer = if hints.is_empty() {
+            hint.to_string()
+        } else {
+            format!("{hints}  {hint}")
+        };
+        if longer.chars().count() > room {
+            break;
+        }
+        hints = longer;
+    }
+    hints
 }
 
 /// An object's display name, with its stage if its type has stages: `berry bush (mature)`.

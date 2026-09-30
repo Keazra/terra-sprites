@@ -44,13 +44,18 @@
     attention_marker: dark_gray,
     cursor: (
         arrows: (up: '↑', down: '↓', left: '←', right: '→'),
+        // Locked on to a sprite, the arrows are solid, clamping it (design v22 §6.2).
+        locked_arrows: (up: '▲', down: '▼', left: '◄', right: '►'),
         status_marks: (
             idle: '·', // nothing to report
+            sent: '+', // a click has just sent a command
+            applied: '☼', // the world has just applied it
+            rejected: '?', // or refused it
         ),
         mode_marks: {
             select: (glyph: '♦', fg: white),
-            // Train's colour is slice 10b's to settle (design v21 §6.5).
-            train:  (glyph: '±', fg: light_green),
+            // Train stands out on the grass the Cursor mostly sits on (design v22 §6.5).
+            train:  (glyph: '±', fg: light_magenta),
         },
     ),
 )

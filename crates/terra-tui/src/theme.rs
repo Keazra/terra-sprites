@@ -7,7 +7,7 @@ use ratatui::style::Color;
 use serde::Deserialize;
 use terra_sim::Terrain;
 
-use crate::app::CursorMode;
+use crate::app::{CursorMode, StatusMark};
 
 /// What the map view draws for a tile, named by meaning rather than by character.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
@@ -90,6 +90,24 @@ pub struct Arrows {
 pub struct StatusMarks {
     /// Nothing to report.
     pub idle: char,
+    /// A click has just sent a command.
+    pub sent: char,
+    /// The world has just applied one.
+    pub applied: char,
+    /// The world has just refused one.
+    pub rejected: char,
+}
+
+impl StatusMarks {
+    /// The glyph the status marks show for `mark`.
+    pub fn glyph(self, mark: StatusMark) -> char {
+        match mark {
+            StatusMark::Idle => self.idle,
+            StatusMark::Sent => self.sent,
+            StatusMark::Applied => self.applied,
+            StatusMark::Rejected => self.rejected,
+        }
+    }
 }
 
 /// A mapping from semantic tiles, and the cursor, to glyphs and colours.
@@ -99,6 +117,7 @@ pub struct Theme {
     /// By object type name, then visual state.
     objects: BTreeMap<String, BTreeMap<String, Glyph>>,
     arrows: Arrows,
+    locked_arrows: Arrows,
     status_marks: StatusMarks,
     mode_marks: BTreeMap<CursorMode, Glyph>,
     attention_marker: Color,
@@ -140,9 +159,15 @@ impl Theme {
         self.attention_marker
     }
 
-    /// The cursor's arrows.
+    /// The Cursor's arrows.
     pub fn arrows(&self) -> Arrows {
         self.arrows
+    }
+
+    /// The Cursor's arrows while it's locked on to a sprite: solid (design
+    /// v22 §6.2).
+    pub fn locked_arrows(&self) -> Arrows {
+        self.locked_arrows
     }
 
     /// What the cursor's status marks show.
@@ -181,6 +206,7 @@ impl Theme {
             tiles,
             objects,
             arrows: file.cursor.arrows,
+            locked_arrows: file.cursor.locked_arrows,
             status_marks: file.cursor.status_marks,
             mode_marks,
             attention_marker: file.attention_marker.into(),
@@ -222,6 +248,8 @@ struct ThemeFile {
 #[serde(deny_unknown_fields)]
 struct CursorFile {
     arrows: Arrows,
+    /// The arrows while the Cursor is locked on to a sprite.
+    locked_arrows: Arrows,
     status_marks: StatusMarks,
     mode_marks: BTreeMap<CursorMode, GlyphEntry>,
 }
