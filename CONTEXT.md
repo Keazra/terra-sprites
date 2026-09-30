@@ -77,12 +77,16 @@ An object attached to the ground, so nothing can push, pull or carry it, such as
 _Avoid_: obstacle
 
 **Item**:
-An object that is neither solid nor a fixture, so a sprite can stand on it and the Cursor can carry it, such as a berry or a ball.
+An object that is neither solid nor a fixture, so a sprite can stand on it and the Cursor can pick it up, such as a berry or a ball.
 _Avoid_: loose item, pickup
 
 **Tag**:
-A property an object type either has or lacks, such as solid or fixture. Having the tag means yes; lacking it means no.
-_Avoid_: flag, attribute
+A property an object type either has or lacks. Having the tag means yes; lacking it means no. Solid and fixture are built in: they're physics. Others, such as thorny, are defined in the data, each saying what every contact with a thing that has it does, and every thing with a tag behaves the same way.
+_Avoid_: flag, attribute, keyword
+
+**Contact**:
+A sprite touching a thing: eating it, hitting it, playing with it, or crashing into it. Walking past never counts.
+_Avoid_: collision, touch (the Cursor's touch is a pet or a shock)
 
 **Stage**:
 A phase of an object's life, such as a bush's seedling and mature stages. Each lasts a random time within its type's range.
@@ -107,8 +111,8 @@ The name a theme draws an object by, such as a bush's seedling, bare or fruiting
 _Avoid_: sprite (a sprite is a creature), appearance
 
 **Roll**:
-An item moving across the map one tile a tick after a sprite pushes it, such as a kicked ball, until it has gone as far as the push sent it.
-_Avoid_: slide, fly
+An item moving across the map one tile a tick after a sprite pushes it or the Cursor throws it, such as a kicked ball, until it has gone as far as the push sent it.
+_Avoid_: fly, slide (a shoved sprite slides)
 
 **Bounce**:
 A rolling item turning away from what it ran into: straight back if it met it head on, glancing off at the same angle if it met it slantwise.
@@ -407,7 +411,7 @@ The part of the map currently shown in the map view.
 _Avoid_: camera
 
 **Cursor**:
-The player's hard-light projection into the terrarium: to the sprites the player is an advanced creature, and this is how they reach in. It shows on the map as a 3×3 grid that follows the pointer, unless it's locked on to a sprite, and a click acts as the cursor mode says. In M1 sprites can't see it, so its touch is a feeling from nowhere. It holds at most one thing.
+The player's hard-light projection into the terrarium: to the sprites the player is an advanced creature, and this is how they reach in. It shows on the map as a 3×3 grid that follows the pointer, unless it's locked on to a sprite, and a click acts as the cursor mode says. In M1 sprites can't see it, so its touch is a feeling from nowhere. It holds an item or leads a sprite, one thing at a time.
 _Avoid_: hand, orb, selection (the selection is the chosen sprite)
 
 **Pointer**:
@@ -423,11 +427,11 @@ The sprite the inspector shows, chosen by clicking it or with `Tab`. The Cursor 
 _Avoid_: focus, target
 
 **Lock on**:
-To fix the Cursor on the selected sprite, so it moves with the sprite in every mode and a pet or a shock needs no aim. A right click in Select mode locks on or lets go; selecting another sprite moves the lock, and the sprite's death lets it go.
+To fix the Cursor on the selected sprite, so it moves with the sprite in every mode and a pet or a shock needs no aim. A right click in Select mode turns the lock on or off; selecting another sprite moves the lock, and the sprite's death ends it. While the Cursor holds or leads something in Grab mode, the lock waits and the Cursor follows the pointer.
 _Avoid_: follow, track (those are the view following the selected sprite, with `T`)
 
 **Status marks**:
-The two corners of the Cursor, top right and bottom left, that report on it: in Train mode they flash `+` when a click is sent, then `☼` when it applied or `?` when it was refused; in Grab mode they show what the Cursor holds. The other two corners are the mode marks, which show the cursor mode.
+The two corners of the Cursor, top right and bottom left, that report on it: in Train mode they flash `+` when a click is sent, then `☼` when it applied or `?` when it was refused; in Grab mode they show what the Cursor holds or leads. The other two corners are the mode marks, which show the cursor mode.
 _Avoid_: indicators, lights, flash (on its own)
 
 **Inspector**:
@@ -472,8 +476,32 @@ The cursor mode for teaching: a left click rewards the target, a right click cor
 _Avoid_: Reward mode, Correct mode (merged into Train)
 
 **Grab mode**:
-The cursor mode that picks things up, puts them down and places new ones (slice 11).
+The cursor mode for moving things: a left click grabs what's under the Cursor, and the next lets go of the sprite or puts the item down; a right click throws or shoves it (slice 11b). Pressing `C` again opens the Place menu, for new things (slice 11c).
 _Avoid_: Hand mode
+
+**Grab**:
+To take hold of what's under the Cursor: a sprite is led, an item picked up. A sprite on the tile comes before an item, and a fixture can't be grabbed.
+_Avoid_: lift, pick up (for a sprite)
+
+**Lead**:
+To hold a sprite through the Cursor without lifting it: it stays on the map and walks after the Cursor at its own pace, choosing nothing for itself, until the player **lets go**. Sprites are led, never lifted.
+_Avoid_: drag, carry, pick up
+
+**Hold**:
+What the Cursor does with an item it has picked up: the item leaves the map, its life going on, until the Cursor **puts it down** on a tile.
+_Avoid_: carry, in hand
+
+**Throw**:
+To let go of a held item with a push, so it rolls away like a kicked ball.
+_Avoid_: toss, fling
+
+**Shove**:
+To let go of a led sprite with a push, so it **slides** up to 3 tiles that way, a tile a tick, stopping at the first thing in its way. It doesn't hurt, unless the sprite crashes into something that does.
+_Avoid_: throw (for a sprite), push (a sprite's push rolls an item)
+
+**Crash**:
+A shoved sprite stopping against a solid object or another sprite. It's a contact, so it counts as touching that thing: a crash into a thornbush pricks, and teaches that thornbushes are bad.
+_Avoid_: collision, bump, bounce (an item bounces)
 
 **Reward**:
 The Cursor's good touch, which raises the sprite's reward chemical: a **pet**, or amplified, a **hug**.
