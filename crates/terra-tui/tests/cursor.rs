@@ -2,7 +2,10 @@
 //! and locking on.
 
 use ratatui::layout::{Position, Rect};
-use terra_sim::{Command, DataPack, EntityId, Map, Pos, Scenario, World};
+use terra_sim::{
+    Command, DataPack, DeathCause, EntityId, Event, EventKind, Map, Pos, Scenario, ScriptedAction,
+    World,
+};
 use terra_tui::app::{App, Areas, CursorMode, Flow, Screen};
 use terra_tui::input::{Action, Button};
 use terra_tui::theme::Theme;
@@ -176,4 +179,165 @@ fn a_pet_reaches_back_two_seconds_of_the_player_s_time() {
     apply(&mut app, &world, Action::TogglePause);
     click(&mut app, &world, at(4, 2), Button::Left);
     assert_eq!(app.take_commands(), [pet(id, 40)]);
+}
+
+/// Selects the sprite on `tile` and locks the Cursor on to it, in Select
+/// mode: a left click, then a right click.
+fn lock_on(app: &mut App, world: &World, tile: Pos) {
+    click(app, world, tile, Button::Left);
+    click(app, world, tile, Button::Right);
+}
+
+#[test]
+fn in_select_mode_a_right_click_locks_the_cursor_on_to_the_selection_and_another_lets_go() {
+    // Design v21 §6.5: wherever the click is, with a sprite selected.
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    click(&mut app, &world, at(4, 2), Button::Left);
+    assert_eq!(app.locked(), None, "selecting doesn't lock");
+    click(&mut app, &world, at(8, 5), Button::Right);
+    assert_eq!(app.locked(), Some(id));
+    click(&mut app, &world, at(0, 0), Button::Right);
+    assert_eq!(app.locked(), None);
+}
+
+#[test]
+fn with_nothing_selected_a_right_click_on_a_sprite_selects_it_and_locks_on() {
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    click(&mut app, &world, at(1, 1), Button::Right);
+    assert_eq!(
+        (app.selection(), app.locked()),
+        (None, None),
+        "empty ground"
+    );
+    click(&mut app, &world, at(4, 2), Button::Right);
+    assert_eq!(app.locked(), Some(id));
+}
+
+#[test]
+fn locked_on_a_left_click_on_empty_ground_keeps_the_selection() {
+    // Design v21 §6.5: a stray click can't lose a lock; unlocked, it clears.
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    lock_on(&mut app, &world, at(4, 2));
+    click(&mut app, &world, at(1, 1), Button::Left);
+    assert_eq!(app.locked(), Some(id));
+    click(&mut app, &world, at(1, 1), Button::Right);
+    click(&mut app, &world, at(1, 1), Button::Left);
+    assert_eq!(app.selection(), None);
+}
+
+#[test]
+fn selecting_another_sprite_moves_the_lock_with_it() {
+    // Design v21 §6.5: a left click on it, or Tab.
+    let world = field(&[at(2, 2), at(6, 2)]);
+    let (first, second) = (sprite_on(&world, at(2, 2)), sprite_on(&world, at(6, 2)));
+    let mut app = app(&world);
+    lock_on(&mut app, &world, at(2, 2));
+    click(&mut app, &world, at(6, 2), Button::Left);
+    assert_eq!(app.locked(), Some(second));
+    apply(&mut app, &world, Action::SelectNext);
+    assert_eq!(app.locked(), Some(first), "Tab wraps round to the first");
+}
+
+#[test]
+fn locked_on_the_cursor_stays_on_its_sprite_whatever_the_pointer_does() {
+    let world = field(&[at(4, 2)]);
+    let mut app = app(&world);
+    lock_on(&mut app, &world, at(4, 2));
+    apply(&mut app, &world, Action::Point(Position::new(8, 5)));
+    assert_eq!(app.cursor(), at(4, 2));
+    click(&mut app, &world, at(4, 2), Button::Right);
+    apply(&mut app, &world, Action::Point(Position::new(8, 5)));
+    assert_eq!(
+        app.cursor(),
+        at(8, 5),
+        "let go, it follows the pointer again"
+    );
+}
+
+#[test]
+fn locked_on_the_cursor_moves_with_its_sprite() {
+    // Design v21 §6.5: the sprite walks off, and the Cursor goes with it.
+    let data = pack();
+    let map = Map::from_ascii(&vec![".........."; 6], &data).expect("valid drawing");
+    let walk = ScriptedAction::Wander {
+        destination: at(8, 2),
+    };
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &[(at(1, 2), None)],
+        scripted: &[(at(1, 2), walk)],
+    };
+    let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+    let mut app = app(&world);
+    lock_on(&mut app, &world, at(1, 2));
+    for _ in 0..3 {
+        let events = world.step();
+        app.record(&events, &world);
+    }
+    let now = world.sprites().next().expect("the sprite").pos();
+    assert_ne!(now, at(1, 2), "it walked");
+    assert_eq!(app.cursor(), now);
+}
+
+#[test]
+fn the_locked_on_sprite_s_death_lets_go() {
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    lock_on(&mut app, &world, at(4, 2));
+    let died = Event {
+        tick: 0,
+        kind: EventKind::Died {
+            id,
+            cause: DeathCause::Starvation,
+            age: 5,
+        },
+    };
+    app.record(&[died], &world);
+    assert_eq!(app.locked(), None);
+    apply(&mut app, &world, Action::Point(Position::new(8, 5)));
+    assert_eq!(app.cursor(), at(8, 5), "it follows the pointer again");
+}
+
+#[test]
+fn in_train_mode_the_locked_on_sprite_is_the_target_wherever_the_click_or_key_is() {
+    // Design v21 §6.5.
+    let world = field(&[at(2, 2), at(6, 2)]);
+    let first = sprite_on(&world, at(2, 2));
+    let mut app = app(&world);
+    lock_on(&mut app, &world, at(2, 2));
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    click(&mut app, &world, at(6, 2), Button::Left);
+    click(&mut app, &world, at(9, 5), Button::Right);
+    let q = Action::Press {
+        button: Button::Left,
+        amplified: false,
+    };
+    apply(&mut app, &world, q);
+    assert_eq!(
+        app.take_commands(),
+        [pet(first, 3), zap(first), pet(first, 3)]
+    );
+}
+
+#[test]
+fn q_and_e_act_where_the_pointer_is() {
+    // Design v21 §6.5: as a click there would.
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Point(Position::new(4, 2)));
+    let e = Action::Press {
+        button: Button::Right,
+        amplified: false,
+    };
+    apply(&mut app, &world, e);
+    assert_eq!(app.locked(), Some(id), "E selected it and locked on");
 }
