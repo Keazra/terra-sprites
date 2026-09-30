@@ -1191,14 +1191,20 @@ pub(crate) fn event_line(event: &Event, data: &DataPack) -> Option<String> {
             Some(format!("You {done} {}", sprite_label(*id)))
         }
         EventKind::CommandRejected { command, reason } => {
-            let touch = CursorTouch::of(command).name();
-            let (terra_sim::Command::Reward { sprite, .. }
-            | terra_sim::Command::Correct { sprite, .. }) = *command;
+            let (verb, sprite) = match *command {
+                terra_sim::Command::Reward { sprite, .. }
+                | terra_sim::Command::Correct { sprite, .. } => {
+                    let touch = CursorTouch::of(command).expect("a touch");
+                    (touch.name(), sprite)
+                }
+                terra_sim::Command::TakeHold { .. } => return None,
+            };
             let why = match reason {
                 Rejection::Gone => "it's gone",
             };
-            Some(format!("Couldn't {touch} {}: {why}", sprite_label(sprite)))
+            Some(format!("Couldn't {verb} {}: {why}", sprite_label(sprite)))
         }
+        EventKind::TookHold { .. } => None,
         EventKind::ObjectSpawned { .. }
         | EventKind::ObjectRemoved { .. }
         | EventKind::ActionStarted { .. } => None,

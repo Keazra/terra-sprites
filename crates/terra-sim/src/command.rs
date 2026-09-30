@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::cursor::Grip;
 use crate::data::DataPack;
 use crate::events::{Event, EventKind};
 use crate::objects::EntityId;
@@ -25,6 +26,8 @@ pub enum Command {
     /// touch window, whatever the speed, so a late shock can't land on the
     /// wrong thing (design v21 §5.6).
     Correct { sprite: EntityId, amplified: bool },
+    /// Takes hold of a sprite, which the Cursor then leads (design v23 §6.5).
+    TakeHold { sprite: EntityId },
 }
 
 /// One of the Cursor's four touches (design v21 §4.6): a Reward or a
@@ -40,11 +43,12 @@ pub enum CursorTouch {
 }
 
 impl CursorTouch {
-    /// The touch `command` gives.
-    pub fn of(command: &Command) -> CursorTouch {
+    /// The touch `command` gives, if it's a touch.
+    pub fn of(command: &Command) -> Option<CursorTouch> {
         match *command {
-            Command::Reward { amplified, .. } => CursorTouch::rewarding(amplified),
-            Command::Correct { amplified, .. } => CursorTouch::correcting(amplified),
+            Command::Reward { amplified, .. } => Some(CursorTouch::rewarding(amplified)),
+            Command::Correct { amplified, .. } => Some(CursorTouch::correcting(amplified)),
+            Command::TakeHold { .. } => None,
         }
     }
 
@@ -114,57 +118,78 @@ pub enum Rejection {
 /// Step 1 (design §2.4): applies the commands stamped for this tick, in the
 /// order they were submitted.
 pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Event>) {
-    let physiology = data.physiology();
-    let (cursor, indices) = (&physiology.cursor, &physiology.indices);
     for command in std::mem::take(&mut state.commands) {
-        let (Command::Reward { sprite, .. } | Command::Correct { sprite, .. }) = command;
-        let Some(touched) = state.sprites.get_mut(sprite) else {
-            events.push(Event {
-                tick: state.tick,
-                kind: EventKind::CommandRejected {
-                    command,
-                    reason: Rejection::Gone,
-                },
-            });
-            continue;
-        };
-        // A Reward looks back its reach back, within the bounds, and several
-        // in a tick as far as the furthest; a Correct looks back only the
-        // touch window, which its `shocked` pulse tells learning (design v21
-        // §2.5, §5.6).
-        let kind = match command {
+        let applied = match command {
             Command::Reward {
+                sprite,
                 amplified,
                 reach_back,
-                ..
-            } => {
-                let reach_back = reach_back.clamp(physiology.touch_window, cursor.max_reach_back);
-                let brain = &mut touched.brain;
-                brain.reach_back = brain.reach_back.max(Some(reach_back));
-                let body = &mut touched.body;
-                let reward = if amplified { cursor.hug } else { cursor.pet };
-                body.raise(indices.reward, reward);
-                body.pulse(indices.petted, None);
-                EventKind::Rewarded {
-                    id: sprite,
-                    amplified,
-                }
-            }
-            Command::Correct { amplified, .. } => {
-                let body = &mut touched.body;
-                let correction = if amplified { cursor.shock } else { cursor.zap };
-                body.raise(indices.punishment, correction.punishment);
-                body.raise(indices.pain, correction.pain);
-                body.pulse(indices.shocked, None);
-                EventKind::Corrected {
-                    id: sprite,
-                    amplified,
-                }
-            }
+            } => reward(state, data, sprite, amplified, reach_back),
+            Command::Correct { sprite, amplified } => correct(state, data, sprite, amplified),
+            Command::TakeHold { sprite } => take_hold(state, sprite),
+        };
+        let kind = match applied {
+            Ok(kind) => kind,
+            Err(reason) => EventKind::CommandRejected { command, reason },
         };
         events.push(Event {
             tick: state.tick,
             kind,
         });
     }
+}
+
+/// The Cursor's good touch on `sprite` (design v21 §4.6): a pet, or
+/// amplified, a hug. Its feeling looks back its reach back, within the
+/// bounds, and several in a tick as far as the furthest (design v21 §2.5,
+/// §5.6).
+fn reward(
+    state: &mut WorldState,
+    data: &DataPack,
+    sprite: EntityId,
+    amplified: bool,
+    reach_back: u64,
+) -> Result<EventKind, Rejection> {
+    let physiology = data.physiology();
+    let (cursor, indices) = (&physiology.cursor, &physiology.indices);
+    let touched = state.sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
+    let reach_back = reach_back.clamp(physiology.touch_window, cursor.max_reach_back);
+    let brain = &mut touched.brain;
+    brain.reach_back = brain.reach_back.max(Some(reach_back));
+    let body = &mut touched.body;
+    let reward = if amplified { cursor.hug } else { cursor.pet };
+    body.raise(indices.reward, reward);
+    body.pulse(indices.petted, None);
+    Ok(EventKind::Rewarded {
+        id: sprite,
+        amplified,
+    })
+}
+
+/// The Cursor's bad touch on `sprite` (design v21 §4.6): a zap, or
+/// amplified, a shock. Its feeling looks back only the touch window, which
+/// its `shocked` pulse tells learning (design v21 §5.6).
+fn correct(
+    state: &mut WorldState,
+    data: &DataPack,
+    sprite: EntityId,
+    amplified: bool,
+) -> Result<EventKind, Rejection> {
+    let physiology = data.physiology();
+    let (cursor, indices) = (&physiology.cursor, &physiology.indices);
+    let body = &mut state.sprites.get_mut(sprite).ok_or(Rejection::Gone)?.body;
+    let correction = if amplified { cursor.shock } else { cursor.zap };
+    body.raise(indices.punishment, correction.punishment);
+    body.raise(indices.pain, correction.pain);
+    body.pulse(indices.shocked, None);
+    Ok(EventKind::Corrected {
+        id: sprite,
+        amplified,
+    })
+}
+
+/// The Cursor takes hold of `sprite`, and leads it (design v23 §6.5).
+fn take_hold(state: &mut WorldState, sprite: EntityId) -> Result<EventKind, Rejection> {
+    state.cursor.grip = Some(Grip::Leads(sprite));
+    Ok(EventKind::TookHold { sprite })
 }
