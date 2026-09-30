@@ -51,6 +51,13 @@ impl CursorMode {
             CursorMode::Train => "TRAIN",
         }
     }
+
+    /// The mode `steps` along from this one, wrapping round.
+    fn along(self, steps: i32) -> CursorMode {
+        let modes = CursorMode::ALL;
+        let here = modes.iter().position(|&mode| mode == self).expect("a mode") as i32;
+        modes[(here + steps).rem_euclid(modes.len() as i32) as usize]
+    }
 }
 
 /// How many lines the observed list keeps (design §6.1).
@@ -510,10 +517,14 @@ impl App {
                 let page = self.inspector_rows() as i32;
                 self.scroll_tab(pages * page, world);
             }
+            // The wheel scrolls the inspector's tab, and elsewhere cycles
+            // the cursor modes (design v21 §6.5).
             Action::Wheel { at, notches } => {
                 self.point(at);
                 if self.inspector.is_some_and(|area| area.contains(at)) {
                     self.scroll_tab(notches * WHEEL_LINES, world);
+                } else {
+                    self.mode = self.mode.along(notches);
                 }
             }
             Action::ToggleDetail => self.detail = !self.detail,
