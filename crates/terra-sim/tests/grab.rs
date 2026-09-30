@@ -147,3 +147,93 @@ fn a_led_sprite_walks_to_the_cursor_at_its_own_pace_and_chooses_nothing() {
     assert_eq!(world.sprite(id).expect("the sprite").pos(), at(5, 0));
     assert_eq!(started, Vec::new(), "it chose nothing while led");
 }
+
+/// Leads the sprite on `from` towards `tile` for `ticks` ticks, and says
+/// where it ends up.
+fn lead(world: &mut World, from: Pos, tile: Pos, ticks: u32) -> Pos {
+    let id = sprite_on(world, from);
+    world.submit(Command::TakeHold { sprite: id });
+    world.submit(Command::MoveCursor { tile });
+    for _ in 0..ticks {
+        world.step();
+    }
+    assert_eq!(world.cursor().leads(), Some(id), "still led");
+    world.sprite(id).expect("the sprite").pos()
+}
+
+#[test]
+fn a_led_sprite_goes_as_close_as_it_can_to_a_tile_it_cant_stand_on() {
+    let mut world = world(&["....#"], &[], &[at(0, 0)], &[]);
+    assert_eq!(lead(&mut world, at(0, 0), at(4, 0), 30), at(3, 0));
+}
+
+#[test]
+fn a_led_sprite_stops_beside_a_sprite_on_the_cursors_tile() {
+    let rests = [(at(4, 0), ScriptedAction::Rest); 6];
+    let mut world = world(&["......"], &[], &[at(0, 0), at(4, 0)], &rests);
+    assert_eq!(lead(&mut world, at(0, 0), at(4, 0), 30), at(3, 0));
+}
+
+#[test]
+fn a_led_sprite_held_up_by_another_waits_and_never_gives_up() {
+    // The sprite resting in the corridor blocks the way to the Cursor.
+    let rests = [(at(2, 0), ScriptedAction::Rest); 8];
+    let mut world = world(&["....."], &[], &[at(0, 0), at(2, 0)], &rests);
+    assert_eq!(lead(&mut world, at(0, 0), at(4, 0), 40), at(1, 0));
+}
+
+#[test]
+fn a_pet_reaches_a_led_sprite() {
+    let mut world = world(&["....."], &[], &[at(0, 0)], &[]);
+    let id = sprite_on(&world, at(0, 0));
+    world.submit(Command::TakeHold { sprite: id });
+    world.step();
+    world.submit(Command::Reward {
+        sprite: id,
+        amplified: false,
+        reach_back: 3,
+    });
+    let events = world.step();
+    assert!(
+        events.iter().any(|e| e.kind
+            == EventKind::Rewarded {
+                id,
+                amplified: false
+            }),
+        "{events:?}"
+    );
+}
+
+#[test]
+fn let_go_a_sprite_chooses_for_itself_again_at_once() {
+    let mut world = world(&["....."], &[], &[at(0, 0)], &[]);
+    let id = sprite_on(&world, at(0, 0));
+    world.submit(Command::TakeHold { sprite: id });
+    world.step();
+    world.submit(Command::LetGo);
+    let events = world.step();
+    assert!(
+        events
+            .iter()
+            .any(|e| e.kind == EventKind::LetGo { sprite: id }),
+        "{events:?}"
+    );
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e.kind, EventKind::ActionStarted { id: who, .. } if who == id)),
+        "it chose something that tick: {events:?}"
+    );
+    assert_eq!(world.cursor().leads(), None);
+}
+
+#[test]
+fn letting_go_with_no_sprite_led_is_refused() {
+    let mut world = world(&["....."], &[], &[], &[]);
+    world.submit(Command::LetGo);
+    let events = world.step();
+    assert_eq!(
+        refused(&events, Command::LetGo),
+        Some(Rejection::NotLeading)
+    );
+}
