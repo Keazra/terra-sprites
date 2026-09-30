@@ -502,3 +502,27 @@ fn a_zap_looks_back_only_the_touch_window_whatever_the_speed() {
     assert!(close(bad, -0.4) && close(habit, -0.15), "{bad}, {habit}");
     assert_eq!(zap_after_a_kick(4), (0.0, 0.0));
 }
+
+#[test]
+fn a_zap_with_a_pet_in_the_same_tick_still_looks_back_only_the_touch_window() {
+    // Design v21 §5.6: the pet reaches back to the kick 6 ticks before; the
+    // zap, looking back only 3, teaches nothing about it.
+    let (mut world, id) = kicker("");
+    run_to(&mut world, 6);
+    world.submit(Command::Reward {
+        sprite: id,
+        amplified: false,
+        reach_back: 10,
+    });
+    world.submit(zap(id));
+    world.step();
+    let balls_bad = Learned::Bad {
+        thing: "ball".into(),
+    };
+    assert!(close(value_of(&world, id, &balls_good()), 0.25));
+    assert!(
+        close(value_of(&world, id, &kicking_balls()), 0.15),
+        "the zap took nothing off"
+    );
+    assert_eq!(value_of(&world, id, &balls_bad), 0.0);
+}

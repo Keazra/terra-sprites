@@ -258,28 +258,19 @@ impl App {
                 // Its death lets go of the lock (design v21 §6.5).
                 self.lock = false;
             }
-            let logged = match event.kind {
-                EventKind::ObjectSpawned { .. }
-                | EventKind::ObjectRemoved { .. }
-                | EventKind::ActionStarted { .. } => false,
-                EventKind::LearnedMilestone { .. }
-                | EventKind::Rewarded { .. }
-                | EventKind::Corrected { .. }
-                | EventKind::CommandRejected { .. } => true,
-                EventKind::ActionEnded { id, ref action, .. } => {
-                    inspector::logged_line(id, action, world.data()).is_some()
-                }
-                EventKind::Died { .. } => true,
+            // What the log says of it, if it's logged at all; a line that
+            // reads as the one before merges into it with a count (design v21
+            // §6.1).
+            let data = world.data();
+            let Some(line) = inspector::event_line(event, data) else {
+                continue;
             };
-            // The same event again merges into one line with a count
-            // (design v21 §6.1).
             match self.event_log.front_mut() {
-                Some((front, count)) if logged && front.kind == event.kind => {
+                Some((front, count)) if inspector::event_line(front, data) == Some(line) => {
                     *front = event.clone();
                     *count += 1;
                 }
-                _ if logged => self.event_log.push_front((event.clone(), 1)),
-                _ => {}
+                _ => self.event_log.push_front((event.clone(), 1)),
             }
         }
         self.event_log.truncate(EVENT_LOG_LENGTH);

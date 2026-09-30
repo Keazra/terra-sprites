@@ -2328,3 +2328,37 @@ fn a_pet_shows_a_heart_and_a_zap_a_yellow_double_bang_for_a_second() {
         assert_ne!(at(&app, zapped_cell).0, bang);
     }
 }
+
+#[test]
+fn lines_that_read_the_same_merge_though_their_events_differ() {
+    // Design v21 §6.1: two different balls read the same, and so do pets
+    // refused at different speeds.
+    let world = garden(pack());
+    let kick = |tick, ball| {
+        let ball = (Target::Object(EntityId(ball)), 4);
+        acted(tick, 12, Verb::Play, ball, Outcome::Applied, UNHURT)
+    };
+    let refused = |tick, reach_back| Event {
+        tick,
+        kind: EventKind::CommandRejected {
+            command: Command::Reward {
+                sprite: EntityId(12),
+                amplified: false,
+                reach_back,
+            },
+            reason: Rejection::Gone,
+        },
+    };
+    let rows = logged(
+        &world,
+        &[kick(1, 40), kick(2, 41), refused(3, 3), refused(4, 20)],
+    );
+    assert_eq!(
+        rows,
+        [
+            "4  Couldn't pet Sprite #12: it's gone ×2",
+            "2  Sprite #12 kicked a ball ×2",
+            "",
+        ]
+    );
+}

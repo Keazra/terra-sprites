@@ -273,9 +273,12 @@ pub(crate) struct Signals {
     pub(crate) hit: bool,
     /// Who hit it, the `was_hit` pulse's source, if one is live.
     pub(crate) attacker: Option<EntityId>,
-    /// How far back the Cursor's touch looks, if it touched the sprite this
-    /// tick (design v21 §5.6).
+    /// How far back the Cursor's Reward looks, if it rewarded the sprite
+    /// this tick (design v21 §5.6).
     pub(crate) reach_back: Option<u64>,
+    /// Whether the Cursor corrected the sprite this tick: a `shocked` pulse
+    /// is live (design v21 §5.6).
+    pub(crate) corrected: bool,
 }
 
 /// The most entries a trace keeps (design §5.6).
@@ -354,6 +357,7 @@ pub(crate) fn run(
             hit: body.loci[indices.was_hit] > 0.0,
             attacker: body.sources.get(&indices.was_hit).copied(),
             reach_back,
+            corrected: body.loci[indices.shocked] > 0.0,
         };
         let rate = body.loci[indices.learning_rate_mod];
         for (learned, good) in brain.learn(tick, &signals, rate, data) {

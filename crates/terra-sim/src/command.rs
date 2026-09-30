@@ -52,20 +52,21 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
             });
             continue;
         };
-        // A Reward looks back its reach back, within the bounds; a Correct
-        // the touch window. Several in a tick look back as far as the
-        // furthest (design v21 §2.5, §5.6).
-        let reach_back = match command {
-            Command::Reward { reach_back, .. } => {
-                u64::from(reach_back).clamp(physiology.touch_window, cursor.max_reach_back)
-            }
-            Command::Correct { .. } => physiology.touch_window,
-        };
-        let brain = &mut touched.brain;
-        brain.reach_back = brain.reach_back.max(Some(reach_back));
-        let body = &mut touched.body;
+        // A Reward looks back its reach back, within the bounds, and several
+        // in a tick as far as the furthest; a Correct looks back only the
+        // touch window, which its `shocked` pulse tells learning (design v21
+        // §2.5, §5.6).
         let kind = match command {
-            Command::Reward { amplified, .. } => {
+            Command::Reward {
+                amplified,
+                reach_back,
+                ..
+            } => {
+                let reach_back =
+                    u64::from(reach_back).clamp(physiology.touch_window, cursor.max_reach_back);
+                let brain = &mut touched.brain;
+                brain.reach_back = brain.reach_back.max(Some(reach_back));
+                let body = &mut touched.body;
                 let reward = if amplified { cursor.hug } else { cursor.pet };
                 raise(body, indices.reward, reward);
                 body.pulse(indices.petted, None);
@@ -75,6 +76,7 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
                 }
             }
             Command::Correct { amplified, .. } => {
+                let body = &mut touched.body;
                 let touch = if amplified { cursor.shock } else { cursor.zap };
                 raise(body, indices.punishment, touch.punishment);
                 raise(body, indices.pain, touch.pain);

@@ -379,30 +379,35 @@ impl Brain {
             attacker.fear = (attacker.fear - rate * signals.punishment).max(-1.0);
         }
         // What the feelings are about: the latest try, while it's recent
-        // (design §5.6). Relief looks back the touch window; reward and
-        // punishment in a tick the Cursor touched the sprite look back its
-        // reach back (design v21 §5.6).
+        // (design §5.6). Relief and punishment look back the touch window, a
+        // zap's or shock's too; reward, in a tick the Cursor rewarded the
+        // sprite, looks back the Reward's reach back (design v21 §5.6).
         let within = |ticks: u64| self.touched.filter(|t| tick - t.tick <= ticks);
         let near = within(physiology.touch_window);
-        let felt = signals.reach_back.map_or(near, within);
+        let reached = signals.reach_back.map_or(near, within);
+        let needs = data.need_places().len();
         if let Some(Touch {
             subject,
             sprite,
             novelty,
             ..
-        }) = felt.or(near)
+        }) = reached.or(near)
         {
             let good = self.params.get(BrainParam::WorthRateGood) * learning_rate_mod;
             let bad = self.params.get(BrainParam::WorthRateBad) * learning_rate_mod;
             let relief: &[f32] = if near.is_some() { relief } else { &[] };
-            let (reward, punishment) = match felt {
-                // A hit's punishment teaches fear and habits, not worth
-                // (design v18 §5.6).
-                Some(_) if signals.hit => (signals.reward, 0.0),
-                Some(_) => (signals.reward, signals.punishment),
-                None => (0.0, 0.0),
+            let reward = if reached.is_some() {
+                signals.reward
+            } else {
+                0.0
             };
-            let needs = data.need_places().len();
+            // A hit's punishment teaches fear and habits, not worth (design
+            // v18 §5.6).
+            let punishment = if near.is_some() && !signals.hit {
+                signals.punishment
+            } else {
+                0.0
+            };
             match sprite {
                 // A sprite is learned about as that one sprite, fast; sprites
                 // in general only through the ones it knows (design v18 §5.6).
@@ -435,26 +440,28 @@ impl Brain {
         }
         // Habits, along the trace: each aimed verb and the thing it attended.
         // A fruitless try disappoints the need that chose it. In a tick the
-        // Cursor touched the sprite, its feeling goes to the habit of the
-        // latest try within its reach back instead, at full weight (design
-        // v21 §5.6).
+        // Cursor rewarded the sprite, the reward goes instead to the habit of
+        // the latest try within the Reward's reach back, at full weight; in a
+        // tick it corrected it, the punishment likewise to the latest try
+        // within the touch window (design v21 §5.6).
         let rate = self.params.get(BrainParam::HabitRate) * learning_rate_mod;
-        let r = signals.reward - signals.punishment;
-        let (r, cursor) = match felt {
-            Some(touch) if signals.reach_back.is_some() => (0.0, Some((touch, r))),
-            _ => (r, None),
-        };
-        if let Some((touch, r)) = cursor {
-            let needs = data.need_places().len();
-            let known = self.experience.learn_about(touch.subject, needs);
-            let habit = &mut known.habits[column(touch.verb)];
-            *habit = (*habit + rate * r).clamp(-1.0, 1.0);
+        let rewarded = reached.filter(|_| signals.reach_back.is_some());
+        let corrected = near.filter(|_| signals.corrected);
+        let mut r = 0.0;
+        for (tried_on, felt) in [(rewarded, signals.reward), (corrected, -signals.punishment)] {
+            match tried_on {
+                Some(touch) => {
+                    let known = self.experience.learn_about(touch.subject, needs);
+                    let habit = &mut known.habits[column(touch.verb)];
+                    *habit = (*habit + rate * felt).clamp(-1.0, 1.0);
+                }
+                None => r += felt,
+            }
         }
         let tried = self.touched.filter(|_| signals.fruitless).map(|t| t.tick);
         if r != 0.0 || tried.is_some() {
             let disappointment = self.params.get(BrainParam::Disappointment);
             let decay = self.params.get(BrainParam::TraceDecay);
-            let needs = data.need_places().len();
             for entry in &self.trace {
                 let (Some(verb), Some(subject)) = (entry.verb, entry.subject) else {
                     continue;
