@@ -291,6 +291,11 @@ impl App {
             }
             if let EventKind::CommandRejected { .. } = event.kind {
                 self.report(StatusMark::Rejected);
+                // And why, on the status line, as the log words it (design
+                // v22 §6.1).
+                if let Some(why) = inspector::event_line(event, world.data()) {
+                    self.notice = Some((why, self.running_for));
+                }
             }
             if let EventKind::Died { id, cause, age } = event.kind
                 && self.selection == Some(Selection::Living(id))
