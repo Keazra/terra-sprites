@@ -7,7 +7,7 @@ use ratatui::{
     style::{Modifier, Style},
     text::Line,
 };
-use terra_sim::{Map, ObjectView, Pos, Progress, Terrain, World};
+use terra_sim::{Grip, Map, ObjectView, Pos, Progress, Terrain, World};
 
 use crate::app::{App, Areas, Screen, Selection};
 use crate::clock::Speed;
@@ -169,7 +169,7 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
                 .set_style(style);
         }
     }
-    draw_cursor(buf, inner, app);
+    draw_cursor(buf, inner, app, world);
 }
 
 /// Where the selected sprite is heading, while its action is under way
@@ -202,7 +202,7 @@ fn attended_by(app: &App, world: &World) -> Option<Pos> {
 /// → ☺ ←      Y, N: the status marks
 /// N ↑ M
 /// ```
-fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App) {
+fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App, world: &World) {
     let Some(centre) = app.cell_of(app.cursor()) else {
         return;
     };
@@ -211,15 +211,20 @@ fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App) {
     } else {
         app.theme.arrows()
     };
-    let status = app.theme.status_marks().glyph(app.status_mark());
+    let [y, n] = app.status_marks(world).map(|status| {
+        let theme = app.theme.status_marks();
+        theme
+            .glyph(status)
+            .unwrap_or_else(|| held_glyph(app, world))
+    });
     let mark = app.theme.mode_mark(app.mode());
     let pieces = [
         (-1, -1, mark.symbol),
         (0, -1, arrows.down),
-        (1, -1, status),
+        (1, -1, y),
         (-1, 0, arrows.right),
         (1, 0, arrows.left),
-        (-1, 1, status),
+        (-1, 1, n),
         (0, 1, arrows.up),
         (1, 1, mark.symbol),
     ];
@@ -234,6 +239,27 @@ fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App) {
                 .set_style(Style::default().fg(mark.fg));
         }
     }
+}
+
+/// The glyph of what the Cursor has hold of, as the queue will leave it: a
+/// sprite's, or an item's, held or still on the map (design v23 §6.5).
+fn held_glyph(app: &App, world: &World) -> char {
+    let theme = &app.theme;
+    let glyph = match app.grip(world) {
+        Some(Grip::Holds(id)) => {
+            let held = world.cursor().holds().filter(|held| held.id() == id);
+            let look = held.map(|held| (held.type_name(), held.visual_state()));
+            let on_map = || {
+                let object = world.objects().find(|object| object.id() == id)?;
+                Some((object.type_name(), object.visual_state()))
+            };
+            look.or_else(on_map)
+                .map(|(name, state)| theme.object_glyph(name, state))
+        }
+        Some(Grip::Leads(_)) => Some(theme.glyph(SemanticTile::Sprite)),
+        None => None,
+    };
+    glyph.map_or('?', |glyph| glyph.symbol)
 }
 
 /// Which sides of the map view's border are the terrarium's wall.

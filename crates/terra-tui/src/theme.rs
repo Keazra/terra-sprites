@@ -96,17 +96,29 @@ pub struct StatusMarks {
     pub applied: char,
     /// The world has just refused one.
     pub rejected: char,
+    /// In Grab mode, empty: `Y`, a click would lift something (design v23
+    /// §6.5).
+    pub lift: char,
+    /// In Grab mode, empty: `N`.
+    pub empty: char,
+    /// In Grab mode, holding or leading: `Y`, a click would put it down.
+    pub drop: char,
 }
 
 impl StatusMarks {
-    /// The glyph the status marks show for `mark`.
-    pub fn glyph(self, mark: StatusMark) -> char {
-        match mark {
+    /// The glyph the status marks show for `mark`, or `None` for the thing
+    /// the Cursor holds or leads, which shows its own glyph.
+    pub fn glyph(self, mark: StatusMark) -> Option<char> {
+        Some(match mark {
             StatusMark::Idle => self.idle,
             StatusMark::Sent => self.sent,
             StatusMark::Applied => self.applied,
             StatusMark::Rejected => self.rejected,
-        }
+            StatusMark::Lift => self.lift,
+            StatusMark::Empty => self.empty,
+            StatusMark::Drop => self.drop,
+            StatusMark::Holding => return None,
+        })
     }
 }
 

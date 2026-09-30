@@ -396,25 +396,7 @@ impl<'a> ObjectView<'a> {
     /// The name of the look a theme draws the object with: the state of the
     /// first of its type's visual rules whose conditions hold, or `"default"`.
     pub fn visual_state(&self) -> &'a str {
-        let world = self.world;
-        let object_type = &world.data.object_types()[self.object.kind];
-        object_type
-            .visual
-            .iter()
-            .find(|visual| {
-                visual.conditions.iter().all(|condition| {
-                    holds_without_drawing(
-                        &world.state.map,
-                        &world.state.objects,
-                        &world.data,
-                        self.object,
-                        self.object.pos,
-                        condition,
-                    )
-                    .expect("visual rules never use Chance")
-                })
-            })
-            .map_or("default", |visual| visual.state.as_str())
+        visual_state(self.world, self.object)
     }
 
     /// The name of the object's current stage, or `None` if its type has no stages.
@@ -422,6 +404,29 @@ impl<'a> ObjectView<'a> {
         let stages = &self.world.data.object_types()[self.object.kind].stages;
         self.object.stage.map(|stage| stages[stage].name.as_str())
     }
+}
+
+/// The name of the look a theme draws `object` with: the state of the first
+/// of its type's visual rules whose conditions hold, or `"default"`.
+fn visual_state<'a>(world: &'a World, object: &Object) -> &'a str {
+    let object_type = &world.data.object_types()[object.kind];
+    object_type
+        .visual
+        .iter()
+        .find(|visual| {
+            visual.conditions.iter().all(|condition| {
+                holds_without_drawing(
+                    &world.state.map,
+                    &world.state.objects,
+                    &world.data,
+                    object,
+                    object.pos,
+                    condition,
+                )
+                .expect("visual rules never use Chance")
+            })
+        })
+        .map_or("default", |visual| visual.state.as_str())
 }
 
 /// A read-only view of the Cursor, as far as it touches the world (design
@@ -464,6 +469,13 @@ impl<'a> HeldView<'a> {
     /// The name of the item's type, as `objects.ron` gives it.
     pub fn type_name(&self) -> &'a str {
         &self.world.data.object_types()[self.object.kind].name
+    }
+
+    /// The name of the look a theme draws the item with, as for an object
+    /// on the map (`ObjectView::visual_state`); held, it has no tile, so
+    /// rules asking about one don't hold (design §3.5.2).
+    pub fn visual_state(&self) -> &'a str {
+        visual_state(self.world, self.object)
     }
 }
 

@@ -253,6 +253,44 @@ fn the_status_marks_show_what_the_cursor_reports() {
 }
 
 #[test]
+fn in_grab_mode_the_status_marks_show_what_the_cursor_has_hold_of() {
+    // Design v23 §6.5: empty, `↑` and `░`; holding or leading, `↓` and the
+    // thing's glyph; all in Grab's yellow. The sprite is on map tile (2, 3)
+    // and the ball on (6, 3); the marks sit top right and bottom left of the
+    // Cursor's centre.
+    let world = garden_with_sprites();
+    let marks = |app: &App, centre: (u16, u16)| {
+        let screen = render(app, &world, 40, 10);
+        [(centre.0 + 1, centre.1 - 1), (centre.0 - 1, centre.1 + 1)].map(|cell| {
+            assert_eq!(screen[cell].fg, Color::Yellow, "{cell:?}");
+            screen[cell].symbol().to_string()
+        })
+    };
+    let (sprite, ball) = (Position::new(1 + 2, 2 + 3), Position::new(1 + 6, 2 + 3));
+    for (on, glyph) in [(sprite, "☺"), (ball, "○")] {
+        let mut app = app_for(&world, Theme::cp437(), 40, 10);
+        app.apply(Action::Mode(CursorMode::Grab), &world);
+        app.apply(Action::Point(on), &world);
+        assert_eq!(marks(&app, (on.x, on.y)), ["↑", "░"], "empty");
+        app.apply(Action::left_click(on), &world);
+        assert_eq!(marks(&app, (on.x, on.y)), ["↓", glyph], "a grab queued");
+    }
+}
+
+#[test]
+fn a_grab_click_with_nothing_to_act_on_flashes_a_question_mark() {
+    let world = garden_with_sprites();
+    let empty = Position::new(1 + 4, 2 + 3);
+    let mut app = app_for(&world, Theme::cp437(), 40, 10);
+    app.apply(Action::Mode(CursorMode::Grab), &world);
+    app.apply(Action::left_click(empty), &world);
+    let screen = render(&app, &world, 40, 10);
+    for cell in [(empty.x + 1, empty.y - 1), (empty.x - 1, empty.y + 1)] {
+        assert_eq!(screen[cell].symbol(), "?", "{cell:?}");
+    }
+}
+
+#[test]
 fn map_tiles_take_their_theme_colours() {
     let world = drawn_world(&SMALL_MAP);
     let mut app = app_for(&world, Theme::cp437(), 40, 8);

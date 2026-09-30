@@ -51,6 +51,11 @@
             sent: '+', // a click has just sent a command
             applied: '☼', // the world has just applied it
             rejected: '?', // or refused it
+            // Grab mode shows what the Cursor has hold of (design v23 §6.5):
+            // empty, lift and empty; holding or leading, drop and the thing.
+            lift: '↑',
+            empty: '░',
+            drop: '↓',
         ),
         mode_marks: {
             select: (glyph: '♦', fg: white),
