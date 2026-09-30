@@ -1212,7 +1212,9 @@ pub(crate) fn event_line(event: &Event, data: &DataPack) -> Option<String> {
             };
             Some(format!("Couldn't {verb} {}: {why}", sprite_label(sprite)))
         }
-        EventKind::TookHold { .. } | EventKind::LetGo { .. } => None,
+        EventKind::TookHold { .. } | EventKind::LetGo { .. } | EventKind::CursorEmptied { .. } => {
+            None
+        }
         EventKind::ObjectSpawned { .. }
         | EventKind::ObjectRemoved { .. }
         | EventKind::ActionStarted { .. } => None,
