@@ -316,9 +316,15 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         " ({},{}) {terrain}{sprite}{object} │ {mode}{locked}",
         cursor.x, cursor.y
     );
-    let used = tile.chars().count() + KEY_HINTS.chars().count();
+    // Why a click did nothing, for a while, in the key hints' place (design
+    // v22 §6.1).
+    let right = match app.notice() {
+        Some(notice) => format!("{notice} "),
+        None => KEY_HINTS.to_string(),
+    };
+    let used = tile.chars().count() + right.chars().count();
     match usize::from(width).checked_sub(used) {
-        Some(gap) if gap >= 2 => Line::from(format!("{tile}{}{KEY_HINTS}", " ".repeat(gap))),
+        Some(gap) if gap >= 2 => Line::from(format!("{tile}{}{right}", " ".repeat(gap))),
         _ => Line::from(tile),
     }
 }
