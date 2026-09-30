@@ -126,7 +126,6 @@ fn zap(sprite: EntityId) -> Command {
     Command::Correct {
         sprite,
         amplified: false,
-        reach_back: 3,
     }
 }
 
@@ -158,7 +157,6 @@ fn a_shock_gives_a_full_bad_feeling_and_more_pain_but_no_injury() {
     world.submit(Command::Correct {
         sprite: id,
         amplified: true,
-        reach_back: 3,
     });
     let events = world.step();
     assert!(
@@ -476,4 +474,31 @@ fn commands_waiting_for_the_next_tick_are_part_of_the_world_s_state() {
     let before = world.state_hash();
     world.submit(pet(id));
     assert_ne!(world.state_hash(), before);
+}
+
+/// Kicks the ball at tick 0, and zaps the sprite at `tick`. Returns what it
+/// then thinks of balls, and of kicking them.
+fn zap_after_a_kick(tick: u64) -> (f32, f32) {
+    let (mut world, id) = kicker("");
+    run_to(&mut world, tick);
+    world.submit(zap(id));
+    world.step();
+    let balls_bad = Learned::Bad {
+        thing: "ball".into(),
+    };
+    (
+        value_of(&world, id, &balls_bad),
+        value_of(&world, id, &kicking_balls()),
+    )
+}
+
+#[test]
+fn a_zap_looks_back_only_the_touch_window_whatever_the_speed() {
+    // Design v21 §5.6: a late shock mustn't land on the wrong thing, so a
+    // Correct carries no reach back. 3 ticks after the kick the zap makes
+    // balls bad, .5 × worth_rate_bad (.8), and kicking them, .5 × habit_rate
+    // (.3) at full weight; 4 ticks after, it teaches nothing about them.
+    let (bad, habit) = zap_after_a_kick(3);
+    assert!(close(bad, -0.4) && close(habit, -0.15), "{bad}, {habit}");
+    assert_eq!(zap_after_a_kick(4), (0.0, 0.0));
 }

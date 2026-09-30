@@ -22,13 +22,10 @@ pub enum Command {
         reach_back: u16,
     },
     /// The Cursor's bad touch (design v21 §4.6): a zap, or amplified, a
-    /// shock. It hurts without injuring.
-    Correct {
-        sprite: EntityId,
-        amplified: bool,
-        /// As for `Reward`.
-        reach_back: u16,
-    },
+    /// shock. It hurts without injuring. Its feeling looks back only the
+    /// touch window, whatever the speed, so a late shock can't land on the
+    /// wrong thing (design v21 §5.6).
+    Correct { sprite: EntityId, amplified: bool },
 }
 
 /// Why a command was refused (design §2.5).
@@ -44,12 +41,7 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
     let physiology = data.physiology();
     let (cursor, indices) = (&physiology.cursor, &physiology.indices);
     for command in std::mem::take(&mut state.commands) {
-        let (Command::Reward {
-            sprite, reach_back, ..
-        }
-        | Command::Correct {
-            sprite, reach_back, ..
-        }) = command;
+        let (Command::Reward { sprite, .. } | Command::Correct { sprite, .. }) = command;
         let Some(touched) = state.sprites.get_mut(sprite) else {
             events.push(Event {
                 tick: state.tick,
@@ -60,10 +52,15 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
             });
             continue;
         };
-        // Several in a tick look back as far as the furthest (design v21
-        // §2.5, §5.6).
-        let reach_back =
-            u64::from(reach_back).clamp(physiology.touch_window, cursor.max_reach_back);
+        // A Reward looks back its reach back, within the bounds; a Correct
+        // the touch window. Several in a tick look back as far as the
+        // furthest (design v21 §2.5, §5.6).
+        let reach_back = match command {
+            Command::Reward { reach_back, .. } => {
+                u64::from(reach_back).clamp(physiology.touch_window, cursor.max_reach_back)
+            }
+            Command::Correct { .. } => physiology.touch_window,
+        };
         let brain = &mut touched.brain;
         brain.reach_back = brain.reach_back.max(Some(reach_back));
         let body = &mut touched.body;

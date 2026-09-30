@@ -286,6 +286,12 @@ fn a_trainer_must_answer_an_object_type_and_a_control_without_it_needs_one() {
         LabScenario::from_ron(&untrained, &data).err(),
         Some(LabError::NoTrainer)
     );
+    // Design v21 §5.6: a zap or a shock always looks back the touch window.
+    let reaching = PLAYGROUND.replace("give: Pet,", "give: Zap, reach_back: 20,");
+    assert_eq!(
+        LabScenario::from_ron(&reaching, &data).err(),
+        Some(LabError::ReachBackOnCorrect)
+    );
 }
 
 #[test]
