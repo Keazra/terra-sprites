@@ -36,7 +36,7 @@
         arrows: (up: '^', down: 'v', left: '<', right: '>'),
         // No solid arrows in ASCII: the status line says it's locked on.
         locked_arrows: (up: '^', down: 'v', left: '<', right: '>'),
-        status_marks: (idle: '-', sent: '+'),
+        status_marks: (idle: '-', sent: '+', applied: '*', rejected: '?'),
         mode_marks: {
             select: (glyph: 'S', fg: white),
             train:  (glyph: 'T', fg: light_magenta),

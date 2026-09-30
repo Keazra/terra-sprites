@@ -67,6 +67,10 @@ pub enum StatusMark {
     Idle,
     /// A click has just sent a command.
     Sent,
+    /// The world has just applied one.
+    Applied,
+    /// The world has just refused one.
+    Rejected,
 }
 
 /// How many lines the observed list keeps (design §6.1).
@@ -200,6 +204,8 @@ pub struct App {
     commands: Vec<Command>,
     /// When, in `running_for`, a click last sent a command (design v22 §6.5).
     sent_at: Option<Duration>,
+    /// The world's latest report on a command, and when it began to show.
+    report: Option<(StatusMark, Duration)>,
 }
 
 /// How long the Decision marker shows, and then doesn't: once a second in
@@ -248,6 +254,7 @@ impl App {
             emotes: BTreeMap::new(),
             commands: Vec::new(),
             sent_at: None,
+            report: None,
         };
         app.centre_on(cursor);
         app
@@ -273,6 +280,10 @@ impl App {
                 (&event.kind, CursorTouch::reported(&event.kind))
             {
                 self.note_touch(event.tick, *id, touch);
+                self.report = Some((StatusMark::Applied, self.running_for));
+            }
+            if let EventKind::CommandRejected { .. } = event.kind {
+                self.report = Some((StatusMark::Rejected, self.running_for));
             }
             if let EventKind::Died { id, cause, age } = event.kind
                 && self.selection == Some(Selection::Living(id))
@@ -402,8 +413,9 @@ impl App {
     /// What the Cursor's status marks show now (design v22 §6.5).
     pub fn status_mark(&self) -> StatusMark {
         let flashing = |at: Duration| self.running_for - at < MARK_FLASH_FOR;
-        match self.sent_at {
-            Some(at) if flashing(at) => StatusMark::Sent,
+        match (self.report, self.sent_at) {
+            (Some((report, at)), _) if flashing(at) => report,
+            (_, Some(at)) if flashing(at) => StatusMark::Sent,
             _ => StatusMark::Idle,
         }
     }
