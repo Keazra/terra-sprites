@@ -1680,6 +1680,7 @@ fn the_wheel_over_the_inspector_scrolls_3_lines_a_notch_and_elsewhere_does_not()
         &world,
     );
     assert_eq!(first_and_last(&app, &world).0, "always → boredom +.003");
+    assert_eq!(app.mode(), CursorMode::Select, "the mode stays");
     app.apply(
         Action::Wheel {
             at: Position::new(3, 3),

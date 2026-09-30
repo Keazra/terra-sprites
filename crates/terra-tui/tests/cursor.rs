@@ -97,6 +97,26 @@ fn z_and_x_pick_select_and_train_and_escape_goes_back_to_select() {
 }
 
 #[test]
+fn the_wheel_cycles_the_cursor_modes_wrapping_round() {
+    // Design v21 §6.5: a notch down is the next mode, up the previous; with
+    // Select and Train alone, either way goes to the other.
+    let world = field(&[]);
+    let mut app = app(&world);
+    let wheel = |notches| Action::Wheel {
+        at: Position::new(4, 2),
+        notches,
+    };
+    apply(&mut app, &world, wheel(1));
+    assert_eq!(app.mode(), CursorMode::Train);
+    apply(&mut app, &world, wheel(1));
+    assert_eq!(app.mode(), CursorMode::Select, "wrapping round");
+    apply(&mut app, &world, wheel(-1));
+    assert_eq!(app.mode(), CursorMode::Train);
+    apply(&mut app, &world, wheel(3));
+    assert_eq!(app.mode(), CursorMode::Select, "a notch a mode");
+}
+
+#[test]
 fn in_train_mode_a_left_click_pets_the_sprite_under_it_and_a_right_click_zaps_it() {
     // Design v21 §6.5. At 1×, two seconds is 2.5 ticks: the reach back is 3.
     let world = field(&[at(4, 2)]);
