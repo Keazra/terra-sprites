@@ -5,11 +5,12 @@ use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
-    ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Learned, Map, Outcome, Pos,
-    Progress, Removal, Scenario, ScriptedAction, Target, Thing, Verb, World, WorldConfig,
+    ActionView, Command, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Learned, Map,
+    Outcome, Pos, Progress, Rejection, Removal, Scenario, ScriptedAction, Target, Thing, Verb,
+    World, WorldConfig,
 };
-use terra_tui::app::{App, Tab};
-use terra_tui::input::Action;
+use terra_tui::app::{App, CursorMode, Tab};
+use terra_tui::input::{Action, Button};
 use terra_tui::theme::Theme;
 use terra_tui::ui;
 
@@ -689,7 +690,7 @@ fn the_event_log_leaves_object_and_action_events_out_and_keeps_the_latest_100() 
     for tick in 0..150 {
         app.record(&[died(tick, tick, DeathCause::Starvation, tick)], &world);
     }
-    let ticks: Vec<u64> = app.event_log().map(|event| event.tick).collect();
+    let ticks: Vec<u64> = app.event_log().map(|(event, _)| event.tick).collect();
     assert_eq!(ticks.len(), 100);
     assert_eq!((ticks[0], ticks[99]), (149, 50), "newest first");
 }
@@ -2145,4 +2146,139 @@ fn the_event_log_says_when_sprites_in_general_turn_frightening() {
         )],
     );
     assert_eq!(log, ["40  Sprite #3 learned: sprites are frightening"]);
+}
+
+#[test]
+fn the_status_line_names_train_mode_and_what_the_cursor_is_locked_on_to() {
+    // Design v21 §6.1: tiles are drawn from screen cell (1, 2).
+    let world = garden_with_sprites();
+    let id = world.sprite_at(Pos { x: 2, y: 3 }).expect("a sprite").id();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    let on_it = Position::new(1 + 2, 2 + 3);
+    app.apply(Action::left_click(on_it), &world);
+    let right = Action::Click {
+        at: on_it,
+        button: Button::Right,
+        amplified: false,
+    };
+    app.apply(right, &world);
+    app.apply(Action::Mode(CursorMode::Train), &world);
+    let status = lines(&render(&app, &world, 100, 30))[29].clone();
+    let expected = format!(
+        " (2,3) grass · Sprite #{0} │ TRAIN │ locked on Sprite #{0}",
+        id.0
+    );
+    assert!(status.starts_with(&expected), "{status}");
+}
+
+#[test]
+fn with_room_the_status_line_hints_at_the_mode_keys() {
+    let world = drawn_world(&SMALL_MAP);
+    let app = app_for(&world, Theme::cp437(), 100, 30);
+    let status = lines(&render(&app, &world, 100, 30))[29].clone();
+    assert!(status.contains("Z/X mode"), "{status}");
+}
+
+/// The Cursor's events for sprite 12, at `tick`: a pet, hug, zap or shock by
+/// name, or one refused.
+fn touched(tick: u64, what: &str) -> Event {
+    let id = EntityId(12);
+    let kind = match what {
+        "pet" => EventKind::Rewarded {
+            id,
+            amplified: false,
+        },
+        "hug" => EventKind::Rewarded {
+            id,
+            amplified: true,
+        },
+        "zap" => EventKind::Corrected {
+            id,
+            amplified: false,
+        },
+        "shock" => EventKind::Corrected {
+            id,
+            amplified: true,
+        },
+        "refused pet" => EventKind::CommandRejected {
+            command: Command::Reward {
+                sprite: id,
+                amplified: false,
+                reach_back: 3,
+            },
+            reason: Rejection::Gone,
+        },
+        "refused shock" => EventKind::CommandRejected {
+            command: Command::Correct {
+                sprite: id,
+                amplified: true,
+            },
+            reason: Rejection::Gone,
+        },
+        _ => unreachable!("{what}"),
+    };
+    Event { tick, kind }
+}
+
+/// The event log's first three rows once an app has recorded `events`.
+fn logged(world: &World, events: &[Event]) -> Vec<String> {
+    let mut app = app_for(world, Theme::cp437(), 100, 30);
+    for event in events {
+        app.record(std::slice::from_ref(event), world);
+    }
+    let screen = lines(&render(&app, world, 100, 30));
+    screen[25..28]
+        .iter()
+        .map(|row| inside(row).to_string())
+        .collect()
+}
+
+#[test]
+fn the_event_log_tells_the_player_what_they_did_through_the_cursor() {
+    // Design v21 §6.1: spoken to the player.
+    let world = garden(pack());
+    let first = logged(
+        &world,
+        &[touched(1, "pet"), touched(2, "hug"), touched(3, "zap")],
+    );
+    assert_eq!(
+        first,
+        [
+            "3  You zapped Sprite #12",
+            "2  You hugged Sprite #12",
+            "1  You petted Sprite #12",
+        ]
+    );
+    let then = logged(
+        &world,
+        &[
+            touched(4, "shock"),
+            touched(5, "refused pet"),
+            touched(6, "refused shock"),
+        ],
+    );
+    assert_eq!(
+        then,
+        [
+            "6  Couldn't shock Sprite #12: it's gone",
+            "5  Couldn't pet Sprite #12: it's gone",
+            "4  You shocked Sprite #12",
+        ]
+    );
+}
+
+#[test]
+fn the_same_line_again_merges_into_one_with_a_count() {
+    // Design v21 §6.1: spam-clicking doesn't bury the log.
+    let world = garden(pack());
+    let mut events: Vec<Event> = (1..=10).map(|tick| touched(tick, "pet")).collect();
+    events.push(touched(11, "zap"));
+    assert_eq!(
+        logged(&world, &events),
+        [
+            "11  You zapped Sprite #12",
+            "10  You petted Sprite #12 ×10",
+            "",
+        ]
+    );
 }

@@ -163,8 +163,9 @@ pub struct App {
     inspector: Option<Rect>,
     /// The screen cell under the mouse pointer, while that cell shows a tile.
     pointer: Option<Position>,
-    /// The latest events the event log shows, newest first.
-    event_log: VecDeque<Event>,
+    /// The latest events the event log shows, newest first, each with how
+    /// many times in a row it came (design v21 §6.1).
+    event_log: VecDeque<(Event, u32)>,
     /// The selected sprite's observed list, newest first.
     observed: VecDeque<Observed>,
     selection: Option<Selection>,
@@ -255,18 +256,25 @@ impl App {
             let logged = match event.kind {
                 EventKind::ObjectSpawned { .. }
                 | EventKind::ObjectRemoved { .. }
-                | EventKind::ActionStarted { .. }
+                | EventKind::ActionStarted { .. } => false,
+                EventKind::LearnedMilestone { .. }
                 | EventKind::Rewarded { .. }
                 | EventKind::Corrected { .. }
-                | EventKind::CommandRejected { .. } => false,
-                EventKind::LearnedMilestone { .. } => true,
+                | EventKind::CommandRejected { .. } => true,
                 EventKind::ActionEnded { id, ref action, .. } => {
                     inspector::logged_line(id, action, world.data()).is_some()
                 }
                 EventKind::Died { .. } => true,
             };
-            if logged {
-                self.event_log.push_front(event.clone());
+            // The same event again merges into one line with a count
+            // (design v21 §6.1).
+            match self.event_log.front_mut() {
+                Some((front, count)) if logged && front.kind == event.kind => {
+                    *front = event.clone();
+                    *count += 1;
+                }
+                _ if logged => self.event_log.push_front((event.clone(), 1)),
+                _ => {}
             }
         }
         self.event_log.truncate(EVENT_LOG_LENGTH);
@@ -360,9 +368,10 @@ impl App {
         std::mem::take(&mut self.commands)
     }
 
-    /// The events the event log shows, newest first.
-    pub fn event_log(&self) -> impl Iterator<Item = &Event> {
-        self.event_log.iter()
+    /// The events the event log shows, newest first, each the latest of
+    /// the same event in a row, with how many there were.
+    pub fn event_log(&self) -> impl Iterator<Item = (&Event, u32)> {
+        self.event_log.iter().map(|(event, count)| (event, *count))
     }
 
     /// Moves the app's real-time clock on by `elapsed`, for what flashes.

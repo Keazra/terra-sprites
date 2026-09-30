@@ -7,7 +7,9 @@ use ratatui::{
     style::{Modifier, Style},
     text::Line,
 };
-use terra_sim::{DataPack, Event, EventKind, Map, ObjectView, Pos, Progress, Terrain, World};
+use terra_sim::{
+    Command, DataPack, Event, EventKind, Map, ObjectView, Pos, Progress, Rejection, Terrain, World,
+};
 
 use crate::app::{App, Areas, Screen, Selection};
 use crate::clock::Speed;
@@ -287,7 +289,7 @@ fn top_bar_line(app: &App, world: &World) -> Line<'static> {
 }
 
 /// The keys that work now, shown at the right of the status line when there is room.
-const KEY_HINTS: &str = "WASD scroll  space pause  . step  +/- speed  esc quit ";
+const KEY_HINTS: &str = "Z/X mode  WASD scroll  space pause  . step  +/- speed  esc quit ";
 
 /// The tile under the cursor, with any sprite and object on it, and the
 /// cursor mode, then key hints if they fit in
@@ -307,8 +309,12 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         .map(|object| format!(" · {}", object_label(&object)))
         .unwrap_or_default();
     let mode = app.mode().label();
+    let locked = app
+        .locked()
+        .map(|id| format!(" │ locked on {}", sprite_label(id)))
+        .unwrap_or_default();
     let tile = format!(
-        " ({},{}) {terrain}{sprite}{object} │ {mode}",
+        " ({},{}) {terrain}{sprite}{object} │ {mode}{locked}",
         cursor.x, cursor.y
     );
     let used = tile.chars().count() + KEY_HINTS.chars().count();
@@ -355,11 +361,17 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     };
     draw_border(buf, area, " Events ", no_walls);
     let inner = area.inner(Margin::new(1, 1));
-    let lines = app
-        .event_log()
-        .filter_map(|event| Some((event.tick, event_text(event, world.data())?)));
-    for (row, (tick, text)) in (inner.y..inner.bottom()).zip(lines) {
-        let line = format!(" {:>7}  {text}", group_thousands(tick));
+    let lines = app.event_log().filter_map(|(event, count)| {
+        let text = event_text(event, world.data())?;
+        Some((event.tick, text, count))
+    });
+    for (row, (tick, text, count)) in (inner.y..inner.bottom()).zip(lines) {
+        let times = if count > 1 {
+            format!(" ×{count}")
+        } else {
+            String::new()
+        };
+        let line = format!(" {:>7}  {text}{times}", group_thousands(tick));
         buf.set_stringn(
             inner.x,
             row,
@@ -383,12 +395,34 @@ fn event_text(event: &Event, data: &DataPack) -> Option<String> {
         EventKind::LearnedMilestone { id, learned, good } => {
             Some(inspector::learned_line(*id, learned, *good, data))
         }
+        // The Cursor's touch, spoken to the player (design v21 §6.1).
+        EventKind::Rewarded { id, amplified } => Some(format!(
+            "You {} {}",
+            if *amplified { "hugged" } else { "petted" },
+            sprite_label(*id)
+        )),
+        EventKind::Corrected { id, amplified } => Some(format!(
+            "You {} {}",
+            if *amplified { "shocked" } else { "zapped" },
+            sprite_label(*id)
+        )),
+        EventKind::CommandRejected { command, reason } => {
+            let (touch, sprite) = match *command {
+                Command::Reward {
+                    sprite, amplified, ..
+                } => (if amplified { "hug" } else { "pet" }, sprite),
+                Command::Correct { sprite, amplified } => {
+                    (if amplified { "shock" } else { "zap" }, sprite)
+                }
+            };
+            let why = match reason {
+                Rejection::Gone => "it's gone",
+            };
+            Some(format!("Couldn't {touch} {}: {why}", sprite_label(sprite)))
+        }
         EventKind::ObjectSpawned { .. }
         | EventKind::ObjectRemoved { .. }
-        | EventKind::ActionStarted { .. }
-        | EventKind::Rewarded { .. }
-        | EventKind::Corrected { .. }
-        | EventKind::CommandRejected { .. } => None,
+        | EventKind::ActionStarted { .. } => None,
     }
 }
 
