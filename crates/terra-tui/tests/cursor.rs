@@ -119,6 +119,20 @@ fn the_wheel_cycles_the_cursor_modes_wrapping_round() {
 }
 
 #[test]
+fn the_wheel_off_the_map_leaves_the_mode_alone() {
+    // Design v22 §6.5: over the event log or the bars it does nothing. The
+    // map view's tiles are drawn at cells (0, 0) to (9, 5).
+    let world = field(&[]);
+    let mut app = app(&world);
+    let off_the_map = Action::Wheel {
+        at: Position::new(20, 12),
+        notches: 1,
+    };
+    apply(&mut app, &world, off_the_map);
+    assert_eq!(app.mode(), CursorMode::Select);
+}
+
+#[test]
 fn in_train_mode_a_left_click_pets_the_sprite_under_it_and_a_right_click_zaps_it() {
     // Design v21 §6.5. At 1×, two seconds is 2.5 ticks: the reach back is 3.
     let world = field(&[at(4, 2)]);
@@ -577,4 +591,45 @@ fn a_miss_then_a_quick_pet_shows_the_pet_applied() {
     assert_eq!(app.status_mark(), StatusMark::Sent);
     wait(&mut app, 300);
     assert_eq!(app.status_mark(), StatusMark::Applied, "the pet worked");
+}
+
+#[test]
+fn a_refused_pet_then_a_quick_one_that_works_shows_the_second_applied() {
+    // Design v22 §6.5: the marks follow the latest click, so its `+` puts
+    // the first click's refusal, still waiting to show, behind it.
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    click(&mut app, &world, at(4, 2), Button::Left);
+    wait(&mut app, 10);
+    app.record(&[touched(1, id, "refused pet")], &world);
+    wait(&mut app, 90);
+    click(&mut app, &world, at(4, 2), Button::Left);
+    wait(&mut app, 10);
+    app.record(&[touched(2, id, "pet")], &world);
+    wait(&mut app, 190);
+    assert_eq!(app.status_mark(), StatusMark::Sent, "the second click's +");
+    wait(&mut app, 110);
+    assert_eq!(app.status_mark(), StatusMark::Applied, "the second pet");
+}
+
+#[test]
+fn a_new_click_s_sent_isnt_cut_short_by_an_earlier_click_s_result() {
+    // Design v22 §6.5: while paused, the first pet's `☼`, still waiting its
+    // turn, would read as the second pet landing.
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    click(&mut app, &world, at(4, 2), Button::Left);
+    wait(&mut app, 10);
+    app.record(&[touched(1, id, "pet")], &world);
+    apply(&mut app, &world, Action::TogglePause);
+    wait(&mut app, 90);
+    click(&mut app, &world, at(4, 2), Button::Left);
+    wait(&mut app, 250);
+    assert_eq!(app.status_mark(), StatusMark::Sent);
+    wait(&mut app, 100);
+    assert_eq!(app.status_mark(), StatusMark::Idle, "paused: nothing yet");
 }
