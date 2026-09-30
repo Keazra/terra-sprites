@@ -35,6 +35,7 @@
         status_marks: (idle: '-'),
         mode_marks: {
             select: (glyph: 'S', fg: white),
+            train:  (glyph: 'T', fg: light_green),
         },
     ),
 )

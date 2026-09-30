@@ -8,6 +8,8 @@ use ratatui::crossterm::event::{
 };
 use ratatui::layout::Position;
 
+use crate::app::CursorMode;
+
 /// Something the player asked the UI to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
@@ -27,8 +29,21 @@ pub enum Action {
     },
     /// The mouse pointer is over this screen cell.
     Point(Position),
-    /// A left click on this screen cell.
-    Click(Position),
+    /// A click on this screen cell, amplified if Ctrl was held (design v21
+    /// §6.5).
+    Click {
+        at: Position,
+        button: Button,
+        amplified: bool,
+    },
+    /// `Q` or `E`: what a left or right click does, where the Cursor is,
+    /// amplified if Shift was held (design v21 §6.5).
+    Press {
+        button: Button,
+        amplified: bool,
+    },
+    /// Pick a cursor mode (`Z` Select, `X` Train).
+    Mode(CursorMode),
     /// Select the sprite with the next ID (`Tab`).
     SelectNext,
     /// Select the sprite with the previous ID (`Shift+Tab`).
@@ -57,6 +72,26 @@ pub enum Action {
     Dismiss,
     /// Quit at once (`Ctrl+C`).
     Quit,
+}
+
+/// A mouse button, or the key that stands for it (design v21 §6.5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Button {
+    /// The left button, or `Q`.
+    Left,
+    /// The right button, or `E`.
+    Right,
+}
+
+impl Action {
+    /// A plain left click on `at`.
+    pub fn left_click(at: Position) -> Action {
+        Action::Click {
+            at,
+            button: Button::Left,
+            amplified: false,
+        }
+    }
 }
 
 /// How far Shift scrolls the viewport, in tiles (design §6.5).
@@ -109,6 +144,14 @@ impl Keys {
             1
         };
         let scroll = |dx: i32, dy: i32| Some(Action::Scroll { dx, dy });
+        let shift = key.modifiers.contains(KeyModifiers::SHIFT);
+        // `Q` and `E` act once per press, like a click (design v21 §6.5).
+        let press = |button| {
+            (!held).then_some(Action::Press {
+                button,
+                amplified: shift,
+            })
+        };
         let code = match key.code {
             KeyCode::Char(c) => KeyCode::Char(c.to_ascii_lowercase()),
             other => other,
@@ -126,6 +169,10 @@ impl Keys {
             KeyCode::Char('+' | '=') => Some(Action::Faster { held }),
             KeyCode::Char('-') => Some(Action::Slower { held }),
             KeyCode::Char('y') => Some(Action::Confirm),
+            KeyCode::Char('z') => Some(Action::Mode(CursorMode::Select)),
+            KeyCode::Char('x') => Some(Action::Mode(CursorMode::Train)),
+            KeyCode::Char('q') => press(Button::Left),
+            KeyCode::Char('e') => press(Button::Right),
             // A held `v` would flicker the detail view on and off.
             KeyCode::Char('v') => (!held).then_some(Action::ToggleDetail),
             // Some terminals report Shift+Tab as its own key, others as Tab with Shift.
@@ -144,11 +191,18 @@ impl Keys {
 }
 
 /// The action for a mouse event. Every event says where the pointer is, so it
-/// points there; a left-button press clicks, and the wheel turns.
+/// points there; a left or right button press clicks, amplified with Ctrl
+/// (design v21 §6.5), and the wheel turns.
 pub fn mouse_action(event: MouseEvent) -> Option<Action> {
     let cell = Position::new(event.column, event.row);
+    let click = |button| Action::Click {
+        at: cell,
+        button,
+        amplified: event.modifiers.contains(KeyModifiers::CONTROL),
+    };
     Some(match event.kind {
-        MouseEventKind::Down(MouseButton::Left) => Action::Click(cell),
+        MouseEventKind::Down(MouseButton::Left) => click(Button::Left),
+        MouseEventKind::Down(MouseButton::Right) => click(Button::Right),
         MouseEventKind::ScrollDown => Action::Wheel {
             at: cell,
             notches: 1,

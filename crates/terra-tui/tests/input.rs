@@ -1,6 +1,7 @@
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::layout::Position;
-use terra_tui::input::{Action, Keys};
+use terra_tui::app::CursorMode;
+use terra_tui::input::{Action, Button, Keys};
 
 fn press(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
@@ -231,10 +232,65 @@ fn escape_and_y_answer_the_quit_prompt_and_q_no_longer_quits() {
         Keys::new().action_for(press(KeyCode::Char('y'))),
         Some(Action::Confirm)
     );
-    assert_eq!(
+    // `q` is the left click now (design v21 §6.5).
+    assert_ne!(
         Keys::new().action_for(press(KeyCode::Char('q'))),
-        Some(Action::Dismiss)
+        Some(Action::Quit)
     );
+}
+
+#[test]
+fn z_and_x_pick_select_and_train() {
+    // Design v21 §6.5.
+    assert_eq!(
+        Keys::new().action_for(press(KeyCode::Char('z'))),
+        Some(Action::Mode(CursorMode::Select))
+    );
+    assert_eq!(
+        Keys::new().action_for(press(KeyCode::Char('x'))),
+        Some(Action::Mode(CursorMode::Train))
+    );
+}
+
+#[test]
+fn q_and_e_are_the_left_and_right_click_and_shift_amplifies_them() {
+    // Design v21 §6.5.
+    let press_of = |key: KeyEvent| Keys::new().action_for(key);
+    let pressed = |button, amplified| Some(Action::Press { button, amplified });
+    assert_eq!(
+        press_of(press(KeyCode::Char('q'))),
+        pressed(Button::Left, false)
+    );
+    assert_eq!(
+        press_of(press(KeyCode::Char('e'))),
+        pressed(Button::Right, false)
+    );
+    let shifted = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::SHIFT);
+    assert_eq!(press_of(shifted('Q')), pressed(Button::Left, true));
+    assert_eq!(press_of(shifted('E')), pressed(Button::Right, true));
+    // With Caps Lock on, Windows reports `Q` without Shift: not amplified.
+    assert_eq!(
+        press_of(press(KeyCode::Char('Q'))),
+        pressed(Button::Left, false)
+    );
+}
+
+#[test]
+fn holding_q_or_e_acts_once() {
+    // Design v21 §6.5: once per press, like a click.
+    for c in ['q', 'e'] {
+        let mut keys = Keys::with_release_reporting(true);
+        assert!(keys.action_for(press(KeyCode::Char(c))).is_some());
+        assert_eq!(
+            keys.action_for(kind(KeyCode::Char(c), KeyEventKind::Repeat)),
+            None
+        );
+        assert_eq!(
+            keys.action_for(press(KeyCode::Char(c))),
+            None,
+            "pressed again, unreleased"
+        );
+    }
 }
 
 #[test]
@@ -284,16 +340,44 @@ fn every_mouse_event_points_and_a_left_press_also_clicks() {
     assert_eq!(action(MouseEventKind::Drag(MouseButton::Left)), point);
     assert_eq!(
         action(MouseEventKind::Down(MouseButton::Left)),
-        Some(Action::Click(Position::new(12, 7)))
+        Some(Action::left_click(Position::new(12, 7)))
+    );
+    assert_eq!(
+        action(MouseEventKind::Down(MouseButton::Right)),
+        Some(Action::Click {
+            at: Position::new(12, 7),
+            button: Button::Right,
+            amplified: false
+        }),
+        "design v21 §6.5"
     );
     // Every mouse event says where the pointer is, so the cursor follows it.
     for kind in [
         MouseEventKind::Up(MouseButton::Left),
-        MouseEventKind::Down(MouseButton::Right),
         MouseEventKind::Drag(MouseButton::Middle),
     ] {
         assert_eq!(action(kind), point, "{kind:?}");
     }
+}
+
+#[test]
+fn ctrl_amplifies_a_click() {
+    // Design v21 §6.5: Windows Terminal keeps Shift+click for selecting text.
+    use ratatui::crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+    let ctrl_click = terra_tui::input::mouse_action(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Right),
+        column: 3,
+        row: 4,
+        modifiers: KeyModifiers::CONTROL,
+    });
+    assert_eq!(
+        ctrl_click,
+        Some(Action::Click {
+            at: Position::new(3, 4),
+            button: Button::Right,
+            amplified: true
+        })
+    );
 }
 
 #[test]

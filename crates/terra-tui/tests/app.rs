@@ -66,7 +66,7 @@ fn point(app: &mut App, world: &World, column: u16, row: u16) {
 
 fn click(app: &mut App, world: &World, column: u16, row: u16) {
     assert_eq!(
-        app.apply(Action::Click(Position::new(column, row)), world),
+        app.apply(Action::left_click(Position::new(column, row)), world),
         Flow::Continue
     );
 }
@@ -161,7 +161,7 @@ fn a_click_puts_the_cursor_on_a_tile_without_scrolling() {
     let world = grass(160, 96);
     let mut app = app(&world, tile_area(20, 10));
     assert_eq!(
-        app.apply(Action::Click(Position::new(1, 2)), &world),
+        app.apply(Action::left_click(Position::new(1, 2)), &world),
         Flow::Continue
     );
     assert_eq!(app.cursor(), at(70, 43));

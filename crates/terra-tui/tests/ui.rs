@@ -399,7 +399,7 @@ fn sprites_are_drawn_with_their_theme_glyph_over_any_item() {
 fn the_selected_sprite_is_drawn_with_its_own_glyph() {
     let world = garden_with_sprites();
     let mut cp437 = pointing_at(&world, Theme::cp437(), 40, 9, 7, 1);
-    cp437.apply(Action::Click(Position::new(1 + 7, 2 + 1)), &world);
+    cp437.apply(Action::left_click(Position::new(1 + 7, 2 + 1)), &world);
     cp437.apply(Action::Point(Position::new(1, 2 + 4)), &world); // the cursor out of the way
     let screen = render(&cp437, &world, 40, 9);
     assert_eq!(lines(&screen)[3], "║.'..♠..☻..║", "the selected sprite");
@@ -407,7 +407,7 @@ fn the_selected_sprite_is_drawn_with_its_own_glyph() {
 
     // In ascii, `&` is already the berry bush, so the selected sprite is `@` in reverse video.
     let mut ascii = pointing_at(&world, Theme::ascii(), 40, 9, 7, 1);
-    ascii.apply(Action::Click(Position::new(1 + 7, 2 + 1)), &world);
+    ascii.apply(Action::left_click(Position::new(1 + 7, 2 + 1)), &world);
     ascii.apply(Action::Point(Position::new(1, 2 + 4)), &world);
     let screen = render(&ascii, &world, 40, 9);
     assert_eq!(screen[(8, 3)].symbol(), "@");
@@ -1251,7 +1251,7 @@ fn the_attention_marker_shades_the_one_thing_the_selected_sprite_attends_to() {
 
     // With no sprite selected, nothing is marked.
     let grass = app.cell_of(Pos { x: 0, y: 0 }).expect("in view");
-    app.apply(Action::Click(grass), &world);
+    app.apply(Action::left_click(grass), &world);
     assert_eq!(app.selection(), None);
     assert_eq!(render(&app, &world, 100, 30)[berry_cell].bg, Color::Reset);
 }
@@ -1694,7 +1694,7 @@ fn selecting_another_sprite_starts_its_tab_from_the_top_and_the_same_one_again_d
     open(&mut app, &world, Tab::Genome);
     app.apply(Action::ScrollTab { pages: 1 }, &world);
     // The first sprite is at (2, 3), drawn at cell (3, 5).
-    app.apply(Action::Click(Position::new(3, 5)), &world);
+    app.apply(Action::left_click(Position::new(3, 5)), &world);
     assert_eq!(
         first_and_last(&app, &world).0,
         "always → boredom +.021",
@@ -1870,7 +1870,7 @@ fn selecting_the_selected_sprite_from_a_scrolled_world_tab_opens_body_at_the_top
     app.apply(Action::PreviousTab, &world);
     app.apply(Action::ScrollTab { pages: 1 }, &world);
     // The first sprite is at (2, 3), drawn at cell (3, 5).
-    app.apply(Action::Click(Position::new(3, 5)), &world);
+    app.apply(Action::left_click(Position::new(3, 5)), &world);
     let rows = right_part(&render(&app, &world, 100, 12), 46);
     assert!(rows[1].contains("[Body]"), "{:?}", rows[1]);
     assert!(inside(&rows[2]).starts_with("age "), "{:?}", rows[2]);
