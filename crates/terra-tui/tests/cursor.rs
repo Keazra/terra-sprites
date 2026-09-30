@@ -341,3 +341,56 @@ fn q_and_e_act_where_the_pointer_is() {
     apply(&mut app, &world, e);
     assert_eq!(app.locked(), Some(id), "E selected it and locked on");
 }
+
+/// The Cursor touching sprite `id` on `tick`: a pet, hug, zap or shock.
+fn touched(tick: u64, id: EntityId, what: &str) -> Event {
+    let kind = match what {
+        "pet" => EventKind::Rewarded {
+            id,
+            amplified: false,
+        },
+        "hug" => EventKind::Rewarded {
+            id,
+            amplified: true,
+        },
+        "zap" => EventKind::Corrected {
+            id,
+            amplified: false,
+        },
+        "shock" => EventKind::Corrected {
+            id,
+            amplified: true,
+        },
+        _ => unreachable!("{what}"),
+    };
+    Event { tick, kind }
+}
+
+#[test]
+fn the_observed_list_tells_what_the_sprite_felt_not_where_it_came_from() {
+    // Design v21 §6.1: the Cursor is invisible, so the touch came from
+    // nowhere.
+    let world = field(&[at(2, 2), at(6, 2)]);
+    let (id, other) = (sprite_on(&world, at(2, 2)), sprite_on(&world, at(6, 2)));
+    let mut app = app(&world);
+    click(&mut app, &world, at(2, 2), Button::Left);
+    let events = [
+        touched(1, id, "pet"),
+        touched(2, id, "hug"),
+        touched(3, id, "zap"),
+        touched(4, id, "shock"),
+        touched(5, id, "shock"),
+        touched(6, other, "pet"),
+    ];
+    app.record(&events, &world);
+    let observed: Vec<(&str, u32)> = app.observed().map(|o| (o.line.as_str(), o.count)).collect();
+    assert_eq!(
+        observed,
+        [
+            ("Felt a jolt out of nowhere", 2),
+            ("Felt a zap out of nowhere", 1),
+            ("Felt a warm embrace out of nowhere", 1),
+            ("Felt a gentle touch out of nowhere", 1),
+        ]
+    );
+}

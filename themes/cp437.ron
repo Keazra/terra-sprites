@@ -18,6 +18,10 @@
         decision_marker:        (glyph: 'X', fg: white),
         // Emotes take turns with a sprite's glyph (design §6.3): hurt by something.
         emote(hurt):            (glyph: '!', fg: red),
+        // Petted or hugged, and zapped or shocked, by the Cursor (design v21
+        // §6.3). A shock is a lightning bolt in a tileset; CP437 has none.
+        emote(pleased):         (glyph: '♥', fg: light_magenta),
+        emote(shocked):         (glyph: '‼', fg: yellow),
     },
     // Objects, by type name from the data pack's `objects.ron`, then visual
     // state. An object whose state isn't listed is drawn with its "default"

@@ -176,9 +176,9 @@ pub struct App {
     detail: bool,
     /// Real time the app has been running, for the Decision marker's flashing.
     running_for: Duration,
-    /// When, in `running_for`, each sprite hurt lately was hurt, for its
-    /// Hurt emote.
-    hurt_at: BTreeMap<EntityId, Duration>,
+    /// Each sprite's latest emote lately, and when, in `running_for`, it
+    /// began (design §6.3).
+    emotes: BTreeMap<EntityId, (Emote, Duration)>,
     /// The commands the player's clicks made, for the world (design §6.8).
     commands: Vec<Command>,
 }
@@ -223,7 +223,7 @@ impl App {
             tab_scroll: 0,
             detail: false,
             running_for: Duration::ZERO,
-            hurt_at: BTreeMap::new(),
+            emotes: BTreeMap::new(),
             commands: Vec::new(),
         };
         app.centre_on(cursor);
@@ -245,6 +245,11 @@ impl App {
             if let EventKind::ActionEnded { id, ref action, .. } = event.kind {
                 self.note_hurt(id, action);
                 self.note_done_to_selected(event.tick, id, action, world);
+            }
+            if let EventKind::Rewarded { id, amplified } | EventKind::Corrected { id, amplified } =
+                event.kind
+            {
+                self.note_touch(event.tick, id, &event.kind, amplified);
             }
             if let EventKind::Died { id, cause, age } = event.kind
                 && self.selection == Some(Selection::Living(id))
@@ -304,7 +309,24 @@ impl App {
         };
         let hurt_actor = action.hurt.actor.then_some(actor);
         for id in hurt_actor.into_iter().chain(hurt_target) {
-            self.hurt_at.insert(id, self.running_for);
+            self.emotes.insert(id, (Emote::Hurt, self.running_for));
+        }
+    }
+
+    /// The Cursor's touch on sprite `id`, on `tick`: its emote, and a line
+    /// on the observed list if it's the selected sprite's, told as the
+    /// sprite felt it, from nowhere, since it can't see the Cursor (design
+    /// v21 §6.1, §6.3).
+    fn note_touch(&mut self, tick: u64, id: EntityId, kind: &EventKind, amplified: bool) {
+        let (emote, line) = match (kind, amplified) {
+            (EventKind::Rewarded { .. }, false) => (Emote::Pleased, "a gentle touch"),
+            (EventKind::Rewarded { .. }, true) => (Emote::Pleased, "a warm embrace"),
+            (_, false) => (Emote::Shocked, "a zap"),
+            (_, true) => (Emote::Shocked, "a jolt"),
+        };
+        self.emotes.insert(id, (emote, self.running_for));
+        if self.selection == Some(Selection::Living(id)) {
+            self.observe(tick, format!("Felt {line} out of nowhere"));
         }
     }
 
@@ -333,9 +355,10 @@ impl App {
     /// The emote sprite `id` shows now, if any: the Hurt emote, taking
     /// turns with the sprite for a second after it's hurt (design §6.3).
     pub fn emote(&self, id: EntityId) -> Option<Emote> {
-        let since = self.running_for.checked_sub(*self.hurt_at.get(&id)?)?;
+        let &(emote, at) = self.emotes.get(&id)?;
+        let since = self.running_for.checked_sub(at)?;
         let showing = (since.as_millis() / EMOTE_HALF.as_millis()).is_multiple_of(2);
-        (since < EMOTE_FOR && showing).then_some(Emote::Hurt)
+        (since < EMOTE_FOR && showing).then_some(emote)
     }
 
     /// Puts `line`, finished on `tick`, on the front of the observed list.
@@ -378,7 +401,7 @@ impl App {
     pub fn animate(&mut self, elapsed: Duration) {
         self.running_for += elapsed;
         let now = self.running_for;
-        self.hurt_at.retain(|_, &mut at| now - at < EMOTE_FOR);
+        self.emotes.retain(|_, &mut (_, at)| now - at < EMOTE_FOR);
     }
 
     /// Whether the Decision marker is in its "on" half just now.

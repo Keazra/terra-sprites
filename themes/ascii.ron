@@ -16,6 +16,8 @@
         decision_marker:        (glyph: 'X', fg: white),
         // Emotes take turns with a sprite's glyph (design §6.3): hurt by something.
         emote(hurt):            (glyph: '!', fg: red),
+        emote(pleased):         (glyph: '+', fg: light_magenta),
+        emote(shocked):         (glyph: '/', fg: yellow), // bolt-shaped; `!` is hurt's
     },
     objects: {
         "berry_bush": {
