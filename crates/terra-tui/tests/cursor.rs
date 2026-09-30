@@ -264,7 +264,7 @@ fn locked_on_the_cursor_stays_on_its_sprite_whatever_the_pointer_does() {
 fn locked_on_the_cursor_moves_with_its_sprite() {
     // Design v21 §6.5: the sprite walks off, and the Cursor goes with it.
     let data = pack();
-    let map = Map::from_ascii(&vec![".........."; 6], &data).expect("valid drawing");
+    let map = Map::from_ascii(&[".........."; 6], &data).expect("valid drawing");
     let walk = ScriptedAction::Wander {
         destination: at(8, 2),
     };
