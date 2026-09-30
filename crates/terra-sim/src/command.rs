@@ -3,10 +3,11 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::action::{self, Outcome};
+use crate::action::{self, Outcome, Walk};
 use crate::cursor::Grip;
 use crate::data::DataPack;
 use crate::events::{Event, EventKind};
+use crate::map::Pos;
 use crate::objects::EntityId;
 use crate::world::WorldState;
 
@@ -29,6 +30,9 @@ pub enum Command {
     Correct { sprite: EntityId, amplified: bool },
     /// Takes hold of a sprite, which the Cursor then leads (design v23 §6.5).
     TakeHold { sprite: EntityId },
+    /// Where the Cursor is: sent while it leads a sprite, which heads there
+    /// (design v23 §2.5).
+    MoveCursor { tile: Pos },
 }
 
 /// One of the Cursor's four touches (design v21 §4.6): a Reward or a
@@ -49,7 +53,7 @@ impl CursorTouch {
         match *command {
             Command::Reward { amplified, .. } => Some(CursorTouch::rewarding(amplified)),
             Command::Correct { amplified, .. } => Some(CursorTouch::correcting(amplified)),
-            Command::TakeHold { .. } => None,
+            Command::TakeHold { .. } | Command::MoveCursor { .. } => None,
         }
     }
 
@@ -130,6 +134,11 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
             } => reward(state, data, sprite, amplified, reach_back),
             Command::Correct { sprite, amplified } => correct(state, data, sprite, amplified),
             Command::TakeHold { sprite } => take_hold(state, sprite, events),
+            // Nothing to report: it moves many times a second while leading.
+            Command::MoveCursor { tile } => {
+                state.cursor.tile = Some(tile);
+                continue;
+            }
         };
         let kind = match applied {
             Ok(kind) => kind,
@@ -205,6 +214,8 @@ fn take_hold(
     if let Some(doing) = led.action.as_mut().filter(|a| a.ended.is_none()) {
         action::end(doing, sprite, Outcome::PulledAway, state.tick, events);
     }
+    led.lead = Some(Walk::default());
     state.cursor.grip = Some(Grip::Leads(sprite));
+    state.cursor.tile = Some(led.pos);
     Ok(EventKind::TookHold { sprite })
 }

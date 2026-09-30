@@ -120,3 +120,30 @@ fn a_cursor_leading_one_sprite_cant_take_hold_of_another() {
     );
     assert_eq!(world.cursor().leads(), Some(first));
 }
+
+#[test]
+fn a_led_sprite_walks_to_the_cursor_at_its_own_pace_and_chooses_nothing() {
+    let mut world = world(&["........"], &[], &[at(0, 0)], &[]);
+    let id = sprite_on(&world, at(0, 0));
+    world.submit(Command::TakeHold { sprite: id });
+    world.submit(Command::MoveCursor { tile: at(5, 0) });
+    let mut started = Vec::new();
+    let mut arrived_after = None;
+    for tick in 1..=40 {
+        for event in world.step() {
+            if let EventKind::ActionStarted { id: who, verb } = event.kind
+                && who == id
+            {
+                started.push(verb);
+            }
+        }
+        let pos = world.sprite(id).expect("the sprite").pos();
+        if pos == at(5, 0) && arrived_after.is_none() {
+            arrived_after = Some(tick);
+        }
+    }
+    // Five tiles take a walker of speed 12 or less more than a tick.
+    assert!(arrived_after.is_some_and(|t| t > 1), "{arrived_after:?}");
+    assert_eq!(world.sprite(id).expect("the sprite").pos(), at(5, 0));
+    assert_eq!(started, Vec::new(), "it chose nothing while led");
+}
