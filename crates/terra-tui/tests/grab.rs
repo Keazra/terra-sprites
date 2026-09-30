@@ -3,7 +3,7 @@
 //! go or puts it down.
 
 use ratatui::layout::{Position, Rect};
-use terra_sim::{Command, DataPack, EntityId, Map, Pos, Scenario, World};
+use terra_sim::{Command, DataPack, EntityId, Grip, Map, Pos, Scenario, World};
 use terra_tui::app::{App, Areas, CursorMode, Flow, StatusMark};
 use terra_tui::input::{Action, Button};
 use terra_tui::theme::Theme;
@@ -144,4 +144,38 @@ fn holding_an_item_a_grab_click_puts_it_down_there() {
         app.take_commands(),
         vec![Command::PutDown { tile: at(7, 4) }]
     );
+}
+
+#[test]
+fn while_paused_a_click_after_a_queued_grab_lets_go_and_both_apply_next_tick() {
+    let mut world = field(&[], &[at(4, 2)]);
+    let mut app = grab_app(&world);
+    let sprite = sprite_on(&world, at(4, 2));
+    click(&mut app, &world, at(4, 2));
+    click(&mut app, &world, at(6, 2));
+    assert_eq!(
+        app.take_commands(),
+        vec![Command::TakeHold { sprite }, Command::LetGo]
+    );
+    assert_eq!(app.grip(&world), None, "as the queue leaves it");
+    world.submit(Command::TakeHold { sprite });
+    world.submit(Command::LetGo);
+    let events = world.step();
+    app.record(&events, &world);
+    assert_eq!(world.cursor().leads(), None);
+    assert_eq!(app.grip(&world), None);
+}
+
+#[test]
+fn a_queued_grab_the_world_refuses_leaves_the_cursor_as_the_world_says() {
+    let mut world = field(&[], &[at(4, 2), at(8, 4)]);
+    let mut app = grab_app(&world);
+    let (mine, other) = (sprite_on(&world, at(4, 2)), sprite_on(&world, at(8, 4)));
+    click(&mut app, &world, at(4, 2));
+    assert_eq!(app.grip(&world), Some(Grip::Leads(mine)), "as queued");
+    // Another hand gets there first, so the world refuses the app's grab.
+    world.submit(Command::TakeHold { sprite: other });
+    tick(&mut app, &mut world);
+    assert_eq!(app.grip(&world), Some(Grip::Leads(other)));
+    assert_eq!(app.status_mark(), StatusMark::Rejected);
 }
