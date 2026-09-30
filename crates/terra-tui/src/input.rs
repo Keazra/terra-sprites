@@ -180,6 +180,7 @@ impl Keys {
             KeyCode::Char('y') => Some(Action::Confirm),
             KeyCode::Char('z') => Some(Action::Mode(CursorMode::Select)),
             KeyCode::Char('x') => Some(Action::Mode(CursorMode::Train)),
+            KeyCode::Char('c') => Some(Action::Mode(CursorMode::Grab)),
             KeyCode::Char('q') => press(Button::Left),
             KeyCode::Char('e') => press(Button::Right),
             // A held `v` would flicker the detail view on and off.

@@ -40,6 +40,7 @@
         mode_marks: {
             select: (glyph: 'S', fg: white),
             train:  (glyph: 'T', fg: light_magenta),
+            grab:   (glyph: 'G', fg: yellow),
         },
     ),
 )

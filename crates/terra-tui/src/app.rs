@@ -30,25 +30,27 @@ pub enum Screen {
     QuitPrompt,
 }
 
-/// What a click on the map does (design v21 §6.5). Grab mode arrives with
-/// slice 11.
+/// What a click on the map does (design v21 §6.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CursorMode {
     Select,
     /// Teaching: a left click rewards, a right click corrects.
     Train,
+    /// Moving things: a left click grabs, or lets go (design v23 §6.5).
+    Grab,
 }
 
 impl CursorMode {
     /// Every cursor mode. Each theme must give all of them a mark.
-    pub const ALL: [CursorMode; 2] = [CursorMode::Select, CursorMode::Train];
+    pub const ALL: [CursorMode; 3] = [CursorMode::Select, CursorMode::Train, CursorMode::Grab];
 
     /// The mode's name on the status line.
     pub fn label(self) -> &'static str {
         match self {
             CursorMode::Select => "SELECT",
             CursorMode::Train => "TRAIN",
+            CursorMode::Grab => "GRAB",
         }
     }
 
@@ -656,6 +658,7 @@ impl App {
                 }
                 _ => {}
             },
+            (CursorMode::Grab, _) => {}
             (CursorMode::Train, button) => {
                 let touch = match (button, amplified) {
                     (Button::Left, false) => CursorTouch::Pet,
