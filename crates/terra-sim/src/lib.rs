@@ -42,7 +42,7 @@ pub use biochem::Traits;
 pub use brain::{Contribution, Explanation, Learned, Memory, Part, Thing};
 pub use command::{Command, CursorTouch, Rejection};
 pub use config::{ConfigError, WorldConfig};
-pub use cursor::CursorView;
+pub use cursor::{CursorView, Grip};
 pub use data::{DataError, DataPack};
 pub use events::{DeathCause, Event, EventKind, Removal};
 pub use expression::Expression;

@@ -114,6 +114,8 @@ impl CursorTouch {
 pub enum Rejection {
     /// The sprite isn't in the world: it never was, or it has died.
     Gone,
+    /// The Cursor already has hold of something (design v23 §6.5).
+    Busy(Grip),
 }
 
 /// Step 1 (design §2.4): applies the commands stamped for this tick, in the
@@ -196,10 +198,10 @@ fn take_hold(
     sprite: EntityId,
     events: &mut Vec<Event>,
 ) -> Result<EventKind, Rejection> {
-    let led = state
-        .sprites
-        .get_mut(sprite)
-        .expect("a sprite to take hold of");
+    if let Some(grip) = state.cursor.grip {
+        return Err(Rejection::Busy(grip));
+    }
+    let led = state.sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
     if let Some(doing) = led.action.as_mut().filter(|a| a.ended.is_none()) {
         action::end(doing, sprite, Outcome::PulledAway, state.tick, events);
     }

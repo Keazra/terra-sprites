@@ -2,7 +2,8 @@
 //! and holds items, one thing at a time.
 
 use terra_sim::{
-    Command, DataPack, EntityId, EventKind, Map, Outcome, Pos, Scenario, ScriptedAction, World,
+    Command, DataPack, EntityId, Event, EventKind, Grip, Map, Outcome, Pos, Rejection, Scenario,
+    ScriptedAction, World,
 };
 
 fn builtin() -> DataPack {
@@ -83,4 +84,39 @@ fn taking_hold_of_a_sprite_pulls_it_away_from_what_it_was_doing() {
         _ => None,
     });
     assert_eq!(ended, Some(Outcome::PulledAway), "{events:?}");
+}
+
+/// The reason the world gave for refusing `command`, if it did.
+fn refused(events: &[Event], command: Command) -> Option<Rejection> {
+    events.iter().find_map(|e| match e.kind {
+        EventKind::CommandRejected { command: c, reason } if c == command => Some(reason),
+        _ => None,
+    })
+}
+
+#[test]
+fn a_sprite_that_is_gone_cant_be_taken_hold_of() {
+    let mut world = world(&["....."], &[], &[], &[]);
+    let command = Command::TakeHold {
+        sprite: EntityId(99),
+    };
+    world.submit(command);
+    let events = world.step();
+    assert_eq!(refused(&events, command), Some(Rejection::Gone));
+    assert_eq!(world.cursor().leads(), None);
+}
+
+#[test]
+fn a_cursor_leading_one_sprite_cant_take_hold_of_another() {
+    let mut world = world(&["....."], &[], &[at(0, 0), at(4, 0)], &[]);
+    let (first, second) = (sprite_on(&world, at(0, 0)), sprite_on(&world, at(4, 0)));
+    let command = Command::TakeHold { sprite: second };
+    world.submit(Command::TakeHold { sprite: first });
+    world.submit(command);
+    let events = world.step();
+    assert_eq!(
+        refused(&events, command),
+        Some(Rejection::Busy(Grip::Leads(first)))
+    );
+    assert_eq!(world.cursor().leads(), Some(first));
 }

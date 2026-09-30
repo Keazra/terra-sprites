@@ -13,7 +13,7 @@ pub(crate) struct Cursor {
 
 /// What the Cursor has hold of.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub(crate) enum Grip {
+pub enum Grip {
     /// A sprite it leads (design v23 §6.5).
     Leads(EntityId),
 }
