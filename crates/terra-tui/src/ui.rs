@@ -325,22 +325,27 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         " ({},{}) {terrain}{sprite}{object} │ {mode}{locked}",
         cursor.x, cursor.y
     );
-    // The right-hand part keeps a gap of 2 from the tile, and a space at the
-    // end.
-    let room = usize::from(width).saturating_sub(tile.chars().count() + 3);
-    // Why a click did nothing, for a while, in the key hints' place (design
-    // v22 §6.1).
-    let right = match app.notice() {
-        Some(notice) => notice.to_string(),
-        None => hints_within(room),
-    };
-    let used = tile.chars().count() + right.chars().count() + 1;
-    match usize::from(width).checked_sub(used) {
-        Some(gap) if gap >= 2 && !right.is_empty() => {
-            Line::from(format!("{tile}{}{right} ", " ".repeat(gap)))
+    // At the right, after a gap of 2 and before a space at the end: why a
+    // click did nothing, for a while, or else the key hints that fit (design
+    // v22 §6.1). The reason matters more than the end of the tile's part,
+    // which is cut short to make room for it.
+    let width = usize::from(width);
+    let (tile, right): (String, String) = match app.notice() {
+        Some(why) => {
+            let room = width.saturating_sub(why.chars().count() + 3);
+            (tile.chars().take(room).collect(), why.to_string())
         }
-        _ => Line::from(tile),
+        None => {
+            let room = width.saturating_sub(tile.chars().count() + 3);
+            let hints = hints_within(room);
+            (tile, hints)
+        }
+    };
+    if right.is_empty() {
+        return Line::from(tile);
     }
+    let gap = width.saturating_sub(tile.chars().count() + right.chars().count() + 1);
+    Line::from(format!("{tile}{}{right} ", " ".repeat(gap)))
 }
 
 /// As many of the key hints as fit in `room` columns, whole and in order.
