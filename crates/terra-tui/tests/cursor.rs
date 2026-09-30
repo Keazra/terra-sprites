@@ -544,3 +544,16 @@ fn while_paused_sent_flashes_at_the_click_and_the_report_when_time_moves() {
     app.record(&[touched(1, id, "pet")], &world);
     assert_eq!(app.status_mark(), StatusMark::Applied, "time moved");
 }
+
+#[test]
+fn a_train_click_with_nothing_to_act_on_flashes_rejected_at_once() {
+    // Design v21 §6.5: it sends nothing, so there's no `+` to wait for,
+    // even after a click that did send.
+    let world = field(&[at(4, 2)]);
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    click(&mut app, &world, at(4, 2), Button::Left);
+    click(&mut app, &world, at(1, 1), Button::Right);
+    assert_eq!(app.status_mark(), StatusMark::Rejected);
+    assert_eq!(app.take_commands().len(), 1, "only the first click sent");
+}
