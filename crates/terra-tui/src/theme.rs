@@ -159,14 +159,15 @@ impl Theme {
         self.attention_marker
     }
 
-    /// The cursor's arrows: solid while it's `locked` on to a sprite (design
+    /// The Cursor's arrows.
+    pub fn arrows(&self) -> Arrows {
+        self.arrows
+    }
+
+    /// The Cursor's arrows while it's locked on to a sprite: solid (design
     /// v22 §6.2).
-    pub fn arrows(&self, locked: bool) -> Arrows {
-        if locked {
-            self.locked_arrows
-        } else {
-            self.arrows
-        }
+    pub fn locked_arrows(&self) -> Arrows {
+        self.locked_arrows
     }
 
     /// What the cursor's status marks show.
@@ -247,7 +248,7 @@ struct ThemeFile {
 #[serde(deny_unknown_fields)]
 struct CursorFile {
     arrows: Arrows,
-    /// The arrows while the cursor is locked on to a sprite.
+    /// The arrows while the Cursor is locked on to a sprite.
     locked_arrows: Arrows,
     status_marks: StatusMarks,
     mode_marks: BTreeMap<CursorMode, GlyphEntry>,

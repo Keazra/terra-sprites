@@ -54,6 +54,11 @@ fn lines(buffer: &Buffer) -> Vec<String> {
         .collect()
 }
 
+/// The status line of a 100×30 screen.
+fn status_line(app: &App, world: &World) -> String {
+    lines(&render(app, world, 100, 30))[29].clone()
+}
+
 /// The status line up to its key hints, which the gap of two spaces before
 /// them marks.
 fn before_hints(status: &str) -> &str {
@@ -217,17 +222,12 @@ fn locked_on_the_cursor_s_arrows_are_solid() {
     // arrows; its status line says the Cursor is locked on.
     let world = garden_with_sprites();
     let on_it = Position::new(1 + 2, 2 + 3);
-    let right = Action::Click {
-        at: on_it,
-        button: Button::Right,
-        amplified: false,
-    };
     for (theme, expected) in [
         (Theme::cp437(), [".♦▼·......", ".►☻◄..○...", ".·▲♦......"]),
         (Theme::ascii(), [".Sv-......", ".>@<..o...", ".-^S......"]),
     ] {
         let mut app = app_for(&world, theme, 40, 10);
-        app.apply(right, &world);
+        app.apply(Action::right_click(on_it), &world);
         let map_rows: Vec<String> = lines(&render(&app, &world, 40, 10))[4..7]
             .iter()
             .map(|row| row.chars().skip(1).take(10).collect())
@@ -2227,14 +2227,9 @@ fn the_status_line_names_train_mode_and_what_the_cursor_is_locked_on_to() {
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     let on_it = Position::new(1 + 2, 2 + 3);
     app.apply(Action::left_click(on_it), &world);
-    let right = Action::Click {
-        at: on_it,
-        button: Button::Right,
-        amplified: false,
-    };
-    app.apply(right, &world);
+    app.apply(Action::right_click(on_it), &world);
     app.apply(Action::Mode(CursorMode::Train), &world);
-    let status = lines(&render(&app, &world, 100, 30))[29].clone();
+    let status = status_line(&app, &world);
     let expected = format!(
         " (2,3) grass · Sprite #{0} │ TRAIN │ locked on Sprite #{0}",
         id.0
@@ -2262,14 +2257,9 @@ fn short_of_room_whole_key_hints_drop_from_the_end() {
     let world = garden_with_sprites();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     let on_it = Position::new(1 + 2, 2 + 3);
-    let right = Action::Click {
-        at: on_it,
-        button: Button::Right,
-        amplified: false,
-    };
-    app.apply(right, &world);
+    app.apply(Action::right_click(on_it), &world);
     app.apply(Action::Mode(CursorMode::Train), &world);
-    let status = lines(&render(&app, &world, 100, 30))[29].clone();
+    let status = status_line(&app, &world);
     assert!(status.contains("│ locked on Sprite #"), "{status}");
     assert!(
         status.ends_with("  Z select  X train  WASD scroll  space pause"),
@@ -2283,7 +2273,6 @@ fn a_train_click_with_nothing_to_act_on_says_so_in_the_hints_place_for_3_seconds
     let world = drawn_world(&SMALL_MAP);
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::Mode(CursorMode::Train), &world);
-    let status = |app: &App| lines(&render(app, &world, 100, 30))[29].clone();
     let empty = Position::new(1 + 1, 2 + 1);
     for (button, amplified, expected) in [
         (Button::Left, false, "No sprite here to pet"),
@@ -2297,14 +2286,20 @@ fn a_train_click_with_nothing_to_act_on_says_so_in_the_hints_place_for_3_seconds
             amplified,
         };
         app.apply(click, &world);
-        let line = status(&app);
+        let line = status_line(&app, &world);
         assert!(line.trim_end().ends_with(expected), "{line}");
         assert!(!line.contains("WASD scroll"), "in the hints' place: {line}");
     }
     app.animate(Duration::from_millis(2_900));
-    assert!(status(&app).contains("No sprite here"), "still");
+    assert!(
+        status_line(&app, &world).contains("No sprite here"),
+        "still"
+    );
     app.animate(Duration::from_millis(200));
-    assert!(status(&app).contains("WASD scroll"), "the hints are back");
+    assert!(
+        status_line(&app, &world).contains("WASD scroll"),
+        "the hints are back"
+    );
 }
 
 /// The Cursor's events for sprite 12, at `tick`: a pet, hug, zap or shock by
@@ -2496,9 +2491,8 @@ fn a_refused_command_says_why_in_the_hints_place_for_3_seconds() {
     // Design v22 §6.1: worded as the event log words it.
     let world = drawn_world(&SMALL_MAP);
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    let status = |app: &App| lines(&render(app, &world, 100, 30))[29].clone();
     app.record(&[touched(1, "refused pet")], &world);
-    let line = status(&app);
+    let line = status_line(&app, &world);
     assert!(
         line.trim_end()
             .ends_with("Couldn't pet Sprite #12: it's gone"),
@@ -2506,7 +2500,10 @@ fn a_refused_command_says_why_in_the_hints_place_for_3_seconds() {
     );
     assert!(!line.contains("WASD scroll"), "in the hints' place: {line}");
     app.animate(Duration::from_millis(3_100));
-    assert!(status(&app).contains("WASD scroll"), "the hints are back");
+    assert!(
+        status_line(&app, &world).contains("WASD scroll"),
+        "the hints are back"
+    );
 }
 
 #[test]
@@ -2516,14 +2513,9 @@ fn a_refusal_shows_even_when_the_status_line_is_crowded() {
     let world = garden_with_sprites();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     let on_it = Position::new(1 + 7, 2 + 1);
-    let right = Action::Click {
-        at: on_it,
-        button: Button::Right,
-        amplified: false,
-    };
-    app.apply(right, &world);
+    app.apply(Action::right_click(on_it), &world);
     app.record(&[touched(1, "refused pet")], &world);
-    let status = lines(&render(&app, &world, 100, 30))[29].clone();
+    let status = status_line(&app, &world);
     assert!(status.starts_with(" (7,1) grass · Sprite #"), "{status}");
     assert!(
         status.ends_with("  Couldn't pet Sprite #12: it's gone"),

@@ -54,9 +54,7 @@ impl CursorMode {
 
     /// The mode `steps` along from this one, wrapping round.
     fn along(self, steps: i32) -> CursorMode {
-        let modes = CursorMode::ALL;
-        let here = modes.iter().position(|&mode| mode == self).expect("a mode") as i32;
-        modes[(here + steps).rem_euclid(modes.len() as i32) as usize]
+        along(&CursorMode::ALL, self, steps)
     }
 }
 
@@ -137,10 +135,18 @@ impl Tab {
     }
 
     /// The tab `steps` along from this one, wrapping around.
-    fn along(self, steps: isize) -> Tab {
-        let here = Tab::ALL.iter().position(|&tab| tab == self).expect("a tab") as isize;
-        Tab::ALL[(here + steps).rem_euclid(Tab::ALL.len() as isize) as usize]
+    fn along(self, steps: i32) -> Tab {
+        along(&Tab::ALL, self, steps)
     }
+}
+
+/// The one of `all` that's `steps` along from `here`, wrapping round.
+fn along<T: Copy + PartialEq>(all: &[T], here: T, steps: i32) -> T {
+    let here = all
+        .iter()
+        .position(|&one| one == here)
+        .expect("one of them") as i32;
+    all[(here + steps).rem_euclid(all.len() as i32) as usize]
 }
 
 /// Where on screen the panels the app works with are drawn.
@@ -206,9 +212,9 @@ pub struct App {
     sent_at: Option<Duration>,
     /// The world's latest report on a command, and when it began to show.
     report: Option<(StatusMark, Duration)>,
-    /// What the status line says in the key hints' place, and since when
-    /// (design v22 §6.1).
-    notice: Option<(String, Duration)>,
+    /// Why the player's latest click was refused, which the status line
+    /// says in the key hints' place, and since when (design v22 §6.1).
+    refusal: Option<(String, Duration)>,
 }
 
 /// How long the Decision marker shows, and then doesn't: once a second in
@@ -225,8 +231,9 @@ const EMOTE_FOR: Duration = Duration::from_secs(1);
 /// How long the status marks flash, in real time (design v21 §6.5).
 const MARK_FLASH_FOR: Duration = Duration::from_millis(300);
 
-/// How long the status line's notice shows, in real time (design v22 §6.1).
-const NOTICE_FOR: Duration = Duration::from_secs(3);
+/// How long the status line says why a click was refused, in real time
+/// (design v22 §6.1).
+const REFUSAL_FOR: Duration = Duration::from_secs(3);
 
 impl App {
     /// A new UI for `map`, with the cursor at the map's centre and the viewport
@@ -261,7 +268,7 @@ impl App {
             commands: Vec::new(),
             sent_at: None,
             report: None,
-            notice: None,
+            refusal: None,
         };
         app.centre_on(cursor);
         app
@@ -287,14 +294,14 @@ impl App {
                 (&event.kind, CursorTouch::reported(&event.kind))
             {
                 self.note_touch(event.tick, *id, touch);
-                self.report(StatusMark::Applied);
+                self.flash_report(StatusMark::Applied);
             }
             if let EventKind::CommandRejected { .. } = event.kind {
-                self.report(StatusMark::Rejected);
+                self.flash_report(StatusMark::Rejected);
                 // And why, on the status line, as the log words it (design
                 // v22 §6.1).
                 if let Some(why) = inspector::event_line(event, world.data()) {
-                    self.notice = Some((why, self.running_for));
+                    self.refusal = Some((why, self.running_for));
                 }
             }
             if let EventKind::Died { id, cause, age } = event.kind
@@ -425,26 +432,28 @@ impl App {
     /// What the Cursor's status marks show now (design v22 §6.5): of the
     /// flashes under way, the one that began last.
     pub fn status_mark(&self) -> StatusMark {
-        let showing = |at: Duration| {
-            self.running_for
-                .checked_sub(at)
-                .is_some_and(|since| since < MARK_FLASH_FOR)
-        };
         let sent = self.sent_at.map(|at| (StatusMark::Sent, at));
         // Last, so a report wins a tie: within a frame, it's the later news.
         [sent, self.report]
             .into_iter()
             .flatten()
-            .filter(|&(_, at)| showing(at))
+            .filter(|&(_, from)| self.shows(from, MARK_FLASH_FOR))
             .max_by_key(|&(_, at)| at)
             .map_or(StatusMark::Idle, |(mark, _)| mark)
     }
 
-    /// What the status line says in the key hints' place, while it shows:
-    /// why a click did nothing (design v22 §6.1).
-    pub fn notice(&self) -> Option<&str> {
-        let (notice, at) = self.notice.as_ref()?;
-        (self.running_for - *at < NOTICE_FOR).then_some(notice.as_str())
+    /// Why the player's latest click was refused, while the status line
+    /// says so (design v22 §6.1).
+    pub fn refusal(&self) -> Option<&str> {
+        let (why, from) = self.refusal.as_ref()?;
+        self.shows(*from, REFUSAL_FOR).then_some(why.as_str())
+    }
+
+    /// Whether something that shows from `from`, for `lasting`, shows now.
+    fn shows(&self, from: Duration, lasting: Duration) -> bool {
+        self.running_for
+            .checked_sub(from)
+            .is_some_and(|since| since < lasting)
     }
 
     /// Flashes the world's report on a command in the status marks, once
@@ -453,7 +462,7 @@ impl App {
     /// replaced by an applied command: it's what needs noticing. Once a
     /// later click has sent, though, the refusal is behind it (design v22
     /// §6.5).
-    fn report(&mut self, mark: StatusMark) {
+    fn flash_report(&mut self, mark: StatusMark) {
         let now = self.running_for;
         if let Some((StatusMark::Rejected, at)) = self.report
             && mark == StatusMark::Applied
@@ -659,7 +668,7 @@ impl App {
                 // once, and the status line says why (design v22 §6.5).
                 let Some(sprite) = self.locked().or(sprite) else {
                     self.report = Some((StatusMark::Rejected, self.running_for));
-                    self.notice = Some((
+                    self.refusal = Some((
                         format!("No sprite here to {}", touch.name()),
                         self.running_for,
                     ));

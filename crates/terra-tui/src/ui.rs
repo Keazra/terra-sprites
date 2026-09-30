@@ -206,7 +206,11 @@ fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App) {
     let Some(centre) = app.cell_of(app.cursor()) else {
         return;
     };
-    let arrows = app.theme.arrows(app.locked().is_some());
+    let arrows = if app.locked().is_some() {
+        app.theme.locked_arrows()
+    } else {
+        app.theme.arrows()
+    };
     let status = app.theme.status_marks().glyph(app.status_mark());
     let mark = app.theme.mode_mark(app.mode());
     let pieces = [
@@ -301,7 +305,7 @@ const KEY_HINTS: [&str; 6] = [
 
 /// The tile under the cursor, with any sprite and object on it, and the
 /// cursor mode, then at the right the key hints that fit in `width` cells, or
-/// a notice in their place. An open prompt takes the line over.
+/// why a click was refused in their place. An open prompt takes the line over.
 fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     if app.screen() == Screen::QuitPrompt {
         return Line::from(" Quit? (y/n)");
@@ -330,7 +334,7 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     // v22 §6.1). The reason matters more than the end of the tile's part,
     // which is cut short to make room for it.
     let width = usize::from(width);
-    let (tile, right): (String, String) = match app.notice() {
+    let (tile, right): (String, String) = match app.refusal() {
         Some(why) => {
             let room = width.saturating_sub(why.chars().count() + 3);
             (tile.chars().take(room).collect(), why.to_string())
