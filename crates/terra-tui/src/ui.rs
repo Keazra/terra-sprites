@@ -7,7 +7,7 @@ use ratatui::{
     style::{Modifier, Style},
     text::Line,
 };
-use terra_sim::{Grip, Map, ObjectView, Pos, Progress, Terrain, World};
+use terra_sim::{EntityId, Grip, Map, ObjectView, Pos, Progress, Terrain, World};
 
 use crate::app::{App, Areas, Screen, Selection};
 use crate::clock::Speed;
@@ -247,19 +247,23 @@ fn held_glyph(app: &App, world: &World) -> char {
     let theme = &app.theme;
     let glyph = match app.grip(world) {
         Some(Grip::Holds(id)) => {
-            let held = world.cursor().holds().filter(|held| held.id() == id);
-            let look = held.map(|held| (held.type_name(), held.visual_state()));
-            let on_map = || {
-                let object = world.objects().find(|object| object.id() == id)?;
-                Some((object.type_name(), object.visual_state()))
-            };
-            look.or_else(on_map)
-                .map(|(name, state)| theme.object_glyph(name, state))
+            item_look(world, id).map(|(name, state)| theme.object_glyph(name, state))
         }
         Some(Grip::Leads(_)) => Some(theme.glyph(SemanticTile::Sprite)),
         None => None,
     };
     glyph.map_or('?', |glyph| glyph.symbol)
+}
+
+/// The type and visual state of the item `id`, held by the Cursor or, while
+/// a pick-up waits in the queue, still on the map.
+fn item_look(world: &World, id: EntityId) -> Option<(&str, &str)> {
+    let held = world.cursor().holds().filter(|held| held.id() == id);
+    let look = held.map(|held| (held.type_name(), held.visual_state()));
+    look.or_else(|| {
+        let object = world.objects().find(|object| object.id() == id)?;
+        Some((object.type_name(), object.visual_state()))
+    })
 }
 
 /// Which sides of the map view's border are the terrarium's wall.
@@ -351,8 +355,17 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         .locked()
         .map(|id| format!(" │ locked on {}", sprite_label(id)))
         .unwrap_or_default();
+    // What the Cursor has hold of, in every mode (design v23 §6.1).
+    let grip = match app.grip(world) {
+        Some(Grip::Leads(id)) => format!(" │ leading: {}", sprite_label(id)),
+        Some(Grip::Holds(id)) => {
+            let name = item_look(world, id).map_or("?", |(name, _)| name);
+            format!(" │ holding: {}", display_name(name))
+        }
+        None => String::new(),
+    };
     let tile = format!(
-        " ({},{}) {terrain}{sprite}{object} │ {mode}{locked}",
+        " ({},{}) {terrain}{sprite}{object} │ {mode}{locked}{grip}",
         cursor.x, cursor.y
     );
     // At the right, after a gap of 2 and before a space at the end: why a
