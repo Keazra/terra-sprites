@@ -1199,7 +1199,9 @@ pub(crate) fn event_line(event: &Event, data: &DataPack) -> Option<String> {
                     let touch = CursorTouch::of(command).expect("a touch");
                     (touch.name(), sprite)
                 }
-                terra_sim::Command::TakeHold { .. } => return None,
+                terra_sim::Command::TakeHold { .. } | terra_sim::Command::MoveCursor { .. } => {
+                    return None;
+                }
             };
             let why = match reason {
                 Rejection::Gone => "it's gone",

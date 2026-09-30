@@ -3,12 +3,16 @@
 
 use serde::Serialize;
 
+use crate::map::Pos;
 use crate::objects::EntityId;
 
 /// What the Cursor has hold of, as the world knows it.
 #[derive(Debug, Clone, Default, Serialize)]
 pub(crate) struct Cursor {
     pub(crate) grip: Option<Grip>,
+    /// The tile it was last told it's on (design v23 §2.5), which a led
+    /// sprite heads for.
+    pub(crate) tile: Option<Pos>,
 }
 
 /// What the Cursor has hold of.
@@ -21,10 +25,7 @@ pub enum Grip {
 impl Cursor {
     /// The sprite it leads, if any.
     pub(crate) fn leads(&self) -> Option<EntityId> {
-        match self.grip {
-            Some(Grip::Leads(id)) => Some(id),
-            None => None,
-        }
+        self.grip.map(|Grip::Leads(id)| id)
     }
 }
 
