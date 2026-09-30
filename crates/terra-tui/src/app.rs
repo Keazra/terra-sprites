@@ -145,7 +145,14 @@ pub struct App {
     pub seed: u64,
     screen: Screen,
     mode: CursorMode,
+    /// Where the Cursor is: on the sprite it's locked on to, or else on
+    /// `pointed`.
     cursor: Pos,
+    /// The tile under the pointer, or its last one (design §6.5).
+    pointed: Pos,
+    /// Whether the Cursor is locked on to the selected sprite (design v21
+    /// §6.5).
+    lock: bool,
     /// The top-left tile of the viewport.
     viewport: Pos,
     /// The map's size, in tiles.
@@ -201,6 +208,8 @@ impl App {
             screen: Screen::Normal,
             mode: CursorMode::Select,
             cursor,
+            pointed: cursor,
+            lock: false,
             viewport: Pos { x: 0, y: 0 },
             map_size: Size::new(map.width(), map.height()),
             tile_area: areas.tiles,
@@ -240,6 +249,8 @@ impl App {
                 && self.selection == Some(Selection::Living(id))
             {
                 self.selection = Some(Selection::Dead { id, cause, age });
+                // Its death lets go of the lock (design v21 §6.5).
+                self.lock = false;
             }
             let logged = match event.kind {
                 EventKind::ObjectSpawned { .. }
@@ -259,6 +270,22 @@ impl App {
             }
         }
         self.event_log.truncate(EVENT_LOG_LENGTH);
+        self.track(world);
+    }
+
+    /// The sprite the Cursor is locked on to, if any (design v21 §6.5).
+    pub fn locked(&self) -> Option<EntityId> {
+        match self.selection {
+            Some(Selection::Living(id)) if self.lock => Some(id),
+            _ => None,
+        }
+    }
+
+    /// Keeps a locked-on Cursor on its sprite, wherever it has walked.
+    fn track(&mut self, world: &World) {
+        if let Some(sprite) = self.locked().and_then(|id| world.sprite(id)) {
+            self.cursor = sprite.pos();
+        }
     }
 
     /// Starts the Hurt emote on each sprite that sprite `actor`'s `action` hurt.
@@ -356,7 +383,8 @@ impl App {
         self.detail
     }
 
-    /// The tile the cursor is on.
+    /// The tile the Cursor is on: its locked-on sprite's, or else the
+    /// pointer's.
     pub fn cursor(&self) -> Pos {
         self.cursor
     }
@@ -447,7 +475,7 @@ impl App {
                 }
             }
             Action::Press { button, amplified } => {
-                self.act(self.cursor, button, amplified, world);
+                self.act(self.pointed, button, amplified, world);
             }
             Action::Mode(mode) => self.mode = mode,
             Action::SelectNext => self.select_along(world, Direction::Next),
@@ -472,23 +500,39 @@ impl App {
             Action::Confirm | Action::Dismiss => {}
             Action::Quit => return Flow::Quit,
         }
+        self.track(world);
         Flow::Continue
     }
 
     /// What a click with `button` on `tile` does, in the cursor mode (design
-    /// v21 §6.5). In Select, a left click selects the sprite there, or
-    /// clears the selection. In Train, a left click rewards the sprite
-    /// there and a right click corrects it; with none there, nothing is sent.
+    /// v21 §6.5).
+    ///
+    /// In Select, a left click selects the sprite there; on empty ground it
+    /// clears the selection, unless the Cursor is locked on. A right click
+    /// locks the Cursor on to the selection, or lets go; with nothing
+    /// selected, on a sprite, it selects it and locks on.
+    ///
+    /// In Train, a left click rewards the target and a right click corrects
+    /// it: the locked-on sprite, or else the one there. With none, nothing is
+    /// sent.
     fn act(&mut self, tile: Pos, button: Button, amplified: bool, world: &World) {
         let sprite = world.sprite_at(tile).map(|sprite| sprite.id());
         match (self.mode, button) {
             (CursorMode::Select, Button::Left) => match sprite {
                 Some(id) => self.select(id),
+                None if self.lock => {}
                 None => self.selection = None,
             },
-            (CursorMode::Select, Button::Right) => {}
+            (CursorMode::Select, Button::Right) => match (self.selection, sprite) {
+                (Some(Selection::Living(_)), _) => self.set_lock(!self.lock),
+                (_, Some(id)) => {
+                    self.select(id);
+                    self.set_lock(true);
+                }
+                _ => {}
+            },
             (CursorMode::Train, button) => {
-                let Some(sprite) = sprite else {
+                let Some(sprite) = self.locked().or(sprite) else {
                     return;
                 };
                 self.commands.push(match button {
@@ -500,6 +544,15 @@ impl App {
                     Button::Right => Command::Correct { sprite, amplified },
                 });
             }
+        }
+    }
+
+    /// Locks the Cursor on to the selection, or lets go, when it follows
+    /// the pointer again.
+    fn set_lock(&mut self, lock: bool) {
+        self.lock = lock;
+        if !lock {
+            self.cursor = self.pointed;
         }
     }
 
@@ -606,13 +659,17 @@ impl App {
         }
     }
 
-    /// Puts the cursor on the tile at screen cell `cell`. Off the map view's
-    /// tiles, the cursor stays on its last tile.
+    /// Notes the tile at screen cell `cell` as the pointer's, and puts the
+    /// Cursor there unless it's locked on. Off the map view's tiles, both
+    /// stay on their last tile.
     fn point(&mut self, cell: Position) {
         match self.tile_at(cell) {
             Some(tile) => {
                 self.pointer = Some(cell);
-                self.cursor = tile;
+                self.pointed = tile;
+                if self.locked().is_none() {
+                    self.cursor = tile;
+                }
             }
             None => self.pointer = None,
         }
