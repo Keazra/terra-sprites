@@ -393,9 +393,10 @@ fn an_item_isnt_put_down_where_it_cant_go_and_the_refusal_names_what_is_in_the_w
         &[],
         at(0, 0),
     );
-    // A berry's stable object type ID in the built-in pack.
-    let berry = 2;
+    // A berry's and a ball's stable object type IDs in the built-in pack.
+    let (berry, ball) = (2, 4);
     assert_eq!(world.data().object_type_name(berry), Some("berry"));
+    assert_eq!(world.data().object_type_name(ball), Some("ball"));
     let cases = [
         (at(1, 0), Blocker::Object(berry)),
         (at(2, 0), Blocker::Terrain(Terrain::DeepWater)),
@@ -405,10 +406,11 @@ fn an_item_isnt_put_down_where_it_cant_go_and_the_refusal_names_what_is_in_the_w
         let command = Command::PutDown { tile };
         world.submit(command);
         let events = world.step();
-        assert_eq!(
-            refused(&events, command),
-            Some(Rejection::InTheWay(blocker))
-        );
+        let reason = Rejection::InTheWay {
+            item: ball,
+            blocker,
+        };
+        assert_eq!(refused(&events, command), Some(reason));
         assert!(world.cursor().holds().is_some(), "still held");
     }
 }
