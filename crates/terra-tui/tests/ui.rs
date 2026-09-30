@@ -2448,3 +2448,21 @@ fn lines_that_read_the_same_merge_though_their_events_differ() {
         ]
     );
 }
+
+#[test]
+fn a_refused_command_says_why_in_the_hints_place_for_3_seconds() {
+    // Design v22 §6.1: worded as the event log words it.
+    let world = drawn_world(&SMALL_MAP);
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    let status = |app: &App| lines(&render(app, &world, 100, 30))[29].clone();
+    app.record(&[touched(1, "refused pet")], &world);
+    let line = status(&app);
+    assert!(
+        line.trim_end()
+            .ends_with("Couldn't pet Sprite #12: it's gone"),
+        "{line}"
+    );
+    assert!(!line.contains("WASD scroll"), "in the hints' place: {line}");
+    app.animate(Duration::from_millis(3_100));
+    assert!(status(&app).contains("WASD scroll"), "the hints are back");
+}
