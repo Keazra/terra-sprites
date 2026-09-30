@@ -499,7 +499,7 @@ impl App {
                 }
             }
             Action::Press { button, amplified } => {
-                self.act(self.pointed, button, amplified, world);
+                self.act(self.cursor, button, amplified, world);
             }
             Action::Mode(mode) => self.mode = mode,
             Action::SelectNext => self.select_along(world, Direction::Next),

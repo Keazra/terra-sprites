@@ -415,7 +415,7 @@ Where the mouse is on screen. The Cursor follows it over the map view, unless it
 _Avoid_: mouse cursor
 
 **Cursor mode**:
-What a click on the map does: Select, Train or Grab. `Q` and `E` do what the left and right click do.
+What a click on the map does: Select, Train or Grab. `Q` and `E` do what the left and right click do, where the Cursor is.
 _Avoid_: tool
 
 **Selection**:
