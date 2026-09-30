@@ -14,7 +14,7 @@ use crate::config::WorldConfig;
 use crate::cursor::{Cursor, CursorView};
 use crate::data::DataPack;
 use crate::ecology::{self, holds_without_drawing, new_object, square};
-use crate::events::{DeathCause, Event, EventKind};
+use crate::events::{DeathCause, Emptied, Event, EventKind};
 use crate::expression::{Expression, expressions};
 use crate::generate::{generate, place_objects, place_sprites};
 use crate::genome::{GeneView, Genome};
@@ -761,7 +761,7 @@ impl World {
 
     /// Step 7: death check #2 marks the sprites step 6's verbs injured to 1;
     /// then the dying are removed, each with a `Died` event, in ascending ID
-    /// order; then the tick counter advances.
+    /// order, a led one emptying the Cursor; then the tick counter advances.
     fn finish_tick(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
         let state = &mut self.state;
         let injury = self.data.physiology().indices.injury;
@@ -783,6 +783,15 @@ impl World {
                     age: sprite.age(state.tick),
                 },
             });
+            if state.cursor.leads() == Some(id) {
+                state.cursor.grip = None;
+                events.push(Event {
+                    tick: state.tick,
+                    kind: EventKind::CursorEmptied {
+                        reason: Emptied::Died { sprite: id },
+                    },
+                });
+            }
         }
         state.tick += 1;
     }

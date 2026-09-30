@@ -2,8 +2,8 @@
 //! and holds items, one thing at a time.
 
 use terra_sim::{
-    Command, DataPack, EntityId, Event, EventKind, Grip, Map, Outcome, Pos, Rejection, Scenario,
-    ScriptedAction, World,
+    Command, DataPack, Emptied, EntityId, Event, EventKind, Grip, Map, Outcome, Pos, Rejection,
+    Scenario, ScriptedAction, World,
 };
 
 fn builtin() -> DataPack {
@@ -236,4 +236,61 @@ fn letting_go_with_no_sprite_led_is_refused() {
         refused(&events, Command::LetGo),
         Some(Rejection::NotLeading)
     );
+}
+
+/// The built-in data pack, with `changes` made to `file`'s text.
+fn builtin_changing(file: &str, changes: &[(&str, &str)]) -> DataPack {
+    let sources: Vec<(&str, String)> = DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, text)| {
+            let mut text = text.to_string();
+            if path == file {
+                for &(from, to) in changes {
+                    assert!(text.contains(from), "{from:?} is in {file}");
+                    text = text.replace(from, to);
+                }
+            }
+            (path, text)
+        })
+        .collect();
+    let borrowed: Vec<(&str, &str)> = sources.iter().map(|(p, t)| (*p, t.as_str())).collect();
+    DataPack::from_sources(&borrowed).expect("the changed pack is valid")
+}
+
+#[test]
+fn a_led_sprite_that_dies_empties_the_cursor() {
+    // Born without water and injured whole by its first thirsty tick.
+    let data = builtin_changing(
+        "physiology.ron",
+        &[
+            (
+                "newborn: (energy: 1.0, hydration: 1.0,",
+                "newborn: (energy: 1.0, hydration: 0.0,",
+            ),
+            ("dehydration: 0.0011", "dehydration: 1.0"),
+        ],
+    );
+    let map = Map::from_ascii(&["..."], &data).expect("valid drawing");
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &[(at(0, 0), None)],
+        scripted: &[],
+    };
+    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    let id = sprite_on(&world, at(0, 0));
+    world.submit(Command::TakeHold { sprite: id });
+    let mut events = Vec::new();
+    for _ in 0..10 {
+        events.extend(world.step());
+    }
+    assert!(world.sprite(id).is_none(), "it died: {events:?}");
+    assert!(
+        events.iter().any(|e| e.kind
+            == EventKind::CursorEmptied {
+                reason: Emptied::Died { sprite: id }
+            }),
+        "{events:?}"
+    );
+    assert_eq!(world.cursor().leads(), None);
 }

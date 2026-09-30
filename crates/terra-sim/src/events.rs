@@ -60,6 +60,8 @@ pub enum EventKind {
     TookHold { sprite: EntityId },
     /// The Cursor let go of the sprite it led (design v23 §6.5).
     LetGo { sprite: EntityId },
+    /// The Cursor lost what it had hold of by itself (design v23 §2.5).
+    CursorEmptied { reason: Emptied },
     /// A command was refused, and did nothing (design §2.5).
     CommandRejected { command: Command, reason: Rejection },
     /// An object left the world.
@@ -93,6 +95,13 @@ impl DeathCause {
         DeathCause::Dehydration,
         DeathCause::OldAge,
     ];
+}
+
+/// How the Cursor lost what it had hold of by itself (design v23 §2.5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Emptied {
+    /// The sprite it led died.
+    Died { sprite: EntityId },
 }
 
 /// Why an object left the world.

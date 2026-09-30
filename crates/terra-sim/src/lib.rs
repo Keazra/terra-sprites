@@ -44,7 +44,7 @@ pub use command::{Command, CursorTouch, Rejection};
 pub use config::{ConfigError, WorldConfig};
 pub use cursor::{CursorView, Grip};
 pub use data::{DataError, DataPack};
-pub use events::{DeathCause, Event, EventKind, Removal};
+pub use events::{DeathCause, Emptied, Event, EventKind, Removal};
 pub use expression::Expression;
 pub use genome::{EmitterMode, GeneView, Genome, GenomeError};
 pub use lab::{LabError, LabRun, LabScenario, Window, Without, median, report};
