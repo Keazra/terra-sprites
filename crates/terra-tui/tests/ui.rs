@@ -1243,6 +1243,21 @@ fn the_body_tab_says_a_led_sprite_is_being_led_and_how_far_behind() {
 }
 
 #[test]
+fn a_led_sprite_as_close_as_it_can_get_to_the_cursor_has_caught_up() {
+    // Design v23 §6.1: the Cursor is on a bush, which it can't stand on.
+    let bush = Pos { x: 7, y: 3 };
+    let (mut world, app) = one_sprite_among(SPEED_10, &[(bush, "berry_bush")], &[], 0);
+    let sprite = world.sprites().next().expect("the sprite").id();
+    world.submit(Command::TakeHold { sprite });
+    world.submit(Command::MoveCursor { tile: bush });
+    for _ in 0..6 {
+        world.step();
+    }
+    assert_eq!(world.sprite(sprite).expect("it").pos(), Pos { x: 6, y: 3 });
+    assert_eq!(inspector(&app, &world).1[0], "Being led");
+}
+
+#[test]
 fn the_decision_marker_flashes_an_x_where_the_selected_sprite_is_heading() {
     let destination = Pos { x: 7, y: 3 };
     let wander = ScriptedAction::Wander { destination };
