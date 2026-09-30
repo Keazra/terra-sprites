@@ -49,8 +49,8 @@
         ),
         mode_marks: {
             select: (glyph: '♦', fg: white),
-            // Train's colour is slice 10b's to settle (design v21 §6.5).
-            train:  (glyph: '±', fg: light_green),
+            // Train stands out on the grass the Cursor mostly sits on (design v22 §6.5).
+            train:  (glyph: '±', fg: light_magenta),
         },
     ),
 )
