@@ -568,3 +568,21 @@ fn a_flash_carries_on_through_a_change_of_mode() {
     apply(&mut app, &world, Action::Mode(CursorMode::Select));
     assert_eq!(app.status_mark(), StatusMark::Sent);
 }
+
+#[test]
+fn a_miss_then_a_quick_pet_shows_the_pet_applied() {
+    // Design v22 §6.5: a refusal wins over a command applied with it, not
+    // over a later click's.
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    click(&mut app, &world, at(1, 1), Button::Left);
+    assert_eq!(app.status_mark(), StatusMark::Rejected, "the miss");
+    wait(&mut app, 130);
+    click(&mut app, &world, at(4, 2), Button::Left);
+    app.record(&[touched(1, id, "pet")], &world);
+    assert_eq!(app.status_mark(), StatusMark::Sent);
+    wait(&mut app, 300);
+    assert_eq!(app.status_mark(), StatusMark::Applied, "the pet worked");
+}
