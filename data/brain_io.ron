@@ -58,4 +58,9 @@ inputs: [
 // sprite what things are good for, each a State input that reads a drive.
 // Pain is a drive but not a need: its fall is a hurt fading, not relief.
 needs: ["hunger", "thirst", "tiredness", "boredom", "loneliness", "crowdedness"],
+
+// The first-order needs (design v21 §5.2, §5.6): the needs that come before a
+// sprite's likes. The more one presses, the less what it merely likes pulls,
+// though never to nothing. The other needs are second-order.
+first_order: ["hunger", "thirst"],
 )

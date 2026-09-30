@@ -124,6 +124,11 @@ fn run(
             }
         }
 
+        // The player's clicks, stamped for the next tick (design §2.5).
+        for command in app.take_commands() {
+            world.submit(command);
+        }
+
         let now = Instant::now();
         let elapsed = now - last_frame;
         last_frame = now;

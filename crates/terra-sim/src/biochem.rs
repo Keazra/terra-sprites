@@ -375,6 +375,12 @@ impl Body {
         };
     }
 
+    /// Raises the chemical at `index` by `amount`, no further than 1, as the
+    /// Cursor's touch does (design v21 §4.6).
+    pub(crate) fn raise(&mut self, index: usize, amount: f32) {
+        self.chems[index] = (self.chems[index] + amount).min(1.0);
+    }
+
     /// Adds `amount` to the chemical at `index`, within 0 to 1. Injury,
     /// at `injury`, is put down to `cause` in full, as physiology's is,
     /// even where the level stops at 1.

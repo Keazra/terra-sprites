@@ -674,6 +674,18 @@ fn physiology_rates_are_not_negative() {
 }
 
 #[test]
+fn the_cursor_s_touch_raises_levels_by_fractions_and_reaches_back_at_least_the_touch_window() {
+    // Design v21 §4.6, §2.5.
+    assert_invalid_physiology("pet: 0.5", "pet: 1.5", "cursor.pet");
+    assert_invalid_physiology(
+        "zap: (punishment: 0.5, pain: 0.3)",
+        "zap: (punishment: 0.5, pain: -0.3)",
+        "cursor.zap",
+    );
+    assert_invalid_physiology("max_reach_back: 40", "max_reach_back: 2", "max_reach_back");
+}
+
+#[test]
 fn causes_of_death_fade_over_at_least_one_tick() {
     assert_invalid_physiology("cause_fade: 350", "cause_fade: 0", "cause_fade");
 }
@@ -967,6 +979,30 @@ fn the_needs_are_the_drives_whose_relief_teaches() {
         ],
         "pain is a drive but not a need"
     );
+}
+
+#[test]
+fn the_first_order_needs_are_hunger_and_thirst() {
+    // Design v21 §5.2: they come before a sprite's likes.
+    let data = DataPack::builtin().expect("built-in data pack is valid");
+    let first: Vec<&str> = data.first_order_needs().collect();
+    assert_eq!(first, ["hunger", "thirst"]);
+}
+
+#[test]
+fn a_first_order_need_is_a_need_named_once() {
+    // Design v21 §5.2.
+    let inputs = r#"inputs: [
+        (id: 1, name: "hungry", reads: Chem("hunger")),
+        (id: 2, name: "thirsty", reads: Chem("thirst")),
+    ]"#;
+    for (first, word) in [
+        (r#"["thirsty"]"#, "thirsty"),
+        (r#"["hungry", "hungry"]"#, "twice"),
+    ] {
+        let text = format!(r#"({inputs}, needs: ["hungry"], first_order: {first})"#);
+        assert_invalid("brain_io.ron", &text, word);
+    }
 }
 
 #[test]

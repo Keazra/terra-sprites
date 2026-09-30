@@ -5,9 +5,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use ron::extensions::Extensions;
 use serde::Deserialize;
 
 use crate::action::Outcome;
+use crate::brain::{Learned, Thing};
+use crate::command::{Command, CursorTouch};
 use crate::config::WorldConfig;
 use crate::data::DataPack;
 use crate::events::{DeathCause, EventKind};
@@ -22,6 +25,7 @@ pub struct LabScenario {
     ticks: u64,
     windows: Vec<(u64, u64)>,
     control: Control,
+    trainer: Option<Trainer>,
 }
 
 /// A second run of each seed to compare with, if any (design §7.1).
@@ -32,6 +36,51 @@ enum Control {
     Off,
     /// The same world with learning switched off.
     NoLearning,
+    /// The same world without the trainer, learning still on (design v21
+    /// §7.3).
+    NoTrainer,
+}
+
+/// What a control run is without (design §7.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Without {
+    /// Learning, switched off world-wide.
+    Learning,
+    /// The trainer.
+    Trainer,
+}
+
+/// A lab scenario's trainer (design v21 §7.1), checked: it answers each
+/// applied `verb` on an object of the type `target` with `give` for the one
+/// who did it, `delay` ticks later, for actions before `until`.
+#[derive(Debug, Clone, Copy)]
+struct Trainer {
+    verb: Verb,
+    /// The object type's stable ID.
+    target: u16,
+    give: CursorTouch,
+    delay: u64,
+    reach_back: u64,
+    until: u64,
+}
+
+/// A trainer in a lab scenario file.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TrainerFile {
+    /// The action it answers: a verb, on an object type by name.
+    on: (Verb, String),
+    give: CursorTouch,
+    /// How many ticks it waits after the action's tick; with none, its
+    /// command is stamped for the tick after.
+    #[serde(default)]
+    delay: u64,
+    /// The reach back its pets or hugs carry; the pack's touch window if
+    /// left out. A zap or shock takes none (design v21 §5.6).
+    #[serde(default)]
+    reach_back: Option<u64>,
+    /// It answers actions before this tick.
+    until: u64,
 }
 
 /// A lab scenario file.
@@ -43,6 +92,9 @@ struct LabFile {
     /// A control run of each seed, if any.
     #[serde(default)]
     control: Control,
+    /// A trainer, if any (design v21 §7.1).
+    #[serde(default)]
+    trainer: Option<TrainerFile>,
     /// Tick ranges, each from its first tick up to but not including its last.
     windows: Vec<(u64, u64)>,
 }
@@ -80,6 +132,13 @@ pub enum LabError {
     Map(MapError),
     /// Something in the key can't go where it's drawn.
     Scenario(ScenarioError),
+    /// The trainer answers actions on an object type the pack doesn't have.
+    UnknownTarget(String),
+    /// A control run without the trainer, in a scenario with no trainer.
+    NoTrainer,
+    /// A trainer that zaps or shocks, given a reach back: a Correct always
+    /// looks back the touch window (design v21 §5.6).
+    ReachBackOnCorrect,
 }
 
 impl std::fmt::Display for LabError {
@@ -92,6 +151,18 @@ impl std::fmt::Display for LabError {
             ),
             LabError::Map(error) => write!(f, "the map: {error:?}"),
             LabError::Scenario(error) => write!(f, "the world: {error:?}"),
+            LabError::UnknownTarget(name) => {
+                write!(
+                    f,
+                    "the trainer answers actions on `{name}`, which isn't an object type"
+                )
+            }
+            LabError::NoTrainer => {
+                f.write_str("the control run is without the trainer, but there's no trainer")
+            }
+            LabError::ReachBackOnCorrect => f.write_str(
+                "a trainer that zaps or shocks takes no reach_back: a zap or shock always looks back the touch window",
+            ),
         }
     }
 }
@@ -104,6 +175,8 @@ pub struct LabRun {
     pub windows: Vec<Window>,
     /// The control run's windows, if the scenario asks for one.
     pub control: Option<Vec<Window>>,
+    /// What the control run is without, if there is one.
+    pub without: Option<Without>,
 }
 
 /// What happened in one window of a run.
@@ -116,6 +189,11 @@ pub struct Window {
     pub applied: BTreeMap<(Verb, Option<u16>), u64>,
     /// Deaths, by cause.
     pub deaths: BTreeMap<DeathCause, u64>,
+    /// The Cursor's touches, such as a trainer's pets (design v21 §7.1).
+    pub touches: BTreeMap<CursorTouch, u64>,
+    /// Lessons learned (design §5.6), each as what was learned and whether
+    /// it rose.
+    pub lessons: BTreeMap<(Learned, bool), u64>,
 }
 
 impl Window {
@@ -134,7 +212,12 @@ impl Window {
 impl LabScenario {
     /// Reads a lab scenario from its RON text, checking it against `data`.
     pub fn from_ron(text: &str, data: &DataPack) -> Result<LabScenario, LabError> {
-        let file: LabFile = ron::from_str(text).map_err(|e| LabError::Parse(e.to_string()))?;
+        // `implicit_some` lets optional fields be written as plain values:
+        // `trainer: (on: (Play, "ball"), …)`.
+        let file: LabFile = ron::Options::default()
+            .with_default_extension(Extensions::IMPLICIT_SOME)
+            .from_str(text)
+            .map_err(|e| LabError::Parse(e.to_string()))?;
         if let Some(&(from, to)) = file
             .windows
             .iter()
@@ -142,11 +225,35 @@ impl LabScenario {
         {
             return Err(LabError::BadWindow { from, to });
         }
+        let trainer = file
+            .trainer
+            .map(|trainer| {
+                if trainer.give.corrects() && trainer.reach_back.is_some() {
+                    return Err(LabError::ReachBackOnCorrect);
+                }
+                let (verb, name) = trainer.on;
+                let index = data
+                    .object_type_named(&name)
+                    .ok_or(LabError::UnknownTarget(name))?;
+                Ok(Trainer {
+                    verb,
+                    target: data.object_types()[index].id,
+                    give: trainer.give,
+                    delay: trainer.delay,
+                    reach_back: trainer.reach_back.unwrap_or(data.physiology().touch_window),
+                    until: trainer.until,
+                })
+            })
+            .transpose()?;
+        if file.control == Control::NoTrainer && trainer.is_none() {
+            return Err(LabError::NoTrainer);
+        }
         let lab = LabScenario {
             world: file.world,
             ticks: file.ticks,
             windows: file.windows,
             control: file.control,
+            trainer,
         };
         // Building it once finds anything that can't go where it's drawn.
         lab.world(data.clone(), 0)?;
@@ -155,20 +262,30 @@ impl LabScenario {
 
     /// Runs the scenario for `seed`, counting each window.
     pub fn run(&self, data: DataPack, seed: u64) -> LabRun {
-        let control = (self.control == Control::NoLearning).then(|| {
-            let mut world = self.world(data.clone(), seed).expect("checked when read");
-            world.switch_off_learning();
-            self.count(world)
-        });
+        let (control, without) = match self.control {
+            Control::Off => (None, None),
+            Control::NoLearning => {
+                let mut world = self.world(data.clone(), seed).expect("checked when read");
+                world.switch_off_learning();
+                let windows = self.count(world, self.trainer);
+                (Some(windows), Some(Without::Learning))
+            }
+            Control::NoTrainer => {
+                let world = self.world(data.clone(), seed).expect("checked when read");
+                (Some(self.count(world, None)), Some(Without::Trainer))
+            }
+        };
         let world = self.world(data, seed).expect("checked when read");
         LabRun {
-            windows: self.count(world),
+            windows: self.count(world, self.trainer),
             control,
+            without,
         }
     }
 
-    /// Runs `world` for the scenario's ticks, counting each window.
-    fn count(&self, mut world: World) -> Vec<Window> {
+    /// Runs `world` for the scenario's ticks with `trainer`, if any,
+    /// counting each window.
+    fn count(&self, mut world: World, trainer: Option<Trainer>) -> Vec<Window> {
         let mut windows: Vec<Window> = self
             .windows
             .iter()
@@ -177,11 +294,34 @@ impl LabScenario {
                 to,
                 applied: BTreeMap::new(),
                 deaths: BTreeMap::new(),
+                touches: BTreeMap::new(),
+                lessons: BTreeMap::new(),
             })
             .collect();
+        // The trainer's commands, each with the tick it's submitted before.
+        let mut due: Vec<(u64, Command)> = Vec::new();
         for _ in 0..self.ticks {
             let tick = world.tick();
+            for (_, command) in due.extract_if(.., |(at, _)| *at == tick) {
+                world.submit(command);
+            }
             let events = world.step();
+            if let Some(trainer) = trainer.filter(|t| tick < t.until) {
+                for event in &events {
+                    if let EventKind::ActionEnded {
+                        id,
+                        verb,
+                        outcome: Outcome::Applied,
+                        action,
+                    } = &event.kind
+                        && *verb == trainer.verb
+                        && action.target_type == Some(trainer.target)
+                    {
+                        let command = trainer.give.command(*id, trainer.reach_back);
+                        due.push((tick + 1 + trainer.delay, command));
+                    }
+                }
+            }
             for window in windows
                 .iter_mut()
                 .filter(|w| (w.from..w.to).contains(&tick))
@@ -202,7 +342,14 @@ impl LabScenario {
                         EventKind::Died { cause, .. } => {
                             *window.deaths.entry(*cause).or_insert(0) += 1;
                         }
-                        _ => {}
+                        EventKind::LearnedMilestone { learned, good, .. } => {
+                            *window.lessons.entry((learned.clone(), *good)).or_insert(0) += 1;
+                        }
+                        kind => {
+                            if let Some(touch) = CursorTouch::reported(kind) {
+                                *window.touches.entry(touch).or_insert(0) += 1;
+                            }
+                        }
                     }
                 }
             }
@@ -267,12 +414,12 @@ pub fn report(runs: &[(u64, LabRun)], data: &DataPack) -> String {
         .iter()
         .map(|(seed, run)| run.control.as_deref().map(|windows| (*seed, windows)))
         .collect();
-    if let Some(controls) = controls.filter(|c| !c.is_empty()) {
-        out.push_str(
-            "
-control, without learning
-",
-        );
+    let without = runs.first().and_then(|(_, run)| run.without);
+    if let (Some(controls), Some(without)) = (controls.filter(|c| !c.is_empty()), without) {
+        out.push_str(match without {
+            Without::Learning => "\ncontrol, without learning\n",
+            Without::Trainer => "\ncontrol, without the trainer\n",
+        });
         out.push_str(&windows_report(&controls, data));
     }
     out
@@ -296,28 +443,72 @@ fn windows_report(runs: &[(u64, &[Window])], data: &DataPack) -> String {
             out.push_str(&format!("{:>10}", format!("seed {seed}")));
         }
         out.push_str(&format!("{:>10}\n", "median"));
-        let applied: BTreeSet<(Verb, Option<u16>)> = windows
-            .iter()
-            .flat_map(|w| w.applied.keys().copied())
-            .collect();
-        for key in applied {
-            let counts = windows
-                .iter()
-                .map(|w| w.applied.get(&key).copied().unwrap_or(0));
-            out.push_str(&row(&applied_name(key, data), counts));
-        }
-        let causes: BTreeSet<DeathCause> = windows
-            .iter()
-            .flat_map(|w| w.deaths.keys().copied())
-            .collect();
-        for cause in causes {
-            let counts = windows
-                .iter()
-                .map(|w| w.deaths.get(&cause).copied().unwrap_or(0));
-            out.push_str(&row(&format!("died: {}", cause_name(cause, data)), counts));
-        }
+        out.push_str(&rows(
+            &windows,
+            |w| &w.applied,
+            |&key| applied_name(key, data),
+        ));
+        out.push_str(&rows(
+            &windows,
+            |w| &w.deaths,
+            |&cause| format!("died: {}", cause_name(cause, data)),
+        ));
+        out.push_str(&rows(
+            &windows,
+            |w| &w.touches,
+            |touch| format!("given: {}", touch.name()),
+        ));
+        out.push_str(&rows(
+            &windows,
+            |w| &w.lessons,
+            |lesson| format!("lesson: {}", lesson_name(lesson)),
+        ));
     }
     out
+}
+
+/// A report row, named by `name`, for each key any of `windows` counts in
+/// the counts `of` picks out, in key order.
+fn rows<K: Ord>(
+    windows: &[&Window],
+    of: impl Fn(&Window) -> &BTreeMap<K, u64>,
+    name: impl Fn(&K) -> String,
+) -> String {
+    let keys: BTreeSet<&K> = windows.iter().flat_map(|w| of(w).keys()).collect();
+    keys.into_iter()
+        .map(|key| {
+            let counts = windows.iter().map(|w| of(w).get(key).copied().unwrap_or(0));
+            row(&name(key), counts)
+        })
+        .collect()
+}
+
+/// A lesson in a report: what was learned, and which way it went.
+fn lesson_name((learned, rose): &(Learned, bool)) -> String {
+    let good = if *rose { "good" } else { "bad" };
+    match learned {
+        Learned::Worth {
+            thing,
+            need: Some(need),
+        } => format!("{} is good for {need}", thing_name(thing)),
+        Learned::Worth { thing, need: None } => format!("{} is good", thing_name(thing)),
+        Learned::Bad { thing } => format!("{} is bad", thing_name(thing)),
+        Learned::Fear { thing } => format!("{} is frightening", thing_name(thing)),
+        Learned::Habit { thing, verb } => {
+            let verb = format!("{verb:?}").to_lowercase();
+            format!("{verb} {} is {good}", thing_name(thing))
+        }
+        Learned::NewThings => format!("new things are {good}"),
+    }
+}
+
+/// What a lesson is about, in a report.
+fn thing_name(thing: &Thing) -> String {
+    match thing {
+        Thing::ObjectType(name) => name.clone(),
+        Thing::Category(name) => format!("{name} in general"),
+        Thing::Sprite(id) => format!("Sprite #{}", id.0),
+    }
 }
 
 /// One row of a report: `name`, each seed's count, and their median.

@@ -22,11 +22,6 @@ fn at_speed_bushes_fruit_berries_drop_then_expire_or_sprout_and_thornbushes_spre
     for tick in 0..5_000 {
         for event in world.step() {
             let entry = match event.kind {
-                // Only the objects are tallied here.
-                EventKind::Died { .. }
-                | EventKind::ActionStarted { .. }
-                | EventKind::ActionEnded { .. }
-                | EventKind::LearnedMilestone { .. } => continue,
                 EventKind::ObjectSpawned {
                     object_type, pos, ..
                 } => {
@@ -48,6 +43,8 @@ fn at_speed_bushes_fruit_berries_drop_then_expire_or_sprout_and_thornbushes_spre
                         Removal::Replaced => "replaced",
                     },
                 ),
+                // Only the objects are tallied here.
+                _ => continue,
             };
             *tally.entry(entry).or_insert(0) += 1;
         }

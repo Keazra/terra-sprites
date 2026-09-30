@@ -5,11 +5,12 @@ use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
-    ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Learned, Map, Outcome, Pos,
-    Progress, Removal, Scenario, ScriptedAction, Target, Thing, Verb, World, WorldConfig,
+    ActionView, Command, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Learned, Map,
+    Outcome, Pos, Progress, Rejection, Removal, Scenario, ScriptedAction, Target, Thing, Verb,
+    World, WorldConfig,
 };
-use terra_tui::app::{App, Tab};
-use terra_tui::input::Action;
+use terra_tui::app::{App, CursorMode, Tab};
+use terra_tui::input::{Action, Button};
 use terra_tui::theme::Theme;
 use terra_tui::ui;
 
@@ -399,7 +400,7 @@ fn sprites_are_drawn_with_their_theme_glyph_over_any_item() {
 fn the_selected_sprite_is_drawn_with_its_own_glyph() {
     let world = garden_with_sprites();
     let mut cp437 = pointing_at(&world, Theme::cp437(), 40, 9, 7, 1);
-    cp437.apply(Action::Click(Position::new(1 + 7, 2 + 1)), &world);
+    cp437.apply(Action::left_click(Position::new(1 + 7, 2 + 1)), &world);
     cp437.apply(Action::Point(Position::new(1, 2 + 4)), &world); // the cursor out of the way
     let screen = render(&cp437, &world, 40, 9);
     assert_eq!(lines(&screen)[3], "║.'..♠..☻..║", "the selected sprite");
@@ -407,7 +408,7 @@ fn the_selected_sprite_is_drawn_with_its_own_glyph() {
 
     // In ascii, `&` is already the berry bush, so the selected sprite is `@` in reverse video.
     let mut ascii = pointing_at(&world, Theme::ascii(), 40, 9, 7, 1);
-    ascii.apply(Action::Click(Position::new(1 + 7, 2 + 1)), &world);
+    ascii.apply(Action::left_click(Position::new(1 + 7, 2 + 1)), &world);
     ascii.apply(Action::Point(Position::new(1, 2 + 4)), &world);
     let screen = render(&ascii, &world, 40, 9);
     assert_eq!(screen[(8, 3)].symbol(), "@");
@@ -689,7 +690,7 @@ fn the_event_log_leaves_object_and_action_events_out_and_keeps_the_latest_100() 
     for tick in 0..150 {
         app.record(&[died(tick, tick, DeathCause::Starvation, tick)], &world);
     }
-    let ticks: Vec<u64> = app.event_log().map(|event| event.tick).collect();
+    let ticks: Vec<u64> = app.event_log().map(|(event, _)| event.tick).collect();
     assert_eq!(ticks.len(), 100);
     assert_eq!((ticks[0], ticks[99]), (149, 50), "newest first");
 }
@@ -1251,7 +1252,7 @@ fn the_attention_marker_shades_the_one_thing_the_selected_sprite_attends_to() {
 
     // With no sprite selected, nothing is marked.
     let grass = app.cell_of(Pos { x: 0, y: 0 }).expect("in view");
-    app.apply(Action::Click(grass), &world);
+    app.apply(Action::left_click(grass), &world);
     assert_eq!(app.selection(), None);
     assert_eq!(render(&app, &world, 100, 30)[berry_cell].bg, Color::Reset);
 }
@@ -1694,7 +1695,7 @@ fn selecting_another_sprite_starts_its_tab_from_the_top_and_the_same_one_again_d
     open(&mut app, &world, Tab::Genome);
     app.apply(Action::ScrollTab { pages: 1 }, &world);
     // The first sprite is at (2, 3), drawn at cell (3, 5).
-    app.apply(Action::Click(Position::new(3, 5)), &world);
+    app.apply(Action::left_click(Position::new(3, 5)), &world);
     assert_eq!(
         first_and_last(&app, &world).0,
         "always → boredom +.021",
@@ -1870,7 +1871,7 @@ fn selecting_the_selected_sprite_from_a_scrolled_world_tab_opens_body_at_the_top
     app.apply(Action::PreviousTab, &world);
     app.apply(Action::ScrollTab { pages: 1 }, &world);
     // The first sprite is at (2, 3), drawn at cell (3, 5).
-    app.apply(Action::Click(Position::new(3, 5)), &world);
+    app.apply(Action::left_click(Position::new(3, 5)), &world);
     let rows = right_part(&render(&app, &world, 100, 12), 46);
     assert!(rows[1].contains("[Body]"), "{:?}", rows[1]);
     assert!(inside(&rows[2]).starts_with("age "), "{:?}", rows[2]);
@@ -2145,4 +2146,219 @@ fn the_event_log_says_when_sprites_in_general_turn_frightening() {
         )],
     );
     assert_eq!(log, ["40  Sprite #3 learned: sprites are frightening"]);
+}
+
+#[test]
+fn the_status_line_names_train_mode_and_what_the_cursor_is_locked_on_to() {
+    // Design v21 §6.1: tiles are drawn from screen cell (1, 2).
+    let world = garden_with_sprites();
+    let id = world.sprite_at(Pos { x: 2, y: 3 }).expect("a sprite").id();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    let on_it = Position::new(1 + 2, 2 + 3);
+    app.apply(Action::left_click(on_it), &world);
+    let right = Action::Click {
+        at: on_it,
+        button: Button::Right,
+        amplified: false,
+    };
+    app.apply(right, &world);
+    app.apply(Action::Mode(CursorMode::Train), &world);
+    let status = lines(&render(&app, &world, 100, 30))[29].clone();
+    let expected = format!(
+        " (2,3) grass · Sprite #{0} │ TRAIN │ locked on Sprite #{0}",
+        id.0
+    );
+    assert!(status.starts_with(&expected), "{status}");
+}
+
+#[test]
+fn with_room_the_status_line_hints_at_the_mode_keys() {
+    let world = drawn_world(&SMALL_MAP);
+    let app = app_for(&world, Theme::cp437(), 100, 30);
+    let status = lines(&render(&app, &world, 100, 30))[29].clone();
+    assert!(status.contains("Z/X mode"), "{status}");
+}
+
+/// The Cursor's events for sprite 12, at `tick`: a pet, hug, zap or shock by
+/// name, or one refused.
+fn touched(tick: u64, what: &str) -> Event {
+    let id = EntityId(12);
+    let kind = match what {
+        "pet" => EventKind::Rewarded {
+            id,
+            amplified: false,
+        },
+        "hug" => EventKind::Rewarded {
+            id,
+            amplified: true,
+        },
+        "zap" => EventKind::Corrected {
+            id,
+            amplified: false,
+        },
+        "shock" => EventKind::Corrected {
+            id,
+            amplified: true,
+        },
+        "refused pet" => EventKind::CommandRejected {
+            command: Command::Reward {
+                sprite: id,
+                amplified: false,
+                reach_back: 3,
+            },
+            reason: Rejection::Gone,
+        },
+        "refused shock" => EventKind::CommandRejected {
+            command: Command::Correct {
+                sprite: id,
+                amplified: true,
+            },
+            reason: Rejection::Gone,
+        },
+        _ => unreachable!("{what}"),
+    };
+    Event { tick, kind }
+}
+
+/// The event log's first three rows once an app has recorded `events`.
+fn logged(world: &World, events: &[Event]) -> Vec<String> {
+    let mut app = app_for(world, Theme::cp437(), 100, 30);
+    for event in events {
+        app.record(std::slice::from_ref(event), world);
+    }
+    let screen = lines(&render(&app, world, 100, 30));
+    screen[25..28]
+        .iter()
+        .map(|row| inside(row).to_string())
+        .collect()
+}
+
+#[test]
+fn the_event_log_tells_the_player_what_they_did_through_the_cursor() {
+    // Design v21 §6.1: spoken to the player.
+    let world = garden(pack());
+    let first = logged(
+        &world,
+        &[touched(1, "pet"), touched(2, "hug"), touched(3, "zap")],
+    );
+    assert_eq!(
+        first,
+        [
+            "3  You zapped Sprite #12",
+            "2  You hugged Sprite #12",
+            "1  You petted Sprite #12",
+        ]
+    );
+    let then = logged(
+        &world,
+        &[
+            touched(4, "shock"),
+            touched(5, "refused pet"),
+            touched(6, "refused shock"),
+        ],
+    );
+    assert_eq!(
+        then,
+        [
+            "6  Couldn't shock Sprite #12: it's gone",
+            "5  Couldn't pet Sprite #12: it's gone",
+            "4  You shocked Sprite #12",
+        ]
+    );
+}
+
+#[test]
+fn the_same_line_again_merges_into_one_with_a_count() {
+    // Design v21 §6.1: spam-clicking doesn't bury the log.
+    let world = garden(pack());
+    let mut events: Vec<Event> = (1..=10).map(|tick| touched(tick, "pet")).collect();
+    events.push(touched(11, "zap"));
+    assert_eq!(
+        logged(&world, &events),
+        [
+            "11  You zapped Sprite #12",
+            "10  You petted Sprite #12 ×10",
+            "",
+        ]
+    );
+}
+
+#[test]
+fn a_pet_shows_a_heart_and_a_zap_a_yellow_double_bang_for_a_second() {
+    // Design v21 §6.3: Pleased and Shocked, taking turns with the sprite.
+    for (theme, heart, bang) in [(Theme::cp437(), "♥", "‼"), (Theme::ascii(), "+", "/")] {
+        let world = garden_with_sprites();
+        let mut app = app_for(&world, theme, 100, 30);
+        let (petted, zapped) = (Pos { x: 2, y: 3 }, Pos { x: 7, y: 1 });
+        let ids = |pos| world.sprite_at(pos).expect("a sprite").id();
+        let cells = |pos| app.cell_of(pos).expect("in view");
+        let (petted_cell, zapped_cell) = (cells(petted), cells(zapped));
+        let sprite_glyph = render(&app, &world, 100, 30)[petted_cell]
+            .symbol()
+            .to_string();
+        let touch = |id, correct: bool| Event {
+            tick: 1,
+            kind: if correct {
+                EventKind::Corrected {
+                    id,
+                    amplified: false,
+                }
+            } else {
+                EventKind::Rewarded {
+                    id,
+                    amplified: true,
+                }
+            },
+        };
+        app.record(
+            &[touch(ids(petted), false), touch(ids(zapped), true)],
+            &world,
+        );
+        let at = |app: &App, cell| {
+            let screen = render(app, &world, 100, 30);
+            let cell = &screen[cell];
+            (cell.symbol().to_string(), cell.fg)
+        };
+        assert_eq!(at(&app, petted_cell).0, heart);
+        assert_eq!(at(&app, zapped_cell), (bang.to_string(), Color::Yellow));
+        app.animate(Duration::from_millis(250));
+        assert_eq!(at(&app, petted_cell).0, sprite_glyph);
+        app.animate(Duration::from_millis(1000));
+        assert_eq!(at(&app, petted_cell).0, sprite_glyph, "and then it's over");
+        assert_ne!(at(&app, zapped_cell).0, bang);
+    }
+}
+
+#[test]
+fn lines_that_read_the_same_merge_though_their_events_differ() {
+    // Design v21 §6.1: two different balls read the same, and so do pets
+    // refused at different speeds.
+    let world = garden(pack());
+    let kick = |tick, ball| {
+        let ball = (Target::Object(EntityId(ball)), 4);
+        acted(tick, 12, Verb::Play, ball, Outcome::Applied, UNHURT)
+    };
+    let refused = |tick, reach_back| Event {
+        tick,
+        kind: EventKind::CommandRejected {
+            command: Command::Reward {
+                sprite: EntityId(12),
+                amplified: false,
+                reach_back,
+            },
+            reason: Rejection::Gone,
+        },
+    };
+    let rows = logged(
+        &world,
+        &[kick(1, 40), kick(2, 41), refused(3, 3), refused(4, 20)],
+    );
+    assert_eq!(
+        rows,
+        [
+            "4  Couldn't pet Sprite #12: it's gone ×2",
+            "2  Sprite #12 kicked a ball ×2",
+            "",
+        ]
+    );
 }

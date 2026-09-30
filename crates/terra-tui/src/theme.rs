@@ -31,11 +31,15 @@ pub enum SemanticTile {
 pub enum Emote {
     /// Something hurt it.
     Hurt,
+    /// The Cursor petted or hugged it (design v21 §6.3).
+    Pleased,
+    /// The Cursor zapped or shocked it (design v21 §6.3).
+    Shocked,
 }
 
 impl SemanticTile {
     /// Every semantic tile. Each theme must draw all of them.
-    pub const ALL: [SemanticTile; 10] = [
+    pub const ALL: [SemanticTile; 12] = [
         SemanticTile::Terrain(Terrain::Grass),
         SemanticTile::Terrain(Terrain::Dirt),
         SemanticTile::Terrain(Terrain::Sand),
@@ -46,6 +50,8 @@ impl SemanticTile {
         SemanticTile::SelectedSprite,
         SemanticTile::DecisionMarker,
         SemanticTile::Emote(Emote::Hurt),
+        SemanticTile::Emote(Emote::Pleased),
+        SemanticTile::Emote(Emote::Shocked),
     ];
 }
 
