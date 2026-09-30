@@ -49,3 +49,61 @@ fn a1_a_sprite_learns_to_keep_away_from_thornbushes() {
         "the learner's median is {learner} contacts ({learners:?}), against the control's {control} ({controls:?})"
     );
 }
+
+/// Each seed's count of applied `verb`s on `target` over ticks 10,000 to
+/// 20,000 (the scenario's second window), trained and untrained.
+fn after_training(
+    lab: &LabScenario,
+    data: &DataPack,
+    verb: Verb,
+    target: &str,
+) -> (Vec<u64>, Vec<u64>) {
+    let (mut trained, mut untrained) = (Vec::new(), Vec::new());
+    for seed in 1..=10 {
+        let run = lab.run(data.clone(), seed);
+        trained.push(run.windows[1].applied_on(verb, target, data));
+        let control = run.control.expect("a control run without the trainer");
+        untrained.push(control[1].applied_on(verb, target, data));
+    }
+    (trained, untrained)
+}
+
+#[test]
+fn a2_a_sprite_petted_for_playing_with_balls_plays_with_them_more() {
+    // Design v21 §7.3: after training, its applied Plays on balls are at
+    // least 1.5× the same seed's never trained, median of 10 seeds, with at
+    // least 20 in the control.
+    let data = builtin();
+    let text = include_str!("../../../scenarios/a2-reward-training.ron");
+    let lab = LabScenario::from_ron(text, &data).expect("a valid scenario");
+    let (trained, untrained) = after_training(&lab, &data, Verb::Play, "ball");
+    let (t, c) = (median(&trained), median(&untrained));
+    assert!(
+        c >= 20.0,
+        "badly calibrated: the control's median is {c} ({untrained:?}), needing 20"
+    );
+    assert!(
+        t >= 1.5 * c,
+        "trained {t} ({trained:?}) against the control's {c} ({untrained:?})"
+    );
+}
+
+#[test]
+fn a3_sprites_shocked_for_hitting_each_other_hit_less() {
+    // Design v21 §7.3: after training, their applied Hits on sprites, all
+    // four combined, are at most half the same seed's never trained, median
+    // of 10 seeds, with at least 20 in the control.
+    let data = builtin();
+    let text = include_str!("../../../scenarios/a3-correct-training.ron");
+    let lab = LabScenario::from_ron(text, &data).expect("a valid scenario");
+    let (trained, untrained) = after_training(&lab, &data, Verb::Hit, "sprite");
+    let (t, c) = (median(&trained), median(&untrained));
+    assert!(
+        c >= 20.0,
+        "badly calibrated: the control's median is {c} ({untrained:?}), needing 20"
+    );
+    assert!(
+        t <= 0.5 * c,
+        "trained {t} ({trained:?}) against the control's {c} ({untrained:?})"
+    );
+}

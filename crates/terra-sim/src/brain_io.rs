@@ -72,6 +72,19 @@ pub(crate) struct BrainInput {
 pub(crate) struct BrainIoFile {
     inputs: Vec<InputEntry>,
     needs: Vec<String>,
+    /// The first-order needs (design v21 §5.2); none if left out.
+    #[serde(default)]
+    first_order: Vec<String>,
+}
+
+/// What `brain_io.ron` sets out, checked (design §5.2).
+pub(crate) struct BrainIo {
+    /// Every brain input, in ID order.
+    pub(crate) inputs: Vec<BrainInput>,
+    /// The needs, as places in `inputs`.
+    pub(crate) needs: Vec<usize>,
+    /// The first-order needs, as places in `inputs` (design v21 §5.2).
+    pub(crate) first_order: Vec<usize>,
 }
 
 /// One entry of `brain_io.ron`'s inputs.
@@ -116,15 +129,16 @@ fn target_inputs(categories: &[Category]) -> impl Iterator<Item = (u16, String, 
         ])
 }
 
-/// Every brain input, in ID order, and the needs, as places in that order
-/// (design §5.2). A need that isn't a State input reading a drive, or is
-/// named twice, is an error.
+/// Every brain input, in ID order, and the needs and first-order needs, as
+/// places in that order (design §5.2). A need that isn't a State input
+/// reading a drive, a first-order need that isn't a need, or either named
+/// twice, is an error.
 pub(crate) fn brain_io(
     file: BrainIoFile,
     categories: &[Category],
     chemicals: &[Chemical],
     loci: &[Locus],
-) -> Result<(Vec<BrainInput>, Vec<usize>), DataError> {
+) -> Result<BrainIo, DataError> {
     let inputs = brain_inputs(file.inputs, categories, chemicals, loci)?;
     let mut needs: Vec<usize> = Vec::new();
     for name in &file.needs {
@@ -150,7 +164,27 @@ pub(crate) fn brain_io(
         }
         needs.push(place);
     }
-    Ok((inputs, needs))
+    let mut first_order: Vec<usize> = Vec::new();
+    for name in &file.first_order {
+        let invalid = |problem: &str| DataError::Invalid {
+            file: BRAIN_IO.into(),
+            message: format!("the first-order need `{name}` {problem}"),
+        };
+        let place = needs
+            .iter()
+            .copied()
+            .find(|&place| &inputs[place].name == name)
+            .ok_or_else(|| invalid("isn't a need"))?;
+        if first_order.contains(&place) {
+            return Err(invalid("is named twice"));
+        }
+        first_order.push(place);
+    }
+    Ok(BrainIo {
+        inputs,
+        needs,
+        first_order,
+    })
 }
 
 /// Every brain input, in ID order: the State inputs `entries` list, and the

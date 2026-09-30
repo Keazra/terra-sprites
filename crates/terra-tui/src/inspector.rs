@@ -4,9 +4,9 @@
 use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
-    ActionView, ChemicalKind, ChemicalLevel, DataPack, DeathCause, EmitterMode, EntityId,
-    Explanation, Expression, GeneView, Learned, ObjectView, Outcome, Part, Progress, SpriteView,
-    Target, Thing, Trait, Verb, World,
+    ActionView, ChemicalKind, ChemicalLevel, CursorTouch, DataPack, DeathCause, EmitterMode,
+    EntityId, Event, EventKind, Explanation, Expression, GeneView, Learned, ObjectView, Outcome,
+    Part, Progress, Rejection, SpriteView, Target, Thing, Trait, Verb, World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -1164,6 +1164,45 @@ fn world_tab(world: &World) -> Vec<Line<'static>> {
         }
     }
     lines
+}
+
+/// What an event says in the event log, if the log shows it (design §6.1).
+pub(crate) fn event_line(event: &Event, data: &DataPack) -> Option<String> {
+    match &event.kind {
+        EventKind::Died { id, cause, age } => Some(format!(
+            "{} died ({}, age {})",
+            sprite_label(*id),
+            cause_name(*cause, data),
+            group_thousands(*age)
+        )),
+        EventKind::ActionEnded { id, action, .. } => logged_line(*id, action, data),
+        EventKind::LearnedMilestone { id, learned, good } => {
+            Some(learned_line(*id, learned, *good, data))
+        }
+        // The Cursor's touch, spoken to the player (design v21 §6.1).
+        EventKind::Rewarded { id, .. } | EventKind::Corrected { id, .. } => {
+            let touch = CursorTouch::reported(&event.kind).expect("the Cursor's touch");
+            let done = match touch {
+                CursorTouch::Pet => "petted",
+                CursorTouch::Hug => "hugged",
+                CursorTouch::Zap => "zapped",
+                CursorTouch::Shock => "shocked",
+            };
+            Some(format!("You {done} {}", sprite_label(*id)))
+        }
+        EventKind::CommandRejected { command, reason } => {
+            let touch = CursorTouch::of(command).name();
+            let (terra_sim::Command::Reward { sprite, .. }
+            | terra_sim::Command::Correct { sprite, .. }) = *command;
+            let why = match reason {
+                Rejection::Gone => "it's gone",
+            };
+            Some(format!("Couldn't {touch} {}: {why}", sprite_label(sprite)))
+        }
+        EventKind::ObjectSpawned { .. }
+        | EventKind::ObjectRemoved { .. }
+        | EventKind::ActionStarted { .. } => None,
+    }
 }
 
 #[cfg(test)]

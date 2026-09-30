@@ -5,10 +5,13 @@ use std::time::Duration;
 
 use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
-use terra_sim::{ActionView, DeathCause, EntityId, Event, EventKind, Map, Pos, Target, World};
+use terra_sim::{
+    ActionView, Command, CursorTouch, DeathCause, EntityId, Event, EventKind, Map, Pos, Target,
+    World,
+};
 
 use crate::clock::Clock;
-use crate::input::Action;
+use crate::input::{Action, Button};
 use crate::inspector;
 use crate::theme::{Emote, Theme};
 
@@ -27,22 +30,25 @@ pub enum Screen {
     QuitPrompt,
 }
 
-/// What a click on the map does (design §6.5). The Hand, Reward and Correct
-/// modes arrive with the hand's slices.
+/// What a click on the map does (design v21 §6.5). Grab mode arrives with
+/// slice 11.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CursorMode {
     Select,
+    /// Teaching: a left click rewards, a right click corrects.
+    Train,
 }
 
 impl CursorMode {
     /// Every cursor mode. Each theme must give all of them a mark.
-    pub const ALL: [CursorMode; 1] = [CursorMode::Select];
+    pub const ALL: [CursorMode; 2] = [CursorMode::Select, CursorMode::Train];
 
     /// The mode's name on the status line.
     pub fn label(self) -> &'static str {
         match self {
             CursorMode::Select => "SELECT",
+            CursorMode::Train => "TRAIN",
         }
     }
 }
@@ -140,7 +146,14 @@ pub struct App {
     pub seed: u64,
     screen: Screen,
     mode: CursorMode,
+    /// Where the Cursor is: on the sprite it's locked on to, or else on
+    /// `pointed`.
     cursor: Pos,
+    /// The tile under the pointer, or its last one (design §6.5).
+    pointed: Pos,
+    /// Whether the Cursor is locked on to the selected sprite (design v21
+    /// §6.5).
+    lock: bool,
     /// The top-left tile of the viewport.
     viewport: Pos,
     /// The map's size, in tiles.
@@ -151,8 +164,9 @@ pub struct App {
     inspector: Option<Rect>,
     /// The screen cell under the mouse pointer, while that cell shows a tile.
     pointer: Option<Position>,
-    /// The latest events the event log shows, newest first.
-    event_log: VecDeque<Event>,
+    /// The latest events the event log shows, newest first, each with how
+    /// many times in a row it came (design v21 §6.1).
+    event_log: VecDeque<(Event, u32)>,
     /// The selected sprite's observed list, newest first.
     observed: VecDeque<Observed>,
     selection: Option<Selection>,
@@ -163,9 +177,11 @@ pub struct App {
     detail: bool,
     /// Real time the app has been running, for the Decision marker's flashing.
     running_for: Duration,
-    /// When, in `running_for`, each sprite hurt lately was hurt, for its
-    /// Hurt emote.
-    hurt_at: BTreeMap<EntityId, Duration>,
+    /// Each sprite's latest emote lately, and when, in `running_for`, it
+    /// began (design §6.3).
+    emotes: BTreeMap<EntityId, (Emote, Duration)>,
+    /// The commands the player's clicks made, for the world (design §6.8).
+    commands: Vec<Command>,
 }
 
 /// How long the Decision marker shows, and then doesn't: once a second in
@@ -194,6 +210,8 @@ impl App {
             screen: Screen::Normal,
             mode: CursorMode::Select,
             cursor,
+            pointed: cursor,
+            lock: false,
             viewport: Pos { x: 0, y: 0 },
             map_size: Size::new(map.width(), map.height()),
             tile_area: areas.tiles,
@@ -206,7 +224,8 @@ impl App {
             tab_scroll: 0,
             detail: false,
             running_for: Duration::ZERO,
-            hurt_at: BTreeMap::new(),
+            emotes: BTreeMap::new(),
+            commands: Vec::new(),
         };
         app.centre_on(cursor);
         app
@@ -228,26 +247,50 @@ impl App {
                 self.note_hurt(id, action);
                 self.note_done_to_selected(event.tick, id, action, world);
             }
+            if let (EventKind::Rewarded { id, .. } | EventKind::Corrected { id, .. }, Some(touch)) =
+                (&event.kind, CursorTouch::reported(&event.kind))
+            {
+                self.note_touch(event.tick, *id, touch);
+            }
             if let EventKind::Died { id, cause, age } = event.kind
                 && self.selection == Some(Selection::Living(id))
             {
                 self.selection = Some(Selection::Dead { id, cause, age });
+                // Its death lets go of the lock (design v21 §6.5).
+                self.lock = false;
             }
-            let logged = match event.kind {
-                EventKind::ObjectSpawned { .. }
-                | EventKind::ObjectRemoved { .. }
-                | EventKind::ActionStarted { .. } => false,
-                EventKind::LearnedMilestone { .. } => true,
-                EventKind::ActionEnded { id, ref action, .. } => {
-                    inspector::logged_line(id, action, world.data()).is_some()
-                }
-                EventKind::Died { .. } => true,
+            // What the log says of it, if it's logged at all; a line that
+            // reads as the one before merges into it with a count (design v21
+            // §6.1).
+            let data = world.data();
+            let Some(line) = inspector::event_line(event, data) else {
+                continue;
             };
-            if logged {
-                self.event_log.push_front(event.clone());
+            match self.event_log.front_mut() {
+                Some((front, count)) if inspector::event_line(front, data) == Some(line) => {
+                    *front = event.clone();
+                    *count += 1;
+                }
+                _ => self.event_log.push_front((event.clone(), 1)),
             }
         }
         self.event_log.truncate(EVENT_LOG_LENGTH);
+        self.track(world);
+    }
+
+    /// The sprite the Cursor is locked on to, if any (design v21 §6.5).
+    pub fn locked(&self) -> Option<EntityId> {
+        match self.selection {
+            Some(Selection::Living(id)) if self.lock => Some(id),
+            _ => None,
+        }
+    }
+
+    /// Keeps a locked-on Cursor on its sprite, wherever it has walked.
+    fn track(&mut self, world: &World) {
+        if let Some(sprite) = self.locked().and_then(|id| world.sprite(id)) {
+            self.cursor = sprite.pos();
+        }
     }
 
     /// Starts the Hurt emote on each sprite that sprite `actor`'s `action` hurt.
@@ -258,7 +301,24 @@ impl App {
         };
         let hurt_actor = action.hurt.actor.then_some(actor);
         for id in hurt_actor.into_iter().chain(hurt_target) {
-            self.hurt_at.insert(id, self.running_for);
+            self.emotes.insert(id, (Emote::Hurt, self.running_for));
+        }
+    }
+
+    /// The Cursor's touch on sprite `id`, on `tick`: its emote, and a line
+    /// on the observed list if it's the selected sprite's, told as the
+    /// sprite felt it, from nowhere, since it can't see the Cursor (design
+    /// v21 §6.1, §6.3).
+    fn note_touch(&mut self, tick: u64, id: EntityId, touch: CursorTouch) {
+        let (emote, line) = match touch {
+            CursorTouch::Pet => (Emote::Pleased, "a gentle touch"),
+            CursorTouch::Hug => (Emote::Pleased, "a warm embrace"),
+            CursorTouch::Zap => (Emote::Shocked, "a zap"),
+            CursorTouch::Shock => (Emote::Shocked, "a jolt"),
+        };
+        self.emotes.insert(id, (emote, self.running_for));
+        if self.selection == Some(Selection::Living(id)) {
+            self.observe(tick, format!("Felt {line} out of nowhere"));
         }
     }
 
@@ -287,9 +347,10 @@ impl App {
     /// The emote sprite `id` shows now, if any: the Hurt emote, taking
     /// turns with the sprite for a second after it's hurt (design §6.3).
     pub fn emote(&self, id: EntityId) -> Option<Emote> {
-        let since = self.running_for.checked_sub(*self.hurt_at.get(&id)?)?;
+        let &(emote, at) = self.emotes.get(&id)?;
+        let since = self.running_for.checked_sub(at)?;
         let showing = (since.as_millis() / EMOTE_HALF.as_millis()).is_multiple_of(2);
-        (since < EMOTE_FOR && showing).then_some(Emote::Hurt)
+        (since < EMOTE_FOR && showing).then_some(emote)
     }
 
     /// Puts `line`, finished on `tick`, on the front of the observed list.
@@ -316,16 +377,23 @@ impl App {
         self.observed.iter()
     }
 
-    /// The events the event log shows, newest first.
-    pub fn event_log(&self) -> impl Iterator<Item = &Event> {
-        self.event_log.iter()
+    /// Takes the commands the player's clicks have made since last taken,
+    /// in the order made, for the world to apply at its next tick.
+    pub fn take_commands(&mut self) -> Vec<Command> {
+        std::mem::take(&mut self.commands)
+    }
+
+    /// The events the event log shows, newest first, each the latest of
+    /// the same event in a row, with how many there were.
+    pub fn event_log(&self) -> impl Iterator<Item = (&Event, u32)> {
+        self.event_log.iter().map(|(event, count)| (event, *count))
     }
 
     /// Moves the app's real-time clock on by `elapsed`, for what flashes.
     pub fn animate(&mut self, elapsed: Duration) {
         self.running_for += elapsed;
         let now = self.running_for;
-        self.hurt_at.retain(|_, &mut at| now - at < EMOTE_FOR);
+        self.emotes.retain(|_, &mut (_, at)| now - at < EMOTE_FOR);
     }
 
     /// Whether the Decision marker is in its "on" half just now.
@@ -339,7 +407,8 @@ impl App {
         self.detail
     }
 
-    /// The tile the cursor is on.
+    /// The tile the Cursor is on: its locked-on sprite's, or else the
+    /// pointer's.
     pub fn cursor(&self) -> Pos {
         self.cursor
     }
@@ -402,7 +471,7 @@ impl App {
             match action {
                 Action::Confirm | Action::Back | Action::Quit => return Flow::Quit,
                 // The mouse carries on as usual and doesn't answer the prompt.
-                Action::Point(_) | Action::Click(_) | Action::Wheel { .. } => {}
+                Action::Point(_) | Action::Click { .. } | Action::Wheel { .. } => {}
                 // Any other key cancels the prompt, and does nothing else.
                 _ => {
                     self.screen = Screen::Normal;
@@ -419,17 +488,20 @@ impl App {
             Action::Slower { held: true } => self.clock.slower_held(),
             Action::Scroll { dx, dy } => self.scroll(dx, dy),
             Action::Point(cell) => self.point(cell),
-            // In Select mode (the only mode so far), a click on the map
-            // selects the sprite there, or clears the selection.
-            Action::Click(cell) => {
-                self.point(cell);
-                if let Some(tile) = self.tile_at(cell) {
-                    match world.sprite_at(tile) {
-                        Some(sprite) => self.select(sprite.id()),
-                        None => self.selection = None,
-                    }
+            Action::Click {
+                at,
+                button,
+                amplified,
+            } => {
+                self.point(at);
+                if let Some(tile) = self.tile_at(at) {
+                    self.act(tile, button, amplified, world);
                 }
             }
+            Action::Press { button, amplified } => {
+                self.act(self.cursor, button, amplified, world);
+            }
+            Action::Mode(mode) => self.mode = mode,
             Action::SelectNext => self.select_along(world, Direction::Next),
             Action::SelectPrevious => self.select_along(world, Direction::Previous),
             Action::NextTab => self.open(self.tab.along(1)),
@@ -445,11 +517,67 @@ impl App {
                 }
             }
             Action::ToggleDetail => self.detail = !self.detail,
+            // Esc returns to Select; from Select it asks to quit (design v21
+            // §6.5).
+            Action::Back if self.mode != CursorMode::Select => self.mode = CursorMode::Select,
             Action::Back => self.screen = Screen::QuitPrompt,
             Action::Confirm | Action::Dismiss => {}
             Action::Quit => return Flow::Quit,
         }
+        self.track(world);
         Flow::Continue
+    }
+
+    /// What a click with `button` on `tile` does, in the cursor mode (design
+    /// v21 §6.5).
+    ///
+    /// In Select, a left click selects the sprite there; on empty ground it
+    /// clears the selection, unless the Cursor is locked on. A right click
+    /// locks the Cursor on to the selection, or lets go; with nothing
+    /// selected, on a sprite, it selects it and locks on.
+    ///
+    /// In Train, a left click rewards the target and a right click corrects
+    /// it: the locked-on sprite, or else the one there. With none, nothing is
+    /// sent.
+    fn act(&mut self, tile: Pos, button: Button, amplified: bool, world: &World) {
+        let sprite = world.sprite_at(tile).map(|sprite| sprite.id());
+        match (self.mode, button) {
+            (CursorMode::Select, Button::Left) => match sprite {
+                Some(id) => self.select(id),
+                None if self.lock => {}
+                None => self.selection = None,
+            },
+            (CursorMode::Select, Button::Right) => match (self.selection, sprite) {
+                (Some(Selection::Living(_)), _) => self.set_lock(!self.lock),
+                (_, Some(id)) => {
+                    self.select(id);
+                    self.set_lock(true);
+                }
+                _ => {}
+            },
+            (CursorMode::Train, button) => {
+                let Some(sprite) = self.locked().or(sprite) else {
+                    return;
+                };
+                self.commands.push(match button {
+                    Button::Left => Command::Reward {
+                        sprite,
+                        amplified,
+                        reach_back: self.clock.reach_back(),
+                    },
+                    Button::Right => Command::Correct { sprite, amplified },
+                });
+            }
+        }
+    }
+
+    /// Locks the Cursor on to the selection, or lets go, when it follows
+    /// the pointer again.
+    fn set_lock(&mut self, lock: bool) {
+        self.lock = lock;
+        if !lock {
+            self.cursor = self.pointed;
+        }
     }
 
     /// Selects the sprite `id`. From the World tab, that opens Body; and
@@ -555,13 +683,17 @@ impl App {
         }
     }
 
-    /// Puts the cursor on the tile at screen cell `cell`. Off the map view's
-    /// tiles, the cursor stays on its last tile.
+    /// Notes the tile at screen cell `cell` as the pointer's, and puts the
+    /// Cursor there unless it's locked on. Off the map view's tiles, both
+    /// stay on their last tile.
     fn point(&mut self, cell: Position) {
         match self.tile_at(cell) {
             Some(tile) => {
                 self.pointer = Some(cell);
-                self.cursor = tile;
+                self.pointed = tile;
+                if self.locked().is_none() {
+                    self.cursor = tile;
+                }
             }
             None => self.pointer = None,
         }

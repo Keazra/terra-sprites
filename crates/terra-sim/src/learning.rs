@@ -246,6 +246,8 @@ fn within<'a>(
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub(crate) struct Touch {
     pub(crate) tick: u64,
+    /// The verb it tried (design v21 §5.6).
+    pub(crate) verb: Verb,
     /// What it's learned about as (design v19 §5.6).
     pub(crate) subject: Subject,
     /// Which sprite, if it was one (design v18 §5.6).
@@ -271,6 +273,12 @@ pub(crate) struct Signals {
     pub(crate) hit: bool,
     /// Who hit it, the `was_hit` pulse's source, if one is live.
     pub(crate) attacker: Option<EntityId>,
+    /// How far back the Cursor's Reward looks, if it rewarded the sprite
+    /// this tick (design v21 §5.6).
+    pub(crate) reach_back: Option<u64>,
+    /// Whether the Cursor corrected the sprite this tick: a `shocked` pulse
+    /// is live (design v21 §5.6).
+    pub(crate) corrected: bool,
 }
 
 /// The most entries a trace keeps (design §5.6).
@@ -332,6 +340,7 @@ pub(crate) fn run(
         let (reward, punishment) = (body.chems[indices.reward], body.chems[indices.punishment]);
         body.chems[indices.reward] = 0.0;
         body.chems[indices.punishment] = 0.0;
+        let reach_back = brain.reach_back.take();
         brain.experience.forget_dead(&alive);
         let needs = brain.need_levels(body, data);
         let relief = brain.relief(&needs, data);
@@ -347,6 +356,8 @@ pub(crate) fn run(
             fruitless: body.loci[indices.fruitless] > 0.0,
             hit: body.loci[indices.was_hit] > 0.0,
             attacker: body.sources.get(&indices.was_hit).copied(),
+            reach_back,
+            corrected: body.loci[indices.shocked] > 0.0,
         };
         let rate = body.loci[indices.learning_rate_mod];
         for (learned, good) in brain.learn(tick, &signals, rate, data) {

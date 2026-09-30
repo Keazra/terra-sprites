@@ -76,6 +76,11 @@
         "fear_reach":        (range: (0.1, 1.0),     default: 0.5),
         // Category summaries (design v19 §5.6), at generalise's value.
         "generalise_types":  (range: (2.0, 10.0),    default: 3.0),
+        // A pressing first-order need quiets what a sprite merely likes, by
+        // at most this much, never all of it; and bad habits fade as slowly
+        // as bad things (design v21 §5.6).
+        "quieting":          (range: (0.0, 1.0),     default: 0.8),
+        "habit_fade_bad":    (range: (0.0, 0.01),    default: 0.00005),
     },
     // The range of each receptor target in `loci.ron`. Each rests at 1.0 when
     // no receptor writes it.
@@ -115,4 +120,17 @@
     // units (a grass step is 10). After `replan_after` blocked ticks in a
     // row, a sprite looks for a way round the sprites in its way.
     movement: (flood_refresh: 8, occupied_penalty: 30, replan_after: 3),
+
+    // The Cursor's touch (design v21 §4.6): the levels it raises, a starting
+    // point for the lab's strength sweep; and the longest a pet's or hug's
+    // feeling looks back for the sprite's latest try, in ticks (§5.6): two
+    // seconds at 16×. A shorter reach back than `touch_window` is taken as
+    // that; a zap's or shock's always looks back `touch_window`.
+    cursor: (
+        pet: 0.5,
+        hug: 1.0,
+        zap: (punishment: 0.5, pain: 0.3),
+        shock: (punishment: 1.0, pain: 0.6),
+        max_reach_back: 40,
+    ),
 )
