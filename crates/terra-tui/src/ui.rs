@@ -295,7 +295,7 @@ fn top_bar_line(app: &App, world: &World) -> Line<'static> {
 /// there's room. The mode keys come first, as one hint, so they're the last
 /// to go (design v22 §6.1).
 const KEY_HINTS: [&str; 6] = [
-    "Z select  X train",
+    "Z select  X train  C grab",
     "WASD scroll",
     "space pause",
     ". step",

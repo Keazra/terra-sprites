@@ -100,8 +100,8 @@ fn z_and_x_pick_select_and_train_and_escape_goes_back_to_select() {
 
 #[test]
 fn the_wheel_cycles_the_cursor_modes_wrapping_round() {
-    // Design v21 §6.5: a notch down is the next mode, up the previous; with
-    // Select and Train alone, either way goes to the other.
+    // Design v21 §6.5: a notch down is the next mode, up the previous:
+    // Select, Train, Grab (v23).
     let world = field(&[]);
     let mut app = app(&world);
     let wheel = |notches| Action::Wheel {
@@ -111,11 +111,13 @@ fn the_wheel_cycles_the_cursor_modes_wrapping_round() {
     apply(&mut app, &world, wheel(1));
     assert_eq!(app.mode(), CursorMode::Train);
     apply(&mut app, &world, wheel(1));
+    assert_eq!(app.mode(), CursorMode::Grab);
+    apply(&mut app, &world, wheel(1));
     assert_eq!(app.mode(), CursorMode::Select, "wrapping round");
     apply(&mut app, &world, wheel(-1));
-    assert_eq!(app.mode(), CursorMode::Train);
+    assert_eq!(app.mode(), CursorMode::Grab, "wrapping back");
     apply(&mut app, &world, wheel(3));
-    assert_eq!(app.mode(), CursorMode::Select, "a notch a mode");
+    assert_eq!(app.mode(), CursorMode::Grab, "a notch a mode");
 }
 
 #[test]

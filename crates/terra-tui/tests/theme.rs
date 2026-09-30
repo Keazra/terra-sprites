@@ -173,6 +173,17 @@ fn the_themes_draw_the_select_cursor_as_the_design_table_says() {
 }
 
 #[test]
+fn grab_mode_is_a_yellow_arch_or_g() {
+    // Design §6.2, §6.5.
+    let (cp437, ascii) = (Theme::cp437(), Theme::ascii());
+    assert_eq!(cp437.mode_mark(CursorMode::Grab).symbol, '∩');
+    assert_eq!(ascii.mode_mark(CursorMode::Grab).symbol, 'G');
+    for theme in [cp437, ascii] {
+        assert_eq!(theme.mode_mark(CursorMode::Grab).fg, Color::Yellow);
+    }
+}
+
+#[test]
 fn the_select_mode_is_white_in_both_themes() {
     // Design §6.5: the mode mark's colour is the whole cursor's colour.
     for theme in [Theme::cp437(), Theme::ascii()] {

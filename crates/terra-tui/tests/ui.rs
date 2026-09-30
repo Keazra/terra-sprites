@@ -2239,13 +2239,14 @@ fn the_status_line_names_train_mode_and_what_the_cursor_is_locked_on_to() {
 
 #[test]
 fn the_key_hints_lead_with_the_mode_keys() {
-    // Design v22 §6.1.
+    // Design v22 §6.1, with Grab's from v23.
     let world = drawn_world(&SMALL_MAP);
     let app = app_for(&world, Theme::cp437(), 120, 30);
     let status = lines(&render(&app, &world, 120, 30))[29].clone();
     assert!(
-        status
-            .ends_with("Z select  X train  WASD scroll  space pause  . step  +/- speed  esc quit"),
+        status.ends_with(
+            "Z select  X train  C grab  WASD scroll  space pause  . step  +/- speed  esc quit"
+        ),
         "{status}"
     );
 }
@@ -2262,7 +2263,7 @@ fn short_of_room_whole_key_hints_drop_from_the_end() {
     let status = status_line(&app, &world);
     assert!(status.contains("│ locked on Sprite #"), "{status}");
     assert!(
-        status.ends_with("  Z select  X train  WASD scroll  space pause"),
+        status.ends_with("  Z select  X train  C grab  WASD scroll"),
         "{status}"
     );
 }
