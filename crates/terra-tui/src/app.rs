@@ -215,6 +215,12 @@ pub struct App {
     /// tick the world applies it at, so the marks and the next click follow
     /// the queue (design v23 §6.5).
     queued: Vec<(u64, Command)>,
+    /// While the Cursor leads a sprite, the tile the world was last told
+    /// it's on (design v23 §6.5).
+    told: Option<Pos>,
+    /// Whether the Cursor holds or leads something, as the player sees it
+    /// (`App::grip`), as of the latest action or tick.
+    gripping: bool,
     /// When, in `running_for`, a click last sent a command (design v22 §6.5).
     sent_at: Option<Duration>,
     /// The world's latest report on a command, and when it began to show.
@@ -274,6 +280,8 @@ impl App {
             emotes: BTreeMap::new(),
             commands: Vec::new(),
             queued: Vec::new(),
+            told: None,
+            gripping: false,
             sent_at: None,
             report: None,
             refusal: None,
@@ -337,7 +345,28 @@ impl App {
         self.event_log.truncate(EVENT_LOG_LENGTH);
         // The world has applied what was queued for the ticks it has run.
         self.queued.retain(|&(tick, _)| tick >= world.tick());
+        self.settle_cursor(world);
+    }
+
+    /// Settles the Cursor after an action or a tick: what it has hold of, then
+    /// where it is, then telling the world if it leads a sprite.
+    fn settle_cursor(&mut self, world: &World) {
+        self.gripping = self.grip(world).is_some();
         self.track(world);
+        self.tell(world);
+    }
+
+    /// While the Cursor leads a sprite, tells the world each new tile it
+    /// moves onto, in every mode (design v23 §6.5): the led sprite heads
+    /// there.
+    fn tell(&mut self, world: &World) {
+        if !matches!(self.grip(world), Some(Grip::Leads(_))) {
+            self.told = None;
+        } else if self.told != Some(self.cursor) {
+            self.commands
+                .push(Command::MoveCursor { tile: self.cursor });
+            self.told = Some(self.cursor);
+        }
     }
 
     /// What the Cursor has hold of as the player sees it: what the world
@@ -358,7 +387,13 @@ impl App {
     }
 
     /// The sprite the Cursor is locked on to, if any (design v21 §6.5).
+    /// While it holds or leads something in Grab mode, the lock waits, and
+    /// the Cursor follows the pointer, so the player chooses where things go
+    /// (design v23 §6.5).
     pub fn locked(&self) -> Option<EntityId> {
+        if self.mode == CursorMode::Grab && self.gripping {
+            return None;
+        }
         match self.selection {
             Some(Selection::Living(id)) if self.lock => Some(id),
             _ => None,
@@ -652,7 +687,7 @@ impl App {
             Action::Confirm | Action::Dismiss => {}
             Action::Quit => return Flow::Quit,
         }
-        self.track(world);
+        self.settle_cursor(world);
         Flow::Continue
     }
 
@@ -731,6 +766,10 @@ impl App {
                 }
             },
         };
+        if let Command::TakeHold { sprite } = command {
+            // Taking hold puts the Cursor, as the world knows it, on the sprite.
+            self.told = world.sprite(sprite).map(|s| s.pos());
+        }
         self.commands.push(command);
         self.queued.push((world.tick(), command));
         // The marks follow the latest click (design v22 §6.5).
