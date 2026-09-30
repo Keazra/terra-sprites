@@ -246,7 +246,8 @@ fn leading_the_locked_on_sprite_the_cursor_follows_the_pointer_and_the_lock_come
     point(&mut app, &world, at(0, 0));
     press(&mut app, &world);
     let commands = app.take_commands();
-    assert_eq!(commands, vec![Command::TakeHold { sprite }]);
+    let to_the_pointer = Command::MoveCursor { tile: at(0, 0) };
+    assert_eq!(commands, vec![Command::TakeHold { sprite }, to_the_pointer]);
     for command in commands {
         world.submit(command);
     }
@@ -350,5 +351,52 @@ fn the_observed_list_tells_of_being_pulled_away_and_along_as_the_sprite_felt_it(
             "Was pulled along out of nowhere",
             "Wandered off, but was pulled away",
         ]
+    );
+}
+
+/// A field with a ball on (1, 1) and a sprite resting on (4, 2) for a
+/// while, so it stays put.
+fn resting_sprite_and_ball() -> World {
+    let rows = vec![".........."; 6];
+    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
+    let resting = at(4, 2);
+    let scenario = Scenario {
+        map,
+        objects: &[(at(1, 1), "ball")],
+        sprites: &[(resting, None)],
+        scripted: &[(resting, ScriptedAction::Rest); 5],
+    };
+    World::from_scenario(scenario, pack(), 1).expect("valid scenario")
+}
+
+#[test]
+fn taking_hold_of_the_locked_on_sprite_puts_the_cursor_on_the_pointer_at_once() {
+    // Design v23 §6.5: the lock waits, so a keyboard click lands where the
+    // pointer is.
+    let world = resting_sprite_and_ball();
+    let mut app = grab_app(&world);
+    lock_on(&mut app, &world, at(4, 2));
+    point(&mut app, &world, at(8, 5));
+    assert_eq!(app.cursor(), at(4, 2), "locked on");
+    press(&mut app, &world);
+    assert_eq!(app.cursor(), at(8, 5));
+}
+
+#[test]
+fn back_in_grab_mode_holding_an_item_the_cursor_is_on_the_pointer_at_once() {
+    let mut world = resting_sprite_and_ball();
+    let mut app = grab_app(&world);
+    click(&mut app, &world, at(1, 1));
+    tick(&mut app, &mut world);
+    lock_on(&mut app, &world, at(4, 2));
+    point(&mut app, &world, at(8, 5));
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    assert_eq!(app.cursor(), at(4, 2), "in Train, on the sprite");
+    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+    assert_eq!(app.cursor(), at(8, 5), "in Grab, at the pointer");
+    press(&mut app, &world);
+    assert_eq!(
+        app.take_commands(),
+        vec![Command::PutDown { tile: at(8, 5) }]
     );
 }

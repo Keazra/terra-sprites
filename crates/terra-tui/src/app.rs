@@ -408,7 +408,7 @@ impl App {
     /// the Cursor follows the pointer, so the player chooses where things go
     /// (design v23 §6.5).
     pub fn locked(&self) -> Option<EntityId> {
-        if self.mode == CursorMode::Grab && self.gripping {
+        if self.lock_waits() {
             return None;
         }
         match self.selection {
@@ -417,10 +417,20 @@ impl App {
         }
     }
 
+    /// Whether the Cursor's lock waits, while it holds or leads something
+    /// in Grab mode (design v23 §6.5).
+    fn lock_waits(&self) -> bool {
+        self.lock && self.mode == CursorMode::Grab && self.gripping
+    }
+
     /// Keeps a locked-on Cursor on its sprite, wherever it has walked.
+    /// A lock that waits leaves the Cursor on the pointer at once, so a
+    /// keyboard click lands where the player points (design v23 §6.5).
     fn track(&mut self, world: &World) {
         if let Some(sprite) = self.locked().and_then(|id| world.sprite(id)) {
             self.cursor = sprite.pos();
+        } else if self.lock_waits() {
+            self.cursor = self.pointed;
         }
     }
 
