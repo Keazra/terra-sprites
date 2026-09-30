@@ -507,3 +507,24 @@ fn a_new_click_flashes_sent_at_once_even_over_a_report() {
     click(&mut app, &world, at(4, 2), Button::Left);
     assert_eq!(app.status_mark(), StatusMark::Sent);
 }
+
+#[test]
+fn a_refusal_wins_over_a_command_applied_with_it() {
+    // Design v22 §6.5: a refusal is what needs noticing, so `☼` doesn't
+    // replace a `?` still to show or showing.
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    let refused = Event {
+        tick: 1,
+        kind: EventKind::CommandRejected {
+            command: pet(id, 3),
+            reason: Rejection::Gone,
+        },
+    };
+    app.record(&[refused.clone(), touched(1, id, "pet")], &world);
+    assert_eq!(app.status_mark(), StatusMark::Rejected, "in one tick");
+    wait(&mut app, 100);
+    app.record(&[touched(2, id, "pet")], &world);
+    assert_eq!(app.status_mark(), StatusMark::Rejected, "while it shows");
+}
