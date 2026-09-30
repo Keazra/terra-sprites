@@ -2282,3 +2282,49 @@ fn the_same_line_again_merges_into_one_with_a_count() {
         ]
     );
 }
+
+#[test]
+fn a_pet_shows_a_heart_and_a_zap_a_yellow_double_bang_for_a_second() {
+    // Design v21 §6.3: Pleased and Shocked, taking turns with the sprite.
+    for (theme, heart, bang) in [(Theme::cp437(), "♥", "‼"), (Theme::ascii(), "+", "/")] {
+        let world = garden_with_sprites();
+        let mut app = app_for(&world, theme, 100, 30);
+        let (petted, zapped) = (Pos { x: 2, y: 3 }, Pos { x: 7, y: 1 });
+        let ids = |pos| world.sprite_at(pos).expect("a sprite").id();
+        let cells = |pos| app.cell_of(pos).expect("in view");
+        let (petted_cell, zapped_cell) = (cells(petted), cells(zapped));
+        let sprite_glyph = render(&app, &world, 100, 30)[petted_cell]
+            .symbol()
+            .to_string();
+        let touch = |id, correct: bool| Event {
+            tick: 1,
+            kind: if correct {
+                EventKind::Corrected {
+                    id,
+                    amplified: false,
+                }
+            } else {
+                EventKind::Rewarded {
+                    id,
+                    amplified: true,
+                }
+            },
+        };
+        app.record(
+            &[touch(ids(petted), false), touch(ids(zapped), true)],
+            &world,
+        );
+        let at = |app: &App, cell| {
+            let screen = render(app, &world, 100, 30);
+            let cell = &screen[cell];
+            (cell.symbol().to_string(), cell.fg)
+        };
+        assert_eq!(at(&app, petted_cell).0, heart);
+        assert_eq!(at(&app, zapped_cell), (bang.to_string(), Color::Yellow));
+        app.animate(Duration::from_millis(250));
+        assert_eq!(at(&app, petted_cell).0, sprite_glyph);
+        app.animate(Duration::from_millis(1000));
+        assert_eq!(at(&app, petted_cell).0, sprite_glyph, "and then it's over");
+        assert_ne!(at(&app, zapped_cell).0, bang);
+    }
+}
