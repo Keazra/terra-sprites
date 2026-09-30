@@ -185,10 +185,10 @@ fn grab_mode_is_a_yellow_arch_or_g() {
 
 #[test]
 fn the_themes_draw_grab_s_status_marks_as_the_design_table_says() {
-    // Design §6.2: lift, empty and drop; holding shows the thing itself.
+    // Design §6.2: grab, empty and release; holding shows the thing itself.
     let marks = |theme: &Theme| {
         let status = theme.status_marks();
-        [status.lift, status.empty, status.drop]
+        [status.grab, status.empty, status.release]
     };
     assert_eq!(marks(&Theme::cp437()), ['↑', '░', '↓']);
     assert_eq!(marks(&Theme::ascii()), ['^', '_', 'v']);

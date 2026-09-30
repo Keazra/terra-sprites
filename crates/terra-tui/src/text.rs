@@ -7,6 +7,9 @@ pub(crate) fn display_name(name: &str) -> String {
     name.replace('_', " ")
 }
 
+/// Why a fixture can't be grabbed (design v23 §6.1).
+pub(crate) const ROOTED: &str = "it's rooted to the ground";
+
 /// A terrain's name on screen: `deep water`.
 pub(crate) fn terrain_name(terrain: Terrain) -> &'static str {
     match terrain {

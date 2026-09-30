@@ -2,6 +2,7 @@
 
 use rand_chacha::ChaCha8Rng;
 
+use crate::cursor::Grip;
 use crate::data::DataPack;
 use crate::events::{Emptied, Event, EventKind, Removal};
 use crate::map::{Map, Pos};
@@ -314,8 +315,7 @@ pub(crate) fn removed(
             reason,
         },
     });
-    if state.cursor.holds() == Some(id) {
-        state.cursor.grip = None;
+    if state.cursor.empty_of(Grip::Holds(id)) {
         events.push(Event {
             tick: state.tick,
             kind: EventKind::CursorEmptied {

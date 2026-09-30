@@ -11,7 +11,7 @@ use crate::biochem::{self, Senses, Traits};
 use crate::brain::{Explanation, Memory};
 use crate::command::{self, Command};
 use crate::config::WorldConfig;
-use crate::cursor::Cursor;
+use crate::cursor::{Cursor, Grip};
 use crate::data::DataPack;
 use crate::ecology::{self, holds_without_drawing, new_object, square};
 use crate::events::{DeathCause, Emptied, Event, EventKind};
@@ -858,8 +858,7 @@ impl World {
                     age: sprite.age(state.tick),
                 },
             });
-            if state.cursor.leads() == Some(id) {
-                state.cursor.grip = None;
+            if state.cursor.empty_of(Grip::Leads(id)) {
                 events.push(Event {
                     tick: state.tick,
                     kind: EventKind::CursorEmptied {
@@ -936,6 +935,12 @@ mod tests {
     fn force_place(world: &mut World, name: &str, pos: Pos) {
         let kind = world.data.object_type_named(name).expect("a built-in type");
         world.state.add_object(new_object(&world.data, kind, pos));
+    }
+
+    /// Puts a berry on `pos`, and gives its ID.
+    fn force_berry(world: &mut World, pos: Pos) -> EntityId {
+        force_place(world, "berry", pos);
+        world.state.objects.at(pos).expect("the berry")
     }
 
     #[test]
@@ -1062,12 +1067,7 @@ mod tests {
         world.submit(Command::TakeHold { sprite: first });
         world.step();
         assert_eq!(world.check_invariants(), Ok(()));
-        force_place(&mut world, "berry", Pos { x: 0, y: 0 });
-        let berry = world
-            .state
-            .objects
-            .at(Pos { x: 0, y: 0 })
-            .expect("the berry");
+        let berry = force_berry(&mut world, Pos { x: 0, y: 0 });
         world.submit(Command::LetGo);
         world.submit(Command::PickUp { item: berry });
         world.step();
@@ -1093,25 +1093,15 @@ mod tests {
     #[test]
     fn a_held_item_the_cursor_does_not_hold_breaks_an_invariant() {
         let mut world = field_with_a_bush();
-        force_place(&mut world, "berry", Pos { x: 0, y: 0 });
-        let berry = world
-            .state
-            .objects
-            .at(Pos { x: 0, y: 0 })
-            .expect("the berry");
-        world.state.objects.lift(berry);
+        let berry = force_berry(&mut world, Pos { x: 0, y: 0 });
+        world.state.objects.pick_up(berry);
         assert!(world.check_invariants().is_err());
     }
 
     #[test]
     fn a_cursor_holding_an_item_on_the_map_breaks_an_invariant() {
         let mut world = field_with_a_bush();
-        force_place(&mut world, "berry", Pos { x: 0, y: 0 });
-        let berry = world
-            .state
-            .objects
-            .at(Pos { x: 0, y: 0 })
-            .expect("the berry");
+        let berry = force_berry(&mut world, Pos { x: 0, y: 0 });
         world.state.cursor.grip = Some(Grip::Holds(berry));
         assert!(world.check_invariants().is_err());
     }

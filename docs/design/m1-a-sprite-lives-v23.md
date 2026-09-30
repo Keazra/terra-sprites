@@ -1368,11 +1368,11 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 | Cursor arrows | `↓ ↑ → ←` | `v ^ > <` | the cursor mode's colour |
 | Cursor arrows, locked on (v21) | `▼ ▲ ► ◄` | `v ^ > <` (the status line says it's locked) | the cursor mode's colour |
 | Mode marks: Select / Train / Grab (v21) | `♦` `±` `∩` | `S` `T` `G` | the mode's colour |
-| Status marks: idle / lift / drop / empty / sent / applied / rejected | `·` `↑` `↓` `░` `+` `☼` `?` | `-` `^` `v` `_` `+` `*` `?` | the mode's colour |
+| Status marks: idle / grab / release / empty / sent / applied / rejected | `·` `↑` `↓` `░` `+` `☼` `?` | `-` `^` `v` `_` `+` `*` `?` | the mode's colour |
 | Decision marker (flashes) | `X` | `X` | white |
 | Attention marker | the tile's own glyph | the tile's own glyph | dark grey background |
 
-- Every **terrain and object type** on the map, and sprites, has a unique glyph. Colour is used only for **state**, and the status line always names what's under the Cursor. The Cursor's arrows and marks are UI drawn over the map, and may share glyphs with each other (lift and drop are arrows).
+- Every **terrain and object type** on the map, and sprites, has a unique glyph. Colour is used only for **state**, and the status line always names what's under the Cursor. The Cursor's arrows and marks are UI drawn over the map, and may share glyphs with each other (grab and release are arrows).
 - **`--ascii` swaps only what themes cover:** the map's glyphs, the Cursor and the emotes. Frames and text stay CP437 in every theme.
 
 ### 6.3 Body language (UI only)

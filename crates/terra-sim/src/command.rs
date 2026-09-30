@@ -146,7 +146,7 @@ pub enum Rejection {
     /// Something on the tile stops the item going there (design §3.4).
     InTheWay {
         /// The stable ID of the held item's type.
-        item: u16,
+        item_type: u16,
         blocker: Blocker,
     },
 }
@@ -249,15 +249,13 @@ fn take_hold(
     sprite: EntityId,
     events: &mut Vec<Event>,
 ) -> Result<EventKind, Rejection> {
-    if let Some(grip) = state.cursor.grip {
-        return Err(Rejection::Busy(grip));
-    }
+    state.cursor.free()?;
     let led = state.sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
     if let Some(doing) = led.action.as_mut().filter(|a| a.ended.is_none()) {
         action::end(doing, sprite, Outcome::PulledAway, state.tick, events);
     }
     led.lead = Some(Walk::default());
-    state.cursor.grip = Some(Grip::Leads(sprite));
+    state.cursor.take(Grip::Leads(sprite));
     state.cursor.tile = Some(led.pos);
     Ok(EventKind::TookHold { sprite })
 }
@@ -265,7 +263,7 @@ fn take_hold(
 /// The Cursor lets go of the sprite it leads (design v23 §6.5).
 fn let_go(state: &mut WorldState) -> Result<EventKind, Rejection> {
     let sprite = state.cursor.leads().ok_or(Rejection::NotLeading)?;
-    state.cursor.grip = None;
+    state.cursor.release();
     let led = state.sprites.get_mut(sprite).expect("the led sprite");
     led.lead = None;
     Ok(EventKind::LetGo { sprite })
@@ -278,9 +276,7 @@ fn pick_up(
     data: &DataPack,
     item: EntityId,
 ) -> Result<EventKind, Rejection> {
-    if let Some(grip) = state.cursor.grip {
-        return Err(Rejection::Busy(grip));
-    }
+    state.cursor.free()?;
     let object = state.objects.get(item).ok_or(Rejection::Gone)?;
     let object_type = &data.object_types()[object.kind];
     // In M1 every fixture is solid, and every solid object a fixture
@@ -289,8 +285,8 @@ fn pick_up(
         return Err(Rejection::Rooted);
     }
     let object_type = object_type.name.clone();
-    state.objects.lift(item);
-    state.cursor.grip = Some(Grip::Holds(item));
+    state.objects.pick_up(item);
+    state.cursor.take(Grip::Holds(item));
     Ok(EventKind::PickedUp { item, object_type })
 }
 
@@ -304,7 +300,7 @@ fn put_down(state: &mut WorldState, data: &DataPack, tile: Pos) -> Result<EventK
     }
     let held = &data.object_types()[state.objects.kind(item)];
     let in_the_way = |blocker| Rejection::InTheWay {
-        item: held.id,
+        item_type: held.id,
         blocker,
     };
     if let Some(there) = state.objects.at(tile) {
@@ -315,7 +311,7 @@ fn put_down(state: &mut WorldState, data: &DataPack, tile: Pos) -> Result<EventK
         return Err(in_the_way(Blocker::Terrain(state.map.terrain(tile))));
     }
     state.objects.put_down(item, tile);
-    state.cursor.grip = None;
+    state.cursor.release();
     let object_type = held.name.clone();
     Ok(EventKind::PutDown {
         item,
