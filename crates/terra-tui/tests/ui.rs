@@ -2276,6 +2276,36 @@ fn the_status_line_names_train_mode_and_what_the_cursor_is_locked_on_to() {
 }
 
 #[test]
+fn the_status_line_says_what_the_cursor_holds_or_leads_in_every_mode() {
+    // Design v23 §6.1. The sprite is on map tile (2, 3), the ball on (6, 3).
+    let world = garden_with_sprites();
+    let sprite = world
+        .sprite_at(terra_sim::Pos { x: 2, y: 3 })
+        .expect("a sprite")
+        .id();
+    let cases = [
+        (
+            Position::new(1 + 2, 2 + 3),
+            format!(" │ leading: Sprite #{}", sprite.0),
+        ),
+        (Position::new(1 + 6, 2 + 3), " │ holding: ball".to_string()),
+    ];
+    for (on, says) in cases {
+        let mut app = app_for(&world, Theme::cp437(), 100, 30);
+        app.apply(Action::Mode(CursorMode::Grab), &world);
+        app.apply(Action::left_click(on), &world);
+        let status = status_line(&app, &world);
+        assert!(before_hints(&status).ends_with(&says), "{status}");
+        app.apply(Action::Mode(CursorMode::Select), &world);
+        let status = status_line(&app, &world);
+        assert!(
+            before_hints(&status).ends_with(&says),
+            "in Select: {status}"
+        );
+    }
+}
+
+#[test]
 fn the_key_hints_lead_with_the_mode_keys() {
     // Design v22 §6.1, with Grab's from v23.
     let world = drawn_world(&SMALL_MAP);
