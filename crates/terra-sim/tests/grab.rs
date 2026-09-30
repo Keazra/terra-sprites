@@ -407,7 +407,7 @@ fn an_item_isnt_put_down_where_it_cant_go_and_the_refusal_names_what_is_in_the_w
         world.submit(command);
         let events = world.step();
         let reason = Rejection::InTheWay {
-            item: ball,
+            item_type: ball,
             blocker,
         };
         assert_eq!(refused(&events, command), Some(reason));

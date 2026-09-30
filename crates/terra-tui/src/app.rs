@@ -13,7 +13,7 @@ use terra_sim::{
 use crate::clock::Clock;
 use crate::input::{Action, Button};
 use crate::inspector;
-use crate::text::display_name;
+use crate::text::{ROOTED, display_name};
 use crate::theme::{Emote, Theme};
 
 /// Whether the game carries on after an action.
@@ -72,14 +72,14 @@ pub enum StatusMark {
     Applied,
     /// The world has just refused one.
     Rejected,
-    /// In Grab mode, empty, `Y`: a click would lift something (design v23
+    /// In Grab mode, empty, `Y`: a click would grab something (design v23
     /// §6.5).
-    Lift,
+    Grab,
     /// In Grab mode, empty, `N`.
     Empty,
     /// In Grab mode, holding or leading, `Y`: a click would put it down or
     /// let go.
-    Drop,
+    Release,
     /// In Grab mode, holding or leading, `N`: the thing's own glyph.
     Holding,
 }
@@ -227,7 +227,7 @@ pub struct App {
     queued: Vec<(u64, Command)>,
     /// While the Cursor leads a sprite, the tile the world was last told
     /// it's on (design v23 §6.5).
-    told: Option<Pos>,
+    told_tile: Option<Pos>,
     /// Whether the Cursor holds or leads something, as the player sees it
     /// (`App::grip`), as of the latest action or tick.
     gripping: bool,
@@ -290,7 +290,7 @@ impl App {
             emotes: BTreeMap::new(),
             commands: Vec::new(),
             queued: Vec::new(),
-            told: None,
+            told_tile: None,
             gripping: false,
             sent_at: None,
             report: None,
@@ -378,11 +378,11 @@ impl App {
     /// there.
     fn tell(&mut self, world: &World) {
         if !matches!(self.grip(world), Some(Grip::Leads(_))) {
-            self.told = None;
-        } else if self.told != Some(self.cursor) {
+            self.told_tile = None;
+        } else if self.told_tile != Some(self.cursor) {
             self.commands
                 .push(Command::MoveCursor { tile: self.cursor });
-            self.told = Some(self.cursor);
+            self.told_tile = Some(self.cursor);
         }
     }
 
@@ -399,7 +399,9 @@ impl App {
                 Command::TakeHold { sprite } => grip.or(Some(Grip::Leads(sprite))),
                 Command::PickUp { item } => grip.or(Some(Grip::Holds(item))),
                 Command::LetGo | Command::PutDown { .. } => None,
-                _ => grip,
+                Command::Reward { .. } | Command::Correct { .. } | Command::MoveCursor { .. } => {
+                    grip
+                }
             })
     }
 
@@ -541,8 +543,8 @@ impl App {
             return [flash; 2];
         }
         match self.grip(world) {
-            Some(_) => [StatusMark::Drop, StatusMark::Holding],
-            None => [StatusMark::Lift, StatusMark::Empty],
+            Some(_) => [StatusMark::Release, StatusMark::Holding],
+            None => [StatusMark::Grab, StatusMark::Empty],
         }
     }
 
@@ -760,7 +762,7 @@ impl App {
                 }
                 _ => {}
             },
-            (CursorMode::Grab, Button::Left) => self.grab(tile, sprite, world),
+            (CursorMode::Grab, Button::Left) => self.grab_click(tile, sprite, world),
             // Throwing and shoving come with slice 11b.
             (CursorMode::Grab, Button::Right) => {}
             (CursorMode::Train, button) => {
@@ -790,15 +792,16 @@ impl App {
     /// Leading, it lets go; holding, it puts the item down there. Empty, it
     /// takes hold of the locked-on sprite, or else the sprite there, or
     /// else picks up the item there; a fixture is rooted to the ground.
-    fn grab(&mut self, tile: Pos, sprite: Option<EntityId>, world: &World) {
+    fn grab_click(&mut self, tile: Pos, sprite: Option<EntityId>, world: &World) {
         let command = match self.grip(world) {
             Some(Grip::Leads(_)) => Command::LetGo,
             Some(Grip::Holds(_)) => Command::PutDown { tile },
             None => match (self.locked().or(sprite), world.object_at(tile)) {
                 (Some(sprite), _) => Command::TakeHold { sprite },
+                // In M1 every solid object is a fixture (design §3.3).
                 (None, Some(object)) if object.is_solid() => {
                     let name = display_name(object.type_name());
-                    self.refuse(format!("Can't grab the {name}: it's rooted to the ground"));
+                    self.refuse(format!("Can't grab the {name}: {ROOTED}"));
                     return;
                 }
                 (None, Some(object)) => Command::PickUp { item: object.id() },
@@ -810,7 +813,7 @@ impl App {
         };
         if let Command::TakeHold { sprite } = command {
             // Taking hold puts the Cursor, as the world knows it, on the sprite.
-            self.told = world.sprite(sprite).map(|s| s.pos());
+            self.told_tile = world.sprite(sprite).map(|s| s.pos());
         }
         self.commands.push(command);
         self.queued.push((world.tick(), command));

@@ -96,13 +96,14 @@ pub struct StatusMarks {
     pub applied: char,
     /// The world has just refused one.
     pub rejected: char,
-    /// In Grab mode, empty: `Y`, a click would lift something (design v23
+    /// In Grab mode, empty: `Y`, a click would grab something (design v23
     /// §6.5).
-    pub lift: char,
+    pub grab: char,
     /// In Grab mode, empty: `N`.
     pub empty: char,
-    /// In Grab mode, holding or leading: `Y`, a click would put it down.
-    pub drop: char,
+    /// In Grab mode, holding or leading: `Y`, a click would let go or put
+    /// it down.
+    pub release: char,
 }
 
 impl StatusMarks {
@@ -114,9 +115,9 @@ impl StatusMarks {
             StatusMark::Sent => self.sent,
             StatusMark::Applied => self.applied,
             StatusMark::Rejected => self.rejected,
-            StatusMark::Lift => self.lift,
+            StatusMark::Grab => self.grab,
             StatusMark::Empty => self.empty,
-            StatusMark::Drop => self.drop,
+            StatusMark::Release => self.release,
             StatusMark::Holding => return None,
         })
     }

@@ -12,8 +12,8 @@ use terra_sim::{
 
 use crate::app::{App, Selection, Tab};
 use crate::text::{
-    cause_name, change, display_name, group_thousands, level, signed, signed_level, significant,
-    sprite_label, terrain_name, whole,
+    ROOTED, cause_name, change, display_name, group_thousands, level, signed, signed_level,
+    significant, sprite_label, terrain_name, whole,
 };
 
 /// The inspector's width, in columns, border included (design §6.1).
@@ -1212,7 +1212,7 @@ fn refusal_line(command: &Command, reason: Rejection, data: &DataPack) -> Option
         Command::TakeHold { sprite } => format!("take hold of {}", sprite_label(sprite)),
         Command::PickUp { .. } => "pick it up".into(),
         Command::PutDown { .. } => match reason {
-            Rejection::InTheWay { item, .. } => format!("put the {} down", name(item)),
+            Rejection::InTheWay { item_type, .. } => format!("put the {} down", name(item_type)),
             _ => "put it down".into(),
         },
         Command::LetGo => "let go".into(),
@@ -1226,7 +1226,7 @@ fn refusal_line(command: &Command, reason: Rejection, data: &DataPack) -> Option
         }
         Rejection::Busy(Grip::Holds(_)) => "you're already holding something".into(),
         Rejection::NotLeading => "you're not leading a sprite".into(),
-        Rejection::Rooted => "it's rooted to the ground".into(),
+        Rejection::Rooted => ROOTED.into(),
         Rejection::NotHolding => "you're not holding anything".into(),
         Rejection::OffTheMap => "that's off the map".into(),
         Rejection::InTheWay {

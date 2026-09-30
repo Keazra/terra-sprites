@@ -183,13 +183,13 @@ impl Objects {
         self.on_tile.put(to, id);
     }
 
-    /// Takes the object `id`, which must exist and be on the map, off its
+    /// Picks the object `id`, which must exist and be on the map, off its
     /// tile for the Cursor to hold, at rest (design v23 §6.5).
-    pub(crate) fn lift(&mut self, id: EntityId) {
+    pub(crate) fn pick_up(&mut self, id: EntityId) {
         let object = self
             .by_id
             .get_mut(&id)
-            .expect("lifting an object that exists");
+            .expect("picking up an object that exists");
         self.on_tile.clear(object.pos);
         object.held = true;
         object.roll = None;

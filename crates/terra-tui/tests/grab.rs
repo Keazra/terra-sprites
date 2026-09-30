@@ -173,7 +173,7 @@ fn a_queued_grab_the_world_refuses_leaves_the_cursor_as_the_world_says() {
     let (mine, other) = (sprite_on(&world, at(4, 2)), sprite_on(&world, at(8, 4)));
     click(&mut app, &world, at(4, 2));
     assert_eq!(app.grip(&world), Some(Grip::Leads(mine)), "as queued");
-    // Another hand gets there first, so the world refuses the app's grab.
+    // Another command gets there first, so the world refuses the app's grab.
     world.submit(Command::TakeHold { sprite: other });
     tick(&mut app, &mut world);
     assert_eq!(app.grip(&world), Some(Grip::Leads(other)));

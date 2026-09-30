@@ -38,7 +38,7 @@
         locked_arrows: (up: '^', down: 'v', left: '<', right: '>'),
         status_marks: (
             idle: '-', sent: '+', applied: '*', rejected: '?',
-            lift: '^', empty: '_', drop: 'v',
+            grab: '^', empty: '_', release: 'v',
         ),
         mode_marks: {
             select: (glyph: 'S', fg: white),

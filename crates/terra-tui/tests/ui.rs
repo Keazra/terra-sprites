@@ -2600,7 +2600,10 @@ fn the_event_log_says_why_a_grab_was_refused() {
     let put_down = Command::PutDown {
         tile: Pos { x: 1, y: 1 },
     };
-    let blocked = |blocker| Rejection::InTheWay { item: 4, blocker };
+    let blocked = |blocker| Rejection::InTheWay {
+        item_type: 4,
+        blocker,
+    };
     let first = on_ticks(vec![
         refused(Command::TakeHold { sprite }, Rejection::Gone),
         refused(

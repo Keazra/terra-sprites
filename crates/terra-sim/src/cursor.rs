@@ -3,6 +3,7 @@
 
 use serde::Serialize;
 
+use crate::command::Rejection;
 use crate::map::{Map, Pos};
 use crate::objects::{EntityId, Objects};
 use crate::sprites::Sprites;
@@ -40,6 +41,36 @@ impl Cursor {
             Some(Grip::Holds(id)) => Some(id),
             _ => None,
         }
+    }
+
+    /// Whether it's free to grab something: refused while it has hold of
+    /// anything already, one thing at a time (design v23 §6.5).
+    pub(crate) fn free(&self) -> Result<(), Rejection> {
+        match self.grip {
+            Some(grip) => Err(Rejection::Busy(grip)),
+            None => Ok(()),
+        }
+    }
+
+    /// Takes hold of `grip`. The caller has checked it's `free`.
+    pub(crate) fn take(&mut self, grip: Grip) {
+        debug_assert!(self.grip.is_none(), "the Cursor has hold of one thing");
+        self.grip = Some(grip);
+    }
+
+    /// Lets go of whatever it has hold of.
+    pub(crate) fn release(&mut self) {
+        self.grip = None;
+    }
+
+    /// Lets go of `grip` if it has hold of it, and says whether it did: a
+    /// led sprite has died, or a held item left the world by itself.
+    pub(crate) fn empty_of(&mut self, grip: Grip) -> bool {
+        let had = self.grip == Some(grip);
+        if had {
+            self.grip = None;
+        }
+        had
     }
 
     /// Checks that its tile is on the map, and that the one sprite led and

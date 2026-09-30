@@ -52,10 +52,10 @@
             applied: '☼', // the world has just applied it
             rejected: '?', // or refused it
             // Grab mode shows what the Cursor has hold of (design v23 §6.5):
-            // empty, lift and empty; holding or leading, drop and the thing.
-            lift: '↑',
+            // empty, grab and empty; holding or leading, release and the thing.
+            grab: '↑',
             empty: '░',
-            drop: '↓',
+            release: '↓',
         ),
         mode_marks: {
             select: (glyph: '♦', fg: white),
