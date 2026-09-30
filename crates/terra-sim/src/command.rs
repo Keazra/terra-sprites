@@ -144,7 +144,11 @@ pub enum Rejection {
     /// The tile isn't on the map.
     OffTheMap,
     /// Something on the tile stops the item going there (design §3.4).
-    InTheWay(Blocker),
+    InTheWay {
+        /// The stable ID of the held item's type.
+        item: u16,
+        blocker: Blocker,
+    },
 }
 
 /// What stops an item being put down on a tile (design §3.4).
@@ -298,20 +302,21 @@ fn put_down(state: &mut WorldState, data: &DataPack, tile: Pos) -> Result<EventK
     if !state.map.contains(tile) {
         return Err(Rejection::OffTheMap);
     }
+    let held = &data.object_types()[state.objects.kind(item)];
+    let in_the_way = |blocker| Rejection::InTheWay {
+        item: held.id,
+        blocker,
+    };
     if let Some(there) = state.objects.at(tile) {
         let kind = state.objects.kind(there);
-        return Err(Rejection::InTheWay(Blocker::Object(
-            data.object_types()[kind].id,
-        )));
+        return Err(in_the_way(Blocker::Object(data.object_types()[kind].id)));
     }
     if !state.map.is_walkable(tile) {
-        return Err(Rejection::InTheWay(Blocker::Terrain(
-            state.map.terrain(tile),
-        )));
+        return Err(in_the_way(Blocker::Terrain(state.map.terrain(tile))));
     }
     state.objects.put_down(item, tile);
     state.cursor.grip = None;
-    let object_type = data.object_types()[state.objects.kind(item)].name.clone();
+    let object_type = held.name.clone();
     Ok(EventKind::PutDown {
         item,
         object_type,

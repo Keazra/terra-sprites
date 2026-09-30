@@ -5,9 +5,9 @@ use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
-    ActionView, Command, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Learned, Map,
-    Outcome, Pos, Progress, Rejection, Removal, Scenario, ScriptedAction, Target, Thing, Verb,
-    World, WorldConfig,
+    ActionView, Blocker, Command, DataPack, DeathCause, Emptied, EntityId, Event, EventKind, Grip,
+    Hurt, Learned, Map, Outcome, Pos, Progress, Rejection, Removal, Scenario, ScriptedAction,
+    Target, Terrain, Thing, Verb, World, WorldConfig,
 };
 use terra_tui::app::{App, CursorMode, Tab};
 use terra_tui::input::{Action, Button};
@@ -2455,6 +2455,103 @@ fn the_event_log_tells_the_player_what_they_did_through_the_cursor() {
             "6  Couldn't shock Sprite #12: it's gone",
             "5  Couldn't pet Sprite #12: it's gone",
             "4  You shocked Sprite #12",
+        ]
+    );
+}
+
+/// `kinds` as events on ticks 1, 2, 3 and on.
+fn on_ticks(kinds: Vec<EventKind>) -> Vec<Event> {
+    (1..)
+        .zip(kinds)
+        .map(|(tick, kind)| Event { tick, kind })
+        .collect()
+}
+
+#[test]
+fn the_event_log_tells_the_player_what_they_grabbed_and_let_go() {
+    // Design v23 §6.1: spoken to the player.
+    let world = garden(pack());
+    let (sprite, ball, berry) = (EntityId(12), EntityId(20), EntityId(21));
+    let first = on_ticks(vec![
+        EventKind::TookHold { sprite },
+        EventKind::LetGo { sprite },
+        EventKind::PickedUp {
+            item: ball,
+            object_type: "ball".into(),
+        },
+    ]);
+    assert_eq!(
+        logged(&world, &first),
+        [
+            "3  You picked up a ball",
+            "2  You let go of Sprite #12",
+            "1  You took hold of Sprite #12",
+        ]
+    );
+    let then = on_ticks(vec![
+        EventKind::PutDown {
+            item: ball,
+            object_type: "ball".into(),
+            pos: Pos { x: 1, y: 1 },
+        },
+        EventKind::CursorEmptied {
+            reason: Emptied::Removed {
+                item: berry,
+                object_type: "berry".into(),
+                reason: Removal::Expired,
+            },
+        },
+        // A led sprite's death has its own line, and needs no other.
+        EventKind::CursorEmptied {
+            reason: Emptied::Died { sprite },
+        },
+    ]);
+    assert_eq!(
+        logged(&world, &then)[..2],
+        [
+            "2  The berry you were holding expired",
+            "1  You put the ball down",
+        ]
+    );
+}
+
+#[test]
+fn the_event_log_says_why_a_grab_was_refused() {
+    // Design v23 §6.1. A ball's stable type ID is 4, a berry's 2.
+    let world = garden(pack());
+    let (sprite, other) = (EntityId(12), EntityId(13));
+    let refused = |command, reason| EventKind::CommandRejected { command, reason };
+    let put_down = Command::PutDown {
+        tile: Pos { x: 1, y: 1 },
+    };
+    let blocked = |blocker| Rejection::InTheWay { item: 4, blocker };
+    let first = on_ticks(vec![
+        refused(Command::TakeHold { sprite }, Rejection::Gone),
+        refused(
+            Command::TakeHold { sprite },
+            Rejection::Busy(Grip::Leads(other)),
+        ),
+        refused(put_down, blocked(Blocker::Object(2))),
+    ]);
+    assert_eq!(
+        logged(&world, &first),
+        [
+            "3  Couldn't put the ball down: a berry is there",
+            "2  Couldn't take hold of Sprite #12: you're already leading Sprite #13",
+            "1  Couldn't take hold of Sprite #12: it's gone",
+        ]
+    );
+    let then = on_ticks(vec![
+        refused(put_down, blocked(Blocker::Terrain(Terrain::Rock))),
+        refused(put_down, blocked(Blocker::Terrain(Terrain::DeepWater))),
+        refused(Command::LetGo, Rejection::NotLeading),
+    ]);
+    assert_eq!(
+        logged(&world, &then),
+        [
+            "3  Couldn't let go: you're not leading a sprite",
+            "2  Couldn't put the ball down: it can't go in deep water",
+            "1  Couldn't put the ball down: it can't go on rock",
         ]
     );
 }

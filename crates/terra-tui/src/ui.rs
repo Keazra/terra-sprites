@@ -7,12 +7,12 @@ use ratatui::{
     style::{Modifier, Style},
     text::Line,
 };
-use terra_sim::{EntityId, Grip, Map, ObjectView, Pos, Progress, Terrain, World};
+use terra_sim::{EntityId, Grip, Map, ObjectView, Pos, Progress, World};
 
 use crate::app::{App, Areas, Screen, Selection};
 use crate::clock::Speed;
 use crate::inspector::{self, INSPECTOR_WIDTH, first_shown};
-use crate::text::{display_name, group_thousands, sprite_label};
+use crate::text::{display_name, group_thousands, sprite_label, terrain_name};
 use crate::theme::SemanticTile;
 
 /// The narrowest terminal that has room for the inspector beside the map view.
@@ -463,17 +463,6 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
             usize::from(inner.width),
             Style::default(),
         );
-    }
-}
-
-fn terrain_name(terrain: Terrain) -> &'static str {
-    match terrain {
-        Terrain::Grass => "grass",
-        Terrain::Dirt => "dirt",
-        Terrain::Sand => "sand",
-        Terrain::ShallowWater => "shallow water",
-        Terrain::DeepWater => "deep water",
-        Terrain::Rock => "rock",
     }
 }
 

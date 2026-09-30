@@ -4,15 +4,16 @@
 use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
-    ActionView, ChemicalKind, ChemicalLevel, CursorTouch, DataPack, DeathCause, EmitterMode,
-    EntityId, Event, EventKind, Explanation, Expression, GeneView, Learned, ObjectView, Outcome,
-    Part, Progress, Rejection, SpriteView, Target, Thing, Trait, Verb, World,
+    ActionView, Blocker, ChemicalKind, ChemicalLevel, Command, CursorTouch, DataPack, DeathCause,
+    EmitterMode, Emptied, EntityId, Event, EventKind, Explanation, Expression, GeneView, Grip,
+    Learned, ObjectView, Outcome, Part, Progress, Rejection, Removal, SpriteView, Target, Terrain,
+    Thing, Trait, Verb, World,
 };
 
 use crate::app::{App, Selection, Tab};
 use crate::text::{
     cause_name, change, display_name, group_thousands, level, signed, signed_level, significant,
-    sprite_label, whole,
+    sprite_label, terrain_name, whole,
 };
 
 /// The inspector's width, in columns, border included (design §6.1).
@@ -1168,6 +1169,54 @@ fn world_tab(world: &World) -> Vec<Line<'static>> {
     lines
 }
 
+/// Why the world refused `command`, spoken to the player, as the event log
+/// and the status line say it (design v22, v23 §6.1): "Couldn't pet Sprite
+/// #12: it's gone", "Couldn't put the ball down: a berry is there".
+fn refusal_line(command: &Command, reason: Rejection, data: &DataPack) -> Option<String> {
+    let name = |id: u16| display_name(data.object_type_name(id).unwrap_or("?"));
+    let what = match *command {
+        Command::Reward { sprite, .. } | Command::Correct { sprite, .. } => {
+            let touch = CursorTouch::of(command).expect("a touch");
+            format!("{} {}", touch.name(), sprite_label(sprite))
+        }
+        Command::TakeHold { sprite } => format!("take hold of {}", sprite_label(sprite)),
+        Command::PickUp { .. } => "pick it up".into(),
+        Command::PutDown { .. } => match reason {
+            Rejection::InTheWay { item, .. } => format!("put the {} down", name(item)),
+            _ => "put it down".into(),
+        },
+        Command::LetGo => "let go".into(),
+        // The app sends it only while leading, and only onto the map.
+        Command::MoveCursor { .. } => return None,
+    };
+    let why = match reason {
+        Rejection::Gone => "it's gone".into(),
+        Rejection::Busy(Grip::Leads(led)) => {
+            format!("you're already leading {}", sprite_label(led))
+        }
+        Rejection::Busy(Grip::Holds(_)) => "you're already holding something".into(),
+        Rejection::NotLeading => "you're not leading a sprite".into(),
+        Rejection::Rooted => "it's rooted to the ground".into(),
+        Rejection::NotHolding => "you're not holding anything".into(),
+        Rejection::OffTheMap => "that's off the map".into(),
+        Rejection::InTheWay {
+            blocker: Blocker::Object(there),
+            ..
+        } => format!("{} is there", with_article(&name(there))),
+        Rejection::InTheWay {
+            blocker: Blocker::Terrain(terrain),
+            ..
+        } => {
+            let into = match terrain {
+                Terrain::ShallowWater | Terrain::DeepWater => "in",
+                _ => "on",
+            };
+            format!("it can't go {into} {}", terrain_name(terrain))
+        }
+    };
+    Some(format!("Couldn't {what}: {why}"))
+}
+
 /// What an event says in the event log, if the log shows it (design §6.1).
 pub(crate) fn event_line(event: &Event, data: &DataPack) -> Option<String> {
     match &event.kind {
@@ -1192,38 +1241,39 @@ pub(crate) fn event_line(event: &Event, data: &DataPack) -> Option<String> {
             };
             Some(format!("You {done} {}", sprite_label(*id)))
         }
-        EventKind::CommandRejected { command, reason } => {
-            let (verb, sprite) = match *command {
-                terra_sim::Command::Reward { sprite, .. }
-                | terra_sim::Command::Correct { sprite, .. } => {
-                    let touch = CursorTouch::of(command).expect("a touch");
-                    (touch.name(), sprite)
-                }
-                terra_sim::Command::TakeHold { .. }
-                | terra_sim::Command::PickUp { .. }
-                | terra_sim::Command::PutDown { .. }
-                | terra_sim::Command::LetGo
-                | terra_sim::Command::MoveCursor { .. } => {
-                    return None;
-                }
-            };
-            let why = match reason {
-                Rejection::Gone => "it's gone",
-                // A touch is never refused for the Cursor's grip.
-                Rejection::Busy(_)
-                | Rejection::NotLeading
-                | Rejection::Rooted
-                | Rejection::NotHolding
-                | Rejection::OffTheMap
-                | Rejection::InTheWay(_) => return None,
-            };
-            Some(format!("Couldn't {verb} {}: {why}", sprite_label(sprite)))
+        EventKind::CommandRejected { command, reason } => refusal_line(command, *reason, data),
+        // Grabbing, spoken to the player (design v23 §6.1).
+        EventKind::TookHold { sprite } => {
+            Some(format!("You took hold of {}", sprite_label(*sprite)))
         }
-        EventKind::TookHold { .. }
-        | EventKind::LetGo { .. }
-        | EventKind::PickedUp { .. }
-        | EventKind::PutDown { .. }
-        | EventKind::CursorEmptied { .. } => None,
+        EventKind::LetGo { sprite } => Some(format!("You let go of {}", sprite_label(*sprite))),
+        EventKind::PickedUp { object_type, .. } => Some(format!(
+            "You picked up {}",
+            with_article(&display_name(object_type))
+        )),
+        EventKind::PutDown { object_type, .. } => {
+            Some(format!("You put the {} down", display_name(object_type)))
+        }
+        EventKind::CursorEmptied {
+            reason:
+                Emptied::Removed {
+                    object_type,
+                    reason,
+                    ..
+                },
+        } => {
+            let went = match reason {
+                Removal::Expired => "expired",
+                Removal::Destroyed => "was destroyed",
+                Removal::Replaced => "was replaced",
+            };
+            let name = display_name(object_type);
+            Some(format!("The {name} you were holding {went}"))
+        }
+        // A led sprite's death has its own line.
+        EventKind::CursorEmptied {
+            reason: Emptied::Died { .. },
+        } => None,
         EventKind::ObjectSpawned { .. }
         | EventKind::ObjectRemoved { .. }
         | EventKind::ActionStarted { .. } => None,
