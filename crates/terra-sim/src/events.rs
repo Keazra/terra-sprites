@@ -58,6 +58,8 @@ pub enum EventKind {
     /// The Cursor took hold of a sprite, which it now leads (design v23
     /// §6.5).
     TookHold { sprite: EntityId },
+    /// The Cursor let go of the sprite it led (design v23 §6.5).
+    LetGo { sprite: EntityId },
     /// A command was refused, and did nothing (design §2.5).
     CommandRejected { command: Command, reason: Rejection },
     /// An object left the world.

@@ -30,6 +30,9 @@ pub enum Command {
     Correct { sprite: EntityId, amplified: bool },
     /// Takes hold of a sprite, which the Cursor then leads (design v23 §6.5).
     TakeHold { sprite: EntityId },
+    /// Lets go of the sprite the Cursor leads, which chooses for itself
+    /// again at its next step 5 (design v23 §6.5).
+    LetGo,
     /// Where the Cursor is: sent while it leads a sprite, which heads there
     /// (design v23 §2.5).
     MoveCursor { tile: Pos },
@@ -53,7 +56,7 @@ impl CursorTouch {
         match *command {
             Command::Reward { amplified, .. } => Some(CursorTouch::rewarding(amplified)),
             Command::Correct { amplified, .. } => Some(CursorTouch::correcting(amplified)),
-            Command::TakeHold { .. } | Command::MoveCursor { .. } => None,
+            Command::TakeHold { .. } | Command::LetGo | Command::MoveCursor { .. } => None,
         }
     }
 
@@ -120,6 +123,8 @@ pub enum Rejection {
     Gone,
     /// The Cursor already has hold of something (design v23 §6.5).
     Busy(Grip),
+    /// The Cursor leads no sprite to let go of.
+    NotLeading,
 }
 
 /// Step 1 (design §2.4): applies the commands stamped for this tick, in the
@@ -134,6 +139,7 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
             } => reward(state, data, sprite, amplified, reach_back),
             Command::Correct { sprite, amplified } => correct(state, data, sprite, amplified),
             Command::TakeHold { sprite } => take_hold(state, sprite, events),
+            Command::LetGo => let_go(state),
             // Nothing to report: it moves many times a second while leading.
             Command::MoveCursor { tile } => {
                 state.cursor.tile = Some(tile);
@@ -218,4 +224,13 @@ fn take_hold(
     state.cursor.grip = Some(Grip::Leads(sprite));
     state.cursor.tile = Some(led.pos);
     Ok(EventKind::TookHold { sprite })
+}
+
+/// The Cursor lets go of the sprite it leads (design v23 §6.5).
+fn let_go(state: &mut WorldState) -> Result<EventKind, Rejection> {
+    let sprite = state.cursor.leads().ok_or(Rejection::NotLeading)?;
+    state.cursor.grip = None;
+    let led = state.sprites.get_mut(sprite).expect("the led sprite");
+    led.lead = None;
+    Ok(EventKind::LetGo { sprite })
 }
