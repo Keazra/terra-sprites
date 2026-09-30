@@ -34,6 +34,8 @@
     attention_marker: dark_gray,
     cursor: (
         arrows: (up: '^', down: 'v', left: '<', right: '>'),
+        // No solid arrows in ASCII: the status line says it's locked on.
+        locked_arrows: (up: '^', down: 'v', left: '<', right: '>'),
         status_marks: (idle: '-'),
         mode_marks: {
             select: (glyph: 'S', fg: white),

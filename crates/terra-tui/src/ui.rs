@@ -193,9 +193,9 @@ fn attended_by(app: &App, world: &World) -> Option<Pos> {
 }
 
 /// Draws the 3×3 cursor around its target tile, which the tile loop has already
-/// drawn in reverse video. The arrows and marks take the mode mark's colour. The
-/// cursor is drawn only while its target is in view, and pieces outside the map
-/// view's tiles are left off.
+/// drawn in reverse video. The arrows, solid while locked on, and the marks
+/// take the mode mark's colour. The cursor is drawn only while its target is
+/// in view, and pieces outside the map view's tiles are left off.
 ///
 /// ```text
 /// M ↓ Y      M: the mode mark
@@ -206,7 +206,8 @@ fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App) {
     let Some(centre) = app.cell_of(app.cursor()) else {
         return;
     };
-    let (arrows, status) = (app.theme.arrows(), app.theme.status_marks());
+    let arrows = app.theme.arrows(app.locked().is_some());
+    let status = app.theme.status_marks();
     let mark = app.theme.mode_mark(app.mode());
     let pieces = [
         (-1, -1, mark.symbol),

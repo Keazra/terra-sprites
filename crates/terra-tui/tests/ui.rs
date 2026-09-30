@@ -206,6 +206,31 @@ fn in_train_mode_the_cursor_is_light_magenta_in_every_theme() {
 }
 
 #[test]
+fn locked_on_the_cursor_s_arrows_are_solid() {
+    // Design v22 §6.2: they clamp the sprite. The ASCII theme has no solid
+    // arrows; its status line says the Cursor is locked on.
+    let world = garden_with_sprites();
+    let on_it = Position::new(1 + 2, 2 + 3);
+    let right = Action::Click {
+        at: on_it,
+        button: Button::Right,
+        amplified: false,
+    };
+    for (theme, expected) in [
+        (Theme::cp437(), [".♦▼·......", ".►☻◄..○...", ".·▲♦......"]),
+        (Theme::ascii(), [".Sv-......", ".>@<..o...", ".-^S......"]),
+    ] {
+        let mut app = app_for(&world, theme, 40, 10);
+        app.apply(right, &world);
+        let map_rows: Vec<String> = lines(&render(&app, &world, 40, 10))[4..7]
+            .iter()
+            .map(|row| row.chars().skip(1).take(10).collect())
+            .collect();
+        assert_eq!(map_rows, expected);
+    }
+}
+
+#[test]
 fn map_tiles_take_their_theme_colours() {
     let world = drawn_world(&SMALL_MAP);
     let mut app = app_for(&world, Theme::cp437(), 40, 8);
