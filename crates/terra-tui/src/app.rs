@@ -429,10 +429,16 @@ impl App {
 
     /// Flashes the world's report on a command in the status marks, once
     /// the latest `+` has shown for its time, so both flashes show however
-    /// soon the report comes (design v22 §6.5).
+    /// soon the report comes. A refusal still to show, or showing, isn't
+    /// replaced by an applied command: it's what needs noticing (design v22
+    /// §6.5).
     fn report(&mut self, mark: StatusMark) {
         let now = self.running_for;
         let from = self.sent_at.map_or(now, |at| now.max(at + MARK_FLASH_FOR));
+        let mark = match self.report {
+            Some((StatusMark::Rejected, at)) if now < at + MARK_FLASH_FOR => StatusMark::Rejected,
+            _ => mark,
+        };
         self.report = Some((mark, from));
     }
 
