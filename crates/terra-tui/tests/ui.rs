@@ -54,6 +54,12 @@ fn lines(buffer: &Buffer) -> Vec<String> {
         .collect()
 }
 
+/// The status line up to its key hints, which the gap of two spaces before
+/// them marks.
+fn before_hints(status: &str) -> &str {
+    status.split("  ").next().expect("a status line")
+}
+
 /// Renders one frame of the default world and returns the top line as text.
 fn top_bar(app: &App) -> String {
     let world = generated_world();
@@ -351,15 +357,18 @@ fn the_status_line_names_the_terrain_under_the_cursor() {
         let mut app = app_for(&world, Theme::cp437(), 40, 8);
         // Tiles are drawn from screen cell (1, 2).
         app.apply(Action::Point(Position::new(1 + x, 2 + y)), &world);
-        assert_eq!(lines(&render(&app, &world, 40, 8))[7], expected);
+        assert_eq!(
+            before_hints(&lines(&render(&app, &world, 40, 8))[7]),
+            expected
+        );
     }
 }
 
 #[test]
 fn with_room_the_status_line_also_shows_the_keys() {
     let world = drawn_world(&SMALL_MAP);
-    let app = app_for(&world, Theme::cp437(), 100, 30);
-    let status = lines(&render(&app, &world, 100, 30))[29].clone();
+    let app = app_for(&world, Theme::cp437(), 120, 30);
+    let status = lines(&render(&app, &world, 120, 30))[29].clone();
     assert!(
         status.starts_with(" (5,2) shallow water │ SELECT"),
         "{status}"
@@ -527,7 +536,10 @@ fn the_status_line_names_the_object_under_the_cursor_with_its_stage() {
     ];
     for ((x, y), expected) in cases {
         let app = pointing_at(&world, Theme::cp437(), 50, 9, x, y);
-        assert_eq!(lines(&render(&app, &world, 50, 9))[8], expected);
+        assert_eq!(
+            before_hints(&lines(&render(&app, &world, 50, 9))[8]),
+            expected
+        );
     }
 }
 
@@ -543,7 +555,10 @@ fn the_status_line_shows_a_sprite_under_the_cursor_by_its_id() {
         " (7,1) grass · Sprite #{} · berry (fresh) │ SELECT",
         sprite.id().0
     );
-    assert_eq!(lines(&render(&app, &world, 60, 9))[8], expected);
+    assert_eq!(
+        before_hints(&lines(&render(&app, &world, 60, 9))[8]),
+        expected
+    );
 }
 
 #[test]
@@ -2228,11 +2243,38 @@ fn the_status_line_names_train_mode_and_what_the_cursor_is_locked_on_to() {
 }
 
 #[test]
-fn with_room_the_status_line_hints_at_the_mode_keys() {
+fn the_key_hints_lead_with_the_mode_keys() {
+    // Design v22 §6.1.
     let world = drawn_world(&SMALL_MAP);
-    let app = app_for(&world, Theme::cp437(), 100, 30);
+    let app = app_for(&world, Theme::cp437(), 120, 30);
+    let status = lines(&render(&app, &world, 120, 30))[29].clone();
+    assert!(
+        status
+            .ends_with("Z select  X train  WASD scroll  space pause  . step  +/- speed  esc quit"),
+        "{status}"
+    );
+}
+
+#[test]
+fn short_of_room_whole_key_hints_drop_from_the_end() {
+    // Design v22 §6.1: at 100 columns, with a sprite under the Cursor and a
+    // lock on, the mode keys and the first hints after them still show.
+    let world = garden_with_sprites();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    let on_it = Position::new(1 + 2, 2 + 3);
+    let right = Action::Click {
+        at: on_it,
+        button: Button::Right,
+        amplified: false,
+    };
+    app.apply(right, &world);
+    app.apply(Action::Mode(CursorMode::Train), &world);
     let status = lines(&render(&app, &world, 100, 30))[29].clone();
-    assert!(status.contains("Z/X mode"), "{status}");
+    assert!(status.contains("│ locked on Sprite #"), "{status}");
+    assert!(
+        status.ends_with("  Z select  X train  WASD scroll  space pause"),
+        "{status}"
+    );
 }
 
 #[test]

@@ -287,12 +287,21 @@ fn top_bar_line(app: &App, world: &World) -> Line<'static> {
     Line::from(text).style(Style::default().add_modifier(Modifier::REVERSED))
 }
 
-/// The keys that work now, shown at the right of the status line when there is room.
-const KEY_HINTS: &str = "Z/X mode  WASD scroll  space pause  . step  +/- speed  esc quit ";
+/// The keys that work now, shown at the right of the status line as far as
+/// there's room. The mode keys come first, as one hint, so they're the last
+/// to go (design v22 §6.1).
+const KEY_HINTS: [&str; 6] = [
+    "Z select  X train",
+    "WASD scroll",
+    "space pause",
+    ". step",
+    "+/- speed",
+    "esc quit",
+];
 
 /// The tile under the cursor, with any sprite and object on it, and the
-/// cursor mode, then key hints if they fit in
-/// `width` cells. An open prompt takes the line over.
+/// cursor mode, then at the right the key hints that fit in `width` cells, or
+/// a notice in their place. An open prompt takes the line over.
 fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     if app.screen() == Screen::QuitPrompt {
         return Line::from(" Quit? (y/n)");
@@ -316,17 +325,39 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         " ({},{}) {terrain}{sprite}{object} │ {mode}{locked}",
         cursor.x, cursor.y
     );
+    // The right-hand part keeps a gap of 2 from the tile, and a space at the
+    // end.
+    let room = usize::from(width).saturating_sub(tile.chars().count() + 3);
     // Why a click did nothing, for a while, in the key hints' place (design
     // v22 §6.1).
     let right = match app.notice() {
-        Some(notice) => format!("{notice} "),
-        None => KEY_HINTS.to_string(),
+        Some(notice) => notice.to_string(),
+        None => hints_within(room),
     };
-    let used = tile.chars().count() + right.chars().count();
+    let used = tile.chars().count() + right.chars().count() + 1;
     match usize::from(width).checked_sub(used) {
-        Some(gap) if gap >= 2 => Line::from(format!("{tile}{}{right}", " ".repeat(gap))),
+        Some(gap) if gap >= 2 && !right.is_empty() => {
+            Line::from(format!("{tile}{}{right} ", " ".repeat(gap)))
+        }
         _ => Line::from(tile),
     }
+}
+
+/// As many of the key hints as fit in `room` columns, whole and in order.
+fn hints_within(room: usize) -> String {
+    let mut hints = String::new();
+    for hint in KEY_HINTS {
+        let longer = if hints.is_empty() {
+            hint.to_string()
+        } else {
+            format!("{hints}  {hint}")
+        };
+        if longer.chars().count() > room {
+            break;
+        }
+        hints = longer;
+    }
+    hints
 }
 
 /// An object's display name, with its stage if its type has stages: `berry bush (mature)`.
