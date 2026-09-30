@@ -592,10 +592,16 @@ fn trait_text(which: Trait, value: f32) -> String {
 const CONCEPTS_SHOWN: usize = 5;
 
 /// The Brain tab (design §5.9, §6.1): what the sprite attended to and
-/// decided at its latest step 5, or "Nothing decided yet"; then its memory,
-/// which it can have before it first decides.
+/// decided at its latest step 5, or "Nothing decided yet", or while led
+/// "Being led: it decides nothing"; then its memory, which it can have
+/// before it first decides.
 fn brain_tab(sprite: &SpriteView, data: &DataPack) -> Vec<Line<'static>> {
+    // Led, it decides nothing, so its last decision would mislead (design
+    // v23 §2.4).
     let mut lines = match sprite.explain() {
+        _ if sprite.lead_steps_left().is_some() => {
+            vec![" Being led: it decides nothing".to_string()]
+        }
         Some(explained) => explained_lines(&explained),
         None => vec![" Nothing decided yet".to_string()],
     };

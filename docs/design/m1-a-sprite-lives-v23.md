@@ -262,7 +262,7 @@ A replay file contains:
   - the tick counter and the full **RNG state**
   - the `WorldConfig` and the embedded data pack
   - the entity ID counter and every entity
-  - the Cursor: the item it holds or the sprite it leads, and, while it leads, its tile (v23)
+  - the Cursor: the item it holds or the sprite it leads, and the tile it was last told it's on (v23)
   - the commands submitted and waiting for the next tick (v21), such as clicks made while paused
   - per sprite:
     - chemicals, both pulse buffers, and `last_r` (§5.6). Not the levels from one tick ago that the Chem tab's changes come from: nothing in the sim reads them, so after a load every change reads blank for one tick
@@ -1232,6 +1232,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 - **The decision** names the verb chosen, or kept, at the latest step 5, with its score, then the five parts adding most to it, largest first whatever the sign: instinct concepts, named by their inputs as the Genome tab names instincts; the attended thing's worth; its habit for the verb; and how frightening it is, "fear: Sprite #7" (v18). Worth and fear name the object type or the sprite, not the category. One whose part rounds to `.00` is left out. A name too long for its row wraps between words.
 - **Memory** lists the sprite's learned values furthest from 0 (§5.9), each with its value, worded as the event log words a lesson: "Sprite #7 is frightening", "Mira #12 is good for loneliness", and sprites in general as "sprites are frightening" (v18). The part is left out while nothing has been learned.
 - **An object type, in general,** is worded by its `plural` (§3.5.1): "thornbushes are bad". One without a plural, such as water, reads with "is". **A category's summary** (v19) is worded by the category's own `plural` (§3.5.5), "bushes are bad", or by its name with "is", and shows once it counts, as "sprites" does. This replaces v17's wording of a kind by the plural of the first object type perceived as it.
+- **While the Cursor leads it** (v23), attention and the decision read "Being led: it decides nothing", since the decision from before it was taken hold of would mislead; its memory still shows below.
 - Before a sprite's first decision, attention and the decision read "Nothing decided yet", as they do while a sprite in a hand-made world works through its scripted actions. Its memory still shows below (v17), since such a sprite can learn before it decides:
 
   ```
