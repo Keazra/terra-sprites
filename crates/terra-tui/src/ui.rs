@@ -7,14 +7,12 @@ use ratatui::{
     style::{Modifier, Style},
     text::Line,
 };
-use terra_sim::{
-    Command, DataPack, Event, EventKind, Map, ObjectView, Pos, Progress, Rejection, Terrain, World,
-};
+use terra_sim::{Map, ObjectView, Pos, Progress, Terrain, World};
 
 use crate::app::{App, Areas, Screen, Selection};
 use crate::clock::Speed;
 use crate::inspector::{self, INSPECTOR_WIDTH, first_shown};
-use crate::text::{cause_name, display_name, group_thousands, sprite_label};
+use crate::text::{display_name, group_thousands, sprite_label};
 use crate::theme::SemanticTile;
 
 /// The narrowest terminal that has room for the inspector beside the map view.
@@ -362,7 +360,7 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     draw_border(buf, area, " Events ", no_walls);
     let inner = area.inner(Margin::new(1, 1));
     let lines = app.event_log().filter_map(|(event, count)| {
-        let text = event_text(event, world.data())?;
+        let text = inspector::event_line(event, world.data())?;
         Some((event.tick, text, count))
     });
     for (row, (tick, text, count)) in (inner.y..inner.bottom()).zip(lines) {
@@ -379,50 +377,6 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
             usize::from(inner.width),
             Style::default(),
         );
-    }
-}
-
-/// What an event says in the event log, if the log shows it.
-fn event_text(event: &Event, data: &DataPack) -> Option<String> {
-    match &event.kind {
-        EventKind::Died { id, cause, age } => Some(format!(
-            "{} died ({}, age {})",
-            sprite_label(*id),
-            cause_name(*cause, data),
-            group_thousands(*age)
-        )),
-        EventKind::ActionEnded { id, action, .. } => inspector::logged_line(*id, action, data),
-        EventKind::LearnedMilestone { id, learned, good } => {
-            Some(inspector::learned_line(*id, learned, *good, data))
-        }
-        // The Cursor's touch, spoken to the player (design v21 §6.1).
-        EventKind::Rewarded { id, amplified } => Some(format!(
-            "You {} {}",
-            if *amplified { "hugged" } else { "petted" },
-            sprite_label(*id)
-        )),
-        EventKind::Corrected { id, amplified } => Some(format!(
-            "You {} {}",
-            if *amplified { "shocked" } else { "zapped" },
-            sprite_label(*id)
-        )),
-        EventKind::CommandRejected { command, reason } => {
-            let (touch, sprite) = match *command {
-                Command::Reward {
-                    sprite, amplified, ..
-                } => (if amplified { "hug" } else { "pet" }, sprite),
-                Command::Correct { sprite, amplified } => {
-                    (if amplified { "shock" } else { "zap" }, sprite)
-                }
-            };
-            let why = match reason {
-                Rejection::Gone => "it's gone",
-            };
-            Some(format!("Couldn't {touch} {}: {why}", sprite_label(sprite)))
-        }
-        EventKind::ObjectSpawned { .. }
-        | EventKind::ObjectRemoved { .. }
-        | EventKind::ActionStarted { .. } => None,
     }
 }
 
