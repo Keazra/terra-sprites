@@ -115,9 +115,9 @@ pub struct Hurt {
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct Action {
     pub(crate) verb: Verb,
-    /// Where it's heading: a Wander's destination, or the goal tile an
-    /// aimed action is walking to, found again at every 5.0.
-    pub(crate) destination: Option<Pos>,
+    /// Its way to where it's heading: a Wander's destination, or the goal
+    /// tile an aimed action is walking to, found again at every 5.0.
+    pub(crate) walk: Walk,
     /// What an aimed action is aimed at (design §5.3).
     pub(crate) target: Option<Target>,
     /// The stable ID of the target's object type.
@@ -134,17 +134,24 @@ pub(crate) struct Action {
     pub(crate) started: u64,
     /// The ticks it has been carried out on, at step 6.
     pub(crate) ticks: u32,
-    /// Ticks in a row it had the points for its next step but couldn't take it.
-    pub(crate) blocked_ticks: u32,
     /// The steps a Retreat has taken.
     pub(crate) retreat_steps: u32,
-    /// The rest of the way round blocking sprites that blocked re-planning
-    /// found, which the sprite keeps to while it lasts (design §3.7).
-    pub(crate) committed: Option<Vec<Pos>>,
     /// How it ended, once it has.
     pub(crate) ended: Option<Outcome>,
     /// A hand-made world started it: the brain leaves it be until it ends.
     pub(crate) scripted: bool,
+}
+
+/// A sprite's way to where it's heading (design §3.7).
+#[derive(Debug, Clone, Default, Serialize)]
+pub(crate) struct Walk {
+    /// Where it's heading.
+    pub(crate) destination: Option<Pos>,
+    /// Ticks in a row it had the points for its next step but couldn't take it.
+    pub(crate) blocked_ticks: u32,
+    /// The rest of the way round blocking sprites that blocked re-planning
+    /// found, which the sprite keeps to while it lasts (design §3.7).
+    pub(crate) committed: Option<Vec<Pos>>,
 }
 
 /// What a sprite did at step 6, which its body feels at the next tick's
@@ -167,7 +174,10 @@ impl Action {
     ) -> Action {
         Action {
             verb,
-            destination,
+            walk: Walk {
+                destination,
+                ..Walk::default()
+            },
             target: target.map(|(target, _)| target),
             target_type: target.and_then(|(_, kind)| kind),
             attempted: false,
@@ -176,9 +186,7 @@ impl Action {
             hurt: Hurt::default(),
             started: tick,
             ticks: 0,
-            blocked_ticks: 0,
             retreat_steps: 0,
-            committed: None,
             ended: None,
             scripted,
         }
@@ -196,9 +204,9 @@ pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
             ticks: action.ticks,
             of,
         }
-    } else if action.blocked_ticks > 0 {
+    } else if action.walk.blocked_ticks > 0 {
         Progress::Waiting {
-            blocked_ticks: action.blocked_ticks,
+            blocked_ticks: action.walk.blocked_ticks,
         }
     } else if action.verb == Verb::Retreat {
         let bout = data.physiology().actions.retreat_bout;
@@ -211,7 +219,7 @@ pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
     };
     Some(ActionView {
         verb: action.verb,
-        destination: action.destination,
+        destination: action.walk.destination,
         target: action.target,
         target_type: action.target_type,
         attempted: action.attempted,
@@ -276,9 +284,10 @@ pub(crate) fn sense_and_decide(
             let gone = action.target.is_some() && there.is_none();
             let lost = aim == Some(None)
                 || action
+                    .walk
                     .destination
                     .is_some_and(|to| flood.cost(to).is_none());
-            let outcome = if gone || action.committed.is_none() && lost {
+            let outcome = if gone || action.walk.committed.is_none() && lost {
                 Some(Outcome::Failed)
             } else if state.tick >= action.started + u64::from(timeout) {
                 Some(Outcome::TimedOut)
@@ -300,11 +309,11 @@ pub(crate) fn sense_and_decide(
                         // first seen isn't a move.
                         let moved = action.target_at.is_some_and(|at| there != Some(at));
                         if moved {
-                            action.committed = None;
+                            action.walk.committed = None;
                         }
                         action.target_at = there;
-                        if action.committed.is_none() {
-                            action.destination = Some(goal);
+                        if action.walk.committed.is_none() {
+                            action.walk.destination = Some(goal);
                         }
                     }
                 }
@@ -360,7 +369,7 @@ pub(crate) fn end(
     action.ended = Some(outcome);
     let view = ActionView {
         verb: action.verb,
-        destination: action.destination,
+        destination: action.walk.destination,
         target: action.target,
         target_type: action.target_type,
         attempted: action.attempted,
@@ -518,7 +527,7 @@ fn is_walking(sprite: &Sprite) -> bool {
         && sprite
             .action
             .as_ref()
-            .is_some_and(|a| a.destination.is_some() || a.verb == Verb::Retreat)
+            .is_some_and(|a| a.walk.destination.is_some() || a.verb == Verb::Retreat)
 }
 
 /// The flood `sprite` would make from where it stands now, treating other
@@ -539,11 +548,11 @@ fn flood(state: &WorldState, data: &DataPack, sprite: &Sprite, occupied: Occupie
 /// if it has no way there.
 fn way_ahead(sprite: &Sprite) -> Option<Vec<Pos>> {
     let action = sprite.action.as_ref().filter(|_| is_walking(sprite))?;
-    if let Some(committed) = &action.committed {
+    if let Some(committed) = &action.walk.committed {
         return Some(committed.clone());
     }
     let flood = sprite.flood.as_ref()?;
-    let path = flood.path_to(action.destination?)?;
+    let path = flood.path_to(action.walk.destination?)?;
     if sprite.pos == flood.origin {
         return Some(path);
     }
@@ -660,13 +669,13 @@ fn stepped(state: &mut WorldState, id: EntityId, cost: u32, events: &mut Vec<Eve
     let sprite = state.sprites.get_mut(id).expect("the walker");
     sprite.move_points -= cost;
     sprite.did.steps += 1;
-    let arrived = sprite.action.as_ref().expect("an action").destination == Some(sprite.pos);
+    let arrived = sprite.action.as_ref().expect("an action").walk.destination == Some(sprite.pos);
     if arrived {
         sprite.move_points = sprite.move_points.min(cost);
     }
     let action = sprite.action.as_mut().expect("an action");
-    action.blocked_ticks = 0;
-    if let Some(committed) = &mut action.committed {
+    action.walk.blocked_ticks = 0;
+    if let Some(committed) = &mut action.walk.committed {
         committed.remove(0);
     }
     if arrived && action.target.is_none() {
@@ -682,12 +691,12 @@ fn stepped(state: &mut WorldState, id: EntityId, cost: u32, events: &mut Vec<Eve
 fn held_up(sprite: &mut Sprite, cost: u32) -> u32 {
     sprite.move_points = sprite.move_points.min(cost);
     let action = sprite.action.as_mut().expect("an action");
-    action.blocked_ticks = if action.committed.take().is_some() {
+    action.walk.blocked_ticks = if action.walk.committed.take().is_some() {
         1
     } else {
-        action.blocked_ticks + 1
+        action.walk.blocked_ticks + 1
     };
-    action.blocked_ticks
+    action.walk.blocked_ticks
 }
 
 /// Sprite `id` had the points for its next step but couldn't take it: it
@@ -702,7 +711,7 @@ fn wait(state: &mut WorldState, data: &DataPack, id: EntityId, cost: u32, events
     if held_up(sprite, cost) < replan_after {
         return;
     }
-    let destination = sprite.action.as_ref().and_then(|a| a.destination);
+    let destination = sprite.action.as_ref().and_then(|a| a.walk.destination);
     let destination = destination.expect("a walker has a destination");
     let sprite = state.sprites.get(id).expect("the walker");
     let way = flood(state, data, sprite, Occupied::Closed).path_to(destination);
@@ -715,8 +724,8 @@ fn wait(state: &mut WorldState, data: &DataPack, id: EntityId, cost: u32, events
     let action = action.expect("an action");
     match way {
         Some(way) => {
-            action.committed = Some(way);
-            action.blocked_ticks = 0;
+            action.walk.committed = Some(way);
+            action.walk.blocked_ticks = 0;
         }
         None => end(action, id, Outcome::Blocked, state.tick, events),
     }
