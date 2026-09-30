@@ -280,10 +280,10 @@ impl App {
                 (&event.kind, CursorTouch::reported(&event.kind))
             {
                 self.note_touch(event.tick, *id, touch);
-                self.report = Some((StatusMark::Applied, self.running_for));
+                self.report(StatusMark::Applied);
             }
             if let EventKind::CommandRejected { .. } = event.kind {
-                self.report = Some((StatusMark::Rejected, self.running_for));
+                self.report(StatusMark::Rejected);
             }
             if let EventKind::Died { id, cause, age } = event.kind
                 && self.selection == Some(Selection::Living(id))
@@ -410,14 +410,30 @@ impl App {
         self.observed.iter()
     }
 
-    /// What the Cursor's status marks show now (design v22 §6.5).
+    /// What the Cursor's status marks show now (design v22 §6.5): of the
+    /// flashes under way, the one that began last.
     pub fn status_mark(&self) -> StatusMark {
-        let flashing = |at: Duration| self.running_for - at < MARK_FLASH_FOR;
-        match (self.report, self.sent_at) {
-            (Some((report, at)), _) if flashing(at) => report,
-            (_, Some(at)) if flashing(at) => StatusMark::Sent,
-            _ => StatusMark::Idle,
-        }
+        let showing = |at: Duration| {
+            self.running_for
+                .checked_sub(at)
+                .is_some_and(|since| since < MARK_FLASH_FOR)
+        };
+        let sent = self.sent_at.map(|at| (StatusMark::Sent, at));
+        [self.report, sent]
+            .into_iter()
+            .flatten()
+            .filter(|&(_, at)| showing(at))
+            .max_by_key(|&(_, at)| at)
+            .map_or(StatusMark::Idle, |(mark, _)| mark)
+    }
+
+    /// Flashes the world's report on a command in the status marks, once
+    /// the latest `+` has shown for its time, so both flashes show however
+    /// soon the report comes (design v22 §6.5).
+    fn report(&mut self, mark: StatusMark) {
+        let now = self.running_for;
+        let from = self.sent_at.map_or(now, |at| now.max(at + MARK_FLASH_FOR));
+        self.report = Some((mark, from));
     }
 
     /// Takes the commands the player's clicks have made since last taken,

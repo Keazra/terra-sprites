@@ -473,3 +473,37 @@ fn the_world_s_report_flashes_applied_or_rejected() {
     wait(&mut app, 310);
     assert_eq!(app.status_mark(), StatusMark::Idle);
 }
+
+#[test]
+fn a_report_waits_until_sent_has_shown() {
+    // Design v22 §6.5: at speed a command can apply in the frame it was
+    // sent, so both flashes show, one after the other.
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    click(&mut app, &world, at(4, 2), Button::Left);
+    app.record(&[touched(1, id, "pet")], &world);
+    assert_eq!(app.status_mark(), StatusMark::Sent);
+    wait(&mut app, 290);
+    assert_eq!(app.status_mark(), StatusMark::Sent);
+    wait(&mut app, 20);
+    assert_eq!(app.status_mark(), StatusMark::Applied);
+    wait(&mut app, 280);
+    assert_eq!(app.status_mark(), StatusMark::Applied);
+    wait(&mut app, 20);
+    assert_eq!(app.status_mark(), StatusMark::Idle);
+}
+
+#[test]
+fn a_new_click_flashes_sent_at_once_even_over_a_report() {
+    // Design v21 §6.5: each click flashes `+` at once.
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    app.record(&[touched(1, id, "pet")], &world);
+    wait(&mut app, 100);
+    click(&mut app, &world, at(4, 2), Button::Left);
+    assert_eq!(app.status_mark(), StatusMark::Sent);
+}
