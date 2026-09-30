@@ -76,8 +76,8 @@ impl CursorTouch {
         }
     }
 
-    /// The command that gives `sprite` this touch, looking `reach_back`
-    /// ticks back.
+    /// The command that gives `sprite` this touch, a pet or hug looking
+    /// `reach_back` ticks back.
     fn command(self, sprite: EntityId, reach_back: u16) -> Command {
         let amplified = matches!(self, Self::Hug | Self::Shock);
         match self {
@@ -86,11 +86,7 @@ impl CursorTouch {
                 amplified,
                 reach_back,
             },
-            Self::Zap | Self::Shock => Command::Correct {
-                sprite,
-                amplified,
-                reach_back,
-            },
+            Self::Zap | Self::Shock => Command::Correct { sprite, amplified },
         }
     }
 
@@ -130,7 +126,8 @@ struct TrainerFile {
     /// command is stamped for the tick after.
     #[serde(default)]
     delay: u64,
-    /// The reach back its commands carry; the pack's touch window if left out.
+    /// The reach back its pets or hugs carry; the pack's touch window if
+    /// left out. A zap or shock takes none (design v21 §5.6).
     #[serde(default)]
     reach_back: Option<u16>,
     /// It answers actions before this tick.
@@ -190,6 +187,9 @@ pub enum LabError {
     UnknownTarget(String),
     /// A control run without the trainer, in a scenario with no trainer.
     NoTrainer,
+    /// A trainer that zaps or shocks, given a reach back: a Correct always
+    /// looks back the touch window (design v21 §5.6).
+    ReachBackOnCorrect,
 }
 
 impl std::fmt::Display for LabError {
@@ -211,6 +211,9 @@ impl std::fmt::Display for LabError {
             LabError::NoTrainer => {
                 f.write_str("the control run is without the trainer, but there's no trainer")
             }
+            LabError::ReachBackOnCorrect => f.write_str(
+                "a trainer that zaps or shocks takes no reach_back: a zap or shock always looks back the touch window",
+            ),
         }
     }
 }
@@ -276,6 +279,10 @@ impl LabScenario {
         let trainer = file
             .trainer
             .map(|trainer| {
+                let correcting = matches!(trainer.give, CursorTouch::Zap | CursorTouch::Shock);
+                if correcting && trainer.reach_back.is_some() {
+                    return Err(LabError::ReachBackOnCorrect);
+                }
                 let (verb, name) = trainer.on;
                 let index = data
                     .object_type_named(&name)

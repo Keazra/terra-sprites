@@ -484,7 +484,7 @@ A Reward or Correct given with Shift (on `Q` or `E`) or Ctrl (on a click): a hug
 _Avoid_: strong, heavy
 
 **Reach back**:
-How many ticks back a Reward or Correct looks for the sprite's latest attempt, which its feeling is then about: about two seconds of the player's time at the speed they're playing.
+How many ticks back a Reward looks for the sprite's latest attempt, which its feeling is then about: about two seconds of the player's time at the speed they're playing. A Correct has none: it looks back only the touch window, so a late shock can't land on the wrong thing.
 _Avoid_: reach (a flood's reach is where a sprite can walk), touch window (that's for every other feeling)
 
 ### Testing and tuning
