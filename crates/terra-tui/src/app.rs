@@ -72,6 +72,16 @@ pub enum StatusMark {
     Applied,
     /// The world has just refused one.
     Rejected,
+    /// In Grab mode, empty, `Y`: a click would lift something (design v23
+    /// §6.5).
+    Lift,
+    /// In Grab mode, empty, `N`.
+    Empty,
+    /// In Grab mode, holding or leading, `Y`: a click would put it down or
+    /// let go.
+    Drop,
+    /// In Grab mode, holding or leading, `N`: the thing's own glyph.
+    Holding,
 }
 
 /// How many lines the observed list keeps (design §6.1).
@@ -502,6 +512,21 @@ impl App {
             .filter(|&(_, from)| self.shows(from, MARK_FLASH_FOR))
             .max_by_key(|&(_, at)| at)
             .map_or(StatusMark::Idle, |(mark, _)| mark)
+    }
+
+    /// What the Cursor's two status marks show now, top right (`Y`) then
+    /// bottom left (`N`) (design v23 §6.5). In Grab mode they show what the
+    /// Cursor has hold of, as the queue will leave it, unless a refusal is
+    /// flashing; in the other modes, both show `status_mark`.
+    pub fn status_marks(&self, world: &World) -> [StatusMark; 2] {
+        let flash = self.status_mark();
+        if self.mode != CursorMode::Grab || flash == StatusMark::Rejected {
+            return [flash; 2];
+        }
+        match self.grip(world) {
+            Some(_) => [StatusMark::Drop, StatusMark::Holding],
+            None => [StatusMark::Lift, StatusMark::Empty],
+        }
     }
 
     /// Why the player's latest click was refused, while the status line
