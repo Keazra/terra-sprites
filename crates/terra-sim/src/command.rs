@@ -172,10 +172,11 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
             Command::PutDown { tile } => put_down(state, data, tile),
             Command::LetGo => let_go(state),
             // Nothing to report: it moves many times a second while leading.
-            Command::MoveCursor { tile } => {
+            Command::MoveCursor { tile } if state.map.contains(tile) => {
                 state.cursor.tile = Some(tile);
                 continue;
             }
+            Command::MoveCursor { .. } => Err(Rejection::OffTheMap),
         };
         let kind = match applied {
             Ok(kind) => kind,

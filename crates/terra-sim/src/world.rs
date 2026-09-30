@@ -868,6 +868,11 @@ impl World {
             .objects
             .check(&state.map, &self.data)
             .and_then(|()| state.sprites.check(&state.map, &state.objects, &self.data))
+            .and_then(|()| {
+                state
+                    .cursor
+                    .check(&state.map, &state.objects, &state.sprites)
+            })
             .map_err(InvariantViolation)
     }
 }
@@ -875,8 +880,9 @@ impl World {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::action::Outcome;
+    use crate::action::{Outcome, Walk};
     use crate::brain::Brain;
+    use crate::cursor::Grip;
     use crate::learning::{Signals, Touch, TraceEntry, TypeMemory};
     use crate::map::Dir;
     use crate::objects::Roll;
@@ -1018,6 +1024,66 @@ mod tests {
     fn a_sprite_on_a_solid_object_breaks_an_invariant() {
         let (mut world, _, _) = field_with_sprites();
         force_place(&mut world, "thornbush", Pos { x: 5, y: 1 });
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_cursor_leading_and_holding_as_commands_leave_it_passes_the_invariant_checks() {
+        let (mut world, first, _) = field_with_sprites();
+        world.submit(Command::TakeHold { sprite: first });
+        world.step();
+        assert_eq!(world.check_invariants(), Ok(()));
+        force_place(&mut world, "berry", Pos { x: 0, y: 0 });
+        let berry = world
+            .state
+            .objects
+            .at(Pos { x: 0, y: 0 })
+            .expect("the berry");
+        world.submit(Command::LetGo);
+        world.submit(Command::PickUp { item: berry });
+        world.step();
+        assert_eq!(world.check_invariants(), Ok(()));
+    }
+
+    #[test]
+    fn a_cursor_leading_a_sprite_that_is_not_there_breaks_an_invariant() {
+        let (mut world, first, _) = field_with_sprites();
+        world.submit(Command::TakeHold { sprite: first });
+        world.step();
+        world.state.sprites.remove(first);
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_sprite_led_by_no_cursor_breaks_an_invariant() {
+        let (mut world, first, _) = field_with_sprites();
+        world.state.sprites.get_mut(first).expect("a sprite").lead = Some(Walk::default());
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_held_item_the_cursor_does_not_hold_breaks_an_invariant() {
+        let mut world = field_with_a_bush();
+        force_place(&mut world, "berry", Pos { x: 0, y: 0 });
+        let berry = world
+            .state
+            .objects
+            .at(Pos { x: 0, y: 0 })
+            .expect("the berry");
+        world.state.objects.lift(berry);
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_cursor_holding_an_item_on_the_map_breaks_an_invariant() {
+        let mut world = field_with_a_bush();
+        force_place(&mut world, "berry", Pos { x: 0, y: 0 });
+        let berry = world
+            .state
+            .objects
+            .at(Pos { x: 0, y: 0 })
+            .expect("the berry");
+        world.state.cursor.grip = Some(Grip::Holds(berry));
         assert!(world.check_invariants().is_err());
     }
 
