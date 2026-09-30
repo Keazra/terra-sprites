@@ -318,3 +318,37 @@ fn while_leading_a_cursor_locked_on_to_another_walking_sprite_tells_the_world_wh
         vec![Command::MoveCursor { tile: walked_to }]
     );
 }
+
+#[test]
+fn the_observed_list_tells_of_being_pulled_away_and_along_as_the_sprite_felt_it() {
+    // Design v23 §6.1: the Cursor is invisible, so it comes out of nowhere.
+    let rows = vec![".........."; 6];
+    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
+    let start = at(1, 1);
+    let wander = ScriptedAction::Wander {
+        destination: at(9, 1),
+    };
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &[(start, None)],
+        scripted: &[(start, wander)],
+    };
+    let mut world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
+    let mut app = grab_app(&world);
+    apply(&mut app, &world, Action::SelectNext);
+    tick(&mut app, &mut world);
+    let now = world.sprites().next().expect("the sprite").pos();
+    click(&mut app, &world, now);
+    tick(&mut app, &mut world);
+    click(&mut app, &world, at(5, 5));
+    tick(&mut app, &mut world);
+    let observed: Vec<&str> = app.observed().map(|o| o.line.as_str()).collect();
+    assert_eq!(
+        observed,
+        [
+            "Was pulled along out of nowhere",
+            "Wandered off, but was pulled away",
+        ]
+    );
+}

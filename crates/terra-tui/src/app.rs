@@ -322,6 +322,13 @@ impl App {
                 self.note_touch(event.tick, *id, touch);
                 self.flash_report(StatusMark::Applied);
             }
+            // Let go, the selected sprite felt it as a pull from nowhere, since
+            // it can't see the Cursor (design v23 §6.1).
+            if let EventKind::LetGo { sprite } = event.kind
+                && self.selection == Some(Selection::Living(sprite))
+            {
+                self.observe(event.tick, "Was pulled along out of nowhere".into());
+            }
             if let EventKind::CommandRejected { .. } = event.kind {
                 self.flash_report(StatusMark::Rejected);
                 // And why, on the status line, as the log words it (design

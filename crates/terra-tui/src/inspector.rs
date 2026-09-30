@@ -344,6 +344,7 @@ pub(crate) fn observed_line(action: &ActionView, data: &DataPack) -> String {
             _ => "it was gone".into(),
         },
         Outcome::Interrupted => "changed its mind".into(),
+        Outcome::PulledAway => "was pulled away".into(),
         outcome => {
             let reason = ended_line(outcome).expect("an outcome that isn't applied");
             reason.replacen("Gave up", "gave up", 1)
@@ -1810,6 +1811,11 @@ mod tests {
             ),
             (rest(Ended(Applied)), "Rested"),
             (rest(Ended(Interrupted)), "Rested, but changed its mind"),
+            (rest(Ended(PulledAway)), "Rested, but was pulled away"),
+            (
+                bush(PulledAway),
+                "Went to eat the berry bush, but was pulled away",
+            ),
             (tried(bush(Applied)), "Ate from the berry bush"),
             (gone(tried(berry(Applied))), "Ate the berry"),
             (
