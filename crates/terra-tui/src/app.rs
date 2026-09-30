@@ -6,13 +6,14 @@ use std::time::Duration;
 use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
 use terra_sim::{
-    ActionView, Command, CursorTouch, DeathCause, EntityId, Event, EventKind, Map, Pos, Target,
-    World,
+    ActionView, Command, CursorTouch, DeathCause, EntityId, Event, EventKind, Grip, Map, Pos,
+    Target, World,
 };
 
 use crate::clock::Clock;
 use crate::input::{Action, Button};
 use crate::inspector;
+use crate::text::display_name;
 use crate::theme::{Emote, Theme};
 
 /// Whether the game carries on after an action.
@@ -210,6 +211,10 @@ pub struct App {
     emotes: BTreeMap<EntityId, (Emote, Duration)>,
     /// The commands the player's clicks made, for the world (design §6.8).
     commands: Vec<Command>,
+    /// Grab mode's commands the world hasn't applied yet, each with the
+    /// tick the world applies it at, so the marks and the next click follow
+    /// the queue (design v23 §6.5).
+    queued: Vec<(u64, Command)>,
     /// When, in `running_for`, a click last sent a command (design v22 §6.5).
     sent_at: Option<Duration>,
     /// The world's latest report on a command, and when it began to show.
@@ -268,6 +273,7 @@ impl App {
             running_for: Duration::ZERO,
             emotes: BTreeMap::new(),
             commands: Vec::new(),
+            queued: Vec::new(),
             sent_at: None,
             report: None,
             refusal: None,
@@ -329,7 +335,26 @@ impl App {
             }
         }
         self.event_log.truncate(EVENT_LOG_LENGTH);
+        // The world has applied what was queued for the ticks it has run.
+        self.queued.retain(|&(tick, _)| tick >= world.tick());
         self.track(world);
+    }
+
+    /// What the Cursor has hold of as the player sees it: what the world
+    /// says, as the commands queued since will leave it (design v23 §6.5).
+    /// If the world refuses one, this goes back to the world's word.
+    pub fn grip(&self, world: &World) -> Option<Grip> {
+        let now = world.cursor();
+        let held = now.holds().map(|item| Grip::Holds(item.id()));
+        let start = now.leads().map(Grip::Leads).or(held);
+        self.queued
+            .iter()
+            .fold(start, |grip, &(_, command)| match command {
+                Command::TakeHold { sprite } => grip.or(Some(Grip::Leads(sprite))),
+                Command::PickUp { item } => grip.or(Some(Grip::Holds(item))),
+                Command::LetGo | Command::PutDown { .. } => None,
+                _ => grip,
+            })
     }
 
     /// The sprite the Cursor is locked on to, if any (design v21 §6.5).
@@ -658,7 +683,9 @@ impl App {
                 }
                 _ => {}
             },
-            (CursorMode::Grab, _) => {}
+            (CursorMode::Grab, Button::Left) => self.grab(tile, sprite, world),
+            // Throwing and shoving come with slice 11b.
+            (CursorMode::Grab, Button::Right) => {}
             (CursorMode::Train, button) => {
                 let touch = match (button, amplified) {
                     (Button::Left, false) => CursorTouch::Pet,
@@ -669,11 +696,7 @@ impl App {
                 // With nothing to act on, nothing is sent, so `?` flashes at
                 // once, and the status line says why (design v22 §6.5).
                 let Some(sprite) = self.locked().or(sprite) else {
-                    self.report = Some((StatusMark::Rejected, self.running_for));
-                    self.refusal = Some((
-                        format!("No sprite here to {}", touch.name()),
-                        self.running_for,
-                    ));
+                    self.refuse(format!("No sprite here to {}", touch.name()));
                     return;
                 };
                 self.commands
@@ -684,6 +707,41 @@ impl App {
                 self.report = None;
             }
         }
+    }
+
+    /// A Grab-mode click on `tile`, with `sprite` on it (design v23 §6.5).
+    /// Leading, it lets go; holding, it puts the item down there. Empty, it
+    /// takes hold of the locked-on sprite, or else the sprite there, or
+    /// else picks up the item there; a fixture is rooted to the ground.
+    fn grab(&mut self, tile: Pos, sprite: Option<EntityId>, world: &World) {
+        let command = match self.grip(world) {
+            Some(Grip::Leads(_)) => Command::LetGo,
+            Some(Grip::Holds(_)) => Command::PutDown { tile },
+            None => match (self.locked().or(sprite), world.object_at(tile)) {
+                (Some(sprite), _) => Command::TakeHold { sprite },
+                (None, Some(object)) if object.is_solid() => {
+                    let name = display_name(object.type_name());
+                    self.refuse(format!("Can't grab the {name}: it's rooted to the ground"));
+                    return;
+                }
+                (None, Some(object)) => Command::PickUp { item: object.id() },
+                (None, None) => {
+                    self.refuse("Nothing here to grab".into());
+                    return;
+                }
+            },
+        };
+        self.commands.push(command);
+        self.queued.push((world.tick(), command));
+        // The marks follow the latest click (design v22 §6.5).
+        self.report = None;
+    }
+
+    /// A click with nothing to act on: it sends nothing, so `?` flashes at
+    /// once, and the status line says why (design v22 §6.5).
+    fn refuse(&mut self, why: String) {
+        self.report = Some((StatusMark::Rejected, self.running_for));
+        self.refusal = Some((why, self.running_for));
     }
 
     /// Locks the Cursor on to the selection, or lets go, when it follows
