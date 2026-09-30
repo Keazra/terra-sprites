@@ -319,3 +319,24 @@ fn picking_up_an_item_takes_it_off_the_map_into_the_cursor() {
     let held = world.cursor().holds().expect("an item held");
     assert_eq!((held.id(), held.type_name()), (berry, "berry"));
 }
+
+#[test]
+fn a_fixture_is_rooted_and_cant_be_picked_up() {
+    let mut world = world(&["....."], &[(at(2, 0), "berry_bush")], &[], &[]);
+    let bush = object_on(&world, at(2, 0));
+    let command = Command::PickUp { item: bush };
+    world.submit(command);
+    let events = world.step();
+    assert_eq!(refused(&events, command), Some(Rejection::Rooted));
+    assert_eq!(world.object_at(at(2, 0)).map(|o| o.id()), Some(bush));
+    assert!(world.cursor().holds().is_none());
+}
+
+#[test]
+fn an_item_that_is_gone_cant_be_picked_up() {
+    let mut world = world(&["....."], &[], &[], &[]);
+    let command = Command::PickUp { item: EntityId(99) };
+    world.submit(command);
+    let events = world.step();
+    assert_eq!(refused(&events, command), Some(Rejection::Gone));
+}
