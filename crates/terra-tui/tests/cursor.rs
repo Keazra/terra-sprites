@@ -328,9 +328,9 @@ fn in_train_mode_the_locked_on_sprite_is_the_target_wherever_the_click_or_key_is
 }
 
 #[test]
-fn q_and_e_act_where_the_pointer_is() {
-    // Design v21 §6.5: as a click there would.
-    let world = field(&[at(4, 2)]);
+fn q_and_e_act_where_the_cursor_is() {
+    // Design v21 §6.5: under the pointer, or on the locked-on sprite.
+    let world = field(&[at(4, 2), at(7, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     apply(&mut app, &world, Action::Point(Position::new(4, 2)));
@@ -340,6 +340,17 @@ fn q_and_e_act_where_the_pointer_is() {
     };
     apply(&mut app, &world, e);
     assert_eq!(app.locked(), Some(id), "E selected it and locked on");
+    apply(&mut app, &world, Action::Point(Position::new(7, 2)));
+    let q = Action::Press {
+        button: Button::Left,
+        amplified: false,
+    };
+    apply(&mut app, &world, q);
+    assert_eq!(
+        app.locked(),
+        Some(id),
+        "Q didn't select the sprite under the pointer"
+    );
 }
 
 /// The Cursor touching sprite `id` on `tick`: a pet, hug, zap or shock.
