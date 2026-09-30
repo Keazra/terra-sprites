@@ -419,7 +419,8 @@ impl App {
                 .is_some_and(|since| since < MARK_FLASH_FOR)
         };
         let sent = self.sent_at.map(|at| (StatusMark::Sent, at));
-        [self.report, sent]
+        // Last, so a report wins a tie: within a frame, it's the later news.
+        [sent, self.report]
             .into_iter()
             .flatten()
             .filter(|&(_, at)| showing(at))
@@ -625,7 +626,10 @@ impl App {
                 _ => {}
             },
             (CursorMode::Train, button) => {
+                // With nothing to act on, nothing is sent, so `?` flashes at
+                // once (design v21 §6.5).
                 let Some(sprite) = self.locked().or(sprite) else {
+                    self.report = Some((StatusMark::Rejected, self.running_for));
                     return;
                 };
                 self.commands.push(match button {
