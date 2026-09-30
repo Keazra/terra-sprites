@@ -11,6 +11,7 @@ use crate::biochem::{self, Senses, Traits};
 use crate::brain::{Explanation, Memory};
 use crate::command::{self, Command};
 use crate::config::WorldConfig;
+use crate::cursor::{Cursor, CursorView};
 use crate::data::DataPack;
 use crate::ecology::{self, holds_without_drawing, new_object, square};
 use crate::events::{DeathCause, Event, EventKind};
@@ -57,6 +58,8 @@ pub(crate) struct WorldState {
     pub(crate) learning: bool,
     /// The commands submitted for the next tick, in order (design §2.5).
     pub(crate) commands: Vec<Command>,
+    /// What the Cursor has hold of (design v23 §6.5).
+    pub(crate) cursor: Cursor,
 }
 
 impl WorldState {
@@ -558,6 +561,7 @@ impl World {
                 deaths: BTreeMap::new(),
                 learning: true,
                 commands: Vec::new(),
+                cursor: Cursor::default(),
             },
             data,
             checked_next_id: Cell::new(1),
@@ -655,6 +659,13 @@ impl World {
             object: self.state.objects.get(id)?,
             world: self,
         })
+    }
+
+    /// The Cursor, as far as it touches the world (design v23 §6.5).
+    pub fn cursor(&self) -> CursorView<'_> {
+        CursorView {
+            cursor: &self.state.cursor,
+        }
     }
 
     /// How many sprites have died of `cause` since the world began.

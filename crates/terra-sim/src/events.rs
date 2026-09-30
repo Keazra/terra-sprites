@@ -55,6 +55,9 @@ pub enum EventKind {
     /// The Cursor corrected a sprite (design v21 §4.6): a zap, or amplified,
     /// a shock.
     Corrected { id: EntityId, amplified: bool },
+    /// The Cursor took hold of a sprite, which it now leads (design v23
+    /// §6.5).
+    TookHold { sprite: EntityId },
     /// A command was refused, and did nothing (design §2.5).
     CommandRejected { command: Command, reason: Rejection },
     /// An object left the world.
