@@ -92,6 +92,10 @@ pub struct StatusMarks {
     pub idle: char,
     /// A click has just sent a command.
     pub sent: char,
+    /// The world has just applied one.
+    pub applied: char,
+    /// The world has just refused one.
+    pub rejected: char,
 }
 
 impl StatusMarks {
@@ -100,6 +104,8 @@ impl StatusMarks {
         match mark {
             StatusMark::Idle => self.idle,
             StatusMark::Sent => self.sent,
+            StatusMark::Applied => self.applied,
+            StatusMark::Rejected => self.rejected,
         }
     }
 }

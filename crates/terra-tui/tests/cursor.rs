@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use ratatui::layout::{Position, Rect};
 use terra_sim::{
-    Command, DataPack, DeathCause, EntityId, Event, EventKind, Map, Pos, Scenario, ScriptedAction,
-    World,
+    Command, DataPack, DeathCause, EntityId, Event, EventKind, Map, Pos, Rejection, Scenario,
+    ScriptedAction, World,
 };
 use terra_tui::app::{App, Areas, CursorMode, Flow, Screen, StatusMark};
 use terra_tui::input::{Action, Button};
@@ -447,5 +447,29 @@ fn a_train_click_that_sends_a_command_flashes_sent_for_a_moment() {
     wait(&mut app, 290);
     assert_eq!(app.status_mark(), StatusMark::Sent);
     wait(&mut app, 20);
+    assert_eq!(app.status_mark(), StatusMark::Idle);
+}
+
+#[test]
+fn the_world_s_report_flashes_applied_or_rejected() {
+    // Design v21 §6.5: `☼` when a pet or zap applied, `?` when it was
+    // refused.
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    app.record(&[touched(1, id, "zap")], &world);
+    assert_eq!(app.status_mark(), StatusMark::Applied);
+    wait(&mut app, 310);
+    assert_eq!(app.status_mark(), StatusMark::Idle);
+    let refused = Event {
+        tick: 2,
+        kind: EventKind::CommandRejected {
+            command: pet(id, 3),
+            reason: Rejection::Gone,
+        },
+    };
+    app.record(&[refused], &world);
+    assert_eq!(app.status_mark(), StatusMark::Rejected);
+    wait(&mut app, 310);
     assert_eq!(app.status_mark(), StatusMark::Idle);
 }

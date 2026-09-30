@@ -49,6 +49,8 @@
         status_marks: (
             idle: '·', // nothing to report
             sent: '+', // a click has just sent a command
+            applied: '☼', // the world has just applied it
+            rejected: '?', // or refused it
         ),
         mode_marks: {
             select: (glyph: '♦', fg: white),
