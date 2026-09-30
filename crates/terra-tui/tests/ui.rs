@@ -1501,6 +1501,25 @@ fn a_lesson_about_a_category_words_it_as_the_category_names_itself() {
 }
 
 #[test]
+fn the_brain_tab_says_a_led_sprite_decides_nothing() {
+    // Design v23 §2.4: led, it makes no decisions, so the one before it was
+    // taken hold of would mislead.
+    let (mut world, mut app) = one_sprite(HUNGRY_GENOME, 1);
+    open(&mut app, &world, Tab::Brain);
+    assert_ne!(
+        inspector(&app, &world).1[0],
+        "Being led: it decides nothing"
+    );
+    let sprite = world.sprites().next().expect("the sprite").id();
+    world.submit(Command::TakeHold { sprite });
+    world.step();
+    assert_eq!(
+        inspector(&app, &world).1[0],
+        "Being led: it decides nothing"
+    );
+}
+
+#[test]
 fn the_brain_tab_says_when_nothing_has_been_decided_or_is_in_sight() {
     let (world, mut app) = one_sprite(HUNGRY_GENOME, 0);
     open(&mut app, &world, Tab::Brain);
