@@ -144,7 +144,7 @@ fn cp437_covers_the_glyphs_the_design_uses_and_nothing_outside_the_code_page() {
 /// A theme's cursor glyphs for Select mode: the four arrows (up, down, left,
 /// right), the mode mark and the idle status mark.
 fn select_cursor(theme: &Theme) -> [char; 6] {
-    let (arrows, status) = (theme.arrows(), theme.status_marks());
+    let (arrows, status) = (theme.arrows(false), theme.status_marks());
     let mark = theme.mode_mark(CursorMode::Select).symbol;
     [
         arrows.up,

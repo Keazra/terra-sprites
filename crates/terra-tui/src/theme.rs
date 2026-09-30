@@ -99,6 +99,7 @@ pub struct Theme {
     /// By object type name, then visual state.
     objects: BTreeMap<String, BTreeMap<String, Glyph>>,
     arrows: Arrows,
+    locked_arrows: Arrows,
     status_marks: StatusMarks,
     mode_marks: BTreeMap<CursorMode, Glyph>,
     attention_marker: Color,
@@ -140,9 +141,14 @@ impl Theme {
         self.attention_marker
     }
 
-    /// The cursor's arrows.
-    pub fn arrows(&self) -> Arrows {
-        self.arrows
+    /// The cursor's arrows: solid while it's `locked` on to a sprite (design
+    /// v22 §6.2).
+    pub fn arrows(&self, locked: bool) -> Arrows {
+        if locked {
+            self.locked_arrows
+        } else {
+            self.arrows
+        }
     }
 
     /// What the cursor's status marks show.
@@ -181,6 +187,7 @@ impl Theme {
             tiles,
             objects,
             arrows: file.cursor.arrows,
+            locked_arrows: file.cursor.locked_arrows,
             status_marks: file.cursor.status_marks,
             mode_marks,
             attention_marker: file.attention_marker.into(),
@@ -222,6 +229,8 @@ struct ThemeFile {
 #[serde(deny_unknown_fields)]
 struct CursorFile {
     arrows: Arrows,
+    /// The arrows while the cursor is locked on to a sprite.
+    locked_arrows: Arrows,
     status_marks: StatusMarks,
     mode_marks: BTreeMap<CursorMode, GlyphEntry>,
 }
