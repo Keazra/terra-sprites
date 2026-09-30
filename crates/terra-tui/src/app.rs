@@ -459,15 +459,14 @@ impl App {
     /// Flashes the world's report on a command in the status marks, once
     /// the latest `+` has shown for its time, so both flashes show however
     /// soon the report comes. A refusal still to show, or showing, isn't
-    /// replaced by an applied command: it's what needs noticing. Once a
-    /// later click has sent, though, the refusal is behind it (design v22
-    /// §6.5).
+    /// replaced by an applied command: it's what needs noticing (design v22
+    /// §6.5). A click that sends clears it, so it's never an earlier
+    /// click's.
     fn flash_report(&mut self, mark: StatusMark) {
         let now = self.running_for;
         if let Some((StatusMark::Rejected, at)) = self.report
             && mark == StatusMark::Applied
             && now < at + MARK_FLASH_FOR
-            && self.sent_at.is_none_or(|sent| at >= sent)
         {
             return;
         }
@@ -608,13 +607,13 @@ impl App {
                 let page = self.inspector_rows() as i32;
                 self.scroll_tab(pages * page, world);
             }
-            // The wheel scrolls the inspector's tab, and elsewhere cycles
-            // the cursor modes (design v21 §6.5).
+            // The wheel scrolls the inspector's tab, and over the map cycles
+            // the cursor modes (design v22 §6.5).
             Action::Wheel { at, notches } => {
                 self.point(at);
                 if self.inspector.is_some_and(|area| area.contains(at)) {
                     self.scroll_tab(notches * WHEEL_LINES, world);
-                } else {
+                } else if self.tile_at(at).is_some() {
                     self.mode = self.mode.along(notches);
                 }
             }
@@ -676,7 +675,10 @@ impl App {
                 };
                 self.commands
                     .push(touch.command(sprite, self.clock.reach_back()));
+                // The marks follow the latest click: an earlier click's
+                // report, not shown yet, is behind it (design v22 §6.5).
                 self.sent_at = Some(self.running_for);
+                self.report = None;
             }
         }
     }
