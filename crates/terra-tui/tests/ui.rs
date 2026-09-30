@@ -2508,3 +2508,26 @@ fn a_refused_command_says_why_in_the_hints_place_for_3_seconds() {
     app.animate(Duration::from_millis(3_100));
     assert!(status(&app).contains("WASD scroll"), "the hints are back");
 }
+
+#[test]
+fn a_refusal_shows_even_when_the_status_line_is_crowded() {
+    // Design v22 §6.1: locked on to a sprite standing on a berry, the line
+    // is too full for the reason, so what's under the Cursor is cut short.
+    let world = garden_with_sprites();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    let on_it = Position::new(1 + 7, 2 + 1);
+    let right = Action::Click {
+        at: on_it,
+        button: Button::Right,
+        amplified: false,
+    };
+    app.apply(right, &world);
+    app.record(&[touched(1, "refused pet")], &world);
+    let status = lines(&render(&app, &world, 100, 30))[29].clone();
+    assert!(status.starts_with(" (7,1) grass · Sprite #"), "{status}");
+    assert!(
+        status.ends_with("  Couldn't pet Sprite #12: it's gone"),
+        "{status}"
+    );
+    assert!(status.chars().count() <= 100);
+}
