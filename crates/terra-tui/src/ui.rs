@@ -207,15 +207,15 @@ fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App) {
         return;
     };
     let arrows = app.theme.arrows(app.locked().is_some());
-    let status = app.theme.status_marks();
+    let status = app.theme.status_marks().glyph(app.status_mark());
     let mark = app.theme.mode_mark(app.mode());
     let pieces = [
         (-1, -1, mark.symbol),
         (0, -1, arrows.down),
-        (1, -1, status.idle),
+        (1, -1, status),
         (-1, 0, arrows.right),
         (1, 0, arrows.left),
-        (-1, 1, status.idle),
+        (-1, 1, status),
         (0, 1, arrows.up),
         (1, 1, mark.symbol),
     ];

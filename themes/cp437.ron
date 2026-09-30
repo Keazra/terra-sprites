@@ -48,6 +48,7 @@
         locked_arrows: (up: '▲', down: '▼', left: '◄', right: '►'),
         status_marks: (
             idle: '·', // nothing to report
+            sent: '+', // a click has just sent a command
         ),
         mode_marks: {
             select: (glyph: '♦', fg: white),

@@ -1,12 +1,14 @@
 //! The Cursor on screen (design v21 §6.5): its modes, Train's pets and zaps,
 //! and locking on.
 
+use std::time::Duration;
+
 use ratatui::layout::{Position, Rect};
 use terra_sim::{
     Command, DataPack, DeathCause, EntityId, Event, EventKind, Map, Pos, Scenario, ScriptedAction,
     World,
 };
-use terra_tui::app::{App, Areas, CursorMode, Flow, Screen};
+use terra_tui::app::{App, Areas, CursorMode, Flow, Screen, StatusMark};
 use terra_tui::input::{Action, Button};
 use terra_tui::theme::Theme;
 
@@ -424,4 +426,26 @@ fn the_observed_list_tells_what_the_sprite_felt_not_where_it_came_from() {
             ("Felt a gentle touch out of nowhere", 1),
         ]
     );
+}
+
+/// Moves the app's real-time clock on by `millis` milliseconds.
+fn wait(app: &mut App, millis: u64) {
+    app.animate(Duration::from_millis(millis));
+}
+
+#[test]
+fn a_train_click_that_sends_a_command_flashes_sent_for_a_moment() {
+    // Design v21 §6.5: about 0.3 s of real time. A Select click sends
+    // nothing, so it doesn't flash.
+    let world = field(&[at(4, 2)]);
+    let mut app = app(&world);
+    click(&mut app, &world, at(4, 2), Button::Left);
+    assert_eq!(app.status_mark(), StatusMark::Idle);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    click(&mut app, &world, at(4, 2), Button::Left);
+    assert_eq!(app.status_mark(), StatusMark::Sent);
+    wait(&mut app, 290);
+    assert_eq!(app.status_mark(), StatusMark::Sent);
+    wait(&mut app, 20);
+    assert_eq!(app.status_mark(), StatusMark::Idle);
 }
