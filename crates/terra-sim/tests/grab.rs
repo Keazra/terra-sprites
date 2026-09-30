@@ -535,3 +535,24 @@ fn a_held_items_location_conditions_are_false() {
     );
     assert_eq!(world.cursor().holds().map(|h| h.id()), Some(held));
 }
+
+#[test]
+fn a_sprite_heading_for_an_item_that_is_picked_up_gives_up_as_it_is_gone() {
+    let eater = at(0, 0);
+    let script = [(eater, ScriptedAction::Eat { at: at(5, 0) })];
+    let mut world = world(&["......"], &[(at(5, 0), "berry")], &[eater], &script);
+    let (sprite, berry) = (sprite_on(&world, eater), object_on(&world, at(5, 0)));
+    world.step();
+    world.submit(Command::PickUp { item: berry });
+    let events = world.step();
+    let ended = events.iter().find_map(|e| match &e.kind {
+        EventKind::ActionEnded {
+            id,
+            outcome,
+            action,
+            ..
+        } if *id == sprite => Some((*outcome, action.target_gone)),
+        _ => None,
+    });
+    assert_eq!(ended, Some((Outcome::Failed, true)), "{events:?}");
+}
