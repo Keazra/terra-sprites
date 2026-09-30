@@ -3,7 +3,7 @@
 //! go or puts it down.
 
 use ratatui::layout::{Position, Rect};
-use terra_sim::{Command, DataPack, EntityId, Grip, Map, Pos, Scenario, World};
+use terra_sim::{Command, DataPack, EntityId, Grip, Map, Pos, Scenario, ScriptedAction, World};
 use terra_tui::app::{App, Areas, CursorMode, Flow, StatusMark};
 use terra_tui::input::{Action, Button};
 use terra_tui::theme::Theme;
@@ -178,4 +178,143 @@ fn a_queued_grab_the_world_refuses_leaves_the_cursor_as_the_world_says() {
     tick(&mut app, &mut world);
     assert_eq!(app.grip(&world), Some(Grip::Leads(other)));
     assert_eq!(app.status_mark(), StatusMark::Rejected);
+}
+
+fn point(app: &mut App, world: &World, tile: Pos) {
+    apply(app, world, Action::Point(Position::new(tile.x, tile.y)));
+}
+
+#[test]
+fn while_leading_each_move_of_the_cursor_onto_a_new_tile_is_sent_once() {
+    let world = field(&[], &[at(4, 2)]);
+    let mut app = grab_app(&world);
+    let sprite = sprite_on(&world, at(4, 2));
+    click(&mut app, &world, at(4, 2));
+    point(&mut app, &world, at(6, 2));
+    point(&mut app, &world, at(6, 2));
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    point(&mut app, &world, at(7, 3));
+    assert_eq!(
+        app.take_commands(),
+        vec![
+            Command::TakeHold { sprite },
+            Command::MoveCursor { tile: at(6, 2) },
+            Command::MoveCursor { tile: at(7, 3) },
+        ],
+        "once a tile, in every mode"
+    );
+}
+
+#[test]
+fn not_leading_the_cursor_moves_without_telling_the_world() {
+    let world = field(&[(at(4, 2), "ball")], &[]);
+    let mut app = grab_app(&world);
+    point(&mut app, &world, at(6, 2));
+    click(&mut app, &world, at(4, 2));
+    point(&mut app, &world, at(7, 3));
+    let item = object_on(&world, at(4, 2));
+    assert_eq!(app.take_commands(), vec![Command::PickUp { item }]);
+}
+
+fn press(app: &mut App, world: &World) {
+    let action = Action::Press {
+        button: Button::Left,
+        amplified: false,
+    };
+    apply(app, world, action);
+}
+
+/// Selects the sprite on `tile` and locks the Cursor on to it, in Select
+/// mode, then goes back to Grab mode.
+fn lock_on(app: &mut App, world: &World, tile: Pos) {
+    apply(app, world, Action::Mode(CursorMode::Select));
+    let action = Action::Click {
+        at: Position::new(tile.x, tile.y),
+        button: Button::Right,
+        amplified: false,
+    };
+    apply(app, world, action);
+    apply(app, world, Action::Mode(CursorMode::Grab));
+}
+
+#[test]
+fn leading_the_locked_on_sprite_the_cursor_follows_the_pointer_and_the_lock_comes_back_after() {
+    let mut world = field(&[], &[at(4, 2)]);
+    let mut app = grab_app(&world);
+    let sprite = sprite_on(&world, at(4, 2));
+    lock_on(&mut app, &world, at(4, 2));
+    point(&mut app, &world, at(0, 0));
+    press(&mut app, &world);
+    let commands = app.take_commands();
+    assert_eq!(commands, vec![Command::TakeHold { sprite }]);
+    for command in commands {
+        world.submit(command);
+    }
+    tick(&mut app, &mut world);
+    point(&mut app, &world, at(8, 5));
+    assert_eq!(
+        (app.cursor(), app.locked()),
+        (at(8, 5), None),
+        "the lock waits"
+    );
+    press(&mut app, &world);
+    tick(&mut app, &mut world);
+    let there = world.sprite(sprite).expect("the sprite").pos();
+    assert_eq!(
+        (app.cursor(), app.locked()),
+        (there, Some(sprite)),
+        "back on it"
+    );
+}
+
+#[test]
+fn holding_an_item_in_grab_mode_the_cursor_follows_the_pointer_though_locked_on() {
+    let mut world = field(&[(at(1, 1), "ball")], &[at(4, 2)]);
+    let mut app = grab_app(&world);
+    click(&mut app, &world, at(1, 1));
+    tick(&mut app, &mut world);
+    lock_on(&mut app, &world, at(4, 2));
+    point(&mut app, &world, at(8, 5));
+    assert_eq!(
+        (app.cursor(), app.locked()),
+        (at(8, 5), None),
+        "the lock waits"
+    );
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    assert_eq!(app.cursor(), at(4, 2), "in another mode, the lock holds");
+}
+
+#[test]
+fn while_leading_a_cursor_locked_on_to_another_walking_sprite_tells_the_world_where_it_goes() {
+    let rows = vec![".........."; 6];
+    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
+    let walker = at(5, 3);
+    let wander = ScriptedAction::Wander {
+        destination: at(9, 3),
+    };
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &[(at(1, 1), None), (walker, None)],
+        scripted: &[(walker, wander)],
+    };
+    let mut world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
+    let mut app = grab_app(&world);
+    let id = sprite_on(&world, walker);
+    click(&mut app, &world, at(1, 1));
+    lock_on(&mut app, &world, walker);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    for _ in 0..6 {
+        tick(&mut app, &mut world);
+        if world.sprite(id).expect("the walker").pos() != walker {
+            break;
+        }
+    }
+    let walked_to = world.sprite(id).expect("the walker").pos();
+    assert_ne!(walked_to, walker, "it walked");
+    assert_eq!(app.cursor(), walked_to);
+    assert_eq!(
+        app.take_commands(),
+        vec![Command::MoveCursor { tile: walked_to }]
+    );
 }
