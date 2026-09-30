@@ -528,3 +528,19 @@ fn a_refusal_wins_over_a_command_applied_with_it() {
     app.record(&[touched(2, id, "pet")], &world);
     assert_eq!(app.status_mark(), StatusMark::Rejected, "while it shows");
 }
+
+#[test]
+fn while_paused_sent_flashes_at_the_click_and_the_report_when_time_moves() {
+    // Design v22 §6.5: the command waits for the next tick.
+    let world = field(&[at(4, 2)]);
+    let id = sprite_on(&world, at(4, 2));
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::TogglePause);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    click(&mut app, &world, at(4, 2), Button::Left);
+    assert_eq!(app.status_mark(), StatusMark::Sent);
+    wait(&mut app, 5_000);
+    assert_eq!(app.status_mark(), StatusMark::Idle, "paused, nothing yet");
+    app.record(&[touched(1, id, "pet")], &world);
+    assert_eq!(app.status_mark(), StatusMark::Applied, "time moved");
+}
