@@ -1154,7 +1154,7 @@ mod tests {
                 .iter()
                 .map(|(_, s)| {
                     (
-                        s.action.as_ref().expect("wandering").blocked_ticks,
+                        s.action.as_ref().expect("wandering").walk.blocked_ticks,
                         s.move_points,
                     )
                 })
