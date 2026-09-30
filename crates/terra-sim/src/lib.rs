@@ -40,7 +40,7 @@ mod world;
 pub use action::{ActionView, Hurt, Outcome, Progress, ScriptedAction};
 pub use biochem::Traits;
 pub use brain::{Contribution, Explanation, Learned, Memory, Part, Thing};
-pub use command::{Command, CursorTouch, Rejection};
+pub use command::{Blocker, Command, CursorTouch, Rejection};
 pub use config::{ConfigError, WorldConfig};
 pub use cursor::Grip;
 pub use data::{DataError, DataPack};
