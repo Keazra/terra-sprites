@@ -375,7 +375,8 @@ fn q_and_e_act_where_the_cursor_is() {
     );
 }
 
-/// The Cursor touching sprite `id` on `tick`: a pet, hug, zap or shock.
+/// The Cursor touching sprite `id` on `tick`: a pet, hug, zap or shock, or
+/// a pet refused.
 fn touched(tick: u64, id: EntityId, what: &str) -> Event {
     let kind = match what {
         "pet" => EventKind::Rewarded {
@@ -393,6 +394,10 @@ fn touched(tick: u64, id: EntityId, what: &str) -> Event {
         "shock" => EventKind::Corrected {
             id,
             amplified: true,
+        },
+        "refused pet" => EventKind::CommandRejected {
+            command: pet(id, 3),
+            reason: Rejection::Gone,
         },
         _ => unreachable!("{what}"),
     };
@@ -461,14 +466,7 @@ fn the_world_s_report_flashes_applied_or_rejected() {
     assert_eq!(app.status_mark(), StatusMark::Applied);
     wait(&mut app, 310);
     assert_eq!(app.status_mark(), StatusMark::Idle);
-    let refused = Event {
-        tick: 2,
-        kind: EventKind::CommandRejected {
-            command: pet(id, 3),
-            reason: Rejection::Gone,
-        },
-    };
-    app.record(&[refused], &world);
+    app.record(&[touched(2, id, "refused pet")], &world);
     assert_eq!(app.status_mark(), StatusMark::Rejected);
     wait(&mut app, 310);
     assert_eq!(app.status_mark(), StatusMark::Idle);
@@ -515,14 +513,8 @@ fn a_refusal_wins_over_a_command_applied_with_it() {
     let world = field(&[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
-    let refused = Event {
-        tick: 1,
-        kind: EventKind::CommandRejected {
-            command: pet(id, 3),
-            reason: Rejection::Gone,
-        },
-    };
-    app.record(&[refused.clone(), touched(1, id, "pet")], &world);
+    let refused = touched(1, id, "refused pet");
+    app.record(&[refused, touched(1, id, "pet")], &world);
     assert_eq!(app.status_mark(), StatusMark::Rejected, "in one tick");
     wait(&mut app, 100);
     app.record(&[touched(2, id, "pet")], &world);
