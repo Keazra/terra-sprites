@@ -122,9 +122,10 @@
     movement: (flood_refresh: 8, occupied_penalty: 30, replan_after: 3),
 
     // The Cursor's touch (design v21 §4.6): the levels it raises, a starting
-    // point for the lab's strength sweep; and the longest its feeling looks
-    // back for the sprite's latest try, in ticks (§5.6): two seconds at 16×.
-    // A shorter reach back than `touch_window` is taken as that.
+    // point for the lab's strength sweep; and the longest a pet's or hug's
+    // feeling looks back for the sprite's latest try, in ticks (§5.6): two
+    // seconds at 16×. A shorter reach back than `touch_window` is taken as
+    // that; a zap's or shock's always looks back `touch_window`.
     cursor: (
         pet: 0.5,
         hug: 1.0,

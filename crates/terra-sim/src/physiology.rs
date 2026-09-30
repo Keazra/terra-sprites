@@ -122,8 +122,8 @@ pub(crate) struct Cursor {
     pub(crate) zap: Correction,
     /// What a shock, an amplified zap, injects.
     pub(crate) shock: Correction,
-    /// The longest a Reward or Correct looks back for the sprite's latest
-    /// try, in ticks (design v21 §5.6).
+    /// The longest a Reward looks back for the sprite's latest try, in ticks
+    /// (design v21 §5.6). A Correct looks back only `touch_window`.
     pub(crate) max_reach_back: u64,
 }
 
