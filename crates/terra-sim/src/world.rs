@@ -306,8 +306,12 @@ impl<'a> SpriteView<'a> {
     /// The tile of the one thing its attention was on at the latest step 5
     /// (design §5.3): an object's tile, a water tile, or where a sprite it
     /// attends to is now. `None` before its first decision, with nothing in
-    /// reach, or once that thing is gone.
+    /// reach, once that thing is gone, or while the Cursor leads it, when it
+    /// attends to nothing (design v23 §6.5).
     pub fn attending_to(&self) -> Option<Pos> {
+        if self.sprite.lead.is_some() {
+            return None;
+        }
         let target = self.sprite.brain.snapshot.as_ref()?.target?;
         let (pos, _) = self.world.state.whereabouts(&self.world.data, target)?;
         Some(pos)
@@ -439,6 +443,12 @@ impl<'a> CursorView<'a> {
     /// The sprite the Cursor leads, if any.
     pub fn leads(&self) -> Option<EntityId> {
         self.world.state.cursor.leads()
+    }
+
+    /// The tile the world was last told the Cursor is on, which a led
+    /// sprite heads for (design v23 §2.5).
+    pub fn tile(&self) -> Option<Pos> {
+        self.world.state.cursor.tile
     }
 
     /// The item the Cursor holds, if any.

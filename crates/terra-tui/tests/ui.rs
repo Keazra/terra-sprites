@@ -1219,6 +1219,30 @@ fn the_body_tab_starts_with_what_the_sprite_is_doing_in_plain_words() {
 }
 
 #[test]
+fn the_body_tab_says_a_led_sprite_is_being_led_and_how_far_behind() {
+    // Design v23 §6.1. It walks a grass step a tick, from (2, 3).
+    let (mut world, mut app) = one_sprite_doing(SPEED_10, &[], 0);
+    let sprite = world.sprites().next().expect("the sprite").id();
+    world.submit(Command::TakeHold { sprite });
+    world.submit(Command::MoveCursor {
+        tile: Pos { x: 7, y: 3 },
+    });
+    world.step();
+    assert_eq!(inspector(&app, &world).1[0], "Being led · 4 tiles behind");
+    app.apply(Action::ToggleDetail, &world);
+    assert_eq!(
+        inspector(&app, &world).1[0],
+        "LED → (7,3) · walking (4 tiles)"
+    );
+    for _ in 0..4 {
+        world.step();
+    }
+    assert_eq!(inspector(&app, &world).1[0], "LED → (7,3)");
+    app.apply(Action::ToggleDetail, &world);
+    assert_eq!(inspector(&app, &world).1[0], "Being led", "caught up");
+}
+
+#[test]
 fn the_decision_marker_flashes_an_x_where_the_selected_sprite_is_heading() {
     let destination = Pos { x: 7, y: 3 };
     let wander = ScriptedAction::Wander { destination };
@@ -1362,6 +1386,24 @@ fn the_attention_marker_shades_the_one_thing_the_selected_sprite_attends_to() {
     let grass = app.cell_of(Pos { x: 0, y: 0 }).expect("in view");
     app.apply(Action::left_click(grass), &world);
     assert_eq!(app.selection(), None);
+    assert_eq!(render(&app, &world, 100, 30)[berry_cell].bg, Color::Reset);
+}
+
+#[test]
+fn a_led_sprite_shows_no_attention_marker() {
+    // Design v23 §6.5: led, it attends to nothing, so the mark from before
+    // would be stale.
+    let (berry, bush) = (Pos { x: 0, y: 1 }, Pos { x: 8, y: 4 });
+    let objects = [(bush, "berry_bush"), (berry, "berry")];
+    let (mut world, app) = one_sprite_among(HUNGRY_GENOME, &objects, &[], 1);
+    let berry_cell = app.cell_of(berry).expect("in view");
+    assert_eq!(
+        render(&app, &world, 100, 30)[berry_cell].bg,
+        Color::DarkGray
+    );
+    let sprite = world.sprites().next().expect("the sprite").id();
+    world.submit(Command::TakeHold { sprite });
+    world.step();
     assert_eq!(render(&app, &world, 100, 30)[berry_cell].bg, Color::Reset);
 }
 

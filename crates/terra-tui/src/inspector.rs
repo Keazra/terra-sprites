@@ -115,9 +115,12 @@ fn sprite_tab(tab: Tab, sprite: &SpriteView, app: &App, world: &World) -> Vec<Li
 /// player has observed it do.
 fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
     let traits = sprite.traits();
-    let doing = sprite
-        .action()
-        .map(|action| format!(" {}", action_line(&action, app.detail(), world.data())));
+    let doing = match led_line(sprite, app.detail(), world) {
+        Some(led) => Some(format!(" {led}")),
+        None => sprite
+            .action()
+            .map(|action| format!(" {}", action_line(&action, app.detail(), world.data()))),
+    };
     let mut lines: Vec<String> = doing.into_iter().collect();
     lines.extend([
         format!(
@@ -217,6 +220,29 @@ fn hanging(head: &str, text: &str) -> Vec<String> {
 /// §6.1): in plain words, describing and never speaking as the sprite; or,
 /// in the detail view, exactly, with its verb, destination or target, and
 /// outcome.
+/// While the Cursor leads `sprite`, what the Body tab says in place of an
+/// action (design v23 §6.1): "Being led · 4 tiles behind", or once caught
+/// up "Being led"; in the detail view `LED → (61,40) · walking (4 tiles)`.
+fn led_line(sprite: &SpriteView, detail: bool, world: &World) -> Option<String> {
+    let cursor = world.cursor();
+    let tile = cursor
+        .tile()
+        .filter(|_| cursor.leads() == Some(sprite.id()))?;
+    let pos = sprite.pos();
+    let behind = u32::from(pos.x.abs_diff(tile.x).max(pos.y.abs_diff(tile.y)));
+    Some(match (detail, behind) {
+        (false, 0) => "Being led".into(),
+        (false, _) => format!("Being led · {} behind", counted(behind, "tile")),
+        (true, 0) => format!("LED → ({},{})", tile.x, tile.y),
+        (true, _) => format!(
+            "LED → ({},{}) · walking ({})",
+            tile.x,
+            tile.y,
+            counted(behind, "tile")
+        ),
+    })
+}
+
 fn action_line(action: &ActionView, detail: bool, data: &DataPack) -> String {
     let plain = match action.verb {
         _ if detail => None,
