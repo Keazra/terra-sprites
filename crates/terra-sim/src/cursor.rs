@@ -3,8 +3,9 @@
 
 use serde::Serialize;
 
-use crate::map::Pos;
-use crate::objects::EntityId;
+use crate::map::{Map, Pos};
+use crate::objects::{EntityId, Objects};
+use crate::sprites::Sprites;
 
 /// What the Cursor has hold of, as the world knows it.
 #[derive(Debug, Clone, Default, Serialize)]
@@ -39,5 +40,38 @@ impl Cursor {
             Some(Grip::Holds(id)) => Some(id),
             _ => None,
         }
+    }
+
+    /// Checks that its tile is on the map, and that the one sprite led and
+    /// the one item held off the map are the ones it has hold of;
+    /// describes the first problem.
+    pub(crate) fn check(
+        &self,
+        map: &Map,
+        objects: &Objects,
+        sprites: &Sprites,
+    ) -> Result<(), String> {
+        if let Some(tile) = self.tile.filter(|&tile| !map.contains(tile)) {
+            return Err(format!("the Cursor is off the map, at {tile:?}"));
+        }
+        let led = sprites
+            .iter()
+            .filter(|(_, s)| s.lead.is_some())
+            .map(|(id, _)| id);
+        let held = objects.iter().filter(|(_, o)| o.held).map(|(id, _)| id);
+        let (led, held): (Vec<EntityId>, Vec<EntityId>) = (led.collect(), held.collect());
+        if led != self.leads().into_iter().collect::<Vec<_>>() {
+            return Err(format!(
+                "the Cursor leads {:?}, but {led:?} are led",
+                self.leads()
+            ));
+        }
+        if held != self.holds().into_iter().collect::<Vec<_>>() {
+            return Err(format!(
+                "the Cursor holds {:?}, but {held:?} are held",
+                self.holds()
+            ));
+        }
+        Ok(())
     }
 }

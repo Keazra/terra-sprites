@@ -556,3 +556,41 @@ fn a_sprite_heading_for_an_item_that_is_picked_up_gives_up_as_it_is_gone() {
     });
     assert_eq!(ended, Some((Outcome::Failed, true)), "{events:?}");
 }
+
+#[test]
+fn a_grab_and_a_let_go_queued_together_both_apply_on_the_next_tick() {
+    let mut world = world(&["....."], &[(at(3, 0), "ball")], &[at(0, 0)], &[]);
+    let (sprite, ball) = (sprite_on(&world, at(0, 0)), object_on(&world, at(3, 0)));
+    world.submit(Command::TakeHold { sprite });
+    world.submit(Command::LetGo);
+    world.submit(Command::PickUp { item: ball });
+    world.submit(Command::PutDown { tile: at(4, 0) });
+    let events = world.step();
+    let rejected = events
+        .iter()
+        .filter(|e| matches!(e.kind, EventKind::CommandRejected { .. }))
+        .count();
+    assert_eq!(rejected, 0, "{events:?}");
+    assert!(world.cursor().leads().is_none() && world.cursor().holds().is_none());
+    assert_eq!(world.object_at(at(4, 0)).map(|o| o.id()), Some(ball));
+}
+
+#[test]
+fn the_cursor_cant_be_moved_off_the_map() {
+    let mut world = world(&["....."], &[], &[], &[]);
+    let command = Command::MoveCursor { tile: at(5, 0) };
+    world.submit(command);
+    let events = world.step();
+    assert_eq!(refused(&events, command), Some(Rejection::OffTheMap));
+}
+
+#[test]
+fn where_the_cursor_is_is_part_of_the_worlds_state() {
+    // Saves and replays carry it (design v23 §2.8).
+    let rows = ["....."];
+    let (mut moved, mut still) = (world(&rows, &[], &[], &[]), world(&rows, &[], &[], &[]));
+    moved.submit(Command::MoveCursor { tile: at(2, 0) });
+    moved.step();
+    still.step();
+    assert_ne!(moved.state_hash(), still.state_hash());
+}
