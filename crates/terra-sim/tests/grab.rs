@@ -2,7 +2,7 @@
 //! and holds items, one thing at a time.
 
 use terra_sim::{
-    Command, DataPack, EntityId, EventKind, Map, Pos, Scenario, ScriptedAction, World,
+    Command, DataPack, EntityId, EventKind, Map, Outcome, Pos, Scenario, ScriptedAction, World,
 };
 
 fn builtin() -> DataPack {
@@ -57,4 +57,30 @@ fn taking_hold_of_a_sprite_leads_it_and_leaves_it_where_it_stands() {
     );
     assert_eq!(world.cursor().leads(), Some(id));
     assert_eq!(world.sprite_at(at(2, 1)).map(|s| s.id()), Some(id));
+}
+
+#[test]
+fn taking_hold_of_a_sprite_pulls_it_away_from_what_it_was_doing() {
+    let mut world = world(
+        &["........"],
+        &[],
+        &[at(0, 0)],
+        &[(
+            at(0, 0),
+            ScriptedAction::Wander {
+                destination: at(7, 0),
+            },
+        )],
+    );
+    let id = sprite_on(&world, at(0, 0));
+    world.step();
+    world.submit(Command::TakeHold { sprite: id });
+    let events = world.step();
+    let ended = events.iter().find_map(|e| match e.kind {
+        EventKind::ActionEnded {
+            id: who, outcome, ..
+        } if who == id => Some(outcome),
+        _ => None,
+    });
+    assert_eq!(ended, Some(Outcome::PulledAway), "{events:?}");
 }

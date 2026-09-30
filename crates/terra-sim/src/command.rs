@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::action::{self, Outcome};
 use crate::cursor::Grip;
 use crate::data::DataPack;
 use crate::events::{Event, EventKind};
@@ -126,7 +127,7 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
                 reach_back,
             } => reward(state, data, sprite, amplified, reach_back),
             Command::Correct { sprite, amplified } => correct(state, data, sprite, amplified),
-            Command::TakeHold { sprite } => take_hold(state, sprite),
+            Command::TakeHold { sprite } => take_hold(state, sprite, events),
         };
         let kind = match applied {
             Ok(kind) => kind,
@@ -188,8 +189,20 @@ fn correct(
     })
 }
 
-/// The Cursor takes hold of `sprite`, and leads it (design v23 §6.5).
-fn take_hold(state: &mut WorldState, sprite: EntityId) -> Result<EventKind, Rejection> {
+/// The Cursor takes hold of `sprite`, and leads it (design v23 §6.5):
+/// whatever it was doing ends, pulled away.
+fn take_hold(
+    state: &mut WorldState,
+    sprite: EntityId,
+    events: &mut Vec<Event>,
+) -> Result<EventKind, Rejection> {
+    let led = state
+        .sprites
+        .get_mut(sprite)
+        .expect("a sprite to take hold of");
+    if let Some(doing) = led.action.as_mut().filter(|a| a.ended.is_none()) {
+        action::end(doing, sprite, Outcome::PulledAway, state.tick, events);
+    }
     state.cursor.grip = Some(Grip::Leads(sprite));
     Ok(EventKind::TookHold { sprite })
 }

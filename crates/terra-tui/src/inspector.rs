@@ -441,6 +441,7 @@ fn ended_line(outcome: Outcome) -> Option<String> {
             Outcome::TimedOut => "Gave up: it took too long",
             Outcome::Failed => "Gave up: it couldn't get there",
             Outcome::Interrupted => "Changed its mind",
+            Outcome::PulledAway => "Pulled away",
         }
         .into(),
     )
@@ -532,6 +533,7 @@ fn outcome_name(outcome: Outcome) -> &'static str {
         Outcome::Failed => "failed",
         Outcome::Interrupted => "interrupted",
         Outcome::TimedOut => "timed_out",
+        Outcome::PulledAway => "pulled_away",
     }
 }
 

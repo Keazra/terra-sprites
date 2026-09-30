@@ -35,6 +35,8 @@ pub enum Outcome {
     Interrupted,
     /// It was still going at the timeout.
     TimedOut,
+    /// The Cursor took hold of the sprite (design v23 §6.5).
+    PulledAway,
 }
 
 /// An action to start a sprite on in a hand-made world, instead of what it
