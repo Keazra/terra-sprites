@@ -5,10 +5,12 @@ use std::time::Duration;
 
 use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
-use terra_sim::{ActionView, DeathCause, EntityId, Event, EventKind, Map, Pos, Target, World};
+use terra_sim::{
+    ActionView, Command, DeathCause, EntityId, Event, EventKind, Map, Pos, Target, World,
+};
 
 use crate::clock::Clock;
-use crate::input::Action;
+use crate::input::{Action, Button};
 use crate::inspector;
 use crate::theme::{Emote, Theme};
 
@@ -27,22 +29,25 @@ pub enum Screen {
     QuitPrompt,
 }
 
-/// What a click on the map does (design §6.5). The Hand, Reward and Correct
-/// modes arrive with the hand's slices.
+/// What a click on the map does (design v21 §6.5). Grab mode arrives with
+/// slice 11.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CursorMode {
     Select,
+    /// Teaching: a left click rewards, a right click corrects.
+    Train,
 }
 
 impl CursorMode {
     /// Every cursor mode. Each theme must give all of them a mark.
-    pub const ALL: [CursorMode; 1] = [CursorMode::Select];
+    pub const ALL: [CursorMode; 2] = [CursorMode::Select, CursorMode::Train];
 
     /// The mode's name on the status line.
     pub fn label(self) -> &'static str {
         match self {
             CursorMode::Select => "SELECT",
+            CursorMode::Train => "TRAIN",
         }
     }
 }
@@ -166,6 +171,8 @@ pub struct App {
     /// When, in `running_for`, each sprite hurt lately was hurt, for its
     /// Hurt emote.
     hurt_at: BTreeMap<EntityId, Duration>,
+    /// The commands the player's clicks made, for the world (design §6.8).
+    commands: Vec<Command>,
 }
 
 /// How long the Decision marker shows, and then doesn't: once a second in
@@ -207,6 +214,7 @@ impl App {
             detail: false,
             running_for: Duration::ZERO,
             hurt_at: BTreeMap::new(),
+            commands: Vec::new(),
         };
         app.centre_on(cursor);
         app
@@ -319,6 +327,12 @@ impl App {
         self.observed.iter()
     }
 
+    /// Takes the commands the player's clicks have made since last taken,
+    /// in the order made, for the world to apply at its next tick.
+    pub fn take_commands(&mut self) -> Vec<Command> {
+        std::mem::take(&mut self.commands)
+    }
+
     /// The events the event log shows, newest first.
     pub fn event_log(&self) -> impl Iterator<Item = &Event> {
         self.event_log.iter()
@@ -405,7 +419,7 @@ impl App {
             match action {
                 Action::Confirm | Action::Back | Action::Quit => return Flow::Quit,
                 // The mouse carries on as usual and doesn't answer the prompt.
-                Action::Point(_) | Action::Click(_) | Action::Wheel { .. } => {}
+                Action::Point(_) | Action::Click { .. } | Action::Wheel { .. } => {}
                 // Any other key cancels the prompt, and does nothing else.
                 _ => {
                     self.screen = Screen::Normal;
@@ -422,17 +436,20 @@ impl App {
             Action::Slower { held: true } => self.clock.slower_held(),
             Action::Scroll { dx, dy } => self.scroll(dx, dy),
             Action::Point(cell) => self.point(cell),
-            // In Select mode (the only mode so far), a click on the map
-            // selects the sprite there, or clears the selection.
-            Action::Click(cell) => {
-                self.point(cell);
-                if let Some(tile) = self.tile_at(cell) {
-                    match world.sprite_at(tile) {
-                        Some(sprite) => self.select(sprite.id()),
-                        None => self.selection = None,
-                    }
+            Action::Click {
+                at,
+                button,
+                amplified,
+            } => {
+                self.point(at);
+                if let Some(tile) = self.tile_at(at) {
+                    self.act(tile, button, amplified, world);
                 }
             }
+            Action::Press { button, amplified } => {
+                self.act(self.cursor, button, amplified, world);
+            }
+            Action::Mode(mode) => self.mode = mode,
             Action::SelectNext => self.select_along(world, Direction::Next),
             Action::SelectPrevious => self.select_along(world, Direction::Previous),
             Action::NextTab => self.open(self.tab.along(1)),
@@ -448,11 +465,42 @@ impl App {
                 }
             }
             Action::ToggleDetail => self.detail = !self.detail,
+            // Esc returns to Select; from Select it asks to quit (design v21
+            // §6.5).
+            Action::Back if self.mode != CursorMode::Select => self.mode = CursorMode::Select,
             Action::Back => self.screen = Screen::QuitPrompt,
             Action::Confirm | Action::Dismiss => {}
             Action::Quit => return Flow::Quit,
         }
         Flow::Continue
+    }
+
+    /// What a click with `button` on `tile` does, in the cursor mode (design
+    /// v21 §6.5). In Select, a left click selects the sprite there, or
+    /// clears the selection. In Train, a left click rewards the sprite
+    /// there and a right click corrects it; with none there, nothing is sent.
+    fn act(&mut self, tile: Pos, button: Button, amplified: bool, world: &World) {
+        let sprite = world.sprite_at(tile).map(|sprite| sprite.id());
+        match (self.mode, button) {
+            (CursorMode::Select, Button::Left) => match sprite {
+                Some(id) => self.select(id),
+                None => self.selection = None,
+            },
+            (CursorMode::Select, Button::Right) => {}
+            (CursorMode::Train, button) => {
+                let Some(sprite) = sprite else {
+                    return;
+                };
+                self.commands.push(match button {
+                    Button::Left => Command::Reward {
+                        sprite,
+                        amplified,
+                        reach_back: self.clock.reach_back(),
+                    },
+                    Button::Right => Command::Correct { sprite, amplified },
+                });
+            }
+        }
     }
 
     /// Selects the sprite `id`. From the World tab, that opens Body; and
