@@ -557,3 +557,14 @@ fn a_train_click_with_nothing_to_act_on_flashes_rejected_at_once() {
     assert_eq!(app.status_mark(), StatusMark::Rejected);
     assert_eq!(app.take_commands().len(), 1, "only the first click sent");
 }
+
+#[test]
+fn a_flash_carries_on_through_a_change_of_mode() {
+    // Design v22 §6.5.
+    let world = field(&[at(4, 2)]);
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    click(&mut app, &world, at(4, 2), Button::Left);
+    apply(&mut app, &world, Action::Mode(CursorMode::Select));
+    assert_eq!(app.status_mark(), StatusMark::Sent);
+}
