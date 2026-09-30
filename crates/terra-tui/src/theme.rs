@@ -7,7 +7,7 @@ use ratatui::style::Color;
 use serde::Deserialize;
 use terra_sim::Terrain;
 
-use crate::app::CursorMode;
+use crate::app::{CursorMode, StatusMark};
 
 /// What the map view draws for a tile, named by meaning rather than by character.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
@@ -90,6 +90,18 @@ pub struct Arrows {
 pub struct StatusMarks {
     /// Nothing to report.
     pub idle: char,
+    /// A click has just sent a command.
+    pub sent: char,
+}
+
+impl StatusMarks {
+    /// The glyph the status marks show for `mark`.
+    pub fn glyph(self, mark: StatusMark) -> char {
+        match mark {
+            StatusMark::Idle => self.idle,
+            StatusMark::Sent => self.sent,
+        }
+    }
 }
 
 /// A mapping from semantic tiles, and the cursor, to glyphs and colours.

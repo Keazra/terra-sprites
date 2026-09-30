@@ -231,6 +231,22 @@ fn locked_on_the_cursor_s_arrows_are_solid() {
 }
 
 #[test]
+fn the_status_marks_show_what_the_cursor_reports() {
+    // Design v21 §6.5: a Train click flashes `+` in both status marks, top
+    // right and bottom left, in the mode's colour.
+    let world = garden_with_sprites();
+    let on_it = Position::new(1 + 2, 2 + 3);
+    let mut app = app_for(&world, Theme::cp437(), 40, 10);
+    app.apply(Action::Mode(CursorMode::Train), &world);
+    app.apply(Action::left_click(on_it), &world);
+    let screen = render(&app, &world, 40, 10);
+    for (column, row) in [(4, 4), (2, 6)] {
+        assert_eq!(screen[(column, row)].symbol(), "+", "({column}, {row})");
+        assert_eq!(screen[(column, row)].fg, Color::LightMagenta);
+    }
+}
+
+#[test]
 fn map_tiles_take_their_theme_colours() {
     let world = drawn_world(&SMALL_MAP);
     let mut app = app_for(&world, Theme::cp437(), 40, 8);

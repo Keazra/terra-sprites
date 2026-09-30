@@ -60,6 +60,15 @@ impl CursorMode {
     }
 }
 
+/// What the Cursor's status marks show (design v22 §6.5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatusMark {
+    /// Nothing to report.
+    Idle,
+    /// A click has just sent a command.
+    Sent,
+}
+
 /// How many lines the observed list keeps (design §6.1).
 pub const OBSERVED_LENGTH: usize = 500;
 
@@ -189,6 +198,8 @@ pub struct App {
     emotes: BTreeMap<EntityId, (Emote, Duration)>,
     /// The commands the player's clicks made, for the world (design §6.8).
     commands: Vec<Command>,
+    /// When, in `running_for`, a click last sent a command (design v22 §6.5).
+    sent_at: Option<Duration>,
 }
 
 /// How long the Decision marker shows, and then doesn't: once a second in
@@ -201,6 +212,9 @@ const EMOTE_HALF: Duration = Duration::from_millis(250);
 
 /// How long an emote lasts, in real time, whatever the speed (design §6.3).
 const EMOTE_FOR: Duration = Duration::from_secs(1);
+
+/// How long the status marks flash, in real time (design v21 §6.5).
+const MARK_FLASH_FOR: Duration = Duration::from_millis(300);
 
 impl App {
     /// A new UI for `map`, with the cursor at the map's centre and the viewport
@@ -233,6 +247,7 @@ impl App {
             running_for: Duration::ZERO,
             emotes: BTreeMap::new(),
             commands: Vec::new(),
+            sent_at: None,
         };
         app.centre_on(cursor);
         app
@@ -382,6 +397,15 @@ impl App {
     /// selecting it, newest first (design §6.1).
     pub fn observed(&self) -> impl Iterator<Item = &Observed> {
         self.observed.iter()
+    }
+
+    /// What the Cursor's status marks show now (design v22 §6.5).
+    pub fn status_mark(&self) -> StatusMark {
+        let flashing = |at: Duration| self.running_for - at < MARK_FLASH_FOR;
+        match self.sent_at {
+            Some(at) if flashing(at) => StatusMark::Sent,
+            _ => StatusMark::Idle,
+        }
     }
 
     /// Takes the commands the player's clicks have made since last taken,
@@ -578,6 +602,7 @@ impl App {
                     },
                     Button::Right => Command::Correct { sprite, amplified },
                 });
+                self.sent_at = Some(self.running_for);
             }
         }
     }
