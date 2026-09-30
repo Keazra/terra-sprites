@@ -171,6 +171,18 @@ impl Objects {
         object
     }
 
+    /// Puts the held object `id` down on the tile at `to`, which must hold
+    /// no object (design v23 §6.5).
+    pub(crate) fn put_down(&mut self, id: EntityId, to: Pos) {
+        let object = self
+            .by_id
+            .get_mut(&id)
+            .expect("putting down an object that exists");
+        object.held = false;
+        object.pos = to;
+        self.on_tile.put(to, id);
+    }
+
     /// Takes the object `id`, which must exist and be on the map, off its
     /// tile for the Cursor to hold, at rest (design v23 §6.5).
     pub(crate) fn lift(&mut self, id: EntityId) {

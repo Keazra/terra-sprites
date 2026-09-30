@@ -1201,6 +1201,7 @@ pub(crate) fn event_line(event: &Event, data: &DataPack) -> Option<String> {
                 }
                 terra_sim::Command::TakeHold { .. }
                 | terra_sim::Command::PickUp { .. }
+                | terra_sim::Command::PutDown { .. }
                 | terra_sim::Command::LetGo
                 | terra_sim::Command::MoveCursor { .. } => {
                     return None;
@@ -1209,13 +1210,19 @@ pub(crate) fn event_line(event: &Event, data: &DataPack) -> Option<String> {
             let why = match reason {
                 Rejection::Gone => "it's gone",
                 // A touch is never refused for the Cursor's grip.
-                Rejection::Busy(_) | Rejection::NotLeading | Rejection::Rooted => return None,
+                Rejection::Busy(_)
+                | Rejection::NotLeading
+                | Rejection::Rooted
+                | Rejection::NotHolding
+                | Rejection::OffTheMap
+                | Rejection::InTheWay(_) => return None,
             };
             Some(format!("Couldn't {verb} {}: {why}", sprite_label(sprite)))
         }
         EventKind::TookHold { .. }
         | EventKind::LetGo { .. }
         | EventKind::PickedUp { .. }
+        | EventKind::PutDown { .. }
         | EventKind::CursorEmptied { .. } => None,
         EventKind::ObjectSpawned { .. }
         | EventKind::ObjectRemoved { .. }

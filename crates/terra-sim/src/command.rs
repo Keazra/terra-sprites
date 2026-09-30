@@ -9,6 +9,7 @@ use crate::data::DataPack;
 use crate::events::{Event, EventKind};
 use crate::map::Pos;
 use crate::objects::EntityId;
+use crate::terrain::Terrain;
 use crate::world::WorldState;
 
 /// Something the player does to the world through the Cursor. It carries
@@ -33,6 +34,9 @@ pub enum Command {
     /// Picks up an item, which the Cursor then holds, off the map (design
     /// v23 §6.5).
     PickUp { item: EntityId },
+    /// Puts the item the Cursor holds down on a tile, at rest (design v23
+    /// §6.5).
+    PutDown { tile: Pos },
     /// Lets go of the sprite the Cursor leads, which chooses for itself
     /// again at its next step 5 (design v23 §6.5).
     LetGo,
@@ -61,6 +65,7 @@ impl CursorTouch {
             Command::Correct { amplified, .. } => Some(CursorTouch::correcting(amplified)),
             Command::TakeHold { .. }
             | Command::PickUp { .. }
+            | Command::PutDown { .. }
             | Command::LetGo
             | Command::MoveCursor { .. } => None,
         }
@@ -134,6 +139,21 @@ pub enum Rejection {
     /// A fixture can't be picked up: it's attached to the ground (design
     /// §3.3).
     Rooted,
+    /// The Cursor holds no item to put down.
+    NotHolding,
+    /// The tile isn't on the map.
+    OffTheMap,
+    /// Something on the tile stops the item going there (design §3.4).
+    InTheWay(Blocker),
+}
+
+/// What stops an item being put down on a tile (design §3.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Blocker {
+    /// An object is there already: the stable ID of its type.
+    Object(u16),
+    /// The tile's terrain isn't walkable.
+    Terrain(Terrain),
 }
 
 /// Step 1 (design §2.4): applies the commands stamped for this tick, in the
@@ -149,6 +169,7 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
             Command::Correct { sprite, amplified } => correct(state, data, sprite, amplified),
             Command::TakeHold { sprite } => take_hold(state, sprite, events),
             Command::PickUp { item } => pick_up(state, data, item),
+            Command::PutDown { tile } => put_down(state, data, tile),
             Command::LetGo => let_go(state),
             // Nothing to report: it moves many times a second while leading.
             Command::MoveCursor { tile } => {
@@ -266,4 +287,33 @@ fn pick_up(
     state.objects.lift(item);
     state.cursor.grip = Some(Grip::Holds(item));
     Ok(EventKind::PickedUp { item, object_type })
+}
+
+/// The Cursor puts the item it holds down on `tile`, at rest, where an item
+/// may go: a walkable tile holding no object, a sprite there or not (design
+/// §3.4).
+fn put_down(state: &mut WorldState, data: &DataPack, tile: Pos) -> Result<EventKind, Rejection> {
+    let item = state.cursor.holds().ok_or(Rejection::NotHolding)?;
+    if !state.map.contains(tile) {
+        return Err(Rejection::OffTheMap);
+    }
+    if let Some(there) = state.objects.at(tile) {
+        let kind = state.objects.kind(there);
+        return Err(Rejection::InTheWay(Blocker::Object(
+            data.object_types()[kind].id,
+        )));
+    }
+    if !state.map.is_walkable(tile) {
+        return Err(Rejection::InTheWay(Blocker::Terrain(
+            state.map.terrain(tile),
+        )));
+    }
+    state.objects.put_down(item, tile);
+    state.cursor.grip = None;
+    let object_type = data.object_types()[state.objects.kind(item)].name.clone();
+    Ok(EventKind::PutDown {
+        item,
+        object_type,
+        pos: tile,
+    })
 }

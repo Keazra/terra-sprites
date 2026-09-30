@@ -2,8 +2,8 @@
 //! and holds items, one thing at a time.
 
 use terra_sim::{
-    Command, DataPack, Emptied, EntityId, Event, EventKind, Grip, Map, Outcome, Pos, Rejection,
-    Scenario, ScriptedAction, World,
+    Blocker, Command, DataPack, Emptied, EntityId, Event, EventKind, Grip, Map, Outcome, Pos,
+    Rejection, Scenario, ScriptedAction, Terrain, World,
 };
 
 fn builtin() -> DataPack {
@@ -339,4 +339,108 @@ fn an_item_that_is_gone_cant_be_picked_up() {
     world.submit(command);
     let events = world.step();
     assert_eq!(refused(&events, command), Some(Rejection::Gone));
+}
+
+/// A world of `rows` and `objects` whose Cursor holds the item on `from`.
+fn holding(
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    sprites: &[Pos],
+    from: Pos,
+) -> (World, EntityId) {
+    let mut world = world(rows, objects, sprites, &[]);
+    let item = object_on(&world, from);
+    world.submit(Command::PickUp { item });
+    world.step();
+    assert_eq!(world.cursor().holds().map(|h| h.id()), Some(item));
+    (world, item)
+}
+
+#[test]
+fn a_held_item_is_put_down_on_a_tile_at_rest() {
+    let (mut world, ball) = holding(&["....."], &[(at(0, 0), "ball")], &[], at(0, 0));
+    world.submit(Command::PutDown { tile: at(3, 0) });
+    let events = world.step();
+    assert!(
+        events.iter().any(|e| e.kind
+            == EventKind::PutDown {
+                item: ball,
+                object_type: "ball".into(),
+                pos: at(3, 0)
+            }),
+        "{events:?}"
+    );
+    assert!(world.cursor().holds().is_none());
+    assert_eq!(world.object_at(at(3, 0)).map(|o| o.id()), Some(ball));
+}
+
+#[test]
+fn an_item_may_be_put_down_under_a_sprite() {
+    let rests = [(at(3, 0), ScriptedAction::Rest); 2];
+    let mut world = world(&["....."], &[(at(0, 0), "berry")], &[at(3, 0)], &rests);
+    let berry = object_on(&world, at(0, 0));
+    world.submit(Command::PickUp { item: berry });
+    world.submit(Command::PutDown { tile: at(3, 0) });
+    world.step();
+    assert_eq!(world.object_at(at(3, 0)).map(|o| o.id()), Some(berry));
+}
+
+#[test]
+fn an_item_isnt_put_down_where_it_cant_go_and_the_refusal_names_what_is_in_the_way() {
+    let (mut world, _) = holding(
+        &["..=#"],
+        &[(at(0, 0), "ball"), (at(1, 0), "berry")],
+        &[],
+        at(0, 0),
+    );
+    // A berry's stable object type ID in the built-in pack.
+    let berry = 2;
+    assert_eq!(world.data().object_type_name(berry), Some("berry"));
+    let cases = [
+        (at(1, 0), Blocker::Object(berry)),
+        (at(2, 0), Blocker::Terrain(Terrain::DeepWater)),
+        (at(3, 0), Blocker::Terrain(Terrain::Rock)),
+    ];
+    for (tile, blocker) in cases {
+        let command = Command::PutDown { tile };
+        world.submit(command);
+        let events = world.step();
+        assert_eq!(
+            refused(&events, command),
+            Some(Rejection::InTheWay(blocker))
+        );
+        assert!(world.cursor().holds().is_some(), "still held");
+    }
+}
+
+#[test]
+fn putting_down_with_nothing_held_is_refused() {
+    let mut world = world(&["....."], &[], &[], &[]);
+    let command = Command::PutDown { tile: at(1, 0) };
+    world.submit(command);
+    let events = world.step();
+    assert_eq!(refused(&events, command), Some(Rejection::NotHolding));
+}
+
+#[test]
+fn a_rolling_ball_picked_up_stops_rolling() {
+    // The kick lands on tick 1, and the ball rolls from tick 2.
+    let kicker = at(1, 1);
+    let script = [
+        (kicker, ScriptedAction::Play { at: at(2, 1) }),
+        (kicker, ScriptedAction::Rest),
+        (kicker, ScriptedAction::Rest),
+    ];
+    let lane = ["...........", "...........", "..........."];
+    let mut world = world(&lane, &[(at(2, 1), "ball")], &[kicker], &script);
+    let ball = object_on(&world, at(2, 1));
+    world.step();
+    world.step();
+    assert_eq!(world.object_at(at(3, 1)).map(|o| o.id()), Some(ball), "rolling");
+    world.submit(Command::PickUp { item: ball });
+    world.submit(Command::PutDown { tile: at(3, 1) });
+    for _ in 0..4 {
+        world.step();
+    }
+    assert_eq!(world.object_at(at(3, 1)).map(|o| o.id()), Some(ball), "at rest");
 }
