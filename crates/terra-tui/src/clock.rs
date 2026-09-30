@@ -7,8 +7,8 @@ use std::time::Duration;
 const PARTS: u128 = 32;
 const NANOS_PER_SECOND: u128 = 1_000_000_000;
 
-/// How far back a pet looks, in the player's time (design v21 §6.5): about
-/// how long a player takes to react. Tuned in play.
+/// How far back a Reward looks, in the player's time (design v21 §6.5):
+/// about how long a player takes to react. Tuned in play.
 const REACH_BACK_SECONDS: u32 = 2;
 
 /// Simulation speed. 1× is 1.25 ticks per second, slow enough to watch a
@@ -108,13 +108,12 @@ impl Clock {
         }
     }
 
-    /// How many ticks a pet given now reaches back (design v21 §6.5): two
-    /// seconds' worth at the speed, rounded up, whether or not time is
+    /// How many ticks a Reward given now reaches back (design v21 §6.5):
+    /// two seconds' worth at the speed, rounded up, whether or not time is
     /// paused. At Max, as far as the sim allows.
-    pub fn reach_back(&self) -> u16 {
-        self.speed.parts_per_second().map_or(u16::MAX, |parts| {
-            let parts = parts * REACH_BACK_SECONDS;
-            u16::try_from(parts.div_ceil(PARTS as u32)).unwrap_or(u16::MAX)
+    pub fn reach_back(&self) -> u64 {
+        self.speed.parts_per_second().map_or(u64::MAX, |parts| {
+            u64::from(parts * REACH_BACK_SECONDS).div_ceil(PARTS as u64)
         })
     }
 

@@ -348,7 +348,7 @@ fn a_pet_within_its_reach_back_makes_the_last_thing_tried_and_that_habit_good() 
 
 /// Kicks the ball at tick 0, and pets the sprite at `tick` with `reach_back`.
 /// Returns what it then thinks of balls, and of kicking them.
-fn pet_after_a_kick(tick: u64, reach_back: u16) -> (f32, f32) {
+fn pet_after_a_kick(tick: u64, reach_back: u64) -> (f32, f32) {
     let (mut world, id) = kicker("");
     run_to(&mut world, tick);
     world.submit(Command::Reward {
