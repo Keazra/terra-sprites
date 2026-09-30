@@ -20,23 +20,24 @@ pub(crate) struct Cursor {
 pub enum Grip {
     /// A sprite it leads (design v23 §6.5).
     Leads(EntityId),
+    /// An item it holds, off the map (design v23 §6.5).
+    Holds(EntityId),
 }
 
 impl Cursor {
     /// The sprite it leads, if any.
     pub(crate) fn leads(&self) -> Option<EntityId> {
-        self.grip.map(|Grip::Leads(id)| id)
+        match self.grip {
+            Some(Grip::Leads(id)) => Some(id),
+            _ => None,
+        }
     }
-}
 
-/// A read-only view of the Cursor, as far as it touches the world.
-pub struct CursorView<'a> {
-    pub(crate) cursor: &'a Cursor,
-}
-
-impl CursorView<'_> {
-    /// The sprite the Cursor leads, if any (design v23 §6.5).
-    pub fn leads(&self) -> Option<EntityId> {
-        self.cursor.leads()
+    /// The item it holds, if any.
+    pub(crate) fn holds(&self) -> Option<EntityId> {
+        match self.grip {
+            Some(Grip::Holds(id)) => Some(id),
+            _ => None,
+        }
     }
 }

@@ -294,3 +294,28 @@ fn a_led_sprite_that_dies_empties_the_cursor() {
     );
     assert_eq!(world.cursor().leads(), None);
 }
+
+/// The object on `pos`.
+fn object_on(world: &World, pos: Pos) -> EntityId {
+    world.object_at(pos).expect("an object there").id()
+}
+
+#[test]
+fn picking_up_an_item_takes_it_off_the_map_into_the_cursor() {
+    let mut world = world(&["....."], &[(at(2, 0), "berry")], &[], &[]);
+    let berry = object_on(&world, at(2, 0));
+    world.submit(Command::PickUp { item: berry });
+    let events = world.step();
+    assert!(
+        events.iter().any(|e| e.kind
+            == EventKind::PickedUp {
+                item: berry,
+                object_type: "berry".into()
+            }),
+        "{events:?}"
+    );
+    assert!(world.object_at(at(2, 0)).is_none(), "off the map");
+    assert!(world.objects().all(|o| o.id() != berry), "not on the map");
+    let held = world.cursor().holds().expect("an item held");
+    assert_eq!((held.id(), held.type_name()), (berry, "berry"));
+}
