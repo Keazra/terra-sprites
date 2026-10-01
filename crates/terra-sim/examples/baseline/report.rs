@@ -141,6 +141,83 @@ pub fn viability(
     }
 }
 
+/// One of A1–A3 (design §7.3): its runs' median, its controls', and the
+/// verdict CI's acceptance tests give on the same seeds.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Lesson {
+    pub median: Option<f64>,
+    pub control_median: Option<f64>,
+    pub verdict: Verdict,
+}
+
+/// A1: thornbush contacts (Eat, Play and Hit) over the whole run, at most
+/// half the control's.
+pub fn a1(seeds: &[(u64, Result<LabRun, String>)], data: &DataPack) -> Lesson {
+    let contacts = |windows: &[Window]| {
+        let verbs = [Verb::Eat, Verb::Play, Verb::Hit];
+        windows
+            .iter()
+            .flat_map(|w| verbs.map(|verb| w.applied_on(verb, "thornbush", data)))
+            .sum()
+    };
+    lesson(seeds, contacts, |run, control| run <= control / 2.0)
+}
+
+/// A2: applied Plays on a ball after training, at least 1.5× the control's.
+pub fn a2(seeds: &[(u64, Result<LabRun, String>)], data: &DataPack) -> Lesson {
+    let plays = |windows: &[Window]| after_training(windows).applied_on(Verb::Play, "ball", data);
+    lesson(seeds, plays, |run, control| run >= 1.5 * control)
+}
+
+/// A3: applied Hits on a sprite after training, at most half the control's.
+pub fn a3(seeds: &[(u64, Result<LabRun, String>)], data: &DataPack) -> Lesson {
+    let hits = |windows: &[Window]| after_training(windows).applied_on(Verb::Hit, "sprite", data);
+    lesson(seeds, hits, |run, control| run <= 0.5 * control)
+}
+
+/// A lesson's medians of what `count` counts in each seed's windows, and
+/// whether they pass: `passes` given the run's and the control's, and a
+/// control of at least 20, or the scenario is badly calibrated (§7.3).
+fn lesson(
+    seeds: &[(u64, Result<LabRun, String>)],
+    count: impl Fn(&[Window]) -> u64,
+    passes: impl Fn(f64, f64) -> bool,
+) -> Lesson {
+    let finished: Vec<&LabRun> = seeds
+        .iter()
+        .filter_map(|(_, run)| run.as_ref().ok())
+        .collect();
+    let runs: Vec<f64> = finished
+        .iter()
+        .map(|run| count(&run.windows) as f64)
+        .collect();
+    let controls: Vec<f64> = finished
+        .iter()
+        .filter_map(|run| run.control.as_deref())
+        .map(|windows| count(windows) as f64)
+        .collect();
+    let (median, control_median) = (median_of(&runs), median_of(&controls));
+    let verdict = match (median, control_median) {
+        (Some(run), Some(control)) if control >= 20.0 && passes(run, control) => Verdict::Met,
+        (Some(_), Some(_)) => Verdict::NotMet { until: None },
+        _ => Verdict::NoData,
+    };
+    Lesson {
+        median,
+        control_median,
+        verdict,
+    }
+}
+
+/// The window A2 and A3 measure in: ticks 10,000–20,000, after training
+/// and its washout (design §7.3).
+fn after_training(windows: &[Window]) -> &Window {
+    windows
+        .iter()
+        .find(|w| w.from == 10_000 && w.to == 20_000)
+        .expect("A2 and A3 count ticks 10,000 to 20,000")
+}
+
 /// One of A4's halves: its median, met when it `passes`, and otherwise
 /// not met until slice 17 is done.
 fn a4(median: Option<f64>, passes: impl Fn(f64) -> bool) -> Criterion {
@@ -399,5 +476,107 @@ mod tests {
         assert_eq!(viability.hunger_and_thirst.median, None);
         assert_eq!(viability.hunger_and_thirst.verdict, Verdict::NoData);
         assert_eq!(viability.seeds_with_deaths, 0);
+    }
+
+    /// A window over ticks `from` to `to` that counted these applied actions.
+    fn applied(from: u64, to: u64, applied: &[((Verb, Option<u16>), u64)]) -> Window {
+        Window {
+            applied: applied.iter().copied().collect(),
+            ..window(from, to, &[])
+        }
+    }
+
+    /// Ten seeds of a lesson, each with the same run and control windows.
+    fn lesson_seeds(
+        run: impl Fn() -> Vec<Window>,
+        control: impl Fn() -> Vec<Window>,
+    ) -> Vec<(u64, Result<LabRun, String>)> {
+        (1..=10)
+            .map(|seed| {
+                let run = LabRun {
+                    windows: run(),
+                    control: Some(control()),
+                    without: None,
+                };
+                (seed, Ok(run))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a1_is_met_when_the_learner_touches_thornbushes_half_as_often_as_its_control() {
+        // Design §7.3, A1: thornbush contacts (Eat, Play and Hit) over the
+        // whole run ≤ 50% of the control's, which needs ≥20.
+        let data = data();
+        let thornbush = Some(3);
+        let touches = |eats, plays, hits| {
+            move || {
+                vec![
+                    applied(
+                        0,
+                        10_000,
+                        &[((Verb::Eat, thornbush), eats), ((Verb::Rest, None), 99)],
+                    ),
+                    applied(
+                        10_000,
+                        20_000,
+                        &[
+                            ((Verb::Play, thornbush), plays),
+                            ((Verb::Hit, thornbush), hits),
+                        ],
+                    ),
+                ]
+            }
+        };
+        let half = a1(&lesson_seeds(touches(10, 5, 5), touches(20, 10, 10)), &data);
+        assert_eq!((half.median, half.control_median), (Some(20.0), Some(40.0)));
+        assert_eq!(half.verdict, Verdict::Met);
+        let more = a1(&lesson_seeds(touches(10, 5, 6), touches(20, 10, 10)), &data);
+        assert_eq!(more.verdict, Verdict::NotMet { until: None });
+        // A control under 20 is badly calibrated, however few the learner's.
+        let thin = a1(&lesson_seeds(touches(0, 0, 0), touches(10, 5, 4)), &data);
+        assert_eq!(thin.verdict, Verdict::NotMet { until: None });
+    }
+
+    #[test]
+    fn a2_is_met_when_trained_sprites_play_with_balls_half_as_often_again_after_training() {
+        // Design §7.3, A2: applied Plays on a ball over ticks 10,000–20,000
+        // ≥ 1.5× the control's, which needs ≥20. Training's plays don't count.
+        let data = data();
+        assert_eq!(data.object_type_name(4), Some("ball"), "objects.ron");
+        let plays = |during, after| {
+            move || {
+                vec![
+                    applied(0, 9_900, &[((Verb::Play, Some(4)), during)]),
+                    applied(10_000, 20_000, &[((Verb::Play, Some(4)), after)]),
+                ]
+            }
+        };
+        let met = a2(&lesson_seeds(plays(0, 30), plays(500, 20)), &data);
+        assert_eq!((met.median, met.control_median), (Some(30.0), Some(20.0)));
+        assert_eq!(met.verdict, Verdict::Met);
+        let short = a2(&lesson_seeds(plays(500, 29), plays(0, 20)), &data);
+        assert_eq!(short.verdict, Verdict::NotMet { until: None });
+    }
+
+    #[test]
+    fn a3_is_met_when_shocked_sprites_hit_each_other_half_as_often_after_training() {
+        // Design §7.3, A3: applied Hits on a sprite over ticks 10,000–20,000
+        // ≤ 0.5× the control's, which needs ≥20.
+        let data = data();
+        assert_eq!(data.object_type_name(101), Some("sprite"), "objects.ron");
+        let hits = |during, after| {
+            move || {
+                vec![
+                    applied(0, 9_900, &[((Verb::Hit, Some(101)), during)]),
+                    applied(10_000, 20_000, &[((Verb::Hit, Some(101)), after)]),
+                ]
+            }
+        };
+        let met = a3(&lesson_seeds(hits(500, 10), hits(0, 20)), &data);
+        assert_eq!((met.median, met.control_median), (Some(10.0), Some(20.0)));
+        assert_eq!(met.verdict, Verdict::Met);
+        let more = a3(&lesson_seeds(hits(0, 11), hits(0, 20)), &data);
+        assert_eq!(more.verdict, Verdict::NotMet { until: None });
     }
 }
