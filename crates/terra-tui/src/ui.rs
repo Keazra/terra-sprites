@@ -169,6 +169,9 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
                 .set_style(style);
         }
     }
+    if app.flash_on() {
+        draw_leash(buf, app, world);
+    }
     draw_cursor(buf, inner, app, world);
 }
 
@@ -239,6 +242,55 @@ fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App, world: &World) {
                 .set_style(Style::default().fg(mark.fg));
         }
     }
+}
+
+/// Draws the leash, while the Cursor leads a sprite: a dotted line from the
+/// Cursor to the sprite, over empty ground only, so sprites and objects stay
+/// visible, and stopping at the Cursor's 3×3 (design v23 §6.5).
+fn draw_leash(buf: &mut Buffer, app: &App, world: &World) {
+    let Some(led) = app.leash() else {
+        return;
+    };
+    let cursor = app.cursor();
+    let dot = app.theme.leash();
+    for tile in line_between(led, cursor) {
+        let by_the_cursor = tile.x.abs_diff(cursor.x) <= 1 && tile.y.abs_diff(cursor.y) <= 1;
+        let empty = world.sprite_at(tile).is_none() && world.object_at(tile).is_none();
+        if let Some(cell) = app.cell_of(tile).filter(|_| empty && !by_the_cursor) {
+            buf[(cell.x, cell.y)]
+                .set_char(dot.symbol)
+                .set_style(Style::default().fg(dot.fg));
+        }
+    }
+}
+
+/// The tiles of a straight line from `from` to `to`, leaving both ends out:
+/// Bresenham's, one tile a step.
+fn line_between(from: Pos, to: Pos) -> Vec<Pos> {
+    let (x1, y1) = (i32::from(to.x), i32::from(to.y));
+    let (mut x, mut y) = (i32::from(from.x), i32::from(from.y));
+    let (dx, dy) = ((x1 - x).abs(), -(y1 - y).abs());
+    let (sx, sy) = ((x1 - x).signum(), (y1 - y).signum());
+    let mut error = dx + dy;
+    let mut tiles = Vec::new();
+    while (x, y) != (x1, y1) {
+        let twice = 2 * error;
+        if twice >= dy {
+            error += dy;
+            x += sx;
+        }
+        if twice <= dx {
+            error += dx;
+            y += sy;
+        }
+        if (x, y) != (x1, y1) {
+            tiles.push(Pos {
+                x: x as u16,
+                y: y as u16,
+            });
+        }
+    }
+    tiles
 }
 
 /// The glyph of what the Cursor has hold of, as the queue will leave it: a

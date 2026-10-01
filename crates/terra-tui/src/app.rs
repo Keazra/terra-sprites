@@ -381,6 +381,12 @@ impl App {
         self.tell(world);
     }
 
+    /// While the Cursor leads a sprite, the tile it stands on: where the
+    /// leash runs to from the Cursor (design v23 §6.5).
+    pub fn leash(&self) -> Option<Pos> {
+        self.led.map(|(_, at)| at)
+    }
+
     /// The tile within the leash nearest `tile`: while the Cursor leads a
     /// sprite, it goes no further from it than `LEASH` tiles, in a square
     /// (design v23 §6.5).

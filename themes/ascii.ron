@@ -45,5 +45,6 @@
             train:  (glyph: 'T', fg: light_magenta),
             grab:   (glyph: 'G', fg: yellow),
         },
+        leash: (glyph: ';', fg: yellow),
     ),
 )
