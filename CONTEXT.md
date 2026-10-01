@@ -561,7 +561,7 @@ The observer's plain-language account of a baseline report: what was tested, wha
 _Avoid_: summary, analysis
 
 **Observer**:
-The AI agent that reads a baseline report, and the code and commits behind it, and writes the briefing. It changes nothing and posts nothing.
+The AI agent that reads a baseline report, and the code and commits behind it, and writes the briefing. It changes nothing itself.
 _Avoid_: monitor, watcher
 
 ### Zones (a later milestone)
