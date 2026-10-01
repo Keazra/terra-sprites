@@ -7,8 +7,8 @@ use crate::action::{self, Outcome, Walk};
 use crate::cursor::Grip;
 use crate::data::DataPack;
 use crate::events::{Event, EventKind};
-use crate::map::Pos;
-use crate::objects::EntityId;
+use crate::map::{Dir, Pos};
+use crate::objects::{EntityId, Roll};
 use crate::terrain::Terrain;
 use crate::world::WorldState;
 
@@ -43,6 +43,9 @@ pub enum Command {
     /// Where the Cursor is: sent while it leads a sprite, which heads there
     /// (design v23 §2.5).
     MoveCursor { tile: Pos },
+    /// Throws the item the Cursor holds (design v25 §3.5.4): puts it down on
+    /// `from`, where aiming began, rolling `tiles` tiles `toward`.
+    Throw { from: Pos, toward: Dir, tiles: u16 },
 }
 
 /// One of the Cursor's four touches (design v21 §4.6): a Reward or a
@@ -67,7 +70,8 @@ impl CursorTouch {
             | Command::PickUp { .. }
             | Command::PutDown { .. }
             | Command::LetGo
-            | Command::MoveCursor { .. } => None,
+            | Command::MoveCursor { .. }
+            | Command::Throw { .. } => None,
         }
     }
 
@@ -181,6 +185,11 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
                 continue;
             }
             Command::MoveCursor { .. } => Err(Rejection::OffTheMap),
+            Command::Throw {
+                from,
+                toward,
+                tiles,
+            } => throw(state, data, from, toward, tiles),
         };
         let kind = match applied {
             Ok(kind) => kind,
@@ -294,6 +303,45 @@ fn pick_up(
 /// may go: a walkable tile holding no object, a sprite there or not (design
 /// §3.4).
 fn put_down(state: &mut WorldState, data: &DataPack, tile: Pos) -> Result<EventKind, Rejection> {
+    let (item, object_type) = let_go_of_held(state, data, tile)?;
+    Ok(EventKind::PutDown {
+        item,
+        object_type,
+        pos: tile,
+    })
+}
+
+/// The Cursor throws the item it holds (design v25 §3.5.4): it's put down on
+/// `from`, as `PutDown` would put it, and rolls `tiles` tiles `toward`, from
+/// this tick's step 2: at least 1, and at most the furthest for its size.
+fn throw(
+    state: &mut WorldState,
+    data: &DataPack,
+    from: Pos,
+    toward: Dir,
+    tiles: u16,
+) -> Result<EventKind, Rejection> {
+    let (item, object_type) = let_go_of_held(state, data, from)?;
+    let build = data.object_types()[state.objects.kind(item)]
+        .build
+        .expect("an item has a size");
+    let furthest = data.physiology().cursor.furthest.of(build.size);
+    let thrown = state.objects.get_mut(item).expect("the thrown item");
+    thrown.roll = Some(Roll {
+        dir: toward,
+        left: tiles.max(1).min(furthest),
+    });
+    Ok(EventKind::Threw { item, object_type })
+}
+
+/// The Cursor lets go of the item it holds onto `tile`, at rest, where an
+/// item may go: a walkable tile holding no object, a sprite there or not
+/// (design §3.4). Returns the item and its type's name.
+fn let_go_of_held(
+    state: &mut WorldState,
+    data: &DataPack,
+    tile: Pos,
+) -> Result<(EntityId, String), Rejection> {
     let item = state.cursor.holds().ok_or(Rejection::NotHolding)?;
     if !state.map.contains(tile) {
         return Err(Rejection::OffTheMap);
@@ -312,10 +360,5 @@ fn put_down(state: &mut WorldState, data: &DataPack, tile: Pos) -> Result<EventK
     }
     state.objects.put_down(item, tile);
     state.cursor.release();
-    let object_type = held.name.clone();
-    Ok(EventKind::PutDown {
-        item,
-        object_type,
-        pos: tile,
-    })
+    Ok((item, held.name.clone()))
 }

@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
+use crate::object_types::Size;
 use crate::registry::{BrainParam, Chemical, ChemicalClass, Locus, LocusId, LocusKind, Trait};
 
 /// The physiology file, relative to the pack root.
@@ -125,6 +126,30 @@ pub(crate) struct Cursor {
     /// The longest a Reward looks back for the sprite's latest try, in ticks
     /// (design v21 §5.6). A Correct looks back only `touch_window`.
     pub(crate) max_reach_back: u64,
+    /// The furthest the Cursor throws or shoves a thing of each size, in
+    /// tiles (design v25 §3.5.4).
+    pub(crate) furthest: Furthest,
+}
+
+/// The furthest the Cursor sends a thing of each size, in tiles (design v25
+/// §3.5.4). Size stands in for weight until things have weights.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Furthest {
+    pub(crate) small: u16,
+    pub(crate) medium: u16,
+    pub(crate) large: u16,
+}
+
+impl Furthest {
+    /// The furthest for a thing of `size`.
+    pub(crate) fn of(self, size: Size) -> u16 {
+        match size {
+            Size::Small => self.small,
+            Size::Medium => self.medium,
+            Size::Large => self.large,
+        }
+    }
 }
 
 /// What the Cursor's Correct injects (design v21 §4.6). It hurts, but adds
@@ -368,6 +393,18 @@ impl PhysiologyEntry {
                 "`cursor.max_reach_back` is {}, but must be at least `touch_window`, {}",
                 cursor.max_reach_back, self.touch_window
             ));
+        }
+        let furthest = cursor.furthest;
+        for (size, tiles) in [
+            ("small", furthest.small),
+            ("medium", furthest.medium),
+            ("large", furthest.large),
+        ] {
+            if tiles == 0 {
+                return Err(format!(
+                    "`cursor.furthest.{size}` must be at least 1 tile: a throw or a shove goes somewhere"
+                ));
+            }
         }
 
         Ok(Physiology {

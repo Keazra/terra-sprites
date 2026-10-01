@@ -61,6 +61,8 @@ pub enum EventKind {
     /// The Cursor picked up an item, and holds it off the map (design v23
     /// §6.5).
     PickedUp { item: EntityId, object_type: String },
+    /// The Cursor threw the item it held, which rolls (design v25 §3.5.4).
+    Threw { item: EntityId, object_type: String },
     /// The Cursor put the item it held down on a tile (design v23 §6.5).
     PutDown {
         item: EntityId,
