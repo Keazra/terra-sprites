@@ -32,6 +32,7 @@ mod regions;
 mod registry;
 mod rolling;
 mod sprites;
+mod tags;
 mod terrain;
 mod variation;
 mod verbs;

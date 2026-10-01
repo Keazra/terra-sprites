@@ -1,5 +1,6 @@
-//! What a verb does to its target (design §3.5.2): the effects its verb
-//! table lists for the verb, run in order, once per attempt.
+//! What a verb does to its target (design §3.5.2): the effects its tags
+//! give the contact (design v23 §3.5.6), then those its verb table lists for
+//! the verb, run in order, once per attempt.
 
 use crate::action::{Hurt, Outcome};
 use crate::data::DataPack;
@@ -10,10 +11,11 @@ use crate::objects::EntityId;
 use crate::perception::Target;
 use crate::registry::Verb;
 use crate::rolling;
+use crate::tags::Contact;
 use crate::world::WorldState;
 
-/// Sprite `actor` applies `verb` to `target`, once: `failed` if the target
-/// has no verb table, its verb table has no such verb, or a `RequireCounter`
+/// Sprite `actor` applies `verb` to `target`, once: `failed` if neither the
+/// target's tags nor its verb table have a rule for it, or a `RequireCounter`
 /// isn't met, and then nothing after it happens; `applied` otherwise. With
 /// the outcome comes which sprites it hurt.
 pub(crate) fn attempt(
@@ -27,15 +29,27 @@ pub(crate) fn attempt(
     let mut hurt = Hurt::default();
     // Water or a sprite in a pack with no object type for it has no verb
     // table, so no rule for any verb (design v20 §5.2).
-    let rule = state.kind_of(data, target).and_then(|kind| {
-        let verbs = &data.object_types()[kind].verbs;
-        verbs.get(&verb).map(|effects| (kind, effects))
-    });
-    let Some((kind, effects)) = rule else {
+    let Some(kind) = state.kind_of(data, target) else {
         fruitless(state, data, actor);
         return (Outcome::Failed, hurt);
     };
-    for effect in effects {
+    let object_type = &data.object_types()[kind];
+    // A contact runs the thing's tags first, in the order it lists them,
+    // then its own verb table; a try a tag answers isn't fruitless (design
+    // v23 §3.5.6).
+    let tagged: Vec<&[Effect]> = Contact::of(verb)
+        .map(|contact| {
+            let tags = object_type.tags.iter().map(|&tag| &data.tags()[tag]);
+            tags.filter_map(|tag| tag.contact.get(&contact).map(Vec::as_slice))
+                .collect()
+        })
+        .unwrap_or_default();
+    let table = object_type.verbs.get(&verb).map(Vec::as_slice);
+    if tagged.is_empty() && table.is_none() {
+        fruitless(state, data, actor);
+        return (Outcome::Failed, hurt);
+    }
+    for effect in tagged.into_iter().chain(table).flatten() {
         match *effect {
             Effect::RequireCounter(counter, least) => {
                 let Target::Object(id) = target else {

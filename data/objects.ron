@@ -6,7 +6,9 @@
 //             left out for a thing you don't count, such as water ("water is")
 //   category  what brains perceive it as: a category's name from categories.ron
 //   tags      [Solid, Fixture] for objects like bushes, which nothing can move
-//             through or move; no tags for items, like berries and balls
+//             through or move; no tags for items, like berries and balls. Then
+//             any tags defined in tags.ron, such as Thorny, whose contacts run
+//             before the type's own verbs
 //   size      Small, Medium or Large, and
 //   hardness  from 0 to 1: a rolling item bounces off something bigger, knocks
 //             on something its size, and crushes something smaller and softer.
@@ -66,17 +68,17 @@
      }),
 
     (id: 3, name: "thornbush", plural: "thornbushes",
-     category: "bush", tags: [Solid, Fixture], size: Large, hardness: 1.0,
+     category: "bush", tags: [Solid, Fixture, Thorny], size: Large, hardness: 1.0,
      stages: [(name: "grown", ticks: (40000, 60000), next: Expire)],
      rules: [
          (trigger: Every(2000), if: [Chance(0.1)],
           do: [SpreadTo("thornbush", 4, [DensityBelow("thornbush", 4, 2), KeepsPathsOpen])]),
      ],
-     // Every contact hurts, deliberately, even Play (design §3.5.3).
+     // Every contact hurts, deliberately, even Play (design §3.5.3): its
+     // thorns are its Thorny tag's (tags.ron), so its own table has only
+     // what isn't thorns.
      verbs: {
-         Eat:  [Inject(Actor, "injury", 0.05), Signal(Actor, "pricked")],
-         Hit:  [Inject(Actor, "injury", 0.03), Signal(Actor, "pricked"), Signal(Actor, "did_hit")],
-         Play: [Inject(Actor, "injury", 0.03), Signal(Actor, "pricked")],
+         Hit: [Signal(Actor, "did_hit")],
      }),
 
     (id: 4, name: "ball", plural: "balls", category: "toy", size: Medium, hardness: 0.5,
