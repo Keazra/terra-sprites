@@ -4,15 +4,16 @@
 use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
-    ActionView, ChemicalKind, ChemicalLevel, CursorTouch, DataPack, DeathCause, EmitterMode,
-    EntityId, Event, EventKind, Explanation, Expression, GeneView, Learned, ObjectView, Outcome,
-    Part, Progress, Rejection, SpriteView, Target, Thing, Trait, Verb, World,
+    ActionView, Blocker, ChemicalKind, ChemicalLevel, Command, CursorTouch, DataPack, DeathCause,
+    EmitterMode, Emptied, EntityId, Event, EventKind, Explanation, Expression, GeneView, Grip,
+    Learned, ObjectView, Outcome, Part, Progress, Rejection, Removal, SpriteView, Target, Terrain,
+    Thing, Trait, Verb, World,
 };
 
 use crate::app::{App, Selection, Tab};
 use crate::text::{
-    cause_name, change, display_name, group_thousands, level, signed, signed_level, significant,
-    sprite_label, whole,
+    ROOTED, cause_name, change, display_name, group_thousands, level, signed, signed_level,
+    significant, sprite_label, terrain_name, whole,
 };
 
 /// The inspector's width, in columns, border included (design §6.1).
@@ -114,9 +115,12 @@ fn sprite_tab(tab: Tab, sprite: &SpriteView, app: &App, world: &World) -> Vec<Li
 /// player has observed it do.
 fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
     let traits = sprite.traits();
-    let doing = sprite
-        .action()
-        .map(|action| format!(" {}", action_line(&action, app.detail(), world.data())));
+    let doing = match led_line(sprite, app.detail(), world) {
+        Some(led) => Some(format!(" {led}")),
+        None => sprite
+            .action()
+            .map(|action| format!(" {}", action_line(&action, app.detail(), world.data()))),
+    };
     let mut lines: Vec<String> = doing.into_iter().collect();
     lines.extend([
         format!(
@@ -210,6 +214,26 @@ fn hanging(head: &str, text: &str) -> Vec<String> {
     }
     lines.push(line);
     lines
+}
+
+/// While the Cursor leads `sprite`, what the Body tab says in place of an
+/// action (design v23 §6.1): "Being led · 4 tiles behind", or once caught
+/// up, as close as it can get, "Being led"; in the detail view
+/// `LED → (61,40) · walking (4 tiles)`, with the Cursor's tile.
+fn led_line(sprite: &SpriteView, detail: bool, world: &World) -> Option<String> {
+    let behind = sprite.lead_steps_left()?;
+    let tile = world.cursor().tile()?;
+    Some(match (detail, behind) {
+        (false, 0) => "Being led".into(),
+        (false, _) => format!("Being led · {} behind", counted(behind, "tile")),
+        (true, 0) => format!("LED → ({},{})", tile.x, tile.y),
+        (true, _) => format!(
+            "LED → ({},{}) · walking ({})",
+            tile.x,
+            tile.y,
+            counted(behind, "tile")
+        ),
+    })
 }
 
 /// What a sprite is doing, as the Body tab's first line says it (design
@@ -317,6 +341,7 @@ pub(crate) fn observed_line(action: &ActionView, data: &DataPack) -> String {
             _ => "it was gone".into(),
         },
         Outcome::Interrupted => "changed its mind".into(),
+        Outcome::PulledAway => "was pulled away".into(),
         outcome => {
             let reason = ended_line(outcome).expect("an outcome that isn't applied");
             reason.replacen("Gave up", "gave up", 1)
@@ -441,6 +466,7 @@ fn ended_line(outcome: Outcome) -> Option<String> {
             Outcome::TimedOut => "Gave up: it took too long",
             Outcome::Failed => "Gave up: it couldn't get there",
             Outcome::Interrupted => "Changed its mind",
+            Outcome::PulledAway => "Pulled away",
         }
         .into(),
     )
@@ -532,6 +558,7 @@ fn outcome_name(outcome: Outcome) -> &'static str {
         Outcome::Failed => "failed",
         Outcome::Interrupted => "interrupted",
         Outcome::TimedOut => "timed_out",
+        Outcome::PulledAway => "pulled_away",
     }
 }
 
@@ -565,10 +592,16 @@ fn trait_text(which: Trait, value: f32) -> String {
 const CONCEPTS_SHOWN: usize = 5;
 
 /// The Brain tab (design §5.9, §6.1): what the sprite attended to and
-/// decided at its latest step 5, or "Nothing decided yet"; then its memory,
-/// which it can have before it first decides.
+/// decided at its latest step 5, or "Nothing decided yet", or while led
+/// "Being led: it decides nothing"; then its memory, which it can have
+/// before it first decides.
 fn brain_tab(sprite: &SpriteView, data: &DataPack) -> Vec<Line<'static>> {
+    // Led, it decides nothing, so its last decision would mislead (design
+    // v23 §2.4).
     let mut lines = match sprite.explain() {
+        _ if sprite.lead_steps_left().is_some() => {
+            vec![" Being led: it decides nothing".to_string()]
+        }
         Some(explained) => explained_lines(&explained),
         None => vec![" Nothing decided yet".to_string()],
     };
@@ -1166,6 +1199,54 @@ fn world_tab(world: &World) -> Vec<Line<'static>> {
     lines
 }
 
+/// Why the world refused `command`, spoken to the player, as the event log
+/// and the status line say it (design v22, v23 §6.1): "Couldn't pet Sprite
+/// #12: it's gone", "Couldn't put the ball down: a berry is there".
+fn refusal_line(command: &Command, reason: Rejection, data: &DataPack) -> Option<String> {
+    let name = |id: u16| display_name(data.object_type_name(id).unwrap_or("?"));
+    let what = match *command {
+        Command::Reward { sprite, .. } | Command::Correct { sprite, .. } => {
+            let touch = CursorTouch::of(command).expect("a touch");
+            format!("{} {}", touch.name(), sprite_label(sprite))
+        }
+        Command::TakeHold { sprite } => format!("take hold of {}", sprite_label(sprite)),
+        Command::PickUp { .. } => "pick it up".into(),
+        Command::PutDown { .. } => match reason {
+            Rejection::InTheWay { item_type, .. } => format!("put the {} down", name(item_type)),
+            _ => "put it down".into(),
+        },
+        Command::LetGo => "let go".into(),
+        // The app sends it only while leading, and only onto the map.
+        Command::MoveCursor { .. } => return None,
+    };
+    let why = match reason {
+        Rejection::Gone => "it's gone".into(),
+        Rejection::Busy(Grip::Leads(led)) => {
+            format!("you're already leading {}", sprite_label(led))
+        }
+        Rejection::Busy(Grip::Holds(_)) => "you're already holding something".into(),
+        Rejection::NotLeading => "you're not leading a sprite".into(),
+        Rejection::Rooted => ROOTED.into(),
+        Rejection::NotHolding => "you're not holding anything".into(),
+        Rejection::OffTheMap => "that's off the map".into(),
+        Rejection::InTheWay {
+            blocker: Blocker::Object(there),
+            ..
+        } => format!("{} is there", with_article(&name(there))),
+        Rejection::InTheWay {
+            blocker: Blocker::Terrain(terrain),
+            ..
+        } => {
+            let into = match terrain {
+                Terrain::ShallowWater | Terrain::DeepWater => "in",
+                _ => "on",
+            };
+            format!("it can't go {into} {}", terrain_name(terrain))
+        }
+    };
+    Some(format!("Couldn't {what}: {why}"))
+}
+
 /// What an event says in the event log, if the log shows it (design §6.1).
 pub(crate) fn event_line(event: &Event, data: &DataPack) -> Option<String> {
     match &event.kind {
@@ -1190,15 +1271,39 @@ pub(crate) fn event_line(event: &Event, data: &DataPack) -> Option<String> {
             };
             Some(format!("You {done} {}", sprite_label(*id)))
         }
-        EventKind::CommandRejected { command, reason } => {
-            let touch = CursorTouch::of(command).name();
-            let (terra_sim::Command::Reward { sprite, .. }
-            | terra_sim::Command::Correct { sprite, .. }) = *command;
-            let why = match reason {
-                Rejection::Gone => "it's gone",
-            };
-            Some(format!("Couldn't {touch} {}: {why}", sprite_label(sprite)))
+        EventKind::CommandRejected { command, reason } => refusal_line(command, *reason, data),
+        // Grabbing, spoken to the player (design v23 §6.1).
+        EventKind::TookHold { sprite } => {
+            Some(format!("You took hold of {}", sprite_label(*sprite)))
         }
+        EventKind::LetGo { sprite } => Some(format!("You let go of {}", sprite_label(*sprite))),
+        EventKind::PickedUp { object_type, .. } => Some(format!(
+            "You picked up {}",
+            with_article(&display_name(object_type))
+        )),
+        EventKind::PutDown { object_type, .. } => {
+            Some(format!("You put the {} down", display_name(object_type)))
+        }
+        EventKind::CursorEmptied {
+            reason:
+                Emptied::Removed {
+                    object_type,
+                    reason,
+                    ..
+                },
+        } => {
+            let went = match reason {
+                Removal::Expired => "expired",
+                Removal::Destroyed => "was destroyed",
+                Removal::Replaced => "was replaced",
+            };
+            let name = display_name(object_type);
+            Some(format!("The {name} you were holding {went}"))
+        }
+        // A led sprite's death has its own line.
+        EventKind::CursorEmptied {
+            reason: Emptied::Died { .. },
+        } => None,
         EventKind::ObjectSpawned { .. }
         | EventKind::ObjectRemoved { .. }
         | EventKind::ActionStarted { .. } => None,
@@ -1709,6 +1814,11 @@ mod tests {
             ),
             (rest(Ended(Applied)), "Rested"),
             (rest(Ended(Interrupted)), "Rested, but changed its mind"),
+            (rest(Ended(PulledAway)), "Rested, but was pulled away"),
+            (
+                bush(PulledAway),
+                "Went to eat the berry bush, but was pulled away",
+            ),
             (tried(bush(Applied)), "Ate from the berry bush"),
             (gone(tried(berry(Applied))), "Ate the berry"),
             (

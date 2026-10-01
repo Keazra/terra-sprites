@@ -3,9 +3,13 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::action::{self, Outcome, Walk};
+use crate::cursor::Grip;
 use crate::data::DataPack;
 use crate::events::{Event, EventKind};
+use crate::map::Pos;
 use crate::objects::EntityId;
+use crate::terrain::Terrain;
 use crate::world::WorldState;
 
 /// Something the player does to the world through the Cursor. It carries
@@ -25,6 +29,20 @@ pub enum Command {
     /// touch window, whatever the speed, so a late shock can't land on the
     /// wrong thing (design v21 §5.6).
     Correct { sprite: EntityId, amplified: bool },
+    /// Takes hold of a sprite, which the Cursor then leads (design v23 §6.5).
+    TakeHold { sprite: EntityId },
+    /// Picks up an item, which the Cursor then holds, off the map (design
+    /// v23 §6.5).
+    PickUp { item: EntityId },
+    /// Puts the item the Cursor holds down on a tile, at rest (design v23
+    /// §6.5).
+    PutDown { tile: Pos },
+    /// Lets go of the sprite the Cursor leads, which chooses for itself
+    /// again at its next step 5 (design v23 §6.5).
+    LetGo,
+    /// Where the Cursor is: sent while it leads a sprite, which heads there
+    /// (design v23 §2.5).
+    MoveCursor { tile: Pos },
 }
 
 /// One of the Cursor's four touches (design v21 §4.6): a Reward or a
@@ -40,11 +58,16 @@ pub enum CursorTouch {
 }
 
 impl CursorTouch {
-    /// The touch `command` gives.
-    pub fn of(command: &Command) -> CursorTouch {
+    /// The touch `command` gives, if it's a touch.
+    pub fn of(command: &Command) -> Option<CursorTouch> {
         match *command {
-            Command::Reward { amplified, .. } => CursorTouch::rewarding(amplified),
-            Command::Correct { amplified, .. } => CursorTouch::correcting(amplified),
+            Command::Reward { amplified, .. } => Some(CursorTouch::rewarding(amplified)),
+            Command::Correct { amplified, .. } => Some(CursorTouch::correcting(amplified)),
+            Command::TakeHold { .. }
+            | Command::PickUp { .. }
+            | Command::PutDown { .. }
+            | Command::LetGo
+            | Command::MoveCursor { .. } => None,
         }
     }
 
@@ -109,62 +132,190 @@ impl CursorTouch {
 pub enum Rejection {
     /// The sprite isn't in the world: it never was, or it has died.
     Gone,
+    /// The Cursor already has hold of something (design v23 §6.5).
+    Busy(Grip),
+    /// The Cursor leads no sprite to let go of.
+    NotLeading,
+    /// A fixture can't be picked up: it's attached to the ground (design
+    /// §3.3).
+    Rooted,
+    /// The Cursor holds no item to put down.
+    NotHolding,
+    /// The tile isn't on the map.
+    OffTheMap,
+    /// Something on the tile stops the item going there (design §3.4).
+    InTheWay {
+        /// The stable ID of the held item's type.
+        item_type: u16,
+        blocker: Blocker,
+    },
+}
+
+/// What stops an item being put down on a tile (design §3.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Blocker {
+    /// An object is there already: the stable ID of its type.
+    Object(u16),
+    /// The tile's terrain isn't walkable.
+    Terrain(Terrain),
 }
 
 /// Step 1 (design §2.4): applies the commands stamped for this tick, in the
 /// order they were submitted.
 pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Event>) {
-    let physiology = data.physiology();
-    let (cursor, indices) = (&physiology.cursor, &physiology.indices);
     for command in std::mem::take(&mut state.commands) {
-        let (Command::Reward { sprite, .. } | Command::Correct { sprite, .. }) = command;
-        let Some(touched) = state.sprites.get_mut(sprite) else {
-            events.push(Event {
-                tick: state.tick,
-                kind: EventKind::CommandRejected {
-                    command,
-                    reason: Rejection::Gone,
-                },
-            });
-            continue;
-        };
-        // A Reward looks back its reach back, within the bounds, and several
-        // in a tick as far as the furthest; a Correct looks back only the
-        // touch window, which its `shocked` pulse tells learning (design v21
-        // §2.5, §5.6).
-        let kind = match command {
+        let applied = match command {
             Command::Reward {
+                sprite,
                 amplified,
                 reach_back,
-                ..
-            } => {
-                let reach_back = reach_back.clamp(physiology.touch_window, cursor.max_reach_back);
-                let brain = &mut touched.brain;
-                brain.reach_back = brain.reach_back.max(Some(reach_back));
-                let body = &mut touched.body;
-                let reward = if amplified { cursor.hug } else { cursor.pet };
-                body.raise(indices.reward, reward);
-                body.pulse(indices.petted, None);
-                EventKind::Rewarded {
-                    id: sprite,
-                    amplified,
-                }
+            } => reward(state, data, sprite, amplified, reach_back),
+            Command::Correct { sprite, amplified } => correct(state, data, sprite, amplified),
+            Command::TakeHold { sprite } => take_hold(state, sprite, events),
+            Command::PickUp { item } => pick_up(state, data, item),
+            Command::PutDown { tile } => put_down(state, data, tile),
+            Command::LetGo => let_go(state),
+            // Nothing to report: it moves many times a second while leading.
+            Command::MoveCursor { tile } if state.map.contains(tile) => {
+                state.cursor.tile = Some(tile);
+                continue;
             }
-            Command::Correct { amplified, .. } => {
-                let body = &mut touched.body;
-                let correction = if amplified { cursor.shock } else { cursor.zap };
-                body.raise(indices.punishment, correction.punishment);
-                body.raise(indices.pain, correction.pain);
-                body.pulse(indices.shocked, None);
-                EventKind::Corrected {
-                    id: sprite,
-                    amplified,
-                }
-            }
+            Command::MoveCursor { .. } => Err(Rejection::OffTheMap),
+        };
+        let kind = match applied {
+            Ok(kind) => kind,
+            Err(reason) => EventKind::CommandRejected { command, reason },
         };
         events.push(Event {
             tick: state.tick,
             kind,
         });
     }
+}
+
+/// The Cursor's good touch on `sprite` (design v21 §4.6): a pet, or
+/// amplified, a hug. Its feeling looks back its reach back, within the
+/// bounds, and several in a tick as far as the furthest (design v21 §2.5,
+/// §5.6).
+fn reward(
+    state: &mut WorldState,
+    data: &DataPack,
+    sprite: EntityId,
+    amplified: bool,
+    reach_back: u64,
+) -> Result<EventKind, Rejection> {
+    let physiology = data.physiology();
+    let (cursor, indices) = (&physiology.cursor, &physiology.indices);
+    let touched = state.sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
+    let reach_back = reach_back.clamp(physiology.touch_window, cursor.max_reach_back);
+    let brain = &mut touched.brain;
+    brain.reach_back = brain.reach_back.max(Some(reach_back));
+    let body = &mut touched.body;
+    let reward = if amplified { cursor.hug } else { cursor.pet };
+    body.raise(indices.reward, reward);
+    body.pulse(indices.petted, None);
+    Ok(EventKind::Rewarded {
+        id: sprite,
+        amplified,
+    })
+}
+
+/// The Cursor's bad touch on `sprite` (design v21 §4.6): a zap, or
+/// amplified, a shock. Its feeling looks back only the touch window, which
+/// its `shocked` pulse tells learning (design v21 §5.6).
+fn correct(
+    state: &mut WorldState,
+    data: &DataPack,
+    sprite: EntityId,
+    amplified: bool,
+) -> Result<EventKind, Rejection> {
+    let physiology = data.physiology();
+    let (cursor, indices) = (&physiology.cursor, &physiology.indices);
+    let body = &mut state.sprites.get_mut(sprite).ok_or(Rejection::Gone)?.body;
+    let correction = if amplified { cursor.shock } else { cursor.zap };
+    body.raise(indices.punishment, correction.punishment);
+    body.raise(indices.pain, correction.pain);
+    body.pulse(indices.shocked, None);
+    Ok(EventKind::Corrected {
+        id: sprite,
+        amplified,
+    })
+}
+
+/// The Cursor takes hold of `sprite`, and leads it (design v23 §6.5):
+/// whatever it was doing ends, pulled away.
+fn take_hold(
+    state: &mut WorldState,
+    sprite: EntityId,
+    events: &mut Vec<Event>,
+) -> Result<EventKind, Rejection> {
+    state.cursor.free()?;
+    let led = state.sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
+    if let Some(doing) = led.action.as_mut().filter(|a| a.ended.is_none()) {
+        action::end(doing, sprite, Outcome::PulledAway, state.tick, events);
+    }
+    led.lead = Some(Walk::default());
+    state.cursor.take(Grip::Leads(sprite));
+    state.cursor.tile = Some(led.pos);
+    Ok(EventKind::TookHold { sprite })
+}
+
+/// The Cursor lets go of the sprite it leads (design v23 §6.5).
+fn let_go(state: &mut WorldState) -> Result<EventKind, Rejection> {
+    let sprite = state.cursor.leads().ok_or(Rejection::NotLeading)?;
+    state.cursor.release();
+    let led = state.sprites.get_mut(sprite).expect("the led sprite");
+    led.lead = None;
+    Ok(EventKind::LetGo { sprite })
+}
+
+/// The Cursor picks up `item`, and holds it off the map, at rest (design
+/// v23 §6.5).
+fn pick_up(
+    state: &mut WorldState,
+    data: &DataPack,
+    item: EntityId,
+) -> Result<EventKind, Rejection> {
+    state.cursor.free()?;
+    let object = state.objects.get(item).ok_or(Rejection::Gone)?;
+    let object_type = &data.object_types()[object.kind];
+    // In M1 every fixture is solid, and every solid object a fixture
+    // (design §3.3).
+    if object_type.solid {
+        return Err(Rejection::Rooted);
+    }
+    let object_type = object_type.name.clone();
+    state.objects.pick_up(item);
+    state.cursor.take(Grip::Holds(item));
+    Ok(EventKind::PickedUp { item, object_type })
+}
+
+/// The Cursor puts the item it holds down on `tile`, at rest, where an item
+/// may go: a walkable tile holding no object, a sprite there or not (design
+/// §3.4).
+fn put_down(state: &mut WorldState, data: &DataPack, tile: Pos) -> Result<EventKind, Rejection> {
+    let item = state.cursor.holds().ok_or(Rejection::NotHolding)?;
+    if !state.map.contains(tile) {
+        return Err(Rejection::OffTheMap);
+    }
+    let held = &data.object_types()[state.objects.kind(item)];
+    let in_the_way = |blocker| Rejection::InTheWay {
+        item_type: held.id,
+        blocker,
+    };
+    if let Some(there) = state.objects.at(tile) {
+        let kind = state.objects.kind(there);
+        return Err(in_the_way(Blocker::Object(data.object_types()[kind].id)));
+    }
+    if !state.map.is_walkable(tile) {
+        return Err(in_the_way(Blocker::Terrain(state.map.terrain(tile))));
+    }
+    state.objects.put_down(item, tile);
+    state.cursor.release();
+    let object_type = held.name.clone();
+    Ok(EventKind::PutDown {
+        item,
+        object_type,
+        pos: tile,
+    })
 }

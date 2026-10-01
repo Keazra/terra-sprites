@@ -6,13 +6,14 @@ use std::time::Duration;
 use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
 use terra_sim::{
-    ActionView, Command, CursorTouch, DeathCause, EntityId, Event, EventKind, Map, Pos, Target,
-    World,
+    ActionView, Command, CursorTouch, DeathCause, EntityId, Event, EventKind, Grip, Map, Pos,
+    Target, World,
 };
 
 use crate::clock::Clock;
 use crate::input::{Action, Button};
 use crate::inspector;
+use crate::text::{ROOTED, display_name};
 use crate::theme::{Emote, Theme};
 
 /// Whether the game carries on after an action.
@@ -30,25 +31,27 @@ pub enum Screen {
     QuitPrompt,
 }
 
-/// What a click on the map does (design v21 §6.5). Grab mode arrives with
-/// slice 11.
+/// What a click on the map does (design v21 §6.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CursorMode {
     Select,
     /// Teaching: a left click rewards, a right click corrects.
     Train,
+    /// Moving things: a left click grabs, or lets go (design v23 §6.5).
+    Grab,
 }
 
 impl CursorMode {
     /// Every cursor mode. Each theme must give all of them a mark.
-    pub const ALL: [CursorMode; 2] = [CursorMode::Select, CursorMode::Train];
+    pub const ALL: [CursorMode; 3] = [CursorMode::Select, CursorMode::Train, CursorMode::Grab];
 
     /// The mode's name on the status line.
     pub fn label(self) -> &'static str {
         match self {
             CursorMode::Select => "SELECT",
             CursorMode::Train => "TRAIN",
+            CursorMode::Grab => "GRAB",
         }
     }
 
@@ -69,6 +72,16 @@ pub enum StatusMark {
     Applied,
     /// The world has just refused one.
     Rejected,
+    /// In Grab mode, empty, `Y`: a click would grab something (design v23
+    /// §6.5).
+    Grab,
+    /// In Grab mode, empty, `N`.
+    Empty,
+    /// In Grab mode, holding or leading, `Y`: a click would put it down or
+    /// let go.
+    Release,
+    /// In Grab mode, holding or leading, `N`: the thing's own glyph.
+    Holding,
 }
 
 /// How many lines the observed list keeps (design §6.1).
@@ -208,6 +221,17 @@ pub struct App {
     emotes: BTreeMap<EntityId, (Emote, Duration)>,
     /// The commands the player's clicks made, for the world (design §6.8).
     commands: Vec<Command>,
+    /// Grab mode's commands the world hasn't applied yet, each with the
+    /// tick the world applies it at, so the marks and the next click follow
+    /// the queue (design v23 §6.5).
+    queued: Vec<(u64, Command)>,
+    /// While the Cursor leads a sprite, the tile the world was last told
+    /// it's on (design v23 §6.5).
+    told_tile: Option<Pos>,
+    /// The sprite the Cursor leads, as the player sees it (`App::grip`),
+    /// and where it stands, as of the latest action or tick: the leash's
+    /// centre (design v23 §6.5).
+    led: Option<(EntityId, Pos)>,
     /// When, in `running_for`, a click last sent a command (design v22 §6.5).
     sent_at: Option<Duration>,
     /// The world's latest report on a command, and when it began to show.
@@ -230,6 +254,10 @@ const EMOTE_FOR: Duration = Duration::from_secs(1);
 
 /// How long the status marks flash, in real time (design v21 §6.5).
 const MARK_FLASH_FOR: Duration = Duration::from_millis(300);
+
+/// How far the Cursor goes from a sprite it leads, in tiles, in a square: a
+/// UI setting (design v23 §6.5).
+const LEASH: u16 = 5;
 
 /// How long the status line says why a click was refused, in real time
 /// (design v22 §6.1).
@@ -266,6 +294,9 @@ impl App {
             running_for: Duration::ZERO,
             emotes: BTreeMap::new(),
             commands: Vec::new(),
+            queued: Vec::new(),
+            told_tile: None,
+            led: None,
             sent_at: None,
             report: None,
             refusal: None,
@@ -295,6 +326,13 @@ impl App {
             {
                 self.note_touch(event.tick, *id, touch);
                 self.flash_report(StatusMark::Applied);
+            }
+            // Let go, the selected sprite felt it as a pull from nowhere, since
+            // it can't see the Cursor (design v23 §6.1).
+            if let EventKind::LetGo { sprite } = event.kind
+                && self.selection == Some(Selection::Living(sprite))
+            {
+                self.observe(event.tick, "Was pulled along out of nowhere".into());
             }
             if let EventKind::CommandRejected { .. } = event.kind {
                 self.flash_report(StatusMark::Rejected);
@@ -327,21 +365,109 @@ impl App {
             }
         }
         self.event_log.truncate(EVENT_LOG_LENGTH);
+        // The world has applied what was queued for the ticks it has run.
+        self.queued.retain(|&(tick, _)| tick >= world.tick());
+        self.settle_cursor(world);
+    }
+
+    /// Settles the Cursor after an action or a tick: what it leads, then
+    /// where it is, then telling the world if it leads a sprite.
+    fn settle_cursor(&mut self, world: &World) {
+        self.led = match self.grip(world) {
+            Some(Grip::Leads(id)) => world.sprite(id).map(|sprite| (id, sprite.pos())),
+            _ => None,
+        };
         self.track(world);
+        self.tell(world);
+    }
+
+    /// While the Cursor leads a sprite, the tile it stands on: where the
+    /// leash runs to from the Cursor (design v23 §6.5).
+    pub fn leash(&self) -> Option<Pos> {
+        self.led.map(|(_, at)| at)
+    }
+
+    /// The tile within the leash nearest `tile`: while the Cursor leads a
+    /// sprite, it goes no further from it than `LEASH` tiles, in a square
+    /// (design v23 §6.5).
+    fn within_leash(&self, tile: Pos) -> Pos {
+        let Some((_, at)) = self.led else {
+            return tile;
+        };
+        let near =
+            |to: u16, from: u16| to.clamp(from.saturating_sub(LEASH), from.saturating_add(LEASH));
+        Pos {
+            x: near(tile.x, at.x),
+            y: near(tile.y, at.y),
+        }
+    }
+
+    /// While the Cursor leads a sprite, tells the world each new tile it
+    /// moves onto, in every mode (design v23 §6.5): the led sprite heads
+    /// there.
+    fn tell(&mut self, world: &World) {
+        if !matches!(self.grip(world), Some(Grip::Leads(_))) {
+            self.told_tile = None;
+        } else if self.told_tile != Some(self.cursor) {
+            self.commands
+                .push(Command::MoveCursor { tile: self.cursor });
+            self.told_tile = Some(self.cursor);
+        }
+    }
+
+    /// What the Cursor has hold of as the player sees it: what the world
+    /// says, as the commands queued since will leave it (design v23 §6.5).
+    /// If the world refuses one, this goes back to the world's word.
+    pub fn grip(&self, world: &World) -> Option<Grip> {
+        let now = world.cursor();
+        let held = now.holds().map(|item| Grip::Holds(item.id()));
+        let start = now.leads().map(Grip::Leads).or(held);
+        self.queued
+            .iter()
+            .fold(start, |grip, &(_, command)| match command {
+                Command::TakeHold { sprite } => grip.or(Some(Grip::Leads(sprite))),
+                Command::PickUp { item } => grip.or(Some(Grip::Holds(item))),
+                Command::LetGo | Command::PutDown { .. } => None,
+                Command::Reward { .. } | Command::Correct { .. } | Command::MoveCursor { .. } => {
+                    grip
+                }
+            })
     }
 
     /// The sprite the Cursor is locked on to, if any (design v21 §6.5).
+    /// While the Cursor leads that sprite, the lock steps aside, in every
+    /// mode, and the Cursor follows the pointer, within the leash (design
+    /// v23 §6.5).
     pub fn locked(&self) -> Option<EntityId> {
+        if self.lock_waits() {
+            return None;
+        }
         match self.selection {
             Some(Selection::Living(id)) if self.lock => Some(id),
             _ => None,
         }
     }
 
-    /// Keeps a locked-on Cursor on its sprite, wherever it has walked.
+    /// Whether the lock steps aside: while the Cursor leads the locked-on
+    /// sprite (design v23 §6.5).
+    fn lock_waits(&self) -> bool {
+        match (self.selection, self.led) {
+            (Some(Selection::Living(locked)), Some((led, _))) => self.lock && locked == led,
+            _ => false,
+        }
+    }
+
+    /// Keeps a locked-on Cursor on its sprite, wherever it has walked; and
+    /// a leading one on the pointer, so a keyboard click lands where the
+    /// player points. Either way, within the leash (design v23 §6.5).
     fn track(&mut self, world: &World) {
-        if let Some(sprite) = self.locked().and_then(|id| world.sprite(id)) {
-            self.cursor = sprite.pos();
+        let wanted = match self.locked().and_then(|id| world.sprite(id)) {
+            Some(sprite) => Some(sprite.pos()),
+            None if self.led.is_some() => Some(self.pointed),
+            None => None,
+        };
+        if let Some(tile) = wanted {
+            self.cursor = self.within_leash(tile);
         }
     }
 
@@ -440,6 +566,21 @@ impl App {
             .filter(|&(_, from)| self.shows(from, MARK_FLASH_FOR))
             .max_by_key(|&(_, at)| at)
             .map_or(StatusMark::Idle, |(mark, _)| mark)
+    }
+
+    /// What the Cursor's two status marks show now, top right (`Y`) then
+    /// bottom left (`N`) (design v23 §6.5). In Grab mode they show what the
+    /// Cursor has hold of, as the queue will leave it, unless a refusal is
+    /// flashing; in the other modes, both show `status_mark`.
+    pub fn status_marks(&self, world: &World) -> [StatusMark; 2] {
+        let flash = self.status_mark();
+        if self.mode != CursorMode::Grab || flash == StatusMark::Rejected {
+            return [flash; 2];
+        }
+        match self.grip(world) {
+            Some(_) => [StatusMark::Release, StatusMark::Holding],
+            None => [StatusMark::Grab, StatusMark::Empty],
+        }
     }
 
     /// Why the player's latest click was refused, while the status line
@@ -591,8 +732,10 @@ impl App {
                 amplified,
             } => {
                 self.point(at);
+                // A click lands where the Cursor is: not past the leash
+                // (design v23 §6.5).
                 if let Some(tile) = self.tile_at(at) {
-                    self.act(tile, button, amplified, world);
+                    self.act(self.within_leash(tile), button, amplified, world);
                 }
             }
             Action::Press { button, amplified } => {
@@ -625,7 +768,7 @@ impl App {
             Action::Confirm | Action::Dismiss => {}
             Action::Quit => return Flow::Quit,
         }
-        self.track(world);
+        self.settle_cursor(world);
         Flow::Continue
     }
 
@@ -656,6 +799,9 @@ impl App {
                 }
                 _ => {}
             },
+            (CursorMode::Grab, Button::Left) => self.grab_click(tile, sprite, world),
+            // Throwing and shoving come with slice 11b.
+            (CursorMode::Grab, Button::Right) => {}
             (CursorMode::Train, button) => {
                 let touch = match (button, amplified) {
                     (Button::Left, false) => CursorTouch::Pet,
@@ -666,11 +812,7 @@ impl App {
                 // With nothing to act on, nothing is sent, so `?` flashes at
                 // once, and the status line says why (design v22 §6.5).
                 let Some(sprite) = self.locked().or(sprite) else {
-                    self.report = Some((StatusMark::Rejected, self.running_for));
-                    self.refusal = Some((
-                        format!("No sprite here to {}", touch.name()),
-                        self.running_for,
-                    ));
+                    self.refuse(format!("No sprite here to {}", touch.name()));
                     return;
                 };
                 self.commands
@@ -681,6 +823,46 @@ impl App {
                 self.report = None;
             }
         }
+    }
+
+    /// A Grab-mode click on `tile`, with `sprite` on it (design v23 §6.5).
+    /// Leading, it lets go; holding, it puts the item down there. Empty, it
+    /// takes hold of the locked-on sprite, or else the sprite there, or
+    /// else picks up the item there; a fixture is rooted to the ground.
+    fn grab_click(&mut self, tile: Pos, sprite: Option<EntityId>, world: &World) {
+        let command = match self.grip(world) {
+            Some(Grip::Leads(_)) => Command::LetGo,
+            Some(Grip::Holds(_)) => Command::PutDown { tile },
+            None => match (self.locked().or(sprite), world.object_at(tile)) {
+                (Some(sprite), _) => Command::TakeHold { sprite },
+                // In M1 every solid object is a fixture (design §3.3).
+                (None, Some(object)) if object.is_solid() => {
+                    let name = display_name(object.type_name());
+                    self.refuse(format!("Can't grab the {name}: {ROOTED}"));
+                    return;
+                }
+                (None, Some(object)) => Command::PickUp { item: object.id() },
+                (None, None) => {
+                    self.refuse("Nothing here to grab".into());
+                    return;
+                }
+            },
+        };
+        if let Command::TakeHold { sprite } = command {
+            // Taking hold puts the Cursor, as the world knows it, on the sprite.
+            self.told_tile = world.sprite(sprite).map(|s| s.pos());
+        }
+        self.commands.push(command);
+        self.queued.push((world.tick(), command));
+        // The marks follow the latest click (design v22 §6.5).
+        self.report = None;
+    }
+
+    /// A click with nothing to act on: it sends nothing, so `?` flashes at
+    /// once, and the status line says why (design v22 §6.5).
+    fn refuse(&mut self, why: String) {
+        self.report = Some((StatusMark::Rejected, self.running_for));
+        self.refusal = Some((why, self.running_for));
     }
 
     /// Locks the Cursor on to the selection, or lets go, when it follows
@@ -796,15 +978,15 @@ impl App {
     }
 
     /// Notes the tile at screen cell `cell` as the pointer's, and puts the
-    /// Cursor there unless it's locked on. Off the map view's tiles, both
-    /// stay on their last tile.
+    /// Cursor there, within the leash, unless it's locked on. Off the map
+    /// view's tiles, both stay on their last tile.
     fn point(&mut self, cell: Position) {
         match self.tile_at(cell) {
             Some(tile) => {
                 self.pointer = Some(cell);
                 self.pointed = tile;
                 if self.locked().is_none() {
-                    self.cursor = tile;
+                    self.cursor = self.within_leash(tile);
                 }
             }
             None => self.pointer = None,

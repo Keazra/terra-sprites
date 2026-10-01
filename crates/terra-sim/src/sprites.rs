@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, VecDeque};
 
 use serde::Serialize;
 
-use crate::action::{Action, Did, ScriptedAction};
+use crate::action::{Action, Did, ScriptedAction, Walk};
 use crate::biochem::{Body, Program};
 use crate::brain::Brain;
 use crate::data::DataPack;
@@ -29,6 +29,8 @@ pub(crate) struct Sprite {
     pub(crate) brain: Brain,
     /// What it's doing, or the action that last ended until the next starts.
     pub(crate) action: Option<Action>,
+    /// Its way after the Cursor, while the Cursor leads it (design v23 §6.5).
+    pub(crate) lead: Option<Walk>,
     /// The actions a hand-made world starts it on, in order, until they start.
     pub(crate) scripted: VecDeque<ScriptedAction>,
     /// Its cached perception flood (design §3.6).
@@ -61,6 +63,7 @@ impl Sprite {
             body,
             brain,
             action: None,
+            lead: None,
             scripted: VecDeque::new(),
             flood: None,
             move_points: 0,

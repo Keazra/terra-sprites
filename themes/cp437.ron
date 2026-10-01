@@ -51,11 +51,20 @@
             sent: '+', // a click has just sent a command
             applied: '☼', // the world has just applied it
             rejected: '?', // or refused it
+            // Grab mode shows what the Cursor has hold of (design v23 §6.5):
+            // empty, grab and empty; holding or leading, release and the thing.
+            grab: '↑',
+            empty: '░',
+            release: '↓',
         ),
         mode_marks: {
             select: (glyph: '♦', fg: white),
             // Train stands out on the grass the Cursor mostly sits on (design v22 §6.5).
             train:  (glyph: '±', fg: light_magenta),
+            grab:   (glyph: '∩', fg: yellow),
         },
+        // The leash, flashing from the Cursor to a sprite it leads, over empty
+        // ground (design v23 §6.5).
+        leash: (glyph: '·', fg: yellow),
     ),
 )

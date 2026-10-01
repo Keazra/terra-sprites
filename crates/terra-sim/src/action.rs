@@ -35,6 +35,8 @@ pub enum Outcome {
     Interrupted,
     /// It was still going at the timeout.
     TimedOut,
+    /// The Cursor took hold of the sprite (design v23 §6.5).
+    PulledAway,
 }
 
 /// An action to start a sprite on in a hand-made world, instead of what it
@@ -113,9 +115,9 @@ pub struct Hurt {
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct Action {
     pub(crate) verb: Verb,
-    /// Where it's heading: a Wander's destination, or the goal tile an
-    /// aimed action is walking to, found again at every 5.0.
-    pub(crate) destination: Option<Pos>,
+    /// Its way to where it's heading: a Wander's destination, or the goal
+    /// tile an aimed action is walking to, found again at every 5.0.
+    pub(crate) walk: Walk,
     /// What an aimed action is aimed at (design §5.3).
     pub(crate) target: Option<Target>,
     /// The stable ID of the target's object type.
@@ -132,17 +134,24 @@ pub(crate) struct Action {
     pub(crate) started: u64,
     /// The ticks it has been carried out on, at step 6.
     pub(crate) ticks: u32,
-    /// Ticks in a row it had the points for its next step but couldn't take it.
-    pub(crate) blocked_ticks: u32,
     /// The steps a Retreat has taken.
     pub(crate) retreat_steps: u32,
-    /// The rest of the way round blocking sprites that blocked re-planning
-    /// found, which the sprite keeps to while it lasts (design §3.7).
-    pub(crate) committed: Option<Vec<Pos>>,
     /// How it ended, once it has.
     pub(crate) ended: Option<Outcome>,
     /// A hand-made world started it: the brain leaves it be until it ends.
     pub(crate) scripted: bool,
+}
+
+/// A sprite's way to where it's heading (design §3.7).
+#[derive(Debug, Clone, Default, Serialize)]
+pub(crate) struct Walk {
+    /// Where it's heading.
+    pub(crate) destination: Option<Pos>,
+    /// Ticks in a row it had the points for its next step but couldn't take it.
+    pub(crate) blocked_ticks: u32,
+    /// The rest of the way round blocking sprites that blocked re-planning
+    /// found, which the sprite keeps to while it lasts (design §3.7).
+    pub(crate) committed: Option<Vec<Pos>>,
 }
 
 /// What a sprite did at step 6, which its body feels at the next tick's
@@ -165,7 +174,10 @@ impl Action {
     ) -> Action {
         Action {
             verb,
-            destination,
+            walk: Walk {
+                destination,
+                ..Walk::default()
+            },
             target: target.map(|(target, _)| target),
             target_type: target.and_then(|(_, kind)| kind),
             attempted: false,
@@ -174,9 +186,7 @@ impl Action {
             hurt: Hurt::default(),
             started: tick,
             ticks: 0,
-            blocked_ticks: 0,
             retreat_steps: 0,
-            committed: None,
             ended: None,
             scripted,
         }
@@ -194,9 +204,9 @@ pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
             ticks: action.ticks,
             of,
         }
-    } else if action.blocked_ticks > 0 {
+    } else if action.walk.blocked_ticks > 0 {
         Progress::Waiting {
-            blocked_ticks: action.blocked_ticks,
+            blocked_ticks: action.walk.blocked_ticks,
         }
     } else if action.verb == Verb::Retreat {
         let bout = data.physiology().actions.retreat_bout;
@@ -209,7 +219,7 @@ pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
     };
     Some(ActionView {
         verb: action.verb,
-        destination: action.destination,
+        destination: action.walk.destination,
         target: action.target,
         target_type: action.target_type,
         attempted: action.attempted,
@@ -217,6 +227,16 @@ pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
         hurt: action.hurt,
         progress,
     })
+}
+
+/// While the Cursor leads `sprite`, the steps left on its way to where it's
+/// heading, as near the Cursor as it can get (design v23 §6.5): 0 once
+/// it's there.
+pub(crate) fn lead_steps_left(sprite: &Sprite) -> Option<u32> {
+    sprite
+        .lead
+        .as_ref()
+        .map(|_| way_ahead(sprite).map_or(0, |way| way.len() as u32))
 }
 
 /// Whether `sprite` has an action that hasn't ended.
@@ -252,6 +272,10 @@ pub(crate) fn sense_and_decide(
             state.sprites.get_mut(id).expect("the same sprite").flood = Some(flood);
         }
         let sprite = state.sprites.get(id).expect("the same sprite");
+        if sprite.lead.is_some() {
+            follow_cursor(state, id);
+            continue;
+        }
         if is_acting(sprite) {
             let flood = sprite.flood.as_ref().expect("the flood made above");
             let action = sprite.action.as_ref().expect("an action");
@@ -274,9 +298,10 @@ pub(crate) fn sense_and_decide(
             let gone = action.target.is_some() && there.is_none();
             let lost = aim == Some(None)
                 || action
+                    .walk
                     .destination
                     .is_some_and(|to| flood.cost(to).is_none());
-            let outcome = if gone || action.committed.is_none() && lost {
+            let outcome = if gone || action.walk.committed.is_none() && lost {
                 Some(Outcome::Failed)
             } else if state.tick >= action.started + u64::from(timeout) {
                 Some(Outcome::TimedOut)
@@ -298,17 +323,42 @@ pub(crate) fn sense_and_decide(
                         // first seen isn't a move.
                         let moved = action.target_at.is_some_and(|at| there != Some(at));
                         if moved {
-                            action.committed = None;
+                            action.walk.committed = None;
                         }
                         action.target_at = there;
-                        if action.committed.is_none() {
-                            action.destination = Some(goal);
+                        if action.walk.committed.is_none() {
+                            action.walk.destination = Some(goal);
                         }
                     }
                 }
             }
         }
         decide(state, data, id, events);
+    }
+}
+
+/// Sprite `id`, led, heads for the Cursor's tile, or as near as its flood
+/// reaches, onto no other sprite; it chooses nothing (design v23 §6.5). A
+/// committed way round is dropped once the Cursor moves elsewhere.
+fn follow_cursor(state: &mut WorldState, id: EntityId) {
+    let tile = state
+        .cursor
+        .tile
+        .expect("a Cursor leading a sprite has a tile");
+    let sprites = &state.sprites;
+    let sprite = sprites.get(id).expect("the led sprite");
+    let flood = sprite.flood.as_ref().expect("step 5 made the flood");
+    let to = flood.nearest_reached(tile, |pos| sprites.at(pos).is_none());
+    let lead = state
+        .sprites
+        .get_mut(id)
+        .expect("the same sprite")
+        .lead
+        .as_mut();
+    let lead = lead.expect("a led sprite's way");
+    if lead.destination != Some(to) {
+        lead.committed = None;
+        lead.destination = Some(to);
     }
 }
 
@@ -358,7 +408,7 @@ pub(crate) fn end(
     action.ended = Some(outcome);
     let view = ActionView {
         verb: action.verb,
-        destination: action.destination,
+        destination: action.walk.destination,
         target: action.target,
         target_type: action.target_type,
         attempted: action.attempted,
@@ -402,11 +452,11 @@ pub(crate) fn resolve(
         let sprite = state.sprites.get(id).expect("a sprite taking its turn");
         // An aimed action already on a goal tile acts where it stands: it
         // has no walking to do, so it banks no points for later (design §3.7).
-        // A retreat has no goal tile.
+        // A retreat has no goal tile, and a led sprite's action has ended.
         let arrived = sprite
             .action
             .as_ref()
-            .filter(|a| a.verb.heads_for_goal())
+            .filter(|a| a.verb.heads_for_goal() && sprite.lead.is_none())
             .and_then(|a| a.target)
             .is_some_and(|target| state.on_goal_tile(data, sprite.pos, target));
         let sprite = state.sprites.get_mut(id).expect("the same sprite");
@@ -426,6 +476,12 @@ pub(crate) fn resolve(
     let mut moved: BTreeSet<EntityId> = dying.iter().copied().collect();
     for &id in &order {
         let sprite = state.sprites.get_mut(id).expect("a sprite taking its turn");
+        if sprite.lead.is_some() {
+            if !moved.contains(&id) {
+                walk(state, data, id, &mut moved, events);
+            }
+            continue;
+        }
         if !is_acting(sprite) {
             continue;
         }
@@ -509,14 +565,36 @@ fn shuffle(ids: &mut [EntityId], rng: &mut ChaCha8Rng) {
     }
 }
 
-/// Whether `sprite` is doing an action that walks: to a destination, or
-/// away from its target.
+/// Whether `sprite` is on its way somewhere: led, and not yet where it's
+/// heading, or doing an action that walks, to a destination or away from
+/// its target.
 fn is_walking(sprite: &Sprite) -> bool {
-    is_acting(sprite)
-        && sprite
-            .action
-            .as_ref()
-            .is_some_and(|a| a.destination.is_some() || a.verb == Verb::Retreat)
+    match &sprite.lead {
+        Some(lead) => lead.destination.is_some_and(|to| to != sprite.pos),
+        None => {
+            is_acting(sprite)
+                && sprite
+                    .action
+                    .as_ref()
+                    .is_some_and(|a| a.walk.destination.is_some() || a.verb == Verb::Retreat)
+        }
+    }
+}
+
+/// The way `sprite` is walking: its lead's while it's led, or else its action's.
+fn walk_of(sprite: &Sprite) -> Option<&Walk> {
+    sprite
+        .lead
+        .as_ref()
+        .or_else(|| sprite.action.as_ref().map(|a| &a.walk))
+}
+
+/// The way `sprite` is walking, to change.
+fn walk_of_mut(sprite: &mut Sprite) -> Option<&mut Walk> {
+    match sprite.lead {
+        Some(ref mut lead) => Some(lead),
+        None => sprite.action.as_mut().map(|a| &mut a.walk),
+    }
 }
 
 /// The flood `sprite` would make from where it stands now, treating other
@@ -536,12 +614,12 @@ fn flood(state: &WorldState, data: &DataPack, sprite: &Sprite, occupied: Occupie
 /// or else its flood's path to its destination from where it stands. `None`
 /// if it has no way there.
 fn way_ahead(sprite: &Sprite) -> Option<Vec<Pos>> {
-    let action = sprite.action.as_ref().filter(|_| is_walking(sprite))?;
-    if let Some(committed) = &action.committed {
+    let walk = walk_of(sprite).filter(|_| is_walking(sprite))?;
+    if let Some(committed) = &walk.committed {
         return Some(committed.clone());
     }
     let flood = sprite.flood.as_ref()?;
-    let path = flood.path_to(action.destination?)?;
+    let path = flood.path_to(walk.destination?)?;
     if sprite.pos == flood.origin {
         return Some(path);
     }
@@ -658,16 +736,21 @@ fn stepped(state: &mut WorldState, id: EntityId, cost: u32, events: &mut Vec<Eve
     let sprite = state.sprites.get_mut(id).expect("the walker");
     sprite.move_points -= cost;
     sprite.did.steps += 1;
-    let arrived = sprite.action.as_ref().expect("an action").destination == Some(sprite.pos);
+    let pos = sprite.pos;
+    let walk = walk_of_mut(sprite).expect("a walker's way");
+    let arrived = walk.destination == Some(pos);
+    walk.blocked_ticks = 0;
+    if let Some(committed) = &mut walk.committed {
+        committed.remove(0);
+    }
     if arrived {
         sprite.move_points = sprite.move_points.min(cost);
     }
-    let action = sprite.action.as_mut().expect("an action");
-    action.blocked_ticks = 0;
-    if let Some(committed) = &mut action.committed {
-        committed.remove(0);
-    }
-    if arrived && action.target.is_none() {
+    // A led sprite goes on following the Cursor (design v23 §6.5).
+    if let Some(action) = sprite.action.as_mut().filter(|_| sprite.lead.is_none())
+        && arrived
+        && action.target.is_none()
+    {
         end(action, id, Outcome::Applied, state.tick, events);
     }
     arrived
@@ -679,13 +762,13 @@ fn stepped(state: &mut WorldState, id: EntityId, cost: u32, events: &mut Vec<Eve
 /// Returns the blocked ticks in a row.
 fn held_up(sprite: &mut Sprite, cost: u32) -> u32 {
     sprite.move_points = sprite.move_points.min(cost);
-    let action = sprite.action.as_mut().expect("an action");
-    action.blocked_ticks = if action.committed.take().is_some() {
+    let walk = walk_of_mut(sprite).expect("a walker's way");
+    walk.blocked_ticks = if walk.committed.take().is_some() {
         1
     } else {
-        action.blocked_ticks + 1
+        walk.blocked_ticks + 1
     };
-    action.blocked_ticks
+    walk.blocked_ticks
 }
 
 /// Sprite `id` had the points for its next step but couldn't take it: it
@@ -693,30 +776,32 @@ fn held_up(sprite: &mut Sprite, cost: u32) -> u32 {
 /// tick. Blocked on its committed path, it drops the path and starts
 /// counting again. At `replan_after` blocked ticks in a row, it searches
 /// for a way round every sprite in its way (design §3.7): a way found
-/// becomes its committed path; with none, its action ends as blocked.
+/// becomes its committed path; with none, its action ends as blocked. A led
+/// sprite never gives up: it waits on, and searches again later (design
+/// v23 §6.5).
 fn wait(state: &mut WorldState, data: &DataPack, id: EntityId, cost: u32, events: &mut Vec<Event>) {
     let replan_after = data.physiology().movement.replan_after;
     let sprite = state.sprites.get_mut(id).expect("the walker");
     if held_up(sprite, cost) < replan_after {
         return;
     }
-    let destination = sprite.action.as_ref().and_then(|a| a.destination);
+    let destination = walk_of(sprite).and_then(|walk| walk.destination);
     let destination = destination.expect("a walker has a destination");
     let sprite = state.sprites.get(id).expect("the walker");
     let way = flood(state, data, sprite, Occupied::Closed).path_to(destination);
-    let action = state
-        .sprites
-        .get_mut(id)
-        .expect("the walker")
-        .action
-        .as_mut();
-    let action = action.expect("an action");
+    let sprite = state.sprites.get_mut(id).expect("the walker");
+    let led = sprite.lead.is_some();
+    let walk = walk_of_mut(sprite).expect("a walker's way");
     match way {
         Some(way) => {
-            action.committed = Some(way);
-            action.blocked_ticks = 0;
+            walk.committed = Some(way);
+            walk.blocked_ticks = 0;
         }
-        None => end(action, id, Outcome::Blocked, state.tick, events),
+        None if led => walk.blocked_ticks = 0,
+        None => {
+            let action = sprite.action.as_mut().expect("an action");
+            end(action, id, Outcome::Blocked, state.tick, events);
+        }
     }
 }
 

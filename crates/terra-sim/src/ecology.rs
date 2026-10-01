@@ -2,8 +2,9 @@
 
 use rand_chacha::ChaCha8Rng;
 
+use crate::cursor::Grip;
 use crate::data::DataPack;
-use crate::events::{Event, EventKind, Removal};
+use crate::events::{Emptied, Event, EventKind, Removal};
 use crate::map::{Map, Pos};
 use crate::object_types::{Condition, Effect, Stage, Trigger};
 use crate::objects::{EntityId, Object, Objects};
@@ -22,6 +23,7 @@ pub(crate) fn new_object(data: &DataPack, kind: usize, pos: Pos) -> Object {
         counters: vec![0; object_type.counters.len()],
         fresh: true,
         roll: None,
+        held: false,
     }
 }
 
@@ -179,6 +181,9 @@ pub(crate) fn holds_without_drawing(
         Condition::InStage(stage) => object.stage == Some(stage),
         Condition::Counter(counter, cmp, value) => cmp.holds(object.counters[counter], value),
         Condition::Chance(_) => return None,
+        // A held object has no tile, so its location conditions are false
+        // (design §3.5.2).
+        _ if object.held => false,
         Condition::Fertility(cmp, value) => {
             cmp.holds(data.terrain(map.terrain(pos)).fertility(), value)
         }
@@ -229,6 +234,15 @@ pub(crate) fn apply(
         .expect("the object taking its turn");
     let object_type = &data.object_types()[object.kind];
     let pos = object.pos;
+    let needs_a_tile = matches!(
+        effect,
+        Effect::SpawnNearby(..) | Effect::SpreadTo(..) | Effect::ReplaceWith(..)
+    );
+    // A held object has no tile: an effect that needs one does nothing
+    // (design §3.5.2).
+    if object.held && needs_a_tile {
+        return Turn::Continues;
+    }
     match *effect {
         Effect::AddCounter(counter, delta) => {
             let max = i64::from(object_type.counters[counter].max);
@@ -282,23 +296,37 @@ pub(crate) fn apply(
     Turn::Continues
 }
 
-/// Reports that the object `id`, of type `kind`, has left the world.
+/// Reports that the object `id`, of type `kind`, has left the world. If
+/// the Cursor held it, the Cursor is empty (design §3.5.2).
 pub(crate) fn removed(
-    state: &WorldState,
+    state: &mut WorldState,
     data: &DataPack,
     id: EntityId,
     kind: usize,
     reason: Removal,
     events: &mut Vec<Event>,
 ) {
+    let object_type = data.object_types()[kind].name.clone();
     events.push(Event {
         tick: state.tick,
         kind: EventKind::ObjectRemoved {
             id,
-            object_type: data.object_types()[kind].name.clone(),
+            object_type: object_type.clone(),
             reason,
         },
     });
+    if state.cursor.empty_of(Grip::Holds(id)) {
+        events.push(Event {
+            tick: state.tick,
+            kind: EventKind::CursorEmptied {
+                reason: Emptied::Removed {
+                    item: id,
+                    object_type,
+                    reason,
+                },
+            },
+        });
+    }
 }
 
 /// Creates an object of type `kind` on `pos` during step 2, where the caller
