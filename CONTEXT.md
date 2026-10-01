@@ -496,15 +496,27 @@ What the Cursor does with an item it has picked up: the item leaves the map, its
 _Avoid_: carry, in hand
 
 **Throw**:
-To let go of a held item with a push, so it rolls away like a kicked ball.
+To let go of a held item with a push, so it rolls away like a kicked ball, as far and in the direction the player **aims**.
 _Avoid_: toss, fling
 
 **Shove**:
-To let go of a led sprite with a push, so it **slides** up to 3 tiles that way, a tile a tick, stopping at the first thing in its way. It doesn't hurt, unless the sprite crashes into something that does.
+To let go of a led sprite with a push, so it **slides** as far and in the direction the player **aims**. It doesn't hurt, unless the sprite crashes into something that does.
 _Avoid_: throw (for a sprite), push (a sprite's push rolls an item)
 
+**Slide**:
+A shoved sprite moving a tile a tick in the shove's direction, choosing nothing, until it has gone as far as the shove sent it or something stops it.
+_Avoid_: roll (an item rolls), fly, glide
+
+**Aim**:
+To set a throw's or a shove's direction and distance by pulling the pointer back, away from where the thing should go, with the right button or `E` held, like a pool cue: the further the pull, the further it goes, up to how far the Cursor can send a thing its size.
+_Avoid_: drag, flick, swing
+
+**Aim line**:
+The steady line of dots that shows, while the player aims, where a throw or a shove will go, ending in a small circle where it would stop if nothing's in the way.
+_Avoid_: trajectory, leash (that's the line to a led sprite), cue
+
 **Crash**:
-A shoved sprite stopping against a solid object or another sprite. It's a contact, so it counts as touching that thing: a crash into a thornbush pricks, and teaches that thornbushes are bad.
+A sliding sprite stopping against a solid object or another sprite. It's a contact, so it counts as touching that thing: a crash into a thornbush pricks, and teaches that thornbushes are bad. Stopping against rock, deep water or the terrarium's wall isn't a crash.
 _Avoid_: collision, bump, bounce (an item bounces)
 
 **Reward**:
