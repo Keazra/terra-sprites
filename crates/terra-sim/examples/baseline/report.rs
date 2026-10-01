@@ -141,7 +141,7 @@ impl Report {
                 "{}, over the {} of {} seeds with deaths",
                 percent(v.hunger_and_thirst.median),
                 v.seeds_with_deaths,
-                self.seeds
+                v.finished
             ),
         };
         page.push_str(&format!(
@@ -510,9 +510,8 @@ fn behaviour(
     // CI's tests panic on a broken seed, so a scenario with one isn't met.
     let all_finished = finished.len() == seeds.len();
     let verdict = match (median, control_median) {
-        (Some(run), Some(control)) if all_finished && control >= 20.0 && passes(run, control) => {
-            Verdict::Met
-        }
+        _ if !all_finished => Verdict::NotMet { until: None },
+        (Some(run), Some(control)) if control >= 20.0 && passes(run, control) => Verdict::Met,
         (Some(_), Some(_)) => Verdict::NotMet { until: None },
         _ => Verdict::NoData,
     };
@@ -626,12 +625,9 @@ fn percent(share: Option<f64>) -> String {
     match share {
         None => "no data".into(),
         Some(share) => {
-            let percent = share * 100.0;
-            if percent.fract() == 0.0 {
-                format!("{percent:.0}%")
-            } else {
-                format!("{percent:.1}%")
-            }
+            // Rounded first, so 28.000000000000004 is "28%", not "28.0%".
+            let percent = format!("{:.1}", share * 100.0);
+            format!("{}%", percent.strip_suffix(".0").unwrap_or(&percent))
         }
     }
 }
@@ -1209,5 +1205,44 @@ mod tests {
             page.contains("| A1: thornbush contacts | 10, over 9 of 10 seeds | 20 |"),
             "{page}"
         );
+    }
+
+    #[test]
+    fn the_hunger_and_thirst_share_counts_seeds_with_deaths_among_those_that_finished() {
+        // Gemini's review on #95: "2 of 10 seeds with deaths" would suggest
+        // that the seeds which broke had no deaths.
+        let mut deaths: [&[(DeathCause, u64)]; 10] = [&[]; 10];
+        deaths[0] = &[(DeathCause::Dehydration, 1)];
+        deaths[1] = &[(DeathCause::Starvation, 1)];
+        let mut seeds = seeds_dying(deaths);
+        for broken in &mut seeds[5..] {
+            broken.1 = Err("tick 3: IDs only go up".into());
+        }
+        let mut report = sample();
+        report.viability = viability(&seeds, 30, &data());
+        let page = report.markdown(None);
+        assert!(
+            page.contains("| 100%, over the 2 of 5 seeds with deaths |"),
+            "{page}"
+        );
+    }
+
+    #[test]
+    fn a_behaviour_scenario_whose_every_seed_broke_is_not_met() {
+        // Gemini's review on #95: CI fails it, so it's no different from one
+        // broken seed; "no data" is for a scenario that didn't run.
+        let seeds: Vec<_> = (1..=10)
+            .map(|seed| (seed, Err("tick 3: IDs only go up".into())))
+            .collect();
+        assert_eq!(a1(&seeds, &data()).verdict, Verdict::NotMet { until: None });
+        assert_eq!(a1(&[], &data()).verdict, Verdict::NoData);
+    }
+
+    #[test]
+    fn a_whole_percentage_shows_no_decimals_however_the_float_rounds() {
+        // Gemini's review on #95: 7 / 25 × 100 is 28.000000000000004.
+        assert_eq!(percent(Some(7.0 / 25.0)), "28%");
+        assert_eq!(percent(Some(47.0 / 60.0)), "78.3%");
+        assert_eq!(percent(Some(1.0)), "100%");
     }
 }
