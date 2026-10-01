@@ -1511,7 +1511,7 @@ mod tests {
         let sprite = world.state.sprites.get_mut(first).expect("a sprite");
         sprite.brain.touched = Some(Touch {
             tick: 0,
-            verb: Verb::Eat,
+            verb: Some(Verb::Eat),
             subject: Subject::Category(bush),
             sprite: None,
             novelty: 1.0,
@@ -1540,7 +1540,7 @@ mod tests {
             .brain
             .touched = Some(Touch {
             tick: 0,
-            verb: Verb::Eat,
+            verb: Some(Verb::Eat),
             subject: Subject::Category(bush),
             sprite: None,
             novelty: 1.0,
@@ -1573,7 +1573,7 @@ mod tests {
         let bush = data.category_named("bush").expect("a category");
         brain.touched = Some(Touch {
             tick: 0,
-            verb: Verb::Eat,
+            verb: Some(Verb::Eat),
             subject: Subject::Category(bush),
             sprite: None,
             novelty: 1.0,
