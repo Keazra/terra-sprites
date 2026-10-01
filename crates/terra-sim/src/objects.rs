@@ -208,23 +208,31 @@ impl Objects {
         }
         for (&id, object) in &self.by_id {
             let object_type = &data.object_types()[object.kind];
-            let problem = if object.held {
+            // Where it is: off the map in the Cursor, or on its tile. Then,
+            // either way, its own state, since a held item's life goes on
+            // (design §3.5.2).
+            let whereabouts = if object.held {
                 if object_type.solid {
-                    "is held, yet solid"
+                    Some("is held, yet solid")
                 } else if object.roll.is_some() {
-                    "is held, yet rolling"
+                    Some("is held, yet rolling")
                 } else {
-                    continue;
+                    None
                 }
             } else if self.at(object.pos) != Some(id) {
-                "isn't on its tile in the index"
-            } else if object_type.pseudo {
-                "is of a pseudo type"
+                Some("isn't on its tile in the index")
             } else if !map.is_walkable(object.pos) {
-                "stands on a tile that isn't walkable"
+                Some("stands on a tile that isn't walkable")
             } else if object_type.solid && !data.terrain(map.terrain(object.pos)).allows_fixtures()
             {
-                "is solid on terrain that doesn't allow fixtures"
+                Some("is solid on terrain that doesn't allow fixtures")
+            } else {
+                None
+            };
+            let problem = if let Some(problem) = whereabouts {
+                problem
+            } else if object_type.pseudo {
+                "is of a pseudo type"
             } else if object.stage.is_some_and(|s| s >= object_type.stages.len()) {
                 "is in a stage its type doesn't have"
             } else if object.counters.len() != object_type.counters.len()

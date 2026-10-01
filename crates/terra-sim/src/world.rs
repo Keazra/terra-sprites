@@ -1099,6 +1099,19 @@ mod tests {
     }
 
     #[test]
+    fn a_held_item_in_a_stage_its_type_lacks_breaks_an_invariant() {
+        // Gemini's review of PR #89: a held item's life goes on, so its
+        // stage and counters are checked as on the map (design §3.5.2).
+        let mut world = field_with_a_bush();
+        let berry = force_berry(&mut world, Pos { x: 0, y: 0 });
+        world.state.objects.pick_up(berry);
+        world.state.cursor.take(Grip::Holds(berry));
+        assert_eq!(world.check_invariants(), Ok(()));
+        world.state.objects.get_mut(berry).expect("the berry").stage = Some(9);
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
     fn a_cursor_holding_an_item_on_the_map_breaks_an_invariant() {
         let mut world = field_with_a_bush();
         let berry = force_berry(&mut world, Pos { x: 0, y: 0 });
