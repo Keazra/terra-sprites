@@ -427,7 +427,7 @@ The sprite the inspector shows, chosen by clicking it or with `Tab`. The Cursor 
 _Avoid_: focus, target
 
 **Lock on**:
-To fix the Cursor on the selected sprite, so it moves with the sprite in every mode and a pet or a shock needs no aim. A right click in Select mode turns the lock on or off; selecting another sprite moves the lock, and the sprite's death ends it. While the Cursor holds or leads something in Grab mode, the lock waits and the Cursor follows the pointer.
+To fix the Cursor on the selected sprite, so it moves with the sprite in every mode and a pet or a shock needs no aim. A right click in Select mode turns the lock on or off; selecting another sprite moves the lock, and the sprite's death ends it. While the Cursor leads the locked-on sprite, the lock steps aside and the Cursor follows the pointer, within the leash; otherwise the lock holds.
 _Avoid_: follow, track (those are the view following the selected sprite, with `T`)
 
 **Status marks**:
@@ -486,6 +486,10 @@ _Avoid_: lift, pick up (for a sprite)
 **Lead**:
 To hold a sprite through the Cursor without lifting it: it stays on the map and walks after the Cursor at its own pace, choosing nothing for itself, until the player **lets go**. Sprites are led, never lifted.
 _Avoid_: drag, carry, pick up
+
+**Leash**:
+How far the Cursor may go from a sprite it leads, 5 tiles in a square, and the flashing dotted line that shows it, from the Cursor to the sprite.
+_Avoid_: lead (that's the verb), rope, tether
 
 **Hold**:
 What the Cursor does with an item it has picked up: the item leaves the map, its life going on, until the Cursor **puts it down** on a tile.
