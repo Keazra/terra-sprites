@@ -72,7 +72,7 @@ fn main() -> ExitCode {
     let data = DataPack::builtin().expect("the built-in data pack is valid");
     let started = Instant::now();
     let results = run_all(&data, options.seeds);
-    let seeds_of = |name: &str| -> &[(u64, Result<LabRun, String>)] {
+    let seeds_of = |name: &str| -> &report::SeedRuns {
         &results[SCENARIOS
             .iter()
             .position(|(n, _)| *n == name)
@@ -235,10 +235,10 @@ fn save(dir: &Path, report: &Report, page: &str) -> Result<(PathBuf, PathBuf), S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use report::{Lesson, Verdict, Viability};
+    use report::{Behaviour, Verdict, Viability};
 
     fn report() -> Report {
-        let none = || Lesson {
+        let none = || Behaviour {
             median: None,
             control_median: None,
             verdict: Verdict::NoData,
