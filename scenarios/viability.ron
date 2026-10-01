@@ -1,0 +1,11 @@
+// The viability run (design §7.6, v24): the default world, with no player,
+// for 50,000 ticks. A4 reads who survived the first window and what killed
+// sprites over the last; the thorn trap counts deaths by thornbush over the
+// second, as `thorn-trap.ron` does on the same worlds. Baseline runs use it on
+// seeds 1–10:
+// cargo run --release -p terra-sim --example lab -- scenarios/viability.ron --seeds 10
+(
+    world: Generated,
+    ticks: 50000,
+    windows: [(0, 10000), (0, 30000), (0, 50000)],
+)
