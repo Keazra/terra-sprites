@@ -16,7 +16,7 @@ The owner's preferences and the project's conventions, for any agent session, lo
 - **When they raise a broad idea, lay out what it could mean before narrowing it.** In slice 9 "the simulated fly brain" was first read as one mechanism, a concept pool, and measured. The owner had meant the brain as a whole, so the idea had to be revisited: first say which readings there are, and ask.
 - **`/grill-with-docs`** is the owner's name for the `grilling` skill together with `domain-modeling`: questions in rounds, with each settled term written into `CONTEXT.md` as it's decided, and the decisions in a new design revision.
 - **Other agents may work in the same folder.** The owner runs tools such as Antigravity alongside a session, so untracked files you didn't make are theirs: leave them unstaged and untouched, and pull before pushing in case they committed to the branch.
-  - **Their code builds with ours.** Antigravity's untracked `crates/terra-sim/examples/soak.rs` uses the lab's public API, so changing a shape it reads breaks the local build and tests (CI never sees it). In slice 10, `LabRun.control` kept its shape and gained a separate `without` field instead. And `cargo fmt --all` would reformat their files: run `rustfmt` on your own files, and `cargo fmt --all --check` to check.
+  - **`cargo fmt --all` would reformat their untracked Rust files:** run `rustfmt` on your own files, and `cargo fmt --all --check` to check.
 
 ## The owner's design principles
 
@@ -71,6 +71,13 @@ A slice too big for one PR ships as two ("4a", "4b"); only the last PR's descrip
 **Test a timing rule with the sequence that reaches it in play.** In slice 10b, two bugs in the status marks' flashes passed their tests. The tests fed the world's report without the click that comes before it in play, or used a miss on empty ground, whose `?` starts at once, where a refusal from the world waits its turn. Gemini found both; the tests that caught them follow click, report and next click with real gaps between them.
 
 **Test every input that reaches it: the keyboard's `Q` and `E` as well as clicks.** In slice 11a every Grab test moved the mouse before clicking, so the tests never saw a bug where `Q` acted on the Cursor's old tile: taking hold of the locked-on sprite left the Cursor on it until the mouse moved. The Spec review found it; the tests that catch it press `Q` with the pointer left where it was.
+
+## Baseline runs
+
+Each time `main` moves, a baseline run (design v24 §7.6) measures what's too slow for CI, and the observer, Gemini, writes a briefing on it. Both are in `docs/reports/`, which git ignores, on the owner's machine: `<date>-<commit>-report.md` and `<date>-<commit>-briefing.md`, with `baseline.log`. `/handover start` reads the newest briefing. `scripts/baseline.ps1` runs one, by hand or from the task that `scripts/schedule-baseline.ps1` sets up.
+
+- **The numbers are `main`'s baseline.** When the newest report's commit is `main`'s, its viability run, thorn trap and A1–A3 numbers (seeds 1–10) are what a slice compares itself with, without measuring `main` again.
+- **The observer's guesses are leads.** It reads the code but can't run it, so check a suggested cause before acting on it.
 
 ## Outside reviews
 
