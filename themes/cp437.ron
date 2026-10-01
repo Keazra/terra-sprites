@@ -66,5 +66,9 @@
         // The leash, flashing from the Cursor to a sprite it leads, over empty
         // ground (design v23 §6.5).
         leash: (glyph: '·', fg: yellow),
+        // The aim line, steady, while the player aims a throw or a shove: the
+        // path, over empty ground, and where it would stop. `°`, not the
+        // ball's `○` (design v25 §6.5).
+        aim: (path: (glyph: '·', fg: yellow), end: (glyph: '°', fg: yellow)),
     ),
 )

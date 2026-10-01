@@ -46,5 +46,6 @@
             grab:   (glyph: 'G', fg: yellow),
         },
         leash: (glyph: ';', fg: yellow),
+        aim: (path: (glyph: ';', fg: yellow), end: (glyph: 'O', fg: yellow)),
     ),
 )
