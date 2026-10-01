@@ -129,6 +129,7 @@ fn pulling_back_and_letting_go_throws_the_other_way_as_far_as_the_pull() {
         tiles: 2,
     };
     assert_eq!(app.take_commands(), vec![throw]);
+    assert_eq!(app.cursor(), at(3, 5), "sent, it's back on the pointer");
 }
 
 /// The commands the app's clicks sent, leaving out where the Cursor is,
@@ -182,13 +183,9 @@ fn letting_go_where_aiming_began_sends_nothing_and_esc_cancels_in_grab_mode() {
     point(&mut app, &world, at(3, 5));
     apply(&mut app, &world, Action::Back);
     assert_eq!(app.mode(), CursorMode::Grab, "Esc cancels the aim first");
-    assert_eq!(app.cursor(), at(5, 5));
+    assert_eq!(app.cursor(), at(3, 5), "the Cursor is back on the pointer");
     point(&mut app, &world, at(2, 5));
-    assert_eq!(
-        app.cursor(),
-        at(2, 5),
-        "the Cursor follows the pointer again"
-    );
+    assert_eq!(app.cursor(), at(2, 5), "and follows it again");
     let_go(&mut app, &world, at(2, 5));
     assert_eq!(app.take_commands(), Vec::new(), "cancelled");
 }

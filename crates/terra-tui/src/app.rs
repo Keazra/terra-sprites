@@ -406,7 +406,7 @@ impl App {
         // An aim ends when what it aimed is gone: a held berry expired, or
         // a led sprite died (design v25 §6.5).
         if self.grip(world).is_none() {
-            self.aim = None;
+            self.end_aim();
         }
         self.settle_cursor(world);
     }
@@ -783,8 +783,13 @@ impl App {
         if self.screen == Screen::QuitPrompt {
             match action {
                 Action::Confirm | Action::Back | Action::Quit => return Flow::Quit,
-                // The mouse carries on as usual and doesn't answer the prompt.
-                Action::Point(_) | Action::Click { .. } | Action::Wheel { .. } => {}
+                // The mouse carries on as usual and doesn't answer the prompt;
+                // nor does letting go of a button, or of `E`, which isn't a
+                // key pressed.
+                Action::Point(_)
+                | Action::Click { .. }
+                | Action::Wheel { .. }
+                | Action::Release { .. } => {}
                 // Any other key cancels the prompt, and does nothing else.
                 _ => {
                     self.screen = Screen::Normal;
@@ -846,7 +851,7 @@ impl App {
             Action::ToggleDetail => self.detail = !self.detail,
             // Esc cancels an aim first (design v25 §6.5); then returns to
             // Select; from Select it asks to quit (design v21 §6.5).
-            Action::Back if self.aim.is_some() => self.aim = None,
+            Action::Back if self.aim.is_some() => self.end_aim(),
             Action::Back if self.mode != CursorMode::Select => self.mode = CursorMode::Select,
             Action::Back => self.screen = Screen::QuitPrompt,
             Action::Confirm | Action::Dismiss => {}
@@ -854,7 +859,7 @@ impl App {
         }
         // Only Grab mode aims.
         if self.mode != CursorMode::Grab {
-            self.aim = None;
+            self.end_aim();
         }
         self.settle_cursor(world);
         Flow::Continue
@@ -968,11 +973,9 @@ impl App {
     /// snapped to the nearest of the 8 directions, as far as the pull, in the
     /// game's own measure. A pull back to where it began sends nothing.
     fn send_aimed(&mut self, world: &World) {
-        let aimed = self.aimed();
-        let Some(Aim { from, .. }) = self.aim.take() else {
-            return;
-        };
-        let Some((toward, tiles)) = aimed else {
+        let (aim, aimed) = (self.aim, self.aimed());
+        self.end_aim();
+        let (Some(Aim { from, .. }), Some((toward, tiles))) = (aim, aimed) else {
             return;
         };
         let command = match self.grip(world) {
@@ -1004,6 +1007,14 @@ impl App {
         let toward = Dir::nearest(dx, dy)?;
         let tiles = dx.unsigned_abs().max(dy.unsigned_abs());
         Some((toward, u16::try_from(tiles).unwrap_or(u16::MAX)))
+    }
+
+    /// Ends the aim, sent or not: the Cursor follows the pointer again, as
+    /// far as the lock and the leash let it (design v25 §6.5).
+    fn end_aim(&mut self) {
+        if self.aim.take().is_some() && self.locked().is_none() {
+            self.cursor = self.within_leash(self.pointed);
+        }
     }
 
     /// Whether the player is aiming a throw or a shove (design v25 §6.5).

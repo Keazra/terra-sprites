@@ -174,6 +174,7 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     }
     draw_aim_line(buf, app, world);
     draw_cursor(buf, inner, app, world);
+    draw_aim_end(buf, app, world);
 }
 
 /// Where the selected sprite is heading, while its action is under way
@@ -266,25 +267,47 @@ fn draw_leash(buf: &mut Buffer, app: &App, world: &World) {
 }
 
 /// Draws the aim line, while the player aims a throw or a shove: steady
-/// dots along the thing's path, and where it would stop, over empty ground
-/// only, as the leash is, and clear of the Cursor (design v25 §6.5).
+/// dots along the thing's path, over empty ground only, as the leash is, and
+/// clear of the Cursor (design v25 §6.5). Its end is `draw_aim_end`'s.
 fn draw_aim_line(buf: &mut Buffer, app: &App, world: &World) {
     let line = app.aim_line(world);
     let cursor = app.cursor();
-    for (i, &tile) in line.iter().enumerate() {
-        let glyph = if i + 1 == line.len() {
-            app.theme.aim_end()
-        } else {
-            app.theme.aim()
-        };
+    let dot = app.theme.aim();
+    for &tile in line.iter().rev().skip(1) {
         let by_the_cursor = tile.x.abs_diff(cursor.x) <= 1 && tile.y.abs_diff(cursor.y) <= 1;
-        let empty = world.sprite_at(tile).is_none() && world.object_at(tile).is_none();
-        if let Some(cell) = app.cell_of(tile).filter(|_| empty && !by_the_cursor) {
+        if let Some(cell) = app
+            .cell_of(tile)
+            .filter(|_| empty(world, tile) && !by_the_cursor)
+        {
             buf[(cell.x, cell.y)]
-                .set_char(glyph.symbol)
-                .set_style(Style::default().fg(glyph.fg));
+                .set_char(dot.symbol)
+                .set_style(Style::default().fg(dot.fg));
         }
     }
+}
+
+/// Draws the aim line's end, where the thing would stop if nothing's in the
+/// way, over empty ground: after the Cursor, so a short aim's end shows on
+/// its arms rather than under them, though never on its target tile (design
+/// v25 §6.5).
+fn draw_aim_end(buf: &mut Buffer, app: &App, world: &World) {
+    let Some(&end) = app.aim_line(world).last() else {
+        return;
+    };
+    let mark = app.theme.aim_end();
+    if let Some(cell) = app
+        .cell_of(end)
+        .filter(|_| empty(world, end) && end != app.cursor())
+    {
+        buf[(cell.x, cell.y)]
+            .set_char(mark.symbol)
+            .set_style(Style::default().fg(mark.fg));
+    }
+}
+
+/// Whether `tile` holds no sprite and no object.
+fn empty(world: &World, tile: Pos) -> bool {
+    world.sprite_at(tile).is_none() && world.object_at(tile).is_none()
 }
 
 /// The tiles of a straight line from `from` to `to`, leaving both ends out:

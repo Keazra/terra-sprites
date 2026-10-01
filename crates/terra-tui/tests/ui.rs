@@ -2934,3 +2934,18 @@ fn the_event_log_tells_of_throws_shoves_and_crashes_that_hurt() {
         ]
     );
 }
+
+#[test]
+fn a_short_aim_s_end_shows_even_beside_the_cursor() {
+    // Design v25 §6.5: a ball pulled one tile east goes one tile west, onto
+    // the Cursor's left arm; the end mark shows there, so it isn't lost.
+    let (world, mut app) = holding_world(&[(Pos { x: 12, y: 2 }, "ball")], Pos { x: 12, y: 2 });
+    app.apply(Action::right_click(Position::new(12 + 1, 2 + 2)), &world);
+    app.apply(Action::Point(Position::new(13 + 1, 2 + 2)), &world);
+    let row: String = lines(&render(&app, &world, 60, 12))[2 + 2]
+        .chars()
+        .skip(1)
+        .take(20)
+        .collect();
+    assert_eq!(row, "...........°.←......");
+}
