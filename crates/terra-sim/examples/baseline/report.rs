@@ -36,6 +36,8 @@ pub struct Report {
     pub measured: String,
     /// How long the run took.
     pub seconds: u64,
+    /// How many seeds it ran, from 1.
+    pub seeds: u64,
     /// How many sprites each seed of the viability run starts with.
     pub sprites: u64,
     pub viability: Viability,
@@ -55,6 +57,165 @@ pub struct Moved {
 }
 
 impl Report {
+    /// The report as a page (design §7.6), given what `moved` since the
+    /// report it's compared with, or none if there isn't one.
+    pub fn markdown(&self, moved: Option<&[Moved]>) -> String {
+        let mut page = format!("# Baseline report: `main` at {}\n\n", self.commit);
+        page.push_str(&format!(
+            "Measured {}, in {}, on seeds 1–{}.",
+            self.measured,
+            duration(self.seconds),
+            self.seeds
+        ));
+        if let Some(previous) = &self.compared_with {
+            page.push_str(&format!(" Compared with {previous}."));
+        }
+        page.push_str("\n\n");
+        match moved {
+            None => page.push_str(
+                "This is the first baseline report: there's nothing to compare it with.\n\n",
+            ),
+            Some([]) => page.push_str(&format!(
+                "Nothing moved since {}.\n\n",
+                self.compared_with
+                    .as_deref()
+                    .unwrap_or("the previous report")
+            )),
+            Some(moved) => {
+                page.push_str("## What moved\n\n");
+                for m in moved {
+                    let (was, now) = (m.was.as_deref(), m.now.as_deref());
+                    page.push_str(&format!(
+                        "- {}: {} → {}\n",
+                        m.name,
+                        was.unwrap_or("none"),
+                        now.unwrap_or("none")
+                    ));
+                }
+                page.push('\n');
+            }
+        }
+        if !self.broken.is_empty() {
+            page.push_str("## Broken\n\n");
+            for b in &self.broken {
+                page.push_str(&format!(
+                    "- {}, seed {}: {}. Replay: `{}`\n",
+                    b.scenario, b.seed, b.message, b.replay
+                ));
+            }
+            page.push('\n');
+        }
+
+        let v = &self.viability;
+        page.push_str("## A4: viability (design §7.4)\n\n");
+        page.push_str("| | Median | Pass mark | Verdict |\n|---|---|---|---|\n");
+        page.push_str(&format!(
+            "| Alive at tick 10,000 | {} | at least 80% | {} |\n",
+            percent(v.survival.median),
+            v.survival.verdict
+        ));
+        let share = match v.hunger_and_thirst.median {
+            None => "no data: no sprite died".to_string(),
+            Some(_) => format!(
+                "{}, over the {} of {} seeds with deaths",
+                percent(v.hunger_and_thirst.median),
+                v.seeds_with_deaths,
+                self.seeds
+            ),
+        };
+        page.push_str(&format!(
+            "| Hunger and thirst's share of deaths, ticks 0–50,000 | {share} | under 25% | {} |\n\n",
+            v.hunger_and_thirst.verdict
+        ));
+
+        page.push_str("## The thorn trap (design §7.3)\n\n");
+        page.push_str(&format!(
+            "Deaths by thornbush in ticks 0–30,000: median {}. It has no pass mark.\n\n",
+            number(v.thorn_trap.median)
+        ));
+        if !v.thorn_trap.per_seed.is_empty() {
+            let (mut seeds, mut rule, mut deaths) = (
+                "| Seed |".to_string(),
+                "|---|".to_string(),
+                "| Deaths |".to_string(),
+            );
+            for (seed, n) in &v.thorn_trap.per_seed {
+                seeds.push_str(&format!(" {seed} |"));
+                rule.push_str("---|");
+                deaths.push_str(&format!(" {n} |"));
+            }
+            page.push_str(&format!("{seeds}\n{rule}\n{deaths}\n\n"));
+        }
+
+        page.push_str("## A1–A3 (design §7.3; CI is their judge)\n\n");
+        page.push_str("| | Median | Control's median | Pass mark | Verdict |\n");
+        page.push_str("|---|---|---|---|---|\n");
+        for (what, _, mark, lesson) in self.lessons() {
+            page.push_str(&format!(
+                "| {what} | {} | {} | {mark} | {} |\n",
+                number(lesson.median),
+                number(lesson.control_median),
+                lesson.verdict
+            ));
+        }
+        page.push('\n');
+
+        page.push_str("## Health, per seed (ticks 0–50,000)\n\n");
+        let verbs: BTreeSet<&String> = v.seeds.iter().flat_map(|row| row.verbs.keys()).collect();
+        page.push_str("| Seed | Alive | Deaths |");
+        for verb in &verbs {
+            page.push_str(&format!(" {verb} |"));
+        }
+        page.push_str(&format!("\n|---|---|---|{}\n", "---|".repeat(verbs.len())));
+        for row in &v.seeds {
+            let deaths: Vec<String> = row
+                .deaths
+                .iter()
+                .map(|(cause, n)| format!("{cause} {n}"))
+                .collect();
+            let deaths = if deaths.is_empty() {
+                "none".to_string()
+            } else {
+                deaths.join(", ")
+            };
+            page.push_str(&format!(
+                "| {} | {} of {} | {deaths} |",
+                row.seed, row.alive, self.sprites
+            ));
+            for verb in &verbs {
+                let n = row.verbs.get(*verb).copied().unwrap_or(0);
+                page.push_str(&format!(" {n} |"));
+            }
+            page.push('\n');
+        }
+        page
+    }
+
+    /// A1–A3: what each counts, what its control lacks, its pass mark, and
+    /// what it measured.
+    fn lessons(&self) -> [(&'static str, &'static str, &'static str, &Lesson); 3] {
+        [
+            (
+                "A1: thornbush contacts",
+                "without learning",
+                "at most half the control's, which needs at least 20",
+                &self.a1,
+            ),
+            (
+                "A2: plays with a ball after training",
+                "without the trainer",
+                "at least 1.5× the control's, which needs at least 20",
+                &self.a2,
+            ),
+            (
+                "A3: hits on sprites after training",
+                "without the trainer",
+                "at most half the control's, which needs at least 20",
+                &self.a3,
+            ),
+        ]
+    }
+
     /// Every number in the report, by name and as it's shown, in the
     /// report's order.
     fn numbers(&self) -> Vec<(String, String)> {
@@ -77,20 +238,7 @@ impl Report {
                 number(v.thorn_trap.median),
             ),
         ];
-        let lessons = [
-            ("A1: thornbush contacts", "without learning", &self.a1),
-            (
-                "A2: plays with a ball after training",
-                "without the trainer",
-                &self.a2,
-            ),
-            (
-                "A3: hits on sprites after training",
-                "without the trainer",
-                &self.a3,
-            ),
-        ];
-        for (what, control, lesson) in lessons {
+        for (what, control, _, lesson) in self.lessons() {
             numbers.push((format!("{what}, median"), number(lesson.median)));
             numbers.push((
                 format!("{what} {control}, median"),
@@ -406,6 +554,26 @@ fn cause_name(cause: DeathCause, data: &DataPack) -> String {
         DeathCause::Dehydration => "dehydration".into(),
         DeathCause::OldAge => "old age".into(),
         DeathCause::HurtBy(id) => format!("hurt by {}", data.object_type_name(id).unwrap_or("?")),
+    }
+}
+
+impl std::fmt::Display for Verdict {
+    /// "met", "not met yet (#18)", "not met" or "no data".
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Verdict::Met => f.write_str("met"),
+            Verdict::NotMet { until: Some(slice) } => write!(f, "not met yet ({slice})"),
+            Verdict::NotMet { until: None } => f.write_str("not met"),
+            Verdict::NoData => f.write_str("no data"),
+        }
+    }
+}
+
+/// How long a run took: "15 min 0 s", or "42 s".
+fn duration(seconds: u64) -> String {
+    match seconds {
+        0..60 => format!("{seconds} s"),
+        _ => format!("{} min {} s", seconds / 60, seconds % 60),
     }
 }
 
@@ -794,6 +962,7 @@ mod tests {
             compared_with: None,
             measured: "2026-10-01 09:00".into(),
             seconds: 900,
+            seeds: 10,
             sprites: 30,
             viability: viability(&seeds_dying(deaths), 30, &data),
             a1: a1(&[], &data),
@@ -835,5 +1004,91 @@ mod tests {
         current.commit = "def5678".into();
         current.seconds = 950;
         assert_eq!(moved(&sample(), &current), Vec::new());
+    }
+
+    #[test]
+    fn the_page_opens_with_the_commit_when_it_was_measured_and_what_it_is_compared_with() {
+        // Design §7.6: the report names the commit it measured and the one
+        // it's compared with.
+        let mut report = sample();
+        report.compared_with = Some("def5678".into());
+        let page = report.markdown(Some(&[]));
+        assert!(
+            page.starts_with(
+                "# Baseline report: `main` at abc1234\n\n\
+                 Measured 2026-10-01 09:00, in 15 min 0 s, on seeds 1–10. \
+                 Compared with def5678.\n"
+            ),
+            "{page}"
+        );
+    }
+
+    #[test]
+    fn the_page_says_what_moved_nothing_moved_or_that_there_is_nothing_to_compare() {
+        let mut report = sample();
+        assert!(
+            report
+                .markdown(None)
+                .contains("This is the first baseline report: there's nothing to compare it with.")
+        );
+        report.compared_with = Some("def5678".into());
+        assert!(
+            report
+                .markdown(Some(&[]))
+                .contains("Nothing moved since def5678.")
+        );
+        let moved = [Moved {
+            name: "Seed 1: died of starvation".into(),
+            was: None,
+            now: Some("1".into()),
+        }];
+        assert!(
+            report
+                .markdown(Some(&moved))
+                .contains("## What moved\n\n- Seed 1: died of starvation: none → 1\n")
+        );
+    }
+
+    #[test]
+    fn the_page_gives_each_criterion_its_pass_mark_and_verdict() {
+        // Design §7.6: met, not met yet or no data, against the design's
+        // pass marks exactly.
+        let page = sample().markdown(None);
+        assert!(
+            page.contains("| Alive at tick 10,000 | 100% | at least 80% | met |"),
+            "{page}"
+        );
+        assert!(
+            page.contains(
+                "| Hunger and thirst's share of deaths, ticks 0–50,000 \
+                 | 100%, over the 1 of 10 seeds with deaths | under 25% | not met yet (#18) |"
+            ),
+            "{page}"
+        );
+        assert!(
+            page.contains("| A1: thornbush contacts | no data | no data |"),
+            "{page}"
+        );
+    }
+
+    #[test]
+    fn the_page_lists_broken_seeds_with_their_replay_commands() {
+        let mut report = sample();
+        report.broken = broken(
+            "viability",
+            &[(
+                4,
+                Err("tick 4,312: no tile holds more than one object".into()),
+            )],
+        );
+        let page = report.markdown(None);
+        assert!(
+            page.contains(
+                "## Broken\n\n- viability, seed 4: tick 4,312: no tile holds more than one \
+                 object. Replay: `cargo run --profile baseline -p terra-sim --example lab -- \
+                 scenarios/viability.ron --seed 4`\n"
+            ),
+            "{page}"
+        );
     }
 }
