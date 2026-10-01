@@ -450,16 +450,26 @@ impl Brain {
         let mut r = 0.0;
         for (tried_on, felt) in [(rewarded, signals.reward), (corrected, -signals.punishment)] {
             match tried_on {
-                Some(touch) => {
-                    let known = self.experience.learn_about(touch.subject, needs);
-                    let habit = &mut known.habits[column(touch.verb)];
+                // A crash has no verb, so teaches no habit (design v23 §5.6).
+                Some(Touch { verb: None, .. }) => {}
+                Some(Touch {
+                    verb: Some(verb),
+                    subject,
+                    ..
+                }) => {
+                    let known = self.experience.learn_about(subject, needs);
+                    let habit = &mut known.habits[column(verb)];
                     *habit = (*habit + rate * felt).clamp(-1.0, 1.0);
                 }
                 None => r += felt,
             }
         }
+        // While a crash is the thing touched, the trace teaches nothing
+        // either: it holds what the sprite chose before it was taken hold
+        // of, which the crash's pain isn't about (design v25 §5.6).
+        let crashed = near.is_some_and(|touch| touch.verb.is_none());
         let tried = self.touched.filter(|_| signals.fruitless).map(|t| t.tick);
-        if r != 0.0 || tried.is_some() {
+        if !crashed && (r != 0.0 || tried.is_some()) {
             let disappointment = self.params.get(BrainParam::Disappointment);
             let decay = self.params.get(BrainParam::TraceDecay);
             for entry in &self.trace {
@@ -1739,7 +1749,7 @@ mod tests {
         decide(&mut brain, 9, Verb::Eat, Some(types::BERRY), &set);
         brain.touched = Some(Touch {
             tick: 9,
-            verb: Verb::Eat,
+            verb: Some(Verb::Eat),
             subject: types::BERRY,
             sprite: None,
             novelty: 1.0,
@@ -1778,7 +1788,7 @@ mod tests {
         let mut brain = unfading(&[]);
         let touch = Touch {
             tick: 1,
-            verb: Verb::Eat,
+            verb: Some(Verb::Eat),
             subject: types::BERRY_BUSH,
             sprite: None,
             novelty: 1.0,
@@ -1810,7 +1820,7 @@ mod tests {
         // A touch longer ago than the window (3 ticks) is forgotten too.
         brain.touched = Some(Touch {
             tick: 2,
-            verb: Verb::Eat,
+            verb: Some(Verb::Eat),
             subject: types::BERRY_BUSH,
             sprite: None,
             novelty: 1.0,
@@ -2077,7 +2087,7 @@ mod tests {
         decide(&mut brain, 9, Verb::Eat, Some(types::BALL), &set);
         brain.touched = Some(Touch {
             tick: 9,
-            verb: Verb::Eat,
+            verb: Some(Verb::Eat),
             subject: types::BALL,
             sprite: None,
             novelty: 1.0,
@@ -2110,7 +2120,7 @@ mod tests {
         );
         brain.touched = Some(Touch {
             tick: 9,
-            verb: Verb::Play,
+            verb: Some(Verb::Play),
             subject: types::BALL,
             sprite: None,
             novelty: 1.0,
@@ -2209,7 +2219,7 @@ mod tests {
         let mut brain = unfading(&[]);
         brain.touched = Some(Touch {
             tick: 1,
-            verb: Verb::Eat,
+            verb: Some(Verb::Eat),
             subject: types::THORNBUSH,
             sprite: None,
             novelty: 0.5,
@@ -2270,7 +2280,7 @@ mod tests {
         decide(&mut brain, 9, Verb::Hit, Some(types::SPRITE), &[]);
         brain.touched = Some(Touch {
             tick: 9,
-            verb: Verb::Hit,
+            verb: Some(Verb::Hit),
             subject: types::SPRITE,
             sprite: None,
             novelty: 1.0,

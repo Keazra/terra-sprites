@@ -2,7 +2,7 @@
 //! give the contact (design v23 §3.5.6), then those its verb table lists for
 //! the verb, run in order, once per attempt.
 
-use crate::action::{Hurt, Outcome};
+use crate::action::{self, Hurt, Outcome};
 use crate::data::DataPack;
 use crate::ecology::{self, Turn};
 use crate::events::{DeathCause, Event};
@@ -108,6 +108,8 @@ pub(crate) fn crash(
     actor: EntityId,
     into: Target,
 ) -> bool {
+    let subject = state.subject_of(data, into);
+    action::touched(state, data, actor, into, subject, None);
     let Some(kind) = state.kind_of(data, into) else {
         return false;
     };
