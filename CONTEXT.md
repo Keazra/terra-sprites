@@ -537,6 +537,29 @@ _Avoid_: teacher, bot
 The same seed run again for comparison, without the one thing being measured: without learning (A1), or without the trainer (A2, A3).
 _Avoid_: baseline (that's a measurement on `main`)
 
+**Viability run**:
+The default world run for many seeds with no player, counting who survives and what killed those who didn't (A4).
+_Avoid_: soak, ecological soak
+
+**Soak**:
+A run of a million ticks with a random script of the Cursor's commands, looking only for panics and broken invariants (A7).
+_Avoid_: stress test; a soak for any long run without commands (that's a viability run)
+
+**Baseline run**:
+The measurements taken on one commit of `main`, so that each commit can be compared with the last: the viability run, the soak, and the A1–A3 lessons' numbers.
+_Avoid_: daily report, nightly soak, health check
+
+**Baseline report**:
+A baseline run's numbers, for one commit.
+
+**Briefing**:
+The observer's plain-language account of a baseline report: what was tested, what changed since the last one, and what might explain it.
+_Avoid_: summary, analysis
+
+**Observer**:
+The AI agent that reads a baseline report, and the code and commits behind it, and writes the briefing. It changes nothing and posts nothing.
+_Avoid_: monitor, watcher
+
 ### Zones (a later milestone)
 
 **Zone**:
