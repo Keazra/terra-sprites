@@ -218,6 +218,37 @@ fn after_training(windows: &[Window]) -> &Window {
         .expect("A2 and A3 count ticks 10,000 to 20,000")
 }
 
+/// A seed that crashed or broke an invariant (design §7.6).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Broken {
+    /// The lab scenario, by the name of its file in `scenarios/`.
+    pub scenario: String,
+    pub seed: u64,
+    /// What it said, which names the tick for a broken invariant (§7.1).
+    pub message: String,
+    /// The command that replays the seed, with the self-check on.
+    pub replay: String,
+}
+
+/// The seeds of `scenario` that broke.
+pub fn broken(scenario: &str, seeds: &[(u64, Result<LabRun, String>)]) -> Vec<Broken> {
+    seeds
+        .iter()
+        .filter_map(|(seed, run)| {
+            let message = run.as_ref().err()?;
+            Some(Broken {
+                scenario: scenario.into(),
+                seed: *seed,
+                message: message.clone(),
+                replay: format!(
+                    "cargo run --profile baseline -p terra-sim --example lab -- \
+                     scenarios/{scenario}.ron --seed {seed}"
+                ),
+            })
+        })
+        .collect()
+}
+
 /// One of A4's halves: its median, met when it `passes`, and otherwise
 /// not met until slice 17 is done.
 fn a4(median: Option<f64>, passes: impl Fn(f64) -> bool) -> Criterion {
@@ -430,6 +461,32 @@ mod tests {
         );
         // Sorted, 0 0 1 1 1 2 2 2 3 4: halfway between the middle two.
         assert_eq!(thorn_trap.median, Some(1.5));
+    }
+
+    #[test]
+    fn a_seed_that_crashed_is_broken_with_how_to_replay_it_and_the_rest_are_still_reported() {
+        // Design §7.6: broken means a crash or a broken invariant, given with
+        // the seed, the tick (in the message) and the command that replays it.
+        let message = "tick 4,312: no tile holds more than one object".to_string();
+        let seeds = vec![
+            (1, Ok(viability_run(&[], &[], &[]))),
+            (2, Err(message.clone())),
+            (3, Ok(viability_run(&[], &[], &[]))),
+        ];
+        assert_eq!(
+            broken("viability", &seeds),
+            vec![Broken {
+                scenario: "viability".into(),
+                seed: 2,
+                message,
+                replay: "cargo run --profile baseline -p terra-sim --example lab -- \
+                         scenarios/viability.ron --seed 2"
+                    .into(),
+            }]
+        );
+        let rows = viability(&seeds, 30, &data()).seeds;
+        let reported: Vec<u64> = rows.iter().map(|row| row.seed).collect();
+        assert_eq!(reported, vec![1, 3]);
     }
 
     #[test]
