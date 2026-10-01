@@ -17,6 +17,11 @@ pub(crate) const TAGS: &str = "tags.ron";
 pub(crate) const SOLID: &str = "Solid";
 pub(crate) const FIXTURE: &str = "Fixture";
 
+/// Whether the tag called `name` is built in, not defined in the data.
+pub(crate) fn is_built_in(name: &str) -> bool {
+    name == SOLID || name == FIXTURE
+}
+
 /// A contact (design v23 §3.5.6): a sprite touching a thing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 pub(crate) enum Contact {
@@ -72,7 +77,7 @@ pub(crate) fn tags(
                 file: TAGS.into(),
                 message,
             };
-            if name == SOLID || name == FIXTURE {
+            if is_built_in(&name) {
                 return Err(invalid(format!(
                     "`{name}` is built in, as physics, so it isn't defined here"
                 )));

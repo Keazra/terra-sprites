@@ -454,12 +454,12 @@ impl DataPack {
         self.loci.iter().find(|l| l.name == name)
     }
 
-    /// Every object type, in ascending ID order. Rules refer to types by their index here.
     /// The tags defined in the data (design v23 §3.5.6), in listed order.
     pub(crate) fn tags(&self) -> &[Tag] {
         &self.tags
     }
 
+    /// Every object type, in ascending ID order. Rules refer to types by their index here.
     pub(crate) fn object_types(&self) -> &[ObjectType] {
         &self.object_types
     }

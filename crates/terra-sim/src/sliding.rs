@@ -27,8 +27,8 @@ pub(crate) struct Slide {
 enum Meeting {
     /// Nothing that stops it: it slides there.
     Open(Pos),
-    /// Terrain or the map's edge: it stops, with no crash.
-    Wall,
+    /// Unwalkable terrain, or the wall: it stops, with no crash.
+    Halt,
     /// A sprite or a solid object: it stops, and crashes into it.
     Crash(Target),
 }
@@ -61,7 +61,7 @@ fn slide(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec
                 left: left - 1,
             })
         }
-        Meeting::Wall => None,
+        Meeting::Halt => None,
         Meeting::Crash(target) => {
             let into = match target {
                 Target::Object(object) => {
@@ -93,7 +93,7 @@ fn slide(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec
 /// object beside it, the one to its east or west first.
 fn meet(state: &WorldState, data: &DataPack, from: Pos, dir: Dir) -> Meeting {
     let Some(to) = state.map.neighbour(from, dir) else {
-        return Meeting::Wall;
+        return Meeting::Halt;
     };
     if let Some(other) = state.sprites.at(to) {
         return Meeting::Crash(Target::Sprite(other));
@@ -108,7 +108,7 @@ fn meet(state: &WorldState, data: &DataPack, from: Pos, dir: Dir) -> Meeting {
         return Meeting::Crash(Target::Object(object));
     }
     if !state.map.is_walkable(to) {
-        return Meeting::Wall;
+        return Meeting::Halt;
     }
     if let Some((across, along)) = dir.parts() {
         let sides = [across, along].map(|side| {
@@ -121,7 +121,7 @@ fn meet(state: &WorldState, data: &DataPack, from: Pos, dir: Dir) -> Meeting {
             return Meeting::Crash(Target::Object(object));
         }
         if !sides.into_iter().all(|side| state.map.is_walkable(side)) {
-            return Meeting::Wall;
+            return Meeting::Halt;
         }
     }
     Meeting::Open(to)

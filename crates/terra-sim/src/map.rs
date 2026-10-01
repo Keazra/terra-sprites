@@ -36,9 +36,8 @@ impl Dir {
         Dir::NW,
     ];
 
-    /// The change in `(x, y)` a step in this direction makes, `y` growing
-    /// south.
-    pub fn offset(self) -> (i32, i32) {
+    /// The change in `(x, y)` a step in this direction makes.
+    pub(crate) fn offset(self) -> (i32, i32) {
         match self {
             Dir::N => (0, -1),
             Dir::NE => (1, -1),
@@ -280,7 +279,7 @@ impl Map {
     }
 
     /// The tile one step from `pos` in direction `dir`, or `None` past the wall.
-    pub(crate) fn neighbour(&self, pos: Pos, dir: Dir) -> Option<Pos> {
+    pub fn neighbour(&self, pos: Pos, dir: Dir) -> Option<Pos> {
         let (dx, dy) = dir.offset();
         let x = i32::from(pos.x) + dx;
         let y = i32::from(pos.y) + dy;
