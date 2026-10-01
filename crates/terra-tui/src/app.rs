@@ -427,7 +427,10 @@ impl App {
             .fold(start, |grip, &(_, command)| match command {
                 Command::TakeHold { sprite } => grip.or(Some(Grip::Leads(sprite))),
                 Command::PickUp { item } => grip.or(Some(Grip::Holds(item))),
-                Command::LetGo | Command::PutDown { .. } | Command::Throw { .. } => None,
+                Command::LetGo
+                | Command::PutDown { .. }
+                | Command::Throw { .. }
+                | Command::Shove { .. } => None,
                 Command::Reward { .. } | Command::Correct { .. } | Command::MoveCursor { .. } => {
                     grip
                 }

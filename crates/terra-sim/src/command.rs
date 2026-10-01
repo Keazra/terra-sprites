@@ -8,7 +8,10 @@ use crate::cursor::Grip;
 use crate::data::DataPack;
 use crate::events::{Event, EventKind};
 use crate::map::{Dir, Pos};
+use crate::object_types::Size;
 use crate::objects::{EntityId, Roll};
+use crate::perception::Target;
+use crate::sliding::Slide;
 use crate::terrain::Terrain;
 use crate::world::WorldState;
 
@@ -46,6 +49,9 @@ pub enum Command {
     /// Throws the item the Cursor holds (design v25 §3.5.4): puts it down on
     /// `from`, where aiming began, rolling `tiles` tiles `toward`.
     Throw { from: Pos, toward: Dir, tiles: u16 },
+    /// Shoves the sprite the Cursor leads (design v25 §3.5.4): lets go of
+    /// it, and it slides `tiles` tiles `toward`.
+    Shove { toward: Dir, tiles: u16 },
 }
 
 /// One of the Cursor's four touches (design v21 §4.6): a Reward or a
@@ -71,7 +77,8 @@ impl CursorTouch {
             | Command::PutDown { .. }
             | Command::LetGo
             | Command::MoveCursor { .. }
-            | Command::Throw { .. } => None,
+            | Command::Throw { .. }
+            | Command::Shove { .. } => None,
         }
     }
 
@@ -190,6 +197,7 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
                 toward,
                 tiles,
             } => throw(state, data, from, toward, tiles),
+            Command::Shove { toward, tiles } => shove(state, data, toward, tiles),
         };
         let kind = match applied {
             Ok(kind) => kind,
@@ -332,6 +340,31 @@ fn throw(
         left: tiles.max(1).min(furthest),
     });
     Ok(EventKind::Threw { item, object_type })
+}
+
+/// The Cursor shoves the sprite it leads (design v25 §3.5.4): lets go of
+/// it, and it slides `tiles` tiles `toward`, from this tick's step 2: at
+/// least 1, and at most the furthest for its size. Sprites are large.
+fn shove(
+    state: &mut WorldState,
+    data: &DataPack,
+    toward: Dir,
+    tiles: u16,
+) -> Result<EventKind, Rejection> {
+    let sprite = state.cursor.leads().ok_or(Rejection::NotLeading)?;
+    let size = state
+        .kind_of(data, Target::Sprite(sprite))
+        .and_then(|kind| data.object_types()[kind].build)
+        .map_or(Size::Large, |build| build.size);
+    let furthest = data.physiology().cursor.furthest.of(size);
+    state.cursor.release();
+    let shoved = state.sprites.get_mut(sprite).expect("the led sprite");
+    shoved.lead = None;
+    shoved.slide = Some(Slide {
+        dir: toward,
+        left: tiles.max(1).min(furthest),
+    });
+    Ok(EventKind::Shoved { sprite })
 }
 
 /// The Cursor lets go of the item it holds onto `tile`, at rest, where an
