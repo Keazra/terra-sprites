@@ -14,10 +14,10 @@ How the owner likes to work, and the project's conventions, are in `docs/agents/
 
 ## Start: take the handover
 
-1. Sync `main` (`git pull --ff-only`, clean tree), read `docs/agents/how-we-work.md`, and list open PRs.
+1. Sync `main` (`git pull --ff-only`, clean tree), read `docs/agents/how-we-work.md`, and list open PRs. In a local session, read the newest briefing in `docs/reports/` (design §7.6), if there is one.
 2. Find the next slice: the earliest open "Slice N" issue in the current milestone. Confirm its `## Blocked by` issues are closed, and read its comments for items deferred from earlier slices.
 3. List open issues with no triage label (roles in `docs/agents/triage-labels.md`). If there are any, suggest the user types `/triage`.
-4. Brief the user in a few lines: what merged since last time, what's open, the proposed slice and anything notable in its issue. Wait for their go.
+4. Brief the user in a few lines: what merged since last time, what's open, what the newest briefing says moved or broke, the proposed slice and anything notable in its issue. Wait for their go.
 5. On their go, branch `feat/slice-N-<slug>`, read the sections of the current design doc the slice touches, and work the slice loop.
 
 Done when the user has the brief and has chosen what to work on.
