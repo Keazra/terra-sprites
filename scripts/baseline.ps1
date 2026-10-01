@@ -59,7 +59,8 @@ function Invoke-Logged([string]$Program, [string]$Arguments, [string]$Directory,
         -RedirectStandardOutput $Out -RedirectStandardError $Err -NoNewWindow -PassThru
     $null = $process.Handle # PowerShell 5.1 loses the exit code without this
     if (-not $process.WaitForExit($Minutes * 60 * 1000)) {
-        $process.Kill()
+        # Kill() would stop only cargo or agy, leaving what they started.
+        & taskkill.exe /pid $process.Id /T /F | Out-Null
         return $null
     }
     return $process.ExitCode
@@ -98,6 +99,10 @@ Found by the baseline run on ``main`` at $Commit, $Measured (design section 7.6)
     if ($open) {
         if ($DryRun) { Write-Host "Would comment on #${open}:`n$body"; return }
         & gh issue comment $open --repo $GitHubRepo --body-file $bodyFile | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Log "ERROR: couldn't comment on #${open} on GitHub"
+            return
+        }
         Write-Log "Commented on #${open}: still broken at $Commit"
         return
     }
@@ -116,6 +121,10 @@ Found by the baseline run on ``main`` at $Commit, $Measured (design section 7.6)
         return
     }
     & gh issue comment $url --repo $GitHubRepo --body-file $plainFile | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Log "Filed $url, but ERROR: couldn't add its plain-language comment"
+        return
+    }
     Write-Log "Filed $url"
 }
 
@@ -128,9 +137,12 @@ function Invoke-Baseline {
         New-Item -ItemType Directory -Force -Path $out | Out-Null
     }
 
-    # 1. GitHub's main, and whether it has moved.
-    & git -C $Repo fetch --quiet origin main
-    if ($LASTEXITCODE -ne 0) { Write-Log "ERROR: couldn't fetch main from GitHub"; return 1 }
+    # 1. GitHub's main, and whether it has moved. A trial of a local ref
+    # needs no fetch, so it runs offline too.
+    if ($Ref -eq "origin/main") {
+        & git -C $Repo fetch --quiet origin main
+        if ($LASTEXITCODE -ne 0) { Write-Log "ERROR: couldn't fetch main from GitHub"; return 1 }
+    }
     $commit = (& git -C $Repo rev-parse --short $Ref).Trim()
     $previous = $null
     if (Test-Path $LastCommit) { $previous = (Read-Text $LastCommit).Trim() }
