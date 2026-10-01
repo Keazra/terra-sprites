@@ -88,28 +88,21 @@ fn slide(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec
 
 /// What a sprite on `from`, sliding in direction `dir`, meets. It stops at
 /// the map's edge, unwalkable terrain, a sprite, a solid object, or a corner
-/// it may not cut (design §3.1); an item doesn't stop it. Stopped by what's on
-/// the tile ahead, it crashes into that; stopped at a corner, into the solid
-/// object beside it, the one to its east or west first.
+/// it may not cut (design §3.1); an item doesn't stop it. A diagonal slide
+/// passes the corner before it reaches the tile ahead, so the corner comes
+/// first: stopped there, it crashes into the solid object beside it, the one
+/// to its east or west first. Past the corner, stopped by what's on the tile
+/// ahead, it crashes into that (design v25 §3.5.4).
 fn meet(state: &WorldState, data: &DataPack, from: Pos, dir: Dir) -> Meeting {
     let Some(to) = state.map.neighbour(from, dir) else {
         return Meeting::Halt;
     };
-    if let Some(other) = state.sprites.at(to) {
-        return Meeting::Crash(Target::Sprite(other));
-    }
     let solid = |pos| {
         state
             .objects
             .at(pos)
             .filter(|_| state.objects.is_solid_at(data, pos))
     };
-    if let Some(object) = solid(to) {
-        return Meeting::Crash(Target::Object(object));
-    }
-    if !state.map.is_walkable(to) {
-        return Meeting::Halt;
-    }
     if let Some((across, along)) = dir.parts() {
         let sides = [across, along].map(|side| {
             state
@@ -123,6 +116,15 @@ fn meet(state: &WorldState, data: &DataPack, from: Pos, dir: Dir) -> Meeting {
         if !sides.into_iter().all(|side| state.map.is_walkable(side)) {
             return Meeting::Halt;
         }
+    }
+    if let Some(other) = state.sprites.at(to) {
+        return Meeting::Crash(Target::Sprite(other));
+    }
+    if let Some(object) = solid(to) {
+        return Meeting::Crash(Target::Object(object));
+    }
+    if !state.map.is_walkable(to) {
+        return Meeting::Halt;
     }
     Meeting::Open(to)
 }
