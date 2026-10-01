@@ -744,6 +744,17 @@ impl World {
         CursorView { world: self }
     }
 
+    /// The furthest the Cursor throws what `grip` holds, or shoves what it
+    /// leads, in tiles, by its size (design v25 §3.5.4). The screen asks it
+    /// of a grip it has queued as well as of one the world has applied.
+    pub fn furthest(&self, grip: Grip) -> u16 {
+        let thing = match grip {
+            Grip::Holds(item) => Target::Object(item),
+            Grip::Leads(sprite) => Target::Sprite(sprite),
+        };
+        command::furthest(&self.state, &self.data, thing)
+    }
+
     /// How many sprites have died of `cause` since the world began.
     pub fn deaths(&self, cause: DeathCause) -> u64 {
         self.state.deaths.get(&cause).copied().unwrap_or(0)

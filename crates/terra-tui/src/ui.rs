@@ -172,6 +172,7 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     if app.flash_on() {
         draw_leash(buf, app, world);
     }
+    draw_aim_line(buf, app, world);
     draw_cursor(buf, inner, app, world);
 }
 
@@ -260,6 +261,28 @@ fn draw_leash(buf: &mut Buffer, app: &App, world: &World) {
             buf[(cell.x, cell.y)]
                 .set_char(dot.symbol)
                 .set_style(Style::default().fg(dot.fg));
+        }
+    }
+}
+
+/// Draws the aim line, while the player aims a throw or a shove: steady
+/// dots along the thing's path, and where it would stop, over empty ground
+/// only, as the leash is, and clear of the Cursor (design v25 §6.5).
+fn draw_aim_line(buf: &mut Buffer, app: &App, world: &World) {
+    let line = app.aim_line(world);
+    let cursor = app.cursor();
+    for (i, &tile) in line.iter().enumerate() {
+        let glyph = if i + 1 == line.len() {
+            app.theme.aim_end()
+        } else {
+            app.theme.aim()
+        };
+        let by_the_cursor = tile.x.abs_diff(cursor.x) <= 1 && tile.y.abs_diff(cursor.y) <= 1;
+        let empty = world.sprite_at(tile).is_none() && world.object_at(tile).is_none();
+        if let Some(cell) = app.cell_of(tile).filter(|_| empty && !by_the_cursor) {
+            buf[(cell.x, cell.y)]
+                .set_char(glyph.symbol)
+                .set_style(Style::default().fg(glyph.fg));
         }
     }
 }
@@ -432,7 +455,12 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         }
         None => {
             let room = width.saturating_sub(tile.chars().count() + 3);
-            let hints = hints_within(room);
+            // While the player aims, how to send it or not (design v25 §6.1).
+            let hints = match (app.aiming(), app.grip(world)) {
+                (true, Some(Grip::Holds(_))) => within(room, "let go to throw  esc cancel"),
+                (true, Some(Grip::Leads(_))) => within(room, "let go to shove  esc cancel"),
+                _ => hints_within(room),
+            };
             (tile, hints)
         }
     };
@@ -441,6 +469,15 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     }
     let gap = width.saturating_sub(tile.chars().count() + right.chars().count() + 1);
     Line::from(format!("{tile}{}{right} ", " ".repeat(gap)))
+}
+
+/// `hint`, if it fits in `room` columns, or nothing.
+fn within(room: usize, hint: &str) -> String {
+    if hint.chars().count() <= room {
+        hint.into()
+    } else {
+        String::new()
+    }
 }
 
 /// As many of the key hints as fit in `room` columns, whole and in order.

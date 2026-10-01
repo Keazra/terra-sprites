@@ -330,10 +330,7 @@ fn throw(
     tiles: u16,
 ) -> Result<EventKind, Rejection> {
     let (item, object_type) = let_go_of_held(state, data, from)?;
-    let build = data.object_types()[state.objects.kind(item)]
-        .build
-        .expect("an item has a size");
-    let furthest = data.physiology().cursor.furthest.of(build.size);
+    let furthest = furthest(state, data, Target::Object(item));
     let thrown = state.objects.get_mut(item).expect("the thrown item");
     thrown.roll = Some(Roll {
         dir: toward,
@@ -352,11 +349,7 @@ fn shove(
     tiles: u16,
 ) -> Result<EventKind, Rejection> {
     let sprite = state.cursor.leads().ok_or(Rejection::NotLeading)?;
-    let size = state
-        .kind_of(data, Target::Sprite(sprite))
-        .and_then(|kind| data.object_types()[kind].build)
-        .map_or(Size::Large, |build| build.size);
-    let furthest = data.physiology().cursor.furthest.of(size);
+    let furthest = furthest(state, data, Target::Sprite(sprite));
     state.cursor.release();
     let shoved = state.sprites.get_mut(sprite).expect("the led sprite");
     shoved.lead = None;
@@ -365,6 +358,16 @@ fn shove(
         left: tiles.max(1).min(furthest),
     });
     Ok(EventKind::Shoved { sprite })
+}
+
+/// The furthest the Cursor throws or shoves `thing`, by its size (design
+/// v25 §3.5.4). Sprites are large, in a pack that doesn't say.
+pub(crate) fn furthest(state: &WorldState, data: &DataPack, thing: Target) -> u16 {
+    let size = state
+        .kind_of(data, thing)
+        .and_then(|kind| data.object_types()[kind].build)
+        .map_or(Size::Large, |build| build.size);
+    data.physiology().cursor.furthest.of(size)
 }
 
 /// The Cursor lets go of the item it holds onto `tile`, at rest, where an

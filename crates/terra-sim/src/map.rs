@@ -36,8 +36,9 @@ impl Dir {
         Dir::NW,
     ];
 
-    /// The change in `(x, y)` a step in this direction makes.
-    pub(crate) fn offset(self) -> (i32, i32) {
+    /// The change in `(x, y)` a step in this direction makes, `y` growing
+    /// south.
+    pub fn offset(self) -> (i32, i32) {
         match self {
             Dir::N => (0, -1),
             Dir::NE => (1, -1),
@@ -92,6 +93,31 @@ impl Dir {
 
     pub(crate) fn is_diagonal(self) -> bool {
         matches!(self, Dir::NE | Dir::SE | Dir::SW | Dir::NW)
+    }
+
+    /// The direction nearest the way `(dx, dy)` points, `y` growing south,
+    /// or `None` for no way at all: how a throw or a shove is aimed (design
+    /// v25 §6.5). Whole numbers never point exactly between two directions.
+    pub fn nearest(dx: i32, dy: i32) -> Option<Dir> {
+        if (dx, dy) == (0, 0) {
+            return None;
+        }
+        let (along, across) = (
+            dx.unsigned_abs().max(dy.unsigned_abs()),
+            dx.unsigned_abs().min(dy.unsigned_abs()),
+        );
+        // Within 22.5° of the longer axis when across / along < √2 − 1,
+        // that is when (across + along)² < 2 × along², in whole numbers.
+        let (along, across) = (u64::from(along), u64::from(across));
+        let straight = (across + along).pow(2) < 2 * along.pow(2);
+        let step = |d: i32, keep: bool| if keep { d.signum() } else { 0 };
+        let (x, y) = if straight {
+            let x_longer = dx.unsigned_abs() >= dy.unsigned_abs();
+            (step(dx, x_longer), step(dy, !x_longer))
+        } else {
+            (dx.signum(), dy.signum())
+        };
+        Some(Dir::with_offset(x, y))
     }
 }
 
