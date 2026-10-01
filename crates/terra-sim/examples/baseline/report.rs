@@ -1,6 +1,6 @@
 //! The baseline report (design §7.6): each criterion's numbers and verdict.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use terra_sim::{DataPack, DeathCause, LabRun, Verb, Window};
 
@@ -23,6 +23,129 @@ pub enum Verdict {
 pub struct Criterion {
     pub median: Option<f64>,
     pub verdict: Verdict,
+}
+
+/// A baseline report (design §7.6): what one commit of `main` measured.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Report {
+    /// The commit measured.
+    pub commit: String,
+    /// The commit of the report it's compared with, if there was one.
+    pub compared_with: Option<String>,
+    /// When it was measured, in local time, as the launcher gives it.
+    pub measured: String,
+    /// How long the run took.
+    pub seconds: u64,
+    /// How many sprites each seed of the viability run starts with.
+    pub sprites: u64,
+    pub viability: Viability,
+    pub a1: Lesson,
+    pub a2: Lesson,
+    pub a3: Lesson,
+    pub broken: Vec<Broken>,
+}
+
+/// A number that moved since the previous report: what it is, and how each
+/// report shows it, or none where a report doesn't have it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Moved {
+    pub name: String,
+    pub was: Option<String>,
+    pub now: Option<String>,
+}
+
+impl Report {
+    /// Every number in the report, by name and as it's shown, in the
+    /// report's order.
+    fn numbers(&self) -> Vec<(String, String)> {
+        let v = &self.viability;
+        let mut numbers = vec![
+            (
+                "A4: alive at tick 10,000, median".to_string(),
+                percent(v.survival.median),
+            ),
+            (
+                "A4: hunger and thirst's share of deaths, median".into(),
+                percent(v.hunger_and_thirst.median),
+            ),
+            (
+                "A4: seeds with deaths".into(),
+                v.seeds_with_deaths.to_string(),
+            ),
+            (
+                "Thorn trap: deaths by thornbush in ticks 0–30,000, median".into(),
+                number(v.thorn_trap.median),
+            ),
+        ];
+        let lessons = [
+            ("A1: thornbush contacts", "without learning", &self.a1),
+            (
+                "A2: plays with a ball after training",
+                "without the trainer",
+                &self.a2,
+            ),
+            (
+                "A3: hits on sprites after training",
+                "without the trainer",
+                &self.a3,
+            ),
+        ];
+        for (what, control, lesson) in lessons {
+            numbers.push((format!("{what}, median"), number(lesson.median)));
+            numbers.push((
+                format!("{what} {control}, median"),
+                number(lesson.control_median),
+            ));
+        }
+        for (seed, n) in &v.thorn_trap.per_seed {
+            numbers.push((format!("Thorn trap: seed {seed}"), n.to_string()));
+        }
+        for row in &v.seeds {
+            let seed = row.seed;
+            numbers.push((
+                format!("Seed {seed}: alive at tick 50,000"),
+                row.alive.to_string(),
+            ));
+            for (cause, n) in &row.deaths {
+                numbers.push((format!("Seed {seed}: died of {cause}"), n.to_string()));
+            }
+            for (verb, n) in &row.verbs {
+                numbers.push((format!("Seed {seed}: {verb}"), n.to_string()));
+            }
+        }
+        for broken in &self.broken {
+            let name = format!("Broken: {} seed {}", broken.scenario, broken.seed);
+            numbers.push((name, broken.message.clone()));
+        }
+        numbers
+    }
+}
+
+/// Every number in `current` that `previous` showed differently or didn't
+/// have, in `current`'s order, then any that `current` no longer has.
+pub fn moved(previous: &Report, current: &Report) -> Vec<Moved> {
+    let was: BTreeMap<String, String> = previous.numbers().into_iter().collect();
+    let now = current.numbers();
+    let mut moved: Vec<Moved> = now
+        .iter()
+        .filter(|(name, shown)| was.get(name) != Some(shown))
+        .map(|(name, shown)| Moved {
+            name: name.clone(),
+            was: was.get(name).cloned(),
+            now: Some(shown.clone()),
+        })
+        .collect();
+    let named: BTreeSet<&String> = now.iter().map(|(name, _)| name).collect();
+    for (name, shown) in previous.numbers() {
+        if !named.contains(&name) {
+            moved.push(Moved {
+                name,
+                was: Some(shown),
+                now: None,
+            });
+        }
+    }
+    moved
 }
 
 /// What the viability run measured (design §7.6).
@@ -283,6 +406,30 @@ fn cause_name(cause: DeathCause, data: &DataPack) -> String {
         DeathCause::Dehydration => "dehydration".into(),
         DeathCause::OldAge => "old age".into(),
         DeathCause::HurtBy(id) => format!("hurt by {}", data.object_type_name(id).unwrap_or("?")),
+    }
+}
+
+/// A share as a report shows it: "80%", "78.3%", or "no data".
+fn percent(share: Option<f64>) -> String {
+    match share {
+        None => "no data".into(),
+        Some(share) => {
+            let percent = share * 100.0;
+            if percent.fract() == 0.0 {
+                format!("{percent:.0}%")
+            } else {
+                format!("{percent:.1}%")
+            }
+        }
+    }
+}
+
+/// A median as a report shows it: "2", "1.5", or "no data".
+fn number(median: Option<f64>) -> String {
+    match median {
+        None => "no data".into(),
+        Some(n) if n.fract() == 0.0 => format!("{n:.0}"),
+        Some(n) => format!("{n:.1}"),
     }
 }
 
@@ -635,5 +782,58 @@ mod tests {
         assert_eq!(met.verdict, Verdict::Met);
         let more = a3(&lesson_seeds(hits(0, 11), hits(0, 20)), &data);
         assert_eq!(more.verdict, Verdict::NotMet { until: None });
+    }
+
+    /// A report of ten seeds, one of which lost a sprite to thirst.
+    fn sample() -> Report {
+        let data = data();
+        let mut deaths: [&[(DeathCause, u64)]; 10] = [&[]; 10];
+        deaths[0] = &[(DeathCause::Dehydration, 1)];
+        Report {
+            commit: "abc1234".into(),
+            compared_with: None,
+            measured: "2026-10-01 09:00".into(),
+            seconds: 900,
+            sprites: 30,
+            viability: viability(&seeds_dying(deaths), 30, &data),
+            a1: a1(&[], &data),
+            a2: a2(&[], &data),
+            a3: a3(&[], &data),
+            broken: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn what_moved_lists_each_number_that_changed_since_the_previous_report() {
+        // Design §7.6: the report opens with every number that moved.
+        let previous = sample();
+        let mut current = sample();
+        current.viability.thorn_trap.median = Some(2.0);
+        current.viability.seeds[0]
+            .deaths
+            .insert("starvation".into(), 1);
+        assert_eq!(
+            moved(&previous, &current),
+            vec![
+                Moved {
+                    name: "Thorn trap: deaths by thornbush in ticks 0–30,000, median".into(),
+                    was: Some("0".into()),
+                    now: Some("2".into()),
+                },
+                Moved {
+                    name: "Seed 1: died of starvation".into(),
+                    was: None,
+                    now: Some("1".into()),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn nothing_moved_between_two_reports_of_the_same_numbers() {
+        let mut current = sample();
+        current.commit = "def5678".into();
+        current.seconds = 950;
+        assert_eq!(moved(&sample(), &current), Vec::new());
     }
 }
