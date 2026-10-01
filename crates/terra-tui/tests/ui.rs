@@ -291,6 +291,44 @@ fn a_grab_click_with_nothing_to_act_on_flashes_a_question_mark() {
 }
 
 #[test]
+fn a_flashing_dotted_leash_runs_from_the_cursor_to_the_led_sprite_over_empty_ground() {
+    // Design v23 §6.5. The sprite is on map tile (1, 2) and a berry on
+    // (4, 2); a map tile (x, y) is drawn at screen cell (x + 1, y + 2).
+    let pack = pack();
+    let map = Map::from_ascii(&["............"; 5], &pack).expect("valid drawing");
+    let scenario = Scenario {
+        map,
+        objects: &[(Pos { x: 4, y: 2 }, "berry")],
+        sprites: &[(Pos { x: 1, y: 2 }, None)],
+        scripted: &[(Pos { x: 1, y: 2 }, ScriptedAction::Rest)],
+    };
+    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut app = app_for(&world, Theme::cp437(), 40, 10);
+    app.apply(Action::Mode(CursorMode::Grab), &world);
+    app.apply(Action::left_click(Position::new(1 + 1, 2 + 2)), &world);
+    app.apply(Action::Point(Position::new(1 + 6, 2 + 2)), &world);
+    let row = |app: &App| -> String {
+        lines(&render(app, &world, 40, 10))[4]
+            .chars()
+            .skip(1)
+            .take(12)
+            .collect()
+    };
+    assert_eq!(row(&app), ".☺··•→.←....", "dots, and the berry over them");
+    let dot = &render(&app, &world, 40, 10)[(1 + 2, 2 + 2)];
+    assert_eq!(dot.fg, Color::Yellow);
+    app.animate(Duration::from_millis(500));
+    assert_eq!(
+        row(&app),
+        ".☺..•→.←....",
+        "flashing, like the Decision marker"
+    );
+    app.animate(Duration::from_millis(500));
+    app.apply(Action::Mode(CursorMode::Train), &world);
+    assert_eq!(row(&app), ".☺··•→.←....", "in every mode");
+}
+
+#[test]
 fn map_tiles_take_their_theme_colours() {
     let world = drawn_world(&SMALL_MAP);
     let mut app = app_for(&world, Theme::cp437(), 40, 8);

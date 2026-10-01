@@ -202,6 +202,16 @@ fn the_themes_draw_grab_s_status_marks_as_the_design_table_says() {
 }
 
 #[test]
+fn the_leash_is_yellow_dots_or_semicolons() {
+    // Design §6.2, v23.
+    assert_eq!(Theme::cp437().leash().symbol, '·');
+    assert_eq!(Theme::ascii().leash().symbol, ';');
+    for theme in [Theme::cp437(), Theme::ascii()] {
+        assert_eq!(theme.leash().fg, Color::Yellow);
+    }
+}
+
+#[test]
 fn the_select_mode_is_white_in_both_themes() {
     // Design §6.5: the mode mark's colour is the whole cursor's colour.
     for theme in [Theme::cp437(), Theme::ascii()] {

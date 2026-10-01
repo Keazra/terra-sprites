@@ -63,5 +63,8 @@
             train:  (glyph: '±', fg: light_magenta),
             grab:   (glyph: '∩', fg: yellow),
         },
+        // The leash, flashing from the Cursor to a sprite it leads, over empty
+        // ground (design v23 §6.5).
+        leash: (glyph: '·', fg: yellow),
     ),
 )
