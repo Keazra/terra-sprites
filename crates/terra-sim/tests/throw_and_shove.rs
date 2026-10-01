@@ -3,7 +3,7 @@
 //! and may crash into what stops it.
 
 use terra_sim::{
-    Command, DataPack, Dir, EntityId, Event, EventKind, Map, Pos, Rejection, Scenario,
+    Command, DataPack, DeathCause, Dir, EntityId, Event, EventKind, Map, Pos, Rejection, Scenario,
     ScriptedAction, Thing, World,
 };
 
@@ -23,7 +23,17 @@ fn world(
     sprites: &[Pos],
     script: &[(Pos, ScriptedAction)],
 ) -> World {
-    let data = builtin();
+    world_in(builtin(), rows, objects, sprites, script)
+}
+
+/// A world like `world`'s, made with `data`.
+fn world_in(
+    data: DataPack,
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    sprites: &[Pos],
+    script: &[(Pos, ScriptedAction)],
+) -> World {
     let map = Map::from_ascii(rows, &data).expect("valid drawing");
     let sprites: Vec<(Pos, Option<_>)> = sprites.iter().map(|&pos| (pos, None)).collect();
     let scenario = Scenario {
@@ -250,11 +260,24 @@ fn shoved(
     toward: Dir,
     tiles: u16,
 ) -> (World, EntityId, Vec<Event>) {
+    shoved_in(builtin(), rows, objects, sprites, from, toward, tiles)
+}
+
+/// What `shoved` does, in a world made with `data`.
+fn shoved_in(
+    data: DataPack,
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    sprites: &[Pos],
+    from: Pos,
+    toward: Dir,
+    tiles: u16,
+) -> (World, EntityId, Vec<Event>) {
     let rests: Vec<(Pos, ScriptedAction)> = sprites
         .iter()
         .flat_map(|&pos| [(pos, ScriptedAction::Rest); 20])
         .collect();
-    let mut world = world(rows, objects, sprites, &rests);
+    let mut world = world_in(data, rows, objects, sprites, &rests);
     let sprite = sprite_on(&world, from);
     world.submit(Command::TakeHold { sprite });
     world.step();
@@ -318,11 +341,15 @@ fn a_slide_stopped_at_a_corner_crashes_into_the_bush_beside_it_east_or_west_firs
         assert_eq!(where_is(&world, sprite), at(1, 2), "{objects:?}");
         crashes(&events, sprite)
     };
-    let bush = |name: &str| (Thing::ObjectType(name.into()), false);
+    let into = |name: &str, hurt| (Thing::ObjectType(name.into()), hurt);
     let north = [(at(1, 1), "berry_bush")];
-    assert_eq!(corner(&field, &north), [bush("berry_bush")]);
+    assert_eq!(corner(&field, &north), [into("berry_bush", false)]);
     let both = [(at(1, 1), "berry_bush"), (at(2, 2), "thornbush")];
-    assert_eq!(corner(&field, &both), [bush("thornbush")], "east first");
+    assert_eq!(
+        corner(&field, &both),
+        [into("thornbush", true)],
+        "east first"
+    );
     assert_eq!(corner(&rocky, &[]), [], "rock is no crash");
 }
 
@@ -361,4 +388,63 @@ fn a_sprite_taken_hold_of_mid_slide_slides_on_to_the_end_and_then_follows() {
         world.step();
     }
     assert_eq!(where_is(&world, sprite), at(0, 1), "then after the Cursor");
+}
+
+/// The built-in pack with `file` changed: each `(from, to)` replaced.
+fn builtin_changing(file: &str, changes: &[(&str, &str)]) -> DataPack {
+    let sources: Vec<(&str, String)> = DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, text)| {
+            let mut text = text.to_string();
+            if path == file {
+                for &(from, to) in changes {
+                    assert!(text.contains(from), "{from:?} is in {file}");
+                    text = text.replace(from, to);
+                }
+            }
+            (path, text)
+        })
+        .collect();
+    let borrowed: Vec<(&str, &str)> = sources.iter().map(|(p, t)| (*p, t.as_str())).collect();
+    DataPack::from_sources(&borrowed).expect("the changed pack is valid")
+}
+
+#[test]
+fn a_crash_runs_the_thing_s_tags_so_a_thornbush_pricks_and_can_kill() {
+    // Design v25 §3.5.4, v23 §3.5.6: a crash is a contact.
+    let lane = ["......", "......"];
+    let thorns = [(at(3, 0), "thornbush")];
+    let (world, sprite, events) = shoved(&lane, &thorns, &[at(1, 0)], at(1, 0), Dir::E, 3);
+    let thornbush = Thing::ObjectType("thornbush".into());
+    assert_eq!(crashes(&events, sprite), [(thornbush, true)]);
+    let injury = world.sprite(sprite).unwrap().chemical("injury").unwrap();
+    assert!(
+        injury > 0.029,
+        "Thorny's crash, 0.03, less healing: {injury}"
+    );
+
+    let crash = r#"Crash: [Inject(Actor, "injury", 0.03)"#;
+    let deadly = builtin_changing(
+        "tags.ron",
+        &[(crash, r#"Crash: [Inject(Actor, "injury", 1.0)"#)],
+    );
+    let (world, sprite, events) =
+        shoved_in(deadly, &lane, &thorns, &[at(1, 0)], at(1, 0), Dir::E, 3);
+    let died = events.iter().find_map(|e| match e.kind {
+        EventKind::Died { id, cause, .. } if id == sprite => Some(cause),
+        _ => None,
+    });
+    // The thornbush's stable object type ID.
+    assert_eq!(died, Some(DeathCause::HurtBy(3)));
+    assert_eq!(world.data().object_type_name(3), Some("thornbush"));
+}
+
+#[test]
+fn a_sprite_crashed_into_feels_nothing() {
+    // Design v25 §3.5.4: as a sprite a ball bounces off feels nothing.
+    let lane = ["......", "......"];
+    let (world, sprite, _) = shoved(&lane, &[], &[at(1, 0), at(3, 0)], at(1, 0), Dir::E, 3);
+    let other = world.sprite_at(at(3, 0)).expect("the other sprite");
+    assert_eq!(other.chemical("injury"), Some(0.0));
+    assert_eq!(world.sprite(sprite).unwrap().chemical("injury"), Some(0.0));
 }

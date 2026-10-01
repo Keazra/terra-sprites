@@ -811,9 +811,13 @@ impl World {
             })
             .collect();
         let mut dying = Vec::new();
+        let injury = data.physiology().indices.injury;
         for (id, senses) in senses {
             let sprite = state.sprites.get_mut(id).expect("a sprite taking its turn");
-            if biochem::step(&sprite.program, &mut sprite.body, &senses, data) {
+            // A crash at step 2 that took injury to 1 kills, as a verb's hurt
+            // does at death check #2: healing can't undo it (design v25 §2.4).
+            let crashed_to_death = sprite.body.chems[injury] >= 1.0;
+            if biochem::step(&sprite.program, &mut sprite.body, &senses, data) || crashed_to_death {
                 dying.push(id);
             }
         }

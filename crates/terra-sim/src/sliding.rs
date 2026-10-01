@@ -10,6 +10,8 @@ use crate::data::DataPack;
 use crate::events::{Event, EventKind};
 use crate::map::{Dir, Pos};
 use crate::objects::EntityId;
+use crate::perception::Target;
+use crate::verbs;
 use crate::world::WorldState;
 
 /// A sliding sprite's way on (design v25 §3.5.4).
@@ -28,13 +30,7 @@ enum Meeting {
     /// Terrain or the map's edge: it stops, with no crash.
     Wall,
     /// A sprite or a solid object: it stops, and crashes into it.
-    Crash(Crashed),
-}
-
-/// What a sliding sprite crashed into.
-enum Crashed {
-    Sprite(EntityId),
-    Object(EntityId),
+    Crash(Target),
 }
 
 /// Every sliding sprite, in ascending ID order, slides a tile.
@@ -66,20 +62,22 @@ fn slide(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec
             })
         }
         Meeting::Wall => None,
-        Meeting::Crash(into) => {
-            let into = match into {
-                Crashed::Sprite(other) => Thing::Sprite(other),
-                Crashed::Object(object) => {
+        Meeting::Crash(target) => {
+            let into = match target {
+                Target::Object(object) => {
                     let kind = state.objects.kind(object);
                     Thing::ObjectType(data.object_types()[kind].name.clone())
                 }
+                Target::Sprite(other) => Thing::Sprite(other),
+                Target::Water(_) => unreachable!("water stops a slide without a crash"),
             };
+            let hurt = verbs::crash(state, data, id, target);
             events.push(Event {
                 tick: state.tick,
                 kind: EventKind::Crashed {
                     sprite: id,
                     into,
-                    hurt: false,
+                    hurt,
                 },
             });
             None
@@ -98,7 +96,7 @@ fn meet(state: &WorldState, data: &DataPack, from: Pos, dir: Dir) -> Meeting {
         return Meeting::Wall;
     };
     if let Some(other) = state.sprites.at(to) {
-        return Meeting::Crash(Crashed::Sprite(other));
+        return Meeting::Crash(Target::Sprite(other));
     }
     let solid = |pos| {
         state
@@ -107,7 +105,7 @@ fn meet(state: &WorldState, data: &DataPack, from: Pos, dir: Dir) -> Meeting {
             .filter(|_| state.objects.is_solid_at(data, pos))
     };
     if let Some(object) = solid(to) {
-        return Meeting::Crash(Crashed::Object(object));
+        return Meeting::Crash(Target::Object(object));
     }
     if !state.map.is_walkable(to) {
         return Meeting::Wall;
@@ -120,7 +118,7 @@ fn meet(state: &WorldState, data: &DataPack, from: Pos, dir: Dir) -> Meeting {
                 .expect("beside a step on the map")
         });
         if let Some(object) = sides.into_iter().find_map(solid) {
-            return Meeting::Crash(Crashed::Object(object));
+            return Meeting::Crash(Target::Object(object));
         }
         if !sides.into_iter().all(|side| state.map.is_walkable(side)) {
             return Meeting::Wall;
