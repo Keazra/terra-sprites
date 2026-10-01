@@ -448,3 +448,40 @@ fn a_sprite_crashed_into_feels_nothing() {
     assert_eq!(other.chemical("injury"), Some(0.0));
     assert_eq!(world.sprite(sprite).unwrap().chemical("injury"), Some(0.0));
 }
+
+#[test]
+fn a_slide_passes_over_an_item_and_carries_on() {
+    // Design v25 §3.5.4: an item doesn't stop it; a sprite can stand on one.
+    let lane = ["......", "......"];
+    let ball = [(at(3, 0), "ball")];
+    let (world, sprite, events) = shoved(&lane, &ball, &[at(1, 0)], at(1, 0), Dir::E, 3);
+    assert_eq!(where_is(&world, sprite), at(4, 0));
+    assert_eq!(crashes(&events, sprite), []);
+    assert!(
+        world.object_at(at(3, 0)).is_some(),
+        "the ball is where it was"
+    );
+}
+
+#[test]
+fn a_sliding_sprite_shoved_again_starts_a_fresh_slide() {
+    // Design v25 §3.5.4: as a push on an item already rolling starts a
+    // fresh roll (§3.5.2).
+    let (mut world, sprite) = leading(&["........", "........"], &[], at(1, 0));
+    world.submit(Command::Shove {
+        toward: Dir::E,
+        tiles: 3,
+    });
+    world.step();
+    world.submit(Command::TakeHold { sprite });
+    world.step();
+    assert_eq!(where_is(&world, sprite), at(3, 0), "sliding still");
+    world.submit(Command::Shove {
+        toward: Dir::W,
+        tiles: 2,
+    });
+    for _ in 0..4 {
+        world.step();
+    }
+    assert_eq!(where_is(&world, sprite), at(1, 0), "2 back west, no more");
+}

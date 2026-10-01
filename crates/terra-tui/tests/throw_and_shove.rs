@@ -365,3 +365,50 @@ fn the_observed_list_tells_of_a_shove_out_of_nowhere_and_what_it_crashed_into() 
         "{seen:?}"
     );
 }
+
+#[test]
+fn the_aim_is_cancelled_when_the_led_sprite_dies() {
+    // Design v25 §6.5. Newborns here start with no energy and starve fast,
+    // dying a few ticks in.
+    let text = DataPack::builtin_sources()
+        .iter()
+        .find(|(path, _)| *path == "physiology.ron")
+        .map(|(_, text)| {
+            text.replace("newborn: (energy: 1.0,", "newborn: (energy: 0.0,")
+                .replace("starvation: 0.0011,", "starvation: 0.3,")
+        })
+        .expect("physiology.ron");
+    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, builtin)| {
+            (
+                path,
+                if path == "physiology.ron" {
+                    text.as_str()
+                } else {
+                    builtin
+                },
+            )
+        })
+        .collect();
+    let data = DataPack::from_sources(&sources).expect("a valid pack");
+    let map = Map::from_ascii(&["...................."; 12], &data).expect("valid drawing");
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &[(at(5, 5), None)],
+        scripted: &[(at(5, 5), ScriptedAction::Rest)],
+    };
+    let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+    let mut app = grab_app(&world);
+    lead(&mut app, &mut world, at(5, 5));
+    click(&mut app, &world, at(5, 5), Button::Right);
+    point(&mut app, &world, at(3, 5));
+    for _ in 0..5 {
+        tick(&mut app, &mut world);
+    }
+    assert!(world.sprites().next().is_none(), "it starved");
+    assert!(!app.aiming());
+    let_go(&mut app, &world, at(3, 5));
+    assert_eq!(sent(&mut app), Vec::new());
+}
