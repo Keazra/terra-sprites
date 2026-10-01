@@ -5,9 +5,9 @@ use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
-    ActionView, Command, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Learned, Map,
-    Outcome, Pos, Progress, Rejection, Removal, Scenario, ScriptedAction, Target, Thing, Verb,
-    World, WorldConfig,
+    ActionView, Blocker, Command, DataPack, DeathCause, Emptied, EntityId, Event, EventKind, Grip,
+    Hurt, Learned, Map, Outcome, Pos, Progress, Rejection, Removal, Scenario, ScriptedAction,
+    Target, Terrain, Thing, Verb, World, WorldConfig,
 };
 use terra_tui::app::{App, CursorMode, Tab};
 use terra_tui::input::{Action, Button};
@@ -250,6 +250,82 @@ fn the_status_marks_show_what_the_cursor_reports() {
         assert_eq!(screen[(column, row)].symbol(), "+", "({column}, {row})");
         assert_eq!(screen[(column, row)].fg, Color::LightMagenta);
     }
+}
+
+#[test]
+fn in_grab_mode_the_status_marks_show_what_the_cursor_has_hold_of() {
+    // Design v23 §6.5: empty, `↑` and `░`; holding or leading, `↓` and the
+    // thing's glyph; all in Grab's yellow. The sprite is on map tile (2, 3)
+    // and the ball on (6, 3); the marks sit top right and bottom left of the
+    // Cursor's centre.
+    let world = garden_with_sprites();
+    let marks = |app: &App, centre: (u16, u16)| {
+        let screen = render(app, &world, 40, 10);
+        [(centre.0 + 1, centre.1 - 1), (centre.0 - 1, centre.1 + 1)].map(|cell| {
+            assert_eq!(screen[cell].fg, Color::Yellow, "{cell:?}");
+            screen[cell].symbol().to_string()
+        })
+    };
+    let (sprite, ball) = (Position::new(1 + 2, 2 + 3), Position::new(1 + 6, 2 + 3));
+    for (on, glyph) in [(sprite, "☺"), (ball, "○")] {
+        let mut app = app_for(&world, Theme::cp437(), 40, 10);
+        app.apply(Action::Mode(CursorMode::Grab), &world);
+        app.apply(Action::Point(on), &world);
+        assert_eq!(marks(&app, (on.x, on.y)), ["↑", "░"], "empty");
+        app.apply(Action::left_click(on), &world);
+        assert_eq!(marks(&app, (on.x, on.y)), ["↓", glyph], "a grab queued");
+    }
+}
+
+#[test]
+fn a_grab_click_with_nothing_to_act_on_flashes_a_question_mark() {
+    let world = garden_with_sprites();
+    let empty = Position::new(1 + 4, 2 + 3);
+    let mut app = app_for(&world, Theme::cp437(), 40, 10);
+    app.apply(Action::Mode(CursorMode::Grab), &world);
+    app.apply(Action::left_click(empty), &world);
+    let screen = render(&app, &world, 40, 10);
+    for cell in [(empty.x + 1, empty.y - 1), (empty.x - 1, empty.y + 1)] {
+        assert_eq!(screen[cell].symbol(), "?", "{cell:?}");
+    }
+}
+
+#[test]
+fn a_flashing_dotted_leash_runs_from_the_cursor_to_the_led_sprite_over_empty_ground() {
+    // Design v23 §6.5. The sprite is on map tile (1, 2) and a berry on
+    // (4, 2); a map tile (x, y) is drawn at screen cell (x + 1, y + 2).
+    let pack = pack();
+    let map = Map::from_ascii(&["............"; 5], &pack).expect("valid drawing");
+    let scenario = Scenario {
+        map,
+        objects: &[(Pos { x: 4, y: 2 }, "berry")],
+        sprites: &[(Pos { x: 1, y: 2 }, None)],
+        scripted: &[(Pos { x: 1, y: 2 }, ScriptedAction::Rest)],
+    };
+    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut app = app_for(&world, Theme::cp437(), 40, 10);
+    app.apply(Action::Mode(CursorMode::Grab), &world);
+    app.apply(Action::left_click(Position::new(1 + 1, 2 + 2)), &world);
+    app.apply(Action::Point(Position::new(1 + 6, 2 + 2)), &world);
+    let row = |app: &App| -> String {
+        lines(&render(app, &world, 40, 10))[4]
+            .chars()
+            .skip(1)
+            .take(12)
+            .collect()
+    };
+    assert_eq!(row(&app), ".☺··•→.←....", "dots, and the berry over them");
+    let dot = &render(&app, &world, 40, 10)[(1 + 2, 2 + 2)];
+    assert_eq!(dot.fg, Color::Yellow);
+    app.animate(Duration::from_millis(500));
+    assert_eq!(
+        row(&app),
+        ".☺..•→.←....",
+        "flashing, like the Decision marker"
+    );
+    app.animate(Duration::from_millis(500));
+    app.apply(Action::Mode(CursorMode::Train), &world);
+    assert_eq!(row(&app), ".☺··•→.←....", "in every mode");
 }
 
 #[test]
@@ -1181,6 +1257,45 @@ fn the_body_tab_starts_with_what_the_sprite_is_doing_in_plain_words() {
 }
 
 #[test]
+fn the_body_tab_says_a_led_sprite_is_being_led_and_how_far_behind() {
+    // Design v23 §6.1. It walks a grass step a tick, from (2, 3).
+    let (mut world, mut app) = one_sprite_doing(SPEED_10, &[], 0);
+    let sprite = world.sprites().next().expect("the sprite").id();
+    world.submit(Command::TakeHold { sprite });
+    world.submit(Command::MoveCursor {
+        tile: Pos { x: 7, y: 3 },
+    });
+    world.step();
+    assert_eq!(inspector(&app, &world).1[0], "Being led · 4 tiles behind");
+    app.apply(Action::ToggleDetail, &world);
+    assert_eq!(
+        inspector(&app, &world).1[0],
+        "LED → (7,3) · walking (4 tiles)"
+    );
+    for _ in 0..4 {
+        world.step();
+    }
+    assert_eq!(inspector(&app, &world).1[0], "LED → (7,3)");
+    app.apply(Action::ToggleDetail, &world);
+    assert_eq!(inspector(&app, &world).1[0], "Being led", "caught up");
+}
+
+#[test]
+fn a_led_sprite_as_close_as_it_can_get_to_the_cursor_has_caught_up() {
+    // Design v23 §6.1: the Cursor is on a bush, which it can't stand on.
+    let bush = Pos { x: 7, y: 3 };
+    let (mut world, app) = one_sprite_among(SPEED_10, &[(bush, "berry_bush")], &[], 0);
+    let sprite = world.sprites().next().expect("the sprite").id();
+    world.submit(Command::TakeHold { sprite });
+    world.submit(Command::MoveCursor { tile: bush });
+    for _ in 0..6 {
+        world.step();
+    }
+    assert_eq!(world.sprite(sprite).expect("it").pos(), Pos { x: 6, y: 3 });
+    assert_eq!(inspector(&app, &world).1[0], "Being led");
+}
+
+#[test]
 fn the_decision_marker_flashes_an_x_where_the_selected_sprite_is_heading() {
     let destination = Pos { x: 7, y: 3 };
     let wander = ScriptedAction::Wander { destination };
@@ -1328,6 +1443,24 @@ fn the_attention_marker_shades_the_one_thing_the_selected_sprite_attends_to() {
 }
 
 #[test]
+fn a_led_sprite_shows_no_attention_marker() {
+    // Design v23 §6.5: led, it attends to nothing, so the mark from before
+    // would be stale.
+    let (berry, bush) = (Pos { x: 0, y: 1 }, Pos { x: 8, y: 4 });
+    let objects = [(bush, "berry_bush"), (berry, "berry")];
+    let (mut world, app) = one_sprite_among(HUNGRY_GENOME, &objects, &[], 1);
+    let berry_cell = app.cell_of(berry).expect("in view");
+    assert_eq!(
+        render(&app, &world, 100, 30)[berry_cell].bg,
+        Color::DarkGray
+    );
+    let sprite = world.sprites().next().expect("the sprite").id();
+    world.submit(Command::TakeHold { sprite });
+    world.step();
+    assert_eq!(render(&app, &world, 100, 30)[berry_cell].bg, Color::Reset);
+}
+
+#[test]
 fn the_brain_tab_shows_memory_before_the_first_decision() {
     // Design v17 §6.1. A scripted bite at tick 0 hurts; at tick 1, still on
     // its scripted rest, it learns thornbushes are bad: .8 × a punishment of 1.
@@ -1402,6 +1535,25 @@ fn a_lesson_about_a_category_words_it_as_the_category_names_itself() {
             "31  Sprite #12 learned: fruit is good for hunger",
             "30  Sprite #12 learned: bushes are bad",
         ]
+    );
+}
+
+#[test]
+fn the_brain_tab_says_a_led_sprite_decides_nothing() {
+    // Design v23 §2.4: led, it makes no decisions, so the one before it was
+    // taken hold of would mislead.
+    let (mut world, mut app) = one_sprite(HUNGRY_GENOME, 1);
+    open(&mut app, &world, Tab::Brain);
+    assert_ne!(
+        inspector(&app, &world).1[0],
+        "Being led: it decides nothing"
+    );
+    let sprite = world.sprites().next().expect("the sprite").id();
+    world.submit(Command::TakeHold { sprite });
+    world.step();
+    assert_eq!(
+        inspector(&app, &world).1[0],
+        "Being led: it decides nothing"
     );
 }
 
@@ -2238,14 +2390,45 @@ fn the_status_line_names_train_mode_and_what_the_cursor_is_locked_on_to() {
 }
 
 #[test]
+fn the_status_line_says_what_the_cursor_holds_or_leads_in_every_mode() {
+    // Design v23 §6.1. The sprite is on map tile (2, 3), the ball on (6, 3).
+    let world = garden_with_sprites();
+    let sprite = world
+        .sprite_at(terra_sim::Pos { x: 2, y: 3 })
+        .expect("a sprite")
+        .id();
+    let cases = [
+        (
+            Position::new(1 + 2, 2 + 3),
+            format!(" │ leading: Sprite #{}", sprite.0),
+        ),
+        (Position::new(1 + 6, 2 + 3), " │ holding: ball".to_string()),
+    ];
+    for (on, says) in cases {
+        let mut app = app_for(&world, Theme::cp437(), 100, 30);
+        app.apply(Action::Mode(CursorMode::Grab), &world);
+        app.apply(Action::left_click(on), &world);
+        let status = status_line(&app, &world);
+        assert!(before_hints(&status).ends_with(&says), "{status}");
+        app.apply(Action::Mode(CursorMode::Select), &world);
+        let status = status_line(&app, &world);
+        assert!(
+            before_hints(&status).ends_with(&says),
+            "in Select: {status}"
+        );
+    }
+}
+
+#[test]
 fn the_key_hints_lead_with_the_mode_keys() {
-    // Design v22 §6.1.
+    // Design v22 §6.1, with Grab's from v23.
     let world = drawn_world(&SMALL_MAP);
     let app = app_for(&world, Theme::cp437(), 120, 30);
     let status = lines(&render(&app, &world, 120, 30))[29].clone();
     assert!(
-        status
-            .ends_with("Z select  X train  WASD scroll  space pause  . step  +/- speed  esc quit"),
+        status.ends_with(
+            "Z select  X train  C grab  WASD scroll  space pause  . step  +/- speed  esc quit"
+        ),
         "{status}"
     );
 }
@@ -2262,7 +2445,7 @@ fn short_of_room_whole_key_hints_drop_from_the_end() {
     let status = status_line(&app, &world);
     assert!(status.contains("│ locked on Sprite #"), "{status}");
     assert!(
-        status.ends_with("  Z select  X train  WASD scroll  space pause"),
+        status.ends_with("  Z select  X train  C grab  WASD scroll"),
         "{status}"
     );
 }
@@ -2386,6 +2569,106 @@ fn the_event_log_tells_the_player_what_they_did_through_the_cursor() {
             "6  Couldn't shock Sprite #12: it's gone",
             "5  Couldn't pet Sprite #12: it's gone",
             "4  You shocked Sprite #12",
+        ]
+    );
+}
+
+/// `kinds` as events on ticks 1, 2, 3 and on.
+fn on_ticks(kinds: Vec<EventKind>) -> Vec<Event> {
+    (1..)
+        .zip(kinds)
+        .map(|(tick, kind)| Event { tick, kind })
+        .collect()
+}
+
+#[test]
+fn the_event_log_tells_the_player_what_they_grabbed_and_let_go() {
+    // Design v23 §6.1: spoken to the player.
+    let world = garden(pack());
+    let (sprite, ball, berry) = (EntityId(12), EntityId(20), EntityId(21));
+    let first = on_ticks(vec![
+        EventKind::TookHold { sprite },
+        EventKind::LetGo { sprite },
+        EventKind::PickedUp {
+            item: ball,
+            object_type: "ball".into(),
+        },
+    ]);
+    assert_eq!(
+        logged(&world, &first),
+        [
+            "3  You picked up a ball",
+            "2  You let go of Sprite #12",
+            "1  You took hold of Sprite #12",
+        ]
+    );
+    let then = on_ticks(vec![
+        EventKind::PutDown {
+            item: ball,
+            object_type: "ball".into(),
+            pos: Pos { x: 1, y: 1 },
+        },
+        EventKind::CursorEmptied {
+            reason: Emptied::Removed {
+                item: berry,
+                object_type: "berry".into(),
+                reason: Removal::Expired,
+            },
+        },
+        // A led sprite's death has its own line, and needs no other.
+        EventKind::CursorEmptied {
+            reason: Emptied::Died { sprite },
+        },
+    ]);
+    assert_eq!(
+        logged(&world, &then)[..2],
+        [
+            "2  The berry you were holding expired",
+            "1  You put the ball down",
+        ]
+    );
+}
+
+#[test]
+fn the_event_log_says_why_a_grab_was_refused() {
+    // Design v23 §6.1. A ball's stable type ID is 4, a berry's 2.
+    let world = garden(pack());
+    let (sprite, other) = (EntityId(12), EntityId(13));
+    let refused = |command, reason| EventKind::CommandRejected { command, reason };
+    let put_down = Command::PutDown {
+        tile: Pos { x: 1, y: 1 },
+    };
+    let blocked = |blocker| Rejection::InTheWay {
+        item_type: 4,
+        blocker,
+    };
+    let first = on_ticks(vec![
+        refused(Command::TakeHold { sprite }, Rejection::Gone),
+        refused(
+            Command::TakeHold { sprite },
+            Rejection::Busy(Grip::Leads(other)),
+        ),
+        refused(put_down, blocked(Blocker::Object(2))),
+    ]);
+    assert_eq!(
+        logged(&world, &first),
+        [
+            "3  Couldn't put the ball down: a berry is there",
+            "2  Couldn't take hold of Sprite #12: you're already leading Sprite #13",
+            "1  Couldn't take hold of Sprite #12: it's gone",
+        ]
+    );
+    let then = on_ticks(vec![
+        refused(put_down, blocked(Blocker::Terrain(Terrain::Rock))),
+        refused(put_down, blocked(Blocker::Terrain(Terrain::DeepWater))),
+        refused(Command::LetGo, Rejection::NotLeading),
+    ]);
+    assert_eq!(
+        logged(&world, &then),
+        [
+            "3  Couldn't let go: you're not leading a sprite",
+            "2  Couldn't put the ball down: it can't go in deep water",
+            "1  Couldn't put the ball down: it can't go on rock",
         ]
     );
 }

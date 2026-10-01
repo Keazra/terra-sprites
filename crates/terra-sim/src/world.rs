@@ -11,9 +11,10 @@ use crate::biochem::{self, Senses, Traits};
 use crate::brain::{Explanation, Memory};
 use crate::command::{self, Command};
 use crate::config::WorldConfig;
+use crate::cursor::{Cursor, Grip};
 use crate::data::DataPack;
 use crate::ecology::{self, holds_without_drawing, new_object, square};
-use crate::events::{DeathCause, Event, EventKind};
+use crate::events::{DeathCause, Emptied, Event, EventKind};
 use crate::expression::{Expression, expressions};
 use crate::generate::{generate, place_objects, place_sprites};
 use crate::genome::{GeneView, Genome};
@@ -57,6 +58,8 @@ pub(crate) struct WorldState {
     pub(crate) learning: bool,
     /// The commands submitted for the next tick, in order (design §2.5).
     pub(crate) commands: Vec<Command>,
+    /// What the Cursor has hold of (design v23 §6.5).
+    pub(crate) cursor: Cursor,
 }
 
 impl WorldState {
@@ -127,11 +130,11 @@ impl WorldState {
 
     /// Where `target` is, and whether a sprite may act on it from its own
     /// tile (an item or water) as well as from beside it (design §3.6).
-    /// `None` if it's gone.
+    /// `None` if it's gone, off the map in the Cursor included.
     pub(crate) fn whereabouts(&self, data: &DataPack, target: Target) -> Option<(Pos, bool)> {
         match target {
             Target::Object(id) => {
-                let object = self.objects.get(id)?;
+                let object = self.objects.get(id).filter(|o| !o.held)?;
                 Some((object.pos, !data.object_types()[object.kind].solid))
             }
             Target::Water(pos) => Some((pos, true)),
@@ -282,6 +285,13 @@ impl<'a> SpriteView<'a> {
         action::view(self.sprite, &self.world.data)
     }
 
+    /// While the Cursor leads it, the steps left on its way to where it's
+    /// heading, as near the Cursor as it can get: 0 once it's there, or as
+    /// close as it can get (design v23 §6.5). `None` while it isn't led.
+    pub fn lead_steps_left(&self) -> Option<u32> {
+        action::lead_steps_left(self.sprite)
+    }
+
     /// What its brain did at the latest step 5, explained (design §5.9), or
     /// `None` before its first decision.
     pub fn explain(&self) -> Option<Explanation<'a>> {
@@ -303,8 +313,12 @@ impl<'a> SpriteView<'a> {
     /// The tile of the one thing its attention was on at the latest step 5
     /// (design §5.3): an object's tile, a water tile, or where a sprite it
     /// attends to is now. `None` before its first decision, with nothing in
-    /// reach, or once that thing is gone.
+    /// reach, once that thing is gone, or while the Cursor leads it, when it
+    /// attends to nothing (design v23 §6.5).
     pub fn attending_to(&self) -> Option<Pos> {
+        if self.sprite.lead.is_some() {
+            return None;
+        }
         let target = self.sprite.brain.snapshot.as_ref()?.target?;
         let (pos, _) = self.world.state.whereabouts(&self.world.data, target)?;
         Some(pos)
@@ -393,31 +407,92 @@ impl<'a> ObjectView<'a> {
     /// The name of the look a theme draws the object with: the state of the
     /// first of its type's visual rules whose conditions hold, or `"default"`.
     pub fn visual_state(&self) -> &'a str {
-        let world = self.world;
-        let object_type = &world.data.object_types()[self.object.kind];
-        object_type
-            .visual
-            .iter()
-            .find(|visual| {
-                visual.conditions.iter().all(|condition| {
-                    holds_without_drawing(
-                        &world.state.map,
-                        &world.state.objects,
-                        &world.data,
-                        self.object,
-                        self.object.pos,
-                        condition,
-                    )
-                    .expect("visual rules never use Chance")
-                })
-            })
-            .map_or("default", |visual| visual.state.as_str())
+        visual_state(self.world, self.object)
     }
 
     /// The name of the object's current stage, or `None` if its type has no stages.
     pub fn stage(&self) -> Option<&'a str> {
         let stages = &self.world.data.object_types()[self.object.kind].stages;
         self.object.stage.map(|stage| stages[stage].name.as_str())
+    }
+}
+
+/// The name of the look a theme draws `object` with: the state of the first
+/// of its type's visual rules whose conditions hold, or `"default"`.
+fn visual_state<'a>(world: &'a World, object: &Object) -> &'a str {
+    let object_type = &world.data.object_types()[object.kind];
+    object_type
+        .visual
+        .iter()
+        .find(|visual| {
+            visual.conditions.iter().all(|condition| {
+                holds_without_drawing(
+                    &world.state.map,
+                    &world.state.objects,
+                    &world.data,
+                    object,
+                    object.pos,
+                    condition,
+                )
+                .expect("visual rules never use Chance")
+            })
+        })
+        .map_or("default", |visual| visual.state.as_str())
+}
+
+/// A read-only view of the Cursor, as far as it touches the world (design
+/// v23 §6.5).
+pub struct CursorView<'a> {
+    world: &'a World,
+}
+
+impl<'a> CursorView<'a> {
+    /// The sprite the Cursor leads, if any.
+    pub fn leads(&self) -> Option<EntityId> {
+        self.world.state.cursor.leads()
+    }
+
+    /// The tile the world was last told the Cursor is on, which a led
+    /// sprite heads for (design v23 §2.5).
+    pub fn tile(&self) -> Option<Pos> {
+        self.world.state.cursor.tile
+    }
+
+    /// The item the Cursor holds, if any.
+    pub fn holds(&self) -> Option<HeldView<'a>> {
+        let id = self.world.state.cursor.holds()?;
+        let object = self.world.state.objects.get(id)?;
+        Some(HeldView {
+            id,
+            object,
+            world: self.world,
+        })
+    }
+}
+
+/// A read-only view of the item the Cursor holds: an object off the map.
+pub struct HeldView<'a> {
+    id: EntityId,
+    object: &'a Object,
+    world: &'a World,
+}
+
+impl<'a> HeldView<'a> {
+    /// The item's entity ID.
+    pub fn id(&self) -> EntityId {
+        self.id
+    }
+
+    /// The name of the item's type, as `objects.ron` gives it.
+    pub fn type_name(&self) -> &'a str {
+        &self.world.data.object_types()[self.object.kind].name
+    }
+
+    /// The name of the look a theme draws the item with, as for an object
+    /// on the map (`ObjectView::visual_state`); held, it has no tile, so
+    /// rules asking about one don't hold (design §3.5.2).
+    pub fn visual_state(&self) -> &'a str {
+        visual_state(self.world, self.object)
     }
 }
 
@@ -558,6 +633,7 @@ impl World {
                 deaths: BTreeMap::new(),
                 learning: true,
                 commands: Vec::new(),
+                cursor: Cursor::default(),
             },
             data,
             checked_next_id: Cell::new(1),
@@ -604,13 +680,18 @@ impl World {
         &self.data
     }
 
-    /// Every object, in ascending ID order.
+    /// Every object on the map, in ascending ID order: an item the Cursor
+    /// holds is off it (`World::cursor`).
     pub fn objects(&self) -> impl Iterator<Item = ObjectView<'_>> {
-        self.state.objects.iter().map(|(id, object)| ObjectView {
-            id,
-            object,
-            world: self,
-        })
+        self.state
+            .objects
+            .iter()
+            .filter(|(_, object)| !object.held)
+            .map(|(id, object)| ObjectView {
+                id,
+                object,
+                world: self,
+            })
     }
 
     /// Every sprite, in ascending ID order.
@@ -655,6 +736,11 @@ impl World {
             object: self.state.objects.get(id)?,
             world: self,
         })
+    }
+
+    /// The Cursor, as far as it touches the world (design v23 §6.5).
+    pub fn cursor(&self) -> CursorView<'_> {
+        CursorView { world: self }
     }
 
     /// How many sprites have died of `cause` since the world began.
@@ -750,7 +836,7 @@ impl World {
 
     /// Step 7: death check #2 marks the sprites step 6's verbs injured to 1;
     /// then the dying are removed, each with a `Died` event, in ascending ID
-    /// order; then the tick counter advances.
+    /// order, a led one emptying the Cursor; then the tick counter advances.
     fn finish_tick(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
         let state = &mut self.state;
         let injury = self.data.physiology().indices.injury;
@@ -772,6 +858,14 @@ impl World {
                     age: sprite.age(state.tick),
                 },
             });
+            if state.cursor.empty_of(Grip::Leads(id)) {
+                events.push(Event {
+                    tick: state.tick,
+                    kind: EventKind::CursorEmptied {
+                        reason: Emptied::Died { sprite: id },
+                    },
+                });
+            }
         }
         state.tick += 1;
     }
@@ -802,6 +896,11 @@ impl World {
             .objects
             .check(&state.map, &self.data)
             .and_then(|()| state.sprites.check(&state.map, &state.objects, &self.data))
+            .and_then(|()| {
+                state
+                    .cursor
+                    .check(&state.map, &state.objects, &state.sprites)
+            })
             .map_err(InvariantViolation)
     }
 }
@@ -809,8 +908,9 @@ impl World {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::action::Outcome;
+    use crate::action::{Outcome, Walk};
     use crate::brain::Brain;
+    use crate::cursor::Grip;
     use crate::learning::{Signals, Touch, TraceEntry, TypeMemory};
     use crate::map::Dir;
     use crate::objects::Roll;
@@ -835,6 +935,12 @@ mod tests {
     fn force_place(world: &mut World, name: &str, pos: Pos) {
         let kind = world.data.object_type_named(name).expect("a built-in type");
         world.state.add_object(new_object(&world.data, kind, pos));
+    }
+
+    /// Puts a berry on `pos`, and gives its ID.
+    fn force_berry(world: &mut World, pos: Pos) -> EntityId {
+        force_place(world, "berry", pos);
+        world.state.objects.at(pos).expect("the berry")
     }
 
     #[test]
@@ -952,6 +1058,64 @@ mod tests {
     fn a_sprite_on_a_solid_object_breaks_an_invariant() {
         let (mut world, _, _) = field_with_sprites();
         force_place(&mut world, "thornbush", Pos { x: 5, y: 1 });
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_cursor_leading_and_holding_as_commands_leave_it_passes_the_invariant_checks() {
+        let (mut world, first, _) = field_with_sprites();
+        world.submit(Command::TakeHold { sprite: first });
+        world.step();
+        assert_eq!(world.check_invariants(), Ok(()));
+        let berry = force_berry(&mut world, Pos { x: 0, y: 0 });
+        world.submit(Command::LetGo);
+        world.submit(Command::PickUp { item: berry });
+        world.step();
+        assert_eq!(world.check_invariants(), Ok(()));
+    }
+
+    #[test]
+    fn a_cursor_leading_a_sprite_that_is_not_there_breaks_an_invariant() {
+        let (mut world, first, _) = field_with_sprites();
+        world.submit(Command::TakeHold { sprite: first });
+        world.step();
+        world.state.sprites.remove(first);
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_sprite_led_by_no_cursor_breaks_an_invariant() {
+        let (mut world, first, _) = field_with_sprites();
+        world.state.sprites.get_mut(first).expect("a sprite").lead = Some(Walk::default());
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_held_item_the_cursor_does_not_hold_breaks_an_invariant() {
+        let mut world = field_with_a_bush();
+        let berry = force_berry(&mut world, Pos { x: 0, y: 0 });
+        world.state.objects.pick_up(berry);
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_held_item_in_a_stage_its_type_lacks_breaks_an_invariant() {
+        // Gemini's review of PR #89: a held item's life goes on, so its
+        // stage and counters are checked as on the map (design §3.5.2).
+        let mut world = field_with_a_bush();
+        let berry = force_berry(&mut world, Pos { x: 0, y: 0 });
+        world.state.objects.pick_up(berry);
+        world.state.cursor.take(Grip::Holds(berry));
+        assert_eq!(world.check_invariants(), Ok(()));
+        world.state.objects.get_mut(berry).expect("the berry").stage = Some(9);
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_cursor_holding_an_item_on_the_map_breaks_an_invariant() {
+        let mut world = field_with_a_bush();
+        let berry = force_berry(&mut world, Pos { x: 0, y: 0 });
+        world.state.cursor.grip = Some(Grip::Holds(berry));
         assert!(world.check_invariants().is_err());
     }
 
@@ -1143,7 +1307,7 @@ mod tests {
                 .iter()
                 .map(|(_, s)| {
                     (
-                        s.action.as_ref().expect("wandering").blocked_ticks,
+                        s.action.as_ref().expect("wandering").walk.blocked_ticks,
                         s.move_points,
                     )
                 })

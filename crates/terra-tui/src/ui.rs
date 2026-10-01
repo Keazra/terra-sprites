@@ -7,12 +7,12 @@ use ratatui::{
     style::{Modifier, Style},
     text::Line,
 };
-use terra_sim::{Map, ObjectView, Pos, Progress, Terrain, World};
+use terra_sim::{EntityId, Grip, Map, ObjectView, Pos, Progress, World};
 
 use crate::app::{App, Areas, Screen, Selection};
 use crate::clock::Speed;
 use crate::inspector::{self, INSPECTOR_WIDTH, first_shown};
-use crate::text::{display_name, group_thousands, sprite_label};
+use crate::text::{display_name, group_thousands, sprite_label, terrain_name};
 use crate::theme::SemanticTile;
 
 /// The narrowest terminal that has room for the inspector beside the map view.
@@ -169,7 +169,10 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
                 .set_style(style);
         }
     }
-    draw_cursor(buf, inner, app);
+    if app.flash_on() {
+        draw_leash(buf, app, world);
+    }
+    draw_cursor(buf, inner, app, world);
 }
 
 /// Where the selected sprite is heading, while its action is under way
@@ -202,7 +205,7 @@ fn attended_by(app: &App, world: &World) -> Option<Pos> {
 /// → ☺ ←      Y, N: the status marks
 /// N ↑ M
 /// ```
-fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App) {
+fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App, world: &World) {
     let Some(centre) = app.cell_of(app.cursor()) else {
         return;
     };
@@ -211,15 +214,20 @@ fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App) {
     } else {
         app.theme.arrows()
     };
-    let status = app.theme.status_marks().glyph(app.status_mark());
+    let [y, n] = app.status_marks(world).map(|status| {
+        let theme = app.theme.status_marks();
+        theme
+            .glyph(status)
+            .unwrap_or_else(|| held_glyph(app, world))
+    });
     let mark = app.theme.mode_mark(app.mode());
     let pieces = [
         (-1, -1, mark.symbol),
         (0, -1, arrows.down),
-        (1, -1, status),
+        (1, -1, y),
         (-1, 0, arrows.right),
         (1, 0, arrows.left),
-        (-1, 1, status),
+        (-1, 1, n),
         (0, 1, arrows.up),
         (1, 1, mark.symbol),
     ];
@@ -234,6 +242,80 @@ fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App) {
                 .set_style(Style::default().fg(mark.fg));
         }
     }
+}
+
+/// Draws the leash, while the Cursor leads a sprite: a dotted line from the
+/// Cursor to the sprite, over empty ground only, so sprites and objects stay
+/// visible, and stopping at the Cursor's 3×3 (design v23 §6.5).
+fn draw_leash(buf: &mut Buffer, app: &App, world: &World) {
+    let Some(led) = app.leash() else {
+        return;
+    };
+    let cursor = app.cursor();
+    let dot = app.theme.leash();
+    for tile in line_between(led, cursor) {
+        let by_the_cursor = tile.x.abs_diff(cursor.x) <= 1 && tile.y.abs_diff(cursor.y) <= 1;
+        let empty = world.sprite_at(tile).is_none() && world.object_at(tile).is_none();
+        if let Some(cell) = app.cell_of(tile).filter(|_| empty && !by_the_cursor) {
+            buf[(cell.x, cell.y)]
+                .set_char(dot.symbol)
+                .set_style(Style::default().fg(dot.fg));
+        }
+    }
+}
+
+/// The tiles of a straight line from `from` to `to`, leaving both ends out:
+/// Bresenham's, one tile a step.
+fn line_between(from: Pos, to: Pos) -> Vec<Pos> {
+    let (x1, y1) = (i32::from(to.x), i32::from(to.y));
+    let (mut x, mut y) = (i32::from(from.x), i32::from(from.y));
+    let (dx, dy) = ((x1 - x).abs(), -(y1 - y).abs());
+    let (sx, sy) = ((x1 - x).signum(), (y1 - y).signum());
+    let mut error = dx + dy;
+    let mut tiles = Vec::new();
+    while (x, y) != (x1, y1) {
+        let twice = 2 * error;
+        if twice >= dy {
+            error += dy;
+            x += sx;
+        }
+        if twice <= dx {
+            error += dx;
+            y += sy;
+        }
+        if (x, y) != (x1, y1) {
+            tiles.push(Pos {
+                x: x as u16,
+                y: y as u16,
+            });
+        }
+    }
+    tiles
+}
+
+/// The glyph of what the Cursor has hold of, as the queue will leave it: a
+/// sprite's, or an item's, held or still on the map (design v23 §6.5).
+fn held_glyph(app: &App, world: &World) -> char {
+    let theme = &app.theme;
+    let glyph = match app.grip(world) {
+        Some(Grip::Holds(id)) => {
+            item_look(world, id).map(|(name, state)| theme.object_glyph(name, state))
+        }
+        Some(Grip::Leads(_)) => Some(theme.glyph(SemanticTile::Sprite)),
+        None => None,
+    };
+    glyph.map_or('?', |glyph| glyph.symbol)
+}
+
+/// The type and visual state of the item `id`, held by the Cursor or, while
+/// a pick-up waits in the queue, still on the map.
+fn item_look(world: &World, id: EntityId) -> Option<(&str, &str)> {
+    let held = world.cursor().holds().filter(|held| held.id() == id);
+    let look = held.map(|held| (held.type_name(), held.visual_state()));
+    look.or_else(|| {
+        let object = world.objects().find(|object| object.id() == id)?;
+        Some((object.type_name(), object.visual_state()))
+    })
 }
 
 /// Which sides of the map view's border are the terrarium's wall.
@@ -295,7 +377,7 @@ fn top_bar_line(app: &App, world: &World) -> Line<'static> {
 /// there's room. The mode keys come first, as one hint, so they're the last
 /// to go (design v22 §6.1).
 const KEY_HINTS: [&str; 6] = [
-    "Z select  X train",
+    "Z select  X train  C grab",
     "WASD scroll",
     "space pause",
     ". step",
@@ -325,8 +407,17 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         .locked()
         .map(|id| format!(" │ locked on {}", sprite_label(id)))
         .unwrap_or_default();
+    // What the Cursor has hold of, in every mode (design v23 §6.1).
+    let grip = match app.grip(world) {
+        Some(Grip::Leads(id)) => format!(" │ leading: {}", sprite_label(id)),
+        Some(Grip::Holds(id)) => {
+            let name = item_look(world, id).map_or("?", |(name, _)| name);
+            format!(" │ holding: {}", display_name(name))
+        }
+        None => String::new(),
+    };
     let tile = format!(
-        " ({},{}) {terrain}{sprite}{object} │ {mode}{locked}",
+        " ({},{}) {terrain}{sprite}{object} │ {mode}{locked}{grip}",
         cursor.x, cursor.y
     );
     // At the right, after a gap of 2 and before a space at the end: why a
@@ -424,17 +515,6 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
             usize::from(inner.width),
             Style::default(),
         );
-    }
-}
-
-fn terrain_name(terrain: Terrain) -> &'static str {
-    match terrain {
-        Terrain::Grass => "grass",
-        Terrain::Dirt => "dirt",
-        Terrain::Sand => "sand",
-        Terrain::ShallowWater => "shallow water",
-        Terrain::DeepWater => "deep water",
-        Terrain::Rock => "rock",
     }
 }
 

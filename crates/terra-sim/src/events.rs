@@ -55,6 +55,22 @@ pub enum EventKind {
     /// The Cursor corrected a sprite (design v21 §4.6): a zap, or amplified,
     /// a shock.
     Corrected { id: EntityId, amplified: bool },
+    /// The Cursor took hold of a sprite, which it now leads (design v23
+    /// §6.5).
+    TookHold { sprite: EntityId },
+    /// The Cursor picked up an item, and holds it off the map (design v23
+    /// §6.5).
+    PickedUp { item: EntityId, object_type: String },
+    /// The Cursor put the item it held down on a tile (design v23 §6.5).
+    PutDown {
+        item: EntityId,
+        object_type: String,
+        pos: Pos,
+    },
+    /// The Cursor let go of the sprite it led (design v23 §6.5).
+    LetGo { sprite: EntityId },
+    /// The Cursor lost what it had hold of by itself (design v23 §2.5).
+    CursorEmptied { reason: Emptied },
     /// A command was refused, and did nothing (design §2.5).
     CommandRejected { command: Command, reason: Rejection },
     /// An object left the world.
@@ -88,6 +104,19 @@ impl DeathCause {
         DeathCause::Dehydration,
         DeathCause::OldAge,
     ];
+}
+
+/// How the Cursor lost what it had hold of by itself (design v23 §2.5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Emptied {
+    /// The sprite it led died.
+    Died { sprite: EntityId },
+    /// The item it held left the world by itself: it expired, say.
+    Removed {
+        item: EntityId,
+        object_type: String,
+        reason: Removal,
+    },
 }
 
 /// Why an object left the world.

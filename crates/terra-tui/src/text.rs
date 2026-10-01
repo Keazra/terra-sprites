@@ -1,10 +1,25 @@
 //! How the screen writes names and numbers.
 
-use terra_sim::{DataPack, DeathCause, EntityId};
+use terra_sim::{DataPack, DeathCause, EntityId, Terrain};
 
 /// A name from the data, as shown on screen: `berry_bush` → `berry bush`.
 pub(crate) fn display_name(name: &str) -> String {
     name.replace('_', " ")
+}
+
+/// Why a fixture can't be grabbed (design v23 §6.1).
+pub(crate) const ROOTED: &str = "it's rooted to the ground";
+
+/// A terrain's name on screen: `deep water`.
+pub(crate) fn terrain_name(terrain: Terrain) -> &'static str {
+    match terrain {
+        Terrain::Grass => "grass",
+        Terrain::Dirt => "dirt",
+        Terrain::Sand => "sand",
+        Terrain::ShallowWater => "shallow water",
+        Terrain::DeepWater => "deep water",
+        Terrain::Rock => "rock",
+    }
 }
 
 /// How the screen names a sprite. Sprites have no names until the player

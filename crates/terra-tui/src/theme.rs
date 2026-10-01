@@ -96,17 +96,30 @@ pub struct StatusMarks {
     pub applied: char,
     /// The world has just refused one.
     pub rejected: char,
+    /// In Grab mode, empty: `Y`, a click would grab something (design v23
+    /// §6.5).
+    pub grab: char,
+    /// In Grab mode, empty: `N`.
+    pub empty: char,
+    /// In Grab mode, holding or leading: `Y`, a click would let go or put
+    /// it down.
+    pub release: char,
 }
 
 impl StatusMarks {
-    /// The glyph the status marks show for `mark`.
-    pub fn glyph(self, mark: StatusMark) -> char {
-        match mark {
+    /// The glyph the status marks show for `mark`, or `None` for the thing
+    /// the Cursor holds or leads, which shows its own glyph.
+    pub fn glyph(self, mark: StatusMark) -> Option<char> {
+        Some(match mark {
             StatusMark::Idle => self.idle,
             StatusMark::Sent => self.sent,
             StatusMark::Applied => self.applied,
             StatusMark::Rejected => self.rejected,
-        }
+            StatusMark::Grab => self.grab,
+            StatusMark::Empty => self.empty,
+            StatusMark::Release => self.release,
+            StatusMark::Holding => return None,
+        })
     }
 }
 
@@ -120,6 +133,7 @@ pub struct Theme {
     locked_arrows: Arrows,
     status_marks: StatusMarks,
     mode_marks: BTreeMap<CursorMode, Glyph>,
+    leash: Glyph,
     attention_marker: Color,
 }
 
@@ -180,6 +194,12 @@ impl Theme {
         self.mode_marks[&mode]
     }
 
+    /// The leash, a dot of the line from the Cursor to a sprite it leads
+    /// (design v23 §6.5).
+    pub fn leash(&self) -> Glyph {
+        self.leash
+    }
+
     fn builtin(name: &str, text: &str) -> Theme {
         let file: ThemeFile = ron::from_str(text)
             .unwrap_or_else(|e| panic!("the built-in {name} theme doesn't parse: {e}"));
@@ -209,6 +229,7 @@ impl Theme {
             locked_arrows: file.cursor.locked_arrows,
             status_marks: file.cursor.status_marks,
             mode_marks,
+            leash: glyph(file.cursor.leash),
             attention_marker: file.attention_marker.into(),
         }
     }
@@ -218,16 +239,18 @@ impl Theme {
 fn glyphs<K: Ord>(entries: BTreeMap<K, GlyphEntry>) -> BTreeMap<K, Glyph> {
     entries
         .into_iter()
-        .map(|(key, entry)| {
-            let glyph = Glyph {
-                symbol: entry.glyph,
-                fg: entry.fg.into(),
-                bold: entry.bold,
-                reversed: entry.reversed,
-            };
-            (key, glyph)
-        })
+        .map(|(key, entry)| (key, glyph(entry)))
         .collect()
+}
+
+/// Turns a theme file's entry into a glyph.
+fn glyph(entry: GlyphEntry) -> Glyph {
+    Glyph {
+        symbol: entry.glyph,
+        fg: entry.fg.into(),
+        bold: entry.bold,
+        reversed: entry.reversed,
+    }
 }
 
 /// A theme file, as written in `themes/*.ron`.
@@ -252,6 +275,8 @@ struct CursorFile {
     locked_arrows: Arrows,
     status_marks: StatusMarks,
     mode_marks: BTreeMap<CursorMode, GlyphEntry>,
+    /// A dot of the leash, from the Cursor to a sprite it leads.
+    leash: GlyphEntry,
 }
 
 #[derive(Deserialize)]

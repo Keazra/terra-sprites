@@ -240,8 +240,8 @@ fn escape_and_y_answer_the_quit_prompt_and_q_no_longer_quits() {
 }
 
 #[test]
-fn z_and_x_pick_select_and_train() {
-    // Design v21 §6.5.
+fn z_x_and_c_pick_select_train_and_grab() {
+    // Design v21 §6.5, v23.
     assert_eq!(
         Keys::new().action_for(press(KeyCode::Char('z'))),
         Some(Action::Mode(CursorMode::Select))
@@ -249,6 +249,10 @@ fn z_and_x_pick_select_and_train() {
     assert_eq!(
         Keys::new().action_for(press(KeyCode::Char('x'))),
         Some(Action::Mode(CursorMode::Train))
+    );
+    assert_eq!(
+        Keys::new().action_for(press(KeyCode::Char('c'))),
+        Some(Action::Mode(CursorMode::Grab))
     );
 }
 

@@ -1,6 +1,6 @@
 use ratatui::style::Color;
 use terra_sim::{DataPack, Terrain};
-use terra_tui::app::CursorMode;
+use terra_tui::app::{CursorMode, StatusMark};
 use terra_tui::cp437;
 use terra_tui::theme::{SemanticTile, Theme};
 
@@ -169,6 +169,45 @@ fn the_themes_draw_the_select_cursor_as_the_design_table_says() {
     );
     for glyph in select_cursor(&Theme::cp437()) {
         assert!(cp437::contains(glyph), "{glyph:?}");
+    }
+}
+
+#[test]
+fn grab_mode_is_a_yellow_arch_or_g() {
+    // Design §6.2, §6.5.
+    let (cp437, ascii) = (Theme::cp437(), Theme::ascii());
+    assert_eq!(cp437.mode_mark(CursorMode::Grab).symbol, '∩');
+    assert_eq!(ascii.mode_mark(CursorMode::Grab).symbol, 'G');
+    for theme in [cp437, ascii] {
+        assert_eq!(theme.mode_mark(CursorMode::Grab).fg, Color::Yellow);
+    }
+}
+
+#[test]
+fn the_themes_draw_grab_s_status_marks_as_the_design_table_says() {
+    // Design §6.2: grab, empty and release; holding shows the thing itself.
+    let marks = |theme: &Theme| {
+        let status = theme.status_marks();
+        [status.grab, status.empty, status.release]
+    };
+    assert_eq!(marks(&Theme::cp437()), ['↑', '░', '↓']);
+    assert_eq!(marks(&Theme::ascii()), ['^', '_', 'v']);
+    for glyph in marks(&Theme::cp437()) {
+        assert!(cp437::contains(glyph), "{glyph:?}");
+    }
+    assert_eq!(
+        Theme::cp437().status_marks().glyph(StatusMark::Holding),
+        None
+    );
+}
+
+#[test]
+fn the_leash_is_yellow_dots_or_semicolons() {
+    // Design §6.2, v23.
+    assert_eq!(Theme::cp437().leash().symbol, '·');
+    assert_eq!(Theme::ascii().leash().symbol, ';');
+    for theme in [Theme::cp437(), Theme::ascii()] {
+        assert_eq!(theme.leash().fg, Color::Yellow);
     }
 }
 

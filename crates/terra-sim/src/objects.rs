@@ -29,6 +29,9 @@ pub(crate) struct Object {
     pub(crate) fresh: bool,
     /// Its roll, while a push has it rolling (design §3.5.4).
     pub(crate) roll: Option<Roll>,
+    /// Whether the Cursor holds it, off the map (design v23 §6.5). Its
+    /// `pos` is then where it was picked up, and means nothing.
+    pub(crate) held: bool,
 }
 
 /// A rolling item's way on (design §3.5.4).
@@ -162,8 +165,34 @@ impl Objects {
             .by_id
             .remove(&id)
             .expect("removing an object that exists");
-        self.on_tile.clear(object.pos);
+        if !object.held {
+            self.on_tile.clear(object.pos);
+        }
         object
+    }
+
+    /// Puts the held object `id` down on the tile at `to`, which must hold
+    /// no object (design v23 §6.5).
+    pub(crate) fn put_down(&mut self, id: EntityId, to: Pos) {
+        let object = self
+            .by_id
+            .get_mut(&id)
+            .expect("putting down an object that exists");
+        object.held = false;
+        object.pos = to;
+        self.on_tile.put(to, id);
+    }
+
+    /// Picks the object `id`, which must exist and be on the map, off its
+    /// tile for the Cursor to hold, at rest (design v23 §6.5).
+    pub(crate) fn pick_up(&mut self, id: EntityId) {
+        let object = self
+            .by_id
+            .get_mut(&id)
+            .expect("picking up an object that exists");
+        self.on_tile.clear(object.pos);
+        object.held = true;
+        object.roll = None;
     }
 
     /// Checks that every object stands where the rules allow, alone on its
@@ -171,23 +200,39 @@ impl Objects {
     /// item with tiles to go; describes the first problem.
     pub(crate) fn check(&self, map: &Map, data: &DataPack) -> Result<(), String> {
         let indexed = self.on_tile.count();
-        if indexed != self.by_id.len() {
+        let on_map = self.by_id.values().filter(|o| !o.held).count();
+        if indexed != on_map {
             return Err(format!(
-                "{indexed} tiles hold objects, but there are {} objects",
-                self.by_id.len()
+                "{indexed} tiles hold objects, but there are {on_map} objects on the map"
             ));
         }
         for (&id, object) in &self.by_id {
             let object_type = &data.object_types()[object.kind];
-            let problem = if self.at(object.pos) != Some(id) {
-                "isn't on its tile in the index"
-            } else if object_type.pseudo {
-                "is of a pseudo type"
+            // Where it is: off the map in the Cursor, or on its tile. Then,
+            // either way, its own state, since a held item's life goes on
+            // (design §3.5.2).
+            let whereabouts = if object.held {
+                if object_type.solid {
+                    Some("is held, yet solid")
+                } else if object.roll.is_some() {
+                    Some("is held, yet rolling")
+                } else {
+                    None
+                }
+            } else if self.at(object.pos) != Some(id) {
+                Some("isn't on its tile in the index")
             } else if !map.is_walkable(object.pos) {
-                "stands on a tile that isn't walkable"
+                Some("stands on a tile that isn't walkable")
             } else if object_type.solid && !data.terrain(map.terrain(object.pos)).allows_fixtures()
             {
-                "is solid on terrain that doesn't allow fixtures"
+                Some("is solid on terrain that doesn't allow fixtures")
+            } else {
+                None
+            };
+            let problem = if let Some(problem) = whereabouts {
+                problem
+            } else if object_type.pseudo {
+                "is of a pseudo type"
             } else if object.stage.is_some_and(|s| s >= object_type.stages.len()) {
                 "is in a stage its type doesn't have"
             } else if object.counters.len() != object_type.counters.len()
@@ -277,6 +322,7 @@ mod tests {
                 counters: Vec::new(),
                 fresh: false,
                 roll: None,
+                held: false,
             };
             self.objects.place(id, object);
             id
