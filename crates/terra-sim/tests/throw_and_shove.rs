@@ -485,3 +485,35 @@ fn a_sliding_sprite_shoved_again_starts_a_fresh_slide() {
     }
     assert_eq!(where_is(&world, sprite), at(1, 0), "2 back west, no more");
 }
+
+#[test]
+fn a_diagonal_slide_meets_the_corner_before_the_tile_ahead() {
+    // Design v25 §3.5.4: sliding NE from (1, 2), it passes the corner, (2, 2)
+    // to the east and (1, 1) to the north, before it can reach (2, 1). So a
+    // bush at the corner is what it crashes into, though a sprite or rock is
+    // ahead; and rock at the corner stops it with no crash at all.
+    let field = [".....", ".....", ".....", "....."];
+    let rock_ahead = [".....", "..#..", ".....", "....."];
+    let rocky_corner = [".....", ".#...", ".....", "....."];
+    let berry_bush = (Thing::ObjectType("berry_bush".into()), false);
+    let bush_north = [(at(1, 1), "berry_bush")];
+    let (me, ahead) = (at(1, 2), at(2, 1));
+
+    let (world, sprite, events) = shoved(&field, &bush_north, &[me, ahead], me, Dir::NE, 3);
+    assert_eq!(where_is(&world, sprite), me);
+    assert_eq!(
+        crashes(&events, sprite),
+        std::slice::from_ref(&berry_bush),
+        "not the sprite"
+    );
+
+    let (_, sprite, events) = shoved(&rock_ahead, &bush_north, &[me], me, Dir::NE, 3);
+    assert_eq!(
+        crashes(&events, sprite),
+        [berry_bush],
+        "the bush, not the rock"
+    );
+
+    let (_, sprite, events) = shoved(&rocky_corner, &[], &[me, ahead], me, Dir::NE, 3);
+    assert_eq!(crashes(&events, sprite), [], "rock at the corner");
+}
