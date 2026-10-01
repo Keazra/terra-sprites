@@ -178,7 +178,11 @@ fn run_all(data: &DataPack, seeds: u64) -> Vec<Vec<(u64, Result<LabRun, String>)
     std::thread::scope(|scope| {
         for _ in 0..workers {
             scope.spawn(|| {
-                while let Some((lab, seed)) = jobs.lock().expect("no worker panics").pop() {
+                loop {
+                    // Taken on a line of its own, so the lock isn't held
+                    // while the seed runs.
+                    let job = jobs.lock().expect("no worker panics").pop();
+                    let Some((lab, seed)) = job else { break };
                     let run = std::thread::scope(|inner| {
                         inner
                             .spawn(|| labs[lab].run(data.clone(), seed))
