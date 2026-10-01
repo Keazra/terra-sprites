@@ -1218,6 +1218,8 @@ fn refusal_line(command: &Command, reason: Rejection, data: &DataPack) -> Option
         Command::LetGo => "let go".into(),
         // The app sends it only while leading, and only onto the map.
         Command::MoveCursor { .. } => return None,
+        // Worded with the rest of slice 11b's screen.
+        Command::Throw { .. } => return None,
     };
     let why = match reason {
         Rejection::Gone => "it's gone".into(),
@@ -1307,6 +1309,8 @@ pub(crate) fn event_line(event: &Event, data: &DataPack) -> Option<String> {
         EventKind::ObjectSpawned { .. }
         | EventKind::ObjectRemoved { .. }
         | EventKind::ActionStarted { .. } => None,
+        // Worded with the rest of slice 11b's screen.
+        EventKind::Threw { .. } => None,
     }
 }
 
