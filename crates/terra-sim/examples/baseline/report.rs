@@ -33,6 +33,16 @@ pub struct Viability {
     pub hunger_and_thirst: Criterion,
     /// How many seeds had a death in their 50,000 ticks.
     pub seeds_with_deaths: usize,
+    /// The thorn trap (design §7.3): deaths by thornbush over ticks 0–30,000.
+    pub thorn_trap: Count,
+}
+
+/// A number counted on each seed, and its median. It has no pass mark.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Count {
+    /// Each seed and its count.
+    pub per_seed: Vec<(u64, u64)>,
+    pub median: Option<f64>,
 }
 
 /// The viability run's report, from each seed's run or the reason it broke.
@@ -40,15 +50,15 @@ pub struct Viability {
 pub fn viability(
     seeds: &[(u64, Result<LabRun, String>)],
     sprites: u64,
-    _data: &DataPack,
+    data: &DataPack,
 ) -> Viability {
-    let finished: Vec<&LabRun> = seeds
+    let finished: Vec<(u64, &LabRun)> = seeds
         .iter()
-        .filter_map(|(_, run)| run.as_ref().ok())
+        .filter_map(|(seed, run)| Some((*seed, run.as_ref().ok()?)))
         .collect();
     let alive: Vec<f64> = finished
         .iter()
-        .map(|run| {
+        .map(|(_, run)| {
             let died: u64 = window(run, 10_000).deaths.values().sum();
             sprites.saturating_sub(died) as f64 / sprites as f64
         })
@@ -56,7 +66,7 @@ pub fn viability(
     // A seed where no one died has no share of deaths (design §7.6).
     let hunger_and_thirst: Vec<f64> = finished
         .iter()
-        .map(|run| &window(run, 50_000).deaths)
+        .map(|(_, run)| &window(run, 50_000).deaths)
         .filter_map(|deaths| {
             let all: u64 = deaths.values().sum();
             let starved: u64 = deaths
@@ -69,10 +79,30 @@ pub fn viability(
             (all > 0).then(|| starved as f64 / all as f64)
         })
         .collect();
+    let pricked: Vec<(u64, u64)> = finished
+        .iter()
+        .map(|(seed, run)| {
+            let deaths = &window(run, 30_000).deaths;
+            let by_thornbush = deaths
+                .iter()
+                .filter(|(cause, _)| match cause {
+                    DeathCause::HurtBy(id) => data.object_type_name(*id) == Some("thornbush"),
+                    _ => false,
+                })
+                .map(|(_, n)| n)
+                .sum();
+            (*seed, by_thornbush)
+        })
+        .collect();
+    let counts: Vec<f64> = pricked.iter().map(|&(_, n)| n as f64).collect();
     Viability {
         survival: a4(median_of(&alive), |share| share >= 0.8),
         hunger_and_thirst: a4(median_of(&hunger_and_thirst), |share| share < 0.25),
         seeds_with_deaths: hunger_and_thirst.len(),
+        thorn_trap: Count {
+            median: median_of(&counts),
+            per_seed: pricked,
+        },
     }
 }
 
@@ -237,6 +267,41 @@ mod tests {
         let under: &[(DeathCause, u64)] = &[(Starvation, 1), (OldAge, 4)];
         let under_a_quarter = viability(&seeds_dying([under; 10]), 30, &data());
         assert_eq!(under_a_quarter.hunger_and_thirst.verdict, Verdict::Met);
+    }
+
+    #[test]
+    fn the_thorn_trap_counts_thornbush_deaths_in_the_first_30000_ticks() {
+        // Design §7.3: the thorn trap counts deaths by thornbush over ticks
+        // 0–30,000; later ones, and other causes, don't count.
+        let data = data();
+        assert_eq!(data.object_type_name(3), Some("thornbush"), "objects.ron");
+        let thornbush = DeathCause::HurtBy(3);
+        let seeds: Vec<_> = (1..=10)
+            .zip([1, 2, 0, 3, 1, 2, 4, 0, 1, 2])
+            .map(|(seed, pricked)| {
+                let by_30k = [(thornbush, pricked), (DeathCause::Dehydration, 2)];
+                let by_50k = [(thornbush, pricked + 5), (DeathCause::Dehydration, 2)];
+                (seed, Ok(viability_run(&[], &by_30k, &by_50k)))
+            })
+            .collect();
+        let thorn_trap = viability(&seeds, 30, &data).thorn_trap;
+        assert_eq!(
+            thorn_trap.per_seed,
+            vec![
+                (1, 1),
+                (2, 2),
+                (3, 0),
+                (4, 3),
+                (5, 1),
+                (6, 2),
+                (7, 4),
+                (8, 0),
+                (9, 1),
+                (10, 2)
+            ]
+        );
+        // Sorted, 0 0 1 1 1 2 2 2 3 4: halfway between the middle two.
+        assert_eq!(thorn_trap.median, Some(1.5));
     }
 
     #[test]
