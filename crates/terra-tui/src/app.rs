@@ -7,7 +7,7 @@ use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
 use terra_sim::{
     ActionView, Command, CursorTouch, DeathCause, Dir, EntityId, Event, EventKind, Grip, Map, Pos,
-    Target, World,
+    Target, Thing, World,
 };
 
 use crate::clock::Clock;
@@ -234,6 +234,10 @@ pub struct App {
     led: Option<(EntityId, Pos)>,
     /// While the player aims a throw or a shove (design v25 §6.5).
     aim: Option<Aim>,
+    /// While the selected sprite slides from a shove, what it crashed into
+    /// and whether that hurt, once it has: its observed line waits for the
+    /// slide to end (design v25 §6.1).
+    sliding: Option<(EntityId, Option<(Thing, bool)>)>,
     /// When, in `running_for`, a click last sent a command (design v22 §6.5).
     sent_at: Option<Duration>,
     /// The world's latest report on a command, and when it began to show.
@@ -310,6 +314,7 @@ impl App {
             told_tile: None,
             led: None,
             aim: None,
+            sliding: None,
             sent_at: None,
             report: None,
             refusal: None,
@@ -342,10 +347,27 @@ impl App {
             }
             // Let go, the selected sprite felt it as a pull from nowhere, since
             // it can't see the Cursor (design v23 §6.1).
-            if let EventKind::LetGo { sprite } = event.kind
+            if let EventKind::LetGo { sprite } | EventKind::Shoved { sprite } = event.kind
                 && self.selection == Some(Selection::Living(sprite))
             {
                 self.observe(event.tick, "Was pulled along out of nowhere".into());
+            }
+            // A shove, felt as one from nowhere, is observed once the slide
+            // ends, with what it crashed into (design v25 §6.1).
+            match &event.kind {
+                EventKind::Shoved { sprite }
+                    if self.selection == Some(Selection::Living(*sprite)) =>
+                {
+                    self.sliding = Some((*sprite, None));
+                }
+                EventKind::Crashed { sprite, into, hurt } => {
+                    if let Some((slider, crash)) = &mut self.sliding
+                        && slider == sprite
+                    {
+                        *crash = Some((into.clone(), *hurt));
+                    }
+                }
+                _ => {}
             }
             if let EventKind::CommandRejected { .. } = event.kind {
                 self.flash_report(StatusMark::Rejected);
@@ -378,6 +400,7 @@ impl App {
             }
         }
         self.event_log.truncate(EVENT_LOG_LENGTH);
+        self.note_slide_ended(world);
         // The world has applied what was queued for the ticks it has run.
         self.queued.retain(|&(tick, _)| tick >= world.tick());
         // An aim ends when what it aimed is gone: a held berry expired, or
@@ -493,6 +516,34 @@ impl App {
         if let Some(tile) = wanted {
             self.cursor = self.within_leash(tile);
         }
+    }
+
+    /// Once the selected sprite's slide has ended, its observed list tells of
+    /// the shove: "Was shoved out of nowhere", and what it crashed into, and
+    /// whether that hurt (design v25 §6.1).
+    fn note_slide_ended(&mut self, world: &World) {
+        let Some((id, crash)) = self.sliding.take() else {
+            return;
+        };
+        if world
+            .sprite(id)
+            .is_some_and(|sprite| sprite.slide().is_some())
+        {
+            self.sliding = Some((id, crash));
+            return;
+        }
+        if self.selection != Some(Selection::Living(id)) {
+            return;
+        }
+        let line = match crash {
+            None => "Was shoved out of nowhere".to_string(),
+            Some((into, hurt)) => {
+                let hurt = if hurt { ", and got hurt" } else { "" };
+                let into = inspector::crashed_into(&into);
+                format!("Was shoved out of nowhere, into {into}{hurt}")
+            }
+        };
+        self.observe(world.tick().saturating_sub(1), line);
     }
 
     /// Starts the Hurt emote on each sprite that sprite `actor`'s `action` hurt.

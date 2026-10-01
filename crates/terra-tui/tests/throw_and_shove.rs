@@ -3,7 +3,7 @@
 //! back, and letting go sends it.
 
 use ratatui::layout::{Position, Rect};
-use terra_sim::{Command, DataPack, Dir, EntityId, Map, Pos, Scenario, World};
+use terra_sim::{Command, DataPack, Dir, EntityId, Map, Pos, Scenario, ScriptedAction, World};
 use terra_tui::app::{App, Areas, CursorMode, Flow, StatusMark};
 use terra_tui::input::{Action, Button};
 use terra_tui::theme::Theme;
@@ -290,4 +290,81 @@ fn locked_on_to_a_sprite_a_throw_starts_at_its_feet() {
         tiles: 2,
     };
     assert_eq!(app.take_commands(), vec![throw]);
+}
+
+#[test]
+fn a_queued_throw_leaves_the_marks_empty_and_a_refused_one_says_why() {
+    // Design v25 §6.5: the marks follow the queue; a throw from where the
+    // ball can't go is refused as putting it down there would be.
+    let mut world = field(&[(at(5, 5), "ball"), (at(9, 5), "berry")], &[]);
+    let mut app = grab_app(&world);
+    hold(&mut app, &mut world, at(5, 5));
+    point(&mut app, &world, at(9, 5));
+    click(&mut app, &world, at(9, 5), Button::Right);
+    point(&mut app, &world, at(7, 5));
+    let_go(&mut app, &world, at(7, 5));
+    assert_eq!(
+        app.status_marks(&world),
+        [StatusMark::Grab, StatusMark::Empty],
+        "queued"
+    );
+    tick(&mut app, &mut world);
+    assert_eq!(app.status_mark(), StatusMark::Rejected);
+    assert_eq!(
+        app.refusal(),
+        Some("Couldn't throw the ball: a berry is there")
+    );
+    assert!(world.cursor().holds().is_some(), "still held");
+}
+
+/// What the selected sprite was seen to go through, newest first, once the
+/// Cursor took hold of the sprite on (5, 5) and shoved it east 3 tiles,
+/// in a field with `objects` and another sprite on each of `others`.
+fn shove_seen(objects: &[(Pos, &str)], others: &[Pos]) -> Vec<String> {
+    let mut sprites = vec![(at(5, 5), None)];
+    sprites.extend(others.iter().map(|&pos| (pos, None)));
+    // Resting whenever they choose, so they stay where they are.
+    let rests: Vec<(Pos, ScriptedAction)> = sprites
+        .iter()
+        .flat_map(|&(pos, _)| [(pos, ScriptedAction::Rest); 20])
+        .collect();
+    let map = Map::from_ascii(&["...................."; 12], &pack()).expect("valid drawing");
+    let scenario = Scenario {
+        map,
+        objects,
+        sprites: &sprites,
+        scripted: &rests,
+    };
+    let mut world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
+    let mut app = grab_app(&world);
+    apply(&mut app, &world, Action::SelectNext);
+    lead(&mut app, &mut world, at(5, 5));
+    point(&mut app, &world, at(5, 5));
+    click(&mut app, &world, at(5, 5), Button::Right);
+    point(&mut app, &world, at(2, 5));
+    let_go(&mut app, &world, at(2, 5));
+    for _ in 0..4 {
+        tick(&mut app, &mut world);
+    }
+    app.observed().take(2).map(|o| o.line.clone()).collect()
+}
+
+#[test]
+fn the_observed_list_tells_of_a_shove_out_of_nowhere_and_what_it_crashed_into() {
+    // Design v25 §6.1: let go with a push, it was pulled along, then shoved.
+    let pulled = "Was pulled along out of nowhere";
+    assert_eq!(shove_seen(&[], &[]), ["Was shoved out of nowhere", pulled]);
+    let thorns = [(at(8, 5), "thornbush")];
+    assert_eq!(
+        shove_seen(&thorns, &[]),
+        [
+            "Was shoved out of nowhere, into a thornbush, and got hurt",
+            pulled
+        ]
+    );
+    let seen = shove_seen(&[], &[at(8, 5)]);
+    assert!(
+        seen[0].starts_with("Was shoved out of nowhere, into Sprite #"),
+        "{seen:?}"
+    );
 }

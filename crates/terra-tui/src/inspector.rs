@@ -115,8 +115,10 @@ fn sprite_tab(tab: Tab, sprite: &SpriteView, app: &App, world: &World) -> Vec<Li
 /// player has observed it do.
 fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
     let traits = sprite.traits();
-    let doing = match led_line(sprite, app.detail(), world) {
-        Some(led) => Some(format!(" {led}")),
+    let handled =
+        slide_line(sprite, app.detail()).or_else(|| led_line(sprite, app.detail(), world));
+    let doing = match handled {
+        Some(line) => Some(format!(" {line}")),
         None => sprite
             .action()
             .map(|action| format!(" {}", action_line(&action, app.detail(), world.data()))),
@@ -214,6 +216,20 @@ fn hanging(head: &str, text: &str) -> Vec<String> {
     }
     lines.push(line);
     lines
+}
+
+/// While a shove sends `sprite` sliding, what the Body tab says in place of
+/// an action, even if the Cursor has taken hold of it meanwhile (design v25
+/// §6.1): "Shoved · 2 tiles to go"; in the detail view
+/// `SHOVED → NE · 2 tiles left`.
+fn slide_line(sprite: &SpriteView, detail: bool) -> Option<String> {
+    let (toward, left) = sprite.slide()?;
+    let tiles = counted(u32::from(left), "tile");
+    Some(if detail {
+        format!("SHOVED → {toward:?} · {tiles} left")
+    } else {
+        format!("Shoved · {tiles} to go")
+    })
 }
 
 /// While the Cursor leads `sprite`, what the Body tab says in place of an
@@ -599,6 +615,8 @@ fn brain_tab(sprite: &SpriteView, data: &DataPack) -> Vec<Line<'static>> {
     // Led, it decides nothing, so its last decision would mislead (design
     // v23 §2.4).
     let mut lines = match sprite.explain() {
+        // Sliding, likewise (design v25 §2.4).
+        _ if sprite.slide().is_some() => vec![" Shoved: it decides nothing".to_string()],
         _ if sprite.lead_steps_left().is_some() => {
             vec![" Being led: it decides nothing".to_string()]
         }
@@ -1201,7 +1219,8 @@ fn world_tab(world: &World) -> Vec<Line<'static>> {
 
 /// Why the world refused `command`, spoken to the player, as the event log
 /// and the status line say it (design v22, v23 §6.1): "Couldn't pet Sprite
-/// #12: it's gone", "Couldn't put the ball down: a berry is there".
+/// #12: it's gone", "Couldn't put the ball down: a berry is there",
+/// "Couldn't throw the ball: a berry is there" (design v25).
 fn refusal_line(command: &Command, reason: Rejection, data: &DataPack) -> Option<String> {
     let name = |id: u16| display_name(data.object_type_name(id).unwrap_or("?"));
     let what = match *command {
@@ -1218,8 +1237,12 @@ fn refusal_line(command: &Command, reason: Rejection, data: &DataPack) -> Option
         Command::LetGo => "let go".into(),
         // The app sends it only while leading, and only onto the map.
         Command::MoveCursor { .. } => return None,
-        // Worded with the rest of slice 11b's screen.
-        Command::Throw { .. } | Command::Shove { .. } => return None,
+        // Refused as putting it down would be (design v25 §2.5).
+        Command::Throw { .. } => match reason {
+            Rejection::InTheWay { item_type, .. } => format!("throw the {}", name(item_type)),
+            _ => "throw it".into(),
+        },
+        Command::Shove { .. } => "shove".into(),
     };
     let why = match reason {
         Rejection::Gone => "it's gone".into(),
@@ -1309,8 +1332,31 @@ pub(crate) fn event_line(event: &Event, data: &DataPack) -> Option<String> {
         EventKind::ObjectSpawned { .. }
         | EventKind::ObjectRemoved { .. }
         | EventKind::ActionStarted { .. } => None,
-        // Worded with the rest of slice 11b's screen.
-        EventKind::Threw { .. } | EventKind::Shoved { .. } | EventKind::Crashed { .. } => None,
+        // Throwing and shoving, spoken to the player, and a crash only if it
+        // hurt (design v25 §6.1).
+        EventKind::Threw { object_type, .. } => {
+            Some(format!("You threw the {}", display_name(object_type)))
+        }
+        EventKind::Shoved { sprite } => Some(format!("You shoved {}", sprite_label(*sprite))),
+        EventKind::Crashed {
+            sprite,
+            into,
+            hurt: true,
+        } => Some(format!(
+            "{} was shoved into {} and got hurt",
+            sprite_label(*sprite),
+            crashed_into(into)
+        )),
+        EventKind::Crashed { hurt: false, .. } => None,
+    }
+}
+
+/// What a sprite crashed into, as a sentence says it: "a thornbush", or
+/// "Sprite #7" (design v25 §6.1).
+pub(crate) fn crashed_into(into: &Thing) -> String {
+    match into {
+        Thing::ObjectType(name) | Thing::Category(name) => with_article(&display_name(name)),
+        Thing::Sprite(id) => sprite_label(*id),
     }
 }
 
