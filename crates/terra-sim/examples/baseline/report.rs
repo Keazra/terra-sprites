@@ -2,13 +2,14 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::{Deserialize, Serialize};
 use terra_sim::{DataPack, DeathCause, LabRun, Verb, Window};
 
 /// The slice that tunes the default world to meet A4 (design §7.4).
 const A4_TUNING: &str = "#18";
 
 /// How a criterion stands against its pass mark (design §7.6).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Verdict {
     Met,
     /// Not met; `until` names the slice that's meant to meet it.
@@ -19,14 +20,14 @@ pub enum Verdict {
 }
 
 /// A criterion's median across the seeds, and its verdict.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Criterion {
     pub median: Option<f64>,
     pub verdict: Verdict,
 }
 
 /// A baseline report (design §7.6): what one commit of `main` measured.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Report {
     /// The commit measured.
     pub commit: String,
@@ -57,6 +58,17 @@ pub struct Moved {
 }
 
 impl Report {
+    /// The report as RON, the file the next baseline run compares with.
+    pub fn to_ron(&self) -> String {
+        let pretty = ron::ser::PrettyConfig::default();
+        ron::ser::to_string_pretty(self, pretty).expect("a report is plain data")
+    }
+
+    /// A report from the RON that `to_ron` wrote.
+    pub fn from_ron(text: &str) -> Result<Report, String> {
+        ron::from_str(text).map_err(|e| e.to_string())
+    }
+
     /// The report as a page (design §7.6), given what `moved` since the
     /// report it's compared with, or none if there isn't one.
     pub fn markdown(&self, moved: Option<&[Moved]>) -> String {
@@ -297,7 +309,7 @@ pub fn moved(previous: &Report, current: &Report) -> Vec<Moved> {
 }
 
 /// What the viability run measured (design §7.6).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Viability {
     /// A4: the share of sprites alive at tick 10,000.
     pub survival: Criterion,
@@ -314,7 +326,7 @@ pub struct Viability {
 
 /// One seed's 50,000 ticks: who survived, what killed the rest, and how
 /// often each verb was applied, each by name.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SeedRow {
     pub seed: u64,
     pub alive: u64,
@@ -323,7 +335,7 @@ pub struct SeedRow {
 }
 
 /// A number counted on each seed, and its median. It has no pass mark.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Count {
     /// Each seed and its count.
     pub per_seed: Vec<(u64, u64)>,
@@ -414,7 +426,7 @@ pub fn viability(
 
 /// One of A1–A3 (design §7.3): its runs' median, its controls', and the
 /// verdict CI's acceptance tests give on the same seeds.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Lesson {
     pub median: Option<f64>,
     pub control_median: Option<f64>,
@@ -490,7 +502,7 @@ fn after_training(windows: &[Window]) -> &Window {
 }
 
 /// A seed that crashed or broke an invariant (design §7.6).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Broken {
     /// The lab scenario, by the name of its file in `scenarios/`.
     pub scenario: String,
@@ -1090,5 +1102,14 @@ mod tests {
             ),
             "{page}"
         );
+    }
+
+    #[test]
+    fn a_report_written_as_ron_reads_back_the_same() {
+        // The next baseline run compares itself with this one's file.
+        let mut report = sample();
+        report.compared_with = Some("def5678".into());
+        report.broken = broken("viability", &[(4, Err("tick 9: \"quoted\"".into()))]);
+        assert_eq!(Report::from_ron(&report.to_ron()), Ok(report));
     }
 }
