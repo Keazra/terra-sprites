@@ -19,7 +19,7 @@ use crate::expression::{Expression, expressions};
 use crate::generate::{generate, place_objects, place_sprites};
 use crate::genome::{GeneView, Genome};
 use crate::learning::{self, Subject};
-use crate::map::{Map, MapError, Pos};
+use crate::map::{Dir, Map, MapError, Pos};
 use crate::objects::{EntityId, Object, Objects};
 use crate::perception::{Flood, Target, goal_tiles};
 use crate::regions::Regions;
@@ -291,6 +291,12 @@ impl<'a> SpriteView<'a> {
     /// close as it can get (design v23 §6.5). `None` while it isn't led.
     pub fn lead_steps_left(&self) -> Option<u32> {
         action::lead_steps_left(self.sprite)
+    }
+
+    /// While a shove sends it, the way it slides and the tiles it has left
+    /// to go (design v25 §3.5.4). `None` while it isn't sliding.
+    pub fn slide(&self) -> Option<(Dir, u16)> {
+        self.sprite.slide.map(|slide| (slide.dir, slide.left))
     }
 
     /// What its brain did at the latest step 5, explained (design §5.9), or

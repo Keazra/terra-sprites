@@ -2869,3 +2869,68 @@ fn while_aiming_the_hints_say_how_to_send_it_or_cancel() {
         "{status:?}"
     );
 }
+
+#[test]
+fn the_body_tab_says_a_shoved_sprite_slides_and_how_far_it_has_to_go() {
+    // Design v25 §6.1. It's shoved 3 tiles east from (2, 3), and slides a
+    // tile a tick.
+    let (mut world, mut app) = one_sprite_doing(SPEED_10, &[], 0);
+    let sprite = world.sprites().next().expect("the sprite").id();
+    world.submit(Command::TakeHold { sprite });
+    world.step();
+    world.submit(Command::Shove {
+        toward: terra_sim::Dir::E,
+        tiles: 3,
+    });
+    world.step();
+    assert_eq!(inspector(&app, &world).1[0], "Shoved · 2 tiles to go");
+    app.apply(Action::ToggleDetail, &world);
+    assert_eq!(inspector(&app, &world).1[0], "SHOVED → E · 2 tiles left");
+}
+
+#[test]
+fn the_brain_tab_says_a_sliding_sprite_decides_nothing() {
+    let (mut world, mut app) = one_sprite(HUNGRY_GENOME, 1);
+    open(&mut app, &world, Tab::Brain);
+    let sprite = world.sprites().next().expect("the sprite").id();
+    world.submit(Command::TakeHold { sprite });
+    world.step();
+    world.submit(Command::Shove {
+        toward: terra_sim::Dir::E,
+        tiles: 3,
+    });
+    world.step();
+    assert_eq!(inspector(&app, &world).1[0], "Shoved: it decides nothing");
+}
+
+#[test]
+fn the_event_log_tells_of_throws_shoves_and_crashes_that_hurt() {
+    // Design v25 §6.1: spoken to the player; a crash only if it hurt.
+    let world = garden(pack());
+    let (sprite, other, ball) = (EntityId(12), EntityId(13), EntityId(20));
+    let events = on_ticks(vec![
+        EventKind::Threw {
+            item: ball,
+            object_type: "ball".into(),
+        },
+        EventKind::Shoved { sprite },
+        EventKind::Crashed {
+            sprite,
+            into: Thing::ObjectType("thornbush".into()),
+            hurt: true,
+        },
+        EventKind::Crashed {
+            sprite,
+            into: Thing::Sprite(other),
+            hurt: false,
+        },
+    ]);
+    assert_eq!(
+        logged(&world, &events),
+        [
+            "3  Sprite #12 was shoved into a thornbush and got hurt",
+            "2  You shoved Sprite #12",
+            "1  You threw the ball",
+        ]
+    );
+}
