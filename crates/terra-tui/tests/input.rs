@@ -355,6 +355,16 @@ fn every_mouse_event_points_and_a_left_press_also_clicks() {
         }),
         "design v21 §6.5"
     );
+    // Letting go of the right button sends an aimed throw or shove (design
+    // v25 §6.5); dragging it pulls, as any move points.
+    assert_eq!(
+        action(MouseEventKind::Up(MouseButton::Right)),
+        Some(Action::Release {
+            button: Button::Right,
+            at: Some(Position::new(12, 7)),
+        })
+    );
+    assert_eq!(action(MouseEventKind::Drag(MouseButton::Right)), point);
     // Every mouse event says where the pointer is, so the cursor follows it.
     for kind in [
         MouseEventKind::Up(MouseButton::Left),

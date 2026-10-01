@@ -41,7 +41,8 @@ pub(crate) fn attempt(
         .verbs
         .get(&verb)
         .map(Vec::as_slice);
-    if tagged.is_empty() && table.is_none() {
+    let answered = !tagged.is_empty();
+    if !answered && table.is_none() {
         fruitless(state, data, actor);
         return (Outcome::Failed, hurt);
     }
@@ -53,7 +54,11 @@ pub(crate) fn attempt(
                 };
                 let object = state.objects.get(id).expect("the target");
                 if object.counters[counter] < least {
-                    fruitless(state, data, actor);
+                    // Something happened if a tag answered it, so it fails
+                    // without being fruitless (design v23 §3.5.6).
+                    if !answered {
+                        fruitless(state, data, actor);
+                    }
                     return (Outcome::Failed, hurt);
                 }
             }

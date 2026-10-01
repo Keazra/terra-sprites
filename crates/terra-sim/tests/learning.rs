@@ -948,3 +948,35 @@ fn a_crash_teaches_no_habit_not_even_along_the_trace_and_nor_does_a_pet_that_rea
     };
     assert!(value_of(&world, &thorns_good) > 0.0, "{:?}", memory(&world));
 }
+
+#[test]
+fn a_shock_just_after_a_crash_teaches_badness_and_no_habit() {
+    // Design v25 §5.6: a shock looks back the touch window, and finds the
+    // crash, so it teaches the thornbush is worse, and no habit.
+    let mut world = world(
+        &["........", "........", "........", "........"],
+        &[(at(1, 3), "thornbush"), (at(7, 0), "berry_bush")],
+        at(1, 0),
+        &format!(
+            r#"{PRICKS_HURT}
+            Instinct(inputs: [("always", false)], verb: Approach, weight: 1.0),"#
+        ),
+        &[],
+    );
+    world.step();
+    shove_the_sprite(&mut world, Dir::S);
+    let sprite = world.sprites().next().expect("the sprite").id();
+    world.submit(Command::Correct {
+        sprite,
+        amplified: false,
+    });
+    world.step();
+    let thorns_bad = Learned::Bad {
+        thing: "thornbush".into(),
+    };
+    assert!(value_of(&world, &thorns_bad) < -0.8, "{:?}", memory(&world));
+    let no_habits = memory(&world)
+        .iter()
+        .all(|(learned, _)| !matches!(learned, Learned::Habit { .. }));
+    assert!(no_habits, "{:?}", memory(&world));
+}
