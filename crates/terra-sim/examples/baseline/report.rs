@@ -1,6 +1,8 @@
 //! The baseline report (design §7.6): each criterion's numbers and verdict.
 
-use terra_sim::{DataPack, DeathCause, LabRun, Window};
+use std::collections::BTreeMap;
+
+use terra_sim::{DataPack, DeathCause, LabRun, Verb, Window};
 
 /// The slice that tunes the default world to meet A4 (design §7.4).
 const A4_TUNING: &str = "#18";
@@ -35,6 +37,18 @@ pub struct Viability {
     pub seeds_with_deaths: usize,
     /// The thorn trap (design §7.3): deaths by thornbush over ticks 0–30,000.
     pub thorn_trap: Count,
+    /// The health table: a row for each seed that finished.
+    pub seeds: Vec<SeedRow>,
+}
+
+/// One seed's 50,000 ticks: who survived, what killed the rest, and how
+/// often each verb was applied, each by name.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SeedRow {
+    pub seed: u64,
+    pub alive: u64,
+    pub deaths: BTreeMap<String, u64>,
+    pub verbs: BTreeMap<String, u64>,
 }
 
 /// A number counted on each seed, and its median. It has no pass mark.
@@ -95,7 +109,28 @@ pub fn viability(
         })
         .collect();
     let counts: Vec<f64> = pricked.iter().map(|&(_, n)| n as f64).collect();
+    let rows = finished
+        .iter()
+        .map(|(seed, run)| {
+            let all = window(run, 50_000);
+            let mut verbs = BTreeMap::new();
+            for (&(verb, _), n) in &all.applied {
+                *verbs.entry(verb_name(verb)).or_insert(0) += n;
+            }
+            SeedRow {
+                seed: *seed,
+                alive: sprites.saturating_sub(all.deaths.values().sum()),
+                deaths: all
+                    .deaths
+                    .iter()
+                    .map(|(&cause, &n)| (cause_name(cause, data), n))
+                    .collect(),
+                verbs,
+            }
+        })
+        .collect();
     Viability {
+        seeds: rows,
         survival: a4(median_of(&alive), |share| share >= 0.8),
         hunger_and_thirst: a4(median_of(&hunger_and_thirst), |share| share < 0.25),
         seeds_with_deaths: hunger_and_thirst.len(),
@@ -127,6 +162,22 @@ fn window(run: &LabRun, to: u64) -> &Window {
         .unwrap_or_else(|| panic!("the viability run counts ticks 0 to {to}"))
 }
 
+/// A verb by name, as the lab runner writes it: "eat".
+fn verb_name(verb: Verb) -> String {
+    format!("{verb:?}").to_lowercase()
+}
+
+/// A cause of death by name, as the lab runner writes it: "hurt by
+/// thornbush" names the object type.
+fn cause_name(cause: DeathCause, data: &DataPack) -> String {
+    match cause {
+        DeathCause::Starvation => "starvation".into(),
+        DeathCause::Dehydration => "dehydration".into(),
+        DeathCause::OldAge => "old age".into(),
+        DeathCause::HurtBy(id) => format!("hurt by {}", data.object_type_name(id).unwrap_or("?")),
+    }
+}
+
 /// The median of `values`, or none if there are none.
 fn median_of(values: &[f64]) -> Option<f64> {
     let mut sorted = values.to_vec();
@@ -143,7 +194,7 @@ fn median_of(values: &[f64]) -> Option<f64> {
 mod tests {
     use super::*;
     use std::collections::BTreeMap;
-    use terra_sim::DeathCause;
+    use terra_sim::{DeathCause, Verb};
 
     fn data() -> DataPack {
         DataPack::builtin().expect("the built-in data pack is valid")
@@ -302,6 +353,44 @@ mod tests {
         );
         // Sorted, 0 0 1 1 1 2 2 2 3 4: halfway between the middle two.
         assert_eq!(thorn_trap.median, Some(1.5));
+    }
+
+    #[test]
+    fn the_health_table_has_a_row_per_seed_of_who_survived_what_killed_the_rest_and_the_verbs() {
+        // Design §7.6: per seed, who survived the 50,000 ticks, what killed
+        // the rest, and how often each verb was applied, whatever its target.
+        let data = data();
+        assert_eq!(data.object_type_name(2), Some("berry"), "objects.ron");
+        assert_eq!(data.object_type_name(3), Some("thornbush"), "objects.ron");
+        let mut run = viability_run(
+            &[],
+            &[],
+            &[(DeathCause::Dehydration, 2), (DeathCause::HurtBy(3), 1)],
+        );
+        run.windows[2].applied = BTreeMap::from([
+            ((Verb::Eat, Some(2)), 10),
+            ((Verb::Eat, Some(3)), 2),
+            ((Verb::Rest, None), 50),
+            ((Verb::Wander, None), 100),
+        ]);
+        let seeds = vec![(7, Ok(run))];
+        let rows = viability(&seeds, 30, &data).seeds;
+        assert_eq!(
+            rows,
+            vec![SeedRow {
+                seed: 7,
+                alive: 27,
+                deaths: BTreeMap::from([
+                    ("dehydration".into(), 2),
+                    ("hurt by thornbush".into(), 1)
+                ]),
+                verbs: BTreeMap::from([
+                    ("eat".into(), 12),
+                    ("rest".into(), 50),
+                    ("wander".into(), 100)
+                ]),
+            }]
+        );
     }
 
     #[test]
