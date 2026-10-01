@@ -228,9 +228,10 @@ pub struct App {
     /// While the Cursor leads a sprite, the tile the world was last told
     /// it's on (design v23 §6.5).
     told_tile: Option<Pos>,
-    /// Whether the Cursor holds or leads something, as the player sees it
-    /// (`App::grip`), as of the latest action or tick.
-    gripping: bool,
+    /// The sprite the Cursor leads, as the player sees it (`App::grip`),
+    /// and where it stands, as of the latest action or tick: the leash's
+    /// centre (design v23 §6.5).
+    led: Option<(EntityId, Pos)>,
     /// When, in `running_for`, a click last sent a command (design v22 §6.5).
     sent_at: Option<Duration>,
     /// The world's latest report on a command, and when it began to show.
@@ -253,6 +254,10 @@ const EMOTE_FOR: Duration = Duration::from_secs(1);
 
 /// How long the status marks flash, in real time (design v21 §6.5).
 const MARK_FLASH_FOR: Duration = Duration::from_millis(300);
+
+/// How far the Cursor goes from a sprite it leads, in tiles, in a square: a
+/// UI setting (design v23 §6.5).
+const LEASH: u16 = 5;
 
 /// How long the status line says why a click was refused, in real time
 /// (design v22 §6.1).
@@ -291,7 +296,7 @@ impl App {
             commands: Vec::new(),
             queued: Vec::new(),
             told_tile: None,
-            gripping: false,
+            led: None,
             sent_at: None,
             report: None,
             refusal: None,
@@ -365,12 +370,30 @@ impl App {
         self.settle_cursor(world);
     }
 
-    /// Settles the Cursor after an action or a tick: what it has hold of, then
+    /// Settles the Cursor after an action or a tick: what it leads, then
     /// where it is, then telling the world if it leads a sprite.
     fn settle_cursor(&mut self, world: &World) {
-        self.gripping = self.grip(world).is_some();
+        self.led = match self.grip(world) {
+            Some(Grip::Leads(id)) => world.sprite(id).map(|sprite| (id, sprite.pos())),
+            _ => None,
+        };
         self.track(world);
         self.tell(world);
+    }
+
+    /// The tile within the leash nearest `tile`: while the Cursor leads a
+    /// sprite, it goes no further from it than `LEASH` tiles, in a square
+    /// (design v23 §6.5).
+    fn within_leash(&self, tile: Pos) -> Pos {
+        let Some((_, at)) = self.led else {
+            return tile;
+        };
+        let near =
+            |to: u16, from: u16| to.clamp(from.saturating_sub(LEASH), from.saturating_add(LEASH));
+        Pos {
+            x: near(tile.x, at.x),
+            y: near(tile.y, at.y),
+        }
     }
 
     /// While the Cursor leads a sprite, tells the world each new tile it
@@ -406,9 +429,9 @@ impl App {
     }
 
     /// The sprite the Cursor is locked on to, if any (design v21 §6.5).
-    /// While it holds or leads something in Grab mode, the lock waits, and
-    /// the Cursor follows the pointer, so the player chooses where things go
-    /// (design v23 §6.5).
+    /// While the Cursor leads that sprite, the lock steps aside, in every
+    /// mode, and the Cursor follows the pointer, within the leash (design
+    /// v23 §6.5).
     pub fn locked(&self) -> Option<EntityId> {
         if self.lock_waits() {
             return None;
@@ -419,20 +442,26 @@ impl App {
         }
     }
 
-    /// Whether the Cursor's lock waits, while it holds or leads something
-    /// in Grab mode (design v23 §6.5).
+    /// Whether the lock steps aside: while the Cursor leads the locked-on
+    /// sprite (design v23 §6.5).
     fn lock_waits(&self) -> bool {
-        self.lock && self.mode == CursorMode::Grab && self.gripping
+        match (self.selection, self.led) {
+            (Some(Selection::Living(locked)), Some((led, _))) => self.lock && locked == led,
+            _ => false,
+        }
     }
 
-    /// Keeps a locked-on Cursor on its sprite, wherever it has walked.
-    /// A lock that waits leaves the Cursor on the pointer at once, so a
-    /// keyboard click lands where the player points (design v23 §6.5).
+    /// Keeps a locked-on Cursor on its sprite, wherever it has walked; and
+    /// a leading one on the pointer, so a keyboard click lands where the
+    /// player points. Either way, within the leash (design v23 §6.5).
     fn track(&mut self, world: &World) {
-        if let Some(sprite) = self.locked().and_then(|id| world.sprite(id)) {
-            self.cursor = sprite.pos();
-        } else if self.lock_waits() {
-            self.cursor = self.pointed;
+        let wanted = match self.locked().and_then(|id| world.sprite(id)) {
+            Some(sprite) => Some(sprite.pos()),
+            None if self.led.is_some() => Some(self.pointed),
+            None => None,
+        };
+        if let Some(tile) = wanted {
+            self.cursor = self.within_leash(tile);
         }
     }
 
@@ -697,8 +726,10 @@ impl App {
                 amplified,
             } => {
                 self.point(at);
+                // A click lands where the Cursor is: not past the leash
+                // (design v23 §6.5).
                 if let Some(tile) = self.tile_at(at) {
-                    self.act(tile, button, amplified, world);
+                    self.act(self.within_leash(tile), button, amplified, world);
                 }
             }
             Action::Press { button, amplified } => {
@@ -941,15 +972,15 @@ impl App {
     }
 
     /// Notes the tile at screen cell `cell` as the pointer's, and puts the
-    /// Cursor there unless it's locked on. Off the map view's tiles, both
-    /// stay on their last tile.
+    /// Cursor there, within the leash, unless it's locked on. Off the map
+    /// view's tiles, both stay on their last tile.
     fn point(&mut self, cell: Position) {
         match self.tile_at(cell) {
             Some(tile) => {
                 self.pointer = Some(cell);
                 self.pointed = tile;
                 if self.locked().is_none() {
-                    self.cursor = tile;
+                    self.cursor = self.within_leash(tile);
                 }
             }
             None => self.pointer = None,

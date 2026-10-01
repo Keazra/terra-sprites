@@ -269,23 +269,6 @@ fn leading_the_locked_on_sprite_the_cursor_follows_the_pointer_and_the_lock_come
 }
 
 #[test]
-fn holding_an_item_in_grab_mode_the_cursor_follows_the_pointer_though_locked_on() {
-    let mut world = field(&[(at(1, 1), "ball")], &[at(4, 2)]);
-    let mut app = grab_app(&world);
-    click(&mut app, &world, at(1, 1));
-    tick(&mut app, &mut world);
-    lock_on(&mut app, &world, at(4, 2));
-    point(&mut app, &world, at(8, 5));
-    assert_eq!(
-        (app.cursor(), app.locked()),
-        (at(8, 5), None),
-        "the lock waits"
-    );
-    apply(&mut app, &world, Action::Mode(CursorMode::Train));
-    assert_eq!(app.cursor(), at(4, 2), "in another mode, the lock holds");
-}
-
-#[test]
 fn while_leading_a_cursor_locked_on_to_another_walking_sprite_tells_the_world_where_it_goes() {
     let rows = vec![".........."; 6];
     let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
@@ -383,20 +366,100 @@ fn taking_hold_of_the_locked_on_sprite_puts_the_cursor_on_the_pointer_at_once() 
 }
 
 #[test]
-fn back_in_grab_mode_holding_an_item_the_cursor_is_on_the_pointer_at_once() {
+fn holding_an_item_with_the_lock_on_a_sprite_a_click_puts_it_at_its_feet() {
+    // Design v23 change 6: the lock steps aside only for the sprite it's on,
+    // so holding a berry picked up with the lock off, the Cursor sits on the
+    // locked-on sprite.
     let mut world = resting_sprite_and_ball();
     let mut app = grab_app(&world);
     click(&mut app, &world, at(1, 1));
     tick(&mut app, &mut world);
     lock_on(&mut app, &world, at(4, 2));
     point(&mut app, &world, at(8, 5));
-    apply(&mut app, &world, Action::Mode(CursorMode::Train));
-    assert_eq!(app.cursor(), at(4, 2), "in Train, on the sprite");
-    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
-    assert_eq!(app.cursor(), at(8, 5), "in Grab, at the pointer");
+    assert_eq!(app.cursor(), at(4, 2), "on the locked-on sprite");
     press(&mut app, &world);
     assert_eq!(
         app.take_commands(),
-        vec![Command::PutDown { tile: at(8, 5) }]
+        vec![Command::PutDown { tile: at(4, 2) }]
     );
+}
+
+#[test]
+fn leading_the_locked_on_sprite_the_lock_steps_aside_in_every_mode() {
+    let world = resting_sprite_and_ball();
+    let mut app = grab_app(&world);
+    let sprite = sprite_on(&world, at(4, 2));
+    lock_on(&mut app, &world, at(4, 2));
+    press(&mut app, &world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    point(&mut app, &world, at(7, 4));
+    assert_eq!((app.cursor(), app.locked()), (at(7, 4), None));
+    apply(&mut app, &world, Action::Mode(CursorMode::Select));
+    assert_eq!(app.locked(), None, "still aside in Select");
+    assert_eq!(app.grip(&world), Some(Grip::Leads(sprite)));
+}
+
+/// A field 20 wide with a sprite resting on (1, 1), which the app in Grab
+/// mode has just taken hold of, and a sprite resting on (12, 3).
+fn leading_in_a_wide_field() -> (World, App) {
+    let rows = vec!["...................."; 6];
+    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
+    let (led, other) = (at(1, 1), at(12, 3));
+    let mut scripted = vec![(led, ScriptedAction::Rest); 9];
+    scripted.extend([(other, ScriptedAction::Rest); 9]);
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &[(led, None), (other, None)],
+        scripted: &scripted,
+    };
+    let world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
+    let areas = Areas {
+        tiles: Rect::new(0, 0, 20, 6),
+        inspector: None,
+    };
+    let mut app = App::new(world.map(), Theme::cp437(), 1, areas);
+    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+    click(&mut app, &world, led);
+    (world, app)
+}
+
+#[test]
+fn leading_the_cursor_goes_no_further_than_the_leash_and_clicks_land_where_it_is() {
+    // Design v23 change 14: 5 tiles in a square from the led sprite, on
+    // (1, 1), the leash's end nearest the pointer.
+    let (world, mut app) = leading_in_a_wide_field();
+    app.take_commands();
+    point(&mut app, &world, at(12, 3));
+    assert_eq!(app.cursor(), at(6, 3));
+    assert_eq!(
+        app.take_commands(),
+        vec![Command::MoveCursor { tile: at(6, 3) }]
+    );
+    // A pet clicked on the sprite past the leash lands on the Cursor's tile,
+    // where there's no one.
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    click(&mut app, &world, at(12, 3));
+    assert_eq!(app.take_commands(), Vec::new());
+    assert_eq!(app.refusal(), Some("No sprite here to pet"));
+}
+
+#[test]
+fn as_the_led_sprite_catches_up_the_cursor_moves_on_towards_the_pointer() {
+    let (mut world, mut app) = leading_in_a_wide_field();
+    point(&mut app, &world, at(11, 3));
+    assert_eq!(app.cursor(), at(6, 3), "held back");
+    for _ in 0..40 {
+        tick(&mut app, &mut world);
+    }
+    assert_eq!(app.cursor(), at(11, 3), "there in the end");
+}
+
+#[test]
+fn leading_one_sprite_locked_on_to_another_the_cursor_waits_at_the_leash_s_end_towards_it() {
+    // Design v23 change 6: the lock holds, so the led sprite is led towards
+    // the locked-on one.
+    let (world, mut app) = leading_in_a_wide_field();
+    lock_on(&mut app, &world, at(12, 3));
+    assert_eq!(app.cursor(), at(6, 3));
 }
