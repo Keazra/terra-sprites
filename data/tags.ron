@@ -1,0 +1,20 @@
+// Tags defined in the data (design v23 §3.5.6). A contact is a sprite
+// touching a thing: eating it, hitting it, playing with it, or crashing into
+// it. A tag says what each contact with a thing that has it does to the sprite
+// making it, and every thing with the tag behaves the same way. An object type
+// names its tags in `objects.ron`, after the built-in Solid and Fixture.
+//
+// Each tag has:
+//   name     what object types call it
+//   contact  for each contact (Eat, Hit, Play, Crash), its effects, run before
+//            the thing's own verb table. Only Inject and Signal on the Actor,
+//            the sprite making contact, are allowed
+[
+    (name: "Thorny",
+     contact: {
+         Eat:   [Inject(Actor, "injury", 0.05), Signal(Actor, "pricked")],
+         Hit:   [Inject(Actor, "injury", 0.03), Signal(Actor, "pricked")],
+         Play:  [Inject(Actor, "injury", 0.03), Signal(Actor, "pricked")],
+         Crash: [Inject(Actor, "injury", 0.03), Signal(Actor, "pricked")],
+     }),
+]

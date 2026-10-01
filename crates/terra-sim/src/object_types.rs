@@ -11,6 +11,7 @@ use crate::data::{DataError, check_unique};
 use crate::registry::{
     CategoryId, ChemId, Chemical, ChemicalClass, Locus, LocusId, LocusKind, Verb,
 };
+use crate::tags::{FIXTURE, SOLID, Tag};
 
 /// The object types file, relative to the pack root.
 pub(crate) const OBJECTS: &str = "objects.ron";
@@ -31,6 +32,9 @@ pub(crate) struct ObjectType {
     pub(crate) solid: bool,
     /// A verb table only, with no instances or lifecycle: water and sprites.
     pub(crate) pseudo: bool,
+    /// Its tags defined in the data (design v23 §3.5.6), as indices into the
+    /// pack's tags, in the order it lists them.
+    pub(crate) tags: Vec<usize>,
     /// How big and how hard it is, which decides what a rolling item does to
     /// it (design §3.5.4). Every type with objects has one; a pseudo type may not.
     pub(crate) build: Option<Build>,
@@ -153,6 +157,7 @@ pub(crate) enum Party {
 pub(crate) fn object_types(
     text_entries: Vec<TypeEntry>,
     categories: &[Category],
+    tags: &[Tag],
     chemicals: &[Chemical],
     loci: &[Locus],
 ) -> Result<Vec<ObjectType>, DataError> {
@@ -169,6 +174,7 @@ pub(crate) fn object_types(
             .map(|(index, t)| (t.name.clone(), (index, t.pseudo)))
             .collect(),
         categories,
+        tags,
         chemicals,
         loci,
     };
@@ -189,6 +195,7 @@ struct Names<'a> {
     /// Object type name → (index in the sorted list, whether it's a pseudo type).
     types: BTreeMap<String, (usize, bool)>,
     categories: &'a [Category],
+    tags: &'a [Tag],
     chemicals: &'a [Chemical],
     loci: &'a [Locus],
 }
@@ -201,6 +208,14 @@ impl Names<'_> {
             .find(|c| c.name == name)
             .map(|c| c.id)
             .ok_or_else(|| format!("names the unknown category `{name}`"))
+    }
+
+    /// The index of the tag defined in the data called `name`.
+    fn tag(&self, name: &str) -> Result<usize, String> {
+        self.tags
+            .iter()
+            .position(|t| t.name == name)
+            .ok_or_else(|| format!("names the unknown tag `{name}`"))
     }
 
     /// The index of the object type called `name`, which must be a real (not pseudo) type.
@@ -232,7 +247,7 @@ pub(crate) struct TypeEntry {
     plural: Option<String>,
     category: String,
     #[serde(default)]
-    tags: Vec<Tag>,
+    tags: Vec<TagName>,
     #[serde(default)]
     pseudo: bool,
     size: Option<Size>,
@@ -249,11 +264,26 @@ pub(crate) struct TypeEntry {
     visual: Vec<VisualEntry>,
 }
 
-/// The closed set of tags an object type can have (design §3.5.1).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-enum Tag {
-    Solid,
-    Fixture,
+/// A tag as an object type names it, bare, as in `[Solid, Fixture, Thorny]`:
+/// one of the built-in `Solid` and `Fixture` (design §3.5.1), or one defined
+/// in the data (design v23 §3.5.6).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TagName(String);
+
+impl<'de> Deserialize<'de> for TagName {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Bare;
+        impl serde::de::Visitor<'_> for Bare {
+            type Value = TagName;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a tag's name, such as Solid")
+            }
+            fn visit_str<E: serde::de::Error>(self, name: &str) -> Result<TagName, E> {
+                Ok(TagName(name.to_string()))
+            }
+        }
+        deserializer.deserialize_identifier(Bare)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -296,7 +326,7 @@ enum TriggerEntry {
 }
 
 #[derive(Debug, Deserialize)]
-enum ConditionEntry {
+pub(crate) enum ConditionEntry {
     InStage(String),
     Counter(String, Cmp, u16),
     Chance(f32),
@@ -306,7 +336,7 @@ enum ConditionEntry {
 }
 
 #[derive(Debug, Deserialize)]
-enum EffectEntry {
+pub(crate) enum EffectEntry {
     AddCounter(String, i32),
     RequireCounter(String, u16),
     SpawnNearby(String, u16),
@@ -329,8 +359,14 @@ impl TypeEntry {
             plural => plural.map(str::to_string),
         };
         let category = names.category(&self.category)?;
-        let solid = self.tags.contains(&Tag::Solid);
-        let fixture = self.tags.contains(&Tag::Fixture);
+        let named = |tag: &str| self.tags.iter().any(|TagName(name)| name == tag);
+        let (solid, fixture) = (named(SOLID), named(FIXTURE));
+        let tags = self
+            .tags
+            .iter()
+            .filter(|TagName(name)| name != SOLID && name != FIXTURE)
+            .map(|TagName(name)| names.tag(name))
+            .collect::<Result<Vec<_>, _>>()?;
         match (solid, fixture) {
             (true, false) => {
                 return Err(
@@ -463,6 +499,7 @@ impl TypeEntry {
             category,
             solid,
             pseudo: self.pseudo,
+            tags,
             build,
             counters,
             stages,
@@ -598,38 +635,45 @@ impl Scope<'_> {
             EffectEntry::ReplaceWith(name) => Effect::ReplaceWith(self.names.real_type(name)?),
             EffectEntry::DestroySelf => Effect::DestroySelf,
             &EffectEntry::Inject(party, ref name, amount) => {
-                let chemical = self
-                    .names
-                    .chemicals
-                    .iter()
-                    .find(|c| &c.name == name)
-                    .ok_or_else(|| format!("names the unknown chemical `{name}`"))?;
-                if chemical.class != ChemicalClass::Physical {
-                    return Err(format!(
-                        "`Inject` can't target `{name}`: only physical chemicals are changed by objects"
-                    ));
-                }
-                Effect::Inject(party, chemical.id, amount)
+                Effect::Inject(party, injectable(self.names.chemicals, name)?, amount)
             }
             &EffectEntry::Signal(party, ref name) => {
-                let locus = self
-                    .names
-                    .loci
-                    .iter()
-                    .find(|l| &l.name == name)
-                    .ok_or_else(|| format!("names the unknown locus `{name}`"))?;
-                if locus.kind != LocusKind::Pulse {
-                    return Err(format!("`Signal` can't target `{name}`: it isn't a pulse"));
-                }
-                Effect::Signal(party, locus.id)
+                Effect::Signal(party, signallable(self.names.loci, name)?)
             }
             &EffectEntry::Push(tiles) => Effect::Push(tiles),
         })
     }
 }
 
+/// The physical chemical called `name`, which an `Inject` may change: only
+/// physical chemicals are changed by things (design §3.5.2).
+pub(crate) fn injectable(chemicals: &[Chemical], name: &str) -> Result<ChemId, String> {
+    let chemical = chemicals
+        .iter()
+        .find(|c| c.name == name)
+        .ok_or_else(|| format!("names the unknown chemical `{name}`"))?;
+    if chemical.class != ChemicalClass::Physical {
+        return Err(format!(
+            "`Inject` can't target `{name}`: only physical chemicals are changed by objects"
+        ));
+    }
+    Ok(chemical.id)
+}
+
+/// The pulse locus called `name`, which a `Signal` may write (design §3.5.2).
+pub(crate) fn signallable(loci: &[Locus], name: &str) -> Result<LocusId, String> {
+    let locus = loci
+        .iter()
+        .find(|l| l.name == name)
+        .ok_or_else(|| format!("names the unknown locus `{name}`"))?;
+    if locus.kind != LocusKind::Pulse {
+        return Err(format!("`Signal` can't target `{name}`: it isn't a pulse"));
+    }
+    Ok(locus.id)
+}
+
 /// An effect's name as written in `objects.ron`.
-fn effect_name(effect: &EffectEntry) -> &'static str {
+pub(crate) fn effect_name(effect: &EffectEntry) -> &'static str {
     match effect {
         EffectEntry::AddCounter(..) => "AddCounter",
         EffectEntry::RequireCounter(..) => "RequireCounter",
