@@ -8,6 +8,9 @@ use terra_sim::{DataPack, DeathCause, LabRun, Verb, Window};
 /// The slice that tunes the default world to meet A4 (design §7.4).
 const A4_TUNING: &str = "#18";
 
+/// A scenario's seeds, each with its run, or what it said when it panicked.
+pub type SeedRuns = [(u64, Result<LabRun, String>)];
+
 /// How a criterion stands against its pass mark (design §7.6).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Verdict {
@@ -42,9 +45,9 @@ pub struct Report {
     /// How many sprites each seed of the viability run starts with.
     pub sprites: u64,
     pub viability: Viability,
-    pub a1: Lesson,
-    pub a2: Lesson,
-    pub a3: Lesson,
+    pub a1: Behaviour,
+    pub a2: Behaviour,
+    pub a3: Behaviour,
     pub broken: Vec<Broken>,
 }
 
@@ -162,17 +165,17 @@ impl Report {
         page.push_str("## A1–A3 (design §7.3; CI is their judge)\n\n");
         page.push_str("| | Median | Control's median | Pass mark | Verdict |\n");
         page.push_str("|---|---|---|---|---|\n");
-        for (what, _, mark, lesson) in self.lessons() {
+        for (what, _, mark, behaviour) in self.behaviours() {
             page.push_str(&format!(
                 "| {what} | {} | {} | {mark} | {} |\n",
-                number(lesson.median),
-                number(lesson.control_median),
-                lesson.verdict
+                number(behaviour.median),
+                number(behaviour.control_median),
+                behaviour.verdict
             ));
         }
         page.push('\n');
 
-        page.push_str("## Health, per seed (ticks 0–50,000)\n\n");
+        page.push_str("## Each seed (ticks 0–50,000)\n\n");
         let verbs: BTreeSet<&String> = v.seeds.iter().flat_map(|row| row.verbs.keys()).collect();
         page.push_str("| Seed | Alive | Deaths |");
         for verb in &verbs {
@@ -205,7 +208,7 @@ impl Report {
 
     /// A1–A3: what each counts, what its control lacks, its pass mark, and
     /// what it measured.
-    fn lessons(&self) -> [(&'static str, &'static str, &'static str, &Lesson); 3] {
+    fn behaviours(&self) -> [(&'static str, &'static str, &'static str, &Behaviour); 3] {
         [
             (
                 "A1: thornbush contacts",
@@ -250,11 +253,11 @@ impl Report {
                 number(v.thorn_trap.median),
             ),
         ];
-        for (what, control, _, lesson) in self.lessons() {
-            numbers.push((format!("{what}, median"), number(lesson.median)));
+        for (what, control, _, behaviour) in self.behaviours() {
+            numbers.push((format!("{what}, median"), number(behaviour.median)));
             numbers.push((
                 format!("{what} {control}, median"),
-                number(lesson.control_median),
+                number(behaviour.control_median),
             ));
         }
         for (seed, n) in &v.thorn_trap.per_seed {
@@ -320,7 +323,7 @@ pub struct Viability {
     pub seeds_with_deaths: usize,
     /// The thorn trap (design §7.3): deaths by thornbush over ticks 0–30,000.
     pub thorn_trap: Count,
-    /// The health table: a row for each seed that finished.
+    /// A row for each seed that finished: who survived, what killed the rest, and the verbs.
     pub seeds: Vec<SeedRow>,
 }
 
@@ -344,11 +347,7 @@ pub struct Count {
 
 /// The viability run's report, from each seed's run or the reason it broke.
 /// Every seed starts with `sprites` sprites.
-pub fn viability(
-    seeds: &[(u64, Result<LabRun, String>)],
-    sprites: u64,
-    data: &DataPack,
-) -> Viability {
+pub fn viability(seeds: &SeedRuns, sprites: u64, data: &DataPack) -> Viability {
     let finished: Vec<(u64, &LabRun)> = seeds
         .iter()
         .filter_map(|(seed, run)| Some((*seed, run.as_ref().ok()?)))
@@ -366,17 +365,17 @@ pub fn viability(
         .map(|(_, run)| &window(run, 50_000).deaths)
         .filter_map(|deaths| {
             let all: u64 = deaths.values().sum();
-            let starved: u64 = deaths
+            let hungry_or_thirsty: u64 = deaths
                 .iter()
                 .filter(|(cause, _)| {
                     matches!(cause, DeathCause::Starvation | DeathCause::Dehydration)
                 })
                 .map(|(_, n)| n)
                 .sum();
-            (all > 0).then(|| starved as f64 / all as f64)
+            (all > 0).then(|| hungry_or_thirsty as f64 / all as f64)
         })
         .collect();
-    let pricked: Vec<(u64, u64)> = finished
+    let thornbush_deaths: Vec<(u64, u64)> = finished
         .iter()
         .map(|(seed, run)| {
             let deaths = &window(run, 30_000).deaths;
@@ -391,7 +390,7 @@ pub fn viability(
             (*seed, by_thornbush)
         })
         .collect();
-    let counts: Vec<f64> = pricked.iter().map(|&(_, n)| n as f64).collect();
+    let counts: Vec<f64> = thornbush_deaths.iter().map(|&(_, n)| n as f64).collect();
     let rows = finished
         .iter()
         .map(|(seed, run)| {
@@ -419,15 +418,16 @@ pub fn viability(
         seeds_with_deaths: hunger_and_thirst.len(),
         thorn_trap: Count {
             median: median_of(&counts),
-            per_seed: pricked,
+            per_seed: thornbush_deaths,
         },
     }
 }
 
-/// One of A1–A3 (design §7.3): its runs' median, its controls', and the
-/// verdict CI's acceptance tests give on the same seeds.
+/// One of the behaviour scenarios A1–A3 (design §7.3): its runs' median,
+/// its controls', and its verdict, by the same pass marks and on the same
+/// seeds as CI's acceptance tests.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Lesson {
+pub struct Behaviour {
     pub median: Option<f64>,
     pub control_median: Option<f64>,
     pub verdict: Verdict,
@@ -435,7 +435,7 @@ pub struct Lesson {
 
 /// A1: thornbush contacts (Eat, Play and Hit) over the whole run, at most
 /// half the control's.
-pub fn a1(seeds: &[(u64, Result<LabRun, String>)], data: &DataPack) -> Lesson {
+pub fn a1(seeds: &SeedRuns, data: &DataPack) -> Behaviour {
     let contacts = |windows: &[Window]| {
         let verbs = [Verb::Eat, Verb::Play, Verb::Hit];
         windows
@@ -443,29 +443,29 @@ pub fn a1(seeds: &[(u64, Result<LabRun, String>)], data: &DataPack) -> Lesson {
             .flat_map(|w| verbs.map(|verb| w.applied_on(verb, "thornbush", data)))
             .sum()
     };
-    lesson(seeds, contacts, |run, control| run <= control / 2.0)
+    behaviour(seeds, contacts, |run, control| run <= control / 2.0)
 }
 
 /// A2: applied Plays on a ball after training, at least 1.5× the control's.
-pub fn a2(seeds: &[(u64, Result<LabRun, String>)], data: &DataPack) -> Lesson {
+pub fn a2(seeds: &SeedRuns, data: &DataPack) -> Behaviour {
     let plays = |windows: &[Window]| after_training(windows).applied_on(Verb::Play, "ball", data);
-    lesson(seeds, plays, |run, control| run >= 1.5 * control)
+    behaviour(seeds, plays, |run, control| run >= 1.5 * control)
 }
 
 /// A3: applied Hits on a sprite after training, at most half the control's.
-pub fn a3(seeds: &[(u64, Result<LabRun, String>)], data: &DataPack) -> Lesson {
+pub fn a3(seeds: &SeedRuns, data: &DataPack) -> Behaviour {
     let hits = |windows: &[Window]| after_training(windows).applied_on(Verb::Hit, "sprite", data);
-    lesson(seeds, hits, |run, control| run <= 0.5 * control)
+    behaviour(seeds, hits, |run, control| run <= 0.5 * control)
 }
 
-/// A lesson's medians of what `count` counts in each seed's windows, and
+/// A behaviour's medians of what `count` counts in each seed's windows, and
 /// whether they pass: `passes` given the run's and the control's, and a
 /// control of at least 20, or the scenario is badly calibrated (§7.3).
-fn lesson(
-    seeds: &[(u64, Result<LabRun, String>)],
+fn behaviour(
+    seeds: &SeedRuns,
     count: impl Fn(&[Window]) -> u64,
     passes: impl Fn(f64, f64) -> bool,
-) -> Lesson {
+) -> Behaviour {
     let finished: Vec<&LabRun> = seeds
         .iter()
         .filter_map(|(_, run)| run.as_ref().ok())
@@ -485,7 +485,7 @@ fn lesson(
         (Some(_), Some(_)) => Verdict::NotMet { until: None },
         _ => Verdict::NoData,
     };
-    Lesson {
+    Behaviour {
         median,
         control_median,
         verdict,
@@ -501,7 +501,7 @@ fn after_training(windows: &[Window]) -> &Window {
         .expect("A2 and A3 count ticks 10,000 to 20,000")
 }
 
-/// A seed that crashed or broke an invariant (design §7.6).
+/// A seed that panicked or broke an invariant (design §7.6).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Broken {
     /// The lab scenario, by the name of its file in `scenarios/`.
@@ -514,7 +514,7 @@ pub struct Broken {
 }
 
 /// The seeds of `scenario` that broke.
-pub fn broken(scenario: &str, seeds: &[(u64, Result<LabRun, String>)]) -> Vec<Broken> {
+pub fn broken(scenario: &str, seeds: &SeedRuns) -> Vec<Broken> {
     seeds
         .iter()
         .filter_map(|(seed, run)| {
@@ -636,7 +636,7 @@ mod tests {
     }
 
     /// A window over ticks `from` to `to` that counted `deaths`.
-    fn window(from: u64, to: u64, deaths: &[(DeathCause, u64)]) -> Window {
+    fn deaths_window(from: u64, to: u64, deaths: &[(DeathCause, u64)]) -> Window {
         Window {
             from,
             to,
@@ -656,9 +656,9 @@ mod tests {
     ) -> LabRun {
         LabRun {
             windows: vec![
-                window(0, 10_000, by_10k),
-                window(0, 30_000, by_30k),
-                window(0, 50_000, by_50k),
+                deaths_window(0, 10_000, by_10k),
+                deaths_window(0, 30_000, by_30k),
+                deaths_window(0, 50_000, by_50k),
             ],
             control: None,
             without: None,
@@ -764,9 +764,12 @@ mod tests {
         let thornbush = DeathCause::HurtBy(3);
         let seeds: Vec<_> = (1..=10)
             .zip([1, 2, 0, 3, 1, 2, 4, 0, 1, 2])
-            .map(|(seed, pricked)| {
-                let by_30k = [(thornbush, pricked), (DeathCause::Dehydration, 2)];
-                let by_50k = [(thornbush, pricked + 5), (DeathCause::Dehydration, 2)];
+            .map(|(seed, thornbush_deaths)| {
+                let by_30k = [(thornbush, thornbush_deaths), (DeathCause::Dehydration, 2)];
+                let by_50k = [
+                    (thornbush, thornbush_deaths + 5),
+                    (DeathCause::Dehydration, 2),
+                ];
                 (seed, Ok(viability_run(&[], &by_30k, &by_50k)))
             })
             .collect();
@@ -791,9 +794,10 @@ mod tests {
     }
 
     #[test]
-    fn a_seed_that_crashed_is_broken_with_how_to_replay_it_and_the_rest_are_still_reported() {
-        // Design §7.6: broken means a crash or a broken invariant, given with
-        // the seed, the tick (in the message) and the command that replays it.
+    fn a_seed_that_panicked_is_broken_with_how_to_replay_it_and_the_rest_are_still_reported() {
+        // Design §7.6: broken means a panic or a broken invariant, given with
+        // the seed, what it said (naming the tick, for a broken invariant)
+        // and the command that replays it.
         let message = "tick 4,312: no tile holds more than one object".to_string();
         let seeds = vec![
             (1, Ok(viability_run(&[], &[], &[]))),
@@ -817,7 +821,7 @@ mod tests {
     }
 
     #[test]
-    fn the_health_table_has_a_row_per_seed_of_who_survived_what_killed_the_rest_and_the_verbs() {
+    fn each_seed_has_a_row_of_who_survived_what_killed_the_rest_and_the_verbs() {
         // Design §7.6: per seed, who survived the 50,000 ticks, what killed
         // the rest, and how often each verb was applied, whatever its target.
         let data = data();
@@ -866,12 +870,12 @@ mod tests {
     fn applied(from: u64, to: u64, applied: &[((Verb, Option<u16>), u64)]) -> Window {
         Window {
             applied: applied.iter().copied().collect(),
-            ..window(from, to, &[])
+            ..deaths_window(from, to, &[])
         }
     }
 
-    /// Ten seeds of a lesson, each with the same run and control windows.
-    fn lesson_seeds(
+    /// Ten seeds of a behaviour, each with the same run and control windows.
+    fn behaviour_seeds(
         run: impl Fn() -> Vec<Window>,
         control: impl Fn() -> Vec<Window>,
     ) -> Vec<(u64, Result<LabRun, String>)> {
@@ -888,12 +892,12 @@ mod tests {
     }
 
     #[test]
-    fn a1_is_met_when_the_learner_touches_thornbushes_half_as_often_as_its_control() {
+    fn a1_is_met_when_the_learner_has_at_most_half_its_controls_thornbush_contacts() {
         // Design §7.3, A1: thornbush contacts (Eat, Play and Hit) over the
         // whole run ≤ 50% of the control's, which needs ≥20.
         let data = data();
         let thornbush = Some(3);
-        let touches = |eats, plays, hits| {
+        let contacts = |eats, plays, hits| {
             move || {
                 vec![
                     applied(
@@ -912,13 +916,22 @@ mod tests {
                 ]
             }
         };
-        let half = a1(&lesson_seeds(touches(10, 5, 5), touches(20, 10, 10)), &data);
+        let half = a1(
+            &behaviour_seeds(contacts(10, 5, 5), contacts(20, 10, 10)),
+            &data,
+        );
         assert_eq!((half.median, half.control_median), (Some(20.0), Some(40.0)));
         assert_eq!(half.verdict, Verdict::Met);
-        let more = a1(&lesson_seeds(touches(10, 5, 6), touches(20, 10, 10)), &data);
+        let more = a1(
+            &behaviour_seeds(contacts(10, 5, 6), contacts(20, 10, 10)),
+            &data,
+        );
         assert_eq!(more.verdict, Verdict::NotMet { until: None });
         // A control under 20 is badly calibrated, however few the learner's.
-        let thin = a1(&lesson_seeds(touches(0, 0, 0), touches(10, 5, 4)), &data);
+        let thin = a1(
+            &behaviour_seeds(contacts(0, 0, 0), contacts(10, 5, 4)),
+            &data,
+        );
         assert_eq!(thin.verdict, Verdict::NotMet { until: None });
     }
 
@@ -936,10 +949,10 @@ mod tests {
                 ]
             }
         };
-        let met = a2(&lesson_seeds(plays(0, 30), plays(500, 20)), &data);
+        let met = a2(&behaviour_seeds(plays(0, 30), plays(500, 20)), &data);
         assert_eq!((met.median, met.control_median), (Some(30.0), Some(20.0)));
         assert_eq!(met.verdict, Verdict::Met);
-        let short = a2(&lesson_seeds(plays(500, 29), plays(0, 20)), &data);
+        let short = a2(&behaviour_seeds(plays(500, 29), plays(0, 20)), &data);
         assert_eq!(short.verdict, Verdict::NotMet { until: None });
     }
 
@@ -957,10 +970,10 @@ mod tests {
                 ]
             }
         };
-        let met = a3(&lesson_seeds(hits(500, 10), hits(0, 20)), &data);
+        let met = a3(&behaviour_seeds(hits(500, 10), hits(0, 20)), &data);
         assert_eq!((met.median, met.control_median), (Some(10.0), Some(20.0)));
         assert_eq!(met.verdict, Verdict::Met);
-        let more = a3(&lesson_seeds(hits(0, 11), hits(0, 20)), &data);
+        let more = a3(&behaviour_seeds(hits(0, 11), hits(0, 20)), &data);
         assert_eq!(more.verdict, Verdict::NotMet { until: None });
     }
 
