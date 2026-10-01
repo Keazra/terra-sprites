@@ -1,6 +1,6 @@
 //! The baseline report (design §7.6): each criterion's numbers and verdict.
 
-use terra_sim::{DataPack, LabRun, Window};
+use terra_sim::{DataPack, DeathCause, LabRun, Window};
 
 /// The slice that tunes the default world to meet A4 (design §7.4).
 const A4_TUNING: &str = "#18";
@@ -28,6 +28,11 @@ pub struct Criterion {
 pub struct Viability {
     /// A4: the share of sprites alive at tick 10,000.
     pub survival: Criterion,
+    /// A4: starvation and dehydration's share of deaths over 50,000 ticks,
+    /// over the seeds where any sprite died.
+    pub hunger_and_thirst: Criterion,
+    /// How many seeds had a death in their 50,000 ticks.
+    pub seeds_with_deaths: usize,
 }
 
 /// The viability run's report, from each seed's run or the reason it broke.
@@ -48,17 +53,40 @@ pub fn viability(
             sprites.saturating_sub(died) as f64 / sprites as f64
         })
         .collect();
-    let median = median_of(&alive);
+    // A seed where no one died has no share of deaths (design §7.6).
+    let hunger_and_thirst: Vec<f64> = finished
+        .iter()
+        .map(|run| &window(run, 50_000).deaths)
+        .filter_map(|deaths| {
+            let all: u64 = deaths.values().sum();
+            let starved: u64 = deaths
+                .iter()
+                .filter(|(cause, _)| {
+                    matches!(cause, DeathCause::Starvation | DeathCause::Dehydration)
+                })
+                .map(|(_, n)| n)
+                .sum();
+            (all > 0).then(|| starved as f64 / all as f64)
+        })
+        .collect();
+    Viability {
+        survival: a4(median_of(&alive), |share| share >= 0.8),
+        hunger_and_thirst: a4(median_of(&hunger_and_thirst), |share| share < 0.25),
+        seeds_with_deaths: hunger_and_thirst.len(),
+    }
+}
+
+/// One of A4's halves: its median, met when it `passes`, and otherwise
+/// not met until slice 17 is done.
+fn a4(median: Option<f64>, passes: impl Fn(f64) -> bool) -> Criterion {
     let verdict = match median {
         None => Verdict::NoData,
-        Some(share) if share >= 0.8 => Verdict::Met,
+        Some(share) if passes(share) => Verdict::Met,
         Some(_) => Verdict::NotMet {
             until: Some(A4_TUNING.into()),
         },
     };
-    Viability {
-        survival: Criterion { median, verdict },
-    }
+    Criterion { median, verdict }
 }
 
 /// The run's window over ticks 0 to `to`, as `scenarios/viability.ron` sets them.
@@ -153,5 +181,69 @@ mod tests {
                 until: Some("#18".into())
             }
         );
+    }
+
+    /// Ten seeds whose first 50,000 ticks saw these deaths, by seed.
+    fn seeds_dying(deaths: [&[(DeathCause, u64)]; 10]) -> Vec<(u64, Result<LabRun, String>)> {
+        (1..=10)
+            .zip(deaths)
+            .map(|(seed, deaths)| (seed, Ok(viability_run(&[], &[], deaths))))
+            .collect()
+    }
+
+    #[test]
+    fn a4_hunger_and_thirst_share_is_the_median_over_the_seeds_where_sprites_died() {
+        // Design §7.4, A4: starvation plus dehydration cause <25% of deaths
+        // over the first 50,000 ticks. A seed where no one died has no share
+        // (design §7.6), so five seeds give the median.
+        use DeathCause::{Dehydration, OldAge, Starvation};
+        let viability = viability(
+            &seeds_dying([
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[(Dehydration, 1)],              // 100%
+                &[(Dehydration, 2)],              // 100%
+                &[(Starvation, 1), (OldAge, 3)],  // 25%
+                &[(OldAge, 4)],                   // 0%
+                &[(Dehydration, 1), (OldAge, 1)], // 50%
+            ]),
+            30,
+            &data(),
+        );
+        assert_eq!(viability.hunger_and_thirst.median, Some(0.5));
+        assert_eq!(viability.seeds_with_deaths, 5);
+        assert_eq!(
+            viability.hunger_and_thirst.verdict,
+            Verdict::NotMet {
+                until: Some("#18".into())
+            }
+        );
+    }
+
+    #[test]
+    fn a4_hunger_and_thirst_share_is_met_only_under_a_quarter() {
+        use DeathCause::{OldAge, Starvation};
+        let quarter: &[(DeathCause, u64)] = &[(Starvation, 1), (OldAge, 3)];
+        let at_a_quarter = viability(&seeds_dying([quarter; 10]), 30, &data());
+        assert_eq!(
+            at_a_quarter.hunger_and_thirst.verdict,
+            Verdict::NotMet {
+                until: Some("#18".into())
+            }
+        );
+        let under: &[(DeathCause, u64)] = &[(Starvation, 1), (OldAge, 4)];
+        let under_a_quarter = viability(&seeds_dying([under; 10]), 30, &data());
+        assert_eq!(under_a_quarter.hunger_and_thirst.verdict, Verdict::Met);
+    }
+
+    #[test]
+    fn a4_hunger_and_thirst_share_has_no_data_when_no_sprite_died() {
+        let viability = viability(&seeds_dying([&[]; 10]), 30, &data());
+        assert_eq!(viability.hunger_and_thirst.median, None);
+        assert_eq!(viability.hunger_and_thirst.verdict, Verdict::NoData);
+        assert_eq!(viability.seeds_with_deaths, 0);
     }
 }
