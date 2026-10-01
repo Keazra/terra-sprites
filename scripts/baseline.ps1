@@ -7,13 +7,17 @@
 #
 # Everything with an effect is done here. The observer (Gemini, through the
 # Antigravity CLI) runs without --dangerously-skip-permissions: it reads, and
-# answers with its briefing as structured output. Only a broken run (a crash
+# answers with its briefing as structured output. Only a broken run (a panic
 # or a broken invariant) files an issue, or comments on the open one.
 #
 #   -Force     measure even if main hasn't moved
 #   -Seeds N   fewer seeds, for trying it out (the report says how many)
 #   -DryRun    print the issue it would file or comment, instead of posting it
 #   -Ref R     measure R instead of GitHub's main, for trying out a branch
+#
+# A trial (-Ref, or fewer seeds than 10) is compared with main's last report
+# but saved in docs/reports/trials/, never becomes main's baseline, and never
+# posts: its issues are only printed.
 
 param(
     [string]$Model = "gemini-3.8-flash-high",
@@ -85,7 +89,12 @@ Found by the baseline run on ``main`` at $Commit, $Measured (design section 7.6)
 "@
     $bodyFile = Join-Path $env:TEMP "baseline-broken-$Commit.md"
     Write-Text $bodyFile $body
+    # One open issue at a time: a later broken run comments on it.
     $open = & gh issue list --repo $GitHubRepo --state open --search "Baseline run broken in:title" --json number --jq ".[0].number"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Log "ERROR: couldn't look for an open issue on GitHub, so none was filed or commented on"
+        return
+    }
     if ($open) {
         if ($DryRun) { Write-Host "Would comment on #${open}:`n$body"; return }
         & gh issue comment $open --repo $GitHubRepo --body-file $bodyFile | Out-Null
@@ -94,7 +103,7 @@ Found by the baseline run on ``main`` at $Commit, $Measured (design section 7.6)
     }
     $title = "Baseline run broken at $Commit"
     $plain = @"
-**In plain terms:** the nightly measurement of ``main`` crashed, or caught the world breaking one of its own rules, on commit $Commit. The Broken section says which scenario and seed, and the tick, and gives the command that replays it exactly.
+**In plain terms:** the baseline run of ``main`` panicked, or caught the world breaking one of its own rules, on commit $Commit. The Broken section says which scenario and seed, what it said (which names the tick, for a broken rule), and gives the command that replays it exactly.
 
 **Caveat:** the observer's guess at the cause comes from reading the code, not from running it, so treat it as a lead rather than a diagnosis.
 "@
@@ -102,12 +111,22 @@ Found by the baseline run on ``main`` at $Commit, $Measured (design section 7.6)
     Write-Text $plainFile $plain
     if ($DryRun) { Write-Host "Would file: $title (afk)`n$body`nThen comment:`n$plain"; return }
     $url = & gh issue create --repo $GitHubRepo --title $title --label afk --body-file $bodyFile
+    if ($LASTEXITCODE -ne 0 -or -not $url) {
+        Write-Log "ERROR: couldn't file the issue on GitHub"
+        return
+    }
     & gh issue comment $url --repo $GitHubRepo --body-file $plainFile | Out-Null
     Write-Log "Filed $url"
 }
 
 function Invoke-Baseline {
     New-Item -ItemType Directory -Force -Path $Reports | Out-Null
+    $trial = ($Ref -ne "origin/main") -or ($Seeds -ne 10)
+    $out = $Reports
+    if ($trial) {
+        $out = Join-Path $Reports "trials"
+        New-Item -ItemType Directory -Force -Path $out | Out-Null
+    }
 
     # 1. GitHub's main, and whether it has moved.
     & git -C $Repo fetch --quiet origin main
@@ -115,7 +134,7 @@ function Invoke-Baseline {
     $commit = (& git -C $Repo rev-parse --short $Ref).Trim()
     $previous = $null
     if (Test-Path $LastCommit) { $previous = (Read-Text $LastCommit).Trim() }
-    if ($previous -eq $commit -and -not $Force) {
+    if ($previous -eq $commit -and -not $Force -and -not $trial) {
         Write-Log "main is still at ${commit}: nothing to measure"
         return 0
     }
@@ -134,22 +153,25 @@ function Invoke-Baseline {
     $measured = Get-Date -Format "yyyy-MM-dd HH:mm"
     $stem = "$($measured.Substring(0, 10))-$commit"
     $arguments = "run --quiet --profile baseline -p terra-sim --example baseline -- " +
-        "--commit $commit --measured `"$measured`" --out `"$Reports`" --seeds $Seeds"
+        "--commit $commit --measured `"$measured`" --out `"$out`" --seeds $Seeds"
     $previousReport = $null
     if ($previous) {
         $previousReport = Get-ChildItem -Path $Reports -Filter "*-$previous-report.ron" |
             Sort-Object LastWriteTime -Descending | Select-Object -First 1
     }
     if ($previousReport) { $arguments += " --previous `"$($previousReport.FullName)`"" }
-    Write-Log "Measuring main at $commit$(if ($previousReport) { ", against $previous" })..."
-    $code = Invoke-Logged "cargo" $arguments $Worktree (Join-Path $Reports "$stem-run.log") `
-        (Join-Path $Reports "$stem-run-errors.log") 180
+    $what = "main"
+    if ($trial) { $what = "a trial of $Ref" }
+    Write-Log "Measuring $what at $commit$(if ($previousReport) { ", against $previous" })..."
+    $code = Invoke-Logged "cargo" $arguments $Worktree (Join-Path $out "$stem-run.log") `
+        (Join-Path $out "$stem-run-errors.log") 180
     if ($code -ne 0 -and $code -ne 2) {
         Write-Log "ERROR: the baseline run failed (exit $code); see $stem-run-errors.log"
         return 1
     }
-    $page = Read-Text (Join-Path $Reports "$stem-report.md")
-    Write-Text $LastCommit $commit
+    $isBroken = $code -eq 2
+    $page = Read-Text (Join-Path $out "$stem-report.md")
+    if (-not $trial) { Write-Text $LastCommit $commit }
 
     # 4. What the observer reads, inside its workspace: the reports, and the
     # commits since the last one with the files each changed.
@@ -169,7 +191,7 @@ function Invoke-Baseline {
     # 5. The observer. The prompt has no double quotes, so it can go on the
     # command line in quotes of its own.
     $prompt = @"
-You are the observer for Terra Sprites, an artificial-life simulation in Rust. You are in a clean checkout of main at commit $commit.
+You are the observer for Terra Sprites, an artificial-life simulation in Rust. You are in a clean checkout of $(if ($trial) { $Ref } else { "main" }) at commit $commit.
 Everything you need is in the .baseline folder: report.md is today's baseline report, previous.md the last one (if there was one), and commits.txt the commits since then, with the files each changed.
 Rules:
 - You cannot run commands: read files only. You may read any file in this checkout: the code, the design (the highest-numbered file in docs/design is the spec, and its section 7 has the pass marks) and CONTEXT.md (the project's words, which you should use).
@@ -183,14 +205,16 @@ If the report has a Broken section, put your best guess at its cause in suspecte
 "@
     $agy = (Get-Command agy.exe -ErrorAction SilentlyContinue).Source
     if (-not $agy) { $agy = Join-Path $env:LOCALAPPDATA "agy\bin\agy.exe" }
-    $briefing = Join-Path $Reports "$stem-briefing.md"
+    $briefing = Join-Path $out "$stem-briefing.md"
     $suspected = $null
     if (Test-Path $agy) {
-        $answer = Join-Path $Reports "$stem-observer.json"
-        $arguments = "--model $Model --effort high --output-format json --json-schema .baseline/schema.json " +
-            "--print-timeout 30m --print `"$prompt`""
+        $answer = Join-Path $out "$stem-observer.json"
+        # Headless, it may read only what's in its workspace, which --add-dir
+        # makes the worktree.
+        $arguments = "--model $Model --effort high --add-dir . --output-format json " +
+            "--json-schema .baseline/schema.json --print-timeout 30m --print `"$prompt`""
         Write-Log "The observer ($Model) is reading the report..."
-        $code = Invoke-Logged $agy $arguments $Worktree $answer (Join-Path $Reports "$stem-observer-errors.log") 40
+        $code = Invoke-Logged $agy $arguments $Worktree $answer (Join-Path $out "$stem-observer-errors.log") 40
         try {
             $result = (Read-Text $answer | ConvertFrom-Json).structured_output
             if (-not $result.briefing) { throw "no briefing in the answer" }
@@ -204,12 +228,14 @@ If the report has a Broken section, put your best guess at its cause in suspecte
         Write-Log "No observer: agy.exe isn't installed, so there's no briefing"
     }
 
-    # 6. A broken run files an issue, or comments on the open one.
-    $broken = Get-BrokenSection $page
-    if ($broken) {
-        Send-Broken -Commit $commit -Measured $measured -Broken $broken -Suspected $suspected -DryRun:$DryRun
+    # 6. A broken run (the program says so with exit code 2) files an issue,
+    # or comments on the open one. A trial only prints it.
+    if ($isBroken) {
+        $broken = Get-BrokenSection $page
+        if (-not $broken) { $broken = "The run broke, but its page has no Broken section: see $stem-report.md." }
+        Send-Broken -Commit $commit -Measured $measured -Broken $broken -Suspected $suspected -DryRun:($DryRun -or $trial)
     }
-    Write-Log "Done: $stem-report.md$(if ($broken) { ' (BROKEN)' })"
+    Write-Log "Done: $stem-report.md$(if ($isBroken) { ' (BROKEN)' })"
     return 0
 }
 
