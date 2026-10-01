@@ -11,7 +11,7 @@ use crate::data::{DataError, check_unique};
 use crate::registry::{
     CategoryId, ChemId, Chemical, ChemicalClass, Locus, LocusId, LocusKind, Verb,
 };
-use crate::tags::{FIXTURE, SOLID, Tag};
+use crate::tags::{FIXTURE, SOLID, Tag, is_built_in};
 
 /// The object types file, relative to the pack root.
 pub(crate) const OBJECTS: &str = "objects.ron";
@@ -364,7 +364,7 @@ impl TypeEntry {
         let tags = self
             .tags
             .iter()
-            .filter(|TagName(name)| name != SOLID && name != FIXTURE)
+            .filter(|TagName(name)| !is_built_in(name))
             .map(|TagName(name)| names.tag(name))
             .collect::<Result<Vec<_>, _>>()?;
         match (solid, fixture) {

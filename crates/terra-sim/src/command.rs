@@ -330,12 +330,9 @@ fn throw(
     tiles: u16,
 ) -> Result<EventKind, Rejection> {
     let (item, object_type) = let_go_of_held(state, data, from)?;
-    let furthest = furthest(state, data, Target::Object(item));
+    let left = sent(state, data, Target::Object(item), tiles);
     let thrown = state.objects.get_mut(item).expect("the thrown item");
-    thrown.roll = Some(Roll {
-        dir: toward,
-        left: tiles.max(1).min(furthest),
-    });
+    thrown.roll = Some(Roll { dir: toward, left });
     Ok(EventKind::Threw { item, object_type })
 }
 
@@ -349,15 +346,19 @@ fn shove(
     tiles: u16,
 ) -> Result<EventKind, Rejection> {
     let sprite = state.cursor.leads().ok_or(Rejection::NotLeading)?;
-    let furthest = furthest(state, data, Target::Sprite(sprite));
+    let left = sent(state, data, Target::Sprite(sprite), tiles);
     state.cursor.release();
     let shoved = state.sprites.get_mut(sprite).expect("the led sprite");
     shoved.lead = None;
-    shoved.slide = Some(Slide {
-        dir: toward,
-        left: tiles.max(1).min(furthest),
-    });
+    shoved.slide = Some(Slide { dir: toward, left });
     Ok(EventKind::Shoved { sprite })
+}
+
+/// How far a throw or a shove asked to send `thing` `tiles` tiles sends it:
+/// at least 1, and at most the furthest for its size (design v25 §2.5).
+fn sent(state: &WorldState, data: &DataPack, thing: Target, tiles: u16) -> u16 {
+    // The pack guarantees the furthest is at least 1.
+    tiles.clamp(1, furthest(state, data, thing))
 }
 
 /// The furthest the Cursor throws or shoves `thing`, by its size (design

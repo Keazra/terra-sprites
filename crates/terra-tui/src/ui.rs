@@ -480,8 +480,8 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
             let room = width.saturating_sub(tile.chars().count() + 3);
             // While the player aims, how to send it or not (design v25 §6.1).
             let hints = match (app.aiming(), app.grip(world)) {
-                (true, Some(Grip::Holds(_))) => within(room, "let go to throw  esc cancel"),
-                (true, Some(Grip::Leads(_))) => within(room, "let go to shove  esc cancel"),
+                (true, Some(Grip::Holds(_))) => hint_if_fits(room, "let go to throw  esc cancel"),
+                (true, Some(Grip::Leads(_))) => hint_if_fits(room, "let go to shove  esc cancel"),
                 _ => hints_within(room),
             };
             (tile, hints)
@@ -495,7 +495,7 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
 }
 
 /// `hint`, if it fits in `room` columns, or nothing.
-fn within(room: usize, hint: &str) -> String {
+fn hint_if_fits(room: usize, hint: &str) -> String {
     if hint.chars().count() <= room {
         hint.into()
     } else {

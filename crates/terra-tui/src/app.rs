@@ -234,10 +234,9 @@ pub struct App {
     led: Option<(EntityId, Pos)>,
     /// While the player aims a throw or a shove (design v25 §6.5).
     aim: Option<Aim>,
-    /// While the selected sprite slides from a shove, what it crashed into
-    /// and whether that hurt, once it has: its observed line waits for the
-    /// slide to end (design v25 §6.1).
-    sliding: Option<(EntityId, Option<(Thing, bool)>)>,
+    /// While the selected sprite slides from a shove: its observed line
+    /// waits for the slide to end (design v25 §6.1).
+    shoved: Option<Shoved>,
     /// When, in `running_for`, a click last sent a command (design v22 §6.5).
     sent_at: Option<Duration>,
     /// The world's latest report on a command, and when it began to show.
@@ -245,6 +244,23 @@ pub struct App {
     /// Why the player's latest click was refused, which the status line
     /// says in the key hints' place, and since when (design v22 §6.1).
     refusal: Option<(String, Duration)>,
+}
+
+/// A shove of the selected sprite, which its observed list tells of once
+/// the slide ends (design v25 §6.1).
+#[derive(Debug, Clone)]
+struct Shoved {
+    sprite: EntityId,
+    /// What it crashed into, once it has.
+    crash: Option<Crash>,
+}
+
+/// What a sliding sprite crashed into, and whether that hurt it (design v25
+/// §3.5.4).
+#[derive(Debug, Clone)]
+struct Crash {
+    into: Thing,
+    hurt: bool,
 }
 
 /// A throw or a shove being aimed (design v25 §6.5).
@@ -314,7 +330,7 @@ impl App {
             told_tile: None,
             led: None,
             aim: None,
-            sliding: None,
+            shoved: None,
             sent_at: None,
             report: None,
             refusal: None,
@@ -358,13 +374,19 @@ impl App {
                 EventKind::Shoved { sprite }
                     if self.selection == Some(Selection::Living(*sprite)) =>
                 {
-                    self.sliding = Some((*sprite, None));
+                    self.shoved = Some(Shoved {
+                        sprite: *sprite,
+                        crash: None,
+                    });
                 }
                 EventKind::Crashed { sprite, into, hurt } => {
-                    if let Some((slider, crash)) = &mut self.sliding
-                        && slider == sprite
+                    if let Some(shoved) = &mut self.shoved
+                        && shoved.sprite == *sprite
                     {
-                        *crash = Some((into.clone(), *hurt));
+                        shoved.crash = Some(Crash {
+                            into: into.clone(),
+                            hurt: *hurt,
+                        });
                     }
                 }
                 _ => {}
@@ -522,22 +544,23 @@ impl App {
     /// the shove: "Was shoved out of nowhere", and what it crashed into, and
     /// whether that hurt (design v25 §6.1).
     fn note_slide_ended(&mut self, world: &World) {
-        let Some((id, crash)) = self.sliding.take() else {
+        let Some(shoved) = self.shoved.take() else {
             return;
         };
+        let id = shoved.sprite;
         if world
             .sprite(id)
             .is_some_and(|sprite| sprite.slide().is_some())
         {
-            self.sliding = Some((id, crash));
+            self.shoved = Some(shoved);
             return;
         }
         if self.selection != Some(Selection::Living(id)) {
             return;
         }
-        let line = match crash {
+        let line = match shoved.crash {
             None => "Was shoved out of nowhere".to_string(),
-            Some((into, hurt)) => {
+            Some(Crash { into, hurt }) => {
                 let hurt = if hurt { ", and got hurt" } else { "" };
                 let into = inspector::crashed_into(&into);
                 format!("Was shoved out of nowhere, into {into}{hurt}")
@@ -1040,19 +1063,13 @@ impl App {
         let Some(mut at) = start else {
             return Vec::new();
         };
-        let (dx, dy) = toward.offset();
         let mut line = Vec::new();
         for _ in 0..tiles.min(world.furthest(grip)) {
-            let next =
-                at.x.checked_add_signed(dx as i16)
-                    .zip(at.y.checked_add_signed(dy as i16));
-            match next {
-                Some((x, y)) if x < self.map_size.width && y < self.map_size.height => {
-                    at = Pos { x, y };
-                    line.push(at);
-                }
-                _ => break,
+            match world.map().neighbour(at, toward) {
+                Some(next) => at = next,
+                None => break,
             }
+            line.push(at);
         }
         line
     }
