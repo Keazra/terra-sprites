@@ -14,3 +14,10 @@ opt-level = 1
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
+
+# Baseline runs (design §7.6): optimised, with the self-check after every tick
+# left on, so a broken invariant stops a seed naming the tick, as in tests.
+[profile.baseline]
+inherits = "release"
+debug-assertions = true
+overflow-checks = true

@@ -17,3 +17,8 @@ workspace = true
 
 [dev-dependencies]
 proptest = "1.11.0"
+
+# The baseline program's report is tested with everything else (design §7.6).
+[[example]]
+name = "baseline"
+test = true
