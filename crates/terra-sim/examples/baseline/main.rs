@@ -239,6 +239,7 @@ mod tests {
 
     fn report() -> Report {
         let none = || Behaviour {
+            finished: 0,
             median: None,
             control_median: None,
             verdict: Verdict::NoData,

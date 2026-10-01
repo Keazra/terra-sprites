@@ -123,6 +123,12 @@ impl Report {
 
         let v = &self.viability;
         page.push_str("## A4: viability (design §7.4)\n\n");
+        if (v.finished as u64) < self.seeds {
+            page.push_str(&format!(
+                "Over the {} of {} seeds that finished.\n\n",
+                v.finished, self.seeds
+            ));
+        }
         page.push_str("| | Median | Pass mark | Verdict |\n|---|---|---|---|\n");
         page.push_str(&format!(
             "| Alive at tick 10,000 | {} | at least 80% | {} |\n",
@@ -166,9 +172,15 @@ impl Report {
         page.push_str("| | Median | Control's median | Pass mark | Verdict |\n");
         page.push_str("|---|---|---|---|---|\n");
         for (what, _, mark, behaviour) in self.behaviours() {
+            let mut median = number(behaviour.median);
+            if behaviour.finished > 0 && (behaviour.finished as u64) < self.seeds {
+                median.push_str(&format!(
+                    ", over {} of {} seeds",
+                    behaviour.finished, self.seeds
+                ));
+            }
             page.push_str(&format!(
-                "| {what} | {} | {} | {mark} | {} |\n",
-                number(behaviour.median),
+                "| {what} | {median} | {} | {mark} | {} |\n",
                 number(behaviour.control_median),
                 behaviour.verdict
             ));
@@ -314,6 +326,8 @@ pub fn moved(previous: &Report, current: &Report) -> Vec<Moved> {
 /// What the viability run measured (design §7.6).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Viability {
+    /// How many seeds finished; the medians are theirs.
+    pub finished: usize,
     /// A4: the share of sprites alive at tick 10,000.
     pub survival: Criterion,
     /// A4: starvation and dehydration's share of deaths over 50,000 ticks,
@@ -412,6 +426,7 @@ pub fn viability(seeds: &SeedRuns, sprites: u64, data: &DataPack) -> Viability {
         })
         .collect();
     Viability {
+        finished: finished.len(),
         seeds: rows,
         survival: a4(median_of(&alive), |share| share >= 0.8),
         hunger_and_thirst: a4(median_of(&hunger_and_thirst), |share| share < 0.25),
@@ -428,6 +443,8 @@ pub fn viability(seeds: &SeedRuns, sprites: u64, data: &DataPack) -> Viability {
 /// seeds as CI's acceptance tests.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Behaviour {
+    /// How many seeds finished; the medians are theirs.
+    pub finished: usize,
     pub median: Option<f64>,
     pub control_median: Option<f64>,
     pub verdict: Verdict,
@@ -443,7 +460,17 @@ pub fn a1(seeds: &SeedRuns, data: &DataPack) -> Behaviour {
             .flat_map(|w| verbs.map(|verb| w.applied_on(verb, "thornbush", data)))
             .sum()
     };
-    behaviour(seeds, contacts, |run, control| run <= control / 2.0)
+    let mut a1 = behaviour(seeds, contacts, |run, control| run <= control / 2.0);
+    // A dead learner touches no thornbushes, which would pass hollowly, so
+    // CI fails A1 when one dies (§7.3).
+    let died = seeds
+        .iter()
+        .filter_map(|(_, run)| run.as_ref().ok())
+        .any(|run| run.windows.iter().any(|w| !w.deaths.is_empty()));
+    if died {
+        a1.verdict = Verdict::NotMet { until: None };
+    }
+    a1
 }
 
 /// A2: applied Plays on a ball after training, at least 1.5× the control's.
@@ -480,12 +507,17 @@ fn behaviour(
         .map(|windows| count(windows) as f64)
         .collect();
     let (median, control_median) = (median_of(&runs), median_of(&controls));
+    // CI's tests panic on a broken seed, so a scenario with one isn't met.
+    let all_finished = finished.len() == seeds.len();
     let verdict = match (median, control_median) {
-        (Some(run), Some(control)) if control >= 20.0 && passes(run, control) => Verdict::Met,
+        (Some(run), Some(control)) if all_finished && control >= 20.0 && passes(run, control) => {
+            Verdict::Met
+        }
         (Some(_), Some(_)) => Verdict::NotMet { until: None },
         _ => Verdict::NoData,
     };
     Behaviour {
+        finished: finished.len(),
         median,
         control_median,
         verdict,
@@ -1124,5 +1156,58 @@ mod tests {
         report.compared_with = Some("def5678".into());
         report.broken = broken("viability", &[(4, Err("tick 9: \"quoted\"".into()))]);
         assert_eq!(Report::from_ron(&report.to_ron()), Ok(report));
+    }
+
+    /// Ten seeds of A1 that would meet it: half the control's contacts.
+    fn a1_met() -> Vec<(u64, Result<LabRun, String>)> {
+        let contacts = |eats| move || vec![applied(0, 20_000, &[((Verb::Eat, Some(3)), eats)])];
+        behaviour_seeds(contacts(10), contacts(20))
+    }
+
+    #[test]
+    fn a1_is_not_met_when_a_learner_died_as_ci_fails_it() {
+        // acceptance.rs: a dead sprite touches no thornbushes, which would
+        // pass hollowly, so CI fails A1 when the learner dies.
+        let data = data();
+        assert_eq!(a1(&a1_met(), &data).verdict, Verdict::Met);
+        let mut seeds = a1_met();
+        if let (_, Ok(run)) = &mut seeds[3] {
+            run.windows[0].deaths.insert(DeathCause::HurtBy(3), 1);
+        }
+        assert_eq!(a1(&seeds, &data).verdict, Verdict::NotMet { until: None });
+    }
+
+    #[test]
+    fn a_behaviour_scenario_with_a_broken_seed_is_not_met_as_ci_fails_it() {
+        // CI's acceptance tests panic on a broken seed, so the report can't
+        // call the scenario met on the seeds that finished.
+        let mut seeds = a1_met();
+        seeds[9].1 = Err("tick 3: IDs only go up".into());
+        let a1 = a1(&seeds, &data());
+        assert_eq!(a1.verdict, Verdict::NotMet { until: None });
+        assert_eq!(a1.finished, 9);
+    }
+
+    #[test]
+    fn the_page_says_how_many_seeds_its_medians_cover_when_some_broke() {
+        let data = data();
+        let mut seeds = seeds_dying([&[]; 10]);
+        seeds[9].1 = Err("tick 3: IDs only go up".into());
+        let mut report = sample();
+        report.viability = viability(&seeds, 30, &data);
+        let mut a1_seeds = a1_met();
+        a1_seeds[9].1 = Err("tick 3: IDs only go up".into());
+        report.a1 = a1(&a1_seeds, &data);
+        let page = report.markdown(None);
+        assert!(
+            page.contains(
+                "## A4: viability (design §7.4)\n\nOver the 9 of 10 seeds that finished.\n"
+            ),
+            "{page}"
+        );
+        assert!(
+            page.contains("| A1: thornbush contacts | 10, over 9 of 10 seeds | 20 |"),
+            "{page}"
+        );
     }
 }
