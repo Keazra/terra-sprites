@@ -9,13 +9,13 @@
 
 ## Changes from v23
 
-Baseline runs ([#94](https://github.com/Keazra/terra-sprites/issues/94)), settled with the owner in a `/grill-with-docs` session. They replace a daily soak report that ran too briefly for any sprite to die, gave the same numbers every day for the same code, and didn't say which commit it had measured. New terms in [`CONTEXT.md`](../../CONTEXT.md): viability run, soak, baseline run, baseline report, briefing, observer.
+Baseline runs ([#94](https://github.com/Keazra/terra-sprites/issues/94)), settled with the owner in a `/grill-with-docs` session. They replace a daily soak report that ran too briefly for any sprite to die, gave the same numbers every day for the same code, and didn't say which commit it had measured. New terms in [`CONTEXT.md`](../../CONTEXT.md): viability run, soak, baseline run, baseline report, broken, briefing, observer.
 
 | # | Change | Source | Sections |
 |---|---|---|---|
 | 1 | **Baseline runs.** Each time `main` moves, a baseline run measures what's too slow for CI: A4's viability run, the thorn trap and, once slice 17 ([#18](https://github.com/Keazra/terra-sprites/issues/18)) builds it, A7's soak. It also records A1–A3's numbers, though CI stays their judge. Its report leads with what moved since the last commit it measured. It runs on the development machine, outside CI. | Owner decision: measure the slow criteria, say what changed, and give a health check | §2.1, §7.3, §7.4, §7.6 |
 | 2 | **Fixed seeds, except the soak's.** The viability run and A1–A3 use seeds 1–10, so a number moves only when the code or the data does. A viability run on seeds 1–10 contains the thorn trap as its first 30,000 ticks. The soak gets a new seed each run, recorded in the report, because a robustness test finds more by exploring. | Owner decision (recommendation accepted) | §7.6 |
-| 3 | **"Not met yet" isn't "broken".** Each criterion in the report is met, not met yet or no data, against this document's pass marks exactly. A share of no deaths is no data, not a pass. "Broken" means only a crash or a broken invariant, and only a broken run files an issue. | Owner decision (recommendation accepted) | §7.6 |
+| 3 | **"Not met yet" isn't "broken".** Each criterion in the report is met, not met yet or no data, against this document's pass marks exactly. A share of no deaths is no data, not a pass. "Broken" means only a panic or a broken invariant, and only a broken run files an issue. A1–A3 are judged as CI judges them, so a seed that panics, or a learner that dies in A1, means not met. | Owner decision (recommendation accepted) | §7.6 |
 | 4 | **The observer.** An AI agent reads each baseline report and the code and commits behind it, and writes a plain-language briefing. It changes nothing and posts nothing; the launcher does everything that has an effect. | Owner decision (recommendation accepted), after finding the old observer ran with every permission check switched off | §7.6 |
 | 5 | **"Soak" means A7's run only.** The quiet default-world run that measures A4 is a viability run. | Owner decision (recommendation accepted) | §7.4, §7.6 |
 
@@ -111,7 +111,7 @@ terra-sprites/
 ├─ crates/
 │  ├─ terra-sim/              library: the whole simulation. No terminal, no file or network I/O.
 │  │  ├─ examples/lab.rs      headless scenario runner (tests + tuning)
-│  │  └─ examples/baseline.rs baseline runs on `main` (§7.6)
+│  │  └─ examples/baseline/   baseline runs on `main` (§7.6)
 │  └─ terra-tui/              binary `terra-sprites`: ratatui + crossterm front end
 ├─ data/                      default data pack (RON), embedded in the binary
 │  ├─ pack.ron                pack name + version
@@ -1680,7 +1680,7 @@ What's too slow for CI is measured on `main` instead, each time it moves, by a *
   - **The soak (A7),** once slice 17 ([#18](https://github.com/Keazra/terra-sprites/issues/18)) builds it: a million ticks with a random script of the Cursor's commands, on a new seed each run.
 - **The baseline report** names the commit it measured and the one it's compared with, and opens with every number that moved.
   - Each criterion is **met**, **not met yet** or **no data**, against §7.3 and §7.4's pass marks exactly, so a share of no deaths is no data. A criterion that a tuning slice hasn't yet reached names that slice.
-  - **Broken** means only a crash or a broken invariant. It's given with the seed, the tick and the command that replays it, and a crashing seed still gets its report.
+  - **Broken** means only a panic or a broken invariant (a crash is a shoved sprite's, §3.5.4). It's given with the seed, what it said, which names the tick for a broken invariant, and the command that replays it. The seeds that finished are still reported, and a median over fewer seeds than ran says so.
 - **The observer,** an AI agent, reads the report, the code and the commits since the last one, and writes the **briefing**. The briefing gives, in this order: in plain words, what was tested and what changed; the numbers that moved and what might explain them; anything that looks wrong, and how sure it is. The observer changes nothing and posts nothing. The launcher does everything that has an effect, and files an issue, or comments on an open one, only for a broken run.
 - **Open:** A4's share of deaths means little when few sprites die. At v23, 5 of 300 sprites died in 50,000 ticks, and five of the ten seeds had no deaths, so a median of their shares has no value. Its wording is for slice 17 to settle, alongside the tuning.
 

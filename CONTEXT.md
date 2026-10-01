@@ -552,6 +552,10 @@ _Avoid_: daily report, nightly soak, health check
 **Baseline report**:
 A baseline run's numbers, for one commit.
 
+**Broken**:
+What a baseline report calls a seed that panicked or broke an invariant. A criterion that isn't met yet isn't broken.
+_Avoid_: crash (that's a shoved sprite's), failed
+
 **Briefing**:
 The observer's plain-language account of a baseline report: what was tested, what changed since the last one, and what might explain it.
 _Avoid_: summary, analysis
