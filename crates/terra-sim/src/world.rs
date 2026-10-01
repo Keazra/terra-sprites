@@ -25,6 +25,7 @@ use crate::perception::{Flood, Target, goal_tiles};
 use crate::regions::Regions;
 use crate::registry::{CategoryId, ChemicalKind};
 use crate::rolling;
+use crate::sliding;
 use crate::sprites::{Sprite, Sprites};
 use crate::variation::varied;
 
@@ -779,10 +780,12 @@ impl World {
         command::apply(&mut self.state, &self.data, events);
     }
 
-    /// Step 2: objects run their lifecycle rules, then rolling items roll.
+    /// Step 2: objects run their lifecycle rules, then rolling items roll,
+    /// then shoved sprites slide (design v25 §2.4).
     fn run_environment(&mut self, events: &mut Vec<Event>) {
         ecology::run(&mut self.state, &self.data, events);
         rolling::run(&mut self.state, &self.data, events);
+        sliding::run(&mut self.state, &self.data, events);
     }
 
     /// Step 3: every sprite's chemistry (design §4.4), then death check #1.

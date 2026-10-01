@@ -272,6 +272,10 @@ pub(crate) fn sense_and_decide(
             state.sprites.get_mut(id).expect("the same sprite").flood = Some(flood);
         }
         let sprite = state.sprites.get(id).expect("the same sprite");
+        // A sliding sprite chooses nothing (design v25 §2.4).
+        if sprite.slide.is_some() {
+            continue;
+        }
         if sprite.lead.is_some() {
             follow_cursor(state, id);
             continue;
@@ -476,6 +480,11 @@ pub(crate) fn resolve(
     let mut moved: BTreeSet<EntityId> = dying.iter().copied().collect();
     for &id in &order {
         let sprite = state.sprites.get_mut(id).expect("a sprite taking its turn");
+        // A sliding sprite slid at step 2, and takes no steps (design v25
+        // §2.4).
+        if sprite.slide.is_some() {
+            continue;
+        }
         if sprite.lead.is_some() {
             if !moved.contains(&id) {
                 walk(state, data, id, &mut moved, events);

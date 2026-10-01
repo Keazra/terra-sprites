@@ -31,6 +31,7 @@ mod random;
 mod regions;
 mod registry;
 mod rolling;
+mod sliding;
 mod sprites;
 mod tags;
 mod terrain;

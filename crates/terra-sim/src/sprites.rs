@@ -13,6 +13,7 @@ use crate::map::{Dir, Map, Pos};
 use crate::objects::{EntityId, Objects};
 use crate::occupancy::Occupancy;
 use crate::perception::Flood;
+use crate::sliding::Slide;
 
 /// One sprite.
 #[derive(Debug, Clone, Serialize)]
@@ -31,6 +32,8 @@ pub(crate) struct Sprite {
     pub(crate) action: Option<Action>,
     /// Its way after the Cursor, while the Cursor leads it (design v23 §6.5).
     pub(crate) lead: Option<Walk>,
+    /// Its slide, while a shove sends it (design v25 §3.5.4).
+    pub(crate) slide: Option<Slide>,
     /// The actions a hand-made world starts it on, in order, until they start.
     pub(crate) scripted: VecDeque<ScriptedAction>,
     /// Its cached perception flood (design §3.6).
@@ -64,6 +67,7 @@ impl Sprite {
             brain,
             action: None,
             lead: None,
+            slide: None,
             scripted: VecDeque::new(),
             flood: None,
             move_points: 0,
