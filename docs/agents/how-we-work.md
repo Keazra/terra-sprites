@@ -72,6 +72,8 @@ A slice too big for one PR ships as two ("4a", "4b"); only the last PR's descrip
 
 **Test every input that reaches it: the keyboard's `Q` and `E` as well as clicks.** In slice 11a every Grab test moved the mouse before clicking, so the tests never saw a bug where `Q` acted on the Cursor's old tile: taking hold of the locked-on sprite left the Cursor on it until the mouse moved. The Spec review found it; the tests that catch it press `Q` with the pointer left where it was.
 
+**A test that passes the first time it runs hasn't shown it can fail.** When a test is written for behaviour already built, break the code it guards for a moment and watch the test go red, then put the code back. In slice 11b, the test that a crash's pain teaches no habit along the trace passed with the rule switched off: its sprite was scripted, and **a scripted sprite decides nothing itself, so it commits no trace entries.** A test of learning along the trace needs a sprite that chooses, such as one with an instinct to approach things, which tries nothing on them. The rewritten test went red without the rule, as did the test of slides moving after rolling items with the two swapped.
+
 ## Baseline runs
 
 Each time `main` moves, a baseline run (design v24 §7.6) measures what's too slow for CI, and the observer, Gemini, writes a briefing on it. Both are in `docs/reports/`, which git ignores, on the owner's machine: `<date>-<commit>-report.md` and `<date>-<commit>-briefing.md`, with `baseline.log`. `/handover start` reads the newest briefing. `scripts/baseline.ps1` runs one, by hand or from the task that `scripts/schedule-baseline.ps1` sets up.
