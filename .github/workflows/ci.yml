@@ -32,3 +32,61 @@ jobs:
             echo "terra-sim must not depend on terminal crates"
             exit 1
           fi
+
+  # The cross-platform determinism check (design §2.6, §7.5): the same world
+  # on every runner in the matrix, whose state hashes must all match. Its
+  # targets are exactly those the README promises.
+  determinism:
+    name: determinism (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-x86_64, os: ubuntu-latest, target: x86_64-unknown-linux-gnu }
+          - { name: windows-x86_64, os: windows-latest, target: x86_64-pc-windows-msvc }
+          - { name: macos-aarch64, os: macos-latest, target: aarch64-apple-darwin }
+          - { name: linux-aarch64, os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: The runner builds for the promised target
+        shell: bash
+        run: |
+          mkdir -p out
+          rustc -vV | sed -n 's/^host: //p' > out/target.txt
+          if [ "$(cat out/target.txt)" != "${{ matrix.target }}" ]; then
+            echo "expected ${{ matrix.target }}, but this runner builds for $(cat out/target.txt)"
+            exit 1
+          fi
+      - name: Run the determinism check
+        shell: bash
+        run: |
+          cargo run --release -p terra-sim --example determinism > out/hashes.txt
+          cat out/hashes.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: determinism-${{ matrix.name }}
+          path: out/
+
+  determinism-compare:
+    name: determinism (all runners match)
+    needs: determinism
+    # Still compares the runners that finished when one failed, so the run
+    # summary shows how far they agree, and then fails.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: determinism-*
+          path: runs
+      - name: Compare the state hashes
+        run: python3 scripts/compare_determinism.py runs
+      - name: Every runner finished
+        if: needs.determinism.result != 'success'
+        run: |
+          echo "A runner in the matrix didn't finish the check, so not every target was compared."
+          exit 1
