@@ -50,7 +50,7 @@ pub enum Action {
         at: Option<Position>,
     },
     /// Pick a cursor mode (`Z` Select, `X` Train, `C` Grab); `C` in Grab
-    /// mode opens the Place menu (slice 11c).
+    /// mode opens the Place menu (design v26 §6.5).
     Mode(CursorMode),
     /// Select the sprite with the next ID (`Tab`).
     SelectNext,
@@ -78,7 +78,7 @@ pub enum Action {
     ToggleDetail,
     /// Cancel a prompt: any key with no job of its own.
     Dismiss,
-    /// Pick the menu item with this number, from 1 (`1`–`9`, slice 11c).
+    /// Pick the menu item with this number, from 1 (`1`–`9`, design v26).
     Pick(u8),
     /// Take what's chosen: the highlighted menu item, or the name typed
     /// (`Enter`).

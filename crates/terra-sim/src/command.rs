@@ -58,10 +58,10 @@ pub enum Command {
     /// it, and it slides `tiles` tiles `toward`.
     Shove { toward: Dir, tiles: u16 },
     /// Places a new object of the type with this stable ID on a tile, from
-    /// the Place menu (slice 11c). It starts at the beginning of its first
+    /// the Place menu (design v26 §2.5). It starts at the beginning of its first
     /// stage.
     Place { tile: Pos, object_type: u16 },
-    /// Spawns a new sprite on a tile, from the Place menu (slice 11c): from
+    /// Spawns a new sprite on a tile, from the Place menu (design v26 §2.5): from
     /// the genome it carries in full, or with `None`, from the starter
     /// genome with spawn variation (design §4.9).
     SpawnSprite { tile: Pos, genome: Option<Genome> },
@@ -182,10 +182,10 @@ pub enum Rejection {
     /// §3.4).
     NoRoom(Blocker),
     /// The data doesn't let the Cursor place objects of this type, or the
-    /// pack has no such type (slice 11c).
+    /// pack has no such type (design v26 §2.5).
     NotPlaceable,
     /// The tile doesn't meet a condition the type's data asks of where it's
-    /// placed (slice 11c).
+    /// placed (design v26 §2.5).
     PlaceRule {
         /// The stable ID of the placed type.
         object_type: u16,
@@ -198,7 +198,7 @@ pub enum Rejection {
 }
 
 /// A condition of where a type may be placed that the tile didn't meet
-/// (slice 11c), as the data names it.
+/// (design v26 §2.5), as the data names it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaceRule {
     /// It would cut a path (design §3.3).
@@ -455,7 +455,7 @@ fn let_go_of_held(
 }
 
 /// The Cursor places a new object of the type with stable ID `object_type`
-/// on `tile` (slice 11c), at the beginning of its first stage: where the
+/// on `tile` (design v26 §2.5), at the beginning of its first stage: where the
 /// space rules let it go (design §3.3–3.4), and where the tile meets what
 /// the type's data asks of it.
 fn place(
@@ -524,7 +524,7 @@ fn place_rule(data: &DataPack, condition: &Condition) -> PlaceRule {
     }
 }
 
-/// The Cursor spawns a new sprite on `tile` (slice 11c): from `genome`, or
+/// The Cursor spawns a new sprite on `tile` (design v26 §2.5): from `genome`, or
 /// from the starter genome with spawn variation (design §4.9), on a tile a
 /// sprite may stand on (design §3.4).
 fn spawn_sprite(

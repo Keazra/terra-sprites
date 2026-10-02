@@ -57,13 +57,13 @@ pub enum EventKind {
     /// The Cursor corrected a sprite (design v21 §4.6): a zap, or amplified,
     /// a shock.
     Corrected { id: EntityId, amplified: bool },
-    /// The Cursor placed a new object (slice 11c).
+    /// The Cursor placed a new object (design v26 §2.5).
     Placed {
         id: EntityId,
         object_type: String,
         pos: Pos,
     },
-    /// A new sprite was spawned by the Cursor (slice 11c).
+    /// A new sprite was spawned by the Cursor (design v26 §2.5).
     Spawned { id: EntityId, pos: Pos },
     /// The player named a sprite (design §6.5).
     Renamed { id: EntityId, name: String },

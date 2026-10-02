@@ -1,4 +1,4 @@
-//! The Place menu's commands (design §2.5, slice 11c): the Cursor places a
+//! The Place menu's commands (design v26 §2.5): the Cursor places a
 //! new object or spawns a new sprite, and the player names sprites.
 
 use terra_sim::{
@@ -107,7 +107,7 @@ fn a_placed_bush_starts_as_a_seedling() {
 
 #[test]
 fn a_placed_bush_may_wall_off_a_corridor() {
-    // The owner's choice for slice 11c: the built-in bush asks nothing of
+    // The owner's choice (design v26 change 2): the built-in bush asks nothing of
     // its tile, so the player may pen sprites in on purpose.
     let rows = ["#####", ".....", "#####"];
     let mut world = world(&rows, &[], &[]);
