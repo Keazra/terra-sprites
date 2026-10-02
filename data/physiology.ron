@@ -81,6 +81,10 @@
         // as bad things (design v21 §5.6).
         "quieting":          (range: (0.0, 1.0),     default: 0.8),
         "habit_fade_bad":    (range: (0.0, 0.01),    default: 0.00005),
+        // Fear of the Cursor wears off while it stays near and does nothing,
+        // fastest on the sprite's own tile (design v29 §5.6): a sprite comes
+        // to see it can't do anything about it. A first guess, tuned in play.
+        "cursor_calming":    (range: (0.0, 0.1),     default: 0.01),
     },
     // The range of each receptor target in `loci.ron`. Each rests at 1.0 when
     // no receptor writes it.

@@ -82,6 +82,9 @@ pub enum Action {
     Confirm,
     /// Switch the detail view on or off (`v`).
     ToggleDetail,
+    /// Show the Cursor to sprites in the current cursor mode, or hide it
+    /// from them (`h`, design v29 §6.5).
+    ToggleVisible,
     /// Cancel a prompt: any key with no job of its own.
     Dismiss,
     /// Pick the menu item with this number, from 1 (`1`–`9`, design v28).
@@ -266,6 +269,8 @@ impl Keys {
             KeyCode::Char('f') => (!held).then_some(Action::Follow { at: None }),
             // A held `v` would flicker the detail view on and off.
             KeyCode::Char('v') => (!held).then_some(Action::ToggleDetail),
+            // Likewise a held `h`, whether sprites see the Cursor.
+            KeyCode::Char('h') => (!held).then_some(Action::ToggleVisible),
             KeyCode::Char('r') => (!held).then_some(Action::Rename),
             KeyCode::Char('g') => (!held).then_some(Action::ExportGenome),
             KeyCode::Char(digit @ '1'..='9') => (!held).then(|| Action::Pick(digit as u8 - b'0')),

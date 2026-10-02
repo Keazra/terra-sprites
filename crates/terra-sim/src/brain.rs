@@ -159,6 +159,9 @@ pub(crate) struct Brain {
     /// How far back the Cursor's touch this tick looks, from step 1 to
     /// step 4 (design v21 §5.6); `None` untouched.
     pub(crate) reach_back: Option<u64>,
+    /// Whether the sprite could see the Cursor that touched it this tick,
+    /// from step 1 to step 4 (design v29 §5.6).
+    pub(crate) seen_cursor: bool,
 }
 
 /// What the brain saw and did at a step 5.
@@ -207,6 +210,9 @@ pub enum Thing {
     Category(String),
     /// A particular sprite (design v18 §5.6).
     Sprite(EntityId),
+    /// The Cursor, which sprites learn about as one individual while they
+    /// can see it (design v29 §5.6).
+    Cursor,
 }
 
 impl From<&str> for Thing {
@@ -354,6 +360,7 @@ impl Brain {
             experience: Experience::default(),
             touched: None,
             reach_back: None,
+            seen_cursor: false,
         }
     }
 
@@ -381,17 +388,58 @@ impl Brain {
         // What the feelings are about: the latest try, while it's recent
         // (design §5.6). Relief and punishment look back the touch window, a
         // zap's or shock's too; reward, in a tick the Cursor rewarded the
-        // sprite, looks back the Reward's reach back (design v21 §5.6).
+        // sprite, looks back the Reward's reach back (design v21 §5.6). The
+        // reach back is never shorter than the touch window, so whatever is
+        // near is reached too.
         let within = |ticks: u64| self.touched.filter(|t| tick - t.tick <= ticks);
         let near = within(physiology.touch_window);
         let reached = signals.reach_back.map_or(near, within);
+        // A Cursor it can see is part of the lesson (design v29 §5.6): a pet
+        // teaches it to like the Cursor, and a zap, a shock or a crash after
+        // its shove to fear it, as a hit teaches fear of the hitter, as well
+        // as what each teaches about what it touched. A pet for a try on the
+        // Cursor itself is the lesson about the thing touched, below, and a
+        // crash teaches only in its own tick. In a tick the Cursor corrected
+        // it, the pain is the correction's, so it's about the Cursor only if
+        // the sprite could see it.
+        let touched_the_cursor =
+            reached.is_some_and(|touch| touch.subject.category(data) == data.cursor_category());
+        let liked = signals.seen_cursor && signals.reach_back.is_some() && !touched_the_cursor;
+        let feared = if signals.corrected {
+            signals.seen_cursor
+        } else {
+            near.is_some_and(|touch| touch.by_cursor && touch.tick == tick)
+        };
+        if liked || feared {
+            let good = self.params.get(BrainParam::IndividualRateGood) * learning_rate_mod;
+            let fear = self.params.get(BrainParam::FearRate) * learning_rate_mod;
+            let cursor = self.experience.remember_the_cursor(relief.len());
+            if liked {
+                cursor.good = (cursor.good + good * signals.reward).min(1.0);
+            }
+            if feared {
+                cursor.fear = (cursor.fear - fear * signals.punishment).max(-1.0);
+            }
+        }
+        // A feared Cursor that stays near and does nothing wears the fear
+        // off, fastest on the sprite's own tile: it comes to see it can't do
+        // anything about it (design v29 §5.6).
+        if !signals.corrected
+            && !feared
+            && let (Some(distance), Some(cursor)) =
+                (signals.cursor_distance, self.experience.cursor.as_mut())
+        {
+            let reach = self.params.get(BrainParam::FearReach);
+            let nearness = (1.0 - distance / reach).max(0.0);
+            cursor.fear *= 1.0 - self.params.get(BrainParam::CursorCalming) * nearness;
+        }
         let needs = data.need_places().len();
         if let Some(Touch {
             subject,
             sprite,
             novelty,
             ..
-        }) = reached.or(near)
+        }) = reached
         {
             let good = self.params.get(BrainParam::WorthRateGood) * learning_rate_mod;
             let bad = self.params.get(BrainParam::WorthRateBad) * learning_rate_mod;
@@ -408,13 +456,20 @@ impl Brain {
             } else {
                 0.0
             };
-            match sprite {
-                // A sprite is learned about as that one sprite, fast; sprites
-                // in general only through the ones it knows (design v18 §5.6).
-                Some(sprite) => {
+            // A sprite is learned about as that one sprite, fast; sprites in
+            // general only through the ones it knows (design v18 §5.6). So is
+            // the Cursor, the one there is (design v29 §5.6).
+            let individual = match sprite {
+                Some(sprite) => Some(self.experience.remember(sprite, needs)),
+                None if subject.category(data) == data.cursor_category() => {
+                    Some(self.experience.remember_the_cursor(needs))
+                }
+                None => None,
+            };
+            match individual {
+                Some(known) => {
                     let good = self.params.get(BrainParam::IndividualRateGood) * learning_rate_mod;
                     let bad = self.params.get(BrainParam::IndividualRateBad) * learning_rate_mod;
-                    let known = self.experience.remember(sprite, needs);
                     for (worth, &relief) in known.worth.iter_mut().zip(relief) {
                         *worth = (*worth + good * relief).min(1.0);
                     }
@@ -539,7 +594,8 @@ impl Brain {
         }
         experience.new_things *= good;
         let fear = keep(BrainParam::FearFade);
-        for individual in experience.individuals.values_mut() {
+        let individuals = experience.individuals.values_mut();
+        for individual in individuals.chain(&mut experience.cursor) {
             for value in &mut individual.worth {
                 *value *= good;
             }
@@ -621,6 +677,14 @@ impl Brain {
             if category.id == data.sprite_category() {
                 let thing = category_thing(category.id, data);
                 things.push((thing, &in_general.worth, in_general.good, in_general.bad));
+                continue;
+            }
+            // There's one Cursor, learned about as an individual (design v29
+            // §5.6), so the category has no summary.
+            if category.id == data.cursor_category() {
+                if let Some(known) = &self.experience.cursor {
+                    things.push((Thing::Cursor, &known.worth, known.good, known.bad));
+                }
                 continue;
             }
             let types = self.experience.types.iter();
@@ -721,6 +785,14 @@ impl Brain {
             },
             amount: in_general.fear,
         });
+        if let Some(cursor) = &self.experience.cursor {
+            memory.push(Memory {
+                learned: Learned::Fear {
+                    thing: Thing::Cursor,
+                },
+                amount: cursor.fear,
+            });
+        }
         memory
     }
 
@@ -1048,9 +1120,9 @@ impl Brain {
     }
 
     /// How frightening `category`'s thing is at normalized `distance` (design
-    /// v18 §5.3), from 0 to 1: for sprites, the one in `scoring`, fading to
-    /// nothing at `fear_reach`, and nothing while fear is quiet; nothing is
-    /// feared but sprites in M1.
+    /// v18 §5.3), from 0 to 1: for sprites, the one in `scoring`, or the
+    /// Cursor (design v29 §5.3), fading to nothing at `fear_reach`, and
+    /// nothing while fear is quiet; nothing else is feared in M1.
     fn fright(
         &self,
         category: CategoryId,
@@ -1058,12 +1130,17 @@ impl Brain {
         distance: f32,
         data: &DataPack,
     ) -> f32 {
-        if category != data.sprite_category() || scoring.quiet {
+        if scoring.quiet {
             return 0.0;
         }
-        let fear = self
-            .memory_of(scoring.sprite, data.need_places().len())
-            .fear;
+        let fear = if category == data.sprite_category() {
+            let needs = data.need_places().len();
+            self.memory_of(scoring.sprite, needs).fear
+        } else if category == data.cursor_category() {
+            self.experience.cursor.as_ref().map_or(0.0, |c| c.fear)
+        } else {
+            return 0.0;
+        };
         let reach = self.params.get(BrainParam::FearReach);
         -fear * (1.0 - distance / reach).max(0.0)
     }
@@ -1197,6 +1274,14 @@ impl Brain {
             let known = self.memory_of(sprite, data.need_places().len());
             return now(&known.worth, known.good, known.bad);
         }
+        // The Cursor is one individual (design v29 §5.6).
+        if subject.category(data) == data.cursor_category() {
+            return self
+                .experience
+                .cursor
+                .as_ref()
+                .map_or(0.0, |known| now(&known.worth, known.good, known.bad));
+        }
         match self.experience.types.get(&subject).filter(|t| t.touched) {
             Some(known) => now(&known.worth, known.good, known.bad),
             None => {
@@ -1281,8 +1366,12 @@ fn summary_share(n: usize, generalise: f32) -> f32 {
 }
 
 /// What something learned about as `subject` is called (design v19 §6.1):
-/// its object type, or its category if it has none.
+/// its object type, or its category if it has none; the Cursor by name
+/// (design v29 §5.9).
 fn subject_thing(subject: Subject, data: &DataPack) -> Thing {
+    if subject.category(data) == data.cursor_category() {
+        return Thing::Cursor;
+    }
     match subject {
         Subject::ObjectType(id) => Thing::from(
             data.object_type(id)
@@ -1465,7 +1554,7 @@ mod tests {
             r#"Instinct(inputs: [("hunger", false), ("target_adjacent", true)], verb: Eat, weight: 0.3)"#,
         ]);
         let n = builtin().brain_inputs().count();
-        assert_eq!(n, 44, "37 State inputs and 7 Target inputs");
+        assert_eq!(n, 45, "37 State inputs and 8 Target inputs");
         // One singleton per input, and one conjunction for both genes naming it.
         assert_eq!(brain.concepts.len(), n + 1);
         assert_eq!(
@@ -1753,6 +1842,7 @@ mod tests {
             subject: types::BERRY,
             sprite: None,
             novelty: 1.0,
+            by_cursor: false,
         });
         for (tick, hunger) in [(10, 1.0), (11, 0.0)] {
             let signals = hunger_at(&mut brain, &data, hunger);
@@ -1792,6 +1882,7 @@ mod tests {
             subject: types::BERRY_BUSH,
             sprite: None,
             novelty: 1.0,
+            by_cursor: false,
         };
         brain.touched = Some(touch);
         let signals = hunger_at(&mut brain, &data, 0.5);
@@ -1824,6 +1915,7 @@ mod tests {
             subject: types::BERRY_BUSH,
             sprite: None,
             novelty: 1.0,
+            by_cursor: false,
         });
         let signals = hunger_at(&mut brain, &data, 0.0);
         brain.learn(6, &signals, 1.0, &data);
@@ -2091,6 +2183,7 @@ mod tests {
             subject: types::BALL,
             sprite: None,
             novelty: 1.0,
+            by_cursor: false,
         });
         let mut needs = vec![0.0; data.need_places().len()];
         needs[0] = 0.8;
@@ -2124,6 +2217,7 @@ mod tests {
             subject: types::BALL,
             sprite: None,
             novelty: 1.0,
+            by_cursor: false,
         });
         let fruitless = Signals {
             needs: vec![1.0; data.need_places().len()],
@@ -2223,6 +2317,7 @@ mod tests {
             subject: types::THORNBUSH,
             sprite: None,
             novelty: 0.5,
+            by_cursor: false,
         });
         let hurt = Signals {
             needs: vec![0.0; data.need_places().len()],
@@ -2284,6 +2379,7 @@ mod tests {
             subject: types::SPRITE,
             sprite: None,
             novelty: 1.0,
+            by_cursor: false,
         });
         let hit_back = Signals {
             needs: vec![0.0; data.need_places().len()],
