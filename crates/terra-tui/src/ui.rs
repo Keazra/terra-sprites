@@ -9,7 +9,7 @@ use ratatui::{
 };
 use terra_sim::{EntityId, Grip, Map, ObjectView, Pos, Progress, World};
 
-use crate::app::{App, Areas, Screen, Selection};
+use crate::app::{App, Areas, CursorMode, PlaceItem, Screen, Selection};
 use crate::clock::Speed;
 use crate::inspector::{self, INSPECTOR_WIDTH, first_shown};
 use crate::text::{display_name, group_thousands, terrain_name};
@@ -45,6 +45,7 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
     if let Some(event_log) = event_log_area(area) {
         render_event_log(frame.buffer_mut(), event_log, app, world);
     }
+    render_menu(frame.buffer_mut(), area, app, world);
     frame.render_widget(status_line(app, world, status.width), status);
 }
 
@@ -346,10 +347,76 @@ fn line_between(from: Pos, to: Pos) -> Vec<Pos> {
     tiles
 }
 
+/// Draws the open menu, if any (slice 11c): over the map, from its top-left
+/// tile, its items numbered and the highlighted one in reverse video, inside
+/// a border; as far as the screen goes.
+fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) {
+    let Some(menu) = app.menu_area(world) else {
+        return;
+    };
+    let area = menu.intersection(screen);
+    if area.width < 3 || area.height < 3 {
+        return;
+    }
+    let title = match app.screen() {
+        Screen::GenomeMenu => " Genome files ",
+        _ => " Place ",
+    };
+    buf.set_style(area, Style::default());
+    for y in area.top() + 1..area.bottom() - 1 {
+        for x in area.left() + 1..area.right() - 1 {
+            buf[(x, y)].set_char(' ');
+        }
+    }
+    let walls = Sides {
+        left: false,
+        right: false,
+        top: false,
+        bottom: false,
+    };
+    draw_border(buf, area, title, walls);
+    let items = app.menu_items(world);
+    let room = usize::from(area.width - 2);
+    if items.is_empty() {
+        let none = format!(" {}", app.no_genome_files());
+        buf.set_stringn(area.x + 1, area.y + 1, none, room, Style::default());
+    }
+    for (index, item) in items.iter().enumerate() {
+        let y = area.y + 1 + index as u16;
+        if y >= area.bottom() - 1 {
+            break;
+        }
+        // Items past 9 have no number key, but the arrows reach them.
+        let number = if index < 9 {
+            (index + 1).to_string()
+        } else {
+            " ".into()
+        };
+        let line = format!(" {number} {item} ");
+        let style = if index == app.menu_choice() {
+            Style::default().add_modifier(Modifier::REVERSED)
+        } else {
+            Style::default()
+        };
+        buf.set_stringn(area.x + 1, y, line, room, style);
+    }
+}
+
 /// The glyph of what the Cursor has hold of, as the queue will leave it: a
-/// sprite's, or an item's, held or still on the map (design v23 §6.5).
+/// sprite's, or an item's, held or still on the map (design v23 §6.5); or
+/// of the Place menu item waiting on it (slice 11c).
 fn held_glyph(app: &App, world: &World) -> char {
     let theme = &app.theme;
+    if let Some(item) = app.placing_item() {
+        let glyph = match item {
+            PlaceItem::Object { name, .. } => {
+                let look = world.data().new_look(name).unwrap_or("default");
+                theme.object_glyph(name, look)
+            }
+            PlaceItem::NewSprite | PlaceItem::Genome(_) => theme.glyph(SemanticTile::Sprite),
+        };
+        return glyph.symbol;
+    }
     let glyph = match app.grip(world) {
         Some(Grip::Holds(id)) => {
             item_look(world, id).map(|(name, state)| theme.object_glyph(name, state))
@@ -445,6 +512,13 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     if app.screen() == Screen::QuitPrompt {
         return Line::from(" Quit? (y/n)");
     }
+    // Naming takes the line over (design §6.5).
+    if let (Some(draft), Some(sprite)) = (app.name_draft(), app.naming_sprite()) {
+        let label = app.names().label(sprite);
+        return Line::from(format!(
+            " Name {label}: {draft}_   enter ok  tab another  esc cancel"
+        ));
+    }
     let cursor = app.cursor();
     let terrain = terrain_name(world.map().terrain(cursor));
     let sprite = world
@@ -469,8 +543,13 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         }
         None => String::new(),
     };
+    // A Place menu item waiting on the Cursor, in every mode (slice 11c).
+    let placing = app
+        .placing()
+        .map(|label| format!(" │ placing: {label}"))
+        .unwrap_or_default();
     let tile = format!(
-        " ({},{}) {terrain}{sprite}{object} │ {mode}{locked}{grip}",
+        " ({},{}) {terrain}{sprite}{object} │ {mode}{locked}{grip}{placing}",
         cursor.x, cursor.y
     );
     // At the right, after a gap of 2 and before a space at the end: why a
@@ -478,7 +557,7 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     // v22 §6.1). The reason matters more than the end of the tile's part,
     // which is cut short to make room for it.
     let width = usize::from(width);
-    let (tile, right): (String, String) = match app.refusal() {
+    let (tile, right): (String, String) = match app.refusal().or(app.notice()) {
         Some(why) => {
             let room = width.saturating_sub(why.chars().count() + 3);
             (tile.chars().take(room).collect(), why.to_string())
@@ -486,9 +565,12 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         None => {
             let room = width.saturating_sub(tile.chars().count() + 3);
             // While the player aims, how to send it or not (design v25 §6.1).
+            let placing = app.placing().is_some() && app.mode() == CursorMode::Grab;
             let hints = match (app.aiming(), app.grip(world)) {
                 (true, Some(Grip::Holds(_))) => hint_if_fits(room, "let go to throw  esc cancel"),
                 (true, Some(Grip::Leads(_))) => hint_if_fits(room, "let go to shove  esc cancel"),
+                // A Place menu item waiting, how to place it or not (slice 11c).
+                _ if placing => hint_if_fits(room, "click to place  right-click put away"),
                 _ => hints_within(room),
             };
             (tile, hints)

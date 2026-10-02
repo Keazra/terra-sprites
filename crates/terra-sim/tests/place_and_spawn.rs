@@ -416,3 +416,11 @@ fn pack_with(path: &str, text: &str) -> DataPack {
         .collect();
     DataPack::from_sources(&sources).expect("a valid pack")
 }
+
+#[test]
+fn a_new_objects_look_is_its_first_stages() {
+    let data = builtin();
+    assert_eq!(data.new_look("berry_bush"), Some("seedling"));
+    assert_eq!(data.new_look("ball"), Some("default"));
+    assert_eq!(data.new_look("unicorn"), None);
+}

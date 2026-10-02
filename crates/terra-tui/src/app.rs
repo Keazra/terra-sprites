@@ -1,16 +1,18 @@
 //! The UI state (design §6.8): everything the screen shows that isn't the world.
 
 use std::collections::{BTreeMap, VecDeque};
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
 use terra_sim::{
-    ActionView, Command, CursorTouch, DeathCause, Dir, EntityId, Event, EventKind, Grip, Map, Pos,
-    Target, Thing, World,
+    ActionView, Command, CursorTouch, DeathCause, Dir, EntityId, Event, EventKind, Genome, Grip,
+    MAX_NAME_CHARS, Map, Pos, Target, Thing, World,
 };
 
 use crate::clock::Clock;
+use crate::cp437;
 use crate::input::{Action, Button};
 use crate::inspector;
 use crate::text::{Names, ROOTED, Words, display_name};
@@ -23,13 +25,42 @@ pub enum Flow {
     Quit,
 }
 
-/// What fills the screen besides the map (design §6.8). Menus and help come later.
+/// What fills the screen besides the map (design §6.8). Help comes later.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
     Normal,
     /// "Quit? (y/n)" is waiting for an answer.
     QuitPrompt,
+    /// The Place menu is open (slice 11c).
+    PlaceMenu,
+    /// The Place menu's list of genome files is open (slice 11c).
+    GenomeMenu,
+    /// The player is typing a sprite's name (design §6.5).
+    Naming,
 }
+
+/// What a Place menu item makes (slice 11c).
+#[derive(Debug, Clone, PartialEq)]
+pub enum PlaceItem {
+    /// An object of the type with this stable ID, called `name` in the data.
+    Object { object_type: u16, name: String },
+    /// A sprite from the starter genome with spawn variation.
+    NewSprite,
+    /// A sprite from a genome read from a file.
+    Genome(Genome),
+}
+
+/// The Place menu item waiting on the Cursor until a click places it, and
+/// what the menu called it.
+#[derive(Debug, Clone)]
+struct Placing {
+    item: PlaceItem,
+    label: String,
+}
+
+/// The Place menu's own items, after the object types the data offers.
+const NEW_SPRITE: &str = "new sprite";
+const FROM_A_FILE: &str = "sprite from a genome file";
 
 /// What a click on the map does (design v21 §6.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
@@ -247,6 +278,31 @@ pub struct App {
     /// The names the player has given sprites, as last seen, so the log
     /// keeps naming a sprite after it dies (design §6.5).
     names: Names,
+    /// The Place menu item waiting on the Cursor (slice 11c).
+    placing: Option<Placing>,
+    /// The highlighted item of the open menu, from 0.
+    menu_choice: usize,
+    /// Where genome files are saved and read from (design §6.7), if
+    /// anywhere.
+    genome_folder: Option<PathBuf>,
+    /// The genome files the genome menu lists, by name, with their paths.
+    genome_files: Vec<(String, PathBuf)>,
+    /// While naming: the sprite, the name so far, and whether the player
+    /// has typed it, rather than it being an offered random one.
+    naming: Option<Naming>,
+    /// How many random names have been offered, so each is another.
+    names_offered: u64,
+    /// What the player's latest action did that the status line says, in
+    /// the key hints' place, and since when: where a genome was saved.
+    notice: Option<(String, Duration)>,
+}
+
+/// A sprite's name being typed (design §6.5).
+#[derive(Debug, Clone)]
+struct Naming {
+    sprite: EntityId,
+    draft: String,
+    typed: bool,
 }
 
 /// A shove of the selected sprite, which its observed list tells of once
@@ -355,6 +411,13 @@ impl App {
             report: None,
             refusal: None,
             names: Names::default(),
+            placing: None,
+            menu_choice: 0,
+            genome_folder: None,
+            genome_files: Vec::new(),
+            naming: None,
+            names_offered: 0,
+            notice: None,
         };
         app.centre_on(cursor);
         app
@@ -731,6 +794,10 @@ impl App {
         if self.mode != CursorMode::Grab || flash == StatusMark::Rejected {
             return [flash; 2];
         }
+        // A Place menu item waiting shows as held (slice 11c).
+        if self.placing.is_some() {
+            return [StatusMark::Release, StatusMark::Holding];
+        }
         match self.grip(world) {
             Some(_) => [StatusMark::Release, StatusMark::Holding],
             None => [StatusMark::Grab, StatusMark::Empty],
@@ -859,6 +926,11 @@ impl App {
 
     /// Carries out an action on `world`, and says whether the game carries on.
     pub fn apply(&mut self, action: Action, world: &World) -> Flow {
+        match self.screen {
+            Screen::PlaceMenu | Screen::GenomeMenu => return self.apply_in_menu(action, world),
+            Screen::Naming => return self.apply_naming(action, world),
+            Screen::Normal | Screen::QuitPrompt => {}
+        }
         if self.screen == Screen::QuitPrompt {
             match action {
                 Action::Confirm | Action::Back | Action::Quit => return Flow::Quit,
@@ -908,7 +980,14 @@ impl App {
                     self.send_aimed(world);
                 }
             }
+            // `C` again in Grab mode opens the Place menu (design §6.5).
+            Action::Mode(CursorMode::Grab) if self.mode == CursorMode::Grab => {
+                self.end_aim();
+                self.open_menu(Screen::PlaceMenu);
+            }
             Action::Mode(mode) => self.mode = mode,
+            Action::Rename => self.start_naming(world),
+            Action::ExportGenome => self.export_genome(world),
             Action::SelectNext => self.select_along(world, Direction::Next),
             Action::SelectPrevious => self.select_along(world, Direction::Previous),
             Action::NextTab => self.open(self.tab.along(1)),
@@ -933,7 +1012,13 @@ impl App {
             Action::Back if self.aim.is_some() => self.end_aim(),
             Action::Back if self.mode != CursorMode::Select => self.mode = CursorMode::Select,
             Action::Back => self.screen = Screen::QuitPrompt,
-            Action::Confirm | Action::Dismiss => {}
+            Action::Confirm
+            | Action::Dismiss
+            | Action::Pick(_)
+            | Action::Enter
+            | Action::Type(_)
+            | Action::Erase
+            | Action::AnotherName => {}
             Action::Quit => return Flow::Quit,
         }
         // Only Grab mode aims.
@@ -971,6 +1056,10 @@ impl App {
                 }
                 _ => {}
             },
+            // A Place menu item waiting on the Cursor takes the next click, and
+            // a right click puts it away (slice 11c).
+            (CursorMode::Grab, Button::Left) if self.placing.is_some() => self.place(tile),
+            (CursorMode::Grab, Button::Right) if self.placing.is_some() => self.placing = None,
             (CursorMode::Grab, Button::Left) => self.grab_click(tile, sprite, world),
             (CursorMode::Grab, Button::Right) => self.aim_click(tile, sprite, world),
             (CursorMode::Train, button) => {
@@ -1173,6 +1262,340 @@ impl App {
     fn refuse(&mut self, why: String) {
         self.report = Some((StatusMark::Rejected, self.running_for));
         self.refusal = Some((why, self.running_for));
+        self.notice = None;
+    }
+
+    /// Says what the player's action did on the status line, for a while.
+    fn tell_player(&mut self, what: String) {
+        self.notice = Some((what, self.running_for));
+        self.refusal = None;
+    }
+
+    /// What the player's latest action did, while the status line says so:
+    /// where a genome was saved.
+    pub fn notice(&self) -> Option<&str> {
+        let (what, from) = self.notice.as_ref()?;
+        self.shows(*from, REFUSAL_FOR).then_some(what.as_str())
+    }
+
+    /// Sets where genome files are saved and read from (design §6.7).
+    pub fn set_genome_folder(&mut self, folder: PathBuf) {
+        self.genome_folder = Some(folder);
+    }
+
+    /// What the Place menu item waiting on the Cursor is called, if one is
+    /// (slice 11c).
+    pub fn placing(&self) -> Option<&str> {
+        self.placing.as_ref().map(|placing| placing.label.as_str())
+    }
+
+    /// What the Place menu item waiting on the Cursor makes, if one is.
+    pub fn placing_item(&self) -> Option<&PlaceItem> {
+        self.placing.as_ref().map(|placing| &placing.item)
+    }
+
+    /// The open menu's items, in order: the Place menu's, or the genome
+    /// files'. Empty with no menu open.
+    pub fn menu_items(&self, world: &World) -> Vec<String> {
+        match self.screen {
+            Screen::PlaceMenu => world
+                .data()
+                .placeable()
+                .map(|(_, label)| label.to_string())
+                .chain([NEW_SPRITE.to_string(), FROM_A_FILE.to_string()])
+                .collect(),
+            Screen::GenomeMenu => self
+                .genome_files
+                .iter()
+                .map(|(name, _)| name.clone())
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// The open menu's highlighted item, from 0.
+    pub fn menu_choice(&self) -> usize {
+        self.menu_choice
+    }
+
+    /// The folder genome files are read from, if there is one.
+    pub fn genome_folder(&self) -> Option<&Path> {
+        self.genome_folder.as_deref()
+    }
+
+    /// Where the open menu is drawn: from the map view's top-left tile, as
+    /// wide as its longest item, numbered, inside a border, and one row per
+    /// item, or one saying there are none.
+    pub fn menu_area(&self, world: &World) -> Option<Rect> {
+        let items = self.menu_items(world);
+        let (title, empty) = match self.screen {
+            Screen::PlaceMenu => (" Place ", String::new()),
+            Screen::GenomeMenu => (" Genome files ", self.no_genome_files()),
+            _ => return None,
+        };
+        let widest = items
+            .iter()
+            .map(|item| item.chars().count() + 3)
+            .chain([title.chars().count() + 2, empty.chars().count() + 1])
+            .max()
+            .unwrap_or(0);
+        let rows = items.len().max(1);
+        Some(Rect::new(
+            self.tile_area.x,
+            self.tile_area.y,
+            (widest + 3) as u16,
+            (rows + 2) as u16,
+        ))
+    }
+
+    /// What the genome menu says with no files to list.
+    pub fn no_genome_files(&self) -> String {
+        match &self.genome_folder {
+            Some(folder) => format!("No genome files in {}", folder.display()),
+            None => "No folder for genome files".into(),
+        }
+    }
+
+    /// Opens `menu`, highlighting its first item.
+    fn open_menu(&mut self, menu: Screen) {
+        self.screen = menu;
+        self.menu_choice = 0;
+    }
+
+    /// What an action does while a menu is open: a number or `Enter` picks
+    /// an item, the arrow keys move the highlight, a click picks the item
+    /// under it or, off the menu, closes it, and `Esc` closes it.
+    fn apply_in_menu(&mut self, action: Action, world: &World) -> Flow {
+        let count = self.menu_items(world).len();
+        match action {
+            Action::Pick(n) if usize::from(n) <= count => {
+                self.choose(usize::from(n) - 1, world);
+            }
+            Action::Enter if count > 0 => self.choose(self.menu_choice, world),
+            Action::Scroll { dy, .. } if count > 0 => {
+                let moved = self.menu_choice as i32 + dy.signum();
+                self.menu_choice = moved.clamp(0, count as i32 - 1) as usize;
+            }
+            Action::Click { at, .. } => {
+                let area = self.menu_area(world).expect("a menu is open");
+                let row = usize::from(at.y.wrapping_sub(area.y + 1));
+                if !area.contains(at) {
+                    self.screen = Screen::Normal;
+                } else if row < count {
+                    self.choose(row, world);
+                }
+            }
+            Action::Point(cell) => self.point(cell),
+            Action::Back => self.screen = Screen::Normal,
+            Action::Quit => return Flow::Quit,
+            _ => {}
+        }
+        self.settle_cursor(world);
+        Flow::Continue
+    }
+
+    /// Picks item `index` of the open menu (slice 11c): an object type the
+    /// data offers, or a new sprite, waits on the Cursor; the Place menu's
+    /// last item lists the genome files; a genome file is read, and its
+    /// sprite waits.
+    fn choose(&mut self, index: usize, world: &World) {
+        let menu = self.screen;
+        let label = self.menu_items(world)[index].clone();
+        self.screen = Screen::Normal;
+        let placeable: Vec<&str> = world.data().placeable().map(|(name, _)| name).collect();
+        let item = match menu {
+            Screen::GenomeMenu => {
+                let (name, path) = &self.genome_files[index];
+                let read = std::fs::read_to_string(path)
+                    .map_err(|err| err.to_string())
+                    .and_then(|text| {
+                        Genome::from_ron(&text, world.data()).map_err(|err| err.to_string())
+                    });
+                match read {
+                    Ok(genome) => PlaceItem::Genome(genome),
+                    Err(why) => return self.refuse(format!("Couldn't read {name}: {why}")),
+                }
+            }
+            _ if index < placeable.len() => PlaceItem::Object {
+                object_type: world
+                    .data()
+                    .object_type_id(placeable[index])
+                    .expect("a placeable type"),
+                name: placeable[index].to_string(),
+            },
+            _ if index == placeable.len() => PlaceItem::NewSprite,
+            _ => return self.list_genome_files(),
+        };
+        self.placing = Some(Placing { item, label });
+    }
+
+    /// Opens the genome menu, listing the `.ron` files in the genome folder
+    /// by name, in order.
+    fn list_genome_files(&mut self) {
+        let mut files: Vec<(String, PathBuf)> = self
+            .genome_folder
+            .as_ref()
+            .and_then(|folder| std::fs::read_dir(folder).ok())
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| {
+                let path = entry.ok()?.path();
+                let is_ron = path.extension().is_some_and(|ext| ext == "ron");
+                let name = path.file_stem()?.to_string_lossy().into_owned();
+                is_ron.then_some((name, path))
+            })
+            .collect();
+        files.sort();
+        self.genome_files = files;
+        self.open_menu(Screen::GenomeMenu);
+    }
+
+    /// Places the item waiting on the Cursor on `tile` (slice 11c).
+    fn place(&mut self, tile: Pos) {
+        let Some(placing) = self.placing.take() else {
+            return;
+        };
+        let command = match placing.item {
+            PlaceItem::Object { object_type, .. } => Command::Place { tile, object_type },
+            PlaceItem::NewSprite => Command::SpawnSprite { tile, genome: None },
+            PlaceItem::Genome(genome) => Command::SpawnSprite {
+                tile,
+                genome: Some(genome),
+            },
+        };
+        self.commands.push(command);
+        // The marks follow the latest click (design v22 §6.5).
+        self.report = None;
+    }
+
+    /// Whether keys type letters, rather than act: while naming.
+    pub fn typing(&self) -> bool {
+        self.screen == Screen::Naming
+    }
+
+    /// The name being typed, while naming (design §6.5).
+    pub fn name_draft(&self) -> Option<&str> {
+        self.naming.as_ref().map(|naming| naming.draft.as_str())
+    }
+
+    /// The sprite being named, while naming.
+    pub fn naming_sprite(&self) -> Option<EntityId> {
+        self.naming.as_ref().map(|naming| naming.sprite)
+    }
+
+    /// Starts naming the selected sprite, offering a random name to start
+    /// from (design §6.5).
+    fn start_naming(&mut self, world: &World) {
+        let Some(Selection::Living(sprite)) = self.selection else {
+            return self.refuse("Select a sprite to name it".into());
+        };
+        let draft = self.random_name(sprite, world);
+        self.naming = Some(Naming {
+            sprite,
+            draft,
+            typed: false,
+        });
+        self.screen = Screen::Naming;
+    }
+
+    /// Another random name for `sprite`, made up by the screen, so naming
+    /// never draws from the world's randomness (design §6.5).
+    fn random_name(&mut self, sprite: EntityId, world: &World) -> String {
+        self.names_offered += 1;
+        let seed = self
+            .seed
+            .wrapping_mul(0x9e37_79b9_7f4a_7c15)
+            .wrapping_add(sprite.0.wrapping_mul(0xbf58_476d_1ce4_e5b9))
+            .wrapping_add(self.names_offered);
+        world.data().random_name(seed)
+    }
+
+    /// What an action does while the player types a name: letters CP437
+    /// can show are typed, up to the most a name may have, the first
+    /// replacing the offered name; `Backspace` rubs one out; `Tab` offers
+    /// another; `Enter` sends the name and `Esc` gives up.
+    fn apply_naming(&mut self, action: Action, world: &World) -> Flow {
+        let Some(naming) = self.naming.as_mut() else {
+            self.screen = Screen::Normal;
+            return Flow::Continue;
+        };
+        match action {
+            Action::Type(c) if cp437::contains(c) && !c.is_control() => {
+                if !naming.typed {
+                    naming.draft.clear();
+                    naming.typed = true;
+                }
+                if naming.draft.chars().count() < MAX_NAME_CHARS {
+                    naming.draft.push(c);
+                }
+            }
+            Action::Erase => {
+                naming.draft.pop();
+                naming.typed = true;
+            }
+            Action::AnotherName => {
+                let sprite = naming.sprite;
+                let draft = self.random_name(sprite, world);
+                let naming = self.naming.as_mut().expect("naming");
+                naming.draft = draft;
+                naming.typed = false;
+            }
+            Action::Enter => {
+                let naming = self.naming.take().expect("naming");
+                self.screen = Screen::Normal;
+                if naming.draft.trim().is_empty() {
+                    self.refuse("A name needs a letter in it".into());
+                } else {
+                    self.commands.push(Command::Rename {
+                        sprite: naming.sprite,
+                        name: naming.draft,
+                    });
+                }
+            }
+            Action::Back => {
+                self.naming = None;
+                self.screen = Screen::Normal;
+            }
+            Action::Quit => return Flow::Quit,
+            Action::Point(cell) => self.point(cell),
+            _ => {}
+        }
+        Flow::Continue
+    }
+
+    /// Saves the selected sprite's genome to a file in the genome folder
+    /// (design §6.1, §6.7), named for the sprite and the tick, and says
+    /// where.
+    fn export_genome(&mut self, world: &World) {
+        let Some(sprite) = self.selection.and_then(|s| match s {
+            Selection::Living(id) => world.sprite(id),
+            Selection::Dead { .. } => None,
+        }) else {
+            return self.refuse("Select a sprite to save its genome".into());
+        };
+        let Some(folder) = self.genome_folder.clone() else {
+            return self.refuse("There's no folder to save genomes in".into());
+        };
+        let label = self.names.label(sprite.id());
+        let slug: String = label
+            .chars()
+            .filter_map(|c| match c {
+                c if c.is_ascii_alphanumeric() => Some(c.to_ascii_lowercase()),
+                ' ' | '-' => Some('-'),
+                _ => None,
+            })
+            .collect();
+        let file = format!("{slug}-tick-{}.ron", world.tick());
+        let text = sprite.genome().to_ron(world.data());
+        let saved = std::fs::create_dir_all(&folder)
+            .and_then(|()| std::fs::write(folder.join(&file), text));
+        match saved {
+            Ok(()) => {
+                let path = folder.join(&file);
+                self.tell_player(format!("Saved {label}'s genome to {}", path.display()));
+            }
+            Err(err) => self.refuse(format!("Couldn't save the genome: {err}")),
+        }
     }
 
     /// Locks the Cursor on to the selection, or lets go, when it follows

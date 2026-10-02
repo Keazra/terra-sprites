@@ -8,7 +8,7 @@ use crate::categories::{CATEGORIES, Category, SPRITE, WATER, categories};
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, GenomeError};
 use crate::names::{NAMES, Syllables};
-use crate::object_types::{Effect, OBJECTS, ObjectType, TypeEntry, object_types};
+use crate::object_types::{Condition, Effect, OBJECTS, ObjectType, TypeEntry, object_types};
 use crate::physiology::{Indices, PHYSIOLOGY, Physiology, PhysiologyEntry};
 use crate::registry::{CategoryId, ChemId, Chemical, Locus, LocusId, Verb};
 use crate::tags::{TAGS, Tag, TagEntry, tags};
@@ -274,6 +274,27 @@ impl DataPack {
     pub fn object_type_id(&self, name: &str) -> Option<u16> {
         self.object_type_named(name)
             .map(|kind| self.object_types[kind].id)
+    }
+
+    /// The look a theme draws a new object of type `object_type` with,
+    /// before it's anywhere: the state of the first visual rule that holds
+    /// at the start of its first stage, with its counters at 0, judging any
+    /// condition on where it is false; or "default". `None` if the pack has
+    /// no such type.
+    pub fn new_look(&self, object_type: &str) -> Option<&str> {
+        let kind = self.object_type_named(object_type)?;
+        let object_type = &self.object_types[kind];
+        let first_stage = (!object_type.stages.is_empty()).then_some(0);
+        let holds = |condition: &Condition| match *condition {
+            Condition::InStage(stage) => first_stage == Some(stage),
+            Condition::Counter(_, cmp, value) => cmp.holds(0, value),
+            _ => false,
+        };
+        let visual = object_type
+            .visual
+            .iter()
+            .find(|visual| visual.conditions.iter().all(holds));
+        Some(visual.map_or("default", |visual| visual.state.as_str()))
     }
 
     /// A random name made from the pack's syllables (design §6.5): the same

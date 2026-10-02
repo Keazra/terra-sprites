@@ -318,7 +318,7 @@ fn any_other_key_is_reported_so_it_can_cancel_a_prompt() {
     for code in [
         KeyCode::Char('k'),
         KeyCode::Char('n'),
-        KeyCode::Enter,
+        KeyCode::Char('0'),
         KeyCode::F(5),
     ] {
         assert_eq!(
@@ -505,4 +505,21 @@ fn letting_go_of_e_lets_go_of_the_right_button_and_other_releases_do_nothing() {
     keys.action_for(press(KeyCode::Char('q')));
     let release = kind(KeyCode::Char('q'), KeyEventKind::Release);
     assert_eq!(keys.action_for(release), None);
+}
+
+#[test]
+fn the_place_menu_and_naming_keys_have_their_actions() {
+    for (code, action) in [
+        (KeyCode::Char('1'), Action::Pick(1)),
+        (KeyCode::Char('9'), Action::Pick(9)),
+        (KeyCode::Enter, Action::Enter),
+        (KeyCode::Char('r'), Action::Rename),
+        (KeyCode::Char('g'), Action::ExportGenome),
+    ] {
+        assert_eq!(
+            Keys::new().action_for(press(code)),
+            Some(action),
+            "{code:?}"
+        );
+    }
 }
