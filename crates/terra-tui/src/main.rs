@@ -11,6 +11,7 @@ use ratatui::crossterm::execute;
 use terra_sim::{DataPack, World, WorldConfig};
 use terra_tui::app::{App, Flow};
 use terra_tui::args::{Args, USAGE};
+use terra_tui::files;
 use terra_tui::input::{self, Keys};
 use terra_tui::theme::Theme;
 use terra_tui::ui;
@@ -98,6 +99,9 @@ fn run(
 ) -> io::Result<()> {
     let areas = ui::areas(terminal.size()?, world.map());
     let mut app = App::new(world.map(), theme, seed, areas);
+    if let Some(folder) = files::genome_folder() {
+        app.set_genome_folder(folder);
+    }
     let mut keys = Keys::new();
     let mut last_frame = Instant::now();
 
@@ -113,6 +117,8 @@ fn run(
         let deadline = last_frame + FRAME;
         while event::poll(deadline.saturating_duration_since(Instant::now()))? {
             let action = match event::read()? {
+                // While naming, keys type letters (design §6.5).
+                Event::Key(key) if app.typing() => input::typed_action(key),
                 Event::Key(key) => keys.action_for(key),
                 Event::Mouse(mouse) => input::mouse_action(mouse),
                 _ => None,

@@ -5,6 +5,7 @@ pub mod app;
 pub mod args;
 pub mod clock;
 pub mod cp437;
+pub mod files;
 pub mod input;
 mod inspector;
 mod text;
