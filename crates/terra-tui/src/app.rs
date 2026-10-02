@@ -200,7 +200,7 @@ pub struct App {
     tile_area: Rect,
     /// The inspector, border included, if the screen has room for it.
     inspector: Option<Rect>,
-    /// The screen cell under the mouse pointer, while that cell shows a tile.
+    /// The screen cell under the mouse pointer, while it points at a tile.
     pointer: Option<Position>,
     /// The latest events the event log shows, newest first, each with how
     /// many times in a row it came (design v21 §6.1).
@@ -804,9 +804,9 @@ impl App {
     /// The tile the pointer on screen cell `cell` points at (design v27 §6.5):
     /// the one up and to the left of the tile under it, so the pointer's
     /// arrow rests on the Cursor's corner rather than hiding it. On the map
-    /// view's top row or left column it's the tile under the pointer, and the
-    /// border just right of or below the tiles points at the last column or
-    /// row, so every tile in view can be pointed at.
+    /// view's top row it stays in that row, and on its left column in that
+    /// column; and the border just right of or below the tiles points at the
+    /// last column or row, so every tile in view can be pointed at.
     pub fn pointed_at(&self, cell: Position) -> Option<Pos> {
         let area = self.tile_area;
         let reach = Rect::new(
@@ -916,7 +916,7 @@ impl App {
                 self.point(at);
                 if self.inspector.is_some_and(|area| area.contains(at)) {
                     self.scroll_tab(notches * WHEEL_LINES, world);
-                } else if self.tile_at(at).is_some() {
+                } else if self.pointed_at(at).is_some() {
                     self.mode = self.mode.along(notches);
                 }
             }
@@ -1287,8 +1287,8 @@ impl App {
         self.settle();
     }
 
-    /// Keeps the viewport within the wall, and the cursor on whatever tile is
-    /// under a still pointer.
+    /// Keeps the viewport within the wall, and the cursor on whatever tile a
+    /// still pointer points at.
     fn settle(&mut self) {
         let (map, area) = (self.map_size, self.tile_area);
         self.viewport = Pos {
@@ -1302,7 +1302,8 @@ impl App {
 
     /// Notes the tile the pointer on screen cell `cell` points at as the
     /// pointer's, and puts the Cursor there, within the leash, unless it
-    /// follows a sprite. Off the map view, both stay on their last tile.
+    /// follows a sprite. Where it points at no tile, both stay on their last
+    /// tile.
     fn point(&mut self, cell: Position) {
         match self.pointed_at(cell) {
             Some(tile) => {

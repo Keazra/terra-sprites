@@ -125,7 +125,7 @@ fn pointing_puts_the_cursor_one_tile_up_and_left_of_the_pointer() {
 }
 
 #[test]
-fn on_the_map_view_s_top_row_or_left_column_the_cursor_is_under_the_pointer() {
+fn on_the_map_view_s_top_row_or_left_column_the_cursor_stays_in_that_row_or_column() {
     let world = grass(160, 96);
     let mut app = app(&world, tile_area(20, 10));
     point(&mut app, &world, 1, 2);
