@@ -74,7 +74,7 @@ fn a_paused_clock_runs_nothing_and_builds_no_backlog() {
 }
 
 #[test]
-fn stepping_while_paused_runs_exactly_one_tick() {
+fn stepping_while_paused_at_1x_runs_one_tick() {
     let mut clock = Clock::new();
     clock.toggle_pause();
     clock.step_once();
@@ -84,6 +84,86 @@ fn stepping_while_paused_runs_exactly_one_tick() {
         0,
         "a step is used once"
     );
+}
+
+/// A paused clock at `speed`, reached from 1× with fresh presses.
+fn paused_at(speed: Speed) -> Clock {
+    let mut clock = Clock::new();
+    clock.toggle_pause();
+    while clock.speed() != speed {
+        if speed == Speed::Eighth || speed == Speed::Quarter || speed == Speed::Half {
+            clock.slower();
+        } else {
+            clock.faster();
+        }
+    }
+    clock
+}
+
+#[test]
+fn a_step_runs_one_seconds_worth_of_ticks_at_the_speed_and_at_least_one() {
+    // Design v26 §6.6: 1× is 1.25 ticks a second, rounded down to 1; Max
+    // steps as 16× does.
+    use Speed::*;
+    for (speed, ticks) in [
+        (Eighth, 1),
+        (Quarter, 1),
+        (Half, 1),
+        (X1, 1),
+        (X2, 2),
+        (X4, 5),
+        (X8, 10),
+        (X16, 20),
+        (Max, 20),
+    ] {
+        let mut clock = paused_at(speed);
+        clock.step_once();
+        assert_eq!(
+            run_for(&mut clock, Duration::from_secs(4)),
+            ticks,
+            "{speed:?}"
+        );
+    }
+}
+
+#[test]
+fn a_step_cut_short_by_the_frame_budget_finishes_on_the_next_frames() {
+    let mut clock = paused_at(Speed::X16);
+    clock.step_once();
+    let ticks = std::cell::Cell::new(0);
+    let ran = clock.advance(
+        Duration::from_millis(40),
+        || ticks.set(ticks.get() + 1),
+        || ticks.get() >= 3,
+    );
+    assert_eq!(ran, 3);
+    assert_eq!(run_for(&mut clock, Duration::from_secs(4)), 17);
+}
+
+#[test]
+fn stepping_again_mid_step_tops_it_up_rather_than_adding_another() {
+    // A held `.` repeats faster than a long step runs, so presses don't pile up.
+    let mut clock = paused_at(Speed::X16);
+    clock.step_once();
+    let ticks = std::cell::Cell::new(0);
+    clock.advance(
+        Duration::from_millis(40),
+        || ticks.set(ticks.get() + 1),
+        || ticks.get() >= 3,
+    );
+    clock.step_once();
+    clock.step_once();
+    assert_eq!(run_for(&mut clock, Duration::from_secs(4)), 20);
+}
+
+#[test]
+fn resuming_drops_what_is_left_of_a_step() {
+    let mut clock = paused_at(Speed::X16);
+    clock.step_once();
+    clock.advance(Duration::from_millis(40), || {}, || true);
+    clock.toggle_pause();
+    clock.toggle_pause();
+    assert_eq!(run_for(&mut clock, Duration::from_secs(4)), 0);
 }
 
 #[test]

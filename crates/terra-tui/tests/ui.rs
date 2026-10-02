@@ -99,8 +99,24 @@ fn the_top_bar_shows_when_time_is_paused() {
     let mut app = default_app();
     app.clock.toggle_pause();
     let bar = top_bar(&app);
-    assert!(bar.contains("|| paused"), "{bar}");
+    assert!(bar.contains("|| paused 1x"), "{bar}");
     assert!(!bar.contains('►'), "{bar}");
+}
+
+#[test]
+fn while_paused_the_top_bar_shows_the_speed_time_resumes_at() {
+    // Design v26 §6.6: `+` and `-` still change the speed while paused.
+    let mut app = default_app();
+    app.clock.toggle_pause();
+    app.clock.faster();
+    app.clock.faster();
+    let bar = top_bar(&app);
+    assert!(bar.contains("|| paused 4x"), "{bar}");
+    app.clock.slower();
+    app.clock.slower();
+    app.clock.slower();
+    let bar = top_bar(&app);
+    assert!(bar.contains("|| paused 1/2x"), "{bar}");
 }
 
 #[test]

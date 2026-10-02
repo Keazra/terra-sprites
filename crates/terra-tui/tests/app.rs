@@ -189,6 +189,22 @@ fn time_actions_reach_the_clock() {
 }
 
 #[test]
+fn plus_and_minus_change_the_speed_while_paused() {
+    let world = grass(40, 30);
+    let mut app = app(&world, tile_area(20, 10));
+    app.apply(Action::TogglePause, &world);
+    app.apply(Action::Faster { held: false }, &world);
+    app.apply(Action::Faster { held: false }, &world);
+    assert_eq!(app.clock.speed(), Speed::X4);
+    app.apply(Action::Slower { held: false }, &world);
+    assert_eq!(app.clock.speed(), Speed::X2);
+    assert!(
+        app.clock.is_paused(),
+        "changing the speed doesn't resume time"
+    );
+}
+
+#[test]
 fn escape_asks_to_quit_and_y_quits() {
     let world = grass(40, 30);
     let mut app = app(&world, tile_area(20, 10));
