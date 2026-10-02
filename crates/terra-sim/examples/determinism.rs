@@ -18,7 +18,7 @@ const TICKS: u64 = 20_000;
 
 /// How often a hash is printed, as for a replay's checkpoints (design §2.7):
 /// a mismatch then names the stretch of ticks it began in.
-const EVERY: u64 = 1_000;
+const CHECKPOINT_EVERY: u64 = 1_000;
 
 fn main() {
     let data = DataPack::builtin().expect("the built-in data pack is valid");
@@ -27,7 +27,7 @@ fn main() {
     checkpoint(&world);
     while world.tick() < TICKS {
         world.step();
-        if world.tick().is_multiple_of(EVERY) {
+        if world.tick().is_multiple_of(CHECKPOINT_EVERY) {
             checkpoint(&world);
         }
     }

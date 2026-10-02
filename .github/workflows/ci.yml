@@ -73,6 +73,9 @@ jobs:
   determinism-compare:
     name: determinism (all runners match)
     needs: determinism
+    # Still compares the runners that finished when one failed, so the run
+    # summary shows how far they agree.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
