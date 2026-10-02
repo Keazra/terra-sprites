@@ -224,25 +224,22 @@ fn press(app: &mut App, world: &World) {
     apply(app, world, action);
 }
 
-/// Selects the sprite on `tile` and locks the Cursor on to it, in Select
-/// mode, then goes back to Grab mode.
-fn lock_on(app: &mut App, world: &World, tile: Pos) {
-    apply(app, world, Action::Mode(CursorMode::Select));
-    let action = Action::Click {
-        at: Position::new(tile.x, tile.y),
-        button: Button::Right,
-        amplified: false,
-    };
-    apply(app, world, action);
-    apply(app, world, Action::Mode(CursorMode::Grab));
+/// Has the Cursor follow the sprite on `tile`, with a middle click (design
+/// v26 §6.5).
+fn follow(app: &mut App, world: &World, tile: Pos) {
+    apply(
+        app,
+        world,
+        Action::middle_click(Position::new(tile.x, tile.y)),
+    );
 }
 
 #[test]
-fn leading_the_locked_on_sprite_the_cursor_follows_the_pointer_and_the_lock_comes_back_after() {
+fn leading_the_followed_sprite_the_cursor_follows_the_pointer_and_follow_comes_back_after() {
     let mut world = field(&[], &[at(4, 2)]);
     let mut app = grab_app(&world);
     let sprite = sprite_on(&world, at(4, 2));
-    lock_on(&mut app, &world, at(4, 2));
+    follow(&mut app, &world, at(4, 2));
     point(&mut app, &world, at(0, 0));
     press(&mut app, &world);
     let commands = app.take_commands();
@@ -254,22 +251,22 @@ fn leading_the_locked_on_sprite_the_cursor_follows_the_pointer_and_the_lock_come
     tick(&mut app, &mut world);
     point(&mut app, &world, at(8, 5));
     assert_eq!(
-        (app.cursor(), app.locked()),
+        (app.cursor(), app.followed()),
         (at(8, 5), None),
-        "the lock waits"
+        "Follow waits"
     );
     press(&mut app, &world);
     tick(&mut app, &mut world);
     let there = world.sprite(sprite).expect("the sprite").pos();
     assert_eq!(
-        (app.cursor(), app.locked()),
+        (app.cursor(), app.followed()),
         (there, Some(sprite)),
         "back on it"
     );
 }
 
 #[test]
-fn while_leading_a_cursor_locked_on_to_another_walking_sprite_tells_the_world_where_it_goes() {
+fn while_leading_a_cursor_following_another_walking_sprite_tells_the_world_where_it_goes() {
     let rows = vec![".........."; 6];
     let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
     let walker = at(5, 3);
@@ -286,7 +283,7 @@ fn while_leading_a_cursor_locked_on_to_another_walking_sprite_tells_the_world_wh
     let mut app = grab_app(&world);
     let id = sprite_on(&world, walker);
     click(&mut app, &world, at(1, 1));
-    lock_on(&mut app, &world, walker);
+    follow(&mut app, &world, walker);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
     for _ in 0..6 {
         tick(&mut app, &mut world);
@@ -353,30 +350,30 @@ fn resting_sprite_and_ball() -> World {
 }
 
 #[test]
-fn taking_hold_of_the_locked_on_sprite_puts_the_cursor_on_the_pointer_at_once() {
-    // Design v23 §6.5: the lock waits, so a keyboard click lands where the
+fn taking_hold_of_the_followed_sprite_puts_the_cursor_on_the_pointer_at_once() {
+    // Design v23 §6.5: Follow waits, so a keyboard click lands where the
     // pointer is.
     let world = resting_sprite_and_ball();
     let mut app = grab_app(&world);
-    lock_on(&mut app, &world, at(4, 2));
+    follow(&mut app, &world, at(4, 2));
     point(&mut app, &world, at(8, 5));
-    assert_eq!(app.cursor(), at(4, 2), "locked on");
+    assert_eq!(app.cursor(), at(4, 2), "following");
     press(&mut app, &world);
     assert_eq!(app.cursor(), at(8, 5));
 }
 
 #[test]
-fn holding_an_item_with_the_lock_on_a_sprite_a_click_puts_it_at_its_feet() {
-    // Design v23 change 6: the lock steps aside only for the sprite it's on,
-    // so holding a berry picked up with the lock off, the Cursor sits on the
-    // locked-on sprite.
+fn holding_an_item_while_following_a_sprite_a_click_puts_it_at_its_feet() {
+    // Design v23 change 6: Follow steps aside only for the sprite it's on,
+    // so holding a berry picked up with Follow off, the Cursor sits on the
+    // followed sprite.
     let mut world = resting_sprite_and_ball();
     let mut app = grab_app(&world);
     click(&mut app, &world, at(1, 1));
     tick(&mut app, &mut world);
-    lock_on(&mut app, &world, at(4, 2));
+    follow(&mut app, &world, at(4, 2));
     point(&mut app, &world, at(8, 5));
-    assert_eq!(app.cursor(), at(4, 2), "on the locked-on sprite");
+    assert_eq!(app.cursor(), at(4, 2), "on the followed sprite");
     press(&mut app, &world);
     assert_eq!(
         app.take_commands(),
@@ -385,17 +382,33 @@ fn holding_an_item_with_the_lock_on_a_sprite_a_click_puts_it_at_its_feet() {
 }
 
 #[test]
-fn leading_the_locked_on_sprite_the_lock_steps_aside_in_every_mode() {
+fn holding_an_item_while_following_a_sprite_a_mouse_click_anywhere_puts_it_at_its_feet() {
+    // Design v26 §6.5: following, a click still reaches the sprite, wherever
+    // it lands.
+    let mut world = resting_sprite_and_ball();
+    let mut app = grab_app(&world);
+    click(&mut app, &world, at(1, 1));
+    tick(&mut app, &mut world);
+    follow(&mut app, &world, at(4, 2));
+    click(&mut app, &world, at(8, 5));
+    assert_eq!(
+        app.take_commands(),
+        vec![Command::PutDown { tile: at(4, 2) }]
+    );
+}
+
+#[test]
+fn leading_the_followed_sprite_follow_steps_aside_in_every_mode() {
     let world = resting_sprite_and_ball();
     let mut app = grab_app(&world);
     let sprite = sprite_on(&world, at(4, 2));
-    lock_on(&mut app, &world, at(4, 2));
+    follow(&mut app, &world, at(4, 2));
     press(&mut app, &world);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
     point(&mut app, &world, at(7, 4));
-    assert_eq!((app.cursor(), app.locked()), (at(7, 4), None));
+    assert_eq!((app.cursor(), app.followed()), (at(7, 4), None));
     apply(&mut app, &world, Action::Mode(CursorMode::Select));
-    assert_eq!(app.locked(), None, "still aside in Select");
+    assert_eq!(app.followed(), None, "still aside in Select");
     assert_eq!(app.grip(&world), Some(Grip::Leads(sprite)));
 }
 
@@ -456,10 +469,10 @@ fn as_the_led_sprite_catches_up_the_cursor_moves_on_towards_the_pointer() {
 }
 
 #[test]
-fn leading_one_sprite_locked_on_to_another_the_cursor_waits_at_the_leash_s_end_towards_it() {
-    // Design v23 change 6: the lock holds, so the led sprite is led towards
-    // the locked-on one.
+fn leading_one_sprite_following_another_the_cursor_waits_at_the_leash_s_end_towards_it() {
+    // Design v23 change 6: Follow holds, so the led sprite is led towards
+    // the followed one.
     let (world, mut app) = leading_in_a_wide_field();
-    lock_on(&mut app, &world, at(12, 3));
+    follow(&mut app, &world, at(12, 3));
     assert_eq!(app.cursor(), at(6, 3));
 }
