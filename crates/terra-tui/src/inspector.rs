@@ -446,6 +446,7 @@ pub(crate) fn logged_line(actor: EntityId, action: &ActionView, data: &Words) ->
     let what = match action.target? {
         Target::Sprite(id) => data.label(id),
         Target::Water(_) => "the water".into(),
+        Target::Cursor => CURSOR.into(),
         Target::Object(_) => {
             let name = action.target_type.and_then(|id| data.object_type_name(id));
             with_article(&display_name(name.unwrap_or("?")))
@@ -466,6 +467,7 @@ fn target_words(action: &ActionView, data: &Words) -> String {
     match action.target {
         Some(Target::Sprite(id)) => data.label(id),
         Some(Target::Water(_)) => "the water".into(),
+        Some(Target::Cursor) => CURSOR.into(),
         Some(Target::Object(_)) => {
             let name = action.target_type.and_then(|id| data.object_type_name(id));
             format!("the {}", display_name(name.unwrap_or("?")))
@@ -526,6 +528,7 @@ fn exact_line(action: &ActionView, data: &Words) -> String {
         }
         (Some(Target::Water(at)), _) => format!("{verb} → water ({},{})", at.x, at.y),
         (Some(Target::Sprite(id)), _) => format!("{verb} → sprite #{}", id.0),
+        (Some(Target::Cursor), _) => format!("{verb} → cursor"),
         (None, Some(to)) => format!("{verb} → ({},{})", to.x, to.y),
         (None, None) => verb.to_string(),
     };
@@ -737,6 +740,10 @@ fn learned_name(learned: &Learned, data: &Words) -> String {
     }
 }
 
+/// How the screen names the Cursor, which sprites learn about while they
+/// can see it (design v29 §6.1): "the Cursor is frightening".
+const CURSOR: &str = "the Cursor";
+
 /// A thing as the Brain tab names it (design v19 §6.1): an object type or
 /// a category by its display name, `berry bush`, a sprite as the log names
 /// it, `Sprite #7`.
@@ -744,6 +751,7 @@ fn thing_name(thing: &Thing, data: &Words) -> String {
     match thing {
         Thing::ObjectType(name) | Thing::Category(name) => display_name(name),
         Thing::Sprite(id) => data.label(*id),
+        Thing::Cursor => CURSOR.into(),
     }
 }
 
@@ -762,6 +770,7 @@ fn things(thing: &Thing, data: &Words) -> (String, &'static str) {
         Thing::ObjectType(name) => counted(name, data.plural_of(name)),
         Thing::Category(name) => counted(name, data.category_plural(name)),
         Thing::Sprite(id) => (data.label(*id), "is"),
+        Thing::Cursor => (CURSOR.into(), "is"),
     }
 }
 
@@ -1236,8 +1245,9 @@ fn refusal_line(command: &Command, reason: Rejection, data: &Words) -> Option<St
             _ => "put it down".into(),
         },
         Command::LetGo => "let go".into(),
-        // The app sends it only while leading, and only onto the map.
-        Command::MoveCursor { .. } => return None,
+        // The app sends it only while leading or visible, and only onto
+        // the map; and the world never refuses showing or hiding it.
+        Command::MoveCursor { .. } | Command::ShowCursor { .. } => return None,
         // Refused as putting it down would be (design v25 §2.5).
         Command::Throw { .. } => match reason {
             Rejection::InTheWay { item_type, .. } => format!("throw the {}", name(item_type)),
@@ -1390,6 +1400,7 @@ pub(crate) fn crashed_into(into: &Thing, data: &Words) -> String {
     match into {
         Thing::ObjectType(name) | Thing::Category(name) => with_article(&display_name(name)),
         Thing::Sprite(id) => data.label(*id),
+        Thing::Cursor => CURSOR.into(),
     }
 }
 
