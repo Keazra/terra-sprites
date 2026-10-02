@@ -208,3 +208,74 @@ fn h_toggles_whether_sprites_can_see_the_cursor_and_held_does_not_flicker() {
         KeyEvent::new_with_kind(KeyCode::Char('h'), KeyModifiers::NONE, KeyEventKind::Repeat);
     assert_eq!(keys.action_for(held), None);
 }
+
+/// The selected sprite's observed lines, newest first.
+fn observed(app: &App) -> Vec<String> {
+    app.observed().map(|o| o.line.clone()).collect()
+}
+
+#[test]
+fn a_touch_from_a_visible_cursor_is_told_as_coming_from_the_cursor() {
+    // Design v29 §6.1: a sprite that can see the Cursor knows where the
+    // touch came from.
+    for (visible, line) in [
+        (false, "Felt a gentle touch out of nowhere"),
+        (true, "Felt a gentle touch from the Cursor"),
+    ] {
+        let mut world = field(&[at(2, 2)]);
+        let mut app = app(&world);
+        apply(&mut app, &world, Action::SelectNext);
+        apply(&mut app, &world, Action::Mode(CursorMode::Train));
+        if visible {
+            apply(&mut app, &world, Action::ToggleVisible);
+        }
+        apply(&mut app, &world, Action::Follow { at: None });
+        apply(
+            &mut app,
+            &world,
+            Action::Press {
+                button: terra_tui::input::Button::Left,
+                amplified: false,
+            },
+        );
+        tick(&mut app, &mut world);
+        assert_eq!(observed(&app).first().map(String::as_str), Some(line));
+    }
+}
+
+#[test]
+fn being_led_and_shoved_by_a_visible_cursor_is_told_as_the_cursor_s_doing() {
+    for (visible, how) in [(false, "out of nowhere"), (true, "by the Cursor")] {
+        let mut world = field(&[at(2, 2)]);
+        let mut app = app(&world);
+        apply(&mut app, &world, Action::SelectNext);
+        apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+        if visible {
+            apply(&mut app, &world, Action::ToggleVisible);
+        }
+        point(&mut app, &world, at(2, 2));
+        apply(
+            &mut app,
+            &world,
+            Action::Click {
+                at: Position::new(3, 3),
+                button: terra_tui::input::Button::Left,
+                amplified: false,
+            },
+        );
+        tick(&mut app, &mut world);
+        world.submit(Command::Shove {
+            toward: terra_sim::Dir::E,
+            tiles: 2,
+        });
+        for _ in 0..4 {
+            tick(&mut app, &mut world);
+        }
+        let lines = observed(&app);
+        assert!(
+            lines.contains(&format!("Was pulled along {how}")),
+            "{lines:?}"
+        );
+        assert!(lines.contains(&format!("Was shoved {how}")), "{lines:?}");
+    }
+}
