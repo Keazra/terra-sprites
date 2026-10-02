@@ -44,12 +44,18 @@ fn at(x: u16, y: u16) -> Pos {
     Pos { x, y }
 }
 
+/// The screen cell the pointer is on to point at `tile`: one down and right of
+/// it (design v27 §6.5). The map view's tiles are drawn from screen cell (0, 0).
+fn pointing_at(tile: Pos) -> Position {
+    Position::new(tile.x + 1, tile.y + 1)
+}
+
 fn apply(app: &mut App, world: &World, action: Action) {
     assert_eq!(app.apply(action, world), Flow::Continue);
 }
 
 fn click(app: &mut App, world: &World, tile: Pos, button: Button) {
-    let at = Position::new(tile.x, tile.y);
+    let at = pointing_at(tile);
     let action = Action::Click {
         at,
         button,
@@ -154,7 +160,7 @@ fn an_amplified_click_is_a_hug_or_a_shock() {
     let mut app = app(&world);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
     for button in [Button::Left, Button::Right] {
-        let at = Position::new(4, 2);
+        let at = pointing_at(at(4, 2));
         let amplified = true;
         apply(
             &mut app,
@@ -225,13 +231,13 @@ const F: Action = Action::Follow { at: None };
 /// A middle click on `tile`: what `F` does, where it points (design v26
 /// §6.5).
 fn middle_click(app: &mut App, world: &World, tile: Pos) {
-    let at = Position::new(tile.x, tile.y);
+    let at = pointing_at(tile);
     apply(app, world, Action::middle_click(at));
 }
 
 /// Has the Cursor follow the sprite on `tile`: points there, then `F`.
 fn follow(app: &mut App, world: &World, tile: Pos) {
-    apply(app, world, Action::Point(Position::new(tile.x, tile.y)));
+    apply(app, world, Action::Point(pointing_at(tile)));
     apply(app, world, F);
 }
 
@@ -363,10 +369,10 @@ fn following_the_cursor_stays_on_its_sprite_whatever_the_pointer_does() {
     let world = field(&[at(4, 2)]);
     let mut app = app(&world);
     follow(&mut app, &world, at(4, 2));
-    apply(&mut app, &world, Action::Point(Position::new(8, 5)));
+    apply(&mut app, &world, Action::Point(pointing_at(at(8, 5))));
     assert_eq!(app.cursor(), at(4, 2));
     apply(&mut app, &world, F);
-    apply(&mut app, &world, Action::Point(Position::new(8, 5)));
+    apply(&mut app, &world, Action::Point(pointing_at(at(8, 5))));
     assert_eq!(
         app.cursor(),
         at(8, 5),
@@ -421,7 +427,7 @@ fn the_followed_sprite_s_death_ends_follow_and_no_other_does() {
     assert_eq!(app.followed(), Some(id), "the selected sprite died");
     app.record(&[died(id)], &world);
     assert_eq!(app.followed(), None);
-    apply(&mut app, &world, Action::Point(Position::new(8, 5)));
+    apply(&mut app, &world, Action::Point(pointing_at(at(8, 5))));
     assert_eq!(app.cursor(), at(8, 5), "it follows the pointer again");
 }
 
@@ -448,14 +454,14 @@ fn in_train_mode_the_followed_sprite_is_the_target_wherever_the_click_or_key_is(
 
 #[test]
 fn q_and_f_act_where_the_cursor_is() {
-    // Design v26 §6.5: under the pointer, or on the followed sprite.
+    // Design v27 §6.5: where the pointer points, or on the followed sprite.
     let world = field(&[at(4, 2), at(7, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
-    apply(&mut app, &world, Action::Point(Position::new(4, 2)));
+    apply(&mut app, &world, Action::Point(pointing_at(at(4, 2))));
     apply(&mut app, &world, F);
     assert_eq!(app.followed(), Some(id), "F followed it");
-    apply(&mut app, &world, Action::Point(Position::new(7, 2)));
+    apply(&mut app, &world, Action::Point(pointing_at(at(7, 2))));
     let q = Action::Press {
         button: Button::Left,
         amplified: false,
@@ -464,7 +470,7 @@ fn q_and_f_act_where_the_cursor_is() {
     assert_eq!(
         app.followed(),
         Some(id),
-        "Q didn't select the sprite under the pointer"
+        "Q didn't select the sprite pointed at"
     );
 }
 

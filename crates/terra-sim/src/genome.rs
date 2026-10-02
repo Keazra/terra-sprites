@@ -249,7 +249,7 @@ impl Genome {
     /// Whether every gene fits `data`: what each refers to is in the pack,
     /// and its values are in range. A genome read with the pack always does;
     /// one a spawn carries is checked, since a replay may bring it from
-    /// another pack (design v27 §2.5).
+    /// another pack (design v28 §2.5).
     pub(crate) fn fits(&self, data: &DataPack) -> bool {
         self.genes.iter().all(|gene| gene.check(data).is_ok())
     }

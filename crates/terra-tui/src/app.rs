@@ -31,15 +31,15 @@ pub enum Screen {
     Normal,
     /// "Quit? (y/n)" is waiting for an answer.
     QuitPrompt,
-    /// The Place menu is open (design v27 §6.5).
+    /// The Place menu is open (design v28 §6.5).
     PlaceMenu,
-    /// The Place menu's list of genome files is open (design v27 §6.5).
+    /// The Place menu's list of genome files is open (design v28 §6.5).
     GenomeMenu,
     /// The player is typing a sprite's name (design §6.5).
     Naming,
 }
 
-/// What a Place menu item makes (design v27 §6.5).
+/// What a Place menu item makes (design v28 §6.5).
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlaceItem {
     /// An object of the type with this stable ID, called `name` in the data.
@@ -219,7 +219,7 @@ pub struct App {
     /// Where the Cursor is: on the sprite it follows, or else on
     /// `pointed`.
     cursor: Pos,
-    /// The tile under the pointer, or its last one (design §6.5).
+    /// The tile the pointer points at, or its last one (design v27 §6.5).
     pointed: Pos,
     /// The sprite the Cursor follows, selected or not (design v26 §6.5).
     follow: Option<EntityId>,
@@ -231,7 +231,7 @@ pub struct App {
     tile_area: Rect,
     /// The inspector, border included, if the screen has room for it.
     inspector: Option<Rect>,
-    /// The screen cell under the mouse pointer, while that cell shows a tile.
+    /// The screen cell under the mouse pointer, while it points at a tile.
     pointer: Option<Position>,
     /// The latest events the event log shows, newest first, each with how
     /// many times in a row it came (design v21 §6.1).
@@ -277,7 +277,7 @@ pub struct App {
     /// The names the player has given sprites, as last seen, so the log
     /// keeps naming a sprite after it dies (design §6.5).
     names: Names,
-    /// The Place menu item waiting on the Cursor (design v27 §6.5).
+    /// The Place menu item waiting on the Cursor (design v28 §6.5).
     placing: Option<Placing>,
     /// The highlighted item of the open menu, from 0.
     menu_choice: usize,
@@ -487,7 +487,7 @@ impl App {
             }
             if let EventKind::CommandRejected { command, .. } = &event.kind {
                 // The marks report the Cursor's clicks; naming isn't one
-                // (design v27 §6.5).
+                // (design v28 §6.5).
                 if !matches!(command, Command::Rename { .. }) {
                     self.flash_report(StatusMark::Rejected);
                 }
@@ -803,7 +803,7 @@ impl App {
             return [flash; 2];
         }
         // A Place menu item waiting on the Cursor shows `↓` and its glyph, as
-        // something carried would (design v27 §6.5).
+        // something carried would (design v28 §6.5).
         if self.placing.is_some() {
             return [StatusMark::Release, StatusMark::Holding];
         }
@@ -918,6 +918,29 @@ impl App {
         })
     }
 
+    /// The tile the pointer on screen cell `cell` points at (design v27 §6.5):
+    /// the one up and to the left of the tile under it, so the pointer's
+    /// arrow rests on the Cursor's corner rather than hiding it. On the map
+    /// view's top row it stays in that row, and on its left column in that
+    /// column; and the border just right of or below the tiles points at the
+    /// last column or row, so every tile in view can be pointed at.
+    pub fn pointed_at(&self, cell: Position) -> Option<Pos> {
+        let area = self.tile_area;
+        let reach = Rect::new(
+            area.x,
+            area.y,
+            area.width.saturating_add(1),
+            area.height.saturating_add(1),
+        );
+        if area.is_empty() || !reach.contains(cell) {
+            return None;
+        }
+        self.tile_at(Position::new(
+            cell.x.saturating_sub(1).max(area.x),
+            cell.y.saturating_sub(1).max(area.y),
+        ))
+    }
+
     /// The screen cell where `tile` is drawn, if it is in view.
     pub fn cell_of(&self, tile: Pos) -> Option<Position> {
         let (area, origin) = (self.tile_area, self.viewport);
@@ -975,7 +998,7 @@ impl App {
                 self.point(at);
                 // A click lands where the Cursor is: not past the leash
                 // (design v23 §6.5).
-                if let Some(tile) = self.tile_at(at) {
+                if let Some(tile) = self.pointed_at(at) {
                     self.act(self.within_leash(tile), button, amplified, world);
                 }
             }
@@ -988,7 +1011,7 @@ impl App {
                 if let Some(at) = at {
                     self.point(at);
                 }
-                if at.is_none_or(|at| self.tile_at(at).is_some()) {
+                if at.is_none_or(|at| self.pointed_at(at).is_some()) {
                     self.toggle_follow(self.cursor, world);
                 }
             }
@@ -1022,7 +1045,7 @@ impl App {
                 self.point(at);
                 if self.inspector.is_some_and(|area| area.contains(at)) {
                     self.scroll_tab(notches * WHEEL_LINES, world);
-                } else if self.tile_at(at).is_some() {
+                } else if self.pointed_at(at).is_some() {
                     self.mode = self.mode.along(notches);
                 }
             }
@@ -1075,7 +1098,7 @@ impl App {
             // A Place menu item waiting on the Cursor takes the next click,
             // where the Cursor is: at the followed sprite's feet, as a held
             // item is put down, or else on the tile clicked. A right click
-            // puts it away (design v27 §6.5).
+            // puts it away (design v28 §6.5).
             (CursorMode::Grab, Button::Left) if self.placing.is_some() => {
                 let tile = if self.followed().is_some() {
                     self.cursor
@@ -1317,7 +1340,7 @@ impl App {
     }
 
     /// What the Place menu item waiting on the Cursor is called, if one is
-    /// (design v27 §6.5).
+    /// (design v28 §6.5).
     pub fn placing(&self) -> Option<&str> {
         self.placing.as_ref().map(|placing| placing.label.as_str())
     }
@@ -1452,7 +1475,7 @@ impl App {
         Flow::Continue
     }
 
-    /// Picks item `index` of the open menu (design v27 §6.5): an object type the
+    /// Picks item `index` of the open menu (design v28 §6.5): an object type the
     /// data offers, or a new sprite, waits on the Cursor; the Place menu's
     /// last item lists the genome files; a genome file is read, and its
     /// sprite waits.
@@ -1508,7 +1531,7 @@ impl App {
         self.open_menu(Screen::GenomeMenu);
     }
 
-    /// Places the item waiting on the Cursor on `tile` (design v27 §6.5).
+    /// Places the item waiting on the Cursor on `tile` (design v28 §6.5).
     fn place(&mut self, tile: Pos) {
         let Some(placing) = self.placing.take() else {
             return;
@@ -1581,7 +1604,7 @@ impl App {
             return Flow::Continue;
         };
         match action {
-            // Only letters CP437 can show, and spaces between them (design v27 §6.5).
+            // Only letters CP437 can show, and spaces between them (design v28 §6.5).
             Action::Type(c) if (c.is_alphabetic() || c == ' ') && cp437::contains(c) => {
                 if !naming.typed {
                     naming.draft.clear();
@@ -1775,8 +1798,8 @@ impl App {
         self.settle();
     }
 
-    /// Keeps the viewport within the wall, and the cursor on whatever tile is
-    /// under a still pointer.
+    /// Keeps the viewport within the wall, and the cursor on whatever tile a
+    /// still pointer points at.
     fn settle(&mut self) {
         let (map, area) = (self.map_size, self.tile_area);
         self.viewport = Pos {
@@ -1788,11 +1811,12 @@ impl App {
         }
     }
 
-    /// Notes the tile at screen cell `cell` as the pointer's, and puts the
-    /// Cursor there, within the leash, unless it follows a sprite. Off the map
-    /// view's tiles, both stay on their last tile.
+    /// Notes the tile the pointer on screen cell `cell` points at as the
+    /// pointer's, and puts the Cursor there, within the leash, unless it
+    /// follows a sprite. Where it points at no tile, both stay on their last
+    /// tile.
     fn point(&mut self, cell: Position) {
-        match self.tile_at(cell) {
+        match self.pointed_at(cell) {
             Some(tile) => {
                 self.pointer = Some(cell);
                 self.pointed = tile;

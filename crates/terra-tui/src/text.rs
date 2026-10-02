@@ -26,7 +26,7 @@ pub(crate) fn terrain_name(terrain: Terrain) -> &'static str {
 }
 
 /// How the screen names sprite `id`, called `name` or not yet named:
-/// "Mira #12", or "Sprite #12" (design v27 §6.5).
+/// "Mira #12", or "Sprite #12" (design v28 §6.5).
 pub(crate) fn label(id: EntityId, name: Option<&str>) -> String {
     match name {
         Some(name) => format!("{name} #{}", id.0),
