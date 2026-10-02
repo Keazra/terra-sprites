@@ -171,7 +171,8 @@ fn where_is(world: &World, id: EntityId) -> Pos {
 }
 
 #[test]
-fn a_shoved_sprite_is_let_go_and_slides_a_tile_a_tick_up_to_three() {
+fn a_shoved_sprite_is_let_go_and_slides_a_tile_a_tick_up_to_five() {
+    // Design v25 §3.5.4: sprites are large, and a large thing goes 5.
     let (mut world, sprite) = leading(&["..........."], &[], at(1, 0));
     world.submit(Command::Shove {
         toward: Dir::E,
@@ -182,12 +183,12 @@ fn a_shoved_sprite_is_let_go_and_slides_a_tile_a_tick_up_to_three() {
     assert!(events.iter().any(|e| e.kind == shoved), "{events:?}");
     assert_eq!(world.cursor().leads(), None);
     assert_eq!(where_is(&world, sprite), at(2, 0), "a tile, from that tick");
+    for x in 3..=6 {
+        world.step();
+        assert_eq!(where_is(&world, sprite), at(x, 0));
+    }
     world.step();
-    assert_eq!(where_is(&world, sprite), at(3, 0));
-    world.step();
-    assert_eq!(where_is(&world, sprite), at(4, 0), "a large thing goes 3");
-    world.step();
-    assert_eq!(where_is(&world, sprite), at(4, 0), "and rests there");
+    assert_eq!(where_is(&world, sprite), at(6, 0), "and rests there");
 }
 
 #[test]
