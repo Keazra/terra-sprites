@@ -7,6 +7,10 @@ use std::time::Duration;
 const PARTS: u128 = 32;
 const NANOS_PER_SECOND: u128 = 1_000_000_000;
 
+/// The most ticks one step runs: 16×'s second's worth, so a step at Max is
+/// still something the player can follow (design v26 §6.6).
+const MAX_STEP_TICKS: u64 = 20;
+
 /// How far back a Reward looks, in the player's time (design v21 §6.5):
 /// about how long a player takes to react. Tuned in play.
 const REACH_BACK_SECONDS: u32 = 2;
@@ -74,8 +78,9 @@ impl Speed {
 pub struct Clock {
     speed: Speed,
     paused: bool,
-    /// A single step requested while paused, run on the next frame.
-    step_requested: bool,
+    /// Ticks still to run of a step requested while paused. A step the frame
+    /// budget cuts short finishes on the next frames.
+    step_ticks: u64,
     /// Owed ticks, scaled by 32 × 10⁹ so pacing stays exact in integer maths.
     owed: u128,
 }
@@ -86,7 +91,7 @@ impl Clock {
         Clock {
             speed: Speed::X1,
             paused: false,
-            step_requested: false,
+            step_ticks: 0,
             owed: 0,
         }
     }
@@ -121,18 +126,28 @@ impl Clock {
         self.paused
     }
 
-    /// Pauses or resumes. Time spent paused is never made up afterwards, and a
-    /// single step still pending when time resumes is dropped.
+    /// Pauses or resumes. Time spent paused is never made up afterwards, and
+    /// what's left of a step when time resumes is dropped.
     pub fn toggle_pause(&mut self) {
         self.paused = !self.paused;
         self.owed = 0;
-        self.step_requested = false;
+        self.step_ticks = 0;
     }
 
-    /// While paused, runs exactly one tick on the next frame. Does nothing while running.
+    /// While paused, runs one step from the next frame: one real second's
+    /// worth of ticks at the speed, rounded down, at least one and at most
+    /// 16×'s 20 (design v26 §6.6). Pressed again before a step has finished,
+    /// it tops the step back up rather than adding another, so a held `.`
+    /// can't pile steps up. Does nothing while running.
     pub fn step_once(&mut self) {
         if self.paused {
-            self.step_requested = true;
+            let ticks = self
+                .speed
+                .parts_per_second()
+                .map_or(MAX_STEP_TICKS, |parts| {
+                    (u64::from(parts) / PARTS as u64).clamp(1, MAX_STEP_TICKS)
+                });
+            self.step_ticks = self.step_ticks.max(ticks);
         }
     }
 
@@ -149,37 +164,39 @@ impl Clock {
     }
 
     /// Accounts for `elapsed` real time, calling `step` once per tick that is due.
+    /// While paused, the ticks due are what's left of a step.
     ///
     /// `out_of_time` is checked after each tick; once it returns true the frame
-    /// stops and any backlog is dropped, so a slow frame can't snowball. At least
-    /// one due tick always runs. Returns the number of ticks run.
+    /// stops and any backlog is dropped, so a slow frame can't snowball. A step
+    /// keeps its ticks for the next frames instead. At least one due tick
+    /// always runs. Returns the number of ticks run.
     pub fn advance(
         &mut self,
         elapsed: Duration,
         mut step: impl FnMut(),
         mut out_of_time: impl FnMut() -> bool,
     ) -> u64 {
-        if self.paused {
-            if std::mem::take(&mut self.step_requested) {
-                step();
-                return 1;
+        let due = if self.paused {
+            u128::from(self.step_ticks)
+        } else {
+            match self.speed.parts_per_second() {
+                Some(rate) => {
+                    self.owed += elapsed.as_nanos() * u128::from(rate);
+                    let due = self.owed / (NANOS_PER_SECOND * PARTS);
+                    self.owed %= NANOS_PER_SECOND * PARTS;
+                    due
+                }
+                // Max: as many ticks as the frame budget allows.
+                None => u128::MAX,
             }
-            return 0;
-        }
-        let due = match self.speed.parts_per_second() {
-            Some(rate) => {
-                self.owed += elapsed.as_nanos() * u128::from(rate);
-                let due = self.owed / (NANOS_PER_SECOND * PARTS);
-                self.owed %= NANOS_PER_SECOND * PARTS;
-                due
-            }
-            // Max: as many ticks as the frame budget allows.
-            None => u128::MAX,
         };
         let mut ran = 0;
         while ran < due {
             step();
             ran += 1;
+            if self.paused {
+                self.step_ticks -= 1;
+            }
             if out_of_time() {
                 break;
             }
