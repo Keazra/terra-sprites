@@ -255,6 +255,21 @@ fn letting_go_of_a_mouse_button_leaves_the_quit_prompt_open() {
 }
 
 #[test]
+fn a_middle_click_leaves_the_quit_prompt_open_and_f_cancels_it() {
+    // A middle click is the mouse, and `F` a key (design v26 §6.5).
+    let world = grass(40, 30);
+    let mut app = app(&world, tile_area(20, 10));
+    app.apply(Action::Back, &world);
+    let middle = Action::Follow {
+        at: Some(Position::new(3, 3)),
+    };
+    app.apply(middle, &world);
+    assert_eq!(app.screen(), Screen::QuitPrompt);
+    app.apply(Action::Follow { at: None }, &world);
+    assert_eq!(app.screen(), Screen::Normal);
+}
+
+#[test]
 fn ctrl_c_quits_at_once() {
     let world = grass(40, 30);
     let mut app = app(&world, tile_area(20, 10));
