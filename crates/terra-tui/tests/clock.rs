@@ -74,7 +74,7 @@ fn a_paused_clock_runs_nothing_and_builds_no_backlog() {
 }
 
 #[test]
-fn stepping_while_paused_runs_exactly_one_tick() {
+fn stepping_while_paused_at_1x_runs_one_tick() {
     let mut clock = Clock::new();
     clock.toggle_pause();
     clock.step_once();
@@ -84,6 +84,104 @@ fn stepping_while_paused_runs_exactly_one_tick() {
         0,
         "a step is used once"
     );
+}
+
+/// A paused clock at `speed`, reached from 1× with fresh presses.
+fn paused_at(speed: Speed) -> Clock {
+    let mut clock = Clock::new();
+    clock.toggle_pause();
+    let below_1x = matches!(speed, Speed::Eighth | Speed::Quarter | Speed::Half);
+    for _ in 0..5 {
+        if clock.speed() == speed {
+            break;
+        }
+        if below_1x {
+            clock.slower();
+        } else {
+            clock.faster();
+        }
+    }
+    assert_eq!(clock.speed(), speed);
+    clock
+}
+
+/// One frame whose budget runs out after `ticks` ticks. Returns how many ran.
+fn advance_cut_after(clock: &mut Clock, ticks: u64) -> u64 {
+    let ran = std::cell::Cell::new(0);
+    clock.advance(
+        Duration::from_millis(40),
+        || ran.set(ran.get() + 1),
+        || ran.get() >= ticks,
+    )
+}
+
+#[test]
+fn a_step_runs_one_seconds_worth_of_ticks_at_the_speed_and_at_least_one() {
+    // Design v27 §6.6: 1× is 1.25 ticks a second, rounded down to 1; Max
+    // steps as 16× does.
+    use Speed::*;
+    for (speed, ticks) in [
+        (Eighth, 1),
+        (Quarter, 1),
+        (Half, 1),
+        (X1, 1),
+        (X2, 2),
+        (X4, 5),
+        (X8, 10),
+        (X16, 20),
+        (Max, 20),
+    ] {
+        let mut clock = paused_at(speed);
+        clock.step_once();
+        assert_eq!(
+            run_for(&mut clock, Duration::from_secs(4)),
+            ticks,
+            "{speed:?}"
+        );
+    }
+}
+
+#[test]
+fn a_step_cut_short_by_the_frame_budget_finishes_on_the_next_frames() {
+    let mut clock = paused_at(Speed::X16);
+    clock.step_once();
+    assert_eq!(advance_cut_after(&mut clock, 3), 3);
+    assert_eq!(run_for(&mut clock, Duration::from_secs(4)), 17);
+}
+
+#[test]
+fn stepping_again_mid_step_tops_it_up_rather_than_adding_another() {
+    // A held `.` repeats faster than a long step runs, so presses don't pile up.
+    let mut clock = paused_at(Speed::X16);
+    clock.step_once();
+    assert_eq!(advance_cut_after(&mut clock, 3), 3);
+    clock.step_once();
+    clock.step_once();
+    assert_eq!(run_for(&mut clock, Duration::from_secs(4)), 20);
+}
+
+#[test]
+fn a_step_after_slowing_down_mid_step_runs_the_new_speed_s_step() {
+    // The top bar shows the new speed, so the step must match it.
+    let mut clock = paused_at(Speed::X16);
+    clock.step_once();
+    assert_eq!(advance_cut_after(&mut clock, 3), 3);
+    for _ in 0..4 {
+        clock.slower();
+    }
+    assert_eq!(clock.speed(), Speed::X1);
+    clock.step_once();
+    assert_eq!(run_for(&mut clock, Duration::from_secs(4)), 1);
+}
+
+#[test]
+fn resuming_drops_what_is_left_of_a_step() {
+    let mut clock = paused_at(Speed::X16);
+    clock.step_once();
+    advance_cut_after(&mut clock, 1);
+    clock.toggle_pause();
+    clock.toggle_pause();
+    assert_eq!(run_for(&mut clock, Duration::from_secs(4)), 0);
 }
 
 #[test]

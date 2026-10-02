@@ -43,13 +43,19 @@ fn grab_app(world: &World) -> App {
     app
 }
 
+/// The screen cell the pointer is on to point at `tile`: one down and right of
+/// it (design v27 §6.5). The map view's tiles are drawn from screen cell (0, 0).
+fn pointing_at(tile: Pos) -> Position {
+    Position::new(tile.x + 1, tile.y + 1)
+}
+
 fn apply(app: &mut App, world: &World, action: Action) {
     assert_eq!(app.apply(action, world), Flow::Continue);
 }
 
 fn click(app: &mut App, world: &World, tile: Pos) {
     let action = Action::Click {
-        at: Position::new(tile.x, tile.y),
+        at: pointing_at(tile),
         button: Button::Left,
         amplified: false,
     };
@@ -181,7 +187,7 @@ fn a_queued_grab_the_world_refuses_leaves_the_cursor_as_the_world_says() {
 }
 
 fn point(app: &mut App, world: &World, tile: Pos) {
-    apply(app, world, Action::Point(Position::new(tile.x, tile.y)));
+    apply(app, world, Action::Point(pointing_at(tile)));
 }
 
 #[test]
@@ -227,11 +233,7 @@ fn press(app: &mut App, world: &World) {
 /// Has the Cursor follow the sprite on `tile`, with a middle click (design
 /// v26 §6.5).
 fn follow(app: &mut App, world: &World, tile: Pos) {
-    apply(
-        app,
-        world,
-        Action::middle_click(Position::new(tile.x, tile.y)),
-    );
+    apply(app, world, Action::middle_click(pointing_at(tile)));
 }
 
 #[test]

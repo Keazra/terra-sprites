@@ -412,8 +412,10 @@ fn draw_border(buf: &mut Buffer, area: Rect, title: &str, walls: Sides) {
 
 fn top_bar_line(app: &App, world: &World) -> Line<'static> {
     let clock = &app.clock;
+    // Paused, it still shows the speed: `+` and `-` change it, and it sets
+    // how far `.` steps (design v27 §6.6).
     let time = if clock.is_paused() {
-        "|| paused".to_string()
+        format!("|| paused {}", speed_label(clock.speed()))
     } else {
         format!("► {}", speed_label(clock.speed()))
     };
