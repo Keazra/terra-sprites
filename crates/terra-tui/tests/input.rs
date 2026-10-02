@@ -1,4 +1,4 @@
-use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, ModifierKeyCode};
 use ratatui::layout::Position;
 use terra_tui::app::CursorMode;
 use terra_tui::input::{Action, Button, Keys};
@@ -141,6 +141,39 @@ fn holding_step_keeps_stepping() {
         keys.action_for(kind(dot, KeyEventKind::Repeat)),
         Some(Action::StepOnce),
         "held via repeat"
+    );
+}
+
+#[test]
+fn a_modifier_or_lock_key_on_its_own_does_nothing() {
+    // With the kitty keyboard protocol on (design v26 §6.6), the terminal
+    // reports Shift and the lock keys as keys of their own. Pressing Shift for
+    // a capital `Y` mustn't cancel the quit prompt first.
+    let mut keys = Keys::with_release_reporting(true);
+    for code in [
+        KeyCode::Modifier(ModifierKeyCode::LeftShift),
+        KeyCode::Modifier(ModifierKeyCode::RightControl),
+        KeyCode::CapsLock,
+        KeyCode::NumLock,
+        KeyCode::ScrollLock,
+    ] {
+        assert_eq!(keys.action_for(press(code)), None, "{code:?}");
+        assert_eq!(
+            keys.action_for(kind(code, KeyEventKind::Release)),
+            None,
+            "{code:?}"
+        );
+    }
+}
+
+#[test]
+fn a_shifted_plus_reported_as_shift_and_equals_is_faster() {
+    // The kitty protocol reports the key, `=`, with Shift held.
+    let mut keys = Keys::with_release_reporting(true);
+    let shifted_equals = KeyEvent::new(KeyCode::Char('='), KeyModifiers::SHIFT);
+    assert_eq!(
+        keys.action_for(shifted_equals),
+        Some(Action::Faster { held: false })
     );
 }
 
