@@ -50,7 +50,7 @@ To run the checks CI runs: `cargo fmt --all --check`, `cargo clippy --workspace 
 
 ## Same seed, same world
 
-A world made from the same seed and settings, given the same clicks and keys, plays out exactly the same every time, in the same version of the game. That holds across computers too, for these targets:
+A world made from the same seed and world config, given the same clicks and keys, plays out exactly the same every time, in the same version of the game. That holds across computers too, for these targets:
 
 | Computer | Target |
 |---|---|
