@@ -317,17 +317,17 @@ struct Shoved {
     /// What it crashed into, once it has.
     crash: Option<Crash>,
     /// Where the shove came from, as the sprite felt it (design v29 §6.1).
-    how: &'static str,
+    how: String,
 }
 
 /// Where the Cursor's doing came from, as a sprite felt it in the tick just
 /// run (design v29 §6.1): "out of nowhere", or, while sprites could see it,
-/// "by the Cursor".
-fn whence(world: &World) -> &'static str {
+/// "by the Cursor" (or "from" it, as `preposition` says).
+fn whence(world: &World, preposition: &str) -> String {
     if world.cursor().visible() {
-        "by the Cursor"
+        format!("{preposition} the Cursor")
     } else {
-        "out of nowhere"
+        "out of nowhere".into()
     }
 }
 
@@ -482,7 +482,7 @@ impl App {
             if let EventKind::LetGo { sprite } | EventKind::Shoved { sprite } = event.kind
                 && self.selection == Some(Selection::Living(sprite))
             {
-                let how = whence(world);
+                let how = whence(world, "by");
                 self.observe(event.tick, format!("Was pulled along {how}"));
             }
             // A shove, felt as one from nowhere, is observed once the slide
@@ -494,7 +494,7 @@ impl App {
                     self.shoved = Some(Shoved {
                         sprite: *sprite,
                         crash: None,
-                        how: whence(world),
+                        how: whence(world, "by"),
                     });
                 }
                 EventKind::Crashed { sprite, into, hurt } => {
@@ -759,11 +759,7 @@ impl App {
         };
         self.emotes.insert(id, (emote, self.running_for));
         if self.selection == Some(Selection::Living(id)) {
-            let from = if world.cursor().visible() {
-                "from the Cursor"
-            } else {
-                "out of nowhere"
-            };
+            let from = whence(world, "from");
             self.observe(tick, format!("Felt {line} {from}"));
         }
     }

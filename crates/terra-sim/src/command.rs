@@ -247,7 +247,8 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
                 continue;
             }
             &Command::MoveCursor { .. } => Err(Rejection::OffTheMap),
-            // Nor this: the screen sends it as the player changes mode.
+            // Nor this: the screen sends it as the player changes mode (design
+            // v29 §2.5, §6.5).
             &Command::ShowCursor { visible } => {
                 state.cursor.visible = visible;
                 continue;

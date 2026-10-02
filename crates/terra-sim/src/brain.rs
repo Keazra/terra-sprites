@@ -385,17 +385,33 @@ impl Brain {
             let attacker = self.experience.remember(attacker, relief.len());
             attacker.fear = (attacker.fear - rate * signals.punishment).max(-1.0);
         }
+        // What the feelings are about: the latest try, while it's recent
+        // (design §5.6). Relief and punishment look back the touch window, a
+        // zap's or shock's too; reward, in a tick the Cursor rewarded the
+        // sprite, looks back the Reward's reach back (design v21 §5.6).
+        let within = |ticks: u64| self.touched.filter(|t| tick - t.tick <= ticks);
+        let near = within(physiology.touch_window);
+        let reached = signals.reach_back.map_or(near, within);
         // A Cursor it can see is part of the lesson (design v29 §5.6): a pet
-        // teaches it to like the Cursor, and a zap or a shock to fear it, as
-        // well as what each teaches about what it touched.
-        if signals.seen_cursor {
+        // teaches it to like the Cursor, and a zap, a shock or a crash after
+        // its shove to fear it, as a hit teaches fear of the hitter, as well
+        // as what each teaches about what it touched. A pet for a try on the
+        // Cursor itself is the lesson about the thing touched, below, and a
+        // crash teaches only in its own tick.
+        let touched_the_cursor = reached
+            .or(near)
+            .is_some_and(|touch| touch.subject.category(data) == data.cursor_category());
+        let liked = signals.seen_cursor && signals.reach_back.is_some() && !touched_the_cursor;
+        let feared = signals.seen_cursor && signals.corrected
+            || near.is_some_and(|touch| touch.by_cursor && touch.tick == tick);
+        if liked || feared {
             let good = self.params.get(BrainParam::IndividualRateGood) * learning_rate_mod;
             let fear = self.params.get(BrainParam::FearRate) * learning_rate_mod;
             let cursor = self.experience.remember_the_cursor(relief.len());
-            if signals.reach_back.is_some() {
+            if liked {
                 cursor.good = (cursor.good + good * signals.reward).min(1.0);
             }
-            if signals.corrected {
+            if feared {
                 cursor.fear = (cursor.fear - fear * signals.punishment).max(-1.0);
             }
         }
@@ -409,24 +425,6 @@ impl Brain {
             let reach = self.params.get(BrainParam::FearReach);
             let nearness = (1.0 - distance / reach).max(0.0);
             cursor.fear *= 1.0 - self.params.get(BrainParam::CursorCalming) * nearness;
-        }
-        // What the feelings are about: the latest try, while it's recent
-        // (design §5.6). Relief and punishment look back the touch window, a
-        // zap's or shock's too; reward, in a tick the Cursor rewarded the
-        // sprite, looks back the Reward's reach back (design v21 §5.6).
-        let within = |ticks: u64| self.touched.filter(|t| tick - t.tick <= ticks);
-        let near = within(physiology.touch_window);
-        let reached = signals.reach_back.map_or(near, within);
-        // A crash after a shove by a Cursor it could see teaches fear of the
-        // Cursor too, as a hit teaches fear of the hitter; the thing crashed
-        // into is bad, as ever (design v29 §5.6).
-        if let Some(Touch {
-            by_cursor: true, ..
-        }) = near
-        {
-            let fear = self.params.get(BrainParam::FearRate) * learning_rate_mod;
-            let cursor = self.experience.remember_the_cursor(relief.len());
-            cursor.fear = (cursor.fear - fear * signals.punishment).max(-1.0);
         }
         let needs = data.need_places().len();
         if let Some(Touch {
