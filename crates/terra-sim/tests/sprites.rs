@@ -111,7 +111,7 @@ struct Death {
 fn first_death(world: &mut World, limit: u64) -> Death {
     for _ in 0..limit {
         for event in world.step() {
-            if let EventKind::Died { id, cause, age } = event.kind {
+            if let EventKind::Died { id, cause, age, .. } = event.kind {
                 return Death {
                     tick: event.tick,
                     id,

@@ -72,7 +72,7 @@ fn follow(app: &mut App, world: &World, tile: Pos) {
 /// Hands the app's commands to the world and runs a tick, as a frame does.
 fn tick(app: &mut App, world: &mut World) {
     for command in app.take_commands() {
-        world.submit(command);
+        world.submit(command.clone());
     }
     let events = world.step();
     app.record(&events, world);
@@ -421,7 +421,10 @@ fn a_right_press_on_a_sprite_with_the_cursor_empty_takes_hold_of_it_and_aims_a_s
         toward: Dir::E,
         tiles: 2,
     };
-    assert_eq!(sent(&mut app), vec![Command::TakeHold { sprite }, shove]);
+    assert_eq!(
+        sent(&mut app),
+        vec![Command::TakeHold { sprite }, shove.clone()]
+    );
     // Both apply at the next tick, and it slides a tile of the 2.
     world.submit(Command::TakeHold { sprite });
     world.submit(shove);
@@ -447,7 +450,7 @@ fn a_right_press_on_an_item_with_the_cursor_empty_picks_it_up_and_throws_it_from
     };
     assert_eq!(
         app.take_commands(),
-        vec![Command::PickUp { item: ball }, throw]
+        vec![Command::PickUp { item: ball }, throw.clone()]
     );
     world.submit(Command::PickUp { item: ball });
     world.submit(throw);

@@ -8,7 +8,7 @@ use crate::objects::EntityId;
 use crate::registry::Verb;
 
 /// Something that happened during a tick.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Event {
     /// The tick it happened in.
     pub tick: u64,
@@ -16,7 +16,7 @@ pub struct Event {
 }
 
 /// What kind of thing happened, with the entities involved.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum EventKind {
     /// An object was created, by a lifecycle rule.
     ObjectSpawned {
@@ -38,6 +38,8 @@ pub enum EventKind {
     /// A sprite died, and left the world.
     Died {
         id: EntityId,
+        /// The name the player gave it, if any (design v28 §2.5).
+        name: Option<String>,
         cause: DeathCause,
         /// Its age in ticks.
         age: u64,
@@ -55,6 +57,16 @@ pub enum EventKind {
     /// The Cursor corrected a sprite (design v21 §4.6): a zap, or amplified,
     /// a shock.
     Corrected { id: EntityId, amplified: bool },
+    /// The Cursor placed a new object (design v28 §2.5).
+    Placed {
+        id: EntityId,
+        object_type: String,
+        pos: Pos,
+    },
+    /// A new sprite was spawned by the Cursor (design v28 §2.5).
+    Spawned { id: EntityId, pos: Pos },
+    /// The player named a sprite (design v28 §2.5).
+    Renamed { id: EntityId, name: String },
     /// The Cursor took hold of a sprite, which it now leads (design v23
     /// §6.5).
     TookHold { sprite: EntityId },

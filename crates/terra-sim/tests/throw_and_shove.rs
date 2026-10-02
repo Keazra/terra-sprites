@@ -62,8 +62,8 @@ fn holding(rows: &[&str], objects: &[(Pos, &str)], from: Pos) -> (World, EntityI
 
 /// The reason the world gave for refusing `command`, if it did.
 fn refused(events: &[Event], command: Command) -> Option<Rejection> {
-    events.iter().find_map(|e| match e.kind {
-        EventKind::CommandRejected { command: c, reason } if c == command => Some(reason),
+    events.iter().find_map(|e| match &e.kind {
+        EventKind::CommandRejected { command: c, reason } if *c == command => Some(*reason),
         _ => None,
     })
 }
@@ -120,7 +120,7 @@ fn a_throw_is_refused_where_the_item_cant_go_and_with_nothing_held() {
             toward: Dir::E,
             tiles: 3,
         };
-        world.submit(command);
+        world.submit(command.clone());
         let events = world.step();
         assert!(
             matches!(refused(&events, command), Some(Rejection::InTheWay { .. })),
@@ -138,7 +138,7 @@ fn a_throw_is_refused_where_the_item_cant_go_and_with_nothing_held() {
         toward: Dir::E,
         tiles: 3,
     };
-    empty.submit(command);
+    empty.submit(command.clone());
     let events = empty.step();
     assert_eq!(refused(&events, command), Some(Rejection::NotHolding));
 }
@@ -361,7 +361,7 @@ fn a_shove_with_no_sprite_led_is_refused() {
         toward: Dir::E,
         tiles: 3,
     };
-    world.submit(command);
+    world.submit(command.clone());
     let events = world.step();
     assert_eq!(refused(&events, command), Some(Rejection::NotLeading));
     assert!(world.cursor().holds().is_some(), "the ball is still held");

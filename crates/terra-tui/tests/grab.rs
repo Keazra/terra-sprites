@@ -65,7 +65,7 @@ fn click(app: &mut App, world: &World, tile: Pos) {
 /// Hands the app's commands to the world and runs a tick, as a frame does.
 fn tick(app: &mut App, world: &mut World) {
     for command in app.take_commands() {
-        world.submit(command);
+        world.submit(command.clone());
     }
     let events = world.step();
     app.record(&events, world);
@@ -248,7 +248,7 @@ fn leading_the_followed_sprite_the_cursor_follows_the_pointer_and_follow_comes_b
     let to_the_pointer = Command::MoveCursor { tile: at(0, 0) };
     assert_eq!(commands, vec![Command::TakeHold { sprite }, to_the_pointer]);
     for command in commands {
-        world.submit(command);
+        world.submit(command.clone());
     }
     tick(&mut app, &mut world);
     point(&mut app, &world, at(8, 5));

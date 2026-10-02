@@ -88,8 +88,8 @@ fn taking_hold_of_a_sprite_pulls_it_away_from_what_it_was_doing() {
 
 /// The reason the world gave for refusing `command`, if it did.
 fn refused(events: &[Event], command: Command) -> Option<Rejection> {
-    events.iter().find_map(|e| match e.kind {
-        EventKind::CommandRejected { command: c, reason } if c == command => Some(reason),
+    events.iter().find_map(|e| match &e.kind {
+        EventKind::CommandRejected { command: c, reason } if *c == command => Some(*reason),
         _ => None,
     })
 }
@@ -100,7 +100,7 @@ fn a_sprite_that_is_gone_cant_be_taken_hold_of() {
     let command = Command::TakeHold {
         sprite: EntityId(99),
     };
-    world.submit(command);
+    world.submit(command.clone());
     let events = world.step();
     assert_eq!(refused(&events, command), Some(Rejection::Gone));
     assert_eq!(world.cursor().leads(), None);
@@ -112,7 +112,7 @@ fn a_cursor_leading_one_sprite_cant_take_hold_of_another() {
     let (first, second) = (sprite_on(&world, at(0, 0)), sprite_on(&world, at(4, 0)));
     let command = Command::TakeHold { sprite: second };
     world.submit(Command::TakeHold { sprite: first });
-    world.submit(command);
+    world.submit(command.clone());
     let events = world.step();
     assert_eq!(
         refused(&events, command),
@@ -325,7 +325,7 @@ fn a_fixture_is_rooted_and_cant_be_picked_up() {
     let mut world = world(&["....."], &[(at(2, 0), "berry_bush")], &[], &[]);
     let bush = object_on(&world, at(2, 0));
     let command = Command::PickUp { item: bush };
-    world.submit(command);
+    world.submit(command.clone());
     let events = world.step();
     assert_eq!(refused(&events, command), Some(Rejection::Rooted));
     assert_eq!(world.object_at(at(2, 0)).map(|o| o.id()), Some(bush));
@@ -336,7 +336,7 @@ fn a_fixture_is_rooted_and_cant_be_picked_up() {
 fn an_item_that_is_gone_cant_be_picked_up() {
     let mut world = world(&["....."], &[], &[], &[]);
     let command = Command::PickUp { item: EntityId(99) };
-    world.submit(command);
+    world.submit(command.clone());
     let events = world.step();
     assert_eq!(refused(&events, command), Some(Rejection::Gone));
 }
@@ -404,7 +404,7 @@ fn an_item_isnt_put_down_where_it_cant_go_and_the_refusal_names_what_is_in_the_w
     ];
     for (tile, blocker) in cases {
         let command = Command::PutDown { tile };
-        world.submit(command);
+        world.submit(command.clone());
         let events = world.step();
         let reason = Rejection::InTheWay {
             item_type: ball,
@@ -419,7 +419,7 @@ fn an_item_isnt_put_down_where_it_cant_go_and_the_refusal_names_what_is_in_the_w
 fn putting_down_with_nothing_held_is_refused() {
     let mut world = world(&["....."], &[], &[], &[]);
     let command = Command::PutDown { tile: at(1, 0) };
-    world.submit(command);
+    world.submit(command.clone());
     let events = world.step();
     assert_eq!(refused(&events, command), Some(Rejection::NotHolding));
 }
@@ -581,7 +581,7 @@ fn a_grab_and_a_let_go_queued_together_both_apply_on_the_next_tick() {
 fn the_cursor_cant_be_moved_off_the_map() {
     let mut world = world(&["....."], &[], &[], &[]);
     let command = Command::MoveCursor { tile: at(5, 0) };
-    world.submit(command);
+    world.submit(command.clone());
     let events = world.step();
     assert_eq!(refused(&events, command), Some(Rejection::OffTheMap));
 }

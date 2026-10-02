@@ -1207,3 +1207,48 @@ fn a_pseudo_type_gives_both_a_size_and_a_hardness_or_neither() {
         assert!(builtin_with("objects.ron", &text).is_ok(), "{fields:?}");
     }
 }
+
+const BUILTIN_OBJECTS: &str = include_str!("../../../data/objects.ron");
+const BUILTIN_NAMES: &str = include_str!("../../../data/names.ron");
+
+#[test]
+fn a_place_in_the_place_menu_needs_a_label_a_real_type_and_no_chance() {
+    let ball = r#"place: (label: "ball"),"#;
+    for (place, word) in [
+        (r#"place: (label: "  "),"#, "empty label"),
+        (
+            r#"place: (label: "ball", if: [Chance(0.5)]),"#,
+            "placing never uses the RNG",
+        ),
+    ] {
+        assert_invalid("objects.ron", &BUILTIN_OBJECTS.replace(ball, place), word);
+    }
+    let water = r#"(id: 100, name: "water", category: "water", pseudo: true,"#;
+    let placed_water = format!(r#"{water} place: (label: "water"),"#);
+    assert_invalid(
+        "objects.ron",
+        &BUILTIN_OBJECTS.replace(water, &placed_water),
+        "a place in the Place menu",
+    );
+}
+
+#[test]
+fn random_names_need_syllables_of_letters_short_enough_for_a_name() {
+    for (from, to, word) in [
+        (r#""bek","#, r#""b3k","#, "CP437 letters"),
+        (r#""Tam","#, r#""Tamtamtamtam","#, "over the 16"),
+        (
+            "middle_chance: 0.35",
+            "middle_chance: 1.5",
+            "outside 0 to 1",
+        ),
+        (
+            r#""ra", "be", "li", "no", "ta", "mi", "ko", "si", "ve", "lu","#,
+            "",
+            "middle syllables are empty",
+        ),
+    ] {
+        assert!(BUILTIN_NAMES.contains(from), "{from}");
+        assert_invalid("names.ron", &BUILTIN_NAMES.replace(from, to), word);
+    }
+}
