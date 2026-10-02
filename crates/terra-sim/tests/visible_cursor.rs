@@ -437,3 +437,48 @@ fn a_feared_cursor_far_off_or_hidden_leaves_the_fear_as_it_was() {
         assert_eq!(value_of(&world, &fears_the_cursor()), feared, "hide {hide}");
     }
 }
+
+/// A sprite whose pricks punish it, resting beside a thornbush two tiles
+/// east, taken hold of and shoved into it by the Cursor, visible or not.
+fn shoved_into_a_thornbush(visible: bool) -> World {
+    let data = builtin();
+    let map = Map::from_ascii(&OPEN, &data).expect("valid drawing");
+    let genes = r#"Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),"#;
+    let sprites = [(at(1, 2), Some(genome(genes, &data)))];
+    let scripted = [(at(1, 2), ScriptedAction::Rest); 10];
+    let scenario = Scenario {
+        map,
+        objects: &[(at(3, 2), "thornbush")],
+        sprites: &sprites,
+        scripted: &scripted,
+    };
+    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    world.submit(Command::MoveCursor { tile: at(1, 2) });
+    world.submit(Command::ShowCursor { visible });
+    let sprite = the_sprite(&world).id();
+    world.submit(Command::TakeHold { sprite });
+    world.step();
+    world.submit(Command::Shove {
+        toward: terra_sim::Dir::E,
+        tiles: 3,
+    });
+    for _ in 0..4 {
+        world.step();
+    }
+    world
+}
+
+#[test]
+fn a_shove_into_a_thornbush_by_a_visible_cursor_teaches_fear_of_the_cursor_too() {
+    // Design v29 §5.6: as a hit teaches fear of the hitter. The thornbush is
+    // bad either way.
+    let thorns_bad = Learned::Bad {
+        thing: "thornbush".into(),
+    };
+    let seen = shoved_into_a_thornbush(true);
+    assert!(value_of(&seen, &thorns_bad) < 0.0);
+    assert!(value_of(&seen, &fears_the_cursor()) < 0.0);
+    let unseen = shoved_into_a_thornbush(false);
+    assert!(value_of(&unseen, &thorns_bad) < 0.0);
+    assert_eq!(value_of(&unseen, &fears_the_cursor()), 0.0);
+}

@@ -575,6 +575,7 @@ pub(crate) fn touched(
         subject,
         sprite: target.sprite(),
         novelty: brain.novelty(subject),
+        by_cursor: false,
     });
 }
 

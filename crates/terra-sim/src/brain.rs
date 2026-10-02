@@ -417,6 +417,17 @@ impl Brain {
         let within = |ticks: u64| self.touched.filter(|t| tick - t.tick <= ticks);
         let near = within(physiology.touch_window);
         let reached = signals.reach_back.map_or(near, within);
+        // A crash after a shove by a Cursor it could see teaches fear of the
+        // Cursor too, as a hit teaches fear of the hitter; the thing crashed
+        // into is bad, as ever (design v29 §5.6).
+        if let Some(Touch {
+            by_cursor: true, ..
+        }) = near
+        {
+            let fear = self.params.get(BrainParam::FearRate) * learning_rate_mod;
+            let cursor = self.experience.remember_the_cursor(relief.len());
+            cursor.fear = (cursor.fear - fear * signals.punishment).max(-1.0);
+        }
         let needs = data.need_places().len();
         if let Some(Touch {
             subject,
@@ -1826,6 +1837,7 @@ mod tests {
             subject: types::BERRY,
             sprite: None,
             novelty: 1.0,
+            by_cursor: false,
         });
         for (tick, hunger) in [(10, 1.0), (11, 0.0)] {
             let signals = hunger_at(&mut brain, &data, hunger);
@@ -1865,6 +1877,7 @@ mod tests {
             subject: types::BERRY_BUSH,
             sprite: None,
             novelty: 1.0,
+            by_cursor: false,
         };
         brain.touched = Some(touch);
         let signals = hunger_at(&mut brain, &data, 0.5);
@@ -1897,6 +1910,7 @@ mod tests {
             subject: types::BERRY_BUSH,
             sprite: None,
             novelty: 1.0,
+            by_cursor: false,
         });
         let signals = hunger_at(&mut brain, &data, 0.0);
         brain.learn(6, &signals, 1.0, &data);
@@ -2164,6 +2178,7 @@ mod tests {
             subject: types::BALL,
             sprite: None,
             novelty: 1.0,
+            by_cursor: false,
         });
         let mut needs = vec![0.0; data.need_places().len()];
         needs[0] = 0.8;
@@ -2197,6 +2212,7 @@ mod tests {
             subject: types::BALL,
             sprite: None,
             novelty: 1.0,
+            by_cursor: false,
         });
         let fruitless = Signals {
             needs: vec![1.0; data.need_places().len()],
@@ -2296,6 +2312,7 @@ mod tests {
             subject: types::THORNBUSH,
             sprite: None,
             novelty: 0.5,
+            by_cursor: false,
         });
         let hurt = Signals {
             needs: vec![0.0; data.need_places().len()],
@@ -2357,6 +2374,7 @@ mod tests {
             subject: types::SPRITE,
             sprite: None,
             novelty: 1.0,
+            by_cursor: false,
         });
         let hit_back = Signals {
             needs: vec![0.0; data.need_places().len()],

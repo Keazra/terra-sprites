@@ -418,7 +418,12 @@ fn shove(
     state.cursor.release();
     let shoved = state.sprites.get_mut(sprite).expect("the led sprite");
     shoved.lead = None;
-    shoved.slide = Some(Slide { dir: toward, left });
+    let seen = state.cursor.visible;
+    shoved.slide = Some(Slide {
+        dir: toward,
+        left,
+        seen,
+    });
     Ok(EventKind::Shoved { sprite })
 }
 
