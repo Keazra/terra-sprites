@@ -5,11 +5,12 @@
 use std::path::PathBuf;
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
-use ratatui::layout::{Position, Rect};
+use ratatui::layout::{Position, Rect, Size};
 use terra_sim::{Command, DataPack, Genome, Map, Pos, Scenario, World};
 use terra_tui::app::{App, Areas, CursorMode, Flow, Screen, StatusMark};
-use terra_tui::input::{self, Action, Button};
+use terra_tui::input::{Action, Button, Keys};
 use terra_tui::theme::Theme;
+use terra_tui::ui;
 
 fn pack() -> DataPack {
     DataPack::builtin().expect("valid pack")
@@ -325,35 +326,65 @@ fn r_with_no_sprite_selected_says_so() {
     assert_eq!(app.refusal(), Some("Select a sprite to name it"));
 }
 
-#[test]
-fn while_naming_keys_type_letters_rather_than_act() {
-    let key = |code| KeyEvent {
+fn key(code: KeyCode, kind: KeyEventKind) -> KeyEvent {
+    KeyEvent {
         code,
         modifiers: KeyModifiers::NONE,
-        kind: KeyEventKind::Press,
+        kind,
         state: KeyEventState::NONE,
-    };
+    }
+}
+
+#[test]
+fn while_naming_keys_type_letters_rather_than_act() {
+    let mut keys = Keys::with_release_reporting(false);
+    let mut typed = |code| keys.typed_action(key(code, KeyEventKind::Press));
+    assert_eq!(typed(KeyCode::Char('q')), Some(Action::Type('q')));
+    assert_eq!(typed(KeyCode::Char(' ')), Some(Action::Type(' ')));
+    assert_eq!(typed(KeyCode::Backspace), Some(Action::Erase));
+    assert_eq!(typed(KeyCode::Enter), Some(Action::Enter));
+    assert_eq!(typed(KeyCode::Tab), Some(Action::AnotherName));
+    assert_eq!(typed(KeyCode::Esc), Some(Action::Back));
+}
+
+#[test]
+fn the_r_that_opens_the_prompt_counts_as_let_go_and_a_held_r_types_nothing() {
+    // Windows reports releases, and those arrive while the prompt is open.
+    let mut keys = Keys::with_release_reporting(true);
+    let r = |kind| key(KeyCode::Char('r'), kind);
     assert_eq!(
-        input::typed_action(key(KeyCode::Char('q'))),
-        Some(Action::Type('q'))
+        keys.action_for(r(KeyEventKind::Press)),
+        Some(Action::Rename)
     );
+    assert_eq!(keys.typed_action(r(KeyEventKind::Repeat)), None);
+    assert_eq!(keys.typed_action(r(KeyEventKind::Release)), None);
     assert_eq!(
-        input::typed_action(key(KeyCode::Char(' '))),
-        Some(Action::Type(' '))
+        keys.typed_action(r(KeyEventKind::Press)),
+        Some(Action::Type('r'))
     );
+    keys.typed_action(r(KeyEventKind::Release));
     assert_eq!(
-        input::typed_action(key(KeyCode::Backspace)),
-        Some(Action::Erase)
-    );
-    assert_eq!(
-        input::typed_action(key(KeyCode::Enter)),
+        keys.typed_action(key(KeyCode::Enter, KeyEventKind::Press)),
         Some(Action::Enter)
     );
+    // Back on the map, the next `r` is a fresh press.
     assert_eq!(
-        input::typed_action(key(KeyCode::Tab)),
-        Some(Action::AnotherName)
+        keys.action_for(r(KeyEventKind::Press)),
+        Some(Action::Rename)
     );
-    assert_eq!(input::typed_action(key(KeyCode::Esc)), Some(Action::Back));
+}
+
+#[test]
+fn only_letters_and_spaces_are_typed() {
+    let world = field(&[], &[at(4, 2)]);
+    let mut app = grab_app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Select));
+    click(&mut app, &world, at(4, 2), Button::Left);
+    apply(&mut app, &world, Action::Rename);
+    for c in "Al-7 ║Bo".chars() {
+        apply(&mut app, &world, Action::Type(c));
+    }
+    assert_eq!(app.name_draft(), Some("Al Bo"));
 }
 
 #[test]
@@ -420,12 +451,55 @@ fn a_genome_file_that_doesnt_read_is_refused_with_why() {
 
 #[test]
 fn the_place_menu_draws_over_the_map_with_its_items_numbered() {
-    let world = field(&[], &[]);
+    // As small as a preset lets a map be (`data/presets/default.ron`).
+    let rows = vec!["................................"; 32];
+    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &[],
+        scripted: &[],
+    };
+    let world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
     let mut app = grab_app(&world);
+    app.fit(ui::areas(Size::new(60, 20), world.map()));
     apply(&mut app, &world, Action::Mode(CursorMode::Grab));
     let screen = rendered(&app, &world, 60, 20);
     assert!(screen.contains("1 berry bush seedling"), "{screen}");
     assert!(screen.contains("5 sprite from a genome file"), "{screen}");
+}
+
+#[test]
+fn a_menu_longer_than_the_map_view_scrolls_to_keep_the_highlight_in_view() {
+    let world = field(&[], &[]);
+    let dir = scratch_folder("many");
+    for n in 0..12 {
+        std::fs::write(dir.join(format!("file-{n:02}.ron")), "").unwrap();
+    }
+    let mut app = grab_app(&world);
+    app.set_genome_folder(dir.clone());
+    pick(&mut app, &world, 5);
+    // The map view is 6 rows: 4 items show inside the border.
+    let area = app.menu_area(&world).expect("the genome menu");
+    assert_eq!(area.height, 6);
+    assert_eq!(app.menu_first(&world), 0);
+    for _ in 0..6 {
+        apply(&mut app, &world, Action::Scroll { dx: 0, dy: 1 });
+    }
+    assert_eq!(app.menu_choice(), 6);
+    assert_eq!(app.menu_first(&world), 3);
+    // A click on the top row picks the first item shown.
+    apply(
+        &mut app,
+        &world,
+        Action::Click {
+            at: Position::new(area.x + 2, area.y + 1),
+            button: Button::Left,
+            amplified: false,
+        },
+    );
+    assert_eq!(app.screen(), Screen::Normal);
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 fn status_line(app: &App, world: &World) -> String {

@@ -11,6 +11,7 @@ use terra_sim::{
 };
 
 use crate::app::{App, Selection, Tab};
+use crate::text;
 use crate::text::{
     ROOTED, Words, cause_name, change, display_name, group_thousands, level, signed, signed_level,
     significant, terrain_name, whole,
@@ -1296,9 +1297,15 @@ fn refusal_line(command: &Command, reason: Rejection, data: &Words) -> Option<St
 /// What an event says in the event log, if the log shows it (design §6.1).
 pub(crate) fn event_line(event: &Event, data: &Words) -> Option<String> {
     match &event.kind {
-        EventKind::Died { id, cause, age, .. } => Some(format!(
+        EventKind::Died {
+            id,
+            name,
+            cause,
+            age,
+        } => Some(format!(
             "{} died ({}, age {})",
-            data.label(*id),
+            name.as_deref()
+                .map_or_else(|| data.label(*id), |name| text::label(*id, Some(name))),
             cause_name(*cause, data),
             group_thousands(*age)
         )),
@@ -1373,7 +1380,7 @@ pub(crate) fn event_line(event: &Event, data: &Words) -> Option<String> {
             with_article(&display_name(object_type))
         )),
         EventKind::Spawned { id, .. } => Some(format!("You made {}", data.label(*id))),
-        EventKind::Renamed { id, name } => Some(format!("You named sprite #{} {name}", id.0)),
+        EventKind::Renamed { id, name } => Some(format!("You named Sprite #{} {name}", id.0)),
     }
 }
 

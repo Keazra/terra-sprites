@@ -155,6 +155,36 @@ impl Keys {
         }
     }
 
+    /// The action for a key event while the player types a name (design v26
+    /// §6.5): letters are typed rather than acting, `Backspace` rubs one out,
+    /// `Tab` offers another random name, `Enter` takes it and `Esc` gives up.
+    /// Only presses count, and `Ctrl+C` still quits. Releases are still
+    /// tracked, so the `r` that opened the prompt counts as let go after it,
+    /// and a key already down when the prompt opened types nothing until it's
+    /// let go: holding `r` doesn't type over the offered name.
+    pub fn typed_action(&mut self, key: KeyEvent) -> Option<Action> {
+        let physical = physical_key(key.code);
+        if key.kind == KeyEventKind::Release {
+            self.releases_reported = true;
+            self.down.remove(&physical);
+            return None;
+        }
+        if self.releases_reported && self.down.contains(&physical) {
+            return None;
+        }
+        if key.modifiers.contains(KeyModifiers::CONTROL) {
+            return (key.code == KeyCode::Char('c')).then_some(Action::Quit);
+        }
+        match key.code {
+            KeyCode::Char(c) => Some(Action::Type(c)),
+            KeyCode::Backspace => Some(Action::Erase),
+            KeyCode::Tab => Some(Action::AnotherName),
+            KeyCode::Enter => Some(Action::Enter),
+            KeyCode::Esc => Some(Action::Back),
+            _ => None,
+        }
+    }
+
     /// The action for a key event, if it has one. Of key releases, only
     /// `E`'s acts: it's the right button let go (design v25 §6.5).
     pub fn action_for(&mut self, key: KeyEvent) -> Option<Action> {
@@ -207,7 +237,8 @@ impl Keys {
             KeyCode::Char('y') => Some(Action::Confirm),
             KeyCode::Char('z') => Some(Action::Mode(CursorMode::Select)),
             KeyCode::Char('x') => Some(Action::Mode(CursorMode::Train)),
-            KeyCode::Char('c') => Some(Action::Mode(CursorMode::Grab)),
+            // `C` again in Grab mode opens the Place menu, so a held `C` mustn't.
+            KeyCode::Char('c') => (!held).then_some(Action::Mode(CursorMode::Grab)),
             KeyCode::Char('q') => press(Button::Left),
             KeyCode::Char('e') => press(Button::Right),
             // A held `v` would flicker the detail view on and off.
@@ -228,27 +259,6 @@ impl Keys {
             KeyCode::PageUp => Some(Action::ScrollTab { pages: -1 }),
             _ => Some(Action::Dismiss),
         }
-    }
-}
-
-/// The action for a key event while the player types a name (design §6.5):
-/// letters are typed rather than acting, `Backspace` rubs one out, `Tab`
-/// offers another random name, `Enter` takes it and `Esc` gives up. Only
-/// presses count, and `Ctrl+C` still quits.
-pub fn typed_action(key: KeyEvent) -> Option<Action> {
-    if key.kind == KeyEventKind::Release {
-        return None;
-    }
-    if key.modifiers.contains(KeyModifiers::CONTROL) {
-        return (key.code == KeyCode::Char('c')).then_some(Action::Quit);
-    }
-    match key.code {
-        KeyCode::Char(c) => Some(Action::Type(c)),
-        KeyCode::Backspace => Some(Action::Erase),
-        KeyCode::Tab => Some(Action::AnotherName),
-        KeyCode::Enter => Some(Action::Enter),
-        KeyCode::Esc => Some(Action::Back),
-        _ => None,
     }
 }
 

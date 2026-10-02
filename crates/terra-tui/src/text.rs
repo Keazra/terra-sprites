@@ -25,6 +25,15 @@ pub(crate) fn terrain_name(terrain: Terrain) -> &'static str {
     }
 }
 
+/// How the screen names sprite `id`, called `name` or not yet named:
+/// "Mira #12", or "Sprite #12" (design v26 §6.5).
+pub(crate) fn label(id: EntityId, name: Option<&str>) -> String {
+    match name {
+        Some(name) => format!("{name} #{}", id.0),
+        None => format!("Sprite #{}", id.0),
+    }
+}
+
 /// The names the player has given sprites (design §6.5), as the screen
 /// last saw them: a sprite that has died keeps its name in the log.
 #[derive(Debug, Clone, Default)]
@@ -34,10 +43,7 @@ impl Names {
     /// How the screen names sprite `id`: "Mira #12" once the player has
     /// named it, and until then "Sprite #12" (design §6.5).
     pub fn label(&self, id: EntityId) -> String {
-        match self.0.get(&id) {
-            Some(name) => format!("{name} #{}", id.0),
-            None => format!("Sprite #{}", id.0),
-        }
+        label(id, self.get(id))
     }
 
     /// The name sprite `id` was given, if any.
