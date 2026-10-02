@@ -127,7 +127,8 @@ pub struct Keys {
 }
 
 impl Keys {
-    /// A tracker assuming what this platform's terminals do: Windows reports releases.
+    /// A tracker assuming what this platform's terminals do without the kitty
+    /// keyboard protocol: Windows reports releases.
     pub fn new() -> Keys {
         Keys::with_release_reporting(cfg!(windows))
     }

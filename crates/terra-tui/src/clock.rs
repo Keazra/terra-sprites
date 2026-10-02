@@ -7,10 +7,6 @@ use std::time::Duration;
 const PARTS: u128 = 32;
 const NANOS_PER_SECOND: u128 = 1_000_000_000;
 
-/// The most ticks one step runs: 16×'s second's worth, so a step at Max is
-/// still something the player can follow (design v26 §6.6).
-const MAX_STEP_TICKS: u64 = 20;
-
 /// How far back a Reward looks, in the player's time (design v21 §6.5):
 /// about how long a player takes to react. Tuned in play.
 const REACH_BACK_SECONDS: u32 = 2;
@@ -45,6 +41,12 @@ impl Speed {
             Speed::X16 => Some(640),
             Speed::Max => None,
         }
+    }
+
+    /// Whole ticks per second, rounded down, or `None` for Max.
+    fn whole_ticks_per_second(self) -> Option<u64> {
+        self.parts_per_second()
+            .map(|parts| u64::from(parts) / PARTS as u64)
     }
 
     fn faster(self) -> Speed {
@@ -141,12 +143,12 @@ impl Clock {
     /// can't pile steps up. Does nothing while running.
     pub fn step_once(&mut self) {
         if self.paused {
+            // At Max, 16×'s step, so it's still something the player can follow.
+            let most = Speed::X16.whole_ticks_per_second().unwrap_or(1);
             let ticks = self
                 .speed
-                .parts_per_second()
-                .map_or(MAX_STEP_TICKS, |parts| {
-                    (u64::from(parts) / PARTS as u64).clamp(1, MAX_STEP_TICKS)
-                });
+                .whole_ticks_per_second()
+                .map_or(most, |ticks| ticks.clamp(1, most));
             self.step_ticks = self.step_ticks.max(ticks);
         }
     }
@@ -194,12 +196,12 @@ impl Clock {
         while ran < due {
             step();
             ran += 1;
-            if self.paused {
-                self.step_ticks -= 1;
-            }
             if out_of_time() {
                 break;
             }
+        }
+        if self.paused {
+            self.step_ticks -= ran as u64;
         }
         ran as u64
     }
