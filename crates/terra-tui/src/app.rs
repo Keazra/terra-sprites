@@ -1073,11 +1073,16 @@ impl App {
                 self.refuse("Nothing here to activate".into());
             }
             // A Place menu item waiting on the Cursor takes the next click,
-            // where the Cursor is: on the followed sprite's tile, or else
-            // the one clicked. A right click puts it away (design v27 §6.5).
+            // where the Cursor is: at the followed sprite's feet, as a held
+            // item is put down, or else on the tile clicked. A right click
+            // puts it away (design v27 §6.5).
             (CursorMode::Grab, Button::Left) if self.placing.is_some() => {
-                let followed = self.followed().and_then(|id| world.sprite(id));
-                self.place(followed.map_or(tile, |sprite| sprite.pos()));
+                let tile = if self.followed().is_some() {
+                    self.cursor
+                } else {
+                    tile
+                };
+                self.place(tile);
             }
             (CursorMode::Grab, Button::Right) if self.placing.is_some() => self.placing = None,
             (CursorMode::Grab, Button::Left) => self.grab_click(tile, sprite, world),
