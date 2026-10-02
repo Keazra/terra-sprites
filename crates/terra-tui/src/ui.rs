@@ -530,7 +530,9 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         .object_at(cursor)
         .map(|object| format!(" · {}", object_label(&object)))
         .unwrap_or_default();
-    let mode = app.mode().label();
+    // Whether sprites can see the Cursor in this mode (design v29 §6.1).
+    let seen = if app.visible() { " · seen" } else { "" };
+    let mode = format!("{}{seen}", app.mode().label());
     let followed = app
         .followed()
         .map(|id| format!(" │ following {}", app.names().label(id)))
