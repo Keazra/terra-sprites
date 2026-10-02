@@ -218,6 +218,18 @@ fn a_sprite_that_gives_up_shows_a_question_mark_for_a_second() {
 }
 
 #[test]
+fn giving_up_on_an_action_that_hurt_shows_hurt_not_the_question_mark() {
+    // Design §6.3: being hurt matters more than giving up.
+    let (world, id, mut app) = one_sprite();
+    let mut event = ended(1, id, Verb::Eat, Outcome::Failed, None);
+    if let EventKind::ActionEnded { action, .. } = &mut event.kind {
+        action.hurt.actor = true;
+    }
+    app.record(&[event], &world);
+    assert_eq!(glyph(&app, &world), "!");
+}
+
+#[test]
 fn a_resting_sprite_shows_a_z_while_the_rest_lasts() {
     let (world, id, mut app) = one_sprite();
     app.record(&[started(1, id, Verb::Rest)], &world);
