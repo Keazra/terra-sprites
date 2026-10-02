@@ -50,6 +50,9 @@
         arrows: (up: '^', down: 'v', left: '<', right: '>'),
         // No solid arrows in ASCII: the status line says it's following.
         followed_arrows: (up: '^', down: 'v', left: '<', right: '>'),
+        // While sprites can see it, a frame of light in place of the arrows,
+        // following or not (design v29 §6.5).
+        visible_frame: (up: '=', down: '=', left: '|', right: '|'),
         status_marks: (
             idle: '-', sent: '+', applied: '*', rejected: '?',
             grab: '^', empty: '_', release: 'v',

@@ -78,6 +78,7 @@ fn question_mark_opens_help_over_the_panels_and_esc_or_question_mark_closes_it()
         "track the selected",
         "event filter",
         "sprite list",
+        "show to sprites",
     ] {
         assert!(all.contains(key), "{key}");
     }

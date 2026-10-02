@@ -9,24 +9,23 @@
 
 ## Changes from v28
 
-Slice 14 ([#15](https://github.com/Keazra/terra-sprites/issues/15)), body language and the finished screen, settled with the owner before building: seven questions, each with a recommendation, all accepted. New terms in [`CONTEXT.md`](../../CONTEXT.md): Track, event filter, colour mode, help screen, sprite list, information policy.
+Slice 11d ([#60](https://github.com/Keazra/terra-sprites/issues/60)), the visible Cursor, settled with the owner before building. Decided in slice 10: each cursor mode has its own switch, every mode starts invisible, and while visible the Cursor is part of the lesson. Open here: what a visible Cursor's touch teaches (three readings), what sprites see, whether they can go to it or flee it, a Cursor following a sprite, what being led or shoved by it teaches, and what onlookers learn. The owner accepted every recommendation, and added that a sprite must get used to a feared Cursor that sits on it. After the PR opened, the owner chose the other option for how a player tells a visible Cursor: a frame of light on the map as well as the status line. New terms in [`CONTEXT.md`](../../CONTEXT.md): visible (the Cursor), getting used to the Cursor.
 
 | # | Change | Source | Sections |
 |---|---|---|---|
-| 1 | **The information policy names its panels and subjects.** A display asks `can_view(panel, subject)`, where the panel is one of map colours, emotes, the selected sprite's marks, an event log line, the top bar's counts, a sprite list row, the status line's tile info, or an inspector tab, and the subject is the world, a sprite or a tile. A display denied shows nothing in its place; a denied event log line is left out. M1's policy, `Omniscient`, always says yes; a test with one that says no shows every display blank. | Follows from the slice | §6.4 |
-| 2 | **Drive colours live in the themes,** beside the glyphs, by the drive's name (`hunger: yellow`). A drive a data pack adds that no theme colours draws in the sprite's own colour. The help screen's legend lists the pack's drives in its own order (`DataPack::drives`), so a new drive appears there with no new code. | Owner decision (recommendation accepted), over putting terminal colours in the data pack | §6.2, §6.3 |
-| 3 | **The colour modes** are "strongest drive" and "plain"; the game starts on strongest drive. `b` goes to the next and the status line says which for 3 seconds: "Colours: plain". A drive must be above .5 to colour its sprite; of two equally strong, the first in the data pack's order wins. | Recommendation | §6.3 |
-| 4 | **Failed and Resting emotes.** Failed is a light yellow `?` (white `?` is an object the theme doesn't know), on an action ending blocked, timed out or failed. Resting is a light blue `z` for as long as the rest lasts **and at least a second** of real time, so it's seen at every speed. Of two emotes at once the newest wins, except Resting, which gives way to any other and comes back after it. | Owner decision (recommendation accepted) | §6.3 |
-| 5 | **Pleased from a good feeling** (`♥`): a tick in which a sprite's `last_r` reaches **0.3** shows it, as a pet or a hug does. Measured over 1.79 million sprite-ticks of the default world: about 6,000 felt any reward, and 927 reached 0.3, about one in seven, such as a meal while hungry; small comforts don't. The screen collects these sprites as each tick runs (`Ticks`), since `last_r` is overwritten by the next. | Measured, as the owner asked ("I'll set how good by measuring") | §6.3 |
-| 6 | **Track (`T`)** keeps the selected sprite in the middle of the map view, as far as the wall allows. It follows whichever sprite is selected; scrolling by hand turns it off. With no sprite selected it's refused: "Select a sprite to track it". The status line says "Tracking Mira #12" and "Stopped tracking". | v21's Track, built at last; the issue's "follow mode (`f`)" is this, renamed in v21 | §6.1, §6.5 |
-| 7 | **A terminal smaller than 100×30** shows only "Terminal too small" and "needs 100x30, this is 80x24", in the middle. The game carries on as it was set: shrinking the window doesn't pause it, and `space` and `Esc` still work; "Quit? (y/n)" shows under the message. At 100×30 and up, every panel always shows. | Owner decision (recommendation accepted) | §6.1 |
-| 8 | **The event filter** is `m`, all → selected → major, and a click on the filters on the event log's border does the same. They read ` [all] selected major `, the shown one in brackets. "Selected" is the events the selected sprite did or had done to it; "major" is deaths, lessons learned and refused commands. | Owner decision (recommendation accepted): v1 shows the filters but gave them no key | §6.1, §6.5 |
-| 9 | **The help screen** (`?`) fills the screen between the top bar and the status line: every key in three columns of groups, then the colour legend (a sprite glyph in each drive's colour, and "none"), the emote legend, and the game's folder for its files. It fits at 100×30, so it doesn't scroll. `?` or `Esc` closes it; other keys do nothing while it's open. The top bar ends with `? help`. | Owner decision (recommendation accepted); scrolling dropped since it fits | §6.1 |
-| 10 | **The sprite list** (`l`) fills the same space: a row per sprite, with its label, age, strongest drive above .5 (in the map's colour, or `-`) and what it's doing as the Body tab says it. `Tab` sorts by number, name (named ones first, by name, then the rest by number), age (oldest first) or drive (in the data pack's order, strongest first, none last); `Shift+Tab` goes back. The arrows or the wheel move a highlight that stays on its sprite when re-sorted; `Enter` or a click on a row selects that sprite, centres the view on it and closes the list; `l` or `Esc` closes it. Its title says the order, " Sprites ── sorted by drive ", and the status line's hints read `↑↓ choose  enter go to it  tab sort  esc close`. The column is "Drive", not "Need", since pain is a drive but not a need. | Owner decision (recommendation accepted) | §6.1 |
-| 11 | **Hesitating before a choice,** the note carried on #15, moved to its own issue, [#103](https://github.com/Keazra/terra-sprites/issues/103): it's brain work needing a design session of its own. | Owner decision (recommendation accepted) | — |
-| 12 | **Snapshot tests** of each inspector tab, the help screen and the sprite list, in both themes, are text files in `crates/terra-tui/tests/snapshots/`, written afresh with `UPDATE_SNAPSHOTS=1`. A second test checks every cell of every screen, prompt and overlay is within CP437. | Follows from §7.2 | §7.2 |
+| 1 | **A switch per cursor mode.** `H` shows the Cursor to sprites in the current mode, or hides it; every mode starts hidden, and each keeps its own switch, so the Cursor can be visible in Train and hidden in Select. While visible, the status line says so after the mode, `TRAIN · seen`, and the Cursor draws as a frame of light: `═` above and below, `║` at the sides, in place of the arrows, following or not. | Owner decision (v21); the key, recommendation accepted; the frame, owner decision after the PR opened (the second option asked) | §6.1, §6.5 |
+| 2 | **What sprites see: the Cursor, a category of its own.** `cursor` (category 7, brain input `attended_cursor`, 44) joins `water` and `sprite` as a category every pack must have, since every world has a Cursor. It's perceived on its target tile, where the world was last told it is, as far as a sprite senses. It's light, so it isn't solid: its goal tiles are its own tile and those beside it, as an item's are, and sprites walk under it. Sprites can go to it and back away from it. Its pseudo type (`cursor`, 102) has an empty verb table, so eating, drinking from, hitting or playing with it is a fruitless try. The screen calls it "the Cursor". | Recommendation accepted | §3.5.5, §3.6, §5.2, Appendix A |
+| 3 | **Chasing the light is left out.** Playing with the Cursor eases nothing, so what sprites think of the player comes only from how the player treats them. It's one line of data (a `Play` rule in the pseudo type), kept for later in [#104](https://github.com/Keazra/terra-sprites/issues/104). | Owner decision (recommendation accepted; "file this decision for later") | §3.5.3, §5.6 |
+| 4 | **Commands.** `ShowCursor { visible }` shows or hides the Cursor; the screen sends it as the switch or the mode changes. `MoveCursor` is sent at each move onto a new tile while the Cursor is visible as well as while it leads, a following Cursor's included. Hiding the Cursor ends an action aimed at it, `failed`, as a target that's gone does. | Follows from v23 change 15 (the command exists, so this widens when it's sent) | §2.5, §5.5, §6.5 |
+| 5 | **What a visible Cursor's touch teaches: the Cursor as well as the thing** (the first reading). The lesson about the thing touched, and the habit, are as before; and a pet or hug teaches the sprite to like the Cursor (its general good, at `individual_rate_good`), a zap or shock to fear it (at `fear_rate`), as a hit teaches fear of the hitter. The Cursor is learned about as one individual, as a sprite is: worth for each need, good, bad and fear; habits and familiarity as its object type's. A liked Cursor draws a sprite to it, and a feared one catches its eye and makes it back away while near (`fear_c` counts for the Cursor as for a sprite). | Owner decision (recommendation accepted): realistic, keeps training working, and reuses individuals | §5.3, §5.6 |
+| 6 | **"Not while they're watching"** (the third reading) is parked: it needs lessons that hold only in a situation, which learning can't express yet ([#105](https://github.com/Keazra/terra-sprites/issues/105)). | Owner decision (recommendation accepted) | §5.6 |
+| 7 | **A Cursor following a sprite is seen like anything else.** A sprite that fears it backs away from a Cursor that keeps following, until the player stops or hides it. | Owner decision (recommendation accepted) | §6.5 |
+| 8 | **Getting used to the Cursor.** Each tick a sprite sees the Cursor near and isn't corrected, its fear of the Cursor shrinks by `cursor_calming × nearness`, nearness being `max(0, 1 − distance / fear_reach)` with distance the Chebyshev tiles over its flood's reach: fastest with the Cursor on its own tile. `cursor_calming` is brain parameter 36, 0–0.1, 0.01 by default (a fully frightened sprite under the Cursor halves its fear in about 70 ticks), a first guess for play. It covers fear of the Cursor only; habituation in general stays [#72](https://github.com/Keazra/terra-sprites/issues/72). | Owner decision: "at some point it must realize it can't do anything about it" | §5.6, Appendix A, Appendix B |
+| 9 | **Being led teaches nothing; a shove can.** A crash after a shove by a visible Cursor teaches fear of the Cursor as well as what crashing teaches about the thing crashed into, as a hit teaches fear of the hitter. Hidden, only the thing, as before. | Recommendation accepted | §3.8, §5.6 |
+| 10 | **Onlookers learn nothing yet.** Only the sprite touched learns about the Cursor; learning from watching belongs with teaching in M2 ([#106](https://github.com/Keazra/terra-sprites/issues/106)). | Recommendation accepted | §5.6 |
+| 11 | **The screen's words.** The observed list tells a visible Cursor's doing as coming from it: "Felt a gentle touch from the Cursor", "Was pulled along by the Cursor", "Was shoved by the Cursor, into a thornbush, and got hurt"; hidden, "out of nowhere" as before. The Brain tab names it "the Cursor": "the Cursor is frightening", "eating the Cursor". | Follows from the slice | §6.1 |
 
-**Earlier changes** are in the archived revisions, in [`archive/`](archive/). Each opens with its own table: v28's changes (from v27) head [v28](archive/m1-a-sprite-lives-v28.md), and so on back to v2. So "v16 change 16" is row 16 of the table at the top of [v16](archive/m1-a-sprite-lives-v16.md). The current revision carries only its own table, so the spec doesn't open with its whole history.
+**Earlier changes** are in the archived revisions, in [`archive/`](archive/). Each opens with its own table: v27's changes (from v26) head [v27](archive/m1-a-sprite-lives-v27.md), and so on back to v2. So "v16 change 16" is row 16 of the table at the top of [v16](archive/m1-a-sprite-lives-v16.md). The current revision carries only its own table, so the spec doesn't open with its whole history.
 
 ---
 
@@ -36,7 +35,7 @@ Terra Sprites is a terminal artificial-life game inspired by *Creatures*. Sprite
 
 **The simulation is the star.** Behaviour must emerge from drives, chemistry and learning, not from scripts. The player watches, inspects and intervenes through **the Cursor** (training, moving things) and sees individual sprites learn from experience.
 
-**The Cursor** (v21): to the sprites, the player is an advanced creature, and the Cursor is the hard-light projection they cast into the terrarium, a 3×3 grid of light. In M1 sprites can't see it, so its touch is a feeling from nowhere. Making it visible, so sprites can come to know it, is a slice of its own ([#60](https://github.com/Keazra/terra-sprites/issues/60)). Later milestones add breeding and evolution, a wilder world, language, and a tile-rendered front end.
+**The Cursor** (v21): to the sprites, the player is an advanced creature, and the Cursor is the hard-light projection they cast into the terrarium, a 3×3 grid of light. Hidden, its touch is a feeling from nowhere. Visible (v29, slice 11d), sprites see it and come to know it: they like it for its pets and fear it for its shocks, the first step to NPCs having opinions of the player ([#47](https://github.com/Keazra/terra-sprites/issues/47)). Later milestones add breeding and evolution, a wilder world, language, and a tile-rendered front end.
 
 | Decision | Choice | Why |
 |---|---|---|
@@ -76,7 +75,7 @@ Terra Sprites is a terminal artificial-life game inspired by *Creatures*. Sprite
   - map with body language (drive colours and emotes)
   - sprite inspector (Body / Brain / Chem / Genome / World tabs)
   - event log
-  - the Cursor, invisible to sprites
+  - the Cursor, which sprites see in the cursor modes the player chooses (v29)
   - time controls
   - save, load, autosave
   - replay recording and playback
@@ -204,7 +203,8 @@ Before step 1, the world keeps every sprite's chemical levels as they stand, so 
 | `PickUp { item }` (v23) | Picks up the item, which is then **held**: it leaves the map, and a roll ends (§3.5.4) | The Cursor already holds or leads something; the item is gone; it's a fixture |
 | `LetGo` (v23) | Lets go of the led sprite, which chooses afresh at its next step 5 | The Cursor leads no sprite |
 | `PutDown { tile }` (v23) | Puts the held item on the tile, at rest | The Cursor holds no item, or the item can't go there (§3.4): a sprite's under it is fine, but not another object, or terrain that isn't walkable |
-| `MoveCursor { tile }` (v23) | Moves the Cursor, as the world knows it, to the tile. The UI sends it at each move onto a new tile while the Cursor leads a sprite, or will once a queued `TakeHold` applies (§6.5); the world keeps the tile it was last told | The tile is off the map |
+| `MoveCursor { tile }` (v23) | Moves the Cursor, as the world knows it, to the tile. The UI sends it at each move onto a new tile while the Cursor leads a sprite, or will once a queued `TakeHold` applies, and while it's visible (v29, §6.5); the world keeps the tile it was last told | The tile is off the map |
+| `ShowCursor { visible }` (v29) | Shows the Cursor to sprites, where it was last told it is, or hides it (§6.5). The UI sends it as the switch or the cursor mode changes | Never |
 | `Throw { from, toward, tiles }` (v25) | Puts the held item down on `from` and sets it rolling `tiles` tiles in the direction `toward`, one of the 8, as a kicked ball rolls (§3.5.4), from step 2 of this tick. `tiles` is taken as at least 1, and at most the Cursor's furthest for the item's size (Appendix B) | As `PutDown` |
 | `Shove { toward, tiles }` (v25) | Lets go of the led sprite, which slides `tiles` tiles in the direction `toward` (§3.5.4), from step 2 of this tick. `tiles` is bounded as for `Throw`, by the sprite's size | The Cursor leads no sprite |
 | `Place { tile, object_type }` (v28) | Creates an object of the type with that stable ID, at the beginning of its first stage, if its data offers it in the Place menu (§3.5.1). Placing leaves what the Cursor leads or holds alone | The type can't be placed (or isn't in the pack); the tile is off the map; something's in the way as for `PutDown`, or for a solid object, a sprite there or terrain that doesn't allow fixtures; or the tile fails one of the type's placement conditions, named |
@@ -609,6 +609,7 @@ A **category** is what a sprite perceives a thing as. Attention chooses between 
     (id: 4, name: "water"),
     (id: 5, name: "toy",    plural: "toys"),
     (id: 6, name: "sprite", plural: "sprites"),
+    (id: 7, name: "cursor"),
 ]
 ```
 
@@ -616,7 +617,7 @@ A **category** is what a sprite perceives a thing as. Attention chooses between 
 - **IDs are permanent and append-only;** a retired ID is never reused, and nor is its brain input's. Category 3 was `thornbush` until thornbushes joined bush in slice 9e (v20 change 1), so 3 and input 38 stay unused.
 - **`plural`** is how the screen says the category in general, as an object type's is (§3.5.1): "bushes are bad". It's left out for one you don't count, which then reads with "is": "fruit is good for hunger".
 - **Each object type names one category.** A name that isn't in the list is a load error, as are a duplicate ID or name. A category no object type names is allowed.
-- **`water` and `sprite` must be in the list.** Water tiles and sprites aren't objects, so no object type can say what they are, and every world has them: the engine perceives them as the categories with these two names, and a list without either is a load error. Their pseudo types' verb tables are found through them, as before (found while building slice 9d: test worlds that replace the object types have no pseudo types, and their sprites must still be perceived). One with no pseudo type has no verb table, so every try on it is fruitless (§5.2, v20).
+- **`water`, `sprite` and `cursor` must be in the list.** Water tiles, sprites and the Cursor (v29) aren't objects, so no object type can say what they are, and every world has them: the engine perceives them as the categories with these names, and a list without one is a load error. There's one Cursor, so `cursor` has no plural. Their pseudo types' verb tables are found through them, as before (found while building slice 9d: test worlds that replace the object types have no pseudo types, and their sprites must still be perceived). One with no pseudo type has no verb table, so every try on it is fruitless (§5.2, v20).
 - **Each category has a Target input,** `attended_<name>` (§5.2). Its ID follows from the category's: `35 + id` for IDs 1–6, and `37 + id` from 7, past `target_distance` and `target_adjacent`. So the list holds IDs up to 26.
 - **Mods choose from this list and never add to it** (§1.4). The core game adds categories in its own updates; a world keeps the copy of the pack it was made with (§2.8), so a new category never changes an existing world.
 
@@ -658,12 +659,14 @@ A **contact** is a sprite touching a thing: eating it, hitting it, playing with 
 | Item | Its own tile or any neighbour. A rolling item's are re-planned whenever it moves, as a sprite's are. |
 | Water | The shallow-water tile itself or any neighbour |
 | Sprite | Any neighbour. The path is re-planned whenever the target moves. |
+| The Cursor (v29) | Its own tile or any neighbour: it's light, so sprites walk under it. The path is re-planned whenever it moves, as a sprite's is. |
 
 **Re-planning uses the cached flood.** When a target moves, the new path is traced back through the existing flood's predecessor grid, which costs no new Dijkstra run. A full re-flood happens only on the refresh rules above (the sprite changes tile, or 8 ticks pass). If the target leaves the flood's area, it's no longer reachable, and the action ends (§5.5).
 
 **Candidates:**
 - For each category, the candidate is the reachable thing that **draws the eye most** (v19, §5.3): the one whose nearness, worth and newness, and for a sprite how frightening it is while near, add up highest, ties to the lower entity ID. Among things of one object type, that's the **nearest**: the one with the lowest `(path cost, entity ID)`. For Water, the tile index `y × width + x` stands in for the entity ID.
 - An instance is reachable if the flood reached one of its goal tiles. **A closer instance that can't be reached is never a candidate.**
+- **The Cursor** (v29) is a candidate only while it's visible (§6.5): the Cursor category's one, on the tile the world was last told, if the flood reaches one of its goal tiles. Hidden, it isn't perceived at all, and an action aimed at it ends `failed`, as one at a target that's gone does (§5.5).
 - The Sprite candidate (v18) is the reachable other sprite that **draws the eye most** (§5.3): nearness, what it's worth to the sprite, and how frightening it is while near, ties to the lower entity ID. **While a `was_hit` pulse is live, it's the attacker instead** (the pulse's source), provided the attacker is reachable.
 
 **Cost:** the flood covers at most (2r+1)² tiles (841 when r = 14). It's the main cost per sprite, and one of the first things benchmarked.
@@ -701,7 +704,7 @@ Harm only ever comes from **explicit verbs** aimed at an object. There is no dam
 
 This keeps credit assignment clean. If thorns scratched sprites walking past, the pain would be credited to whatever the sprite was doing at the time, usually "approach food". Sprites would learn the wrong lesson.
 
-**A crash** (v23, slice 11b) is the one harm that doesn't follow a sprite's own verb: it follows the player's shove (§3.5.4). It's a contact, so it's credited cleanly, to the thing crashed into (§5.6). It harms only the sprite that slid, and only if the thing's tags say so (v25).
+**A crash** (v23, slice 11b) is the one harm that doesn't follow a sprite's own verb: it follows the player's shove (§3.5.4). It's a contact, so it's credited cleanly, to the thing crashed into (§5.6). It harms only the sprite that slid, and only if the thing's tags say so (v25). Shoved by a visible Cursor, the sprite also learns to fear the Cursor (v29, §5.6).
 
 ### 3.9 Defaults and performance
 
@@ -893,7 +896,7 @@ Only hunger, thirst, tiredness and pain are tied to physical need in M1. Whether
 - **Neither injures.** However many times a sprite is shocked, it can't die of it: the Cursor teaches and never harms.
 - All four skip the genome, with amounts set in `physiology.ron`, so the player's teaching tools work on every sprite. The amounts are a starting point for the lab's strength sweep (§7.1).
 - Each also pulses `petted` or `shocked`, so a genome can add its own reactions on top. The pulses name what the sprite *senses*; the `reward` chemical rises from other causes too (eating, play). A pet and a hug pulse the same `petted`, and a zap and a shock the same `shocked`.
-- **A sprite can't tell where the touch came from** while the Cursor is invisible, which in M1 it always is (§0, §5.6).
+- **A sprite can't tell where the touch came from** while the Cursor is hidden (§0, §5.6). While it's visible (v29), the sprite also learns about the Cursor from it: to like it, or to fear it (§5.6).
 
 ### 4.7 Newborn state
 
@@ -962,10 +965,10 @@ Every input and output has a stable, append-only ID (Appendix A). Each input bel
 | Group | Inputs | Attention | Concepts |
 |---|---|---|---|
 | **State** (37) | 7 drives, 16 hormones, `nearby_sprites`, `age`, `always`, 11 event pulses | ✓ | ✓ |
-| **Target** (one per category, plus 2) | `attended_<category>` for each category (v19, §3.5.5): `attended_bush`, `attended_fruit`, `attended_water`, `attended_toy`, `attended_sprite`; `TargetDistance` (normalized path cost: the cost over 10 × the flood's reach, capped at 1), `TargetAdjacent` | ✗ | ✓ |
+| **Target** (one per category, plus 2) | `attended_<category>` for each category (v19, §3.5.5): `attended_bush`, `attended_fruit`, `attended_water`, `attended_toy`, `attended_sprite`, `attended_cursor` (v29); `TargetDistance` (normalized path cost: the cost over 10 × the flood's reach, capped at 1), `TargetAdjacent` | ✗ | ✓ |
 
 - **Target inputs are outputs of attention.** They never feed back into attention.
-- **What the file holds:** the State inputs, each with its stable input ID and the chemical or locus it reads, e.g. `(id: 1, name: "hunger", reads: Chem("hunger"))`, `(id: 27, name: "ate", reads: Locus("ate"))`. A name that isn't a chemical or locus of the right kind (a drive or hormone; a body sensor or pulse) is a load error, as is a duplicate ID or name. The verbs, `target_distance` and `target_adjacent` are fixed in code, which gives them their meaning; the attended inputs follow the category list (v19, §3.5.5). Target inputs take IDs 36 to 63 (36, 37 and 39–43 so far: 38 was `attended_thornbush`, retired with its category in v20), and State inputs any other ID from 1: 1–35, then from 64 (from slice 7c). A State input numbered 36 to 63 is a load error. Their names, used in genome files, are `attended_<category>` (`attended_bush` … `attended_sprite`), `target_distance` and `target_adjacent`, and the verb names.
+- **What the file holds:** the State inputs, each with its stable input ID and the chemical or locus it reads, e.g. `(id: 1, name: "hunger", reads: Chem("hunger"))`, `(id: 27, name: "ate", reads: Locus("ate"))`. A name that isn't a chemical or locus of the right kind (a drive or hormone; a body sensor or pulse) is a load error, as is a duplicate ID or name. The verbs, `target_distance` and `target_adjacent` are fixed in code, which gives them their meaning; the attended inputs follow the category list (v19, §3.5.5). Target inputs take IDs 36 to 63 (36, 37 and 39–44 so far: 38 was `attended_thornbush`, retired with its category in v20, and 44 is `attended_cursor`, v29), and State inputs any other ID from 1: 1–35, then from 64 (from slice 7c). A State input numbered 36 to 63 is a load error. Their names, used in genome files, are `attended_<category>` (`attended_bush` … `attended_sprite`), `target_distance` and `target_adjacent`, and the verb names.
 - **The needs** (v16): the file also lists which drives are **needs**, the ones whose relief teaches worth: `needs: ["hunger", "thirst", "tiredness", "boredom", "loneliness", "crowdedness"]`. Each must be a drive that is a State input; anything else is a load error. Pain is a drive but not a need: its fall is a hurt fading, not relief. The data names the channels, so a pack with a new drive adds a channel with no code.
 - **The first-order needs** (v21): `first_order: ["hunger", "thirst"]`, the needs that come before a sprite's likes. While one presses, what the sprite merely likes pulls less (§5.6). Each must be a need; the others are second-order. A pecking order between the second-order needs themselves waits for [#50](https://github.com/Keazra/terra-sprites/issues/50).
 - **Not brain inputs:**
@@ -1010,7 +1013,7 @@ Approach still has its own jobs:
   - `distance_c` is that candidate's own normalized path cost.
   - `value_c` is what the candidate is worth to the sprite now (§5.6): its object type's worth, or, for a type the sprite doesn't know yet, its category's summary (v19).
   - `novelty_c = 1 − familiarity_c` (§5.6), the candidate's object type's (v19), and `boldness = max(0, 1 + new_things) × curiosity_mod`, where `new_things` is the learned worth of the unfamiliar and `curiosity_mod` a receptor target that wariness lowers (§4.2, §4.5).
-  - `fear_c` (v18) is how frightening the candidate is while near: `−F × max(0, 1 − distance_c / fear_reach)`, where `F` (−1 to 0) is what the sprite learned about that sprite, or the summary for one it doesn't remember (§5.6). It is 0 for anything but sprites in M1. It counts even while a hit is felt or the sprite is cornered, so the sprite keeps watching whoever did it; only fear's pull on the decision is quiet then (§5.5). Measured, quieting it here too let a cornered sprite's eye drift to a stranger, and it backed away from the stranger nearly as often as from its bully. A bad thing draws the eye *less* (its worth is negative); a frightening one draws it *more*.
+  - `fear_c` (v18) is how frightening the candidate is while near: `−F × max(0, 1 − distance_c / fear_reach)`, where `F` (−1 to 0) is what the sprite learned about that sprite, or the summary for one it doesn't remember (§5.6), or about the Cursor (v29). It is 0 for anything but sprites and the Cursor in M1. It counts even while a hit is felt or the sprite is cornered, so the sprite keeps watching whoever did it; only fear's pull on the decision is quiet then (§5.5). Measured, quieting it here too let a cornered sprite's eye drift to a stranger, and it backed away from the stranger nearly as often as from its bully. A bad thing draws the eye *less* (its worth is negative); a frightening one draws it *more*.
   - **The candidate's own terms** (v19; for sprites since v18): `distance_c`, `value_c`, `novelty_c` and `fear_c` are the candidate's (§3.6), the reachable thing in the category whose nearness, worth, newness and fear terms add up highest. In a category with one object type, sprites aside, that's its nearest instance, as before v19.
 - **With no current action:** attention **samples** a category with softmax(score / τ_att), where **τ_att = τ_att_base × `exploration_mod`**.
 - **With any action still running**, targetless ones included: attention is **noise-free**. It changes target only if a rival's score beats the current target's by `attention_margin`. Ties go to the lower `CategoryId`. That switch ends a target-bound action.
@@ -1074,7 +1077,7 @@ World randomness is separate: plant rules and the order actions resolve in. It c
 | **Worth for a need**, `G_n[c]` (0 to 1) | need × object type (v19), or need × remembered sprite (v18) | that need's relief | the thing touched |
 | **General good**, `G[c]` (0 to 1) | object type, or remembered sprite | `reward` (pets; anything the genome adds) | the thing touched |
 | **Bad**, `B[c]` (−1 to 0) | object type, or remembered sprite | `punishment` from its own touch (hurts, shocks) | the thing touched |
-| **Fear**, `F[s]` (−1 to 0) (v18) | remembered sprite | `punishment` from a hurt done to it (a `was_hit` pulse live) | the one who did it |
+| **Fear**, `F[s]` (−1 to 0) (v18) | remembered sprite, or the Cursor (v29) | `punishment` from a hurt done to it (a `was_hit` pulse live), or from a visible Cursor's correction or shove (v29) | the one who did it |
 | **Habit**, `H[c][v]` | object type × verb; sprites as a whole × verb | good less bad, and disappointment | the trace |
 | **The worth of new things**, `new_things` | brain | good less bad, times how new the thing touched was | the thing touched |
 | **Familiarity**, `familiarity_c` (0 to 1) | object type; sprites as a whole | attending to it | — |
@@ -1109,6 +1112,14 @@ With no attempt within reach, the tick teaches as any other: no worth, and habit
 
 **Fear** (v18). While a `was_hit` pulse is live, `F[a] −= fear_rate × punishment` for the attacker *a* (the pulse's source), remembering it if it didn't yet. That punishment teaches no worth and no badness, and still teaches habits along the trace.
 
+**The visible Cursor** (v29). The Cursor is learned about as one individual, as a sprite is: worth for each need, good, bad and fear, at the individual rates, with habits and familiarity as its object type's (the pseudo type `cursor`). It has no summary, since there's one. Trying something on it is a fruitless try, and teaches as one (§5.2). While it's visible:
+- **A pet or a hug** (a `petted` pulse live and the Cursor visible when it landed) also raises the Cursor's general good: `G[cursor] += individual_rate_good × reward`. Not when the thing touched is the Cursor itself: then the lesson about the thing touched is the one about the Cursor, and it isn't learned twice.
+- **A zap or a shock** also teaches fear of it: `F[cursor] −= fear_rate × punishment`, as a hit teaches fear of the hitter.
+- **A crash after a shove** by the visible Cursor teaches fear of it the same way, in the tick of the crash only, so a hidden Cursor's zap a moment later teaches nothing about the Cursor. In a tick the Cursor corrects the sprite, the pain is the correction's: it teaches fear of the Cursor only if the Cursor was visible, crash or no crash.
+- What each teaches about the thing touched, and the habit, is as for a hidden Cursor (above): the lesson is about the Cursor **as well as** the thing.
+- **Getting used to it.** Each tick a sprite sees the Cursor near (its flood reaches it, §3.6) and neither corrects it nor is feared anew (a crash's tick), `F[cursor] *= 1 − cursor_calming × nearness`, where `nearness = max(0, 1 − d / fear_reach)` and `d` is the Chebyshev distance in tiles over the reach of the sprite's flood. So a feared Cursor that sits on a sprite and does nothing wears its fear off fastest: the sprite comes to see it can't do anything about it. Fear of sprites has no such rule; habituation in general is [#72](https://github.com/Keazra/terra-sprites/issues/72).
+- **Being led** teaches nothing, visible or not, and onlookers learn nothing from what's done to another sprite ([#106](https://github.com/Keazra/terra-sprites/issues/106)).
+
 **Sprites in general** (v18) are a summary of the *n* sprites a sprite remembers: each value (each `G_n`, `G`, `B` and `F`) is their mean × `clamp((n − 1) / (generalise − 1), 0, 1)`. So a sprite that knows only its bully fears no stranger, and one hurt by three different sprites is wary of every stranger. A sprite it doesn't remember is judged by the summary, and the Brain tab shows the summary as "sprites".
 
 **Category summaries** (v19) work the same way for object types. A sprite **knows** an object type once it has touched one. A category's summary is, for each value (each `G_n`, `G` and `B`), the mean over the *n* object types in the category the sprite knows × `clamp((n − 1) / (generalise_types − 1), 0, 1)`. An object type the sprite doesn't know is judged by its category's summary, which counts for nothing until the sprite knows two types in the category. So one thornbush doesn't make every bush bad: slice 9 measured that failure when pricks leaked onto berry bushes (above). Nothing is learned about a category directly; habits and familiarity have no summary, so an unknown type's start at 0. Object types are never forgotten. Sprites in general is the sprite category's summary, over the sprites it remembers.
@@ -1122,7 +1133,7 @@ With no attempt within reach, the tick teaches as any other: no worth, and habit
 
 **Fading.** Every tick, after learning: each `G_n` and `G` and `new_things` is multiplied by `1 − worth_fade_good`, each `B` by `1 − worth_fade_bad`, each `F` by `1 − fear_fade`, each good habit by `1 − habit_fade` and each bad habit by `1 − habit_fade_bad` (v21). The starter genome's defaults learn bad faster than good and fade it about four times more slowly (Appendix B), habits as well as worth since v21.
 
-**Forgetting** (v18). A remembered sprite all of whose values are under `forget_below` (physiology, 0.01) is forgotten, and so is one that has died, at step 4. There's no limit on how many a sprite remembers.
+**Forgetting** (v18). A remembered sprite all of whose values are under `forget_below` (physiology, 0.01) is forgotten, and so is one that has died, at step 4. So is the Cursor (v29), once all its values are under `forget_below`. There's no limit on how many a sprite remembers.
 
 **Familiarity** rises by `familiarity_rate` for the attended object type (v19) on each tick the sprite commits a trace entry, and never falls in M1. (Whether it should wear off again belongs with habituation, below.)
 
@@ -1133,7 +1144,9 @@ With no attempt within reach, the tick teaches as any other: no worth, and habit
 **Later, not in slice 9:**
 - **Habituation:** repeated senses, pets and shocks included, wear off gently and recover with time. It is its own slice after the core brain. Slice 9 measured that it isn't what stops a bored sprite fiddling: that is mostly an arena with no toys (about 45% of ticks there, 1–2% in the default world). Lowering a thing's worth for the need behind a fruitless try stopped the fiddling but killed 8 of 10 sprites: with boredom stuck at 1, "useless when bored" outweighed "good when thirsty".
 - **Decisions that build up over time,** with body language ([#15](https://github.com/Keazra/terra-sprites/issues/15)).
-- **Places** ([#40](https://github.com/Keazra/terra-sprites/issues/40)), and **the visible Cursor** that sprites see and learn about ([#60](https://github.com/Keazra/terra-sprites/issues/60), slice 11d). Individual sprites came in v18. Three readings of what a visible Cursor's touch teaches wait for that slice: sprites also learn to like or fear the Cursor; they learn about the Cursor instead of the thing; or the lesson holds only while the Cursor is in sight.
+- **Places** ([#40](https://github.com/Keazra/terra-sprites/issues/40)). Individual sprites came in v18, and the visible Cursor in v29.
+- **"Not while they're watching"** ([#105](https://github.com/Keazra/terra-sprites/issues/105)): a lesson from a visible Cursor that holds only while it's in sight, the third reading of what its touch teaches. It needs lessons that hold only in a situation.
+- **Chasing the light** ([#104](https://github.com/Keazra/terra-sprites/issues/104)): play with the Cursor easing boredom, as a cat chases a laser dot. Left out so what sprites think of the player comes only from how they're treated; it's one rule in the Cursor's pseudo type.
 - **Genes that switch on at life stages** (M2, [#49](https://github.com/Keazra/terra-sprites/issues/49)): a new instinct joins the instinct pathway mid-life without touching what was learned.
 
 ### 5.7 Genes for the brain
@@ -1195,7 +1208,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 ### 6.1 Layout
 
 - The minimum terminal size is **100×30**; 140×40 is recommended.
-- A smaller terminal shows only "Terminal too small" and "needs 100x30, this is 80x24", in the middle, and the game carries on as it was set: shrinking the window doesn't pause it, and `Esc` still asks to quit, with "Quit? (y/n)" under the message (v29). At 100×30 and up, every panel always shows.
+- A smaller terminal shows a clear "terminal too small" message.
 - All text uses only CP437 characters (§6.2).
 
 ```
@@ -1209,7 +1222,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 │....☺....○....................................... ││ tiredness  ████░░░░░░ .39                   │
 │..........................♣.......☺.............♠ ││ energy .42 · hydration .77 · injury .05     │
 └──────────────────────────────────────────────────┘└─────────────────────────────────────────────┘
-┌─ Events ─────────────────────────────────────────────────────────────── [all] selected major ─┐
+┌─ Events ─────────────────────────────────────────────────────────────── [all|selected|major] ─┐
 │ 48,207  Mira was pricked by a thornbush                                                        │
 │ 48,190  Mira learned: thornbushes are bad                                                      │
 │ 48,102  Kel died (starvation, age 6,020)                                                       │
@@ -1252,9 +1265,9 @@ The species is dropped into a world it doesn't know and has to learn about it. I
   ```
 
 **Panels:**
-- **Top bar:** tick, speed, seed, population, save status, and at the right end `? help` (v29). Object counts, food included, are the World tab's job.
+- **Top bar:** tick, speed, seed, population, save status. Object counts, food included, are the World tab's job.
 - **Map view:**
-  - Its viewport scrolls with `W` `A` `S` `D` or the arrow keys, or follows the selected sprite (`T`, "track", v21): Track keeps it in the middle of the map view, as far as the wall allows, and follows whichever sprite is selected. Scrolling by hand turns it off (v29).
+  - Its viewport scrolls with `W` `A` `S` `D` or the arrow keys, or follows the selected sprite (`T`, "track", v21).
   - A map smaller than the space gets a map view shrunk to fit it, at the top-left.
   - Its border is **double-lined** (`═ ║`) on any side where the terrarium's wall is in view, and single-lined where the map carries on.
   - The Cursor is 3×3 tiles and follows the pointer, or the sprite it follows (§6.5).
@@ -1330,7 +1343,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 
   - One line per finished action, in the past tense: what it did ("Wandered off", "Rested", "Ate from the berry bush", "Ate the berry", "Drank", "Went over to Sprite #530"), or, if it went badly, what it set out to do and how that went ("Went to eat the berry bush, but it was empty", "…, but changed its mind", "Wandered off, but gave up: the way was blocked"). A retreat reads "Backed away from Sprite #7", or "Backed away from Sprite #7, but was cornered".
   - **What others did to it** goes in the same list, in time order: "Was hit by Sprite #7", "Sprite #9 played with it".
-  - **The Cursor's touch** goes in it too (v21), told as the sprite felt it. While the Cursor is invisible the sprite can't know where it came from: "Felt a gentle touch out of nowhere" (a pet), "Felt a warm embrace out of nowhere" (a hug), "Felt a zap out of nowhere", "Felt a jolt out of nowhere" (a shock).
+  - **The Cursor's touch** goes in it too (v21), told as the sprite felt it. While the Cursor is hidden the sprite can't know where it came from: "Felt a gentle touch out of nowhere" (a pet), "Felt a warm embrace out of nowhere" (a hug), "Felt a zap out of nowhere", "Felt a jolt out of nowhere" (a shock). While it's visible (v29), "from the Cursor": "Felt a gentle touch from the Cursor", and being led or shoved reads "by the Cursor" in place of "out of nowhere" below. The screen goes by whether the Cursor was visible at the end of the tick.
   - **Being led** (v23) goes in it the same way, once it's let go: "Was pulled along out of nowhere". An action it was taken hold of in the middle of reads "Went to eat the berry bush, but was pulled away". From slice 11b, a shove: a shove lets go, so first "Was pulled along out of nowhere", then, once the slide ends, "Was shoved out of nowhere"; with a crash, "Was shoved out of nowhere, into Sprite #7", or, when it hurt, "Was shoved out of nowhere, into a thornbush, and got hurt" (v25).
   - Lines that read the same in a row merge into one with a count (`×3`); its time is when the latest of them finished. The times count up live and are right-aligned; a long line wraps under its own text.
   - It starts afresh when another sprite is selected (reselecting the same one keeps it), and reads "nothing yet" until something finishes.
@@ -1343,57 +1356,17 @@ The species is dropped into a world it doesn't know and has to learn about it. I
   - Selecting a sprite while the World tab is open switches to Body. From any other tab, the tab stays.
   - When the selected sprite dies, its tabs read "Mira #12 died of dehydration at age 4,012" until another sprite is selected.
   - A tab too long to fit scrolls a page with `PgUp` / `PgDn`, or 3 lines per notch of the mouse wheel over the inspector. It stops at the top and at the end, and goes back to the top when the tab or the selection changes.
-- **Event log:** each event shows its sprite by name and ID, as "Mira #12", or "Sprite #530" for a sprite with no name (§6.5). Newest first, filtered to all / the selected sprite / major events only (deaths, learning milestones, rejected commands). The filters sit on the log's top border, ` [all] selected major `, the shown one in brackets; `m`, or a click on them, goes to the next (v29). "Selected" is the events the selected sprite did or had done to it. It never shows object events (`ObjectSpawned`, `ObjectRemoved`): they happen dozens of times a minute and would bury everything else, and the World tab counts objects instead. Nor does it show most action events (`ActionStarted`, `ActionEnded`): with 30 sprites they come about 3 for every tick. The Body tab shows the selected sprite's action instead, and emotes show resting and giving up on the map (§6.3). **The exceptions** (from slice 7a) are every Play and Hit that applied, and any action in which a sprite was hurt (not Retreat, which does nothing to anyone), worded as the Body tab words them: "Sprite #4 kicked a ball", "Sprite #9 played with Sprite #2", "Sprite #7 hit Sprite #12", "Sprite #3 tried to eat a thornbush and got hurt". They're rare enough not to bury deaths; if they do, the major-events filter is the answer.
+- **Event log:** each event shows its sprite by name and ID, as "Mira #12", or "Sprite #530" for a sprite with no name (§6.5). Newest first, filtered to all / the selected sprite / major events only (deaths, learning milestones, rejected commands). It never shows object events (`ObjectSpawned`, `ObjectRemoved`): they happen dozens of times a minute and would bury everything else, and the World tab counts objects instead. Nor does it show most action events (`ActionStarted`, `ActionEnded`): with 30 sprites they come about 3 for every tick. The Body tab shows the selected sprite's action instead, and emotes show resting and giving up on the map (§6.3). **The exceptions** (from slice 7a) are every Play and Hit that applied, and any action in which a sprite was hurt (not Retreat, which does nothing to anyone), worded as the Body tab words them: "Sprite #4 kicked a ball", "Sprite #9 played with Sprite #2", "Sprite #7 hit Sprite #12", "Sprite #3 tried to eat a thornbush and got hurt". They're rare enough not to bury deaths; if they do, the major-events filter is the answer.
   - **The Cursor's touch** (v21) is logged, spoken to the player: "You petted Sprite #12", "You hugged Sprite #12", "You zapped Sprite #12", "You shocked Sprite #12". So is a refusal: "Couldn't pet Sprite #12: it's gone".
   - **Grabbing** (v23) is logged the same way: "You took hold of Mira #12", "You let go of Mira #12", "You picked up a ball", "You put the ball down", and from slice 11b "You threw the ball", "You shoved Mira #12", and "Mira #12 was shoved into a thornbush and got hurt" (`Threw`, `Shoved`, and a `Crashed` that hurt, v25; a crash that doesn't hurt isn't logged). A held item that expires: "The berry you were holding expired". A led sprite that dies has only its death line. Refusals say what stood in the way: "Couldn't take hold of Sprite #7: it's gone", "Couldn't take hold of Sprite #7: you're already leading Mira #12" (or "…holding something"), "Couldn't put the ball down: a berry is there" (or "…: it can't go on rock", "…: it can't go in deep water"). Letting go of a sprite can't fail: it's already standing somewhere. The screen's clicks follow what the Cursor has hold of, so the "already" refusals come only from clicks queued in a race; the one players meet is putting something down where it can't go.
   - **Lines that read the same in a row merge** into one with a count, "You petted Sprite #12 ×10", as the observed list's do; its tick is the latest one's. Spam-clicking would otherwise fill the log.
-- **Status line:** the tile under the Cursor, the cursor mode, the sprite the Cursor follows (`following Mira #12`, v26), what the Cursor holds or leads (`holding: berry`, `leading: Mira #12`, v23, in every mode), and hints for the active keys. A prompt such as "Quit? (y/n)" takes its place while open.
+- **Status line:** the tile under the Cursor, the cursor mode, followed by `· seen` while sprites can see the Cursor in it (v29, `TRAIN · seen`), the sprite the Cursor follows (`following Mira #12`, v26), what the Cursor holds or leads (`holding: berry`, `leading: Mira #12`, v23, in every mode), and hints for the active keys. A prompt such as "Quit? (y/n)" takes its place while open.
   - **The key hints** (v22) sit at the right and lead with the mode keys, `Z select  X train  C grab`, then `WASD scroll  space pause  . step  +/- speed  esc quit`. Short of room, whole hints drop from the end, so the mode keys are the last to go, together.
-  - **While aiming** (v25), the key hints read `let go to throw  esc cancel`, or `let go to shove  esc cancel`. **While the sprite list is open** (v29), they read `↑↓ choose  enter go to it  tab sort  esc close`.
+  - **While aiming** (v25), the key hints read `let go to throw  esc cancel`, or `let go to shove  esc cancel`.
   - **A refused click's reason** (v22) takes the key hints' place for about 3 seconds of real time, worded as the event log words it: "Couldn't pet Sprite #12: it's gone". A Train click with nothing to act on says so the same way: "No sprite here to pet" (or hug, zap, shock). So do an `F` or a middle click with nothing to follow (v26), "No sprite here to follow", and a right click in Select mode while there's nothing to activate, "Nothing here to activate". So does a Grab click (v23): "Nothing here to grab", or on a fixture, "Can't grab the berry bush: it's rooted to the ground"; and a Grab right click with nothing held, led or under the Cursor (v25): "Nothing here to throw or shove", or on a fixture, "Can't throw the thornbush: it's rooted to the ground". On a line too full for it, such as when the Cursor follows a sprite standing on a berry, the reason still shows, and the tile's part of the line is cut short to make room.
   - The tile names its terrain and any object on it, with the object's stage if it has stages: `(61,40) grass · berry bush (mature)`.
   - **Display names** are the data's names with `_` shown as a space (`berry_bush` → "berry bush"), so `objects.ron` needs no separate display name. Its `plural` is the one other form the screen needs (§3.5.1).
-- **Overlays** (v29) fill the screen between the top bar and the status line, inside a single-lined border with their name at the left of its top edge and ` esc close ` at the right. The status line stays.
-  - **The help screen** (`?`): every key in three columns of groups (time and view; the Cursor; sprites and the inspector), then the colour legend, a sprite glyph in each of the data pack's drives' colours and "none", the emote legend, and the game's folder for its files (§6.7). It fits at 100×30, so it doesn't scroll. `?` or `Esc` closes it; other keys do nothing while it's open.
-
-    ```
-    ┌─ Help ─────────────────────────────────────────────────────────────────────────────── esc close ─┐
-    │ TIME                            CURSOR                          SPRITES                          │
-    │ space      pause / resume       Z X C      select/train/grab    Tab        next sprite           │
-    │ .          step                 Q E        left / right click   Shift+Tab  previous sprite       │
-    │ + -        faster / slower      Shift+Q E  hug / shock          l          sprite list           │
-    │ VIEW                            Ctrl+click hug / shock          r          name it               │
-    │ WASD       scroll (Shift: 5)    F          follow a sprite      g          save its genome       │
-    │ T          track the selected   middle     follow a sprite      INSPECTOR                        │
-    │ b          sprite colours       wheel      change mode          [ ]        switch tabs           │
-    │ m          event filter         C again    the Place menu       PgUp PgDn  scroll a tab          │
-    │ v          exact detail         hold E     aim, let go to send                                   │
-    │ ?          this help                                                                             │
-    │ Esc        back, then quit                                                                       │
-    │ Ctrl+C     quit at once                                                                          │
-    │                                                                                                  │
-    │ COLOURS: a sprite's strongest drive, once it's above half                                        │
-    │ ☺ hunger  ☺ thirst  ☺ pain  ☺ tiredness  ☺ boredom  ☺ loneliness  ☺ crowdedness  ☺ none          │
-    │ EMOTES   ! hurt  ‼ zapped  ? gave up  z resting  ♥ pleased                                       │
-    │                                                                                                  │
-    │ FILES    C:\Users\Kurtis\AppData\Roaming\terra-sprites                                           │
-    └──────────────────────────────────────────────────────────────────────────────────────────────────┘
-    ```
-
-  - **The sprite list** (`l`): a row per sprite the policy lets it show (§6.4), with its label, age, strongest drive above .5 in the map's colour (or `-`), and what it's doing as the Body tab's first line says it, in the detail view too.
-
-    ```
-    ┌─ Sprites ── sorted by drive ───────────────────────────────────────────────────────── esc close ─┐
-    │ Sprite       Age  Drive        Doing                                                             │
-    │ Mira #12   3,410  hunger       Going to eat the berry bush · 3 tiles to go                       │
-    │ Sprite #7  1,022  thirst       Going to drink · 2 tiles to go                                    │
-    │ Kel #4     5,903  -            Resting · 6 ticks left                                            │
-    └──────────────────────────────────────────────────────────────────────────────────────────────────┘
-    ```
-
-    - It opens sorted as it was last, starting by number, with the selected sprite highlighted, or else the first. `Tab` sorts by number, name (named sprites first, by name, then the rest by number), age (oldest first) or drive (in the data pack's order, strongest first within each, those with none last); `Shift+Tab` goes back. The title says the order.
-    - The arrows or the wheel move the highlight, a row in reverse video, which stays on its sprite when the list is re-sorted. A list too long for the screen scrolls to keep it in view.
-    - `Enter`, or a click on a row, selects that sprite, centres the view on it and closes the list. `l` or `Esc` closes it without choosing; other keys do nothing while it's open. With no sprites, it reads "No sprites".
+- **Overlays:** `?` for help (keys, colour legend, save path), `l` for a sortable sprite list to jump to.
 
 ### 6.2 Semantic tiles and themes
 
@@ -1419,6 +1392,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 | Selected sprite | `☻` | `@` in reverse video (`&` is the berry bush) | by colour mode (§6.3) |
 | Cursor arrows | `↓ ↑ → ←` | `v ^ > <` | the cursor mode's colour |
 | Cursor arrows, following (v21; v26 name) | `▼ ▲ ► ◄` | `v ^ > <` (the status line says it's following) | the cursor mode's colour |
+| Cursor frame, visible (v29), in place of the arrows | `═ ═ ║ ║` | `= = \| \|` | the cursor mode's colour |
 | Mode marks: Select / Train / Grab (v21) | `♦` `±` `∩` | `S` `T` `G` | the mode's colour |
 | Status marks: idle / grab / release / empty / sent / applied / rejected | `·` `↑` `↓` `░` `+` `☼` `?` | `-` `^` `v` `_` `+` `*` `?` | the mode's colour |
 | Decision marker (flashes) | `X` | `X` | white |
@@ -1431,8 +1405,8 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 
 ### 6.3 Body language (UI only)
 
-**Sprite colour modes** (`b` cycles them; the status line says which for 3 seconds, "Colours: plain", v29):
-- **Strongest drive** (v29 name; "dominant drive" before), where the game starts: the highest drive above 0.5, or the sprite's own colour if none is. Of two equally strong, the first in the data pack's order. **Each drive's colour is the theme's** (v29), by the drive's name, `drives: {hunger: yellow, …}`; a drive no theme colours draws in the sprite's own colour. The built-in themes:
+**Sprite colour modes** (`b` cycles them):
+- **Dominant drive:** the highest drive above 0.5, or white if none is.
 
 | Drive | Colour |
 |---|---|
@@ -1444,7 +1418,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 | loneliness | magenta |
 | crowdedness | light red |
 
-- **Plain:** the sprite's own colour.
+- **Plain.**
 - M2 adds **lineage**.
 
 **Emotes** swap with the sprite glyph at about 2 Hz, for about 1 second of **real** time:
@@ -1453,25 +1427,24 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 |---|---|---|---|
 | Hurt (red) | `!` | `!` | Being hurt by something: a thornbush, a sprite's hit. Not starvation, dehydration or old age, which injure every tick. Built in slice 7a, ahead of the others. |
 | Shocked (yellow, v21) | `‼` | `/` | `Corrected`: a zap or a shock, instead of Hurt. Built in slice 10. The owner asked for a lightning bolt (`🗲`), which isn't CP437; the tile front end can draw one |
-| Failed (light yellow, v29) | `?` | `?` | `ActionEnded` with outcome `failed`, `blocked` or `timed_out`, unless the action also hurt the sprite: then it shows Hurt, which matters more. Light yellow, since a white `?` is an object the theme doesn't know |
-| Resting (light blue, v29) | `z` | `z` | While Rest lasts, and at least a second of real time (v29), so it's seen at every speed |
-| Pleased | `♥` | `+` | `Rewarded`: a pet or a hug (built in slice 10); or a tick in which `last_r` reaches **0.3** (v29). Measured over 1.79 million sprite-ticks of the default world, about one good feeling in seven reaches it, such as a meal while hungry |
+| Failed | `?` | `?` | `ActionEnded` with outcome `failed`, `blocked` or `timed_out` |
+| Resting | `z` | `z` | While Rest lasts |
+| Pleased | `♥` | `+` | `Rewarded`: a pet or a hug (built in slice 10); or `last_r` above the UI's spike threshold (slice 14) |
 
-- Emote timers live in `App` and are driven by **sim events**, so emotes don't vanish at 16× or Max speed. The frame loop runs each tick through `Ticks`, which keeps, tick by tick, the events and the sprites whose `last_r` reached 0.3 then, since the next tick overwrites it; the screen takes them in in tick order, so of two emotes in one frame the later tick's wins (v29).
-- **Two at once** (v29): the newest wins, except Resting, which gives way to any other and comes back after it while the rest lasts.
+- Emote timers live in `App` and are driven by **sim events**, so emotes don't vanish at 16× or Max speed.
 - Body language never changes the sim.
 
 ### 6.4 `InfoPolicy`
 
 - **Every** information display asks `InfoPolicy::can_view(panel, subject)` before showing anything. That includes map colours, emotes, the event log, counts in the top bar, the sprite list, the tile-info line and every inspector tab.
-- **Panels** (v29): `MapColours`, `Emotes`, `Marks` (the selected sprite's Decision and Attention markers), `EventLog` (a line), `Counts` (the top bar's population), `SpriteList` (a row), `TileInfo` (the status line's part about the tile under the Cursor) and `Tab(tab)`. **Subjects:** `World`, `Sprite(id)` or `Tile(pos)`. An event log line asks about its first sprite, or the world. A display denied shows nothing in its place: a sprite in its own colour, no emote, a blank tab, and the inspector's title without the sprite's name. A denied event log line is left out, so the lines after it close up rather than leave a gap that would show something happened.
-- In M1 the answer is always yes (`Omniscient`).
+- In M1 the answer is always yes.
 - A future diegetic Play mode is a new policy. The policy only controls what the UI **reveals**. A physical in-world scanner would be a separate sim feature with its own state and commands.
 
 ### 6.5 The Cursor
 
-**What it is** (v21): the Cursor is the player's hard-light projection into the terrarium (§0), and the 3×3 grid on the map is its form. In M1 it's invisible to sprites.
-- **Visible or invisible** (v21): each cursor mode will have its own switch, and every mode starts invisible. The switch, and what a visible Cursor means to sprites, come with the visible Cursor's slice, 11d ([#60](https://github.com/Keazra/terra-sprites/issues/60)); until then the Cursor is always invisible, and a touch from it is a feeling from nowhere (§4.6, §5.6).
+**What it is** (v21): the Cursor is the player's hard-light projection into the terrarium (§0), and the 3×3 grid on the map is its form.
+- **Visible or hidden** (v21; built in v29): each cursor mode has its own switch, and every mode starts hidden. `H` turns the current mode's on or off; held, it acts once. Hidden, the Cursor's touch is a feeling from nowhere (§4.6, §5.6). Visible, sprites see it as a thing of its own, the Cursor (§3.5.5, §3.6): they can go to it or back away from it, and learn to like or fear it from how it treats them (§5.6). While it's visible it draws as a frame of light, `═` above and below and `║` at the sides, in place of the arrows, following or not (below), and the status line says `· seen` after the mode (§6.1).
+- **Following a sprite while visible** (v29), the Cursor sits on it and the sprite sees it there like anything else. A sprite that fears it backs away from a Cursor that keeps following, and gets used to it if it stays and does nothing (§5.6).
 
 - **Scrolling:** `W` `A` `S` `D` or the arrow keys scroll the viewport one tile, and Shift makes it 5. Holding a key keeps scrolling. The viewport stops at the wall. There is **no keyboard cursor**.
 - **The Cursor follows the pointer,** unless it follows a sprite (below). It sits on the tile the pointer **points at** (v27): one up and one left of the tile under the pointer, so the pointer's arrow rests on the Cursor's lower-right corner rather than hiding the tile. On the map view's top row the tile pointed at stays in that row, and on its left column in that column; and on the map view's border just right of or below the tiles, the pointer points at the last column or row, so every tile in view can be pointed at. The Cursor changes as the map scrolls beneath a still pointer. When the pointer leaves the map view, the Cursor stays on its last tile. A click acts on the tile pointed at, as the cursor mode says.
@@ -1480,7 +1453,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 - **Ownership:** **the Cursor lives in the sim** as far as it touches the world: `World` owns the item it holds or the sprite it leads, one thing at a time, and while it leads, its tile (v23).
   - A held item stays in its World storage with no tile. It's left out of the occupancy index and perception, and its lifecycle keeps running (§3.5.2).
   - A led sprite stays on the map (below).
-  - `App` owns where the Cursor is, the cursor mode and Follow, and reads `world.cursor()` to draw what it holds or leads. While the Cursor is invisible to sprites, where it is touches the world only while it leads a sprite: then each move onto a new tile sends `MoveCursor` (§2.5). The visible Cursor (11d) will send it always.
+  - `App` owns where the Cursor is, the cursor mode, each mode's switch and Follow, and reads `world.cursor()` to draw what it holds or leads. Where it is touches the world while it leads a sprite or is visible (v29): then each move onto a new tile sends `MoveCursor`, a following Cursor's as its sprite walks included, and a change of switch or mode that shows or hides it sends `ShowCursor` (§2.5). Hidden and leading nothing, the world keeps the tile it was last told, and sprites see nothing there.
 
 **Leading a sprite** (v23). Sprites are led, never lifted:
 - **A Grab-mode click on a sprite takes hold of it,** and the next Grab-mode click lets go. A sprite on the tile comes before an item.
@@ -1489,7 +1462,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 - **It chooses nothing while led:** no attention, decision or trace entries (§2.4). So it can't eat, drink, flee or fight back, even when hurt: the Cursor's grip is hard light, stronger than a sprite. Other sprites perceive it as usual, and pets and shocks reach it.
 - **It follows the Cursor in every cursor mode.** Leading the followed sprite, Follow steps aside (below), so the Cursor follows the pointer and the sprite follows the Cursor.
 - **Let go,** it chooses afresh at its next step 5. Taken hold of mid-action, its action ends `pulled_away` (§5.5).
-- **Being led isn't a sense:** a sprite learns nothing from it as such. What the Cursor's handling means to sprites is the visible Cursor's question (11d).
+- **Being led isn't a sense:** a sprite learns nothing from it as such, visible or not (v29). A shove by a visible Cursor into something that hurts teaches fear of the Cursor (§5.6).
 
 **Throwing and shoving** (v25). In Grab mode the right click sends what the Cursor has hold of: it **throws** a held item, which rolls (§3.5.4), or **shoves** a led sprite, which is let go and slides (§3.5.4). Sprites are never thrown (v23 change 8). The player aims by **pulling back**, like a pool cue:
 - **Pressing the right button** (or `E`) **starts aiming** what the Cursor has hold of, whatever the pointer points at. With the Cursor empty, the press first grabs what's under it, as a left click would: the followed sprite, or else the sprite there, or else the item there. With nothing there, it sends nothing, flashes `?`, and says "Nothing here to throw or shove"; on a fixture, "Can't throw the thornbush: it's rooted to the ground".
@@ -1511,7 +1484,13 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 
 - The arrows and marks take the mode's colour. Parts that fall outside the map view aren't drawn.
 - The Cursor covers the 8 tiles around its target while it sits there; the status line still names the target.
-- The arrows and marks are theme glyphs (§6.2). **Following a sprite,** the arrows are solid, clamping the sprite (`▼ ► ◄ ▲`).
+- The arrows and marks are theme glyphs (§6.2). **Following a sprite,** the arrows are solid, clamping the sprite (`▼ ► ◄ ▲`). **While sprites can see it** (v29), a frame of light takes the arrows' place, following or not, and the marks stay:
+
+```
+M ═ Y
+║ ☺ ║
+N ═ M
+```
 
 **Follow** (v21 as locking on; v26). The Cursor can follow a sprite, so a pet or a shock needs no aim:
 - **Following,** the Cursor sits on its sprite and moves with it, in every mode, whatever the pointer does. If the sprite walks out of view, the Cursor goes with it, and a click still reaches it.
@@ -1558,16 +1537,16 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 |---|---|
 | `Tab` / `Shift+Tab` | Select the next / previous sprite by ID, wrapping around, and centre the viewport on it if it's out of view. With none selected, start from the lowest / highest ID; after the selected sprite dies, carry on from its ID. Follow stays where it is |
 | `PgUp` / `PgDn` | Scroll the open inspector tab by a page |
-| `T` | Track: the view follows the selected sprite (v21; `f` before), or stops. With none selected, "Select a sprite to track it" (v29) |
+| `T` | Track: the view follows the selected sprite (v21; `f` before) |
+| `H` | Show the Cursor to sprites in the current cursor mode, or hide it (v29) |
 | `F` | **Follow** (v26): the Cursor follows the sprite under it, or else the selected sprite, or stops (above). The middle mouse button does the same where it points. Not a cursor mode |
 | `b` | Cycle the colour mode |
-| `m` | Cycle the event log's filter: all, selected, major (v29) |
 | `[` / `]` | Previous / next inspector tab, wrapping around |
 | `g` | Save the selected sprite's genome to the genomes folder (§6.7), as `mira-530-tick-5310.ron`; the status line says where (v28) |
 | `r` | Name the selected sprite: a name you type, or one generated at random |
-| `l` | Open or close the sprite list |
+| `l` | Open the sprite list |
 | `v` | Switch the detail view on or off: the exact action line (§6.1) |
-| `?` | Open or close help |
+| `?` | Open help |
 | `Esc` | Close a menu or overlay; otherwise back to Select; from Select, ask to quit |
 | `Ctrl+C` | Quit at once |
 
@@ -1607,7 +1586,7 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 
 ### 6.8 UI architecture
 
-- **`App`** holds the UI state: where the Cursor is, cursor mode (and each mode's reserve), Follow (v21 as the lock), viewport, selection, screen state (Normal / Menu / Prompt / Help / Sprite list), colour mode, emote and feedback timers, and the active `InfoPolicy`.
+- **`App`** holds the UI state: where the Cursor is, cursor mode (and each mode's reserve), Follow (v21 as the lock), viewport, selection, screen state (Normal / Menu / Prompt / Help), colour mode, emote and feedback timers, and the active `InfoPolicy`.
 - **Input:** a keybinding table maps keys to UI `Action`s. Each `Action` either changes `App` or produces a `Command`.
 - **Rendering** is a pure function, `render(frame, &App, &World)`.
 - **Panic hook:** it restores the terminal and flushes the replay.
@@ -1685,11 +1664,11 @@ Implementation is **test-first, one vertical slice at a time.** Everything in `t
 5. **Behaviour scenarios** (§7.3).
 6. **UI tests:**
    - Keybindings map to the right `Action`s and `Command`s.
-   - ratatui `TestBackend` snapshots cover each inspector tab, the help screen and the sprite list in both themes (v29): text files in `crates/terra-tui/tests/snapshots/`, written afresh with `UPDATE_SNAPSHOTS=1` and reviewed like code.
+   - ratatui `TestBackend` snapshots cover each inspector tab and the map in both themes.
    - A deny-all `InfoPolicy` blanks **every** display.
    - Emote timers work from events.
    - The too-small-terminal message appears.
-   - All UI strings are within CP437: a test plays the default world and checks every cell of every screen, prompt and overlay (v29).
+   - All UI strings are within CP437.
 7. **Benchmarks (`criterion`, run locally):**
    - the whole tick with 100 sprites
    - one sprite's flood
@@ -1846,6 +1825,7 @@ IDs are stable and append-only. Gaps are left for growth, and the ranges are a c
 | 4 | water | water |
 | 5 | toy (was Ball) | ball |
 | 6 | sprite | sprite |
+| 7 | cursor (v29) | cursor |
 
 **Object types:**
 
@@ -1857,6 +1837,7 @@ IDs are stable and append-only. Gaps are left for growth, and the ranges are a c
 | 4 | ball |
 | 100 | water (pseudo) |
 | 101 | sprite (pseudo) |
+| 102 | cursor (pseudo, v29) |
 
 **Brain inputs:**
 
@@ -1871,7 +1852,8 @@ IDs are stable and append-only. Gaps are left for growth, and the ranges are a c
 | 36–41 | `attended_<category>` for categories 1–6 (v19: `35 + id`; from category 7, `37 + id`, §3.5.5). 38 was `attended_thornbush`, retired with category 3 (v20) | Target |
 | 42 | TargetDistance | Target |
 | 43 | TargetAdjacent | Target |
-| 44–63 | kept for Target inputs | Target |
+| 44 | `attended_cursor` (v29), for category 7 | Target |
+| 45–63 | kept for Target inputs | Target |
 | 64 | cornered | State |
 | 65 | fruitless | State (v16) |
 
@@ -1929,6 +1911,7 @@ IDs are stable and append-only. Gaps are left for growth, and the ranges are a c
 | 33 | generalise_types (v19) |
 | 34 | quieting (v21) |
 | 35 | habit_fade_bad (v21) |
+| 36 | cursor_calming (v29) |
 
 Since v16, `learning_rate`, `relax_rate` and `consolidate_rate` do nothing (learning is worth and habits, §5.6), nor do 10–14 while the recruitable pool is on hold (§5.4). Their IDs stay taken.
 
@@ -1993,6 +1976,7 @@ This file fixes the **mechanisms and ranges**. The starting values are tuned wit
 | `generalise_types` (v19) | 2–10 | 3 |
 | `quieting` (v21) | 0–1 | 0.8 |
 | `habit_fade_bad` (v21) | 0–0.01 | 0.00005 |
+| `cursor_calming` (v29) | 0–0.1 | 0.01 |
 
 The v16 defaults are the prototype's (#10), a starting point for slice 9's tuning, and the v18 ones slice 9c's prototype's (#62). `generalise_types` starts at `generalise`'s value. Rows for parameters that do nothing since v16 stay, since a genome may still carry their genes.
 

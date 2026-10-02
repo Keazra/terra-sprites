@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 
+use crate::action::chebyshev;
 use crate::brain::{Learned, VERBS};
 use crate::data::DataPack;
 use crate::events::{Event, EventKind};
@@ -137,6 +138,9 @@ pub(crate) struct Experience {
     pub(crate) new_things: f32,
     /// The sprites it remembers (design v18 §5.6), by ID.
     pub(crate) individuals: BTreeMap<EntityId, SpriteMemory>,
+    /// What it remembers of the Cursor, learned about as one individual, as
+    /// a sprite is (design v29 §5.6), if anything.
+    pub(crate) cursor: Option<SpriteMemory>,
     /// Which learned values have been lessons (design §5.6).
     pub(crate) taught: BTreeSet<Learned>,
     /// Each need's level at the last step 4, to read its relief from.
@@ -156,7 +160,7 @@ impl Experience {
             within([&known.familiarity], (0.0, 1.0), "a familiarity")?;
         }
         within([&self.new_things], (-1.0, 1.0), "the worth of new things")?;
-        for individual in self.individuals.values() {
+        for individual in self.individuals.values().chain(&self.cursor) {
             within(&individual.worth, (0.0, 1.0), "a sprite's worth")?;
             within([&individual.good], (0.0, 1.0), "a sprite's good")?;
             within([&individual.bad], (-1.0, 0.0), "a sprite's bad")?;
@@ -175,6 +179,12 @@ impl Experience {
             .or_insert_with(|| TypeMemory::new(needs))
     }
 
+    /// What it remembers of the Cursor, remembering it afresh, for `needs`
+    /// needs, if it doesn't yet (design v29 §5.6).
+    pub(crate) fn remember_the_cursor(&mut self, needs: usize) -> &mut SpriteMemory {
+        self.cursor.get_or_insert_with(|| SpriteMemory::new(needs))
+    }
+
     /// What it remembers of `sprite`, remembering it afresh, for `needs`
     /// needs, if it doesn't yet (design v18 §5.6).
     pub(crate) fn remember(&mut self, sprite: EntityId, needs: usize) -> &mut SpriteMemory {
@@ -183,10 +193,11 @@ impl Experience {
             .or_insert_with(|| SpriteMemory::new(needs))
     }
 
-    /// Forgets every remembered sprite that everything learned about is
-    /// nearer 0 than `below` (design v18 §5.6).
+    /// Forgets every remembered sprite, and the Cursor, that everything
+    /// learned about is nearer 0 than `below` (design v18, v29 §5.6).
     pub(crate) fn forget_faded(&mut self, below: f32) {
         self.individuals.retain(|_, memory| !memory.faded(below));
+        self.cursor = self.cursor.take().filter(|memory| !memory.faded(below));
     }
 
     /// Forgets every remembered sprite not in `alive`: a sprite that has
@@ -196,8 +207,9 @@ impl Experience {
     }
 }
 
-/// What a sprite has learned about one other sprite (design v18 §5.6): its
-/// worth for each need and in general, how bad it is, and how frightening.
+/// What a sprite has learned about one other sprite (design v18 §5.6), or
+/// the Cursor (design v29 §5.6): its worth for each need and in general, how
+/// bad it is, and how frightening.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct SpriteMemory {
     /// Worth for each need, in the pack's needs order (0 to 1).
@@ -255,6 +267,9 @@ pub(crate) struct Touch {
     pub(crate) sprite: Option<EntityId>,
     /// How new its object type was to the sprite then (design v19 §5.6).
     pub(crate) novelty: f32,
+    /// Whether it was a crash after a shove by a Cursor the sprite could
+    /// see (design v29 §5.6).
+    pub(crate) by_cursor: bool,
 }
 
 /// What step 4 reads for one sprite (design §5.6).
@@ -280,6 +295,13 @@ pub(crate) struct Signals {
     /// Whether the Cursor corrected the sprite this tick: a `shocked` pulse
     /// is live (design v21 §5.6).
     pub(crate) corrected: bool,
+    /// Whether the sprite could see the Cursor that touched it this tick
+    /// (design v29 §5.6).
+    pub(crate) seen_cursor: bool,
+    /// How far the Cursor is, while the sprite knows it, can see it and its
+    /// flood reaches it: its Chebyshev distance over the reach of the
+    /// sprite's flood, as `target_distance` is on grass (design v29 §5.6).
+    pub(crate) cursor_distance: Option<f32>,
 }
 
 /// The most entries a trace keeps (design §5.6).
@@ -333,15 +355,32 @@ pub(crate) fn run(
         .map(|(id, _)| id)
         .filter(|id| !dying.contains(id))
         .collect();
+    // How far each sprite that knows the Cursor sees it, by its flood's
+    // reach, if its flood reaches it (design v29 §3.6, §5.6): only those can
+    // get used to it.
+    let cursor = state.cursor.seen_at();
+    let cursor_distances: BTreeMap<EntityId, f32> = state
+        .sprites
+        .iter()
+        .filter(|(_, sprite)| sprite.brain.experience.cursor.is_some())
+        .filter_map(|(id, sprite)| {
+            let (tile, flood) = (cursor?, sprite.flood.as_ref()?);
+            flood.nearest_goal(&state.map, tile, true)?;
+            let reach = f32::from(flood.reach().max(1));
+            Some((id, f32::from(chebyshev(tile, sprite.pos)) / reach))
+        })
+        .collect();
     let living = state
         .sprites
         .minds_mut()
         .filter(|(id, ..)| !dying.contains(id));
     for (id, body, brain) in living {
+        let cursor_distance = cursor_distances.get(&id).copied();
         let (reward, punishment) = (body.chems[indices.reward], body.chems[indices.punishment]);
         body.chems[indices.reward] = 0.0;
         body.chems[indices.punishment] = 0.0;
         let reach_back = brain.reach_back.take();
+        let seen_cursor = std::mem::take(&mut brain.seen_cursor);
         brain.experience.forget_dead(&alive);
         let needs = brain.need_levels(body, data);
         let relief = brain.relief(&needs, data);
@@ -359,6 +398,8 @@ pub(crate) fn run(
             attacker: body.sources.get(&indices.was_hit).copied(),
             reach_back,
             corrected: body.loci[indices.shocked] > 0.0,
+            seen_cursor,
+            cursor_distance,
         };
         let rate = body.loci[indices.learning_rate_mod];
         for (learned, good) in brain.learn(tick, &signals, rate, data) {

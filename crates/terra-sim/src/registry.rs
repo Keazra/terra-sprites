@@ -126,10 +126,13 @@ pub(crate) enum BrainParam {
     Quieting = 34,
     /// How much a bad habit fades each tick (design v21 §5.6).
     HabitFadeBad = 35,
+    /// How fast fear of the Cursor wears off while it stays near the sprite
+    /// and does nothing to it (design v29 §5.6).
+    CursorCalming = 36,
 }
 
 impl BrainParam {
-    pub(crate) const ALL: [BrainParam; 35] = [
+    pub(crate) const ALL: [BrainParam; 36] = [
         BrainParam::LearningRate,
         BrainParam::TraceDecay,
         BrainParam::RelaxRate,
@@ -165,6 +168,7 @@ impl BrainParam {
         BrainParam::GeneraliseTypes,
         BrainParam::Quieting,
         BrainParam::HabitFadeBad,
+        BrainParam::CursorCalming,
     ];
 
     /// The parameter's name in genome files and `physiology.ron`.
@@ -205,6 +209,7 @@ impl BrainParam {
             BrainParam::GeneraliseTypes => "generalise_types",
             BrainParam::Quieting => "quieting",
             BrainParam::HabitFadeBad => "habit_fade_bad",
+            BrainParam::CursorCalming => "cursor_calming",
         }
     }
 

@@ -35,6 +35,8 @@ pub enum Target {
     Water(Pos),
     /// Another sprite.
     Sprite(EntityId),
+    /// The Cursor, while sprites can see it (design v29 §6.5).
+    Cursor,
 }
 
 impl Target {
@@ -265,13 +267,15 @@ impl Flood {
     /// one with the lowest (cost, ID), where water's ID is its tile index; in
     /// ID order. Which of them draws the eye most is the brain's to say. A
     /// thing is reachable if the flood reached one of its goal tiles: beside
-    /// it, or, for an item or water, its own tile too. `me` is the sprite the
-    /// flood is for, which is never its own candidate.
+    /// it, or, for an item, water or the Cursor, its own tile too. `me` is
+    /// the sprite the flood is for, which is never its own candidate. The
+    /// Cursor is one where sprites see it, `cursor` (design v29 §6.5).
     pub(crate) fn candidates(
         &self,
         ground: Ground,
         me: EntityId,
         attacker: Option<EntityId>,
+        cursor: Option<Pos>,
     ) -> BTreeMap<CategoryId, Vec<(Target, u32)>> {
         let map = ground.map;
         // By category and object type, by its index; none for water or a
@@ -337,6 +341,11 @@ impl Flood {
         });
         if let Some(attacker) = attacker {
             candidates.insert(ground.data.sprite_category(), vec![attacker]);
+        }
+        // It's light, so a sprite may stand under it (design v29 §3.6).
+        if let Some(cost) = cursor.and_then(|tile| self.goal_cost(map, tile, true)) {
+            let cursor = ground.data.cursor_category();
+            candidates.insert(cursor, vec![(Target::Cursor, cost)]);
         }
         candidates
     }
@@ -472,7 +481,7 @@ mod tests {
         };
         let flood = Flood::new(ground, sprites[0], 10, Occupied::Penalty(30), 0);
         flood
-            .candidates(ground, EntityId(1), attacker)
+            .candidates(ground, EntityId(1), attacker, None)
             .into_iter()
             .map(|(id, found)| (data.category(id).expect("a category").name.clone(), found))
             .collect()

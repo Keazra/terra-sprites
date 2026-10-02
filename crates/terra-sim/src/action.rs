@@ -575,6 +575,7 @@ pub(crate) fn touched(
         subject,
         sprite: target.sprite(),
         novelty: brain.novelty(subject),
+        by_cursor: false,
     });
 }
 
@@ -954,6 +955,6 @@ fn directness(dir: Dir, line: (i64, i64)) -> i64 {
 
 /// The Chebyshev distance between two tiles: the most tiles apart they are
 /// along either axis.
-fn chebyshev(a: Pos, b: Pos) -> u16 {
+pub(crate) fn chebyshev(a: Pos, b: Pos) -> u16 {
     a.x.abs_diff(b.x).max(a.y.abs_diff(b.y))
 }

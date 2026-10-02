@@ -306,8 +306,9 @@ fn marked(app: &App) -> Option<EntityId> {
 }
 
 /// Draws the 3×3 cursor around its target tile, which the tile loop has already
-/// drawn in reverse video. The arrows, solid while following, and the marks
-/// take the mode mark's colour. The cursor is drawn only while its target is
+/// drawn in reverse video. The arrows, solid while following, or while
+/// sprites can see the Cursor a frame of light (design v29 §6.5), and the
+/// marks take the mode mark's colour. The cursor is drawn only while its target is
 /// in view, and pieces outside the map view's tiles are left off.
 ///
 /// ```text
@@ -319,7 +320,9 @@ fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App, world: &World) {
     let Some(centre) = app.cell_of(app.cursor()) else {
         return;
     };
-    let arrows = if app.followed().is_some() {
+    let arrows = if app.visible() {
+        app.theme.visible_frame()
+    } else if app.followed().is_some() {
         app.theme.followed_arrows()
     } else {
         app.theme.arrows()
@@ -708,7 +711,9 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         .object_at(cursor)
         .map(|object| format!(" · {}", object_label(&object)))
         .unwrap_or_default();
-    let mode = app.mode().label();
+    // Whether sprites can see the Cursor in this mode (design v29 §6.1).
+    let seen = if app.visible() { " · seen" } else { "" };
+    let mode = format!("{}{seen}", app.mode().label());
     let followed = app
         .followed()
         .map(|id| format!(" │ following {}", app.names().label(id)))
