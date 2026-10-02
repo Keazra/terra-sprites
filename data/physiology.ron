@@ -134,6 +134,6 @@
         zap: (punishment: 0.5, pain: 0.3),
         shock: (punishment: 1.0, pain: 0.6),
         max_reach_back: 40,
-        furthest: (small: 6, medium: 6, large: 3),
+        furthest: (small: 6, medium: 6, large: 5),
     ),
 )

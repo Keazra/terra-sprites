@@ -760,10 +760,10 @@ fn the_cursor_s_touch_raises_levels_by_fractions_and_reaches_back_at_least_the_t
 #[test]
 fn the_cursor_sends_a_thing_of_every_size_at_least_a_tile() {
     // Design v25 §3.5.4: the furthest it throws or shoves, by size.
-    let furthest = "furthest: (small: 6, medium: 6, large: 3)";
+    let furthest = "furthest: (small: 6, medium: 6, large: 5)";
     for (size, none) in [
-        ("small", "furthest: (small: 0, medium: 6, large: 3)"),
-        ("medium", "furthest: (small: 6, medium: 0, large: 3)"),
+        ("small", "furthest: (small: 0, medium: 6, large: 5)"),
+        ("medium", "furthest: (small: 6, medium: 0, large: 5)"),
         ("large", "furthest: (small: 6, medium: 6, large: 0)"),
     ] {
         assert_invalid_physiology(furthest, none, &format!("cursor.furthest.{size}"));
