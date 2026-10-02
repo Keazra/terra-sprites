@@ -1453,7 +1453,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 |---|---|---|---|
 | Hurt (red) | `!` | `!` | Being hurt by something: a thornbush, a sprite's hit. Not starvation, dehydration or old age, which injure every tick. Built in slice 7a, ahead of the others. |
 | Shocked (yellow, v21) | `‼` | `/` | `Corrected`: a zap or a shock, instead of Hurt. Built in slice 10. The owner asked for a lightning bolt (`🗲`), which isn't CP437; the tile front end can draw one |
-| Failed (light yellow, v29) | `?` | `?` | `ActionEnded` with outcome `failed`, `blocked` or `timed_out`. Light yellow, since a white `?` is an object the theme doesn't know |
+| Failed (light yellow, v29) | `?` | `?` | `ActionEnded` with outcome `failed`, `blocked` or `timed_out`, unless the action also hurt the sprite: then it shows Hurt, which matters more. Light yellow, since a white `?` is an object the theme doesn't know |
 | Resting (light blue, v29) | `z` | `z` | While Rest lasts, and at least a second of real time (v29), so it's seen at every speed |
 | Pleased | `♥` | `+` | `Rewarded`: a pet or a hug (built in slice 10); or a tick in which `last_r` reaches **0.3** (v29). Measured over 1.79 million sprite-ticks of the default world, about one good feeling in seven reaches it, such as a meal while hungry |
 

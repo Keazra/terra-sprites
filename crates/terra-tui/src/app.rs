@@ -880,13 +880,14 @@ impl App {
     }
 
     /// Starts the Failed emote on sprite `actor` if it gave its `action` up:
-    /// failed, blocked or timed out (design §6.3).
+    /// failed, blocked or timed out (design §6.3). An action that also hurt
+    /// it shows Hurt instead, which matters more.
     fn note_gave_up(&mut self, actor: EntityId, action: &ActionView) {
         let gave_up = matches!(
             action.progress,
             Progress::Ended(Outcome::Failed | Outcome::Blocked | Outcome::TimedOut)
         );
-        if gave_up {
+        if gave_up && !action.hurt.actor {
             self.start_emote(actor, Emote::Failed);
         }
     }

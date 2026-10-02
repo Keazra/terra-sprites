@@ -92,7 +92,10 @@ pub(crate) fn lines(
         return vec![Line::from(" No sprites")];
     }
     let sprites: Vec<SpriteView> = ids.iter().filter_map(|&id| world.sprite(id)).collect();
-    let labels: Vec<String> = ids.iter().map(|&id| app.names().label(id)).collect();
+    let labels: Vec<String> = sprites
+        .iter()
+        .map(|sprite| app.names().label(sprite.id()))
+        .collect();
     let ages: Vec<String> = sprites
         .iter()
         .map(|sprite| group_thousands(sprite.age()))
