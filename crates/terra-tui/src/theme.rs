@@ -130,7 +130,7 @@ pub struct Theme {
     /// By object type name, then visual state.
     objects: BTreeMap<String, BTreeMap<String, Glyph>>,
     arrows: Arrows,
-    locked_arrows: Arrows,
+    followed_arrows: Arrows,
     status_marks: StatusMarks,
     mode_marks: BTreeMap<CursorMode, Glyph>,
     leash: Glyph,
@@ -180,10 +180,10 @@ impl Theme {
         self.arrows
     }
 
-    /// The Cursor's arrows while it's locked on to a sprite: solid (design
-    /// v22 §6.2).
-    pub fn locked_arrows(&self) -> Arrows {
-        self.locked_arrows
+    /// The Cursor's arrows while it follows a sprite: solid (design
+    /// v26 §6.2).
+    pub fn followed_arrows(&self) -> Arrows {
+        self.followed_arrows
     }
 
     /// What the cursor's status marks show.
@@ -240,7 +240,7 @@ impl Theme {
             tiles,
             objects,
             arrows: file.cursor.arrows,
-            locked_arrows: file.cursor.locked_arrows,
+            followed_arrows: file.cursor.followed_arrows,
             status_marks: file.cursor.status_marks,
             mode_marks,
             leash: glyph(file.cursor.leash),
@@ -287,8 +287,8 @@ struct ThemeFile {
 #[serde(deny_unknown_fields)]
 struct CursorFile {
     arrows: Arrows,
-    /// The arrows while the Cursor is locked on to a sprite.
-    locked_arrows: Arrows,
+    /// The arrows while the Cursor follows a sprite.
+    followed_arrows: Arrows,
     status_marks: StatusMarks,
     mode_marks: BTreeMap<CursorMode, GlyphEntry>,
     /// A dot of the leash, from the Cursor to a sprite it leads.
