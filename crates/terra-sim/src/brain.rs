@@ -388,7 +388,9 @@ impl Brain {
         // What the feelings are about: the latest try, while it's recent
         // (design §5.6). Relief and punishment look back the touch window, a
         // zap's or shock's too; reward, in a tick the Cursor rewarded the
-        // sprite, looks back the Reward's reach back (design v21 §5.6).
+        // sprite, looks back the Reward's reach back (design v21 §5.6). The
+        // reach back is never shorter than the touch window, so whatever is
+        // near is reached too.
         let within = |ticks: u64| self.touched.filter(|t| tick - t.tick <= ticks);
         let near = within(physiology.touch_window);
         let reached = signals.reach_back.map_or(near, within);
@@ -397,13 +399,17 @@ impl Brain {
         // its shove to fear it, as a hit teaches fear of the hitter, as well
         // as what each teaches about what it touched. A pet for a try on the
         // Cursor itself is the lesson about the thing touched, below, and a
-        // crash teaches only in its own tick.
-        let touched_the_cursor = reached
-            .or(near)
-            .is_some_and(|touch| touch.subject.category(data) == data.cursor_category());
+        // crash teaches only in its own tick. In a tick the Cursor corrected
+        // it, the pain is the correction's, so it's about the Cursor only if
+        // the sprite could see it.
+        let touched_the_cursor =
+            reached.is_some_and(|touch| touch.subject.category(data) == data.cursor_category());
         let liked = signals.seen_cursor && signals.reach_back.is_some() && !touched_the_cursor;
-        let feared = signals.seen_cursor && signals.corrected
-            || near.is_some_and(|touch| touch.by_cursor && touch.tick == tick);
+        let feared = if signals.corrected {
+            signals.seen_cursor
+        } else {
+            near.is_some_and(|touch| touch.by_cursor && touch.tick == tick)
+        };
         if liked || feared {
             let good = self.params.get(BrainParam::IndividualRateGood) * learning_rate_mod;
             let fear = self.params.get(BrainParam::FearRate) * learning_rate_mod;
@@ -419,6 +425,7 @@ impl Brain {
         // off, fastest on the sprite's own tile: it comes to see it can't do
         // anything about it (design v29 §5.6).
         if !signals.corrected
+            && !feared
             && let (Some(distance), Some(cursor)) =
                 (signals.cursor_distance, self.experience.cursor.as_mut())
         {
@@ -432,7 +439,7 @@ impl Brain {
             sprite,
             novelty,
             ..
-        }) = reached.or(near)
+        }) = reached
         {
             let good = self.params.get(BrainParam::WorthRateGood) * learning_rate_mod;
             let bad = self.params.get(BrainParam::WorthRateBad) * learning_rate_mod;

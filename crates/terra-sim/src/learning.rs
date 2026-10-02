@@ -298,9 +298,9 @@ pub(crate) struct Signals {
     /// Whether the sprite could see the Cursor that touched it this tick
     /// (design v29 §5.6).
     pub(crate) seen_cursor: bool,
-    /// How far the Cursor is, while the sprite can see it and its flood
-    /// reaches it: its Chebyshev distance over the reach of the sprite's
-    /// flood, as `target_distance` is on grass (design v29 §5.6).
+    /// How far the Cursor is, while the sprite knows it, can see it and its
+    /// flood reaches it: its Chebyshev distance over the reach of the
+    /// sprite's flood, as `target_distance` is on grass (design v29 §5.6).
     pub(crate) cursor_distance: Option<f32>,
 }
 
@@ -355,12 +355,14 @@ pub(crate) fn run(
         .map(|(id, _)| id)
         .filter(|id| !dying.contains(id))
         .collect();
-    // How far each sprite sees the Cursor, by its flood's reach, if its
-    // flood reaches it (design v29 §3.6, §5.6).
+    // How far each sprite that knows the Cursor sees it, by its flood's
+    // reach, if its flood reaches it (design v29 §3.6, §5.6): only those can
+    // get used to it.
     let cursor = state.cursor.seen_at();
     let cursor_distances: BTreeMap<EntityId, f32> = state
         .sprites
         .iter()
+        .filter(|(_, sprite)| sprite.brain.experience.cursor.is_some())
         .filter_map(|(id, sprite)| {
             let (tile, flood) = (cursor?, sprite.flood.as_ref()?);
             flood.nearest_goal(&state.map, tile, true)?;
