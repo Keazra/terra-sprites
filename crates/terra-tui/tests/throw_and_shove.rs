@@ -50,13 +50,13 @@ fn apply(app: &mut App, world: &World, action: Action) {
 
 /// The screen cell the pointer is on to point at `tile`: one down and right of
 /// it (design v27 §6.5). The map view's tiles are drawn from screen cell (0, 0).
-fn cell(tile: Pos) -> Position {
+fn pointing_at(tile: Pos) -> Position {
     Position::new(tile.x + 1, tile.y + 1)
 }
 
 fn click(app: &mut App, world: &World, tile: Pos, button: Button) {
     let action = Action::Click {
-        at: cell(tile),
+        at: pointing_at(tile),
         button,
         amplified: false,
     };
@@ -66,7 +66,7 @@ fn click(app: &mut App, world: &World, tile: Pos, button: Button) {
 /// Has the Cursor follow the sprite on `tile`, with a middle click (design
 /// v26 §6.5).
 fn follow(app: &mut App, world: &World, tile: Pos) {
-    apply(app, world, Action::middle_click(cell(tile)));
+    apply(app, world, Action::middle_click(pointing_at(tile)));
 }
 
 /// Hands the app's commands to the world and runs a tick, as a frame does.
@@ -117,14 +117,14 @@ fn hold(app: &mut App, world: &mut World, tile: Pos) -> EntityId {
 
 /// Points at `tile`, as a mouse move, or a drag, does.
 fn point(app: &mut App, world: &World, tile: Pos) {
-    apply(app, world, Action::Point(cell(tile)));
+    apply(app, world, Action::Point(pointing_at(tile)));
 }
 
 /// Lets go of the right button over `tile`.
 fn let_go(app: &mut App, world: &World, tile: Pos) {
     let action = Action::Release {
         button: Button::Right,
-        at: Some(cell(tile)),
+        at: Some(pointing_at(tile)),
     };
     apply(app, world, action);
 }
