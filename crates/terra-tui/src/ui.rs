@@ -754,16 +754,12 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
         bottom: false,
     };
     draw_border(buf, area, " Events ", no_walls);
-    // The filters, at the right of its top border (design §6.1).
-    if let Some(label) = app.filter_label() {
-        let labels = app.event_filter().labels();
-        buf.set_stringn(
-            label.x,
-            label.y,
-            labels,
-            usize::from(label.width),
-            Style::default(),
-        );
+    // The filters, at the right of its top border, where a click on them
+    // lands (design §6.1).
+    let labels = app.event_filter().labels();
+    let width = labels.chars().count() as u16;
+    if let Some(x) = area.right().checked_sub(width + 2) {
+        buf.set_stringn(x, area.y, labels, usize::from(width), Style::default());
     }
     let inner = area.inner(Margin::new(1, 1));
     let lines = app.event_log().filter_map(|(event, count)| {
