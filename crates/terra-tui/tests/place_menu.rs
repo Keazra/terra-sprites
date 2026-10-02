@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
 use ratatui::layout::{Position, Rect, Size};
-use terra_sim::{Command, DataPack, Genome, Map, Pos, Scenario, World};
+use terra_sim::{Command, DataPack, EntityId, Event, EventKind, Genome, Map, Pos, Scenario, World};
 use terra_tui::app::{App, Areas, CursorMode, Flow, Screen, StatusMark};
 use terra_tui::input::{Action, Button, Keys};
 use terra_tui::theme::Theme;
@@ -551,4 +551,59 @@ fn rendered(app: &App, world: &World, width: u16, height: u16) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+#[test]
+fn pick_zero_picks_nothing() {
+    let world = field(&[], &[]);
+    let mut app = grab_app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+    apply(&mut app, &world, Action::Pick(0));
+    assert_eq!(app.screen(), Screen::PlaceMenu);
+    assert_eq!(app.placing(), None);
+}
+
+#[test]
+fn a_folder_named_like_a_genome_file_isnt_listed() {
+    let world = field(&[], &[]);
+    let dir = scratch_folder("folder");
+    std::fs::create_dir_all(dir.join("nested.ron")).unwrap();
+    std::fs::write(dir.join("mira.ron"), "").unwrap();
+    let mut app = grab_app(&world);
+    app.set_genome_folder(dir.clone());
+    pick(&mut app, &world, 5);
+    assert_eq!(app.menu_items(&world), ["mira"]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_naming_prompt_drops_its_key_hints_rather_than_cut_them_off() {
+    let world = field(&[], &[at(4, 2)]);
+    let mut app = grab_app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Select));
+    click(&mut app, &world, at(4, 2), Button::Left);
+    apply(&mut app, &world, Action::Rename);
+    let wide = rendered(&app, &world, 100, 20);
+    let wide = wide.lines().last().unwrap_or_default();
+    assert!(wide.contains("esc cancel"), "{wide}");
+    let narrow = rendered(&app, &world, 40, 20);
+    let narrow = narrow.lines().last().unwrap_or_default();
+    assert!(narrow.starts_with(" Name Sprite #"), "{narrow}");
+    assert!(!narrow.contains("enter"), "{narrow}");
+}
+
+#[test]
+fn a_rename_names_the_sprite_from_its_event() {
+    let world = field(&[], &[]);
+    let mut app = grab_app(&world);
+    let id = EntityId(77);
+    let renamed = Event {
+        tick: 1,
+        kind: EventKind::Renamed {
+            id,
+            name: "Tobek".into(),
+        },
+    };
+    app.record(&[renamed], &world);
+    assert_eq!(app.names().label(id), "Tobek #77");
 }

@@ -511,12 +511,14 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     if app.screen() == Screen::QuitPrompt {
         return Line::from(" Quit? (y/n)");
     }
-    // Naming takes the line over (design §6.5).
+    // Naming takes the line over, with its key hints if they fit (design
+    // v28 §6.5).
     if let (Some(draft), Some(sprite)) = (app.name_draft(), app.naming_sprite()) {
         let label = app.names().label(sprite);
-        return Line::from(format!(
-            " Name {label}: {draft}_   enter ok  tab another  esc cancel"
-        ));
+        let prompt = format!(" Name {label}: {draft}_");
+        const HINTS: &str = "   enter ok  tab another  esc cancel";
+        let fits = prompt.chars().count() + HINTS.chars().count() <= usize::from(width);
+        return Line::from(if fits { prompt + HINTS } else { prompt });
     }
     let cursor = app.cursor();
     let terrain = terrain_name(world.map().terrain(cursor));
