@@ -137,6 +137,8 @@ pub struct Theme {
     aim: Glyph,
     aim_end: Glyph,
     attention_marker: Color,
+    /// By drive name, the colour of a sprite whose strongest drive it is.
+    drives: BTreeMap<String, Color>,
 }
 
 impl Theme {
@@ -173,6 +175,12 @@ impl Theme {
     /// attends to.
     pub fn attention_marker(&self) -> Color {
         self.attention_marker
+    }
+
+    /// The colour of a sprite whose strongest drive is `drive`, if the
+    /// theme gives it one (design §6.3).
+    pub fn drive_colour(&self, drive: &str) -> Option<Color> {
+        self.drives.get(drive).copied()
     }
 
     /// The Cursor's arrows.
@@ -247,6 +255,11 @@ impl Theme {
             aim: glyph(file.cursor.aim.path),
             aim_end: glyph(file.cursor.aim.end),
             attention_marker: file.attention_marker.into(),
+            drives: file
+                .drives
+                .into_iter()
+                .map(|(drive, colour)| (drive, colour.into()))
+                .collect(),
         }
     }
 }
@@ -274,6 +287,9 @@ fn glyph(entry: GlyphEntry) -> Glyph {
 #[serde(deny_unknown_fields)]
 struct ThemeFile {
     tiles: BTreeMap<SemanticTile, GlyphEntry>,
+    /// By drive name, from the data pack's `chemicals.ron`, the colour of a
+    /// sprite whose strongest drive it is (design §6.3).
+    drives: BTreeMap<String, Colour>,
     /// By object type name (from the data pack's `objects.ron`), then visual state.
     objects: BTreeMap<String, BTreeMap<String, GlyphEntry>>,
     cursor: CursorFile,
