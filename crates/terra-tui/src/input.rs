@@ -117,8 +117,9 @@ const SHIFT_STEP: i32 = 5;
 ///
 /// A key is *held* when the terminal reports it as repeating, or when it is
 /// pressed again without a release in between. The second rule is only trusted
-/// where the terminal reports releases (Windows always does; others are trusted
-/// once a release arrives), otherwise every press would look held.
+/// where the terminal reports releases (Windows always does, as does a terminal
+/// with the kitty keyboard protocol on; others are trusted once a release
+/// arrives), otherwise every press would look held.
 #[derive(Debug)]
 pub struct Keys {
     releases_reported: bool,
@@ -142,6 +143,14 @@ impl Keys {
     /// The action for a key event, if it has one. Of key releases, only
     /// `E`'s acts: it's the right button let go (design v25 §6.5).
     pub fn action_for(&mut self, key: KeyEvent) -> Option<Action> {
+        // Terminals using the kitty keyboard protocol report these as keys of
+        // their own (design v26 §6.6); they only change other keys.
+        if matches!(
+            key.code,
+            KeyCode::Modifier(_) | KeyCode::CapsLock | KeyCode::NumLock | KeyCode::ScrollLock
+        ) {
+            return None;
+        }
         let physical = physical_key(key.code);
         if key.kind == KeyEventKind::Release {
             self.releases_reported = true;
