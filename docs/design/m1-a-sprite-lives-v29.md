@@ -9,11 +9,11 @@
 
 ## Changes from v28
 
-Slice 11d ([#60](https://github.com/Keazra/terra-sprites/issues/60)), the visible Cursor, settled with the owner before building. Decided in slice 10: each cursor mode has its own switch, every mode starts invisible, and while visible the Cursor is part of the lesson. Open here: what a visible Cursor's touch teaches (three readings), what sprites see, whether they can go to it or flee it, a Cursor following a sprite, what being led or shoved by it teaches, and what onlookers learn. The owner accepted every recommendation, and added that a sprite must get used to a feared Cursor that sits on it. New terms in [`CONTEXT.md`](../../CONTEXT.md): visible (the Cursor), getting used to the Cursor.
+Slice 11d ([#60](https://github.com/Keazra/terra-sprites/issues/60)), the visible Cursor, settled with the owner before building. Decided in slice 10: each cursor mode has its own switch, every mode starts invisible, and while visible the Cursor is part of the lesson. Open here: what a visible Cursor's touch teaches (three readings), what sprites see, whether they can go to it or flee it, a Cursor following a sprite, what being led or shoved by it teaches, and what onlookers learn. The owner accepted every recommendation, and added that a sprite must get used to a feared Cursor that sits on it. After the PR opened, the owner chose the other option for how a player tells a visible Cursor: a frame of light on the map as well as the status line. New terms in [`CONTEXT.md`](../../CONTEXT.md): visible (the Cursor), getting used to the Cursor.
 
 | # | Change | Source | Sections |
 |---|---|---|---|
-| 1 | **A switch per cursor mode.** `H` shows the Cursor to sprites in the current mode, or hides it; every mode starts hidden, and each keeps its own switch, so the Cursor can be visible in Train and hidden in Select. While visible, the status line says so after the mode: `TRAIN · seen`. The Cursor's look on the map doesn't change. | Owner decision (v21); the key and the status line, recommendation accepted | §6.1, §6.5 |
+| 1 | **A switch per cursor mode.** `H` shows the Cursor to sprites in the current mode, or hides it; every mode starts hidden, and each keeps its own switch, so the Cursor can be visible in Train and hidden in Select. While visible, the status line says so after the mode, `TRAIN · seen`, and the Cursor draws as a frame of light: `═` above and below, `║` at the sides, in place of the arrows, following or not. | Owner decision (v21); the key, recommendation accepted; the frame, owner decision after the PR opened (the second option asked) | §6.1, §6.5 |
 | 2 | **What sprites see: the Cursor, a category of its own.** `cursor` (category 7, brain input `attended_cursor`, 44) joins `water` and `sprite` as a category every pack must have, since every world has a Cursor. It's perceived on its target tile, where the world was last told it is, as far as a sprite senses. It's light, so it isn't solid: its goal tiles are its own tile and those beside it, as an item's are, and sprites walk under it. Sprites can go to it and back away from it. Its pseudo type (`cursor`, 102) has an empty verb table, so eating, drinking from, hitting or playing with it is a fruitless try. The screen calls it "the Cursor". | Recommendation accepted | §3.5.5, §3.6, §5.2, Appendix A |
 | 3 | **Chasing the light is left out.** Playing with the Cursor eases nothing, so what sprites think of the player comes only from how the player treats them. It's one line of data (a `Play` rule in the pseudo type), kept for later in [#104](https://github.com/Keazra/terra-sprites/issues/104). | Owner decision (recommendation accepted; "file this decision for later") | §3.5.3, §5.6 |
 | 4 | **Commands.** `ShowCursor { visible }` shows or hides the Cursor; the screen sends it as the switch or the mode changes. `MoveCursor` is sent at each move onto a new tile while the Cursor is visible as well as while it leads, a following Cursor's included. Hiding the Cursor ends an action aimed at it, `failed`, as a target that's gone does. | Follows from v23 change 15 (the command exists, so this widens when it's sent) | §2.5, §5.5, §6.5 |
@@ -1392,6 +1392,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 | Selected sprite | `☻` | `@` in reverse video (`&` is the berry bush) | by colour mode (§6.3) |
 | Cursor arrows | `↓ ↑ → ←` | `v ^ > <` | the cursor mode's colour |
 | Cursor arrows, following (v21; v26 name) | `▼ ▲ ► ◄` | `v ^ > <` (the status line says it's following) | the cursor mode's colour |
+| Cursor frame, visible (v29), in place of the arrows | `═ ═ ║ ║` | `= = \| \|` | the cursor mode's colour |
 | Mode marks: Select / Train / Grab (v21) | `♦` `±` `∩` | `S` `T` `G` | the mode's colour |
 | Status marks: idle / grab / release / empty / sent / applied / rejected | `·` `↑` `↓` `░` `+` `☼` `?` | `-` `^` `v` `_` `+` `*` `?` | the mode's colour |
 | Decision marker (flashes) | `X` | `X` | white |
@@ -1442,7 +1443,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 ### 6.5 The Cursor
 
 **What it is** (v21): the Cursor is the player's hard-light projection into the terrarium (§0), and the 3×3 grid on the map is its form.
-- **Visible or hidden** (v21; built in v29): each cursor mode has its own switch, and every mode starts hidden. `H` turns the current mode's on or off; held, it acts once. Hidden, the Cursor's touch is a feeling from nowhere (§4.6, §5.6). Visible, sprites see it as a thing of its own, the Cursor (§3.5.5, §3.6): they can go to it or back away from it, and learn to like or fear it from how it treats them (§5.6). Its look on the map is the same either way; the status line says `· seen` after the mode while it's visible (§6.1).
+- **Visible or hidden** (v21; built in v29): each cursor mode has its own switch, and every mode starts hidden. `H` turns the current mode's on or off; held, it acts once. Hidden, the Cursor's touch is a feeling from nowhere (§4.6, §5.6). Visible, sprites see it as a thing of its own, the Cursor (§3.5.5, §3.6): they can go to it or back away from it, and learn to like or fear it from how it treats them (§5.6). While it's visible it draws as a frame of light, `═` above and below and `║` at the sides, in place of the arrows, following or not (below), and the status line says `· seen` after the mode (§6.1).
 - **Following a sprite while visible** (v29), the Cursor sits on it and the sprite sees it there like anything else. A sprite that fears it backs away from a Cursor that keeps following, and gets used to it if it stays and does nothing (§5.6).
 
 - **Scrolling:** `W` `A` `S` `D` or the arrow keys scroll the viewport one tile, and Shift makes it 5. Holding a key keeps scrolling. The viewport stops at the wall. There is **no keyboard cursor**.
@@ -1483,7 +1484,13 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 
 - The arrows and marks take the mode's colour. Parts that fall outside the map view aren't drawn.
 - The Cursor covers the 8 tiles around its target while it sits there; the status line still names the target.
-- The arrows and marks are theme glyphs (§6.2). **Following a sprite,** the arrows are solid, clamping the sprite (`▼ ► ◄ ▲`).
+- The arrows and marks are theme glyphs (§6.2). **Following a sprite,** the arrows are solid, clamping the sprite (`▼ ► ◄ ▲`). **While sprites can see it** (v29), a frame of light takes the arrows' place, following or not, and the marks stay:
+
+```
+M ═ Y
+║ ☺ ║
+N ═ M
+```
 
 **Follow** (v21 as locking on; v26). The Cursor can follow a sprite, so a pet or a shock needs no aim:
 - **Following,** the Cursor sits on its sprite and moves with it, in every mode, whatever the pointer does. If the sprite walks out of view, the Cursor goes with it, and a click still reaches it.
