@@ -384,10 +384,16 @@ fn a_sprite_that_fears_the_cursor_backs_away_from_it_and_one_that_likes_it_goes_
 /// A sprite, resting through its first 20 ticks, shocked in each of them
 /// by a visible Cursor on it, so it fears the Cursor fully.
 fn afraid_of_the_cursor() -> World {
+    afraid_of_the_cursor_in(&OPEN, 20)
+}
+
+/// As `afraid_of_the_cursor`, in a world drawn from `rows`, the sprite on
+/// (2, 2) resting through its first `rests` ticks.
+fn afraid_of_the_cursor_in(rows: &[&str], rests: usize) -> World {
     let data = builtin();
-    let map = Map::from_ascii(&OPEN, &data).expect("valid drawing");
+    let map = Map::from_ascii(rows, &data).expect("valid drawing");
     let sprites = [(at(2, 2), Some(genome("", &data)))];
-    let scripted = [(at(2, 2), ScriptedAction::Rest); 20];
+    let scripted = vec![(at(2, 2), ScriptedAction::Rest); rests];
     let scenario = Scenario {
         map,
         objects: &[],
@@ -438,9 +444,26 @@ fn a_feared_cursor_far_off_or_hidden_leaves_the_fear_as_it_was() {
     }
 }
 
+#[test]
+fn a_feared_cursor_the_sprite_cannot_reach_leaves_the_fear_as_it_was() {
+    // Design v29 §3.6: a sprite sees the Cursor only if its flood reaches
+    // it, so one beyond a wall of rock, however near, calms nothing. The
+    // way round the wall is far outside its flood, and it rests throughout.
+    let mut walled = vec!["....#......"; 28];
+    walled.extend(["...........", "..........."]);
+    let mut world = afraid_of_the_cursor_in(&walled, 130);
+    let feared = value_of(&world, &fears_the_cursor());
+    world.submit(Command::MoveCursor { tile: at(5, 2) });
+    for _ in 0..100 {
+        world.step();
+    }
+    assert_eq!(value_of(&world, &fears_the_cursor()), feared);
+}
+
 /// A sprite whose pricks punish it, resting beside a thornbush two tiles
-/// east, taken hold of and shoved into it by the Cursor, visible or not.
-fn shoved_into_a_thornbush(visible: bool) -> World {
+/// east, taken hold of and shoved into it by the Cursor, visible or not,
+/// the shove sent but not yet run.
+fn about_to_be_shoved_into_a_thornbush(visible: bool) -> World {
     let data = builtin();
     let map = Map::from_ascii(&OPEN, &data).expect("valid drawing");
     let genes = r#"Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),"#;
@@ -462,6 +485,12 @@ fn shoved_into_a_thornbush(visible: bool) -> World {
         toward: terra_sim::Dir::E,
         tiles: 3,
     });
+    world
+}
+
+/// As `about_to_be_shoved_into_a_thornbush`, four ticks after the shove.
+fn shoved_into_a_thornbush(visible: bool) -> World {
+    let mut world = about_to_be_shoved_into_a_thornbush(visible);
     for _ in 0..4 {
         world.step();
     }
@@ -481,4 +510,29 @@ fn a_shove_into_a_thornbush_by_a_visible_cursor_teaches_fear_of_the_cursor_too()
     let unseen = shoved_into_a_thornbush(false);
     assert!(value_of(&unseen, &thorns_bad) < 0.0);
     assert_eq!(value_of(&unseen, &fears_the_cursor()), 0.0);
+}
+
+#[test]
+fn a_crash_teaches_fear_of_the_cursor_only_in_its_own_tick() {
+    // Design v29 §5.6: a zap from a hidden Cursor just after the crash
+    // teaches nothing about the Cursor, however recent the crash.
+    let mut world = about_to_be_shoved_into_a_thornbush(true);
+    let mut crashed = false;
+    for _ in 0..4 {
+        world.step();
+        if value_of(&world, &fears_the_cursor()) < 0.0 {
+            crashed = true;
+            break;
+        }
+    }
+    assert!(crashed, "the crash taught no fear of the Cursor");
+    let feared = value_of(&world, &fears_the_cursor());
+    let sprite = the_sprite(&world).id();
+    world.submit(Command::ShowCursor { visible: false });
+    world.submit(Command::Correct {
+        sprite,
+        amplified: true,
+    });
+    world.step();
+    assert_eq!(value_of(&world, &fears_the_cursor()), feared);
 }

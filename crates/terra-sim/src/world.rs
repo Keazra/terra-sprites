@@ -141,7 +141,7 @@ impl WorldState {
             }
             Target::Water(pos) => Some((pos, true)),
             Target::Sprite(id) => Some((self.sprites.get(id)?.pos, false)),
-            // It's light, so a sprite may stand under it.
+            // It's light, so a sprite may stand under it (design v29 §3.6).
             Target::Cursor => Some((self.cursor.seen_at()?, true)),
         }
     }

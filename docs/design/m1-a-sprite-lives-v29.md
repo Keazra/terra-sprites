@@ -1113,11 +1113,11 @@ With no attempt within reach, the tick teaches as any other: no worth, and habit
 **Fear** (v18). While a `was_hit` pulse is live, `F[a] −= fear_rate × punishment` for the attacker *a* (the pulse's source), remembering it if it didn't yet. That punishment teaches no worth and no badness, and still teaches habits along the trace.
 
 **The visible Cursor** (v29). The Cursor is learned about as one individual, as a sprite is: worth for each need, good, bad and fear, at the individual rates, with habits and familiarity as its object type's (the pseudo type `cursor`). It has no summary, since there's one. Trying something on it is a fruitless try, and teaches as one (§5.2). While it's visible:
-- **A pet or a hug** (a `petted` pulse live and the Cursor visible when it landed) also raises the Cursor's general good: `G[cursor] += individual_rate_good × reward`.
+- **A pet or a hug** (a `petted` pulse live and the Cursor visible when it landed) also raises the Cursor's general good: `G[cursor] += individual_rate_good × reward`. Not when the thing touched is the Cursor itself: then the lesson about the thing touched is the one about the Cursor, and it isn't learned twice.
 - **A zap or a shock** also teaches fear of it: `F[cursor] −= fear_rate × punishment`, as a hit teaches fear of the hitter.
-- **A crash after a shove** by the visible Cursor, while the crash is the thing touched, teaches fear of it the same way.
+- **A crash after a shove** by the visible Cursor teaches fear of it the same way, in the tick of the crash only, so a hidden Cursor's zap a moment later teaches nothing about the Cursor.
 - What each teaches about the thing touched, and the habit, is as for a hidden Cursor (above): the lesson is about the Cursor **as well as** the thing.
-- **Getting used to it.** Each tick a sprite sees the Cursor near and isn't corrected, `F[cursor] *= 1 − cursor_calming × nearness`, where `nearness = max(0, 1 − d / fear_reach)` and `d` is the Chebyshev distance in tiles over the reach of the sprite's flood. So a feared Cursor that sits on a sprite and does nothing wears its fear off fastest: the sprite comes to see it can't do anything about it. Fear of sprites has no such rule; habituation in general is [#72](https://github.com/Keazra/terra-sprites/issues/72).
+- **Getting used to it.** Each tick a sprite sees the Cursor near (its flood reaches it, §3.6) and isn't corrected, `F[cursor] *= 1 − cursor_calming × nearness`, where `nearness = max(0, 1 − d / fear_reach)` and `d` is the Chebyshev distance in tiles over the reach of the sprite's flood. So a feared Cursor that sits on a sprite and does nothing wears its fear off fastest: the sprite comes to see it can't do anything about it. Fear of sprites has no such rule; habituation in general is [#72](https://github.com/Keazra/terra-sprites/issues/72).
 - **Being led** teaches nothing, visible or not, and onlookers learn nothing from what's done to another sprite ([#106](https://github.com/Keazra/terra-sprites/issues/106)).
 
 **Sprites in general** (v18) are a summary of the *n* sprites a sprite remembers: each value (each `G_n`, `G`, `B` and `F`) is their mean × `clamp((n − 1) / (generalise − 1), 0, 1)`. So a sprite that knows only its bully fears no stranger, and one hurt by three different sprites is wary of every stranger. A sprite it doesn't remember is judged by the summary, and the Brain tab shows the summary as "sprites".
@@ -1133,7 +1133,7 @@ With no attempt within reach, the tick teaches as any other: no worth, and habit
 
 **Fading.** Every tick, after learning: each `G_n` and `G` and `new_things` is multiplied by `1 − worth_fade_good`, each `B` by `1 − worth_fade_bad`, each `F` by `1 − fear_fade`, each good habit by `1 − habit_fade` and each bad habit by `1 − habit_fade_bad` (v21). The starter genome's defaults learn bad faster than good and fade it about four times more slowly (Appendix B), habits as well as worth since v21.
 
-**Forgetting** (v18). A remembered sprite all of whose values are under `forget_below` (physiology, 0.01) is forgotten, and so is one that has died, at step 4. There's no limit on how many a sprite remembers.
+**Forgetting** (v18). A remembered sprite all of whose values are under `forget_below` (physiology, 0.01) is forgotten, and so is one that has died, at step 4. So is the Cursor (v29), once all its values are under `forget_below`. There's no limit on how many a sprite remembers.
 
 **Familiarity** rises by `familiarity_rate` for the attended object type (v19) on each tick the sprite commits a trace entry, and never falls in M1. (Whether it should wear off again belongs with habituation, below.)
 

@@ -416,7 +416,7 @@ _Avoid_: hand, orb, selection (the selection is the chosen sprite)
 
 **Visible (the Cursor)**:
 Whether sprites can see the Cursor, switched with `H` for each cursor mode on its own; every mode starts hidden, and the status line says "seen" while it's visible. A visible Cursor is a thing of its own kind that sprites can go to or back away from, and they learn about it as about a particular sprite: a pet teaches them to like it, a zap, a shock or a shove into something that hurts teaches them to fear it, as well as what the touch teaches about the thing touched. Trying anything else on it is a fruitless try. A hidden Cursor's touch is a feeling from nowhere, as before.
-_Avoid_: seen mode ("seen" is only the status line's word), shown
+_Avoid_: seen mode (the switch isn't a cursor mode)
 
 **Getting used to the Cursor**:
 How a sprite's fear of a visible Cursor wears off while the Cursor stays near and doesn't correct it, fastest with the Cursor on its own tile: it comes to see it can't do anything about it. Fear of sprites doesn't wear off this way.
