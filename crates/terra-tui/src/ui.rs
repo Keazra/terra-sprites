@@ -9,11 +9,12 @@ use ratatui::{
 };
 use terra_sim::{EntityId, Grip, Map, ObjectView, Pos, Progress, SpriteView, World};
 
-use crate::app::{App, Areas, ColourMode, CursorMode, PlaceItem, Screen, Selection};
+use crate::app::{
+    App, Areas, ColourMode, CursorMode, PlaceItem, Screen, Selection, strongest_drive,
+};
 use crate::clock::Speed;
 use crate::inspector::{self, INSPECTOR_WIDTH, first_shown};
 use crate::policy::{Panel, Subject};
-use crate::sprite_list::strongest_drive;
 use crate::text::{display_name, group_thousands, terrain_name};
 use crate::theme::SemanticTile;
 
@@ -29,7 +30,7 @@ const MIN_HEIGHT_FOR_EVENT_LOG: u16 = 30;
 pub fn render(frame: &mut Frame, app: &App, world: &World) {
     let area = frame.area();
     if too_small(area.as_size()) {
-        return render_too_small(frame.buffer_mut(), area);
+        return render_too_small(frame.buffer_mut(), area, app);
     }
     let [top_bar, _, status] = Layout::vertical([
         Constraint::Length(1),
@@ -69,14 +70,18 @@ fn too_small(screen: Size) -> bool {
 
 /// Says the terminal is too small, and how big it needs to be, in the
 /// middle of the screen (design §6.1). The game carries on beneath.
-fn render_too_small(buf: &mut Buffer, area: Rect) {
-    let lines = [
+fn render_too_small(buf: &mut Buffer, area: Rect, app: &App) {
+    let mut lines = vec![
         "Terminal too small".to_string(),
         format!(
             "needs {}x{}, this is {}x{}",
             MIN_SIZE.width, MIN_SIZE.height, area.width, area.height
         ),
     ];
+    // `Esc` still asks to quit, so the question shows here too.
+    if app.screen() == Screen::QuitPrompt {
+        lines.push("Quit? (y/n)".into());
+    }
     let top = area.y + area.height.saturating_sub(lines.len() as u16) / 2;
     for (row, line) in (top..area.bottom()).zip(lines) {
         let width = line.chars().count() as u16;
@@ -293,7 +298,9 @@ fn attended_by(app: &App, world: &World) -> Option<Pos> {
 /// where it's heading and what it attends to (design §6.4).
 fn marked(app: &App) -> Option<EntityId> {
     match app.selection() {
-        Some(Selection::Living(id)) if app.can_view(Panel::Marks, Subject::Sprite(id)) => Some(id),
+        Some(Selection::Living(id)) if app.can_view(Panel::Markers, Subject::Sprite(id)) => {
+            Some(id)
+        }
         _ => None,
     }
 }
@@ -525,6 +532,13 @@ fn render_sprite_list(buf: &mut Buffer, app: &App, world: &World) {
     }
 }
 
+/// Where text `width` cells wide sits at the right of `area`'s top border:
+/// before the corner and the line beside it, as a title sits after them.
+pub(crate) fn top_right(area: Rect, width: u16) -> Option<Rect> {
+    let x = area.right().checked_sub(width + 2)?;
+    Some(Rect::new(x, area.y, width, 1))
+}
+
 /// Blanks `area` and draws a single-lined box round it, with `title` at
 /// the left of its top edge and `corner` at the right, as an overlay over
 /// the panels beneath. Gives the area inside the box.
@@ -542,9 +556,8 @@ fn clear_box(buf: &mut Buffer, area: Rect, title: &str, corner: &str) -> Rect {
         bottom: false,
     };
     draw_border(buf, area, title, walls);
-    let width = corner.chars().count() as u16;
-    if let Some(x) = area.right().checked_sub(width + 2) {
-        buf.set_stringn(x, area.y, corner, usize::from(width), Style::default());
+    if let Some(at) = top_right(area, corner.chars().count() as u16) {
+        buf.set_stringn(at.x, at.y, corner, usize::from(at.width), Style::default());
     }
     area.inner(Margin::new(1, 1))
 }
@@ -821,9 +834,8 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     // The filters, at the right of its top border, where a click on them
     // lands (design §6.1).
     let labels = app.event_filter().labels();
-    let width = labels.chars().count() as u16;
-    if let Some(x) = area.right().checked_sub(width + 2) {
-        buf.set_stringn(x, area.y, labels, usize::from(width), Style::default());
+    if let Some(at) = top_right(area, labels.chars().count() as u16) {
+        buf.set_stringn(at.x, at.y, labels, usize::from(at.width), Style::default());
     }
     let inner = area.inner(Margin::new(1, 1));
     let lines = app.event_log().filter_map(|(event, count)| {

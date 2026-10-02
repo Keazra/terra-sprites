@@ -9,7 +9,7 @@ use terra_sim::{
     Hurt, Learned, Map, Outcome, Pos, Progress, Rejection, Removal, Scenario, ScriptedAction,
     Target, Terrain, Thing, Verb, World, WorldConfig,
 };
-use terra_tui::app::{App, CursorMode, Tab};
+use terra_tui::app::{App, CursorMode, Flow, Tab};
 use terra_tui::input::{Action, Button};
 use terra_tui::theme::Theme;
 use terra_tui::ui;
@@ -782,6 +782,40 @@ fn below_100_by_30_the_screen_says_the_terminal_is_too_small() {
         52,
         "from 100 columns, the inspector takes 46"
     );
+}
+
+#[test]
+fn while_the_terminal_is_too_small_the_game_runs_on_and_esc_still_asks_to_quit() {
+    // Design v29 §6.1: shrinking the window doesn't pause it.
+    let mut world = big_world();
+    let small = Size::new(80, 24);
+    let mut app = App::new(
+        world.map(),
+        Theme::cp437(),
+        7,
+        ui::areas(small, world.map()),
+    );
+    let before = world.tick();
+    let mut ran = 0;
+    for _ in 0..10 {
+        ran += app
+            .clock
+            .advance(Duration::from_millis(100), || drop(world.step()), || false);
+    }
+    assert!(ran > 0 && world.tick() > before, "time goes on");
+    app.apply(Action::TogglePause, &world);
+    assert!(app.clock.is_paused(), "space still pauses");
+    app.apply(Action::Back, &world);
+    let mut terminal = Terminal::new(TestBackend::new(small.width, small.height)).unwrap();
+    terminal
+        .draw(|frame| ui::render(frame, &app, &world))
+        .unwrap();
+    let screen = lines(terminal.backend().buffer());
+    assert!(
+        screen.iter().any(|line| line.trim() == "Quit? (y/n)"),
+        "the quit prompt shows: {screen:?}"
+    );
+    assert_eq!(app.apply(Action::Confirm, &world), Flow::Quit);
 }
 
 /// The built-in pack's files with `file` replaced by `text`.

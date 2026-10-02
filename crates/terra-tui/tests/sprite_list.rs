@@ -197,11 +197,7 @@ fn the_highlight_moves_with_the_arrows_and_stays_on_its_sprite_when_resorted() {
     let mut world = field();
     let mut app = named(&mut world);
     app.apply(Action::SpriteList, &world);
-    assert_eq!(
-        app.list_choice(&world),
-        0,
-        "the first, with nothing selected"
-    );
+    assert_eq!(app.list_row(&world), 0, "the first, with nothing selected");
     let highlighted = |app: &App| {
         let screen = render(app, &world);
         let rows: Vec<u16> = (3..28)
@@ -237,7 +233,7 @@ fn the_highlight_moves_with_the_arrows_and_stays_on_its_sprite_when_resorted() {
         "Sprite #4",
         "resorted, it's the same sprite"
     );
-    assert_eq!(app.list_choice(&world), 3);
+    assert_eq!(app.list_row(&world), 3);
     app.apply(Action::Scroll { dx: 0, dy: -9 }, &world);
     assert_eq!(highlighted(&app), "Sprite #2", "up a row");
 }
@@ -249,7 +245,7 @@ fn opening_the_list_highlights_the_selected_sprite() {
     app.apply(Action::SelectNext, &world);
     app.apply(Action::SelectNext, &world);
     app.apply(Action::SpriteList, &world);
-    assert_eq!(app.list_choice(&world), 1);
+    assert_eq!(app.list_row(&world), 1);
 }
 
 #[test]

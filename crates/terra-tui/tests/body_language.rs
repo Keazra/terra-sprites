@@ -9,9 +9,10 @@ use ratatui::style::Color;
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
     ActionView, DataPack, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos, Progress,
-    Scenario, Target, Verb, World,
+    Scenario, ScriptedAction, Target, Verb, World,
 };
 use terra_tui::app::{App, ColourMode, PLEASED_AT, Ticks};
+use terra_tui::clock::Speed;
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
 use terra_tui::ui;
@@ -355,6 +356,60 @@ fn emotes_last_a_second_of_real_time_at_any_speed() {
         (Duration::from_millis(400)..Duration::from_millis(600)).contains(&shown),
         "{shown:?}"
     );
+}
+
+#[test]
+fn the_resting_emote_shows_for_a_second_at_16x_and_at_max_through_the_frame_loop() {
+    // Design §6.3: emotes are driven by the sim's events, a frame's ticks
+    // taken in through `Ticks`, so a rest over in a blink still shows.
+    for speed in [Speed::X16, Speed::Max] {
+        let pack = pack();
+        let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+        let sprites = [(at(2, 3), Some(feeling(&[])))];
+        let scripted = [(at(2, 3), ScriptedAction::Rest)];
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &sprites,
+            scripted: &scripted,
+        };
+        let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+        let id = world.sprites().next().expect("a sprite").id();
+        let mut app = app_for(&world, Theme::cp437());
+        while app.clock.speed() != speed {
+            app.clock.faster();
+        }
+        // Frames of 33 ms, as the game draws them, at most 50 ticks each.
+        let mut seen = Vec::new();
+        for frame in 0..60u32 {
+            let mut ticks = Ticks::default();
+            let mut ran = 0;
+            app.clock.advance(
+                Duration::from_millis(33),
+                || ticks.step(&mut world),
+                || {
+                    ran += 1;
+                    ran >= 50
+                },
+            );
+            app.take_in(ticks, &world);
+            app.animate(Duration::from_millis(33));
+            let pos = world.sprite(id).expect("still alive").pos();
+            if render(&app, &world)[cell(pos)].symbol() == "z" {
+                seen.push(frame);
+            }
+        }
+        let first = *seen.first().unwrap_or_else(|| panic!("no z at {speed:?}"));
+        let last = *seen.last().unwrap();
+        assert!(
+            first <= 1,
+            "{speed:?}: it shows from the start, frame {first}"
+        );
+        assert!(
+            (last - first) * 33 >= 900,
+            "{speed:?}: shown from frame {first} to {last}"
+        );
+    }
 }
 
 #[test]

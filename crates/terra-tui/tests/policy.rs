@@ -170,6 +170,11 @@ fn a_policy_that_denies_everything_blanks_every_display() {
         "no tile under the Cursor: {status}"
     );
     assert_eq!(screen[WANDERER].symbol(), "☻", "no emote");
+    let title = row(&screen, 1, 54..100);
+    assert!(
+        !title.contains('#'),
+        "the inspector's title names no sprite: {title}"
+    );
     let map = (2..7)
         .map(|y| row(&screen, y, 1..11))
         .collect::<Vec<_>>()
