@@ -3,6 +3,7 @@
 
 use std::io::{self, stdout};
 use std::process::ExitCode;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use ratatui::DefaultTerminal;
@@ -92,7 +93,13 @@ fn main() -> ExitCode {
     // restore, so the panic hook undoes them too. The flags go first: the
     // terminal keeps them per screen, and ratatui's restore leaves the
     // alternate screen they were set on.
+    // Once only: a panic after a normal exit mustn't pop the flags again, on
+    // the screen ratatui has gone back to.
+    static SETUP_UNDONE: AtomicBool = AtomicBool::new(false);
     let undo_setup = move || {
+        if SETUP_UNDONE.swap(true, Ordering::SeqCst) {
+            return;
+        }
         if enhanced_keys {
             let _ = execute!(stdout(), PopKeyboardEnhancementFlags);
         }
