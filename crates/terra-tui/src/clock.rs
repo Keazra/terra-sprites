@@ -139,8 +139,8 @@ impl Clock {
     /// While paused, runs one step from the next frame: one real second's
     /// worth of ticks at the speed, rounded down, at least one and at most
     /// 16×'s 20 (design v27 §6.6). Pressed again before a step has finished,
-    /// it tops the step back up rather than adding another, so a held `.`
-    /// can't pile steps up. Does nothing while running.
+    /// it starts a whole step afresh, at the speed now, rather than adding
+    /// another, so a held `.` can't pile steps up. Does nothing while running.
     pub fn step_once(&mut self) {
         if self.paused {
             // At Max, 16×'s step, so it's still something the player can follow.
@@ -149,7 +149,7 @@ impl Clock {
                 .speed
                 .whole_ticks_per_second()
                 .map_or(most, |ticks| ticks.clamp(1, most));
-            self.step_ticks = self.step_ticks.max(ticks);
+            self.step_ticks = ticks;
         }
     }
 

@@ -161,6 +161,20 @@ fn stepping_again_mid_step_tops_it_up_rather_than_adding_another() {
 }
 
 #[test]
+fn a_step_after_slowing_down_mid_step_runs_the_new_speed_s_step() {
+    // The top bar shows the new speed, so the step must match it.
+    let mut clock = paused_at(Speed::X16);
+    clock.step_once();
+    assert_eq!(advance_cut_after(&mut clock, 3), 3);
+    for _ in 0..4 {
+        clock.slower();
+    }
+    assert_eq!(clock.speed(), Speed::X1);
+    clock.step_once();
+    assert_eq!(run_for(&mut clock, Duration::from_secs(4)), 1);
+}
+
+#[test]
 fn resuming_drops_what_is_left_of_a_step() {
     let mut clock = paused_at(Speed::X16);
     clock.step_once();
