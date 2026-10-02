@@ -382,6 +382,22 @@ fn holding_an_item_while_following_a_sprite_a_click_puts_it_at_its_feet() {
 }
 
 #[test]
+fn holding_an_item_while_following_a_sprite_a_mouse_click_anywhere_puts_it_at_its_feet() {
+    // Design v26 §6.5: following, a click still reaches the sprite, wherever
+    // it lands.
+    let mut world = resting_sprite_and_ball();
+    let mut app = grab_app(&world);
+    click(&mut app, &world, at(1, 1));
+    tick(&mut app, &mut world);
+    follow(&mut app, &world, at(4, 2));
+    click(&mut app, &world, at(8, 5));
+    assert_eq!(
+        app.take_commands(),
+        vec![Command::PutDown { tile: at(4, 2) }]
+    );
+}
+
+#[test]
 fn leading_the_followed_sprite_follow_steps_aside_in_every_mode() {
     let world = resting_sprite_and_ball();
     let mut app = grab_app(&world);
