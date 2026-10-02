@@ -277,13 +277,8 @@ fn each_theme_colours_every_drive_of_the_built_in_pack_as_the_design_table_says(
         ("loneliness", Color::Magenta),
         ("crowdedness", Color::LightRed),
     ];
-    let world = terra_sim::World::new(terra_sim::WorldConfig::builtin(&pack()), pack(), 7);
-    let sprite = world.sprites().next().expect("a sprite");
-    let drives: Vec<&str> = sprite
-        .chemicals()
-        .filter(|chemical| chemical.kind == terra_sim::ChemicalKind::Drive)
-        .map(|chemical| chemical.name)
-        .collect();
+    let pack = pack();
+    let drives: Vec<&str> = pack.drives().collect();
     assert_eq!(drives, expected.map(|(drive, _)| drive));
     for (name, theme) in [("cp437", Theme::cp437()), ("ascii", Theme::ascii())] {
         for (drive, colour) in expected {
