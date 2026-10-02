@@ -131,6 +131,7 @@ pub struct Theme {
     objects: BTreeMap<String, BTreeMap<String, Glyph>>,
     arrows: Arrows,
     followed_arrows: Arrows,
+    visible_frame: Arrows,
     status_marks: StatusMarks,
     mode_marks: BTreeMap<CursorMode, Glyph>,
     leash: Glyph,
@@ -184,6 +185,12 @@ impl Theme {
     /// v26 §6.2).
     pub fn followed_arrows(&self) -> Arrows {
         self.followed_arrows
+    }
+
+    /// The Cursor's sides while sprites can see it, in place of the arrows,
+    /// following or not: a frame of light (design v29 §6.5).
+    pub fn visible_frame(&self) -> Arrows {
+        self.visible_frame
     }
 
     /// What the cursor's status marks show.
@@ -241,6 +248,7 @@ impl Theme {
             objects,
             arrows: file.cursor.arrows,
             followed_arrows: file.cursor.followed_arrows,
+            visible_frame: file.cursor.visible_frame,
             status_marks: file.cursor.status_marks,
             mode_marks,
             leash: glyph(file.cursor.leash),
@@ -289,6 +297,9 @@ struct CursorFile {
     arrows: Arrows,
     /// The arrows while the Cursor follows a sprite.
     followed_arrows: Arrows,
+    /// The sides while sprites can see the Cursor, named as the arrows they
+    /// replace.
+    visible_frame: Arrows,
     status_marks: StatusMarks,
     mode_marks: BTreeMap<CursorMode, GlyphEntry>,
     /// A dot of the leash, from the Cursor to a sprite it leads.

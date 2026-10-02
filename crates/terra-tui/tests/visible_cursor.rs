@@ -283,3 +283,46 @@ fn being_led_and_shoved_by_a_visible_cursor_is_told_as_the_cursor_s_doing() {
         assert!(lines.contains(&format!("Was shoved {how}")), "{lines:?}");
     }
 }
+
+/// The four sides of the Cursor drawn on a 100×30 screen, top, left, right
+/// and bottom, with the Cursor on `tile`.
+fn sides(app: &App, world: &World, tile: Pos) -> [String; 4] {
+    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+    terminal
+        .draw(|frame| ui::render(frame, app, world))
+        .unwrap();
+    let buffer = terminal.backend().buffer();
+    let centre = app.cell_of(tile).expect("the Cursor in view");
+    [(0, -1), (-1, 0), (1, 0), (0, 1)].map(|(dx, dy)| {
+        let x = centre.x.checked_add_signed(dx).unwrap();
+        let y = centre.y.checked_add_signed(dy).unwrap();
+        buffer[(x, y)].symbol().to_string()
+    })
+}
+
+#[test]
+fn a_visible_cursor_draws_as_a_frame_of_light_following_or_not() {
+    // Design v29 §6.5: hidden, the arrows (solid while following); visible,
+    // a frame of light in their place.
+    let world = field(&[at(2, 2)]);
+    let areas = ui::areas(ratatui::layout::Size::new(100, 30), world.map());
+    let mut app = App::new(world.map(), Theme::cp437(), 1, areas);
+    apply(&mut app, &world, Action::SelectNext);
+    apply(&mut app, &world, Action::Follow { at: None });
+    assert_eq!(sides(&app, &world, at(2, 2)), ["▼", "►", "◄", "▲"]);
+    apply(&mut app, &world, Action::ToggleVisible);
+    assert_eq!(sides(&app, &world, at(2, 2)), ["═", "║", "║", "═"]);
+    apply(&mut app, &world, Action::ToggleVisible);
+    assert_eq!(sides(&app, &world, at(2, 2)), ["▼", "►", "◄", "▲"]);
+    // Not following, the Cursor goes to where the pointer points.
+    apply(&mut app, &world, Action::Follow { at: None });
+    let pointer = app.cell_of(at(5, 3)).expect("in view");
+    apply(
+        &mut app,
+        &world,
+        Action::Point(Position::new(pointer.x + 1, pointer.y + 1)),
+    );
+    assert_eq!(sides(&app, &world, at(5, 3)), ["↓", "→", "←", "↑"]);
+    apply(&mut app, &world, Action::ToggleVisible);
+    assert_eq!(sides(&app, &world, at(5, 3)), ["═", "║", "║", "═"]);
+}

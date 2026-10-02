@@ -27,7 +27,7 @@ cargo run --release -- --seed 7
 | `Z` / `X` / `C` | Cursor mode: Select / Train / Grab. `C` again in Grab mode opens the Place menu |
 | `Q` / `E` | Left / right click where the Cursor is. In Train mode the left pets and the right zaps (with Ctrl on a click or Shift on a key, a hug or a shock); in Grab mode the left picks up, leads, lets go or puts down, and holding the right aims a throw or a shove |
 | `F` or the middle button | Follow the sprite under the Cursor (or else the selected one) so the Cursor moves with it; again to stop |
-| `H` | Make the Cursor visible to sprites in the current cursor mode, or hide it again. Each mode starts hidden; while visible the status line says "seen", sprites can go to it or back away from it, and they learn to like or fear it from how you treat them |
+| `H` | Make the Cursor visible to sprites in the current cursor mode, or hide it again. Each mode starts hidden; while visible the Cursor is drawn as a frame of light (`═` and `║`) and the status line says "seen"; sprites can go to it or back away from it, and they learn to like or fear it from how you treat them |
 | Place menu | `1`–`9`, or the arrows and `Enter`, or a click picks: a berry bush seedling, a berry, a ball, a new sprite, or a sprite from a genome file. The next Grab-mode click places it; a right click puts it away |
 | `r` | Name the selected sprite: type a name, or `Tab` for another random one, then `Enter` |
 | `g` | Save the selected sprite's genome to the genomes folder (the status line says where); the Place menu reads it back |
