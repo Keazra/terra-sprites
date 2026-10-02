@@ -489,9 +489,9 @@ fn the_place_menu_draws_over_the_map_with_its_items_numbered() {
     };
     let world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
     let mut app = grab_app(&world);
-    app.fit(ui::areas(Size::new(60, 20), world.map()));
+    app.fit(ui::areas(Size::new(100, 30), world.map()));
     apply(&mut app, &world, Action::Mode(CursorMode::Grab));
-    let screen = rendered(&app, &world, 60, 20);
+    let screen = rendered(&app, &world, 100, 30);
     assert!(screen.contains("1 berry bush seedling"), "{screen}");
     assert!(screen.contains("5 sprite from a genome file"), "{screen}");
 }
@@ -530,7 +530,7 @@ fn a_menu_longer_than_the_map_view_scrolls_to_keep_the_highlight_in_view() {
 }
 
 fn status_line(app: &App, world: &World) -> String {
-    let screen = rendered(app, world, 100, 20);
+    let screen = rendered(app, world, 100, 30);
     screen.lines().last().unwrap_or_default().to_string()
 }
 
@@ -577,19 +577,17 @@ fn a_folder_named_like_a_genome_file_isnt_listed() {
 }
 
 #[test]
-fn the_naming_prompt_drops_its_key_hints_rather_than_cut_them_off() {
+fn the_naming_prompt_shows_its_key_hints() {
+    // The narrowest screen the game draws on, 100 columns, has room for the
+    // longest name and its hints (design §6.1).
     let world = field(&[], &[at(4, 2)]);
     let mut app = grab_app(&world);
     apply(&mut app, &world, Action::Mode(CursorMode::Select));
     click(&mut app, &world, at(4, 2), Button::Left);
     apply(&mut app, &world, Action::Rename);
-    let wide = rendered(&app, &world, 100, 20);
-    let wide = wide.lines().last().unwrap_or_default();
-    assert!(wide.contains("esc cancel"), "{wide}");
-    let narrow = rendered(&app, &world, 40, 20);
-    let narrow = narrow.lines().last().unwrap_or_default();
-    assert!(narrow.starts_with(" Name Sprite #"), "{narrow}");
-    assert!(!narrow.contains("enter"), "{narrow}");
+    let line = status_line(&app, &world);
+    assert!(line.starts_with(" Name Sprite #"), "{line}");
+    assert!(line.contains("enter ok  tab another  esc cancel"), "{line}");
 }
 
 #[test]
