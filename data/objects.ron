@@ -112,4 +112,9 @@
          Hit:  [Inject(Target, "injury", 0.03), Signal(Target, "was_hit"), Signal(Actor, "did_hit")],
          Play: [Signal(Actor, "played_social"), Signal(Target, "played_social")],
      }),
+
+    // The Cursor, which sprites see while it's visible (design v29 §6.5).
+    // It's hard light, so every try on it is fruitless; a pack may give it
+    // verbs, such as Play for chasing the light.
+    (id: 102, name: "cursor", category: "cursor", pseudo: true, verbs: {}),
 ]

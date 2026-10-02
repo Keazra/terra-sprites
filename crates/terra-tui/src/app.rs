@@ -1,6 +1,6 @@
 //! The UI state (design §6.8): everything the screen shows that isn't the world.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -255,9 +255,14 @@ pub struct App {
     /// tick the world applies it at, so the marks and the next click follow
     /// the queue (design v23 §6.5).
     queued: Vec<(u64, Command)>,
-    /// While the Cursor leads a sprite, the tile the world was last told
-    /// it's on (design v23 §6.5).
+    /// While the Cursor leads a sprite, or sprites can see it, the tile the
+    /// world was last told it's on (design v23, v29 §6.5).
     told_tile: Option<Pos>,
+    /// The cursor modes in which sprites can see the Cursor (design v29
+    /// §6.5): none, to begin with.
+    visible_in: BTreeSet<CursorMode>,
+    /// Whether the world was last told sprites can see the Cursor.
+    told_visible: bool,
     /// The sprite the Cursor leads, as the player sees it (`App::grip`),
     /// and where it stands, as of the latest action or tick: the leash's
     /// centre (design v23 §6.5).
@@ -311,6 +316,19 @@ struct Shoved {
     sprite: EntityId,
     /// What it crashed into, once it has.
     crash: Option<Crash>,
+    /// Where the shove came from, as the sprite felt it (design v29 §6.1).
+    how: String,
+}
+
+/// Where the Cursor's doing came from, as a sprite felt it in the tick just
+/// run (design v29 §6.1): "out of nowhere", or, while sprites could see it,
+/// "by the Cursor" (or "from" it, as `preposition` says).
+fn whence(world: &World, preposition: &str) -> String {
+    if world.cursor().visible() {
+        format!("{preposition} the Cursor")
+    } else {
+        "out of nowhere".into()
+    }
 }
 
 /// What a sliding sprite crashed into, and whether that hurt it (design v25
@@ -403,6 +421,8 @@ impl App {
             commands: Vec::new(),
             queued: Vec::new(),
             told_tile: None,
+            visible_in: BTreeSet::new(),
+            told_visible: false,
             led: None,
             aim: None,
             shoved: None,
@@ -454,15 +474,16 @@ impl App {
             if let (EventKind::Rewarded { id, .. } | EventKind::Corrected { id, .. }, Some(touch)) =
                 (&event.kind, CursorTouch::reported(&event.kind))
             {
-                self.note_touch(event.tick, *id, touch);
+                self.note_touch(event.tick, *id, touch, world);
                 self.flash_report(StatusMark::Applied);
             }
-            // Let go, the selected sprite felt it as a pull from nowhere, since
-            // it can't see the Cursor (design v23 §6.1).
+            // Let go, the selected sprite felt it as a pull from nowhere,
+            // unless it could see the Cursor (design v23, v29 §6.1).
             if let EventKind::LetGo { sprite } | EventKind::Shoved { sprite } = event.kind
                 && self.selection == Some(Selection::Living(sprite))
             {
-                self.observe(event.tick, "Was pulled along out of nowhere".into());
+                let how = whence(world, "by");
+                self.observe(event.tick, format!("Was pulled along {how}"));
             }
             // A shove, felt as one from nowhere, is observed once the slide
             // ends, with what it crashed into (design v25 §6.1).
@@ -473,6 +494,7 @@ impl App {
                     self.shoved = Some(Shoved {
                         sprite: *sprite,
                         crash: None,
+                        how: whence(world, "by"),
                     });
                 }
                 EventKind::Crashed { sprite, into, hurt } => {
@@ -595,15 +617,28 @@ impl App {
 
     /// While the Cursor leads a sprite, tells the world each new tile it
     /// moves onto, in every mode (design v23 §6.5): the led sprite heads
-    /// there.
+    /// there. So too while sprites can see it, where they see it; and
+    /// whether they can, as the cursor mode changes (design v29 §6.5).
     fn tell(&mut self, world: &World) {
-        if !matches!(self.grip(world), Some(Grip::Leads(_))) {
+        let leading = matches!(self.grip(world), Some(Grip::Leads(_)));
+        let visible = self.visible();
+        if !leading && !visible {
             self.told_tile = None;
         } else if self.told_tile != Some(self.cursor) {
             self.commands
                 .push(Command::MoveCursor { tile: self.cursor });
             self.told_tile = Some(self.cursor);
         }
+        if self.told_visible != visible {
+            self.commands.push(Command::ShowCursor { visible });
+            self.told_visible = visible;
+        }
+    }
+
+    /// Whether sprites can see the Cursor: the current cursor mode's switch
+    /// (design v29 §6.5).
+    pub fn visible(&self) -> bool {
+        self.visible_in.contains(&self.mode)
     }
 
     /// What the Cursor has hold of as the player sees it: what the world
@@ -625,6 +660,7 @@ impl App {
                 Command::Reward { .. }
                 | Command::Correct { .. }
                 | Command::MoveCursor { .. }
+                | Command::ShowCursor { .. }
                 | Command::Place { .. }
                 | Command::SpawnSprite { .. }
                 | Command::Rename { .. } => grip,
@@ -686,12 +722,13 @@ impl App {
         if self.selection != Some(Selection::Living(id)) {
             return;
         }
+        let how = shoved.how;
         let line = match shoved.crash {
-            None => "Was shoved out of nowhere".to_string(),
+            None => format!("Was shoved {how}"),
             Some(Crash { into, hurt }) => {
                 let hurt = if hurt { ", and got hurt" } else { "" };
                 let into = inspector::crashed_into(&into, &self.words(world));
-                format!("Was shoved out of nowhere, into {into}{hurt}")
+                format!("Was shoved {how}, into {into}{hurt}")
             }
         };
         self.observe(world.tick().saturating_sub(1), line);
@@ -711,9 +748,9 @@ impl App {
 
     /// The Cursor's touch on sprite `id`, on `tick`: its emote, and a line
     /// on the observed list if it's the selected sprite's, told as the
-    /// sprite felt it, from nowhere, since it can't see the Cursor (design
-    /// v21 §6.1, §6.3).
-    fn note_touch(&mut self, tick: u64, id: EntityId, touch: CursorTouch) {
+    /// sprite felt it: from nowhere, unless it could see the Cursor (design
+    /// v21, v29 §6.1, §6.3).
+    fn note_touch(&mut self, tick: u64, id: EntityId, touch: CursorTouch, world: &World) {
         let (emote, line) = match touch {
             CursorTouch::Pet => (Emote::Pleased, "a gentle touch"),
             CursorTouch::Hug => (Emote::Pleased, "a warm embrace"),
@@ -722,7 +759,8 @@ impl App {
         };
         self.emotes.insert(id, (emote, self.running_for));
         if self.selection == Some(Selection::Living(id)) {
-            self.observe(tick, format!("Felt {line} out of nowhere"));
+            let from = whence(world, "from");
+            self.observe(tick, format!("Felt {line} {from}"));
         }
     }
 
@@ -1052,6 +1090,11 @@ impl App {
                 }
             }
             Action::ToggleDetail => self.detail = !self.detail,
+            Action::ToggleVisible => {
+                if !self.visible_in.remove(&self.mode) {
+                    self.visible_in.insert(self.mode);
+                }
+            }
             // Esc cancels an aim first (design v25 §6.5); then returns to
             // Select; from Select it asks to quit (design v21 §6.5).
             Action::Back if self.aim.is_some() => self.end_aim(),
