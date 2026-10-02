@@ -1554,6 +1554,7 @@ mod tests {
             subject: Subject::Category(bush),
             sprite: None,
             novelty: 1.0,
+            by_cursor: false,
         });
         sprite.body.chems[indices.reward] = 0.5;
         let mut events = Vec::new();
@@ -1583,6 +1584,7 @@ mod tests {
             subject: Subject::Category(bush),
             sprite: None,
             novelty: 1.0,
+            by_cursor: false,
         });
         world.submit(Command::Reward {
             sprite: first,
@@ -1616,6 +1618,7 @@ mod tests {
             subject: Subject::Category(bush),
             sprite: None,
             novelty: 1.0,
+            by_cursor: false,
         });
         let hunger = |brain: &mut Brain, level| {
             let needs = [vec![level], vec![0.0; data.need_places().len() - 1]].concat();

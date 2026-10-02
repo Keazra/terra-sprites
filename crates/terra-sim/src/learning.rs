@@ -267,6 +267,9 @@ pub(crate) struct Touch {
     pub(crate) sprite: Option<EntityId>,
     /// How new its object type was to the sprite then (design v19 §5.6).
     pub(crate) novelty: f32,
+    /// Whether it was a crash after a shove by a Cursor the sprite could
+    /// see (design v29 §5.6).
+    pub(crate) by_cursor: bool,
 }
 
 /// What step 4 reads for one sprite (design §5.6).

@@ -21,6 +21,8 @@ pub(crate) struct Slide {
     pub(crate) dir: Dir,
     /// The tiles it has left to go.
     pub(crate) left: u16,
+    /// Whether it could see the Cursor that shoved it (design v29 §5.6).
+    pub(crate) seen: bool,
 }
 
 /// What a sliding sprite meets a tile on.
@@ -50,7 +52,7 @@ pub(crate) fn run(state: &mut WorldState, data: &DataPack, events: &mut Vec<Even
 /// rolling item stops it, when the slide ends where it is, with no bounce.
 fn slide(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec<Event>) {
     let sprite = state.sprites.get(id).expect("a sliding sprite");
-    let (from, Some(Slide { dir, left })) = (sprite.pos, sprite.slide) else {
+    let (from, Some(Slide { dir, left, seen })) = (sprite.pos, sprite.slide) else {
         return;
     };
     let rest = match meet(state, data, from, dir) {
@@ -59,6 +61,7 @@ fn slide(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec
             (left > 1).then_some(Slide {
                 dir,
                 left: left - 1,
+                seen,
             })
         }
         Meeting::Halt => None,
@@ -73,6 +76,12 @@ fn slide(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec
                 Target::Cursor => unreachable!("the Cursor is light, and stops nothing"),
             };
             let hurt = verbs::crash(state, data, id, target);
+            // Shoved by a Cursor it could see, the Cursor is part of the
+            // lesson (design v29 §5.6).
+            let brain = &mut state.sprites.get_mut(id).expect("the same sprite").brain;
+            if let Some(touch) = brain.touched.as_mut() {
+                touch.by_cursor = seen;
+            }
             events.push(Event {
                 tick: state.tick,
                 kind: EventKind::Crashed {
