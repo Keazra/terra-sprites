@@ -2806,3 +2806,166 @@ fn a_refusal_shows_even_when_the_status_line_is_crowded() {
     );
     assert!(status.chars().count() <= 100);
 }
+
+/// A world on a 20×5 grass map with `objects`, and the app for it in Grab
+/// mode, holding the item on `held`, on a 60×12 screen. A map tile (x, y) is
+/// drawn at screen cell (x + 1, y + 2).
+fn holding_world(objects: &[(Pos, &str)], held: Pos) -> (World, App) {
+    let pack = pack();
+    let map = Map::from_ascii(&["...................."; 5], &pack).expect("valid drawing");
+    let scenario = Scenario {
+        map,
+        objects,
+        sprites: &[],
+        scripted: &[],
+    };
+    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut app = app_for(&world, Theme::cp437(), 60, 12);
+    app.apply(Action::Mode(CursorMode::Grab), &world);
+    app.apply(
+        Action::left_click(Position::new(held.x + 1, held.y + 2)),
+        &world,
+    );
+    for command in app.take_commands() {
+        world.submit(command);
+    }
+    let events = world.step();
+    app.record(&events, &world);
+    assert!(world.cursor().holds().is_some());
+    (world, app)
+}
+
+#[test]
+fn a_steady_aim_line_runs_the_way_the_thing_will_go_as_far_as_it_can_over_empty_ground() {
+    // Design v25 §6.5. A ball held on (12, 2) is pulled 7 tiles east: it'll
+    // go west, but a ball goes at most 6 tiles. The berry on its way shows,
+    // and the ball under the Cursor, where it'll be thrown from.
+    let (world, mut app) = holding_world(
+        &[(Pos { x: 12, y: 2 }, "ball"), (Pos { x: 8, y: 2 }, "berry")],
+        Pos { x: 12, y: 2 },
+    );
+    app.apply(Action::right_click(Position::new(12 + 1, 2 + 2)), &world);
+    app.apply(Action::Point(Position::new(19 + 1, 2 + 2)), &world);
+    let row = |app: &App| -> String {
+        lines(&render(app, &world, 60, 12))[2 + 2]
+            .chars()
+            .skip(1)
+            .take(20)
+            .collect()
+    };
+    assert_eq!(row(&app), "......°·•··→○←......");
+    let end = &render(&app, &world, 60, 12)[(6 + 1, 2 + 2)];
+    assert_eq!(end.fg, Color::Yellow);
+    app.animate(Duration::from_millis(500));
+    assert_eq!(row(&app), "......°·•··→○←......", "steady");
+}
+
+#[test]
+fn while_aiming_a_held_item_it_is_drawn_under_the_cursor_where_it_will_be_thrown_from() {
+    // Design v25 §6.5: held in place while aimed, rather than gone from the
+    // map, and in reverse video, as the Cursor's target.
+    let (world, mut app) = holding_world(&[(Pos { x: 12, y: 2 }, "ball")], Pos { x: 12, y: 2 });
+    let under_the_cursor = |app: &App| {
+        let cell = render(app, &world, 60, 12)[(12 + 1, 2 + 2)].clone();
+        (
+            cell.symbol().to_string(),
+            cell.modifier.contains(Modifier::REVERSED),
+        )
+    };
+    assert_eq!(under_the_cursor(&app), (".".into(), true), "held");
+    app.apply(Action::right_click(Position::new(12 + 1, 2 + 2)), &world);
+    assert_eq!(under_the_cursor(&app), ("○".into(), true), "aimed");
+    app.apply(Action::Back, &world);
+    assert_eq!(under_the_cursor(&app), (".".into(), true), "cancelled");
+}
+
+#[test]
+fn while_aiming_the_hints_say_how_to_send_it_or_cancel() {
+    let (world, mut app) = holding_world(&[(Pos { x: 12, y: 2 }, "ball")], Pos { x: 12, y: 2 });
+    app.apply(Action::right_click(Position::new(12 + 1, 2 + 2)), &world);
+    let status = lines(&render(&app, &world, 100, 30))[29].clone();
+    assert!(
+        status.ends_with("let go to throw  esc cancel"),
+        "{status:?}"
+    );
+}
+
+#[test]
+fn the_body_tab_says_a_shoved_sprite_slides_and_how_far_it_has_to_go() {
+    // Design v25 §6.1. It's shoved 3 tiles east from (2, 3), and slides a
+    // tile a tick.
+    let (mut world, mut app) = one_sprite_doing(SPEED_10, &[], 0);
+    let sprite = world.sprites().next().expect("the sprite").id();
+    world.submit(Command::TakeHold { sprite });
+    world.step();
+    world.submit(Command::Shove {
+        toward: terra_sim::Dir::E,
+        tiles: 3,
+    });
+    world.step();
+    assert_eq!(inspector(&app, &world).1[0], "Shoved · 2 tiles to go");
+    app.apply(Action::ToggleDetail, &world);
+    assert_eq!(inspector(&app, &world).1[0], "SHOVED → E · 2 tiles left");
+}
+
+#[test]
+fn the_brain_tab_says_a_sliding_sprite_decides_nothing() {
+    let (mut world, mut app) = one_sprite(HUNGRY_GENOME, 1);
+    open(&mut app, &world, Tab::Brain);
+    let sprite = world.sprites().next().expect("the sprite").id();
+    world.submit(Command::TakeHold { sprite });
+    world.step();
+    world.submit(Command::Shove {
+        toward: terra_sim::Dir::E,
+        tiles: 3,
+    });
+    world.step();
+    assert_eq!(inspector(&app, &world).1[0], "Shoved: it decides nothing");
+}
+
+#[test]
+fn the_event_log_tells_of_throws_shoves_and_crashes_that_hurt() {
+    // Design v25 §6.1: spoken to the player; a crash only if it hurt.
+    let world = garden(pack());
+    let (sprite, other, ball) = (EntityId(12), EntityId(13), EntityId(20));
+    let events = on_ticks(vec![
+        EventKind::Threw {
+            item: ball,
+            object_type: "ball".into(),
+        },
+        EventKind::Shoved { sprite },
+        EventKind::Crashed {
+            sprite,
+            into: Thing::ObjectType("thornbush".into()),
+            hurt: true,
+        },
+        EventKind::Crashed {
+            sprite,
+            into: Thing::Sprite(other),
+            hurt: false,
+        },
+    ]);
+    assert_eq!(
+        logged(&world, &events),
+        [
+            "3  Sprite #12 was shoved into a thornbush and got hurt",
+            "2  You shoved Sprite #12",
+            "1  You threw the ball",
+        ]
+    );
+}
+
+#[test]
+fn a_short_aim_s_end_shows_even_beside_the_cursor() {
+    // Design v25 §6.5: a ball pulled one tile east goes one tile west, onto
+    // the Cursor's left arm; the end mark shows there, so it isn't lost.
+    let (world, mut app) = holding_world(&[(Pos { x: 12, y: 2 }, "ball")], Pos { x: 12, y: 2 });
+    app.apply(Action::right_click(Position::new(12 + 1, 2 + 2)), &world);
+    app.apply(Action::Point(Position::new(13 + 1, 2 + 2)), &world);
+    let row: String = lines(&render(&app, &world, 60, 12))[2 + 2]
+        .chars()
+        .skip(1)
+        .take(20)
+        .collect();
+    assert_eq!(row, "...........°○←......");
+}

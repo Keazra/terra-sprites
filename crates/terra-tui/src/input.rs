@@ -42,6 +42,13 @@ pub enum Action {
         button: Button,
         amplified: bool,
     },
+    /// A mouse button let go of over this screen cell, or the key that
+    /// stands for it with no cell: in Grab mode, letting go of the right
+    /// button sends a throw or a shove (design v25 §6.5).
+    Release {
+        button: Button,
+        at: Option<Position>,
+    },
     /// Pick a cursor mode (`Z` Select, `X` Train).
     Mode(CursorMode),
     /// Select the sprite with the next ID (`Tab`).
@@ -132,13 +139,17 @@ impl Keys {
         }
     }
 
-    /// The action for a key event, if it has one. Key releases never act.
+    /// The action for a key event, if it has one. Of key releases, only
+    /// `E`'s acts: it's the right button let go (design v25 §6.5).
     pub fn action_for(&mut self, key: KeyEvent) -> Option<Action> {
         let physical = physical_key(key.code);
         if key.kind == KeyEventKind::Release {
             self.releases_reported = true;
             self.down.remove(&physical);
-            return None;
+            return (physical == KeyCode::Char('e')).then_some(Action::Release {
+                button: Button::Right,
+                at: None,
+            });
         }
         let pressed_again = !self.down.insert(physical);
         let held = key.kind == KeyEventKind::Repeat || (self.releases_reported && pressed_again);
@@ -213,6 +224,10 @@ pub fn mouse_action(event: MouseEvent) -> Option<Action> {
     Some(match event.kind {
         MouseEventKind::Down(MouseButton::Left) => click(Button::Left),
         MouseEventKind::Down(MouseButton::Right) => click(Button::Right),
+        MouseEventKind::Up(MouseButton::Right) => Action::Release {
+            button: Button::Right,
+            at: Some(cell),
+        },
         MouseEventKind::ScrollDown => Action::Wheel {
             at: cell,
             notches: 1,

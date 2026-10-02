@@ -130,6 +130,11 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     let rows = inner.height.min(map.height() - origin.y);
     let destination = heading_for(app, world).filter(|_| app.flash_on());
     let attended = attended_by(app, world);
+    // A held item being aimed, where it will be thrown from (design v25
+    // §6.5).
+    let thrown = app
+        .thrown_from(world)
+        .and_then(|(item, from)| Some((from, item_look(world, item)?)));
     for row in 0..rows {
         for col in 0..cols {
             let pos = Pos {
@@ -146,6 +151,8 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
                     SemanticTile::Sprite
                 };
                 app.theme.glyph(tile)
+            } else if let Some((_, (name, state))) = thrown.filter(|&(from, _)| from == pos) {
+                app.theme.object_glyph(name, state)
             } else if destination == Some(pos) {
                 app.theme.glyph(SemanticTile::DecisionMarker)
             } else if let Some(object) = world.object_at(pos) {
@@ -172,7 +179,9 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     if app.flash_on() {
         draw_leash(buf, app, world);
     }
+    draw_aim_line(buf, app, world);
     draw_cursor(buf, inner, app, world);
+    draw_aim_end(buf, app, world);
 }
 
 /// Where the selected sprite is heading, while its action is under way
@@ -262,6 +271,50 @@ fn draw_leash(buf: &mut Buffer, app: &App, world: &World) {
                 .set_style(Style::default().fg(dot.fg));
         }
     }
+}
+
+/// Draws the aim line, while the player aims a throw or a shove: steady
+/// dots along the thing's path, over empty ground only, as the leash is, and
+/// clear of the Cursor (design v25 §6.5). Its end is `draw_aim_end`'s.
+fn draw_aim_line(buf: &mut Buffer, app: &App, world: &World) {
+    let line = app.aim_line(world);
+    let cursor = app.cursor();
+    let dot = app.theme.aim();
+    for &tile in line.iter().rev().skip(1) {
+        let by_the_cursor = tile.x.abs_diff(cursor.x) <= 1 && tile.y.abs_diff(cursor.y) <= 1;
+        if let Some(cell) = app
+            .cell_of(tile)
+            .filter(|_| empty(world, tile) && !by_the_cursor)
+        {
+            buf[(cell.x, cell.y)]
+                .set_char(dot.symbol)
+                .set_style(Style::default().fg(dot.fg));
+        }
+    }
+}
+
+/// Draws the aim line's end, where the thing would stop if nothing's in the
+/// way, over empty ground: after the Cursor, so a short aim's end shows on
+/// its arms rather than under them, though never on its target tile (design
+/// v25 §6.5).
+fn draw_aim_end(buf: &mut Buffer, app: &App, world: &World) {
+    let Some(&end) = app.aim_line(world).last() else {
+        return;
+    };
+    let mark = app.theme.aim_end();
+    if let Some(cell) = app
+        .cell_of(end)
+        .filter(|_| empty(world, end) && end != app.cursor())
+    {
+        buf[(cell.x, cell.y)]
+            .set_char(mark.symbol)
+            .set_style(Style::default().fg(mark.fg));
+    }
+}
+
+/// Whether `tile` holds no sprite and no object.
+fn empty(world: &World, tile: Pos) -> bool {
+    world.sprite_at(tile).is_none() && world.object_at(tile).is_none()
 }
 
 /// The tiles of a straight line from `from` to `to`, leaving both ends out:
@@ -432,7 +485,12 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         }
         None => {
             let room = width.saturating_sub(tile.chars().count() + 3);
-            let hints = hints_within(room);
+            // While the player aims, how to send it or not (design v25 §6.1).
+            let hints = match (app.aiming(), app.grip(world)) {
+                (true, Some(Grip::Holds(_))) => hint_if_fits(room, "let go to throw  esc cancel"),
+                (true, Some(Grip::Leads(_))) => hint_if_fits(room, "let go to shove  esc cancel"),
+                _ => hints_within(room),
+            };
             (tile, hints)
         }
     };
@@ -441,6 +499,15 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     }
     let gap = width.saturating_sub(tile.chars().count() + right.chars().count() + 1);
     Line::from(format!("{tile}{}{right} ", " ".repeat(gap)))
+}
+
+/// `hint`, if it fits in `room` columns, or nothing.
+fn hint_if_fits(room: usize, hint: &str) -> String {
+    if hint.chars().count() <= room {
+        hint.into()
+    } else {
+        String::new()
+    }
 }
 
 /// As many of the key hints as fit in `room` columns, whole and in order.

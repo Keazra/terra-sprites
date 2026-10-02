@@ -125,12 +125,15 @@
     // point for the lab's strength sweep; and the longest a pet's or hug's
     // feeling looks back for the sprite's latest try, in ticks (§5.6): two
     // seconds at 16×. A shorter reach back than `touch_window` is taken as
-    // that; a zap's or shock's always looks back `touch_window`.
+    // that; a zap's or shock's always looks back `touch_window`. Then the
+    // furthest the Cursor throws or shoves a thing of each size, in tiles
+    // (design v25 §3.5.4): size stands in for weight, and sprites are large.
     cursor: (
         pet: 0.5,
         hug: 1.0,
         zap: (punishment: 0.5, pain: 0.3),
         shock: (punishment: 1.0, pain: 0.6),
         max_reach_back: 40,
+        furthest: (small: 6, medium: 6, large: 5),
     ),
 )

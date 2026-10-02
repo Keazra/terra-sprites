@@ -2,7 +2,7 @@
 //! learns what things are worth and its habits.
 
 use terra_sim::{
-    DataPack, EntityId, Event, EventKind, Genome, Learned, Map, Part, Pos, Scenario,
+    Command, DataPack, Dir, EntityId, Event, EventKind, Genome, Learned, Map, Part, Pos, Scenario,
     ScriptedAction, Thing, Verb, World,
 };
 
@@ -876,4 +876,150 @@ fn touching_a_sprite_it_learns_nothing_about_changes_nothing_about_sprites_in_ge
         "{:?}",
         memory_of(&world, me)
     );
+}
+
+/// The Cursor takes hold of the one sprite, then shoves it `toward` as far
+/// as it goes; the world runs on four ticks more, the crash among them.
+fn shove_the_sprite(world: &mut World, toward: Dir) {
+    let sprite = world.sprites().next().expect("the sprite").id();
+    world.submit(Command::TakeHold { sprite });
+    world.step();
+    world.submit(Command::Shove { toward, tiles: 3 });
+    for _ in 0..4 {
+        world.step();
+    }
+}
+
+#[test]
+fn a_sprite_shoved_into_a_thornbush_learns_thornbushes_are_bad() {
+    // Design v23 §5.6: a crash counts as touching the thing crashed into. A
+    // prick punishes by 1, so bad is −(.8 × 1).
+    let mut world = world(
+        &["......", "......", "......"],
+        &[(at(3, 1), "thornbush")],
+        at(1, 1),
+        PRICKS_HURT,
+        &[ScriptedAction::Rest; 10],
+    );
+    shove_the_sprite(&mut world, Dir::E);
+    let thorns_bad = Learned::Bad {
+        thing: "thornbush".into(),
+    };
+    assert!(
+        close(value_of(&world, &thorns_bad), -0.8),
+        "{:?}",
+        memory(&world)
+    );
+}
+
+#[test]
+fn a_crash_teaches_no_habit_not_even_along_the_trace_and_nor_does_a_pet_that_reaches_it() {
+    // Design v25 §5.6: the trace holds what the sprite chose before it was
+    // taken hold of, here going over to a bush, which the crash's pain isn't
+    // about. A pet a few ticks later reaches back to the crash: it teaches
+    // the thornbush's worth, and no habit. Going over to something tries
+    // nothing on it, so nothing else is touched.
+    let mut world = world(
+        &["........", "........", "........", "........"],
+        &[(at(1, 3), "thornbush"), (at(7, 0), "berry_bush")],
+        at(1, 0),
+        &format!(
+            r#"{PRICKS_HURT}
+            Instinct(inputs: [("always", false)], verb: Approach, weight: 1.0),"#
+        ),
+        &[],
+    );
+    world.step();
+    shove_the_sprite(&mut world, Dir::S);
+    let sprite = world.sprites().next().expect("the sprite").id();
+    world.submit(Command::Reward {
+        sprite,
+        amplified: false,
+        reach_back: 40,
+    });
+    world.step();
+    let no_habits = memory(&world)
+        .iter()
+        .all(|(learned, _)| !matches!(learned, Learned::Habit { .. }));
+    assert!(no_habits, "{:?}", memory(&world));
+    let thorns_good = Learned::Worth {
+        thing: "thornbush".into(),
+        need: None,
+    };
+    assert!(value_of(&world, &thorns_good) > 0.0, "{:?}", memory(&world));
+}
+
+#[test]
+fn a_shock_just_after_a_crash_teaches_badness_and_no_habit() {
+    // Design v25 §5.6: a shock looks back the touch window, and finds the
+    // crash, so it teaches the thornbush is worse, and no habit.
+    let mut world = world(
+        &["........", "........", "........", "........"],
+        &[(at(1, 3), "thornbush"), (at(7, 0), "berry_bush")],
+        at(1, 0),
+        &format!(
+            r#"{PRICKS_HURT}
+            Instinct(inputs: [("always", false)], verb: Approach, weight: 1.0),"#
+        ),
+        &[],
+    );
+    world.step();
+    shove_the_sprite(&mut world, Dir::S);
+    let sprite = world.sprites().next().expect("the sprite").id();
+    world.submit(Command::Correct {
+        sprite,
+        amplified: false,
+    });
+    world.step();
+    let thorns_bad = Learned::Bad {
+        thing: "thornbush".into(),
+    };
+    assert!(value_of(&world, &thorns_bad) < -0.8, "{:?}", memory(&world));
+    let no_habits = memory(&world)
+        .iter()
+        .all(|(learned, _)| !matches!(learned, Learned::Habit { .. }));
+    assert!(no_habits, "{:?}", memory(&world));
+}
+
+#[test]
+fn a_pet_long_after_a_crash_that_reaches_back_to_it_teaches_worth_and_no_habit() {
+    // Design v25 §5.6: past the touch window the crash is no longer the thing
+    // touched, but a pet's reach back still finds it, the sprite's latest
+    // attempt. It teaches the thornbush's worth, and no habit, along the
+    // trace or otherwise.
+    let mut world = world(
+        &["........", "........", "........", "........"],
+        &[(at(1, 3), "thornbush"), (at(7, 0), "berry_bush")],
+        at(1, 0),
+        // Choosing almost surely to go over to things, it tries nothing on
+        // them, so the crash stays its latest attempt.
+        &format!(
+            r#"{PRICKS_HURT}
+            Instinct(inputs: [("always", false)], verb: Approach, weight: 1.0),
+            BrainParam(param: "tau_base", value: 0.05),"#
+        ),
+        &[],
+    );
+    world.step();
+    // The crash comes on the third tick of the shove's four; one tick more,
+    // and the pet lands 4 ticks after it, past the touch window of 3, while
+    // the sprite is still on its way to the berry bush.
+    shove_the_sprite(&mut world, Dir::S);
+    world.step();
+    let sprite = world.sprites().next().expect("the sprite").id();
+    world.submit(Command::Reward {
+        sprite,
+        amplified: false,
+        reach_back: 40,
+    });
+    world.step();
+    let thorns_good = Learned::Worth {
+        thing: "thornbush".into(),
+        need: None,
+    };
+    assert!(value_of(&world, &thorns_good) > 0.0, "{:?}", memory(&world));
+    let no_habits = memory(&world)
+        .iter()
+        .all(|(learned, _)| !matches!(learned, Learned::Habit { .. }));
+    assert!(no_habits, "{:?}", memory(&world));
 }

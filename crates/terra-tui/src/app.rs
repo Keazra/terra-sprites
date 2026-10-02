@@ -6,8 +6,8 @@ use std::time::Duration;
 use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
 use terra_sim::{
-    ActionView, Command, CursorTouch, DeathCause, EntityId, Event, EventKind, Grip, Map, Pos,
-    Target, World,
+    ActionView, Command, CursorTouch, DeathCause, Dir, EntityId, Event, EventKind, Grip, Map, Pos,
+    Target, Thing, World,
 };
 
 use crate::clock::Clock;
@@ -232,6 +232,11 @@ pub struct App {
     /// and where it stands, as of the latest action or tick: the leash's
     /// centre (design v23 §6.5).
     led: Option<(EntityId, Pos)>,
+    /// While the player aims a throw or a shove (design v25 §6.5).
+    aim: Option<Aim>,
+    /// While the selected sprite slides from a shove: its observed line
+    /// waits for the slide to end (design v25 §6.1).
+    shoved: Option<Shoved>,
     /// When, in `running_for`, a click last sent a command (design v22 §6.5).
     sent_at: Option<Duration>,
     /// The world's latest report on a command, and when it began to show.
@@ -239,6 +244,31 @@ pub struct App {
     /// Why the player's latest click was refused, which the status line
     /// says in the key hints' place, and since when (design v22 §6.1).
     refusal: Option<(String, Duration)>,
+}
+
+/// A shove of the selected sprite, which its observed list tells of once
+/// the slide ends (design v25 §6.1).
+#[derive(Debug, Clone)]
+struct Shoved {
+    sprite: EntityId,
+    /// What it crashed into, once it has.
+    crash: Option<Crash>,
+}
+
+/// What a sliding sprite crashed into, and whether that hurt it (design v25
+/// §3.5.4).
+#[derive(Debug, Clone)]
+struct Crash {
+    into: Thing,
+    hurt: bool,
+}
+
+/// A throw or a shove being aimed (design v25 §6.5).
+#[derive(Debug, Clone, Copy)]
+struct Aim {
+    /// Where the Cursor was when the right button was pressed, and stays,
+    /// unless a led sprite slides on: a throw starts here.
+    from: Pos,
 }
 
 /// How long the Decision marker shows, and then doesn't: once a second in
@@ -262,6 +292,25 @@ const LEASH: u16 = 5;
 /// How long the status line says why a click was refused, in real time
 /// (design v22 §6.1).
 const REFUSAL_FOR: Duration = Duration::from_secs(3);
+
+/// How a grab with nothing to grab is refused: "Nothing here to grab", or
+/// on a fixture, "Can't grab the berry bush" (design v22 §6.1).
+struct Refused {
+    nothing_to: &'static str,
+    cant: &'static str,
+}
+
+/// A left click's grab.
+const TO_GRAB: Refused = Refused {
+    nothing_to: "grab",
+    cant: "grab",
+};
+
+/// A right press's grab, to aim what it grabs (design v25 §6.1).
+const TO_SEND: Refused = Refused {
+    nothing_to: "throw or shove",
+    cant: "throw",
+};
 
 impl App {
     /// A new UI for `map`, with the cursor at the map's centre and the viewport
@@ -297,6 +346,8 @@ impl App {
             queued: Vec::new(),
             told_tile: None,
             led: None,
+            aim: None,
+            shoved: None,
             sent_at: None,
             report: None,
             refusal: None,
@@ -329,10 +380,33 @@ impl App {
             }
             // Let go, the selected sprite felt it as a pull from nowhere, since
             // it can't see the Cursor (design v23 §6.1).
-            if let EventKind::LetGo { sprite } = event.kind
+            if let EventKind::LetGo { sprite } | EventKind::Shoved { sprite } = event.kind
                 && self.selection == Some(Selection::Living(sprite))
             {
                 self.observe(event.tick, "Was pulled along out of nowhere".into());
+            }
+            // A shove, felt as one from nowhere, is observed once the slide
+            // ends, with what it crashed into (design v25 §6.1).
+            match &event.kind {
+                EventKind::Shoved { sprite }
+                    if self.selection == Some(Selection::Living(*sprite)) =>
+                {
+                    self.shoved = Some(Shoved {
+                        sprite: *sprite,
+                        crash: None,
+                    });
+                }
+                EventKind::Crashed { sprite, into, hurt } => {
+                    if let Some(shoved) = &mut self.shoved
+                        && shoved.sprite == *sprite
+                    {
+                        shoved.crash = Some(Crash {
+                            into: into.clone(),
+                            hurt: *hurt,
+                        });
+                    }
+                }
+                _ => {}
             }
             if let EventKind::CommandRejected { .. } = event.kind {
                 self.flash_report(StatusMark::Rejected);
@@ -365,8 +439,14 @@ impl App {
             }
         }
         self.event_log.truncate(EVENT_LOG_LENGTH);
+        self.note_slide_ended(world);
         // The world has applied what was queued for the ticks it has run.
         self.queued.retain(|&(tick, _)| tick >= world.tick());
+        // An aim ends when what it aimed is gone: a held berry expired, or
+        // a led sprite died (design v25 §6.5).
+        if self.grip(world).is_none() {
+            self.end_aim();
+        }
         self.settle_cursor(world);
     }
 
@@ -427,7 +507,10 @@ impl App {
             .fold(start, |grip, &(_, command)| match command {
                 Command::TakeHold { sprite } => grip.or(Some(Grip::Leads(sprite))),
                 Command::PickUp { item } => grip.or(Some(Grip::Holds(item))),
-                Command::LetGo | Command::PutDown { .. } => None,
+                Command::LetGo
+                | Command::PutDown { .. }
+                | Command::Throw { .. }
+                | Command::Shove { .. } => None,
                 Command::Reward { .. } | Command::Correct { .. } | Command::MoveCursor { .. } => {
                     grip
                 }
@@ -459,16 +542,52 @@ impl App {
 
     /// Keeps a locked-on Cursor on its sprite, wherever it has walked; and
     /// a leading one on the pointer, so a keyboard click lands where the
-    /// player points. Either way, within the leash (design v23 §6.5).
+    /// player points. Either way, within the leash (design v23 §6.5). While
+    /// the player aims, it stays on what it aims: a led sprite, which a
+    /// slide may carry on, or where a held item will be thrown from (design
+    /// v25 §6.5).
     fn track(&mut self, world: &World) {
-        let wanted = match self.locked().and_then(|id| world.sprite(id)) {
-            Some(sprite) => Some(sprite.pos()),
-            None if self.led.is_some() => Some(self.pointed),
-            None => None,
+        let wanted = if self.aim.is_some() {
+            self.leash()
+        } else {
+            match self.locked().and_then(|id| world.sprite(id)) {
+                Some(sprite) => Some(sprite.pos()),
+                None if self.led.is_some() => Some(self.pointed),
+                None => None,
+            }
         };
         if let Some(tile) = wanted {
             self.cursor = self.within_leash(tile);
         }
+    }
+
+    /// Once the selected sprite's slide has ended, its observed list tells of
+    /// the shove: "Was shoved out of nowhere", and what it crashed into, and
+    /// whether that hurt (design v25 §6.1).
+    fn note_slide_ended(&mut self, world: &World) {
+        let Some(shoved) = self.shoved.take() else {
+            return;
+        };
+        let id = shoved.sprite;
+        if world
+            .sprite(id)
+            .is_some_and(|sprite| sprite.slide().is_some())
+        {
+            self.shoved = Some(shoved);
+            return;
+        }
+        if self.selection != Some(Selection::Living(id)) {
+            return;
+        }
+        let line = match shoved.crash {
+            None => "Was shoved out of nowhere".to_string(),
+            Some(Crash { into, hurt }) => {
+                let hurt = if hurt { ", and got hurt" } else { "" };
+                let into = inspector::crashed_into(&into);
+                format!("Was shoved out of nowhere, into {into}{hurt}")
+            }
+        };
+        self.observe(world.tick().saturating_sub(1), line);
     }
 
     /// Starts the Hurt emote on each sprite that sprite `actor`'s `action` hurt.
@@ -708,8 +827,13 @@ impl App {
         if self.screen == Screen::QuitPrompt {
             match action {
                 Action::Confirm | Action::Back | Action::Quit => return Flow::Quit,
-                // The mouse carries on as usual and doesn't answer the prompt.
-                Action::Point(_) | Action::Click { .. } | Action::Wheel { .. } => {}
+                // The mouse carries on as usual and doesn't answer the prompt;
+                // nor does letting go of a button, or of `E`, which isn't a
+                // key pressed.
+                Action::Point(_)
+                | Action::Click { .. }
+                | Action::Wheel { .. }
+                | Action::Release { .. } => {}
                 // Any other key cancels the prompt, and does nothing else.
                 _ => {
                     self.screen = Screen::Normal;
@@ -741,6 +865,14 @@ impl App {
             Action::Press { button, amplified } => {
                 self.act(self.cursor, button, amplified, world);
             }
+            Action::Release { button, at } => {
+                if let Some(at) = at {
+                    self.point(at);
+                }
+                if button == Button::Right && self.aim.is_some() {
+                    self.send_aimed(world);
+                }
+            }
             Action::Mode(mode) => self.mode = mode,
             Action::SelectNext => self.select_along(world, Direction::Next),
             Action::SelectPrevious => self.select_along(world, Direction::Previous),
@@ -761,12 +893,17 @@ impl App {
                 }
             }
             Action::ToggleDetail => self.detail = !self.detail,
-            // Esc returns to Select; from Select it asks to quit (design v21
-            // §6.5).
+            // Esc cancels an aim first (design v25 §6.5); then returns to
+            // Select; from Select it asks to quit (design v21 §6.5).
+            Action::Back if self.aim.is_some() => self.end_aim(),
             Action::Back if self.mode != CursorMode::Select => self.mode = CursorMode::Select,
             Action::Back => self.screen = Screen::QuitPrompt,
             Action::Confirm | Action::Dismiss => {}
             Action::Quit => return Flow::Quit,
+        }
+        // Only Grab mode aims.
+        if self.mode != CursorMode::Grab {
+            self.end_aim();
         }
         self.settle_cursor(world);
         Flow::Continue
@@ -800,8 +937,7 @@ impl App {
                 _ => {}
             },
             (CursorMode::Grab, Button::Left) => self.grab_click(tile, sprite, world),
-            // Throwing and shoving come with slice 11b.
-            (CursorMode::Grab, Button::Right) => {}
+            (CursorMode::Grab, Button::Right) => self.aim_click(tile, sprite, world),
             (CursorMode::Train, button) => {
                 let touch = match (button, amplified) {
                     (Button::Left, false) => CursorTouch::Pet,
@@ -830,32 +966,171 @@ impl App {
     /// takes hold of the locked-on sprite, or else the sprite there, or
     /// else picks up the item there; a fixture is rooted to the ground.
     fn grab_click(&mut self, tile: Pos, sprite: Option<EntityId>, world: &World) {
-        let command = match self.grip(world) {
-            Some(Grip::Leads(_)) => Command::LetGo,
-            Some(Grip::Holds(_)) => Command::PutDown { tile },
-            None => match (self.locked().or(sprite), world.object_at(tile)) {
-                (Some(sprite), _) => Command::TakeHold { sprite },
-                // In M1 every solid object is a fixture (design §3.3).
-                (None, Some(object)) if object.is_solid() => {
-                    let name = display_name(object.type_name());
-                    self.refuse(format!("Can't grab the {name}: {ROOTED}"));
-                    return;
-                }
-                (None, Some(object)) => Command::PickUp { item: object.id() },
-                (None, None) => {
-                    self.refuse("Nothing here to grab".into());
-                    return;
-                }
-            },
-        };
-        if let Command::TakeHold { sprite } = command {
-            // Taking hold puts the Cursor, as the world knows it, on the sprite.
-            self.told_tile = world.sprite(sprite).map(|s| s.pos());
+        match self.grip(world) {
+            Some(Grip::Leads(_)) => self.send(Command::LetGo, world),
+            Some(Grip::Holds(_)) => self.send(Command::PutDown { tile }, world),
+            None => {
+                self.grab(tile, sprite, world, TO_GRAB);
+            }
         }
+    }
+
+    /// With the Cursor empty, grabs what's on `tile`, with `sprite` on it
+    /// (design v23 §6.5): takes hold of the locked-on sprite, or else the
+    /// sprite there, or else picks up the item there; a fixture is rooted to
+    /// the ground, and with nothing there, it's `refused`. Says whether it
+    /// grabbed anything.
+    fn grab(
+        &mut self,
+        tile: Pos,
+        sprite: Option<EntityId>,
+        world: &World,
+        refused: Refused,
+    ) -> bool {
+        let command = match (self.locked().or(sprite), world.object_at(tile)) {
+            (Some(sprite), _) => {
+                // Taking hold puts the Cursor, as the world knows it, on the
+                // sprite.
+                self.told_tile = world.sprite(sprite).map(|s| s.pos());
+                Command::TakeHold { sprite }
+            }
+            // In M1 every solid object is a fixture (design §3.3).
+            (None, Some(object)) if object.is_solid() => {
+                let (cant, name) = (refused.cant, display_name(object.type_name()));
+                self.refuse(format!("Can't {cant} the {name}: {ROOTED}"));
+                return false;
+            }
+            (None, Some(object)) => Command::PickUp { item: object.id() },
+            (None, None) => {
+                self.refuse(format!("Nothing here to {}", refused.nothing_to));
+                return false;
+            }
+        };
+        self.send(command, world);
+        true
+    }
+
+    /// Sends a Grab-mode command, queued, so the marks and the next click
+    /// follow it (design v23 §6.5).
+    fn send(&mut self, command: Command, world: &World) {
         self.commands.push(command);
         self.queued.push((world.tick(), command));
         // The marks follow the latest click (design v22 §6.5).
         self.report = None;
+    }
+
+    /// A Grab-mode right click on `tile`, with `sprite` on it (design v25
+    /// §6.5): it starts aiming what the Cursor has hold of, the pull measured
+    /// from the Cursor to the pointer. With the Cursor empty, it grabs what's
+    /// there first, as a left click would. Aiming already, it sends the aim,
+    /// as `E` pressed again does in a terminal that doesn't report a key let
+    /// go.
+    fn aim_click(&mut self, tile: Pos, sprite: Option<EntityId>, world: &World) {
+        if self.aim.is_some() {
+            self.send_aimed(world);
+            return;
+        }
+        if self.grip(world).is_none() && !self.grab(tile, sprite, world, TO_SEND) {
+            return;
+        }
+        // Leading, the Cursor goes onto the sprite, which then stands still,
+        // since a led sprite walks towards the Cursor (design v25 §6.5).
+        if let Some(Grip::Leads(id)) = self.grip(world)
+            && let Some(led) = world.sprite(id)
+        {
+            self.cursor = led.pos();
+        }
+        self.aim = Some(Aim { from: self.cursor });
+    }
+
+    /// Sends what the player aimed (design v25 §6.5): the thing goes the
+    /// opposite way to the pull, from the Cursor to the pointer, snapped to
+    /// the nearest of the 8 directions, as far as the pull, in the game's own
+    /// measure. With the pointer on the Cursor, it sends nothing.
+    fn send_aimed(&mut self, world: &World) {
+        let (aim, aimed) = (self.aim, self.aimed());
+        self.end_aim();
+        let (Some(Aim { from, .. }), Some((toward, tiles))) = (aim, aimed) else {
+            return;
+        };
+        let command = match self.grip(world) {
+            Some(Grip::Holds(_)) => Command::Throw {
+                from,
+                toward,
+                tiles,
+            },
+            Some(Grip::Leads(_)) => Command::Shove { toward, tiles },
+            None => return,
+        };
+        self.send(command, world);
+    }
+
+    /// While the player aims, the way the thing will go and how far, as
+    /// the pull says (design v25 §6.5): the opposite way to the pull, from
+    /// the Cursor to the pointer, snapped to the nearest of the 8
+    /// directions, as far as the pull, in the game's own measure. `None` for
+    /// a pull of nothing.
+    fn aimed(&self) -> Option<(Dir, u16)> {
+        self.aim?;
+        let (dx, dy) = (
+            i32::from(self.cursor.x) - i32::from(self.pointed.x),
+            i32::from(self.cursor.y) - i32::from(self.pointed.y),
+        );
+        let toward = Dir::nearest(dx, dy)?;
+        let tiles = dx.unsigned_abs().max(dy.unsigned_abs());
+        Some((toward, u16::try_from(tiles).unwrap_or(u16::MAX)))
+    }
+
+    /// Ends the aim, sent or not: the Cursor follows the pointer again, as
+    /// far as the lock and the leash let it (design v25 §6.5).
+    fn end_aim(&mut self) {
+        if self.aim.take().is_some() && self.locked().is_none() {
+            self.cursor = self.within_leash(self.pointed);
+        }
+    }
+
+    /// Whether the player is aiming a throw or a shove (design v25 §6.5).
+    pub fn aiming(&self) -> bool {
+        self.aim.is_some()
+    }
+
+    /// While the player aims a held item, it and where it will be thrown
+    /// from, under the Cursor, where it's drawn until it's thrown (design
+    /// v25 §6.5).
+    pub fn thrown_from(&self, world: &World) -> Option<(EntityId, Pos)> {
+        match (self.aim, self.grip(world)) {
+            (Some(Aim { from }), Some(Grip::Holds(item))) => Some((item, from)),
+            _ => None,
+        }
+    }
+
+    /// While the player aims, the tiles the thing will cross, from the one
+    /// after where it is to where it would stop if nothing's in the way:
+    /// as far as the pull sends it, no further than the Cursor can send it,
+    /// and not past the wall (design v25 §6.5). Empty otherwise. A held item
+    /// starts where aiming began, and a led sprite where it stands.
+    pub fn aim_line(&self, world: &World) -> Vec<Pos> {
+        let (Some(Aim { from, .. }), Some((toward, tiles)), Some(grip)) =
+            (self.aim, self.aimed(), self.grip(world))
+        else {
+            return Vec::new();
+        };
+        let start = match grip {
+            Grip::Holds(_) => Some(from),
+            Grip::Leads(id) => world.sprite(id).map(|sprite| sprite.pos()),
+        };
+        let Some(mut at) = start else {
+            return Vec::new();
+        };
+        let mut line = Vec::new();
+        for _ in 0..tiles.min(world.furthest(grip)) {
+            match world.map().neighbour(at, toward) {
+                Some(next) => at = next,
+                None => break,
+            }
+            line.push(at);
+        }
+        line
     }
 
     /// A click with nothing to act on: it sends nothing, so `?` flashes at
@@ -985,7 +1260,9 @@ impl App {
             Some(tile) => {
                 self.pointer = Some(cell);
                 self.pointed = tile;
-                if self.locked().is_none() {
+                // While the player aims, the Cursor stays on what it aims,
+                // and the pointer pulls (design v25 §6.5).
+                if self.locked().is_none() && self.aim.is_none() {
                     self.cursor = self.within_leash(tile);
                 }
             }

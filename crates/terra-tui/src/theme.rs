@@ -134,6 +134,8 @@ pub struct Theme {
     status_marks: StatusMarks,
     mode_marks: BTreeMap<CursorMode, Glyph>,
     leash: Glyph,
+    aim: Glyph,
+    aim_end: Glyph,
     attention_marker: Color,
 }
 
@@ -200,6 +202,18 @@ impl Theme {
         self.leash
     }
 
+    /// A dot of the aim line, along the path a throw or a shove will take
+    /// (design v25 §6.5).
+    pub fn aim(&self) -> Glyph {
+        self.aim
+    }
+
+    /// The aim line's end: where a throw or a shove would stop if nothing's
+    /// in the way (design v25 §6.5).
+    pub fn aim_end(&self) -> Glyph {
+        self.aim_end
+    }
+
     fn builtin(name: &str, text: &str) -> Theme {
         let file: ThemeFile = ron::from_str(text)
             .unwrap_or_else(|e| panic!("the built-in {name} theme doesn't parse: {e}"));
@@ -230,6 +244,8 @@ impl Theme {
             status_marks: file.cursor.status_marks,
             mode_marks,
             leash: glyph(file.cursor.leash),
+            aim: glyph(file.cursor.aim.path),
+            aim_end: glyph(file.cursor.aim.end),
             attention_marker: file.attention_marker.into(),
         }
     }
@@ -277,6 +293,18 @@ struct CursorFile {
     mode_marks: BTreeMap<CursorMode, GlyphEntry>,
     /// A dot of the leash, from the Cursor to a sprite it leads.
     leash: GlyphEntry,
+    /// The aim line, while the player aims a throw or a shove.
+    aim: AimFile,
+}
+
+/// A theme file's aim line (design v25 §6.5).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AimFile {
+    /// A dot of the path.
+    path: GlyphEntry,
+    /// Where it would stop.
+    end: GlyphEntry,
 }
 
 #[derive(Deserialize)]

@@ -355,6 +355,16 @@ fn every_mouse_event_points_and_a_left_press_also_clicks() {
         }),
         "design v21 §6.5"
     );
+    // Letting go of the right button sends an aimed throw or shove (design
+    // v25 §6.5); dragging it pulls, as any move points.
+    assert_eq!(
+        action(MouseEventKind::Up(MouseButton::Right)),
+        Some(Action::Release {
+            button: Button::Right,
+            at: Some(Position::new(12, 7)),
+        })
+    );
+    assert_eq!(action(MouseEventKind::Drag(MouseButton::Right)), point);
     // Every mouse event says where the pointer is, so the cursor follows it.
     for kind in [
         MouseEventKind::Up(MouseButton::Left),
@@ -478,4 +488,21 @@ fn tab_with_shift_held_selects_the_previous_sprite_too() {
         Keys::new().action_for(shift_tab),
         Some(Action::SelectPrevious)
     );
+}
+
+#[test]
+fn letting_go_of_e_lets_go_of_the_right_button_and_other_releases_do_nothing() {
+    // Design v25 §6.5: holding `E` aims a throw or a shove, as holding the
+    // right button does, and letting it go sends it.
+    let mut keys = Keys::new();
+    keys.action_for(press(KeyCode::Char('e')));
+    let let_go = Action::Release {
+        button: Button::Right,
+        at: None,
+    };
+    let release = kind(KeyCode::Char('e'), KeyEventKind::Release);
+    assert_eq!(keys.action_for(release), Some(let_go));
+    keys.action_for(press(KeyCode::Char('q')));
+    let release = kind(KeyCode::Char('q'), KeyEventKind::Release);
+    assert_eq!(keys.action_for(release), None);
 }
