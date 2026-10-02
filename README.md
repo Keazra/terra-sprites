@@ -48,6 +48,19 @@ cargo run --release -- --seed 7
 
 To run the checks CI runs: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`.
 
+## Same seed, same world
+
+A world made from the same seed, given the same clicks and keys, plays out exactly the same every time, in the same version of the game. That holds across computers too, for these targets:
+
+| Computer | Target |
+|---|---|
+| Linux PC | `x86_64-unknown-linux-gnu` |
+| Windows PC | `x86_64-pc-windows-msvc` |
+| Mac with Apple silicon | `aarch64-apple-darwin` |
+| Linux on ARM | `aarch64-unknown-linux-gnu` |
+
+CI checks this on every pull request: it runs the default world from seed 7 for 20,000 ticks on each of them, and fails if any of them ends up in a different state. Other 64-bit computers are expected to match too, but aren't checked. To run the check yourself, `cargo run --release -p terra-sim --example determinism` prints the hash of the world's state every 1,000 ticks; CI's run summary shows what each computer printed.
+
 ## Design
 
 - [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v28.md) (v28, the current revision). Earlier revisions and the external evaluations that shaped them are in [`docs/design/archive/`](docs/design/archive/).
