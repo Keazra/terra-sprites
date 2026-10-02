@@ -316,6 +316,19 @@ struct Shoved {
     sprite: EntityId,
     /// What it crashed into, once it has.
     crash: Option<Crash>,
+    /// Where the shove came from, as the sprite felt it (design v29 §6.1).
+    how: &'static str,
+}
+
+/// Where the Cursor's doing came from, as a sprite felt it in the tick just
+/// run (design v29 §6.1): "out of nowhere", or, while sprites could see it,
+/// "by the Cursor".
+fn whence(world: &World) -> &'static str {
+    if world.cursor().visible() {
+        "by the Cursor"
+    } else {
+        "out of nowhere"
+    }
 }
 
 /// What a sliding sprite crashed into, and whether that hurt it (design v25
@@ -461,15 +474,16 @@ impl App {
             if let (EventKind::Rewarded { id, .. } | EventKind::Corrected { id, .. }, Some(touch)) =
                 (&event.kind, CursorTouch::reported(&event.kind))
             {
-                self.note_touch(event.tick, *id, touch);
+                self.note_touch(event.tick, *id, touch, world);
                 self.flash_report(StatusMark::Applied);
             }
-            // Let go, the selected sprite felt it as a pull from nowhere, since
-            // it can't see the Cursor (design v23 §6.1).
+            // Let go, the selected sprite felt it as a pull from nowhere,
+            // unless it could see the Cursor (design v23, v29 §6.1).
             if let EventKind::LetGo { sprite } | EventKind::Shoved { sprite } = event.kind
                 && self.selection == Some(Selection::Living(sprite))
             {
-                self.observe(event.tick, "Was pulled along out of nowhere".into());
+                let how = whence(world);
+                self.observe(event.tick, format!("Was pulled along {how}"));
             }
             // A shove, felt as one from nowhere, is observed once the slide
             // ends, with what it crashed into (design v25 §6.1).
@@ -480,6 +494,7 @@ impl App {
                     self.shoved = Some(Shoved {
                         sprite: *sprite,
                         crash: None,
+                        how: whence(world),
                     });
                 }
                 EventKind::Crashed { sprite, into, hurt } => {
@@ -707,12 +722,13 @@ impl App {
         if self.selection != Some(Selection::Living(id)) {
             return;
         }
+        let how = shoved.how;
         let line = match shoved.crash {
-            None => "Was shoved out of nowhere".to_string(),
+            None => format!("Was shoved {how}"),
             Some(Crash { into, hurt }) => {
                 let hurt = if hurt { ", and got hurt" } else { "" };
                 let into = inspector::crashed_into(&into, &self.words(world));
-                format!("Was shoved out of nowhere, into {into}{hurt}")
+                format!("Was shoved {how}, into {into}{hurt}")
             }
         };
         self.observe(world.tick().saturating_sub(1), line);
@@ -732,9 +748,9 @@ impl App {
 
     /// The Cursor's touch on sprite `id`, on `tick`: its emote, and a line
     /// on the observed list if it's the selected sprite's, told as the
-    /// sprite felt it, from nowhere, since it can't see the Cursor (design
-    /// v21 §6.1, §6.3).
-    fn note_touch(&mut self, tick: u64, id: EntityId, touch: CursorTouch) {
+    /// sprite felt it: from nowhere, unless it could see the Cursor (design
+    /// v21, v29 §6.1, §6.3).
+    fn note_touch(&mut self, tick: u64, id: EntityId, touch: CursorTouch, world: &World) {
         let (emote, line) = match touch {
             CursorTouch::Pet => (Emote::Pleased, "a gentle touch"),
             CursorTouch::Hug => (Emote::Pleased, "a warm embrace"),
@@ -743,7 +759,12 @@ impl App {
         };
         self.emotes.insert(id, (emote, self.running_for));
         if self.selection == Some(Selection::Living(id)) {
-            self.observe(tick, format!("Felt {line} out of nowhere"));
+            let from = if world.cursor().visible() {
+                "from the Cursor"
+            } else {
+                "out of nowhere"
+            };
+            self.observe(tick, format!("Felt {line} {from}"));
         }
     }
 
