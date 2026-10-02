@@ -10,11 +10,12 @@ use crate::registry::CategoryId;
 /// The categories file, relative to the pack root.
 pub(crate) const CATEGORIES: &str = "categories.ron";
 
-/// The categories water tiles and sprites are perceived as. They aren't
-/// objects, so no object type can say what they are, and every world has
-/// them, so the list must too.
+/// The categories water tiles, sprites and the Cursor are perceived as.
+/// They aren't objects, so no object type can say what they are, and every
+/// world has them, so the list must too (design v29 §3.5.5).
 pub(crate) const WATER: &str = "water";
 pub(crate) const SPRITE: &str = "sprite";
+pub(crate) const CURSOR: &str = "cursor";
 
 /// One category.
 #[derive(Debug, Clone, Deserialize)]
@@ -49,7 +50,7 @@ pub(crate) fn categories(mut entries: Vec<Category>) -> Result<Vec<Category>, Da
             c.id.0
         )));
     }
-    for name in [WATER, SPRITE] {
+    for name in [WATER, SPRITE, CURSOR] {
         if !entries.iter().any(|c| c.name == name) {
             return Err(invalid(format!(
                 "`{name}` is missing: every world has it, so brains must perceive it"

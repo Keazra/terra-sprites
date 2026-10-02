@@ -61,7 +61,7 @@ pub(crate) fn decide(
     let reach = 10.0 * f32::from(flood.reach());
     let was_hit = data.physiology().indices.was_hit;
     let attacker = sprite.body.sources.get(&was_hit).copied();
-    let mut offered = flood.candidates(ground, id, attacker);
+    let mut offered = flood.candidates(ground, id, attacker, state.cursor.seen_at());
     // Each sprite in reach is weighed on its own, unless the attacker stands
     // for sprites while a hit is felt (design v18 §3.6).
     let is_attacker = |target: Target| attacker.is_some_and(|a| target == Target::Sprite(a));

@@ -49,8 +49,10 @@ pub enum Command {
     /// again at its next step 5 (design v23 §6.5).
     LetGo,
     /// Where the Cursor is: sent while it leads a sprite, which heads there
-    /// (design v23 §2.5).
+    /// (design v23 §2.5), and while sprites can see it (design v29 §2.5).
     MoveCursor { tile: Pos },
+    /// Shows the Cursor to sprites, or hides it from them (design v29 §6.5).
+    ShowCursor { visible: bool },
     /// Throws the item the Cursor holds (design v25 §3.5.4): puts it down on
     /// `from`, where aiming began, rolling `tiles` tiles `toward`.
     Throw { from: Pos, toward: Dir, tiles: u16 },
@@ -92,6 +94,7 @@ impl CursorTouch {
             | Command::PutDown { .. }
             | Command::LetGo
             | Command::MoveCursor { .. }
+            | Command::ShowCursor { .. }
             | Command::Throw { .. }
             | Command::Shove { .. }
             | Command::Place { .. }
@@ -244,6 +247,11 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
                 continue;
             }
             &Command::MoveCursor { .. } => Err(Rejection::OffTheMap),
+            // Nor this: the screen sends it as the player changes mode.
+            &Command::ShowCursor { visible } => {
+                state.cursor.visible = visible;
+                continue;
+            }
             &Command::Throw {
                 from,
                 toward,
@@ -284,6 +292,7 @@ fn reward(
     let reach_back = reach_back.clamp(physiology.touch_window, cursor.max_reach_back);
     let brain = &mut touched.brain;
     brain.reach_back = brain.reach_back.max(Some(reach_back));
+    brain.seen_cursor |= state.cursor.visible;
     let body = &mut touched.body;
     let reward = if amplified { cursor.hug } else { cursor.pet };
     body.raise(indices.reward, reward);
@@ -305,7 +314,9 @@ fn correct(
 ) -> Result<EventKind, Rejection> {
     let physiology = data.physiology();
     let (cursor, indices) = (&physiology.cursor, &physiology.indices);
-    let body = &mut state.sprites.get_mut(sprite).ok_or(Rejection::Gone)?.body;
+    let touched = state.sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
+    touched.brain.seen_cursor |= state.cursor.visible;
+    let body = &mut touched.body;
     let correction = if amplified { cursor.shock } else { cursor.zap };
     body.raise(indices.punishment, correction.punishment);
     body.raise(indices.pain, correction.pain);

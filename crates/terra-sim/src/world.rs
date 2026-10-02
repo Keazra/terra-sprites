@@ -130,8 +130,9 @@ impl WorldState {
     }
 
     /// Where `target` is, and whether a sprite may act on it from its own
-    /// tile (an item or water) as well as from beside it (design §3.6).
-    /// `None` if it's gone, off the map in the Cursor included.
+    /// tile (an item, water or the Cursor) as well as from beside it (design
+    /// §3.6). `None` if it's gone, off the map in the Cursor included, or
+    /// it's the Cursor and sprites can't see it (design v29 §6.5).
     pub(crate) fn whereabouts(&self, data: &DataPack, target: Target) -> Option<(Pos, bool)> {
         match target {
             Target::Object(id) => {
@@ -140,6 +141,8 @@ impl WorldState {
             }
             Target::Water(pos) => Some((pos, true)),
             Target::Sprite(id) => Some((self.sprites.get(id)?.pos, false)),
+            // It's light, so a sprite may stand under it.
+            Target::Cursor => Some((self.cursor.seen_at()?, true)),
         }
     }
 
@@ -154,13 +157,14 @@ impl WorldState {
     }
 
     /// The index of `target`'s object type, whose verb table it answers
-    /// with: a pseudo type for water or a sprite. `None` if it's gone, or
+    /// with: a pseudo type for water, a sprite or the Cursor. `None` if it's gone, or
     /// the pack has no such pseudo type.
     pub(crate) fn kind_of(&self, data: &DataPack, target: Target) -> Option<usize> {
         match target {
             Target::Object(id) => self.objects.get(id).map(|o| o.kind),
             Target::Water(_) => data.pseudo_type(data.water_category()),
             Target::Sprite(_) => data.pseudo_type(data.sprite_category()),
+            Target::Cursor => data.pseudo_type(data.cursor_category()),
         }
     }
 
@@ -176,6 +180,7 @@ impl WorldState {
             Target::Object(id) => data.object_types()[self.objects.kind(id)].category,
             Target::Water(_) => data.water_category(),
             Target::Sprite(_) => data.sprite_category(),
+            Target::Cursor => data.cursor_category(),
         }
     }
 
@@ -474,6 +479,11 @@ impl<'a> CursorView<'a> {
     /// sprite heads for (design v23 §2.5).
     pub fn tile(&self) -> Option<Pos> {
         self.world.state.cursor.tile
+    }
+
+    /// Whether sprites can see the Cursor (design v29 §6.5).
+    pub fn visible(&self) -> bool {
+        self.world.state.cursor.visible
     }
 
     /// The item the Cursor holds, if any.
