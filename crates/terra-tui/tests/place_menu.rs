@@ -117,6 +117,23 @@ fn c_again_in_grab_mode_opens_the_place_menu_and_esc_closes_it() {
 }
 
 #[test]
+fn following_a_sprite_a_click_anywhere_places_the_item_at_its_feet() {
+    // Design v27 §6.5: the item goes where the Cursor is, as a held one would.
+    let world = field(&[], &[at(4, 2)]);
+    let mut app = grab_app(&world);
+    apply(&mut app, &world, Action::middle_click(Position::new(4, 2)));
+    pick(&mut app, &world, 3);
+    click(&mut app, &world, at(8, 5), Button::Left);
+    assert_eq!(
+        app.take_commands(),
+        vec![Command::Place {
+            tile: at(4, 2),
+            object_type: ball_type(&world)
+        }]
+    );
+}
+
+#[test]
 fn a_chosen_item_waits_on_the_cursor_and_the_next_click_places_it() {
     let mut world = field(&[], &[]);
     let mut app = grab_app(&world);
