@@ -9,7 +9,7 @@ use terra_sim::{
     Hurt, Learned, Map, Outcome, Pos, Progress, Rejection, Removal, Scenario, ScriptedAction,
     Target, Terrain, Thing, Verb, World, WorldConfig,
 };
-use terra_tui::app::{App, CursorMode, Tab};
+use terra_tui::app::{App, CursorMode, Flow, Tab};
 use terra_tui::input::{Action, Button};
 use terra_tui::theme::Theme;
 use terra_tui::ui;
@@ -29,17 +29,43 @@ fn drawn_world(rows: &[&str]) -> World {
 }
 
 /// A UI for `world` sized for a `width`×`height` screen, showing seed 7.
+/// The game draws nothing smaller than 100×30 (design §6.1), so a smaller
+/// screen is a corner of one that size: see `render`.
 fn app_for(world: &World, theme: Theme, width: u16, height: u16) -> App {
-    let areas = ui::areas(Size::new(width, height), world.map());
+    let areas = ui::areas(at_least_min(width, height), world.map());
     App::new(world.map(), theme, 7, areas)
 }
 
+/// A screen of at least the smallest size the game draws on.
+fn at_least_min(width: u16, height: u16) -> Size {
+    Size::new(
+        width.max(ui::MIN_SIZE.width),
+        height.max(ui::MIN_SIZE.height),
+    )
+}
+
+/// One frame on a `width`×`height` screen. Smaller than 100×30, which the
+/// game doesn't draw on (design §6.1), it's the top-left `width`×`height`
+/// of a frame that size, with its status line as the last row: so the tests
+/// of small maps read as they did before the minimum.
 fn render(app: &App, world: &World, width: u16, height: u16) -> Buffer {
-    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+    let full = at_least_min(width, height);
+    let mut terminal = Terminal::new(TestBackend::new(full.width, full.height)).unwrap();
     terminal
         .draw(|frame| ui::render(frame, app, world))
         .unwrap();
-    terminal.backend().buffer().clone()
+    let drawn = terminal.backend().buffer().clone();
+    if Size::new(width, height) == full {
+        return drawn;
+    }
+    let mut corner = Buffer::empty(Rect::new(0, 0, width, height));
+    for y in 0..height {
+        let from = if y + 1 == height { full.height - 1 } else { y };
+        for x in 0..width {
+            corner[(x, y)] = drawn[(x, from)].clone();
+        }
+    }
+    corner
 }
 
 /// The screen's text, one string per row, without trailing spaces.
@@ -147,16 +173,14 @@ const SMALL_MAP: [&str; 4] = [
 fn the_map_view_draws_its_tiles_inside_its_border() {
     let small = drawn_world(&SMALL_MAP);
     assert_eq!(
-        ui::areas(Size::new(40, 8), small.map()).tiles,
+        ui::areas(Size::new(100, 30), small.map()).tiles,
         Rect::new(1, 2, 10, 4),
         "a small map gets a shrunk map view"
     );
-    let row = ".".repeat(30);
-    let big = drawn_world(&vec![row.as_str(); 20]);
     assert_eq!(
-        ui::areas(Size::new(20, 8), big.map()).tiles,
-        Rect::new(1, 2, 18, 4),
-        "a big map fills the space between the top bar and the status line"
+        ui::areas(Size::new(100, 30), big_world().map()).tiles,
+        Rect::new(1, 2, 52, 21),
+        "a big map fills the space between the top bar and the event log"
     );
 }
 
@@ -370,80 +394,74 @@ fn map_tiles_take_their_theme_colours() {
 
 #[test]
 fn the_border_is_single_where_the_map_carries_on_and_double_at_the_wall() {
-    let row = ".".repeat(30);
-    let world = drawn_world(&vec![row.as_str(); 20]);
-    let mut app = app_for(&world, Theme::cp437(), 20, 8);
-
-    // In the middle of the map, every side has more map beyond it. The cursor
-    // starts at (15, 10), in the middle of the view.
-    assert_eq!(
-        lines(&render(&app, &world, 20, 8))[1..7],
-        [
-            "┌─ Map ────────────┐",
-            "│..................│",
-            "│........♦↓·.......│",
-            "│........→.←.......│",
-            "│........·↑♦.......│",
-            "└──────────────────┘",
-        ]
-    );
+    let world = big_world();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    // In the middle of the map, every side has more map beyond it.
+    let rows = map_view_rows(&render(&app, &world, 100, 30));
+    let ends = |row: &String| {
+        let chars: Vec<char> = row.chars().collect();
+        (chars[0], chars[chars.len() - 1])
+    };
+    assert!(rows[0].starts_with("┌─ Map ──"), "{}", rows[0]);
+    assert_eq!(ends(&rows[0]), ('┌', '┐'));
+    assert!(rows[1..22].iter().all(|row| ends(row) == ('│', '│')));
+    assert_eq!(ends(&rows[22]), ('└', '┘'));
+    assert!(rows[22].chars().skip(1).take(52).all(|c| c == '─'));
 
     // Scrolled to the top-left corner, the top and left sides are the wall.
-    // The cursor stayed on (15, 10), which is now out of view.
-    app.apply(Action::Scroll { dx: -100, dy: -100 }, &world);
-    assert_eq!(
-        lines(&render(&app, &world, 20, 8))[1..7],
-        [
-            "╔═ Map ════════════╕",
-            "║..................│",
-            "║..................│",
-            "║..................│",
-            "║..................│",
-            "╙──────────────────┘",
-        ]
-    );
+    app.apply(Action::Scroll { dx: -200, dy: -200 }, &world);
+    let rows = map_view_rows(&render(&app, &world, 100, 30));
+    assert!(rows[0].starts_with("╔═ Map ══"), "{}", rows[0]);
+    assert_eq!(ends(&rows[0]), ('╔', '╕'));
+    assert!(rows[1..22].iter().all(|row| ends(row) == ('║', '│')));
+    assert_eq!(ends(&rows[22]), ('╙', '┘'));
 }
 
 #[test]
 fn the_cursor_is_clipped_at_the_edge_of_the_map_view() {
-    let row = ".".repeat(30);
-    let world = drawn_world(&vec![row.as_str(); 20]);
-    let mut app = app_for(&world, Theme::cp437(), 20, 8);
+    let world = big_world();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::Point(Position::new(1, 2)), &world); // the view's top-left tile
-    assert_eq!(
-        lines(&render(&app, &world, 20, 8))[1..7],
-        [
-            "┌─ Map ────────────┐",
-            "│.←................│",
-            "│↑♦................│",
-            "│..................│",
-            "│..................│",
-            "└──────────────────┘",
-        ]
-    );
+    let rows = map_view_rows(&render(&app, &world, 100, 30));
+    assert!(rows[1].starts_with("│.←..."), "{}", rows[1]);
+    assert!(rows[2].starts_with("│↑♦..."), "{}", rows[2]);
+    assert!(rows[3].starts_with("│....."), "{}", rows[3]);
+}
+
+/// A field of grass bigger than the map view of a 100×30 screen, which
+/// shows 52×21 of its tiles from cell (1, 2).
+fn big_world() -> World {
+    let row = ".".repeat(120);
+    drawn_world(&vec![row.as_str(); 60])
+}
+
+/// The map view's rows on a 100×30 screen, border included: the left 54
+/// columns of rows 1 to 23.
+fn map_view_rows(screen: &Buffer) -> Vec<String> {
+    (1..24)
+        .map(|y| (0..54).map(|x| screen[(x, y)].symbol()).collect())
+        .collect()
 }
 
 #[test]
 fn a_cursor_whose_target_is_out_of_view_is_not_drawn_at_all() {
-    let row = ".".repeat(30);
-    let world = drawn_world(&vec![row.as_str(); 20]);
-    let mut app = app_for(&world, Theme::cp437(), 20, 8);
-    // Put the cursor on the view's rightmost column, (23, 10), then move the
-    // pointer off the map and scroll left, so the cursor's tile leaves the view.
-    app.apply(Action::Point(Position::new(19, 5)), &world);
-    assert_eq!(app.cursor(), terra_sim::Pos { x: 23, y: 10 });
-    app.apply(Action::Point(Position::new(0, 4)), &world);
+    let world = big_world();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    // Put the cursor on the view's rightmost column, with the pointer on the
+    // border beside it, then move the pointer off the map and scroll left, so
+    // the cursor's tile leaves the view.
+    app.apply(Action::Point(Position::new(53, 12)), &world);
+    assert_eq!(app.cursor().x, app.viewport().x + 51);
+    app.apply(Action::Point(Position::new(0, 12)), &world);
     app.apply(Action::Scroll { dx: -1, dy: 0 }, &world);
-    assert_eq!(
-        lines(&render(&app, &world, 20, 8))[2..6],
-        [
-            "│..................│",
-            "│..................│",
-            "│..................│",
-            "│..................│",
-        ],
-        "no stray arrows or marks at the view's edge"
-    );
+    let rows = map_view_rows(&render(&app, &world, 100, 30));
+    for row in &rows[1..22] {
+        assert_eq!(
+            row,
+            &format!("│{}│", ".".repeat(52)),
+            "no stray arrows or marks at the view's edge"
+        );
+    }
 }
 
 #[test]
@@ -501,14 +519,13 @@ fn a_frame_bigger_than_the_fitted_view_draws_no_tiles_past_the_wall() {
     // The terminal can grow between the app fitting its view and the frame
     // being drawn, so for one frame the map view can be wider and taller than
     // the part of the map the viewport has room for.
-    let row = ".".repeat(30);
-    let world = drawn_world(&vec![row.as_str(); 20]);
-    let mut app = app_for(&world, Theme::cp437(), 20, 8); // 18×4 tiles
-    app.apply(Action::Scroll { dx: 100, dy: 100 }, &world); // tiles (12, 16) to (29, 19): the bottom-right corner
-    let screen = render(&app, &world, 40, 10); // room for 30×6 tiles
-    for line in &lines(&screen)[2..6] {
-        let tiles: String = line.chars().skip(1).take(19).collect();
-        assert_eq!(tiles, format!("{} ", ".".repeat(18)), "{line:?}");
+    let world = big_world();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30); // 52×21 tiles
+    app.apply(Action::Scroll { dx: 200, dy: 200 }, &world); // tiles (68, 39) to (119, 59): the bottom-right corner
+    let screen = render(&app, &world, 140, 40); // room for 92×31 tiles
+    for y in 2..23 {
+        let tiles: String = (1..54).map(|x| screen[(x, y)].symbol()).collect();
+        assert_eq!(tiles, format!("{} ", ".".repeat(52)), "row {y}");
     }
 }
 
@@ -666,6 +683,12 @@ fn the_status_line_shows_a_sprite_under_the_cursor_by_its_id() {
 }
 
 #[test]
+fn the_top_bar_ends_with_how_to_open_help() {
+    // Design §6.1.
+    assert!(top_bar(&default_app()).ends_with("     ? help"));
+}
+
+#[test]
 fn the_top_bar_leaves_object_counts_to_the_world_tab() {
     let world = garden(pack());
     let app = app_for(&world, Theme::cp437(), 100, 30);
@@ -680,9 +703,9 @@ fn the_top_bar_shows_the_population_after_the_seed() {
     let world = garden_with_sprites();
     let app = app_for(&world, Theme::cp437(), 100, 30);
     let bar = lines(&render(&app, &world, 100, 30))[0].clone();
-    assert!(bar.ends_with("│ seed 7 │ sprites 2"), "{bar}");
+    assert!(bar.contains("│ seed 7 │ sprites 2 "), "{bar}");
     assert!(
-        top_bar(&default_app()).ends_with("│ sprites 30"),
+        top_bar(&default_app()).contains("│ sprites 30 "),
         "the built-in preset's"
     );
 }
@@ -734,25 +757,65 @@ fn with_room_the_world_tab_shows_the_pack_and_every_object_types_numbers() {
 }
 
 #[test]
-fn a_narrow_terminal_leaves_the_inspector_out_and_gives_the_map_view_the_width() {
-    let row = ".".repeat(200);
-    let world = drawn_world(&vec![row.as_str(); 20]);
-    assert_eq!(
-        ui::areas(Size::new(99, 30), world.map()).tiles.width,
-        97,
-        "below 100 columns, the map view takes it all"
-    );
+fn below_100_by_30_the_screen_says_the_terminal_is_too_small() {
+    // Design §6.1: it replaces every panel, and nothing can be clicked.
+    let world = big_world();
+    for (width, height) in [(99, 30), (100, 29), (80, 24)] {
+        let areas = ui::areas(Size::new(width, height), world.map());
+        assert!(areas.tiles.is_empty() && areas.inspector.is_none());
+        let app = app_for(&world, Theme::cp437(), 100, 30);
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal
+            .draw(|frame| ui::render(frame, &app, &world))
+            .unwrap();
+        let screen = lines(terminal.backend().buffer());
+        let text: Vec<&str> = screen
+            .iter()
+            .map(|line| line.trim())
+            .filter(|line| !line.is_empty())
+            .collect();
+        let size = format!("needs 100x30, this is {width}x{height}");
+        assert_eq!(text, ["Terminal too small", size.as_str()]);
+    }
     assert_eq!(
         ui::areas(Size::new(100, 30), world.map()).tiles.width,
         52,
         "from 100 columns, the inspector takes 46"
     );
-    let app = app_for(&world, Theme::cp437(), 99, 30);
-    let screen = lines(&render(&app, &world, 99, 30));
-    assert!(
-        screen.iter().all(|line| !line.contains("World")),
-        "no World tab"
+}
+
+#[test]
+fn while_the_terminal_is_too_small_the_game_runs_on_and_esc_still_asks_to_quit() {
+    // Design v29 §6.1: shrinking the window doesn't pause it.
+    let mut world = big_world();
+    let small = Size::new(80, 24);
+    let mut app = App::new(
+        world.map(),
+        Theme::cp437(),
+        7,
+        ui::areas(small, world.map()),
     );
+    let before = world.tick();
+    let mut ran = 0;
+    for _ in 0..10 {
+        ran += app
+            .clock
+            .advance(Duration::from_millis(100), || drop(world.step()), || false);
+    }
+    assert!(ran > 0 && world.tick() > before, "time goes on");
+    app.apply(Action::TogglePause, &world);
+    assert!(app.clock.is_paused(), "space still pauses");
+    app.apply(Action::Back, &world);
+    let mut terminal = Terminal::new(TestBackend::new(small.width, small.height)).unwrap();
+    terminal
+        .draw(|frame| ui::render(frame, &app, &world))
+        .unwrap();
+    let screen = lines(terminal.backend().buffer());
+    assert!(
+        screen.iter().any(|line| line.trim() == "Quit? (y/n)"),
+        "the quit prompt shows: {screen:?}"
+    );
+    assert_eq!(app.apply(Action::Confirm, &world), Flow::Quit);
 }
 
 /// The built-in pack's files with `file` replaced by `text`.
@@ -1065,11 +1128,13 @@ fn a_lesson_words_an_object_type_as_it_names_itself() {
 }
 
 #[test]
-fn a_screen_under_30_rows_has_no_event_log() {
+fn a_100_by_30_screen_has_every_panel() {
     let world = garden(pack());
-    let app = app_for(&world, Theme::cp437(), 100, 29);
-    let screen = lines(&render(&app, &world, 100, 29));
-    assert!(screen.iter().all(|line| !line.contains("Events")));
+    let app = app_for(&world, Theme::cp437(), 100, 30);
+    let screen = lines(&render(&app, &world, 100, 30));
+    assert!(screen[0].starts_with(" Terra Sprites"));
+    assert!(screen[1].contains("Map") && screen[1].contains("World"));
+    assert!(screen[24].contains("Events"));
 }
 
 /// Presses `]` until `tab` is open.

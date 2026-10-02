@@ -579,3 +579,21 @@ fn the_place_menu_and_naming_keys_have_their_actions() {
         );
     }
 }
+
+#[test]
+fn b_t_m_l_and_question_mark_act_once_per_press() {
+    // Design §6.1, §6.3: holding one doesn't flicker it.
+    let keys = [
+        ('b', Action::CycleColours),
+        ('t', Action::Track),
+        ('m', Action::CycleEventFilter),
+        ('l', Action::SpriteList),
+        ('?', Action::Help),
+    ];
+    for (code, action) in keys {
+        let mut keys = Keys::with_release_reporting(true);
+        assert_eq!(keys.action_for(press(KeyCode::Char(code))), Some(action));
+        let repeat = kind(KeyCode::Char(code), KeyEventKind::Repeat);
+        assert_eq!(keys.action_for(repeat), None, "{code} held");
+    }
+}

@@ -264,3 +264,26 @@ fn the_aim_line_is_yellow_dots_ending_in_a_small_circle_or_semicolons_and_an_o()
         assert_eq!(theme.aim_end().fg, Color::Yellow);
     }
 }
+
+#[test]
+fn each_theme_colours_every_drive_of_the_built_in_pack_as_the_design_table_says() {
+    // Design §6.3.
+    let expected = [
+        ("hunger", Color::Yellow),
+        ("thirst", Color::Cyan),
+        ("pain", Color::Red),
+        ("tiredness", Color::Blue),
+        ("boredom", Color::DarkGray),
+        ("loneliness", Color::Magenta),
+        ("crowdedness", Color::LightRed),
+    ];
+    let pack = pack();
+    let drives: Vec<&str> = pack.drives().collect();
+    assert_eq!(drives, expected.map(|(drive, _)| drive));
+    for (name, theme) in [("cp437", Theme::cp437()), ("ascii", Theme::ascii())] {
+        for (drive, colour) in expected {
+            assert_eq!(theme.drive_colour(drive), Some(colour), "{name} {drive}");
+        }
+        assert_eq!(theme.drive_colour("wanderlust"), None);
+    }
+}

@@ -11,6 +11,7 @@ use terra_sim::{
 };
 
 use crate::app::{App, Selection, Tab};
+use crate::policy::{Panel, Subject};
 use crate::text;
 use crate::text::{
     ROOTED, Words, cause_name, change, display_name, group_thousands, level, signed, signed_level,
@@ -40,10 +41,13 @@ pub fn title(app: &App) -> String {
         })
         .collect();
     let tabs = tabs.join(" ");
-    let labels = app.selection().map(|selection| {
-        let id = selection.id();
-        (app.names().label(id), format!("#{}", id.0))
-    });
+    // The open tab's policy decides whether the title names the sprite
+    // (design §6.4).
+    let labels = app
+        .selection()
+        .map(|selection| selection.id())
+        .filter(|&id| app.can_view(Panel::Tab(app.tab()), Subject::Sprite(id)))
+        .map(|id| (app.names().label(id), format!("#{}", id.0)));
     fitted_title(
         labels
             .as_ref()
@@ -70,6 +74,16 @@ fn fitted_title(labels: Option<(&str, &str)>, tabs: &str) -> String {
 
 /// The open tab's lines, from the top.
 pub fn lines(app: &App, world: &World) -> Vec<Line<'static>> {
+    // The policy may hide a tab (design §6.4).
+    let subject = match (app.tab(), app.selection()) {
+        (Tab::World, _) | (_, None) => Subject::World,
+        (_, Some(selection)) => Subject::Sprite(selection.id()),
+    };
+    // Saying how to select a sprite tells nothing about the world.
+    let hint = app.tab() != Tab::World && app.selection().is_none();
+    if !hint && !app.can_view(Panel::Tab(app.tab()), subject) {
+        return Vec::new();
+    }
     match (app.tab(), app.selection()) {
         (Tab::World, _) => world_tab(world),
         (_, None) => vec![Line::from(NOTHING_SELECTED)],
@@ -116,14 +130,7 @@ fn sprite_tab(tab: Tab, sprite: &SpriteView, app: &App, world: &World) -> Vec<Li
 /// player has observed it do.
 fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
     let traits = sprite.traits();
-    let handled =
-        slide_line(sprite, app.detail()).or_else(|| led_line(sprite, app.detail(), world));
-    let doing = match handled {
-        Some(line) => Some(format!(" {line}")),
-        None => sprite
-            .action()
-            .map(|action| format!(" {}", action_line(&action, app.detail(), &app.words(world)))),
-    };
+    let doing = doing_line(sprite, app, world).map(|line| format!(" {line}"));
     let mut lines: Vec<String> = doing.into_iter().collect();
     lines.extend([
         format!(
@@ -161,6 +168,19 @@ fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>>
     lines.push(String::new());
     lines.extend(observed_lines(app, world.tick()));
     lines.into_iter().map(Line::from).collect()
+}
+
+/// What `sprite` is doing, as the Body tab's first line says it (design
+/// §6.1): sliding from a shove, being led, or its action; nothing if it has
+/// no action. The sprite list's Doing column says the same.
+pub(crate) fn doing_line(sprite: &SpriteView, app: &App, world: &World) -> Option<String> {
+    slide_line(sprite, app.detail())
+        .or_else(|| led_line(sprite, app.detail(), world))
+        .or_else(|| {
+            sprite
+                .action()
+                .map(|action| action_line(&action, app.detail(), &app.words(world)))
+        })
 }
 
 /// The observed list (design §6.1), newest first: how long ago each line's
@@ -1391,6 +1411,48 @@ pub(crate) fn event_line(event: &Event, data: &Words) -> Option<String> {
         )),
         EventKind::Spawned { id, .. } => Some(format!("You made {}", data.label(*id))),
         EventKind::Renamed { id, name } => Some(format!("You named Sprite #{} {name}", id.0)),
+    }
+}
+
+/// The sprites an event is about, first the one it's mostly about: who
+/// did it, then who it was done to. Empty for an event about no sprite.
+pub(crate) fn event_sprites(event: &Event) -> Vec<EntityId> {
+    match &event.kind {
+        EventKind::Died { id, .. }
+        | EventKind::LearnedMilestone { id, .. }
+        | EventKind::Rewarded { id, .. }
+        | EventKind::Corrected { id, .. }
+        | EventKind::Spawned { id, .. }
+        | EventKind::Renamed { id, .. }
+        | EventKind::ActionStarted { id, .. } => vec![*id],
+        EventKind::ActionEnded { id, action, .. } => match action.target {
+            Some(Target::Sprite(target)) => vec![*id, target],
+            _ => vec![*id],
+        },
+        EventKind::TookHold { sprite }
+        | EventKind::LetGo { sprite }
+        | EventKind::Shoved { sprite } => vec![*sprite],
+        EventKind::Crashed { sprite, into, .. } => match into {
+            Thing::Sprite(other) => vec![*sprite, *other],
+            _ => vec![*sprite],
+        },
+        EventKind::CursorEmptied {
+            reason: Emptied::Died { sprite },
+        } => vec![*sprite],
+        EventKind::CommandRejected { command, .. } => match command {
+            Command::Reward { sprite, .. }
+            | Command::Correct { sprite, .. }
+            | Command::TakeHold { sprite }
+            | Command::Rename { sprite, .. } => vec![*sprite],
+            _ => Vec::new(),
+        },
+        EventKind::ObjectSpawned { .. }
+        | EventKind::ObjectRemoved { .. }
+        | EventKind::Placed { .. }
+        | EventKind::PickedUp { .. }
+        | EventKind::PutDown { .. }
+        | EventKind::Threw { .. }
+        | EventKind::CursorEmptied { .. } => Vec::new(),
     }
 }
 

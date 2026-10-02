@@ -7,14 +7,17 @@ use std::time::Duration;
 use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
 use terra_sim::{
-    ActionView, Command, CursorTouch, DeathCause, Dir, EntityId, Event, EventKind, Genome, Grip,
-    MAX_NAME_CHARS, Map, Pos, Target, Thing, World,
+    ActionView, ChemicalKind, ChemicalLevel, Command, CursorTouch, DeathCause, Dir, EntityId,
+    Event, EventKind, Genome, Grip, MAX_NAME_CHARS, Map, Outcome, Pos, Progress, SpriteView,
+    Target, Thing, Verb, World,
 };
 
 use crate::clock::Clock;
 use crate::cp437;
 use crate::input::{Action, Button};
 use crate::inspector;
+use crate::policy::{InfoPolicy, Omniscient, Panel, Subject};
+use crate::sprite_list::{self, SortBy};
 use crate::text::{Names, ROOTED, Words, display_name};
 use crate::theme::{Emote, Theme};
 
@@ -25,7 +28,7 @@ pub enum Flow {
     Quit,
 }
 
-/// What fills the screen besides the map (design §6.8). Help comes later.
+/// What fills the screen besides the map (design §6.8).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
     Normal,
@@ -37,6 +40,90 @@ pub enum Screen {
     GenomeMenu,
     /// The player is typing a sprite's name (design §6.5).
     Naming,
+    /// The help screen is open (design §6.1).
+    Help,
+    /// The sprite list is open (design §6.1).
+    SpriteList,
+}
+
+/// What colours sprites on the map (design §6.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColourMode {
+    /// The colour of its strongest drive above .5, or its own colour if
+    /// none is.
+    Drive,
+    /// Its own colour.
+    Plain,
+}
+
+impl ColourMode {
+    /// Every colour mode, in the order `b` goes through them.
+    pub const ALL: [ColourMode; 2] = [ColourMode::Drive, ColourMode::Plain];
+
+    /// What the status line calls it when `b` switches to it.
+    pub fn label(self) -> &'static str {
+        match self {
+            ColourMode::Drive => "strongest drive",
+            ColourMode::Plain => "plain",
+        }
+    }
+}
+
+/// How strong a drive must be to colour its sprite, and to show in the
+/// sprite list's Drive column (design §6.3).
+pub(crate) const DRIVE_SHOWS: f32 = 0.5;
+
+/// `sprite`'s strongest drive, if one is above half (design §6.3). Of two
+/// equally strong, the first in the data pack's order.
+pub(crate) fn strongest_drive<'a>(sprite: &SpriteView<'a>) -> Option<ChemicalLevel<'a>> {
+    sprite
+        .chemicals()
+        .filter(|chemical| chemical.kind == ChemicalKind::Drive && chemical.level > DRIVE_SHOWS)
+        .fold(None::<ChemicalLevel>, |best, chemical| match best {
+            Some(best) if best.level >= chemical.level => Some(best),
+            _ => Some(chemical),
+        })
+}
+
+/// Which events the event log shows (design §6.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventFilter {
+    /// Every event it logs.
+    All,
+    /// What the selected sprite did, or had done to it.
+    Selected,
+    /// Deaths, lessons learned and refusals.
+    Major,
+}
+
+impl EventFilter {
+    /// Every filter, in the order `m` goes through them.
+    pub const ALL: [EventFilter; 3] = [EventFilter::All, EventFilter::Selected, EventFilter::Major];
+
+    /// Its name on the event log's border.
+    pub fn label(self) -> &'static str {
+        match self {
+            EventFilter::All => "all",
+            EventFilter::Selected => "selected",
+            EventFilter::Major => "major",
+        }
+    }
+
+    /// The event log's border's label: every filter, the one in use in
+    /// brackets, as the inspector's title shows its tabs.
+    pub fn labels(self) -> String {
+        let labels: Vec<String> = EventFilter::ALL
+            .iter()
+            .map(|&filter| {
+                if filter == self {
+                    format!("[{}]", filter.label())
+                } else {
+                    filter.label().to_string()
+                }
+            })
+            .collect();
+        format!(" {} ", labels.join(" "))
+    }
 }
 
 /// What a Place menu item makes (design v28 §6.5).
@@ -200,6 +287,11 @@ pub struct Areas {
     pub tiles: Rect,
     /// The inspector, border included, if the screen has room for it.
     pub inspector: Option<Rect>,
+    /// The event log, border included, if the screen has room for it.
+    pub event_log: Option<Rect>,
+    /// Where the help screen and the sprite list are drawn: between the top
+    /// bar and the status line, if the screen has room for the game.
+    pub overlay: Option<Rect>,
 }
 
 /// How many lines a notch of the mouse wheel scrolls an inspector tab.
@@ -207,6 +299,47 @@ const WHEEL_LINES: i32 = 3;
 
 /// How many events the event log keeps.
 const EVENT_LOG_LENGTH: usize = 100;
+
+/// How good a tick must feel to a sprite, its `last_r`, for it to show the
+/// Pleased emote: a UI setting (design §6.3). Measured on the default world,
+/// seeds 1 to 3, about one tick in seven that felt good at all felt this good:
+/// a meal or a drink when it mattered, not small comforts.
+pub const PLEASED_AT: f32 = 0.3;
+
+/// What a frame's ticks did that the screen takes in, tick by tick: each
+/// one's events, and the sprites that felt a strong reward on it (design
+/// §6.3), which a look at the world after the last tick would miss.
+#[derive(Debug, Default)]
+pub struct Ticks(Vec<(Vec<Event>, Vec<EntityId>)>);
+
+impl Ticks {
+    /// Runs one tick of `world`, noting what the screen shows of it.
+    pub fn step(&mut self, world: &mut World) {
+        let events = world.step();
+        let pleased = world
+            .sprites()
+            .filter(|sprite| sprite.felt() >= PLEASED_AT)
+            .map(|sprite| sprite.id())
+            .collect();
+        self.0.push((events, pleased));
+    }
+}
+
+/// A sprite's rest, as the Resting emote shows it (design §6.3): since when,
+/// in `running_for`, and when it ended, once it has.
+#[derive(Debug, Clone, Copy)]
+struct Rest {
+    since: Duration,
+    ended: Option<Duration>,
+}
+
+impl Rest {
+    /// Until when its emote shows: as long as the rest lasts, and at least
+    /// as long as any emote, so a rest over in a blink at speed is seen.
+    fn until(self) -> Option<Duration> {
+        self.ended.map(|ended| ended.max(self.since + EMOTE_FOR))
+    }
+}
 
 /// The UI state. Rendering reads it; actions change it.
 pub struct App {
@@ -249,6 +382,8 @@ pub struct App {
     /// Each sprite's latest emote lately, and when, in `running_for`, it
     /// began (design §6.3).
     emotes: BTreeMap<EntityId, (Emote, Duration)>,
+    /// The rests the Resting emote shows (design §6.3).
+    resting: BTreeMap<EntityId, Rest>,
     /// The commands the player's clicks made, for the world (design §6.8).
     commands: Vec<Command>,
     /// Grab mode's commands the world hasn't applied yet, each with the
@@ -299,6 +434,27 @@ pub struct App {
     /// What the player's latest action did that the status line says, in
     /// the key hints' place, and since when: where a genome was saved.
     notice: Option<(String, Duration)>,
+    /// What the screen may show the player (design §6.4).
+    policy: Box<dyn InfoPolicy>,
+    /// What colours sprites on the map (design §6.3).
+    colour_mode: ColourMode,
+    /// Whether the view follows the selected sprite (`T`, design v21
+    /// §6.1).
+    tracking: bool,
+    /// The event log, border included, if the screen has room for it.
+    event_log_area: Option<Rect>,
+    /// Where the help screen and the sprite list are drawn.
+    overlay: Option<Rect>,
+    /// Which events the event log shows (design §6.1).
+    event_filter: EventFilter,
+    /// What the sprite list is sorted by.
+    list_sort: SortBy,
+    /// The sprite the sprite list highlights, if any; the first row's if
+    /// it's gone from the list.
+    list_choice: Option<EntityId>,
+    /// The game's folder for its files (design §6.7), which the help
+    /// screen shows, if there is one.
+    data_folder: Option<PathBuf>,
 }
 
 /// A sprite's name being typed (design §6.5).
@@ -418,6 +574,7 @@ impl App {
             detail: false,
             running_for: Duration::ZERO,
             emotes: BTreeMap::new(),
+            resting: BTreeMap::new(),
             commands: Vec::new(),
             queued: Vec::new(),
             told_tile: None,
@@ -437,6 +594,15 @@ impl App {
             naming: None,
             names_offered: 0,
             notice: None,
+            policy: Box::new(Omniscient),
+            colour_mode: ColourMode::Drive,
+            tracking: false,
+            event_log_area: areas.event_log,
+            overlay: areas.overlay,
+            event_filter: EventFilter::All,
+            list_sort: SortBy::Number,
+            list_choice: None,
+            data_folder: None,
         };
         app.centre_on(cursor);
         app
@@ -469,8 +635,10 @@ impl App {
             }
             if let EventKind::ActionEnded { id, ref action, .. } = event.kind {
                 self.note_hurt(id, action);
+                self.note_gave_up(id, action);
                 self.note_done_to_selected(event.tick, id, action, world);
             }
+            self.note_rest(&event.kind);
             if let (EventKind::Rewarded { id, .. } | EventKind::Corrected { id, .. }, Some(touch)) =
                 (&event.kind, CursorTouch::reported(&event.kind))
             {
@@ -522,6 +690,7 @@ impl App {
                 }
             }
             if let EventKind::Died { id, cause, age, .. } = event.kind {
+                self.resting.remove(&id);
                 if self.selection == Some(Selection::Living(id)) {
                     self.selection = Some(Selection::Dead { id, cause, age });
                 }
@@ -586,6 +755,7 @@ impl App {
     /// Settles the Cursor after an action or a tick: what it leads, then
     /// where it is, then telling the world if it leads a sprite.
     fn settle_cursor(&mut self, world: &World) {
+        self.track_selected(world);
         self.led = match self.grip(world) {
             Some(Grip::Leads(id)) => world.sprite(id).map(|sprite| (id, sprite.pos())),
             _ => None,
@@ -742,7 +912,72 @@ impl App {
         };
         let hurt_actor = action.hurt.actor.then_some(actor);
         for id in hurt_actor.into_iter().chain(hurt_target) {
-            self.emotes.insert(id, (Emote::Hurt, self.running_for));
+            self.start_emote(id, Emote::Hurt);
+        }
+    }
+
+    /// Starts the Failed emote on sprite `actor` if it gave its `action` up:
+    /// failed, blocked or timed out (design §6.3). An action that also hurt
+    /// it shows Hurt instead, which matters more.
+    fn note_gave_up(&mut self, actor: EntityId, action: &ActionView) {
+        let gave_up = matches!(
+            action.progress,
+            Progress::Ended(Outcome::Failed | Outcome::Blocked | Outcome::TimedOut)
+        );
+        if gave_up && !action.hurt.actor {
+            self.start_emote(actor, Emote::Failed);
+        }
+    }
+
+    /// Notes a rest starting or ending, for the Resting emote (design §6.3).
+    fn note_rest(&mut self, event: &EventKind) {
+        let now = self.running_for;
+        match *event {
+            EventKind::ActionStarted {
+                id,
+                verb: Verb::Rest,
+            } => {
+                self.resting.insert(
+                    id,
+                    Rest {
+                        since: now,
+                        ended: None,
+                    },
+                );
+            }
+            EventKind::ActionEnded {
+                id,
+                verb: Verb::Rest,
+                ..
+            } => {
+                if let Some(rest) = self.resting.get_mut(&id) {
+                    rest.ended.get_or_insert(now);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Starts `emote` on sprite `id` now: the newest emote wins (design
+    /// §6.3).
+    fn start_emote(&mut self, id: EntityId, emote: Emote) {
+        self.emotes.insert(id, (emote, self.running_for));
+    }
+
+    /// Takes in what a frame's ticks did: their events, as `record` does,
+    /// and the Pleased emote on each sprite that felt a strong reward
+    /// (design §6.3). One already showing Pleased carries on, rather than
+    /// starting again each tick a reward lasts.
+    pub fn take_in(&mut self, ticks: Ticks, world: &World) {
+        // Tick by tick, so of two emotes in one frame the later tick's wins.
+        for (events, pleased) in ticks.0 {
+            self.record(&events, world);
+            for id in pleased {
+                let showing = matches!(self.emotes.get(&id), Some(&(Emote::Pleased, at)) if self.shows(at, EMOTE_FOR));
+                if !showing {
+                    self.start_emote(id, Emote::Pleased);
+                }
+            }
         }
     }
 
@@ -757,7 +992,7 @@ impl App {
             CursorTouch::Zap => (Emote::Shocked, "a zap"),
             CursorTouch::Shock => (Emote::Shocked, "a jolt"),
         };
-        self.emotes.insert(id, (emote, self.running_for));
+        self.start_emote(id, emote);
         if self.selection == Some(Selection::Living(id)) {
             let from = whence(world, "from");
             self.observe(tick, format!("Felt {line} {from}"));
@@ -787,13 +1022,22 @@ impl App {
         }
     }
 
-    /// The emote sprite `id` shows now, if any: the Hurt emote, taking
-    /// turns with the sprite for a second after it's hurt (design §6.3).
+    /// The emote sprite `id` shows now, if any, taking turns with the
+    /// sprite (design §6.3): the newest for a second after what set it off,
+    /// or else Resting, for as long as it rests.
     pub fn emote(&self, id: EntityId) -> Option<Emote> {
-        let &(emote, at) = self.emotes.get(&id)?;
-        let since = self.running_for.checked_sub(at)?;
-        let showing = (since.as_millis() / EMOTE_HALF.as_millis()).is_multiple_of(2);
-        (since < EMOTE_FOR && showing).then_some(emote)
+        let flashing = |at: Duration| {
+            let since = self.running_for.saturating_sub(at);
+            (since.as_millis() / EMOTE_HALF.as_millis()).is_multiple_of(2)
+        };
+        if let Some(&(emote, at)) = self.emotes.get(&id)
+            && self.shows(at, EMOTE_FOR)
+        {
+            return flashing(at).then_some(emote);
+        }
+        let rest = self.resting.get(&id)?;
+        let resting = rest.until().is_none_or(|until| self.running_for < until);
+        (resting && flashing(rest.since)).then_some(Emote::Resting)
     }
 
     /// Puts `line`, finished on `tick`, on the front of the observed list.
@@ -892,9 +1136,40 @@ impl App {
     }
 
     /// The events the event log shows, newest first, each the latest of
-    /// the same event in a row, with how many there were.
+    /// the same event in a row, with how many there were: those the filter
+    /// lets through (design §6.1).
     pub fn event_log(&self) -> impl Iterator<Item = (&Event, u32)> {
-        self.event_log.iter().map(|(event, count)| (event, *count))
+        self.event_log
+            .iter()
+            .filter(|(event, _)| self.filter_shows(event))
+            .map(|(event, count)| (event, *count))
+    }
+
+    /// Whether the event filter lets `event` through (design §6.1).
+    fn filter_shows(&self, event: &Event) -> bool {
+        match self.event_filter {
+            EventFilter::All => true,
+            EventFilter::Selected => self
+                .selection
+                .is_some_and(|selected| inspector::event_sprites(event).contains(&selected.id())),
+            EventFilter::Major => matches!(
+                event.kind,
+                EventKind::Died { .. }
+                    | EventKind::LearnedMilestone { .. }
+                    | EventKind::CommandRejected { .. }
+            ),
+        }
+    }
+
+    /// Which events the event log shows (design §6.1).
+    pub fn event_filter(&self) -> EventFilter {
+        self.event_filter
+    }
+
+    /// Where the event log's border shows the filters, if it's drawn.
+    pub fn filter_label(&self) -> Option<Rect> {
+        let area = self.event_log_area?;
+        crate::ui::top_right(area, self.event_filter.labels().chars().count() as u16)
     }
 
     /// Moves the app's real-time clock on by `elapsed`, for what flashes.
@@ -902,11 +1177,28 @@ impl App {
         self.running_for += elapsed;
         let now = self.running_for;
         self.emotes.retain(|_, &mut (_, at)| now - at < EMOTE_FOR);
+        self.resting
+            .retain(|_, rest| rest.until().is_none_or(|until| now < until));
     }
 
     /// Whether the Decision marker is in its "on" half just now.
     pub fn flash_on(&self) -> bool {
         (self.running_for.as_millis() / FLASH_HALF.as_millis()).is_multiple_of(2)
+    }
+
+    /// Sets what the screen may show the player (design §6.4).
+    pub fn set_policy(&mut self, policy: impl InfoPolicy + 'static) {
+        self.policy = Box::new(policy);
+    }
+
+    /// Whether `panel` may show what it knows about `subject` (design §6.4).
+    pub fn can_view(&self, panel: Panel, subject: Subject) -> bool {
+        self.policy.can_view(panel, subject)
+    }
+
+    /// What colours sprites on the map (design §6.3).
+    pub fn colour_mode(&self) -> ColourMode {
+        self.colour_mode
     }
 
     /// Whether the detail view is on: the exact workings behind what the
@@ -993,6 +1285,8 @@ impl App {
     pub fn fit(&mut self, areas: Areas) {
         self.tile_area = areas.tiles;
         self.inspector = areas.inspector;
+        self.event_log_area = areas.event_log;
+        self.overlay = areas.overlay;
         self.settle();
     }
 
@@ -1001,6 +1295,8 @@ impl App {
         match self.screen {
             Screen::PlaceMenu | Screen::GenomeMenu => return self.apply_in_menu(action, world),
             Screen::Naming => return self.apply_naming(action, world),
+            Screen::Help => return self.apply_in_help(action),
+            Screen::SpriteList => return self.apply_in_list(action, world),
             Screen::Normal | Screen::QuitPrompt => {}
         }
         if self.screen == Screen::QuitPrompt {
@@ -1028,8 +1324,21 @@ impl App {
             Action::Faster { held: true } => self.clock.faster_held(),
             Action::Slower { held: false } => self.clock.slower(),
             Action::Slower { held: true } => self.clock.slower_held(),
-            Action::Scroll { dx, dy } => self.scroll(dx, dy),
+            // Scrolling by hand takes the view back from Track.
+            Action::Scroll { dx, dy } => {
+                self.tracking = false;
+                self.scroll(dx, dy);
+            }
             Action::Point(cell) => self.point(cell),
+            // A click on the event log's filters goes to the next (design
+            // §6.1).
+            Action::Click {
+                at,
+                button: Button::Left,
+                ..
+            } if self.filter_label().is_some_and(|label| label.contains(at)) => {
+                self.next_filter();
+            }
             Action::Click {
                 at,
                 button,
@@ -1090,6 +1399,20 @@ impl App {
                 }
             }
             Action::ToggleDetail => self.detail = !self.detail,
+            Action::Track => self.toggle_tracking(world),
+            Action::CycleEventFilter => self.next_filter(),
+            Action::Help => {
+                self.end_aim();
+                self.screen = Screen::Help;
+            }
+            Action::SpriteList => {
+                self.end_aim();
+                self.open_list(world);
+            }
+            Action::CycleColours => {
+                self.colour_mode = along(&ColourMode::ALL, self.colour_mode, 1);
+                self.tell_player(format!("Colours: {}", self.colour_mode.label()));
+            }
             Action::ToggleVisible => {
                 if !self.visible_in.remove(&self.mode) {
                     self.visible_in.insert(self.mode);
@@ -1377,6 +1700,144 @@ impl App {
     pub fn notice(&self) -> Option<&str> {
         let (what, from) = self.notice.as_ref()?;
         self.shows(*from, REFUSAL_FOR).then_some(what.as_str())
+    }
+
+    /// What an action does while the help screen is open: `?` or `Esc`
+    /// closes it, and the mouse still points.
+    fn apply_in_help(&mut self, action: Action) -> Flow {
+        match action {
+            Action::Help | Action::Back => self.screen = Screen::Normal,
+            Action::Quit => return Flow::Quit,
+            Action::Point(cell) => self.point(cell),
+            _ => {}
+        }
+        Flow::Continue
+    }
+
+    /// Opens the sprite list, highlighting the selected sprite if it's
+    /// listed, or else the first.
+    fn open_list(&mut self, world: &World) {
+        self.screen = Screen::SpriteList;
+        let listed = sprite_list::order(self, world);
+        self.list_choice = self
+            .selection
+            .map(Selection::id)
+            .filter(|id| listed.contains(id))
+            .or_else(|| listed.first().copied());
+    }
+
+    /// What an action does while the sprite list is open (design §6.1): the
+    /// arrow keys or the wheel move the highlight, `Tab` changes the order,
+    /// `Enter` or a click on a row goes to that sprite, and `l` or `Esc`
+    /// closes the list.
+    fn apply_in_list(&mut self, action: Action, world: &World) -> Flow {
+        let ids = sprite_list::order(self, world);
+        let choice = self.list_row(world) as i32;
+        let moved = |by: i32| {
+            let last = ids.len().max(1) as i32 - 1;
+            ids.get((choice + by).clamp(0, last) as usize).copied()
+        };
+        match action {
+            Action::Scroll { dy, .. } => self.list_choice = moved(dy.signum()),
+            Action::Wheel { at, notches } => {
+                self.point(at);
+                self.list_choice = moved(notches);
+            }
+            Action::SelectNext => self.list_sort = along(&SortBy::ALL, self.list_sort, 1),
+            Action::SelectPrevious => self.list_sort = along(&SortBy::ALL, self.list_sort, -1),
+            Action::Enter => {
+                if let Some(&id) = ids.get(self.list_row(world)) {
+                    self.go_to(id, world);
+                }
+            }
+            Action::Click {
+                at,
+                button: Button::Left,
+                ..
+            } => {
+                self.point(at);
+                let row = self.list_row_at(at);
+                if let Some(&id) = row.and_then(|row| ids.get(self.list_first(world) + row)) {
+                    self.go_to(id, world);
+                }
+            }
+            Action::Point(cell) => self.point(cell),
+            Action::SpriteList | Action::Back => self.screen = Screen::Normal,
+            Action::Quit => return Flow::Quit,
+            _ => {}
+        }
+        Flow::Continue
+    }
+
+    /// Selects sprite `id`, centres the view on it and closes the sprite
+    /// list.
+    fn go_to(&mut self, id: EntityId, world: &World) {
+        self.screen = Screen::Normal;
+        self.select(id);
+        if let Some(sprite) = world.sprite(id) {
+            self.centre_on(sprite.pos());
+        }
+        self.settle_cursor(world);
+    }
+
+    /// Which of the sprite list's rows `at` is on, from 0 for the first
+    /// shown, if it's on one.
+    fn list_row_at(&self, at: Position) -> Option<usize> {
+        let inner = self.overlay?.inner(Margin::new(1, 1));
+        // The heading takes the first row.
+        let rows = Rect::new(
+            inner.x,
+            inner.y + 1,
+            inner.width,
+            inner.height.saturating_sub(1),
+        );
+        rows.contains(at).then(|| usize::from(at.y - rows.y))
+    }
+
+    /// What the sprite list is sorted by.
+    pub fn list_sort(&self) -> SortBy {
+        self.list_sort
+    }
+
+    /// Which row of the sprite list is highlighted, from 0, in its current
+    /// order.
+    pub fn list_row(&self, world: &World) -> usize {
+        let ids = sprite_list::order(self, world);
+        self.list_choice
+            .and_then(|chosen| ids.iter().position(|&id| id == chosen))
+            .unwrap_or(0)
+    }
+
+    /// How many sprites the sprite list shows at once: the rows inside its
+    /// border, less the heading.
+    pub fn list_rows(&self) -> usize {
+        self.overlay.map_or(0, |area| {
+            usize::from(area.inner(Margin::new(1, 1)).height.saturating_sub(1))
+        })
+    }
+
+    /// The first row the sprite list shows: it scrolls so the highlighted
+    /// sprite stays in view.
+    pub fn list_first(&self, world: &World) -> usize {
+        self.list_row(world)
+            .saturating_sub(self.list_rows().max(1) - 1)
+    }
+
+    /// Sets the game's folder for its files (design §6.7), which the help
+    /// screen shows.
+    pub fn set_data_folder(&mut self, folder: PathBuf) {
+        self.data_folder = Some(folder);
+    }
+
+    /// The game's folder for its files, if there is one.
+    pub fn data_folder(&self) -> Option<&Path> {
+        self.data_folder.as_deref()
+    }
+
+    /// Where the help screen and the sprite list are drawn, if the screen
+    /// has room for the game.
+    pub fn overlay(&self) -> Option<Rect> {
+        self.overlay
     }
 
     /// Sets where genome files are saved and read from (design §6.7).
@@ -1728,6 +2189,43 @@ impl App {
                 self.tell_player(format!("Saved {label}'s genome to {}", path.display()));
             }
             Err(err) => self.refuse(format!("Couldn't save the genome: {err}")),
+        }
+    }
+
+    /// Switches the event log to the next filter (design §6.1).
+    fn next_filter(&mut self) {
+        self.event_filter = along(&EventFilter::ALL, self.event_filter, 1);
+    }
+
+    /// `T`: the view follows the selected sprite, or stops (design v21
+    /// §6.1). With none selected, it's refused.
+    fn toggle_tracking(&mut self, world: &World) {
+        if self.tracking {
+            self.tracking = false;
+            return self.tell_player("Stopped tracking".into());
+        }
+        let Some(Selection::Living(id)) = self.selection else {
+            return self.refuse("Select a sprite to track it".into());
+        };
+        self.tracking = true;
+        self.tell_player(format!("Tracking {}", self.names.label(id)));
+        self.track_selected(world);
+    }
+
+    /// Whether the view follows the selected sprite (design v21 §6.1).
+    pub fn tracking(&self) -> bool {
+        self.tracking
+    }
+
+    /// While tracking, centres the view on the selected sprite, as far as
+    /// the wall allows.
+    fn track_selected(&mut self, world: &World) {
+        let tracked = match self.selection {
+            Some(Selection::Living(id)) if self.tracking => world.sprite(id),
+            _ => None,
+        };
+        if let Some(sprite) = tracked {
+            self.centre_on(sprite.pos());
         }
     }
 
