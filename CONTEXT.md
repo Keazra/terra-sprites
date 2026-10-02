@@ -415,7 +415,7 @@ The player's hard-light projection into the terrarium: to the sprites the player
 _Avoid_: hand, orb, selection (the selection is the chosen sprite)
 
 **Pointer**:
-Where the mouse is on screen. The Cursor follows it over the map view, unless it follows a sprite.
+Where the mouse is on screen. The Cursor follows it over the map view, unless it follows a sprite, sitting one tile up and one left of it so the pointer's arrow doesn't hide it: that tile is the one the pointer **points at**, and what a click acts on.
 _Avoid_: mouse cursor
 
 **Cursor mode**:

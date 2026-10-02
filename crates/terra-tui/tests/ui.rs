@@ -65,6 +65,13 @@ fn before_hints(status: &str) -> &str {
     status.split("  ").next().expect("a status line")
 }
 
+/// The screen cell the pointer is on to point at tile (x, y), in a map view
+/// drawn from cell (1, 2) and not scrolled: one down and right of the tile
+/// (design v27 §6.5).
+fn pointer_on(x: u16, y: u16) -> Position {
+    Position::new(2 + x, 3 + y)
+}
+
 /// Renders one frame of the default world and returns the top line as text.
 fn top_bar(app: &App) -> String {
     let world = generated_world();
@@ -238,7 +245,7 @@ fn following_the_cursor_s_arrows_are_solid() {
     // arrows; its status line says the Cursor follows it. Following doesn't
     // select it (design v26 §6.5), so it's drawn as any sprite is.
     let world = garden_with_sprites();
-    let on_it = Position::new(1 + 2, 2 + 3);
+    let on_it = pointer_on(2, 3);
     for (theme, expected) in [
         (Theme::cp437(), [".♦▼·......", ".►☺◄..○...", ".·▲♦......"]),
         (Theme::ascii(), [".Sv-......", ".>@<..o...", ".-^S......"]),
@@ -258,7 +265,7 @@ fn the_status_marks_show_what_the_cursor_reports() {
     // Design v21 §6.5: a Train click flashes `+` in both status marks, top
     // right and bottom left, in the mode's colour.
     let world = garden_with_sprites();
-    let on_it = Position::new(1 + 2, 2 + 3);
+    let on_it = pointer_on(2, 3);
     let mut app = app_for(&world, Theme::cp437(), 40, 10);
     app.apply(Action::Mode(CursorMode::Train), &world);
     app.apply(Action::left_click(on_it), &world);
@@ -283,26 +290,30 @@ fn in_grab_mode_the_status_marks_show_what_the_cursor_has_hold_of() {
             screen[cell].symbol().to_string()
         })
     };
-    let (sprite, ball) = (Position::new(1 + 2, 2 + 3), Position::new(1 + 6, 2 + 3));
+    let (sprite, ball) = (pointer_on(2, 3), pointer_on(6, 3));
     for (on, glyph) in [(sprite, "☺"), (ball, "○")] {
         let mut app = app_for(&world, Theme::cp437(), 40, 10);
         app.apply(Action::Mode(CursorMode::Grab), &world);
         app.apply(Action::Point(on), &world);
-        assert_eq!(marks(&app, (on.x, on.y)), ["↑", "░"], "empty");
+        // The Cursor's centre is up and left of the pointer.
+        let centre = (on.x - 1, on.y - 1);
+        assert_eq!(marks(&app, centre), ["↑", "░"], "empty");
         app.apply(Action::left_click(on), &world);
-        assert_eq!(marks(&app, (on.x, on.y)), ["↓", glyph], "a grab queued");
+        assert_eq!(marks(&app, centre), ["↓", glyph], "a grab queued");
     }
 }
 
 #[test]
 fn a_grab_click_with_nothing_to_act_on_flashes_a_question_mark() {
     let world = garden_with_sprites();
-    let empty = Position::new(1 + 4, 2 + 3);
+    let empty = pointer_on(4, 3);
     let mut app = app_for(&world, Theme::cp437(), 40, 10);
     app.apply(Action::Mode(CursorMode::Grab), &world);
     app.apply(Action::left_click(empty), &world);
     let screen = render(&app, &world, 40, 10);
-    for cell in [(empty.x + 1, empty.y - 1), (empty.x - 1, empty.y + 1)] {
+    // The Cursor's centre is up and left of the pointer.
+    let centre = (empty.x - 1, empty.y - 1);
+    for cell in [(centre.0 + 1, centre.1 - 1), (centre.0 - 1, centre.1 + 1)] {
         assert_eq!(screen[cell].symbol(), "?", "{cell:?}");
     }
 }
@@ -322,8 +333,8 @@ fn a_flashing_dotted_leash_runs_from_the_cursor_to_the_led_sprite_over_empty_gro
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let mut app = app_for(&world, Theme::cp437(), 40, 10);
     app.apply(Action::Mode(CursorMode::Grab), &world);
-    app.apply(Action::left_click(Position::new(1 + 1, 2 + 2)), &world);
-    app.apply(Action::Point(Position::new(1 + 6, 2 + 2)), &world);
+    app.apply(Action::left_click(pointer_on(1, 2)), &world);
+    app.apply(Action::Point(pointer_on(6, 2)), &world);
     let row = |app: &App| -> String {
         lines(&render(app, &world, 40, 10))[4]
             .chars()
@@ -419,7 +430,7 @@ fn a_cursor_whose_target_is_out_of_view_is_not_drawn_at_all() {
     let mut app = app_for(&world, Theme::cp437(), 20, 8);
     // Put the cursor on the view's rightmost column, (23, 10), then move the
     // pointer off the map and scroll left, so the cursor's tile leaves the view.
-    app.apply(Action::Point(Position::new(18, 4)), &world);
+    app.apply(Action::Point(Position::new(19, 5)), &world);
     assert_eq!(app.cursor(), terra_sim::Pos { x: 23, y: 10 });
     app.apply(Action::Point(Position::new(0, 4)), &world);
     app.apply(Action::Scroll { dx: -1, dy: 0 }, &world);
@@ -449,7 +460,7 @@ fn the_status_line_names_the_terrain_under_the_cursor() {
     for ((x, y), expected) in cases {
         let mut app = app_for(&world, Theme::cp437(), 40, 8);
         // Tiles are drawn from screen cell (1, 2).
-        app.apply(Action::Point(Position::new(1 + x, 2 + y)), &world);
+        app.apply(Action::Point(pointer_on(x, y)), &world);
         assert_eq!(
             before_hints(&lines(&render(&app, &world, 40, 8))[7]),
             expected
@@ -557,16 +568,16 @@ fn sprites_are_drawn_with_their_theme_glyph_over_any_item() {
 fn the_selected_sprite_is_drawn_with_its_own_glyph() {
     let world = garden_with_sprites();
     let mut cp437 = pointing_at(&world, Theme::cp437(), 40, 9, 7, 1);
-    cp437.apply(Action::left_click(Position::new(1 + 7, 2 + 1)), &world);
-    cp437.apply(Action::Point(Position::new(1, 2 + 4)), &world); // the cursor out of the way
+    cp437.apply(Action::left_click(pointer_on(7, 1)), &world);
+    cp437.apply(Action::Point(pointer_on(0, 4)), &world); // the cursor out of the way
     let screen = render(&cp437, &world, 40, 9);
     assert_eq!(lines(&screen)[3], "║.'..♠..☻..║", "the selected sprite");
     assert_eq!(screen[(3, 5)].symbol(), "☺", "the other sprite");
 
     // In ascii, `&` is already the berry bush, so the selected sprite is `@` in reverse video.
     let mut ascii = pointing_at(&world, Theme::ascii(), 40, 9, 7, 1);
-    ascii.apply(Action::left_click(Position::new(1 + 7, 2 + 1)), &world);
-    ascii.apply(Action::Point(Position::new(1, 2 + 4)), &world);
+    ascii.apply(Action::left_click(pointer_on(7, 1)), &world);
+    ascii.apply(Action::Point(pointer_on(0, 4)), &world);
     let screen = render(&ascii, &world, 40, 9);
     assert_eq!(screen[(8, 3)].symbol(), "@");
     assert!(screen[(8, 3)].modifier.contains(Modifier::REVERSED));
@@ -577,7 +588,7 @@ fn the_selected_sprite_is_drawn_with_its_own_glyph() {
 /// whose tiles are drawn from screen cell (1, 2).
 fn pointing_at(world: &World, theme: Theme, width: u16, height: u16, x: u16, y: u16) -> App {
     let mut app = app_for(world, theme, width, height);
-    app.apply(Action::Point(Position::new(1 + x, 2 + y)), world);
+    app.apply(Action::Point(pointer_on(x, y)), world);
     app
 }
 
@@ -1883,7 +1894,7 @@ fn the_wheel_over_the_inspector_scrolls_3_lines_a_notch_and_elsewhere_does_not()
     assert_eq!(app.mode(), CursorMode::Select, "the mode stays");
     app.apply(
         Action::Wheel {
-            at: Position::new(3, 3),
+            at: Position::new(4, 4),
             notches: 2,
         },
         &world,
@@ -1934,8 +1945,8 @@ fn selecting_another_sprite_starts_its_tab_from_the_top_and_the_same_one_again_d
     app.apply(Action::SelectNext, &world);
     open(&mut app, &world, Tab::Genome);
     app.apply(Action::ScrollTab { pages: 1 }, &world);
-    // The first sprite is at (2, 3), drawn at cell (3, 5).
-    app.apply(Action::left_click(Position::new(3, 5)), &world);
+    // The first sprite is at (2, 3).
+    app.apply(Action::left_click(pointer_on(2, 3)), &world);
     assert_eq!(
         first_and_last(&app, &world).0,
         "always → boredom +.021",
@@ -2110,8 +2121,8 @@ fn selecting_the_selected_sprite_from_a_scrolled_world_tab_opens_body_at_the_top
     app.apply(Action::SelectNext, &world);
     app.apply(Action::PreviousTab, &world);
     app.apply(Action::ScrollTab { pages: 1 }, &world);
-    // The first sprite is at (2, 3), drawn at cell (3, 5).
-    app.apply(Action::left_click(Position::new(3, 5)), &world);
+    // The first sprite is at (2, 3).
+    app.apply(Action::left_click(pointer_on(2, 3)), &world);
     let rows = right_part(&render(&app, &world, 100, 12), 46);
     assert!(rows[1].contains("[Body]"), "{:?}", rows[1]);
     assert!(inside(&rows[2]).starts_with("age "), "{:?}", rows[2]);
@@ -2394,7 +2405,7 @@ fn the_status_line_names_train_mode_and_what_the_cursor_follows() {
     let world = garden_with_sprites();
     let id = world.sprite_at(Pos { x: 2, y: 3 }).expect("a sprite").id();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    let on_it = Position::new(1 + 2, 2 + 3);
+    let on_it = pointer_on(2, 3);
     app.apply(Action::left_click(on_it), &world);
     app.apply(Action::middle_click(on_it), &world);
     app.apply(Action::Mode(CursorMode::Train), &world);
@@ -2416,10 +2427,10 @@ fn the_status_line_says_what_the_cursor_holds_or_leads_in_every_mode() {
         .id();
     let cases = [
         (
-            Position::new(1 + 2, 2 + 3),
+            pointer_on(2, 3),
             format!(" │ leading: Sprite #{}", sprite.0),
         ),
-        (Position::new(1 + 6, 2 + 3), " │ holding: ball".to_string()),
+        (pointer_on(6, 3), " │ holding: ball".to_string()),
     ];
     for (on, says) in cases {
         let mut app = app_for(&world, Theme::cp437(), 100, 30);
@@ -2456,7 +2467,7 @@ fn short_of_room_whole_key_hints_drop_from_the_end() {
     // follows it, the mode keys and the first hints after them still show.
     let world = garden_with_sprites();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    let on_it = Position::new(1 + 2, 2 + 3);
+    let on_it = pointer_on(2, 3);
     app.apply(Action::middle_click(on_it), &world);
     app.apply(Action::Mode(CursorMode::Train), &world);
     let status = status_line(&app, &world);
@@ -2473,7 +2484,7 @@ fn a_train_click_with_nothing_to_act_on_says_so_in_the_hints_place_for_3_seconds
     let world = drawn_world(&SMALL_MAP);
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::Mode(CursorMode::Train), &world);
-    let empty = Position::new(1 + 1, 2 + 1);
+    let empty = pointer_on(1, 1);
     for (button, amplified, expected) in [
         (Button::Left, false, "No sprite here to pet"),
         (Button::Left, true, "No sprite here to hug"),
@@ -2812,7 +2823,7 @@ fn a_refusal_shows_even_when_the_status_line_is_crowded() {
     // is too full for the reason, so what's under the Cursor is cut short.
     let world = garden_with_sprites();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    let on_it = Position::new(1 + 7, 2 + 1);
+    let on_it = pointer_on(7, 1);
     app.apply(Action::middle_click(on_it), &world);
     app.record(&[touched(1, "refused pet")], &world);
     let status = status_line(&app, &world);
@@ -2839,10 +2850,7 @@ fn holding_world(objects: &[(Pos, &str)], held: Pos) -> (World, App) {
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let mut app = app_for(&world, Theme::cp437(), 60, 12);
     app.apply(Action::Mode(CursorMode::Grab), &world);
-    app.apply(
-        Action::left_click(Position::new(held.x + 1, held.y + 2)),
-        &world,
-    );
+    app.apply(Action::left_click(pointer_on(held.x, held.y)), &world);
     for command in app.take_commands() {
         world.submit(command);
     }
@@ -2861,8 +2869,8 @@ fn a_steady_aim_line_runs_the_way_the_thing_will_go_as_far_as_it_can_over_empty_
         &[(Pos { x: 12, y: 2 }, "ball"), (Pos { x: 8, y: 2 }, "berry")],
         Pos { x: 12, y: 2 },
     );
-    app.apply(Action::right_click(Position::new(12 + 1, 2 + 2)), &world);
-    app.apply(Action::Point(Position::new(19 + 1, 2 + 2)), &world);
+    app.apply(Action::right_click(pointer_on(12, 2)), &world);
+    app.apply(Action::Point(pointer_on(19, 2)), &world);
     let row = |app: &App| -> String {
         lines(&render(app, &world, 60, 12))[2 + 2]
             .chars()
@@ -2890,7 +2898,7 @@ fn while_aiming_a_held_item_it_is_drawn_under_the_cursor_where_it_will_be_thrown
         )
     };
     assert_eq!(under_the_cursor(&app), (".".into(), true), "held");
-    app.apply(Action::right_click(Position::new(12 + 1, 2 + 2)), &world);
+    app.apply(Action::right_click(pointer_on(12, 2)), &world);
     assert_eq!(under_the_cursor(&app), ("○".into(), true), "aimed");
     app.apply(Action::Back, &world);
     assert_eq!(under_the_cursor(&app), (".".into(), true), "cancelled");
@@ -2899,7 +2907,7 @@ fn while_aiming_a_held_item_it_is_drawn_under_the_cursor_where_it_will_be_thrown
 #[test]
 fn while_aiming_the_hints_say_how_to_send_it_or_cancel() {
     let (world, mut app) = holding_world(&[(Pos { x: 12, y: 2 }, "ball")], Pos { x: 12, y: 2 });
-    app.apply(Action::right_click(Position::new(12 + 1, 2 + 2)), &world);
+    app.apply(Action::right_click(pointer_on(12, 2)), &world);
     let status = lines(&render(&app, &world, 100, 30))[29].clone();
     assert!(
         status.ends_with("let go to throw  esc cancel"),
@@ -2977,8 +2985,8 @@ fn a_short_aim_s_end_shows_even_beside_the_cursor() {
     // Design v25 §6.5: a ball pulled one tile east goes one tile west, onto
     // the Cursor's left arm; the end mark shows there, so it isn't lost.
     let (world, mut app) = holding_world(&[(Pos { x: 12, y: 2 }, "ball")], Pos { x: 12, y: 2 });
-    app.apply(Action::right_click(Position::new(12 + 1, 2 + 2)), &world);
-    app.apply(Action::Point(Position::new(13 + 1, 2 + 2)), &world);
+    app.apply(Action::right_click(pointer_on(12, 2)), &world);
+    app.apply(Action::Point(pointer_on(13, 2)), &world);
     let row: String = lines(&render(&app, &world, 60, 12))[2 + 2]
         .chars()
         .skip(1)
