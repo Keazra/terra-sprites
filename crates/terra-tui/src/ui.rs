@@ -38,7 +38,7 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
         Constraint::Length(1),
     ])
     .areas(area);
-    frame.render_widget(top_bar_line(app, world), top_bar);
+    frame.render_widget(top_bar_line(app, world, top_bar.width), top_bar);
     render_map_view(
         frame.buffer_mut(),
         map_view_area(area, world.map()),
@@ -52,6 +52,9 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
         render_event_log(frame.buffer_mut(), event_log, app, world);
     }
     render_menu(frame.buffer_mut(), area, app, world);
+    if app.screen() == Screen::Help {
+        render_help(frame.buffer_mut(), app, world);
+    }
     frame.render_widget(status_line(app, world, status.width), status);
 }
 
@@ -498,6 +501,43 @@ fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) {
     }
 }
 
+/// Draws the help screen over everything between the top bar and the
+/// status line (design §6.1).
+fn render_help(buf: &mut Buffer, app: &App, world: &World) {
+    let Some(area) = app.overlay() else {
+        return;
+    };
+    let inner = clear_box(buf, area, " Help ", " esc close ");
+    let lines = crate::help::lines(app, world, usize::from(inner.width));
+    for (row, line) in (inner.y..inner.bottom()).zip(&lines) {
+        buf.set_line(inner.x, row, line, inner.width);
+    }
+}
+
+/// Blanks `area` and draws a single-lined box round it, with `title` at
+/// the left of its top edge and `corner` at the right, as an overlay over
+/// the panels beneath. Gives the area inside the box.
+fn clear_box(buf: &mut Buffer, area: Rect, title: &str, corner: &str) -> Rect {
+    buf.set_style(area, Style::default());
+    for y in area.top()..area.bottom() {
+        for x in area.left()..area.right() {
+            buf[(x, y)].set_char(' ');
+        }
+    }
+    let walls = Sides {
+        left: false,
+        right: false,
+        top: false,
+        bottom: false,
+    };
+    draw_border(buf, area, title, walls);
+    let width = corner.chars().count() as u16;
+    if let Some(x) = area.right().checked_sub(width + 2) {
+        buf.set_stringn(x, area.y, corner, usize::from(width), Style::default());
+    }
+    area.inner(Margin::new(1, 1))
+}
+
 /// The glyph of what the Cursor has hold of, as the queue will leave it: a
 /// sprite's, or an item's, held or still on the map (design v23 §6.5); or
 /// of the Place menu item waiting on it (design v28 §6.5).
@@ -573,7 +613,9 @@ fn draw_border(buf: &mut Buffer, area: Rect, title: &str, walls: Sides) {
     buf.set_stringn(left + 2, top, title, room, Style::default());
 }
 
-fn top_bar_line(app: &App, world: &World) -> Line<'static> {
+/// The top bar (design §6.1): the tick, the speed, the seed and the
+/// population, and at the right how to open help.
+fn top_bar_line(app: &App, world: &World, width: u16) -> Line<'static> {
     let clock = &app.clock;
     // Paused, it still shows the speed: `+` and `-` change it, and it sets
     // how far `.` steps (design v27 §6.6).
@@ -593,6 +635,13 @@ fn top_bar_line(app: &App, world: &World) -> Line<'static> {
         group_thousands(world.tick()),
         app.seed,
     );
+    const HELP: &str = "? help ";
+    let gap = usize::from(width).saturating_sub(text.chars().count() + HELP.chars().count());
+    let text = if gap > 0 {
+        format!("{text}{}{HELP}", " ".repeat(gap))
+    } else {
+        text
+    };
     Line::from(text).style(Style::default().add_modifier(Modifier::REVERSED))
 }
 

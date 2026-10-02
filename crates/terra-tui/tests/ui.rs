@@ -683,6 +683,12 @@ fn the_status_line_shows_a_sprite_under_the_cursor_by_its_id() {
 }
 
 #[test]
+fn the_top_bar_ends_with_how_to_open_help() {
+    // Design §6.1.
+    assert!(top_bar(&default_app()).ends_with("     ? help"));
+}
+
+#[test]
 fn the_top_bar_leaves_object_counts_to_the_world_tab() {
     let world = garden(pack());
     let app = app_for(&world, Theme::cp437(), 100, 30);
@@ -697,9 +703,9 @@ fn the_top_bar_shows_the_population_after_the_seed() {
     let world = garden_with_sprites();
     let app = app_for(&world, Theme::cp437(), 100, 30);
     let bar = lines(&render(&app, &world, 100, 30))[0].clone();
-    assert!(bar.ends_with("│ seed 7 │ sprites 2"), "{bar}");
+    assert!(bar.contains("│ seed 7 │ sprites 2 "), "{bar}");
     assert!(
-        top_bar(&default_app()).ends_with("│ sprites 30"),
+        top_bar(&default_app()).contains("│ sprites 30 "),
         "the built-in preset's"
     );
 }

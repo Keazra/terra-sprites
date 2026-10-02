@@ -6,6 +6,7 @@ pub mod args;
 pub mod clock;
 pub mod cp437;
 pub mod files;
+mod help;
 pub mod input;
 mod inspector;
 pub mod policy;

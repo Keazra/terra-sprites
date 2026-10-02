@@ -136,6 +136,9 @@ fn run(
 ) -> io::Result<()> {
     let areas = ui::areas(terminal.size()?, world.map());
     let mut app = App::new(world.map(), theme, seed, areas);
+    if let Some(folder) = files::data_folder() {
+        app.set_data_folder(folder);
+    }
     if let Some(folder) = files::genome_folder() {
         app.set_genome_folder(folder);
     }
