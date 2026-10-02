@@ -1,6 +1,6 @@
 //! The UI state (design §6.8): everything the screen shows that isn't the world.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -8,7 +8,7 @@ use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
 use terra_sim::{
     ActionView, Command, CursorTouch, DeathCause, Dir, EntityId, Event, EventKind, Genome, Grip,
-    MAX_NAME_CHARS, Map, Pos, Target, Thing, World,
+    MAX_NAME_CHARS, Map, Outcome, Pos, Progress, Target, Thing, Verb, World,
 };
 
 use crate::clock::Clock;
@@ -232,6 +232,49 @@ const WHEEL_LINES: i32 = 3;
 /// How many events the event log keeps.
 const EVENT_LOG_LENGTH: usize = 100;
 
+/// How good a tick must feel to a sprite, its `last_r`, for it to show the
+/// Pleased emote: a UI setting (design §6.3). Measured on the default world,
+/// seeds 1 to 3, about one tick in seven that felt good at all felt this good:
+/// a meal or a drink when it mattered, not small comforts.
+pub const PLEASED_AT: f32 = 0.3;
+
+/// What a frame's ticks did that the screen takes in: their events, and the
+/// sprites that felt a strong reward on any of them (design §6.3), which a
+/// look at the world after the last tick would miss.
+#[derive(Debug, Default)]
+pub struct Ticks {
+    events: Vec<Event>,
+    pleased: BTreeSet<EntityId>,
+}
+
+impl Ticks {
+    /// Runs one tick of `world`, noting what the screen shows of it.
+    pub fn step(&mut self, world: &mut World) {
+        self.events.extend(world.step());
+        let pleased = world
+            .sprites()
+            .filter(|sprite| sprite.felt() > PLEASED_AT)
+            .map(|sprite| sprite.id());
+        self.pleased.extend(pleased);
+    }
+}
+
+/// A sprite's rest, as the Resting emote shows it (design §6.3): since when,
+/// in `running_for`, and when it ended, once it has.
+#[derive(Debug, Clone, Copy)]
+struct Rest {
+    since: Duration,
+    ended: Option<Duration>,
+}
+
+impl Rest {
+    /// Until when its emote shows: as long as the rest lasts, and at least
+    /// as long as any emote, so a rest over in a blink at speed is seen.
+    fn until(self) -> Option<Duration> {
+        self.ended.map(|ended| ended.max(self.since + EMOTE_FOR))
+    }
+}
+
 /// The UI state. Rendering reads it; actions change it.
 pub struct App {
     pub clock: Clock,
@@ -273,6 +316,8 @@ pub struct App {
     /// Each sprite's latest emote lately, and when, in `running_for`, it
     /// began (design §6.3).
     emotes: BTreeMap<EntityId, (Emote, Duration)>,
+    /// The rests the Resting emote shows (design §6.3).
+    resting: BTreeMap<EntityId, Rest>,
     /// The commands the player's clicks made, for the world (design §6.8).
     commands: Vec<Command>,
     /// Grab mode's commands the world hasn't applied yet, each with the
@@ -428,6 +473,7 @@ impl App {
             detail: false,
             running_for: Duration::ZERO,
             emotes: BTreeMap::new(),
+            resting: BTreeMap::new(),
             commands: Vec::new(),
             queued: Vec::new(),
             told_tile: None,
@@ -479,8 +525,10 @@ impl App {
             }
             if let EventKind::ActionEnded { id, ref action, .. } = event.kind {
                 self.note_hurt(id, action);
+                self.note_gave_up(id, action);
                 self.note_done_to_selected(event.tick, id, action, world);
             }
+            self.note_rest(&event.kind);
             if let (EventKind::Rewarded { id, .. } | EventKind::Corrected { id, .. }, Some(touch)) =
                 (&event.kind, CursorTouch::reported(&event.kind))
             {
@@ -530,6 +578,7 @@ impl App {
                 }
             }
             if let EventKind::Died { id, cause, age, .. } = event.kind {
+                self.resting.remove(&id);
                 if self.selection == Some(Selection::Living(id)) {
                     self.selection = Some(Selection::Dead { id, cause, age });
                 }
@@ -735,7 +784,68 @@ impl App {
         };
         let hurt_actor = action.hurt.actor.then_some(actor);
         for id in hurt_actor.into_iter().chain(hurt_target) {
-            self.emotes.insert(id, (Emote::Hurt, self.running_for));
+            self.start_emote(id, Emote::Hurt);
+        }
+    }
+
+    /// Starts the Failed emote on sprite `actor` if it gave its `action` up:
+    /// failed, blocked or timed out (design §6.3).
+    fn note_gave_up(&mut self, actor: EntityId, action: &ActionView) {
+        let gave_up = matches!(
+            action.progress,
+            Progress::Ended(Outcome::Failed | Outcome::Blocked | Outcome::TimedOut)
+        );
+        if gave_up {
+            self.start_emote(actor, Emote::Failed);
+        }
+    }
+
+    /// Notes a rest starting or ending, for the Resting emote (design §6.3).
+    fn note_rest(&mut self, event: &EventKind) {
+        let now = self.running_for;
+        match *event {
+            EventKind::ActionStarted {
+                id,
+                verb: Verb::Rest,
+            } => {
+                self.resting.insert(
+                    id,
+                    Rest {
+                        since: now,
+                        ended: None,
+                    },
+                );
+            }
+            EventKind::ActionEnded {
+                id,
+                verb: Verb::Rest,
+                ..
+            } => {
+                if let Some(rest) = self.resting.get_mut(&id) {
+                    rest.ended.get_or_insert(now);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Starts `emote` on sprite `id` now: the newest emote wins (design
+    /// §6.3).
+    fn start_emote(&mut self, id: EntityId, emote: Emote) {
+        self.emotes.insert(id, (emote, self.running_for));
+    }
+
+    /// Takes in what a frame's ticks did: their events, as `record` does,
+    /// and the Pleased emote on each sprite that felt a strong reward
+    /// (design §6.3). One already showing Pleased carries on, rather than
+    /// starting again each tick a reward lasts.
+    pub fn take_in(&mut self, ticks: Ticks, world: &World) {
+        self.record(&ticks.events, world);
+        for id in ticks.pleased {
+            let pleased = matches!(self.emotes.get(&id), Some(&(Emote::Pleased, at)) if self.shows(at, EMOTE_FOR));
+            if !pleased {
+                self.start_emote(id, Emote::Pleased);
+            }
         }
     }
 
@@ -750,7 +860,7 @@ impl App {
             CursorTouch::Zap => (Emote::Shocked, "a zap"),
             CursorTouch::Shock => (Emote::Shocked, "a jolt"),
         };
-        self.emotes.insert(id, (emote, self.running_for));
+        self.start_emote(id, emote);
         if self.selection == Some(Selection::Living(id)) {
             self.observe(tick, format!("Felt {line} out of nowhere"));
         }
@@ -779,13 +889,22 @@ impl App {
         }
     }
 
-    /// The emote sprite `id` shows now, if any: the Hurt emote, taking
-    /// turns with the sprite for a second after it's hurt (design §6.3).
+    /// The emote sprite `id` shows now, if any, taking turns with the
+    /// sprite (design §6.3): the newest for a second after what set it off,
+    /// or else Resting, for as long as it rests.
     pub fn emote(&self, id: EntityId) -> Option<Emote> {
-        let &(emote, at) = self.emotes.get(&id)?;
-        let since = self.running_for.checked_sub(at)?;
-        let showing = (since.as_millis() / EMOTE_HALF.as_millis()).is_multiple_of(2);
-        (since < EMOTE_FOR && showing).then_some(emote)
+        let flashing = |at: Duration| {
+            let since = self.running_for.saturating_sub(at);
+            (since.as_millis() / EMOTE_HALF.as_millis()).is_multiple_of(2)
+        };
+        if let Some(&(emote, at)) = self.emotes.get(&id)
+            && self.shows(at, EMOTE_FOR)
+        {
+            return flashing(at).then_some(emote);
+        }
+        let rest = self.resting.get(&id)?;
+        let resting = rest.until().is_none_or(|until| self.running_for < until);
+        (resting && flashing(rest.since)).then_some(Emote::Resting)
     }
 
     /// Puts `line`, finished on `tick`, on the front of the observed list.
@@ -894,6 +1013,8 @@ impl App {
         self.running_for += elapsed;
         let now = self.running_for;
         self.emotes.retain(|_, &mut (_, at)| now - at < EMOTE_FOR);
+        self.resting
+            .retain(|_, rest| rest.until().is_none_or(|until| now < until));
     }
 
     /// Whether the Decision marker is in its "on" half just now.
