@@ -2838,7 +2838,8 @@ fn holding_world(objects: &[(Pos, &str)], held: Pos) -> (World, App) {
 #[test]
 fn a_steady_aim_line_runs_the_way_the_thing_will_go_as_far_as_it_can_over_empty_ground() {
     // Design v25 §6.5. A ball held on (12, 2) is pulled 7 tiles east: it'll
-    // go west, but a ball goes at most 6 tiles. The berry on its way shows.
+    // go west, but a ball goes at most 6 tiles. The berry on its way shows,
+    // and the ball under the Cursor, where it'll be thrown from.
     let (world, mut app) = holding_world(
         &[(Pos { x: 12, y: 2 }, "ball"), (Pos { x: 8, y: 2 }, "berry")],
         Pos { x: 12, y: 2 },
@@ -2852,11 +2853,30 @@ fn a_steady_aim_line_runs_the_way_the_thing_will_go_as_far_as_it_can_over_empty_
             .take(20)
             .collect()
     };
-    assert_eq!(row(&app), "......°·•··→.←......");
+    assert_eq!(row(&app), "......°·•··→○←......");
     let end = &render(&app, &world, 60, 12)[(6 + 1, 2 + 2)];
     assert_eq!(end.fg, Color::Yellow);
     app.animate(Duration::from_millis(500));
-    assert_eq!(row(&app), "......°·•··→.←......", "steady");
+    assert_eq!(row(&app), "......°·•··→○←......", "steady");
+}
+
+#[test]
+fn while_aiming_a_held_item_it_is_drawn_under_the_cursor_where_it_will_be_thrown_from() {
+    // Design v25 §6.5: held in place while aimed, rather than gone from the
+    // map, and in reverse video, as the Cursor's target.
+    let (world, mut app) = holding_world(&[(Pos { x: 12, y: 2 }, "ball")], Pos { x: 12, y: 2 });
+    let under_the_cursor = |app: &App| {
+        let cell = render(app, &world, 60, 12)[(12 + 1, 2 + 2)].clone();
+        (
+            cell.symbol().to_string(),
+            cell.modifier.contains(Modifier::REVERSED),
+        )
+    };
+    assert_eq!(under_the_cursor(&app), (".".into(), true), "held");
+    app.apply(Action::right_click(Position::new(12 + 1, 2 + 2)), &world);
+    assert_eq!(under_the_cursor(&app), ("○".into(), true), "aimed");
+    app.apply(Action::Back, &world);
+    assert_eq!(under_the_cursor(&app), (".".into(), true), "cancelled");
 }
 
 #[test]
@@ -2947,5 +2967,5 @@ fn a_short_aim_s_end_shows_even_beside_the_cursor() {
         .skip(1)
         .take(20)
         .collect();
-    assert_eq!(row, "...........°.←......");
+    assert_eq!(row, "...........°○←......");
 }

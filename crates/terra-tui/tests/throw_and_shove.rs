@@ -1,6 +1,7 @@
 //! Throwing and shoving on screen (design v25 §6.5): in Grab mode the right
-//! button, or `E`, held down, aims what the Cursor has hold of by pulling
-//! back, and letting go sends it.
+//! button, or `E`, held down, aims what the Cursor has hold of, grabbing
+//! what's under it first if it's empty, by pulling back from the Cursor, and
+//! letting go sends it.
 
 use ratatui::layout::{Position, Rect};
 use terra_sim::{Command, DataPack, Dir, EntityId, Map, Pos, Scenario, ScriptedAction, World};
@@ -78,13 +79,23 @@ fn object_on(world: &World, pos: Pos) -> EntityId {
 }
 
 #[test]
-fn a_right_click_with_nothing_held_or_led_sends_nothing_and_says_so() {
-    let world = field(&[], &[]);
-    let mut app = grab_app(&world);
-    click(&mut app, &world, at(4, 2), Button::Right);
-    assert_eq!(app.take_commands(), Vec::new());
-    assert_eq!(app.status_mark(), StatusMark::Rejected);
-    assert_eq!(app.refusal(), Some("Nothing to throw or shove"));
+fn a_right_click_with_nothing_held_led_or_there_sends_nothing_and_says_so() {
+    // Design v25 §6.5: a bush is rooted to the ground.
+    let world = field(&[(at(6, 2), "thornbush")], &[]);
+    for (tile, why) in [
+        (at(4, 2), "Nothing here to throw or shove"),
+        (
+            at(6, 2),
+            "Can't throw the thornbush: it's rooted to the ground",
+        ),
+    ] {
+        let mut app = grab_app(&world);
+        click(&mut app, &world, tile, Button::Right);
+        assert_eq!(app.take_commands(), Vec::new());
+        assert_eq!(app.status_mark(), StatusMark::Rejected);
+        assert_eq!(app.refusal(), Some(why));
+        assert!(!app.aiming());
+    }
 }
 
 /// Makes the Cursor hold the item on `tile`: a click, and a tick.
@@ -151,10 +162,11 @@ fn lead(app: &mut App, world: &mut World, tile: Pos) -> EntityId {
 }
 
 #[test]
-fn a_shove_goes_the_nearest_of_the_8_directions_to_the_way_pulled() {
-    // Pulled 3 east and 1 south, a shove goes west; 2 east and 1 south is
-    // nearer north-west (design v25 §6.5).
-    for (to, toward, tiles) in [(at(9, 6), Dir::W, 3), (at(8, 6), Dir::NW, 2)] {
+fn a_shove_goes_the_nearest_of_the_8_directions_to_the_way_pulled_from_the_cursor() {
+    // Design v25 §6.5: pressed beside the led sprite, the Cursor goes onto
+    // it, and the pull is the pointer's from there. Pulled 4 east and 1
+    // south, a shove goes west; 2 east and 1 south is nearer north-west.
+    for (to, toward, tiles) in [(at(9, 6), Dir::W, 4), (at(7, 6), Dir::NW, 2)] {
         let mut world = field(&[], &[at(5, 5)]);
         let mut app = grab_app(&world);
         lead(&mut app, &mut world, at(5, 5));
@@ -268,9 +280,9 @@ fn e_aims_from_the_cursor_and_letting_it_go_or_pressing_it_again_sends() {
 }
 
 #[test]
-fn locked_on_to_a_sprite_a_throw_starts_at_its_feet() {
+fn locked_on_to_a_sprite_a_throw_starts_at_its_feet_pulled_from_there() {
     // Design v25 §6.5: locked on, the Cursor sits on its sprite, wherever
-    // the click lands.
+    // the click lands, and the pull is the pointer's from the Cursor.
     let mut world = field(&[(at(2, 2), "berry")], &[at(8, 5)]);
     let mut app = grab_app(&world);
     hold(&mut app, &mut world, at(2, 2));
@@ -284,7 +296,7 @@ fn locked_on_to_a_sprite_a_throw_starts_at_its_feet() {
     let throw = Command::Throw {
         from: at(8, 5),
         toward: Dir::W,
-        tiles: 2,
+        tiles: 6,
     };
     assert_eq!(app.take_commands(), vec![throw]);
 }
@@ -364,6 +376,159 @@ fn the_observed_list_tells_of_a_shove_out_of_nowhere_and_what_it_crashed_into() 
         seen[0].starts_with("Was shoved out of nowhere, into Sprite #"),
         "{seen:?}"
     );
+}
+
+#[test]
+fn a_right_press_on_a_sprite_with_the_cursor_empty_takes_hold_of_it_and_aims_a_shove() {
+    // Design v25 §6.5, from the owner's build check: hold the right button
+    // over a thing to grab it and aim, pull, and let go.
+    let mut world = field(&[], &[at(5, 5)]);
+    let mut app = grab_app(&world);
+    let sprite = sprite_on(&world, at(5, 5));
+    click(&mut app, &world, at(5, 5), Button::Right);
+    assert!(app.aiming());
+    point(&mut app, &world, at(3, 5));
+    let_go(&mut app, &world, at(3, 5));
+    let shove = Command::Shove {
+        toward: Dir::E,
+        tiles: 2,
+    };
+    assert_eq!(sent(&mut app), vec![Command::TakeHold { sprite }, shove]);
+    // Both apply at the next tick, and it slides a tile of the 2.
+    world.submit(Command::TakeHold { sprite });
+    world.submit(shove);
+    world.step();
+    let slide = world.sprite(sprite).and_then(|s| s.slide());
+    assert_eq!(slide, Some((Dir::E, 1)));
+}
+
+#[test]
+fn a_right_press_on_an_item_with_the_cursor_empty_picks_it_up_and_throws_it_from_there() {
+    // Design v25 §6.5. Both apply at the next tick, and the ball rolls a
+    // tile from where it lay.
+    let mut world = field(&[(at(5, 5), "ball")], &[]);
+    let mut app = grab_app(&world);
+    let ball = object_on(&world, at(5, 5));
+    click(&mut app, &world, at(5, 5), Button::Right);
+    point(&mut app, &world, at(5, 7));
+    let_go(&mut app, &world, at(5, 7));
+    let throw = Command::Throw {
+        from: at(5, 5),
+        toward: Dir::N,
+        tiles: 2,
+    };
+    assert_eq!(
+        app.take_commands(),
+        vec![Command::PickUp { item: ball }, throw]
+    );
+    world.submit(Command::PickUp { item: ball });
+    world.submit(throw);
+    world.step();
+    assert_eq!(world.object_at(at(5, 4)).map(|o| o.id()), Some(ball));
+}
+
+#[test]
+fn leading_a_right_press_puts_the_cursor_on_the_sprite_which_stands_still_while_aimed() {
+    // Design v25 §6.5: a led sprite walks towards the Cursor, so with the
+    // Cursor on it, it stands still, though it was heading for the pointer.
+    let mut world = field(&[], &[at(5, 5)]);
+    let mut app = grab_app(&world);
+    let sprite = lead(&mut app, &mut world, at(5, 5));
+    point(&mut app, &world, at(9, 5));
+    click(&mut app, &world, at(9, 5), Button::Right);
+    assert_eq!(app.cursor(), at(5, 5), "on the sprite");
+    for _ in 0..10 {
+        tick(&mut app, &mut world);
+    }
+    let still = world.sprite(sprite).map(|s| s.pos());
+    assert_eq!(still, Some(at(5, 5)), "it stood still");
+    assert_eq!(app.cursor(), at(5, 5));
+    assert!(app.aiming());
+}
+
+#[test]
+fn a_sprite_aimed_while_it_slides_slides_on_and_the_cursor_rides_along() {
+    // Design v25 §6.5: shoved 3 tiles east, it's taken hold of again a
+    // tile into its slide, and stands still where the slide ends.
+    let mut world = field(&[], &[at(5, 5)]);
+    let mut app = grab_app(&world);
+    let sprite = lead(&mut app, &mut world, at(5, 5));
+    point(&mut app, &world, at(5, 5));
+    click(&mut app, &world, at(5, 5), Button::Right);
+    point(&mut app, &world, at(2, 5));
+    let_go(&mut app, &world, at(2, 5));
+    tick(&mut app, &mut world);
+    assert_eq!(
+        world.sprite(sprite).and_then(|s| s.slide()),
+        Some((Dir::E, 2))
+    );
+    point(&mut app, &world, at(6, 5));
+    click(&mut app, &world, at(6, 5), Button::Right);
+    for _ in 0..8 {
+        tick(&mut app, &mut world);
+    }
+    let still = world.sprite(sprite).map(|s| s.pos());
+    assert_eq!(still, Some(at(8, 5)), "where its slide ended");
+    assert_eq!(app.cursor(), at(8, 5), "the Cursor rode along");
+    assert!(app.aiming());
+}
+
+#[test]
+fn holding_an_item_a_right_press_on_a_sprite_aims_the_item() {
+    // Design v25 §6.5: the press aims what the Cursor has hold of, whatever
+    // is under the pointer.
+    let mut world = field(&[(at(2, 2), "ball")], &[at(5, 5)]);
+    let mut app = grab_app(&world);
+    hold(&mut app, &mut world, at(2, 2));
+    point(&mut app, &world, at(5, 5));
+    click(&mut app, &world, at(5, 5), Button::Right);
+    point(&mut app, &world, at(5, 6));
+    let_go(&mut app, &world, at(5, 6));
+    let throw = Command::Throw {
+        from: at(5, 5),
+        toward: Dir::N,
+        tiles: 1,
+    };
+    assert_eq!(app.take_commands(), vec![throw]);
+}
+
+#[test]
+fn cancelling_an_aim_the_press_grabbed_for_leaves_it_in_the_cursor_s_grip() {
+    // Design v25 §6.5: Esc, or letting go with the pointer on the Cursor.
+    for pulled in [true, false] {
+        let mut world = field(&[], &[at(5, 5)]);
+        let mut app = grab_app(&world);
+        let sprite = sprite_on(&world, at(5, 5));
+        click(&mut app, &world, at(5, 5), Button::Right);
+        if pulled {
+            point(&mut app, &world, at(3, 5));
+            apply(&mut app, &world, Action::Back);
+        } else {
+            let_go(&mut app, &world, at(5, 5));
+        }
+        assert!(!app.aiming());
+        tick(&mut app, &mut world);
+        assert_eq!(world.cursor().leads(), Some(sprite), "pulled: {pulled}");
+    }
+}
+
+#[test]
+fn locked_on_with_the_cursor_empty_a_right_press_anywhere_aims_the_locked_on_sprite() {
+    // Design v25 §6.5: the press grabs as a left click would.
+    let world = field(&[], &[at(8, 5)]);
+    let mut app = grab_app(&world);
+    let sprite = sprite_on(&world, at(8, 5));
+    apply(&mut app, &world, Action::Mode(CursorMode::Select));
+    click(&mut app, &world, at(8, 5), Button::Right);
+    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+    click(&mut app, &world, at(12, 5), Button::Right);
+    point(&mut app, &world, at(10, 5));
+    let_go(&mut app, &world, at(10, 5));
+    let shove = Command::Shove {
+        toward: Dir::W,
+        tiles: 2,
+    };
+    assert_eq!(sent(&mut app), vec![Command::TakeHold { sprite }, shove]);
 }
 
 #[test]

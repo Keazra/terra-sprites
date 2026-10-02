@@ -130,6 +130,11 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     let rows = inner.height.min(map.height() - origin.y);
     let destination = heading_for(app, world).filter(|_| app.flash_on());
     let attended = attended_by(app, world);
+    // A held item being aimed, where it will be thrown from (design v25
+    // §6.5).
+    let thrown = app
+        .thrown_from(world)
+        .and_then(|(item, from)| Some((from, item_look(world, item)?)));
     for row in 0..rows {
         for col in 0..cols {
             let pos = Pos {
@@ -146,6 +151,8 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
                     SemanticTile::Sprite
                 };
                 app.theme.glyph(tile)
+            } else if let Some((_, (name, state))) = thrown.filter(|&(from, _)| from == pos) {
+                app.theme.object_glyph(name, state)
             } else if destination == Some(pos) {
                 app.theme.glyph(SemanticTile::DecisionMarker)
             } else if let Some(object) = world.object_at(pos) {

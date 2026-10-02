@@ -508,7 +508,7 @@ A shoved sprite moving a tile a tick in the shove's direction, choosing nothing,
 _Avoid_: roll (an item rolls), fly, glide
 
 **Aim**:
-To set a throw's or a shove's direction and distance by pulling the pointer back, away from where the thing should go, with the right button or `E` held, like a pool cue: the further the pull, the further it goes, up to how far the Cursor can send a thing its size.
+To set a throw's or a shove's direction and distance by pulling the pointer back from the Cursor, away from where the thing should go, with the right button or `E` held, like a pool cue: the further the pull, the further it goes, up to how far the Cursor can send a thing its size. The press grabs what's under the Cursor if it has hold of nothing, and while the player aims, the Cursor sits still on the thing, so a led sprite stands still.
 _Avoid_: drag, flick, swing
 
 **Aim line**:
