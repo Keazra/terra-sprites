@@ -3,6 +3,7 @@
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Size};
+use ratatui::style::Color;
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
     ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Map, Outcome, Pos,
@@ -179,4 +180,29 @@ fn a_policy_that_denies_everything_blanks_every_display() {
             "{tab:?} is blank"
         );
     }
+}
+
+#[test]
+fn a_policy_that_hides_map_colours_draws_sprites_in_their_own_colour() {
+    let pack = pack();
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let hungry = terra_sim::Genome::from_ron(
+        r#"(format: 1, genes: [InitialConcentration(chem: "hunger", value: 0.9)])"#,
+        &pack,
+    )
+    .expect("a valid genome");
+    let sprites = [(Pos { x: 2, y: 3 }, Some(hungry))];
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: &[],
+    };
+    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let areas = ui::areas(Size::new(100, 30), world.map());
+    let mut app = App::new(world.map(), Theme::cp437(), 7, areas);
+    app.apply(Action::Point(Position::new(11, 7)), &world);
+    assert_eq!(render(&app, &world)[WANDERER].fg, Color::Yellow);
+    app.set_policy(Blind);
+    assert_eq!(render(&app, &world)[WANDERER].fg, Color::White);
 }

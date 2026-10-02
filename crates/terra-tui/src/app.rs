@@ -40,6 +40,29 @@ pub enum Screen {
     Naming,
 }
 
+/// What colours sprites on the map (design §6.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColourMode {
+    /// The colour of its strongest drive above .5, or its own colour if
+    /// none is.
+    Drive,
+    /// Its own colour.
+    Plain,
+}
+
+impl ColourMode {
+    /// Every colour mode, in the order `b` goes through them.
+    pub const ALL: [ColourMode; 2] = [ColourMode::Drive, ColourMode::Plain];
+
+    /// What the status line calls it when `b` switches to it.
+    pub fn label(self) -> &'static str {
+        match self {
+            ColourMode::Drive => "strongest drive",
+            ColourMode::Plain => "plain",
+        }
+    }
+}
+
 /// What a Place menu item makes (design v28 §6.5).
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlaceItem {
@@ -297,6 +320,8 @@ pub struct App {
     notice: Option<(String, Duration)>,
     /// What the screen may show the player (design §6.4).
     policy: Box<dyn InfoPolicy>,
+    /// What colours sprites on the map (design §6.3).
+    colour_mode: ColourMode,
 }
 
 /// A sprite's name being typed (design §6.5).
@@ -421,6 +446,7 @@ impl App {
             names_offered: 0,
             notice: None,
             policy: Box::new(Omniscient),
+            colour_mode: ColourMode::Drive,
         };
         app.centre_on(cursor);
         app
@@ -885,6 +911,11 @@ impl App {
         self.policy.can_view(panel, subject)
     }
 
+    /// What colours sprites on the map (design §6.3).
+    pub fn colour_mode(&self) -> ColourMode {
+        self.colour_mode
+    }
+
     /// Whether the detail view is on: the exact workings behind what the
     /// screen describes in words (design §6.1).
     pub fn detail(&self) -> bool {
@@ -1066,6 +1097,10 @@ impl App {
                 }
             }
             Action::ToggleDetail => self.detail = !self.detail,
+            Action::CycleColours => {
+                self.colour_mode = along(&ColourMode::ALL, self.colour_mode, 1);
+                self.tell_player(format!("Colours: {}", self.colour_mode.label()));
+            }
             // Esc cancels an aim first (design v25 §6.5); then returns to
             // Select; from Select it asks to quit (design v21 §6.5).
             Action::Back if self.aim.is_some() => self.end_aim(),

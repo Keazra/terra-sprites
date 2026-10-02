@@ -4,12 +4,14 @@ use ratatui::{
     Frame,
     buffer::Buffer,
     layout::{Constraint, Layout, Margin, Position, Rect, Size},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::Line,
 };
-use terra_sim::{EntityId, Grip, Map, ObjectView, Pos, Progress, World};
+use terra_sim::{
+    ChemicalKind, ChemicalLevel, EntityId, Grip, Map, ObjectView, Pos, Progress, SpriteView, World,
+};
 
-use crate::app::{App, Areas, CursorMode, PlaceItem, Screen, Selection};
+use crate::app::{App, Areas, ColourMode, CursorMode, PlaceItem, Screen, Selection};
 use crate::clock::Speed;
 use crate::inspector::{self, INSPECTOR_WIDTH, first_shown};
 use crate::policy::{Panel, Subject};
@@ -166,7 +168,13 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
             } else {
                 app.theme.glyph(SemanticTile::Terrain(map.terrain(pos)))
             };
-            let mut style = Style::default().fg(glyph.fg);
+            // A sprite takes the colour mode's colour, unless it's emoting
+            // (design §6.3).
+            let fg = match world.sprite_at(pos) {
+                Some(sprite) if !is_emote(app, &sprite) => sprite_colour(app, &sprite, glyph.fg),
+                _ => glyph.fg,
+            };
+            let mut style = Style::default().fg(fg);
             if glyph.bold {
                 style = style.add_modifier(Modifier::BOLD);
             }
@@ -188,6 +196,37 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     draw_cursor(buf, inner, app, world);
     draw_aim_end(buf, app, world);
 }
+
+/// Whether `sprite` is drawn as an emote just now.
+fn is_emote(app: &App, sprite: &SpriteView) -> bool {
+    let id = sprite.id();
+    app.emote(id).is_some() && app.can_view(Panel::Emotes, Subject::Sprite(id))
+}
+
+/// The colour `sprite` is drawn in, in the colour mode (design §6.3): its
+/// strongest drive's above .5, or else `own`, its glyph's colour. A drive
+/// the theme has no colour for draws `own` too, and so does a sprite whose
+/// colour the policy hides (design §6.4).
+fn sprite_colour(app: &App, sprite: &SpriteView, own: Color) -> Color {
+    if app.colour_mode() == ColourMode::Plain
+        || !app.can_view(Panel::MapColours, Subject::Sprite(sprite.id()))
+    {
+        return own;
+    }
+    let strongest = sprite
+        .chemicals()
+        .filter(|chemical| chemical.kind == ChemicalKind::Drive && chemical.level > DRIVE_SHOWS)
+        .fold(None::<ChemicalLevel>, |best, chemical| match best {
+            Some(best) if best.level >= chemical.level => Some(best),
+            _ => Some(chemical),
+        });
+    strongest
+        .and_then(|drive| app.theme.drive_colour(drive.name))
+        .unwrap_or(own)
+}
+
+/// How strong a drive must be to colour its sprite (design §6.3).
+const DRIVE_SHOWS: f32 = 0.5;
 
 /// Where the selected sprite is heading, while its action is under way
 /// (design §6.1): where the map flashes the Decision marker.

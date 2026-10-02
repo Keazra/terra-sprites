@@ -82,6 +82,8 @@ pub enum Action {
     Confirm,
     /// Switch the detail view on or off (`v`).
     ToggleDetail,
+    /// Switch to the next colour mode for sprites (`b`, design §6.3).
+    CycleColours,
     /// Cancel a prompt: any key with no job of its own.
     Dismiss,
     /// Pick the menu item with this number, from 1 (`1`–`9`, design v28).
@@ -267,6 +269,7 @@ impl Keys {
             // A held `v` would flicker the detail view on and off.
             KeyCode::Char('v') => (!held).then_some(Action::ToggleDetail),
             KeyCode::Char('r') => (!held).then_some(Action::Rename),
+            KeyCode::Char('b') => (!held).then_some(Action::CycleColours),
             KeyCode::Char('g') => (!held).then_some(Action::ExportGenome),
             KeyCode::Char(digit @ '1'..='9') => (!held).then(|| Action::Pick(digit as u8 - b'0')),
             KeyCode::Enter => (!held).then_some(Action::Enter),

@@ -19,6 +19,18 @@
         emote(pleased):         (glyph: '+', fg: light_magenta),
         emote(shocked):         (glyph: '/', fg: yellow), // bolt-shaped; `!` is hurt's
     },
+    // A sprite's colour, by its strongest drive above .5, keyed by the
+    // drive's name in the data pack (design §6.3). A drive with no colour
+    // here, as from a mod, draws the sprite's own colour.
+    drives: {
+        "hunger":      yellow,
+        "thirst":      cyan,
+        "pain":        red,
+        "tiredness":   blue,
+        "boredom":     dark_gray,
+        "loneliness":  magenta,
+        "crowdedness": light_red,
+    },
     objects: {
         "berry_bush": {
             "seedling": (glyph: '\'', fg: green),
