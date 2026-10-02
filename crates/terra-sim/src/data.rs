@@ -10,6 +10,7 @@ use crate::genome::{Gene, Genome, GenomeError};
 use crate::object_types::{Effect, OBJECTS, ObjectType, TypeEntry, object_types};
 use crate::physiology::{Indices, PHYSIOLOGY, Physiology, PhysiologyEntry};
 use crate::registry::{CategoryId, ChemId, Chemical, Locus, LocusId, Verb};
+use crate::tags::{TAGS, Tag, TagEntry, tags};
 use crate::terrain::{Terrain, TerrainProps};
 
 /// A validated data pack: everything a world needs from `data/`.
@@ -28,6 +29,8 @@ pub struct DataPack {
     first_order: Vec<usize>,
     /// What sprites perceive things as (design v19 §3.5.5), in ascending ID order.
     categories: Vec<Category>,
+    /// The tags defined in the data (design v23 §3.5.6), in listed order.
+    tags: Vec<Tag>,
     /// In ascending ID order.
     object_types: Vec<ObjectType>,
     physiology: Physiology,
@@ -65,6 +68,7 @@ const BUILTIN: &[(&str, &str)] = &[
     (LOCI, include_str!("../../../data/loci.ron")),
     (BRAIN_IO, include_str!("../../../data/brain_io.ron")),
     (CATEGORIES, include_str!("../../../data/categories.ron")),
+    (TAGS, include_str!("../../../data/tags.ron")),
     (OBJECTS, include_str!("../../../data/objects.ron")),
     (PHYSIOLOGY, include_str!("../../../data/physiology.ron")),
     (STARTER, include_str!("../../../data/genomes/starter.ron")),
@@ -209,9 +213,11 @@ impl DataPack {
             &chemicals,
             &loci,
         )?;
+        let tags = tags(parse::<Vec<TagEntry>>(sources, TAGS)?, &chemicals, &loci)?;
         let object_types = object_types(
             parse::<Vec<TypeEntry>>(sources, OBJECTS)?,
             &categories,
+            &tags,
             &chemicals,
             &loci,
         )?;
@@ -235,6 +241,7 @@ impl DataPack {
             needs: brain_io.needs,
             first_order: brain_io.first_order,
             categories,
+            tags,
             object_types,
             physiology,
             starter: Genome { genes: Vec::new() },
@@ -445,6 +452,11 @@ impl DataPack {
     /// The locus called `name`.
     pub(crate) fn locus_named(&self, name: &str) -> Option<&Locus> {
         self.loci.iter().find(|l| l.name == name)
+    }
+
+    /// The tags defined in the data (design v23 §3.5.6), in listed order.
+    pub(crate) fn tags(&self) -> &[Tag] {
+        &self.tags
     }
 
     /// Every object type, in ascending ID order. Rules refer to types by their index here.

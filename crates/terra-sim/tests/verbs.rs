@@ -691,6 +691,65 @@ fn trying_water_or_a_sprite_with_no_object_type_is_fruitless_too() {
 }
 
 #[test]
+fn a_thing_s_tags_answer_a_contact_even_without_a_verb_table_for_it() {
+    // Design v23 §3.5.6: a thorny cactus has no Eat of its own, and still
+    // pricks whoever bites it, so the try isn't fruitless.
+    let cactus = r#"[(id: 7, name: "cactus", category: "bush", size: Large, hardness: 1.0,
+        tags: [Solid, Fixture, Thorny], verbs: {Hit: [Signal(Actor, "did_hit")]})]"#;
+    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, text)| (path, if path == "objects.ron" { cactus } else { text }))
+        .collect();
+    let data = DataPack::from_sources(&sources).expect("a valid test pack");
+    let spot = at(2, 1);
+    let rows = [".....", ".....", "....."];
+    let script = [ScriptedAction::Eat { at: spot }];
+    let mut world = feeling_world_in(data, &rows, &[(spot, "cactus")], at(1, 1), &script, &[]);
+    let events = world.step();
+    assert_eq!(endings(&events), [(Verb::Eat, Outcome::Applied)]);
+    assert_eq!(
+        hurt_by_first_ending(&events),
+        Hurt {
+            actor: true,
+            target: false
+        }
+    );
+    let sprite = world.sprite(the_sprite(&world)).expect("the sprite");
+    assert_eq!(sprite.chemical("injury"), Some(0.05), "Thorny's bite");
+    world.step();
+    assert_eq!(felt_fruitless(&world), 0.0, "a tag answered it");
+}
+
+#[test]
+fn a_try_a_tag_answers_is_not_fruitless_even_if_the_thing_s_own_rule_fails() {
+    // Design v23 §3.5.6: a thorny cactus with no fruit pricks whoever bites
+    // it. Its own Eat needs fruit, so the bite fails, but something happened,
+    // so it isn't fruitless (§5.2: a fruitless try is one where nothing does).
+    let cactus = r#"[(id: 7, name: "cactus", category: "bush", size: Large, hardness: 1.0,
+        tags: [Solid, Fixture, Thorny], counters: {"fruit": 6},
+        verbs: {Eat: [RequireCounter("fruit", 1), AddCounter("fruit", -1)]})]"#;
+    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, text)| (path, if path == "objects.ron" { cactus } else { text }))
+        .collect();
+    let data = DataPack::from_sources(&sources).expect("a valid test pack");
+    let spot = at(2, 1);
+    let rows = [".....", ".....", "....."];
+    let script = [ScriptedAction::Eat { at: spot }];
+    let mut world = feeling_world_in(data, &rows, &[(spot, "cactus")], at(1, 1), &script, &[]);
+    let events = world.step();
+    assert_eq!(endings(&events), [(Verb::Eat, Outcome::Failed)], "no fruit");
+    let sprite = world.sprite(the_sprite(&world)).expect("the sprite");
+    assert_eq!(
+        sprite.chemical("injury"),
+        Some(0.05),
+        "pricked all the same"
+    );
+    world.step();
+    assert_eq!(felt_fruitless(&world), 0.0, "a tag answered it");
+}
+
+#[test]
 fn a_try_that_works_is_not_fruitless() {
     let bush = at(2, 1);
     let mut world = feeling_world(

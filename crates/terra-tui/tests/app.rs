@@ -5,7 +5,7 @@ use terra_sim::{
 };
 use terra_tui::app::{App, Areas, Flow, Screen, Selection, Tab};
 use terra_tui::clock::Speed;
-use terra_tui::input::Action;
+use terra_tui::input::{Action, Button};
 use terra_tui::theme::Theme;
 
 fn pack() -> DataPack {
@@ -237,6 +237,20 @@ fn moving_the_mouse_leaves_the_quit_prompt_open() {
     let mut app = app(&world, tile_area(20, 10));
     app.apply(Action::Back, &world);
     point(&mut app, &world, 3, 3);
+    assert_eq!(app.screen(), Screen::QuitPrompt);
+}
+
+#[test]
+fn letting_go_of_a_mouse_button_leaves_the_quit_prompt_open() {
+    // Any other key cancels the prompt (design §6.6); the mouse doesn't.
+    let world = grass(40, 30);
+    let mut app = app(&world, tile_area(20, 10));
+    app.apply(Action::Back, &world);
+    let release = Action::Release {
+        button: Button::Right,
+        at: Some(Position::new(3, 3)),
+    };
+    app.apply(release, &world);
     assert_eq!(app.screen(), Screen::QuitPrompt);
 }
 

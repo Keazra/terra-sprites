@@ -246,8 +246,9 @@ fn within<'a>(
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub(crate) struct Touch {
     pub(crate) tick: u64,
-    /// The verb it tried (design v21 §5.6).
-    pub(crate) verb: Verb,
+    /// The verb it tried (design v21 §5.6), or none for a crash, a touch it
+    /// didn't choose (design v23 §5.6).
+    pub(crate) verb: Option<Verb>,
     /// What it's learned about as (design v19 §5.6).
     pub(crate) subject: Subject,
     /// Which sprite, if it was one (design v18 §5.6).

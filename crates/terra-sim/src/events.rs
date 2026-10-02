@@ -1,7 +1,7 @@
 //! What happened during a tick, reported by `World::step` (design §2.5).
 
 use crate::action::{ActionView, Outcome};
-use crate::brain::Learned;
+use crate::brain::{Learned, Thing};
 use crate::command::{Command, Rejection};
 use crate::map::Pos;
 use crate::objects::EntityId;
@@ -61,6 +61,17 @@ pub enum EventKind {
     /// The Cursor picked up an item, and holds it off the map (design v23
     /// §6.5).
     PickedUp { item: EntityId, object_type: String },
+    /// The Cursor threw the item it held, which rolls (design v25 §3.5.4).
+    Threw { item: EntityId, object_type: String },
+    /// The Cursor shoved the sprite it led, which slides (design v25 §3.5.4).
+    Shoved { sprite: EntityId },
+    /// A sliding sprite crashed into a thing: a sprite, or an object, by its
+    /// type's name (design v25 §3.5.4); and whether the crash hurt it.
+    Crashed {
+        sprite: EntityId,
+        into: Thing,
+        hurt: bool,
+    },
     /// The Cursor put the item it held down on a tile (design v23 §6.5).
     PutDown {
         item: EntityId,

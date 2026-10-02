@@ -251,3 +251,16 @@ fn the_themes_draw_the_status_marks_and_the_lock_as_the_design_table_says() {
         assert!(cp437::contains(glyph), "{glyph:?}");
     }
 }
+
+#[test]
+fn the_aim_line_is_yellow_dots_ending_in_a_small_circle_or_semicolons_and_an_o() {
+    // Design v25 §6.2: `°` rather than `○`, which is the ball's.
+    assert_eq!(Theme::cp437().aim().symbol, '·');
+    assert_eq!(Theme::cp437().aim_end().symbol, '°');
+    assert_eq!(Theme::ascii().aim().symbol, ';');
+    assert_eq!(Theme::ascii().aim_end().symbol, 'O');
+    for theme in [Theme::cp437(), Theme::ascii()] {
+        assert_eq!(theme.aim().fg, Color::Yellow);
+        assert_eq!(theme.aim_end().fg, Color::Yellow);
+    }
+}

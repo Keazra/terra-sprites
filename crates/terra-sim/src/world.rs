@@ -19,12 +19,13 @@ use crate::expression::{Expression, expressions};
 use crate::generate::{generate, place_objects, place_sprites};
 use crate::genome::{GeneView, Genome};
 use crate::learning::{self, Subject};
-use crate::map::{Map, MapError, Pos};
+use crate::map::{Dir, Map, MapError, Pos};
 use crate::objects::{EntityId, Object, Objects};
 use crate::perception::{Flood, Target, goal_tiles};
 use crate::regions::Regions;
 use crate::registry::{CategoryId, ChemicalKind};
 use crate::rolling;
+use crate::sliding;
 use crate::sprites::{Sprite, Sprites};
 use crate::variation::varied;
 
@@ -290,6 +291,12 @@ impl<'a> SpriteView<'a> {
     /// close as it can get (design v23 §6.5). `None` while it isn't led.
     pub fn lead_steps_left(&self) -> Option<u32> {
         action::lead_steps_left(self.sprite)
+    }
+
+    /// While a shove sends it, the way it slides and the tiles it has left
+    /// to go (design v25 §3.5.4). `None` while it isn't sliding.
+    pub fn slide(&self) -> Option<(Dir, u16)> {
+        self.sprite.slide.map(|slide| (slide.dir, slide.left))
     }
 
     /// What its brain did at the latest step 5, explained (design §5.9), or
@@ -743,6 +750,17 @@ impl World {
         CursorView { world: self }
     }
 
+    /// The furthest the Cursor throws what `grip` holds, or shoves what it
+    /// leads, in tiles, by its size (design v25 §3.5.4). The screen asks it
+    /// of a grip it has queued as well as of one the world has applied.
+    pub fn furthest(&self, grip: Grip) -> u16 {
+        let thing = match grip {
+            Grip::Holds(item) => Target::Object(item),
+            Grip::Leads(sprite) => Target::Sprite(sprite),
+        };
+        command::furthest(&self.state, &self.data, thing)
+    }
+
     /// How many sprites have died of `cause` since the world began.
     pub fn deaths(&self, cause: DeathCause) -> u64 {
         self.state.deaths.get(&cause).copied().unwrap_or(0)
@@ -779,10 +797,12 @@ impl World {
         command::apply(&mut self.state, &self.data, events);
     }
 
-    /// Step 2: objects run their lifecycle rules, then rolling items roll.
+    /// Step 2: objects run their lifecycle rules, then rolling items roll,
+    /// then shoved sprites slide (design v25 §2.4).
     fn run_environment(&mut self, events: &mut Vec<Event>) {
         ecology::run(&mut self.state, &self.data, events);
         rolling::run(&mut self.state, &self.data, events);
+        sliding::run(&mut self.state, &self.data, events);
     }
 
     /// Step 3: every sprite's chemistry (design §4.4), then death check #1.
@@ -808,9 +828,13 @@ impl World {
             })
             .collect();
         let mut dying = Vec::new();
+        let injury = data.physiology().indices.injury;
         for (id, senses) in senses {
             let sprite = state.sprites.get_mut(id).expect("a sprite taking its turn");
-            if biochem::step(&sprite.program, &mut sprite.body, &senses, data) {
+            // A crash at step 2 that took injury to 1 kills, as a verb's hurt
+            // does at death check #2: healing can't undo it (design v25 §2.4).
+            let crashed_to_death = sprite.body.chems[injury] >= 1.0;
+            if biochem::step(&sprite.program, &mut sprite.body, &senses, data) || crashed_to_death {
                 dying.push(id);
             }
         }
@@ -1504,7 +1528,7 @@ mod tests {
         let sprite = world.state.sprites.get_mut(first).expect("a sprite");
         sprite.brain.touched = Some(Touch {
             tick: 0,
-            verb: Verb::Eat,
+            verb: Some(Verb::Eat),
             subject: Subject::Category(bush),
             sprite: None,
             novelty: 1.0,
@@ -1533,7 +1557,7 @@ mod tests {
             .brain
             .touched = Some(Touch {
             tick: 0,
-            verb: Verb::Eat,
+            verb: Some(Verb::Eat),
             subject: Subject::Category(bush),
             sprite: None,
             novelty: 1.0,
@@ -1566,7 +1590,7 @@ mod tests {
         let bush = data.category_named("bush").expect("a category");
         brain.touched = Some(Touch {
             tick: 0,
-            verb: Verb::Eat,
+            verb: Some(Verb::Eat),
             subject: Subject::Category(bush),
             sprite: None,
             novelty: 1.0,

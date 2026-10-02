@@ -10,7 +10,7 @@ use serde::Serialize;
 use crate::data::DataPack;
 use crate::decide::decide;
 use crate::events::{Event, EventKind};
-use crate::learning::Touch;
+use crate::learning::{Subject, Touch};
 use crate::map::{Dir, Pos};
 use crate::objects::EntityId;
 use crate::perception::{Flood, Ground, Occupied, Target};
@@ -272,6 +272,10 @@ pub(crate) fn sense_and_decide(
             state.sprites.get_mut(id).expect("the same sprite").flood = Some(flood);
         }
         let sprite = state.sprites.get(id).expect("the same sprite");
+        // A sliding sprite chooses nothing (design v25 §2.4).
+        if sprite.slide.is_some() {
+            continue;
+        }
         if sprite.lead.is_some() {
             follow_cursor(state, id);
             continue;
@@ -476,6 +480,11 @@ pub(crate) fn resolve(
     let mut moved: BTreeSet<EntityId> = dying.iter().copied().collect();
     for &id in &order {
         let sprite = state.sprites.get_mut(id).expect("a sprite taking its turn");
+        // A sliding sprite slid at step 2, and takes no steps (design v25
+        // §2.4).
+        if sprite.slide.is_some() {
+            continue;
+        }
         if sprite.lead.is_some() {
             if !moved.contains(&id) {
                 walk(state, data, id, &mut moved, events);
@@ -541,20 +550,32 @@ fn act(
     action.hurt = hurt;
     end(action, id, outcome, state.tick, events);
     if verb.is_interaction() {
-        // What it tried is what the next few ticks' feelings are about
-        // (design §5.6).
-        let brain = &mut state.sprites.get_mut(id).expect("the actor").brain;
-        // Touching one, it knows its object type (design v19 §5.6).
-        let needs = data.need_places().len();
-        brain.experience.learn_about(subject, needs).touched = true;
-        brain.touched = Some(Touch {
-            tick: state.tick,
-            verb,
-            subject,
-            sprite: target.sprite(),
-            novelty: brain.novelty(subject),
-        });
+        touched(state, data, id, target, subject, Some(verb));
     }
+}
+
+/// Sprite `id` touched `target`, learned about as `subject`, by trying
+/// `verb` on it, or with no verb by crashing into it (design v23 §5.6): what
+/// the next few ticks' feelings are about. Touching one, it knows its object
+/// type (design v19 §5.6).
+pub(crate) fn touched(
+    state: &mut WorldState,
+    data: &DataPack,
+    id: EntityId,
+    target: Target,
+    subject: Subject,
+    verb: Option<Verb>,
+) {
+    let brain = &mut state.sprites.get_mut(id).expect("the toucher").brain;
+    let needs = data.need_places().len();
+    brain.experience.learn_about(subject, needs).touched = true;
+    brain.touched = Some(Touch {
+        tick: state.tick,
+        verb,
+        subject,
+        sprite: target.sprite(),
+        novelty: brain.novelty(subject),
+    });
 }
 
 /// Shuffles `ids` with the world RNG: Fisher–Yates, one draw per place but the first.

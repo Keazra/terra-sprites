@@ -410,6 +410,78 @@ fn an_object_type_is_solid_and_a_fixture_or_neither() {
 }
 
 #[test]
+fn an_object_type_s_tags_are_built_in_or_defined_in_the_data() {
+    let cactus = |tags: &str| {
+        format!(
+            r#"(id: 1, name: "cactus", category: "bush", size: Large, hardness: 1.0, tags: {tags})"#
+        )
+    };
+    let thorny = format!("[{}]", cactus("[Solid, Fixture, Thorny]"));
+    assert!(builtin_with("objects.ron", &thorny).is_ok());
+    assert_invalid_objects(
+        &[&cactus("[Solid, Fixture, Sticky]")],
+        &["cactus", "Sticky"],
+    );
+}
+
+/// A `tags.ron` defining `Thorny`, which the thornbush names, doing nothing,
+/// and `Sticky`, whose Crash contact does `effect`.
+fn sticky(effect: &str) -> String {
+    format!(r#"[(name: "Thorny"), (name: "Sticky", contact: {{Crash: [{effect}]}})]"#)
+}
+
+#[test]
+fn a_tag_s_contact_only_injects_into_or_signals_the_sprite_making_it() {
+    let fine = sticky(r#"Inject(Actor, "injury", 0.1), Signal(Actor, "pricked")"#);
+    assert!(builtin_with("tags.ron", &fine).is_ok());
+    for (effect, words) in [
+        (
+            r#"Inject(Target, "injury", 0.1)"#,
+            &["Sticky", "Crash", "Actor"][..],
+        ),
+        (
+            r#"Signal(Target, "pricked")"#,
+            &["Sticky", "Crash", "Actor"],
+        ),
+        ("Push(2)", &["Sticky", "Crash", "Push"]),
+        ("DestroySelf", &["Sticky", "Crash", "DestroySelf"]),
+        (
+            r#"Inject(Actor, "hunger", 0.1)"#,
+            &["Sticky", "Crash", "hunger"],
+        ),
+        (
+            r#"Inject(Actor, "glue", 0.1)"#,
+            &["Sticky", "Crash", "glue"],
+        ),
+        (r#"Signal(Actor, "age")"#, &["Sticky", "Crash", "age"]),
+    ] {
+        match builtin_with("tags.ron", &sticky(effect)) {
+            Err(DataError::Invalid { file, message }) => {
+                assert_eq!(file, "tags.ron");
+                for word in words {
+                    assert!(message.contains(word), "{message:?} should mention {word}");
+                }
+            }
+            other => panic!("expected {effect} to be refused, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn a_tag_is_defined_once_and_never_as_solid_or_fixture() {
+    let twice = r#"[(name: "Sticky"), (name: "Sticky")]"#;
+    assert_invalid("tags.ron", twice, "Sticky");
+    for built_in in ["Solid", "Fixture"] {
+        let text = format!(r#"[(name: "{built_in}")]"#);
+        assert_invalid("tags.ron", &text, built_in);
+    }
+    assert_eq!(
+        builtin_without("tags.ron").unwrap_err(),
+        DataError::MissingFile("tags.ron".into())
+    );
+}
+
+#[test]
 fn a_pseudo_type_is_a_verb_table_and_nothing_else() {
     for (fields, what) in [
         ("tags: [Solid, Fixture]", "tags"),
@@ -683,6 +755,19 @@ fn the_cursor_s_touch_raises_levels_by_fractions_and_reaches_back_at_least_the_t
         "cursor.zap",
     );
     assert_invalid_physiology("max_reach_back: 40", "max_reach_back: 2", "max_reach_back");
+}
+
+#[test]
+fn the_cursor_sends_a_thing_of_every_size_at_least_a_tile() {
+    // Design v25 §3.5.4: the furthest it throws or shoves, by size.
+    let furthest = "furthest: (small: 6, medium: 6, large: 5)";
+    for (size, none) in [
+        ("small", "furthest: (small: 0, medium: 6, large: 5)"),
+        ("medium", "furthest: (small: 6, medium: 0, large: 5)"),
+        ("large", "furthest: (small: 6, medium: 6, large: 0)"),
+    ] {
+        assert_invalid_physiology(furthest, none, &format!("cursor.furthest.{size}"));
+    }
 }
 
 #[test]
