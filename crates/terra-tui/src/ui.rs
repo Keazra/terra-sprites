@@ -12,6 +12,7 @@ use terra_sim::{EntityId, Grip, Map, ObjectView, Pos, Progress, World};
 use crate::app::{App, Areas, CursorMode, PlaceItem, Screen, Selection};
 use crate::clock::Speed;
 use crate::inspector::{self, INSPECTOR_WIDTH, first_shown};
+use crate::policy::{Panel, Subject};
 use crate::text::{display_name, group_thousands, terrain_name};
 use crate::theme::SemanticTile;
 
@@ -144,7 +145,10 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
             };
             // A sprite is drawn over any item on its tile.
             let glyph = if let Some(sprite) = world.sprite_at(pos) {
-                let tile = if let Some(emote) = app.emote(sprite.id()) {
+                let emote = app
+                    .emote(sprite.id())
+                    .filter(|_| app.can_view(Panel::Emotes, Subject::Sprite(sprite.id())));
+                let tile = if let Some(emote) = emote {
                     SemanticTile::Emote(emote)
                 } else if app.selection() == Some(Selection::Living(sprite.id())) {
                     SemanticTile::SelectedSprite
@@ -188,9 +192,7 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
 /// Where the selected sprite is heading, while its action is under way
 /// (design §6.1): where the map flashes the Decision marker.
 fn heading_for(app: &App, world: &World) -> Option<Pos> {
-    let Some(Selection::Living(id)) = app.selection() else {
-        return None;
-    };
+    let id = marked(app)?;
     let action = world.sprite(id)?.action()?;
     let under_way = !matches!(action.progress, Progress::Ended(_));
     under_way.then_some(action.destination).flatten()
@@ -199,10 +201,16 @@ fn heading_for(app: &App, world: &World) -> Option<Pos> {
 /// The tile of the one thing the selected sprite attends to (design §5.3):
 /// where the map shades the Attention marker.
 fn attended_by(app: &App, world: &World) -> Option<Pos> {
-    let Some(Selection::Living(id)) = app.selection() else {
-        return None;
-    };
-    world.sprite(id)?.attending_to()
+    world.sprite(marked(app)?)?.attending_to()
+}
+
+/// The selected sprite, if it's living and the policy lets the map mark
+/// where it's heading and what it attends to (design §6.4).
+fn marked(app: &App) -> Option<EntityId> {
+    match app.selection() {
+        Some(Selection::Living(id)) if app.can_view(Panel::Marks, Subject::Sprite(id)) => Some(id),
+        _ => None,
+    }
 }
 
 /// Draws the 3×3 cursor around its target tile, which the tile loop has already
@@ -483,11 +491,16 @@ fn top_bar_line(app: &App, world: &World) -> Line<'static> {
     } else {
         format!("► {}", speed_label(clock.speed()))
     };
+    // The population is a count the policy may hide (design §6.4).
+    let population = if app.can_view(Panel::Counts, Subject::World) {
+        format!(" │ sprites {}", world.sprites().count())
+    } else {
+        String::new()
+    };
     let text = format!(
-        " Terra Sprites │ tick {} │ {time} │ seed {} │ sprites {}",
+        " Terra Sprites │ tick {} │ {time} │ seed {}{population}",
         group_thousands(world.tick()),
         app.seed,
-        world.sprites().count()
     );
     Line::from(text).style(Style::default().add_modifier(Modifier::REVERSED))
 }
@@ -549,10 +562,14 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         .placing()
         .map(|label| format!(" │ placing: {label}"))
         .unwrap_or_default();
-    let tile = format!(
-        " ({},{}) {terrain}{sprite}{object} │ {mode}{followed}{grip}{placing}",
-        cursor.x, cursor.y
-    );
+    // The tile under the Cursor is information the policy may hide (design
+    // §6.4).
+    let under = if app.can_view(Panel::TileInfo, Subject::Tile(cursor)) {
+        format!(" ({},{}) {terrain}{sprite}{object} │", cursor.x, cursor.y)
+    } else {
+        String::new()
+    };
+    let tile = format!("{under} {mode}{followed}{grip}{placing}");
     // At the right, after a gap of 2 and before a space at the end: why a
     // click did nothing, for a while, or else the key hints that fit (design
     // v22 §6.1). The reason matters more than the end of the tile's part,
@@ -648,6 +665,13 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     draw_border(buf, area, " Events ", no_walls);
     let inner = area.inner(Margin::new(1, 1));
     let lines = app.event_log().filter_map(|(event, count)| {
+        // The policy may hide what an event is about (design §6.4).
+        let subject = inspector::event_sprites(event)
+            .first()
+            .map_or(Subject::World, |&id| Subject::Sprite(id));
+        if !app.can_view(Panel::EventLog, subject) {
+            return None;
+        }
         let text = inspector::event_line(event, &app.words(world))?;
         Some((event.tick, text, count))
     });

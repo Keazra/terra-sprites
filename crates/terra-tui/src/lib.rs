@@ -8,6 +8,7 @@ pub mod cp437;
 pub mod files;
 pub mod input;
 mod inspector;
+pub mod policy;
 mod text;
 pub mod theme;
 pub mod ui;

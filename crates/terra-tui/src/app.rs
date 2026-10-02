@@ -15,6 +15,7 @@ use crate::clock::Clock;
 use crate::cp437;
 use crate::input::{Action, Button};
 use crate::inspector;
+use crate::policy::{InfoPolicy, Omniscient, Panel, Subject};
 use crate::text::{Names, ROOTED, Words, display_name};
 use crate::theme::{Emote, Theme};
 
@@ -294,6 +295,8 @@ pub struct App {
     /// What the player's latest action did that the status line says, in
     /// the key hints' place, and since when: where a genome was saved.
     notice: Option<(String, Duration)>,
+    /// What the screen may show the player (design §6.4).
+    policy: Box<dyn InfoPolicy>,
 }
 
 /// A sprite's name being typed (design §6.5).
@@ -417,6 +420,7 @@ impl App {
             naming: None,
             names_offered: 0,
             notice: None,
+            policy: Box::new(Omniscient),
         };
         app.centre_on(cursor);
         app
@@ -869,6 +873,16 @@ impl App {
     /// Whether the Decision marker is in its "on" half just now.
     pub fn flash_on(&self) -> bool {
         (self.running_for.as_millis() / FLASH_HALF.as_millis()).is_multiple_of(2)
+    }
+
+    /// Sets what the screen may show the player (design §6.4).
+    pub fn set_policy(&mut self, policy: impl InfoPolicy + 'static) {
+        self.policy = Box::new(policy);
+    }
+
+    /// Whether `panel` may show what it knows about `subject` (design §6.4).
+    pub fn can_view(&self, panel: Panel, subject: Subject) -> bool {
+        self.policy.can_view(panel, subject)
     }
 
     /// Whether the detail view is on: the exact workings behind what the
