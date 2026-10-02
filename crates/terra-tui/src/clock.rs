@@ -138,7 +138,7 @@ impl Clock {
 
     /// While paused, runs one step from the next frame: one real second's
     /// worth of ticks at the speed, rounded down, at least one and at most
-    /// 16×'s 20 (design v26 §6.6). Pressed again before a step has finished,
+    /// 16×'s 20 (design v27 §6.6). Pressed again before a step has finished,
     /// it tops the step back up rather than adding another, so a held `.`
     /// can't pile steps up. Does nothing while running.
     pub fn step_once(&mut self) {

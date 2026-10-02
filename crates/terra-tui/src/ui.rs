@@ -205,7 +205,7 @@ fn attended_by(app: &App, world: &World) -> Option<Pos> {
 }
 
 /// Draws the 3×3 cursor around its target tile, which the tile loop has already
-/// drawn in reverse video. The arrows, solid while locked on, and the marks
+/// drawn in reverse video. The arrows, solid while following, and the marks
 /// take the mode mark's colour. The cursor is drawn only while its target is
 /// in view, and pieces outside the map view's tiles are left off.
 ///
@@ -218,8 +218,8 @@ fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App, world: &World) {
     let Some(centre) = app.cell_of(app.cursor()) else {
         return;
     };
-    let arrows = if app.locked().is_some() {
-        app.theme.locked_arrows()
+    let arrows = if app.followed().is_some() {
+        app.theme.followed_arrows()
     } else {
         app.theme.arrows()
     };
@@ -413,7 +413,7 @@ fn draw_border(buf: &mut Buffer, area: Rect, title: &str, walls: Sides) {
 fn top_bar_line(app: &App, world: &World) -> Line<'static> {
     let clock = &app.clock;
     // Paused, it still shows the speed: `+` and `-` change it, and it sets
-    // how far `.` steps (design v26 §6.6).
+    // how far `.` steps (design v27 §6.6).
     let time = if clock.is_paused() {
         format!("|| paused {}", speed_label(clock.speed()))
     } else {
@@ -458,9 +458,9 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         .map(|object| format!(" · {}", object_label(&object)))
         .unwrap_or_default();
     let mode = app.mode().label();
-    let locked = app
-        .locked()
-        .map(|id| format!(" │ locked on {}", sprite_label(id)))
+    let followed = app
+        .followed()
+        .map(|id| format!(" │ following {}", sprite_label(id)))
         .unwrap_or_default();
     // What the Cursor has hold of, in every mode (design v23 §6.1).
     let grip = match app.grip(world) {
@@ -472,7 +472,7 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         None => String::new(),
     };
     let tile = format!(
-        " ({},{}) {terrain}{sprite}{object} │ {mode}{locked}{grip}",
+        " ({},{}) {terrain}{sprite}{object} │ {mode}{followed}{grip}",
         cursor.x, cursor.y
     );
     // At the right, after a gap of 2 and before a space at the end: why a

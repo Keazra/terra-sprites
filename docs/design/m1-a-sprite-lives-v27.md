@@ -1,13 +1,13 @@
-# Terra Sprites — M1 "A Sprite Lives" design (v26)
+# Terra Sprites — M1 "A Sprite Lives" design (v27)
 
 - **Status:** Final
 - **Date:** 2026-10-02
-- **Supersedes:** [v25](archive/m1-a-sprite-lives-v25.md) (earlier: [v24](archive/m1-a-sprite-lives-v24.md), [v23](archive/m1-a-sprite-lives-v23.md), [v22](archive/m1-a-sprite-lives-v22.md), [v21](archive/m1-a-sprite-lives-v21.md), [v20](archive/m1-a-sprite-lives-v20.md), [v19](archive/m1-a-sprite-lives-v19.md), [v18](archive/m1-a-sprite-lives-v18.md), [v17](archive/m1-a-sprite-lives-v17.md), [v16](archive/m1-a-sprite-lives-v16.md), [v15](archive/m1-a-sprite-lives-v15.md), [v14](archive/m1-a-sprite-lives-v14.md), [v13](archive/m1-a-sprite-lives-v13.md), [v12](archive/m1-a-sprite-lives-v12.md), [v11](archive/m1-a-sprite-lives-v11.md), [v10](archive/m1-a-sprite-lives-v10.md), [v9](archive/m1-a-sprite-lives-v9.md), [v8](archive/m1-a-sprite-lives-v8.md), [v7](archive/m1-a-sprite-lives-v7.md), [v6](archive/m1-a-sprite-lives-v6.md), [v5](archive/m1-a-sprite-lives-v5.md), [v4](archive/m1-a-sprite-lives-v4.md), [v3](archive/m1-a-sprite-lives-v3.md), [v2](archive/m1-a-sprite-lives-v2.md), [v1](archive/m1-a-sprite-lives.md))
+- **Supersedes:** [v26](archive/m1-a-sprite-lives-v26.md) (earlier: [v25](archive/m1-a-sprite-lives-v25.md), [v24](archive/m1-a-sprite-lives-v24.md), [v23](archive/m1-a-sprite-lives-v23.md), [v22](archive/m1-a-sprite-lives-v22.md), [v21](archive/m1-a-sprite-lives-v21.md), [v20](archive/m1-a-sprite-lives-v20.md), [v19](archive/m1-a-sprite-lives-v19.md), [v18](archive/m1-a-sprite-lives-v18.md), [v17](archive/m1-a-sprite-lives-v17.md), [v16](archive/m1-a-sprite-lives-v16.md), [v15](archive/m1-a-sprite-lives-v15.md), [v14](archive/m1-a-sprite-lives-v14.md), [v13](archive/m1-a-sprite-lives-v13.md), [v12](archive/m1-a-sprite-lives-v12.md), [v11](archive/m1-a-sprite-lives-v11.md), [v10](archive/m1-a-sprite-lives-v10.md), [v9](archive/m1-a-sprite-lives-v9.md), [v8](archive/m1-a-sprite-lives-v8.md), [v7](archive/m1-a-sprite-lives-v7.md), [v6](archive/m1-a-sprite-lives-v6.md), [v5](archive/m1-a-sprite-lives-v5.md), [v4](archive/m1-a-sprite-lives-v4.md), [v3](archive/m1-a-sprite-lives-v3.md), [v2](archive/m1-a-sprite-lives-v2.md), [v1](archive/m1-a-sprite-lives.md))
 - **Covers:** Milestone 1 in full detail, plus the architecture decisions that every later milestone depends on
 
 ---
 
-## Changes from v25
+## Changes from v26
 
 Three small fixes to time and keys from the owner's issues: the speed shows while paused and a step runs by it ([#51](https://github.com/Keazra/terra-sprites/issues/51)), and held keys are told from presses on terminals with the kitty keyboard protocol ([#22](https://github.com/Keazra/terra-sprites/issues/22)). No new terms.
 
@@ -17,7 +17,7 @@ Three small fixes to time and keys from the owner's issues: the speed shows whil
 | 2 | **A step runs by the speed.** One press of `.` while paused runs one real second's worth of ticks at the current speed, rounded down, at least 1 and at most 20: 1 at 1× and slower, 2 at 2×, 5 at 4×, 10 at 8×, 20 at 16× and Max. A step the frame's budget cuts short finishes on the next frames, and a press before a step has finished tops it back up rather than adding another, so a held `.` can't pile steps up. | Owner's proposal ([#51](https://github.com/Keazra/terra-sprites/issues/51)), confirmed when they said go; finishing a cut-short step and topping up were chosen while building, so a step always runs its whole count | §6.6 |
 | 3 | **Held keys on kitty-protocol terminals.** Where the terminal supports the kitty keyboard protocol (kitty, WezTerm, Ghostty, recent foot), the game turns it on, so the terminal reports repeats and releases, and turns it off again on exit or a crash. There, held `+`, `-` and `Esc` behave as on Windows. Shift and the lock keys then arrive as keys of their own, and do nothing. | Owner ([#22](https://github.com/Keazra/terra-sprites/issues/22)) | §6.6 |
 
-**Earlier changes** are in the archived revisions, in [`archive/`](archive/). Each opens with its own table: v25's changes (from v24) head [v25](archive/m1-a-sprite-lives-v25.md), and so on back to v2. So "v16 change 16" is row 16 of the table at the top of [v16](archive/m1-a-sprite-lives-v16.md). The current revision carries only its own table, so the spec doesn't open with its whole history.
+**Earlier changes** are in the archived revisions, in [`archive/`](archive/). Each opens with its own table: v26's changes (from v25) head [v26](archive/m1-a-sprite-lives-v26.md), and so on back to v2. So "v16 change 16" is row 16 of the table at the top of [v16](archive/m1-a-sprite-lives-v16.md). The current revision carries only its own table, so the spec doesn't open with its whole history.
 
 ---
 
@@ -1203,7 +1203,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 │ 48,190  Mira learned: thornbushes are bad                                                      │
 │ 48,102  Kel died (starvation, age 6,020)                                                       │
 └────────────────────────────────────────────────────────────────────────────────────────────────┘
- (61,40) grass · Mira #12 │ SELECT │ locked on Mira #12 │ holding: berry   Z select  X train  C grab
+ (61,40) grass · Mira #12 │ SELECT │ following Mira #12 │ holding: berry   Z select  X train  C grab
 ```
 
 **Brain tab** (v16; the layout is agreed in slice 9, and this revision is amended to match):
@@ -1246,7 +1246,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
   - Its viewport scrolls with `W` `A` `S` `D` or the arrow keys, or follows the selected sprite (`T`, "track", v21).
   - A map smaller than the space gets a map view shrunk to fit it, at the top-left.
   - Its border is **double-lined** (`═ ║`) on any side where the terrarium's wall is in view, and single-lined where the map carries on.
-  - The Cursor is 3×3 tiles and follows the pointer, or the sprite it's locked on to (§6.5).
+  - The Cursor is 3×3 tiles and follows the pointer, or the sprite it follows (§6.5).
 - **Inspector tabs** (`[` and `]`, wrapping around). The game starts on World. The inspector's title is the selected sprite and the tabs, with the open one in brackets; with no sprite selected, it's the tabs alone. A sprite's label too long to fit is shortened, never the tab names.
 
 | Tab | Shows |
@@ -1336,10 +1336,10 @@ The species is dropped into a world it doesn't know and has to learn about it. I
   - **The Cursor's touch** (v21) is logged, spoken to the player: "You petted Sprite #12", "You hugged Sprite #12", "You zapped Sprite #12", "You shocked Sprite #12". So is a refusal: "Couldn't pet Sprite #12: it's gone".
   - **Grabbing** (v23) is logged the same way: "You took hold of Mira #12", "You let go of Mira #12", "You picked up a ball", "You put the ball down", and from slice 11b "You threw the ball", "You shoved Mira #12", and "Mira #12 was shoved into a thornbush and got hurt" (`Threw`, `Shoved`, and a `Crashed` that hurt, v25; a crash that doesn't hurt isn't logged). A held item that expires: "The berry you were holding expired". A led sprite that dies has only its death line. Refusals say what stood in the way: "Couldn't take hold of Sprite #7: it's gone", "Couldn't take hold of Sprite #7: you're already leading Mira #12" (or "…holding something"), "Couldn't put the ball down: a berry is there" (or "…: it can't go on rock", "…: it can't go in deep water"). Letting go of a sprite can't fail: it's already standing somewhere. The screen's clicks follow what the Cursor has hold of, so the "already" refusals come only from clicks queued in a race; the one players meet is putting something down where it can't go.
   - **Lines that read the same in a row merge** into one with a count, "You petted Sprite #12 ×10", as the observed list's do; its tick is the latest one's. Spam-clicking would otherwise fill the log.
-- **Status line:** the tile under the Cursor, the cursor mode, what the Cursor is locked on to (`locked on Mira #12`, v21), what the Cursor holds or leads (`holding: berry`, `leading: Mira #12`, v23, in every mode), and hints for the active keys. A prompt such as "Quit? (y/n)" takes its place while open.
+- **Status line:** the tile under the Cursor, the cursor mode, the sprite the Cursor follows (`following Mira #12`, v26), what the Cursor holds or leads (`holding: berry`, `leading: Mira #12`, v23, in every mode), and hints for the active keys. A prompt such as "Quit? (y/n)" takes its place while open.
   - **The key hints** (v22) sit at the right and lead with the mode keys, `Z select  X train  C grab`, then `WASD scroll  space pause  . step  +/- speed  esc quit`. Short of room, whole hints drop from the end, so the mode keys are the last to go, together.
   - **While aiming** (v25), the key hints read `let go to throw  esc cancel`, or `let go to shove  esc cancel`.
-  - **A refused click's reason** (v22) takes the key hints' place for about 3 seconds of real time, worded as the event log words it: "Couldn't pet Sprite #12: it's gone". A Train click with nothing to act on says so the same way: "No sprite here to pet" (or hug, zap, shock). So does a Grab click (v23): "Nothing here to grab", or on a fixture, "Can't grab the berry bush: it's rooted to the ground"; and a Grab right click with nothing held, led or under the Cursor (v25): "Nothing here to throw or shove", or on a fixture, "Can't throw the thornbush: it's rooted to the ground". On a line too full for it, such as when the Cursor is locked on to a sprite standing on a berry, the reason still shows, and the tile's part of the line is cut short to make room.
+  - **A refused click's reason** (v22) takes the key hints' place for about 3 seconds of real time, worded as the event log words it: "Couldn't pet Sprite #12: it's gone". A Train click with nothing to act on says so the same way: "No sprite here to pet" (or hug, zap, shock). So do an `F` or a middle click with nothing to follow (v26), "No sprite here to follow", and a right click in Select mode while there's nothing to activate, "Nothing here to activate". So does a Grab click (v23): "Nothing here to grab", or on a fixture, "Can't grab the berry bush: it's rooted to the ground"; and a Grab right click with nothing held, led or under the Cursor (v25): "Nothing here to throw or shove", or on a fixture, "Can't throw the thornbush: it's rooted to the ground". On a line too full for it, such as when the Cursor follows a sprite standing on a berry, the reason still shows, and the tile's part of the line is cut short to make room.
   - The tile names its terrain and any object on it, with the object's stage if it has stages: `(61,40) grass · berry bush (mature)`.
   - **Display names** are the data's names with `_` shown as a space (`berry_bush` → "berry bush"), so `objects.ron` needs no separate display name. Its `plural` is the one other form the screen needs (§3.5.1).
 - **Overlays:** `?` for help (keys, colour legend, save path), `l` for a sortable sprite list to jump to.
@@ -1367,7 +1367,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 | Sprite | `☺` | `@` | by colour mode (§6.3) |
 | Selected sprite | `☻` | `@` in reverse video (`&` is the berry bush) | by colour mode (§6.3) |
 | Cursor arrows | `↓ ↑ → ←` | `v ^ > <` | the cursor mode's colour |
-| Cursor arrows, locked on (v21) | `▼ ▲ ► ◄` | `v ^ > <` (the status line says it's locked) | the cursor mode's colour |
+| Cursor arrows, following (v21; v26 name) | `▼ ▲ ► ◄` | `v ^ > <` (the status line says it's following) | the cursor mode's colour |
 | Mode marks: Select / Train / Grab (v21) | `♦` `±` `∩` | `S` `T` `G` | the mode's colour |
 | Status marks: idle / grab / release / empty / sent / applied / rejected | `·` `↑` `↓` `░` `+` `☼` `?` | `-` `^` `v` `_` `+` `*` `?` | the mode's colour |
 | Decision marker (flashes) | `X` | `X` | white |
@@ -1421,30 +1421,30 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 - **Visible or invisible** (v21): each cursor mode will have its own switch, and every mode starts invisible. The switch, and what a visible Cursor means to sprites, come with the visible Cursor's slice, 11d ([#60](https://github.com/Keazra/terra-sprites/issues/60)); until then the Cursor is always invisible, and a touch from it is a feeling from nowhere (§4.6, §5.6).
 
 - **Scrolling:** `W` `A` `S` `D` or the arrow keys scroll the viewport one tile, and Shift makes it 5. Holding a key keeps scrolling. The viewport stops at the wall. There is **no keyboard cursor**.
-- **The Cursor follows the pointer,** unless it's locked on (below). It sits on the tile under the pointer, so it changes as the map scrolls beneath a still pointer. When the pointer leaves the map view, the Cursor stays on its last tile. A click acts as the cursor mode says.
-- **`Q` and `E` are the left and right click** (v21), in every mode, acting where the Cursor is: on the tile under the pointer, or on the sprite it's locked on to. So a locked-on Cursor keeps the keys on its sprite: in Select mode `Q` can't pick up a sprite the pointer happens to rest on. Each acts once per press: holding one doesn't repeat, so a held key can't pour out pets or flicker the lock. In Grab mode `E` also has a release, as the right button does: holding it aims a throw or a shove, and letting it go sends it (v25, below). Keyboard players can train without the mouse: `Tab` to a sprite, `E` to lock on, `X` for Train, `Q` to pet.
+- **The Cursor follows the pointer,** unless it follows a sprite (below). It sits on the tile under the pointer, so it changes as the map scrolls beneath a still pointer. When the pointer leaves the map view, the Cursor stays on its last tile. A click acts as the cursor mode says.
+- **`Q` and `E` are the left and right click** (v21), in every mode, acting where the Cursor is: on the tile under the pointer, or on the sprite it follows. So a following Cursor keeps the keys on its sprite: in Select mode `Q` can't pick up a sprite the pointer happens to rest on. Each acts once per press: holding one doesn't repeat, so a held key can't pour out pets. In Grab mode `E` also has a release, as the right button does: holding it aims a throw or a shove, and letting it go sends it (v25, below). Keyboard players can train without the mouse: `Tab` to a sprite, `F` to follow it, `X` for Train, `Q` to pet.
 - **Reach:** the Cursor reaches anywhere on the map.
 - **Ownership:** **the Cursor lives in the sim** as far as it touches the world: `World` owns the item it holds or the sprite it leads, one thing at a time, and while it leads, its tile (v23).
   - A held item stays in its World storage with no tile. It's left out of the occupancy index and perception, and its lifecycle keeps running (§3.5.2).
   - A led sprite stays on the map (below).
-  - `App` owns where the Cursor is, the cursor mode and the lock, and reads `world.cursor()` to draw what it holds or leads. While the Cursor is invisible to sprites, where it is touches the world only while it leads a sprite: then each move onto a new tile sends `MoveCursor` (§2.5). The visible Cursor (11d) will send it always.
+  - `App` owns where the Cursor is, the cursor mode and Follow, and reads `world.cursor()` to draw what it holds or leads. While the Cursor is invisible to sprites, where it is touches the world only while it leads a sprite: then each move onto a new tile sends `MoveCursor` (§2.5). The visible Cursor (11d) will send it always.
 
 **Leading a sprite** (v23). Sprites are led, never lifted:
 - **A Grab-mode click on a sprite takes hold of it,** and the next Grab-mode click lets go. A sprite on the tile comes before an item.
 - **The led sprite stays on the map** and walks after the Cursor at its own pace: its speed, its step costs, its energy. It heads for the Cursor's tile, or, if it can't stand there or its flood doesn't reach it, for the tile its flood reaches nearest the Cursor. Held up by another sprite, it waits or goes round, as any walking sprite does.
-- **The leash** (v23 change 14): while the Cursor leads a sprite, it goes no further from it than 5 tiles in a square, in every mode. Pointed further, or locked on to a sprite further off, it stops at the leash's end nearest where it would be, and moves on as the led sprite catches up. A click lands where the Cursor is, not past the leash. The leash shows as a dotted line from the Cursor to the led sprite, flashing as the Decision marker does, in Grab's yellow, over empty ground only, so sprites and objects stay visible. Its reach is a UI setting.
+- **The leash** (v23 change 14): while the Cursor leads a sprite, it goes no further from it than 5 tiles in a square, in every mode. Pointed further, or following a sprite further off, it stops at the leash's end nearest where it would be, and moves on as the led sprite catches up. A click lands where the Cursor is, not past the leash. The leash shows as a dotted line from the Cursor to the led sprite, flashing as the Decision marker does, in Grab's yellow, over empty ground only, so sprites and objects stay visible. Its reach is a UI setting.
 - **It chooses nothing while led:** no attention, decision or trace entries (§2.4). So it can't eat, drink, flee or fight back, even when hurt: the Cursor's grip is hard light, stronger than a sprite. Other sprites perceive it as usual, and pets and shocks reach it.
-- **It follows the Cursor in every cursor mode.** Leading the locked-on sprite, the lock steps aside (below), so the Cursor follows the pointer and the sprite follows the Cursor.
+- **It follows the Cursor in every cursor mode.** Leading the followed sprite, Follow steps aside (below), so the Cursor follows the pointer and the sprite follows the Cursor.
 - **Let go,** it chooses afresh at its next step 5. Taken hold of mid-action, its action ends `pulled_away` (§5.5).
 - **Being led isn't a sense:** a sprite learns nothing from it as such. What the Cursor's handling means to sprites is the visible Cursor's question (11d).
 
 **Throwing and shoving** (v25). In Grab mode the right click sends what the Cursor has hold of: it **throws** a held item, which rolls (§3.5.4), or **shoves** a led sprite, which is let go and slides (§3.5.4). Sprites are never thrown (v23 change 8). The player aims by **pulling back**, like a pool cue:
-- **Pressing the right button** (or `E`) **starts aiming** what the Cursor has hold of, whatever is under the pointer. With the Cursor empty, the press first grabs what's under it, as a left click would: the locked-on sprite, or else the sprite there, or else the item there. With nothing there, it sends nothing, flashes `?`, and says "Nothing here to throw or shove"; on a fixture, "Can't throw the thornbush: it's rooted to the ground".
+- **Pressing the right button** (or `E`) **starts aiming** what the Cursor has hold of, whatever is under the pointer. With the Cursor empty, the press first grabs what's under it, as a left click would: the followed sprite, or else the sprite there, or else the item there. With nothing there, it sends nothing, flashes `?`, and says "Nothing here to throw or shove"; on a fixture, "Can't throw the thornbush: it's rooted to the ground".
 - **While aiming, the Cursor sits on the thing and stays still,** still gripping it, and the pointer does the pulling. Leading, the Cursor goes onto the led sprite as the press lands, and since a led sprite walks towards the Cursor, it stands still until the aim ends; its body goes on, and pets and shocks reach it. A sprite sliding when the press lands slides on, and the Cursor rides along on it. Holding, the Cursor stays where it was pressed, and the held item is drawn there, under the Cursor, until it's thrown.
 - **The player pulls the pointer back** from the Cursor, away from where the thing should go. The thing will go the opposite way to the pull, from where it is, snapped to the nearest of the 8 directions; the pull's length, from the Cursor to the pointer, in the game's own measure (a diagonal step is one tile), sets how far, up to the Cursor's furthest for the thing's size (§3.5.4). So pressed with the pointer off a led sprite, the aim already pulls as far as the pointer is from it.
 - **The aim line** shows it: steady dots in Grab's yellow from the thing, along its path, as far as the pull sends it, with a small circle where it would stop if nothing's in the way (§6.2). It's drawn over empty ground only, as the leash is, so a bush in the way shows through. It's straight, and doesn't predict bounces.
 - **Letting go sends it:** `Throw { from, toward, tiles }`, from where aiming began, or `Shove { toward, tiles }` (§2.5). Letting go with the pointer on the Cursor sends nothing, and `Esc` cancels: either way the thing stays held or led, whether the press grabbed it or it was held already.
-- **From where:** a throw starts where aiming began, and is refused, as putting the item down would be, where the item can't go. Locked on, the Cursor sits on its sprite, so a throw starts at the sprite's feet. A shove starts from wherever the led sprite stands when it applies.
+- **From where:** a throw starts where aiming began, and is refused, as putting the item down would be, where the item can't go. Following, the Cursor sits on its sprite, so a throw starts at the sprite's feet. A shove starts from wherever the led sprite stands when it applies.
 - **With the keyboard,** `E` is the right button: hold it, pull with the mouse, and let it go. In a terminal that doesn't report a key being let go, a second press of `E` sends it. Windows Terminal reports it.
 - **A sliding sprite** can be taken hold of: its slide carries on to its end, and then it follows the Cursor. Taking hold of a sprite doesn't lift it, so unlike picking up a rolling item, it can't end the slide.
 
@@ -1458,28 +1458,31 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 
 - The arrows and marks take the mode's colour. Parts that fall outside the map view aren't drawn.
 - The Cursor covers the 8 tiles around its target while it sits there; the status line still names the target.
-- The arrows and marks are theme glyphs (§6.2). **Locked on,** the arrows are solid, clamping the sprite (`▼ ► ◄ ▲`).
+- The arrows and marks are theme glyphs (§6.2). **Following a sprite,** the arrows are solid, clamping the sprite (`▼ ► ◄ ▲`).
 
-**Locking on** (v21). The Cursor can lock on to the selected sprite, so a pet or a shock needs no aim:
-- **Locked on,** the Cursor sits on its sprite and moves with it, in every mode, whatever the pointer does. If the sprite walks out of view, the Cursor goes with it, and a click still reaches it.
-- **In Select mode a right click (or `E`) turns the lock on or off.** With a sprite selected, it toggles the lock on that sprite, wherever the click is. With nothing selected, a right click on a sprite selects it and locks on; on empty ground it does nothing. In the other modes a right click has other jobs, so the lock is set in Select mode and kept through the rest.
-- **The lock moves with the selection:** selecting another sprite, by a left click on it, `Tab` or `Shift+Tab`, moves it.
-- **A left click on empty ground clears the selection only while the lock is off,** so a stray click can't lose a lock.
-- **The sprite's death lets go.** The Cursor stays where the sprite died, and follows the pointer again.
-- **While the Cursor leads the locked-on sprite** (v23 change 6), the lock steps aside, in every mode: the Cursor follows the pointer, within the leash. Let go, the lock comes back and the Cursor sits on the sprite again, so the player can lead a sprite to water and go straight back to training it. A right click in Select mode meanwhile ends the lock for good.
-- **Otherwise the lock holds, whatever the Cursor has hold of.** Holding a berry picked up with the lock off, then locking on to a hungry sprite, a Grab click puts the berry down at its feet. Leading one sprite while locked on to another, the led sprite is led towards the locked-on one, the Cursor waiting at the leash's end until it catches up.
-- **Only sprites are selected and locked on to** (v23). The selection is sprites only, and a rolling ball stops within a few tiles, so it can be grabbed where it ends up.
-- The status line names what the Cursor is locked on to (`locked on Mira #12`).
+**Follow** (v21 as locking on; v26). The Cursor can follow a sprite, so a pet or a shock needs no aim:
+- **Following,** the Cursor sits on its sprite and moves with it, in every mode, whatever the pointer does. If the sprite walks out of view, the Cursor goes with it, and a click still reaches it.
+- **`F` turns Follow on or off, in every mode,** and a **middle click** does the same where it points (v26). Following, it stops, wherever the Cursor is. Otherwise it follows the sprite on the Cursor's tile, or, with none there, the selected sprite, so `Tab` then `F` works without the mouse; with neither, it sends nothing, flashes `?`, and says "No sprite here to follow". A middle click off the map view points nowhere and does nothing, as a click there does. Held, `F` acts once, so it can't flicker Follow on and off. A middle click is the mouse, so it leaves the quit prompt open; `F` is a key, and cancels it.
+- **Follow is the Cursor's, and the selection the inspector's** (v26). Following a sprite doesn't select it, and selecting another sprite, by a left click on it, `Tab` or `Shift+Tab`, leaves Follow where it is. So the player can read one sprite's Brain tab while petting its neighbour; the status line says which sprite the Cursor follows.
+- **A left click on empty ground clears the selection,** and leaves Follow as it is.
+- **The followed sprite's death ends Follow,** whichever sprite is selected. The Cursor stays where the sprite died, and follows the pointer again.
+- **While the Cursor leads the followed sprite** (v23 change 6), Follow steps aside, in every mode: the Cursor follows the pointer, within the leash. Let go, Follow comes back and the Cursor sits on the sprite again, so the player can lead a sprite to water and go straight back to training it. `F` meanwhile ends Follow for good. Stopping Follow while aiming leaves the aim as it was: the Cursor stays where aiming began until the aim ends.
+- **Otherwise Follow holds, whatever the Cursor has hold of.** Holding a berry picked up with Follow off, then following a hungry sprite, a Grab click puts the berry down at its feet. Leading one sprite while following another, the led sprite is led towards the followed one, the Cursor waiting at the leash's end until it catches up.
+- **Only sprites are selected and followed** (v23; followed, v26). The selection is sprites only, and a rolling ball stops within a few tiles, so it can be grabbed where it ends up.
+- The status line names the sprite the Cursor follows (`following Mira #12`).
+- **Follow isn't Track.** `T` (track) has the view follow the selected sprite; Follow has the Cursor follow a sprite.
+
+**Activate** (v26). In Select mode the right click (or `E`) activates the thing clicked, such as a device: a hatchery, a food dispenser ([#26](https://github.com/Keazra/terra-sprites/issues/26)). Activating needs something selectable to activate ([#90](https://github.com/Keazra/terra-sprites/issues/90)); until then there's nothing, so it sends nothing, flashes `?`, and says "Nothing here to activate". It touches neither the selection nor Follow.
 
 **Cursor modes:**
 
 | Key | Mode | Mark | Colour | A left click (`Q`)… | A right click (`E`)… | `Y` / `N` |
 |---|---|---|---|---|---|---|
-| `Z` | **Select** (the default) | `♦` | white | selects the sprite under the pointer; on empty ground, clears the selection unless the Cursor is locked on | locks on to the selection, or lets go (above) | `·` / `·` |
+| `Z` | **Select** (the default) | `♦` | white | selects the sprite under the pointer; on empty ground, clears the selection | activates the thing clicked; nothing can be activated yet (v26, above) | `·` / `·` |
 | `X` | **Train** (v21) | `±` | light magenta (v22) | rewards the target: a **pet**; amplified, a **hug** | corrects the target: a **zap**; amplified, a **shock** | feedback (below) |
 | `C` | **Grab** (slice 11a) | `∩` | yellow | with the Cursor empty, grabs what's under it: takes hold of a sprite (`TakeHold`), or else picks up an item (`PickUp`); leading, lets go (`LetGo`); holding, puts the item down (`PutDown`). Pressing `C` again opens the Place menu (slice 11c) | throws a held item or shoves a led sprite, aimed by pulling back; with the Cursor empty, grabs what's under it first (v25, above) | empty: `↑` / `░`; holding or leading: `↓` / the thing's glyph |
 
-- **Train's target** is the sprite the Cursor is locked on to, or else the sprite on the Cursor's tile. A pet or hug sends `Reward` (§2.5) with its reach back; a zap or shock sends `Correct`, which looks back only the touch window. So at high speed a pet still finds what the player meant, and an exact shock needs a pause.
+- **Train's target** is the sprite the Cursor follows, or else the sprite on the Cursor's tile. A pet or hug sends `Reward` (§2.5) with its reach back; a zap or shock sends `Correct`, which looks back only the touch window. So at high speed a pet still finds what the player meant, and an exact shock needs a pause.
 - **Amplifying:** Shift with `Q` or `E`, or Ctrl with a click. Shift with a click can't be used: Windows Terminal keeps Shift+click for selecting text while a program has the mouse.
 - **The reach back** a Reward carries is about **two seconds of the player's time** at the current speed, in ticks, never below `touch_window` or above `max_reach_back` (Appendix B): 3 at 1× and slower, 5 at 2×, 10 at 4×, 20 at 8×, 40 at 16× and Max. While paused it's the reach back of the speed time will resume at. The two seconds are a UI setting, tuned in play.
 - **The mouse wheel cycles the modes:** a notch down picks the next (Select → Train → Grab, then back to Select), a notch up the previous. A wheel event also points, like every mouse event. The wheel doesn't scroll the map. It cycles the modes over the map view; over the inspector, it scrolls the open tab instead (§6.1); elsewhere it does nothing (v22). Built in slice 10b; Grab joins in slice 11a.
@@ -1488,19 +1491,19 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
   - **Both flashes show, at every speed** (v22). At speed a command can apply in the same frame it's sent, so `☼` or `?` waits until `+` has shown for its 0.3 s. `?` wins over `☼`: a command applied in the same tick as a refusal, or while its `?` is still to show or showing, doesn't replace it. The marks follow the latest click: a click that sends puts any earlier click's result not yet shown behind it.
   - **While paused,** `+` flashes at each click, and `☼` or `?` when time moves and the commands apply.
   - A flash under way carries on through a change of mode, in the new mode's colour.
-- **Nothing to act on:** a click in Train or Grab mode with nothing to act on sends no command and flashes `?` at once. The status line says so (§6.1): "No sprite here to pet".
-- **Switching modes keeps each mode's state.** What the Cursor holds or leads, or a Place item not yet put down, waits in reserve while other modes are in use, and a led sprite keeps following the Cursor (v23); the selection and the lock stay in every mode. While the Cursor holds or leads something, the status line shows it in every mode (`leading: Mira #12`, `holding: berry`), because a led sprite can't eat or drink (§2.4) and a held berry can expire.
-- **Leaving a mode:** `Esc` returns to Select, keeping the lock. `Esc` first closes any open menu or overlay. From Select, `Esc` asks to quit (§6.6). A right click no longer returns to Select (v21).
+- **Nothing to act on:** a click in Train or Grab mode, a right click in Select mode, or `F`, with nothing to act on sends no command and flashes `?` at once. The status line says so (§6.1): "No sprite here to pet".
+- **Switching modes keeps each mode's state.** What the Cursor holds or leads, or a Place item not yet put down, waits in reserve while other modes are in use, and a led sprite keeps following the Cursor (v23); the selection and Follow stay in every mode. While the Cursor holds or leads something, the status line shows it in every mode (`leading: Mira #12`, `holding: berry`), because a led sprite can't eat or drink (§2.4) and a held berry can expire.
+- **Leaving a mode:** `Esc` returns to Select, keeping Follow. `Esc` first closes any open menu or overlay. From Select, `Esc` asks to quit (§6.6). A right click no longer returns to Select (v21).
 - **Pausing queues actions.** Commands are stamped for the next tick (§2.5), so clicks made while paused apply, in click order, when time next moves (`space` or `.`). Grab mode's marks follow the queue: after a queued `TakeHold` or `PickUp`, `Y` shows `↓` and `N` the thing being grabbed; after a queued `Throw` or `Shove` (v25), they show the Cursor empty. If the sim rejects it, `?` flashes and the marks return to the Cursor's real state.
 
 **Other keys:**
 
 | Key | Action |
 |---|---|
-| `Tab` / `Shift+Tab` | Select the next / previous sprite by ID, wrapping around, and centre the viewport on it if it's out of view. With none selected, start from the lowest / highest ID; after the selected sprite dies, carry on from its ID. A lock moves with the selection |
+| `Tab` / `Shift+Tab` | Select the next / previous sprite by ID, wrapping around, and centre the viewport on it if it's out of view. With none selected, start from the lowest / highest ID; after the selected sprite dies, carry on from its ID. Follow stays where it is |
 | `PgUp` / `PgDn` | Scroll the open inspector tab by a page |
 | `T` | Track: the view follows the selected sprite (v21; `f` before) |
-| `F` | Kept for **Function** (v21, later): activate the selected thing, such as a hatchery ([#26](https://github.com/Keazra/terra-sprites/issues/26)). Not a cursor mode |
+| `F` | **Follow** (v26): the Cursor follows the sprite under it, or else the selected sprite, or stops (above). The middle mouse button does the same where it points. Not a cursor mode |
 | `b` | Cycle the colour mode |
 | `[` / `]` | Previous / next inspector tab, wrapping around |
 | `g` | Export the genome (Genome tab) |
@@ -1516,8 +1519,8 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 
 ### 6.6 Time and the frame loop
 
-- **Keys:** `space` pauses and resumes; `.` steps while paused (below); `+` and `-` step through ⅛×, ¼×, ½×, 1× (1.25 ticks per second), 2×, 4×, 8×, 16× (20 ticks per second) and **Max**. Each press halves or doubles the rate. The game starts at 1×; `-` stops at ⅛× (5/32 of a tick a second) and `+` at Max. The top bar labels the slow speeds `1/2x`, `1/4x` and `1/8x`, and shows the speed while paused too, as `|| paused 4x` (v26).
-- **A step** (v26) runs one real second's worth of ticks at the speed, rounded down, at least 1 and at most 20: 1 at 1× and slower, 2 at 2×, 5 at 4×, 10 at 8×, 20 at 16× and Max. It runs within the frame's budget like any other ticks, and what the budget cuts short runs on the next frames. A press before a step has finished tops it back up to a whole step rather than adding another. Resuming drops what's left of it.
+- **Keys:** `space` pauses and resumes; `.` steps while paused (below); `+` and `-` step through ⅛×, ¼×, ½×, 1× (1.25 ticks per second), 2×, 4×, 8×, 16× (20 ticks per second) and **Max**. Each press halves or doubles the rate. The game starts at 1×; `-` stops at ⅛× (5/32 of a tick a second) and `+` at Max. The top bar labels the slow speeds `1/2x`, `1/4x` and `1/8x`, and shows the speed while paused too, as `|| paused 4x` (v27).
+- **A step** (v27) runs one real second's worth of ticks at the speed, rounded down, at least 1 and at most 20: 1 at 1× and slower, 2 at 2×, 5 at 4×, 10 at 8×, 20 at 16× and Max. It runs within the frame's budget like any other ticks, and what the budget cuts short runs on the next frames. A press before a step has finished tops it back up to a whole step rather than adding another. Resuming drops what's left of it.
 - **Quitting:** `Esc` (from Select, with no menu open) asks "Quit? (y/n)". `y` or a second `Esc` quits; any other key cancels. `Ctrl+C` quits at once.
 - **Exact pacing:** the UI clock counts owed ticks in integer maths, with rates in 32nds of a tick per second, so every speed (including ⅛×) runs at exactly its nominal rate with no drift.
 - **Held keys:**
@@ -1526,7 +1529,7 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
   - **`space` toggles pause only on a fresh press,** so holding it doesn't flicker.
   - **Holding `.` keeps stepping,** a step per repeat, which don't pile up (above).
   - **Telling a hold from a press:** a key counts as held when the terminal reports it as repeating, or when it's pressed again with no release in between. The second rule is only trusted where the terminal reports releases: Windows always does, as does a terminal with the kitty keyboard protocol on (below), and any other terminal is trusted once a release arrives. Keys are tracked by physical key, so a `+` whose release is reported as `=` (Shift released first) still counts as released.
-  - **The kitty keyboard protocol** (v26): where the terminal supports it (kitty, WezTerm, Ghostty, recent foot), the game turns it on at start, asking for every key, `+` and the letters included, to be reported with its repeats and releases. It's turned off again on exit and in the panic hook, before the alternate screen is left, since the terminal keeps it per screen. Shift and the lock keys then arrive as keys of their own, and do nothing. Such a terminal reports a shifted key as the key with Shift held, so `>`, `_`, `{` and `}` act as `.`, `-`, `[` and `]` there, where other terminals ignore them; and Caps Lock doesn't count as Shift, so it neither amplifies `Q` and `E` nor makes scrolling jump. Windows reports releases without it.
+  - **The kitty keyboard protocol** (v27): where the terminal supports it (kitty, WezTerm, Ghostty, recent foot), the game turns it on at start, asking for every key, `+` and the letters included, to be reported with its repeats and releases. It's turned off again on exit and in the panic hook, before the alternate screen is left, since the terminal keeps it per screen. Shift and the lock keys then arrive as keys of their own, and do nothing. Such a terminal reports a shifted key as the key with Shift held, so `>`, `_`, `{` and `}` act as `.`, `-`, `[` and `]` there, where other terminals ignore them; and Caps Lock doesn't count as Shift, so it neither amplifies `Q` and `E` nor makes scrolling jump. Windows reports releases without it.
   - **Limitation:** terminals that report neither repeats nor releases, and don't support the kitty protocol, can't tell a hold from taps, so every press there counts as fresh.
 - **Single-threaded in M1.** Each frame:
   1. drain input into `Action`s and `Command`s
@@ -1544,7 +1547,7 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 
 ### 6.8 UI architecture
 
-- **`App`** holds the UI state: where the Cursor is, cursor mode (and each mode's reserve), the lock (v21), viewport, selection, screen state (Normal / Menu / Prompt / Help), colour mode, emote and feedback timers, and the active `InfoPolicy`.
+- **`App`** holds the UI state: where the Cursor is, cursor mode (and each mode's reserve), Follow (v21 as the lock), viewport, selection, screen state (Normal / Menu / Prompt / Help), colour mode, emote and feedback timers, and the active `InfoPolicy`.
 - **Input:** a keybinding table maps keys to UI `Action`s. Each `Action` either changes `App` or produces a `Command`.
 - **Rendering** is a pure function, `render(frame, &App, &World)`.
 - **Panic hook:** it restores the terminal and flushes the replay.
