@@ -1367,7 +1367,7 @@ pub(crate) fn event_line(event: &Event, data: &Words) -> Option<String> {
             crashed_into(into, data)
         )),
         EventKind::Crashed { hurt: false, .. } => None,
-        // The Place menu and naming, spoken to the player (slice 11c).
+        // The Place menu and naming, spoken to the player (design v26 §6.5).
         EventKind::Placed { object_type, .. } => Some(format!(
             "You placed {}",
             with_article(&display_name(object_type))

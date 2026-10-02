@@ -31,15 +31,15 @@ pub enum Screen {
     Normal,
     /// "Quit? (y/n)" is waiting for an answer.
     QuitPrompt,
-    /// The Place menu is open (slice 11c).
+    /// The Place menu is open (design v26 §6.5).
     PlaceMenu,
-    /// The Place menu's list of genome files is open (slice 11c).
+    /// The Place menu's list of genome files is open (design v26 §6.5).
     GenomeMenu,
     /// The player is typing a sprite's name (design §6.5).
     Naming,
 }
 
-/// What a Place menu item makes (slice 11c).
+/// What a Place menu item makes (design v26 §6.5).
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlaceItem {
     /// An object of the type with this stable ID, called `name` in the data.
@@ -278,7 +278,7 @@ pub struct App {
     /// The names the player has given sprites, as last seen, so the log
     /// keeps naming a sprite after it dies (design §6.5).
     names: Names,
-    /// The Place menu item waiting on the Cursor (slice 11c).
+    /// The Place menu item waiting on the Cursor (design v26 §6.5).
     placing: Option<Placing>,
     /// The highlighted item of the open menu, from 0.
     menu_choice: usize,
@@ -794,7 +794,7 @@ impl App {
         if self.mode != CursorMode::Grab || flash == StatusMark::Rejected {
             return [flash; 2];
         }
-        // A Place menu item waiting shows as held (slice 11c).
+        // A Place menu item waiting shows as held (design v26 §6.5).
         if self.placing.is_some() {
             return [StatusMark::Release, StatusMark::Holding];
         }
@@ -1057,7 +1057,7 @@ impl App {
                 _ => {}
             },
             // A Place menu item waiting on the Cursor takes the next click, and
-            // a right click puts it away (slice 11c).
+            // a right click puts it away (design v26 §6.5).
             (CursorMode::Grab, Button::Left) if self.placing.is_some() => self.place(tile),
             (CursorMode::Grab, Button::Right) if self.placing.is_some() => self.placing = None,
             (CursorMode::Grab, Button::Left) => self.grab_click(tile, sprite, world),
@@ -1284,7 +1284,7 @@ impl App {
     }
 
     /// What the Place menu item waiting on the Cursor is called, if one is
-    /// (slice 11c).
+    /// (design v26 §6.5).
     pub fn placing(&self) -> Option<&str> {
         self.placing.as_ref().map(|placing| placing.label.as_str())
     }
@@ -1394,7 +1394,7 @@ impl App {
         Flow::Continue
     }
 
-    /// Picks item `index` of the open menu (slice 11c): an object type the
+    /// Picks item `index` of the open menu (design v26 §6.5): an object type the
     /// data offers, or a new sprite, waits on the Cursor; the Place menu's
     /// last item lists the genome files; a genome file is read, and its
     /// sprite waits.
@@ -1450,7 +1450,7 @@ impl App {
         self.open_menu(Screen::GenomeMenu);
     }
 
-    /// Places the item waiting on the Cursor on `tile` (slice 11c).
+    /// Places the item waiting on the Cursor on `tile` (design v26 §6.5).
     fn place(&mut self, tile: Pos) {
         let Some(placing) = self.placing.take() else {
             return;

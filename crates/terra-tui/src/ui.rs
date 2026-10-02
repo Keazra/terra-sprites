@@ -347,7 +347,7 @@ fn line_between(from: Pos, to: Pos) -> Vec<Pos> {
     tiles
 }
 
-/// Draws the open menu, if any (slice 11c): over the map, from its top-left
+/// Draws the open menu, if any (design v26 §6.5): over the map, from its top-left
 /// tile, its items numbered and the highlighted one in reverse video, inside
 /// a border; as far as the screen goes.
 fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) {
@@ -404,7 +404,7 @@ fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) {
 
 /// The glyph of what the Cursor has hold of, as the queue will leave it: a
 /// sprite's, or an item's, held or still on the map (design v23 §6.5); or
-/// of the Place menu item waiting on it (slice 11c).
+/// of the Place menu item waiting on it (design v26 §6.5).
 fn held_glyph(app: &App, world: &World) -> char {
     let theme = &app.theme;
     if let Some(item) = app.placing_item() {
@@ -543,7 +543,7 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         }
         None => String::new(),
     };
-    // A Place menu item waiting on the Cursor, in every mode (slice 11c).
+    // A Place menu item waiting on the Cursor, in every mode (design v26 §6.5).
     let placing = app
         .placing()
         .map(|label| format!(" │ placing: {label}"))
@@ -569,7 +569,7 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
             let hints = match (app.aiming(), app.grip(world)) {
                 (true, Some(Grip::Holds(_))) => hint_if_fits(room, "let go to throw  esc cancel"),
                 (true, Some(Grip::Leads(_))) => hint_if_fits(room, "let go to shove  esc cancel"),
-                // A Place menu item waiting, how to place it or not (slice 11c).
+                // A Place menu item waiting, how to place it or not (design v26 §6.5).
                 _ if placing => hint_if_fits(room, "click to place  right-click put away"),
                 _ => hints_within(room),
             };

@@ -1,4 +1,4 @@
-//! Sprites' names (design §6.5, slice 11c). A sprite has none until the
+//! Sprites' names (design v26 §6.5). A sprite has none until the
 //! player gives it one, typed or made at random from the data's syllables
 //! (`names.ron`). The screen makes a random name up and sends it in a
 //! `Rename`, so naming never draws from the world's RNG.
