@@ -9,7 +9,8 @@ same text. The comparison is printed as a table, and also written to the
 file `GITHUB_STEP_SUMMARY` names, if set, for the run's summary page.
 
 Exits with 1 when the runs differ, naming the first checkpoint where they
-part, and with 2 when a run is unreadable or there are fewer than two.
+part, and with 2 when a run is unreadable, there are fewer than two, or no
+run has a checkpoint to compare.
 """
 
 import os
@@ -31,9 +32,14 @@ class Run(NamedTuple):
         """Its output's line `i`, or None past its end."""
         return self.lines[i] if i < len(self.lines) else None
 
+    def hashes(self):
+        """Its state hash at each checkpoint, by tick."""
+        found = (checkpoint_in(line) for line in self.lines)
+        return {checkpoint.tick: checkpoint.hash for checkpoint in found if checkpoint}
+
 
 class Checkpoint(NamedTuple):
-    tick: str
+    tick: int
     hash: str
 
 
@@ -52,8 +58,8 @@ def read_runs(folder):
 def checkpoint_in(line):
     """The checkpoint a line of output gives, or None for any other line."""
     words = (line or "").split()
-    if len(words) >= 4 and words[0] == "tick" and words[2] == "hash":
-        return Checkpoint(words[1], words[3])
+    if len(words) >= 4 and words[0] == "tick" and words[1].isdigit() and words[2] == "hash":
+        return Checkpoint(int(words[1]), words[3])
     return None
 
 
@@ -85,17 +91,16 @@ def report(runs, differs_at):
         out.append(f"| {run.runner} | `{run.target}` |")
     out.append("")
 
-    out.append("| Tick | " + " | ".join(run.runner for run in runs) + " | |")
+    # Rows go by tick, not by line, so a runner that printed a line more or
+    # less still lines up with the rest.
+    hashes = [run.hashes() for run in runs]
+    out.append("| Tick | " + " | ".join(run.runner for run in runs) + " | Match |")
     out.append("|---:|" + "---|" * len(runs) + ":---:|")
-    for i in range(max(len(run.lines) for run in runs)):
-        row = [run.line(i) for run in runs]
-        checkpoints = [checkpoint_in(line) for line in row]
-        ticks = [checkpoint.tick for checkpoint in checkpoints if checkpoint]
-        if not ticks:
-            continue
-        cells = [f"`{checkpoint.hash}`" if checkpoint else "" for checkpoint in checkpoints]
+    for tick in sorted(set().union(*hashes)):
+        row = [by_tick.get(tick) for by_tick in hashes]
+        cells = [f"`{hash}`" if hash else "(none)" for hash in row]
         mark = "✓" if len(set(row)) == 1 else "✗"
-        out.append(f"| {ticks[0]} | " + " | ".join(cells) + f" | {mark} |")
+        out.append(f"| {tick} | " + " | ".join(cells) + f" | {mark} |")
     return "\n".join(out) + "\n"
 
 
@@ -106,19 +111,32 @@ def main():
     try:
         runs = read_runs(sys.argv[1])
     except OSError as error:
-        print(f"can't read a run: {error}", file=sys.stderr)
-        return 2
+        return fail(f"Can't read a run: {error}")
     if len(runs) < 2:
-        print(f"found {len(runs)} runs in {sys.argv[1]}; need at least two", file=sys.stderr)
-        return 2
+        finished = ", ".join(run.runner for run in runs) or "none"
+        return fail(f"Too few runners finished to compare: {finished}. It needs at least two.")
+    if not any(run.hashes() for run in runs):
+        return fail("No runner printed a checkpoint, so there was nothing to compare.")
     differs_at = first_difference(runs)
     text = report(runs, differs_at)
     sys.stdout.buffer.write(text.encode("utf-8"))
+    summarise(text)
+    return 0 if differs_at is None else 1
+
+
+def fail(message):
+    """Says why nothing could be compared, here and in the run's summary."""
+    print(message, file=sys.stderr)
+    summarise(f"**Not compared.** {message}\n")
+    return 2
+
+
+def summarise(text):
+    """Adds `text` to the run's summary page, when there is one."""
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a", encoding="utf-8") as file:
             file.write("## Cross-platform determinism\n\n" + text)
-    return 0 if differs_at is None else 1
 
 
 if __name__ == "__main__":
