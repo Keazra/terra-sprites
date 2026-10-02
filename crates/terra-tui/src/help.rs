@@ -44,6 +44,7 @@ const COLUMNS: [&[Group]; 3] = [
             ("Q E", "left / right click"),
             ("Shift+Q E", "hug / shock"),
             ("Ctrl+click", "hug / shock"),
+            ("H", "show to sprites"),
             ("F", "follow a sprite"),
             ("middle", "follow a sprite"),
             ("wheel", "change mode"),

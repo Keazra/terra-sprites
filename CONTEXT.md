@@ -415,8 +415,16 @@ The viewport following the selected sprite, so it stays in the middle of the map
 _Avoid_: follow (that's the Cursor fixed on a sprite, with `F`), lock on
 
 **Cursor**:
-The player's hard-light projection into the terrarium: to the sprites the player is an advanced creature, and this is how they reach in. It shows on the map as a 3×3 grid that follows the pointer, unless it follows a sprite, and a click acts as the cursor mode says. In M1 sprites can't see it, so its touch is a feeling from nowhere. It holds an item or leads a sprite, one thing at a time.
+The player's hard-light projection into the terrarium: to the sprites the player is an advanced creature, and this is how they reach in. It shows on the map as a 3×3 grid that follows the pointer, unless it follows a sprite, and a click acts as the cursor mode says. Sprites see it only where the player has made it **visible**; otherwise its touch is a feeling from nowhere. It holds an item or leads a sprite, one thing at a time.
 _Avoid_: hand, orb, selection (the selection is the chosen sprite)
+
+**Visible (the Cursor)**:
+Whether sprites can see the Cursor, switched with `H` for each cursor mode on its own; every mode starts hidden. While it's visible it draws as a frame of light in place of its arrows, and the status line says "seen". A visible Cursor is a thing of its own kind that sprites can go to or back away from, and they learn about it as about a particular sprite: a pet teaches them to like it, a zap, a shock or a shove into something that hurts teaches them to fear it, as well as what the touch teaches about the thing touched. Trying anything else on it is a fruitless try. A hidden Cursor's touch is a feeling from nowhere, as before.
+_Avoid_: seen mode (the switch isn't a cursor mode)
+
+**Getting used to the Cursor**:
+How a sprite's fear of a visible Cursor wears off while the Cursor stays near and doesn't correct it, fastest with the Cursor on its own tile: it comes to see it can't do anything about it. Fear of sprites doesn't wear off this way.
+_Avoid_: habituation (the general idea, a later design), taming
 
 **Pointer**:
 Where the mouse is on screen. The Cursor follows it over the map view, unless it follows a sprite, sitting one tile up and one left of it so the pointer's arrow doesn't hide it: that tile is the one the pointer **points at**, and what a click acts on.

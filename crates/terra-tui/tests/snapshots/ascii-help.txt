@@ -5,12 +5,12 @@
 │ .          step                 Q E        left / right click   Shift+Tab  previous sprite       │
 │ + -        faster / slower      Shift+Q E  hug / shock          l          sprite list           │
 │ VIEW                            Ctrl+click hug / shock          r          name it               │
-│ WASD       scroll (Shift: 5)    F          follow a sprite      g          save its genome       │
-│ T          track the selected   middle     follow a sprite      INSPECTOR                        │
-│ b          sprite colours       wheel      change mode          [ ]        switch tabs           │
-│ m          event filter         C again    the Place menu       PgUp PgDn  scroll a tab          │
-│ v          exact detail         hold E     aim, let go to send                                   │
-│ ?          this help                                                                             │
+│ WASD       scroll (Shift: 5)    H          show to sprites      g          save its genome       │
+│ T          track the selected   F          follow a sprite      INSPECTOR                        │
+│ b          sprite colours       middle     follow a sprite      [ ]        switch tabs           │
+│ m          event filter         wheel      change mode          PgUp PgDn  scroll a tab          │
+│ v          exact detail         C again    the Place menu                                        │
+│ ?          this help            hold E     aim, let go to send                                   │
 │ Esc        back, then quit                                                                       │
 │ Ctrl+C     quit at once                                                                          │
 │                                                                                                  │

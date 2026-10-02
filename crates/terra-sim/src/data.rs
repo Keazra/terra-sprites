@@ -4,7 +4,7 @@ use ron::extensions::Extensions;
 use serde::Deserialize;
 
 use crate::brain_io::{BRAIN_IO, BrainInput, BrainIoFile, InputId, brain_io};
-use crate::categories::{CATEGORIES, Category, SPRITE, WATER, categories};
+use crate::categories::{CATEGORIES, CURSOR, Category, SPRITE, WATER, categories};
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, GenomeError};
 use crate::names::{NAMES, Syllables};
@@ -574,6 +574,13 @@ impl DataPack {
     pub(crate) fn sprite_category(&self) -> CategoryId {
         self.category_named(SPRITE)
             .expect("a checked pack has sprites")
+    }
+
+    /// The category the Cursor is perceived as, while sprites can see it
+    /// (design v29 §3.5.5).
+    pub(crate) fn cursor_category(&self) -> CategoryId {
+        self.category_named(CURSOR)
+            .expect("a checked pack has the Cursor")
     }
 
     /// The index of the pseudo type of `category`, the verb table of water or
