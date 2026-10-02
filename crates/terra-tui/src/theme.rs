@@ -25,7 +25,7 @@ pub enum SemanticTile {
 }
 
 /// Something that just happened to a sprite, which the map shows by
-/// swapping its glyph for a while (design §6.3). Slice 14 adds the rest.
+/// swapping its glyph for a while (design §6.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Emote {
@@ -35,11 +35,15 @@ pub enum Emote {
     Pleased,
     /// The Cursor zapped or shocked it (design v21 §6.3).
     Shocked,
+    /// It gave up an action: failed, blocked or timed out.
+    Failed,
+    /// It's resting.
+    Resting,
 }
 
 impl SemanticTile {
     /// Every semantic tile. Each theme must draw all of them.
-    pub const ALL: [SemanticTile; 12] = [
+    pub const ALL: [SemanticTile; 14] = [
         SemanticTile::Terrain(Terrain::Grass),
         SemanticTile::Terrain(Terrain::Dirt),
         SemanticTile::Terrain(Terrain::Sand),
@@ -52,6 +56,8 @@ impl SemanticTile {
         SemanticTile::Emote(Emote::Hurt),
         SemanticTile::Emote(Emote::Pleased),
         SemanticTile::Emote(Emote::Shocked),
+        SemanticTile::Emote(Emote::Failed),
+        SemanticTile::Emote(Emote::Resting),
     ];
 }
 

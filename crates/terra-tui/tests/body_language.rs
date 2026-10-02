@@ -1,12 +1,17 @@
 //! Body language (design §6.3): sprite colours and emotes, which show on
 //! the map how a sprite is.
 
+use std::time::Duration;
+
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Size};
 use ratatui::style::Color;
 use ratatui::{Terminal, backend::TestBackend};
-use terra_sim::{DataPack, Genome, Map, Pos, Scenario, World};
-use terra_tui::app::{App, ColourMode};
+use terra_sim::{
+    ActionView, DataPack, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos, Progress,
+    Scenario, Target, Verb, World,
+};
+use terra_tui::app::{App, ColourMode, PLEASED_AT, Ticks};
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
 use terra_tui::ui;
@@ -142,4 +147,230 @@ fn b_switches_between_the_strongest_drive_and_plain_and_says_so() {
         status.trim_end().ends_with("Colours: strongest drive"),
         "{status}"
     );
+}
+
+/// One plain starter sprite on (2, 3), its ID, and an app on it.
+fn one_sprite() -> (World, EntityId, App) {
+    let world = field(&[(at(2, 3), feeling(&[]))]);
+    let id = world.sprites().next().expect("a sprite").id();
+    let app = app_for(&world, Theme::cp437());
+    (world, id, app)
+}
+
+/// What sprite `id`'s `verb`, aimed at `target`, did when it ended on `tick`.
+fn ended(tick: u64, id: EntityId, verb: Verb, outcome: Outcome, target: Option<Target>) -> Event {
+    let action = ActionView {
+        verb,
+        destination: None,
+        target,
+        target_type: target.map(|_| 101),
+        attempted: outcome == Outcome::Applied,
+        target_gone: false,
+        hurt: Hurt::default(),
+        progress: Progress::Ended(outcome),
+    };
+    Event {
+        tick,
+        kind: EventKind::ActionEnded {
+            id,
+            verb,
+            outcome,
+            action,
+        },
+    }
+}
+
+fn started(tick: u64, id: EntityId, verb: Verb) -> Event {
+    Event {
+        tick,
+        kind: EventKind::ActionStarted { id, verb },
+    }
+}
+
+/// The glyph drawn on tile (2, 3).
+fn glyph(app: &App, world: &World) -> String {
+    render(app, world)[cell(at(2, 3))].symbol().to_string()
+}
+
+const QUARTER: Duration = Duration::from_millis(250);
+
+#[test]
+fn a_sprite_that_gives_up_shows_a_question_mark_for_a_second() {
+    // Design §6.3: failed, blocked or timed out; not changing its mind, or
+    // being taken hold of.
+    for outcome in [Outcome::Failed, Outcome::Blocked, Outcome::TimedOut] {
+        let (world, id, mut app) = one_sprite();
+        app.record(&[ended(1, id, Verb::Wander, outcome, None)], &world);
+        assert_eq!(glyph(&app, &world), "?", "{outcome:?}");
+        app.animate(QUARTER);
+        assert_eq!(glyph(&app, &world), "☺", "taking turns with the sprite");
+        app.animate(QUARTER);
+        assert_eq!(glyph(&app, &world), "?");
+        app.animate(QUARTER * 2);
+        assert_eq!(glyph(&app, &world), "☺", "and then it's over");
+    }
+    for outcome in [Outcome::Applied, Outcome::Interrupted, Outcome::PulledAway] {
+        let (world, id, mut app) = one_sprite();
+        app.record(&[ended(1, id, Verb::Wander, outcome, None)], &world);
+        assert_eq!(glyph(&app, &world), "☺", "{outcome:?}");
+    }
+}
+
+#[test]
+fn a_resting_sprite_shows_a_z_while_the_rest_lasts() {
+    let (world, id, mut app) = one_sprite();
+    app.record(&[started(1, id, Verb::Rest)], &world);
+    // However long the rest lasts in real time.
+    for _ in 0..8 {
+        assert_eq!(glyph(&app, &world), "z");
+        app.animate(QUARTER);
+        assert_eq!(glyph(&app, &world), "☺");
+        app.animate(QUARTER);
+    }
+    app.record(&[ended(10, id, Verb::Rest, Outcome::Applied, None)], &world);
+    assert_eq!(glyph(&app, &world), "☺", "rested");
+    app.animate(QUARTER);
+    assert_eq!(glyph(&app, &world), "☺");
+}
+
+#[test]
+fn a_rest_over_in_a_blink_still_shows_its_z_for_a_second() {
+    // At 16x or Max a whole rest can start and end within one frame (design
+    // §6.3): the emote is driven by the events, and lasts in real time.
+    let (world, id, mut app) = one_sprite();
+    app.record(
+        &[
+            started(1, id, Verb::Rest),
+            ended(10, id, Verb::Rest, Outcome::Applied, None),
+        ],
+        &world,
+    );
+    assert_eq!(glyph(&app, &world), "z");
+    app.animate(QUARTER);
+    assert_eq!(glyph(&app, &world), "☺");
+    app.animate(QUARTER);
+    assert_eq!(glyph(&app, &world), "z");
+    app.animate(QUARTER * 2);
+    assert_eq!(glyph(&app, &world), "☺", "a second on, it's over");
+    app.animate(QUARTER);
+    assert_eq!(glyph(&app, &world), "☺");
+}
+
+#[test]
+fn resting_gives_way_to_any_other_emote_and_comes_back_after() {
+    let (world, id, mut app) = one_sprite();
+    app.record(&[started(1, id, Verb::Rest)], &world);
+    app.animate(QUARTER * 4);
+    let mut hit = ended(
+        5,
+        EntityId(99),
+        Verb::Hit,
+        Outcome::Applied,
+        Some(Target::Sprite(id)),
+    );
+    if let EventKind::ActionEnded { action, .. } = &mut hit.kind {
+        action.hurt.target = true;
+    }
+    app.record(&[hit], &world);
+    assert_eq!(glyph(&app, &world), "!", "hurt, while resting");
+    app.animate(QUARTER * 2);
+    assert_eq!(glyph(&app, &world), "!");
+    app.animate(QUARTER * 2);
+    assert_eq!(glyph(&app, &world), "z", "resting again");
+}
+
+#[test]
+fn the_newest_emote_wins() {
+    let (world, id, mut app) = one_sprite();
+    app.record(&[ended(1, id, Verb::Wander, Outcome::Failed, None)], &world);
+    app.animate(QUARTER * 2);
+    let pet = Event {
+        tick: 2,
+        kind: EventKind::Rewarded {
+            id,
+            amplified: false,
+        },
+    };
+    app.record(&[pet], &world);
+    assert_eq!(glyph(&app, &world), "♥");
+}
+
+/// A sprite that feels a reward of `gain` every tick, from tick 1.
+fn rewarded_every_tick(gain: f32) -> Genome {
+    let text = format!(
+        "(format: 1, genes: [Emitter(locus: Locus(\"always\"), mode: Level, gain: {gain}, chem: \"reward\")])"
+    );
+    Genome::from_ron(&text, &pack()).expect("a valid genome")
+}
+
+#[test]
+fn a_sprite_that_feels_a_strong_reward_shows_a_heart() {
+    // Design §6.3: Pleased on `last_r` above the UI's spike threshold, which
+    // the frame's ticks pick up whichever tick it came on.
+    let strong = rewarded_every_tick(PLEASED_AT + 0.2);
+    let weak = rewarded_every_tick(PLEASED_AT - 0.1);
+    let mut world = field(&[(at(2, 3), strong), (at(6, 3), weak)]);
+    let mut app = app_for(&world, Theme::cp437());
+    let mut ticks = Ticks::default();
+    for _ in 0..3 {
+        ticks.step(&mut world);
+    }
+    let felt: Vec<f32> = world.sprites().map(|sprite| sprite.felt()).collect();
+    assert!(felt[0] > PLEASED_AT && felt[1] < PLEASED_AT, "{felt:?}");
+    app.take_in(ticks, &world);
+    let screen = render(&app, &world);
+    let tiles: Vec<Pos> = world.sprites().map(|sprite| sprite.pos()).collect();
+    assert_eq!(screen[cell(tiles[0])].symbol(), "♥");
+    // It may show another emote: it may have given up wandering.
+    assert_ne!(screen[cell(tiles[1])].symbol(), "♥", "a small comfort");
+}
+
+#[test]
+fn emotes_last_a_second_of_real_time_at_any_speed() {
+    // Design §6.3: many ticks a frame, as at Max, still show the emote for
+    // a second, and frames with no ticks don't end it sooner.
+    let (mut world, id, mut app) = one_sprite();
+    let frame = |app: &mut App, world: &mut World, ticks: u32, events: Vec<Event>| {
+        for _ in 0..ticks {
+            world.step();
+        }
+        app.animate(Duration::from_millis(33));
+        app.record(&events, world);
+    };
+    frame(
+        &mut app,
+        &mut world,
+        50,
+        vec![ended(1, id, Verb::Wander, Outcome::Blocked, None)],
+    );
+    let mut shown = Duration::ZERO;
+    for _ in 0..40 {
+        if render(&app, &world)[cell(world.sprite(id).unwrap().pos())].symbol() == "?" {
+            shown += Duration::from_millis(33);
+        }
+        frame(&mut app, &mut world, 50, Vec::new());
+    }
+    // Half of a second's frames show it, the other half the sprite.
+    assert!(
+        (Duration::from_millis(400)..Duration::from_millis(600)).contains(&shown),
+        "{shown:?}"
+    );
+}
+
+#[test]
+fn ascii_draws_failed_and_resting_with_the_same_letters() {
+    // Design §6.3: `?` and `z` in both themes.
+    let world = field(&[(at(2, 3), feeling(&[])), (at(6, 3), feeling(&[]))]);
+    let ids: Vec<EntityId> = world.sprites().map(|sprite| sprite.id()).collect();
+    let mut app = app_for(&world, Theme::ascii());
+    app.record(
+        &[
+            ended(1, ids[0], Verb::Wander, Outcome::Failed, None),
+            started(1, ids[1], Verb::Rest),
+        ],
+        &world,
+    );
+    let screen = render(&app, &world);
+    assert_eq!(screen[cell(at(2, 3))].symbol(), "?");
+    assert_eq!(screen[cell(at(6, 3))].symbol(), "z");
 }

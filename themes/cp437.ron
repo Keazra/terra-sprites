@@ -22,6 +22,11 @@
         // §6.3). A shock is a lightning bolt in a tileset; CP437 has none.
         emote(pleased):         (glyph: '♥', fg: light_magenta),
         emote(shocked):         (glyph: '‼', fg: yellow),
+        // Gave up: failed, blocked or timed out; and resting, for as long as
+        // the rest lasts (design §6.3). Not white: `?` in white is an object
+        // no theme draws.
+        emote(failed):          (glyph: '?', fg: light_yellow),
+        emote(resting):         (glyph: 'z', fg: light_blue),
     },
     // Objects, by type name from the data pack's `objects.ron`, then visual
     // state. An object whose state isn't listed is drawn with its "default"
