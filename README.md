@@ -50,7 +50,7 @@ To run the checks CI runs: `cargo fmt --all --check`, `cargo clippy --workspace 
 
 ## Same seed, same world
 
-A world made from the same seed, given the same clicks and keys, plays out exactly the same every time, in the same version of the game. That holds across computers too, for these targets:
+A world made from the same seed and settings, given the same clicks and keys, plays out exactly the same every time, in the same version of the game. That holds across computers too, for these targets:
 
 | Computer | Target |
 |---|---|
@@ -59,7 +59,7 @@ A world made from the same seed, given the same clicks and keys, plays out exact
 | Mac with Apple silicon | `aarch64-apple-darwin` |
 | Linux on ARM | `aarch64-unknown-linux-gnu` |
 
-CI checks this on every pull request: it runs the default world from seed 7 for 20,000 ticks on each of them, and fails if any of them ends up in a different state. Other 64-bit computers are expected to match too, but aren't checked. To run the check yourself, `cargo run --release -p terra-sim --example determinism` prints the hash of the world's state every 1,000 ticks; CI's run summary shows what each computer printed.
+CI checks this on every pull request: it runs the default world from seed 7 for 20,000 ticks on each of them, with nobody clicking, and fails if any of them ends up in a different state. Other 64-bit computers are expected to match too, but aren't checked. To run the check yourself, `cargo run --release -p terra-sim --example determinism` prints the hash of the world's state every 1,000 ticks; CI's run summary shows what each computer printed.
 
 ## Design
 

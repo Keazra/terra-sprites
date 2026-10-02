@@ -74,7 +74,7 @@ jobs:
     name: determinism (all runners match)
     needs: determinism
     # Still compares the runners that finished when one failed, so the run
-    # summary shows how far they agree.
+    # summary shows how far they agree, and then fails.
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
@@ -85,3 +85,8 @@ jobs:
           path: runs
       - name: Compare the state hashes
         run: python3 scripts/compare_determinism.py runs
+      - name: Every runner finished
+        if: needs.determinism.result != 'success'
+        run: |
+          echo "A runner in the matrix didn't finish the check, so not every target was compared."
+          exit 1
