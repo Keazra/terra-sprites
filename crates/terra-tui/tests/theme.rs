@@ -219,9 +219,9 @@ fn the_select_mode_is_white_in_both_themes() {
     }
 }
 
-/// A theme's glyphs for what the Cursor reports and how it looks following a sprite:
-/// the status marks (idle, sent, applied, rejected), then the solid arrows
-/// (up, down, left, right).
+/// A theme's glyphs for what the Cursor reports and how it looks following
+/// a sprite: the status marks (idle, sent, applied, rejected), then the
+/// solid arrows (up, down, left, right).
 fn reports_and_follow(theme: &Theme) -> [char; 8] {
     let (status, arrows) = (theme.status_marks(), theme.followed_arrows());
     [

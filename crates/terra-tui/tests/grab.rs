@@ -224,11 +224,14 @@ fn press(app: &mut App, world: &World) {
     apply(app, world, action);
 }
 
-/// Selects the sprite on `tile` and has the Cursor follow it, with a middle
-/// click (design v26 §6.5).
+/// Has the Cursor follow the sprite on `tile`, with a middle click (design
+/// v26 §6.5).
 fn follow(app: &mut App, world: &World, tile: Pos) {
-    let at = Some(Position::new(tile.x, tile.y));
-    apply(app, world, Action::Follow { at });
+    apply(
+        app,
+        world,
+        Action::middle_click(Position::new(tile.x, tile.y)),
+    );
 }
 
 #[test]

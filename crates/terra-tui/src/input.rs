@@ -114,6 +114,11 @@ impl Action {
             amplified: false,
         }
     }
+
+    /// A middle click on `at`: what `F` does, there (design v26 §6.5).
+    pub fn middle_click(at: Position) -> Action {
+        Action::Follow { at: Some(at) }
+    }
 }
 
 /// How far Shift scrolls the viewport, in tiles (design §6.5).
@@ -233,7 +238,7 @@ pub fn mouse_action(event: MouseEvent) -> Option<Action> {
     Some(match event.kind {
         MouseEventKind::Down(MouseButton::Left) => click(Button::Left),
         MouseEventKind::Down(MouseButton::Right) => click(Button::Right),
-        MouseEventKind::Down(MouseButton::Middle) => Action::Follow { at: Some(cell) },
+        MouseEventKind::Down(MouseButton::Middle) => Action::middle_click(cell),
         MouseEventKind::Up(MouseButton::Right) => Action::Release {
             button: Button::Right,
             at: Some(cell),

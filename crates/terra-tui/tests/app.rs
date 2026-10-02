@@ -260,10 +260,7 @@ fn a_middle_click_leaves_the_quit_prompt_open_and_f_cancels_it() {
     let world = grass(40, 30);
     let mut app = app(&world, tile_area(20, 10));
     app.apply(Action::Back, &world);
-    let middle = Action::Follow {
-        at: Some(Position::new(3, 3)),
-    };
-    app.apply(middle, &world);
+    app.apply(Action::middle_click(Position::new(3, 3)), &world);
     assert_eq!(app.screen(), Screen::QuitPrompt);
     app.apply(Action::Follow { at: None }, &world);
     assert_eq!(app.screen(), Screen::Normal);

@@ -219,15 +219,16 @@ fn in_train_mode_the_cursor_is_light_magenta_in_every_theme() {
 #[test]
 fn following_the_cursor_s_arrows_are_solid() {
     // Design v22 §6.2: they clamp the sprite. The ASCII theme has no solid
-    // arrows; its status line says the Cursor follows it.
+    // arrows; its status line says the Cursor follows it. Following doesn't
+    // select it (design v26 §6.5), so it's drawn as any sprite is.
     let world = garden_with_sprites();
     let on_it = Position::new(1 + 2, 2 + 3);
     for (theme, expected) in [
-        (Theme::cp437(), [".♦▼·......", ".►☻◄..○...", ".·▲♦......"]),
+        (Theme::cp437(), [".♦▼·......", ".►☺◄..○...", ".·▲♦......"]),
         (Theme::ascii(), [".Sv-......", ".>@<..o...", ".-^S......"]),
     ] {
         let mut app = app_for(&world, theme, 40, 10);
-        app.apply(Action::Follow { at: Some(on_it) }, &world);
+        app.apply(Action::middle_click(on_it), &world);
         let map_rows: Vec<String> = lines(&render(&app, &world, 40, 10))[4..7]
             .iter()
             .map(|row| row.chars().skip(1).take(10).collect())
@@ -2379,7 +2380,7 @@ fn the_status_line_names_train_mode_and_what_the_cursor_follows() {
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     let on_it = Position::new(1 + 2, 2 + 3);
     app.apply(Action::left_click(on_it), &world);
-    app.apply(Action::Follow { at: Some(on_it) }, &world);
+    app.apply(Action::middle_click(on_it), &world);
     app.apply(Action::Mode(CursorMode::Train), &world);
     let status = status_line(&app, &world);
     let expected = format!(
@@ -2440,7 +2441,7 @@ fn short_of_room_whole_key_hints_drop_from_the_end() {
     let world = garden_with_sprites();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     let on_it = Position::new(1 + 2, 2 + 3);
-    app.apply(Action::Follow { at: Some(on_it) }, &world);
+    app.apply(Action::middle_click(on_it), &world);
     app.apply(Action::Mode(CursorMode::Train), &world);
     let status = status_line(&app, &world);
     assert!(status.contains("│ following Sprite #"), "{status}");
@@ -2796,7 +2797,7 @@ fn a_refusal_shows_even_when_the_status_line_is_crowded() {
     let world = garden_with_sprites();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     let on_it = Position::new(1 + 7, 2 + 1);
-    app.apply(Action::Follow { at: Some(on_it) }, &world);
+    app.apply(Action::middle_click(on_it), &world);
     app.record(&[touched(1, "refused pet")], &world);
     let status = status_line(&app, &world);
     assert!(status.starts_with(" (7,1) grass · Sprite #"), "{status}");

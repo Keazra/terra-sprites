@@ -61,11 +61,10 @@ fn click(app: &mut App, world: &World, tile: Pos, button: Button) {
     apply(app, world, action);
 }
 
-/// Selects the sprite on `tile` and has the Cursor follow it, with a middle
-/// click (design v26 §6.5).
+/// Has the Cursor follow the sprite on `tile`, with a middle click (design
+/// v26 §6.5).
 fn follow(app: &mut App, world: &World, tile: Pos) {
-    let at = Some(cell(tile));
-    apply(app, world, Action::Follow { at });
+    apply(app, world, Action::middle_click(cell(tile)));
 }
 
 /// Hands the app's commands to the world and runs a tick, as a frame does.
@@ -297,6 +296,28 @@ fn following_a_sprite_a_throw_starts_at_its_feet_pulled_from_there() {
     assert!(app.followed().is_some());
     click(&mut app, &world, at(12, 5), Button::Right);
     point(&mut app, &world, at(14, 5));
+    let_go(&mut app, &world, at(14, 5));
+    let throw = Command::Throw {
+        from: at(8, 5),
+        toward: Dir::W,
+        tiles: 6,
+    };
+    assert_eq!(app.take_commands(), vec![throw]);
+}
+
+#[test]
+fn stopping_follow_while_aiming_leaves_the_aim_as_it_was() {
+    // Design v26 §6.5: `F` works in every mode, but while aiming the
+    // Cursor stays where aiming began, and the pointer pulls.
+    let mut world = field(&[(at(2, 2), "berry")], &[at(8, 5)]);
+    let mut app = grab_app(&world);
+    hold(&mut app, &mut world, at(2, 2));
+    follow(&mut app, &world, at(8, 5));
+    click(&mut app, &world, at(12, 5), Button::Right);
+    point(&mut app, &world, at(14, 5));
+    apply(&mut app, &world, Action::Follow { at: None });
+    assert_eq!(app.followed(), None);
+    assert_eq!(app.cursor(), at(8, 5), "still where aiming began");
     let_go(&mut app, &world, at(14, 5));
     let throw = Command::Throw {
         from: at(8, 5),
