@@ -43,6 +43,18 @@ pub(crate) struct ObjectType {
     pub(crate) rules: Vec<Rule>,
     pub(crate) verbs: BTreeMap<Verb, Vec<Effect>>,
     pub(crate) visual: Vec<Visual>,
+    /// Whether, and how, the Cursor's Place menu offers it (design v28 §3.5.1).
+    pub(crate) place: Option<Placement>,
+}
+
+/// How the Cursor places an object type (design v28 §3.5.1): under what label the
+/// Place menu offers it, and what its tile must meet. The engine asks no
+/// more than the space rules (design §3.3–3.4); anything else, such as
+/// keeping paths open, is the data's choice.
+#[derive(Debug, Clone)]
+pub(crate) struct Placement {
+    pub(crate) label: String,
+    pub(crate) conditions: Vec<Condition>,
 }
 
 /// An object type's size and hardness (design §3.5.1), which come together.
@@ -236,6 +248,7 @@ enum Section {
     Rule,
     Verb,
     Visual,
+    Place,
 }
 
 /// One entry of `objects.ron`, before validation.
@@ -262,6 +275,15 @@ pub(crate) struct TypeEntry {
     verbs: BTreeMap<Verb, Vec<EffectEntry>>,
     #[serde(default)]
     visual: Vec<VisualEntry>,
+    place: Option<PlaceEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PlaceEntry {
+    label: String,
+    #[serde(rename = "if", default)]
+    conditions: Vec<ConditionEntry>,
 }
 
 /// A tag as an object type names it, bare, as in `[Solid, Fixture, Thorny]`:
@@ -399,6 +421,7 @@ impl TypeEntry {
                 ("stages", !self.stages.is_empty()),
                 ("rules", !self.rules.is_empty()),
                 ("visual rules", !self.visual.is_empty()),
+                ("a place in the Place menu", self.place.is_some()),
             ];
             if let Some((what, _)) = lifecycle.iter().find(|(_, present)| *present) {
                 return Err(format!(
@@ -491,6 +514,18 @@ impl TypeEntry {
                 })
             })
             .collect::<Result<_, String>>()?;
+        let place = match &self.place {
+            Some(place) if place.label.trim().is_empty() => {
+                return Err("has an empty label in the Place menu".into());
+            }
+            Some(place) => Some(Placement {
+                label: place.label.trim().to_string(),
+                conditions: scope
+                    .conditions(&place.conditions, Section::Place)
+                    .map_err(|e| format!("its place: {e}"))?,
+            }),
+            None => None,
+        };
 
         Ok(ObjectType {
             id: self.id,
@@ -506,6 +541,7 @@ impl TypeEntry {
             rules,
             verbs,
             visual,
+            place,
         })
     }
 }
@@ -589,6 +625,9 @@ impl Scope<'_> {
             &ConditionEntry::Chance(p) => {
                 if section == Section::Visual {
                     return Err("`Chance` isn't allowed, so drawing never uses the RNG".into());
+                }
+                if section == Section::Place {
+                    return Err("`Chance` isn't allowed, so placing never uses the RNG".into());
                 }
                 if !(0.0..=1.0).contains(&p) {
                     return Err(format!("`Chance({p})` needs a probability from 0 to 1"));

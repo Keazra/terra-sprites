@@ -147,7 +147,7 @@ One instruction in a genome, such as "low energy raises hunger". Its type says w
 _Avoid_: allele
 
 **Name**:
-What the player calls a sprite: one they make up, or one generated at random. A sprite has no name until the player gives it one, and until then shows by its ID, as "Sprite #530".
+What the player calls a sprite: one they make up, or one generated at random from the data's syllables. A sprite has no name until the player gives it one, and until then shows by its ID, as "Sprite #530"; named, it shows as "Mira #530".
 _Avoid_: label
 
 **Starter genome**:
@@ -522,6 +522,26 @@ _Avoid_: trajectory, leash (that's the line to a led sprite), cue
 **Crash**:
 A sliding sprite stopping against a solid object or another sprite. It's a contact, so it counts as touching that thing: a crash into a thornbush pricks, and teaches that thornbushes are bad. Stopping against rock, deep water or the terrarium's wall isn't a crash.
 _Avoid_: collision, bump, bounce (an item bounces)
+
+**Place menu**:
+The Grab-mode menu, opened by pressing `C` again, for putting new things into the world: the object types whose data offers them, a new sprite, and a sprite from a genome file.
+_Avoid_: spawn menu, build menu
+
+**Place item**:
+What the player picked from the Place menu, waiting on the Cursor until a Grab-mode click places it, or a right click puts it away. It isn't held: what the Cursor leads or holds stays as it was.
+_Avoid_: held item (that's an item picked up), brush
+
+**Place**:
+To make a new object on a tile through the Cursor, at the start of its first stage. Only the types whose data offers them can be placed, and their data says what the tile must meet; the built-in ones ask nothing, so a placed bush may wall things off.
+_Avoid_: put down (that's a held item), plant, build
+
+**Spawn**:
+To make a new sprite on a tile through the Cursor: from the starter genome with spawn variation, or from a genome file.
+_Avoid_: create, birth (that's breeding, later), place (for a sprite)
+
+**Genome file**:
+A genome written as text, which `g` saves from the selected sprite and the Place menu reads back to spawn one like it.
+_Avoid_: DNA file, save (that's the whole world)
 
 **Reward**:
 The Cursor's good touch, which raises the sprite's reward chemical: a **pet**, or amplified, a **hug**.

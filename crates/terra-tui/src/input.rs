@@ -55,7 +55,8 @@ pub enum Action {
     Follow {
         at: Option<Position>,
     },
-    /// Pick a cursor mode (`Z` Select, `X` Train).
+    /// Pick a cursor mode (`Z` Select, `X` Train, `C` Grab); `C` in Grab
+    /// mode opens the Place menu (design v28 §6.5).
     Mode(CursorMode),
     /// Select the sprite with the next ID (`Tab`).
     SelectNext,
@@ -83,6 +84,21 @@ pub enum Action {
     ToggleDetail,
     /// Cancel a prompt: any key with no job of its own.
     Dismiss,
+    /// Pick the menu item with this number, from 1 (`1`–`9`, design v28).
+    Pick(u8),
+    /// Take what's chosen: the highlighted menu item, or the name typed
+    /// (`Enter`).
+    Enter,
+    /// Name the selected sprite (`r`, design §6.5).
+    Rename,
+    /// Export the selected sprite's genome to a file (`g`, design §6.1).
+    ExportGenome,
+    /// While naming, a letter typed.
+    Type(char),
+    /// While naming, the last letter rubbed out (`Backspace`).
+    Erase,
+    /// While naming, another random name to start from (`Tab`).
+    AnotherName,
     /// Quit at once (`Ctrl+C`).
     Quit,
 }
@@ -152,6 +168,36 @@ impl Keys {
         }
     }
 
+    /// The action for a key event while the player types a name (design v28
+    /// §6.5): letters are typed rather than acting, `Backspace` rubs one out,
+    /// `Tab` offers another random name, `Enter` takes it and `Esc` gives up.
+    /// Only presses count, and `Ctrl+C` still quits. Releases are still
+    /// tracked, so the `r` that opened the prompt counts as let go after it,
+    /// and a key already down when the prompt opened types nothing until it's
+    /// let go: holding `r` doesn't type over the offered name.
+    pub fn typed_action(&mut self, key: KeyEvent) -> Option<Action> {
+        let physical = physical_key(key.code);
+        if key.kind == KeyEventKind::Release {
+            self.releases_reported = true;
+            self.down.remove(&physical);
+            return None;
+        }
+        if self.releases_reported && self.down.contains(&physical) {
+            return None;
+        }
+        if key.modifiers.contains(KeyModifiers::CONTROL) {
+            return (key.code == KeyCode::Char('c')).then_some(Action::Quit);
+        }
+        match key.code {
+            KeyCode::Char(c) => Some(Action::Type(c)),
+            KeyCode::Backspace => Some(Action::Erase),
+            KeyCode::Tab => Some(Action::AnotherName),
+            KeyCode::Enter => Some(Action::Enter),
+            KeyCode::Esc => Some(Action::Back),
+            _ => None,
+        }
+    }
+
     /// The action for a key event, if it has one. Of key releases, only
     /// `E`'s acts: it's the right button let go (design v25 §6.5).
     pub fn action_for(&mut self, key: KeyEvent) -> Option<Action> {
@@ -212,13 +258,18 @@ impl Keys {
             KeyCode::Char('y') => Some(Action::Confirm),
             KeyCode::Char('z') => Some(Action::Mode(CursorMode::Select)),
             KeyCode::Char('x') => Some(Action::Mode(CursorMode::Train)),
-            KeyCode::Char('c') => Some(Action::Mode(CursorMode::Grab)),
+            // `C` again in Grab mode opens the Place menu, so a held `C` mustn't.
+            KeyCode::Char('c') => (!held).then_some(Action::Mode(CursorMode::Grab)),
             KeyCode::Char('q') => press(Button::Left),
             KeyCode::Char('e') => press(Button::Right),
             // A held `f` would flicker Follow on and off.
             KeyCode::Char('f') => (!held).then_some(Action::Follow { at: None }),
             // A held `v` would flicker the detail view on and off.
             KeyCode::Char('v') => (!held).then_some(Action::ToggleDetail),
+            KeyCode::Char('r') => (!held).then_some(Action::Rename),
+            KeyCode::Char('g') => (!held).then_some(Action::ExportGenome),
+            KeyCode::Char(digit @ '1'..='9') => (!held).then(|| Action::Pick(digit as u8 - b'0')),
+            KeyCode::Enter => (!held).then_some(Action::Enter),
             // Some terminals report Shift+Tab as its own key, others as Tab with Shift.
             KeyCode::BackTab => Some(Action::SelectPrevious),
             KeyCode::Tab if key.modifiers.contains(KeyModifiers::SHIFT) => {

@@ -1,0 +1,20 @@
+// Random names (design v28 §6.5): the screen offers one when the player
+// names a sprite with `r`, joining a first syllable, sometimes a middle one,
+// and a last. A name is at most 16 letters, so the longest first, middle and
+// last together must fit.
+(
+    first: [
+        "Mi", "To", "Ka", "Re", "Lu", "Sa", "Bo", "Ni", "Fe", "Ta",
+        "Pi", "Ve", "Mo", "Ri", "Da", "Ze", "Wi", "Jo", "Ha", "Ou",
+        "El", "An", "Ish", "Bri", "Tam",
+    ],
+    middle: [
+        "ra", "be", "li", "no", "ta", "mi", "ko", "si", "ve", "lu",
+    ],
+    last: [
+        "ra", "bek", "lo", "na", "ri", "mo", "sha", "kin", "pa", "lis",
+        "tor", "wen", "di", "ko", "fa", "nel", "zu", "beth", "om", "y",
+    ],
+    // How often a name gets a middle syllable, from 0 to 1.
+    middle_chance: 0.35,
+)

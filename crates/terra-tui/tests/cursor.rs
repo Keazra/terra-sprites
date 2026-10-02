@@ -418,6 +418,7 @@ fn the_followed_sprite_s_death_ends_follow_and_no_other_does() {
         tick: 0,
         kind: EventKind::Died {
             id,
+            name: None,
             cause: DeathCause::Starvation,
             age: 5,
         },

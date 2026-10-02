@@ -21,6 +21,8 @@ pub(crate) struct Sprite {
     pub(crate) pos: Pos,
     /// The tick it was born on.
     pub(crate) born: u64,
+    /// The name the player gave it, if any (design v28 §6.5).
+    pub(crate) name: Option<String>,
     pub(crate) genome: Genome,
     /// The genome compiled for the chemistry step. It's derived from the
     /// genome, so it isn't hashed.
@@ -61,6 +63,7 @@ impl Sprite {
         Sprite {
             pos,
             born,
+            name: None,
             genome,
             program,
             body,
