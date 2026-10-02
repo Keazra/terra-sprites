@@ -1,0 +1,30 @@
+ Terra Sprites │ tick 3 │ ► 1x │ seed 7 │ sprites 3                                          ? help
+┌─ Sprites ── sorted by number ──────────────────────────────────────────────────────── esc close ─┐
+│ Sprite     Age  Drive        Doing                                                               │
+│ Sprite #5    3  -            Wandering off · 6 tiles to go                                       │
+│ Sprite #6    3  -            Wandering off · 6 tiles to go                                       │
+│ Sprite #7    3  -            Wandering off · 3 tiles to go                                       │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+ (12,4) grass │ SELECT                               ↑↓ choose  enter go to it  tab sort  esc close
