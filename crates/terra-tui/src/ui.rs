@@ -12,7 +12,7 @@ use terra_sim::{EntityId, Grip, Map, ObjectView, Pos, Progress, World};
 use crate::app::{App, Areas, Screen, Selection};
 use crate::clock::Speed;
 use crate::inspector::{self, INSPECTOR_WIDTH, first_shown};
-use crate::text::{display_name, group_thousands, sprite_label, terrain_name};
+use crate::text::{display_name, group_thousands, terrain_name};
 use crate::theme::SemanticTile;
 
 /// The narrowest terminal that has room for the inspector beside the map view.
@@ -449,7 +449,7 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     let terrain = terrain_name(world.map().terrain(cursor));
     let sprite = world
         .sprite_at(cursor)
-        .map(|sprite| format!(" · {}", sprite_label(sprite.id())))
+        .map(|sprite| format!(" · {}", app.names().label(sprite.id())))
         .unwrap_or_default();
     let object = world
         .object_at(cursor)
@@ -458,11 +458,11 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     let mode = app.mode().label();
     let locked = app
         .locked()
-        .map(|id| format!(" │ locked on {}", sprite_label(id)))
+        .map(|id| format!(" │ locked on {}", app.names().label(id)))
         .unwrap_or_default();
     // What the Cursor has hold of, in every mode (design v23 §6.1).
     let grip = match app.grip(world) {
-        Some(Grip::Leads(id)) => format!(" │ leading: {}", sprite_label(id)),
+        Some(Grip::Leads(id)) => format!(" │ leading: {}", app.names().label(id)),
         Some(Grip::Holds(id)) => {
             let name = item_look(world, id).map_or("?", |(name, _)| name);
             format!(" │ holding: {}", display_name(name))
@@ -565,7 +565,7 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     draw_border(buf, area, " Events ", no_walls);
     let inner = area.inner(Margin::new(1, 1));
     let lines = app.event_log().filter_map(|(event, count)| {
-        let text = inspector::event_line(event, world.data())?;
+        let text = inspector::event_line(event, &app.words(world))?;
         Some((event.tick, text, count))
     });
     for (row, (tick, text, count)) in (inner.y..inner.bottom()).zip(lines) {

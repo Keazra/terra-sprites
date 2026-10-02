@@ -740,6 +740,7 @@ fn died(tick: u64, id: u64, cause: DeathCause, age: u64) -> Event {
         tick,
         kind: EventKind::Died {
             id: EntityId(id),
+            name: None,
             cause,
             age,
         },
@@ -2648,7 +2649,7 @@ fn the_event_log_says_why_a_grab_was_refused() {
             Command::TakeHold { sprite },
             Rejection::Busy(Grip::Leads(other)),
         ),
-        refused(put_down, blocked(Blocker::Object(2))),
+        refused(put_down.clone(), blocked(Blocker::Object(2))),
     ]);
     assert_eq!(
         logged(&world, &first),
@@ -2659,7 +2660,7 @@ fn the_event_log_says_why_a_grab_was_refused() {
         ]
     );
     let then = on_ticks(vec![
-        refused(put_down, blocked(Blocker::Terrain(Terrain::Rock))),
+        refused(put_down.clone(), blocked(Blocker::Terrain(Terrain::Rock))),
         refused(put_down, blocked(Blocker::Terrain(Terrain::DeepWater))),
         refused(Command::LetGo, Rejection::NotLeading),
     ]);
@@ -2827,7 +2828,7 @@ fn holding_world(objects: &[(Pos, &str)], held: Pos) -> (World, App) {
         &world,
     );
     for command in app.take_commands() {
-        world.submit(command);
+        world.submit(command.clone());
     }
     let events = world.step();
     app.record(&events, &world);

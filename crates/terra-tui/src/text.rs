@@ -1,5 +1,8 @@
 //! How the screen writes names and numbers.
 
+use std::collections::BTreeMap;
+use std::ops::Deref;
+
 use terra_sim::{DataPack, DeathCause, EntityId, Terrain};
 
 /// A name from the data, as shown on screen: `berry_bush` → `berry bush`.
@@ -22,10 +25,55 @@ pub(crate) fn terrain_name(terrain: Terrain) -> &'static str {
     }
 }
 
-/// How the screen names a sprite. Sprites have no names until the player
-/// gives them one (design §6.5), so each shows by its ID.
-pub(crate) fn sprite_label(id: EntityId) -> String {
-    format!("Sprite #{}", id.0)
+/// The names the player has given sprites (design §6.5), as the screen
+/// last saw them: a sprite that has died keeps its name in the log.
+#[derive(Debug, Clone, Default)]
+pub struct Names(BTreeMap<EntityId, String>);
+
+impl Names {
+    /// How the screen names sprite `id`: "Mira #12" once the player has
+    /// named it, and until then "Sprite #12" (design §6.5).
+    pub fn label(&self, id: EntityId) -> String {
+        match self.0.get(&id) {
+            Some(name) => format!("{name} #{}", id.0),
+            None => format!("Sprite #{}", id.0),
+        }
+    }
+
+    /// The name sprite `id` was given, if any.
+    pub fn get(&self, id: EntityId) -> Option<&str> {
+        self.0.get(&id).map(String::as_str)
+    }
+
+    /// Notes that sprite `id` is called `name`.
+    pub(crate) fn note(&mut self, id: EntityId, name: &str) {
+        if self.get(id) != Some(name) {
+            self.0.insert(id, name.to_string());
+        }
+    }
+}
+
+/// What the screen's sentences are made from: the data pack's names for
+/// things, and the player's for sprites. It reads as the data pack.
+#[derive(Clone, Copy)]
+pub(crate) struct Words<'a> {
+    pub(crate) data: &'a DataPack,
+    pub(crate) names: &'a Names,
+}
+
+impl Words<'_> {
+    /// How the screen names sprite `id` (design §6.5).
+    pub(crate) fn label(&self, id: EntityId) -> String {
+        self.names.label(id)
+    }
+}
+
+impl Deref for Words<'_> {
+    type Target = DataPack;
+
+    fn deref(&self) -> &DataPack {
+        self.data
+    }
 }
 
 /// A cause of death, as the screen names it: "hurt by thornbush" names the

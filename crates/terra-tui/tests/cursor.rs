@@ -334,6 +334,7 @@ fn the_locked_on_sprite_s_death_lets_go() {
         tick: 0,
         kind: EventKind::Died {
             id,
+            name: None,
             cause: DeathCause::Starvation,
             age: 5,
         },
