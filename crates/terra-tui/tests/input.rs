@@ -581,12 +581,14 @@ fn the_place_menu_and_naming_keys_have_their_actions() {
 }
 
 #[test]
-fn b_t_and_m_switch_colours_tracking_and_the_event_filter_once_per_press() {
+fn b_t_m_l_and_question_mark_act_once_per_press() {
     // Design §6.1, §6.3: holding one doesn't flicker it.
     let keys = [
         ('b', Action::CycleColours),
         ('t', Action::Track),
         ('m', Action::CycleEventFilter),
+        ('l', Action::SpriteList),
+        ('?', Action::Help),
     ];
     for (code, action) in keys {
         let mut keys = Keys::with_release_reporting(true);

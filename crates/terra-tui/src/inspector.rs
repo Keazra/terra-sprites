@@ -127,14 +127,7 @@ fn sprite_tab(tab: Tab, sprite: &SpriteView, app: &App, world: &World) -> Vec<Li
 /// player has observed it do.
 fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
     let traits = sprite.traits();
-    let handled =
-        slide_line(sprite, app.detail()).or_else(|| led_line(sprite, app.detail(), world));
-    let doing = match handled {
-        Some(line) => Some(format!(" {line}")),
-        None => sprite
-            .action()
-            .map(|action| format!(" {}", action_line(&action, app.detail(), &app.words(world)))),
-    };
+    let doing = doing_line(sprite, app, world).map(|line| format!(" {line}"));
     let mut lines: Vec<String> = doing.into_iter().collect();
     lines.extend([
         format!(
@@ -172,6 +165,19 @@ fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>>
     lines.push(String::new());
     lines.extend(observed_lines(app, world.tick()));
     lines.into_iter().map(Line::from).collect()
+}
+
+/// What `sprite` is doing, as the Body tab's first line says it (design
+/// §6.1): sliding from a shove, being led, or its action; nothing if it has
+/// no action. The sprite list's Doing column says the same.
+pub(crate) fn doing_line(sprite: &SpriteView, app: &App, world: &World) -> Option<String> {
+    slide_line(sprite, app.detail())
+        .or_else(|| led_line(sprite, app.detail(), world))
+        .or_else(|| {
+            sprite
+                .action()
+                .map(|action| action_line(&action, app.detail(), &app.words(world)))
+        })
 }
 
 /// The observed list (design §6.1), newest first: how long ago each line's

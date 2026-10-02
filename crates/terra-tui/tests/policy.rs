@@ -146,6 +146,13 @@ fn every_display_asks_the_policy_and_shows_everything_in_m1() {
             "{tab:?} shows something"
         );
     }
+    app.apply(Action::SpriteList, &world);
+    let list = render(&app, &world);
+    assert!(
+        row(&list, 3, 0..100).starts_with("│ Sprite #"),
+        "a row per sprite"
+    );
+    assert!(row(&list, 4, 0..100).starts_with("│ Sprite #"));
 }
 
 #[test]
@@ -180,6 +187,12 @@ fn a_policy_that_denies_everything_blanks_every_display() {
             "{tab:?} is blank"
         );
     }
+    app.apply(Action::SpriteList, &world);
+    let list = render(&app, &world);
+    assert!(
+        row(&list, 2, 0..100).starts_with("│ No sprites "),
+        "no rows in the sprite list"
+    );
 }
 
 #[test]
