@@ -10,7 +10,7 @@ use crate::genome::{Gene, Genome, GenomeError};
 use crate::names::{NAMES, Syllables};
 use crate::object_types::{Condition, Effect, OBJECTS, ObjectType, TypeEntry, object_types};
 use crate::physiology::{Indices, PHYSIOLOGY, Physiology, PhysiologyEntry};
-use crate::registry::{CategoryId, ChemId, Chemical, Locus, LocusId, Verb};
+use crate::registry::{CategoryId, ChemId, Chemical, ChemicalKind, Locus, LocusId, Verb};
 use crate::tags::{TAGS, Tag, TagEntry, tags};
 use crate::terrain::{Terrain, TerrainProps};
 
@@ -324,6 +324,16 @@ impl DataPack {
     /// Every brain input, in ID order: a brain's inputs are in this order.
     pub(crate) fn brain_inputs_in_order(&self) -> &[BrainInput] {
         &self.brain_inputs
+    }
+
+    /// The drives (design §4.1), by name, in `chemicals.ron`'s order: the
+    /// signal chemicals a sprite feels as urges, which colour it on the map
+    /// (design §6.3).
+    pub fn drives(&self) -> impl Iterator<Item = &str> {
+        self.chemicals
+            .iter()
+            .filter(|chemical| chemical.kind() == ChemicalKind::Drive)
+            .map(|chemical| chemical.name.as_str())
     }
 
     /// The needs (design §5.2), by name, in `brain_io.ron`'s order.

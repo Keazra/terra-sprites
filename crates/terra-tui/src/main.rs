@@ -14,7 +14,7 @@ use ratatui::crossterm::event::{
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::supports_keyboard_enhancement;
 use terra_sim::{DataPack, World, WorldConfig};
-use terra_tui::app::{App, Flow};
+use terra_tui::app::{App, Flow, Ticks};
 use terra_tui::args::{Args, USAGE};
 use terra_tui::files;
 use terra_tui::input::{self, Keys};
@@ -136,6 +136,9 @@ fn run(
 ) -> io::Result<()> {
     let areas = ui::areas(terminal.size()?, world.map());
     let mut app = App::new(world.map(), theme, seed, areas);
+    if let Some(folder) = files::data_folder() {
+        app.set_data_folder(folder);
+    }
     if let Some(folder) = files::genome_folder() {
         app.set_genome_folder(folder);
     }
@@ -176,13 +179,13 @@ fn run(
         last_frame = now;
         app.animate(elapsed);
         let frame_start = Instant::now();
-        let mut events = Vec::new();
+        let mut ticks = Ticks::default();
         app.clock.advance(
             elapsed,
-            || events.extend(world.step()),
+            || ticks.step(&mut world),
             || frame_start.elapsed() >= SIM_BUDGET,
         );
-        app.record(&events, &world);
+        app.take_in(ticks, &world);
     }
 }
 

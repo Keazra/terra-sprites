@@ -1,0 +1,30 @@
+ Terra Sprites │ tick 3 │ ► 1x │ seed 7 │ sprites 3                                          ? help
+╔═ Map ══════════════════╗                            ┌─ #5 ── Body Brain Chem [Genome] World ─────┐
+║..............,,,,::~~≈≈║                            │ TRAITS                                     │
+║.'..........♠.,,,,::~~≈≈║                            │ speed 6.5 · sense 9.32 · lifespan 56,185   │
+║..•.##...☺....,,,,::~~≈≈║                            │ HALF-LIVES                                 │
+║....##..............~~≈≈║                            │ hunger halves every 2,091 ticks            │
+║.......♦↓·X....☺....~~≈≈║                            │ thirst halves every 1,897 ticks            │
+║....☻..→.←........::~~≈≈║                            │ pain halves every 19 ticks                 │
+║.......·↑♦........::~~≈≈║                            │ h0 halves every 303 ticks                  │
+║..................::~~≈≈║                            │ EMITTERS                                   │
+╚════════════════════════╝                            │ low energy → hunger +.00382 past .467      │
+                                                      │ ate → hunger -.454                         │
+                                                      │ low hydration → thirst +.00408 past .457   │
+                                                      │ drank → thirst -.486                       │
+                                                      │ low stamina → tiredness +.0038 past .458   │
+                                                      │ stamina → tiredness -.0972 past .642       │
+                                                      │ always → boredom +.0002                    │
+                                                      │ played → boredom -.496                     │
+                                                      │ played social → boredom -.157              │
+                                                      │ low nearby sprites → loneliness +.000504   │
+                                                      │   past .488                                │
+                                                      │ nearby sprites → loneliness -.108 past .201│
+                                                      │ played social → loneliness -.488           │
+                                                      └────────────────────────────────────────────┘
+┌─ Events ────────────────────────────────────────────────────────────────── [all] selected major ─┐
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+ (8,5) grass │ SELECT        Z select  X train  C grab  WASD scroll  space pause  . step  +/- speed

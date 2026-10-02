@@ -410,6 +410,10 @@ _Avoid_: map (for the panel)
 The part of the map currently shown in the map view.
 _Avoid_: camera
 
+**Track**:
+The viewport following the selected sprite, so it stays in the middle of the map view. `T` turns it on or off; scrolling by hand turns it off. It follows whichever sprite is selected, and does nothing while none is.
+_Avoid_: follow (that's the Cursor fixed on a sprite, with `F`), lock on
+
 **Cursor**:
 The player's hard-light projection into the terrarium: to the sprites the player is an advanced creature, and this is how they reach in. It shows on the map as a 3×3 grid that follows the pointer, unless it follows a sprite, and a click acts as the cursor mode says. Sprites see it only where the player has made it **visible**; otherwise its touch is a feeling from nowhere. It holds an item or leads a sprite, one thing at a time.
 _Avoid_: hand, orb, selection (the selection is the chosen sprite)
@@ -470,8 +474,28 @@ _Avoid_: highlight, attention mark
 The panel that lists what just happened to sprites, newest first.
 _Avoid_: events panel, console, feed
 
+**Event filter**:
+Which events the event log shows: all of them, the selected sprite's (what it did and what was done to it), or the major ones (deaths, lessons learned, refused commands). `m`, or a click on the filters on the log's border, goes to the next.
+_Avoid_: log level, view
+
+**Colour mode**:
+What colours a sprite on the map: its strongest drive once one is above half (each drive's colour is the theme's), or plain, its own colour. `b` goes to the next.
+_Avoid_: tint, palette
+
+**Help screen**:
+The overlay `?` opens: every key, grouped, the colour and emote legends, and the game's folder for its files.
+_Avoid_: manual, cheat sheet
+
+**Sprite list**:
+The overlay `l` opens: every sprite, one to a row, with its age, its strongest drive and what it's doing, sorted by number, name, age or drive. Choosing one selects it and centres the viewport on it.
+_Avoid_: roster, census
+
+**Information policy**:
+What decides what the screen may show: every display asks it first, about a panel and a subject (the world, a sprite or a tile). In M1 it shows everything; a later mode that hides information is a new policy, and never changes the world.
+_Avoid_: fog of war, permissions
+
 **Emote**:
-A glyph that takes turns with a sprite's own glyph on the map for about a second, showing something that just happened to it, such as the red `!` of being hurt.
+A glyph that takes turns with a sprite's own glyph on the map for about a second, showing something that just happened to it, such as the red `!` of being hurt; the resting `z` shows for as long as the rest lasts, and at least a second.
 _Avoid_: icon, bubble, flash
 
 **Semantic tile**:

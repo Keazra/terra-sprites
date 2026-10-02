@@ -82,6 +82,17 @@ pub enum Action {
     Confirm,
     /// Switch the detail view on or off (`v`).
     ToggleDetail,
+    /// Switch to the next colour mode for sprites (`b`, design §6.3).
+    CycleColours,
+    /// Have the view follow the selected sprite, or stop (`T`, design v21
+    /// §6.1).
+    Track,
+    /// Switch the event log to its next filter (`m`, design §6.1).
+    CycleEventFilter,
+    /// Open or close the help screen (`?`, design §6.1).
+    Help,
+    /// Open or close the sprite list (`l`, design §6.1).
+    SpriteList,
     /// Show the Cursor to sprites in the current cursor mode, or hide it
     /// from them (`h`, design v29 §6.5).
     ToggleVisible,
@@ -272,6 +283,12 @@ impl Keys {
             // Likewise a held `h`, whether sprites see the Cursor.
             KeyCode::Char('h') => (!held).then_some(Action::ToggleVisible),
             KeyCode::Char('r') => (!held).then_some(Action::Rename),
+            KeyCode::Char('b') => (!held).then_some(Action::CycleColours),
+            // A held `t` would flicker tracking on and off.
+            KeyCode::Char('t') => (!held).then_some(Action::Track),
+            KeyCode::Char('m') => (!held).then_some(Action::CycleEventFilter),
+            KeyCode::Char('?') => (!held).then_some(Action::Help),
+            KeyCode::Char('l') => (!held).then_some(Action::SpriteList),
             KeyCode::Char('g') => (!held).then_some(Action::ExportGenome),
             KeyCode::Char(digit @ '1'..='9') => (!held).then(|| Action::Pick(digit as u8 - b'0')),
             KeyCode::Enter => (!held).then_some(Action::Enter),

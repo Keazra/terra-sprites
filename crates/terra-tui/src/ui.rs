@@ -4,14 +4,17 @@ use ratatui::{
     Frame,
     buffer::Buffer,
     layout::{Constraint, Layout, Margin, Position, Rect, Size},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::Line,
 };
-use terra_sim::{EntityId, Grip, Map, ObjectView, Pos, Progress, World};
+use terra_sim::{EntityId, Grip, Map, ObjectView, Pos, Progress, SpriteView, World};
 
-use crate::app::{App, Areas, CursorMode, PlaceItem, Screen, Selection};
+use crate::app::{
+    App, Areas, ColourMode, CursorMode, PlaceItem, Screen, Selection, strongest_drive,
+};
 use crate::clock::Speed;
 use crate::inspector::{self, INSPECTOR_WIDTH, first_shown};
+use crate::policy::{Panel, Subject};
 use crate::text::{display_name, group_thousands, terrain_name};
 use crate::theme::SemanticTile;
 
@@ -26,13 +29,16 @@ const MIN_HEIGHT_FOR_EVENT_LOG: u16 = 30;
 /// log if there's room, and the status line.
 pub fn render(frame: &mut Frame, app: &App, world: &World) {
     let area = frame.area();
+    if too_small(area.as_size()) {
+        return render_too_small(frame.buffer_mut(), area, app);
+    }
     let [top_bar, _, status] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Min(0),
         Constraint::Length(1),
     ])
     .areas(area);
-    frame.render_widget(top_bar_line(app, world), top_bar);
+    frame.render_widget(top_bar_line(app, world, top_bar.width), top_bar);
     render_map_view(
         frame.buffer_mut(),
         map_view_area(area, world.map()),
@@ -46,16 +52,63 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
         render_event_log(frame.buffer_mut(), event_log, app, world);
     }
     render_menu(frame.buffer_mut(), area, app, world);
+    match app.screen() {
+        Screen::Help => render_help(frame.buffer_mut(), app, world),
+        Screen::SpriteList => render_sprite_list(frame.buffer_mut(), app, world),
+        _ => {}
+    }
     frame.render_widget(status_line(app, world, status.width), status);
+}
+
+/// The smallest screen the game draws on (design §6.1).
+pub const MIN_SIZE: Size = Size::new(100, 30);
+
+/// Whether a screen of `screen` cells is too small for the game.
+fn too_small(screen: Size) -> bool {
+    screen.width < MIN_SIZE.width || screen.height < MIN_SIZE.height
+}
+
+/// Says the terminal is too small, and how big it needs to be, in the
+/// middle of the screen (design §6.1). The game carries on beneath.
+fn render_too_small(buf: &mut Buffer, area: Rect, app: &App) {
+    let mut lines = vec![
+        "Terminal too small".to_string(),
+        format!(
+            "needs {}x{}, this is {}x{}",
+            MIN_SIZE.width, MIN_SIZE.height, area.width, area.height
+        ),
+    ];
+    // `Esc` still asks to quit, so the question shows here too.
+    if app.screen() == Screen::QuitPrompt {
+        lines.push("Quit? (y/n)".into());
+    }
+    let top = area.y + area.height.saturating_sub(lines.len() as u16) / 2;
+    for (row, line) in (top..area.bottom()).zip(lines) {
+        let width = line.chars().count() as u16;
+        let x = area.x + area.width.saturating_sub(width) / 2;
+        buf.set_stringn(x, row, line, usize::from(area.width), Style::default());
+    }
 }
 
 /// Where the app's panels are drawn on a screen of `screen` cells. The map
 /// view draws its tiles inside its border, between the top bar and the
 /// status line, no bigger than the map itself.
 pub fn areas(screen: Size, map: &Map) -> Areas {
+    // A screen too small for the game draws no panels, so nothing can be
+    // clicked on it.
+    if too_small(screen) {
+        return Areas {
+            tiles: Rect::default(),
+            inspector: None,
+            event_log: None,
+            overlay: None,
+        };
+    }
     Areas {
         tiles: map_view_area(screen.into(), map).inner(Margin::new(1, 1)),
         inspector: inspector_area(screen.into()),
+        event_log: event_log_area(screen.into()),
+        overlay: Some(overlay_area(screen.into())),
     }
 }
 
@@ -94,6 +147,17 @@ fn inspector_area(screen: Rect) -> Option<Rect> {
             panels_height(screen),
         )
     })
+}
+
+/// Where the help screen and the sprite list are drawn: the full width,
+/// between the top bar and the status line.
+fn overlay_area(screen: Rect) -> Rect {
+    Rect::new(
+        screen.x,
+        screen.y + 1,
+        screen.width,
+        screen.height.saturating_sub(2),
+    )
 }
 
 /// The event log, border included: the full width, just above the status
@@ -144,7 +208,10 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
             };
             // A sprite is drawn over any item on its tile.
             let glyph = if let Some(sprite) = world.sprite_at(pos) {
-                let tile = if let Some(emote) = app.emote(sprite.id()) {
+                let emote = app
+                    .emote(sprite.id())
+                    .filter(|_| app.can_view(Panel::Emotes, Subject::Sprite(sprite.id())));
+                let tile = if let Some(emote) = emote {
                     SemanticTile::Emote(emote)
                 } else if app.selection() == Some(Selection::Living(sprite.id())) {
                     SemanticTile::SelectedSprite
@@ -162,7 +229,13 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
             } else {
                 app.theme.glyph(SemanticTile::Terrain(map.terrain(pos)))
             };
-            let mut style = Style::default().fg(glyph.fg);
+            // A sprite takes the colour mode's colour, unless it's emoting
+            // (design §6.3).
+            let fg = match world.sprite_at(pos) {
+                Some(sprite) if !is_emote(app, &sprite) => sprite_colour(app, &sprite, glyph.fg),
+                _ => glyph.fg,
+            };
+            let mut style = Style::default().fg(fg);
             if glyph.bold {
                 style = style.add_modifier(Modifier::BOLD);
             }
@@ -185,12 +258,31 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     draw_aim_end(buf, app, world);
 }
 
+/// Whether `sprite` is drawn as an emote just now.
+fn is_emote(app: &App, sprite: &SpriteView) -> bool {
+    let id = sprite.id();
+    app.emote(id).is_some() && app.can_view(Panel::Emotes, Subject::Sprite(id))
+}
+
+/// The colour `sprite` is drawn in, in the colour mode (design §6.3): its
+/// strongest drive's above .5, or else `own`, its glyph's colour. A drive
+/// the theme has no colour for draws `own` too, and so does a sprite whose
+/// colour the policy hides (design §6.4).
+fn sprite_colour(app: &App, sprite: &SpriteView, own: Color) -> Color {
+    if app.colour_mode() == ColourMode::Plain
+        || !app.can_view(Panel::MapColours, Subject::Sprite(sprite.id()))
+    {
+        return own;
+    }
+    strongest_drive(sprite)
+        .and_then(|drive| app.theme.drive_colour(drive.name))
+        .unwrap_or(own)
+}
+
 /// Where the selected sprite is heading, while its action is under way
 /// (design §6.1): where the map flashes the Decision marker.
 fn heading_for(app: &App, world: &World) -> Option<Pos> {
-    let Some(Selection::Living(id)) = app.selection() else {
-        return None;
-    };
+    let id = marked(app)?;
     let action = world.sprite(id)?.action()?;
     let under_way = !matches!(action.progress, Progress::Ended(_));
     under_way.then_some(action.destination).flatten()
@@ -199,10 +291,18 @@ fn heading_for(app: &App, world: &World) -> Option<Pos> {
 /// The tile of the one thing the selected sprite attends to (design §5.3):
 /// where the map shades the Attention marker.
 fn attended_by(app: &App, world: &World) -> Option<Pos> {
-    let Some(Selection::Living(id)) = app.selection() else {
-        return None;
-    };
-    world.sprite(id)?.attending_to()
+    world.sprite(marked(app)?)?.attending_to()
+}
+
+/// The selected sprite, if it's living and the policy lets the map mark
+/// where it's heading and what it attends to (design §6.4).
+fn marked(app: &App) -> Option<EntityId> {
+    match app.selection() {
+        Some(Selection::Living(id)) if app.can_view(Panel::Markers, Subject::Sprite(id)) => {
+            Some(id)
+        }
+        _ => None,
+    }
 }
 
 /// Draws the 3×3 cursor around its target tile, which the tile loop has already
@@ -402,6 +502,69 @@ fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) {
     }
 }
 
+/// Draws the help screen over everything between the top bar and the
+/// status line (design §6.1).
+fn render_help(buf: &mut Buffer, app: &App, world: &World) {
+    let Some(area) = app.overlay() else {
+        return;
+    };
+    let inner = clear_box(buf, area, " Help ", " esc close ");
+    let lines = crate::help::lines(app, world, usize::from(inner.width));
+    for (row, line) in (inner.y..inner.bottom()).zip(&lines) {
+        buf.set_line(inner.x, row, line, inner.width);
+    }
+}
+
+/// Draws the sprite list over everything between the top bar and the
+/// status line (design §6.1).
+fn render_sprite_list(buf: &mut Buffer, app: &App, world: &World) {
+    let Some(area) = app.overlay() else {
+        return;
+    };
+    let title = format!(" Sprites ── sorted by {} ", app.list_sort().label());
+    let inner = clear_box(buf, area, &title, " esc close ");
+    let lines = crate::sprite_list::lines(
+        app,
+        world,
+        usize::from(inner.width),
+        app.list_first(world),
+        app.list_rows(),
+    );
+    for (row, line) in (inner.y..inner.bottom()).zip(&lines) {
+        buf.set_line(inner.x, row, line, inner.width);
+    }
+}
+
+/// Where text `width` cells wide sits at the right of `area`'s top border:
+/// before the corner and the line beside it, as a title sits after them.
+pub(crate) fn top_right(area: Rect, width: u16) -> Option<Rect> {
+    let x = area.right().checked_sub(width + 2)?;
+    Some(Rect::new(x, area.y, width, 1))
+}
+
+/// Blanks `area` and draws a single-lined box round it, with `title` at
+/// the left of its top edge and `corner` at the right, as an overlay over
+/// the panels beneath. Gives the area inside the box.
+fn clear_box(buf: &mut Buffer, area: Rect, title: &str, corner: &str) -> Rect {
+    buf.set_style(area, Style::default());
+    for y in area.top()..area.bottom() {
+        for x in area.left()..area.right() {
+            buf[(x, y)].set_char(' ');
+        }
+    }
+    let walls = Sides {
+        left: false,
+        right: false,
+        top: false,
+        bottom: false,
+    };
+    draw_border(buf, area, title, walls);
+    if let Some(at) = top_right(area, corner.chars().count() as u16) {
+        buf.set_stringn(at.x, at.y, corner, usize::from(at.width), Style::default());
+    }
+    area.inner(Margin::new(1, 1))
+}
+
 /// The glyph of what the Cursor has hold of, as the queue will leave it: a
 /// sprite's, or an item's, held or still on the map (design v23 §6.5); or
 /// of the Place menu item waiting on it (design v28 §6.5).
@@ -477,7 +640,9 @@ fn draw_border(buf: &mut Buffer, area: Rect, title: &str, walls: Sides) {
     buf.set_stringn(left + 2, top, title, room, Style::default());
 }
 
-fn top_bar_line(app: &App, world: &World) -> Line<'static> {
+/// The top bar (design §6.1): the tick, the speed, the seed and the
+/// population, and at the right how to open help.
+fn top_bar_line(app: &App, world: &World, width: u16) -> Line<'static> {
     let clock = &app.clock;
     // Paused, it still shows the speed: `+` and `-` change it, and it sets
     // how far `.` steps (design v27 §6.6).
@@ -486,12 +651,25 @@ fn top_bar_line(app: &App, world: &World) -> Line<'static> {
     } else {
         format!("► {}", speed_label(clock.speed()))
     };
+    // The population is a count the policy may hide (design §6.4).
+    let population = if app.can_view(Panel::Counts, Subject::World) {
+        format!(" │ sprites {}", world.sprites().count())
+    } else {
+        String::new()
+    };
     let text = format!(
-        " Terra Sprites │ tick {} │ {time} │ seed {} │ sprites {}",
+        " Terra Sprites │ tick {} │ {time} │ seed {}{population}",
         group_thousands(world.tick()),
         app.seed,
-        world.sprites().count()
     );
+    const HELP: &str = "? help ";
+    let gap = usize::from(width).saturating_sub(text.chars().count() + HELP.chars().count());
+    // At least a space between the two, so `? help` never runs into them.
+    let text = if gap > 0 {
+        format!("{text}{}{HELP}", " ".repeat(gap))
+    } else {
+        text
+    };
     Line::from(text).style(Style::default().add_modifier(Modifier::REVERSED))
 }
 
@@ -554,10 +732,14 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         .placing()
         .map(|label| format!(" │ placing: {label}"))
         .unwrap_or_default();
-    let tile = format!(
-        " ({},{}) {terrain}{sprite}{object} │ {mode}{followed}{grip}{placing}",
-        cursor.x, cursor.y
-    );
+    // The tile under the Cursor is information the policy may hide (design
+    // §6.4).
+    let under = if app.can_view(Panel::TileInfo, Subject::Tile(cursor)) {
+        format!(" ({},{}) {terrain}{sprite}{object} │", cursor.x, cursor.y)
+    } else {
+        String::new()
+    };
+    let tile = format!("{under} {mode}{followed}{grip}{placing}");
     // At the right, after a gap of 2 and before a space at the end: why a
     // click did nothing, for a while, or else the key hints that fit (design
     // v22 §6.1). The reason matters more than the end of the tile's part,
@@ -577,6 +759,10 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
                 (true, Some(Grip::Leads(_))) => hint_if_fits(room, "let go to shove  esc cancel"),
                 // A Place menu item waiting, how to place it or not (design v28 §6.5).
                 _ if placing => hint_if_fits(room, "click to place  right-click put away"),
+                // While the sprite list is open, how to use it (design §6.1).
+                _ if app.screen() == Screen::SpriteList => {
+                    hint_if_fits(room, "↑↓ choose  enter go to it  tab sort  esc close")
+                }
                 _ => hints_within(room),
             };
             (tile, hints)
@@ -651,8 +837,21 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
         bottom: false,
     };
     draw_border(buf, area, " Events ", no_walls);
+    // The filters, at the right of its top border, where a click on them
+    // lands (design §6.1).
+    let labels = app.event_filter().labels();
+    if let Some(at) = top_right(area, labels.chars().count() as u16) {
+        buf.set_stringn(at.x, at.y, labels, usize::from(at.width), Style::default());
+    }
     let inner = area.inner(Margin::new(1, 1));
     let lines = app.event_log().filter_map(|(event, count)| {
+        // The policy may hide what an event is about (design §6.4).
+        let subject = inspector::event_sprites(event)
+            .first()
+            .map_or(Subject::World, |&id| Subject::Sprite(id));
+        if !app.can_view(Panel::EventLog, subject) {
+            return None;
+        }
         let text = inspector::event_line(event, &app.words(world))?;
         Some((event.tick, text, count))
     });
