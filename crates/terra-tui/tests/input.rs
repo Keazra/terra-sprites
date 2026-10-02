@@ -579,3 +579,14 @@ fn the_place_menu_and_naming_keys_have_their_actions() {
         );
     }
 }
+
+#[test]
+fn b_and_t_switch_colours_and_tracking_once_per_press() {
+    // Design §6.3, v21 §6.1: holding either doesn't flicker it.
+    for (code, action) in [('b', Action::CycleColours), ('t', Action::Track)] {
+        let mut keys = Keys::with_release_reporting(true);
+        assert_eq!(keys.action_for(press(KeyCode::Char(code))), Some(action));
+        let repeat = kind(KeyCode::Char(code), KeyEventKind::Repeat);
+        assert_eq!(keys.action_for(repeat), None, "{code} held");
+    }
+}

@@ -367,6 +367,9 @@ pub struct App {
     policy: Box<dyn InfoPolicy>,
     /// What colours sprites on the map (design §6.3).
     colour_mode: ColourMode,
+    /// Whether the view follows the selected sprite (`T`, design v21
+    /// §6.1).
+    tracking: bool,
 }
 
 /// A sprite's name being typed (design §6.5).
@@ -493,6 +496,7 @@ impl App {
             notice: None,
             policy: Box::new(Omniscient),
             colour_mode: ColourMode::Drive,
+            tracking: false,
         };
         app.centre_on(cursor);
         app
@@ -643,6 +647,7 @@ impl App {
     /// Settles the Cursor after an action or a tick: what it leads, then
     /// where it is, then telling the world if it leads a sprite.
     fn settle_cursor(&mut self, world: &World) {
+        self.follow_with_view(world);
         self.led = match self.grip(world) {
             Some(Grip::Leads(id)) => world.sprite(id).map(|sprite| (id, sprite.pos())),
             _ => None,
@@ -1156,7 +1161,11 @@ impl App {
             Action::Faster { held: true } => self.clock.faster_held(),
             Action::Slower { held: false } => self.clock.slower(),
             Action::Slower { held: true } => self.clock.slower_held(),
-            Action::Scroll { dx, dy } => self.scroll(dx, dy),
+            // Scrolling by hand takes the view back from Track.
+            Action::Scroll { dx, dy } => {
+                self.tracking = false;
+                self.scroll(dx, dy);
+            }
             Action::Point(cell) => self.point(cell),
             Action::Click {
                 at,
@@ -1218,6 +1227,7 @@ impl App {
                 }
             }
             Action::ToggleDetail => self.detail = !self.detail,
+            Action::Track => self.toggle_tracking(world),
             Action::CycleColours => {
                 self.colour_mode = along(&ColourMode::ALL, self.colour_mode, 1);
                 self.tell_player(format!("Colours: {}", self.colour_mode.label()));
@@ -1855,6 +1865,38 @@ impl App {
                 self.tell_player(format!("Saved {label}'s genome to {}", path.display()));
             }
             Err(err) => self.refuse(format!("Couldn't save the genome: {err}")),
+        }
+    }
+
+    /// `T`: the view follows the selected sprite, or stops (design v21
+    /// §6.1). With none selected, it's refused.
+    fn toggle_tracking(&mut self, world: &World) {
+        if self.tracking {
+            self.tracking = false;
+            return self.tell_player("Stopped tracking".into());
+        }
+        let Some(Selection::Living(id)) = self.selection else {
+            return self.refuse("Select a sprite to track it".into());
+        };
+        self.tracking = true;
+        self.tell_player(format!("Tracking {}", self.names.label(id)));
+        self.follow_with_view(world);
+    }
+
+    /// Whether the view follows the selected sprite (design v21 §6.1).
+    pub fn tracking(&self) -> bool {
+        self.tracking
+    }
+
+    /// While tracking, centres the view on the selected sprite, as far as
+    /// the wall allows.
+    fn follow_with_view(&mut self, world: &World) {
+        let tracked = match self.selection {
+            Some(Selection::Living(id)) if self.tracking => world.sprite(id),
+            _ => None,
+        };
+        if let Some(sprite) = tracked {
+            self.centre_on(sprite.pos());
         }
     }
 
