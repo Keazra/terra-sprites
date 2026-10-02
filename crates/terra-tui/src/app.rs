@@ -190,8 +190,8 @@ pub struct App {
     cursor: Pos,
     /// The tile under the pointer, or its last one (design §6.5).
     pointed: Pos,
-    /// Whether the Cursor follows the selected sprite (design v26 §6.5).
-    follow: bool,
+    /// The sprite the Cursor follows, selected or not (design v26 §6.5).
+    follow: Option<EntityId>,
     /// The top-left tile of the viewport.
     viewport: Pos,
     /// The map's size, in tiles.
@@ -327,7 +327,7 @@ impl App {
             mode: CursorMode::Select,
             cursor,
             pointed: cursor,
-            follow: false,
+            follow: None,
             viewport: Pos { x: 0, y: 0 },
             map_size: Size::new(map.width(), map.height()),
             tile_area: areas.tiles,
@@ -415,12 +415,14 @@ impl App {
                     self.refusal = Some((why, self.running_for));
                 }
             }
-            if let EventKind::Died { id, cause, age } = event.kind
-                && self.selection == Some(Selection::Living(id))
-            {
-                self.selection = Some(Selection::Dead { id, cause, age });
-                // Its death ends Follow (design v26 §6.5).
-                self.follow = false;
+            if let EventKind::Died { id, cause, age } = event.kind {
+                if self.selection == Some(Selection::Living(id)) {
+                    self.selection = Some(Selection::Dead { id, cause, age });
+                }
+                // The followed sprite's death ends Follow (design v26 §6.5).
+                if self.follow == Some(id) {
+                    self.follow = None;
+                }
             }
             // What the log says of it, if it's logged at all; a line that
             // reads as the one before merges into it with a count (design v21
@@ -523,19 +525,13 @@ impl App {
         if self.follow_waits() {
             return None;
         }
-        match self.selection {
-            Some(Selection::Living(id)) if self.follow => Some(id),
-            _ => None,
-        }
+        self.follow
     }
 
     /// Whether Follow steps aside: while the Cursor leads the followed
     /// sprite (design v23 §6.5).
     fn follow_waits(&self) -> bool {
-        match (self.selection, self.led) {
-            (Some(Selection::Living(followed)), Some((led, _))) => self.follow && followed == led,
-            _ => false,
-        }
+        matches!((self.follow, self.led), (Some(followed), Some((led, _))) if followed == led)
     }
 
     /// Keeps the Cursor on the sprite it follows, wherever it has walked; and
@@ -871,7 +867,7 @@ impl App {
                     self.point(at);
                 }
                 if at.is_none_or(|at| self.tile_at(at).is_some()) {
-                    self.follow_at(self.cursor, world);
+                    self.toggle_follow(self.cursor, world);
                 }
             }
             Action::Release { button, at } => {
@@ -922,7 +918,7 @@ impl App {
     /// v21 §6.5).
     ///
     /// In Select, a left click selects the sprite there; on empty ground it
-    /// clears the selection, unless the Cursor follows a sprite. A right
+    /// clears the selection, which leaves Follow as it is. A right
     /// click activates what's there, and nothing can be activated yet
     /// (design v26 §6.5).
     ///
@@ -934,7 +930,6 @@ impl App {
         match (self.mode, button) {
             (CursorMode::Select, Button::Left) => match sprite {
                 Some(id) => self.select(id),
-                None if self.follow => {}
                 None => self.selection = None,
             },
             // Until there are devices, nothing can be activated (design v26
@@ -1147,26 +1142,27 @@ impl App {
     }
 
     /// `F`, or a middle click, on `tile`, in every mode (design v26 §6.5).
-    /// With a sprite selected, the Cursor follows it, or stops, wherever
-    /// `tile` is; with nothing selected, it selects the sprite on `tile` and
-    /// follows it. On empty ground it's refused.
-    fn follow_at(&mut self, tile: Pos, world: &World) {
-        match (self.selection, world.sprite_at(tile)) {
-            (Some(Selection::Living(_)), _) => self.set_follow(!self.follow),
-            (_, Some(sprite)) => {
-                self.select(sprite.id());
-                self.set_follow(true);
+    /// Following, it stops, wherever `tile` is. Otherwise the Cursor follows
+    /// the sprite on `tile`, or else the selected sprite, leaving the
+    /// selection as it is; with neither, it's refused.
+    fn toggle_follow(&mut self, tile: Pos, world: &World) {
+        if self.follow.is_some() {
+            self.follow = None;
+            // It follows the pointer again, unless the player is aiming:
+            // then it stays on what it aims until the aim ends (design v25
+            // §6.5).
+            if self.aim.is_none() {
+                self.cursor = self.pointed;
             }
-            _ => self.refuse("No sprite here to follow".into()),
+            return;
         }
-    }
-
-    /// Has the Cursor follow the selection, or stop, when it follows the
-    /// pointer again.
-    fn set_follow(&mut self, follow: bool) {
-        self.follow = follow;
-        if !follow {
-            self.cursor = self.pointed;
+        let selected = match self.selection {
+            Some(Selection::Living(id)) => Some(id),
+            _ => None,
+        };
+        match world.sprite_at(tile).map(|sprite| sprite.id()).or(selected) {
+            Some(id) => self.follow = Some(id),
+            None => self.refuse("No sprite here to follow".into()),
         }
     }
 

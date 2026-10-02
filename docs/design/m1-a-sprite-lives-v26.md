@@ -9,16 +9,16 @@
 
 ## Changes from v25
 
-Follow ([#92](https://github.com/Keazra/terra-sprites/issues/92)), decided by the owner after trying slices 11a and 11b: the lock on moves to its own key, `F`, under a new name, **Follow**, and the middle mouse button does the same; Select mode's right click becomes **Activate**. New and changed terms in [`CONTEXT.md`](../../CONTEXT.md): Follow (was lock on), Activate.
+Follow ([#92](https://github.com/Keazra/terra-sprites/issues/92)), decided by the owner after trying slices 11a and 11b: the lock on moves to its own key, `F`, under a new name, **Follow**, the middle mouse button does the same, and Follow no longer needs the sprite to be selected; Select mode's right click becomes **Activate**. New and changed terms in [`CONTEXT.md`](../../CONTEXT.md): Follow (was lock on), Activate.
 
 | # | Change | Source | Sections |
 |---|---|---|---|
-| 1 | **Follow replaces locking on.** The Cursor following the selected sprite, sitting on it and moving with it in every mode, is now called Follow, and `F` turns it on or off, in every mode. v21 set the lock in Select mode only, because the right click had other jobs in the other modes; with a key of its own, no mode gives up a button for it. Everything else the lock did, Follow does: it moves with the selection, the sprite's death ends it, a left click on empty ground keeps the selection while it's on, and Train's target is the followed sprite. | Owner decision ([#92](https://github.com/Keazra/terra-sprites/issues/92)) | §6.1, §6.5 |
+| 1 | **Follow replaces locking on.** The Cursor sitting on a sprite and moving with it in every mode is now called Follow, and `F` turns it on or off, in every mode. v21 set the lock in Select mode only, because the right click had other jobs in the other modes; with a key of its own, no mode gives up a button for it. As with the lock, the sprite's death ends it, and Train's target is the followed sprite. | Owner decision ([#92](https://github.com/Keazra/terra-sprites/issues/92)) | §6.1, §6.5 |
 | 2 | **The middle mouse button does what `F` does,** where it points: a middle press points, as every mouse event does, then acts as `F` would on the Cursor's tile. `F` stays, since many trackpads have no middle button, as `Q` and `E` stand in for the left and right buttons. A middle click with the quit prompt open leaves it open, as every mouse event does; `F` is a key, so it cancels it. | Owner decision, during slice 11b's build check | §6.5 |
-| 3 | **With nothing selected, `F` selects the sprite under the Cursor and follows it,** in one press, as the right click did with the lock. On empty ground it sends nothing, flashes `?`, and the status line says "No sprite here to follow". With a sprite selected, `F` turns Follow on or off wherever the Cursor is. | Recommendation, put to the owner on #92; it keeps the lock's one-press habit | §6.1, §6.5 |
+| 3 | **Follow is the Cursor's, and the selection the inspector's.** v21's lock was always on the selected sprite; Follow remembers its own sprite. `F` follows the sprite under the Cursor and leaves the selection as it is; with no sprite there, it follows the selected one, so `Tab` then `F` still works without the mouse. With neither, it sends nothing, flashes `?`, and the status line says "No sprite here to follow". Following, `F` stops, wherever the Cursor is. So the inspector can show one sprite while the Cursor follows another. Selecting another sprite no longer moves Follow, and a left click on empty ground clears the selection whether or not the Cursor follows a sprite, since it can no longer lose Follow. | Owner's question ("make it follow without selecting?"); recommendation | §6.1, §6.5 |
 | 4 | **Select mode's right click (and `E`) is Activate:** it will work the thing clicked, such as a device (a hatchery, a food dispenser), the job v21 had kept `F` for, as "Function". Until there are devices ([#26](https://github.com/Keazra/terra-sprites/issues/26), [#90](https://github.com/Keazra/terra-sprites/issues/90)), there's nothing to activate: it sends nothing, flashes `?`, and the status line says "Nothing here to activate", as Train's empty clicks do. | Owner decision ([#92](https://github.com/Keazra/terra-sprites/issues/92)) | §6.1, §6.5 |
 | 5 | **Wording.** The status line says `following Mira #12` where it said `locked on Mira #12`. The glossary's *lock on* becomes **Follow**, and *track* stays the view following the selected sprite with `T`. The theme files' solid arrows are `followed_arrows`. | Follows from change 1 | §6.1, §6.2, §6.5, §6.8 |
-| 6 | **Grab mode's rule stays, under the new word** (v23 change 6): while the Cursor leads the followed sprite, Follow steps aside, and comes back when it's let go. `F` meanwhile ends it for good, as the right click in Select mode ended the lock. | Follows from change 1 | §6.5 |
+| 6 | **Grab mode's rule stays, under the new word** (v23 change 6): while the Cursor leads the followed sprite, Follow steps aside, and comes back when it's let go. `F` meanwhile ends it for good, as the right click in Select mode ended the lock. Stopping Follow while aiming leaves the aim as it was: the Cursor stays where aiming began until the aim ends. | Follows from change 1 | §6.5 |
 
 **Earlier changes** are in the archived revisions, in [`archive/`](archive/). Each opens with its own table: v25's changes (from v24) head [v25](archive/m1-a-sprite-lives-v25.md), and so on back to v2. So "v16 change 16" is row 16 of the table at the top of [v16](archive/m1-a-sprite-lives-v16.md). The current revision carries only its own table, so the spec doesn't open with its whole history.
 
@@ -1463,17 +1463,17 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 - The Cursor covers the 8 tiles around its target while it sits there; the status line still names the target.
 - The arrows and marks are theme glyphs (§6.2). **Following a sprite,** the arrows are solid, clamping the sprite (`▼ ► ◄ ▲`).
 
-**Follow** (v21 as locking on; v26). The Cursor can follow the selected sprite, so a pet or a shock needs no aim:
+**Follow** (v21 as locking on; v26). The Cursor can follow a sprite, so a pet or a shock needs no aim:
 - **Following,** the Cursor sits on its sprite and moves with it, in every mode, whatever the pointer does. If the sprite walks out of view, the Cursor goes with it, and a click still reaches it.
-- **`F` turns Follow on or off, in every mode,** and a **middle click** does the same where it points (v26). With a sprite selected, it turns Follow on or off for that sprite, wherever the Cursor is. With nothing selected, it selects the sprite on the Cursor's tile and follows it; on empty ground it sends nothing, flashes `?`, and says "No sprite here to follow". Held, `F` acts once, so it can't flicker Follow on and off. A middle click is the mouse, so it leaves the quit prompt open; `F` is a key, and cancels it.
-- **Follow moves with the selection:** selecting another sprite, by a left click on it, `Tab` or `Shift+Tab`, moves it.
-- **A left click on empty ground clears the selection only while Follow is off,** so a stray click can't lose it.
-- **The sprite's death ends Follow.** The Cursor stays where the sprite died, and follows the pointer again.
-- **While the Cursor leads the followed sprite** (v23 change 6), Follow steps aside, in every mode: the Cursor follows the pointer, within the leash. Let go, Follow comes back and the Cursor sits on the sprite again, so the player can lead a sprite to water and go straight back to training it. `F` meanwhile ends Follow for good.
+- **`F` turns Follow on or off, in every mode,** and a **middle click** does the same where it points (v26). Following, it stops, wherever the Cursor is. Otherwise it follows the sprite on the Cursor's tile, or, with none there, the selected sprite, so `Tab` then `F` works without the mouse; with neither, it sends nothing, flashes `?`, and says "No sprite here to follow". A middle click off the map view points nowhere and does nothing, as a click there does. Held, `F` acts once, so it can't flicker Follow on and off. A middle click is the mouse, so it leaves the quit prompt open; `F` is a key, and cancels it.
+- **Follow is the Cursor's, and the selection the inspector's** (v26). Following a sprite doesn't select it, and selecting another sprite, by a left click on it, `Tab` or `Shift+Tab`, leaves Follow where it is. So the player can read one sprite's Brain tab while petting its neighbour; the status line says which sprite the Cursor follows.
+- **A left click on empty ground clears the selection,** and leaves Follow as it is.
+- **The followed sprite's death ends Follow,** whichever sprite is selected. The Cursor stays where the sprite died, and follows the pointer again.
+- **While the Cursor leads the followed sprite** (v23 change 6), Follow steps aside, in every mode: the Cursor follows the pointer, within the leash. Let go, Follow comes back and the Cursor sits on the sprite again, so the player can lead a sprite to water and go straight back to training it. `F` meanwhile ends Follow for good. Stopping Follow while aiming leaves the aim as it was: the Cursor stays where aiming began until the aim ends.
 - **Otherwise Follow holds, whatever the Cursor has hold of.** Holding a berry picked up with Follow off, then following a hungry sprite, a Grab click puts the berry down at its feet. Leading one sprite while following another, the led sprite is led towards the followed one, the Cursor waiting at the leash's end until it catches up.
-- **Only sprites are selected and followed** (v23). The selection is sprites only, and a rolling ball stops within a few tiles, so it can be grabbed where it ends up.
+- **Only sprites are selected and followed** (v23; followed, v26). The selection is sprites only, and a rolling ball stops within a few tiles, so it can be grabbed where it ends up.
 - The status line names the sprite the Cursor follows (`following Mira #12`).
-- **Follow isn't Track.** `T` (track) has the view follow the selected sprite; Follow has the Cursor follow it.
+- **Follow isn't Track.** `T` (track) has the view follow the selected sprite; Follow has the Cursor follow a sprite.
 
 **Activate** (v26). In Select mode the right click (or `E`) activates the thing clicked, such as a device: a hatchery, a food dispenser ([#26](https://github.com/Keazra/terra-sprites/issues/26)). Activating needs something selectable to activate ([#90](https://github.com/Keazra/terra-sprites/issues/90)); until then there's nothing, so it sends nothing, flashes `?`, and says "Nothing here to activate". It touches neither the selection nor Follow.
 
@@ -1481,7 +1481,7 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 
 | Key | Mode | Mark | Colour | A left click (`Q`)… | A right click (`E`)… | `Y` / `N` |
 |---|---|---|---|---|---|---|
-| `Z` | **Select** (the default) | `♦` | white | selects the sprite under the pointer; on empty ground, clears the selection unless the Cursor follows a sprite | activates the thing clicked; nothing can be activated yet (v26, above) | `·` / `·` |
+| `Z` | **Select** (the default) | `♦` | white | selects the sprite under the pointer; on empty ground, clears the selection | activates the thing clicked; nothing can be activated yet (v26, above) | `·` / `·` |
 | `X` | **Train** (v21) | `±` | light magenta (v22) | rewards the target: a **pet**; amplified, a **hug** | corrects the target: a **zap**; amplified, a **shock** | feedback (below) |
 | `C` | **Grab** (slice 11a) | `∩` | yellow | with the Cursor empty, grabs what's under it: takes hold of a sprite (`TakeHold`), or else picks up an item (`PickUp`); leading, lets go (`LetGo`); holding, puts the item down (`PutDown`). Pressing `C` again opens the Place menu (slice 11c) | throws a held item or shoves a led sprite, aimed by pulling back; with the Cursor empty, grabs what's under it first (v25, above) | empty: `↑` / `░`; holding or leading: `↓` / the thing's glyph |
 
@@ -1503,10 +1503,10 @@ N ↑ M      centre: the target tile, in reverse video, glyph still visible
 
 | Key | Action |
 |---|---|
-| `Tab` / `Shift+Tab` | Select the next / previous sprite by ID, wrapping around, and centre the viewport on it if it's out of view. With none selected, start from the lowest / highest ID; after the selected sprite dies, carry on from its ID. Follow moves with the selection |
+| `Tab` / `Shift+Tab` | Select the next / previous sprite by ID, wrapping around, and centre the viewport on it if it's out of view. With none selected, start from the lowest / highest ID; after the selected sprite dies, carry on from its ID. Follow stays where it is |
 | `PgUp` / `PgDn` | Scroll the open inspector tab by a page |
 | `T` | Track: the view follows the selected sprite (v21; `f` before) |
-| `F` | **Follow** (v26): the Cursor follows the selected sprite, or stops; with nothing selected, it selects the sprite under the Cursor and follows it (above). The middle mouse button does the same where it points. Not a cursor mode |
+| `F` | **Follow** (v26): the Cursor follows the sprite under it, or else the selected sprite, or stops (above). The middle mouse button does the same where it points. Not a cursor mode |
 | `b` | Cycle the colour mode |
 | `[` / `]` | Previous / next inspector tab, wrapping around |
 | `g` | Export the genome (Genome tab) |

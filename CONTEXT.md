@@ -423,11 +423,11 @@ What a click on the map does: Select, Train or Grab. `Q` and `E` do what the lef
 _Avoid_: tool
 
 **Selection**:
-The sprite the inspector shows, chosen by clicking it or with `Tab`. The Cursor can follow it.
+The sprite the inspector shows, chosen by clicking it or with `Tab`. It's the inspector's: the Cursor can follow another sprite.
 _Avoid_: focus, target
 
 **Follow**:
-The Cursor fixed on the selected sprite, so it moves with the sprite in every mode and a pet or a shock needs no aim. `F`, or a middle click, turns it on or off in every mode; with nothing selected, it selects the sprite under the Cursor and follows it. Selecting another sprite moves it, and the sprite's death ends it. While the Cursor leads the followed sprite, Follow steps aside and the Cursor follows the pointer, within the leash; otherwise it holds.
+The Cursor fixed on a sprite, so it moves with the sprite in every mode and a pet or a shock needs no aim. `F`, or a middle click, turns it on or off in every mode: it follows the sprite under the Cursor, or else the selected one. It doesn't select the sprite, selecting another leaves it as it is, and the sprite's death ends it. While the Cursor leads the followed sprite, Follow steps aside and the Cursor follows the pointer, within the leash; otherwise it holds.
 _Avoid_: lock on (its name before v26), track (that's the view following the selected sprite, with `T`)
 
 **Activate**:

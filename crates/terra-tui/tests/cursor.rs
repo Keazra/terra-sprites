@@ -225,48 +225,54 @@ const F: Action = Action::Follow { at: None };
 /// A middle click on `tile`: what `F` does, where it points (design v26
 /// §6.5).
 fn middle_click(app: &mut App, world: &World, tile: Pos) {
-    let at = Some(Position::new(tile.x, tile.y));
-    apply(app, world, Action::Follow { at });
+    let at = Position::new(tile.x, tile.y);
+    apply(app, world, Action::middle_click(at));
 }
 
-/// Selects the sprite on `tile` and has the Cursor follow it, in Select
-/// mode: a left click, then `F`.
+/// Has the Cursor follow the sprite on `tile`: points there, then `F`.
 fn follow(app: &mut App, world: &World, tile: Pos) {
-    click(app, world, tile, Button::Left);
+    apply(app, world, Action::Point(Position::new(tile.x, tile.y)));
     apply(app, world, F);
 }
 
 #[test]
-fn f_has_the_cursor_follow_the_selection_and_again_stops() {
-    // Design v26 §6.5: wherever the Cursor is, with a sprite selected.
+fn f_follows_the_sprite_under_the_cursor_without_selecting_it_and_again_stops() {
+    // Design v26 §6.5: Follow is the Cursor's, and the selection the
+    // inspector's.
     let world = field(&[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
-    click(&mut app, &world, at(4, 2), Button::Left);
-    assert_eq!(app.followed(), None, "selecting doesn't follow");
-    apply(&mut app, &world, Action::Point(Position::new(8, 5)));
-    apply(&mut app, &world, F);
-    assert_eq!(app.followed(), Some(id));
+    follow(&mut app, &world, at(4, 2));
+    assert_eq!((app.followed(), app.selection()), (Some(id), None));
     apply(&mut app, &world, F);
     assert_eq!(app.followed(), None);
 }
 
 #[test]
-fn with_nothing_selected_f_selects_the_sprite_under_the_cursor_and_follows_it() {
+fn with_no_sprite_under_the_cursor_f_follows_the_selected_one() {
+    // Design v26 §6.5: so `Tab` then `F` works without the mouse.
     let world = field(&[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     apply(&mut app, &world, Action::Point(Position::new(1, 1)));
     apply(&mut app, &world, F);
-    assert_eq!(
-        (app.selection(), app.followed()),
-        (None, None),
-        "empty ground"
-    );
+    assert_eq!(app.followed(), None, "nothing there or selected");
     assert_eq!(app.refusal(), Some("No sprite here to follow"));
-    apply(&mut app, &world, Action::Point(Position::new(4, 2)));
+    apply(&mut app, &world, Action::SelectNext);
     apply(&mut app, &world, F);
     assert_eq!(app.followed(), Some(id));
+}
+
+#[test]
+fn a_sprite_under_the_cursor_comes_before_the_selected_one() {
+    // Design v26 §6.5.
+    let world = field(&[at(2, 2), at(6, 2)]);
+    let (first, second) = (sprite_on(&world, at(2, 2)), sprite_on(&world, at(6, 2)));
+    let mut app = app(&world);
+    click(&mut app, &world, at(2, 2), Button::Left);
+    follow(&mut app, &world, at(6, 2));
+    assert_eq!(app.followed(), Some(second));
+    assert_eq!(app.selection().map(|s| s.id()), Some(first), "kept");
 }
 
 #[test]
@@ -276,14 +282,14 @@ fn a_middle_click_does_what_f_does_where_it_points() {
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     middle_click(&mut app, &world, at(1, 1));
-    assert_eq!(app.selection(), None, "empty ground");
+    assert_eq!(app.refusal(), Some("No sprite here to follow"));
     assert_eq!(
         app.cursor(),
         at(1, 1),
         "it points, as every mouse event does"
     );
     middle_click(&mut app, &world, at(4, 2));
-    assert_eq!(app.followed(), Some(id));
+    assert_eq!((app.followed(), app.selection()), (Some(id), None));
     middle_click(&mut app, &world, at(8, 5));
     assert_eq!(app.followed(), None, "anywhere, it stops following");
 }
@@ -297,8 +303,7 @@ fn f_and_the_middle_click_follow_in_every_mode() {
         let id = sprite_on(&world, at(4, 2));
         let mut app = app(&world);
         apply(&mut app, &world, Action::Mode(mode));
-        apply(&mut app, &world, Action::Point(Position::new(4, 2)));
-        apply(&mut app, &world, F);
+        follow(&mut app, &world, at(4, 2));
         assert_eq!(app.followed(), Some(id), "F in {mode:?}");
         middle_click(&mut app, &world, at(0, 0));
         assert_eq!(app.followed(), None, "middle click in {mode:?}");
@@ -323,35 +328,34 @@ fn in_select_mode_a_right_click_or_e_activates_and_nothing_can_be_activated_yet(
         amplified: false,
     };
     apply(&mut app, &world, e);
-    assert_eq!(app.followed(), Some(id));
+    assert_eq!((app.selection(), app.followed()), (None, Some(id)));
     assert_eq!(app.refusal(), Some("Nothing here to activate"));
 }
 
 #[test]
-fn following_a_left_click_on_empty_ground_keeps_the_selection() {
-    // Design v21 §6.5: a stray click can't lose Follow; with it off, it clears.
+fn a_left_click_on_empty_ground_clears_the_selection_and_follow_holds() {
+    // Design v26 §6.5: the selection no longer carries Follow, so a stray
+    // click can't lose it.
     let world = field(&[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
+    click(&mut app, &world, at(4, 2), Button::Left);
     follow(&mut app, &world, at(4, 2));
     click(&mut app, &world, at(1, 1), Button::Left);
-    assert_eq!(app.followed(), Some(id));
-    apply(&mut app, &world, F);
-    click(&mut app, &world, at(1, 1), Button::Left);
-    assert_eq!(app.selection(), None);
+    assert_eq!((app.selection(), app.followed()), (None, Some(id)));
 }
 
 #[test]
-fn selecting_another_sprite_moves_follow_with_it() {
-    // Design v21 §6.5: a left click on it, or Tab.
+fn selecting_another_sprite_leaves_follow_where_it_is() {
+    // Design v26 §6.5: a left click on it, or Tab.
     let world = field(&[at(2, 2), at(6, 2)]);
-    let (first, second) = (sprite_on(&world, at(2, 2)), sprite_on(&world, at(6, 2)));
+    let first = sprite_on(&world, at(2, 2));
     let mut app = app(&world);
     follow(&mut app, &world, at(2, 2));
     click(&mut app, &world, at(6, 2), Button::Left);
-    assert_eq!(app.followed(), Some(second));
+    assert_eq!(app.followed(), Some(first));
     apply(&mut app, &world, Action::SelectNext);
-    assert_eq!(app.followed(), Some(first), "Tab wraps round to the first");
+    assert_eq!(app.followed(), Some(first), "Tab");
 }
 
 #[test]
@@ -397,12 +401,14 @@ fn following_the_cursor_moves_with_its_sprite() {
 }
 
 #[test]
-fn the_followed_sprite_s_death_ends_follow() {
-    let world = field(&[at(4, 2)]);
-    let id = sprite_on(&world, at(4, 2));
+fn the_followed_sprite_s_death_ends_follow_and_no_other_does() {
+    // Design v26 §6.5: whichever sprite is selected.
+    let world = field(&[at(4, 2), at(7, 2)]);
+    let (id, other) = (sprite_on(&world, at(4, 2)), sprite_on(&world, at(7, 2)));
     let mut app = app(&world);
+    click(&mut app, &world, at(7, 2), Button::Left);
     follow(&mut app, &world, at(4, 2));
-    let died = Event {
+    let died = |id| Event {
         tick: 0,
         kind: EventKind::Died {
             id,
@@ -410,7 +416,9 @@ fn the_followed_sprite_s_death_ends_follow() {
             age: 5,
         },
     };
-    app.record(&[died], &world);
+    app.record(&[died(other)], &world);
+    assert_eq!(app.followed(), Some(id), "the selected sprite died");
+    app.record(&[died(id)], &world);
     assert_eq!(app.followed(), None);
     apply(&mut app, &world, Action::Point(Position::new(8, 5)));
     assert_eq!(app.cursor(), at(8, 5), "it follows the pointer again");
