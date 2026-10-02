@@ -411,11 +411,11 @@ The part of the map currently shown in the map view.
 _Avoid_: camera
 
 **Cursor**:
-The player's hard-light projection into the terrarium: to the sprites the player is an advanced creature, and this is how they reach in. It shows on the map as a 3×3 grid that follows the pointer, unless it's locked on to a sprite, and a click acts as the cursor mode says. In M1 sprites can't see it, so its touch is a feeling from nowhere. It holds an item or leads a sprite, one thing at a time.
+The player's hard-light projection into the terrarium: to the sprites the player is an advanced creature, and this is how they reach in. It shows on the map as a 3×3 grid that follows the pointer, unless it follows a sprite, and a click acts as the cursor mode says. In M1 sprites can't see it, so its touch is a feeling from nowhere. It holds an item or leads a sprite, one thing at a time.
 _Avoid_: hand, orb, selection (the selection is the chosen sprite)
 
 **Pointer**:
-Where the mouse is on screen. The Cursor follows it over the map view, unless it's locked on.
+Where the mouse is on screen. The Cursor follows it over the map view, unless it follows a sprite.
 _Avoid_: mouse cursor
 
 **Cursor mode**:
@@ -423,12 +423,16 @@ What a click on the map does: Select, Train or Grab. `Q` and `E` do what the lef
 _Avoid_: tool
 
 **Selection**:
-The sprite the inspector shows, chosen by clicking it or with `Tab`. The Cursor can lock on to it.
+The sprite the inspector shows, chosen by clicking it or with `Tab`. It's the inspector's: the Cursor can follow another sprite.
 _Avoid_: focus, target
 
-**Lock on**:
-To fix the Cursor on the selected sprite, so it moves with the sprite in every mode and a pet or a shock needs no aim. A right click in Select mode turns the lock on or off; selecting another sprite moves the lock, and the sprite's death ends it. While the Cursor leads the locked-on sprite, the lock steps aside and the Cursor follows the pointer, within the leash; otherwise the lock holds.
-_Avoid_: follow, track (those are the view following the selected sprite, with `T`)
+**Follow**:
+The Cursor fixed on a sprite, so it moves with the sprite in every mode and a pet or a shock needs no aim. `F`, or a middle click, turns it on or off in every mode: it follows the sprite under the Cursor, or else the selected one. It doesn't select the sprite, selecting another leaves it as it is, and the sprite's death ends it. While the Cursor leads the followed sprite, Follow steps aside and the Cursor follows the pointer, within the leash; otherwise it holds.
+_Avoid_: lock on (its name before v26), track (that's the view following the selected sprite, with `T`)
+
+**Activate**:
+What Select mode's right click (or `E`) does: work the thing clicked, such as a device (a hatchery, a food dispenser). Nothing can be activated until devices arrive.
+_Avoid_: function, use
 
 **Status marks**:
 The two corners of the Cursor, top right and bottom left, that report on it: in Train mode they flash `+` when a click is sent, then `☼` when it applied or `?` when it was refused; in Grab mode they show what the Cursor holds or leads. The other two corners are the mode marks, which show the cursor mode.
@@ -472,7 +476,7 @@ _Avoid_: skin
 ### The Cursor
 
 **Train mode**:
-The cursor mode for teaching: a left click rewards the target, a right click corrects it. The target is the sprite the Cursor is locked on to, or else the one under it.
+The cursor mode for teaching: a left click rewards the target, a right click corrects it. The target is the sprite the Cursor follows, or else the one under it.
 _Avoid_: Reward mode, Correct mode (merged into Train)
 
 **Grab mode**:

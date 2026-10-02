@@ -117,7 +117,7 @@ fn advance_cut_after(clock: &mut Clock, ticks: u64) -> u64 {
 
 #[test]
 fn a_step_runs_one_seconds_worth_of_ticks_at_the_speed_and_at_least_one() {
-    // Design v26 §6.6: 1× is 1.25 ticks a second, rounded down to 1; Max
+    // Design v27 §6.6: 1× is 1.25 ticks a second, rounded down to 1; Max
     // steps as 16× does.
     use Speed::*;
     for (speed, ticks) in [

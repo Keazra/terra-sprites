@@ -219,11 +219,11 @@ fn the_select_mode_is_white_in_both_themes() {
     }
 }
 
-/// A theme's glyphs for what the Cursor reports and how it looks locked on:
-/// the status marks (idle, sent, applied, rejected), then the solid arrows
-/// (up, down, left, right).
-fn reports_and_lock(theme: &Theme) -> [char; 8] {
-    let (status, arrows) = (theme.status_marks(), theme.locked_arrows());
+/// A theme's glyphs for what the Cursor reports and how it looks following
+/// a sprite: the status marks (idle, sent, applied, rejected), then the
+/// solid arrows (up, down, left, right).
+fn reports_and_follow(theme: &Theme) -> [char; 8] {
+    let (status, arrows) = (theme.status_marks(), theme.followed_arrows());
     [
         status.idle,
         status.sent,
@@ -237,17 +237,17 @@ fn reports_and_lock(theme: &Theme) -> [char; 8] {
 }
 
 #[test]
-fn the_themes_draw_the_status_marks_and_the_lock_as_the_design_table_says() {
+fn the_themes_draw_the_status_marks_and_follow_as_the_design_table_says() {
     // Design v22 §6.2.
     assert_eq!(
-        reports_and_lock(&Theme::cp437()),
+        reports_and_follow(&Theme::cp437()),
         ['·', '+', '☼', '?', '▲', '▼', '◄', '►']
     );
     assert_eq!(
-        reports_and_lock(&Theme::ascii()),
+        reports_and_follow(&Theme::ascii()),
         ['-', '+', '*', '?', '^', 'v', '<', '>']
     );
-    for glyph in reports_and_lock(&Theme::cp437()) {
+    for glyph in reports_and_follow(&Theme::cp437()) {
         assert!(cp437::contains(glyph), "{glyph:?}");
     }
 }

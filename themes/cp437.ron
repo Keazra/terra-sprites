@@ -44,8 +44,8 @@
     attention_marker: dark_gray,
     cursor: (
         arrows: (up: '↑', down: '↓', left: '←', right: '→'),
-        // Locked on to a sprite, the arrows are solid, clamping it (design v22 §6.2).
-        locked_arrows: (up: '▲', down: '▼', left: '◄', right: '►'),
+        // Following a sprite, the arrows are solid, clamping it (design v26 §6.2).
+        followed_arrows: (up: '▲', down: '▼', left: '◄', right: '►'),
         status_marks: (
             idle: '·', // nothing to report
             sent: '+', // a click has just sent a command

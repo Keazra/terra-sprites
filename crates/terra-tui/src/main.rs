@@ -75,7 +75,7 @@ fn main() -> ExitCode {
     };
     // Where the terminal supports the kitty keyboard protocol, it reports
     // repeats and releases too, so held keys can be told from presses (design
-    // v26 §6.6). Windows reports them anyway, and says it has no support.
+    // v27 §6.6). Windows reports them anyway, and says it has no support.
     let enhanced_keys = supports_keyboard_enhancement().unwrap_or(false)
         && execute!(
             stdout(),
