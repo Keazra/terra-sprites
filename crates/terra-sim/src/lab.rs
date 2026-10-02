@@ -508,6 +508,7 @@ fn thing_name(thing: &Thing) -> String {
         Thing::ObjectType(name) => name.clone(),
         Thing::Category(name) => format!("{name} in general"),
         Thing::Sprite(id) => format!("Sprite #{}", id.0),
+        Thing::Cursor => "the Cursor".into(),
     }
 }
 

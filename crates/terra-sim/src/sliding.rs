@@ -70,6 +70,7 @@ fn slide(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec
                 }
                 Target::Sprite(other) => Thing::Sprite(other),
                 Target::Water(_) => unreachable!("water stops a slide without a crash"),
+                Target::Cursor => unreachable!("the Cursor is light, and stops nothing"),
             };
             let hurt = verbs::crash(state, data, id, target);
             events.push(Event {

@@ -1,5 +1,6 @@
 //! The Cursor as far as it touches the world (design v23 §6.5): the sprite
-//! it leads or the item it holds, one thing at a time.
+//! it leads or the item it holds, one thing at a time, and whether sprites
+//! can see it (design v29 §6.5).
 
 use serde::Serialize;
 
@@ -13,8 +14,10 @@ use crate::sprites::Sprites;
 pub(crate) struct Cursor {
     pub(crate) grip: Option<Grip>,
     /// The tile it was last told it's on (design v23 §2.5), which a led
-    /// sprite heads for.
+    /// sprite heads for, and where sprites see it while it's visible.
     pub(crate) tile: Option<Pos>,
+    /// Whether sprites can see it (design v29 §6.5).
+    pub(crate) visible: bool,
 }
 
 /// What the Cursor has hold of.
@@ -41,6 +44,12 @@ impl Cursor {
             Some(Grip::Holds(id)) => Some(id),
             _ => None,
         }
+    }
+
+    /// Where sprites see it: its tile while it's visible (design v29 §6.5),
+    /// or nowhere.
+    pub(crate) fn seen_at(&self) -> Option<Pos> {
+        self.tile.filter(|_| self.visible)
     }
 
     /// Whether it's free to grab something: refused while it has hold of

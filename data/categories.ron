@@ -16,4 +16,7 @@
     (id: 4, name: "water"),
     (id: 5, name: "toy",       plural: "toys"),
     (id: 6, name: "sprite",    plural: "sprites"),
+    // The Cursor, which sprites see while it's visible (design v29 §6.5).
+    // There's one, so it has no plural.
+    (id: 7, name: "cursor"),
 ]
