@@ -26,7 +26,7 @@ pub enum Flow {
     Quit,
 }
 
-/// What fills the screen besides the map (design §6.8). Help comes later.
+/// What fills the screen besides the map (design §6.8).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
     Normal,
@@ -38,6 +38,8 @@ pub enum Screen {
     GenomeMenu,
     /// The player is typing a sprite's name (design §6.5).
     Naming,
+    /// The help screen is open (design §6.1).
+    Help,
 }
 
 /// What colours sprites on the map (design §6.3).
@@ -422,6 +424,9 @@ pub struct App {
     overlay: Option<Rect>,
     /// Which events the event log shows (design §6.1).
     event_filter: EventFilter,
+    /// The game's folder for its files (design §6.7), which the help
+    /// screen shows, if there is one.
+    data_folder: Option<PathBuf>,
 }
 
 /// A sprite's name being typed (design §6.5).
@@ -552,6 +557,7 @@ impl App {
             event_log_area: areas.event_log,
             overlay: areas.overlay,
             event_filter: EventFilter::All,
+            data_folder: None,
         };
         app.centre_on(cursor);
         app
@@ -1226,6 +1232,7 @@ impl App {
         match self.screen {
             Screen::PlaceMenu | Screen::GenomeMenu => return self.apply_in_menu(action, world),
             Screen::Naming => return self.apply_naming(action, world),
+            Screen::Help => return self.apply_in_help(action),
             Screen::Normal | Screen::QuitPrompt => {}
         }
         if self.screen == Screen::QuitPrompt {
@@ -1330,6 +1337,10 @@ impl App {
             Action::ToggleDetail => self.detail = !self.detail,
             Action::Track => self.toggle_tracking(world),
             Action::CycleEventFilter => self.next_filter(),
+            Action::Help => {
+                self.end_aim();
+                self.screen = Screen::Help;
+            }
             Action::CycleColours => {
                 self.colour_mode = along(&ColourMode::ALL, self.colour_mode, 1);
                 self.tell_player(format!("Colours: {}", self.colour_mode.label()));
@@ -1616,6 +1627,35 @@ impl App {
     pub fn notice(&self) -> Option<&str> {
         let (what, from) = self.notice.as_ref()?;
         self.shows(*from, REFUSAL_FOR).then_some(what.as_str())
+    }
+
+    /// What an action does while the help screen is open: `?` or `Esc`
+    /// closes it, and the mouse still points.
+    fn apply_in_help(&mut self, action: Action) -> Flow {
+        match action {
+            Action::Help | Action::Back => self.screen = Screen::Normal,
+            Action::Quit => return Flow::Quit,
+            Action::Point(cell) => self.point(cell),
+            _ => {}
+        }
+        Flow::Continue
+    }
+
+    /// Sets the game's folder for its files (design §6.7), which the help
+    /// screen shows.
+    pub fn set_data_folder(&mut self, folder: PathBuf) {
+        self.data_folder = Some(folder);
+    }
+
+    /// The game's folder for its files, if there is one.
+    pub fn data_folder(&self) -> Option<&Path> {
+        self.data_folder.as_deref()
+    }
+
+    /// Where the help screen and the sprite list are drawn, if the screen
+    /// has room for the game.
+    pub fn overlay(&self) -> Option<Rect> {
+        self.overlay
     }
 
     /// Sets where genome files are saved and read from (design §6.7).
