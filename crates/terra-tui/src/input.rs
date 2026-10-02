@@ -49,8 +49,14 @@ pub enum Action {
         button: Button,
         at: Option<Position>,
     },
+    /// `F`, or a middle click on this screen cell: the Cursor follows the
+    /// selected sprite, or stops, or with nothing selected, selects the
+    /// sprite where the Cursor is and follows it (design v26 §6.5).
+    Follow {
+        at: Option<Position>,
+    },
     /// Pick a cursor mode (`Z` Select, `X` Train, `C` Grab); `C` in Grab
-    /// mode opens the Place menu (design v26 §6.5).
+    /// mode opens the Place menu (design v27 §6.5).
     Mode(CursorMode),
     /// Select the sprite with the next ID (`Tab`).
     SelectNext,
@@ -78,7 +84,7 @@ pub enum Action {
     ToggleDetail,
     /// Cancel a prompt: any key with no job of its own.
     Dismiss,
-    /// Pick the menu item with this number, from 1 (`1`–`9`, design v26).
+    /// Pick the menu item with this number, from 1 (`1`–`9`, design v27).
     Pick(u8),
     /// Take what's chosen: the highlighted menu item, or the name typed
     /// (`Enter`).
@@ -124,6 +130,11 @@ impl Action {
             amplified: false,
         }
     }
+
+    /// A middle click on `at`: what `F` does, there (design v26 §6.5).
+    pub fn middle_click(at: Position) -> Action {
+        Action::Follow { at: Some(at) }
+    }
 }
 
 /// How far Shift scrolls the viewport, in tiles (design §6.5).
@@ -155,7 +166,7 @@ impl Keys {
         }
     }
 
-    /// The action for a key event while the player types a name (design v26
+    /// The action for a key event while the player types a name (design v27
     /// §6.5): letters are typed rather than acting, `Backspace` rubs one out,
     /// `Tab` offers another random name, `Enter` takes it and `Esc` gives up.
     /// Only presses count, and `Ctrl+C` still quits. Releases are still
@@ -241,6 +252,8 @@ impl Keys {
             KeyCode::Char('c') => (!held).then_some(Action::Mode(CursorMode::Grab)),
             KeyCode::Char('q') => press(Button::Left),
             KeyCode::Char('e') => press(Button::Right),
+            // A held `f` would flicker Follow on and off.
+            KeyCode::Char('f') => (!held).then_some(Action::Follow { at: None }),
             // A held `v` would flicker the detail view on and off.
             KeyCode::Char('v') => (!held).then_some(Action::ToggleDetail),
             KeyCode::Char('r') => (!held).then_some(Action::Rename),
@@ -264,7 +277,8 @@ impl Keys {
 
 /// The action for a mouse event. Every event says where the pointer is, so it
 /// points there; a left or right button press clicks, amplified with Ctrl
-/// (design v21 §6.5), and the wheel turns.
+/// (design v21 §6.5), a middle press is what `F` does (design v26 §6.5), and
+/// the wheel turns.
 pub fn mouse_action(event: MouseEvent) -> Option<Action> {
     let cell = Position::new(event.column, event.row);
     let click = |button| Action::Click {
@@ -275,6 +289,7 @@ pub fn mouse_action(event: MouseEvent) -> Option<Action> {
     Some(match event.kind {
         MouseEventKind::Down(MouseButton::Left) => click(Button::Left),
         MouseEventKind::Down(MouseButton::Right) => click(Button::Right),
+        MouseEventKind::Down(MouseButton::Middle) => Action::middle_click(cell),
         MouseEventKind::Up(MouseButton::Right) => Action::Release {
             button: Button::Right,
             at: Some(cell),

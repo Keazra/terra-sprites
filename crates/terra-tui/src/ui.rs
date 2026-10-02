@@ -206,7 +206,7 @@ fn attended_by(app: &App, world: &World) -> Option<Pos> {
 }
 
 /// Draws the 3×3 cursor around its target tile, which the tile loop has already
-/// drawn in reverse video. The arrows, solid while locked on, and the marks
+/// drawn in reverse video. The arrows, solid while following, and the marks
 /// take the mode mark's colour. The cursor is drawn only while its target is
 /// in view, and pieces outside the map view's tiles are left off.
 ///
@@ -219,8 +219,8 @@ fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App, world: &World) {
     let Some(centre) = app.cell_of(app.cursor()) else {
         return;
     };
-    let arrows = if app.locked().is_some() {
-        app.theme.locked_arrows()
+    let arrows = if app.followed().is_some() {
+        app.theme.followed_arrows()
     } else {
         app.theme.arrows()
     };
@@ -347,7 +347,7 @@ fn line_between(from: Pos, to: Pos) -> Vec<Pos> {
     tiles
 }
 
-/// Draws the open menu, if any (design v26 §6.5): over the map, from its top-left
+/// Draws the open menu, if any (design v27 §6.5): over the map, from its top-left
 /// tile, its items numbered and the highlighted one in reverse video, inside
 /// a border; as far as the screen goes.
 fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) {
@@ -401,7 +401,7 @@ fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) {
 
 /// The glyph of what the Cursor has hold of, as the queue will leave it: a
 /// sprite's, or an item's, held or still on the map (design v23 §6.5); or
-/// of the Place menu item waiting on it (design v26 §6.5).
+/// of the Place menu item waiting on it (design v27 §6.5).
 fn held_glyph(app: &App, world: &World) -> char {
     let theme = &app.theme;
     if let Some(item) = app.placing_item() {
@@ -527,9 +527,9 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         .map(|object| format!(" · {}", object_label(&object)))
         .unwrap_or_default();
     let mode = app.mode().label();
-    let locked = app
-        .locked()
-        .map(|id| format!(" │ locked on {}", app.names().label(id)))
+    let followed = app
+        .followed()
+        .map(|id| format!(" │ following {}", app.names().label(id)))
         .unwrap_or_default();
     // What the Cursor has hold of, in every mode (design v23 §6.1).
     let grip = match app.grip(world) {
@@ -540,13 +540,13 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         }
         None => String::new(),
     };
-    // A Place menu item waiting on the Cursor, in every mode (design v26 §6.5).
+    // A Place menu item waiting on the Cursor, in every mode (design v27 §6.5).
     let placing = app
         .placing()
         .map(|label| format!(" │ placing: {label}"))
         .unwrap_or_default();
     let tile = format!(
-        " ({},{}) {terrain}{sprite}{object} │ {mode}{locked}{grip}{placing}",
+        " ({},{}) {terrain}{sprite}{object} │ {mode}{followed}{grip}{placing}",
         cursor.x, cursor.y
     );
     // At the right, after a gap of 2 and before a space at the end: why a
@@ -566,7 +566,7 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
             let hints = match (app.aiming(), app.grip(world)) {
                 (true, Some(Grip::Holds(_))) => hint_if_fits(room, "let go to throw  esc cancel"),
                 (true, Some(Grip::Leads(_))) => hint_if_fits(room, "let go to shove  esc cancel"),
-                // A Place menu item waiting, how to place it or not (design v26 §6.5).
+                // A Place menu item waiting, how to place it or not (design v27 §6.5).
                 _ if placing => hint_if_fits(room, "click to place  right-click put away"),
                 _ => hints_within(room),
             };

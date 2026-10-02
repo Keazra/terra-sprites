@@ -37,7 +37,7 @@ pub struct DataPack {
     physiology: Physiology,
     /// What sprites without parents are made from. Every gene in it is expressed or unexpressed.
     starter: Genome,
-    /// What random names are made of (design v26 §3.5.1).
+    /// What random names are made of (design v27 §3.5.1).
     syllables: Syllables,
 }
 
@@ -261,7 +261,7 @@ impl DataPack {
         Ok(pack)
     }
 
-    /// The object types the Cursor's Place menu offers (design v26 §3.5.1), in ID
+    /// The object types the Cursor's Place menu offers (design v27 §3.5.1), in ID
     /// order: each type's name, and the label the menu shows.
     pub fn placeable(&self) -> impl Iterator<Item = (&str, &str)> {
         self.object_types.iter().filter_map(|object_type| {

@@ -21,7 +21,7 @@
 //   visual    [(if: [conditions], state: name)]: the first match names the state
 //             themes draw; with no match, the state is "default"
 //   place     (label: "...", if: [conditions]) if the Cursor's Place menu offers
-//             it (design v26 §3.5.1), under that label. A placed object starts at the
+//             it (design v27 §3.5.1), under that label. A placed object starts at the
 //             beginning of its first stage. `if` is optional: the conditions its
 //             tile must meet, such as KeepsPathsOpen; Chance isn't allowed
 //
@@ -58,7 +58,7 @@
          (if: [Counter("fruit", Ge, 1)], state: "fruiting"),
      ],
      // Placed anywhere a bush may stand, even where it walls things off: the
-     // player may pen sprites in on purpose (design v26 §3.5.1).
+     // player may pen sprites in on purpose (design v27 §3.5.1).
      place: (label: "berry bush seedling"),
     ),
 

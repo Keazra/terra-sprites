@@ -1,7 +1,7 @@
-//! Sprites' names (design v26 §6.5). A sprite has none until the
+//! Sprites' names (design v27 §6.5). A sprite has none until the
 //! player gives it one, typed or made at random from the data's syllables
 //! (`names.ron`). The screen makes a random name up and sends it in a
-//! `Rename`, so naming never draws from the world's RNG (design v26 change
+//! `Rename`, so naming never draws from the world's RNG (design v27 change
 //! 3): a name is made with an RNG of its own, seeded by the screen.
 
 use rand_chacha::ChaCha8Rng;
@@ -14,10 +14,10 @@ use crate::random::{chance, uniform};
 /// The names file, relative to the pack root.
 pub(crate) const NAMES: &str = "names.ron";
 
-/// The most characters a name may have (design v26 §2.5).
+/// The most characters a name may have (design v27 §2.5).
 pub const MAX_NAME_CHARS: usize = 16;
 
-/// Why a name was refused (design v26 §2.5).
+/// Why a name was refused (design v27 §2.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NameProblem {
     /// Nothing but spaces.

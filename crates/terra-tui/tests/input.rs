@@ -280,6 +280,20 @@ fn q_and_e_are_the_left_and_right_click_and_shift_amplifies_them() {
 }
 
 #[test]
+fn f_is_follow_and_acts_once_per_press() {
+    // Design v26 §6.5: `F` turns Follow on or off where the Cursor is.
+    let mut keys = Keys::with_release_reporting(true);
+    let follow = Some(Action::Follow { at: None });
+    assert_eq!(keys.action_for(press(KeyCode::Char('f'))), follow);
+    assert_eq!(
+        keys.action_for(press(KeyCode::Char('f'))),
+        None,
+        "held, it doesn't flicker"
+    );
+    assert_eq!(Keys::new().action_for(press(KeyCode::Char('F'))), follow);
+}
+
+#[test]
 fn holding_q_or_e_acts_once() {
     // Design v21 §6.5: once per press, like a click.
     for c in ['q', 'e'] {
@@ -365,10 +379,19 @@ fn every_mouse_event_points_and_a_left_press_also_clicks() {
         })
     );
     assert_eq!(action(MouseEventKind::Drag(MouseButton::Right)), point);
+    // The middle button does what `F` does, where it points (design v26
+    // §6.5).
+    assert_eq!(
+        action(MouseEventKind::Down(MouseButton::Middle)),
+        Some(Action::Follow {
+            at: Some(Position::new(12, 7)),
+        })
+    );
     // Every mouse event says where the pointer is, so the cursor follows it.
     for kind in [
         MouseEventKind::Up(MouseButton::Left),
         MouseEventKind::Drag(MouseButton::Middle),
+        MouseEventKind::Up(MouseButton::Middle),
     ] {
         assert_eq!(action(kind), point, "{kind:?}");
     }
