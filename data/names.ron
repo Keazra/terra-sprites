@@ -1,4 +1,4 @@
-// Random names (design v27 §6.5): the screen offers one when the player
+// Random names (design v28 §6.5): the screen offers one when the player
 // names a sprite with `r`, joining a first syllable, sometimes a middle one,
 // and a last. A name is at most 16 letters, so the longest first, middle and
 // last together must fit.

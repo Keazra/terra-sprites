@@ -112,14 +112,42 @@ fn scrolling_moves_the_viewport_and_stops_at_the_wall() {
 }
 
 #[test]
-fn pointing_at_a_tile_puts_the_cursor_on_it() {
-    // The view shows tiles (70, 43) to (89, 52), drawn from screen cell (1, 2).
+fn pointing_puts_the_cursor_one_tile_up_and_left_of_the_pointer() {
+    // Design v27 §6.5: the pointer's arrow then rests on the Cursor's
+    // lower-right corner, not over the tile pointed at. The view shows tiles
+    // (70, 43) to (89, 52), drawn from screen cell (1, 2).
+    let world = grass(160, 96);
+    let mut app = app(&world, tile_area(20, 10));
+    point(&mut app, &world, 11, 7); // over (80, 48)
+    assert_eq!(app.cursor(), at(79, 47));
+    point(&mut app, &world, 20, 11); // over (89, 52)
+    assert_eq!(app.cursor(), at(88, 51));
+}
+
+#[test]
+fn on_the_map_view_s_top_row_or_left_column_the_cursor_stays_in_that_row_or_column() {
     let world = grass(160, 96);
     let mut app = app(&world, tile_area(20, 10));
     point(&mut app, &world, 1, 2);
     assert_eq!(app.cursor(), at(70, 43));
-    point(&mut app, &world, 20, 11);
+    point(&mut app, &world, 1, 7);
+    assert_eq!(app.cursor(), at(70, 47));
+    point(&mut app, &world, 11, 2);
+    assert_eq!(app.cursor(), at(79, 43));
+}
+
+#[test]
+fn the_border_right_of_and_below_the_tiles_points_at_the_last_column_and_row() {
+    // Otherwise, with the wall in view, the map's last column and row
+    // couldn't be pointed at.
+    let world = grass(160, 96);
+    let mut app = app(&world, tile_area(20, 10));
+    point(&mut app, &world, 21, 12);
     assert_eq!(app.cursor(), at(89, 52));
+    point(&mut app, &world, 21, 5);
+    assert_eq!(app.cursor(), at(89, 45));
+    point(&mut app, &world, 5, 12);
+    assert_eq!(app.cursor(), at(73, 52));
 }
 
 #[test]
@@ -127,10 +155,10 @@ fn pointing_outside_the_map_view_leaves_the_cursor_on_its_last_tile() {
     let world = grass(160, 96);
     let mut app = app(&world, tile_area(20, 10));
     point(&mut app, &world, 5, 5);
-    assert_eq!(app.cursor(), at(74, 46));
-    for (column, row) in [(0, 5), (21, 5), (5, 1), (5, 12)] {
+    assert_eq!(app.cursor(), at(73, 45));
+    for (column, row) in [(0, 5), (22, 5), (5, 1), (5, 13), (22, 13)] {
         point(&mut app, &world, column, row);
-        assert_eq!(app.cursor(), at(74, 46), "pointer at ({column}, {row})");
+        assert_eq!(app.cursor(), at(73, 45), "pointer at ({column}, {row})");
     }
 }
 
@@ -138,7 +166,7 @@ fn pointing_outside_the_map_view_leaves_the_cursor_on_its_last_tile() {
 fn scrolling_under_a_still_pointer_moves_the_cursor_with_the_map() {
     let world = grass(160, 96);
     let mut app = app(&world, tile_area(20, 10));
-    point(&mut app, &world, 11, 7);
+    point(&mut app, &world, 12, 8);
     assert_eq!(app.cursor(), at(80, 48));
     scroll(&mut app, &world, 3, -1);
     assert_eq!(app.cursor(), at(83, 47));
@@ -150,7 +178,7 @@ fn with_the_pointer_off_the_map_scrolling_leaves_the_cursor_on_its_tile() {
     let mut app = app(&world, tile_area(20, 10));
     scroll(&mut app, &world, 3, 0); // no pointer yet
     assert_eq!(app.cursor(), at(80, 48));
-    point(&mut app, &world, 11, 7); // over (83, 48) now
+    point(&mut app, &world, 12, 8); // pointing at (83, 48) now
     point(&mut app, &world, 0, 7); // the pointer leaves the map view
     scroll(&mut app, &world, 3, 0);
     assert_eq!(app.cursor(), at(83, 48));
@@ -186,6 +214,22 @@ fn time_actions_reach_the_clock() {
     assert_eq!(app.clock.speed(), Speed::X2);
     app.apply(Action::TogglePause, &world);
     assert!(app.clock.is_paused());
+}
+
+#[test]
+fn plus_and_minus_change_the_speed_while_paused() {
+    let world = grass(40, 30);
+    let mut app = app(&world, tile_area(20, 10));
+    app.apply(Action::TogglePause, &world);
+    app.apply(Action::Faster { held: false }, &world);
+    app.apply(Action::Faster { held: false }, &world);
+    assert_eq!(app.clock.speed(), Speed::X4);
+    app.apply(Action::Slower { held: false }, &world);
+    assert_eq!(app.clock.speed(), Speed::X2);
+    assert!(
+        app.clock.is_paused(),
+        "changing the speed doesn't resume time"
+    );
 }
 
 #[test]
@@ -275,21 +319,23 @@ fn ctrl_c_quits_at_once() {
 
 #[test]
 fn clicking_a_sprite_selects_it_and_clicking_a_tile_with_none_clears_the_selection() {
-    // The whole map fits in the view, so tile (x, y) is drawn at cell (1 + x, 2 + y).
+    // The whole map fits in the view, so tile (x, y) is drawn at cell (1 + x,
+    // 2 + y), and pointed at from the cell one down and right (design v27 §6.5).
     let world = grass_with(20, 10, &[at(3, 4), at(6, 2)]);
     let mut app = app(&world, tile_area(20, 10));
     assert_eq!(app.selection(), None, "nothing is selected at first");
-    click(&mut app, &world, 1 + 6, 2 + 2);
+    click(&mut app, &world, 2 + 6, 3 + 2);
     assert_eq!(
         app.selection(),
         Some(Selection::Living(sprite_on(&world, at(6, 2))))
     );
-    click(&mut app, &world, 1 + 3, 2 + 4);
+    click(&mut app, &world, 2 + 3, 3 + 4);
     assert_eq!(
         app.selection(),
         Some(Selection::Living(sprite_on(&world, at(3, 4))))
     );
-    click(&mut app, &world, 1 + 5, 2 + 5);
+    // The pointer's tip on the sprite's own tile points at the one up-left.
+    click(&mut app, &world, 1 + 3, 2 + 4);
     assert_eq!(app.selection(), None);
 }
 
@@ -375,7 +421,7 @@ fn the_inspector_starts_on_the_world_tab_and_the_brackets_go_round_the_tabs() {
 fn selecting_a_sprite_from_the_world_tab_opens_body_and_from_another_tab_stays() {
     let world = grass_with(20, 10, &[at(3, 4), at(6, 2)]);
     let mut app = app(&world, tile_area(20, 10));
-    click(&mut app, &world, 1 + 3, 2 + 4);
+    click(&mut app, &world, 2 + 3, 3 + 4);
     assert_eq!(app.tab(), Tab::Body, "by a click");
 
     let mut app = self::app(&world, tile_area(20, 10));
@@ -384,7 +430,7 @@ fn selecting_a_sprite_from_the_world_tab_opens_body_and_from_another_tab_stays()
     app.apply(Action::NextTab, &world);
     app.apply(Action::SelectNext, &world);
     assert_eq!(app.tab(), Tab::Brain, "already on a sprite tab");
-    click(&mut app, &world, 1 + 3, 2 + 4);
+    click(&mut app, &world, 2 + 3, 3 + 4);
     assert_eq!(app.tab(), Tab::Brain);
 }
 
@@ -392,8 +438,8 @@ fn selecting_a_sprite_from_the_world_tab_opens_body_and_from_another_tab_stays()
 fn clearing_the_selection_leaves_the_tab_open() {
     let world = grass_with(20, 10, &[at(3, 4)]);
     let mut app = app(&world, tile_area(20, 10));
-    click(&mut app, &world, 1 + 3, 2 + 4);
-    click(&mut app, &world, 1 + 5, 2 + 5);
+    click(&mut app, &world, 2 + 3, 3 + 4);
+    click(&mut app, &world, 2 + 5, 3 + 5);
     assert_eq!((app.selection(), app.tab()), (None, Tab::Body));
 }
 

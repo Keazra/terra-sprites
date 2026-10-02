@@ -347,7 +347,7 @@ fn line_between(from: Pos, to: Pos) -> Vec<Pos> {
     tiles
 }
 
-/// Draws the open menu, if any (design v27 §6.5): over the map, from its top-left
+/// Draws the open menu, if any (design v28 §6.5): over the map, from its top-left
 /// tile, its items numbered and the highlighted one in reverse video, inside
 /// a border; as far as the screen goes.
 fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) {
@@ -401,7 +401,7 @@ fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) {
 
 /// The glyph of what the Cursor has hold of, as the queue will leave it: a
 /// sprite's, or an item's, held or still on the map (design v23 §6.5); or
-/// of the Place menu item waiting on it (design v27 §6.5).
+/// of the Place menu item waiting on it (design v28 §6.5).
 fn held_glyph(app: &App, world: &World) -> char {
     let theme = &app.theme;
     if let Some(item) = app.placing_item() {
@@ -476,8 +476,10 @@ fn draw_border(buf: &mut Buffer, area: Rect, title: &str, walls: Sides) {
 
 fn top_bar_line(app: &App, world: &World) -> Line<'static> {
     let clock = &app.clock;
+    // Paused, it still shows the speed: `+` and `-` change it, and it sets
+    // how far `.` steps (design v27 §6.6).
     let time = if clock.is_paused() {
-        "|| paused".to_string()
+        format!("|| paused {}", speed_label(clock.speed()))
     } else {
         format!("► {}", speed_label(clock.speed()))
     };
@@ -540,7 +542,7 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         }
         None => String::new(),
     };
-    // A Place menu item waiting on the Cursor, in every mode (design v27 §6.5).
+    // A Place menu item waiting on the Cursor, in every mode (design v28 §6.5).
     let placing = app
         .placing()
         .map(|label| format!(" │ placing: {label}"))
@@ -566,7 +568,7 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
             let hints = match (app.aiming(), app.grip(world)) {
                 (true, Some(Grip::Holds(_))) => hint_if_fits(room, "let go to throw  esc cancel"),
                 (true, Some(Grip::Leads(_))) => hint_if_fits(room, "let go to shove  esc cancel"),
-                // A Place menu item waiting, how to place it or not (design v27 §6.5).
+                // A Place menu item waiting, how to place it or not (design v28 §6.5).
                 _ if placing => hint_if_fits(room, "click to place  right-click put away"),
                 _ => hints_within(room),
             };

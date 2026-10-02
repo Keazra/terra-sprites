@@ -1,4 +1,4 @@
-//! The Place menu, naming and genome files on screen (design v27 §6.5): `C` again
+//! The Place menu, naming and genome files on screen (design v28 §6.5): `C` again
 //! in Grab mode opens the menu, the chosen item waits on the Cursor until a
 //! click places it, `r` names the selected sprite and `g` exports its genome.
 
@@ -56,9 +56,15 @@ fn apply(app: &mut App, world: &World, action: Action) {
     assert_eq!(app.apply(action, world), Flow::Continue);
 }
 
+/// The screen cell the pointer is on to point at `tile`: one down and right of
+/// it (design v27 §6.5). The map view's tiles are drawn from screen cell (0, 0).
+fn pointing_at(tile: Pos) -> Position {
+    Position::new(tile.x + 1, tile.y + 1)
+}
+
 fn click(app: &mut App, world: &World, tile: Pos, button: Button) {
     let action = Action::Click {
-        at: Position::new(tile.x, tile.y),
+        at: pointing_at(tile),
         button,
         amplified: false,
     };
@@ -118,10 +124,14 @@ fn c_again_in_grab_mode_opens_the_place_menu_and_esc_closes_it() {
 
 #[test]
 fn following_a_sprite_a_click_anywhere_places_the_item_at_its_feet() {
-    // Design v27 §6.5: the item goes where the Cursor is, as a held one would.
+    // Design v28 §6.5: the item goes where the Cursor is, as a held one would.
     let world = field(&[], &[at(4, 2)]);
     let mut app = grab_app(&world);
-    apply(&mut app, &world, Action::middle_click(Position::new(4, 2)));
+    apply(
+        &mut app,
+        &world,
+        Action::middle_click(pointing_at(at(4, 2))),
+    );
     pick(&mut app, &world, 3);
     click(&mut app, &world, at(8, 5), Button::Left);
     assert_eq!(

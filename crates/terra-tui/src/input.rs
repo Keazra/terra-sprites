@@ -56,7 +56,7 @@ pub enum Action {
         at: Option<Position>,
     },
     /// Pick a cursor mode (`Z` Select, `X` Train, `C` Grab); `C` in Grab
-    /// mode opens the Place menu (design v27 §6.5).
+    /// mode opens the Place menu (design v28 §6.5).
     Mode(CursorMode),
     /// Select the sprite with the next ID (`Tab`).
     SelectNext,
@@ -84,7 +84,7 @@ pub enum Action {
     ToggleDetail,
     /// Cancel a prompt: any key with no job of its own.
     Dismiss,
-    /// Pick the menu item with this number, from 1 (`1`–`9`, design v27).
+    /// Pick the menu item with this number, from 1 (`1`–`9`, design v28).
     Pick(u8),
     /// Take what's chosen: the highlighted menu item, or the name typed
     /// (`Enter`).
@@ -144,8 +144,9 @@ const SHIFT_STEP: i32 = 5;
 ///
 /// A key is *held* when the terminal reports it as repeating, or when it is
 /// pressed again without a release in between. The second rule is only trusted
-/// where the terminal reports releases (Windows always does; others are trusted
-/// once a release arrives), otherwise every press would look held.
+/// where the terminal reports releases (Windows always does, as does a terminal
+/// with the kitty keyboard protocol on; others are trusted once a release
+/// arrives), otherwise every press would look held.
 #[derive(Debug)]
 pub struct Keys {
     releases_reported: bool,
@@ -153,7 +154,8 @@ pub struct Keys {
 }
 
 impl Keys {
-    /// A tracker assuming what this platform's terminals do: Windows reports releases.
+    /// A tracker assuming what this platform's terminals do without the kitty
+    /// keyboard protocol: Windows reports releases.
     pub fn new() -> Keys {
         Keys::with_release_reporting(cfg!(windows))
     }
@@ -166,7 +168,7 @@ impl Keys {
         }
     }
 
-    /// The action for a key event while the player types a name (design v27
+    /// The action for a key event while the player types a name (design v28
     /// §6.5): letters are typed rather than acting, `Backspace` rubs one out,
     /// `Tab` offers another random name, `Enter` takes it and `Esc` gives up.
     /// Only presses count, and `Ctrl+C` still quits. Releases are still
@@ -199,6 +201,14 @@ impl Keys {
     /// The action for a key event, if it has one. Of key releases, only
     /// `E`'s acts: it's the right button let go (design v25 §6.5).
     pub fn action_for(&mut self, key: KeyEvent) -> Option<Action> {
+        // Terminals using the kitty keyboard protocol report these as keys of
+        // their own (design v27 §6.6); they only change other keys.
+        if matches!(
+            key.code,
+            KeyCode::Modifier(_) | KeyCode::CapsLock | KeyCode::NumLock | KeyCode::ScrollLock
+        ) {
+            return None;
+        }
         let physical = physical_key(key.code);
         if key.kind == KeyEventKind::Release {
             self.releases_reported = true;

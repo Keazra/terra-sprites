@@ -3,11 +3,16 @@
 
 use std::io::{self, stdout};
 use std::process::ExitCode;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use ratatui::DefaultTerminal;
-use ratatui::crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event};
+use ratatui::crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyboardEnhancementFlags,
+    PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+};
 use ratatui::crossterm::execute;
+use ratatui::crossterm::terminal::supports_keyboard_enhancement;
 use terra_sim::{DataPack, World, WorldConfig};
 use terra_tui::app::{App, Flow};
 use terra_tui::args::{Args, USAGE};
@@ -70,15 +75,46 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    // Mouse capture isn't part of ratatui's restore, so the panic hook turns it off too.
+    // Where the terminal supports the kitty keyboard protocol, it reports
+    // repeats and releases too, so held keys can be told from presses (design
+    // v27 §6.6). Windows reports them anyway, and says it has no support.
+    let enhanced_keys = supports_keyboard_enhancement().unwrap_or(false)
+        && execute!(
+            stdout(),
+            PushKeyboardEnhancementFlags(
+                KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                    | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
+                    // Plain letters and `+` send only text without this, with
+                    // no repeats or releases.
+                    | KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
+            )
+        )
+        .is_ok();
+    // Neither mouse capture nor the keyboard flags are part of ratatui's
+    // restore, so the panic hook undoes them too. The flags go first: the
+    // terminal keeps them per screen, and ratatui's restore leaves the
+    // alternate screen they were set on.
+    // Once only: a panic after a normal exit mustn't pop the flags again, on
+    // the screen ratatui has gone back to.
+    static SETUP_UNDONE: AtomicBool = AtomicBool::new(false);
+    let undo_setup = move || {
+        if SETUP_UNDONE.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        if enhanced_keys {
+            let _ = execute!(stdout(), PopKeyboardEnhancementFlags);
+        }
+        let _ = execute!(stdout(), DisableMouseCapture);
+    };
     let restore_terminal = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        let _ = execute!(stdout(), DisableMouseCapture);
+        undo_setup();
         restore_terminal(info);
     }));
+    let keys = Keys::with_release_reporting(cfg!(windows) || enhanced_keys);
     let result = execute!(stdout(), EnableMouseCapture)
-        .and_then(|()| run(&mut terminal, world, theme, seed, args.force_panic));
-    let _ = execute!(stdout(), DisableMouseCapture);
+        .and_then(|()| run(&mut terminal, world, theme, seed, keys, args.force_panic));
+    undo_setup();
     ratatui::restore();
 
     match result {
@@ -95,6 +131,7 @@ fn run(
     mut world: World,
     theme: Theme,
     seed: u64,
+    mut keys: Keys,
     force_panic: bool,
 ) -> io::Result<()> {
     let areas = ui::areas(terminal.size()?, world.map());
@@ -102,7 +139,6 @@ fn run(
     if let Some(folder) = files::genome_folder() {
         app.set_genome_folder(folder);
     }
-    let mut keys = Keys::new();
     let mut last_frame = Instant::now();
 
     loop {
@@ -117,7 +153,7 @@ fn run(
         let deadline = last_frame + FRAME;
         while event::poll(deadline.saturating_duration_since(Instant::now()))? {
             let action = match event::read()? {
-                // While naming, keys type letters (design v27 §6.5).
+                // While naming, keys type letters (design v28 §6.5).
                 Event::Key(key) if app.typing() => keys.typed_action(key),
                 Event::Key(key) => keys.action_for(key),
                 Event::Mouse(mouse) => input::mouse_action(mouse),
