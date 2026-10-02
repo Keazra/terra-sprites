@@ -1,0 +1,30 @@
+ Terra Sprites │ tick 3 │ ► 1x │ seed 7 │ sprites 3                                          ? help
+┌─ Help ─────────────────────────────────────────────────────────────────────────────── esc close ─┐
+│ TIME                            CURSOR                          SPRITES                          │
+│ space      pause / resume       Z X C      select/train/grab    Tab        next sprite           │
+│ .          step                 Q E        left / right click   Shift+Tab  previous sprite       │
+│ + -        faster / slower      Shift+Q E  hug / shock          l          sprite list           │
+│ VIEW                            Ctrl+click hug / shock          r          name it               │
+│ WASD       scroll (Shift: 5)    F          follow a sprite      g          save its genome       │
+│ T          track the selected   middle     follow a sprite      INSPECTOR                        │
+│ b          sprite colours       wheel      change mode          [ ]        switch tabs           │
+│ m          event filter         C again    the Place menu       PgUp PgDn  scroll a tab          │
+│ v          exact detail         hold E     aim, let go to send                                   │
+│ ?          this help                                                                             │
+│ Esc        back, then quit                                                                       │
+│ Ctrl+C     quit at once                                                                          │
+│                                                                                                  │
+│ COLOURS: a sprite's strongest drive, once it's above half                                        │
+│ @ hunger  @ thirst  @ pain  @ tiredness  @ boredom  @ loneliness  @ crowdedness  @ none          │
+│ EMOTES   ! hurt  / zapped  ? gave up  z resting  + pleased                                       │
+│                                                                                                  │
+│ FILES    /home/kel/.local/share/terra-sprites                                                    │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+ (12,4) grass │ SELECT       Z select  X train  C grab  WASD scroll  space pause  . step  +/- speed
