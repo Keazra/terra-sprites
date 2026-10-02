@@ -275,12 +275,13 @@ impl<'a> SpriteView<'a> {
         self.sprite.pos
     }
 
-    /// The name the player gave it, if any (design §6.5).
+    /// The name the player gave it, if any (design v26 §6.5).
     pub fn name(&self) -> Option<&'a str> {
         self.sprite.name.as_deref()
     }
 
-    /// Its genome, as it was born with it.
+    /// Its genome, as it was born with it: what `g` exports (design v26
+    /// §6.5).
     pub fn genome(&self) -> &'a Genome {
         &self.sprite.genome
     }

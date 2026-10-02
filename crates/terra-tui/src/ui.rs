@@ -351,17 +351,13 @@ fn line_between(from: Pos, to: Pos) -> Vec<Pos> {
 /// tile, its items numbered and the highlighted one in reverse video, inside
 /// a border; as far as the screen goes.
 fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) {
-    let Some(menu) = app.menu_area(world) else {
+    let (Some(menu), Some(title)) = (app.menu_area(world), app.menu_title()) else {
         return;
     };
     let area = menu.intersection(screen);
     if area.width < 3 || area.height < 3 {
         return;
     }
-    let title = match app.screen() {
-        Screen::GenomeMenu => " Genome files ",
-        _ => " Place ",
-    };
     buf.set_style(area, Style::default());
     for y in area.top() + 1..area.bottom() - 1 {
         for x in area.left() + 1..area.right() - 1 {
@@ -381,8 +377,9 @@ fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) {
         let none = format!(" {}", app.no_genome_files());
         buf.set_stringn(area.x + 1, area.y + 1, none, room, Style::default());
     }
-    for (index, item) in items.iter().enumerate() {
-        let y = area.y + 1 + index as u16;
+    let first = app.menu_first(world);
+    for (row, (index, item)) in items.iter().enumerate().skip(first).enumerate() {
+        let y = area.y + 1 + row as u16;
         if y >= area.bottom() - 1 {
             break;
         }

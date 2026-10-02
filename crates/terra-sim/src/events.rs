@@ -38,7 +38,7 @@ pub enum EventKind {
     /// A sprite died, and left the world.
     Died {
         id: EntityId,
-        /// The name the player gave it, if any (design §2.5).
+        /// The name the player gave it, if any (design v26 §2.5).
         name: Option<String>,
         cause: DeathCause,
         /// Its age in ticks.
@@ -65,7 +65,7 @@ pub enum EventKind {
     },
     /// A new sprite was spawned by the Cursor (design v26 §2.5).
     Spawned { id: EntityId, pos: Pos },
-    /// The player named a sprite (design §6.5).
+    /// The player named a sprite (design v26 §2.5).
     Renamed { id: EntityId, name: String },
     /// The Cursor took hold of a sprite, which it now leads (design v23
     /// §6.5).

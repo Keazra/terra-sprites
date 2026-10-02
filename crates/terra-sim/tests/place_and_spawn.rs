@@ -2,8 +2,8 @@
 //! new object or spawns a new sprite, and the player names sprites.
 
 use terra_sim::{
-    Blocker, Command, DataPack, EntityId, Event, EventKind, Genome, Map, NameProblem, Pos,
-    Rejection, Scenario, Terrain, World,
+    Blocker, Command, DataPack, EntityId, Event, EventKind, Genome, Map, NameProblem, PlaceRule,
+    Pos, Rejection, Scenario, Terrain, World,
 };
 
 fn builtin() -> DataPack {
@@ -136,7 +136,7 @@ fn a_placement_rule_in_the_data_can_keep_paths_open() {
         refused(&events, &command),
         Some(Rejection::PlaceRule {
             object_type: bush,
-            rule: terra_sim::PlaceRule::KeepsPathsOpen,
+            rule: PlaceRule::KeepsPathsOpen,
         })
     );
     assert!(world.object_at(at(2, 1)).is_none());
@@ -164,6 +164,58 @@ fn placing_is_refused_where_the_thing_cant_go() {
     // An item may go under a sprite (design §3.4).
     let under = world.sprites().next().expect("the sprite").pos();
     let command = place(&world, under, "ball");
+    let events = run(&mut world, command.clone());
+    assert_eq!(refused(&events, &command), None);
+}
+
+#[test]
+fn placement_rules_in_the_data_refuse_with_the_rule_they_name() {
+    // Dirt's fertility is 0.5, and a berry lies within two tiles.
+    let rows = [",....", "....."];
+    let berry = type_id(&world(&rows, &[], &[]), "berry");
+    for (condition, rule) in [
+        ("Fertility(Ge, 0.75)", PlaceRule::Fertility),
+        (
+            r#"DensityBelow("berry", 2, 1)"#,
+            PlaceRule::DensityBelow(berry),
+        ),
+        // A new bush has no fruit.
+        (r#"Counter("fruit", Ge, 1)"#, PlaceRule::Itself),
+    ] {
+        let objects = builtin_source("objects.ron").replace(
+            r#"place: (label: "berry bush seedling"),"#,
+            &format!(r#"place: (label: "berry bush seedling", if: [{condition}]),"#),
+        );
+        let data = pack_with("objects.ron", &objects);
+        let mut world = world_in(data, &rows, &[(at(2, 1), "berry")], &[]);
+        let command = place(&world, at(0, 0), "berry_bush");
+        let events = run(&mut world, command.clone());
+        assert_eq!(
+            refused(&events, &command),
+            Some(Rejection::PlaceRule {
+                object_type: type_id(&world, "berry_bush"),
+                rule,
+            }),
+            "{condition}"
+        );
+        assert!(world.object_at(at(0, 0)).is_none(), "{condition}");
+    }
+}
+
+#[test]
+fn a_bush_cant_be_placed_where_the_ground_allows_no_fixtures() {
+    let mut world = world(&["~...."], &[], &[]);
+    let command = place(&world, at(0, 0), "berry_bush");
+    let events = run(&mut world, command.clone());
+    assert_eq!(
+        refused(&events, &command),
+        Some(Rejection::InTheWay {
+            item_type: type_id(&world, "berry_bush"),
+            blocker: Blocker::Terrain(Terrain::ShallowWater),
+        })
+    );
+    // An item may lie in shallow water.
+    let command = place(&world, at(0, 0), "berry");
     let events = run(&mut world, command.clone());
     assert_eq!(refused(&events, &command), None);
 }
@@ -291,6 +343,26 @@ fn spawning_is_refused_where_a_sprite_cant_stand() {
     };
     let events = run(&mut world, command.clone());
     assert_eq!(refused(&events, &command), None);
+}
+
+#[test]
+fn a_genome_from_another_pack_that_doesnt_fit_this_world_is_refused() {
+    // A pack with a chemical this world's lacks, and a genome that uses it.
+    let chemicals = builtin_source("chemicals.ron").replace(
+        r#"    (id: 47, name: "h15", class: Hormone),"#,
+        "    (id: 47, name: \"h15\", class: Hormone),\n    (id: 48, name: \"zest\", class: Hormone),",
+    );
+    let other = pack_with("chemicals.ron", &chemicals);
+    let text = builtin_source("genomes/starter.ron").replace(r#""h0""#, r#""zest""#);
+    let genome = Genome::from_ron(&text, &other).expect("it fits the other pack");
+    let mut world = world(&["....."], &[], &[]);
+    let command = Command::SpawnSprite {
+        tile: at(1, 0),
+        genome: Some(genome),
+    };
+    let events = run(&mut world, command.clone());
+    assert_eq!(refused(&events, &command), Some(Rejection::BadGenome));
+    assert!(world.sprite_at(at(1, 0)).is_none());
 }
 
 #[test]

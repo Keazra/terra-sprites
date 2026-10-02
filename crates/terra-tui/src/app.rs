@@ -436,6 +436,16 @@ impl App {
     pub fn record(&mut self, events: &[Event], world: &World) {
         self.note_names(world);
         for event in events {
+            // A sprite named and killed in one tick is gone before
+            // `note_names` sees it, but its death carries its name.
+            if let EventKind::Died {
+                id,
+                name: Some(name),
+                ..
+            } = &event.kind
+            {
+                self.names.note(*id, name);
+            }
             if let EventKind::ActionEnded { id, ref action, .. } = event.kind {
                 self.note_hurt(id, action);
                 self.note_done_to_selected(event.tick, id, action, world);
@@ -476,8 +486,12 @@ impl App {
                 }
                 _ => {}
             }
-            if let EventKind::CommandRejected { .. } = event.kind {
-                self.flash_report(StatusMark::Rejected);
+            if let EventKind::CommandRejected { command, .. } = &event.kind {
+                // The marks report the Cursor's clicks; naming isn't one
+                // (design v26 §6.5).
+                if !matches!(command, Command::Rename { .. }) {
+                    self.flash_report(StatusMark::Rejected);
+                }
                 // And why, on the status line, as the log words it (design
                 // v22 §6.1).
                 if let Some(why) = inspector::event_line(event, &self.words(world)) {
@@ -794,7 +808,8 @@ impl App {
         if self.mode != CursorMode::Grab || flash == StatusMark::Rejected {
             return [flash; 2];
         }
-        // A Place menu item waiting shows as held (design v26 §6.5).
+        // A Place menu item waiting on the Cursor shows `↓` and its glyph, as
+        // something carried would (design v26 §6.5).
         if self.placing.is_some() {
             return [StatusMark::Release, StatusMark::Holding];
         }
@@ -1056,9 +1071,13 @@ impl App {
                 }
                 _ => {}
             },
-            // A Place menu item waiting on the Cursor takes the next click, and
-            // a right click puts it away (design v26 §6.5).
-            (CursorMode::Grab, Button::Left) if self.placing.is_some() => self.place(tile),
+            // A Place menu item waiting on the Cursor takes the next click,
+            // where the Cursor is: on the locked-on sprite's tile, or else
+            // the one clicked. A right click puts it away (design v26 §6.5).
+            (CursorMode::Grab, Button::Left) if self.placing.is_some() => {
+                let locked_on = self.locked().and_then(|id| world.sprite(id));
+                self.place(locked_on.map_or(tile, |sprite| sprite.pos()));
+            }
             (CursorMode::Grab, Button::Right) if self.placing.is_some() => self.placing = None,
             (CursorMode::Grab, Button::Left) => self.grab_click(tile, sprite, world),
             (CursorMode::Grab, Button::Right) => self.aim_click(tile, sprite, world),
@@ -1323,15 +1342,25 @@ impl App {
         self.genome_folder.as_deref()
     }
 
+    /// The open menu's title, or `None` with no menu open.
+    pub fn menu_title(&self) -> Option<&'static str> {
+        match self.screen {
+            Screen::PlaceMenu => Some(" Place "),
+            Screen::GenomeMenu => Some(" Genome files "),
+            _ => None,
+        }
+    }
+
     /// Where the open menu is drawn: from the map view's top-left tile, as
     /// wide as its longest item, numbered, inside a border, and one row per
-    /// item, or one saying there are none.
+    /// item, or one saying there are none. It stays within the map view, so
+    /// a long list shows as many items as fit (see `menu_first`).
     pub fn menu_area(&self, world: &World) -> Option<Rect> {
+        let title = self.menu_title()?;
         let items = self.menu_items(world);
-        let (title, empty) = match self.screen {
-            Screen::PlaceMenu => (" Place ", String::new()),
-            Screen::GenomeMenu => (" Genome files ", self.no_genome_files()),
-            _ => return None,
+        let empty = match self.screen {
+            Screen::GenomeMenu => self.no_genome_files(),
+            _ => String::new(),
         };
         let widest = items
             .iter()
@@ -1340,12 +1369,26 @@ impl App {
             .max()
             .unwrap_or(0);
         let rows = items.len().max(1);
-        Some(Rect::new(
+        let wanted = Rect::new(
             self.tile_area.x,
             self.tile_area.y,
-            (widest + 3) as u16,
-            (rows + 2) as u16,
-        ))
+            (widest + 3).min(usize::from(u16::MAX)) as u16,
+            (rows + 2).min(usize::from(u16::MAX)) as u16,
+        );
+        Some(wanted.intersection(self.tile_area))
+    }
+
+    /// How many of the open menu's items fit in it at once.
+    fn menu_rows(&self, world: &World) -> usize {
+        self.menu_area(world)
+            .map_or(0, |area| usize::from(area.height.saturating_sub(2)))
+    }
+
+    /// The first item the open menu shows: the list scrolls so the
+    /// highlighted item stays in view.
+    pub fn menu_first(&self, world: &World) -> usize {
+        let rows = self.menu_rows(world).max(1);
+        self.menu_choice.saturating_sub(rows - 1)
     }
 
     /// What the genome menu says with no files to list.
@@ -1379,10 +1422,11 @@ impl App {
             Action::Click { at, .. } => {
                 let area = self.menu_area(world).expect("a menu is open");
                 let row = usize::from(at.y.wrapping_sub(area.y + 1));
+                let item = self.menu_first(world) + row;
                 if !area.contains(at) {
                     self.screen = Screen::Normal;
-                } else if row < count {
-                    self.choose(row, world);
+                } else if row < self.menu_rows(world) && item < count {
+                    self.choose(item, world);
                 }
             }
             Action::Point(cell) => self.point(cell),
@@ -1502,6 +1546,9 @@ impl App {
     /// never draws from the world's randomness (design §6.5).
     fn random_name(&mut self, sprite: EntityId, world: &World) -> String {
         self.names_offered += 1;
+        // Mixes the session's seed, the sprite and how many names have been
+        // offered, so each offer differs; the odd constants are the usual
+        // 64-bit multiplicative hash ones, spreading nearby numbers apart.
         let seed = self
             .seed
             .wrapping_mul(0x9e37_79b9_7f4a_7c15)
@@ -1511,7 +1558,7 @@ impl App {
     }
 
     /// What an action does while the player types a name: letters CP437
-    /// can show are typed, up to the most a name may have, the first
+    /// can show, and spaces, are typed, up to the most a name may have, the first
     /// replacing the offered name; `Backspace` rubs one out; `Tab` offers
     /// another; `Enter` sends the name and `Esc` gives up.
     fn apply_naming(&mut self, action: Action, world: &World) -> Flow {
@@ -1520,7 +1567,8 @@ impl App {
             return Flow::Continue;
         };
         match action {
-            Action::Type(c) if cp437::contains(c) && !c.is_control() => {
+            // Only letters CP437 can show, and spaces between them (design v26 §6.5).
+            Action::Type(c) if (c.is_alphabetic() || c == ' ') && cp437::contains(c) => {
                 if !naming.typed {
                     naming.draft.clear();
                     naming.typed = true;
@@ -1543,7 +1591,7 @@ impl App {
             Action::Enter => {
                 let naming = self.naming.take().expect("naming");
                 self.screen = Screen::Normal;
-                if naming.draft.trim().is_empty() {
+                if naming.draft.trim_matches(' ').is_empty() {
                     self.refuse("A name needs a letter in it".into());
                 } else {
                     self.commands.push(Command::Rename {

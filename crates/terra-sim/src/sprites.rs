@@ -21,7 +21,7 @@ pub(crate) struct Sprite {
     pub(crate) pos: Pos,
     /// The tick it was born on.
     pub(crate) born: u64,
-    /// The name the player gave it, if any (design §6.5).
+    /// The name the player gave it, if any (design v26 §6.5).
     pub(crate) name: Option<String>,
     pub(crate) genome: Genome,
     /// The genome compiled for the chemistry step. It's derived from the

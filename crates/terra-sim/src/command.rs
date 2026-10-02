@@ -65,7 +65,7 @@ pub enum Command {
     /// the genome it carries in full, or with `None`, from the starter
     /// genome with spawn variation (design §4.9).
     SpawnSprite { tile: Pos, genome: Option<Genome> },
-    /// Names a sprite (design §6.5).
+    /// Names a sprite (design v26 §2.5, §6.5).
     Rename { sprite: EntityId, name: String },
 }
 
@@ -174,7 +174,8 @@ pub enum Rejection {
     OffTheMap,
     /// Something on the tile stops the item going there (design §3.4).
     InTheWay {
-        /// The stable ID of the held or placed item's type.
+        /// The stable ID of the type of what's going there: the held
+        /// item's, or the placed object's.
         item_type: u16,
         blocker: Blocker,
     },
@@ -191,9 +192,9 @@ pub enum Rejection {
         object_type: u16,
         rule: PlaceRule,
     },
-    /// A sprite's name must be 1 to 16 CP437 characters (design §2.5).
+    /// A sprite's name must be 1 to 16 CP437 characters (design v26 §2.5).
     BadName(NameProblem),
-    /// The genome doesn't fit the world's data pack (design §2.5).
+    /// The genome doesn't fit the world's data pack (design v26 §2.5).
     BadGenome,
 }
 
@@ -226,32 +227,34 @@ pub enum Blocker {
 /// order they were submitted.
 pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Event>) {
     for command in std::mem::take(&mut state.commands) {
-        let applied = match command.clone() {
-            Command::Reward {
+        let applied = match &command {
+            &Command::Reward {
                 sprite,
                 amplified,
                 reach_back,
             } => reward(state, data, sprite, amplified, reach_back),
-            Command::Correct { sprite, amplified } => correct(state, data, sprite, amplified),
-            Command::TakeHold { sprite } => take_hold(state, sprite, events),
-            Command::PickUp { item } => pick_up(state, data, item),
-            Command::PutDown { tile } => put_down(state, data, tile),
-            Command::LetGo => let_go(state),
+            &Command::Correct { sprite, amplified } => correct(state, data, sprite, amplified),
+            &Command::TakeHold { sprite } => take_hold(state, sprite, events),
+            &Command::PickUp { item } => pick_up(state, data, item),
+            &Command::PutDown { tile } => put_down(state, data, tile),
+            &Command::LetGo => let_go(state),
             // Nothing to report: it moves many times a second while leading.
-            Command::MoveCursor { tile } if state.map.contains(tile) => {
+            &Command::MoveCursor { tile } if state.map.contains(tile) => {
                 state.cursor.tile = Some(tile);
                 continue;
             }
-            Command::MoveCursor { .. } => Err(Rejection::OffTheMap),
-            Command::Throw {
+            &Command::MoveCursor { .. } => Err(Rejection::OffTheMap),
+            &Command::Throw {
                 from,
                 toward,
                 tiles,
             } => throw(state, data, from, toward, tiles),
-            Command::Shove { toward, tiles } => shove(state, data, toward, tiles),
-            Command::Place { tile, object_type } => place(state, data, tile, object_type),
-            Command::SpawnSprite { tile, genome } => spawn_sprite(state, data, tile, genome),
-            Command::Rename { sprite, name } => rename(state, sprite, &name),
+            &Command::Shove { toward, tiles } => shove(state, data, toward, tiles),
+            &Command::Place { tile, object_type } => place(state, data, tile, object_type),
+            Command::SpawnSprite { tile, genome } => {
+                spawn_sprite(state, data, *tile, genome.clone())
+            }
+            Command::Rename { sprite, name } => rename(state, *sprite, name),
         };
         let kind = match applied {
             Ok(kind) => kind,
@@ -536,18 +539,18 @@ fn spawn_sprite(
     if !state.map.contains(tile) {
         return Err(Rejection::OffTheMap);
     }
-    let in_the_way = Rejection::NoRoom;
+    let no_room = Rejection::NoRoom;
     if state.sprites.at(tile).is_some() {
-        return Err(in_the_way(Blocker::Sprite));
+        return Err(no_room(Blocker::Sprite));
     }
     if let Some(there) = state.objects.at(tile)
         && data.object_types()[state.objects.kind(there)].solid
     {
         let kind = state.objects.kind(there);
-        return Err(in_the_way(Blocker::Object(data.object_types()[kind].id)));
+        return Err(no_room(Blocker::Object(data.object_types()[kind].id)));
     }
     if !state.map.is_walkable(tile) {
-        return Err(in_the_way(Blocker::Terrain(state.map.terrain(tile))));
+        return Err(no_room(Blocker::Terrain(state.map.terrain(tile))));
     }
     let genome = match genome {
         Some(genome) if !genome.fits(data) => return Err(Rejection::BadGenome),
@@ -559,7 +562,7 @@ fn spawn_sprite(
     Ok(EventKind::Spawned { id, pos: tile })
 }
 
-/// The player names `sprite` (design §6.5): 1 to 16 CP437 characters,
+/// The player names `sprite` (design v26 §2.5): 1 to 16 CP437 characters,
 /// trimmed of spaces at either end.
 fn rename(state: &mut WorldState, sprite: EntityId, name: &str) -> Result<EventKind, Rejection> {
     let named = state.sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
