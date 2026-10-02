@@ -49,9 +49,9 @@ pub enum Action {
         button: Button,
         at: Option<Position>,
     },
-    /// `F`, or a middle click on this screen cell: the Cursor follows the
-    /// selected sprite, or stops, or with nothing selected, selects the
-    /// sprite where the Cursor is and follows it (design v26 §6.5).
+    /// `F`, or a middle click on this screen cell: following, the Cursor
+    /// stops; otherwise it follows the sprite where the Cursor is, or else
+    /// the selected sprite, leaving the selection as it is (design v26 §6.5).
     Follow {
         at: Option<Position>,
     },
