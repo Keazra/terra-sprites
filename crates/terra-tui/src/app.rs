@@ -435,9 +435,11 @@ impl App {
     pub fn record(&mut self, events: &[Event], world: &World) {
         self.note_names(world);
         for event in events {
-            // A sprite named and killed in one tick is gone before
-            // `note_names` sees it, but its death carries its name.
-            if let EventKind::Died {
+            // The events carry the names, so the log names a sprite as it
+            // was then: one named and killed in one tick is gone before
+            // `note_names` sees it.
+            if let EventKind::Renamed { id, name }
+            | EventKind::Died {
                 id,
                 name: Some(name),
                 ..
@@ -1448,7 +1450,8 @@ impl App {
     fn apply_in_menu(&mut self, action: Action, world: &World) -> Flow {
         let count = self.menu_items(world).len();
         match action {
-            Action::Pick(n) if usize::from(n) <= count => {
+            // Numbers count from 1.
+            Action::Pick(n) if (1..=count).contains(&usize::from(n)) => {
                 self.choose(usize::from(n) - 1, world);
             }
             Action::Enter if count > 0 => self.choose(self.menu_choice, world),
@@ -1520,10 +1523,12 @@ impl App {
             .into_iter()
             .flatten()
             .filter_map(|entry| {
-                let path = entry.ok()?.path();
+                let entry = entry.ok()?;
+                let path = entry.path();
+                let is_file = entry.file_type().is_ok_and(|kind| kind.is_file());
                 let is_ron = path.extension().is_some_and(|ext| ext == "ron");
                 let name = path.file_stem()?.to_string_lossy().into_owned();
-                is_ron.then_some((name, path))
+                (is_file && is_ron).then_some((name, path))
             })
             .collect();
         files.sort();
