@@ -29,6 +29,9 @@ const MIN_HEIGHT_FOR_EVENT_LOG: u16 = 30;
 /// log if there's room, and the status line.
 pub fn render(frame: &mut Frame, app: &App, world: &World) {
     let area = frame.area();
+    if too_small(area.as_size()) {
+        return render_too_small(frame.buffer_mut(), area);
+    }
     let [top_bar, _, status] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Min(0),
@@ -52,10 +55,44 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
     frame.render_widget(status_line(app, world, status.width), status);
 }
 
+/// The smallest screen the game draws on (design §6.1).
+pub const MIN_SIZE: Size = Size::new(100, 30);
+
+/// Whether a screen of `screen` cells is too small for the game.
+fn too_small(screen: Size) -> bool {
+    screen.width < MIN_SIZE.width || screen.height < MIN_SIZE.height
+}
+
+/// Says the terminal is too small, and how big it needs to be, in the
+/// middle of the screen (design §6.1). The game carries on beneath.
+fn render_too_small(buf: &mut Buffer, area: Rect) {
+    let lines = [
+        "Terminal too small".to_string(),
+        format!(
+            "needs {}x{}, this is {}x{}",
+            MIN_SIZE.width, MIN_SIZE.height, area.width, area.height
+        ),
+    ];
+    let top = area.y + area.height.saturating_sub(lines.len() as u16) / 2;
+    for (row, line) in (top..area.bottom()).zip(lines) {
+        let width = line.chars().count() as u16;
+        let x = area.x + area.width.saturating_sub(width) / 2;
+        buf.set_stringn(x, row, line, usize::from(area.width), Style::default());
+    }
+}
+
 /// Where the app's panels are drawn on a screen of `screen` cells. The map
 /// view draws its tiles inside its border, between the top bar and the
 /// status line, no bigger than the map itself.
 pub fn areas(screen: Size, map: &Map) -> Areas {
+    // A screen too small for the game draws no panels, so nothing can be
+    // clicked on it.
+    if too_small(screen) {
+        return Areas {
+            tiles: Rect::default(),
+            inspector: None,
+        };
+    }
     Areas {
         tiles: map_view_area(screen.into(), map).inner(Margin::new(1, 1)),
         inspector: inspector_area(screen.into()),
