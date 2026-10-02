@@ -199,14 +199,18 @@ fn the_status_line_says_when_sprites_can_see_the_cursor() {
 
 #[test]
 fn h_toggles_whether_sprites_can_see_the_cursor_and_held_does_not_flicker() {
-    let mut keys = Keys::new();
-    for h in ['h', 'H'] {
-        let press = KeyEvent::new(KeyCode::Char(h), KeyModifiers::NONE);
-        assert_eq!(keys.action_for(press), Some(Action::ToggleVisible));
+    // A fresh tracker for each press: where releases are reported (Windows),
+    // a second press with no release between reads as the key held.
+    for releases_reported in [false, true] {
+        for h in ['h', 'H'] {
+            let mut keys = Keys::with_release_reporting(releases_reported);
+            let press = KeyEvent::new(KeyCode::Char(h), KeyModifiers::NONE);
+            assert_eq!(keys.action_for(press), Some(Action::ToggleVisible));
+            let held =
+                KeyEvent::new_with_kind(KeyCode::Char(h), KeyModifiers::NONE, KeyEventKind::Repeat);
+            assert_eq!(keys.action_for(held), None, "{h} held");
+        }
     }
-    let held =
-        KeyEvent::new_with_kind(KeyCode::Char('h'), KeyModifiers::NONE, KeyEventKind::Repeat);
-    assert_eq!(keys.action_for(held), None);
 }
 
 /// The selected sprite's observed lines, newest first.
