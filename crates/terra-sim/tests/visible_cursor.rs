@@ -464,14 +464,22 @@ fn a_feared_cursor_the_sprite_cannot_reach_leaves_the_fear_as_it_was() {
 /// east, taken hold of and shoved into it by the Cursor, visible or not,
 /// the shove sent but not yet run.
 fn about_to_be_shoved_into_a_thornbush(visible: bool) -> World {
+    about_to_be_shoved_into("thornbush", visible, "")
+}
+
+/// As `about_to_be_shoved_into_a_thornbush`, into an object of type `into`,
+/// the sprite's genome having `genes` too.
+fn about_to_be_shoved_into(into: &str, visible: bool, genes: &str) -> World {
     let data = builtin();
     let map = Map::from_ascii(&OPEN, &data).expect("valid drawing");
-    let genes = r#"Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),"#;
-    let sprites = [(at(1, 2), Some(genome(genes, &data)))];
+    let genes = format!(
+        r#"Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),{genes}"#
+    );
+    let sprites = [(at(1, 2), Some(genome(&genes, &data)))];
     let scripted = [(at(1, 2), ScriptedAction::Rest); 10];
     let scenario = Scenario {
         map,
-        objects: &[(at(3, 2), "thornbush")],
+        objects: &[(at(3, 2), into)],
         sprites: &sprites,
         scripted: &scripted,
     };
@@ -535,4 +543,58 @@ fn a_crash_teaches_fear_of_the_cursor_only_in_its_own_tick() {
     });
     world.step();
     assert_eq!(value_of(&world, &fears_the_cursor()), feared);
+}
+
+/// The ticks stepped after the shove until the sprite crashed, counting the
+/// tick of the crash.
+fn ticks_to_crash(world: &mut World) -> usize {
+    for ticks in 1..=6 {
+        let crashed = world
+            .step()
+            .iter()
+            .any(|event| matches!(event.kind, EventKind::Crashed { .. }));
+        if crashed {
+            return ticks;
+        }
+    }
+    panic!("the sprite never crashed");
+}
+
+#[test]
+fn a_crash_s_fear_of_the_cursor_does_not_wear_off_in_the_tick_it_is_learned() {
+    // Design v29 §5.6: the sprite gets used to a Cursor that does nothing,
+    // and in the tick of the crash it did something.
+    let fear_after_crash = |calming: f32| {
+        let genes = format!(r#"BrainParam(param: "cursor_calming", value: {calming:?}),"#);
+        let mut world = about_to_be_shoved_into("thornbush", true, &genes);
+        ticks_to_crash(&mut world);
+        value_of(&world, &fears_the_cursor())
+    };
+    let feared = fear_after_crash(0.0);
+    assert!(feared < 0.0);
+    assert_eq!(fear_after_crash(0.1), feared);
+}
+
+#[test]
+fn a_hidden_cursor_s_zap_in_the_tick_of_a_crash_teaches_no_fear_of_the_cursor() {
+    // Design v29 §5.6: shoved into a bush that doesn't hurt, by a visible
+    // Cursor, and zapped by a hidden one as it crashes. The pain is the
+    // zap's, and the sprite couldn't see where that came from.
+    let crash = ticks_to_crash(&mut about_to_be_shoved_into("berry_bush", true, ""));
+    let mut world = about_to_be_shoved_into("berry_bush", true, "");
+    for _ in 1..crash {
+        world.step();
+    }
+    let sprite = the_sprite(&world).id();
+    world.submit(Command::ShowCursor { visible: false });
+    world.submit(Command::Correct {
+        sprite,
+        amplified: true,
+    });
+    let crashed = world
+        .step()
+        .iter()
+        .any(|event| matches!(event.kind, EventKind::Crashed { .. }));
+    assert!(crashed);
+    assert_eq!(value_of(&world, &fears_the_cursor()), 0.0);
 }
