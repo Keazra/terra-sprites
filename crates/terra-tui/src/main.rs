@@ -117,7 +117,7 @@ fn run(
         let deadline = last_frame + FRAME;
         while event::poll(deadline.saturating_duration_since(Instant::now()))? {
             let action = match event::read()? {
-                // While naming, keys type letters (design v26 §6.5).
+                // While naming, keys type letters (design v27 §6.5).
                 Event::Key(key) if app.typing() => keys.typed_action(key),
                 Event::Key(key) => keys.action_for(key),
                 Event::Mouse(mouse) => input::mouse_action(mouse),

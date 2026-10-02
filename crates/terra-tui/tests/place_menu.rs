@@ -1,4 +1,4 @@
-//! The Place menu, naming and genome files on screen (design v26 §6.5): `C` again
+//! The Place menu, naming and genome files on screen (design v27 §6.5): `C` again
 //! in Grab mode opens the menu, the chosen item waits on the Cursor until a
 //! click places it, `r` names the selected sprite and `g` exports its genome.
 

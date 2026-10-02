@@ -31,15 +31,15 @@ pub enum Screen {
     Normal,
     /// "Quit? (y/n)" is waiting for an answer.
     QuitPrompt,
-    /// The Place menu is open (design v26 §6.5).
+    /// The Place menu is open (design v27 §6.5).
     PlaceMenu,
-    /// The Place menu's list of genome files is open (design v26 §6.5).
+    /// The Place menu's list of genome files is open (design v27 §6.5).
     GenomeMenu,
     /// The player is typing a sprite's name (design §6.5).
     Naming,
 }
 
-/// What a Place menu item makes (design v26 §6.5).
+/// What a Place menu item makes (design v27 §6.5).
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlaceItem {
     /// An object of the type with this stable ID, called `name` in the data.
@@ -216,14 +216,13 @@ pub struct App {
     pub seed: u64,
     screen: Screen,
     mode: CursorMode,
-    /// Where the Cursor is: on the sprite it's locked on to, or else on
+    /// Where the Cursor is: on the sprite it follows, or else on
     /// `pointed`.
     cursor: Pos,
     /// The tile under the pointer, or its last one (design §6.5).
     pointed: Pos,
-    /// Whether the Cursor is locked on to the selected sprite (design v21
-    /// §6.5).
-    lock: bool,
+    /// The sprite the Cursor follows, selected or not (design v26 §6.5).
+    follow: Option<EntityId>,
     /// The top-left tile of the viewport.
     viewport: Pos,
     /// The map's size, in tiles.
@@ -278,7 +277,7 @@ pub struct App {
     /// The names the player has given sprites, as last seen, so the log
     /// keeps naming a sprite after it dies (design §6.5).
     names: Names,
-    /// The Place menu item waiting on the Cursor (design v26 §6.5).
+    /// The Place menu item waiting on the Cursor (design v27 §6.5).
     placing: Option<Placing>,
     /// The highlighted item of the open menu, from 0.
     menu_choice: usize,
@@ -387,7 +386,7 @@ impl App {
             mode: CursorMode::Select,
             cursor,
             pointed: cursor,
-            lock: false,
+            follow: None,
             viewport: Pos { x: 0, y: 0 },
             map_size: Size::new(map.width(), map.height()),
             tile_area: areas.tiles,
@@ -488,7 +487,7 @@ impl App {
             }
             if let EventKind::CommandRejected { command, .. } = &event.kind {
                 // The marks report the Cursor's clicks; naming isn't one
-                // (design v26 §6.5).
+                // (design v27 §6.5).
                 if !matches!(command, Command::Rename { .. }) {
                     self.flash_report(StatusMark::Rejected);
                 }
@@ -498,12 +497,14 @@ impl App {
                     self.refusal = Some((why, self.running_for));
                 }
             }
-            if let EventKind::Died { id, cause, age, .. } = event.kind
-                && self.selection == Some(Selection::Living(id))
-            {
-                self.selection = Some(Selection::Dead { id, cause, age });
-                // Its death lets go of the lock (design v21 §6.5).
-                self.lock = false;
+            if let EventKind::Died { id, cause, age, .. } = event.kind {
+                if self.selection == Some(Selection::Living(id)) {
+                    self.selection = Some(Selection::Dead { id, cause, age });
+                }
+                // The followed sprite's death ends Follow (design v26 §6.5).
+                if self.follow == Some(id) {
+                    self.follow = None;
+                }
             }
             // What the log says of it, if it's logged at all; a line that
             // reads as the one before merges into it with a count (design v21
@@ -628,30 +629,23 @@ impl App {
             })
     }
 
-    /// The sprite the Cursor is locked on to, if any (design v21 §6.5).
-    /// While the Cursor leads that sprite, the lock steps aside, in every
-    /// mode, and the Cursor follows the pointer, within the leash (design
-    /// v23 §6.5).
-    pub fn locked(&self) -> Option<EntityId> {
-        if self.lock_waits() {
+    /// The sprite the Cursor follows, if any (design v26 §6.5). While the
+    /// Cursor leads that sprite, Follow steps aside, in every mode, and the
+    /// Cursor follows the pointer, within the leash (design v23 §6.5).
+    pub fn followed(&self) -> Option<EntityId> {
+        if self.follow_waits() {
             return None;
         }
-        match self.selection {
-            Some(Selection::Living(id)) if self.lock => Some(id),
-            _ => None,
-        }
+        self.follow
     }
 
-    /// Whether the lock steps aside: while the Cursor leads the locked-on
+    /// Whether Follow steps aside: while the Cursor leads the followed
     /// sprite (design v23 §6.5).
-    fn lock_waits(&self) -> bool {
-        match (self.selection, self.led) {
-            (Some(Selection::Living(locked)), Some((led, _))) => self.lock && locked == led,
-            _ => false,
-        }
+    fn follow_waits(&self) -> bool {
+        matches!((self.follow, self.led), (Some(followed), Some((led, _))) if followed == led)
     }
 
-    /// Keeps a locked-on Cursor on its sprite, wherever it has walked; and
+    /// Keeps the Cursor on the sprite it follows, wherever it has walked; and
     /// a leading one on the pointer, so a keyboard click lands where the
     /// player points. Either way, within the leash (design v23 §6.5). While
     /// the player aims, it stays on what it aims: a led sprite, which a
@@ -661,7 +655,7 @@ impl App {
         let wanted = if self.aim.is_some() {
             self.leash()
         } else {
-            match self.locked().and_then(|id| world.sprite(id)) {
+            match self.followed().and_then(|id| world.sprite(id)) {
                 Some(sprite) => Some(sprite.pos()),
                 None if self.led.is_some() => Some(self.pointed),
                 None => None,
@@ -809,7 +803,7 @@ impl App {
             return [flash; 2];
         }
         // A Place menu item waiting on the Cursor shows `↓` and its glyph, as
-        // something carried would (design v26 §6.5).
+        // something carried would (design v27 §6.5).
         if self.placing.is_some() {
             return [StatusMark::Release, StatusMark::Holding];
         }
@@ -881,7 +875,7 @@ impl App {
         self.detail
     }
 
-    /// The tile the Cursor is on: its locked-on sprite's, or else the
+    /// The tile the Cursor is on: its followed sprite's, or else the
     /// pointer's.
     pub fn cursor(&self) -> Pos {
         self.cursor
@@ -954,6 +948,7 @@ impl App {
                 // key pressed.
                 Action::Point(_)
                 | Action::Click { .. }
+                | Action::Follow { at: Some(_) }
                 | Action::Wheel { .. }
                 | Action::Release { .. } => {}
                 // Any other key cancels the prompt, and does nothing else.
@@ -986,6 +981,16 @@ impl App {
             }
             Action::Press { button, amplified } => {
                 self.act(self.cursor, button, amplified, world);
+            }
+            // A middle click points, then acts where the Cursor is, as `F`
+            // does (design v26 §6.5).
+            Action::Follow { at } => {
+                if let Some(at) = at {
+                    self.point(at);
+                }
+                if at.is_none_or(|at| self.tile_at(at).is_some()) {
+                    self.toggle_follow(self.cursor, world);
+                }
             }
             Action::Release { button, at } => {
                 if let Some(at) = at {
@@ -1048,35 +1053,31 @@ impl App {
     /// v21 §6.5).
     ///
     /// In Select, a left click selects the sprite there; on empty ground it
-    /// clears the selection, unless the Cursor is locked on. A right click
-    /// locks the Cursor on to the selection, or lets go; with nothing
-    /// selected, on a sprite, it selects it and locks on.
+    /// clears the selection, which leaves Follow as it is. A right
+    /// click activates what's there, and nothing can be activated yet
+    /// (design v26 §6.5).
     ///
     /// In Train, a left click rewards the target and a right click corrects
-    /// it: the locked-on sprite, or else the one there. With none, nothing is
+    /// it: the followed sprite, or else the one there. With none, nothing is
     /// sent.
     fn act(&mut self, tile: Pos, button: Button, amplified: bool, world: &World) {
         let sprite = world.sprite_at(tile).map(|sprite| sprite.id());
         match (self.mode, button) {
             (CursorMode::Select, Button::Left) => match sprite {
                 Some(id) => self.select(id),
-                None if self.lock => {}
                 None => self.selection = None,
             },
-            (CursorMode::Select, Button::Right) => match (self.selection, sprite) {
-                (Some(Selection::Living(_)), _) => self.set_lock(!self.lock),
-                (_, Some(id)) => {
-                    self.select(id);
-                    self.set_lock(true);
-                }
-                _ => {}
-            },
+            // Until there are devices, nothing can be activated (design v26
+            // §6.5).
+            (CursorMode::Select, Button::Right) => {
+                self.refuse("Nothing here to activate".into());
+            }
             // A Place menu item waiting on the Cursor takes the next click,
-            // where the Cursor is: on the locked-on sprite's tile, or else
-            // the one clicked. A right click puts it away (design v26 §6.5).
+            // where the Cursor is: on the followed sprite's tile, or else
+            // the one clicked. A right click puts it away (design v27 §6.5).
             (CursorMode::Grab, Button::Left) if self.placing.is_some() => {
-                let locked_on = self.locked().and_then(|id| world.sprite(id));
-                self.place(locked_on.map_or(tile, |sprite| sprite.pos()));
+                let followed = self.followed().and_then(|id| world.sprite(id));
+                self.place(followed.map_or(tile, |sprite| sprite.pos()));
             }
             (CursorMode::Grab, Button::Right) if self.placing.is_some() => self.placing = None,
             (CursorMode::Grab, Button::Left) => self.grab_click(tile, sprite, world),
@@ -1090,7 +1091,7 @@ impl App {
                 };
                 // With nothing to act on, nothing is sent, so `?` flashes at
                 // once, and the status line says why (design v22 §6.5).
-                let Some(sprite) = self.locked().or(sprite) else {
+                let Some(sprite) = self.followed().or(sprite) else {
                     self.refuse(format!("No sprite here to {}", touch.name()));
                     return;
                 };
@@ -1106,7 +1107,7 @@ impl App {
 
     /// A Grab-mode click on `tile`, with `sprite` on it (design v23 §6.5).
     /// Leading, it lets go; holding, it puts the item down there. Empty, it
-    /// takes hold of the locked-on sprite, or else the sprite there, or
+    /// takes hold of the followed sprite, or else the sprite there, or
     /// else picks up the item there; a fixture is rooted to the ground.
     fn grab_click(&mut self, tile: Pos, sprite: Option<EntityId>, world: &World) {
         match self.grip(world) {
@@ -1119,7 +1120,7 @@ impl App {
     }
 
     /// With the Cursor empty, grabs what's on `tile`, with `sprite` on it
-    /// (design v23 §6.5): takes hold of the locked-on sprite, or else the
+    /// (design v23 §6.5): takes hold of the followed sprite, or else the
     /// sprite there, or else picks up the item there; a fixture is rooted to
     /// the ground, and with nothing there, it's `refused`. Says whether it
     /// grabbed anything.
@@ -1130,7 +1131,7 @@ impl App {
         world: &World,
         refused: Refused,
     ) -> bool {
-        let command = match (self.locked().or(sprite), world.object_at(tile)) {
+        let command = match (self.followed().or(sprite), world.object_at(tile)) {
             (Some(sprite), _) => {
                 // Taking hold puts the Cursor, as the world knows it, on the
                 // sprite.
@@ -1225,9 +1226,9 @@ impl App {
     }
 
     /// Ends the aim, sent or not: the Cursor follows the pointer again, as
-    /// far as the lock and the leash let it (design v25 §6.5).
+    /// far as Follow and the leash let it (design v25 §6.5).
     fn end_aim(&mut self) {
-        if self.aim.take().is_some() && self.locked().is_none() {
+        if self.aim.take().is_some() && self.followed().is_none() {
             self.cursor = self.within_leash(self.pointed);
         }
     }
@@ -1303,7 +1304,7 @@ impl App {
     }
 
     /// What the Place menu item waiting on the Cursor is called, if one is
-    /// (design v26 §6.5).
+    /// (design v27 §6.5).
     pub fn placing(&self) -> Option<&str> {
         self.placing.as_ref().map(|placing| placing.label.as_str())
     }
@@ -1438,7 +1439,7 @@ impl App {
         Flow::Continue
     }
 
-    /// Picks item `index` of the open menu (design v26 §6.5): an object type the
+    /// Picks item `index` of the open menu (design v27 §6.5): an object type the
     /// data offers, or a new sprite, waits on the Cursor; the Place menu's
     /// last item lists the genome files; a genome file is read, and its
     /// sprite waits.
@@ -1494,7 +1495,7 @@ impl App {
         self.open_menu(Screen::GenomeMenu);
     }
 
-    /// Places the item waiting on the Cursor on `tile` (design v26 §6.5).
+    /// Places the item waiting on the Cursor on `tile` (design v27 §6.5).
     fn place(&mut self, tile: Pos) {
         let Some(placing) = self.placing.take() else {
             return;
@@ -1567,7 +1568,7 @@ impl App {
             return Flow::Continue;
         };
         match action {
-            // Only letters CP437 can show, and spaces between them (design v26 §6.5).
+            // Only letters CP437 can show, and spaces between them (design v27 §6.5).
             Action::Type(c) if (c.is_alphabetic() || c == ' ') && cp437::contains(c) => {
                 if !naming.typed {
                     naming.draft.clear();
@@ -1646,12 +1647,28 @@ impl App {
         }
     }
 
-    /// Locks the Cursor on to the selection, or lets go, when it follows
-    /// the pointer again.
-    fn set_lock(&mut self, lock: bool) {
-        self.lock = lock;
-        if !lock {
-            self.cursor = self.pointed;
+    /// `F`, or a middle click, on `tile`, in every mode (design v26 §6.5).
+    /// Following, it stops, wherever `tile` is. Otherwise the Cursor follows
+    /// the sprite on `tile`, or else the selected sprite, leaving the
+    /// selection as it is; with neither, it's refused.
+    fn toggle_follow(&mut self, tile: Pos, world: &World) {
+        if self.follow.is_some() {
+            self.follow = None;
+            // It follows the pointer again, unless the player is aiming:
+            // then it stays on what it aims until the aim ends (design v25
+            // §6.5).
+            if self.aim.is_none() {
+                self.cursor = self.pointed;
+            }
+            return;
+        }
+        let selected = match self.selection {
+            Some(Selection::Living(id)) => Some(id),
+            _ => None,
+        };
+        match world.sprite_at(tile).map(|sprite| sprite.id()).or(selected) {
+            Some(id) => self.follow = Some(id),
+            None => self.refuse("No sprite here to follow".into()),
         }
     }
 
@@ -1759,7 +1776,7 @@ impl App {
     }
 
     /// Notes the tile at screen cell `cell` as the pointer's, and puts the
-    /// Cursor there, within the leash, unless it's locked on. Off the map
+    /// Cursor there, within the leash, unless it follows a sprite. Off the map
     /// view's tiles, both stay on their last tile.
     fn point(&mut self, cell: Position) {
         match self.tile_at(cell) {
@@ -1768,7 +1785,7 @@ impl App {
                 self.pointed = tile;
                 // While the player aims, the Cursor stays on what it aims,
                 // and the pointer pulls (design v25 §6.5).
-                if self.locked().is_none() && self.aim.is_none() {
+                if self.followed().is_none() && self.aim.is_none() {
                     self.cursor = self.within_leash(tile);
                 }
             }

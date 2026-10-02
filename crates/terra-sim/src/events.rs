@@ -38,7 +38,7 @@ pub enum EventKind {
     /// A sprite died, and left the world.
     Died {
         id: EntityId,
-        /// The name the player gave it, if any (design v26 §2.5).
+        /// The name the player gave it, if any (design v27 §2.5).
         name: Option<String>,
         cause: DeathCause,
         /// Its age in ticks.
@@ -57,15 +57,15 @@ pub enum EventKind {
     /// The Cursor corrected a sprite (design v21 §4.6): a zap, or amplified,
     /// a shock.
     Corrected { id: EntityId, amplified: bool },
-    /// The Cursor placed a new object (design v26 §2.5).
+    /// The Cursor placed a new object (design v27 §2.5).
     Placed {
         id: EntityId,
         object_type: String,
         pos: Pos,
     },
-    /// A new sprite was spawned by the Cursor (design v26 §2.5).
+    /// A new sprite was spawned by the Cursor (design v27 §2.5).
     Spawned { id: EntityId, pos: Pos },
-    /// The player named a sprite (design v26 §2.5).
+    /// The player named a sprite (design v27 §2.5).
     Renamed { id: EntityId, name: String },
     /// The Cursor took hold of a sprite, which it now leads (design v23
     /// §6.5).

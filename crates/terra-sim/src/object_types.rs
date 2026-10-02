@@ -43,11 +43,11 @@ pub(crate) struct ObjectType {
     pub(crate) rules: Vec<Rule>,
     pub(crate) verbs: BTreeMap<Verb, Vec<Effect>>,
     pub(crate) visual: Vec<Visual>,
-    /// Whether, and how, the Cursor's Place menu offers it (design v26 §3.5.1).
+    /// Whether, and how, the Cursor's Place menu offers it (design v27 §3.5.1).
     pub(crate) place: Option<Placement>,
 }
 
-/// How the Cursor places an object type (design v26 §3.5.1): under what label the
+/// How the Cursor places an object type (design v27 §3.5.1): under what label the
 /// Place menu offers it, and what its tile must meet. The engine asks no
 /// more than the space rules (design §3.3–3.4); anything else, such as
 /// keeping paths open, is the data's choice.
