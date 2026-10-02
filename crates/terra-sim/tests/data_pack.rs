@@ -1067,6 +1067,25 @@ fn the_needs_are_the_drives_whose_relief_teaches() {
 }
 
 #[test]
+fn the_drives_are_the_signal_chemicals_but_reward_and_punishment() {
+    // Design §4.1: what colours a sprite on the map (design §6.3).
+    let data = DataPack::builtin().expect("built-in data pack is valid");
+    let drives: Vec<&str> = data.drives().collect();
+    assert_eq!(
+        drives,
+        [
+            "hunger",
+            "thirst",
+            "pain",
+            "tiredness",
+            "boredom",
+            "loneliness",
+            "crowdedness"
+        ]
+    );
+}
+
+#[test]
 fn the_first_order_needs_are_hunger_and_thirst() {
     // Design v21 §5.2: they come before a sprite's likes.
     let data = DataPack::builtin().expect("built-in data pack is valid");
