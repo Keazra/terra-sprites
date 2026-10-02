@@ -661,6 +661,7 @@ fn top_bar_line(app: &App, world: &World, width: u16) -> Line<'static> {
     );
     const HELP: &str = "? help ";
     let gap = usize::from(width).saturating_sub(text.chars().count() + HELP.chars().count());
+    // At least a space between the two, so `? help` never runs into them.
     let text = if gap > 0 {
         format!("{text}{}{HELP}", " ".repeat(gap))
     } else {

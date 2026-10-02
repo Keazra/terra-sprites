@@ -1675,11 +1675,12 @@ impl App {
     /// listed, or else the first.
     fn open_list(&mut self, world: &World) {
         self.screen = Screen::SpriteList;
+        let listed = sprite_list::order(self, world);
         self.list_choice = self
             .selection
             .map(Selection::id)
-            .filter(|id| world.sprite(*id).is_some())
-            .or_else(|| sprite_list::order(self, world).first().copied());
+            .filter(|id| listed.contains(id))
+            .or_else(|| listed.first().copied());
     }
 
     /// What an action does while the sprite list is open (design §6.1): the
