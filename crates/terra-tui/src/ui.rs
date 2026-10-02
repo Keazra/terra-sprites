@@ -7,14 +7,13 @@ use ratatui::{
     style::{Color, Modifier, Style},
     text::Line,
 };
-use terra_sim::{
-    ChemicalKind, ChemicalLevel, EntityId, Grip, Map, ObjectView, Pos, Progress, SpriteView, World,
-};
+use terra_sim::{EntityId, Grip, Map, ObjectView, Pos, Progress, SpriteView, World};
 
 use crate::app::{App, Areas, ColourMode, CursorMode, PlaceItem, Screen, Selection};
 use crate::clock::Speed;
 use crate::inspector::{self, INSPECTOR_WIDTH, first_shown};
 use crate::policy::{Panel, Subject};
+use crate::sprite_list::strongest_drive;
 use crate::text::{display_name, group_thousands, terrain_name};
 use crate::theme::SemanticTile;
 
@@ -52,8 +51,10 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
         render_event_log(frame.buffer_mut(), event_log, app, world);
     }
     render_menu(frame.buffer_mut(), area, app, world);
-    if app.screen() == Screen::Help {
-        render_help(frame.buffer_mut(), app, world);
+    match app.screen() {
+        Screen::Help => render_help(frame.buffer_mut(), app, world),
+        Screen::SpriteList => render_sprite_list(frame.buffer_mut(), app, world),
+        _ => {}
     }
     frame.render_widget(status_line(app, world, status.width), status);
 }
@@ -268,20 +269,10 @@ fn sprite_colour(app: &App, sprite: &SpriteView, own: Color) -> Color {
     {
         return own;
     }
-    let strongest = sprite
-        .chemicals()
-        .filter(|chemical| chemical.kind == ChemicalKind::Drive && chemical.level > DRIVE_SHOWS)
-        .fold(None::<ChemicalLevel>, |best, chemical| match best {
-            Some(best) if best.level >= chemical.level => Some(best),
-            _ => Some(chemical),
-        });
-    strongest
+    strongest_drive(sprite)
         .and_then(|drive| app.theme.drive_colour(drive.name))
         .unwrap_or(own)
 }
-
-/// How strong a drive must be to colour its sprite (design §6.3).
-const DRIVE_SHOWS: f32 = 0.5;
 
 /// Where the selected sprite is heading, while its action is under way
 /// (design §6.1): where the map flashes the Decision marker.
@@ -514,6 +505,26 @@ fn render_help(buf: &mut Buffer, app: &App, world: &World) {
     }
 }
 
+/// Draws the sprite list over everything between the top bar and the
+/// status line (design §6.1).
+fn render_sprite_list(buf: &mut Buffer, app: &App, world: &World) {
+    let Some(area) = app.overlay() else {
+        return;
+    };
+    let title = format!(" Sprites ── sorted by {} ", app.list_sort().label());
+    let inner = clear_box(buf, area, &title, " esc close ");
+    let lines = crate::sprite_list::lines(
+        app,
+        world,
+        usize::from(inner.width),
+        app.list_first(world),
+        app.list_rows(),
+    );
+    for (row, line) in (inner.y..inner.bottom()).zip(&lines) {
+        buf.set_line(inner.x, row, line, inner.width);
+    }
+}
+
 /// Blanks `area` and draws a single-lined box round it, with `title` at
 /// the left of its top edge and `corner` at the right, as an overlay over
 /// the panels beneath. Gives the area inside the box.
@@ -729,6 +740,10 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
                 (true, Some(Grip::Leads(_))) => hint_if_fits(room, "let go to shove  esc cancel"),
                 // A Place menu item waiting, how to place it or not (design v28 §6.5).
                 _ if placing => hint_if_fits(room, "click to place  right-click put away"),
+                // While the sprite list is open, how to use it (design §6.1).
+                _ if app.screen() == Screen::SpriteList => {
+                    hint_if_fits(room, "↑↓ choose  enter go to it  tab sort  esc close")
+                }
                 _ => hints_within(room),
             };
             (tile, hints)

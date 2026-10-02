@@ -16,6 +16,7 @@ use crate::cp437;
 use crate::input::{Action, Button};
 use crate::inspector;
 use crate::policy::{InfoPolicy, Omniscient, Panel, Subject};
+use crate::sprite_list::{self, SortBy};
 use crate::text::{Names, ROOTED, Words, display_name};
 use crate::theme::{Emote, Theme};
 
@@ -40,6 +41,8 @@ pub enum Screen {
     Naming,
     /// The help screen is open (design §6.1).
     Help,
+    /// The sprite list is open (design §6.1).
+    SpriteList,
 }
 
 /// What colours sprites on the map (design §6.3).
@@ -424,6 +427,11 @@ pub struct App {
     overlay: Option<Rect>,
     /// Which events the event log shows (design §6.1).
     event_filter: EventFilter,
+    /// What the sprite list is sorted by.
+    list_sort: SortBy,
+    /// The sprite the sprite list highlights, if any; the first row's if
+    /// it's gone from the list.
+    list_choice: Option<EntityId>,
     /// The game's folder for its files (design §6.7), which the help
     /// screen shows, if there is one.
     data_folder: Option<PathBuf>,
@@ -557,6 +565,8 @@ impl App {
             event_log_area: areas.event_log,
             overlay: areas.overlay,
             event_filter: EventFilter::All,
+            list_sort: SortBy::Number,
+            list_choice: None,
             data_folder: None,
         };
         app.centre_on(cursor);
@@ -1233,6 +1243,7 @@ impl App {
             Screen::PlaceMenu | Screen::GenomeMenu => return self.apply_in_menu(action, world),
             Screen::Naming => return self.apply_naming(action, world),
             Screen::Help => return self.apply_in_help(action),
+            Screen::SpriteList => return self.apply_in_list(action, world),
             Screen::Normal | Screen::QuitPrompt => {}
         }
         if self.screen == Screen::QuitPrompt {
@@ -1340,6 +1351,10 @@ impl App {
             Action::Help => {
                 self.end_aim();
                 self.screen = Screen::Help;
+            }
+            Action::SpriteList => {
+                self.end_aim();
+                self.open_list(world);
             }
             Action::CycleColours => {
                 self.colour_mode = along(&ColourMode::ALL, self.colour_mode, 1);
@@ -1639,6 +1654,118 @@ impl App {
             _ => {}
         }
         Flow::Continue
+    }
+
+    /// Opens the sprite list, highlighting the selected sprite if it's
+    /// listed, or else the first.
+    fn open_list(&mut self, world: &World) {
+        self.screen = Screen::SpriteList;
+        self.list_choice = self
+            .selection
+            .map(Selection::id)
+            .filter(|id| world.sprite(*id).is_some())
+            .or_else(|| {
+                sprite_list::order(self, world, self.list_sort)
+                    .first()
+                    .copied()
+            });
+    }
+
+    /// What an action does while the sprite list is open (design §6.1): the
+    /// arrow keys or the wheel move the highlight, `Tab` changes the order,
+    /// `Enter` or a click on a row goes to that sprite, and `l` or `Esc`
+    /// closes the list.
+    fn apply_in_list(&mut self, action: Action, world: &World) -> Flow {
+        let ids = sprite_list::order(self, world, self.list_sort);
+        let choice = self.list_choice(world) as i32;
+        let moved = |by: i32| {
+            let last = ids.len().max(1) as i32 - 1;
+            ids.get((choice + by).clamp(0, last) as usize).copied()
+        };
+        match action {
+            Action::Scroll { dy, .. } => self.list_choice = moved(dy.signum()),
+            Action::Wheel { at, notches } => {
+                self.point(at);
+                self.list_choice = moved(notches);
+            }
+            Action::SelectNext => self.list_sort = along(&SortBy::ALL, self.list_sort, 1),
+            Action::SelectPrevious => self.list_sort = along(&SortBy::ALL, self.list_sort, -1),
+            Action::Enter => {
+                if let Some(&id) = ids.get(self.list_choice(world)) {
+                    self.go_to(id, world);
+                }
+            }
+            Action::Click {
+                at,
+                button: Button::Left,
+                ..
+            } => {
+                self.point(at);
+                let row = self.list_row_at(at);
+                if let Some(&id) = row.and_then(|row| ids.get(self.list_first(world) + row)) {
+                    self.go_to(id, world);
+                }
+            }
+            Action::Point(cell) => self.point(cell),
+            Action::SpriteList | Action::Back => self.screen = Screen::Normal,
+            Action::Quit => return Flow::Quit,
+            _ => {}
+        }
+        Flow::Continue
+    }
+
+    /// Selects sprite `id`, centres the view on it and closes the sprite
+    /// list.
+    fn go_to(&mut self, id: EntityId, world: &World) {
+        self.screen = Screen::Normal;
+        self.select(id);
+        if let Some(sprite) = world.sprite(id) {
+            self.centre_on(sprite.pos());
+        }
+        self.settle_cursor(world);
+    }
+
+    /// Which of the sprite list's rows `at` is on, from 0 for the first
+    /// shown, if it's on one.
+    fn list_row_at(&self, at: Position) -> Option<usize> {
+        let inner = self.overlay?.inner(Margin::new(1, 1));
+        // The heading takes the first row.
+        let rows = Rect::new(
+            inner.x,
+            inner.y + 1,
+            inner.width,
+            inner.height.saturating_sub(1),
+        );
+        rows.contains(at).then(|| usize::from(at.y - rows.y))
+    }
+
+    /// What the sprite list is sorted by.
+    pub fn list_sort(&self) -> SortBy {
+        self.list_sort
+    }
+
+    /// Which row of the sprite list is highlighted, from 0, in its current
+    /// order.
+    pub fn list_choice(&self, world: &World) -> usize {
+        let ids = sprite_list::order(self, world, self.list_sort);
+        self.list_choice
+            .and_then(|chosen| ids.iter().position(|&id| id == chosen))
+            .unwrap_or(0)
+    }
+
+    /// How many sprites the sprite list shows at once: the rows inside its
+    /// border, less the heading.
+    pub fn list_rows(&self) -> usize {
+        self.overlay.map_or(0, |area| {
+            usize::from(area.inner(Margin::new(1, 1)).height.saturating_sub(1))
+        })
+    }
+
+    /// The first row the sprite list shows: it scrolls so the highlighted
+    /// sprite stays in view.
+    pub fn list_first(&self, world: &World) -> usize {
+        self.list_choice(world)
+            .saturating_sub(self.list_rows().max(1) - 1)
     }
 
     /// Sets the game's folder for its files (design §6.7), which the help

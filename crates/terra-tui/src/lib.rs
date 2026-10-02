@@ -10,6 +10,7 @@ mod help;
 pub mod input;
 mod inspector;
 pub mod policy;
+pub mod sprite_list;
 mod text;
 pub mod theme;
 pub mod ui;
