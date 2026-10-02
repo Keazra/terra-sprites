@@ -454,7 +454,7 @@ fn q_and_f_act_where_the_cursor_is() {
     let mut app = app(&world);
     apply(&mut app, &world, Action::Point(Position::new(4, 2)));
     apply(&mut app, &world, F);
-    assert_eq!(app.followed(), Some(id), "F selected it and followed it");
+    assert_eq!(app.followed(), Some(id), "F followed it");
     apply(&mut app, &world, Action::Point(Position::new(7, 2)));
     let q = Action::Press {
         button: Button::Left,

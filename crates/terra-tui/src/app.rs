@@ -1106,13 +1106,21 @@ impl App {
     }
 
     /// A Grab-mode click on `tile`, with `sprite` on it (design v23 §6.5).
-    /// Leading, it lets go; holding, it puts the item down there. Empty, it
-    /// takes hold of the followed sprite, or else the sprite there, or
-    /// else picks up the item there; a fixture is rooted to the ground.
+    /// Leading, it lets go; holding, it puts the item down there, or at the
+    /// followed sprite's feet, wherever the click lands (design v26 §6.5).
+    /// Empty, it takes hold of the followed sprite, or else the sprite there,
+    /// or else picks up the item there; a fixture is rooted to the ground.
     fn grab_click(&mut self, tile: Pos, sprite: Option<EntityId>, world: &World) {
         match self.grip(world) {
             Some(Grip::Leads(_)) => self.send(Command::LetGo, world),
-            Some(Grip::Holds(_)) => self.send(Command::PutDown { tile }, world),
+            Some(Grip::Holds(_)) => {
+                let tile = if self.followed().is_some() {
+                    self.cursor
+                } else {
+                    tile
+                };
+                self.send(Command::PutDown { tile }, world);
+            }
             None => {
                 self.grab(tile, sprite, world, TO_GRAB);
             }
