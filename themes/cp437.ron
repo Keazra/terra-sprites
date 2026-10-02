@@ -28,9 +28,6 @@
         emote(failed):          (glyph: '?', fg: light_yellow),
         emote(resting):         (glyph: 'z', fg: light_blue),
     },
-    // Objects, by type name from the data pack's `objects.ron`, then visual
-    // state. An object whose state isn't listed is drawn with its "default"
-    // look, and one not listed at all as `?`.
     // A sprite's colour, by its strongest drive above .5, keyed by the
     // drive's name in the data pack (design §6.3). A drive with no colour
     // here, as from a mod, draws the sprite's own colour.
@@ -43,6 +40,9 @@
         "loneliness":  magenta,
         "crowdedness": light_red,
     },
+    // Objects, by type name from the data pack's `objects.ron`, then visual
+    // state. An object whose state isn't listed is drawn with its "default"
+    // look, and one not listed at all as `?`.
     objects: {
         "berry_bush": {
             "seedling": (glyph: '\'', fg: green),

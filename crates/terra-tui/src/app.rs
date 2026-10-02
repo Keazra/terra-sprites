@@ -1,14 +1,15 @@
 //! The UI state (design §6.8): everything the screen shows that isn't the world.
 
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
 use terra_sim::{
-    ActionView, Command, CursorTouch, DeathCause, Dir, EntityId, Event, EventKind, Genome, Grip,
-    MAX_NAME_CHARS, Map, Outcome, Pos, Progress, Target, Thing, Verb, World,
+    ActionView, ChemicalKind, ChemicalLevel, Command, CursorTouch, DeathCause, Dir, EntityId,
+    Event, EventKind, Genome, Grip, MAX_NAME_CHARS, Map, Outcome, Pos, Progress, SpriteView,
+    Target, Thing, Verb, World,
 };
 
 use crate::clock::Clock;
@@ -66,6 +67,22 @@ impl ColourMode {
             ColourMode::Plain => "plain",
         }
     }
+}
+
+/// How strong a drive must be to colour its sprite, and to show in the
+/// sprite list's Drive column (design §6.3).
+pub(crate) const DRIVE_SHOWS: f32 = 0.5;
+
+/// `sprite`'s strongest drive, if one is above half (design §6.3). Of two
+/// equally strong, the first in the data pack's order.
+pub(crate) fn strongest_drive<'a>(sprite: &SpriteView<'a>) -> Option<ChemicalLevel<'a>> {
+    sprite
+        .chemicals()
+        .filter(|chemical| chemical.kind == ChemicalKind::Drive && chemical.level > DRIVE_SHOWS)
+        .fold(None::<ChemicalLevel>, |best, chemical| match best {
+            Some(best) if best.level >= chemical.level => Some(best),
+            _ => Some(chemical),
+        })
 }
 
 /// Which events the event log shows (design §6.1).
@@ -289,24 +306,22 @@ const EVENT_LOG_LENGTH: usize = 100;
 /// a meal or a drink when it mattered, not small comforts.
 pub const PLEASED_AT: f32 = 0.3;
 
-/// What a frame's ticks did that the screen takes in: their events, and the
-/// sprites that felt a strong reward on any of them (design §6.3), which a
-/// look at the world after the last tick would miss.
+/// What a frame's ticks did that the screen takes in, tick by tick: each
+/// one's events, and the sprites that felt a strong reward on it (design
+/// §6.3), which a look at the world after the last tick would miss.
 #[derive(Debug, Default)]
-pub struct Ticks {
-    events: Vec<Event>,
-    pleased: BTreeSet<EntityId>,
-}
+pub struct Ticks(Vec<(Vec<Event>, Vec<EntityId>)>);
 
 impl Ticks {
     /// Runs one tick of `world`, noting what the screen shows of it.
     pub fn step(&mut self, world: &mut World) {
-        self.events.extend(world.step());
+        let events = world.step();
         let pleased = world
             .sprites()
-            .filter(|sprite| sprite.felt() > PLEASED_AT)
-            .map(|sprite| sprite.id());
-        self.pleased.extend(pleased);
+            .filter(|sprite| sprite.felt() >= PLEASED_AT)
+            .map(|sprite| sprite.id())
+            .collect();
+        self.0.push((events, pleased));
     }
 }
 
@@ -718,7 +733,7 @@ impl App {
     /// Settles the Cursor after an action or a tick: what it leads, then
     /// where it is, then telling the world if it leads a sprite.
     fn settle_cursor(&mut self, world: &World) {
-        self.follow_with_view(world);
+        self.track_selected(world);
         self.led = match self.grip(world) {
             Some(Grip::Leads(id)) => world.sprite(id).map(|sprite| (id, sprite.pos())),
             _ => None,
@@ -916,11 +931,14 @@ impl App {
     /// (design §6.3). One already showing Pleased carries on, rather than
     /// starting again each tick a reward lasts.
     pub fn take_in(&mut self, ticks: Ticks, world: &World) {
-        self.record(&ticks.events, world);
-        for id in ticks.pleased {
-            let pleased = matches!(self.emotes.get(&id), Some(&(Emote::Pleased, at)) if self.shows(at, EMOTE_FOR));
-            if !pleased {
-                self.start_emote(id, Emote::Pleased);
+        // Tick by tick, so of two emotes in one frame the later tick's wins.
+        for (events, pleased) in ticks.0 {
+            self.record(&events, world);
+            for id in pleased {
+                let showing = matches!(self.emotes.get(&id), Some(&(Emote::Pleased, at)) if self.shows(at, EMOTE_FOR));
+                if !showing {
+                    self.start_emote(id, Emote::Pleased);
+                }
             }
         }
     }
@@ -1112,11 +1130,7 @@ impl App {
     /// Where the event log's border shows the filters, if it's drawn.
     pub fn filter_label(&self) -> Option<Rect> {
         let area = self.event_log_area?;
-        let width = self.event_filter.labels().chars().count() as u16;
-        // Before the corner and the line beside it, as the title sits after
-        // them.
-        let x = area.right().checked_sub(width + 2)?;
-        Some(Rect::new(x, area.y, width, 1))
+        crate::ui::top_right(area, self.event_filter.labels().chars().count() as u16)
     }
 
     /// Moves the app's real-time clock on by `elapsed`, for what flashes.
@@ -1664,11 +1678,7 @@ impl App {
             .selection
             .map(Selection::id)
             .filter(|id| world.sprite(*id).is_some())
-            .or_else(|| {
-                sprite_list::order(self, world, self.list_sort)
-                    .first()
-                    .copied()
-            });
+            .or_else(|| sprite_list::order(self, world).first().copied());
     }
 
     /// What an action does while the sprite list is open (design §6.1): the
@@ -1676,8 +1686,8 @@ impl App {
     /// `Enter` or a click on a row goes to that sprite, and `l` or `Esc`
     /// closes the list.
     fn apply_in_list(&mut self, action: Action, world: &World) -> Flow {
-        let ids = sprite_list::order(self, world, self.list_sort);
-        let choice = self.list_choice(world) as i32;
+        let ids = sprite_list::order(self, world);
+        let choice = self.list_row(world) as i32;
         let moved = |by: i32| {
             let last = ids.len().max(1) as i32 - 1;
             ids.get((choice + by).clamp(0, last) as usize).copied()
@@ -1691,7 +1701,7 @@ impl App {
             Action::SelectNext => self.list_sort = along(&SortBy::ALL, self.list_sort, 1),
             Action::SelectPrevious => self.list_sort = along(&SortBy::ALL, self.list_sort, -1),
             Action::Enter => {
-                if let Some(&id) = ids.get(self.list_choice(world)) {
+                if let Some(&id) = ids.get(self.list_row(world)) {
                     self.go_to(id, world);
                 }
             }
@@ -1746,8 +1756,8 @@ impl App {
 
     /// Which row of the sprite list is highlighted, from 0, in its current
     /// order.
-    pub fn list_choice(&self, world: &World) -> usize {
-        let ids = sprite_list::order(self, world, self.list_sort);
+    pub fn list_row(&self, world: &World) -> usize {
+        let ids = sprite_list::order(self, world);
         self.list_choice
             .and_then(|chosen| ids.iter().position(|&id| id == chosen))
             .unwrap_or(0)
@@ -1764,7 +1774,7 @@ impl App {
     /// The first row the sprite list shows: it scrolls so the highlighted
     /// sprite stays in view.
     pub fn list_first(&self, world: &World) -> usize {
-        self.list_choice(world)
+        self.list_row(world)
             .saturating_sub(self.list_rows().max(1) - 1)
     }
 
@@ -2154,7 +2164,7 @@ impl App {
         };
         self.tracking = true;
         self.tell_player(format!("Tracking {}", self.names.label(id)));
-        self.follow_with_view(world);
+        self.track_selected(world);
     }
 
     /// Whether the view follows the selected sprite (design v21 §6.1).
@@ -2164,7 +2174,7 @@ impl App {
 
     /// While tracking, centres the view on the selected sprite, as far as
     /// the wall allows.
-    fn follow_with_view(&mut self, world: &World) {
+    fn track_selected(&mut self, world: &World) {
         let tracked = match self.selection {
             Some(Selection::Living(id)) if self.tracking => world.sprite(id),
             _ => None,

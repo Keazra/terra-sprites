@@ -41,10 +41,13 @@ pub fn title(app: &App) -> String {
         })
         .collect();
     let tabs = tabs.join(" ");
-    let labels = app.selection().map(|selection| {
-        let id = selection.id();
-        (app.names().label(id), format!("#{}", id.0))
-    });
+    // The open tab's policy decides whether the title names the sprite
+    // (design §6.4).
+    let labels = app
+        .selection()
+        .map(|selection| selection.id())
+        .filter(|&id| app.can_view(Panel::Tab(app.tab()), Subject::Sprite(id)))
+        .map(|id| (app.names().label(id), format!("#{}", id.0)));
     fitted_title(
         labels
             .as_ref()

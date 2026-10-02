@@ -4,16 +4,12 @@
 
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use terra_sim::{ChemicalKind, ChemicalLevel, EntityId, SpriteView, World};
+use terra_sim::{EntityId, SpriteView, World};
 
-use crate::app::App;
+use crate::app::{App, strongest_drive};
 use crate::inspector;
 use crate::policy::{Panel, Subject};
 use crate::text::{display_name, group_thousands};
-
-/// How strong a drive must be to colour its sprite, and to show in the
-/// list's Drive column (design §6.3).
-pub(crate) const DRIVE_SHOWS: f32 = 0.5;
 
 /// What the sprite list is sorted by.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,27 +40,15 @@ impl SortBy {
     }
 }
 
-/// `sprite`'s strongest drive, if one is above half (design §6.3). Of two
-/// equally strong, the first in the data pack's order.
-pub(crate) fn strongest_drive<'a>(sprite: &SpriteView<'a>) -> Option<ChemicalLevel<'a>> {
-    sprite
-        .chemicals()
-        .filter(|chemical| chemical.kind == ChemicalKind::Drive && chemical.level > DRIVE_SHOWS)
-        .fold(None::<ChemicalLevel>, |best, chemical| match best {
-            Some(best) if best.level >= chemical.level => Some(best),
-            _ => Some(chemical),
-        })
-}
-
 /// The sprites the list shows, in the order it shows them: those the policy
-/// lets it show (design §6.4), sorted by `sort`.
-pub(crate) fn order(app: &App, world: &World, sort: SortBy) -> Vec<EntityId> {
+/// lets it show (design §6.4), sorted as the player chose.
+pub(crate) fn order(app: &App, world: &World) -> Vec<EntityId> {
     let mut sprites: Vec<SpriteView> = world
         .sprites()
         .filter(|sprite| app.can_view(Panel::SpriteList, Subject::Sprite(sprite.id())))
         .collect();
     let drives: Vec<&str> = world.data().drives().collect();
-    match sort {
+    match app.list_sort() {
         // The world lists its sprites by ID already.
         SortBy::Number => {}
         SortBy::Name => sprites.sort_by_key(|sprite| match app.names().get(sprite.id()) {
@@ -103,7 +87,7 @@ pub(crate) fn lines(
     first: usize,
     rows: usize,
 ) -> Vec<Line<'static>> {
-    let ids = order(app, world, app.list_sort());
+    let ids = order(app, world);
     if ids.is_empty() {
         return vec![Line::from(" No sprites")];
     }
@@ -140,7 +124,7 @@ pub(crate) fn lines(
         clipped(&heading, width),
         Style::default().add_modifier(Modifier::BOLD),
     )];
-    let chosen = app.list_choice(world);
+    let chosen = app.list_row(world);
     let shown = sprites.iter().zip(&labels).zip(&ages).enumerate();
     for (index, ((sprite, label), age)) in shown.skip(first).take(rows) {
         let doing = inspector::doing_line(sprite, app, world).unwrap_or_default();
