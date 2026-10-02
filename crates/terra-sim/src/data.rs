@@ -7,6 +7,7 @@ use crate::brain_io::{BRAIN_IO, BrainInput, BrainIoFile, InputId, brain_io};
 use crate::categories::{CATEGORIES, Category, SPRITE, WATER, categories};
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, GenomeError};
+use crate::names::{NAMES, Syllables};
 use crate::object_types::{Effect, OBJECTS, ObjectType, TypeEntry, object_types};
 use crate::physiology::{Indices, PHYSIOLOGY, Physiology, PhysiologyEntry};
 use crate::registry::{CategoryId, ChemId, Chemical, Locus, LocusId, Verb};
@@ -36,6 +37,8 @@ pub struct DataPack {
     physiology: Physiology,
     /// What sprites without parents are made from. Every gene in it is expressed or unexpressed.
     starter: Genome,
+    /// What random names are made of (slice 11c).
+    syllables: Syllables,
 }
 
 /// Why a data pack could not be loaded.
@@ -72,6 +75,7 @@ const BUILTIN: &[(&str, &str)] = &[
     (OBJECTS, include_str!("../../../data/objects.ron")),
     (PHYSIOLOGY, include_str!("../../../data/physiology.ron")),
     (STARTER, include_str!("../../../data/genomes/starter.ron")),
+    (NAMES, include_str!("../../../data/names.ron")),
 ];
 
 /// `pack.ron`: identifies the pack.
@@ -232,6 +236,12 @@ impl DataPack {
                 file: PHYSIOLOGY.into(),
                 message,
             })?;
+        let syllables = parse::<Syllables>(sources, NAMES)?
+            .validate()
+            .map_err(|message| DataError::Invalid {
+                file: NAMES.into(),
+                message,
+            })?;
         let mut pack = DataPack {
             manifest,
             terrain,
@@ -245,9 +255,31 @@ impl DataPack {
             object_types,
             physiology,
             starter: Genome { genes: Vec::new() },
+            syllables,
         };
         pack.starter = starter_genome(find(sources, STARTER)?, &pack)?;
         Ok(pack)
+    }
+
+    /// The object types the Cursor's Place menu offers (slice 11c), in ID
+    /// order: each type's name, and the label the menu shows.
+    pub fn placeable(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.object_types.iter().filter_map(|object_type| {
+            let place = object_type.place.as_ref()?;
+            Some((object_type.name.as_str(), place.label.as_str()))
+        })
+    }
+
+    /// The stable ID of the object type called `name`, if the pack has one.
+    pub fn object_type_id(&self, name: &str) -> Option<u16> {
+        self.object_type_named(name)
+            .map(|kind| self.object_types[kind].id)
+    }
+
+    /// A random name made from the pack's syllables (design §6.5): the same
+    /// `seed` always makes the same one, and it's always a valid name.
+    pub fn random_name(&self, seed: u64) -> String {
+        self.syllables.name(seed)
     }
 
     /// The pack's name, from its manifest.

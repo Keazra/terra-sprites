@@ -13,7 +13,7 @@ use terra_sim::{
 use crate::clock::Clock;
 use crate::input::{Action, Button};
 use crate::inspector;
-use crate::text::{ROOTED, display_name};
+use crate::text::{Names, ROOTED, Words, display_name};
 use crate::theme::{Emote, Theme};
 
 /// Whether the game carries on after an action.
@@ -244,6 +244,9 @@ pub struct App {
     /// Why the player's latest click was refused, which the status line
     /// says in the key hints' place, and since when (design v22 §6.1).
     refusal: Option<(String, Duration)>,
+    /// The names the player has given sprites, as last seen, so the log
+    /// keeps naming a sprite after it dies (design §6.5).
+    names: Names,
 }
 
 /// A shove of the selected sprite, which its observed list tells of once
@@ -351,6 +354,7 @@ impl App {
             sent_at: None,
             report: None,
             refusal: None,
+            names: Names::default(),
         };
         app.centre_on(cursor);
         app
@@ -367,6 +371,7 @@ impl App {
     /// on the front of its observed list, or counts up the line there if it
     /// reads the same.
     pub fn record(&mut self, events: &[Event], world: &World) {
+        self.note_names(world);
         for event in events {
             if let EventKind::ActionEnded { id, ref action, .. } = event.kind {
                 self.note_hurt(id, action);
@@ -412,11 +417,11 @@ impl App {
                 self.flash_report(StatusMark::Rejected);
                 // And why, on the status line, as the log words it (design
                 // v22 §6.1).
-                if let Some(why) = inspector::event_line(event, world.data()) {
+                if let Some(why) = inspector::event_line(event, &self.words(world)) {
                     self.refusal = Some((why, self.running_for));
                 }
             }
-            if let EventKind::Died { id, cause, age } = event.kind
+            if let EventKind::Died { id, cause, age, .. } = event.kind
                 && self.selection == Some(Selection::Living(id))
             {
                 self.selection = Some(Selection::Dead { id, cause, age });
@@ -426,12 +431,15 @@ impl App {
             // What the log says of it, if it's logged at all; a line that
             // reads as the one before merges into it with a count (design v21
             // §6.1).
-            let data = world.data();
-            let Some(line) = inspector::event_line(event, data) else {
+            let words = Words {
+                data: world.data(),
+                names: &self.names,
+            };
+            let Some(line) = inspector::event_line(event, &words) else {
                 continue;
             };
             match self.event_log.front_mut() {
-                Some((front, count)) if inspector::event_line(front, data) == Some(line) => {
+                Some((front, count)) if inspector::event_line(front, &words) == Some(line) => {
                     *front = event.clone();
                     *count += 1;
                 }
@@ -448,6 +456,29 @@ impl App {
             self.end_aim();
         }
         self.settle_cursor(world);
+    }
+
+    /// Notes the names the world's sprites have now, so a sprite named and
+    /// then dead keeps its name in the log.
+    fn note_names(&mut self, world: &World) {
+        for sprite in world.sprites() {
+            if let Some(name) = sprite.name() {
+                self.names.note(sprite.id(), name);
+            }
+        }
+    }
+
+    /// The names the player has given sprites, as the screen last saw them.
+    pub fn names(&self) -> &Names {
+        &self.names
+    }
+
+    /// What the screen's sentences are made from, for `world`.
+    pub(crate) fn words<'a>(&'a self, world: &'a World) -> Words<'a> {
+        Words {
+            data: world.data(),
+            names: &self.names,
+        }
     }
 
     /// Settles the Cursor after an action or a tick: what it leads, then
@@ -504,16 +535,19 @@ impl App {
         let start = now.leads().map(Grip::Leads).or(held);
         self.queued
             .iter()
-            .fold(start, |grip, &(_, command)| match command {
+            .fold(start, |grip, (_, command)| match *command {
                 Command::TakeHold { sprite } => grip.or(Some(Grip::Leads(sprite))),
                 Command::PickUp { item } => grip.or(Some(Grip::Holds(item))),
                 Command::LetGo
                 | Command::PutDown { .. }
                 | Command::Throw { .. }
                 | Command::Shove { .. } => None,
-                Command::Reward { .. } | Command::Correct { .. } | Command::MoveCursor { .. } => {
-                    grip
-                }
+                Command::Reward { .. }
+                | Command::Correct { .. }
+                | Command::MoveCursor { .. }
+                | Command::Place { .. }
+                | Command::SpawnSprite { .. }
+                | Command::Rename { .. } => grip,
             })
     }
 
@@ -583,7 +617,7 @@ impl App {
             None => "Was shoved out of nowhere".to_string(),
             Some(Crash { into, hurt }) => {
                 let hurt = if hurt { ", and got hurt" } else { "" };
-                let into = inspector::crashed_into(&into);
+                let into = inspector::crashed_into(&into, &self.words(world));
                 format!("Was shoved out of nowhere, into {into}{hurt}")
             }
         };
@@ -633,9 +667,10 @@ impl App {
             return;
         };
         if actor == selected {
-            self.observe(tick, inspector::observed_line(action, world.data()));
+            let line = inspector::observed_line(action, &self.words(world));
+            self.observe(tick, line);
         } else if action.target == Some(Target::Sprite(selected))
-            && let Some(line) = inspector::done_to_line(actor, action)
+            && let Some(line) = inspector::done_to_line(actor, action, &self.words(world))
         {
             self.observe(tick, line);
         }
@@ -1013,7 +1048,7 @@ impl App {
     /// Sends a Grab-mode command, queued, so the marks and the next click
     /// follow it (design v23 §6.5).
     fn send(&mut self, command: Command, world: &World) {
-        self.commands.push(command);
+        self.commands.push(command.clone());
         self.queued.push((world.tick(), command));
         // The marks follow the latest click (design v22 §6.5).
         self.report = None;

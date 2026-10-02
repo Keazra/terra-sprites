@@ -6,18 +6,23 @@ use serde::{Deserialize, Serialize};
 use crate::action::{self, Outcome, Walk};
 use crate::cursor::Grip;
 use crate::data::DataPack;
+use crate::ecology::{holds_without_drawing, new_object};
 use crate::events::{Event, EventKind};
+use crate::genome::Genome;
 use crate::map::{Dir, Pos};
-use crate::object_types::Size;
+use crate::names::{self, NameProblem};
+use crate::object_types::{Condition, Size};
 use crate::objects::{EntityId, Roll};
 use crate::perception::Target;
 use crate::sliding::Slide;
+use crate::sprites::Sprite;
 use crate::terrain::Terrain;
+use crate::variation::varied;
 use crate::world::WorldState;
 
 /// Something the player does to the world through the Cursor. It carries
 /// values, never references (design §2.5).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum Command {
     /// The Cursor's good touch (design v21 §4.6): a pet, or amplified, a hug.
     Reward {
@@ -52,6 +57,16 @@ pub enum Command {
     /// Shoves the sprite the Cursor leads (design v25 §3.5.4): lets go of
     /// it, and it slides `tiles` tiles `toward`.
     Shove { toward: Dir, tiles: u16 },
+    /// Places a new object of the type with this stable ID on a tile, from
+    /// the Place menu (slice 11c). It starts at the beginning of its first
+    /// stage.
+    Place { tile: Pos, object_type: u16 },
+    /// Spawns a new sprite on a tile, from the Place menu (slice 11c): from
+    /// the genome it carries in full, or with `None`, from the starter
+    /// genome with spawn variation (design §4.9).
+    SpawnSprite { tile: Pos, genome: Option<Genome> },
+    /// Names a sprite (design §6.5).
+    Rename { sprite: EntityId, name: String },
 }
 
 /// One of the Cursor's four touches (design v21 §4.6): a Reward or a
@@ -78,7 +93,10 @@ impl CursorTouch {
             | Command::LetGo
             | Command::MoveCursor { .. }
             | Command::Throw { .. }
-            | Command::Shove { .. } => None,
+            | Command::Shove { .. }
+            | Command::Place { .. }
+            | Command::SpawnSprite { .. }
+            | Command::Rename { .. } => None,
         }
     }
 
@@ -156,10 +174,41 @@ pub enum Rejection {
     OffTheMap,
     /// Something on the tile stops the item going there (design §3.4).
     InTheWay {
-        /// The stable ID of the held item's type.
+        /// The stable ID of the held or placed item's type.
         item_type: u16,
         blocker: Blocker,
     },
+    /// Something on the tile stops a new sprite standing there (design
+    /// §3.4).
+    NoRoom(Blocker),
+    /// The data doesn't let the Cursor place objects of this type, or the
+    /// pack has no such type (slice 11c).
+    NotPlaceable,
+    /// The tile doesn't meet a condition the type's data asks of where it's
+    /// placed (slice 11c).
+    PlaceRule {
+        /// The stable ID of the placed type.
+        object_type: u16,
+        rule: PlaceRule,
+    },
+    /// A sprite's name must be 1 to 16 CP437 characters (design §2.5).
+    BadName(NameProblem),
+    /// The genome doesn't fit the world's data pack (design §2.5).
+    BadGenome,
+}
+
+/// A condition of where a type may be placed that the tile didn't meet
+/// (slice 11c), as the data names it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlaceRule {
+    /// It would cut a path (design §3.3).
+    KeepsPathsOpen,
+    /// The ground isn't fertile enough, or is too fertile.
+    Fertility,
+    /// Too many objects of the type with this stable ID are near.
+    DensityBelow(u16),
+    /// A condition on the new object itself, its stage or a counter.
+    Itself,
 }
 
 /// What stops an item being put down on a tile (design §3.4).
@@ -167,6 +216,8 @@ pub enum Rejection {
 pub enum Blocker {
     /// An object is there already: the stable ID of its type.
     Object(u16),
+    /// A sprite stands there.
+    Sprite,
     /// The tile's terrain isn't walkable.
     Terrain(Terrain),
 }
@@ -175,7 +226,7 @@ pub enum Blocker {
 /// order they were submitted.
 pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Event>) {
     for command in std::mem::take(&mut state.commands) {
-        let applied = match command {
+        let applied = match command.clone() {
             Command::Reward {
                 sprite,
                 amplified,
@@ -198,6 +249,9 @@ pub(crate) fn apply(state: &mut WorldState, data: &DataPack, events: &mut Vec<Ev
                 tiles,
             } => throw(state, data, from, toward, tiles),
             Command::Shove { toward, tiles } => shove(state, data, toward, tiles),
+            Command::Place { tile, object_type } => place(state, data, tile, object_type),
+            Command::SpawnSprite { tile, genome } => spawn_sprite(state, data, tile, genome),
+            Command::Rename { sprite, name } => rename(state, sprite, &name),
         };
         let kind = match applied {
             Ok(kind) => kind,
@@ -398,4 +452,121 @@ fn let_go_of_held(
     state.objects.put_down(item, tile);
     state.cursor.release();
     Ok((item, held.name.clone()))
+}
+
+/// The Cursor places a new object of the type with stable ID `object_type`
+/// on `tile` (slice 11c), at the beginning of its first stage: where the
+/// space rules let it go (design §3.3–3.4), and where the tile meets what
+/// the type's data asks of it.
+fn place(
+    state: &mut WorldState,
+    data: &DataPack,
+    tile: Pos,
+    object_type: u16,
+) -> Result<EventKind, Rejection> {
+    let kind = data
+        .object_types()
+        .iter()
+        .position(|t| t.id == object_type)
+        .ok_or(Rejection::NotPlaceable)?;
+    let placed = &data.object_types()[kind];
+    let placement = placed.place.as_ref().ok_or(Rejection::NotPlaceable)?;
+    if !state.map.contains(tile) {
+        return Err(Rejection::OffTheMap);
+    }
+    let in_the_way = |blocker| Rejection::InTheWay {
+        item_type: object_type,
+        blocker,
+    };
+    if let Some(there) = state.objects.at(tile) {
+        let kind = state.objects.kind(there);
+        return Err(in_the_way(Blocker::Object(data.object_types()[kind].id)));
+    }
+    let terrain = state.map.terrain(tile);
+    if !state.can_place(data, kind, tile) {
+        return Err(in_the_way(
+            if placed.solid && state.sprites.at(tile).is_some() {
+                Blocker::Sprite
+            } else {
+                Blocker::Terrain(terrain)
+            },
+        ));
+    }
+    let object = new_object(data, kind, tile);
+    for condition in &placement.conditions {
+        let held =
+            holds_without_drawing(&state.map, &state.objects, data, &object, tile, condition)
+                .expect("the data allows no Chance in a placement");
+        if !held {
+            return Err(Rejection::PlaceRule {
+                object_type,
+                rule: place_rule(data, condition),
+            });
+        }
+    }
+    let id = state.add_object(object);
+    Ok(EventKind::Placed {
+        id,
+        object_type: placed.name.clone(),
+        pos: tile,
+    })
+}
+
+/// How a refusal names the placement `condition` a tile didn't meet.
+fn place_rule(data: &DataPack, condition: &Condition) -> PlaceRule {
+    match *condition {
+        Condition::KeepsPathsOpen => PlaceRule::KeepsPathsOpen,
+        Condition::Fertility(..) => PlaceRule::Fertility,
+        Condition::DensityBelow(kind, ..) => PlaceRule::DensityBelow(data.object_types()[kind].id),
+        Condition::InStage(..) | Condition::Counter(..) | Condition::Chance(..) => {
+            PlaceRule::Itself
+        }
+    }
+}
+
+/// The Cursor spawns a new sprite on `tile` (slice 11c): from `genome`, or
+/// from the starter genome with spawn variation (design §4.9), on a tile a
+/// sprite may stand on (design §3.4).
+fn spawn_sprite(
+    state: &mut WorldState,
+    data: &DataPack,
+    tile: Pos,
+    genome: Option<Genome>,
+) -> Result<EventKind, Rejection> {
+    if !state.map.contains(tile) {
+        return Err(Rejection::OffTheMap);
+    }
+    let in_the_way = Rejection::NoRoom;
+    if state.sprites.at(tile).is_some() {
+        return Err(in_the_way(Blocker::Sprite));
+    }
+    if let Some(there) = state.objects.at(tile)
+        && data.object_types()[state.objects.kind(there)].solid
+    {
+        let kind = state.objects.kind(there);
+        return Err(in_the_way(Blocker::Object(data.object_types()[kind].id)));
+    }
+    if !state.map.is_walkable(tile) {
+        return Err(in_the_way(Blocker::Terrain(state.map.terrain(tile))));
+    }
+    let genome = match genome {
+        Some(genome) if !genome.fits(data) => return Err(Rejection::BadGenome),
+        Some(genome) => genome,
+        None => varied(data.starter(), data, &mut state.rng),
+    };
+    let sprite = Sprite::newborn(genome, tile, state.tick, data);
+    let id = state.add_sprite(sprite);
+    Ok(EventKind::Spawned { id, pos: tile })
+}
+
+/// The player names `sprite` (design §6.5): 1 to 16 CP437 characters,
+/// trimmed of spaces at either end.
+fn rename(state: &mut WorldState, sprite: EntityId, name: &str) -> Result<EventKind, Rejection> {
+    let named = state.sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
+    let name = names::checked(name).map_err(Rejection::BadName)?;
+    named.name = Some(name.to_string());
+    Ok(EventKind::Renamed {
+        id: sprite,
+        name: name.to_string(),
+    })
 }

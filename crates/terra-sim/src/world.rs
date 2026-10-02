@@ -275,6 +275,16 @@ impl<'a> SpriteView<'a> {
         self.sprite.pos
     }
 
+    /// The name the player gave it, if any (design §6.5).
+    pub fn name(&self) -> Option<&'a str> {
+        self.sprite.name.as_deref()
+    }
+
+    /// Its genome, as it was born with it.
+    pub fn genome(&self) -> &'a Genome {
+        &self.sprite.genome
+    }
+
     /// Ticks since the sprite was born.
     pub fn age(&self) -> u64 {
         self.sprite.age(self.world.state.tick)
@@ -880,6 +890,7 @@ impl World {
                     id,
                     cause,
                     age: sprite.age(state.tick),
+                    name: sprite.name,
                 },
             });
             if state.cursor.empty_of(Grip::Leads(id)) {

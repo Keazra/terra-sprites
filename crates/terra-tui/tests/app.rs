@@ -388,7 +388,12 @@ fn clearing_the_selection_leaves_the_tab_open() {
 fn died(id: EntityId, cause: DeathCause, age: u64) -> Event {
     Event {
         tick: age,
-        kind: EventKind::Died { id, cause, age },
+        kind: EventKind::Died {
+            id,
+            name: None,
+            cause,
+            age,
+        },
     }
 }
 

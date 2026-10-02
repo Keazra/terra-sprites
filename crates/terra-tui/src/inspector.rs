@@ -4,16 +4,16 @@
 use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
-    ActionView, Blocker, ChemicalKind, ChemicalLevel, Command, CursorTouch, DataPack, DeathCause,
+    ActionView, Blocker, ChemicalKind, ChemicalLevel, Command, CursorTouch, DeathCause,
     EmitterMode, Emptied, EntityId, Event, EventKind, Explanation, Expression, GeneView, Grip,
-    Learned, ObjectView, Outcome, Part, Progress, Rejection, Removal, SpriteView, Target, Terrain,
-    Thing, Trait, Verb, World,
+    Learned, MAX_NAME_CHARS, NameProblem, ObjectView, Outcome, Part, PlaceRule, Progress,
+    Rejection, Removal, SpriteView, Target, Terrain, Thing, Trait, Verb, World,
 };
 
 use crate::app::{App, Selection, Tab};
 use crate::text::{
-    ROOTED, cause_name, change, display_name, group_thousands, level, signed, signed_level,
-    significant, sprite_label, terrain_name, whole,
+    ROOTED, Words, cause_name, change, display_name, group_thousands, level, signed, signed_level,
+    significant, terrain_name, whole,
 };
 
 /// The inspector's width, in columns, border included (design §6.1).
@@ -41,7 +41,7 @@ pub fn title(app: &App) -> String {
     let tabs = tabs.join(" ");
     let labels = app.selection().map(|selection| {
         let id = selection.id();
-        (sprite_label(id), format!("#{}", id.0))
+        (app.names().label(id), format!("#{}", id.0))
     });
     fitted_title(
         labels
@@ -83,7 +83,7 @@ pub fn lines(app: &App, world: &World) -> Vec<Line<'static>> {
             };
             let text = format!(
                 "{} died {} at age{BOUND}{}",
-                unbroken(&sprite_label(id)),
+                unbroken(&app.names().label(id)),
                 unbroken(&how),
                 group_thousands(age)
             );
@@ -103,7 +103,7 @@ pub(crate) fn first_shown(scroll: usize, length: usize, rows: usize) -> usize {
 fn sprite_tab(tab: Tab, sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
     match tab {
         Tab::Body => body_tab(sprite, app, world),
-        Tab::Brain => brain_tab(sprite, world.data()),
+        Tab::Brain => brain_tab(sprite, &app.words(world)),
         Tab::Chem => chem_tab(sprite),
         Tab::Genome => genome_tab(sprite),
         Tab::World => Vec::new(),
@@ -121,7 +121,7 @@ fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>>
         Some(line) => Some(format!(" {line}")),
         None => sprite
             .action()
-            .map(|action| format!(" {}", action_line(&action, app.detail(), world.data()))),
+            .map(|action| format!(" {}", action_line(&action, app.detail(), &app.words(world)))),
     };
     let mut lines: Vec<String> = doing.into_iter().collect();
     lines.extend([
@@ -256,7 +256,7 @@ fn led_line(sprite: &SpriteView, detail: bool, world: &World) -> Option<String> 
 /// §6.1): in plain words, describing and never speaking as the sprite; or,
 /// in the detail view, exactly, with its verb, destination or target, and
 /// outcome.
-fn action_line(action: &ActionView, detail: bool, data: &DataPack) -> String {
+fn action_line(action: &ActionView, detail: bool, data: &Words) -> String {
     let plain = match action.verb {
         _ if detail => None,
         Verb::Wander => wander_line(action.progress),
@@ -268,7 +268,7 @@ fn action_line(action: &ActionView, detail: bool, data: &DataPack) -> String {
 
 /// An aimed action in plain words, naming what it's aimed at, if it has
 /// words for `progress`.
-fn aimed_line(action: &ActionView, data: &DataPack) -> Option<String> {
+fn aimed_line(action: &ActionView, data: &Words) -> Option<String> {
     action.target?;
     let what = target_words(action, data);
     let going = match action.verb {
@@ -324,7 +324,7 @@ fn walked(verb: Verb) -> &'static str {
 
 /// A finished action in the past tense, for the Body tab's observed list
 /// (design §6.1): what it did, or what it set out to do and how that went.
-pub(crate) fn observed_line(action: &ActionView, data: &DataPack) -> String {
+pub(crate) fn observed_line(action: &ActionView, data: &Words) -> String {
     let Progress::Ended(outcome) = action.progress else {
         return action_line(action, false, data);
     };
@@ -369,11 +369,11 @@ pub(crate) fn observed_line(action: &ActionView, data: &DataPack) -> String {
 /// What sprite `actor`'s finished `action` did to the sprite it was aimed
 /// at, as that sprite's observed list says it (design §6.1): "Was hit by
 /// Sprite #7". `None` if it did nothing worth a line.
-pub(crate) fn done_to_line(actor: EntityId, action: &ActionView) -> Option<String> {
+pub(crate) fn done_to_line(actor: EntityId, action: &ActionView, data: &Words) -> Option<String> {
     if action.progress != Progress::Ended(Outcome::Applied) {
         return None;
     }
-    let who = sprite_label(actor);
+    let who = data.label(actor);
     match action.verb {
         Verb::Hit => Some(format!("Was hit by {who}")),
         Verb::Play => Some(format!("{who} played with it")),
@@ -384,7 +384,7 @@ pub(crate) fn done_to_line(actor: EntityId, action: &ActionView) -> Option<Strin
 /// What an aimed action that applied did to `what`, its target in words,
 /// in the past tense: "Ate from the berry bush", "Kicked the ball", and
 /// whether it got hurt doing it.
-fn done_line(action: &ActionView, what: &str, data: &DataPack) -> String {
+fn done_line(action: &ActionView, what: &str, data: &Words) -> String {
     let deed = deed(action, what, data);
     let mut letters = deed.chars();
     let first = letters.next().map(|c| c.to_ascii_uppercase());
@@ -404,7 +404,7 @@ fn and_if_hurt(line: String, action: &ActionView) -> String {
 /// What an aimed action that applied did to `what`, its target in words,
 /// in the past tense and lower case: "ate from the berry bush", "kicked the
 /// ball". A kick is a Play that pushes, as the target's verb table says.
-fn deed(action: &ActionView, what: &str, data: &DataPack) -> String {
+fn deed(action: &ActionView, what: &str, data: &Words) -> String {
     let pushes = |verb| action.target_type.is_some_and(|t| data.pushes(t, verb));
     match action.verb {
         // An Eat that hurts, a thornbush's say, gave no food.
@@ -435,7 +435,7 @@ fn with_article(name: &str) -> String {
 /// §6.1), if the log shows it: every Play and Hit that applied, and any
 /// attempt that hurt a sprite, even one that then failed. "Sprite #4
 /// kicked a ball".
-pub(crate) fn logged_line(actor: EntityId, action: &ActionView, data: &DataPack) -> Option<String> {
+pub(crate) fn logged_line(actor: EntityId, action: &ActionView, data: &Words) -> Option<String> {
     let applied = action.progress == Progress::Ended(Outcome::Applied);
     let hurt = action.hurt.actor || action.hurt.target;
     let played = applied && matches!(action.verb, Verb::Play | Verb::Hit);
@@ -443,7 +443,7 @@ pub(crate) fn logged_line(actor: EntityId, action: &ActionView, data: &DataPack)
         return None;
     }
     let what = match action.target? {
-        Target::Sprite(id) => sprite_label(id),
+        Target::Sprite(id) => data.label(id),
         Target::Water(_) => "the water".into(),
         Target::Object(_) => {
             let name = action.target_type.and_then(|id| data.object_type_name(id));
@@ -456,14 +456,14 @@ pub(crate) fn logged_line(actor: EntityId, action: &ActionView, data: &DataPack)
     } else {
         ""
     };
-    Some(format!("{} {deed}{hurt_itself}", sprite_label(actor)))
+    Some(format!("{} {deed}{hurt_itself}", data.label(actor)))
 }
 
 /// What an aimed action is aimed at, in words: "the berry bush", "the
 /// water", "Sprite #530". Empty for an action aimed at nothing.
-fn target_words(action: &ActionView, data: &DataPack) -> String {
+fn target_words(action: &ActionView, data: &Words) -> String {
     match action.target {
-        Some(Target::Sprite(id)) => sprite_label(id),
+        Some(Target::Sprite(id)) => data.label(id),
         Some(Target::Water(_)) => "the water".into(),
         Some(Target::Object(_)) => {
             let name = action.target_type.and_then(|id| data.object_type_name(id));
@@ -516,7 +516,7 @@ fn rest_line(progress: Progress) -> Option<String> {
 
 /// An action exactly: `WANDER → (61,40) · walking (5 tiles)`, or
 /// `EAT → berry_bush #812 · applied`.
-fn exact_line(action: &ActionView, data: &DataPack) -> String {
+fn exact_line(action: &ActionView, data: &Words) -> String {
     let verb = verb_name(action.verb);
     let head = match (action.target, action.destination) {
         (Some(Target::Object(id)), _) => {
@@ -611,7 +611,7 @@ const CONCEPTS_SHOWN: usize = 5;
 /// decided at its latest step 5, or "Nothing decided yet", or while led
 /// "Being led: it decides nothing"; then its memory, which it can have
 /// before it first decides.
-fn brain_tab(sprite: &SpriteView, data: &DataPack) -> Vec<Line<'static>> {
+fn brain_tab(sprite: &SpriteView, data: &Words) -> Vec<Line<'static>> {
     // Led, it decides nothing, so its last decision would mislead (design
     // v23 §2.4).
     let mut lines = match sprite.explain() {
@@ -620,7 +620,7 @@ fn brain_tab(sprite: &SpriteView, data: &DataPack) -> Vec<Line<'static>> {
         _ if sprite.lead_steps_left().is_some() => {
             vec![" Being led: it decides nothing".to_string()]
         }
-        Some(explained) => explained_lines(&explained),
+        Some(explained) => explained_lines(&explained, data),
         None => vec![" Nothing decided yet".to_string()],
     };
     // What has learned only a rounding's worth has nothing worth showing.
@@ -644,7 +644,7 @@ fn brain_tab(sprite: &SpriteView, data: &DataPack) -> Vec<Line<'static>> {
 /// to, with its score, the attended one marked; then the verb chosen, with
 /// its score, and the concepts adding most to it, largest first. A snapshot
 /// always has a verb; "none" only guards against one that doesn't.
-fn explained_lines(explained: &Explanation) -> Vec<String> {
+fn explained_lines(explained: &Explanation, data: &Words) -> Vec<String> {
     let mut lines = vec![" ATTENTION".to_string()];
     if explained.attention.is_empty() {
         lines.push("   nothing in sight".into());
@@ -657,7 +657,7 @@ fn explained_lines(explained: &Explanation) -> Vec<String> {
         };
         lines.extend(scored(
             &format!(" {marker} "),
-            &thing_name(thing),
+            &thing_name(thing, data),
             &level(*score),
         ));
     }
@@ -680,11 +680,11 @@ fn explained_lines(explained: &Explanation) -> Vec<String> {
             Part::Concept(inputs) => concept_name(inputs),
             // Neutral, since worth adds to a verb or takes from it either
             // way: a bad thing's takes from going near it.
-            Part::Worth(thing) => format!("worth: {}", thing_name(thing)),
-            Part::Fear(thing) => format!("fear: {}", thing_name(thing)),
+            Part::Worth(thing) => format!("worth: {}", thing_name(thing, data)),
+            Part::Fear(thing) => format!("fear: {}", thing_name(thing, data)),
             Part::Habit(thing) => {
                 let verb = explained.decision.map_or("", |(verb, _)| verb_name(verb));
-                format!("habit: {} {}", verb.to_lowercase(), thing_name(thing))
+                format!("habit: {} {}", verb.to_lowercase(), thing_name(thing, data))
             }
         };
         lines.extend(scored("   ", &name, &amount));
@@ -695,7 +695,7 @@ fn explained_lines(explained: &Explanation) -> Vec<String> {
 /// A lesson as the event log says it (design §6.1): "Sprite #12 learned:
 /// thornbushes are bad", "… water is good for thirst", "… eating balls is
 /// bad".
-pub(crate) fn learned_line(id: EntityId, learned: &Learned, good: bool, data: &DataPack) -> String {
+pub(crate) fn learned_line(id: EntityId, learned: &Learned, good: bool, data: &Words) -> String {
     let verdict = if good { "good" } else { "bad" };
     let what = match learned {
         Learned::Worth { .. } | Learned::Bad { .. } | Learned::Fear { .. } => {
@@ -704,13 +704,13 @@ pub(crate) fn learned_line(id: EntityId, learned: &Learned, good: bool, data: &D
         Learned::Habit { .. } => format!("{} is {verdict}", learned_name(learned, data)),
         Learned::NewThings => format!("new things are {verdict}"),
     };
-    format!("{} learned: {what}", sprite_label(id))
+    format!("{} learned: {what}", data.label(id))
 }
 
 /// Something learned, as the memory words it: `thornbushes are bad`,
 /// `water is good for thirst`, `Sprite #7 is frightening`, `eating balls`,
 /// `new things`.
-fn learned_name(learned: &Learned, data: &DataPack) -> String {
+fn learned_name(learned: &Learned, data: &Words) -> String {
     match learned {
         Learned::Worth {
             thing,
@@ -739,10 +739,10 @@ fn learned_name(learned: &Learned, data: &DataPack) -> String {
 /// A thing as the Brain tab names it (design v19 §6.1): an object type or
 /// a category by its display name, `berry bush`, a sprite as the log names
 /// it, `Sprite #7`.
-fn thing_name(thing: &Thing) -> String {
+fn thing_name(thing: &Thing, data: &Words) -> String {
     match thing {
         Thing::ObjectType(name) | Thing::Category(name) => display_name(name),
-        Thing::Sprite(id) => sprite_label(*id),
+        Thing::Sprite(id) => data.label(*id),
     }
 }
 
@@ -752,7 +752,7 @@ fn thing_name(thing: &Thing) -> String {
 /// `bushes are`, `fruit is`; or a particular sprite, `Sprite #7 is` (design
 /// v18 §6.1). One with no plural isn't counted, so it keeps its name and
 /// takes "is".
-fn things(thing: &Thing, data: &DataPack) -> (String, &'static str) {
+fn things(thing: &Thing, data: &Words) -> (String, &'static str) {
     let counted = |name: &str, plural: Option<&str>| match plural {
         Some(plural) => (plural.to_string(), "are"),
         None => (display_name(name), "is"),
@@ -760,7 +760,7 @@ fn things(thing: &Thing, data: &DataPack) -> (String, &'static str) {
     match thing {
         Thing::ObjectType(name) => counted(name, data.plural_of(name)),
         Thing::Category(name) => counted(name, data.category_plural(name)),
-        Thing::Sprite(id) => (sprite_label(*id), "is"),
+        Thing::Sprite(id) => (data.label(*id), "is"),
     }
 }
 
@@ -1221,14 +1221,14 @@ fn world_tab(world: &World) -> Vec<Line<'static>> {
 /// and the status line say it (design v22, v23 §6.1): "Couldn't pet Sprite
 /// #12: it's gone", "Couldn't put the ball down: a berry is there",
 /// "Couldn't throw the ball: a berry is there" (design v25).
-fn refusal_line(command: &Command, reason: Rejection, data: &DataPack) -> Option<String> {
+fn refusal_line(command: &Command, reason: Rejection, data: &Words) -> Option<String> {
     let name = |id: u16| display_name(data.object_type_name(id).unwrap_or("?"));
-    let what = match *command {
+    let what = match command.clone() {
         Command::Reward { sprite, .. } | Command::Correct { sprite, .. } => {
             let touch = CursorTouch::of(command).expect("a touch");
-            format!("{} {}", touch.name(), sprite_label(sprite))
+            format!("{} {}", touch.name(), data.label(sprite))
         }
-        Command::TakeHold { sprite } => format!("take hold of {}", sprite_label(sprite)),
+        Command::TakeHold { sprite } => format!("take hold of {}", data.label(sprite)),
         Command::PickUp { .. } => "pick it up".into(),
         Command::PutDown { .. } => match reason {
             Rejection::InTheWay { item_type, .. } => format!("put the {} down", name(item_type)),
@@ -1243,41 +1243,62 @@ fn refusal_line(command: &Command, reason: Rejection, data: &DataPack) -> Option
             _ => "throw it".into(),
         },
         Command::Shove { .. } => "shove".into(),
+        Command::Place { object_type, .. } => format!("place the {}", name(object_type)),
+        Command::SpawnSprite { .. } => "put a new sprite there".into(),
+        Command::Rename { sprite, .. } => format!("name {}", data.label(sprite)),
     };
     let why = match reason {
         Rejection::Gone => "it's gone".into(),
         Rejection::Busy(Grip::Leads(led)) => {
-            format!("you're already leading {}", sprite_label(led))
+            format!("you're already leading {}", data.label(led))
         }
         Rejection::Busy(Grip::Holds(_)) => "you're already holding something".into(),
         Rejection::NotLeading => "you're not leading a sprite".into(),
         Rejection::Rooted => ROOTED.into(),
         Rejection::NotHolding => "you're not holding anything".into(),
         Rejection::OffTheMap => "that's off the map".into(),
-        Rejection::InTheWay {
-            blocker: Blocker::Object(there),
-            ..
-        } => format!("{} is there", with_article(&name(there))),
-        Rejection::InTheWay {
-            blocker: Blocker::Terrain(terrain),
-            ..
-        } => {
-            let into = match terrain {
-                Terrain::ShallowWater | Terrain::DeepWater => "in",
-                _ => "on",
-            };
-            format!("it can't go {into} {}", terrain_name(terrain))
+        Rejection::InTheWay { blocker, .. } | Rejection::NoRoom(blocker) => match blocker {
+            Blocker::Object(there) => format!("{} is there", with_article(&name(there))),
+            Blocker::Sprite => "a sprite is there".into(),
+            Blocker::Terrain(terrain) => {
+                let into = match terrain {
+                    Terrain::ShallowWater | Terrain::DeepWater => "in",
+                    _ => "on",
+                };
+                format!("it can't go {into} {}", terrain_name(terrain))
+            }
+        },
+        Rejection::NotPlaceable => "the Cursor can't make one of those".into(),
+        Rejection::PlaceRule { rule, .. } => match rule {
+            PlaceRule::KeepsPathsOpen => "it would block the way".into(),
+            PlaceRule::Fertility => "the ground there doesn't suit it".into(),
+            PlaceRule::DensityBelow(crowding) => {
+                let crowd = data.object_type_name(crowding).unwrap_or("?");
+                let crowd = data
+                    .plural_of(crowd)
+                    .map_or_else(|| display_name(crowd), str::to_string);
+                format!("there are too many {crowd} near")
+            }
+            PlaceRule::Itself => "it can't go there".into(),
+        },
+        Rejection::BadName(NameProblem::Empty) => "a name needs a letter in it".into(),
+        Rejection::BadName(NameProblem::TooLong) => {
+            format!("a name has at most {MAX_NAME_CHARS} letters")
         }
+        Rejection::BadName(NameProblem::NotCp437) => {
+            "the game can't show some of its letters".into()
+        }
+        Rejection::BadGenome => "its genome doesn't fit this world".into(),
     };
     Some(format!("Couldn't {what}: {why}"))
 }
 
 /// What an event says in the event log, if the log shows it (design §6.1).
-pub(crate) fn event_line(event: &Event, data: &DataPack) -> Option<String> {
+pub(crate) fn event_line(event: &Event, data: &Words) -> Option<String> {
     match &event.kind {
-        EventKind::Died { id, cause, age } => Some(format!(
+        EventKind::Died { id, cause, age, .. } => Some(format!(
             "{} died ({}, age {})",
-            sprite_label(*id),
+            data.label(*id),
             cause_name(*cause, data),
             group_thousands(*age)
         )),
@@ -1294,14 +1315,12 @@ pub(crate) fn event_line(event: &Event, data: &DataPack) -> Option<String> {
                 CursorTouch::Zap => "zapped",
                 CursorTouch::Shock => "shocked",
             };
-            Some(format!("You {done} {}", sprite_label(*id)))
+            Some(format!("You {done} {}", data.label(*id)))
         }
         EventKind::CommandRejected { command, reason } => refusal_line(command, *reason, data),
         // Grabbing, spoken to the player (design v23 §6.1).
-        EventKind::TookHold { sprite } => {
-            Some(format!("You took hold of {}", sprite_label(*sprite)))
-        }
-        EventKind::LetGo { sprite } => Some(format!("You let go of {}", sprite_label(*sprite))),
+        EventKind::TookHold { sprite } => Some(format!("You took hold of {}", data.label(*sprite))),
+        EventKind::LetGo { sprite } => Some(format!("You let go of {}", data.label(*sprite))),
         EventKind::PickedUp { object_type, .. } => Some(format!(
             "You picked up {}",
             with_article(&display_name(object_type))
@@ -1337,26 +1356,33 @@ pub(crate) fn event_line(event: &Event, data: &DataPack) -> Option<String> {
         EventKind::Threw { object_type, .. } => {
             Some(format!("You threw the {}", display_name(object_type)))
         }
-        EventKind::Shoved { sprite } => Some(format!("You shoved {}", sprite_label(*sprite))),
+        EventKind::Shoved { sprite } => Some(format!("You shoved {}", data.label(*sprite))),
         EventKind::Crashed {
             sprite,
             into,
             hurt: true,
         } => Some(format!(
             "{} was shoved into {} and got hurt",
-            sprite_label(*sprite),
-            crashed_into(into)
+            data.label(*sprite),
+            crashed_into(into, data)
         )),
         EventKind::Crashed { hurt: false, .. } => None,
+        // The Place menu and naming, spoken to the player (slice 11c).
+        EventKind::Placed { object_type, .. } => Some(format!(
+            "You placed {}",
+            with_article(&display_name(object_type))
+        )),
+        EventKind::Spawned { id, .. } => Some(format!("You made {}", data.label(*id))),
+        EventKind::Renamed { id, name } => Some(format!("You named sprite #{} {name}", id.0)),
     }
 }
 
 /// What a sprite crashed into, as a sentence says it: "a thornbush", or
 /// "Sprite #7" (design v25 §6.1).
-pub(crate) fn crashed_into(into: &Thing) -> String {
+pub(crate) fn crashed_into(into: &Thing, data: &Words) -> String {
     match into {
         Thing::ObjectType(name) | Thing::Category(name) => with_article(&display_name(name)),
-        Thing::Sprite(id) => sprite_label(*id),
+        Thing::Sprite(id) => data.label(*id),
     }
 }
 
@@ -1482,8 +1508,13 @@ mod tests {
         assert_eq!(action_line(&nowhere, true, &pack()), "WANDER · failed");
     }
 
-    fn pack() -> DataPack {
-        DataPack::builtin().expect("built-in data pack is valid")
+    /// The built-in pack's words, with no sprite named.
+    fn pack() -> Words<'static> {
+        let data = Box::leak(Box::new(
+            terra_sim::DataPack::builtin().expect("built-in data pack is valid"),
+        ));
+        let names = Box::leak(Box::new(crate::text::Names::default()));
+        Words { data, names }
     }
 
     /// An aimed action, `verb`, at `target` of the type `target_type`.
