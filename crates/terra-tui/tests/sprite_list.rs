@@ -8,6 +8,7 @@ use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{Command, DataPack, EntityId, Genome, Map, Pos, Scenario, ScriptedAction, World};
 use terra_tui::app::{App, Flow, Screen};
 use terra_tui::input::Action;
+use terra_tui::policy::{InfoPolicy, Panel, Subject};
 use terra_tui::sprite_list::SortBy;
 use terra_tui::theme::Theme;
 use terra_tui::ui;
@@ -246,6 +247,29 @@ fn opening_the_list_highlights_the_selected_sprite() {
     app.apply(Action::SelectNext, &world);
     app.apply(Action::SpriteList, &world);
     assert_eq!(app.list_row(&world), 1);
+}
+
+/// A policy that keeps one sprite out of the sprite list.
+struct Unlisted(EntityId);
+
+impl InfoPolicy for Unlisted {
+    fn can_view(&self, panel: Panel, subject: Subject) -> bool {
+        !(panel == Panel::SpriteList && subject == Subject::Sprite(self.0))
+    }
+}
+
+#[test]
+fn a_selected_sprite_the_list_leaves_out_isnt_highlighted() {
+    // Design §6.4: the first listed sprite is, so Enter goes to it.
+    let mut world = field();
+    let mut app = named(&mut world);
+    app.apply(Action::SelectNext, &world);
+    let ids = ids(&world);
+    app.set_policy(Unlisted(ids[0]));
+    app.apply(Action::SpriteList, &world);
+    app.apply(Action::Scroll { dx: 0, dy: 1 }, &world);
+    app.apply(Action::Enter, &world);
+    assert_eq!(app.selection().map(|s| s.id()), Some(ids[2]));
 }
 
 #[test]
