@@ -87,6 +87,8 @@ pub enum Action {
     /// Have the view follow the selected sprite, or stop (`T`, design v21
     /// §6.1).
     Track,
+    /// Switch the event log to its next filter (`m`, design §6.1).
+    CycleEventFilter,
     /// Cancel a prompt: any key with no job of its own.
     Dismiss,
     /// Pick the menu item with this number, from 1 (`1`–`9`, design v28).
@@ -275,6 +277,7 @@ impl Keys {
             KeyCode::Char('b') => (!held).then_some(Action::CycleColours),
             // A held `t` would flicker tracking on and off.
             KeyCode::Char('t') => (!held).then_some(Action::Track),
+            KeyCode::Char('m') => (!held).then_some(Action::CycleEventFilter),
             KeyCode::Char('g') => (!held).then_some(Action::ExportGenome),
             KeyCode::Char(digit @ '1'..='9') => (!held).then(|| Action::Pick(digit as u8 - b'0')),
             KeyCode::Enter => (!held).then_some(Action::Enter),

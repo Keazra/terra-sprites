@@ -91,11 +91,15 @@ pub fn areas(screen: Size, map: &Map) -> Areas {
         return Areas {
             tiles: Rect::default(),
             inspector: None,
+            event_log: None,
+            overlay: None,
         };
     }
     Areas {
         tiles: map_view_area(screen.into(), map).inner(Margin::new(1, 1)),
         inspector: inspector_area(screen.into()),
+        event_log: event_log_area(screen.into()),
+        overlay: Some(overlay_area(screen.into())),
     }
 }
 
@@ -134,6 +138,17 @@ fn inspector_area(screen: Rect) -> Option<Rect> {
             panels_height(screen),
         )
     })
+}
+
+/// Where the help screen and the sprite list are drawn: the full width,
+/// between the top bar and the status line.
+fn overlay_area(screen: Rect) -> Rect {
+    Rect::new(
+        screen.x,
+        screen.y + 1,
+        screen.width,
+        screen.height.saturating_sub(2),
+    )
 }
 
 /// The event log, border included: the full width, just above the status
@@ -739,6 +754,17 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
         bottom: false,
     };
     draw_border(buf, area, " Events ", no_walls);
+    // The filters, at the right of its top border (design §6.1).
+    if let Some(label) = app.filter_label() {
+        let labels = app.event_filter().labels();
+        buf.set_stringn(
+            label.x,
+            label.y,
+            labels,
+            usize::from(label.width),
+            Style::default(),
+        );
+    }
     let inner = area.inner(Margin::new(1, 1));
     let lines = app.event_log().filter_map(|(event, count)| {
         // The policy may hide what an event is about (design §6.4).

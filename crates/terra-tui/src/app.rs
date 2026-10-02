@@ -63,6 +63,47 @@ impl ColourMode {
     }
 }
 
+/// Which events the event log shows (design §6.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventFilter {
+    /// Every event it logs.
+    All,
+    /// What the selected sprite did, or had done to it.
+    Selected,
+    /// Deaths, lessons learned and refusals.
+    Major,
+}
+
+impl EventFilter {
+    /// Every filter, in the order `m` goes through them.
+    pub const ALL: [EventFilter; 3] = [EventFilter::All, EventFilter::Selected, EventFilter::Major];
+
+    /// Its name on the event log's border.
+    pub fn label(self) -> &'static str {
+        match self {
+            EventFilter::All => "all",
+            EventFilter::Selected => "selected",
+            EventFilter::Major => "major",
+        }
+    }
+
+    /// The event log's border's label: every filter, the one in use in
+    /// brackets, as the inspector's title shows its tabs.
+    pub fn labels(self) -> String {
+        let labels: Vec<String> = EventFilter::ALL
+            .iter()
+            .map(|&filter| {
+                if filter == self {
+                    format!("[{}]", filter.label())
+                } else {
+                    filter.label().to_string()
+                }
+            })
+            .collect();
+        format!(" {} ", labels.join(" "))
+    }
+}
+
 /// What a Place menu item makes (design v28 §6.5).
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlaceItem {
@@ -224,6 +265,11 @@ pub struct Areas {
     pub tiles: Rect,
     /// The inspector, border included, if the screen has room for it.
     pub inspector: Option<Rect>,
+    /// The event log, border included, if the screen has room for it.
+    pub event_log: Option<Rect>,
+    /// Where the help screen and the sprite list are drawn: between the top
+    /// bar and the status line, if the screen has room for the game.
+    pub overlay: Option<Rect>,
 }
 
 /// How many lines a notch of the mouse wheel scrolls an inspector tab.
@@ -370,6 +416,12 @@ pub struct App {
     /// Whether the view follows the selected sprite (`T`, design v21
     /// §6.1).
     tracking: bool,
+    /// The event log, border included, if the screen has room for it.
+    event_log_area: Option<Rect>,
+    /// Where the help screen and the sprite list are drawn.
+    overlay: Option<Rect>,
+    /// Which events the event log shows (design §6.1).
+    event_filter: EventFilter,
 }
 
 /// A sprite's name being typed (design §6.5).
@@ -497,6 +549,9 @@ impl App {
             policy: Box::new(Omniscient),
             colour_mode: ColourMode::Drive,
             tracking: false,
+            event_log_area: areas.event_log,
+            overlay: areas.overlay,
+            event_filter: EventFilter::All,
         };
         app.centre_on(cursor);
         app
@@ -1008,9 +1063,44 @@ impl App {
     }
 
     /// The events the event log shows, newest first, each the latest of
-    /// the same event in a row, with how many there were.
+    /// the same event in a row, with how many there were: those the filter
+    /// lets through (design §6.1).
     pub fn event_log(&self) -> impl Iterator<Item = (&Event, u32)> {
-        self.event_log.iter().map(|(event, count)| (event, *count))
+        self.event_log
+            .iter()
+            .filter(|(event, _)| self.filter_shows(event))
+            .map(|(event, count)| (event, *count))
+    }
+
+    /// Whether the event filter lets `event` through (design §6.1).
+    fn filter_shows(&self, event: &Event) -> bool {
+        match self.event_filter {
+            EventFilter::All => true,
+            EventFilter::Selected => self
+                .selection
+                .is_some_and(|selected| inspector::event_sprites(event).contains(&selected.id())),
+            EventFilter::Major => matches!(
+                event.kind,
+                EventKind::Died { .. }
+                    | EventKind::LearnedMilestone { .. }
+                    | EventKind::CommandRejected { .. }
+            ),
+        }
+    }
+
+    /// Which events the event log shows (design §6.1).
+    pub fn event_filter(&self) -> EventFilter {
+        self.event_filter
+    }
+
+    /// Where the event log's border shows the filters, if it's drawn.
+    pub fn filter_label(&self) -> Option<Rect> {
+        let area = self.event_log_area?;
+        let width = self.event_filter.labels().chars().count() as u16;
+        // Before the corner and the line beside it, as the title sits after
+        // them.
+        let x = area.right().checked_sub(width + 2)?;
+        Some(Rect::new(x, area.y, width, 1))
     }
 
     /// Moves the app's real-time clock on by `elapsed`, for what flashes.
@@ -1126,6 +1216,8 @@ impl App {
     pub fn fit(&mut self, areas: Areas) {
         self.tile_area = areas.tiles;
         self.inspector = areas.inspector;
+        self.event_log_area = areas.event_log;
+        self.overlay = areas.overlay;
         self.settle();
     }
 
@@ -1167,6 +1259,15 @@ impl App {
                 self.scroll(dx, dy);
             }
             Action::Point(cell) => self.point(cell),
+            // A click on the event log's filters goes to the next (design
+            // §6.1).
+            Action::Click {
+                at,
+                button: Button::Left,
+                ..
+            } if self.filter_label().is_some_and(|label| label.contains(at)) => {
+                self.next_filter();
+            }
             Action::Click {
                 at,
                 button,
@@ -1228,6 +1329,7 @@ impl App {
             }
             Action::ToggleDetail => self.detail = !self.detail,
             Action::Track => self.toggle_tracking(world),
+            Action::CycleEventFilter => self.next_filter(),
             Action::CycleColours => {
                 self.colour_mode = along(&ColourMode::ALL, self.colour_mode, 1);
                 self.tell_player(format!("Colours: {}", self.colour_mode.label()));
@@ -1866,6 +1968,11 @@ impl App {
             }
             Err(err) => self.refuse(format!("Couldn't save the genome: {err}")),
         }
+    }
+
+    /// Switches the event log to the next filter (design §6.1).
+    fn next_filter(&mut self) {
+        self.event_filter = along(&EventFilter::ALL, self.event_filter, 1);
     }
 
     /// `T`: the view follows the selected sprite, or stops (design v21

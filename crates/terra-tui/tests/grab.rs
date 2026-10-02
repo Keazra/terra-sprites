@@ -37,6 +37,8 @@ fn grab_app(world: &World) -> App {
     let areas = Areas {
         tiles: Rect::new(0, 0, 10, 6),
         inspector: None,
+        event_log: None,
+        overlay: None,
     };
     let mut app = App::new(world.map(), Theme::cp437(), 1, areas);
     apply(&mut app, world, Action::Mode(CursorMode::Grab));
@@ -432,6 +434,8 @@ fn leading_in_a_wide_field() -> (World, App) {
     let areas = Areas {
         tiles: Rect::new(0, 0, 20, 6),
         inspector: None,
+        event_log: None,
+        overlay: None,
     };
     let mut app = App::new(world.map(), Theme::cp437(), 1, areas);
     apply(&mut app, &world, Action::Mode(CursorMode::Grab));

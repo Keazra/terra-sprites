@@ -36,6 +36,8 @@ fn field() -> (World, App) {
     let areas = Areas {
         tiles: Rect::new(1, 2, 20, 10),
         inspector: None,
+        event_log: None,
+        overlay: None,
     };
     let app = App::new(world.map(), Theme::cp437(), 1, areas);
     (world, app)

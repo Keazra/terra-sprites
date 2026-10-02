@@ -46,6 +46,8 @@ fn no_inspector(tiles: Rect) -> Areas {
     Areas {
         tiles,
         inspector: None,
+        event_log: None,
+        overlay: None,
     }
 }
 
