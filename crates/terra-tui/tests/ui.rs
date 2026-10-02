@@ -217,9 +217,9 @@ fn in_train_mode_the_cursor_is_light_magenta_in_every_theme() {
 }
 
 #[test]
-fn locked_on_the_cursor_s_arrows_are_solid() {
+fn following_the_cursor_s_arrows_are_solid() {
     // Design v22 §6.2: they clamp the sprite. The ASCII theme has no solid
-    // arrows; its status line says the Cursor is locked on.
+    // arrows; its status line says the Cursor follows it.
     let world = garden_with_sprites();
     let on_it = Position::new(1 + 2, 2 + 3);
     for (theme, expected) in [
@@ -227,7 +227,7 @@ fn locked_on_the_cursor_s_arrows_are_solid() {
         (Theme::ascii(), [".Sv-......", ".>@<..o...", ".-^S......"]),
     ] {
         let mut app = app_for(&world, theme, 40, 10);
-        app.apply(Action::right_click(on_it), &world);
+        app.apply(Action::Follow { at: Some(on_it) }, &world);
         let map_rows: Vec<String> = lines(&render(&app, &world, 40, 10))[4..7]
             .iter()
             .map(|row| row.chars().skip(1).take(10).collect())
@@ -2372,18 +2372,18 @@ fn the_event_log_says_when_sprites_in_general_turn_frightening() {
 }
 
 #[test]
-fn the_status_line_names_train_mode_and_what_the_cursor_is_locked_on_to() {
+fn the_status_line_names_train_mode_and_what_the_cursor_follows() {
     // Design v21 §6.1: tiles are drawn from screen cell (1, 2).
     let world = garden_with_sprites();
     let id = world.sprite_at(Pos { x: 2, y: 3 }).expect("a sprite").id();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     let on_it = Position::new(1 + 2, 2 + 3);
     app.apply(Action::left_click(on_it), &world);
-    app.apply(Action::right_click(on_it), &world);
+    app.apply(Action::Follow { at: Some(on_it) }, &world);
     app.apply(Action::Mode(CursorMode::Train), &world);
     let status = status_line(&app, &world);
     let expected = format!(
-        " (2,3) grass · Sprite #{0} │ TRAIN │ locked on Sprite #{0}",
+        " (2,3) grass · Sprite #{0} │ TRAIN │ following Sprite #{0}",
         id.0
     );
     assert!(status.starts_with(&expected), "{status}");
@@ -2435,15 +2435,15 @@ fn the_key_hints_lead_with_the_mode_keys() {
 
 #[test]
 fn short_of_room_whole_key_hints_drop_from_the_end() {
-    // Design v22 §6.1: at 100 columns, with a sprite under the Cursor and a
-    // lock on, the mode keys and the first hints after them still show.
+    // Design v22 §6.1: at 100 columns, with a sprite under the Cursor, which
+    // follows it, the mode keys and the first hints after them still show.
     let world = garden_with_sprites();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     let on_it = Position::new(1 + 2, 2 + 3);
-    app.apply(Action::right_click(on_it), &world);
+    app.apply(Action::Follow { at: Some(on_it) }, &world);
     app.apply(Action::Mode(CursorMode::Train), &world);
     let status = status_line(&app, &world);
-    assert!(status.contains("│ locked on Sprite #"), "{status}");
+    assert!(status.contains("│ following Sprite #"), "{status}");
     assert!(
         status.ends_with("  Z select  X train  C grab  WASD scroll"),
         "{status}"
@@ -2791,12 +2791,12 @@ fn a_refused_command_says_why_in_the_hints_place_for_3_seconds() {
 
 #[test]
 fn a_refusal_shows_even_when_the_status_line_is_crowded() {
-    // Design v22 §6.1: locked on to a sprite standing on a berry, the line
+    // Design v22 §6.1: following a sprite standing on a berry, the line
     // is too full for the reason, so what's under the Cursor is cut short.
     let world = garden_with_sprites();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     let on_it = Position::new(1 + 7, 2 + 1);
-    app.apply(Action::right_click(on_it), &world);
+    app.apply(Action::Follow { at: Some(on_it) }, &world);
     app.record(&[touched(1, "refused pet")], &world);
     let status = status_line(&app, &world);
     assert!(status.starts_with(" (7,1) grass · Sprite #"), "{status}");

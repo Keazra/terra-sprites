@@ -61,6 +61,13 @@ fn click(app: &mut App, world: &World, tile: Pos, button: Button) {
     apply(app, world, action);
 }
 
+/// Selects the sprite on `tile` and has the Cursor follow it, with a middle
+/// click (design v26 §6.5).
+fn follow(app: &mut App, world: &World, tile: Pos) {
+    let at = Some(cell(tile));
+    apply(app, world, Action::Follow { at });
+}
+
 /// Hands the app's commands to the world and runs a tick, as a frame does.
 fn tick(app: &mut App, world: &mut World) {
     for command in app.take_commands() {
@@ -280,16 +287,14 @@ fn e_aims_from_the_cursor_and_letting_it_go_or_pressing_it_again_sends() {
 }
 
 #[test]
-fn locked_on_to_a_sprite_a_throw_starts_at_its_feet_pulled_from_there() {
-    // Design v25 §6.5: locked on, the Cursor sits on its sprite, wherever
+fn following_a_sprite_a_throw_starts_at_its_feet_pulled_from_there() {
+    // Design v25 §6.5: following, the Cursor sits on its sprite, wherever
     // the click lands, and the pull is the pointer's from the Cursor.
     let mut world = field(&[(at(2, 2), "berry")], &[at(8, 5)]);
     let mut app = grab_app(&world);
     hold(&mut app, &mut world, at(2, 2));
-    apply(&mut app, &world, Action::Mode(CursorMode::Select));
-    click(&mut app, &world, at(8, 5), Button::Right);
-    assert!(app.locked().is_some());
-    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+    follow(&mut app, &world, at(8, 5));
+    assert!(app.followed().is_some());
     click(&mut app, &world, at(12, 5), Button::Right);
     point(&mut app, &world, at(14, 5));
     let_go(&mut app, &world, at(14, 5));
@@ -513,14 +518,12 @@ fn cancelling_an_aim_the_press_grabbed_for_leaves_it_in_the_cursor_s_grip() {
 }
 
 #[test]
-fn locked_on_with_the_cursor_empty_a_right_press_anywhere_aims_the_locked_on_sprite() {
+fn following_with_the_cursor_empty_a_right_press_anywhere_aims_the_followed_sprite() {
     // Design v25 §6.5: the press grabs as a left click would.
     let world = field(&[], &[at(8, 5)]);
     let mut app = grab_app(&world);
     let sprite = sprite_on(&world, at(8, 5));
-    apply(&mut app, &world, Action::Mode(CursorMode::Select));
-    click(&mut app, &world, at(8, 5), Button::Right);
-    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+    follow(&mut app, &world, at(8, 5));
     click(&mut app, &world, at(12, 5), Button::Right);
     point(&mut app, &world, at(10, 5));
     let_go(&mut app, &world, at(10, 5));
