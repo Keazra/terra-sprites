@@ -46,6 +46,10 @@ pub struct World {
     /// The preset a generated world was made from, kept in its saves (design
     /// §2.8). A hand-made world has none. Nothing in the sim reads it.
     config: Option<WorldConfig>,
+    /// The tile at the middle of the screen when the world was saved, if a
+    /// screen saved it (design §2.8), so a load shows what the player saw.
+    /// Nothing in the sim reads it.
+    view: Option<Pos>,
 }
 
 /// Everything that determines how the world evolves. Hashed by `state_hash`.
@@ -690,18 +694,32 @@ impl World {
             checked_next_id: Cell::new(1),
             seed,
             config: None,
+            view: None,
         }
     }
 
     /// Saves the world (design §2.8): everything that determines how it
     /// evolves, with the data pack and preset it was made with, so that
     /// loading it carries on exactly as this world would.
+    /// It keeps the view it was loaded with, if any.
     pub fn save(&self) -> Vec<u8> {
+        self.save_viewing(self.view)
+    }
+
+    /// Saves the world as `save` does, with `view`, the tile at the middle
+    /// of the screen, for a load to show again (design §2.8, §6.7).
+    pub fn save_with_view(&self, view: Pos) -> Vec<u8> {
+        self.save_viewing(Some(view))
+    }
+
+    /// The world's save, with `view` as its view.
+    fn save_viewing(&self, view: Option<Pos>) -> Vec<u8> {
         save::write(&save::Contents {
             seed: self.seed,
             config: self.config.as_ref().map(save::Preset::from),
             pack: self.data.sources().to_vec(),
             state: &self.state,
+            view,
         })
     }
 
@@ -714,6 +732,7 @@ impl World {
             config,
             pack,
             mut state,
+            view,
         } = save::read(bytes)?;
         let sources: Vec<(&str, &str)> = pack
             .iter()
@@ -727,6 +746,7 @@ impl World {
             data,
             seed,
             config: config.map(WorldConfig::from),
+            view,
         };
         world
             .check_invariants()
@@ -737,6 +757,12 @@ impl World {
     /// The seed the world was made from.
     pub fn seed(&self) -> u64 {
         self.seed
+    }
+
+    /// The tile at the middle of the screen when the world was saved, if
+    /// its save kept one (design §2.8).
+    pub fn view(&self) -> Option<Pos> {
+        self.view
     }
 
     /// Advances the world by exactly one tick, running the canonical tick order
