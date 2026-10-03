@@ -163,6 +163,47 @@ impl Flood {
         flood
     }
 
+    /// Whether a loaded flood fits `map` (design §2.8): its square is on
+    /// the map and holds its origin, it has a cost and a step for each
+    /// tile, and the way back from each tile it reached leads to the origin,
+    /// each step to a tile reached more cheaply, as every step costs.
+    pub(crate) fn fits(&self, map: &Map) -> bool {
+        let tiles = usize::from(self.width) * usize::from(self.height);
+        let on_map = u32::from(self.corner.x) + u32::from(self.width) <= u32::from(map.width())
+            && u32::from(self.corner.y) + u32::from(self.height) <= u32::from(map.height());
+        if !on_map || self.costs.len() != tiles || self.steps.len() != tiles {
+            return false;
+        }
+        let Some(start) = self.local(self.origin) else {
+            return false;
+        };
+        let leads_back = |index: usize| {
+            let cost = self.costs[index];
+            let Some(&dir) = Dir::ALL.get(usize::from(self.steps[index])) else {
+                return false;
+            };
+            let from = self.local(back(self.pos(index), dir));
+            from.is_some_and(|from| self.costs[from] < cost)
+        };
+        self.costs[start] == 0
+            && (0..tiles)
+                .filter(|&index| index != start && self.costs[index] != UNREACHED)
+                .all(leads_back)
+    }
+
+    /// Sets the step to the first tile it reached past the origin to `byte`,
+    /// unchecked, to test the checks on loading.
+    #[cfg(test)]
+    pub(crate) fn damage_a_step(&mut self, byte: u8) {
+        let start = self
+            .local(self.origin)
+            .expect("the origin is in its square");
+        let index = (0..self.costs.len())
+            .find(|&index| index != start && self.costs[index] != UNREACHED)
+            .expect("a tile it reached");
+        self.steps[index] = byte;
+    }
+
     /// How far it reaches, in tiles in any direction.
     pub(crate) fn reach(&self) -> u16 {
         self.radius

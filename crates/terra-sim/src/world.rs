@@ -78,7 +78,7 @@ impl WorldState {
     fn rebuild(&mut self, data: &DataPack) -> Result<(), String> {
         self.map.check_shape(data)?;
         self.objects.rebuild(&self.map, data)?;
-        self.sprites.rebuild(&self.map, data)
+        self.sprites.rebuild(&self.map, data, self.tick)
     }
 
     /// Gives `object` the next entity ID and puts it in the world. The caller
@@ -1053,20 +1053,45 @@ mod tests {
     /// next tick (design §2.8).
     #[test]
     fn a_save_that_doesnt_fit_its_pack_is_refused() {
-        let damage: [fn(&mut WorldState); 2] = [
-            |state| {
+        let damage: [fn(&mut WorldState, &DataPack); 9] = [
+            |state, _| {
                 let id = state.objects.at(Pos { x: 2, y: 2 }).expect("the bush");
                 state.objects.get_mut(id).expect("the bush").kind = 127;
             },
-            |state| {
-                let id = state.sprites.at(Pos { x: 1, y: 1 }).expect("the sprite");
-                state
-                    .sprites
-                    .get_mut(id)
-                    .expect("the sprite")
-                    .body
-                    .chems
-                    .pop();
+            |state, _| {
+                the_sprite(state).body.chems.pop();
+            },
+            // A flood whose way back from a tile it reached leads nowhere.
+            |state, _| {
+                let flood = the_sprite(state).flood.as_mut().expect("a flood");
+                flood.damage_a_step(8);
+            },
+            |state, _| {
+                let flood = the_sprite(state).flood.as_mut().expect("a flood");
+                flood.damage_a_step(u8::MAX);
+            },
+            // A concept of an input the pack doesn't have.
+            |state, _| the_sprite(state).brain.concepts[0] = vec![(999, false)],
+            // Something learned about an object type the pack doesn't have.
+            |state, data| {
+                let experience = &mut the_sprite(state).brain.experience;
+                let nothing = TypeMemory::new(data.needs().count());
+                experience.types.insert(Subject::ObjectType(9999), nothing);
+            },
+            // A motive for a need the pack doesn't have.
+            |state, _| {
+                let trace = &mut the_sprite(state).brain.trace;
+                trace.back_mut().expect("a trace entry").motive = Some(999);
+            },
+            // A sprite born, or a trace entry made, after the save.
+            |state, _| {
+                let tick = state.tick;
+                the_sprite(state).born = tick + 1;
+            },
+            |state, _| {
+                let tick = state.tick;
+                let trace = &mut the_sprite(state).brain.trace;
+                trace.back_mut().expect("a trace entry").tick = tick + 1;
             },
         ];
         for (n, damage) in damage.into_iter().enumerate() {
@@ -1075,15 +1100,30 @@ mod tests {
                 tile: Pos { x: 1, y: 1 },
                 genome: None,
             });
-            world.step();
-            assert!(World::load(&world.save()).is_ok());
-            damage(&mut world.state);
+            for _ in 0..10 {
+                world.step();
+            }
+            let sprite = the_sprite(&mut world.state);
+            sprite.brain.trace.push_back(TraceEntry {
+                tick: 10,
+                verb: None,
+                subject: None,
+                motive: Some(0),
+            });
+            assert!(World::load(&world.save()).is_ok(), "damage {n}");
+            damage(&mut world.state, &world.data);
             match World::load(&world.save()) {
                 Err(LoadError::Damaged(_)) => {}
                 Err(err) => panic!("damage {n} refused for the wrong reason: {err}"),
                 Ok(_) => panic!("damage {n} loaded"),
             }
         }
+    }
+
+    /// The world's only sprite.
+    fn the_sprite(state: &mut WorldState) -> &mut Sprite {
+        let (id, _) = state.sprites.iter().next().expect("a sprite");
+        state.sprites.get_mut(id).expect("the sprite")
     }
 
     /// Puts an object of type `name` on `pos` without checking the placement rules.

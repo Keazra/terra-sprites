@@ -16,7 +16,7 @@ use crate::world::WorldState;
 /// Instinct links (design §5.1, §5.4): a row per concept or input, a column
 /// per verb or category, each at the weight the genome gave it. They never
 /// change in a sprite's life; learning is worth and habits (§5.6).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Links {
     w: Vec<Vec<f32>>,
 }
@@ -89,6 +89,14 @@ impl Subject {
             Subject::Category(category) => category,
         }
     }
+
+    /// Whether `data` has it: its object type, or its category.
+    pub(crate) fn fits(self, data: &DataPack) -> bool {
+        match self {
+            Subject::ObjectType(id) => data.object_type(id).is_some(),
+            Subject::Category(category) => data.category(category).is_some(),
+        }
+    }
 }
 
 /// What a sprite has learned about one object type (design v19 §5.6): its
@@ -148,6 +156,20 @@ pub(crate) struct Experience {
 }
 
 impl Experience {
+    /// Whether a loaded experience fits `data` (design §2.8): each thing
+    /// learned about is in the pack, and each worth, and the needs' levels
+    /// it keeps, cover the pack's needs.
+    pub(crate) fn fits(&self, data: &DataPack) -> bool {
+        let needs = data.needs().count();
+        let mut remembered = self.individuals.values().chain(&self.cursor);
+        let levels = self.needs_before.as_ref();
+        self.types
+            .iter()
+            .all(|(subject, known)| subject.fits(data) && known.worth.len() == needs)
+            && remembered.all(|known| known.worth.len() == needs)
+            && levels.is_none_or(|levels| levels.len() == needs)
+    }
+
     /// Checks every learned value is a number within its range (design
     /// §5.6): worth, good and familiarity 0 to 1, bad −1 to 0, habits and
     /// the worth of new things −1 to 1. Says which isn't.
