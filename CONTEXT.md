@@ -591,6 +591,24 @@ _Avoid_: strong, heavy
 How many ticks back a Reward looks for the sprite's latest attempt, which its feeling is then about: about two seconds of the player's time at the speed they're playing. A Correct has none: it looks back only the touch window, so a late shock can't land on the wrong thing.
 _Avoid_: reach (a flood's reach is where a sprite can walk), touch window (that's for every other feeling)
 
+### Saves
+
+**Save**:
+The whole world written to a file, so it can be loaded later and carry on exactly as it would have: every sprite's chemistry, brain and action, every object, the Cursor's grip, the dice, and the data pack the world was made with. A save is opaque: it's for the game to read, not the player.
+_Avoid_: snapshot (that's a replay's start, later), save game, genome file (that's one sprite's genes)
+
+**Quicksave**:
+The one save `F5` writes and `F9` loads, named `quicksave`, overwritten each time.
+_Avoid_: quick save, slot
+
+**Autosave**:
+A save the game makes by itself: after every 10 minutes that time runs, unpaused, and on quitting. The last three are kept, the newest as `autosave-1`.
+_Avoid_: backup, checkpoint (that's a replay's hash, later)
+
+**Save format**:
+The layout of a save's world, numbered by its schema version. A change that only adds things keeps the number; one that breaks it bumps the number and comes with a step that upgrades the old layout. A save in a newer format than the build is refused.
+_Avoid_: save version (the build that wrote it is the sim version)
+
 ### Testing and tuning
 
 **Lab scenario**:
