@@ -173,12 +173,16 @@ impl Sprites {
     /// Rebuilds what a save leaves out (design §2.8): which sprite stands on
     /// each tile of `map`, each one's genome compiled for the chemistry
     /// step, and its levels before the tick, taken as its levels now. Says
-    /// what's wrong if one is off the map or shares a tile.
+    /// what's wrong if one is off the map or shares a tile, or its genome or
+    /// body doesn't fit `data`.
     pub(crate) fn rebuild(&mut self, map: &Map, data: &DataPack) -> Result<(), String> {
         self.on_tile = Occupancy::new(map);
         for (&id, sprite) in &mut self.by_id {
             if !map.contains(sprite.pos) || self.on_tile.at(sprite.pos).is_some() {
                 return Err(format!("sprite {} has no tile of its own", id.0));
+            }
+            if !sprite.genome.fits(data) || !sprite.body.fits(data) {
+                return Err(format!("sprite {} doesn't fit its data pack", id.0));
             }
             self.on_tile.put(sprite.pos, id);
             sprite.program = Program::new(&sprite.genome, data);

@@ -1,4 +1,4 @@
-TSPR‚®schema_version«sim_version¥0.1.0„¤seedÍê¦configÀ¤pack›’¨pack.ronÙ—// The default Terra Sprites data pack. Embedded in the binary; `--data <dir>`
+TSPRƒ®schema_version«sim_version¥0.1.0¨checksumÏ}¢À«¶’Ãé„¤seedÍê¦configÀ¤pack›’¨pack.ronÙ—// The default Terra Sprites data pack. Embedded in the binary; `--data <dir>`
 // overrides it for new worlds.
 (
     name: "core",

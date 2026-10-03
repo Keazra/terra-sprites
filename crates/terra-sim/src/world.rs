@@ -76,7 +76,8 @@ impl WorldState {
     /// compiled genome, and its levels before the tick, taken as its levels
     /// now, so each change on the Chem tab reads blank for one tick.
     fn rebuild(&mut self, data: &DataPack) -> Result<(), String> {
-        self.objects.rebuild(&self.map)?;
+        self.map.check_shape(data)?;
+        self.objects.rebuild(&self.map, data)?;
         self.sprites.rebuild(&self.map, data)
     }
 
@@ -698,7 +699,7 @@ impl World {
     pub fn save(&self) -> Vec<u8> {
         save::write(&save::Contents {
             seed: self.seed,
-            config: self.config.clone(),
+            config: self.config.as_ref().map(save::Preset::from),
             pack: self.data.sources().to_vec(),
             state: &self.state,
         })
@@ -725,7 +726,7 @@ impl World {
             state,
             data,
             seed,
-            config,
+            config: config.map(WorldConfig::from),
         };
         world
             .check_invariants()
@@ -1045,6 +1046,44 @@ mod tests {
             scripted: &[],
         };
         World::from_scenario(scenario, data, 7).expect("valid scenario")
+    }
+
+    /// A save whose checksum holds but whose world doesn't fit its pack, as
+    /// a build with a bug might write, is refused rather than crashing the
+    /// next tick (design §2.8).
+    #[test]
+    fn a_save_that_doesnt_fit_its_pack_is_refused() {
+        let damage: [fn(&mut WorldState); 2] = [
+            |state| {
+                let id = state.objects.at(Pos { x: 2, y: 2 }).expect("the bush");
+                state.objects.get_mut(id).expect("the bush").kind = 127;
+            },
+            |state| {
+                let id = state.sprites.at(Pos { x: 1, y: 1 }).expect("the sprite");
+                state
+                    .sprites
+                    .get_mut(id)
+                    .expect("the sprite")
+                    .body
+                    .chems
+                    .pop();
+            },
+        ];
+        for (n, damage) in damage.into_iter().enumerate() {
+            let mut world = field_with_a_bush();
+            world.submit(Command::SpawnSprite {
+                tile: Pos { x: 1, y: 1 },
+                genome: None,
+            });
+            world.step();
+            assert!(World::load(&world.save()).is_ok());
+            damage(&mut world.state);
+            match World::load(&world.save()) {
+                Err(LoadError::Damaged(_)) => {}
+                Err(err) => panic!("damage {n} refused for the wrong reason: {err}"),
+                Ok(_) => panic!("damage {n} loaded"),
+            }
+        }
     }
 
     /// Puts an object of type `name` on `pos` without checking the placement rules.

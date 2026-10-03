@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use ron::extensions::Extensions;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::data::DataPack;
 use crate::map::MAX_SIDE;
@@ -20,7 +20,7 @@ const SPRITES: std::ops::RangeInclusive<u16> = 20..=100;
 ///
 /// A config is checked against the data pack it was parsed with, and must be
 /// used with that pack.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorldConfig {
     width: u16,
     height: u16,
@@ -122,6 +122,35 @@ impl WorldConfig {
             per_tiles,
             sprites,
         })
+    }
+
+    /// The fields, for a save to keep (design §2.8).
+    pub(crate) fn parts(&self) -> (u16, u16, &BTreeMap<String, u32>, u32, u16) {
+        (
+            self.width,
+            self.height,
+            &self.objects,
+            self.per_tiles,
+            self.sprites,
+        )
+    }
+
+    /// A config from the fields a save kept, checked when it was made.
+    /// Nothing in the sim reads a loaded world's config.
+    pub(crate) fn from_parts(
+        width: u16,
+        height: u16,
+        objects: BTreeMap<String, u32>,
+        per_tiles: u32,
+        sprites: u16,
+    ) -> WorldConfig {
+        WorldConfig {
+            width,
+            height,
+            objects,
+            per_tiles,
+            sprites,
+        }
     }
 
     /// The map's width, in tiles.
