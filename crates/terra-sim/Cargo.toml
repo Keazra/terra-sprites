@@ -16,7 +16,14 @@ xxhash-rust = { version = "0.8.18", features = ["xxh3"] }
 workspace = true
 
 [dev-dependencies]
+criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 proptest = "1.11.0"
+
+# Benchmarks of a tick and its costliest parts (design §3.9, §7.4 A5):
+# `cargo bench -p terra-sim`.
+[[bench]]
+name = "tick"
+harness = false
 
 # The baseline program's report is tested with everything else (design §7.6).
 [[example]]

@@ -793,6 +793,11 @@ impl World {
         self.state.deaths.iter().map(|(&cause, &n)| (cause, n))
     }
 
+    /// The world's state and data pack, for the benchmark hooks.
+    pub(crate) fn parts(&mut self) -> (&mut WorldState, &DataPack) {
+        (&mut self.state, &self.data)
+    }
+
     /// The number of ticks simulated so far.
     pub fn tick(&self) -> u64 {
         self.state.tick
