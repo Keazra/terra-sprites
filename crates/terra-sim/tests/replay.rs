@@ -87,7 +87,7 @@ fn play_back(playback: &mut Playback) -> Vec<Vec<terra_sim::Event>> {
 fn replaying_a_recorded_session_reproduces_every_checkpoint() {
     let mut world = recorded_world(7);
     let recorded = play(&mut world, 2_500);
-    let bytes = world.recording().expect("the world records");
+    let bytes = world.replay().expect("the world records");
 
     let mut playback = Playback::new(&bytes).expect("the replay plays");
     assert!(playback.started_fresh(), "a new world starts afresh");
@@ -124,7 +124,7 @@ fn a_session_started_from_a_save_replays_from_it() {
     world.start_recording();
     play(&mut world, 2_100);
 
-    let mut playback = Playback::new(&world.recording().unwrap()).expect("the replay plays");
+    let mut playback = Playback::new(&world.replay().unwrap()).expect("the replay plays");
     assert!(
         !playback.started_fresh(),
         "a loaded world starts from its save"
@@ -152,7 +152,7 @@ fn a_hand_made_world_replays_from_its_save() {
     for _ in 0..1_200 {
         world.step();
     }
-    let mut playback = Playback::new(&world.recording().unwrap()).unwrap();
+    let mut playback = Playback::new(&world.replay().unwrap()).unwrap();
     assert!(
         !playback.started_fresh(),
         "a hand-made world can't be generated"
@@ -168,7 +168,7 @@ fn a_world_that_has_run_records_from_its_save_not_its_seed() {
     let mut world = World::new(WorldConfig::builtin(&data), data, 4);
     world.step();
     world.start_recording();
-    let playback = Playback::new(&world.recording().unwrap()).unwrap();
+    let playback = Playback::new(&world.replay().unwrap()).unwrap();
     assert!(!playback.started_fresh());
     assert_eq!(playback.start(), 1);
     assert_eq!(playback.divergence(), None);
@@ -178,7 +178,7 @@ fn a_world_that_has_run_records_from_its_save_not_its_seed() {
 fn an_injected_divergence_is_reported_at_the_first_checkpoint_after_it() {
     let mut world = recorded_world(11);
     play(&mut world, 3_500);
-    let mut playback = Playback::new(&world.recording().unwrap()).unwrap();
+    let mut playback = Playback::new(&world.replay().unwrap()).unwrap();
     while playback.world().tick() < 1_500 {
         playback.step();
     }
@@ -212,7 +212,7 @@ fn a_session_that_ends_in_a_panic_still_leaves_a_valid_replay() {
         panic!("something broke");
     }));
     assert!(panicked.is_err());
-    let mut playback = Playback::new(&world.recording().unwrap()).expect("a valid replay");
+    let mut playback = Playback::new(&world.replay().unwrap()).expect("a valid replay");
     assert_eq!(playback.end(), 1_300);
     play_back(&mut playback);
     assert_eq!(playback.divergence(), None);
@@ -223,7 +223,7 @@ fn a_session_that_ends_in_a_panic_still_leaves_a_valid_replay() {
 fn a_world_not_recording_has_no_replay() {
     let data = builtin();
     let world = World::new(WorldConfig::builtin(&data), data, 1);
-    assert!(world.recording().is_none());
+    assert!(world.replay().is_none());
 }
 
 /// Where a replay's body starts, after the magic and the header.
@@ -256,7 +256,7 @@ fn fix_checksum(bytes: &mut [u8]) {
 fn a_replay_from_another_build_is_refused_saying_so() {
     let mut world = recorded_world(1);
     play(&mut world, 10);
-    let bytes = world.recording().unwrap();
+    let bytes = world.replay().unwrap();
 
     // Another sim version: its first digit changed.
     let mut other = bytes.clone();
@@ -301,7 +301,7 @@ fn a_replay_naming_another_data_pack_is_refused_saying_so() {
             world
         };
         play(&mut world, 20);
-        let mut bytes = world.recording().unwrap();
+        let mut bytes = world.replay().unwrap();
         // The pack it names comes first: `core` becomes `cord`.
         let body = body_start(&bytes);
         let name = after(&bytes, body, b"name") + 1;
@@ -335,14 +335,14 @@ fn what_isnt_a_replay_is_refused() {
     // Nor is a replay a save.
     let mut world = recorded_world(1);
     world.step();
-    assert!(World::load(&world.recording().unwrap()).is_err());
+    assert!(World::load(&world.replay().unwrap()).is_err());
 }
 
 #[test]
 fn a_damaged_replay_is_refused_without_a_crash() {
     let mut world = recorded_world(2);
     play(&mut world, 40);
-    let bytes = world.recording().unwrap();
+    let bytes = world.replay().unwrap();
     let step = (bytes.len() / 97).max(1);
     for len in (0..bytes.len()).step_by(step) {
         assert!(Playback::new(&bytes[..len]).is_err(), "cut at {len} played");
