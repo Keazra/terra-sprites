@@ -1,4 +1,4 @@
- Terra Sprites │ tick 3 │ ► 1x │ seed 7 │ sprites 3                                          ? help
+ Terra Sprites │ tick 3 │ ► 1x │ seed 7 │ sprites 3 │ not saved                              ? help
 ┌─ Help ─────────────────────────────────────────────────────────────────────────────── esc close ─┐
 │ TIME                            CURSOR                          SPRITES                          │
 │ space      pause / resume       Z X C      select/train/grab    Tab        next sprite           │
@@ -13,16 +13,16 @@
 │ ?          this help            hold E     aim, let go to send                                   │
 │ Esc        back, then quit                                                                       │
 │ Ctrl+C     quit at once                                                                          │
+│ FILES                                                                                            │
+│ F5 F9      quicksave / load                                                                      │
+│ Ctrl+S     save as...                                                                            │
+│ Ctrl+O     load a save                                                                           │
 │                                                                                                  │
 │ COLOURS: a sprite's strongest drive, once it's above half                                        │
 │ @ hunger  @ thirst  @ pain  @ tiredness  @ boredom  @ loneliness  @ crowdedness  @ none          │
 │ EMOTES   ! hurt  / zapped  ? gave up  z resting  + pleased                                       │
 │                                                                                                  │
 │ FILES    /home/kel/.local/share/terra-sprites                                                    │
-│                                                                                                  │
-│                                                                                                  │
-│                                                                                                  │
-│                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │

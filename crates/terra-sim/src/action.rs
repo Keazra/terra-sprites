@@ -5,7 +5,7 @@
 use std::collections::BTreeSet;
 
 use rand_chacha::ChaCha8Rng;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::data::DataPack;
 use crate::decide::decide;
@@ -22,7 +22,7 @@ use crate::verbs;
 use crate::world::WorldState;
 
 /// How an action ended (design §5.5).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Outcome {
     /// It did what it set out to do: arrived, or rested its bout.
     Applied,
@@ -42,7 +42,7 @@ pub enum Outcome {
 /// An action to start a sprite on in a hand-made world, instead of what it
 /// would choose, so tests and lab scenarios can set up exact situations.
 /// When it ends, the sprite chooses for itself.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ScriptedAction {
     /// Wander to `destination`.
     Wander { destination: Pos },
@@ -103,7 +103,7 @@ pub struct ActionView {
 
 /// Which sprites an action's attempt hurt: the actor, biting a thornbush
 /// say, or a sprite it aimed at, by hitting it.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Hurt {
     /// The sprite whose action it was.
     pub actor: bool,
@@ -112,7 +112,7 @@ pub struct Hurt {
 }
 
 /// A sprite's action.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Action {
     pub(crate) verb: Verb,
     /// Its way to where it's heading: a Wander's destination, or the goal
@@ -143,7 +143,7 @@ pub(crate) struct Action {
 }
 
 /// A sprite's way to where it's heading (design §3.7).
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct Walk {
     /// Where it's heading.
     pub(crate) destination: Option<Pos>,
@@ -156,7 +156,7 @@ pub(crate) struct Walk {
 
 /// What a sprite did at step 6, which its body feels at the next tick's
 /// step 3 (design §2.4).
-#[derive(Debug, Clone, Copy, Default, Serialize)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub(crate) struct Did {
     /// The steps it took.
     pub(crate) steps: u32,

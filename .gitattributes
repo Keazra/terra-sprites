@@ -1,3 +1,6 @@
 # Store and check out text files with LF endings on every platform.
 # Git still auto-detects binary files (golden saves, replays, images).
 * text=auto eol=lf
+
+# Saves are MessagePack: never touch their bytes.
+*.tspr binary
