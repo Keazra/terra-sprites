@@ -38,6 +38,8 @@ cargo run --release -- --seed 7
 | `space` | Pause / resume |
 | `.` | Step one tick while paused (hold to keep stepping) |
 | `+` / `-` | Faster / slower: each step doubles or halves the speed, from ⅛× up to 16×, then Max. The game starts at 1× (1.25 ticks per second, slow enough to watch sprites walk). Holding either key stops at 1×; press again to go past it. |
+| `F5` / `F9` | Quicksave / quickload. Loading over a world that has run since it was last saved asks first, and a loaded world starts paused |
+| `Ctrl+S` / `Ctrl+O` | Save under a name you type / pick a save to load, newest first. The world also saves itself every 10 minutes of running time and when you quit, keeping the last 3 autosaves. Saves are in the `saves` folder of the game's folder (the help screen shows where) |
 | `Esc` | Quit, after "Quit? (y/n)": press `y` or `Esc` again |
 | `Ctrl+C` | Quit at once |
 

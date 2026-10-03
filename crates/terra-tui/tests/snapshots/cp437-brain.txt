@@ -1,4 +1,4 @@
- Terra Sprites │ tick 3 │ ► 1x │ seed 7 │ sprites 3                                          ? help
+ Terra Sprites │ tick 3 │ ► 1x │ seed 7 │ sprites 3 │ not saved                              ? help
 ╔═ Map ══════════════════╗                            ┌─ #5 ── Body [Brain] Chem Genome World ─────┐
 ║..............,,,,::~~≈≈║                            │ ATTENTION                                  │
 ║.'..........♠.,,,,::~~≈≈║                            │ ► berry                                .69 │
