@@ -10,7 +10,8 @@ use ratatui::{
 use terra_sim::{EntityId, Grip, Map, ObjectView, Pos, Progress, SpriteView, World};
 
 use crate::app::{
-    App, Areas, ColourMode, CursorMode, PlaceItem, Screen, Selection, strongest_drive,
+    App, Areas, ColourMode, CursorMode, PlaceItem, Screen, Selection, spoken_duration,
+    strongest_drive,
 };
 use crate::clock::Speed;
 use crate::inspector::{self, INSPECTOR_WIDTH, first_shown};
@@ -664,8 +665,7 @@ fn top_bar_line(app: &App, world: &World, width: u16) -> Line<'static> {
     let saved = match app.saved_ago() {
         None => "not saved".to_string(),
         Some(ago) if ago.as_secs() < 60 => "saved just now".to_string(),
-        Some(ago) if ago.as_secs() < 60 * 60 => format!("saved {}m ago", ago.as_secs() / 60),
-        Some(ago) => format!("saved {}h ago", ago.as_secs() / (60 * 60)),
+        Some(ago) => format!("saved {} ago", spoken_duration(ago)),
     };
     let text = format!(
         " Terra Sprites │ tick {} │ {time} │ seed {}{population} │ {saved}",

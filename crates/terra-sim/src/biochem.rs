@@ -306,6 +306,18 @@ pub(crate) struct Body {
 }
 
 impl Body {
+    /// Whether the body has a level for each of `data`'s chemicals and a
+    /// value for each of its loci, as a body read from a save must (design
+    /// §2.8).
+    pub(crate) fn fits(&self, data: &DataPack) -> bool {
+        let (chems, loci) = (data.chemicals().len(), data.loci().len());
+        self.chems.len() == chems
+            && self.last_chems.len() == chems
+            && self.loci.len() == loci
+            && self.last_loci.len() == loci
+            && self.incoming.len() == loci
+    }
+
     /// A newborn's body (design §4.7).
     pub(crate) fn newborn(program: &Program, data: &DataPack) -> Body {
         let physiology = data.physiology();

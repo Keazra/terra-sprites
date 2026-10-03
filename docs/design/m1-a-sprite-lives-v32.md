@@ -13,16 +13,16 @@ Slice 12 ([#13](https://github.com/Keazra/terra-sprites/issues/13)): save and lo
 
 | # | Change | Source | Sections |
 |---|---|---|---|
-| 1 | **What a save holds, exactly.** After the magic and a header that never changes shape (`schema_version`, `sim_version`), the world: the seed the top bar shows, the preset a generated world was made from (none for a hand-made one), the data pack's files as text, and the whole world state as the state hash already serialises it. Nothing in the sim reads the seed or the preset; they're kept for the screen and for replays. | Follows from the slice | §2.8 |
+| 1 | **What a save holds, exactly.** After the magic and a header that never changes shape (`schema_version`, `sim_version`, and a checksum of the rest, so a save damaged on disk is refused before it's read), the world: the seed the top bar shows, the preset a generated world was made from (none for a hand-made one), the data pack's files as text, and the whole world state as the state hash already serialises it. Nothing in the sim reads the seed or the preset; they're kept for the screen and for replays. | Follows from the slice | §2.8 |
 | 2 | **The pack travels as its files.** A save embeds the text of each file of the pack, and loading reads them again, as for a new world, so a save never depends on the files on disk and its objects' indexes into the pack's lists stay right. A pack the loading build can't read refuses the save, saying so. | Follows from the slice (#13's carried-over note on object type indexes) | §2.8 |
-| 3 | **Loading rebuilds what's derived, then checks.** Which entity stands on each tile, each sprite's compiled genome, and the levels from before the tick (taken as the levels now, so each change on the Chem tab reads blank for one tick) are rebuilt; then the invariants of §7.1 are checked. A save that fails them, or doesn't decode, is refused as damaged, never a crash. | Follows from the slice | §2.8, §2.9 |
+| 3 | **Loading checks the checksum, rebuilds what's derived, and checks the world fits its pack.** Which entity stands on each tile, each sprite's compiled genome, and the levels from before the tick (taken as the levels now, so each change on the Chem tab reads blank for one tick) are rebuilt; then the invariants of §7.1 are checked. A save that fails them, or doesn't decode, is refused as damaged, never a crash. | Follows from the slice | §2.8, §2.9 |
 | 4 | **The migration chain, in place for schema 1.** The step from schema *N* reads frozen copies of schema *N*'s types, made when the next breaking change comes, and upgrades them to the live types. Schema 1's golden save is `tests/golden/save-v1.tspr`, written by an ignored test when a schema is released. | Follows from the slice | §2.8, §7.2 |
 | 5 | **Where saves go.** A `saves` folder in the game's folder: the quicksave is `quicksave`, the autosaves `autosave-1` (newest) to `autosave-3`, and a save by name is that name, with any character a file name can't hold on some system made a `-`; each with `.tspr`, for the magic. A save is written beside its file and then put in its place, so one cut short never breaks a good one. | Follows from the slice | §6.7 |
 | 6 | **Saving and loading by name.** `Ctrl+S` opens a prompt on the status line, `Save as: seed 7 tick 48210_   enter save  esc cancel`, offering the seed and tick; typing replaces it, up to 40 characters, and the same name saves over. `Ctrl+O` opens a menu of every save, newest first, the quicksave and autosaves included, picked as the Place menu's items are. | Recommended to the owner (silence accepts) | §6.5, §6.7 |
 | 7 | **Loading asks first if the world has run since it was last saved:** "Load quicksave? The world has run 4m since it was last saved (y/n)", or "This world has never been saved". `y` loads; any other key keeps the world. A world that hasn't run since loads at once. | Recommended to the owner (silence accepts) | §6.7 |
 | 8 | **A loaded world starts paused,** so the player can see where they are. The screen starts afresh on it, as for a new world, with the Cursor where the save left it, in Grab mode if it holds or leads something, and seen if it was. What's the player's carries over: the speed, the theme, the colours, the open tab, the event log's filter, the sprite list's order. | Recommended to the owner (silence accepts) | §6.7 |
-| 9 | **The autosave clock runs only while time does,** so a paused game doesn't fill the slots with copies; quitting autosaves too, unless the world hasn't run since its last save. | Recommended to the owner (silence accepts) | §6.7 |
-| 10 | **The top bar's save status** reads `not saved`, `saved just now` (under a minute), `saved 3m ago` or `saved 2h ago`, counting from the last save, autosave or load. The help screen lists the keys under FILES. | Follows from the slice | §6.1, §6.7 |
+| 9 | **The autosave clock runs only while time does,** so a paused game doesn't fill the autosaves with copies; quitting autosaves too, unless the world hasn't run since its last save. | Recommended to the owner (silence accepts) | §6.7 |
+| 10 | **The top bar's save status** reads `not saved`, `saved just now` (under a minute), `saved 3m ago` or `saved 1h 5m ago`, counting from the last save, autosave or load. The help screen lists the keys under FILES. | Follows from the slice | §6.1, §6.7 |
 
 **Earlier changes** are in the archived revisions, in [`archive/`](archive/). Each opens with its own table: v31's changes (from v30) head [v31](archive/m1-a-sprite-lives-v31.md), and so on back to v2. So "v16 change 16" is row 16 of the table at the top of [v16](archive/m1-a-sprite-lives-v16.md). The current revision carries only its own table, so the spec doesn't open with its whole history.
 
@@ -261,7 +261,7 @@ A replay file contains:
 
 **The save file:**
 - Encoded as MessagePack with named fields (`rmp-serde`).
-- **Header:** magic `TSPR`, then `schema_version` and `sim_version`. The header never changes shape, so any build can read any save's and say why it refuses it (v32).
+- **Header:** magic `TSPR`, then `schema_version`, `sim_version` and the checksum (xxh3) of what follows. The header never changes shape, so any build can read any save's and say why it refuses it (v32).
 - **Contents:**
   - the seed, which the top bar shows (v32)
   - the tick counter and the full **RNG state**
@@ -277,7 +277,7 @@ A replay file contains:
     - the cached perception flood and its refresh timer
   - in all, the world state exactly as `state_hash` serialises it (v32)
 
-**Loading** (v32) rebuilds what's derived: which entity stands on each tile, each sprite's genome compiled for step 3, and the levels from before the tick, taken as the levels now. Then the invariants (§7.1) are checked. A save that doesn't decode, or fails them, is refused as damaged, never a crash; so is one whose pack the build can't read.
+**Loading** (v32) checks the checksum, then rebuilds what's derived: which entity stands on each tile, each sprite's genome compiled for step 3, and the levels from before the tick, taken as the levels now. On the way it checks that the world fits its pack: the map's size adds up, each object's type is in the pack, and each sprite's genome and chemistry fit it. Then the invariants (§7.1) are checked. A save that fails any of these, or doesn't decode, is refused as damaged, never a crash; so is one whose pack the build can't read.
 
 **Schema evolution:**
 - **Additive changes**, meaning new fields with serde defaults, need no version bump.
@@ -1270,7 +1270,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
   ```
 
 **Panels:**
-- **Top bar:** tick, speed, seed, population, save status, and at the right end `? help` (v30). The save status (v32) is `not saved`, `saved just now` (under a minute), `saved 3m ago` or `saved 2h ago`, from the last save, autosave or load. Object counts, food included, are the World tab's job.
+- **Top bar:** tick, speed, seed, population, save status, and at the right end `? help` (v30). The save status (v32) is `not saved`, `saved just now` (under a minute), `saved 3m ago` or `saved 1h 5m ago`, from the last save, autosave or load. Object counts, food included, are the World tab's job.
 - **Map view:**
   - Its viewport scrolls with `W` `A` `S` `D` or the arrow keys, or follows the selected sprite (`T`, "track", v21): Track keeps it in the middle of the map view, as far as the wall allows, and follows whichever sprite is selected. Scrolling by hand turns it off (v30).
   - A map smaller than the space gets a map view shrunk to fit it, at the top-left.

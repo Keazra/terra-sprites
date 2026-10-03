@@ -116,8 +116,8 @@ fn a_loaded_sprite_shows_its_chemicals_at_once() {
 
 #[test]
 fn a_loaded_world_uses_the_pack_its_save_embeds_not_the_built_in_one() {
-    // A pack whose name differs, and whose berry bushes are walls of a
-    // different name, so a world made with it plays differently.
+    // A pack whose name differs from the built-in one's, so the loaded
+    // world's pack shows where it came from.
     let sources: Vec<(&str, String)> = DataPack::builtin_sources()
         .iter()
         .map(|&(path, text)| {
@@ -228,12 +228,14 @@ fn a_damaged_save_is_refused_without_a_crash() {
     for len in (40..bytes.len()).step_by(step) {
         assert!(World::load(&bytes[..len]).is_err(), "cut at {len} loaded");
     }
-    for index in (40..bytes.len()).step_by(step) {
+    // Past the header, the checksum catches any byte changed.
+    for index in (100..bytes.len()).step_by(step) {
         let mut damaged = bytes.clone();
         damaged[index] ^= 0xa5;
-        // Some changes leave a valid world, such as a chemical's level; any
-        // that doesn't must be refused rather than crash.
-        let _ = World::load(&damaged);
+        assert!(
+            matches!(World::load(&damaged), Err(LoadError::Damaged(_))),
+            "a change at {index} loaded"
+        );
     }
 }
 
@@ -294,6 +296,10 @@ fn sprite_ids(world: &World) -> [EntityId; 2] {
     ids.try_into().expect("two sprites")
 }
 
+// Unlike the golden genome files, a golden save isn't checked byte for byte
+// on saving it again: a later build that adds a field (with a default, as
+// design §2.8 allows) writes it, and the header names that build. What must
+// hold is that it loads and plays on.
 #[test]
 fn golden_the_first_save_still_loads_and_carries_on() {
     let mut world = World::load(GOLDEN_V1).expect("the golden save loads");

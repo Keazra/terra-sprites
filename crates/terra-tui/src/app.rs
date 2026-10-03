@@ -468,9 +468,8 @@ pub struct App {
     save_folder: Option<PathBuf>,
     /// The saves the load menu lists, newest first.
     save_files: Vec<SaveFile>,
-    /// While naming a save: the name so far, and whether the player has
-    /// typed it, rather than it being the one offered.
-    save_naming: Option<(String, bool)>,
+    /// While naming a save, the name so far.
+    save_naming: Option<Draft>,
     /// The save waiting for the player to say yes to loading it.
     to_load: Option<SaveFile>,
     /// A world just loaded, and the save's name, for the frame loop to take
@@ -494,8 +493,40 @@ pub const AUTOSAVE_EVERY: Duration = Duration::from_secs(10 * 60);
 #[derive(Debug, Clone)]
 struct Naming {
     sprite: EntityId,
-    draft: String,
+    draft: Draft,
+}
+
+/// A name being typed on the status line, for a sprite or a save: what's
+/// there so far, and whether the player has typed it, rather than it being
+/// the one offered, which the first letter typed replaces.
+#[derive(Debug, Clone)]
+struct Draft {
+    text: String,
     typed: bool,
+}
+
+impl Draft {
+    /// `text`, offered.
+    fn offered(text: String) -> Draft {
+        Draft { text, typed: false }
+    }
+
+    /// Types `c`, replacing the name offered, up to `most` characters.
+    fn type_char(&mut self, c: char, most: usize) {
+        if !self.typed {
+            self.text.clear();
+            self.typed = true;
+        }
+        if self.text.chars().count() < most {
+            self.text.push(c);
+        }
+    }
+
+    /// Rubs out the last character.
+    fn erase(&mut self) {
+        self.text.pop();
+        self.typed = true;
+    }
 }
 
 /// A shove of the selected sprite, which its observed list tells of once
@@ -1429,10 +1460,10 @@ impl App {
             Action::Mode(mode) => self.mode = mode,
             Action::Rename => self.start_naming(world),
             Action::ExportGenome => self.export_genome(world),
-            Action::QuickSave => self.save_as(QUICKSAVE, world),
-            Action::QuickLoad => self.quickload(world),
+            Action::Quicksave => self.save_as(QUICKSAVE, world),
+            Action::Quickload => self.quickload(world),
             Action::SaveAs => self.start_save_naming(world),
-            Action::Open => self.list_saves(),
+            Action::OpenSaves => self.list_saves(),
             Action::SelectNext => self.select_along(world, Direction::Next),
             Action::SelectPrevious => self.select_along(world, Direction::Previous),
             Action::NextTab => self.open(self.tab.along(1)),
@@ -1924,7 +1955,18 @@ impl App {
                 .iter()
                 .map(|(name, _)| name.clone())
                 .collect(),
-            Screen::LoadMenu => self.save_files.iter().map(|f| f.name.clone()).collect(),
+            // A file put there by hand may have a name the screen can't
+            // show (design §7.2).
+            Screen::LoadMenu => self
+                .save_files
+                .iter()
+                .map(|file| {
+                    file.name
+                        .chars()
+                        .map(|c| if cp437::contains(c) { c } else { '?' })
+                        .collect()
+                })
+                .collect(),
             _ => Vec::new(),
         }
     }
@@ -2131,7 +2173,9 @@ impl App {
 
     /// The name being typed, while naming (design §6.5).
     pub fn name_draft(&self) -> Option<&str> {
-        self.naming.as_ref().map(|naming| naming.draft.as_str())
+        self.naming
+            .as_ref()
+            .map(|naming| naming.draft.text.as_str())
     }
 
     /// The sprite being named, while naming.
@@ -2148,8 +2192,7 @@ impl App {
         let draft = self.random_name(sprite, world);
         self.naming = Some(Naming {
             sprite,
-            draft,
-            typed: false,
+            draft: Draft::offered(draft),
         });
         self.screen = Screen::Naming;
     }
@@ -2181,34 +2224,24 @@ impl App {
         match action {
             // Only letters CP437 can show, and spaces between them (design v28 §6.5).
             Action::Type(c) if (c.is_alphabetic() || c == ' ') && cp437::contains(c) => {
-                if !naming.typed {
-                    naming.draft.clear();
-                    naming.typed = true;
-                }
-                if naming.draft.chars().count() < MAX_NAME_CHARS {
-                    naming.draft.push(c);
-                }
+                naming.draft.type_char(c, MAX_NAME_CHARS);
             }
-            Action::Erase => {
-                naming.draft.pop();
-                naming.typed = true;
-            }
+            Action::Erase => naming.draft.erase(),
             Action::AnotherName => {
                 let sprite = naming.sprite;
                 let draft = self.random_name(sprite, world);
                 let naming = self.naming.as_mut().expect("naming");
-                naming.draft = draft;
-                naming.typed = false;
+                naming.draft = Draft::offered(draft);
             }
             Action::Enter => {
                 let naming = self.naming.take().expect("naming");
                 self.screen = Screen::Normal;
-                if naming.draft.trim_matches(' ').is_empty() {
+                if naming.draft.text.trim_matches(' ').is_empty() {
                     self.refuse("A name needs a letter in it".into());
                 } else {
                     self.commands.push(Command::Rename {
                         sprite: naming.sprite,
-                        name: naming.draft,
+                        name: naming.draft.text,
                     });
                 }
             }
@@ -2289,6 +2322,12 @@ impl App {
         self.unsaved_run = Duration::ZERO;
     }
 
+    /// Whether the world has run since it was last saved or loaded, or, if
+    /// it never was, since it began: whether a load would lose anything.
+    fn has_run_since_save(&self, world: &World) -> bool {
+        world.tick() != self.saved.map_or(0, |(tick, _)| tick)
+    }
+
     /// When the world was last saved or loaded, as real time since, or
     /// `None` if it never has been: for the top bar (design §6.1).
     pub fn saved_ago(&self) -> Option<Duration> {
@@ -2308,8 +2347,7 @@ impl App {
     /// already hold it, or a save does, and an older autosave stays.
     pub fn autosave(&mut self, world: &World) {
         self.since_autosave = Duration::ZERO;
-        let saved_tick = self.saved.map_or(0, |(tick, _)| tick);
-        if world.tick() == saved_tick {
+        if !self.has_run_since_save(world) {
             return;
         }
         let Some(folder) = self.save_folder.clone() else {
@@ -2329,39 +2367,31 @@ impl App {
     fn start_save_naming(&mut self, world: &World) {
         self.end_aim();
         let offered = format!("seed {} tick {}", world.seed(), world.tick());
-        self.save_naming = Some((offered, false));
+        self.save_naming = Some(Draft::offered(offered));
         self.screen = Screen::SaveNaming;
     }
 
     /// The save's name being typed, while naming one.
     pub fn save_name_draft(&self) -> Option<&str> {
-        self.save_naming.as_ref().map(|(draft, _)| draft.as_str())
+        self.save_naming.as_ref().map(|draft| draft.text.as_str())
     }
 
     /// What an action does while naming a save: letters type, the first
     /// replacing the name offered; `Backspace` rubs one out; `Enter` saves;
     /// `Esc` gives up.
     fn apply_save_naming(&mut self, action: Action, world: &World) -> Flow {
-        let Some((draft, typed)) = self.save_naming.as_mut() else {
+        let Some(draft) = self.save_naming.as_mut() else {
             self.screen = Screen::Normal;
             return Flow::Continue;
         };
         match action {
-            Action::Type(c) => {
-                if !*typed {
-                    draft.clear();
-                    *typed = true;
-                }
-                if draft.chars().count() < MAX_SAVE_NAME_CHARS {
-                    draft.push(c);
-                }
+            // Only what the screen can show (design §7.2).
+            Action::Type(c) if !c.is_control() && cp437::contains(c) => {
+                draft.type_char(c, MAX_SAVE_NAME_CHARS);
             }
-            Action::Erase => {
-                draft.pop();
-                *typed = true;
-            }
+            Action::Erase => draft.erase(),
             Action::Enter => {
-                let (draft, _) = self.save_naming.take().expect("naming a save");
+                let draft = self.save_naming.take().expect("naming a save").text;
                 self.screen = Screen::Normal;
                 if draft.trim().is_empty() {
                     self.refuse("A save needs a name".into());
@@ -2420,8 +2450,7 @@ impl App {
     /// Loads `file`, first asking if the world has run since it was last
     /// saved, as what has happened since would be lost (design §6.7).
     fn ask_to_load(&mut self, file: SaveFile, world: &World) {
-        let saved_tick = self.saved.map_or(0, |(tick, _)| tick);
-        if world.tick() == saved_tick {
+        if !self.has_run_since_save(world) {
             return self.load(file);
         }
         self.to_load = Some(file);
@@ -2731,7 +2760,7 @@ fn clamp_origin(origin: i32, view: u16, len: u16) -> u16 {
 
 /// A length of real time as the player reads it: "under a minute", "3m",
 /// "1h 5m".
-fn spoken_duration(time: Duration) -> String {
+pub(crate) fn spoken_duration(time: Duration) -> String {
     let minutes = time.as_secs() / 60;
     match (minutes / 60, minutes % 60) {
         (0, 0) => "under a minute".into(),

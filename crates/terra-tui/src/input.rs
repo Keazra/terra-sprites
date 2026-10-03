@@ -108,13 +108,13 @@ pub enum Action {
     /// Export the selected sprite's genome to a file (`g`, design §6.1).
     ExportGenome,
     /// Save the world as the quicksave (`F5`, design §6.7).
-    QuickSave,
+    Quicksave,
     /// Load the quicksave (`F9`).
-    QuickLoad,
+    Quickload,
     /// Save the world by a name typed (`Ctrl+S`).
     SaveAs,
     /// Pick a save to load from a list (`Ctrl+O`).
-    Open,
+    OpenSaves,
     /// While naming, a letter typed.
     Type(char),
     /// While naming, the last letter rubbed out (`Backspace`).
@@ -247,7 +247,7 @@ impl Keys {
                 KeyCode::Char('c' | 'C') => Action::Quit,
                 // A held key would save or open the list again and again.
                 KeyCode::Char('s' | 'S') if !held => Action::SaveAs,
-                KeyCode::Char('o' | 'O') if !held => Action::Open,
+                KeyCode::Char('o' | 'O') if !held => Action::OpenSaves,
                 KeyCode::Char('s' | 'S' | 'o' | 'O') => return None,
                 _ => Action::Dismiss,
             });
@@ -306,8 +306,8 @@ impl Keys {
             KeyCode::Char('g') => (!held).then_some(Action::ExportGenome),
             KeyCode::Char(digit @ '1'..='9') => (!held).then(|| Action::Pick(digit as u8 - b'0')),
             KeyCode::Enter => (!held).then_some(Action::Enter),
-            KeyCode::F(5) => (!held).then_some(Action::QuickSave),
-            KeyCode::F(9) => (!held).then_some(Action::QuickLoad),
+            KeyCode::F(5) => (!held).then_some(Action::Quicksave),
+            KeyCode::F(9) => (!held).then_some(Action::Quickload),
             // Some terminals report Shift+Tab as its own key, others as Tab with Shift.
             KeyCode::BackTab => Some(Action::SelectPrevious),
             KeyCode::Tab if key.modifiers.contains(KeyModifiers::SHIFT) => {

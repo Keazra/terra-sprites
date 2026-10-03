@@ -177,11 +177,11 @@ fn run(
             if let Some(loaded) = app.take_loaded() {
                 world = loaded;
             }
-        }
-
-        // The player's clicks, stamped for the next tick (design §2.5).
-        for command in app.take_commands() {
-            world.submit(command);
+            // The player's clicks, stamped for the next tick (design
+            // §2.5), as each is made, so a save made next holds them.
+            for command in app.take_commands() {
+                world.submit(command);
+            }
         }
 
         let now = Instant::now();

@@ -93,7 +93,7 @@ fn f5_saves_the_quicksave_and_the_top_bar_says_so() {
     run(&mut world, 5);
     assert!(bars(&app, &world).0.contains("│ not saved"));
 
-    apply(&mut app, &world, Action::QuickSave);
+    apply(&mut app, &world, Action::Quicksave);
     assert_eq!(app.notice(), Some("Saved as quicksave"));
     let saved = std::fs::read(saves::path_for(&folder, QUICKSAVE)).expect("the quicksave");
     let loaded = World::load(&saved).expect("it loads");
@@ -109,7 +109,7 @@ fn f9_with_no_quicksave_says_so() {
     let folder = scratch_folder("f9-none");
     let world = world();
     let mut app = app_for(&world, &folder);
-    apply(&mut app, &world, Action::QuickLoad);
+    apply(&mut app, &world, Action::Quickload);
     assert_eq!(
         app.refusal(),
         Some("There's no quicksave yet: F5 makes one")
@@ -123,12 +123,12 @@ fn f9_loads_the_quicksave_after_asking_if_the_world_has_run_since() {
     let mut world = world();
     let mut app = app_for(&world, &folder);
     run(&mut world, 10);
-    apply(&mut app, &world, Action::QuickSave);
+    apply(&mut app, &world, Action::Quicksave);
     let saved_hash = world.state_hash();
     app.animate(Duration::from_secs(4 * 60));
     run(&mut world, 30);
 
-    apply(&mut app, &world, Action::QuickLoad);
+    apply(&mut app, &world, Action::Quickload);
     assert_eq!(app.screen(), Screen::LoadPrompt);
     assert_eq!(
         app.load_question().as_deref(),
@@ -155,9 +155,9 @@ fn any_other_key_keeps_the_world_as_it_is() {
     let folder = scratch_folder("f9-cancel");
     let mut world = world();
     let mut app = app_for(&world, &folder);
-    apply(&mut app, &world, Action::QuickSave);
+    apply(&mut app, &world, Action::Quicksave);
     run(&mut world, 3);
-    apply(&mut app, &world, Action::QuickLoad);
+    apply(&mut app, &world, Action::Quickload);
     apply(&mut app, &world, Action::Dismiss);
     assert_eq!(app.screen(), Screen::Normal);
     assert!(app.load_question().is_none());
@@ -170,8 +170,8 @@ fn a_world_that_hasnt_run_since_its_save_loads_without_asking() {
     let mut world = world();
     let mut app = app_for(&world, &folder);
     run(&mut world, 4);
-    apply(&mut app, &world, Action::QuickSave);
-    apply(&mut app, &world, Action::QuickLoad);
+    apply(&mut app, &world, Action::Quicksave);
+    apply(&mut app, &world, Action::Quickload);
     assert_eq!(app.screen(), Screen::Normal);
     assert!(app.take_loaded().is_some());
 }
@@ -183,7 +183,7 @@ fn a_world_never_saved_asks_saying_so() {
     let mut app = app_for(&world, &folder);
     saves::write(&folder, QUICKSAVE, &world.save()).expect("written");
     run(&mut world, 2);
-    apply(&mut app, &world, Action::QuickLoad);
+    apply(&mut app, &world, Action::Quickload);
     assert_eq!(
         app.load_question().as_deref(),
         Some("Load quicksave? This world has never been saved (y/n)")
@@ -240,10 +240,10 @@ fn ctrl_o_lists_the_saves_newest_first_and_picking_one_loads_it() {
     // File times can be coarse: make the order plain.
     std::thread::sleep(Duration::from_millis(1100));
     run(&mut world, 6);
-    apply(&mut app, &world, Action::QuickSave);
+    apply(&mut app, &world, Action::Quicksave);
     run(&mut world, 2);
 
-    apply(&mut app, &world, Action::Open);
+    apply(&mut app, &world, Action::OpenSaves);
     assert_eq!(app.screen(), Screen::LoadMenu);
     assert_eq!(app.menu_title(), Some(" Load "));
     assert_eq!(app.menu_items(&world), ["quicksave", "older"]);
@@ -261,7 +261,7 @@ fn the_load_list_says_when_there_are_no_saves() {
     let folder = scratch_folder("open-empty");
     let world = world();
     let mut app = app_for(&world, &folder);
-    apply(&mut app, &world, Action::Open);
+    apply(&mut app, &world, Action::OpenSaves);
     assert!(app.menu_items(&world).is_empty());
     assert_eq!(
         app.menu_empty(),
@@ -277,7 +277,7 @@ fn a_damaged_save_is_refused_on_the_status_line() {
     let world = world();
     let mut app = app_for(&world, &folder);
     std::fs::write(saves::path_for(&folder, QUICKSAVE), b"TSPR not really").expect("written");
-    apply(&mut app, &world, Action::QuickLoad);
+    apply(&mut app, &world, Action::Quickload);
     assert_eq!(
         app.refusal(),
         Some("Couldn't load quicksave: it isn't a Terra Sprites save")
@@ -294,7 +294,7 @@ fn a_save_that_cant_be_written_is_refused_on_the_status_line() {
     std::fs::write(&blocked, b"").expect("written");
     let world = world();
     let mut app = app_for(&world, &blocked);
-    apply(&mut app, &world, Action::QuickSave);
+    apply(&mut app, &world, Action::Quicksave);
     let refusal = app.refusal().expect("refused");
     assert!(refusal.starts_with("Couldn't save: "), "{refusal}");
 }
@@ -311,7 +311,7 @@ fn a_loaded_world_keeps_the_cursor_as_it_was() {
     saves::write(&folder, QUICKSAVE, &world.save()).expect("written");
     let fresh = self::world();
     let mut app = app_for(&fresh, &folder);
-    apply(&mut app, &fresh, Action::QuickLoad);
+    apply(&mut app, &fresh, Action::Quickload);
     let loaded = app.take_loaded().expect("loaded");
     assert_eq!(app.mode(), CursorMode::Grab, "the Cursor holds the ball");
     assert_eq!(app.cursor(), at(4, 6));
@@ -367,7 +367,7 @@ fn quitting_autosaves_unless_the_world_hasnt_run_since_its_last_save() {
         "a new world has nothing to keep"
     );
     run(&mut world, 3);
-    apply(&mut app, &world, Action::QuickSave);
+    apply(&mut app, &world, Action::Quicksave);
     app.autosave(&world);
     assert_eq!(saves::list(&folder).len(), 1, "the quicksave holds it");
     run(&mut world, 3);
@@ -381,11 +381,11 @@ fn the_keys_for_saving_and_loading() {
     let key = |code, modifiers| KeyEvent::new(code, modifiers);
     assert_eq!(
         keys.action_for(key(KeyCode::F(5), KeyModifiers::NONE)),
-        Some(Action::QuickSave)
+        Some(Action::Quicksave)
     );
     assert_eq!(
         keys.action_for(key(KeyCode::F(9), KeyModifiers::NONE)),
-        Some(Action::QuickLoad)
+        Some(Action::Quickload)
     );
     assert_eq!(
         keys.action_for(key(KeyCode::Char('s'), KeyModifiers::CONTROL)),
@@ -393,7 +393,7 @@ fn the_keys_for_saving_and_loading() {
     );
     assert_eq!(
         keys.action_for(key(KeyCode::Char('o'), KeyModifiers::CONTROL)),
-        Some(Action::Open)
+        Some(Action::OpenSaves)
     );
 }
 
@@ -404,4 +404,14 @@ fn a_save_name_becomes_a_file_name_any_system_can_hold() {
         saves::path_for(folder, " a/b:c? "),
         folder.join("a-b-c-.tspr")
     );
+}
+
+#[test]
+fn a_save_name_takes_only_what_the_screen_can_show() {
+    let folder = scratch_folder("save-as-cp437");
+    let world = world();
+    let mut app = app_for(&world, &folder);
+    apply(&mut app, &world, Action::SaveAs);
+    type_text(&mut app, &world, "Café ☃ 1\t");
+    assert_eq!(app.save_name_draft(), Some("Café  1"));
 }

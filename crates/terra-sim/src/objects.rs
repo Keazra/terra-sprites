@@ -149,10 +149,17 @@ impl Objects {
 
     /// Rebuilds which object stands on each tile of `map`, after a load: every
     /// object but a held one, which is off the map. Says what's wrong if
-    /// one is off the map or shares a tile.
-    pub(crate) fn rebuild(&mut self, map: &Map) -> Result<(), String> {
+    /// one is of a type `data` doesn't have, or is off the map or shares a
+    /// tile.
+    pub(crate) fn rebuild(&mut self, map: &Map, data: &DataPack) -> Result<(), String> {
         self.on_tile = Occupancy::new(map);
         for (&id, object) in &self.by_id {
+            if object.kind >= data.object_types().len() {
+                return Err(format!(
+                    "object {} is of a type its pack doesn't have",
+                    id.0
+                ));
+            }
             if object.held {
                 continue;
             }

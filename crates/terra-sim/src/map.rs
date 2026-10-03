@@ -206,6 +206,21 @@ impl Map {
         }
     }
 
+    /// Checks a map read from a save (design §2.8): each side in range, a
+    /// tile for each place, and the step costs `data` gives.
+    pub(crate) fn check_shape(&self, data: &DataPack) -> Result<(), String> {
+        let side = 1..=MAX_SIDE;
+        let tiles = usize::from(self.width) * usize::from(self.height);
+        if !side.contains(&self.width) || !side.contains(&self.height) || self.tiles.len() != tiles
+        {
+            return Err("the map's size doesn't add up".into());
+        }
+        if self.step_costs != step_costs(data) {
+            return Err("the map's step costs aren't its data pack's".into());
+        }
+        Ok(())
+    }
+
     /// The map drawn with the `from_ascii` legend, one string per row.
     #[cfg(test)]
     pub(crate) fn to_ascii(&self) -> Vec<String> {
@@ -334,4 +349,21 @@ fn terrain_from_bytes<'de, D: Deserializer<'de>>(
                 .ok_or_else(|| serde::de::Error::custom(format!("{byte} names no terrain")))
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_map_whose_size_doesnt_add_up_fails_its_shape_check() {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let mut map = Map::filled(4, 3, Terrain::Grass, &data);
+        assert!(map.check_shape(&data).is_ok());
+        map.width = 5;
+        assert!(map.check_shape(&data).is_err());
+        map.width = 4;
+        map.step_costs[0] = Some(999);
+        assert!(map.check_shape(&data).is_err());
+    }
 }

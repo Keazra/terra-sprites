@@ -1,6 +1,6 @@
 //! Save files (design §2.8): the magic `TSPR`, then a header naming the
-//! save's schema and the build that wrote it, then the world, each in
-//! MessagePack with named fields.
+//! save's schema, the build that wrote it and the world's checksum, then
+//! the world, each in MessagePack with named fields.
 //!
 //! **Schema versions.** A change that only adds fields, each with a serde
 //! default, keeps the schema. A breaking change bumps `SCHEMA_VERSION` and
@@ -16,6 +16,10 @@ use std::fmt;
 
 use serde::de::{self, DeserializeOwned, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
+
+use std::collections::BTreeMap;
+
+use xxhash_rust::xxh3::xxh3_64;
 
 use crate::config::WorldConfig;
 use crate::data::DataError;
@@ -62,7 +66,12 @@ impl fmt::Display for LoadError {
                  this one reads formats up to {SCHEMA_VERSION}"
             ),
             LoadError::Damaged(what) => write!(f, "it's damaged: {what}"),
-            LoadError::Pack(err) => write!(f, "its data pack doesn't load: {err:?}"),
+            LoadError::Pack(DataError::MissingFile(file)) => {
+                write!(f, "its data pack has no {file}")
+            }
+            LoadError::Pack(
+                DataError::Parse { file, message } | DataError::Invalid { file, message },
+            ) => write!(f, "its data pack's {file} doesn't load: {message}"),
         }
     }
 }
@@ -73,13 +82,16 @@ impl fmt::Display for LoadError {
 struct Header {
     schema_version: u32,
     sim_version: String,
+    /// The world's bytes, hashed, so a save damaged on disk is refused
+    /// before it's read, rather than read wrong.
+    checksum: u64,
 }
 
 /// The world as a save holds it, in the current schema.
 #[derive(Serialize)]
 pub(crate) struct Contents<'a> {
     pub(crate) seed: u64,
-    pub(crate) config: Option<WorldConfig>,
+    pub(crate) config: Option<Preset>,
     /// The data pack's files, as `(path within the pack, RON text)`.
     pub(crate) pack: Vec<(String, String)>,
     pub(crate) state: &'a WorldState,
@@ -89,20 +101,58 @@ pub(crate) struct Contents<'a> {
 #[derive(Deserialize)]
 pub(crate) struct Loaded {
     pub(crate) seed: u64,
-    pub(crate) config: Option<WorldConfig>,
+    pub(crate) config: Option<Preset>,
     pub(crate) pack: Vec<(String, String)>,
     pub(crate) state: WorldState,
 }
 
+/// A world's preset as a save holds it: `WorldConfig`'s fields, kept
+/// here so the public `WorldConfig` can only be made by checking a preset.
+#[derive(Serialize, Deserialize)]
+pub(crate) struct Preset {
+    width: u16,
+    height: u16,
+    objects: BTreeMap<String, u32>,
+    per_tiles: u32,
+    sprites: u16,
+}
+
+impl From<&WorldConfig> for Preset {
+    fn from(config: &WorldConfig) -> Preset {
+        let (width, height, objects, per_tiles, sprites) = config.parts();
+        Preset {
+            width,
+            height,
+            objects: objects.clone(),
+            per_tiles,
+            sprites,
+        }
+    }
+}
+
+impl From<Preset> for WorldConfig {
+    fn from(preset: Preset) -> WorldConfig {
+        WorldConfig::from_parts(
+            preset.width,
+            preset.height,
+            preset.objects,
+            preset.per_tiles,
+            preset.sprites,
+        )
+    }
+}
+
 /// The save's bytes.
 pub(crate) fn write(contents: &Contents) -> Vec<u8> {
+    let body = rmp_serde::to_vec_named(contents).expect("a world always serializes");
     let header = Header {
         schema_version: SCHEMA_VERSION,
         sim_version: SIM_VERSION.into(),
+        checksum: xxh3_64(&body),
     };
     let mut bytes = MAGIC.to_vec();
     rmp_serde::encode::write_named(&mut bytes, &header).expect("a header always serializes");
-    rmp_serde::encode::write_named(&mut bytes, contents).expect("a world always serializes");
+    bytes.extend_from_slice(&body);
     bytes
 }
 
@@ -117,6 +167,9 @@ pub(crate) fn read(bytes: &[u8]) -> Result<Loaded, LoadError> {
             schema,
             sim_version: header.sim_version,
         }),
+        _ if xxh3_64(rest) != header.checksum => Err(LoadError::Damaged(
+            "its contents don't match their checksum".into(),
+        )),
         schema => upgrade(schema, rest),
     }
 }
