@@ -151,6 +151,38 @@ fn f9_loads_the_quicksave_after_asking_if_the_world_has_run_since() {
 }
 
 #[test]
+fn f9_answers_its_own_question() {
+    let folder = scratch_folder("f9-twice");
+    let mut world = world();
+    let mut app = app_for(&world, &folder);
+    apply(&mut app, &world, Action::Quicksave);
+    run(&mut world, 3);
+    apply(&mut app, &world, Action::Quickload);
+    assert_eq!(app.screen(), Screen::LoadPrompt);
+    apply(&mut app, &world, Action::Quickload);
+    assert_eq!(app.screen(), Screen::Normal);
+    assert_eq!(app.take_loaded().expect("the quicksave loaded").tick(), 0);
+}
+
+#[test]
+fn f9_doesnt_answer_for_another_save() {
+    let folder = scratch_folder("f9-other");
+    let mut world = world();
+    let mut app = app_for(&world, &folder);
+    saves::write(&folder, "Bush gardens", &world.save()).expect("written");
+    run(&mut world, 3);
+    apply(&mut app, &world, Action::OpenSaves);
+    apply(&mut app, &world, Action::Pick(1));
+    assert_eq!(app.screen(), Screen::LoadPrompt);
+    apply(&mut app, &world, Action::Quickload);
+    assert_eq!(app.screen(), Screen::Normal);
+    assert!(
+        app.take_loaded().is_none(),
+        "F9 answers only for the quicksave"
+    );
+}
+
+#[test]
 fn any_other_key_keeps_the_world_as_it_is() {
     let folder = scratch_folder("f9-cancel");
     let mut world = world();
@@ -318,6 +350,32 @@ fn a_loaded_world_keeps_the_cursor_as_it_was() {
     assert!(app.visible());
     assert!(app.take_commands().is_empty(), "nothing to tell the world");
     assert!(loaded.cursor().holds().is_some());
+}
+
+#[test]
+fn a_loaded_world_shows_what_the_screen_showed_when_it_was_saved() {
+    let folder = scratch_folder("view");
+    let rows = vec!["........................................"; 30];
+    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &[(at(2, 2), None)],
+        scripted: &[],
+    };
+    let world = World::from_scenario(scenario, pack(), 7).expect("valid scenario");
+    let mut app = app_for(&world, &folder);
+    // The view starts at the middle of the map; this takes it to a corner.
+    apply(&mut app, &world, Action::Scroll { dx: 20, dy: 15 });
+    let viewport = app.viewport();
+    assert_eq!(viewport, at(29, 22));
+    apply(&mut app, &world, Action::Quicksave);
+
+    apply(&mut app, &world, Action::Scroll { dx: -40, dy: -30 });
+    assert_eq!(app.viewport(), at(0, 0));
+    apply(&mut app, &world, Action::Quickload);
+    app.take_loaded().expect("the quicksave loaded");
+    assert_eq!(app.viewport(), viewport);
 }
 
 #[test]
