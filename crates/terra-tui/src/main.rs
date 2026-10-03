@@ -61,10 +61,23 @@ fn main() -> ExitCode {
     };
     let seed = args.seed.unwrap_or_else(time_seed);
     let world = World::new(config, data, seed);
-    let theme = if args.ascii {
-        Theme::ascii()
-    } else {
-        Theme::cp437()
+    // A theme names object types and drives, so it's checked against the
+    // pack too (design v33 §6.7).
+    let theme = match &args.theme {
+        None if args.ascii => Theme::ascii(),
+        None => Theme::cp437(),
+        Some(path) => {
+            let loaded = std::fs::read_to_string(path)
+                .map_err(|err| err.to_string())
+                .and_then(|text| Theme::from_ron(&text, world.data()));
+            match loaded {
+                Ok(theme) => theme,
+                Err(err) => {
+                    eprintln!("terra-sprites: can't use theme {}: {err}", path.display());
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
     };
 
     // Installs a panic hook that restores the terminal before the panic is reported.
