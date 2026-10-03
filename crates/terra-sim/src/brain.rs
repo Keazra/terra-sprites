@@ -559,11 +559,16 @@ impl Brain {
     fn lessons(&mut self, data: &DataPack) -> Vec<(Learned, bool)> {
         let threshold = data.physiology().lesson_threshold;
         let mut found = Vec::new();
-        for learned in self.learned(data) {
-            if learned.amount.abs() >= threshold
-                && self.experience.taught.insert(learned.learned.clone())
-            {
-                found.push((learned.learned, learned.amount > 0.0));
+        let mut over = Vec::new();
+        self.each_learned(data, |learned, amount| {
+            if amount.abs() >= threshold {
+                over.push((learned, amount));
+            }
+        });
+        for (learned, amount) in over {
+            let learned = learned.named(data);
+            if self.experience.taught.insert(learned.clone()) {
+                found.push((learned, amount > 0.0));
             }
         }
         found
@@ -661,8 +666,20 @@ impl Brain {
     /// category order, and within a category in object type order (design
     /// §5.6).
     fn learned(&self, data: &DataPack) -> Vec<Memory> {
-        let inputs = data.brain_inputs_in_order();
-        let mut memory: Vec<Memory> = Vec::new();
+        let mut memory = Vec::new();
+        self.each_learned(data, |learned, amount| {
+            memory.push(Memory {
+                learned: learned.named(data),
+                amount,
+            });
+        });
+        memory
+    }
+
+    /// `learned`, each value given to `visit` before it's named: naming
+    /// takes text, and most values are looked at only for their amount,
+    /// every tick.
+    fn each_learned(&self, data: &DataPack, mut visit: impl FnMut(Unnamed, f32)) {
         // Sprites in general are the summary of the ones it knows (design
         // v18 §5.6), never learned directly.
         let in_general = self.sprites_in_general(data.need_places().len());
@@ -672,10 +689,10 @@ impl Brain {
             .map(|category| (category.id, self.category_summary(category.id, data)))
             .collect();
         // Each thing's worth for each need, general good and bad.
-        let mut things: Vec<(Thing, &[f32], f32, f32)> = Vec::new();
+        let mut things: Vec<(UnnamedThing, &[f32], f32, f32)> = Vec::new();
         for category in categories {
             if category.id == data.sprite_category() {
-                let thing = category_thing(category.id, data);
+                let thing = UnnamedThing::Category(category.id);
                 things.push((thing, &in_general.worth, in_general.good, in_general.bad));
                 continue;
             }
@@ -683,50 +700,36 @@ impl Brain {
             // §5.6), so the category has no summary.
             if category.id == data.cursor_category() {
                 if let Some(known) = &self.experience.cursor {
-                    things.push((Thing::Cursor, &known.worth, known.good, known.bad));
+                    let thing = UnnamedThing::Cursor;
+                    things.push((thing, &known.worth, known.good, known.bad));
                 }
                 continue;
             }
             let types = self.experience.types.iter();
             for (&subject, known) in types.filter(|(s, _)| s.category(data) == category.id) {
-                let thing = subject_thing(subject, data);
+                let thing = UnnamedThing::Subject(subject);
                 things.push((thing, &known.worth, known.good, known.bad));
             }
             // Then the category's summary, never learned directly (design
             // v19 §5.6).
             let summary = &summaries[&category.id];
-            let thing = category_thing(category.id, data);
+            let thing = UnnamedThing::Category(category.id);
             things.push((thing, &summary.worth, summary.good, summary.bad));
         }
         for (need, &place) in data.need_places().iter().enumerate() {
-            for (thing, worth, ..) in &things {
-                memory.push(Memory {
-                    learned: Learned::Worth {
-                        thing: thing.clone(),
-                        need: Some(inputs[place].name.clone()),
-                    },
-                    amount: worth[need],
-                });
+            for &(thing, worth, ..) in &things {
+                let named = Unnamed::Worth {
+                    thing,
+                    need: Some(place),
+                };
+                visit(named, worth[need]);
             }
         }
-        for &(ref thing, _, good, _) in &things {
-            let learned = Learned::Worth {
-                thing: thing.clone(),
-                need: None,
-            };
-            memory.push(Memory {
-                learned,
-                amount: good,
-            });
+        for &(thing, _, good, _) in &things {
+            visit(Unnamed::Worth { thing, need: None }, good);
         }
-        for &(ref thing, _, _, bad) in &things {
-            let learned = Learned::Bad {
-                thing: thing.clone(),
-            };
-            memory.push(Memory {
-                learned,
-                amount: bad,
-            });
+        for &(thing, _, _, bad) in &things {
+            visit(Unnamed::Bad { thing }, bad);
         }
         // Habits are about object types, sprites' too (design v19 §5.6).
         let habits = categories.iter().flat_map(|category| {
@@ -735,65 +738,35 @@ impl Brain {
         });
         for (&subject, known) in habits {
             for (&verb, &value) in VERBS.iter().zip(&known.habits) {
-                let learned = Learned::Habit {
-                    thing: subject_thing(subject, data),
-                    verb,
-                };
-                memory.push(Memory {
-                    learned,
-                    amount: value,
-                });
+                let thing = UnnamedThing::Subject(subject);
+                visit(Unnamed::Habit { thing, verb }, value);
             }
         }
-        memory.push(Memory {
-            learned: Learned::NewThings,
-            amount: self.experience.new_things,
-        });
+        visit(Unnamed::NewThings, self.experience.new_things);
         // The sprites it remembers (design v18 §5.9), in ID order.
         for (&id, individual) in &self.experience.individuals {
-            let thing = || Thing::Sprite(id);
+            let thing = UnnamedThing::Sprite(id);
             for (&value, &place) in individual.worth.iter().zip(data.need_places()) {
-                let learned = Learned::Worth {
-                    thing: thing(),
-                    need: Some(inputs[place].name.clone()),
-                };
-                memory.push(Memory {
-                    learned,
-                    amount: value,
-                });
-            }
-            let values = [
-                (
-                    Learned::Worth {
-                        thing: thing(),
-                        need: None,
+                visit(
+                    Unnamed::Worth {
+                        thing,
+                        need: Some(place),
                     },
-                    individual.good,
-                ),
-                (Learned::Bad { thing: thing() }, individual.bad),
-                (Learned::Fear { thing: thing() }, individual.fear),
-            ];
-            for (learned, amount) in values {
-                memory.push(Memory { learned, amount });
+                    value,
+                );
             }
+            visit(Unnamed::Worth { thing, need: None }, individual.good);
+            visit(Unnamed::Bad { thing }, individual.bad);
+            visit(Unnamed::Fear { thing }, individual.fear);
         }
         // Fear of sprites in general comes of the sprites above, so it's
         // listed, and a lesson, after them.
-        memory.push(Memory {
-            learned: Learned::Fear {
-                thing: category_thing(data.sprite_category(), data),
-            },
-            amount: in_general.fear,
-        });
+        let sprites = UnnamedThing::Category(data.sprite_category());
+        visit(Unnamed::Fear { thing: sprites }, in_general.fear);
         if let Some(cursor) = &self.experience.cursor {
-            memory.push(Memory {
-                learned: Learned::Fear {
-                    thing: Thing::Cursor,
-                },
-                amount: cursor.fear,
-            });
+            let thing = UnnamedThing::Cursor;
+            visit(Unnamed::Fear { thing }, cursor.fear);
         }
-        memory
     }
 
     /// Sprites in general (design v18 §5.6): each value's mean over the
@@ -821,14 +794,17 @@ impl Brain {
     /// object types in it the sprite knows, at no strength while it knows
     /// one, and in full once it knows `generalise_types`.
     pub(crate) fn category_summary(&self, category: CategoryId, data: &DataPack) -> Summary {
-        let known: Vec<_> = self
-            .experience
-            .types
-            .iter()
-            .filter(|(subject, memory)| memory.touched && subject.category(data) == category)
-            .map(|(_, memory)| memory)
-            .collect();
-        let share = summary_share(known.len(), self.params.get(BrainParam::GeneraliseTypes));
+        let known = || {
+            self.experience
+                .types
+                .iter()
+                .filter(|(subject, memory)| memory.touched && subject.category(data) == category)
+                .map(|(_, memory)| memory)
+        };
+        let share = summary_share(
+            known().count(),
+            self.params.get(BrainParam::GeneraliseTypes),
+        );
         let mut summary = Summary {
             worth: vec![0.0; data.need_places().len()],
             good: 0.0,
@@ -837,7 +813,7 @@ impl Brain {
         if share == 0.0 {
             return summary;
         }
-        for known in known {
+        for known in known() {
             for (summary, worth) in summary.worth.iter_mut().zip(&known.worth) {
                 *summary += share * worth;
             }
@@ -1387,6 +1363,71 @@ fn subject_thing(subject: Subject, data: &DataPack) -> Thing {
 fn category_thing(category: CategoryId, data: &DataPack) -> Thing {
     let category = data.category(category).expect("a category in the pack");
     Thing::Category(category.name.clone())
+}
+
+/// A thing something learned is about, before it's named (`Thing`).
+#[derive(Debug, Clone, Copy)]
+enum UnnamedThing {
+    /// An object type, or water or sprites learned about as a category.
+    Subject(Subject),
+    /// A category's summary.
+    Category(CategoryId),
+    Sprite(EntityId),
+    Cursor,
+}
+
+impl UnnamedThing {
+    fn named(self, data: &DataPack) -> Thing {
+        match self {
+            UnnamedThing::Subject(subject) => subject_thing(subject, data),
+            UnnamedThing::Category(category) => category_thing(category, data),
+            UnnamedThing::Sprite(id) => Thing::Sprite(id),
+            UnnamedThing::Cursor => Thing::Cursor,
+        }
+    }
+}
+
+/// Something a sprite has learned, before it's named (`Learned`). A need is
+/// its place among the brain inputs.
+#[derive(Debug, Clone, Copy)]
+enum Unnamed {
+    Worth {
+        thing: UnnamedThing,
+        need: Option<usize>,
+    },
+    Bad {
+        thing: UnnamedThing,
+    },
+    Fear {
+        thing: UnnamedThing,
+    },
+    Habit {
+        thing: UnnamedThing,
+        verb: Verb,
+    },
+    NewThings,
+}
+
+impl Unnamed {
+    fn named(self, data: &DataPack) -> Learned {
+        match self {
+            Unnamed::Worth { thing, need } => Learned::Worth {
+                thing: thing.named(data),
+                need: need.map(|place| data.brain_inputs_in_order()[place].name.clone()),
+            },
+            Unnamed::Bad { thing } => Learned::Bad {
+                thing: thing.named(data),
+            },
+            Unnamed::Fear { thing } => Learned::Fear {
+                thing: thing.named(data),
+            },
+            Unnamed::Habit { thing, verb } => Learned::Habit {
+                thing: thing.named(data),
+                verb,
+            },
+            Unnamed::NewThings => Learned::NewThings,
+        }
+    }
 }
 
 /// The `target_distance` input's value in `inputs` (design §5.2).
