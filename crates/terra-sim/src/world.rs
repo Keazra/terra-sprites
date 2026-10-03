@@ -790,7 +790,7 @@ impl World {
 
     /// The session log recorded since `start_recording`, as a replay's
     /// bytes, or `None` if the world isn't recording (design §2.7).
-    pub fn recording(&self) -> Option<Vec<u8>> {
+    pub fn replay(&self) -> Option<Vec<u8>> {
         let recording = self.recording.as_ref()?;
         Some(replay::write(recording, &self.data, self.state.tick))
     }

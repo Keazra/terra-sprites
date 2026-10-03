@@ -42,7 +42,7 @@ pub fn session_log() -> Option<PathBuf> {
 pub const SESSION_LOG: &str = "last_session.replay";
 
 /// Where the default preset sits in a data folder.
-const DEFAULT_PRESET: &str = "presets/default.ron";
+pub const DEFAULT_PRESET: &str = "presets/default.ron";
 
 /// What `--data <dir>` reads from its folder (design §6.7).
 #[derive(Debug, Clone, PartialEq, Eq)]

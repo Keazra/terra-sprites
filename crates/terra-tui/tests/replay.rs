@@ -83,7 +83,7 @@ fn played(world: World, ticks: u64) -> Session {
 /// The playback of the replay `session` writes.
 fn replay_of(session: &Session, name: &str) -> Playback {
     let log = scratch_folder(name).join(files::SESSION_LOG);
-    session.write_log(&log).expect("the log is written");
+    session.write_session_log(&log).expect("the log is written");
     Playback::new(&std::fs::read(&log).expect("the log is there")).expect("it plays")
 }
 
@@ -95,7 +95,7 @@ fn replaying(playback: &Playback) -> App {
 }
 
 #[test]
-fn a_live_session_writes_a_log_that_plays_back_to_the_same_world() {
+fn a_live_session_writes_a_session_log_that_plays_back_to_the_same_world() {
     let session = played(world(), 1_200);
     let mut playback = replay_of(&session, "live");
     assert_eq!(playback.end(), 1_200);
@@ -107,7 +107,7 @@ fn a_live_session_writes_a_log_that_plays_back_to_the_same_world() {
 }
 
 #[test]
-fn loading_a_save_starts_the_log_afresh_from_it() {
+fn loading_a_save_starts_the_session_log_afresh_from_it() {
     let mut session = played(world(), 50);
     let mut other = world();
     for _ in 0..30 {
@@ -122,7 +122,7 @@ fn loading_a_save_starts_the_log_afresh_from_it() {
 }
 
 #[test]
-fn a_replay_takes_no_commands_and_writes_no_log() {
+fn a_replay_takes_no_commands_and_writes_no_session_log() {
     let live = played(world(), 20);
     let mut replay = Session::replay(replay_of(&live, "no-commands"));
     let before = replay.world().state_hash();
@@ -134,17 +134,17 @@ fn a_replay_takes_no_commands_and_writes_no_log() {
     assert_eq!(replay.world().state_hash(), before, "nothing was submitted");
 
     let log = scratch_folder("no-log").join(files::SESSION_LOG);
-    replay.write_log(&log).expect("nothing to write");
+    replay.write_session_log(&log).expect("nothing to write");
     assert!(!log.exists(), "a replay never overwrites the log");
     assert!(replay.playback().is_some());
 }
 
 #[test]
-fn a_session_that_ends_in_a_panic_still_writes_its_log() {
+fn a_session_that_ends_in_a_panic_still_writes_its_session_log() {
     let mut session = Session::live(world());
     let log = scratch_folder("panic").join(files::SESSION_LOG);
     let panicked = catch_unwind(AssertUnwindSafe(|| {
-        session::writing_log_on_panic(&mut session, Some(&log), |session| {
+        session::writing_session_log_on_panic(&mut session, Some(&log), |session| {
             for _ in 0..1_100 {
                 session.step();
             }

@@ -72,8 +72,8 @@ impl Session {
     /// Writes the session log to `path`, beside it first and then in its
     /// place, so a write cut short never breaks the last one. A replay
     /// writes none: it might be playing that very file.
-    pub fn write_log(&self, path: &Path) -> io::Result<()> {
-        let Some(bytes) = self.world_recording() else {
+    pub fn write_session_log(&self, path: &Path) -> io::Result<()> {
+        let Some(bytes) = self.replay_bytes() else {
             return Ok(());
         };
         if let Some(folder) = path.parent() {
@@ -86,9 +86,9 @@ impl Session {
     }
 
     /// A live world's session log so far.
-    fn world_recording(&self) -> Option<Vec<u8>> {
+    fn replay_bytes(&self) -> Option<Vec<u8>> {
         match self {
-            Session::Live(world) => world.recording(),
+            Session::Live(world) => world.replay(),
             Session::Replay(_) => None,
         }
     }
@@ -98,7 +98,7 @@ impl Session {
 /// `log` before the panic carries on, so a session that ends in a panic
 /// still leaves its replay (design §2.9). The panic hook has restored the
 /// terminal by then.
-pub fn writing_log_on_panic<R>(
+pub fn writing_session_log_on_panic<R>(
     session: &mut Session,
     log: Option<&Path>,
     run: impl FnOnce(&mut Session) -> R,
@@ -107,7 +107,7 @@ pub fn writing_log_on_panic<R>(
         Ok(result) => result,
         Err(panicked) => {
             if let Some(log) = log
-                && let Err(err) = session.write_log(log)
+                && let Err(err) = session.write_session_log(log)
             {
                 eprintln!(
                     "terra-sprites: couldn't write the replay {}: {err}",

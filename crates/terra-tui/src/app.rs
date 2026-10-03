@@ -2378,7 +2378,7 @@ impl App {
     }
 
     /// Says on the status line that the session log couldn't be written.
-    pub fn note_log_failed(&mut self, why: &str) {
+    pub fn note_session_log_failed(&mut self, why: &str) {
         self.refuse(format!("Couldn't write the replay: {why}"));
     }
 

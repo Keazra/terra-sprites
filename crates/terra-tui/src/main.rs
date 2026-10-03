@@ -39,15 +39,13 @@ fn main() -> ExitCode {
     };
     let start = match &args.replay {
         Some(path) => replay_from(path),
-        None => new_world(&args).map(|world| Start {
-            seed: world.seed(),
+        None => new_world(&args).map(|world| Opening {
             session: Session::live(world),
             replay: None,
         }),
     };
-    let Start {
+    let Opening {
         mut session,
-        seed,
         replay,
     } = match start {
         Ok(start) => start,
@@ -108,22 +106,33 @@ fn main() -> ExitCode {
     }));
     let keys = Keys::with_release_reporting(cfg!(windows) || enhanced_keys);
     // A session that ends in a panic still writes its replay (design §2.9).
-    let log = files::session_log();
-    let result = session::writing_log_on_panic(&mut session, log.as_deref(), |session| {
-        execute!(stdout(), EnableMouseCapture).and_then(|()| {
-            let setup = Setup {
-                theme,
-                seed,
-                keys,
-                force_panic: args.force_panic,
-                log: log.as_deref(),
-                replay: replay.as_deref(),
-            };
-            run(&mut terminal, session, setup)
-        })
-    });
+    let session_log = files::session_log();
+    let result =
+        session::writing_session_log_on_panic(&mut session, session_log.as_deref(), |session| {
+            execute!(stdout(), EnableMouseCapture).and_then(|()| {
+                let setup = Setup {
+                    theme,
+                    keys,
+                    force_panic: args.force_panic,
+                    session_log: session_log.as_deref(),
+                    replay: replay.as_deref(),
+                };
+                run(&mut terminal, session, setup)
+            })
+        });
     undo_setup();
     ratatui::restore();
+    // A session the terminal failed under still writes its replay; quitting
+    // has written it already.
+    if result.is_err()
+        && let Some(path) = &session_log
+        && let Err(err) = session.write_session_log(path)
+    {
+        eprintln!(
+            "terra-sprites: couldn't write the replay {}: {err}",
+            path.display()
+        );
+    }
 
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -134,11 +143,9 @@ fn main() -> ExitCode {
     }
 }
 
-/// What `main` starts with: the session, the seed the top bar shows, and,
-/// for a replay, its file's name.
-struct Start {
+/// What `main` starts with: the session, and for a replay, its file's name.
+struct Opening {
     session: Session,
-    seed: u64,
     replay: Option<String>,
 }
 
@@ -168,7 +175,7 @@ fn new_world(args: &Args) -> Result<World, String> {
             })?;
             (
                 data,
-                preset.map(|text| (dir.join("presets/default.ron"), text)),
+                preset.map(|text| (dir.join(files::DEFAULT_PRESET), text)),
             )
         }
     };
@@ -191,7 +198,7 @@ fn new_world(args: &Args) -> Result<World, String> {
 }
 
 /// The replay in the file at `path`, to play back (design §2.7).
-fn replay_from(path: &Path) -> Result<Start, String> {
+fn replay_from(path: &Path) -> Result<Opening, String> {
     let cant = |why: String| format!("can't play the replay {}: {why}", path.display());
     let bytes = std::fs::read(path).map_err(|err| cant(err.to_string()))?;
     let playback = Playback::new(&bytes).map_err(|err| cant(err.to_string()))?;
@@ -199,8 +206,7 @@ fn replay_from(path: &Path) -> Result<Start, String> {
         || path.display().to_string(),
         |name| name.to_string_lossy().into_owned(),
     );
-    Ok(Start {
-        seed: playback.world().seed(),
+    Ok(Opening {
         session: Session::replay(playback),
         replay: Some(name),
     })
@@ -209,11 +215,10 @@ fn replay_from(path: &Path) -> Result<Start, String> {
 /// What the frame loop runs with, besides the terminal and the session.
 struct Setup<'a> {
     theme: Theme,
-    seed: u64,
     keys: Keys,
     force_panic: bool,
     /// Where the session log goes, if anywhere (design §2.7).
-    log: Option<&'a Path>,
+    session_log: Option<&'a Path>,
     /// For a replay, its file's name.
     replay: Option<&'a str>,
 }
@@ -221,14 +226,14 @@ struct Setup<'a> {
 fn run(terminal: &mut DefaultTerminal, session: &mut Session, setup: Setup) -> io::Result<()> {
     let Setup {
         theme,
-        seed,
         mut keys,
         force_panic,
-        log,
+        session_log,
         replay,
     } = setup;
     let areas = ui::areas(terminal.size()?, session.world().map());
-    let mut app = App::new(session.world().map(), theme, seed, areas);
+    let world = session.world();
+    let mut app = App::new(world.map(), theme, world.seed(), areas);
     if let Some(folder) = files::data_folder() {
         app.set_data_folder(folder);
     }
@@ -243,11 +248,11 @@ fn run(terminal: &mut DefaultTerminal, session: &mut Session, setup: Setup) -> i
     }
     // The session log is written at each autosave and on quitting (design
     // §2.7), and a write that fails says so.
-    let write_log = |app: &mut App, session: &Session| {
-        if let Some(log) = log
-            && let Err(err) = session.write_log(log)
+    let write_session_log = |app: &mut App, session: &Session| {
+        if let Some(session_log) = session_log
+            && let Err(err) = session.write_session_log(session_log)
         {
-            app.note_log_failed(&err.to_string());
+            app.note_session_log_failed(&err.to_string());
         }
     };
     let mut last_frame = Instant::now();
@@ -276,7 +281,7 @@ fn run(terminal: &mut DefaultTerminal, session: &mut Session, setup: Setup) -> i
                 // Quitting saves, so a closed session is never lost (design
                 // §6.7), and writes the session log.
                 app.autosave(session.world());
-                write_log(&mut app, session);
+                write_session_log(&mut app, session);
                 return Ok(());
             }
             // A save the player loaded replaces the world from here on, and
@@ -316,7 +321,7 @@ fn run(terminal: &mut DefaultTerminal, session: &mut Session, setup: Setup) -> i
             app.take_in_replay(playback);
         }
         if app.autosave_if_due(session.world()) {
-            write_log(&mut app, session);
+            write_session_log(&mut app, session);
         }
     }
 }

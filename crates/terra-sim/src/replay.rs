@@ -146,7 +146,7 @@ struct Contents<'a> {
 
 /// A replay's body, as it's read back: `Contents`, owned.
 #[derive(Deserialize)]
-struct Read {
+struct ReadBack {
     pack: PackIdentity,
     sources: Vec<(String, String)>,
     start: Start,
@@ -227,7 +227,7 @@ impl Playback {
                 "its contents don't match their checksum".into(),
             ));
         }
-        let read: Read = save::decode(body).map_err(|err| match err {
+        let read: ReadBack = save::decode(body).map_err(|err| match err {
             LoadError::Damaged(what) => ReplayError::Damaged(what),
             other => ReplayError::Damaged(other.to_string()),
         })?;
@@ -292,7 +292,8 @@ impl Playback {
     }
 
     /// The tick the recording had reached when it was written: where the
-    /// replay ends. Time can run on past it, with no more commands.
+    /// replay ends. Time can run on past it, with no more commands than
+    /// those still waiting then, for the tick a panic may have cut short.
     pub fn end(&self) -> u64 {
         self.end
     }
