@@ -595,7 +595,7 @@ _Avoid_: reach (a flood's reach is where a sprite can walk), touch window (that'
 
 **Save**:
 The whole world written to a file, so it can be loaded later and carry on exactly as it would have: every sprite's chemistry, brain and action, every object, the Cursor's grip, the dice, and the data pack the world was made with. A save is opaque: it's for the game to read, not the player.
-_Avoid_: snapshot (that's a replay's start, later), save game, genome file (that's one sprite's genes)
+_Avoid_: snapshot (that's a replay's start), save game, genome file (that's one sprite's genes)
 
 **Quicksave**:
 The one save `F5` writes and `F9` loads, named `quicksave`, overwritten each time.
@@ -603,11 +603,37 @@ _Avoid_: quick save, slot
 
 **Autosave**:
 A save the game makes by itself: after every 10 minutes that time runs, unpaused, and on quitting. The last three are kept, the newest as `autosave-1`.
-_Avoid_: backup, checkpoint (that's a replay's hash, later)
+_Avoid_: backup, checkpoint (that's a replay's hash)
 
 **Save format**:
 The layout of a save's world, numbered by its schema version. A change that only adds things keeps the number; one that breaks it bumps the number and comes with a step that upgrades the old layout. A save in a newer format than the build is refused.
 _Avoid_: save version (the build that wrote it is the sim version)
+
+### Replays
+
+**Replay**:
+A file from which a session can be played back exactly: where the world started, every command the player's clicks sent, and the world's hash now and then to check against. It plays only in the build that recorded it, and is opaque, like a save.
+_Avoid_: recording (that's the world keeping one), demo, movie
+
+**Session log**:
+The replay every session writes as it goes, `last_session.replay`, starting afresh from each load, and written at each autosave, on quitting and on a panic.
+_Avoid_: log (that's the event log), crash dump
+
+**Snapshot**:
+A replay's start when it isn't a world generated afresh from its seed: a save of the world as the recording began, such as a loaded save.
+_Avoid_: save (that's the player's file), checkpoint
+
+**Checkpoint**:
+The world's hash, kept in a replay where the recording starts and every 1,000 ticks, so playback can check it's still the same world.
+_Avoid_: save, snapshot, autosave
+
+**Playback**:
+Playing a replay (`--replay <file>`): its commands at their ticks, with the player's own input closed to the world. Time, the view and the inspector still work.
+_Avoid_: replay mode, rerun
+
+**Divergence**:
+Playback finding the world different from its recording at a checkpoint. It's reported with the last checkpoint that matched, as the world parted somewhere between the two.
+_Avoid_: desync, mismatch (for this; a mismatched version or pack is refused before playback starts)
 
 ### Testing and tuning
 
