@@ -107,6 +107,14 @@ pub enum Action {
     Rename,
     /// Export the selected sprite's genome to a file (`g`, design §6.1).
     ExportGenome,
+    /// Save the world as the quicksave (`F5`, design §6.7).
+    QuickSave,
+    /// Load the quicksave (`F9`).
+    QuickLoad,
+    /// Save the world by a name typed (`Ctrl+S`).
+    SaveAs,
+    /// Pick a save to load from a list (`Ctrl+O`).
+    Open,
     /// While naming, a letter typed.
     Type(char),
     /// While naming, the last letter rubbed out (`Backspace`).
@@ -235,8 +243,14 @@ impl Keys {
         let pressed_again = !self.down.insert(physical);
         let held = key.kind == KeyEventKind::Repeat || (self.releases_reported && pressed_again);
         if key.modifiers.contains(KeyModifiers::CONTROL) {
-            let quit = key.code == KeyCode::Char('c');
-            return Some(if quit { Action::Quit } else { Action::Dismiss });
+            return Some(match key.code {
+                KeyCode::Char('c' | 'C') => Action::Quit,
+                // A held key would save or open the list again and again.
+                KeyCode::Char('s' | 'S') if !held => Action::SaveAs,
+                KeyCode::Char('o' | 'O') if !held => Action::Open,
+                KeyCode::Char('s' | 'S' | 'o' | 'O') => return None,
+                _ => Action::Dismiss,
+            });
         }
         // Only Shift makes a scroll key jump: a capital letter may come from Caps Lock.
         let step = if key.modifiers.contains(KeyModifiers::SHIFT) {
@@ -292,6 +306,8 @@ impl Keys {
             KeyCode::Char('g') => (!held).then_some(Action::ExportGenome),
             KeyCode::Char(digit @ '1'..='9') => (!held).then(|| Action::Pick(digit as u8 - b'0')),
             KeyCode::Enter => (!held).then_some(Action::Enter),
+            KeyCode::F(5) => (!held).then_some(Action::QuickSave),
+            KeyCode::F(9) => (!held).then_some(Action::QuickLoad),
             // Some terminals report Shift+Tab as its own key, others as Tab with Shift.
             KeyCode::BackTab => Some(Action::SelectPrevious),
             KeyCode::Tab if key.modifiers.contains(KeyModifiers::SHIFT) => {
