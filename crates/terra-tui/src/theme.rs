@@ -1,11 +1,12 @@
 //! Themes map semantic tiles to glyphs and colours (design §6.2). They are UI
-//! assets, embedded in the binary, and never affect the simulation.
+//! assets and never affect the simulation. Two are embedded in the binary,
+//! and `--theme <file>` loads one the player has edited (design v33 §6.7).
 
 use std::collections::BTreeMap;
 
 use ratatui::style::Color;
 use serde::Deserialize;
-use terra_sim::Terrain;
+use terra_sim::{DataPack, Terrain};
 
 use crate::app::{CursorMode, StatusMark};
 
@@ -235,29 +236,69 @@ impl Theme {
         self.aim_end
     }
 
+    /// A theme from the text of a theme file, as `--theme <file>` loads it
+    /// (design v33 §6.7), checked against the data pack it will draw.
+    ///
+    /// It must draw every semantic tile and mode mark, with glyphs CP437
+    /// has (design §6.2). It may leave out object types and drives, which
+    /// fall back, but every object type, visual state and drive it names
+    /// must be in `data`, so a misspelt one is caught rather than drawn as
+    /// `?`. The error says what's wrong, in the file's own words.
+    pub fn from_ron(text: &str, data: &DataPack) -> Result<Theme, String> {
+        let theme = Theme::parse(text)?;
+        for (object, states) in &theme.objects {
+            if !data.object_type_names().any(|name| name == object) {
+                return Err(format!("the data pack has no object type \"{object}\""));
+            }
+            let known = data.visual_states(object);
+            if let Some(state) = states.keys().find(|state| !known.contains(&state.as_str())) {
+                return Err(format!(
+                    "\"{object}\" has no visual state \"{state}\": it has {}",
+                    quoted(&known)
+                ));
+            }
+        }
+        if let Some(drive) = theme
+            .drives
+            .keys()
+            .find(|drive| !data.drives().any(|name| name == drive.as_str()))
+        {
+            let drives: Vec<&str> = data.drives().collect();
+            return Err(format!(
+                "the data pack has no drive \"{drive}\": its drives are {}",
+                quoted(&drives)
+            ));
+        }
+        Ok(theme)
+    }
+
     fn builtin(name: &str, text: &str) -> Theme {
-        let file: ThemeFile = ron::from_str(text)
-            .unwrap_or_else(|e| panic!("the built-in {name} theme doesn't parse: {e}"));
+        Theme::parse(text).unwrap_or_else(|e| panic!("the built-in {name} theme is invalid: {e}"))
+    }
+
+    /// A theme from a theme file's text, complete and within CP437.
+    fn parse(text: &str) -> Result<Theme, String> {
+        let file: ThemeFile = ron::from_str(text).map_err(|e| e.to_string())?;
         let tiles = glyphs(file.tiles);
-        for tile in SemanticTile::ALL {
-            assert!(
-                tiles.contains_key(&tile),
-                "the {name} theme has no {tile:?}"
-            );
+        if let Some(&tile) = SemanticTile::ALL
+            .iter()
+            .find(|tile| !tiles.contains_key(tile))
+        {
+            return Err(format!("it has no glyph for {}", tile_name(tile)));
         }
         let mode_marks = glyphs(file.cursor.mode_marks);
-        for mode in CursorMode::ALL {
-            assert!(
-                mode_marks.contains_key(&mode),
-                "the {name} theme has no {mode:?} mark"
-            );
+        if let Some(&mode) = CursorMode::ALL
+            .iter()
+            .find(|mode| !mode_marks.contains_key(mode))
+        {
+            return Err(format!("it has no mode mark for {}", snake_case(&mode)));
         }
         let objects = file
             .objects
             .into_iter()
             .map(|(object, states)| (object, glyphs(states)))
             .collect();
-        Theme {
+        let theme = Theme {
             tiles,
             objects,
             arrows: file.cursor.arrows,
@@ -274,8 +315,98 @@ impl Theme {
                 .into_iter()
                 .map(|(drive, colour)| (drive, colour.into()))
                 .collect(),
+        };
+        if let Some((what, symbol)) = theme
+            .symbols()
+            .into_iter()
+            .find(|&(_, symbol)| !terra_sim::is_cp437(symbol))
+        {
+            return Err(format!(
+                "its glyph '{symbol}' for {what} isn't in CP437, which everything on screen stays within"
+            ));
+        }
+        Ok(theme)
+    }
+
+    /// Every character this theme draws, with what it's for, in the file's
+    /// words.
+    fn symbols(&self) -> Vec<(String, char)> {
+        let tiles = self
+            .tiles
+            .iter()
+            .map(|(&tile, glyph)| (tile_name(tile), glyph.symbol));
+        let objects = self.objects.iter().flat_map(|(object, states)| {
+            states
+                .iter()
+                .map(move |(state, glyph)| (format!("\"{object}\" \"{state}\""), glyph.symbol))
+        });
+        let arrows = [
+            ("arrows", self.arrows),
+            ("followed_arrows", self.followed_arrows),
+            ("visible_frame", self.visible_frame),
+        ]
+        .into_iter()
+        .flat_map(|(name, a)| {
+            [a.up, a.down, a.left, a.right].map(|symbol| (format!("the cursor's {name}"), symbol))
+        });
+        let m = self.status_marks;
+        let marks = [
+            m.idle, m.sent, m.applied, m.rejected, m.grab, m.empty, m.release,
+        ]
+        .map(|symbol| ("the cursor's status_marks".to_string(), symbol));
+        let mode_marks = self
+            .mode_marks
+            .iter()
+            .map(|(mode, glyph)| (format!("the {} mode mark", snake_case(mode)), glyph.symbol));
+        let lines = [
+            ("the leash", self.leash),
+            ("the aim line", self.aim),
+            ("the aim line's end", self.aim_end),
+        ]
+        .map(|(what, glyph)| (what.to_string(), glyph.symbol));
+        tiles
+            .chain(objects)
+            .chain(arrows)
+            .chain(marks)
+            .chain(mode_marks)
+            .chain(lines)
+            .collect()
+    }
+}
+
+/// A semantic tile as a theme file names it, such as `terrain(deep_water)`.
+fn tile_name(tile: SemanticTile) -> String {
+    match tile {
+        SemanticTile::Terrain(terrain) => format!("terrain({})", snake_case(&terrain)),
+        SemanticTile::Emote(emote) => format!("emote({})", snake_case(&emote)),
+        tile => snake_case(&tile),
+    }
+}
+
+/// A unit variant's name as theme files spell it: `ShallowWater` is
+/// `shallow_water`.
+fn snake_case(variant: &impl std::fmt::Debug) -> String {
+    let mut name = String::new();
+    for (i, c) in format!("{variant:?}").chars().enumerate() {
+        if c.is_ascii_uppercase() {
+            if i > 0 {
+                name.push('_');
+            }
+            name.push(c.to_ascii_lowercase());
+        } else {
+            name.push(c);
         }
     }
+    name
+}
+
+/// Names, each in quotes, separated by commas.
+fn quoted(names: &[&str]) -> String {
+    names
+        .iter()
+        .map(|name| format!("\"{name}\""))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Turns a theme file's entries into glyphs.

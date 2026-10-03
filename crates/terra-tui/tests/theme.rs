@@ -287,3 +287,102 @@ fn each_theme_colours_every_drive_of_the_built_in_pack_as_the_design_table_says(
         assert_eq!(theme.drive_colour("wanderlust"), None);
     }
 }
+
+const ASCII_THEME: &str = include_str!("../../../themes/ascii.ron");
+
+/// The ascii theme's file with `from` replaced by `to`, which must be in it.
+fn ascii_with(from: &str, to: &str) -> String {
+    assert!(ASCII_THEME.contains(from), "the ascii theme has {from:?}");
+    ASCII_THEME.replacen(from, to, 1)
+}
+
+#[test]
+fn a_theme_file_loads_and_draws_as_written() {
+    // Design v33 §6.2: `--theme <file>` loads a theme the player has edited.
+    let pack = pack();
+    let theme = Theme::from_ron(ASCII_THEME, &pack).expect("the ascii theme loads");
+    assert_eq!(theme.glyph(SemanticTile::Sprite).symbol, '@');
+    let edited = ascii_with(
+        "\"ball\":      { \"default\": (glyph: 'o', fg: white) }",
+        "\"ball\":      { \"default\": (glyph: 'Q', fg: light_cyan, bold: true) }",
+    );
+    let theme = Theme::from_ron(&edited, &pack).expect("the edited theme loads");
+    let ball = theme.object_glyph("ball", "default");
+    assert_eq!(
+        (ball.symbol, ball.fg, ball.bold),
+        ('Q', Color::LightCyan, true)
+    );
+}
+
+#[test]
+fn a_theme_that_is_not_ron_is_refused_saying_where() {
+    let error = Theme::from_ron("(tiles: {", &pack()).expect_err("refused");
+    assert!(error.contains("1:"), "{error}");
+}
+
+#[test]
+fn a_theme_missing_a_tile_or_a_mode_mark_is_refused_naming_it() {
+    let pack = pack();
+    let cases = [
+        (
+            "terrain(rock):          (glyph: '#', fg: gray),",
+            "terrain(rock)",
+        ),
+        (
+            "emote(resting):         (glyph: 'z', fg: light_blue),",
+            "emote(resting)",
+        ),
+        ("grab:   (glyph: 'G', fg: yellow),", "grab"),
+    ];
+    for (line, named) in cases {
+        let error = Theme::from_ron(&ascii_with(line, ""), &pack).expect_err("refused");
+        assert!(error.contains(named), "{named}: {error}");
+    }
+}
+
+#[test]
+fn a_theme_glyph_outside_cp437_is_refused() {
+    // All the screen draws stays within CP437 (design §6.2).
+    let pack = pack();
+    for (from, to) in [
+        (
+            "sprite:                 (glyph: '@'",
+            "sprite:                 (glyph: 'λ'",
+        ),
+        ("leash: (glyph: ';'", "leash: (glyph: '€'"),
+        ("idle: '-'", "idle: '✓'"),
+    ] {
+        let error = Theme::from_ron(&ascii_with(from, to), &pack).expect_err("refused");
+        let glyph = to.chars().rev().nth(1).unwrap();
+        assert!(error.contains(glyph) && error.contains("CP437"), "{error}");
+    }
+}
+
+#[test]
+fn a_theme_naming_what_the_pack_lacks_is_refused_naming_it() {
+    // A misspelt name would otherwise draw a `?` without saying why.
+    let pack = pack();
+    for (from, to, named) in [
+        ("\"ball\":", "\"bal\":", "bal"),
+        ("\"fruiting\":", "\"fruting\":", "fruting"),
+        ("\"hunger\":", "\"hungre\":", "hungre"),
+    ] {
+        let error = Theme::from_ron(&ascii_with(from, to), &pack).expect_err("refused");
+        assert!(error.contains(named), "{named}: {error}");
+    }
+}
+
+#[test]
+fn a_theme_may_leave_out_objects_and_drives() {
+    // They fall back to the object's default look, then `?`, and to the
+    // sprite's own colour (design §6.2, §6.3).
+    let pack = pack();
+    let edited = ascii_with(
+        "        \"ball\":      { \"default\": (glyph: 'o', fg: white) },\n",
+        "",
+    );
+    let edited = edited.replacen("        \"boredom\":     dark_gray,\n", "", 1);
+    let theme = Theme::from_ron(&edited, &pack).expect("loads");
+    assert_eq!(theme.object_glyph("ball", "default").symbol, '?');
+    assert_eq!(theme.drive_colour("boredom"), None);
+}

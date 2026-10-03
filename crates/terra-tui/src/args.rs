@@ -11,12 +11,16 @@ pub struct Args {
     pub preset: Option<PathBuf>,
     /// `--ascii`: use the ascii theme.
     pub ascii: bool,
+    /// `--theme <file>`: a theme to use instead of the built-in ones (design
+    /// v33 §6.7).
+    pub theme: Option<PathBuf>,
     /// Hidden developer flag: panic after the first frame, to check the terminal is restored.
     pub force_panic: bool,
 }
 
 /// How to run the game, shown with any flag error.
-pub const USAGE: &str = "usage: terra-sprites [--seed <n>] [--preset <file>] [--ascii]";
+pub const USAGE: &str =
+    "usage: terra-sprites [--seed <n>] [--preset <file>] [--ascii | --theme <file>]";
 
 impl Args {
     /// Reads the flags, not including the program name.
@@ -37,9 +41,13 @@ impl Args {
                 }
                 "--preset" => parsed.preset = Some(value_of(&flag, args.next())?.into()),
                 "--ascii" => parsed.ascii = true,
+                "--theme" => parsed.theme = Some(value_of(&flag, args.next())?.into()),
                 "--force-panic" => parsed.force_panic = true,
                 _ => return Err(format!("unknown flag `{flag}`")),
             }
+        }
+        if parsed.ascii && parsed.theme.is_some() {
+            return Err("`--ascii` and `--theme` both pick a theme: use one".into());
         }
         Ok(parsed)
     }
