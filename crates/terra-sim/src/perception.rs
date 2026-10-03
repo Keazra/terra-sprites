@@ -1,7 +1,7 @@
 //! Perception (design §3.6): each sprite's bounded Dijkstra flood, which
 //! gives both what it can reach and the way there.
 
-use std::cell::OnceCell;
+use std::sync::OnceLock;
 
 use std::collections::BTreeMap;
 
@@ -85,7 +85,7 @@ pub(crate) struct Flood {
     /// map is made, so it isn't state and isn't saved; the candidates of a
     /// flood that lives for several ticks find it once.
     #[serde(skip)]
-    water: OnceCell<Option<(Pos, u32)>>,
+    water: OnceLock<Option<(Pos, u32)>>,
 }
 
 /// What a flood spreads through: the map, and what stands on it.
@@ -137,7 +137,7 @@ impl Flood {
             height,
             costs: vec![UNREACHED; tiles],
             steps: vec![NO_STEP; tiles],
-            water: OnceCell::new(),
+            water: OnceLock::new(),
         };
         // The search runs on the square with a ring of closed tiles round
         // it, so every step from a tile in the square lands on the padded
@@ -350,7 +350,7 @@ impl Flood {
 
     /// Every other sprite the flood reaches, with the path cost to its
     /// nearest goal tile, in ID order (design v18 §3.6).
-    pub(crate) fn sprites(&self, ground: Ground, me: EntityId) -> Vec<(EntityId, u32)> {
+    fn sprites(&self, ground: Ground, me: EntityId) -> Vec<(EntityId, u32)> {
         let map = ground.map;
         let (top_left, bottom_right) = self.near(map);
         let near = |pos: Pos| {
