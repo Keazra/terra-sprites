@@ -621,7 +621,12 @@ fn walk_of_mut(sprite: &mut Sprite) -> Option<&mut Walk> {
 
 /// The flood `sprite` would make from where it stands now, treating other
 /// sprites as `occupied` says.
-fn flood(state: &WorldState, data: &DataPack, sprite: &Sprite, occupied: Occupied) -> Flood {
+pub(crate) fn flood(
+    state: &WorldState,
+    data: &DataPack,
+    sprite: &Sprite,
+    occupied: Occupied,
+) -> Flood {
     let ground = Ground {
         map: &state.map,
         objects: &state.objects,
