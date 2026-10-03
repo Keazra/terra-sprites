@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 907651a57257f1320465cfc15f795305cf9a733e2b24a4d5e3b2db33e5e5eac4 # shrinks to (rows, objects, sprites, origin) = (["...", "...", "...", "...", "...", "...", "...", "...", "~..", "...", "...", "...", "...", "..."], [], [Pos { x: 1, y: 6 }], Pos { x: 0, y: 5 }), radius = 6, penalty = None
+cc 6c4f646900be8b03ac0cc2687a65b525ea86f2071e48f6aa56655ec74f33a211 # shrinks to (rows, objects, sprites, origin) = (["~", "~"], [], [], Pos { x: 0, y: 0 }), radius = 0, penalty = None, attacker = None, cursor = None

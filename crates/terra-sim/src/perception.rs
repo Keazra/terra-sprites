@@ -52,7 +52,7 @@ impl Target {
 /// No step reached the tile.
 const UNREACHED: u32 = u32::MAX;
 /// The end of a list of a flood's waiting tiles.
-const NONE: usize = usize::MAX;
+const END_OF_LIST: usize = usize::MAX;
 /// A step no walker may take, in a flood's working costs.
 const BLOCKED: u32 = u32::MAX;
 /// The direction marker for a tile no step reached, or the origin.
@@ -139,10 +139,10 @@ impl Flood {
             steps: vec![NO_STEP; tiles],
             water: OnceCell::new(),
         };
-        // The search runs on the square with a border of one tile that
-        // can't be entered, so every step from a tile in the square lands
-        // on the padded grid, and needs no check that it's on the map. Row
-        // order is the same on both grids, so ties settle the same way.
+        // The search runs on the square with a ring of closed tiles round
+        // it, so every step from a tile in the square lands on the padded
+        // square, and needs no check that it's on the map. Row order is the
+        // same in both, so ties settle the same way.
         let (w, h) = (usize::from(width), usize::from(height));
         let padded = w + 2;
         let at = |x: usize, y: usize| (y + 1) * padded + (x + 1);
@@ -189,17 +189,17 @@ impl Flood {
         // Each bucket is a list threaded through `waiting`, newest first:
         // a tile, and the place of the next entry in its bucket.
         let ring = longest + 1;
-        let mut buckets = vec![NONE; ring];
+        let mut buckets = vec![END_OF_LIST; ring];
         let mut waiting: Vec<(usize, usize)> = Vec::with_capacity(tiles * 2);
-        waiting.push((start, NONE));
+        waiting.push((start, END_OF_LIST));
         buckets[0] = 0;
         let mut queued = 1;
         let mut settling = Vec::new();
         let mut cost = 0;
         while queued > 0 {
             let slot = cost as usize % ring;
-            let mut entry = std::mem::replace(&mut buckets[slot], NONE);
-            while entry != NONE {
+            let mut entry = std::mem::replace(&mut buckets[slot], END_OF_LIST);
+            while entry != END_OF_LIST {
                 let (index, next) = waiting[entry];
                 settling.push(index);
                 entry = next;
@@ -835,7 +835,7 @@ mod tests {
         );
     }
 
-    /// The flood as slice 16 found it, before it was made faster: the
+    /// The flood of design §3.6 as first built, before it was made faster: the
     /// search over the map itself, with a binary heap. The faster flood must
     /// reach the same costs by the same steps, ties and all, or worlds would
     /// change (design §2.3). Returns the costs and steps over the square.
@@ -907,6 +907,96 @@ mod tests {
         (costs, steps)
     }
 
+    /// What each category offered, as slice 9c's code worked it out before
+    /// it was made faster (design §3.6): a scan of every tile near the
+    /// square for objects, water and sprites, then step 5 offering every
+    /// sprite in reach unless a reachable attacker stands for them.
+    fn reference_candidates(
+        flood: &Flood,
+        ground: Ground,
+        me: EntityId,
+        attacker: Option<EntityId>,
+        cursor: Option<Pos>,
+    ) -> BTreeMap<CategoryId, Vec<(Target, u32)>> {
+        let map = ground.map;
+        let goal_cost = |pos: Pos, own_tile: bool| {
+            goal_tiles(map, pos, own_tile)
+                .filter_map(|goal| flood.cost(goal))
+                .min()
+        };
+        let (top_left, bottom_right) = flood.near(map);
+        let tiles: Vec<Pos> = (top_left.y..=bottom_right.y)
+            .flat_map(|y| (top_left.x..=bottom_right.x).map(move |x| Pos { x, y }))
+            .collect();
+        let mut best: BTreeMap<(CategoryId, Option<usize>), (u32, u64, Target)> = BTreeMap::new();
+        let mut offer = |key, target, id, cost| {
+            let better = best.get(&key).is_none_or(|&(c, i, _)| (cost, id) < (c, i));
+            if better {
+                best.insert(key, (cost, id, target));
+            }
+        };
+        for &pos in &tiles {
+            if let Some(id) = ground.objects.at(pos) {
+                let index = ground.objects.kind(id);
+                let object_type = &ground.data.object_types()[index];
+                if let Some(cost) = goal_cost(pos, !object_type.solid) {
+                    offer(
+                        (object_type.category, Some(index)),
+                        Target::Object(id),
+                        id.0,
+                        cost,
+                    );
+                }
+            }
+            if ground.data.terrain(map.terrain(pos)).is_drinkable()
+                && let Some(cost) = goal_cost(pos, true)
+            {
+                let key = (ground.data.water_category(), None);
+                offer(key, Target::Water(pos), map.index(pos) as u64, cost);
+            }
+        }
+        let mut found: BTreeMap<CategoryId, Vec<(u64, Target, u32)>> = BTreeMap::new();
+        for ((category, _), (cost, id, target)) in best {
+            found.entry(category).or_default().push((id, target, cost));
+        }
+        let mut found: BTreeMap<CategoryId, Vec<(Target, u32)>> = found
+            .into_iter()
+            .map(|(category, mut things)| {
+                things.sort_by_key(|&(id, ..)| id);
+                (
+                    category,
+                    things.into_iter().map(|(_, t, c)| (t, c)).collect(),
+                )
+            })
+            .collect();
+        let attacker = attacker.filter(|&id| id != me).and_then(|id| {
+            let pos = ground.sprites.get(id)?.pos;
+            Some((Target::Sprite(id), goal_cost(pos, false)?))
+        });
+        let mut sprites: Vec<(EntityId, u32)> = tiles
+            .iter()
+            .filter_map(|&pos| {
+                let id = ground.sprites.at(pos).filter(|&id| id != me)?;
+                Some((id, goal_cost(pos, false)?))
+            })
+            .collect();
+        sprites.sort_by_key(|&(id, _)| id);
+        let sprites: Vec<(Target, u32)> = match attacker {
+            Some(attacker) => vec![attacker],
+            None => sprites
+                .into_iter()
+                .map(|(id, c)| (Target::Sprite(id), c))
+                .collect(),
+        };
+        if !sprites.is_empty() {
+            found.insert(ground.data.sprite_category(), sprites);
+        }
+        if let Some(cost) = cursor.and_then(|tile| goal_cost(tile, true)) {
+            found.insert(ground.data.cursor_category(), vec![(Target::Cursor, cost)]);
+        }
+        found
+    }
+
     mod same_as_before {
         use proptest::prelude::*;
 
@@ -939,7 +1029,10 @@ mod tests {
                 (rows, objects, sprites, origin) in scene(),
                 radius in 0u16..9,
                 penalty in prop::option::of(0u32..60),
+                attacker in prop::option::of(1u64..12),
+                cursor in prop::option::of((0u16..14, 0u16..14)),
             ) {
+                let cursor = cursor.map(|(x, y)| Pos { x, y });
                 let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
                 // One object and one sprite to a tile, and none on the origin.
                 let mut taken = BTreeSet::from([origin]);
@@ -964,6 +1057,15 @@ mod tests {
                 let (costs, steps) = reference_flood(ground, origin, radius, occupied);
                 prop_assert_eq!(&flood.costs, &costs);
                 prop_assert_eq!(&flood.steps, &steps);
+                // What each category offers sprite 1, on the origin, hit by
+                // `attacker` and seeing the Cursor on `cursor`, if any.
+                let attacker = attacker.map(EntityId);
+                let cursor = cursor.filter(|&tile| map.contains(tile));
+                let me = EntityId(1);
+                prop_assert_eq!(
+                    flood.candidates(ground, me, attacker, cursor),
+                    reference_candidates(&flood, ground, me, attacker, cursor)
+                );
                 for y in 0..map.height() {
                     for x in 0..map.width() {
                         let pos = Pos { x, y };
