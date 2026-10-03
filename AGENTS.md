@@ -18,6 +18,7 @@ Before pushing, run the checks CI runs (`.github/workflows/ci.yml` is the source
 - One test file: `cargo test -p terra-sim --test movement`
 - One test by name (substring): `cargo test -p terra-sim --test movement -- head_on`
 - Unit tests inside a module: `cargo test -p terra-sim --lib biochem::`
+- Speed check (A5, 100 sprites, ticks a second): `cargo run --release -p terra-sim --example speed`. Benchmarks of a tick, a flood and a brain step: `cargo bench -p terra-sim`.
 
 The dev profile is `opt-level = 1` because the self-check after every tick makes unoptimised long tests take minutes. Debug assertions stay on, so tests still run the self-check.
 
