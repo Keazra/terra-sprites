@@ -6,7 +6,8 @@ use terra_sim::DataPack;
 use terra_tui::theme::{SemanticTile, Theme};
 
 /// The example `name` from a reference page: the fenced block after its
-/// `<!-- example: name -->` marker, without the fences.
+/// `<!-- example: name -->` marker, without the fences. The same as
+/// `terra-sim`'s `tests/reference_docs.rs`, which a test crate can't share.
 fn example(page: &str, name: &str) -> String {
     let marker = format!("<!-- example: {name} -->");
     let after = page

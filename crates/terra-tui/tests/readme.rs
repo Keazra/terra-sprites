@@ -39,12 +39,10 @@ fn keys_in(cell: &str) -> BTreeSet<String> {
     let spans: Vec<&str> = cell.split('`').skip(1).step_by(2).collect();
     let mut keys: BTreeSet<String> = spans.iter().map(|span| canonical(span)).collect();
     for pair in spans.windows(2) {
-        let range = format!("`{}`–`{}`", pair[0], pair[1]);
-        if let (true, [from], [to]) = (
-            cell.contains(&range),
-            pair[0].as_bytes(),
-            pair[1].as_bytes(),
-        ) {
+        if !cell.contains(&format!("`{}`–`{}`", pair[0], pair[1])) {
+            continue;
+        }
+        if let ([from], [to]) = (pair[0].as_bytes(), pair[1].as_bytes()) {
             keys.extend((*from..=*to).map(|c| (c as char).to_string()));
         }
     }

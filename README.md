@@ -10,7 +10,7 @@ Sprites learn from what happens to them. Each one learns, by touch, what things 
 
 You can teach them too. In Train mode a click pets the sprite under the Cursor and a right click zaps it (hold Ctrl with a click, or Shift with `Q` or `E`, for a hug or a shock). A pet rewards what the sprite just tried, so it learns to like that thing and to do it again, and a zap does the opposite. The Cursor can also follow a sprite so it moves with it, and in Grab mode pick up items, lead a sprite, throw items and shove sprites, or place new berries, balls, bushes and sprites. You can name a sprite, and save its genome to place a copy later.
 
-You can select a sprite and look inside it: its Brain tab shows what it's paying attention to and why it does what it does, and below that its memory, everything it has learned and how strongly. The map flashes an `X` where it's heading and shades what it's paying attention to in grey. You can scroll around and point at things, and the clock can be paused, stepped and sped up.
+You can select a sprite and look inside it: its Brain tab shows what it's paying attention to and why it does what it does, and below that its memory, everything it has learned and how strongly. The map flashes an `X` where it's heading and shades what it's paying attention to in grey. You can scroll around and point at things, and the clock can be paused, stepped and sped up. A world can be saved and loaded, and saves itself every 10 minutes; and the map can be drawn with a theme of your own.
 
 ## Getting started
 
@@ -23,7 +23,7 @@ cargo run --release -- --seed 7
 The first build takes a minute or two. The game opens on a new terrarium, made from seed 7, with time running at 1×. Some things to try first:
 
 1. **Watch one sprite.** Click a sprite (`☺`) to select it. The panel beside the map shows its body; `]` moves to its Brain tab, which says what it's paying attention to and why. `T` makes the view follow it.
-2. **Control time.** `space` pauses, `.` steps one tick while paused, and `+` speeds up. A sprite's life is long at 1×, so try 8× or 16×.
+2. **Control time.** `space` pauses, `.` steps a little while paused, and `+` speeds up. A sprite's life is long at 1×, so try 8× or 16×.
 3. **Teach it something.** Press `X` for Train mode. When the sprite does something you like, click it to pet it; right-click to zap it for something you don't. It learns from both.
 4. **Move things.** Press `C` for Grab mode. Click a berry (`•`) to pick it up, and click again beside a hungry sprite to put it down. Press `C` once more for the Place menu, to add berries, balls, bushes and new sprites.
 5. **Keep the world.** `F5` saves and `F9` loads it back; the game also saves itself every 10 minutes. `?` shows every key, the colour legend, and where your saves are.
@@ -37,8 +37,8 @@ The same key in capitals or lower case does the same thing.
 | Key | Action |
 |---|---|
 | `space` | Pause / resume |
-| `.` | Step one tick while paused (hold to keep stepping) |
-| `+` / `-` | Faster / slower: each step doubles or halves the speed, from ⅛× up to 16×, then Max. The game starts at 1× (1.25 ticks per second, slow enough to watch sprites walk). Holding either key stops at 1×; press again to go past it |
+| `.` | Step while paused: a second's worth of ticks at the current speed, one at 1× and slower, up to 20 at 16× and Max (hold to keep stepping) |
+| `+` / `-` | Faster / slower: each step doubles or halves the speed, from ⅛× up to 16×, then Max. The game starts at 1× (1.25 ticks per second, slow enough to watch sprites walk). Holding `+` stops at 1× and at 16×, and holding `-` at 1×; press again to go past |
 | `W` `A` `S` `D` or arrows | Scroll the map (hold Shift to scroll 5 tiles) |
 | Mouse | Point at a tile: the status line says what's there. Click a sprite to select it |
 | `T` | Track: the view follows the selected sprite; again to stop |
