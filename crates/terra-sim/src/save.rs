@@ -23,6 +23,7 @@ use xxhash_rust::xxh3::xxh3_64;
 
 use crate::config::WorldConfig;
 use crate::data::DataError;
+use crate::map::Pos;
 use crate::world::WorldState;
 
 /// What every save starts with.
@@ -95,6 +96,9 @@ pub(crate) struct Contents<'a> {
     /// The data pack's files, as `(path within the pack, RON text)`.
     pub(crate) pack: Vec<(String, String)>,
     pub(crate) state: &'a WorldState,
+    /// The tile at the middle of the screen, if a screen saved it. Added
+    /// within schema 1, so a save without it reads as having none.
+    pub(crate) view: Option<Pos>,
 }
 
 /// The world as it's read back: `Contents`, owned.
@@ -104,6 +108,8 @@ pub(crate) struct Loaded {
     pub(crate) config: Option<Preset>,
     pub(crate) pack: Vec<(String, String)>,
     pub(crate) state: WorldState,
+    #[serde(default)]
+    pub(crate) view: Option<Pos>,
 }
 
 /// A world's preset as a save holds it: `WorldConfig`'s fields, kept

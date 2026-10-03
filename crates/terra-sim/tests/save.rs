@@ -100,6 +100,24 @@ fn a_loaded_world_keeps_its_seed_and_names() {
 }
 
 #[test]
+fn a_save_keeps_where_the_screen_was_looking() {
+    let world = busy_world(4, 10);
+    let plain = World::load(&world.save()).expect("the save loads");
+    assert_eq!(plain.view(), None, "a save made without a view has none");
+
+    let loaded = World::load(&world.save_with_view(at(30, 12))).expect("the save loads");
+    assert_eq!(loaded.view(), Some(at(30, 12)));
+    assert_eq!(
+        loaded.state_hash(),
+        world.state_hash(),
+        "the view isn't world state"
+    );
+    // Saved again as it stands, it keeps the view it was loaded with.
+    let again = World::load(&loaded.save()).expect("the save loads");
+    assert_eq!(again.view(), Some(at(30, 12)));
+}
+
+#[test]
 fn a_loaded_sprite_shows_its_chemicals_at_once() {
     // The levels from before the tick aren't saved (design §2.8), but the
     // Chem tab lists every chemical straight after a load.
@@ -305,6 +323,7 @@ fn golden_the_first_save_still_loads_and_carries_on() {
     let mut world = World::load(GOLDEN_V1).expect("the golden save loads");
     assert_eq!(world.tick(), 61);
     assert_eq!(world.seed(), 2026);
+    assert_eq!(world.view(), None, "schema 1 saved no view at first");
     world.check_invariants().expect("invariants hold");
     let names: Vec<Option<&str>> = world.sprites().map(|s| s.name()).collect();
     assert_eq!(names.first().copied().flatten(), Some("Mira"));
