@@ -70,7 +70,7 @@ The ground, the plants and toys, a sprite's body and its instincts, and the size
 
 ## Design
 
-- [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v31.md) (v31, the current revision). Earlier revisions and the external evaluations that shaped them are in [`docs/design/archive/`](docs/design/archive/).
+- [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v32.md) (v32, the current revision). Earlier revisions and the external evaluations that shaped them are in [`docs/design/archive/`](docs/design/archive/).
 
 ## Roadmap
 
