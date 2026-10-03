@@ -7,7 +7,7 @@ use std::collections::BinaryHeap;
 use std::collections::BTreeMap;
 
 use rand_chacha::ChaCha8Rng;
-use serde::{Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::data::DataPack;
 use crate::map::{Dir, Map, Pos};
@@ -27,7 +27,7 @@ pub(crate) enum Occupied {
 }
 
 /// Something a sprite can aim a verb at (design §3.6).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Target {
     /// An object, such as a berry or a bush.
     Object(EntityId),
@@ -57,7 +57,7 @@ const NO_STEP: u8 = u8::MAX;
 /// A sprite's flood: the cheapest cost to each tile it reaches within its
 /// radius, and the step that reached it. It's cached and saved (design §2.8),
 /// so it's part of the world state.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Flood {
     /// The tile it spreads from.
     pub(crate) origin: Pos,
@@ -70,10 +70,16 @@ pub(crate) struct Flood {
     width: u16,
     height: u16,
     /// The cost to reach each tile of the square, row by row, in terrain units.
-    #[serde(serialize_with = "costs_as_bytes")]
+    #[serde(
+        serialize_with = "costs_as_bytes",
+        deserialize_with = "costs_from_bytes"
+    )]
     costs: Vec<u32>,
     /// The direction of the step that reached each tile, as its place in `Dir::ALL`.
-    #[serde(serialize_with = "as_bytes")]
+    #[serde(
+        serialize_with = "as_bytes",
+        deserialize_with = "crate::save::read_bytes"
+    )]
     steps: Vec<u8>,
 }
 
@@ -406,6 +412,16 @@ fn as_bytes<S: Serializer>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Erro
 fn costs_as_bytes<S: Serializer>(costs: &[u32], serializer: S) -> Result<S::Ok, S::Error> {
     let bytes: Vec<u8> = costs.iter().flat_map(|cost| cost.to_le_bytes()).collect();
     serializer.serialize_bytes(&bytes)
+}
+
+/// Reads costs back from `costs_as_bytes`, as a save holds them (design §2.8).
+fn costs_from_bytes<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<u32>, D::Error> {
+    let bytes = crate::save::read_bytes(deserializer)?;
+    let (costs, rest) = bytes.as_chunks::<4>();
+    if !rest.is_empty() {
+        return Err(serde::de::Error::custom("flood costs aren't whole numbers"));
+    }
+    Ok(costs.iter().map(|&cost| u32::from_le_bytes(cost)).collect())
 }
 
 /// The tile one step back from `pos` against direction `dir`.

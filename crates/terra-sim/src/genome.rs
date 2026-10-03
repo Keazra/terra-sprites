@@ -17,7 +17,7 @@ const VERSION: u8 = 1;
 
 /// A sprite's genes, in order. A genome is checked against the data pack it
 /// was read with, and must be used with that pack.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Genome {
     pub(crate) genes: Vec<Gene>,
 }
@@ -40,7 +40,7 @@ impl std::fmt::Display for GenomeError {
 }
 
 /// One gene. Everything it refers to is a stable registry ID.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) enum Gene {
     /// Type 1: the chemical decays by half every `ticks` ticks.
     HalfLife { chem: ChemId, ticks: u32 },
@@ -98,7 +98,7 @@ pub(crate) enum Gene {
 }
 
 /// How an unmatched gene was written, so it's written back the same way.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) enum AsWritten {
     /// An attention instinct by name, with its names as written.
     AttentionInstinct {
@@ -139,14 +139,14 @@ impl AsWritten {
 }
 
 /// A chemical and its coefficient in a reaction.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Term {
     pub(crate) chem: ChemId,
     pub(crate) coefficient: u8,
 }
 
 /// What an emitter reads: a chemical's level, or another locus.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum LocusRef {
     Chem(ChemId),
     Locus(LocusId),

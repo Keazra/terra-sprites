@@ -33,6 +33,7 @@ mod random;
 mod regions;
 mod registry;
 mod rolling;
+mod save;
 mod sliding;
 mod sprites;
 mod tags;
@@ -58,6 +59,7 @@ pub use names::{MAX_NAME_CHARS, NameProblem};
 pub use objects::EntityId;
 pub use perception::Target;
 pub use registry::{ChemicalKind, Trait, Verb};
+pub use save::{LoadError, SCHEMA_VERSION};
 pub use terrain::{Terrain, TerrainProps};
 pub use world::{
     ChemicalLevel, CursorView, HeldView, InvariantViolation, ObjectView, Scenario, ScenarioError,

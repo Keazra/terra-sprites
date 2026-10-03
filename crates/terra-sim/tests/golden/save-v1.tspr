@@ -1,0 +1,632 @@
+TSPRÇÆschema_version´sim_version•0.1.0Ñ§seedÕÍ¶config¿§packõí®pack.ronŸó// The default Terra Sprites data pack. Embedded in the binary; `--data <dir>`
+// overrides it for new worlds.
+(
+    name: "core",
+    version: "1",
+)
+í´terrain.ron⁄u// Terrain properties (design ¬ß3.1). Every terrain must be listed.
+//
+// A walkable terrain gives its step cost (what an orthogonal step onto it
+// costs; a diagonal step costs 14/10 of that), its fertility (0 to 1) and
+// whether sprites can drink there, and whether a fixture (such as a bush) may
+// stand there. An unwalkable terrain gives only `walkable: false`.
+{
+    grass:         (walkable: true, step_cost: 10, fertility: 1.0, drinkable: false, allows_fixtures: true),
+    dirt:          (walkable: true, step_cost: 10, fertility: 0.5, drinkable: false, allows_fixtures: true),
+    sand:          (walkable: true, step_cost: 15, fertility: 0.0, drinkable: false, allows_fixtures: true),
+    shallow_water: (walkable: true, step_cost: 25, fertility: 0.0, drinkable: true,  allows_fixtures: false),
+    deep_water:    (walkable: false),
+    rock:          (walkable: false),
+}
+í≠chemicals.ron⁄// The chemicals registry (design ¬ß4.1, Appendix A). IDs are stable and
+// append-only: never renumber or reuse one.
+//
+// Classes: Physical chemicals are changed only by physiology and object verbs;
+// Signal chemicals (drives, reward, punishment) and Hormones by the genome.
+// Only Physical chemicals may be the target of an object verb's `Inject`.
+[
+    (id: 1,  name: "energy",      class: Physical),
+    (id: 2,  name: "hydration",   class: Physical),
+    (id: 3,  name: "stamina",     class: Physical),
+    (id: 4,  name: "food",        class: Physical),
+    (id: 5,  name: "water",       class: Physical),
+    (id: 6,  name: "injury",      class: Physical),
+
+    (id: 16, name: "hunger",      class: Signal),
+    (id: 17, name: "thirst",      class: Signal),
+    (id: 18, name: "pain",        class: Signal),
+    (id: 19, name: "tiredness",   class: Signal),
+    (id: 20, name: "boredom",     class: Signal),
+    (id: 21, name: "loneliness",  class: Signal),
+    (id: 22, name: "crowdedness", class: Signal),
+    (id: 23, name: "reward",      class: Signal),
+    (id: 24, name: "punishment",  class: Signal),
+
+    (id: 32, name: "h0",  class: Hormone),
+    (id: 33, name: "h1",  class: Hormone),
+    (id: 34, name: "h2",  class: Hormone),
+    (id: 35, name: "h3",  class: Hormone),
+    (id: 36, name: "h4",  class: Hormone),
+    (id: 37, name: "h5",  class: Hormone),
+    (id: 38, name: "h6",  class: Hormone),
+    (id: 39, name: "h7",  class: Hormone),
+    (id: 40, name: "h8",  class: Hormone),
+    (id: 41, name: "h9",  class: Hormone),
+    (id: 42, name: "h10", class: Hormone),
+    (id: 43, name: "h11", class: Hormone),
+    (id: 44, name: "h12", class: Hormone),
+    (id: 45, name: "h13", class: Hormone),
+    (id: 46, name: "h14", class: Hormone),
+    (id: 47, name: "h15", class: Hormone),
+]
+í®loci.ron⁄ù// The loci registry (design ¬ß4.2, Appendix A): the named values genes and
+// verbs read and write. IDs are stable and append-only: never renumber or
+// reuse one. Chemical levels are loci too, referred to as `Chem(id)`, so
+// they aren't listed here.
+//
+// Kinds: BodySensor (physiology fills it in every tick), Pulse (an event that
+// lasts one tick; object verbs `Signal` these) and ReceptorTarget (written by
+// receptors). Which of them the brain feels is listed in `brain_io.ron`.
+[
+    (id: 1,  name: "always",            kind: BodySensor),
+    (id: 2,  name: "age",               kind: BodySensor),
+    (id: 3,  name: "nearby_sprites",    kind: BodySensor),
+    (id: 4,  name: "moving",            kind: BodySensor),
+    (id: 5,  name: "resting",           kind: BodySensor),
+
+    (id: 32, name: "ate",               kind: Pulse),
+    (id: 33, name: "drank",             kind: Pulse),
+    (id: 34, name: "played",            kind: Pulse),
+    (id: 35, name: "played_social",     kind: Pulse),
+    (id: 36, name: "pricked",           kind: Pulse),
+    (id: 37, name: "was_hit",           kind: Pulse),
+    (id: 38, name: "did_hit",           kind: Pulse),
+    (id: 39, name: "petted",            kind: Pulse),
+    (id: 40, name: "shocked",           kind: Pulse),
+    (id: 41, name: "cornered",          kind: Pulse),  // a retreat found no step away
+    (id: 42, name: "fruitless",         kind: Pulse),  // a try that did nothing (design v16 ¬ß5.2)
+
+    (id: 64, name: "learning_rate_mod", kind: ReceptorTarget),
+    (id: 65, name: "exploration_mod",   kind: ReceptorTarget),
+    (id: 66, name: "curiosity_mod",     kind: ReceptorTarget),  // wariness lowers it (design v16 ¬ß5.3)
+]
+í¨brain_io.ron⁄à// The brain's State inputs (design ¬ß5.2, Appendix A): what a sprite's brain
+// feels, each reading a drive, a hormone, a body sensor or a pulse. IDs are
+// stable and append-only: never renumber or reuse one.
+//
+// Not brain inputs: physical chemicals (the brain feels the body only through
+// drives), reward and punishment (learning signals), the `moving` and
+// `resting` sensors (as inputs they'd loop an action back into itself) and
+// receptor targets. The Target inputs are one for each category in
+// categories.ron, attended_<category>, then target_distance (42) and
+// target_adjacent (43), and IDs 36 to 63 are kept for them, so State inputs
+// carry on from 64.
+(
+inputs: [
+    (id: 1,  name: "hunger",        reads: Chem("hunger")),
+    (id: 2,  name: "thirst",        reads: Chem("thirst")),
+    (id: 3,  name: "pain",          reads: Chem("pain")),
+    (id: 4,  name: "tiredness",     reads: Chem("tiredness")),
+    (id: 5,  name: "boredom",       reads: Chem("boredom")),
+    (id: 6,  name: "loneliness",    reads: Chem("loneliness")),
+    (id: 7,  name: "crowdedness",   reads: Chem("crowdedness")),
+
+    (id: 8,  name: "h0",            reads: Chem("h0")),
+    (id: 9,  name: "h1",            reads: Chem("h1")),
+    (id: 10, name: "h2",            reads: Chem("h2")),
+    (id: 11, name: "h3",            reads: Chem("h3")),
+    (id: 12, name: "h4",            reads: Chem("h4")),
+    (id: 13, name: "h5",            reads: Chem("h5")),
+    (id: 14, name: "h6",            reads: Chem("h6")),
+    (id: 15, name: "h7",            reads: Chem("h7")),
+    (id: 16, name: "h8",            reads: Chem("h8")),
+    (id: 17, name: "h9",            reads: Chem("h9")),
+    (id: 18, name: "h10",           reads: Chem("h10")),
+    (id: 19, name: "h11",           reads: Chem("h11")),
+    (id: 20, name: "h12",           reads: Chem("h12")),
+    (id: 21, name: "h13",           reads: Chem("h13")),
+    (id: 22, name: "h14",           reads: Chem("h14")),
+    (id: 23, name: "h15",           reads: Chem("h15")),
+
+    (id: 24, name: "nearby_sprites",reads: Locus("nearby_sprites")),
+    (id: 25, name: "age",           reads: Locus("age")),
+    (id: 26, name: "always",        reads: Locus("always")),
+
+    (id: 27, name: "ate",           reads: Locus("ate")),
+    (id: 28, name: "drank",         reads: Locus("drank")),
+    (id: 29, name: "played",        reads: Locus("played")),
+    (id: 30, name: "played_social", reads: Locus("played_social")),
+    (id: 31, name: "pricked",       reads: Locus("pricked")),
+    (id: 32, name: "was_hit",       reads: Locus("was_hit")),
+    (id: 33, name: "did_hit",       reads: Locus("did_hit")),
+    (id: 34, name: "petted",        reads: Locus("petted")),
+    (id: 35, name: "shocked",       reads: Locus("shocked")),
+
+    (id: 64, name: "cornered",      reads: Locus("cornered")),
+    (id: 65, name: "fruitless",     reads: Locus("fruitless")),
+],
+
+// The needs (design v16 ¬ß5.2, ¬ß5.6): the drives whose relief teaches a
+// sprite what things are good for, each a State input that reads a drive.
+// Pain is a drive but not a need: its fall is a hurt fading, not relief.
+needs: ["hunger", "thirst", "tiredness", "boredom", "loneliness", "crowdedness"],
+
+// The first-order needs (design v21 ¬ß5.2, ¬ß5.6): the needs that come before a
+// sprite's likes. The more one presses, the less what it merely likes pulls,
+// though never to nothing. The other needs are second-order.
+first_order: ["hunger", "thirst"],
+)
+íÆcategories.ron⁄g// Categories (design v19 ¬ß3.5.5): what a sprite perceives a thing as. Things
+// share a category because they look alike to a sprite, never because of what
+// they do to it: a bush and a berry are different categories, though berries
+// grow on bushes. IDs are permanent and append-only: never renumber or reuse
+// one. Each category's brain input, attended_<name>, takes the ID 35 + id for
+// IDs 1 to 6, and 37 + id from 7, so category IDs go up to 26.
+//
+// Each category has:
+//   name    what object types, genomes and brain inputs call it
+//   plural  how the screen says the category in general, as written:
+//           "bushes"; left out for one you don't count, such as water
+[
+    (id: 1, name: "bush",      plural: "bushes"),
+    (id: 2, name: "fruit"),
+    // 3 was thornbush, until thornbushes joined bush (design v20). Never reuse it.
+    (id: 4, name: "water"),
+    (id: 5, name: "toy",       plural: "toys"),
+    (id: 6, name: "sprite",    plural: "sprites"),
+    // The Cursor, which sprites see while it's visible (design v29 ¬ß6.5).
+    // There's one, so it has no plural.
+    (id: 7, name: "cursor"),
+]
+í®tags.ron⁄Ó// Tags defined in the data (design v23 ¬ß3.5.6). A contact is a sprite
+// touching a thing: eating it, hitting it, playing with it, or crashing into
+// it. A tag says what each contact with a thing that has it does to the sprite
+// making it, and every thing with the tag behaves the same way. An object type
+// names its tags in `objects.ron`, after the built-in Solid and Fixture.
+//
+// Each tag has:
+//   name     what object types call it
+//   contact  for each contact (Eat, Hit, Play, Crash), its effects, run before
+//            the thing's own verb table. Only Inject and Signal on the Actor,
+//            the sprite making contact, are allowed
+[
+    (name: "Thorny",
+     contact: {
+         Eat:   [Inject(Actor, "injury", 0.05), Signal(Actor, "pricked")],
+         Hit:   [Inject(Actor, "injury", 0.03), Signal(Actor, "pricked")],
+         Play:  [Inject(Actor, "injury", 0.03), Signal(Actor, "pricked")],
+         Crash: [Inject(Actor, "injury", 0.03), Signal(Actor, "pricked")],
+     }),
+]
+í´objects.ron⁄c// Object types (design ¬ß3.5). IDs are stable and append-only: never renumber
+// or reuse one. Names are what rules, presets and themes refer to.
+//
+// Each type has:
+//   plural    how the screen says the kind in general, as written: "berry bushes";
+//             left out for a thing you don't count, such as water ("water is")
+//   category  what brains perceive it as: a category's name from categories.ron
+//   tags      [Solid, Fixture] for objects like bushes, which nothing can move
+//             through or move; no tags for items, like berries and balls. Then
+//             any tags defined in tags.ron, such as Thorny, whose contacts run
+//             before the type's own verbs
+//   size      Small, Medium or Large, and
+//   hardness  from 0 to 1: a rolling item bounces off something bigger, knocks
+//             on something its size, and crushes something smaller and softer.
+//             Every type with objects gives both; a pseudo type gives both or neither
+//   counters  named whole numbers with maximums: {"fruit": 6}
+//   stages    [(name, ticks: (min, max), next: Stage(name) or Expire)]; a type
+//             with no stages is permanent
+//   rules     [(trigger, if: [conditions], do: [effects])], run in order
+//   verbs     {Verb: [effects]}: what happens when a sprite does that verb to it
+//   visual    [(if: [conditions], state: name)]: the first match names the state
+//             themes draw; with no match, the state is "default"
+//   place     (label: "...", if: [conditions]) if the Cursor's Place menu offers
+//             it (design v28 ¬ß3.5.1), under that label. A placed object starts at the
+//             beginning of its first stage. `if` is optional: the conditions its
+//             tile must meet, such as KeepsPathsOpen; Chance isn't allowed
+//
+// Triggers: Every(n), OnStageEnter(stage), OnExpire.
+// Conditions: InStage(stage), Counter(name, cmp, n), Chance(p),
+//   Fertility(cmp, f), DensityBelow(type, radius, max), KeepsPathsOpen;
+//   cmp is Lt, Le, Eq, Ne, Ge or Gt. KeepsPathsOpen holds where a solid object
+//   wouldn't split the open tiles around it: ask it before making one.
+// Effects: AddCounter(name, delta), SpawnNearby(type, radius),
+//   SpreadTo(type, radius, [conditions]), ReplaceWith(type), DestroySelf;
+//   and in verbs only: RequireCounter(name, n), Inject(Actor or Target, chemical, amount),
+//   Signal(Actor or Target, locus), Push(tiles).
+[
+    (id: 1, name: "berry_bush", plural: "berry bushes",
+     category: "bush", tags: [Solid, Fixture], size: Large, hardness: 1.0,
+     counters: {"fruit": 6},
+     stages: [
+         (name: "seedling", ticks: (1500, 2500),   next: Stage("mature")),
+         (name: "mature",   ticks: (20000, 30000), next: Expire),
+     ],
+     rules: [
+         (trigger: Every(200), if: [InStage("mature")], do: [AddCounter("fruit", 1)]),
+         // Overripe fruit drops beside the bush.
+         (trigger: Every(50), if: [Counter("fruit", Ge, 6), Chance(0.2)],
+          do: [AddCounter("fruit", -1), SpawnNearby("berry", 1)]),
+     ],
+     verbs: {
+         Eat: [RequireCounter("fruit", 1), AddCounter("fruit", -1),
+               Inject(Actor, "food", 0.3), Signal(Actor, "ate")],
+         Hit: [Signal(Actor, "did_hit")],
+     },
+     visual: [
+         (if: [InStage("seedling")], state: "seedling"),
+         (if: [Counter("fruit", Ge, 1)], state: "fruiting"),
+     ],
+     // Placed anywhere a bush may stand, even where it walls things off: the
+     // player may pen sprites in on purpose (design v28 ¬ß3.5.1).
+     place: (label: "berry bush seedling"),
+    ),
+
+    (id: 2, name: "berry", plural: "berries", category: "fruit", size: Small, hardness: 0.1,
+     stages: [(name: "fresh", ticks: (1500, 2500), next: Expire)],
+     rules: [
+         // An expiring berry sometimes sprouts, on fertile land that isn't crowded,
+         // where a bush wouldn't cut a path.
+         (trigger: OnExpire,
+          if: [Fertility(Ge, 0.5), DensityBelow("berry_bush", 4, 3), KeepsPathsOpen, Chance(0.1)],
+          do: [ReplaceWith("berry_bush")]),
+     ],
+     verbs: {
+         Eat: [Inject(Actor, "food", 0.3), Signal(Actor, "ate"), DestroySelf],
+     },
+     place: (label: "berry"),
+    ),
+
+    (id: 3, name: "thornbush", plural: "thornbushes",
+     category: "bush", tags: [Solid, Fixture, Thorny], size: Large, hardness: 1.0,
+     stages: [(name: "grown", ticks: (40000, 60000), next: Expire)],
+     rules: [
+         (trigger: Every(2000), if: [Chance(0.1)],
+          do: [SpreadTo("thornbush", 4, [DensityBelow("thornbush", 4, 2), KeepsPathsOpen])]),
+     ],
+     // Every contact hurts, deliberately, even Play (design ¬ß3.5.3): its
+     // thorns are its Thorny tag's (tags.ron), so its own table has only
+     // what isn't thorns.
+     verbs: {
+         Hit: [Signal(Actor, "did_hit")],
+     }),
+
+    (id: 4, name: "ball", plural: "balls", category: "toy", size: Medium, hardness: 0.5,
+     verbs: {
+         Play: [Push(4), Signal(Actor, "played")],
+         Hit:  [Push(2), Signal(Actor, "did_hit")],
+     },
+     place: (label: "ball"),
+    ),
+
+    // Pseudo types: a verb table only, with no instances or lifecycle.
+    // Water has no plural: it isn't counted, so it reads "water is".
+    (id: 100, name: "water", category: "water", pseudo: true,
+     verbs: {
+         Drink: [Inject(Actor, "water", 0.2), Signal(Actor, "drank")],
+     }),
+
+    (id: 101, name: "sprite", plural: "sprites",
+     category: "sprite", pseudo: true, size: Large, hardness: 0.5,
+     verbs: {
+         Hit:  [Inject(Target, "injury", 0.03), Signal(Target, "was_hit"), Signal(Actor, "did_hit")],
+         Play: [Signal(Actor, "played_social"), Signal(Target, "played_social")],
+     }),
+
+    // The Cursor, which sprites see while it's visible (design v29 ¬ß6.5).
+    // It's hard light, so every try on it is fruitless; a pack may give it
+    // verbs, such as Play for chasing the light.
+    (id: 102, name: "cursor", category: "cursor", pseudo: true, verbs: {}),
+]
+íÆphysiology.ron⁄¥// Physiology (design ¬ß4.4, Appendix B): the body's fixed rules, which genes
+// can't change. Levels are fractions of full, from 0 to 1; rates are per tick.
+//
+// The starting values aim for these timescales, for a sprite at rest: full
+// hydration lasts about 3,000 ticks and full energy about 6,000; once either
+// runs out, injury kills in about 1,000 more; a sprite past its lifespan dies
+// within about 2,000. Slice 17 tunes them.
+(
+    // What a newborn's physical chemicals start at. Injury and gut contents start at 0.
+    newborn: (energy: 1.0, hydration: 1.0, stamina: 1.0),
+    // The first population, placed by world generation, starts with its energy
+    // and its hydration each drawn between these fractions of the newborn level.
+    first_population: (0.6, 1.0),
+
+    metabolism: (
+        basal: 0.0001,              // energy per tick
+        per_sense_tile: 0.0000067,  // energy per tick, per tile of sense radius
+        per_step: 0.0002,           // energy per step at speed 8; scales with (speed / 8)¬≤
+    ),
+    // Gut contents moved into the body per tick: food into energy, water into hydration.
+    digestion: (food: 0.001, water: 0.002),
+    hydration_loss: 0.00033,
+    stamina: (per_step: 0.002, idle: 0.0005, resting: 0.002),
+    healing: 0.0001,  // injury healed per tick
+    // Injury per tick while energy is at 0, while hydration is at 0, and while
+    // age is past lifespan.
+    injury: (starvation: 0.0011, dehydration: 0.0011, old_age: 0.0006),
+    // Each cause-of-death tally halves every this many ticks (design ¬ß4.10).
+    cause_fade: 350,
+
+    // The range each trait gene is clamped to (design ¬ß4.8).
+    traits: (
+        speed: (4.0, 12.0),
+        sense_radius: (6.0, 14.0),
+        lifespan: (20000.0, 200000.0),
+    ),
+    // Each brain parameter's range, which a `BrainParam` gene is clamped to,
+    // and the value a genome with no gene for it gets (design ¬ß5.7, Appendix B).
+    brain: {
+        "learning_rate":     (range: (0.001, 0.5),   default: 0.05),
+        "trace_decay":       (range: (0.5, 0.99),    default: 0.9),
+        "relax_rate":        (range: (0.0, 0.01),    default: 0.001),
+        "consolidate_rate":  (range: (0.0, 0.001),   default: 0.0001),
+        "tau_base":          (range: (0.05, 2.0),    default: 0.2),
+        "tau_att_base":      (range: (0.05, 2.0),    default: 0.2),
+        "switch_margin":     (range: (0.0, 1.0),     default: 0.2),
+        "attention_margin":  (range: (0.0, 1.0),     default: 0.2),
+        "salience_gain":     (range: (0.0, 2.0),     default: 0.5),
+        "pool_size":         (range: (0.0, 64.0),    default: 32.0),
+        "max_arity":         (range: (1.0, 3.0),     default: 3.0),
+        "recruit_threshold": (range: (0.0, 1.0),     default: 0.3),
+        "novelty_threshold": (range: (0.0, 1.0),     default: 0.5),
+        "forget_ticks":      (range: (100.0, 100000.0), default: 5000.0),
+        // Learning (design v16 ¬ß5.6). Since v16 learning_rate, relax_rate and
+        // consolidate_rate do nothing, nor do pool_size to forget_ticks while
+        // the recruitable pool is on hold; genomes may still carry them.
+        "worth_rate_good":   (range: (0.0, 1.0),     default: 0.5),
+        "worth_rate_bad":    (range: (0.0, 1.0),     default: 0.8),
+        "worth_fade_good":   (range: (0.0, 0.01),    default: 0.0002),
+        "worth_fade_bad":    (range: (0.0, 0.01),    default: 0.00005),
+        "habit_rate":        (range: (0.0, 1.0),     default: 0.3),
+        "habit_fade":        (range: (0.0, 0.01),    default: 0.0002),
+        "value_gain":        (range: (0.0, 2.0),     default: 1.0),
+        "curiosity":         (range: (0.0, 1.0),     default: 0.3),
+        "familiarity_rate":  (range: (0.0, 0.05),    default: 0.002),
+        "disappointment":    (range: (0.0, 1.0),     default: 0.3),
+        // Individuals and fear (design v18 ¬ß5.3, ¬ß5.5, ¬ß5.6), from slice 9c's
+        // prototype (#62).
+        "individual_rate_good": (range: (0.0, 1.0),  default: 0.8),
+        "individual_rate_bad":  (range: (0.0, 1.0),  default: 0.9),
+        "fear_rate":         (range: (0.0, 1.0),     default: 1.0),
+        "fear_fade":         (range: (0.0, 0.01),    default: 0.00005),
+        "generalise":        (range: (2.0, 10.0),    default: 3.0),
+        "vigilance":         (range: (0.0, 2.0),     default: 0.8),
+        "flight":            (range: (0.0, 2.0),     default: 0.8),
+        "fear_reach":        (range: (0.1, 1.0),     default: 0.5),
+        // Category summaries (design v19 ¬ß5.6), at generalise's value.
+        "generalise_types":  (range: (2.0, 10.0),    default: 3.0),
+        // A pressing first-order need quiets what a sprite merely likes, by
+        // at most this much, never all of it; and bad habits fade as slowly
+        // as bad things (design v21 ¬ß5.6).
+        "quieting":          (range: (0.0, 1.0),     default: 0.8),
+        "habit_fade_bad":    (range: (0.0, 0.01),    default: 0.00005),
+        // Fear of the Cursor wears off while it stays near and does nothing,
+        // fastest on the sprite's own tile (design v29 ¬ß5.6): a sprite comes
+        // to see it can't do anything about it. A first guess, tuned in play.
+        "cursor_calming":    (range: (0.0, 0.1),     default: 0.01),
+    },
+    // The range of each receptor target in `loci.ron`. Each rests at 1.0 when
+    // no receptor writes it.
+    receptor_targets: {
+        "learning_rate_mod": (0.5, 2.0),
+        "exploration_mod": (0.25, 4.0),
+        "curiosity_mod": (0.0, 2.0),
+    },
+
+    // The `nearby_sprites` body sensor counts the other sprites within
+    // `radius` tiles, in any direction, and reads 1 at `full` of them.
+    nearby_sprites: (radius: 3, full: 4),
+
+    // Spawn variation (design ¬ß4.9): each gene value is multiplied by a factor
+    // drawn between 1 ‚àí this and 1 + this.
+    spawn_variation: 0.1,
+
+    // A learned value this far from 0 is a lesson, which the event log
+    // announces once (design v16 ¬ß5.6).
+    lesson_threshold: 0.5,
+
+    // Learning (design v16 ¬ß5.6): the least fall of a need in a tick that
+    // counts as relief, and how many ticks after a try the thing tried on
+    // is still the thing a feeling is about.
+    relief_deadband: 0.02,
+    touch_window: 3,
+    // A remembered sprite is forgotten once everything learned about it has
+    // faded nearer 0 than this (design v18 ¬ß5.6).
+    forget_below: 0.01,
+
+    // How long actions last (design ¬ß5.5): a rest in ticks, a retreat in
+    // steps. An action still going at the timeout, in ticks, ends as timed out.
+    actions: (rest_bout: 10, retreat_bout: 6, timeout: 60),
+    // How sprites find their way (design ¬ß3.6‚Äì3.7). A flood is made again 8
+    // ticks after the last, if the sprite hasn't moved sooner. It prices a
+    // tile holding another sprite at `occupied_penalty` more, in terrain
+    // units (a grass step is 10). After `replan_after` blocked ticks in a
+    // row, a sprite looks for a way round the sprites in its way.
+    movement: (flood_refresh: 8, occupied_penalty: 30, replan_after: 3),
+
+    // The Cursor's touch (design v21 ¬ß4.6): the levels it raises, a starting
+    // point for the lab's strength sweep; and the longest a pet's or hug's
+    // feeling looks back for the sprite's latest try, in ticks (¬ß5.6): two
+    // seconds at 16√ó. A shorter reach back than `touch_window` is taken as
+    // that; a zap's or shock's always looks back `touch_window`. Then the
+    // furthest the Cursor throws or shoves a thing of each size, in tiles
+    // (design v25 ¬ß3.5.4): size stands in for weight, and sprites are large.
+    cursor: (
+        pet: 0.5,
+        hug: 1.0,
+        zap: (punishment: 0.5, pain: 0.3),
+        shock: (punishment: 1.0, pain: 0.6),
+        max_reach_back: 40,
+        furthest: (small: 6, medium: 6, large: 5),
+    ),
+)
+í≥genomes/starter.ron⁄≠// The starter genome (design ¬ß4.5, ¬ß5.8): what sprites without parents are
+// made from. The world decides what happens to the body; these genes decide
+// how that feels.
+//
+// Drives rise from a need and fall sharply when a one-shot action relieves
+// it (a pulse-keyed Level emitter). The brain reads a need's fall as relief
+// (design v16 ¬ß5.6), which teaches that the thing touched is good for it.
+// Relief is gradual only where the relieving action is itself ongoing
+// (resting, staying near others).
+//
+// The brain (design v16 ¬ß5.8): very basic instincts. They connect needs to
+// actions, know the sprite's own kind, and fight or flee; they know nothing
+// of food, water, toys or danger. The species is dropped into a world it
+// doesn't know and learns it.
+//
+// The values are first cuts; slice 17 tunes them.
+(
+    format: 1,
+    genes: [
+        // Traits (design ¬ß4.8).
+        Trait(trait: "speed", value: 7.0),
+        Trait(trait: "sense_radius", value: 10.0),
+        Trait(trait: "lifespan", value: 60000.0),
+
+        // Hunger rises as energy falls below half, and drops at once on eating.
+        Emitter(locus: Chem("energy"), mode: Level, invert: true, threshold: 0.5, gain: 0.004, chem: "hunger"),
+        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "hunger"),
+        HalfLife(chem: "hunger", ticks: 2000),
+
+        // Thirst, the same way with hydration and drinking.
+        Emitter(locus: Chem("hydration"), mode: Level, invert: true, threshold: 0.5, gain: 0.004, chem: "thirst"),
+        Emitter(locus: Locus("drank"), mode: Level, gain: -0.5, chem: "thirst"),
+        HalfLife(chem: "thirst", ticks: 2000),
+
+        // Tiredness rises as stamina falls below half, and eases as rest restores it.
+        Emitter(locus: Chem("stamina"), mode: Level, invert: true, threshold: 0.5, gain: 0.004, chem: "tiredness"),
+        Emitter(locus: Chem("stamina"), mode: Level, threshold: 0.6, gain: -0.1, chem: "tiredness"),
+
+        // Boredom creeps up always; play relieves it at once, playing with
+        // another sprite much less than kicking a ball.
+        Emitter(locus: Locus("always"), mode: Level, gain: 0.0002, chem: "boredom"),
+        Emitter(locus: Locus("played"), mode: Level, gain: -0.5, chem: "boredom"),
+        Emitter(locus: Locus("played_social"), mode: Level, gain: -0.15, chem: "boredom"),
+
+        // Loneliness rises with nobody near, and eases in company or at once in social play.
+        Emitter(locus: Locus("nearby_sprites"), mode: Level, invert: true, threshold: 0.5, gain: 0.0005, chem: "loneliness"),
+        Emitter(locus: Locus("nearby_sprites"), mode: Level, threshold: 0.2, gain: -0.1, chem: "loneliness"),
+        Emitter(locus: Locus("played_social"), mode: Level, gain: -0.5, chem: "loneliness"),
+
+        // Crowdedness rises in a crowd, and falls within a few ticks of leaving it.
+        Emitter(locus: Locus("nearby_sprites"), mode: Level, threshold: 0.5, gain: 0.01, chem: "crowdedness"),
+        Emitter(locus: Locus("nearby_sprites"), mode: Level, invert: true, threshold: 0.5, gain: -0.5, chem: "crowdedness"),
+
+        // Pain comes with new injury, thorns and blows, and fades fast.
+        Emitter(locus: Locus("pricked"), mode: Level, gain: 0.3, chem: "pain"),
+        Emitter(locus: Locus("was_hit"), mode: Level, gain: 0.3, chem: "pain"),
+        HalfLife(chem: "pain", ticks: 20),
+
+        // Punishment. Rise emitters run after every Level emitter, in this
+        // order, so injury ‚Üí pain ‚Üí punishment completes in one tick. Relief
+        // needs no gene: the brain reads it from the needs themselves.
+        Emitter(locus: Chem("injury"), mode: Rise, gain: 10.0, chem: "pain"),
+        Emitter(locus: Chem("pain"), mode: Rise, gain: 1.0, chem: "punishment"),
+
+        // Need makes a sprite restless (design v16 ¬ß4.5): the more pressing
+        // hunger, thirst or boredom, the less sure its choices, so a sprite
+        // that doesn't know where water is tries more things.
+        Receptor(chem: "hunger", threshold: 0.2, gain: 1.0, target: "exploration_mod"),
+        Receptor(chem: "thirst", threshold: 0.2, gain: 1.0, target: "exploration_mod"),
+        Receptor(chem: "boredom", threshold: 0.2, gain: 0.5, target: "exploration_mod"),
+
+        // Wariness (design v16 ¬ß4.5): pain feeds h0, which fades over a few
+        // hundred ticks and lowers curiosity, so a run of hurts makes a sprite
+        // shy of the unfamiliar for a while.
+        Emitter(locus: Chem("pain"), mode: Level, threshold: 0.1, gain: 0.05, chem: "h0"),
+        HalfLife(chem: "h0", ticks: 300),
+        Receptor(chem: "h0", gain: -2.0, target: "curiosity_mod"),
+
+        // How the brain works. Choices are fairly sure of themselves: with
+        // no drive pressing a sprite wanders, and a drive of .5 wins most
+        // choices. Habits are credited over a short trace, so a hurt is
+        // blamed on what it did just before it (design v15 change 10). How
+        // fast it learns worth and habits, and how curious it is, are
+        // physiology's defaults (design v16, Appendix B).
+        BrainParam(param: "trace_decay", value: 0.5),
+        BrainParam(param: "tau_base", value: 0.1),
+        BrainParam(param: "tau_att_base", value: 0.2),
+        BrainParam(param: "switch_margin", value: 0.2),
+        BrainParam(param: "attention_margin", value: 0.2),
+        BrainParam(param: "salience_gain", value: 0.5),
+
+        // It knows its own kind: loneliness draws its eye to other sprites.
+        // Nothing draws it to food, water or toys; it learns what they're for.
+        AttentionInstinct(input: "loneliness", category: "sprite", weight: 1.0),
+        // Being hit draws attention to sprites, which means the attacker.
+        AttentionInstinct(input: "was_hit", category: "sprite", weight: 1.0),
+        // Crowding draws attention to sprites.
+        AttentionInstinct(input: "crowdedness", category: "sprite", weight: 1.0),
+
+        // Each need leads to its action, on whatever is attended: hunger to
+        // eating, thirst to drinking. Trying it on the wrong thing does nothing.
+        Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
+        Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
+        Instinct(inputs: [("tiredness", false)], verb: Rest, weight: 1.0),
+        // Boredom leads to play; loneliness to going over to others, or
+        // playing with them.
+        Instinct(inputs: [("boredom", false)], verb: Play, weight: 1.0),
+        Instinct(inputs: [("loneliness", false)], verb: Approach, weight: 0.8),
+        Instinct(inputs: [("loneliness", false)], verb: Play, weight: 0.8),
+        // Pain leads to backing away from whatever the sprite attends to.
+        // Being hit, looking at the attacker, leads to hitting back, a little
+        // more weakly than a hit's pain leads to backing away: a busy sprite
+        // switches to whichever is stronger in it, so spawn variation makes
+        // about one sprite in four one that hits back.
+        Instinct(inputs: [("pain", false)], verb: Retreat, weight: 1.0),
+        Instinct(inputs: [("was_hit", false), ("attended_sprite", false)], verb: Hit, weight: 0.56),
+        // Crowding leads to backing away, and sometimes to hitting a
+        // neighbour: the deliberate mistake, which correcting should cure.
+        Instinct(inputs: [("crowdedness", false)], verb: Retreat, weight: 1.0),
+        Instinct(inputs: [("crowdedness", false), ("attended_sprite", false)], verb: Hit, weight: 0.6),
+        // A cornered sprite, looking at a sprite, turns on it.
+        Instinct(inputs: [("cornered", false), ("attended_sprite", false)], verb: Hit, weight: 1.0),
+        // A mild habit of wandering, which any drive that has grown outweighs.
+        Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3),
+    ],
+)
+í©names.ron⁄// Random names (design v28 ¬ß6.5): the screen offers one when the player
+// names a sprite with `r`, joining a first syllable, sometimes a middle one,
+// and a last. A name is at most 16 letters, so the longest first, middle and
+// last together must fit.
+(
+    first: [
+        "Mi", "To", "Ka", "Re", "Lu", "Sa", "Bo", "Ni", "Fe", "Ta",
+        "Pi", "Ve", "Mo", "Ri", "Da", "Ze", "Wi", "Jo", "Ha", "Ou",
+        "El", "An", "Ish", "Bri", "Tam",
+    ],
+    middle: [
+        "ra", "be", "li", "no", "ta", "mi", "ko", "si", "ve", "lu",
+    ],
+    last: [
+        "ra", "bek", "lo", "na", "ri", "mo", "sha", "kin", "pa", "lis",
+        "tor", "wen", "di", "ko", "fa", "nel", "zu", "beth", "om", "y",
+    ],
+    // How often a name gets a middle syllable, from 0 to 1.
+    middle_chance: 0.35,
+)
+•stateä§tick=£rngÉ§seed‹  3Ã»ÃûÃóÃ ÃΩÃ–awVÃœdTOb'({ÃßÃ¥Ã¨XÃ®ÃóvCÃõÃ†Ã◊¶stream ®word_posƒ              6£mapÑ•width¶height•tilesƒT                                                                                ™step_costsñ
+
+¿¿ßnext_idßobjectsÅ•by_idÑà§kind £posÇ°x°y•stage ™stage_endsÕ5®countersë •fresh¬§roll¿§held¬à§kind£posÇ°x°y•stage ™stage_endsÕ«™®countersê•fresh¬§roll¿§held¬à§kind£posÇ°x°y•stage¿™stage_ends ®countersê•fresh¬§roll¿§held¬à§kind£posÇ°x
+°y•stage¿™stage_ends ®countersê•fresh¬§roll¿§held√ßspritesÅ•by_idÇé£posÇ°x
+°y§born §name§Mira¶genomeÅ•genes‹ 3Å•TraitÇ•which•Speed•value @Ã#$Å•TraitÇ•which´SenseRadius•value A#0`Å•TraitÇ•which®Lifespan•value GbŸRÅßEmitterÜ•locusÅ§Chem§mode•Level¶invert√©threshold >ÛgE§gain ;â>¢§chemÅßEmitterÜ•locusÅ•Locus §mode•Level¶invert¬©threshold     §gain æˇß∞§chemÅ®HalfLifeÇ§chem•ticksÕSÅßEmitterÜ•locusÅ§Chem§mode•Level¶invert√©threshold ?
+ˇ§gain ;y6§chemÅßEmitterÜ•locusÅ•Locus!§mode•Level¶invert¬©threshold     §gain øÄs§chemÅ®HalfLifeÇ§chem•ticksÕÅßEmitterÜ•locusÅ§Chem§mode•Level¶invert√©threshold ?kı§gain ;rÔ°§chemÅßEmitterÜ•locusÅ§Chem§mode•Level¶invert¬©threshold ?íP§gain Ω∏Q˚§chemÅßEmitterÜ•locusÅ•Locus§mode•Level¶invert¬©threshold     §gain 9Póh§chemÅßEmitterÜ•locusÅ•Locus"§mode•Level¶invert¬©threshold     §gain ø∫È§chemÅßEmitterÜ•locusÅ•Locus#§mode•Level¶invert¬©threshold     §gain æﬁ§chemÅßEmitterÜ•locusÅ•Locus§mode•Level¶invert√©threshold ?
+A§gain : @›§chemÅßEmitterÜ•locusÅ•Locus§mode•Level¶invert¬©threshold >]î≠§gain Ω◊Ãª§chemÅßEmitterÜ•locusÅ•Locus#§mode•Level¶invert¬©threshold     §gain ø~§chemÅßEmitterÜ•locusÅ•Locus§mode•Level¶invert¬©threshold ?	õ0§gain <4§chemÅßEmitterÜ•locusÅ•Locus§mode•Level¶invert√©threshold ?
+Oî§gain ø pU§chemÅßEmitterÜ•locusÅ•Locus$§mode•Level¶invert¬©threshold     §gain >•ã,§chemÅßEmitterÜ•locusÅ•Locus%§mode•Level¶invert¬©threshold     §gain >®aè§chemÅ®HalfLifeÇ§chem•ticksÅßEmitterÜ•locusÅ§Chem§mode§Rise¶invert¬©threshold     §gain AçA§chemÅßEmitterÜ•locusÅ§Chem§mode§Rise¶invert¬©threshold     §gain ?rç§chemÅ®ReceptorÑ§chem©threshold >Alå§gain ?ÄÕ≥¶targetAÅ®ReceptorÑ§chem©threshold ><Ëx§gain ?i)¶¶targetAÅ®ReceptorÑ§chem©threshold >D‹§gain >ˇ=·¶targetAÅßEmitterÜ•locusÅ§Chem§mode•Level¶invert¬©threshold =‹£z§gain =WÅ´§chem Å®HalfLifeÇ§chem •ticksÕ<Å®ReceptorÑ§chem ©threshold     §gain øÍog¶targetBÅ™BrainParamÇ•param™TraceDecay•value ?   Å™BrainParamÇ•paramßTauBase•value =◊ñãÅ™BrainParamÇ•param™TauAttBase•value >`∂òÅ™BrainParamÇ•param¨SwitchMargin•value >B∆õÅ™BrainParamÇ•paramØAttentionMargin•value >R(áÅ™BrainParamÇ•param¨SalienceGain•value ? }áÅ±AttentionInstinctÉ•input®category¶weight ?ÄwÃÅ±AttentionInstinctÉ•input ®category¶weight ?iÄÅ±AttentionInstinctÉ•input®category¶weight ?ÄOÚÅ®InstinctÉ¶inputsëí¬§verb£Eat¶weight ?ÇÍ∑Å®InstinctÉ¶inputsëí¬§verb•Drink¶weight ?}±Å®InstinctÉ¶inputsëí¬§verb§Rest¶weight ?}éBÅ®InstinctÉ¶inputsëí¬§verb§Play¶weight ?xäÅ®InstinctÉ¶inputsëí¬§verb®Approach¶weight ?8ˆÉÅ®InstinctÉ¶inputsëí¬§verb§Play¶weight ?@`êÅ®InstinctÉ¶inputsëí¬§verbßRetreat¶weight ?ÄZÓÅ®InstinctÉ¶inputsíí ¬í)¬§verb£Hit¶weight ?ñUÅ®InstinctÉ¶inputsëí¬§verbßRetreat¶weight ?t*„Å®InstinctÉ¶inputsíí¬í)¬§verb£Hit¶weight ?.™Å®InstinctÉ¶inputsíí@¬í)¬§verb£Hit¶weight ?ÉFkÅ®InstinctÉ¶inputsëí¬§verb¶Wander¶weight >íâß§bodyà•chems‹  ?|e ?zÿ‡ ?tZ5                                    <F–T :kı:                                                                                               §loci‹  ?Ä   :ák®      ?Ä                                                               ?Ä   ?Ä   ?Ä  ®incoming‹                                                                                                ßsourcesÄ∞incoming_sourcesÄ™last_chems‹  ?|e ?zÿ‡ ?tZ5                                    <F–T :kı:                                                                                               ©last_loci‹  ?Ä   :ák®      ?Ä                                                               ?Ä   ?Ä   ?Ä  ßtalliesÄ•brainå¶paramsÅ¶values‹ $ =LÃÕ ?    :Éo 8—∑ =◊ñã >`∂ò >B∆õ >R(á ? }á B    @@   >ôôö ?    Eú@  ?    ?LÃÕ 9Q∑ 8Q∑ >ôôö 9Q∑ ?Ä   >ôôö ;o >ôôö ?LÃÕ ?fff ?Ä   8Q∑ @@   ?LÃÕ ?LÃÕ ?    @@   ?LÃÕ 8Q∑ <#◊
+®concepts‹ 0ëí ¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí	¬ëí
+¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí ¬ëí!¬ëí"¬ëí#¬ëí$¬ëí%¬ëí&¬ëí'¬ëí(¬ëí)¬ëí*¬ëí+¬ëí,¬íí¬í'¬íí¬í'¬íí'¬í+¬®decisionÅ°w‹ 0ò      ?Ä                                ò           ?}±                         ò                          ?Ä            ò                               ?}éB     ò                     ?xä               ò ?8ˆÉ                ?@`ê               ò                          ?t*„          ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                    >íâßò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                ?ñU                    ò                ?.™                    ò                ?Ä                      ©attentionÅ°w‹ -ñ                              ñ                              ñ                              ñ                              ñ                              ñ                     ?Ä       ñ                     ?Ä       ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                     ?iÄ     ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ®attended®snapshotç§tick<¶inputs‹ -                     <F–T :kı:                                                                                           :ák® ?Ä                                                          ?Ä             =ÃÃÕ                    ´activations‹ 0                     <F–T :kı:                                                                                           :ák® ?Ä                                                          ?Ä             =ÃÃÕ                                   ©attentionÑ ?1IÃ ?=^ã ?ïö ?$5x¶scoredÑÅ™ObjectTypeÅ™ObjectTypedÅ™ObjectTypeÅ™ObjectTypee®attended¶targetÅ•WaterÇ°x°yßsubjectÅ™ObjectTyped¶scoresò :*{x                <K∫+           >íâß§verb¶Wander¶motive¿´sprite_seenßscoringÇ¶sprite•quiet¬§felt     •traceñÑ§tick7§verb¶WanderßsubjectÅ™ObjectTypee¶motive¿Ñ§tick8§verb¶WanderßsubjectÅ™ObjectTypee¶motive¿Ñ§tick9§verb¶WanderßsubjectÅ™ObjectTyped¶motive¿Ñ§tick:§verb¶WanderßsubjectÅ™ObjectTyped¶motive¿Ñ§tick;§verb¶WanderßsubjectÅ™ObjectTyped¶motive¿Ñ§tick<§verb¶WanderßsubjectÅ™ObjectTyped¶motive¿™experienceÜ•typesÖÅ™ObjectTypeÜ•worthñ                              §good     £bad     ¶habitsò                                        ´familiarity <oßtouched¬Å™ObjectTypeÜ•worthñ                              §good     £bad     ¶habitsò                                        ´familiarity <ı¬ëßtouched¬Å™ObjectTypeÜ•worthñ                              §good     £bad     ¶habitsò                                        ´familiarity ;ƒõ¶ßtouched¬Å™ObjectTypedÜ•worthñ                              §good     £bad     ¶habitsò                                        ´familiarity =,2ßtouched¬Å™ObjectTypeeÜ•worthñ                              §good     £bad     ¶habitsò                                        ´familiarity =tΩßtouched¬™new_things     ´individualsÄ¶cursor¿¶taughtê¨needs_beforeñ                <F–T :kı:     ßtouched¿™reach_back¿´seen_cursor¬¶actionç§verb¶Wander§walkÉ´destinationÇ°x°y≠blocked_ticks ©committed¿¶target¿´target_type¿©attempted¬©target_at¿´target_gone¬§hurtÇ•actor¬¶target¬ßstarted9•ticks≠retreat_steps •ended¿®scripted¬§lead¿•slide¿®scriptedê•floodà¶originÇ°x°y§made<¶radius
+¶cornerÇ°x°y •width¶height•costs≈8p   f   \   R   H   >   4   *   &   "      7   J   r   ˇˇˇˇX   N   D   :   0   &            '   1   h   ^   T   J   @   6   J   "         
+         d   Z   P   F   <   2   (         
+       
+      h   ^   T   J   @   6   2   ˇˇˇˇ      
+         l   b   X   N   D   :   0   &                  •stepsƒN  ˇ   ˇˇ´move_points£didÇ•steps¶rested¬©last_step°Wé£posÇ°x°y§born §name¿¶genomeÅ•genes‹ 3Å•TraitÇ•which•Speed•value @Â§Å•TraitÇ•which´SenseRadius•value A.[†Å•TraitÇ•which®Lifespan•value Go¥BÅßEmitterÜ•locusÅ§Chem§mode•Level¶invert√©threshold >˛Ï§gain ;w3§chemÅßEmitterÜ•locusÅ•Locus §mode•Level¶invert¬©threshold     §gain ønL§chemÅ®HalfLifeÇ§chem•ticksÕ	ÅßEmitterÜ•locusÅ§Chem§mode•Level¶invert√©threshold ?±]§gain ;ÜR§chemÅßEmitterÜ•locusÅ•Locus!§mode•Level¶invert¬©threshold     §gain æÚ À§chemÅ®HalfLifeÇ§chem•ticksÕ(ÅßEmitterÜ•locusÅ§Chem§mode•Level¶invert√©threshold ?Ú≤§gain ;o≤r§chemÅßEmitterÜ•locusÅ§Chem§mode•Level¶invert¬©threshold ? —&§gain Ω’cø§chemÅßEmitterÜ•locusÅ•Locus§mode•Level¶invert¬©threshold     §gain 9P ‹§chemÅßEmitterÜ•locusÅ•Locus"§mode•Level¶invert¬©threshold     §gain æÈ%È§chemÅßEmitterÜ•locusÅ•Locus#§mode•Level¶invert¬©threshold     §gain æ p§chemÅßEmitterÜ•locusÅ•Locus§mode•Level¶invert√©threshold ?XÛ§gain 9˘!ö§chemÅßEmitterÜ•locusÅ•Locus§mode•Level¶invert¬©threshold >DK8§gain Ω«wª§chemÅßEmitterÜ•locusÅ•Locus#§mode•Level¶invert¬©threshold     §gain æÒF˝§chemÅßEmitterÜ•locusÅ•Locus§mode•Level¶invert¬©threshold ?w¡§gain <)€t§chemÅßEmitterÜ•locusÅ•Locus§mode•Level¶invert√©threshold >Óq±§gain ø§chemÅßEmitterÜ•locusÅ•Locus$§mode•Level¶invert¬©threshold     §gain >ã¯f§chemÅßEmitterÜ•locusÅ•Locus%§mode•Level¶invert¬©threshold     §gain >ü≈ó§chemÅ®HalfLifeÇ§chem•ticksÅßEmitterÜ•locusÅ§Chem§mode§Rise¶invert¬©threshold     §gain A*§chemÅßEmitterÜ•locusÅ§Chem§mode§Rise¶invert¬©threshold     §gain ?gq§chemÅ®ReceptorÑ§chem©threshold >@ØÃ§gain ?Ç@¿¶targetAÅ®ReceptorÑ§chem©threshold >JÁÍ§gain ?v#¶targetAÅ®ReceptorÑ§chem©threshold >;øœ§gain ?)‡¶targetAÅßEmitterÜ•locusÅ§Chem§mode•Level¶invert¬©threshold =Œ}§gain =VU§chem Å®HalfLifeÇ§chem •ticksÕ"Å®ReceptorÑ§chem ©threshold     §gain ¿Â¶targetBÅ™BrainParamÇ•param™TraceDecay•value ?À˝Å™BrainParamÇ•paramßTauBase•value =’ıªÅ™BrainParamÇ•param™TauAttBase•value >:‚Å™BrainParamÇ•param¨SwitchMargin•value >E •Å™BrainParamÇ•paramØAttentionMargin•value >>}Å™BrainParamÇ•param¨SalienceGain•value >˘F∞Å±AttentionInstinctÉ•input®category¶weight ?Ç–RÅ±AttentionInstinctÉ•input ®category¶weight ?ÅÓbÅ±AttentionInstinctÉ•input®category¶weight ?ÅEqÅ®InstinctÉ¶inputsëí¬§verb£Eat¶weight ?qî1Å®InstinctÉ¶inputsëí¬§verb•Drink¶weight ?ÑáﬁÅ®InstinctÉ¶inputsëí¬§verb§Rest¶weight ?ÅçÓÅ®InstinctÉ¶inputsëí¬§verb§Play¶weight ?}#Å®InstinctÉ¶inputsëí¬§verb®Approach¶weight ?<cvÅ®InstinctÉ¶inputsëí¬§verb§Play¶weight ?PõÅ®InstinctÉ¶inputsëí¬§verbßRetreat¶weight ?å2Å®InstinctÉ¶inputsíí ¬í)¬§verb£Hit¶weight ?±ÌÅ®InstinctÉ¶inputsëí¬§verbßRetreat¶weight ?|©ÙÅ®InstinctÉ¶inputsíí¬í)¬§verb£Hit¶weight ?
+˙oÅ®InstinctÉ¶inputsíí@¬í)¬§verb£Hit¶weight ?sCÃÅ®InstinctÉ¶inputsëí¬§verb¶Wander¶weight >äÖ¨§bodyà•chems‹  ?{¶e ?zÿ‡ ?mÛœ                                    <GR :aT                                                                                               §loci‹  ?Ä   :Ä(r                                                                       ?Ä   ?Ä   ?Ä  ®incoming‹                                                                                                ßsourcesÄ∞incoming_sourcesÄ™last_chems‹  ?{¶e ?zÿ‡ ?mÛœ                                    <GR :aT                                                                                               ©last_loci‹  ?Ä   :Ä(r                                                                       ?Ä   ?Ä   ?Ä  ßtalliesÄ•brainå¶paramsÅ¶values‹ $ =LÃÕ ?À˝ :Éo 8—∑ =’ıª >:‚ >E • >>} >˘F∞ B    @@   >ôôö ?    Eú@  ?    ?LÃÕ 9Q∑ 8Q∑ >ôôö 9Q∑ ?Ä   >ôôö ;o >ôôö ?LÃÕ ?fff ?Ä   8Q∑ @@   ?LÃÕ ?LÃÕ ?    @@   ?LÃÕ 8Q∑ <#◊
+®concepts‹ 0ëí ¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí	¬ëí
+¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí¬ëí ¬ëí!¬ëí"¬ëí#¬ëí$¬ëí%¬ëí&¬ëí'¬ëí(¬ëí)¬ëí*¬ëí+¬ëí,¬íí¬í'¬íí¬í'¬íí'¬í+¬®decisionÅ°w‹ 0ò      ?qî1                              ò           ?Ä                           ò                          ?Ä            ò                               ?Ä       ò                     ?}#               ò ?<cv                ?Põ               ò                          ?|©Ù          ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                    >äÖ¨ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                                        ò                ?±Ì                    ò                ?
+˙o                    ò                ?sCÃ                    ©attentionÅ°w‹ -ñ                              ñ                              ñ                              ñ                              ñ                              ñ                     ?Ä       ñ                     ?Ä       ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                     ?Ä       ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ñ                              ®attended®snapshotç§tick<¶inputs‹ -                     <GR :aT                                                                                           :Ä(r ?Ä                                                                    ?Ä   >ã¢È                    ´activations‹ 0                     <GR :aT                                                                                           :Ä(r ?Ä                                                                    ?Ä   >ã¢È                                   ©attentionÑ ?<L ?z ?<j ?$IX¶scoredÑÅ™ObjectTypeÅ™ObjectTypedÅ™ObjectTypeÅ™ObjectTypee®attended¶targetÅ¶SpriteßsubjectÅ™ObjectTypee¶scoresò :%¶                <P7V           >äÖ¨§verb¶Wander¶motive¿´sprite_seenßscoringÇ¶sprite•quiet¬§felt     •traceñÑ§tick7§verb¶WanderßsubjectÅ™ObjectTypee¶motive¿Ñ§tick8§verb¶WanderßsubjectÅ™ObjectTypee¶motive¿Ñ§tick9§verb¶WanderßsubjectÅ™ObjectTypee¶motive¿Ñ§tick:§verb¶WanderßsubjectÅ™ObjectTypee¶motive¿Ñ§tick;§verb¶WanderßsubjectÅ™ObjectTypee¶motive¿Ñ§tick<§verb¶WanderßsubjectÅ™ObjectTypee¶motive¿™experienceÜ•typesÑÅ™ObjectTypeÜ•worthñ                              §good     £bad     ¶habitsò                                        ´familiarity <Â`Cßtouched¬Å™ObjectTypeÜ•worthñ                              §good     £bad     ¶habitsò                                        ´familiarity <‘˝ıßtouched¬Å™ObjectTypeÜ•worthñ                              §good     £bad     ¶habitsò                                        ´familiarity <¥9Yßtouched¬Å™ObjectTypeeÜ•worthñ                              §good     £bad     ¶habitsò                                        ´familiarity =<jÄßtouched¬™new_things     ´individualsÄ¶cursor¿¶taughtê¨needs_beforeñ                <GR :aT     ßtouched¿™reach_back¿´seen_cursor¬¶actionç§verb¶Wander§walkÉ´destinationÇ°x°y≠blocked_ticks ©committed¿¶target¿´target_type¿©attempted¬©target_at¿´target_gone¬§hurtÇ•actor¬¶target¬ßstarted4•ticks	≠retreat_steps •ended¿®scripted¬§lead¿•slide¿®scriptedê•floodà¶originÇ°x°y§made;¶radius¶cornerÇ°x °y •width¶height•costs≈PN   D   :   0   &                  &   0   I   b   J   F   ˇˇˇˇ,   "         
+         "   ,   E   U   F   <   2   (         
+       
+         (   2   <   J   @   6   ,   "         
+         "   ,   T   @   N   D   :   0   &            ˇˇˇˇ"   &   0   :   D   R   H   >   4   *   &   "      (   ,   0   4   >   H   •stepsƒT  ˇ ˇˇ´move_points4£didÇ•steps¶rested¬©last_step°W¶deathsÄ®learning√®commandsëÅ¶RenameÇ¶sprite§name§Oren¶cursorÉ§gripÅ•Holds§tile¿ßvisible¬
