@@ -2310,7 +2310,7 @@ impl App {
         match saves::write(&folder, name, &world.save()) {
             Ok(_) => {
                 self.saved_now(world);
-                self.tell_player(format!("Saved as {}", name.trim()));
+                self.tell_player(format!("Saved as {}", saves::name_for(name)));
             }
             Err(err) => self.refuse(format!("Couldn't save: {err}")),
         }

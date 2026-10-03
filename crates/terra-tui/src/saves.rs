@@ -27,9 +27,17 @@ pub struct SaveFile {
     pub modified: Option<SystemTime>,
 }
 
-/// The file a save named `name` is written to, in `folder`: the name with
-/// any character a file name can't hold on some system made a `-`.
+/// The file a save named `name` is written to, in `folder`, named by
+/// `name_for`.
 pub fn path_for(folder: &Path, name: &str) -> PathBuf {
+    folder.join(format!("{}.{EXTENSION}", name_for(name)))
+}
+
+/// The name a save called `name` is stored, and listed, by: one any
+/// system's file names can hold. Each character some system forbids is made
+/// a `-`; the dots and spaces Windows drops from the end go; and a name
+/// Windows keeps for a device, such as `con`, gets a `-` after it.
+pub fn name_for(name: &str) -> String {
     let safe: String = name
         .trim()
         .chars()
@@ -39,7 +47,28 @@ pub fn path_for(folder: &Path, name: &str) -> PathBuf {
             c => c,
         })
         .collect();
-    folder.join(format!("{safe}.{EXTENSION}"))
+    let safe = safe.trim_end_matches(['.', ' ']);
+    if safe.is_empty() {
+        return "-".into();
+    }
+    // Windows reads only up to the first dot when it looks for a device.
+    let (stem, rest) = safe.split_at(safe.find('.').unwrap_or(safe.len()));
+    if is_device(stem) {
+        format!("{stem}-{rest}")
+    } else {
+        safe.into()
+    }
+}
+
+/// Whether Windows keeps `stem` for a device, in any case.
+fn is_device(stem: &str) -> bool {
+    let upper = stem.to_ascii_uppercase();
+    let numbered = |prefix| {
+        upper
+            .strip_prefix(prefix)
+            .is_some_and(|n: &str| matches!(n.as_bytes(), [b'1'..=b'9']))
+    };
+    matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL") || numbered("COM") || numbered("LPT")
 }
 
 /// Writes `bytes` as the save named `name` in `folder`, making the folder
