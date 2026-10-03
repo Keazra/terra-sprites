@@ -231,6 +231,13 @@ impl Map {
         self.tiles[self.index(pos)]
     }
 
+    /// The terrain of the tiles of row `y` from `x0` to `x1`, inclusive,
+    /// which must be on the map.
+    pub(crate) fn terrain_row(&self, y: u16, x0: u16, x1: u16) -> &[Terrain] {
+        let start = self.index(Pos { x: x0, y });
+        &self.tiles[start..=start + usize::from(x1 - x0)]
+    }
+
     /// What a step from `from` in direction `dir` costs, or `None` if the step isn't allowed.
     pub fn step_cost(&self, from: Pos, dir: Dir) -> Option<u32> {
         let to = self.neighbour(from, dir)?;
