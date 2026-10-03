@@ -39,6 +39,9 @@ pub struct DataPack {
     starter: Genome,
     /// What random names are made of (design v28 §3.5.1).
     syllables: Syllables,
+    /// The files the pack was read from, as `(path within the pack, RON
+    /// text)`, which a save embeds (design §2.8).
+    sources: Vec<(String, String)>,
 }
 
 /// Why a data pack could not be loaded.
@@ -256,9 +259,20 @@ impl DataPack {
             physiology,
             starter: Genome { genes: Vec::new() },
             syllables,
+            sources: sources
+                .iter()
+                .map(|&(path, text)| (path.to_string(), text.to_string()))
+                .collect(),
         };
         pack.starter = starter_genome(find(sources, STARTER)?, &pack)?;
         Ok(pack)
+    }
+
+    /// The files the pack was read from, as `(path within the pack, RON
+    /// text)`: what a save embeds, so loading it rebuilds the same pack
+    /// (design §2.8).
+    pub(crate) fn sources(&self) -> &[(String, String)] {
+        &self.sources
     }
 
     /// The object types the Cursor's Place menu offers (design v28 §3.5.1), in ID

@@ -24,3 +24,8 @@ pub fn data_folder() -> Option<PathBuf> {
 pub fn genome_folder() -> Option<PathBuf> {
     data_folder().map(|folder| folder.join("genomes"))
 }
+
+/// The folder saves go in (design §6.7).
+pub fn save_folder() -> Option<PathBuf> {
+    data_folder().map(|folder| folder.join("saves"))
+}

@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, VecDeque};
 
 use rand_chacha::ChaCha8Rng;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::biochem::Body;
 use crate::brain_io::Source;
@@ -67,7 +67,7 @@ fn column(verb: Verb) -> usize {
 /// The brain's parameters (design §5.7): each from the first `BrainParam`
 /// gene that sets it, clamped to physiology's range, or physiology's
 /// default where no gene does.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct BrainParams {
     /// In `BrainParam::ALL` order. A `Vec`, since serde serialises arrays
     /// only up to 32 long.
@@ -113,7 +113,7 @@ pub(crate) type Signature = Vec<(usize, bool)>;
 /// Which sprite stands for sprites while the brain scores (design v18
 /// §5.3, §5.5), and whether fear is quiet: a hit is still felt, or the
 /// sprite is cornered, moments that are instinct's.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub(crate) struct SpriteScoring {
     pub(crate) sprite: Option<EntityId>,
     pub(crate) quiet: bool,
@@ -132,7 +132,7 @@ pub(crate) struct Aim {
 }
 
 /// A sprite's brain: its parameters, concepts and links (design §5.1).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Brain {
     pub(crate) params: BrainParams,
     /// Singletons, one per input in input order, then the innate
@@ -165,7 +165,7 @@ pub(crate) struct Brain {
 }
 
 /// What the brain saw and did at a step 5.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Snapshot {
     /// The tick of that step 5.
     pub(crate) tick: u64,
@@ -198,7 +198,7 @@ pub(crate) struct Snapshot {
 }
 
 /// What something learned is about (design v19 §5.9, §6.1).
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Thing {
     /// An object type, by name (`berry_bush`).
     ObjectType(String),
@@ -224,7 +224,7 @@ impl From<&str> for Thing {
 
 /// Something a sprite has learned, named (design §5.6, §5.9). Needs are
 /// named as brain inputs name them (`hunger`).
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Learned {
     /// What a thing is worth: for a need, or in general (`None`).
     Worth { thing: Thing, need: Option<String> },
@@ -845,6 +845,43 @@ impl Brain {
             summary.bad += share * known.bad;
         }
         summary
+    }
+
+    /// Whether a loaded brain fits `genome` and `data` at the tick `now`
+    /// (design §2.8): its parameters, concepts and instincts are the ones
+    /// the genome gives; whatever it attends to, has learned or remembers
+    /// doing is about categories, object types and needs the pack has; and
+    /// what it remembers doing was done by `now`.
+    pub(crate) fn fits(&self, genome: &Genome, data: &DataPack, now: u64) -> bool {
+        let born = Brain::new(genome, data);
+        let needs = data.needs().count();
+        let category = |id: CategoryId| data.category(id).is_some();
+        let subject = |subject: Subject| subject.fits(data);
+        let motive = |motive: Option<usize>| motive.is_none_or(|need| need < needs);
+        let scored = |(&id, &thing): (&CategoryId, &Subject)| category(id) && subject(thing);
+        let snapshot = |snapshot: &Snapshot| {
+            snapshot.tick <= now
+                && snapshot.inputs.len() == data.brain_inputs_in_order().len()
+                && snapshot.activations.len() == self.concepts.len()
+                && snapshot.attention.keys().all(|&id| category(id))
+                && snapshot.scored.iter().all(scored)
+                && snapshot.attended.is_none_or(category)
+                && snapshot.subject.is_none_or(subject)
+                && motive(snapshot.motive)
+        };
+        let traced = |entry: &TraceEntry| {
+            entry.tick <= now && entry.subject.is_none_or(subject) && motive(entry.motive)
+        };
+        let touched = |touch: Touch| touch.tick <= now && subject(touch.subject);
+        self.params == born.params
+            && self.concepts == born.concepts
+            && self.decision == born.decision
+            && self.attention == born.attention
+            && self.attended.is_none_or(category)
+            && self.snapshot.as_ref().is_none_or(snapshot)
+            && self.trace.iter().all(traced)
+            && self.experience.fits(data)
+            && self.touched.is_none_or(touched)
     }
 
     /// Checks the brain's state (design §5.6): instinct links within

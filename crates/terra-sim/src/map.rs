@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::data::DataPack;
 use crate::terrain::Terrain;
@@ -11,7 +11,7 @@ pub struct Pos {
 }
 
 /// One of the eight step directions. North is up the screen.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Dir {
     N,
     NE,
@@ -147,12 +147,15 @@ const LEGEND: [(char, Terrain); 6] = [
 ];
 
 /// The world's fixed-size grid of tiles, with the terrain movement rules (design §3.1).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Map {
     width: u16,
     height: u16,
     /// Row-major: the tile at `(x, y)` is at `y × width + x`.
-    #[serde(serialize_with = "terrain_bytes")]
+    #[serde(
+        serialize_with = "terrain_bytes",
+        deserialize_with = "terrain_from_bytes"
+    )]
     tiles: Vec<Terrain>,
     /// Each terrain's step cost, indexed by `Terrain as usize`; `None` if unwalkable.
     step_costs: [Option<u16>; Terrain::ALL.len()],
@@ -201,6 +204,21 @@ impl Map {
             tiles: vec![terrain; usize::from(width) * usize::from(height)],
             step_costs: step_costs(data),
         }
+    }
+
+    /// Checks a map read from a save (design §2.8): each side in range, a
+    /// tile for each place, and the step costs `data` gives.
+    pub(crate) fn check_shape(&self, data: &DataPack) -> Result<(), String> {
+        let side = 1..=MAX_SIDE;
+        let tiles = usize::from(self.width) * usize::from(self.height);
+        if !side.contains(&self.width) || !side.contains(&self.height) || self.tiles.len() != tiles
+        {
+            return Err("the map's size doesn't add up".into());
+        }
+        if self.step_costs != step_costs(data) {
+            return Err("the map's step costs aren't its data pack's".into());
+        }
+        Ok(())
     }
 
     /// The map drawn with the `from_ascii` legend, one string per row.
@@ -315,4 +333,37 @@ fn step_costs(data: &DataPack) -> [Option<u16>; Terrain::ALL.len()] {
 fn terrain_bytes<S: Serializer>(tiles: &[Terrain], serializer: S) -> Result<S::Ok, S::Error> {
     let bytes: Vec<u8> = tiles.iter().map(|&terrain| terrain as u8).collect();
     serializer.serialize_bytes(&bytes)
+}
+
+/// Reads tiles back from `terrain_bytes`, as a save holds them (design
+/// §2.8), refusing a byte that names no terrain.
+fn terrain_from_bytes<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<Terrain>, D::Error> {
+    crate::save::read_bytes(deserializer)?
+        .into_iter()
+        .map(|byte| {
+            Terrain::ALL
+                .get(usize::from(byte))
+                .copied()
+                .ok_or_else(|| serde::de::Error::custom(format!("{byte} names no terrain")))
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_map_whose_size_doesnt_add_up_fails_its_shape_check() {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let mut map = Map::filled(4, 3, Terrain::Grass, &data);
+        assert!(map.check_shape(&data).is_ok());
+        map.width = 5;
+        assert!(map.check_shape(&data).is_err());
+        map.width = 4;
+        map.step_costs[0] = Some(999);
+        assert!(map.check_shape(&data).is_err());
+    }
 }

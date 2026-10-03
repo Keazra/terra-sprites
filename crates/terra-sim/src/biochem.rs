@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::data::DataPack;
 use crate::events::DeathCause;
@@ -14,7 +14,7 @@ use crate::physiology::halving_factor;
 use crate::registry::{ChemId, LocusKind, Trait};
 
 /// A sprite's traits (design §4.8), clamped to physiology's ranges.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Traits {
     /// Move points per tick.
     pub speed: f32,
@@ -36,7 +36,7 @@ impl Traits {
 
 /// A genome as the chemistry step runs it: its expressed genes only, with
 /// chemicals and loci as indices in the pack's order.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct Program {
     pub(crate) traits: Traits,
     /// What each chemical is multiplied by every tick: 1 where no half-life is set.
@@ -276,7 +276,7 @@ impl Program {
 
 /// A sprite's chemistry (design §4.1–§4.2): every chemical's level and every
 /// locus's value, as the chemistry step leaves them.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Body {
     /// Each chemical's level, in the pack's chemical order.
     pub(crate) chems: Vec<f32>,
@@ -306,6 +306,18 @@ pub(crate) struct Body {
 }
 
 impl Body {
+    /// Whether the body has a level for each of `data`'s chemicals and a
+    /// value for each of its loci, as a body read from a save must (design
+    /// §2.8).
+    pub(crate) fn fits(&self, data: &DataPack) -> bool {
+        let (chems, loci) = (data.chemicals().len(), data.loci().len());
+        self.chems.len() == chems
+            && self.last_chems.len() == chems
+            && self.loci.len() == loci
+            && self.last_loci.len() == loci
+            && self.incoming.len() == loci
+    }
+
     /// A newborn's body (design §4.7).
     pub(crate) fn newborn(program: &Program, data: &DataPack) -> Body {
         let physiology = data.physiology();

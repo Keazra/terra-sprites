@@ -22,7 +22,7 @@ use crate::world::WorldState;
 
 /// Something the player does to the world through the Cursor. It carries
 /// values, never references (design §2.5).
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Command {
     /// The Cursor's good touch (design v21 §4.6): a pet, or amplified, a hug.
     Reward {
