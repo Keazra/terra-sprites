@@ -7,9 +7,9 @@ use std::time::Duration;
 use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
 use terra_sim::{
-    ActionView, ChemicalKind, ChemicalLevel, Command, CursorTouch, DeathCause, Dir, EntityId,
-    Event, EventKind, Genome, Grip, MAX_NAME_CHARS, Map, Outcome, Pos, Progress, SpriteView,
-    Target, Thing, Verb, World,
+    ActionView, ChemicalKind, ChemicalLevel, Command, CursorTouch, DeathCause, Dir, Divergence,
+    EntityId, Event, EventKind, Genome, Grip, MAX_NAME_CHARS, Map, Outcome, Playback, Pos,
+    Progress, SpriteView, Target, Thing, Verb, World,
 };
 
 use crate::clock::Clock;
@@ -325,6 +325,12 @@ impl Ticks {
     /// Runs one tick of `world`, noting what the screen shows of it.
     pub fn step(&mut self, world: &mut World) {
         let events = world.step();
+        self.note(events, world);
+    }
+
+    /// Notes what the screen shows of a tick just run: its `events`, and
+    /// how `world` stands after it.
+    pub fn note(&mut self, events: Vec<Event>, world: &World) {
         let pleased = world
             .sprites()
             .filter(|sprite| sprite.felt() >= PLEASED_AT)
@@ -484,7 +490,40 @@ pub struct App {
     /// How long time has run, unpaused, since the last autosave (design
     /// §6.7).
     since_autosave: Duration,
+    /// While a replay plays back (design §2.7).
+    replay: Option<Replay>,
 }
+
+/// A replay as the screen follows it (design §2.7).
+#[derive(Debug, Clone, Copy)]
+struct Replay {
+    /// The tick the recording reached.
+    end: u64,
+    /// Whether playback has reached `end`, and paused there.
+    ended: bool,
+    /// Where the world first parted from the recording, once it has.
+    divergence: Option<Divergence>,
+}
+
+/// When the frame loop stops running a replay's ticks (`App::replay_stops`):
+/// at the recording's end, the first time it's reached, and where playback
+/// first finds the world different from the recording.
+#[derive(Debug, Clone, Copy)]
+pub struct ReplayStops {
+    end: Option<u64>,
+    divergence: bool,
+}
+
+impl ReplayStops {
+    /// Whether `playback` has just reached a stop.
+    pub fn at(self, playback: &Playback) -> bool {
+        self.end.is_some_and(|end| playback.world().tick() >= end)
+            || (self.divergence && playback.divergence().is_some())
+    }
+}
+
+/// What the status line says when the player tries to change a replay.
+pub const REPLAY_REFUSAL: &str = "It's a replay: only time, the view and the inspector work";
 
 /// How often the world saves itself while time runs (design §6.7).
 pub const AUTOSAVE_EVERY: Duration = Duration::from_secs(10 * 60);
@@ -675,6 +714,7 @@ impl App {
             saved: None,
             unsaved_run: Duration::ZERO,
             since_autosave: Duration::ZERO,
+            replay: None,
         };
         app.centre_on(cursor);
         app
@@ -886,7 +926,12 @@ impl App {
     /// What the Cursor has hold of as the player sees it: what the world
     /// says, as the commands queued since will leave it (design v23 §6.5).
     /// If the world refuses one, this goes back to the world's word.
+    /// In a replay the Cursor is the player's own, which holds nothing: the
+    /// recorded one isn't drawn (design §2.7).
     pub fn grip(&self, world: &World) -> Option<Grip> {
+        if self.replay.is_some() {
+            return None;
+        }
         let now = world.cursor();
         let held = now.holds().map(|item| Grip::Holds(item.id()));
         let start = now.leads().map(Grip::Leads).or(held);
@@ -1396,6 +1441,10 @@ impl App {
                     return Flow::Continue;
                 }
             }
+        }
+        if self.replay.is_some() && changes_the_world(&action, self.pointed_at_map(&action)) {
+            self.refuse(REPLAY_REFUSAL.into());
+            return Flow::Continue;
         }
         match action {
             Action::TogglePause => self.clock.toggle_pause(),
@@ -2291,6 +2340,89 @@ impl App {
         }
     }
 
+    /// Starts following `playback`, a replay called `name`, paused at its
+    /// start (design §2.7): from here on the world can't be changed, only
+    /// watched.
+    pub fn start_replay(&mut self, name: &str, playback: &Playback) {
+        self.replay = Some(Replay {
+            end: playback.end(),
+            ended: false,
+            divergence: None,
+        });
+        self.mode = CursorMode::Select;
+        self.clock.pause();
+        let from = if playback.started_fresh() {
+            "a new world".to_string()
+        } else {
+            format!("a save at tick {}", group_thousands(playback.start()))
+        };
+        self.tell_player(format!(
+            "Replaying {name}: from {from} to tick {}",
+            group_thousands(playback.end())
+        ));
+        self.take_in_replay(playback);
+    }
+
+    /// Whether a replay is playing back.
+    pub fn replaying(&self) -> bool {
+        self.replay.is_some()
+    }
+
+    /// While a replay plays back, when the frame loop should stop running
+    /// ticks, so the screen pauses there (design §2.7).
+    pub fn replay_stops(&self) -> Option<ReplayStops> {
+        self.replay.map(|replay| ReplayStops {
+            end: (!replay.ended).then_some(replay.end),
+            divergence: replay.divergence.is_none(),
+        })
+    }
+
+    /// Says on the status line that the session log couldn't be written.
+    pub fn note_log_failed(&mut self, why: &str) {
+        self.refuse(format!("Couldn't write the replay: {why}"));
+    }
+
+    /// Takes in how playback stands after a frame's ticks (design §2.7):
+    /// at the recording's end, it pauses and says so, once, and time can
+    /// then run on; where the world was first found different from the
+    /// recording, it pauses and says between which checkpoints it parted.
+    pub fn take_in_replay(&mut self, playback: &Playback) {
+        let Some(mut replay) = self.replay else {
+            return;
+        };
+        let tick = playback.world().tick();
+        if !replay.ended && tick >= replay.end {
+            replay.ended = true;
+            self.clock.pause();
+            self.tell_player(format!(
+                "The replay ends here, at tick {}: time can run on, with nothing more done",
+                group_thousands(replay.end)
+            ));
+        }
+        if replay.divergence.is_none()
+            && let Some(divergence) = playback.divergence()
+        {
+            replay.divergence = Some(divergence);
+            self.clock.pause();
+            self.tell_player(diverged(divergence));
+        }
+        self.replay = Some(replay);
+    }
+
+    /// What the top bar says of a replay, in place of the save status:
+    /// where it ends, that it has ended, or that it diverged.
+    pub fn replay_status(&self) -> Option<String> {
+        let replay = self.replay?;
+        Some(match replay.divergence {
+            Some(divergence) => format!(
+                "replay diverged by tick {}",
+                group_thousands(divergence.tick)
+            ),
+            None if replay.ended => "replay ended".into(),
+            None => format!("replay to tick {}", group_thousands(replay.end)),
+        })
+    }
+
     /// Sets where saves go (design §6.7).
     pub fn set_save_folder(&mut self, folder: PathBuf) {
         self.save_folder = Some(folder);
@@ -2347,18 +2479,23 @@ impl App {
 
     /// Autosaves if time has run, unpaused, for `AUTOSAVE_EVERY` since the
     /// last autosave (design §6.7). The frame loop calls it every frame.
-    pub fn autosave_if_due(&mut self, world: &World) {
-        if self.since_autosave >= AUTOSAVE_EVERY {
+    /// Says whether it was due, as the session log is written then too
+    /// (design §2.7).
+    pub fn autosave_if_due(&mut self, world: &World) -> bool {
+        let due = self.since_autosave >= AUTOSAVE_EVERY;
+        if due {
             self.autosave(world);
         }
+        due
     }
 
     /// Saves the world as the newest autosave (design §6.7), as on quitting,
     /// unless it hasn't run since it was last saved: then the autosaves
     /// already hold it, or a save does, and an older autosave stays.
+    /// A replay never autosaves: it isn't the player's world.
     pub fn autosave(&mut self, world: &World) {
         self.since_autosave = Duration::ZERO;
-        if !self.has_run_since_save(world) {
+        if self.replay.is_some() || !self.has_run_since_save(world) {
             return;
         }
         let Some(folder) = self.save_folder.clone() else {
@@ -2419,6 +2556,17 @@ impl App {
             _ => {}
         }
         Flow::Continue
+    }
+
+    /// Whether `action` would point at a tile of the map, for the wheel,
+    /// which changes the cursor mode there.
+    fn pointed_at_map(&self, action: &Action) -> bool {
+        match *action {
+            Action::Wheel { at, .. } => {
+                self.pointed_at(at).is_some() && !self.inspector.is_some_and(|i| i.contains(at))
+            }
+            _ => false,
+        }
     }
 
     /// `F9`: loads the quicksave, if there is one (design §6.7).
@@ -2788,5 +2936,32 @@ pub(crate) fn spoken_duration(time: Duration) -> String {
         (0, m) => format!("{m}m"),
         (h, 0) => format!("{h}h"),
         (h, m) => format!("{h}h {m}m"),
+    }
+}
+
+/// Whether `action` would change the world, or lead to changing it, which a
+/// replay refuses (design §2.7): the cursor modes that touch it (Select
+/// only points and selects), the wheel over the map, which changes mode,
+/// naming a sprite, showing the Cursor to sprites, and loading a save.
+/// Saving, and exporting a genome, only read it.
+fn changes_the_world(action: &Action, wheel_on_map: bool) -> bool {
+    match action {
+        Action::Mode(mode) => *mode != CursorMode::Select,
+        Action::Wheel { .. } => wheel_on_map,
+        Action::Rename | Action::ToggleVisible | Action::Quickload | Action::OpenSaves => true,
+        _ => false,
+    }
+}
+
+/// What the status line says when playback first finds the world different
+/// from the recording (design §2.7).
+fn diverged(divergence: Divergence) -> String {
+    let by = group_thousands(divergence.tick);
+    match divergence.matched {
+        Some(matched) => format!(
+            "The replay parted from its recording between ticks {} and {by}",
+            group_thousands(matched)
+        ),
+        None => format!("The replay was different from its recording from tick {by}"),
     }
 }

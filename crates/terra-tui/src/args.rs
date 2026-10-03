@@ -9,6 +9,12 @@ pub struct Args {
     pub seed: Option<u64>,
     /// `--preset <file>`: a world config to use instead of the built-in one.
     pub preset: Option<PathBuf>,
+    /// `--data <dir>`: a folder of data pack files, each replacing the
+    /// built-in one, for a new world (design §2.8, §6.7).
+    pub data: Option<PathBuf>,
+    /// `--replay <file>`: play a replay back instead of a new world (design
+    /// §2.7).
+    pub replay: Option<PathBuf>,
     /// `--ascii`: use the ascii theme.
     pub ascii: bool,
     /// Hidden developer flag: panic after the first frame, to check the terminal is restored.
@@ -16,7 +22,8 @@ pub struct Args {
 }
 
 /// How to run the game, shown with any flag error.
-pub const USAGE: &str = "usage: terra-sprites [--seed <n>] [--preset <file>] [--ascii]";
+pub const USAGE: &str = "usage: terra-sprites [--seed <n>] [--preset <file>] [--data <dir>] [--ascii]\n\
+                         \x20      terra-sprites --replay <file> [--ascii]";
 
 impl Args {
     /// Reads the flags, not including the program name.
@@ -36,9 +43,25 @@ impl Args {
                     parsed.seed = Some(seed);
                 }
                 "--preset" => parsed.preset = Some(value_of(&flag, args.next())?.into()),
+                "--data" => parsed.data = Some(value_of(&flag, args.next())?.into()),
+                "--replay" => parsed.replay = Some(value_of(&flag, args.next())?.into()),
                 "--ascii" => parsed.ascii = true,
                 "--force-panic" => parsed.force_panic = true,
                 _ => return Err(format!("unknown flag `{flag}`")),
+            }
+        }
+        // A replay brings its own world, so what makes a new one doesn't
+        // apply (design §2.7).
+        if parsed.replay.is_some() {
+            let new_world = [
+                ("--seed", parsed.seed.is_some()),
+                ("--preset", parsed.preset.is_some()),
+                ("--data", parsed.data.is_some()),
+            ];
+            if let Some((flag, _)) = new_world.iter().find(|(_, given)| *given) {
+                return Err(format!(
+                    "`{flag}` makes a new world, and `--replay` plays a recorded one: use one or the other"
+                ));
             }
         }
         Ok(parsed)
