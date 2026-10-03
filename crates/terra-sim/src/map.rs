@@ -259,6 +259,8 @@ impl Map {
     }
 
     /// Changes the terrain of the tile at `pos`, which must be on the map.
+    /// Only while the map is made: floods keep the Water candidate they
+    /// find, since terrain never changes after that.
     pub(crate) fn set(&mut self, pos: Pos, terrain: Terrain) {
         let index = self.index(pos);
         self.tiles[index] = terrain;

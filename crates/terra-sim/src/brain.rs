@@ -676,10 +676,10 @@ impl Brain {
         memory
     }
 
-    /// `learned`, each value given to `visit` before it's named: naming
-    /// takes text, and most values are looked at only for their amount,
-    /// every tick.
-    fn each_learned(&self, data: &DataPack, mut visit: impl FnMut(Unnamed, f32)) {
+    /// `learned`, each value given to `visit` by ID, before it's put in
+    /// words: the words take text, and most values are looked at only for
+    /// their amount, every tick.
+    fn each_learned(&self, data: &DataPack, mut visit: impl FnMut(LearnedKey, f32)) {
         // Sprites in general are the summary of the ones it knows (design
         // v18 §5.6), never learned directly.
         let in_general = self.sprites_in_general(data.need_places().len());
@@ -689,10 +689,10 @@ impl Brain {
             .map(|category| (category.id, self.category_summary(category.id, data)))
             .collect();
         // Each thing's worth for each need, general good and bad.
-        let mut things: Vec<(UnnamedThing, &[f32], f32, f32)> = Vec::new();
+        let mut things: Vec<(ThingKey, &[f32], f32, f32)> = Vec::new();
         for category in categories {
             if category.id == data.sprite_category() {
-                let thing = UnnamedThing::Category(category.id);
+                let thing = ThingKey::Category(category.id);
                 things.push((thing, &in_general.worth, in_general.good, in_general.bad));
                 continue;
             }
@@ -700,36 +700,36 @@ impl Brain {
             // §5.6), so the category has no summary.
             if category.id == data.cursor_category() {
                 if let Some(known) = &self.experience.cursor {
-                    let thing = UnnamedThing::Cursor;
+                    let thing = ThingKey::Cursor;
                     things.push((thing, &known.worth, known.good, known.bad));
                 }
                 continue;
             }
             let types = self.experience.types.iter();
             for (&subject, known) in types.filter(|(s, _)| s.category(data) == category.id) {
-                let thing = UnnamedThing::Subject(subject);
+                let thing = ThingKey::Subject(subject);
                 things.push((thing, &known.worth, known.good, known.bad));
             }
             // Then the category's summary, never learned directly (design
             // v19 §5.6).
             let summary = &summaries[&category.id];
-            let thing = UnnamedThing::Category(category.id);
+            let thing = ThingKey::Category(category.id);
             things.push((thing, &summary.worth, summary.good, summary.bad));
         }
         for (need, &place) in data.need_places().iter().enumerate() {
             for &(thing, worth, ..) in &things {
-                let named = Unnamed::Worth {
+                let key = LearnedKey::Worth {
                     thing,
                     need: Some(place),
                 };
-                visit(named, worth[need]);
+                visit(key, worth[need]);
             }
         }
         for &(thing, _, good, _) in &things {
-            visit(Unnamed::Worth { thing, need: None }, good);
+            visit(LearnedKey::Worth { thing, need: None }, good);
         }
         for &(thing, _, _, bad) in &things {
-            visit(Unnamed::Bad { thing }, bad);
+            visit(LearnedKey::Bad { thing }, bad);
         }
         // Habits are about object types, sprites' too (design v19 §5.6).
         let habits = categories.iter().flat_map(|category| {
@@ -738,34 +738,34 @@ impl Brain {
         });
         for (&subject, known) in habits {
             for (&verb, &value) in VERBS.iter().zip(&known.habits) {
-                let thing = UnnamedThing::Subject(subject);
-                visit(Unnamed::Habit { thing, verb }, value);
+                let thing = ThingKey::Subject(subject);
+                visit(LearnedKey::Habit { thing, verb }, value);
             }
         }
-        visit(Unnamed::NewThings, self.experience.new_things);
+        visit(LearnedKey::NewThings, self.experience.new_things);
         // The sprites it remembers (design v18 §5.9), in ID order.
         for (&id, individual) in &self.experience.individuals {
-            let thing = UnnamedThing::Sprite(id);
+            let thing = ThingKey::Sprite(id);
             for (&value, &place) in individual.worth.iter().zip(data.need_places()) {
                 visit(
-                    Unnamed::Worth {
+                    LearnedKey::Worth {
                         thing,
                         need: Some(place),
                     },
                     value,
                 );
             }
-            visit(Unnamed::Worth { thing, need: None }, individual.good);
-            visit(Unnamed::Bad { thing }, individual.bad);
-            visit(Unnamed::Fear { thing }, individual.fear);
+            visit(LearnedKey::Worth { thing, need: None }, individual.good);
+            visit(LearnedKey::Bad { thing }, individual.bad);
+            visit(LearnedKey::Fear { thing }, individual.fear);
         }
         // Fear of sprites in general comes of the sprites above, so it's
         // listed, and a lesson, after them.
-        let sprites = UnnamedThing::Category(data.sprite_category());
-        visit(Unnamed::Fear { thing: sprites }, in_general.fear);
+        let sprites = ThingKey::Category(data.sprite_category());
+        visit(LearnedKey::Fear { thing: sprites }, in_general.fear);
         if let Some(cursor) = &self.experience.cursor {
-            let thing = UnnamedThing::Cursor;
-            visit(Unnamed::Fear { thing }, cursor.fear);
+            let thing = ThingKey::Cursor;
+            visit(LearnedKey::Fear { thing }, cursor.fear);
         }
     }
 
@@ -1365,9 +1365,9 @@ fn category_thing(category: CategoryId, data: &DataPack) -> Thing {
     Thing::Category(category.name.clone())
 }
 
-/// A thing something learned is about, before it's named (`Thing`).
+/// A thing something learned is about, by ID, before it's put in words (`Thing`).
 #[derive(Debug, Clone, Copy)]
-enum UnnamedThing {
+enum ThingKey {
     /// An object type, or water or sprites learned about as a category.
     Subject(Subject),
     /// A category's summary.
@@ -1376,56 +1376,56 @@ enum UnnamedThing {
     Cursor,
 }
 
-impl UnnamedThing {
+impl ThingKey {
     fn named(self, data: &DataPack) -> Thing {
         match self {
-            UnnamedThing::Subject(subject) => subject_thing(subject, data),
-            UnnamedThing::Category(category) => category_thing(category, data),
-            UnnamedThing::Sprite(id) => Thing::Sprite(id),
-            UnnamedThing::Cursor => Thing::Cursor,
+            ThingKey::Subject(subject) => subject_thing(subject, data),
+            ThingKey::Category(category) => category_thing(category, data),
+            ThingKey::Sprite(id) => Thing::Sprite(id),
+            ThingKey::Cursor => Thing::Cursor,
         }
     }
 }
 
-/// Something a sprite has learned, before it's named (`Learned`). A need is
-/// its place among the brain inputs.
+/// Something a sprite has learned, by ID, before it's put in words
+/// (`Learned`). A need is its place among the brain inputs.
 #[derive(Debug, Clone, Copy)]
-enum Unnamed {
+enum LearnedKey {
     Worth {
-        thing: UnnamedThing,
+        thing: ThingKey,
         need: Option<usize>,
     },
     Bad {
-        thing: UnnamedThing,
+        thing: ThingKey,
     },
     Fear {
-        thing: UnnamedThing,
+        thing: ThingKey,
     },
     Habit {
-        thing: UnnamedThing,
+        thing: ThingKey,
         verb: Verb,
     },
     NewThings,
 }
 
-impl Unnamed {
+impl LearnedKey {
     fn named(self, data: &DataPack) -> Learned {
         match self {
-            Unnamed::Worth { thing, need } => Learned::Worth {
+            LearnedKey::Worth { thing, need } => Learned::Worth {
                 thing: thing.named(data),
                 need: need.map(|place| data.brain_inputs_in_order()[place].name.clone()),
             },
-            Unnamed::Bad { thing } => Learned::Bad {
+            LearnedKey::Bad { thing } => Learned::Bad {
                 thing: thing.named(data),
             },
-            Unnamed::Fear { thing } => Learned::Fear {
+            LearnedKey::Fear { thing } => Learned::Fear {
                 thing: thing.named(data),
             },
-            Unnamed::Habit { thing, verb } => Learned::Habit {
+            LearnedKey::Habit { thing, verb } => Learned::Habit {
                 thing: thing.named(data),
                 verb,
             },
-            Unnamed::NewThings => Learned::NewThings,
+            LearnedKey::NewThings => Learned::NewThings,
         }
     }
 }

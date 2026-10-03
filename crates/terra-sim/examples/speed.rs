@@ -11,14 +11,10 @@
 use std::process::ExitCode;
 use std::time::Instant;
 
-use terra_sim::{DataPack, World, WorldConfig};
+use terra_sim::bench::crowded_world;
 
 /// The target, in ticks a second.
 const TARGET: f64 = 200.0;
-
-/// Ticks run before measuring, so sprites are spread out and busy, as in
-/// play, rather than standing where they were placed.
-const SETTLE: u64 = 300;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -32,16 +28,8 @@ fn main() -> ExitCode {
     if cfg!(debug_assertions) {
         eprintln!("warning: this is a debug build; add --release for a fair measure");
     }
-    let data = DataPack::builtin().expect("the built-in data pack is valid");
-    let default = include_str!("../../../data/presets/default.ron");
-    let preset = default.replace("sprites: 30,", "sprites: 100,");
-    assert_ne!(preset, default, "the default preset names its sprite count");
-    let config = WorldConfig::from_ron(&preset, &data).expect("a valid preset");
-    let mut world = World::new(config, data, seed);
-    println!("default world, 100 sprites, seed {seed}");
-    while world.tick() < SETTLE {
-        world.step();
-    }
+    println!("default world, 100 sprites, seed {seed}, settled for a few hundred ticks");
+    let mut world = crowded_world(seed);
     let start = Instant::now();
     for _ in 0..ticks {
         world.step();
