@@ -2,7 +2,7 @@
 //! it leads or the item it holds, one thing at a time, and whether sprites
 //! can see it (design v29 §6.5).
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::command::Rejection;
 use crate::map::{Map, Pos};
@@ -10,7 +10,7 @@ use crate::objects::{EntityId, Objects};
 use crate::sprites::Sprites;
 
 /// What the Cursor has hold of, as the world knows it.
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct Cursor {
     pub(crate) grip: Option<Grip>,
     /// The tile it was last told it's on (design v23 §2.5), which a led
@@ -21,7 +21,7 @@ pub(crate) struct Cursor {
 }
 
 /// What the Cursor has hold of.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Grip {
     /// A sprite it leads (design v23 §6.5).
     Leads(EntityId),

@@ -142,6 +142,9 @@ fn run(
     if let Some(folder) = files::genome_folder() {
         app.set_genome_folder(folder);
     }
+    if let Some(folder) = files::save_folder() {
+        app.set_save_folder(folder);
+    }
     let mut last_frame = Instant::now();
 
     loop {
@@ -165,13 +168,20 @@ fn run(
             if let Some(action) = action
                 && app.apply(action, &world) == Flow::Quit
             {
+                // Quitting saves, so a closed session is never lost (design
+                // §6.7).
+                app.autosave(&world);
                 return Ok(());
             }
-        }
-
-        // The player's clicks, stamped for the next tick (design §2.5).
-        for command in app.take_commands() {
-            world.submit(command);
+            // A save the player loaded replaces the world from here on.
+            if let Some(loaded) = app.take_loaded() {
+                world = loaded;
+            }
+            // The player's clicks, stamped for the next tick (design
+            // §2.5), as each is made, so a save made next holds them.
+            for command in app.take_commands() {
+                world.submit(command);
+            }
         }
 
         let now = Instant::now();
@@ -186,6 +196,7 @@ fn run(
             || frame_start.elapsed() >= SIM_BUDGET,
         );
         app.take_in(ticks, &world);
+        app.autosave_if_due(&world);
     }
 }
 

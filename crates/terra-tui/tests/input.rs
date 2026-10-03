@@ -366,7 +366,7 @@ fn any_other_key_is_reported_so_it_can_cancel_a_prompt() {
         KeyCode::Char('k'),
         KeyCode::Char('n'),
         KeyCode::Char('0'),
-        KeyCode::F(5),
+        KeyCode::F(6),
     ] {
         assert_eq!(
             Keys::new().action_for(press(code)),
