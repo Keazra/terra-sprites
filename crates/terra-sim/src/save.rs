@@ -33,8 +33,9 @@ const MAGIC: &[u8; 4] = b"TSPR";
 pub const SCHEMA_VERSION: u32 = 1;
 
 /// The build that wrote a save, for the message when a newer one is
-/// refused.
-const SIM_VERSION: &str = env!("CARGO_PKG_VERSION");
+/// refused, and that recorded a replay, which plays only in the same build
+/// (design §2.7).
+pub(crate) const SIM_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Why a save couldn't be loaded.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,14 +79,43 @@ impl fmt::Display for LoadError {
 }
 
 /// What follows the magic. Its shape never changes, so any build can read
-/// any save's header and say why it refuses it.
+/// any save's header and say why it refuses it. A replay starts the same
+/// way, after a magic of its own (design §2.7).
 #[derive(Serialize, Deserialize)]
-struct Header {
-    schema_version: u32,
-    sim_version: String,
-    /// The world's bytes, hashed, so a save damaged on disk is refused
+pub(crate) struct Header {
+    pub(crate) schema_version: u32,
+    pub(crate) sim_version: String,
+    /// The body's bytes, hashed, so a file damaged on disk is refused
     /// before it's read, rather than read wrong.
-    checksum: u64,
+    pub(crate) checksum: u64,
+}
+
+impl Header {
+    /// Whether `body` is what the header's checksum was taken of.
+    pub(crate) fn checks(&self, body: &[u8]) -> bool {
+        xxh3_64(body) == self.checksum
+    }
+}
+
+/// `magic`, then a header for this build, then `body`.
+pub(crate) fn framed(magic: &[u8; 4], body: &[u8]) -> Vec<u8> {
+    let header = Header {
+        schema_version: SCHEMA_VERSION,
+        sim_version: SIM_VERSION.into(),
+        checksum: xxh3_64(body),
+    };
+    let mut bytes = magic.to_vec();
+    rmp_serde::encode::write_named(&mut bytes, &header).expect("a header always serializes");
+    bytes.extend_from_slice(body);
+    bytes
+}
+
+/// The header and the body after it, if `bytes` start with `magic` and a
+/// header.
+pub(crate) fn unframed<'a>(magic: &[u8; 4], bytes: &'a [u8]) -> Option<(Header, &'a [u8])> {
+    let mut rest = bytes.strip_prefix(magic)?;
+    let header = rmp_serde::from_read(&mut rest).ok()?;
+    Some((header, rest))
 }
 
 /// The world as a save holds it, in the current schema.
@@ -114,7 +144,7 @@ pub(crate) struct Loaded {
 
 /// A world's preset as a save holds it: `WorldConfig`'s fields, kept
 /// here so the public `WorldConfig` can only be made by checking a preset.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Preset {
     width: u16,
     height: u16,
@@ -151,29 +181,20 @@ impl From<Preset> for WorldConfig {
 /// The save's bytes.
 pub(crate) fn write(contents: &Contents) -> Vec<u8> {
     let body = rmp_serde::to_vec_named(contents).expect("a world always serializes");
-    let header = Header {
-        schema_version: SCHEMA_VERSION,
-        sim_version: SIM_VERSION.into(),
-        checksum: xxh3_64(&body),
-    };
-    let mut bytes = MAGIC.to_vec();
-    rmp_serde::encode::write_named(&mut bytes, &header).expect("a header always serializes");
-    bytes.extend_from_slice(&body);
-    bytes
+    framed(MAGIC, &body)
 }
 
 /// Reads a save, upgrading an older schema to the current one, or says why
 /// it can't.
 pub(crate) fn read(bytes: &[u8]) -> Result<Loaded, LoadError> {
-    let mut rest = bytes.strip_prefix(MAGIC).ok_or(LoadError::NotASave)?;
-    let header: Header = rmp_serde::from_read(&mut rest).map_err(|_| LoadError::NotASave)?;
+    let (header, rest) = unframed(MAGIC, bytes).ok_or(LoadError::NotASave)?;
     match header.schema_version {
         0 => Err(LoadError::NotASave),
         schema if schema > SCHEMA_VERSION => Err(LoadError::Newer {
             schema,
             sim_version: header.sim_version,
         }),
-        _ if xxh3_64(rest) != header.checksum => Err(LoadError::Damaged(
+        _ if !header.checks(rest) => Err(LoadError::Damaged(
             "its contents don't match their checksum".into(),
         )),
         schema => upgrade(schema, rest),
@@ -192,7 +213,7 @@ fn upgrade(schema: u32, body: &[u8]) -> Result<Loaded, LoadError> {
 }
 
 /// Decodes a save's body as `T`.
-fn decode<T: DeserializeOwned>(body: &[u8]) -> Result<T, LoadError> {
+pub(crate) fn decode<T: DeserializeOwned>(body: &[u8]) -> Result<T, LoadError> {
     rmp_serde::from_slice(body).map_err(|err| LoadError::Damaged(err.to_string()))
 }
 

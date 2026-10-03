@@ -24,6 +24,7 @@ use crate::objects::{EntityId, Object, Objects};
 use crate::perception::{Flood, Target, goal_tiles};
 use crate::regions::Regions;
 use crate::registry::{CategoryId, ChemicalKind};
+use crate::replay::{self, CHECKPOINT_EVERY, Recording, Start};
 use crate::rolling;
 use crate::save::{self, LoadError};
 use crate::sliding;
@@ -50,6 +51,9 @@ pub struct World {
     /// screen saved it (design §2.8), so a load shows what the player saw.
     /// Nothing in the sim reads it.
     view: Option<Pos>,
+    /// The session log, once the world has been asked to record one
+    /// (design §2.7). Nothing in the sim reads it.
+    recording: Option<Recording>,
 }
 
 /// Everything that determines how the world evolves. Hashed by `state_hash`.
@@ -695,6 +699,7 @@ impl World {
             seed,
             config: None,
             view: None,
+            recording: None,
         }
     }
 
@@ -747,11 +752,47 @@ impl World {
             seed,
             config: config.map(WorldConfig::from),
             view,
+            recording: None,
         };
         world
             .check_invariants()
             .map_err(|broken| LoadError::Damaged(broken.0))?;
         Ok(world)
+    }
+
+    /// Starts recording the world's session log (design §2.7) from the
+    /// world as it is now, dropping any recording begun before: a world
+    /// just generated starts it afresh from its seed and preset, and any
+    /// other from its save. From here on the world records each command
+    /// submitted and, at each tick that's a multiple of 1,000, its hash.
+    pub fn start_recording(&mut self) {
+        let start = match &self.config {
+            Some(config) if self.is_as_generated(config) => Start::Fresh {
+                seed: self.seed,
+                config: save::Preset::from(config),
+            },
+            _ => Start::Snapshot(self.save()),
+        };
+        self.recording = Some(Recording {
+            start,
+            commands: Vec::new(),
+            checkpoints: vec![(self.state.tick, self.state_hash())],
+        });
+    }
+
+    /// Whether the world is exactly as `World::new` makes it from `config`
+    /// and its seed: generating it again gives the same state.
+    fn is_as_generated(&self, config: &WorldConfig) -> bool {
+        self.state.tick == 0
+            && World::new(config.clone(), self.data.clone(), self.seed).state_hash()
+                == self.state_hash()
+    }
+
+    /// The session log recorded since `start_recording`, as a replay's
+    /// bytes, or `None` if the world isn't recording (design §2.7).
+    pub fn recording(&self) -> Option<Vec<u8>> {
+        let recording = self.recording.as_ref()?;
+        Some(replay::write(recording, &self.data, self.state.tick))
     }
 
     /// The seed the world was made from.
@@ -781,6 +822,7 @@ impl World {
         self.sense_and_decide(&dying, &mut events); // 5
         self.resolve_actions(&dying, &mut events); // 6
         self.finish_tick(&dying, &mut events); // 7
+        self.checkpoint();
         #[cfg(debug_assertions)]
         if let Err(InvariantViolation(broken)) = self.check_invariants() {
             let tick = self.state.tick - 1;
@@ -792,7 +834,23 @@ impl World {
     /// Submits `command`, stamped for the next tick: it's applied at that
     /// tick's step 1, after any submitted before it (design §2.5).
     pub fn submit(&mut self, command: Command) {
+        if let Some(recording) = &mut self.recording {
+            recording.commands.push((self.state.tick, command.clone()));
+        }
         self.state.commands.push(command);
+    }
+
+    /// While recording, takes the world's hash at each tick that's a
+    /// multiple of `CHECKPOINT_EVERY` (design §2.7).
+    fn checkpoint(&mut self) {
+        let tick = self.state.tick;
+        if self.recording.is_none() || !tick.is_multiple_of(CHECKPOINT_EVERY) {
+            return;
+        }
+        let hash = self.state_hash();
+        if let Some(recording) = &mut self.recording {
+            recording.checkpoints.push((tick, hash));
+        }
     }
 
     /// The world's map.
