@@ -208,7 +208,7 @@ impl Keys {
             return None;
         }
         if key.modifiers.contains(KeyModifiers::CONTROL) {
-            return (key.code == KeyCode::Char('c')).then_some(Action::Quit);
+            return matches!(key.code, KeyCode::Char('c' | 'C')).then_some(Action::Quit);
         }
         match key.code {
             KeyCode::Char(c) => Some(Action::Type(c)),

@@ -400,10 +400,46 @@ fn the_keys_for_saving_and_loading() {
 #[test]
 fn a_save_name_becomes_a_file_name_any_system_can_hold() {
     let folder = Path::new("saves");
-    assert_eq!(
-        saves::path_for(folder, " a/b:c? "),
-        folder.join("a-b-c-.tspr")
-    );
+    let cases = [
+        (" a/b:c? ", "a-b-c-"),
+        // Windows drops dots and spaces at the end of a file's name.
+        ("world. . ", "world"),
+        ("...", "-"),
+        // And keeps these names for devices, whatever follows a dot.
+        ("con", "con-"),
+        ("LPT1", "LPT1-"),
+        ("Aux.old", "Aux-.old"),
+        ("console", "console"),
+    ];
+    for (name, file) in cases {
+        assert_eq!(saves::name_for(name), file, "{name:?}");
+        assert_eq!(
+            saves::path_for(folder, name),
+            folder.join(format!("{file}.tspr"))
+        );
+    }
+}
+
+#[test]
+fn a_save_is_announced_by_the_name_the_load_list_shows() {
+    let folder = scratch_folder("save-as-unsafe");
+    let world = world();
+    let mut app = app_for(&world, &folder);
+    apply(&mut app, &world, Action::SaveAs);
+    type_text(&mut app, &world, "my/world:1");
+    apply(&mut app, &world, Action::Enter);
+    assert_eq!(app.notice(), Some("Saved as my-world-1"));
+    let listed: Vec<String> = saves::list(&folder).into_iter().map(|s| s.name).collect();
+    assert_eq!(listed, ["my-world-1"]);
+}
+
+#[test]
+fn ctrl_c_quits_while_a_name_is_typed_with_caps_lock_on() {
+    let mut keys = Keys::with_release_reporting(false);
+    for c in ['c', 'C'] {
+        let key = KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL);
+        assert_eq!(keys.typed_action(key), Some(Action::Quit), "{c}");
+    }
 }
 
 #[test]
