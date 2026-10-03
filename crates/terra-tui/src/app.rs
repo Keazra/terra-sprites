@@ -1381,7 +1381,9 @@ impl App {
         }
         if self.screen == Screen::QuitPrompt {
             match action {
-                Action::Confirm | Action::Back | Action::Quit => return Flow::Quit,
+                // Only `y` answers it: `Esc` never quits on its own (design
+                // v33 §6.6).
+                Action::Confirm | Action::Quit => return Flow::Quit,
                 // The mouse carries on as usual and doesn't answer the prompt;
                 // nor does letting go of a button, or of `E`, which isn't a
                 // key pressed.
@@ -1502,9 +1504,13 @@ impl App {
                     self.visible_in.insert(self.mode);
                 }
             }
-            // Esc cancels an aim first (design v25 §6.5); then returns to
-            // Select; from Select it asks to quit (design v21 §6.5).
+            // Esc cancels an aim first (design v25 §6.5); then lets go of
+            // what the Cursor holds or leads, a Place menu item waiting on it
+            // first, in any mode (design v33 §6.5); then returns to Select;
+            // from Select it asks to quit (design v21 §6.5).
             Action::Back if self.aim.is_some() => self.end_aim(),
+            Action::Back if self.placing.is_some() => self.placing = None,
+            Action::Back if self.grip(world).is_some() => self.let_go(world),
             Action::Back if self.mode != CursorMode::Select => self.mode = CursorMode::Select,
             Action::Back => self.screen = Screen::QuitPrompt,
             Action::Confirm
@@ -1604,6 +1610,17 @@ impl App {
             None => {
                 self.grab(tile, sprite, world, TO_GRAB);
             }
+        }
+    }
+
+    /// Lets go of what the Cursor has hold of, where the Cursor is, as `Esc`
+    /// does (design v33 §6.5): a led sprite is let go, and a held item put
+    /// down on the Cursor's tile, as a click there would.
+    fn let_go(&mut self, world: &World) {
+        match self.grip(world) {
+            Some(Grip::Leads(_)) => self.send(Command::LetGo, world),
+            Some(Grip::Holds(_)) => self.send(Command::PutDown { tile: self.cursor }, world),
+            None => {}
         }
     }
 
