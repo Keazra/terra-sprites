@@ -12,35 +12,54 @@ You can teach them too. In Train mode a click pets the sprite under the Cursor a
 
 You can select a sprite and look inside it: its Brain tab shows what it's paying attention to and why it does what it does, and below that its memory, everything it has learned and how strongly. The map flashes an `X` where it's heading and shades what it's paying attention to in grey. You can scroll around and point at things, and the clock can be paused, stepped and sped up.
 
-## Running it
+## Getting started
 
-You need [Rust](https://rustup.rs) (stable). Then, from the repository root:
+You need [Rust](https://rustup.rs) (stable) and a terminal of at least 100×30 characters; 140×40 is better. On Windows, use Windows Terminal. Then, from the repository root:
 
 ```bash
 cargo run --release -- --seed 7
 ```
 
+The first build takes a minute or two. The game opens on a new terrarium, made from seed 7, with time running at 1×. Some things to try first:
+
+1. **Watch one sprite.** Click a sprite (`☺`) to select it. The panel beside the map shows its body; `]` moves to its Brain tab, which says what it's paying attention to and why. `T` makes the view follow it.
+2. **Control time.** `space` pauses, `.` steps one tick while paused, and `+` speeds up. A sprite's life is long at 1×, so try 8× or 16×.
+3. **Teach it something.** Press `X` for Train mode. When the sprite does something you like, click it to pet it; right-click to zap it for something you don't. It learns from both.
+4. **Move things.** Press `C` for Grab mode. Click a berry (`•`) to pick it up, and click again beside a hungry sprite to put it down. Press `C` once more for the Place menu, to add berries, balls, bushes and new sprites.
+5. **Keep the world.** `F5` saves and `F9` loads it back; the game also saves itself every 10 minutes. `?` shows every key, the colour legend, and where your saves are.
+
+The status line at the bottom always says what's under the Cursor, and the event log under the map tells you what the sprites are doing.
+
+## Controls
+
+The same key in capitals or lower case does the same thing.
+
 | Key | Action |
 |---|---|
+| `space` | Pause / resume |
+| `.` | Step one tick while paused (hold to keep stepping) |
+| `+` / `-` | Faster / slower: each step doubles or halves the speed, from ⅛× up to 16×, then Max. The game starts at 1× (1.25 ticks per second, slow enough to watch sprites walk). Holding either key stops at 1×; press again to go past it |
 | `W` `A` `S` `D` or arrows | Scroll the map (hold Shift to scroll 5 tiles) |
 | Mouse | Point at a tile: the status line says what's there. Click a sprite to select it |
-| `Z` / `X` / `C` | Cursor mode: Select / Train / Grab. `C` again in Grab mode opens the Place menu |
-| `Q` / `E` | Left / right click where the Cursor is. In Train mode the left pets and the right zaps (with Ctrl on a click or Shift on a key, a hug or a shock); in Grab mode the left picks up, leads, lets go or puts down, and holding the right aims a throw or a shove |
+| `T` | Track: the view follows the selected sprite; again to stop |
+| `b` | Sprite colours: what a sprite's colour shows, such as its strongest drive or nothing. The status line says which |
+| `m` | Event log filter: all events, the selected sprite's, or only the major ones (deaths, lessons learned, refusals) |
+| `v` | Detail view: exactly what the selected sprite is doing |
+| `?` | Help: every key, the colour legend and where the game keeps its files |
+| `Z` / `X` / `C` | Cursor mode: Select / Train / Grab. The mouse wheel over the map changes mode too. `C` again in Grab mode opens the Place menu |
+| `Q` / `E` | Left / right click where the Cursor is. In Train mode the left pets and the right zaps (with Ctrl on a click or Shift on a key, a hug or a shock); in Grab mode the left picks up, leads, lets go or puts down, and holding the right aims a throw or a shove, which goes when you let go |
 | `F` or the middle button | Follow the sprite under the Cursor (or else the selected one) so the Cursor moves with it; again to stop |
 | `H` | Make the Cursor visible to sprites in the current cursor mode, or hide it again. Each mode starts hidden; while visible the Cursor is drawn as a frame of light (`═` and `║`) and the status line says "seen"; sprites can go to it or back away from it, and they learn to like or fear it from how you treat them |
 | Place menu | `1`–`9`, or the arrows and `Enter`, or a click picks: a berry bush seedling, a berry, a ball, a new sprite, or a sprite from a genome file. The next Grab-mode click places it; a right click puts it away |
+| `Tab` / `Shift+Tab` | Select the next / previous sprite |
+| `l` | Sprite list: every sprite, with its age, strongest drive and what it's doing. The arrows choose, `Tab` changes the order, `Enter` goes to it |
 | `r` | Name the selected sprite: type a name, or `Tab` for another random one, then `Enter` |
 | `g` | Save the selected sprite's genome to the genomes folder (the status line says where); the Place menu reads it back |
-| `Tab` / `Shift+Tab` | Select the next / previous sprite |
 | `[` / `]` | Previous / next inspector tab |
 | `PgUp` / `PgDn`, or the mouse wheel over the inspector | Scroll a long tab |
-| `v` | Detail view: exactly what the selected sprite is doing |
-| `space` | Pause / resume |
-| `.` | Step one tick while paused (hold to keep stepping) |
-| `+` / `-` | Faster / slower: each step doubles or halves the speed, from ⅛× up to 16×, then Max. The game starts at 1× (1.25 ticks per second, slow enough to watch sprites walk). Holding either key stops at 1×; press again to go past it. |
-| `F5` / `F9` | Quicksave / quickload. Loading over a world that has run since it was last saved asks first, and a loaded world starts paused |
-| `Ctrl+S` / `Ctrl+O` | Save under a name you type / pick a save to load, newest first. The world also saves itself every 10 minutes of running time and when you quit, keeping the last 3 autosaves. Saves are in the `saves` folder of the game's folder (the help screen shows where) |
-| `Esc` | Quit, after "Quit? (y/n)": press `y` or `Esc` again |
+| `F5` / `F9` | Quicksave / quickload. Loading over a world that has run since it was last saved asks first (`y` to load), and a loaded world starts paused |
+| `Ctrl+S` / `Ctrl+O` | Save under a name you type / pick a save to load, newest first. The world also saves itself every 10 minutes of running time and when you quit, keeping the last 3 autosaves. See [saves](docs/reference/saves.md) |
+| `Esc` | Close a menu or overlay, or cancel an aim; otherwise back to Select mode; from Select, "Quit? (y/n)": press `y` or `Esc` again |
 | `Ctrl+C` | Quit at once |
 
 | Flag | Effect |
@@ -48,6 +67,7 @@ cargo run --release -- --seed 7
 | `--seed <n>` | Make the world from seed `n` (the top bar shows the seed of every world) |
 | `--preset <file>` | Use a world config from a RON file, such as a copy of [`data/presets/default.ron`](data/presets/default.ron) |
 | `--ascii` | Draw the map in plain ASCII instead of CP437 |
+| `--theme <file>` | Draw the map with a theme of your own, such as an edited copy of [`themes/cp437.ron`](themes/cp437.ron); see [themes](docs/reference/themes.md) |
 
 To run the checks CI runs: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`.
 
@@ -66,11 +86,11 @@ CI checks this on every pull request: it runs the default world from seed 7 for 
 
 ## Changing the game
 
-The ground, the plants and toys, a sprite's body and its instincts, and the size of the world are data files anyone can edit. The [data-format reference](docs/reference/README.md) explains each one, with a working example.
+The ground, the plants and toys, a sprite's body and its instincts, the size of the world and how the map is drawn are files anyone can edit. The [data-format reference](docs/reference/README.md) explains each one, with a working example.
 
 ## Design
 
-- [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v32.md) (v32, the current revision). Earlier revisions and the external evaluations that shaped them are in [`docs/design/archive/`](docs/design/archive/).
+- [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v33.md) (v33, the current revision). Earlier revisions and the external evaluations that shaped them are in [`docs/design/archive/`](docs/design/archive/).
 
 ## Roadmap
 
