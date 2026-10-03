@@ -1382,7 +1382,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
     │ ☺ hunger  ☺ thirst  ☺ pain  ☺ tiredness  ☺ boredom  ☺ loneliness  ☺ crowdedness  ☺ none          │
     │ EMOTES   ! hurt  ‼ zapped  ? gave up  z resting  ♥ pleased                                       │
     │                                                                                                  │
-    │ FILES    C:\Users\Kurtis\AppData\Roaming\terra-sprites                                           │
+    │ FILES    C:\Users\Player\AppData\Roaming\terra-sprites                                           │
     └──────────────────────────────────────────────────────────────────────────────────────────────────┘
     ```
 
