@@ -4,7 +4,7 @@
 
 use ratatui::layout::{Position, Rect};
 use terra_sim::{Command, DataPack, EntityId, Grip, Map, Pos, Scenario, ScriptedAction, World};
-use terra_tui::app::{App, Areas, CursorMode, Flow, StatusMark};
+use terra_tui::app::{App, Areas, CursorMode, Flow, Screen, StatusMark};
 use terra_tui::input::{Action, Button};
 use terra_tui::theme::Theme;
 
@@ -481,4 +481,102 @@ fn leading_one_sprite_following_another_the_cursor_waits_at_the_leash_s_end_towa
     let (world, mut app) = leading_in_a_wide_field();
     follow(&mut app, &world, at(12, 3));
     assert_eq!(app.cursor(), at(6, 3));
+}
+
+fn escape(app: &mut App, world: &World) {
+    apply(app, world, Action::Back);
+}
+
+#[test]
+fn leading_a_sprite_esc_lets_go_and_the_next_esc_returns_to_select() {
+    // Design v33 §6.5: Esc lets go before it leaves the mode.
+    let mut world = field(&[], &[at(4, 2)]);
+    let mut app = grab_app(&world);
+    click(&mut app, &world, at(4, 2));
+    tick(&mut app, &mut world);
+    escape(&mut app, &world);
+    assert_eq!(app.mode(), CursorMode::Grab, "letting go comes first");
+    tick(&mut app, &mut world);
+    assert_eq!(world.cursor().leads(), None);
+    escape(&mut app, &world);
+    assert_eq!(app.mode(), CursorMode::Select);
+    assert_eq!(app.take_commands(), Vec::new());
+}
+
+#[test]
+fn holding_an_item_esc_puts_it_down_on_the_cursor_s_tile() {
+    // Design v33 §6.5: where the Cursor is, as a click there would. The
+    // pointer stays where it was, as with a key pressed.
+    let mut world = field(&[(at(4, 2), "ball")], &[]);
+    let mut app = grab_app(&world);
+    let ball = object_on(&world, at(4, 2));
+    click(&mut app, &world, at(4, 2));
+    tick(&mut app, &mut world);
+    point(&mut app, &world, at(7, 4));
+    escape(&mut app, &world);
+    assert_eq!(
+        app.take_commands(),
+        vec![Command::PutDown { tile: at(7, 4) }]
+    );
+    assert_eq!(app.grip(&world), None, "as the queue leaves it");
+    world.submit(Command::PutDown { tile: at(7, 4) });
+    let events = world.step();
+    app.record(&events, &world);
+    assert_eq!(world.object_at(at(7, 4)).map(|o| o.id()), Some(ball));
+}
+
+#[test]
+fn holding_an_item_while_following_a_sprite_esc_puts_it_at_its_feet() {
+    // The Cursor sits on the followed sprite (design v26 §6.5), so that's
+    // where Esc puts the item down.
+    let mut world = resting_sprite_and_ball();
+    let mut app = grab_app(&world);
+    click(&mut app, &world, at(1, 1));
+    tick(&mut app, &mut world);
+    follow(&mut app, &world, at(4, 2));
+    point(&mut app, &world, at(8, 5));
+    escape(&mut app, &world);
+    assert_eq!(
+        app.take_commands(),
+        vec![Command::PutDown { tile: at(4, 2) }]
+    );
+}
+
+#[test]
+fn esc_lets_go_in_every_mode_before_it_asks_to_quit() {
+    // What the Cursor holds or leads stays held in other modes (design v23
+    // §6.5), so Esc lets go of it there too, first (design v33 §6.5).
+    let mut world = field(&[(at(4, 2), "ball")], &[]);
+    let mut app = grab_app(&world);
+    let ball = object_on(&world, at(4, 2));
+    click(&mut app, &world, at(4, 2));
+    tick(&mut app, &mut world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Select));
+    point(&mut app, &world, at(6, 3));
+    escape(&mut app, &world);
+    assert_eq!(app.screen(), Screen::Normal, "no quit prompt yet");
+    assert_eq!(app.grip(&world), None, "as the queue leaves it");
+    tick(&mut app, &mut world);
+    assert_eq!(world.object_at(at(6, 3)).map(|o| o.id()), Some(ball));
+    escape(&mut app, &world);
+    assert_eq!(app.screen(), Screen::QuitPrompt);
+}
+
+#[test]
+fn esc_putting_an_item_down_where_it_cant_go_is_refused_with_why() {
+    // As a click there would be (design v33 §6.5).
+    let mut world = field(&[(at(4, 2), "ball"), (at(7, 4), "berry_bush")], &[]);
+    let mut app = grab_app(&world);
+    let ball = object_on(&world, at(4, 2));
+    click(&mut app, &world, at(4, 2));
+    tick(&mut app, &mut world);
+    point(&mut app, &world, at(7, 4));
+    escape(&mut app, &world);
+    tick(&mut app, &mut world);
+    assert_eq!(app.status_mark(), StatusMark::Rejected);
+    assert_eq!(
+        app.refusal(),
+        Some("Couldn't put the ball down: a berry bush is there")
+    );
+    assert_eq!(world.cursor().holds().map(|o| o.id()), Some(ball));
 }
