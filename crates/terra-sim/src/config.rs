@@ -168,6 +168,11 @@ impl WorldConfig {
         usize::from(self.sprites)
     }
 
+    /// The same preset, starting with `sprites` sprites, for the benchmarks.
+    pub(crate) fn with_sprites(self, sprites: u16) -> WorldConfig {
+        WorldConfig { sprites, ..self }
+    }
+
     /// How many objects of the type called `name` a new world gets: the preset's
     /// density scaled to the map's area, rounding halves up. 0 for a type it doesn't name.
     pub fn object_count(&self, name: &str) -> usize {

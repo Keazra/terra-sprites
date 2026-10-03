@@ -68,6 +68,12 @@ impl Objects {
         self.on_tile.at(pos)
     }
 
+    /// The objects on the tiles of row `y` from `x0` to `x1`, inclusive,
+    /// which must be on the map.
+    pub(crate) fn row(&self, y: u16, x0: u16, x1: u16) -> &[Option<EntityId>] {
+        self.on_tile.row(y, x0, x1)
+    }
+
     /// The object `id`, if it exists.
     pub(crate) fn get(&self, id: EntityId) -> Option<&Object> {
         self.by_id.get(&id)
