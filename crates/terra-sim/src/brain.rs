@@ -847,6 +847,43 @@ impl Brain {
         summary
     }
 
+    /// Whether a loaded brain fits `genome` and `data` at the tick `now`
+    /// (design §2.8): its parameters, concepts and instincts are the ones
+    /// the genome gives; whatever it attends to, has learned or remembers
+    /// doing is about categories, object types and needs the pack has; and
+    /// what it remembers doing was done by `now`.
+    pub(crate) fn fits(&self, genome: &Genome, data: &DataPack, now: u64) -> bool {
+        let born = Brain::new(genome, data);
+        let needs = data.needs().count();
+        let category = |id: CategoryId| data.category(id).is_some();
+        let subject = |subject: Subject| subject.fits(data);
+        let motive = |motive: Option<usize>| motive.is_none_or(|need| need < needs);
+        let scored = |(&id, &thing): (&CategoryId, &Subject)| category(id) && subject(thing);
+        let snapshot = |snapshot: &Snapshot| {
+            snapshot.tick <= now
+                && snapshot.inputs.len() == data.brain_inputs_in_order().len()
+                && snapshot.activations.len() == self.concepts.len()
+                && snapshot.attention.keys().all(|&id| category(id))
+                && snapshot.scored.iter().all(scored)
+                && snapshot.attended.is_none_or(category)
+                && snapshot.subject.is_none_or(subject)
+                && motive(snapshot.motive)
+        };
+        let traced = |entry: &TraceEntry| {
+            entry.tick <= now && entry.subject.is_none_or(subject) && motive(entry.motive)
+        };
+        let touched = |touch: Touch| touch.tick <= now && subject(touch.subject);
+        self.params == born.params
+            && self.concepts == born.concepts
+            && self.decision == born.decision
+            && self.attention == born.attention
+            && self.attended.is_none_or(category)
+            && self.snapshot.as_ref().is_none_or(snapshot)
+            && self.trace.iter().all(traced)
+            && self.experience.fits(data)
+            && self.touched.is_none_or(touched)
+    }
+
     /// Checks the brain's state (design §5.6): instinct links within
     /// [−1, 1], what it has learned within its ranges, a felt value that's a
     /// number, and a trace within its cap.
