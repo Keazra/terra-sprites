@@ -136,6 +136,13 @@ impl Clock {
         self.step_ticks = 0;
     }
 
+    /// Pauses, if time is running, as after a load (design §6.7).
+    pub fn pause(&mut self) {
+        if !self.paused {
+            self.toggle_pause();
+        }
+    }
+
     /// While paused, runs one step from the next frame: one real second's
     /// worth of ticks at the speed, rounded down, at least one and at most
     /// 16×'s 20 (design v27 §6.6). Pressed again before a step has finished,

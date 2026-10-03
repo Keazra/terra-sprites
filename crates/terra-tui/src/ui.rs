@@ -10,7 +10,8 @@ use ratatui::{
 use terra_sim::{EntityId, Grip, Map, ObjectView, Pos, Progress, SpriteView, World};
 
 use crate::app::{
-    App, Areas, ColourMode, CursorMode, PlaceItem, Screen, Selection, strongest_drive,
+    App, Areas, ColourMode, CursorMode, PlaceItem, Screen, Selection, spoken_duration,
+    strongest_drive,
 };
 use crate::clock::Speed;
 use crate::inspector::{self, INSPECTOR_WIDTH, first_shown};
@@ -81,6 +82,9 @@ fn render_too_small(buf: &mut Buffer, area: Rect, app: &App) {
     // `Esc` still asks to quit, so the question shows here too.
     if app.screen() == Screen::QuitPrompt {
         lines.push("Quit? (y/n)".into());
+    }
+    if let Some(question) = app.load_question() {
+        lines.push(question);
     }
     let top = area.y + area.height.saturating_sub(lines.len() as u16) / 2;
     for (row, line) in (top..area.bottom()).zip(lines) {
@@ -477,7 +481,7 @@ fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) {
     let items = app.menu_items(world);
     let room = usize::from(area.width - 2);
     if items.is_empty() {
-        let none = format!(" {}", app.no_genome_files());
+        let none = format!(" {}", app.menu_empty());
         buf.set_stringn(area.x + 1, area.y + 1, none, room, Style::default());
     }
     let first = app.menu_first(world);
@@ -657,8 +661,14 @@ fn top_bar_line(app: &App, world: &World, width: u16) -> Line<'static> {
     } else {
         String::new()
     };
+    // When the world was last saved or loaded (design §6.1, §6.7).
+    let saved = match app.saved_ago() {
+        None => "not saved".to_string(),
+        Some(ago) if ago.as_secs() < 60 => "saved just now".to_string(),
+        Some(ago) => format!("saved {} ago", spoken_duration(ago)),
+    };
     let text = format!(
-        " Terra Sprites │ tick {} │ {time} │ seed {}{population}",
+        " Terra Sprites │ tick {} │ {time} │ seed {}{population} │ {saved}",
         group_thousands(world.tick()),
         app.seed,
     );
@@ -691,6 +701,16 @@ const KEY_HINTS: [&str; 6] = [
 fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     if app.screen() == Screen::QuitPrompt {
         return Line::from(" Quit? (y/n)");
+    }
+    if let Some(question) = app.load_question() {
+        return Line::from(format!(" {question}"));
+    }
+    // Naming a save takes the line over too (design §6.7).
+    if let Some(draft) = app.save_name_draft() {
+        let prompt = format!(" Save as: {draft}_");
+        const HINTS: &str = "   enter save  esc cancel";
+        let fits = prompt.chars().count() + HINTS.chars().count() <= usize::from(width);
+        return Line::from(if fits { prompt + HINTS } else { prompt });
     }
     // Naming takes the line over, with its key hints if they fit (design
     // v28 §6.5).
