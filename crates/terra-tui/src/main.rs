@@ -1,7 +1,9 @@
 //! `terra-sprites`: owns the terminal and runs the frame loop (design §6.6).
 //! All logic worth testing lives in the `terra_tui` library.
 
+use std::cell::Cell;
 use std::io::{self, stdout};
+use std::path::Path;
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -13,11 +15,12 @@ use ratatui::crossterm::event::{
 };
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::supports_keyboard_enhancement;
-use terra_sim::{DataPack, World, WorldConfig};
+use terra_sim::{DataError, DataPack, Playback, World, WorldConfig};
 use terra_tui::app::{App, Flow, Ticks};
 use terra_tui::args::{Args, USAGE};
 use terra_tui::files;
 use terra_tui::input::{self, Keys};
+use terra_tui::session::{self, Session};
 use terra_tui::theme::Theme;
 use terra_tui::ui;
 
@@ -34,33 +37,25 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let data = match DataPack::builtin() {
-        Ok(data) => data,
+    let start = match &args.replay {
+        Some(path) => replay_from(path),
+        None => new_world(&args).map(|world| Start {
+            seed: world.seed(),
+            session: Session::live(world),
+            replay: None,
+        }),
+    };
+    let Start {
+        mut session,
+        seed,
+        replay,
+    } = match start {
+        Ok(start) => start,
         Err(err) => {
-            eprintln!("terra-sprites: the built-in data pack is invalid: {err:?}");
+            eprintln!("terra-sprites: {err}");
             return ExitCode::FAILURE;
         }
     };
-    // A preset names object types, so it's checked against the pack.
-    let config = match &args.preset {
-        None => WorldConfig::builtin(&data),
-        Some(path) => {
-            let loaded = std::fs::read_to_string(path)
-                .map_err(|err| err.to_string())
-                .and_then(|text| {
-                    WorldConfig::from_ron(&text, &data).map_err(|err| err.to_string())
-                });
-            match loaded {
-                Ok(config) => config,
-                Err(err) => {
-                    eprintln!("terra-sprites: can't use preset {}: {err}", path.display());
-                    return ExitCode::FAILURE;
-                }
-            }
-        }
-    };
-    let seed = args.seed.unwrap_or_else(time_seed);
-    let world = World::new(config, data, seed);
     let theme = if args.ascii {
         Theme::ascii()
     } else {
@@ -112,8 +107,21 @@ fn main() -> ExitCode {
         restore_terminal(info);
     }));
     let keys = Keys::with_release_reporting(cfg!(windows) || enhanced_keys);
-    let result = execute!(stdout(), EnableMouseCapture)
-        .and_then(|()| run(&mut terminal, world, theme, seed, keys, args.force_panic));
+    // A session that ends in a panic still writes its replay (design §2.9).
+    let log = files::session_log();
+    let result = session::writing_log_on_panic(&mut session, log.as_deref(), |session| {
+        execute!(stdout(), EnableMouseCapture).and_then(|()| {
+            let setup = Setup {
+                theme,
+                seed,
+                keys,
+                force_panic: args.force_panic,
+                log: log.as_deref(),
+                replay: replay.as_deref(),
+            };
+            run(&mut terminal, session, setup)
+        })
+    });
     undo_setup();
     ratatui::restore();
 
@@ -126,16 +134,101 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(
-    terminal: &mut DefaultTerminal,
-    mut world: World,
+/// What `main` starts with: the session, the seed the top bar shows, and,
+/// for a replay, its file's name.
+struct Start {
+    session: Session,
+    seed: u64,
+    replay: Option<String>,
+}
+
+/// A new world, as the flags ask: generated from `--seed`, or a seed from
+/// the clock, with `--preset`, or the data folder's default preset, or the
+/// built-in one; and the data pack `--data` gives, or the built-in one.
+fn new_world(args: &Args) -> Result<World, String> {
+    let (data, folder_preset) = match &args.data {
+        None => (
+            DataPack::builtin()
+                .map_err(|err| format!("the built-in data pack is invalid: {err:?}"))?,
+            None,
+        ),
+        Some(dir) => {
+            let files::DataFolder { sources, preset } = files::data_folder_files(dir)
+                .map_err(|err| format!("can't use the data in {}: {err}", dir.display()))?;
+            let borrowed: Vec<(&str, &str)> = sources
+                .iter()
+                .map(|(path, text)| (path.as_str(), text.as_str()))
+                .collect();
+            let data = DataPack::from_sources(&borrowed).map_err(|err| {
+                format!(
+                    "can't use the data in {}: {}",
+                    dir.display(),
+                    pack_problem(err)
+                )
+            })?;
+            (
+                data,
+                preset.map(|text| (dir.join("presets/default.ron"), text)),
+            )
+        }
+    };
+    // A preset names object types, so it's checked against the pack.
+    let preset = match &args.preset {
+        Some(path) => Some((
+            path.clone(),
+            std::fs::read_to_string(path)
+                .map_err(|err| format!("can't use preset {}: {err}", path.display()))?,
+        )),
+        None => folder_preset,
+    };
+    let config = match preset {
+        None => WorldConfig::builtin(&data),
+        Some((path, text)) => WorldConfig::from_ron(&text, &data)
+            .map_err(|err| format!("can't use preset {}: {err}", path.display()))?,
+    };
+    let seed = args.seed.unwrap_or_else(time_seed);
+    Ok(World::new(config, data, seed))
+}
+
+/// The replay in the file at `path`, to play back (design §2.7).
+fn replay_from(path: &Path) -> Result<Start, String> {
+    let cant = |why: String| format!("can't play the replay {}: {why}", path.display());
+    let bytes = std::fs::read(path).map_err(|err| cant(err.to_string()))?;
+    let playback = Playback::new(&bytes).map_err(|err| cant(err.to_string()))?;
+    let name = path.file_name().map_or_else(
+        || path.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    Ok(Start {
+        seed: playback.world().seed(),
+        session: Session::replay(playback),
+        replay: Some(name),
+    })
+}
+
+/// What the frame loop runs with, besides the terminal and the session.
+struct Setup<'a> {
     theme: Theme,
     seed: u64,
-    mut keys: Keys,
+    keys: Keys,
     force_panic: bool,
-) -> io::Result<()> {
-    let areas = ui::areas(terminal.size()?, world.map());
-    let mut app = App::new(world.map(), theme, seed, areas);
+    /// Where the session log goes, if anywhere (design §2.7).
+    log: Option<&'a Path>,
+    /// For a replay, its file's name.
+    replay: Option<&'a str>,
+}
+
+fn run(terminal: &mut DefaultTerminal, session: &mut Session, setup: Setup) -> io::Result<()> {
+    let Setup {
+        theme,
+        seed,
+        mut keys,
+        force_panic,
+        log,
+        replay,
+    } = setup;
+    let areas = ui::areas(terminal.size()?, session.world().map());
+    let mut app = App::new(session.world().map(), theme, seed, areas);
     if let Some(folder) = files::data_folder() {
         app.set_data_folder(folder);
     }
@@ -145,12 +238,24 @@ fn run(
     if let Some(folder) = files::save_folder() {
         app.set_save_folder(folder);
     }
+    if let (Some(name), Some(playback)) = (replay, session.playback()) {
+        app.start_replay(name, playback);
+    }
+    // The session log is written at each autosave and on quitting (design
+    // §2.7), and a write that fails says so.
+    let write_log = |app: &mut App, session: &Session| {
+        if let Some(log) = log
+            && let Err(err) = session.write_log(log)
+        {
+            app.note_log_failed(&err.to_string());
+        }
+    };
     let mut last_frame = Instant::now();
 
     loop {
         // The terminal may have been resized since the last frame.
-        app.fit(ui::areas(terminal.size()?, world.map()));
-        terminal.draw(|frame| ui::render(frame, &app, &world))?;
+        app.fit(ui::areas(terminal.size()?, session.world().map()));
+        terminal.draw(|frame| ui::render(frame, &app, session.world()))?;
         if force_panic {
             panic!("forced panic (--force-panic): the terminal should now be restored");
         }
@@ -166,22 +271,23 @@ fn run(
                 _ => None,
             };
             if let Some(action) = action
-                && app.apply(action, &world) == Flow::Quit
+                && app.apply(action, session.world()) == Flow::Quit
             {
                 // Quitting saves, so a closed session is never lost (design
-                // §6.7).
-                app.autosave(&world);
+                // §6.7), and writes the session log.
+                app.autosave(session.world());
+                write_log(&mut app, session);
                 return Ok(());
             }
-            // A save the player loaded replaces the world from here on.
+            // A save the player loaded replaces the world from here on, and
+            // the session log starts afresh from it (design §2.7).
             if let Some(loaded) = app.take_loaded() {
-                world = loaded;
+                session.load(loaded);
             }
             // The player's clicks, stamped for the next tick (design
-            // §2.5), as each is made, so a save made next holds them.
-            for command in app.take_commands() {
-                world.submit(command);
-            }
+            // §2.5), as each is made, so a save made next holds them. A
+            // replay takes none.
+            session.submit(app.take_commands());
         }
 
         let now = Instant::now();
@@ -190,13 +296,38 @@ fn run(
         app.animate(elapsed);
         let frame_start = Instant::now();
         let mut ticks = Ticks::default();
+        // Playback stops at the recording's end, and where it first finds
+        // the world different from it, so the screen pauses there.
+        let stop = Cell::new(false);
+        let stops = app.replay_stops();
         app.clock.advance(
             elapsed,
-            || ticks.step(&mut world),
-            || frame_start.elapsed() >= SIM_BUDGET,
+            || {
+                let events = session.step();
+                ticks.note(events, session.world());
+                if let (Some(stops), Some(playback)) = (stops, session.playback()) {
+                    stop.set(stops.at(playback));
+                }
+            },
+            || stop.get() || frame_start.elapsed() >= SIM_BUDGET,
         );
-        app.take_in(ticks, &world);
-        app.autosave_if_due(&world);
+        app.take_in(ticks, session.world());
+        if let Some(playback) = session.playback() {
+            app.take_in_replay(playback);
+        }
+        if app.autosave_if_due(session.world()) {
+            write_log(&mut app, session);
+        }
+    }
+}
+
+/// What's wrong with a data pack, naming the file.
+fn pack_problem(err: DataError) -> String {
+    match err {
+        DataError::MissingFile(file) => format!("it has no {file}"),
+        DataError::Parse { file, message } | DataError::Invalid { file, message } => {
+            format!("{file}: {message}")
+        }
     }
 }
 
