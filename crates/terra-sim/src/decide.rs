@@ -61,21 +61,9 @@ pub(crate) fn decide(
     let reach = 10.0 * f32::from(flood.reach());
     let was_hit = data.physiology().indices.was_hit;
     let attacker = sprite.body.sources.get(&was_hit).copied();
-    let mut offered = flood.candidates(ground, id, attacker, state.cursor.seen_at());
     // Each sprite in reach is weighed on its own, unless the attacker stands
     // for sprites while a hit is felt (design v18 §3.6).
-    let is_attacker = |target: Target| attacker.is_some_and(|a| target == Target::Sprite(a));
-    if !offered
-        .get(&data.sprite_category())
-        .is_some_and(|things| things.iter().any(|&(target, _)| is_attacker(target)))
-    {
-        let sprites = flood.sprites(ground, id).into_iter();
-        let sprites: Vec<(Target, u32)> =
-            sprites.map(|(s, cost)| (Target::Sprite(s), cost)).collect();
-        if !sprites.is_empty() {
-            offered.insert(data.sprite_category(), sprites);
-        }
-    }
+    let offered = flood.candidates(ground, id, attacker, state.cursor.seen_at());
     // Each category's candidate is the thing that draws the eye most (design
     // v19 §3.6); ties go to the lower ID, which comes first.
     let state_only = sprite.brain.inputs(&sprite.body, None, data);

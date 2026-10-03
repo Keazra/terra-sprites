@@ -4,6 +4,8 @@
 //! pack as already-read text and is driven one tick at a time.
 
 mod action;
+#[doc(hidden)]
+pub mod bench;
 mod biochem;
 mod brain;
 mod brain_io;

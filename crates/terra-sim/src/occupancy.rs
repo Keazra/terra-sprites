@@ -28,6 +28,13 @@ impl Occupancy {
         self.tiles[self.index(pos)]
     }
 
+    /// The entities on the tiles of row `y` from `x0` to `x1`, inclusive,
+    /// which must be on the map.
+    pub(crate) fn row(&self, y: u16, x0: u16, x1: u16) -> &[Option<EntityId>] {
+        let start = self.index(Pos { x: x0, y });
+        &self.tiles[start..=start + usize::from(x1 - x0)]
+    }
+
     /// Puts `id` on the tile at `pos`, which must be empty.
     pub(crate) fn put(&mut self, pos: Pos, id: EntityId) {
         let index = self.index(pos);
