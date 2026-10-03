@@ -1,12 +1,11 @@
 //! Perception (design §3.6): each sprite's bounded Dijkstra flood, which
 //! gives both what it can reach and the way there.
 
+use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
-use std::collections::BTreeMap;
-
 use rand_chacha::ChaCha8Rng;
-use serde::{Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::data::DataPack;
 use crate::map::{Dir, Map, Pos};
@@ -27,7 +26,7 @@ pub(crate) enum Occupied {
 }
 
 /// Something a sprite can aim a verb at (design §3.6).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Target {
     /// An object, such as a berry or a bush.
     Object(EntityId),
@@ -61,7 +60,7 @@ const NO_STEP: u8 = u8::MAX;
 /// A sprite's flood: the cheapest cost to each tile it reaches within its
 /// radius, and the step that reached it. It's cached and saved (design §2.8),
 /// so it's part of the world state.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Flood {
     /// The tile it spreads from.
     pub(crate) origin: Pos,
@@ -74,10 +73,16 @@ pub(crate) struct Flood {
     width: u16,
     height: u16,
     /// The cost to reach each tile of the square, row by row, in terrain units.
-    #[serde(serialize_with = "costs_as_bytes")]
+    #[serde(
+        serialize_with = "costs_as_bytes",
+        deserialize_with = "costs_from_bytes"
+    )]
     costs: Vec<u32>,
     /// The direction of the step that reached each tile, as its place in `Dir::ALL`.
-    #[serde(serialize_with = "as_bytes")]
+    #[serde(
+        serialize_with = "as_bytes",
+        deserialize_with = "crate::save::read_bytes"
+    )]
     steps: Vec<u8>,
     /// The Water candidate, once asked for: the drinkable tile with the
     /// cheapest goal tile, ties to the lower tile index, and that cost. It
@@ -256,6 +261,47 @@ impl Flood {
             flood.steps[y * w..(y + 1) * w].copy_from_slice(&steps[row..row + w]);
         }
         flood
+    }
+
+    /// Whether a loaded flood fits `map` (design §2.8): its square is on
+    /// the map and holds its origin, it has a cost and a step for each
+    /// tile, and the way back from each tile it reached leads to the origin,
+    /// each step to a tile reached more cheaply, as every step costs.
+    pub(crate) fn fits(&self, map: &Map) -> bool {
+        let tiles = usize::from(self.width) * usize::from(self.height);
+        let on_map = u32::from(self.corner.x) + u32::from(self.width) <= u32::from(map.width())
+            && u32::from(self.corner.y) + u32::from(self.height) <= u32::from(map.height());
+        if !on_map || self.costs.len() != tiles || self.steps.len() != tiles {
+            return false;
+        }
+        let Some(start) = self.local(self.origin) else {
+            return false;
+        };
+        let leads_back = |index: usize| {
+            let cost = self.costs[index];
+            let Some(&dir) = Dir::ALL.get(usize::from(self.steps[index])) else {
+                return false;
+            };
+            let from = self.local(back(self.pos(index), dir));
+            from.is_some_and(|from| self.costs[from] < cost)
+        };
+        self.costs[start] == 0
+            && (0..tiles)
+                .filter(|&index| index != start && self.costs[index] != UNREACHED)
+                .all(leads_back)
+    }
+
+    /// Sets the step to the first tile it reached past the origin to `byte`,
+    /// unchecked, to test the checks on loading.
+    #[cfg(test)]
+    pub(crate) fn damage_a_step(&mut self, byte: u8) {
+        let start = self
+            .local(self.origin)
+            .expect("the origin is in its square");
+        let index = (0..self.costs.len())
+            .find(|&index| index != start && self.costs[index] != UNREACHED)
+            .expect("a tile it reached");
+        self.steps[index] = byte;
     }
 
     /// How far it reaches, in tiles in any direction.
@@ -582,6 +628,16 @@ fn as_bytes<S: Serializer>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Erro
 fn costs_as_bytes<S: Serializer>(costs: &[u32], serializer: S) -> Result<S::Ok, S::Error> {
     let bytes: Vec<u8> = costs.iter().flat_map(|cost| cost.to_le_bytes()).collect();
     serializer.serialize_bytes(&bytes)
+}
+
+/// Reads costs back from `costs_as_bytes`, as a save holds them (design §2.8).
+fn costs_from_bytes<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<u32>, D::Error> {
+    let bytes = crate::save::read_bytes(deserializer)?;
+    let (costs, rest) = bytes.as_chunks::<4>();
+    if !rest.is_empty() {
+        return Err(serde::de::Error::custom("flood costs aren't whole numbers"));
+    }
+    Ok(costs.iter().map(|&cost| u32::from_le_bytes(cost)).collect())
 }
 
 /// The tile one step back from `pos` against direction `dir`.

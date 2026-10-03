@@ -3,7 +3,7 @@
 //! nothing, until it has gone as far as the shove sent it or something stops
 //! it. Stopping against a solid object or a sprite is a crash.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::brain::Thing;
 use crate::data::DataPack;
@@ -15,7 +15,7 @@ use crate::verbs;
 use crate::world::WorldState;
 
 /// A sliding sprite's way on (design v25 §3.5.4).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Slide {
     /// The way it's sliding.
     pub(crate) dir: Dir,

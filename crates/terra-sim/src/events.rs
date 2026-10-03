@@ -107,7 +107,9 @@ pub enum EventKind {
 /// What caused most of a dead sprite's recent injury (design §4.10). Ties
 /// are settled in this order: physiology's three causes, then objects by
 /// type ID.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum DeathCause {
     /// Its energy ran out.
     Starvation,

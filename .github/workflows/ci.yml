@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
 
+# The jobs only read the code: the token they get can't push, comment or
+# change settings.
+permissions:
+  contents: read
+
 jobs:
   test:
     name: test (${{ matrix.os }})

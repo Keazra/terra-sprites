@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::SeedableRng;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use xxhash_rust::xxh3::xxh3_64_with_seed;
 
 use crate::action::{self, ActionView, ScriptedAction};
@@ -25,6 +25,7 @@ use crate::perception::{Flood, Target, goal_tiles};
 use crate::regions::Regions;
 use crate::registry::{CategoryId, ChemicalKind};
 use crate::rolling;
+use crate::save::{self, LoadError};
 use crate::sliding;
 use crate::sprites::{Sprite, Sprites};
 use crate::variation::varied;
@@ -39,10 +40,20 @@ pub struct World {
     data: DataPack,
     /// The ID counter as `check_invariants` last saw it, to catch it going back.
     checked_next_id: Cell<u64>,
+    /// The seed the world was made from, which the top bar shows. The RNG's
+    /// state carries on from it, so nothing in the sim reads it.
+    seed: u64,
+    /// The preset a generated world was made from, kept in its saves (design
+    /// §2.8). A hand-made world has none. Nothing in the sim reads it.
+    config: Option<WorldConfig>,
+    /// The tile at the middle of the screen when the world was saved, if a
+    /// screen saved it (design §2.8), so a load shows what the player saw.
+    /// Nothing in the sim reads it.
+    view: Option<Pos>,
 }
 
 /// Everything that determines how the world evolves. Hashed by `state_hash`.
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub(crate) struct WorldState {
     pub(crate) tick: u64,
     /// The world's only source of randomness (design §2.3).
@@ -64,6 +75,16 @@ pub(crate) struct WorldState {
 }
 
 impl WorldState {
+    /// Rebuilds what a save leaves out because it's derived from the rest
+    /// (design §2.8): which entity stands on each tile, each sprite's
+    /// compiled genome, and its levels before the tick, taken as its levels
+    /// now, so each change on the Chem tab reads blank for one tick.
+    fn rebuild(&mut self, data: &DataPack) -> Result<(), String> {
+        self.map.check_shape(data)?;
+        self.objects.rebuild(&self.map, data)?;
+        self.sprites.rebuild(&self.map, data, self.tick)
+    }
+
     /// Gives `object` the next entity ID and puts it in the world. The caller
     /// has checked that it may go there.
     pub(crate) fn add_object(&mut self, object: Object) -> EntityId {
@@ -529,9 +550,10 @@ impl World {
     pub fn new(config: WorldConfig, data: DataPack, seed: u64) -> World {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let map = generate(&config, &data, &mut rng);
-        let mut world = World::with(map, data, rng);
+        let mut world = World::with(map, data, rng, seed);
         place_objects(&config, &world.data, &mut world.state);
         place_sprites(&config, &world.data, &mut world.state);
+        world.config = Some(config);
         world
     }
 
@@ -541,7 +563,12 @@ impl World {
         if regions != 1 {
             return Err(MapError::NotOneRegion { regions });
         }
-        Ok(World::with(map, data, ChaCha8Rng::seed_from_u64(seed)))
+        Ok(World::with(
+            map,
+            data,
+            ChaCha8Rng::seed_from_u64(seed),
+            seed,
+        ))
     }
 
     /// A world made by hand, for tests and lab scenarios. The objects get IDs
@@ -647,7 +674,7 @@ impl World {
         self.state.learning = false;
     }
 
-    fn with(map: Map, data: DataPack, rng: ChaCha8Rng) -> World {
+    fn with(map: Map, data: DataPack, rng: ChaCha8Rng, seed: u64) -> World {
         let objects = Objects::new(&map);
         let sprites = Sprites::new(&map);
         World {
@@ -665,7 +692,77 @@ impl World {
             },
             data,
             checked_next_id: Cell::new(1),
+            seed,
+            config: None,
+            view: None,
         }
+    }
+
+    /// Saves the world (design §2.8): everything that determines how it
+    /// evolves, with the data pack and preset it was made with, so that
+    /// loading it carries on exactly as this world would.
+    /// It keeps the view it was loaded with, if any.
+    pub fn save(&self) -> Vec<u8> {
+        self.save_viewing(self.view)
+    }
+
+    /// Saves the world as `save` does, with `view`, the tile at the middle
+    /// of the screen, for a load to show again (design §2.8, §6.7).
+    pub fn save_with_view(&self, view: Pos) -> Vec<u8> {
+        self.save_viewing(Some(view))
+    }
+
+    /// The world's save, with `view` as its view.
+    fn save_viewing(&self, view: Option<Pos>) -> Vec<u8> {
+        save::write(&save::Contents {
+            seed: self.seed,
+            config: self.config.as_ref().map(save::Preset::from),
+            pack: self.data.sources().to_vec(),
+            state: &self.state,
+            view,
+        })
+    }
+
+    /// Loads a world saved by `save`, with the data pack the save embeds,
+    /// never the files on disk (design §2.8). A save from a newer build, or
+    /// one that's damaged, is refused.
+    pub fn load(bytes: &[u8]) -> Result<World, LoadError> {
+        let save::Loaded {
+            seed,
+            config,
+            pack,
+            mut state,
+            view,
+        } = save::read(bytes)?;
+        let sources: Vec<(&str, &str)> = pack
+            .iter()
+            .map(|(path, text)| (path.as_str(), text.as_str()))
+            .collect();
+        let data = DataPack::from_sources(&sources).map_err(LoadError::Pack)?;
+        state.rebuild(&data).map_err(LoadError::Damaged)?;
+        let world = World {
+            checked_next_id: Cell::new(state.next_id),
+            state,
+            data,
+            seed,
+            config: config.map(WorldConfig::from),
+            view,
+        };
+        world
+            .check_invariants()
+            .map_err(|broken| LoadError::Damaged(broken.0))?;
+        Ok(world)
+    }
+
+    /// The seed the world was made from.
+    pub fn seed(&self) -> u64 {
+        self.seed
+    }
+
+    /// The tile at the middle of the screen when the world was saved, if
+    /// its save kept one (design §2.8).
+    pub fn view(&self) -> Option<Pos> {
+        self.view
     }
 
     /// Advances the world by exactly one tick, running the canonical tick order
@@ -980,6 +1077,84 @@ mod tests {
             scripted: &[],
         };
         World::from_scenario(scenario, data, 7).expect("valid scenario")
+    }
+
+    /// A save whose checksum holds but whose world doesn't fit its pack, as
+    /// a build with a bug might write, is refused rather than crashing the
+    /// next tick (design §2.8).
+    #[test]
+    fn a_save_that_doesnt_fit_its_pack_is_refused() {
+        let damage: [fn(&mut WorldState, &DataPack); 9] = [
+            |state, _| {
+                let id = state.objects.at(Pos { x: 2, y: 2 }).expect("the bush");
+                state.objects.get_mut(id).expect("the bush").kind = 127;
+            },
+            |state, _| {
+                the_sprite(state).body.chems.pop();
+            },
+            // A flood whose way back from a tile it reached leads nowhere.
+            |state, _| {
+                let flood = the_sprite(state).flood.as_mut().expect("a flood");
+                flood.damage_a_step(8);
+            },
+            |state, _| {
+                let flood = the_sprite(state).flood.as_mut().expect("a flood");
+                flood.damage_a_step(u8::MAX);
+            },
+            // A concept of an input the pack doesn't have.
+            |state, _| the_sprite(state).brain.concepts[0] = vec![(999, false)],
+            // Something learned about an object type the pack doesn't have.
+            |state, data| {
+                let experience = &mut the_sprite(state).brain.experience;
+                let nothing = TypeMemory::new(data.needs().count());
+                experience.types.insert(Subject::ObjectType(9999), nothing);
+            },
+            // A motive for a need the pack doesn't have.
+            |state, _| {
+                let trace = &mut the_sprite(state).brain.trace;
+                trace.back_mut().expect("a trace entry").motive = Some(999);
+            },
+            // A sprite born, or a trace entry made, after the save.
+            |state, _| {
+                let tick = state.tick;
+                the_sprite(state).born = tick + 1;
+            },
+            |state, _| {
+                let tick = state.tick;
+                let trace = &mut the_sprite(state).brain.trace;
+                trace.back_mut().expect("a trace entry").tick = tick + 1;
+            },
+        ];
+        for (n, damage) in damage.into_iter().enumerate() {
+            let mut world = field_with_a_bush();
+            world.submit(Command::SpawnSprite {
+                tile: Pos { x: 1, y: 1 },
+                genome: None,
+            });
+            for _ in 0..10 {
+                world.step();
+            }
+            let sprite = the_sprite(&mut world.state);
+            sprite.brain.trace.push_back(TraceEntry {
+                tick: 10,
+                verb: None,
+                subject: None,
+                motive: Some(0),
+            });
+            assert!(World::load(&world.save()).is_ok(), "damage {n}");
+            damage(&mut world.state, &world.data);
+            match World::load(&world.save()) {
+                Err(LoadError::Damaged(_)) => {}
+                Err(err) => panic!("damage {n} refused for the wrong reason: {err}"),
+                Ok(_) => panic!("damage {n} loaded"),
+            }
+        }
+    }
+
+    /// The world's only sprite.
+    fn the_sprite(state: &mut WorldState) -> &mut Sprite {
+        let (id, _) = state.sprites.iter().next().expect("a sprite");
+        state.sprites.get_mut(id).expect("the sprite")
     }
 
     /// Puts an object of type `name` on `pos` without checking the placement rules.

@@ -36,6 +36,14 @@ const COLUMNS: [&[Group]; 3] = [
                 ("Ctrl+C", "quit at once"),
             ],
         ),
+        (
+            "FILES",
+            &[
+                ("F5 F9", "quicksave / load"),
+                ("Ctrl+S", "save as..."),
+                ("Ctrl+O", "load a save"),
+            ],
+        ),
     ],
     &[(
         "CURSOR",

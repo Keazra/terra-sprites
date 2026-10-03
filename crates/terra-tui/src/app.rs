@@ -17,8 +17,9 @@ use crate::cp437;
 use crate::input::{Action, Button};
 use crate::inspector;
 use crate::policy::{InfoPolicy, Omniscient, Panel, Subject};
+use crate::saves::{self, MAX_SAVE_NAME_CHARS, QUICKSAVE, SaveFile};
 use crate::sprite_list::{self, SortBy};
-use crate::text::{Names, ROOTED, Words, display_name};
+use crate::text::{Names, ROOTED, Words, display_name, group_thousands};
 use crate::theme::{Emote, Theme};
 
 /// Whether the game carries on after an action.
@@ -40,6 +41,14 @@ pub enum Screen {
     GenomeMenu,
     /// The player is typing a sprite's name (design §6.5).
     Naming,
+    /// The player is typing a name to save the world as (`Ctrl+S`, design
+    /// §6.7).
+    SaveNaming,
+    /// The list of saves to load is open (`Ctrl+O`, design §6.7).
+    LoadMenu,
+    /// "Load …? (y/n)" is waiting for an answer: the world has run since it
+    /// was last saved (design §6.7).
+    LoadPrompt,
     /// The help screen is open (design §6.1).
     Help,
     /// The sprite list is open (design §6.1).
@@ -455,14 +464,69 @@ pub struct App {
     /// The game's folder for its files (design §6.7), which the help
     /// screen shows, if there is one.
     data_folder: Option<PathBuf>,
+    /// Where saves go (design §6.7), if anywhere.
+    save_folder: Option<PathBuf>,
+    /// The saves the load menu lists, newest first.
+    save_files: Vec<SaveFile>,
+    /// While naming a save, the name so far.
+    save_naming: Option<Draft>,
+    /// The save waiting for the player to say yes to loading it.
+    to_load: Option<SaveFile>,
+    /// A world just loaded, and the save's name, for the frame loop to take
+    /// (`take_loaded`).
+    loaded: Option<(World, String)>,
+    /// When the world was last saved, or loaded: its tick then, and the
+    /// time then, in `running_for`. `None` for a world never saved.
+    saved: Option<(u64, Duration)>,
+    /// How long time has run, unpaused, since the world was last saved or
+    /// loaded, for the question before loading over it.
+    unsaved_run: Duration,
+    /// How long time has run, unpaused, since the last autosave (design
+    /// §6.7).
+    since_autosave: Duration,
 }
+
+/// How often the world saves itself while time runs (design §6.7).
+pub const AUTOSAVE_EVERY: Duration = Duration::from_secs(10 * 60);
 
 /// A sprite's name being typed (design §6.5).
 #[derive(Debug, Clone)]
 struct Naming {
     sprite: EntityId,
-    draft: String,
+    draft: Draft,
+}
+
+/// A name being typed on the status line, for a sprite or a save: what's
+/// there so far, and whether the player has typed it, rather than it being
+/// the one offered, which the first letter typed replaces.
+#[derive(Debug, Clone)]
+struct Draft {
+    text: String,
     typed: bool,
+}
+
+impl Draft {
+    /// `text`, offered.
+    fn offered(text: String) -> Draft {
+        Draft { text, typed: false }
+    }
+
+    /// Types `c`, replacing the name offered, up to `most` characters.
+    fn type_char(&mut self, c: char, most: usize) {
+        if !self.typed {
+            self.text.clear();
+            self.typed = true;
+        }
+        if self.text.chars().count() < most {
+            self.text.push(c);
+        }
+    }
+
+    /// Rubs out the last character.
+    fn erase(&mut self) {
+        self.text.pop();
+        self.typed = true;
+    }
 }
 
 /// A shove of the selected sprite, which its observed list tells of once
@@ -603,6 +667,14 @@ impl App {
             list_sort: SortBy::Number,
             list_choice: None,
             data_folder: None,
+            save_folder: None,
+            save_files: Vec::new(),
+            save_naming: None,
+            to_load: None,
+            loaded: None,
+            saved: None,
+            unsaved_run: Duration::ZERO,
+            since_autosave: Duration::ZERO,
         };
         app.centre_on(cursor);
         app
@@ -1175,6 +1247,10 @@ impl App {
     /// Moves the app's real-time clock on by `elapsed`, for what flashes.
     pub fn animate(&mut self, elapsed: Duration) {
         self.running_for += elapsed;
+        if !self.clock.is_paused() {
+            self.unsaved_run += elapsed;
+            self.since_autosave += elapsed;
+        }
         let now = self.running_for;
         self.emotes.retain(|_, &mut (_, at)| now - at < EMOTE_FOR);
         self.resting
@@ -1293,8 +1369,12 @@ impl App {
     /// Carries out an action on `world`, and says whether the game carries on.
     pub fn apply(&mut self, action: Action, world: &World) -> Flow {
         match self.screen {
-            Screen::PlaceMenu | Screen::GenomeMenu => return self.apply_in_menu(action, world),
+            Screen::PlaceMenu | Screen::GenomeMenu | Screen::LoadMenu => {
+                return self.apply_in_menu(action, world);
+            }
             Screen::Naming => return self.apply_naming(action, world),
+            Screen::SaveNaming => return self.apply_save_naming(action, world),
+            Screen::LoadPrompt => return self.apply_load_prompt(action),
             Screen::Help => return self.apply_in_help(action),
             Screen::SpriteList => return self.apply_in_list(action, world),
             Screen::Normal | Screen::QuitPrompt => {}
@@ -1380,6 +1460,10 @@ impl App {
             Action::Mode(mode) => self.mode = mode,
             Action::Rename => self.start_naming(world),
             Action::ExportGenome => self.export_genome(world),
+            Action::Quicksave => self.save_as(QUICKSAVE, world),
+            Action::Quickload => self.quickload(world),
+            Action::SaveAs => self.start_save_naming(world),
+            Action::OpenSaves => self.list_saves(),
             Action::SelectNext => self.select_along(world, Direction::Next),
             Action::SelectPrevious => self.select_along(world, Direction::Previous),
             Action::NextTab => self.open(self.tab.along(1)),
@@ -1871,6 +1955,18 @@ impl App {
                 .iter()
                 .map(|(name, _)| name.clone())
                 .collect(),
+            // A file put there by hand may have a name the screen can't
+            // show (design §7.2).
+            Screen::LoadMenu => self
+                .save_files
+                .iter()
+                .map(|file| {
+                    file.name
+                        .chars()
+                        .map(|c| if cp437::contains(c) { c } else { '?' })
+                        .collect()
+                })
+                .collect(),
             _ => Vec::new(),
         }
     }
@@ -1890,6 +1986,7 @@ impl App {
         match self.screen {
             Screen::PlaceMenu => Some(" Place "),
             Screen::GenomeMenu => Some(" Genome files "),
+            Screen::LoadMenu => Some(" Load "),
             _ => None,
         }
     }
@@ -1901,10 +1998,7 @@ impl App {
     pub fn menu_area(&self, world: &World) -> Option<Rect> {
         let title = self.menu_title()?;
         let items = self.menu_items(world);
-        let empty = match self.screen {
-            Screen::GenomeMenu => self.no_genome_files(),
-            _ => String::new(),
-        };
+        let empty = self.menu_empty();
         let widest = items
             .iter()
             .map(|item| item.chars().count() + 3)
@@ -1932,6 +2026,15 @@ impl App {
     pub fn menu_first(&self, world: &World) -> usize {
         let rows = self.menu_rows(world).max(1);
         self.menu_choice.saturating_sub(rows - 1)
+    }
+
+    /// What the open menu says with nothing to list.
+    pub fn menu_empty(&self) -> String {
+        match self.screen {
+            Screen::GenomeMenu => self.no_genome_files(),
+            Screen::LoadMenu => self.no_saves(),
+            _ => String::new(),
+        }
     }
 
     /// What the genome menu says with no files to list.
@@ -1992,6 +2095,10 @@ impl App {
         self.screen = Screen::Normal;
         let placeable: Vec<&str> = world.data().placeable().map(|(name, _)| name).collect();
         let item = match menu {
+            Screen::LoadMenu => {
+                let file = self.save_files[index].clone();
+                return self.ask_to_load(file, world);
+            }
             Screen::GenomeMenu => {
                 let (name, path) = &self.genome_files[index];
                 let read = std::fs::read_to_string(path)
@@ -2058,14 +2165,17 @@ impl App {
         self.report = None;
     }
 
-    /// Whether keys type letters, rather than act: while naming.
+    /// Whether keys type letters, rather than act: while naming a sprite or
+    /// a save.
     pub fn typing(&self) -> bool {
-        self.screen == Screen::Naming
+        matches!(self.screen, Screen::Naming | Screen::SaveNaming)
     }
 
     /// The name being typed, while naming (design §6.5).
     pub fn name_draft(&self) -> Option<&str> {
-        self.naming.as_ref().map(|naming| naming.draft.as_str())
+        self.naming
+            .as_ref()
+            .map(|naming| naming.draft.text.as_str())
     }
 
     /// The sprite being named, while naming.
@@ -2082,8 +2192,7 @@ impl App {
         let draft = self.random_name(sprite, world);
         self.naming = Some(Naming {
             sprite,
-            draft,
-            typed: false,
+            draft: Draft::offered(draft),
         });
         self.screen = Screen::Naming;
     }
@@ -2115,34 +2224,24 @@ impl App {
         match action {
             // Only letters CP437 can show, and spaces between them (design v28 §6.5).
             Action::Type(c) if (c.is_alphabetic() || c == ' ') && cp437::contains(c) => {
-                if !naming.typed {
-                    naming.draft.clear();
-                    naming.typed = true;
-                }
-                if naming.draft.chars().count() < MAX_NAME_CHARS {
-                    naming.draft.push(c);
-                }
+                naming.draft.type_char(c, MAX_NAME_CHARS);
             }
-            Action::Erase => {
-                naming.draft.pop();
-                naming.typed = true;
-            }
+            Action::Erase => naming.draft.erase(),
             Action::AnotherName => {
                 let sprite = naming.sprite;
                 let draft = self.random_name(sprite, world);
                 let naming = self.naming.as_mut().expect("naming");
-                naming.draft = draft;
-                naming.typed = false;
+                naming.draft = Draft::offered(draft);
             }
             Action::Enter => {
                 let naming = self.naming.take().expect("naming");
                 self.screen = Screen::Normal;
-                if naming.draft.trim_matches(' ').is_empty() {
+                if naming.draft.text.trim_matches(' ').is_empty() {
                     self.refuse("A name needs a letter in it".into());
                 } else {
                     self.commands.push(Command::Rename {
                         sprite: naming.sprite,
-                        name: naming.draft,
+                        name: naming.draft.text,
                     });
                 }
             }
@@ -2190,6 +2289,295 @@ impl App {
             }
             Err(err) => self.refuse(format!("Couldn't save the genome: {err}")),
         }
+    }
+
+    /// Sets where saves go (design §6.7).
+    pub fn set_save_folder(&mut self, folder: PathBuf) {
+        self.save_folder = Some(folder);
+    }
+
+    /// Where saves go, if anywhere.
+    pub fn save_folder(&self) -> Option<&Path> {
+        self.save_folder.as_deref()
+    }
+
+    /// Saves the world as `name` in the saves folder (design §6.7), and says
+    /// so, or why it couldn't.
+    fn save_as(&mut self, name: &str, world: &World) {
+        let Some(folder) = self.save_folder.clone() else {
+            return self.refuse("There's no folder to save in".into());
+        };
+        match saves::write(&folder, name, &self.save_of(world)) {
+            Ok(_) => {
+                self.saved_now(world);
+                self.tell_player(format!("Saved as {}", saves::name_for(name)));
+            }
+            Err(err) => self.refuse(format!("Couldn't save: {err}")),
+        }
+    }
+
+    /// `world`'s save, with the tile at the middle of the view, so a load
+    /// shows what the player saw (design §6.7).
+    fn save_of(&self, world: &World) -> Vec<u8> {
+        let area = self.tile_area;
+        let middle = Pos {
+            x: (self.viewport.x + area.width / 2).min(self.map_size.width - 1),
+            y: (self.viewport.y + area.height / 2).min(self.map_size.height - 1),
+        };
+        world.save_with_view(middle)
+    }
+
+    /// Notes that the world, as it stands, has just been saved or loaded.
+    fn saved_now(&mut self, world: &World) {
+        self.saved = Some((world.tick(), self.running_for));
+        self.unsaved_run = Duration::ZERO;
+    }
+
+    /// Whether the world has run since it was last saved or loaded, or, if
+    /// it never was, since it began: whether a load would lose anything.
+    fn has_run_since_save(&self, world: &World) -> bool {
+        world.tick() != self.saved.map_or(0, |(tick, _)| tick)
+    }
+
+    /// When the world was last saved or loaded, as real time since, or
+    /// `None` if it never has been: for the top bar (design §6.1).
+    pub fn saved_ago(&self) -> Option<Duration> {
+        self.saved.map(|(_, at)| self.running_for - at)
+    }
+
+    /// Autosaves if time has run, unpaused, for `AUTOSAVE_EVERY` since the
+    /// last autosave (design §6.7). The frame loop calls it every frame.
+    pub fn autosave_if_due(&mut self, world: &World) {
+        if self.since_autosave >= AUTOSAVE_EVERY {
+            self.autosave(world);
+        }
+    }
+
+    /// Saves the world as the newest autosave (design §6.7), as on quitting,
+    /// unless it hasn't run since it was last saved: then the autosaves
+    /// already hold it, or a save does, and an older autosave stays.
+    pub fn autosave(&mut self, world: &World) {
+        self.since_autosave = Duration::ZERO;
+        if !self.has_run_since_save(world) {
+            return;
+        }
+        let Some(folder) = self.save_folder.clone() else {
+            return;
+        };
+        match saves::autosave(&folder, &self.save_of(world)) {
+            Ok(_) => {
+                self.saved_now(world);
+                self.tell_player("Autosaved".into());
+            }
+            Err(err) => self.refuse(format!("Couldn't autosave: {err}")),
+        }
+    }
+
+    /// `Ctrl+S`: starts naming a save, offering the seed and the tick
+    /// (design §6.7).
+    fn start_save_naming(&mut self, world: &World) {
+        self.end_aim();
+        let offered = format!("seed {} tick {}", world.seed(), world.tick());
+        self.save_naming = Some(Draft::offered(offered));
+        self.screen = Screen::SaveNaming;
+    }
+
+    /// The save's name being typed, while naming one.
+    pub fn save_name_draft(&self) -> Option<&str> {
+        self.save_naming.as_ref().map(|draft| draft.text.as_str())
+    }
+
+    /// What an action does while naming a save: letters type, the first
+    /// replacing the name offered; `Backspace` rubs one out; `Enter` saves;
+    /// `Esc` gives up.
+    fn apply_save_naming(&mut self, action: Action, world: &World) -> Flow {
+        let Some(draft) = self.save_naming.as_mut() else {
+            self.screen = Screen::Normal;
+            return Flow::Continue;
+        };
+        match action {
+            // Only what the screen can show (design §7.2).
+            Action::Type(c) if !c.is_control() && cp437::contains(c) => {
+                draft.type_char(c, MAX_SAVE_NAME_CHARS);
+            }
+            Action::Erase => draft.erase(),
+            Action::Enter => {
+                let draft = self.save_naming.take().expect("naming a save").text;
+                self.screen = Screen::Normal;
+                if draft.trim().is_empty() {
+                    self.refuse("A save needs a name".into());
+                } else {
+                    self.save_as(&draft, world);
+                }
+            }
+            Action::Back => {
+                self.save_naming = None;
+                self.screen = Screen::Normal;
+            }
+            Action::Quit => return Flow::Quit,
+            Action::Point(cell) => self.point(cell),
+            _ => {}
+        }
+        Flow::Continue
+    }
+
+    /// `F9`: loads the quicksave, if there is one (design §6.7).
+    fn quickload(&mut self, world: &World) {
+        let Some(folder) = self.save_folder.clone() else {
+            return self.refuse("There's no folder to load from".into());
+        };
+        let path = saves::path_for(&folder, QUICKSAVE);
+        if !path.is_file() {
+            return self.refuse("There's no quicksave yet: F5 makes one".into());
+        }
+        let file = SaveFile {
+            name: QUICKSAVE.into(),
+            path,
+            modified: None,
+        };
+        self.ask_to_load(file, world);
+    }
+
+    /// `Ctrl+O`: opens the list of saves to load, newest first (design
+    /// §6.7).
+    fn list_saves(&mut self) {
+        self.end_aim();
+        self.save_files = self
+            .save_folder
+            .as_deref()
+            .map(saves::list)
+            .unwrap_or_default();
+        self.open_menu(Screen::LoadMenu);
+    }
+
+    /// What the load menu says with no saves to list.
+    pub fn no_saves(&self) -> String {
+        match &self.save_folder {
+            Some(folder) => format!("No saves in {}", folder.display()),
+            None => "No folder for saves".into(),
+        }
+    }
+
+    /// Loads `file`, first asking if the world has run since it was last
+    /// saved, as what has happened since would be lost (design §6.7).
+    fn ask_to_load(&mut self, file: SaveFile, world: &World) {
+        if !self.has_run_since_save(world) {
+            return self.load(file);
+        }
+        self.to_load = Some(file);
+        self.screen = Screen::LoadPrompt;
+    }
+
+    /// The question before loading, while it waits for an answer.
+    pub fn load_question(&self) -> Option<String> {
+        let file = self.to_load.as_ref()?;
+        let since = if self.saved.is_some() {
+            format!(
+                "The world has run {} since it was last saved",
+                spoken_duration(self.unsaved_run)
+            )
+        } else {
+            "This world has never been saved".into()
+        };
+        Some(format!("Load {}? {since} (y/n)", file.name))
+    }
+
+    /// What an action does while the question before loading waits: `y`
+    /// loads, as does `F9` when the question is the quicksave's; the mouse
+    /// carries on as usual; any other key cancels.
+    fn apply_load_prompt(&mut self, action: Action) -> Flow {
+        let quicksave = self
+            .to_load
+            .as_ref()
+            .is_some_and(|file| file.name == QUICKSAVE);
+        let yes = action == Action::Confirm || (action == Action::Quickload && quicksave);
+        match action {
+            _ if yes => {
+                self.screen = Screen::Normal;
+                if let Some(file) = self.to_load.take() {
+                    self.load(file);
+                }
+            }
+            Action::Quit => return Flow::Quit,
+            Action::Point(cell) => self.point(cell),
+            Action::Click { .. }
+            | Action::Follow { at: Some(_) }
+            | Action::Wheel { .. }
+            | Action::Release { .. } => {}
+            _ => {
+                self.to_load = None;
+                self.screen = Screen::Normal;
+            }
+        }
+        Flow::Continue
+    }
+
+    /// Reads `file` and loads the world in it, for the frame loop to take,
+    /// or says on the status line why it couldn't (design §2.9).
+    fn load(&mut self, file: SaveFile) {
+        let loaded = std::fs::read(&file.path)
+            .map_err(|err| err.to_string())
+            .and_then(|bytes| World::load(&bytes).map_err(|err| err.to_string()));
+        match loaded {
+            Ok(world) => self.loaded = Some((world, file.name)),
+            Err(why) => self.refuse(format!("Couldn't load {}: {why}", file.name)),
+        }
+    }
+
+    /// The world just loaded, if one was, for the frame loop to play from
+    /// now on. The app starts afresh on it, as for a new world, paused so
+    /// the player can see where they are (design §6.7). What's the
+    /// player's rather than the world's carries over: the speed, the theme,
+    /// the colours, the open tab and the folders.
+    pub fn take_loaded(&mut self) -> Option<World> {
+        let (world, name) = self.loaded.take()?;
+        let areas = Areas {
+            tiles: self.tile_area,
+            inspector: self.inspector,
+            event_log: self.event_log_area,
+            overlay: self.overlay,
+        };
+        let mut fresh = App::new(world.map(), self.theme.clone(), world.seed(), areas);
+        fresh.clock = std::mem::take(&mut self.clock);
+        fresh.clock.pause();
+        fresh.policy = std::mem::replace(&mut self.policy, Box::new(Omniscient));
+        fresh.colour_mode = self.colour_mode;
+        fresh.event_filter = self.event_filter;
+        fresh.list_sort = self.list_sort;
+        fresh.tab = self.tab;
+        fresh.running_for = self.running_for;
+        fresh.data_folder = self.data_folder.take();
+        fresh.genome_folder = self.genome_folder.take();
+        fresh.save_folder = self.save_folder.take();
+        // The Cursor as the world left it: where it was, what it has hold
+        // of, in Grab mode, which holds and leads, and whether sprites can
+        // see it.
+        let cursor = world.cursor();
+        if cursor.leads().is_some() || cursor.holds().is_some() {
+            fresh.mode = CursorMode::Grab;
+        }
+        if let Some(tile) = cursor.tile() {
+            fresh.cursor = tile;
+            fresh.pointed = tile;
+            fresh.told_tile = Some(tile);
+            fresh.centre_on(tile);
+        }
+        // The view as the player left it, if the save kept it.
+        if let Some(view) = world.view() {
+            fresh.centre_on(view);
+        }
+        if cursor.visible() {
+            fresh.visible_in.insert(fresh.mode);
+        }
+        fresh.told_visible = cursor.visible();
+        fresh.saved_now(&world);
+        fresh.tell_player(format!(
+            "Loaded {name}, at tick {}",
+            group_thousands(world.tick())
+        ));
+        *self = fresh;
+        self.settle_cursor(&world);
+        Some(world)
     }
 
     /// Switches the event log to the next filter (design §6.1).
@@ -2389,4 +2777,16 @@ enum Direction {
 fn clamp_origin(origin: i32, view: u16, len: u16) -> u16 {
     let furthest = (i32::from(len) - i32::from(view)).max(0);
     origin.clamp(0, furthest) as u16
+}
+
+/// A length of real time as the player reads it: "under a minute", "3m",
+/// "1h 5m".
+pub(crate) fn spoken_duration(time: Duration) -> String {
+    let minutes = time.as_secs() / 60;
+    match (minutes / 60, minutes % 60) {
+        (0, 0) => "under a minute".into(),
+        (0, m) => format!("{m}m"),
+        (h, 0) => format!("{h}h"),
+        (h, m) => format!("{h}h {m}m"),
+    }
 }

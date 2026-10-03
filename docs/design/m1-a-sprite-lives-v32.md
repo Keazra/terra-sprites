@@ -1,23 +1,30 @@
-# Terra Sprites — M1 "A Sprite Lives" design (v31)
+# Terra Sprites — M1 "A Sprite Lives" design (v32)
 
 - **Status:** Final
-- **Date:** 2026-10-02
-- **Supersedes:** [v30](archive/m1-a-sprite-lives-v30.md) (earlier: [v29](archive/m1-a-sprite-lives-v29.md), [v28](archive/m1-a-sprite-lives-v28.md), [v27](archive/m1-a-sprite-lives-v27.md), [v26](archive/m1-a-sprite-lives-v26.md), [v25](archive/m1-a-sprite-lives-v25.md), [v24](archive/m1-a-sprite-lives-v24.md), [v23](archive/m1-a-sprite-lives-v23.md), [v22](archive/m1-a-sprite-lives-v22.md), [v21](archive/m1-a-sprite-lives-v21.md), [v20](archive/m1-a-sprite-lives-v20.md), [v19](archive/m1-a-sprite-lives-v19.md), [v18](archive/m1-a-sprite-lives-v18.md), [v17](archive/m1-a-sprite-lives-v17.md), [v16](archive/m1-a-sprite-lives-v16.md), [v15](archive/m1-a-sprite-lives-v15.md), [v14](archive/m1-a-sprite-lives-v14.md), [v13](archive/m1-a-sprite-lives-v13.md), [v12](archive/m1-a-sprite-lives-v12.md), [v11](archive/m1-a-sprite-lives-v11.md), [v10](archive/m1-a-sprite-lives-v10.md), [v9](archive/m1-a-sprite-lives-v9.md), [v8](archive/m1-a-sprite-lives-v8.md), [v7](archive/m1-a-sprite-lives-v7.md), [v6](archive/m1-a-sprite-lives-v6.md), [v5](archive/m1-a-sprite-lives-v5.md), [v4](archive/m1-a-sprite-lives-v4.md), [v3](archive/m1-a-sprite-lives-v3.md), [v2](archive/m1-a-sprite-lives-v2.md), [v1](archive/m1-a-sprite-lives.md))
+- **Date:** 2026-10-03
+- **Supersedes:** [v31](archive/m1-a-sprite-lives-v31.md) (earlier: [v30](archive/m1-a-sprite-lives-v30.md), [v29](archive/m1-a-sprite-lives-v29.md), [v28](archive/m1-a-sprite-lives-v28.md), [v27](archive/m1-a-sprite-lives-v27.md), [v26](archive/m1-a-sprite-lives-v26.md), [v25](archive/m1-a-sprite-lives-v25.md), [v24](archive/m1-a-sprite-lives-v24.md), [v23](archive/m1-a-sprite-lives-v23.md), [v22](archive/m1-a-sprite-lives-v22.md), [v21](archive/m1-a-sprite-lives-v21.md), [v20](archive/m1-a-sprite-lives-v20.md), [v19](archive/m1-a-sprite-lives-v19.md), [v18](archive/m1-a-sprite-lives-v18.md), [v17](archive/m1-a-sprite-lives-v17.md), [v16](archive/m1-a-sprite-lives-v16.md), [v15](archive/m1-a-sprite-lives-v15.md), [v14](archive/m1-a-sprite-lives-v14.md), [v13](archive/m1-a-sprite-lives-v13.md), [v12](archive/m1-a-sprite-lives-v12.md), [v11](archive/m1-a-sprite-lives-v11.md), [v10](archive/m1-a-sprite-lives-v10.md), [v9](archive/m1-a-sprite-lives-v9.md), [v8](archive/m1-a-sprite-lives-v8.md), [v7](archive/m1-a-sprite-lives-v7.md), [v6](archive/m1-a-sprite-lives-v6.md), [v5](archive/m1-a-sprite-lives-v5.md), [v4](archive/m1-a-sprite-lives-v4.md), [v3](archive/m1-a-sprite-lives-v3.md), [v2](archive/m1-a-sprite-lives-v2.md), [v1](archive/m1-a-sprite-lives.md))
 - **Covers:** Milestone 1 in full detail, plus the architecture decisions that every later milestone depends on
 
 ---
 
-## Changes from v30
+## Changes from v31
 
-Slice 18 ([#19](https://github.com/Keazra/terra-sprites/issues/19)), its data-format half: the reference for every user-editable format. The README's controls and the replay workflow wait for the slices they document. No new terms.
+Slice 12 ([#13](https://github.com/Keazra/terra-sprites/issues/13)): save and load. New terms: save, quicksave, autosave, save format (`CONTEXT.md`).
 
 | # | Change | Source | Sections |
 |---|---|---|---|
-| 1 | **Themes leave A9's list for now.** Nothing loads a theme of the player's own: both are built in, and `--ascii` picks between them. Loading one, by a `--theme <file>` flag or a themes folder, is [#109](https://github.com/Keazra/terra-sprites/issues/109), which puts themes back on the list. | Owner decision ("Drop the --theme and add it later") | §7.4 |
-| 2 | **A9's list names every file the pack has:** `categories`, `tags` and `names` join it, as formats added since v1 (v19, v23, v28). | Follows from the slice | §7.4 |
-| 3 | **The reference lives in `docs/reference/`,** a page per format with a working example. Each example is marked in its page, and a test (`reference_docs.rs`) loads it in its format, so the reference can't drift from the code. The example of a format too long to show whole, such as `objects.ron`, is an entry added to the built-in file; the built-in files are working examples of the rest. | Follows from the slice (A9's "with a working example") | §2.1, §7.4 |
+| 1 | **What a save holds, exactly.** After the magic and a header that never changes shape (`schema_version`, `sim_version`, and a checksum of the rest, so a save damaged on disk is refused before it's read), the world: the seed the top bar shows, the preset a generated world was made from (none for a hand-made one), the data pack's files as text, the whole world state as the state hash already serialises it, and the tile at the middle of the screen when it was saved. Nothing in the sim reads the seed, the preset or that tile; they're kept for the screen and for replays. | Follows from the slice | §2.8 |
+| 2 | **The pack travels as its files.** A save embeds the text of each file of the pack, and loading reads them again, as for a new world, so a save never depends on the files on disk and its objects' indexes into the pack's lists stay right. A pack the loading build can't read refuses the save, saying so. | Follows from the slice (#13's carried-over note on object type indexes) | §2.8 |
+| 3 | **Loading checks the checksum, rebuilds what's derived, and checks the world fits its pack.** Which entity stands on each tile, each sprite's compiled genome, and the levels from before the tick (taken as the levels now, so each change on the Chem tab reads blank for one tick) are rebuilt; the brains are checked against their genomes, the floods against the map, and what's learned against the pack; then the invariants of §7.1 are checked. A save that fails them, or doesn't decode, is refused as damaged, never a crash. | Follows from the slice | §2.8, §2.9 |
+| 4 | **The migration chain, in place for schema 1.** The step from schema *N* reads frozen copies of schema *N*'s types, made when the next breaking change comes, and upgrades them to the live types. Schema 1's golden save is `tests/golden/save-v1.tspr`, written by an ignored test when a schema is released. | Follows from the slice | §2.8, §7.2 |
+| 5 | **Where saves go.** A `saves` folder in the game's folder: the quicksave is `quicksave`, the autosaves `autosave-1` (newest) to `autosave-3`, and a save by name is that name, with any character a file name can't hold on some system made a `-`, the dots and spaces Windows drops from a name's end left off, and a `-` after a name Windows keeps for a device (`con`, `lpt1`); each with `.tspr`, for the magic. The game says a save's name as it's stored, which is the name the load list shows. A save is written beside its file and then put in its place, so one cut short never breaks a good one. | Follows from the slice | §6.7 |
+| 6 | **Saving and loading by name.** `Ctrl+S` opens a prompt on the status line, `Save as: seed 7 tick 48210_   enter save  esc cancel`, offering the seed and tick; typing replaces it, up to 40 characters, and the same name saves over. `Ctrl+O` opens a menu of every save, newest first, the quicksave and autosaves included, picked as the Place menu's items are. | Recommended to the owner (silence accepts) | §6.5, §6.7 |
+| 7 | **Loading asks first if the world has run since it was last saved:** "Load quicksave? The world has run 4m since it was last saved (y/n)", or "This world has never been saved". `y` loads, as does `F9` again when it's the quicksave asked about; any other key keeps the world. A world that hasn't run since loads at once. | Recommended to the owner (silence accepts); `F9` as yes is the owner's (2026-10-03) | §6.7 |
+| 8 | **A loaded world starts paused,** so the player can see where they are. The screen starts afresh on it, as for a new world, with the view where the save left it, the Cursor where the save left it, in Grab mode if it holds or leads something, and seen if it was. What's the player's carries over: the speed, the theme, the colours, the open tab, the event log's filter, the sprite list's order. | Recommended to the owner (silence accepts); the view is the owner's (2026-10-03) | §2.8, §6.7 |
+| 9 | **The autosave clock runs only while time does,** so a paused game doesn't fill the autosaves with copies; quitting autosaves too, unless the world hasn't run since its last save. | Recommended to the owner (silence accepts) | §6.7 |
+| 10 | **The top bar's save status** reads `not saved`, `saved just now` (under a minute), `saved 3m ago` or `saved 1h 5m ago`, counting from the last save, autosave or load. The help screen lists the keys under FILES. | Follows from the slice | §6.1, §6.7 |
 
-**Earlier changes** are in the archived revisions, in [`archive/`](archive/). Each opens with its own table: v30's changes (from v29) head [v30](archive/m1-a-sprite-lives-v30.md), and so on back to v2. So "v16 change 16" is row 16 of the table at the top of [v16](archive/m1-a-sprite-lives-v16.md). The current revision carries only its own table, so the spec doesn't open with its whole history.
+**Earlier changes** are in the archived revisions, in [`archive/`](archive/). Each opens with its own table: v31's changes (from v30) head [v31](archive/m1-a-sprite-lives-v31.md), and so on back to v2. So "v16 change 16" is row 16 of the table at the top of [v16](archive/m1-a-sprite-lives-v16.md). The current revision carries only its own table, so the spec doesn't open with its whole history.
 
 ---
 
@@ -254,10 +261,11 @@ A replay file contains:
 
 **The save file:**
 - Encoded as MessagePack with named fields (`rmp-serde`).
-- **Header:** magic `TSPR`, `schema_version`, `sim_version`.
+- **Header:** magic `TSPR`, then `schema_version`, `sim_version` and the checksum (xxh3) of what follows. The header never changes shape, so any build can read any save's and say why it refuses it (v32).
 - **Contents:**
+  - the seed, which the top bar shows (v32)
   - the tick counter and the full **RNG state**
-  - the `WorldConfig` and the embedded data pack
+  - the `WorldConfig` a generated world was made from (none for a hand-made one), and the embedded data pack, as the text of each of its files: loading reads them as for a new world, so the objects' indexes into the pack's lists stay right (v32)
   - the entity ID counter and every entity
   - the Cursor: the item it holds or the sprite it leads, and the tile it was last told it's on (v23)
   - the commands submitted and waiting for the next tick (v21), such as clicks made while paused
@@ -267,12 +275,17 @@ A replay file contains:
     - the current action, including any Wander destination, bout progress and committed path (§3.7)
     - movement state (move points, blocked-tick counter, last step direction), and a slide's direction and tiles left (v25)
     - the cached perception flood and its refresh timer
+  - in all, the world state exactly as `state_hash` serialises it (v32)
+  - the tile at the middle of the screen when it was saved, so a load shows what the player saw (v32). It isn't world state, and a save without it, as schema 1's first saves are, loads as having none
+
+**Loading** (v32) checks the checksum, then rebuilds what's derived: which entity stands on each tile, each sprite's genome compiled for step 3, and the levels from before the tick, taken as the levels now. On the way it checks that the world fits its pack: the map's size adds up, each object's type is in the pack, and each sprite's genome and chemistry fit it. So does each brain: its concepts and instincts are the ones its genome gives, and whatever it has learned, attends to or remembers doing is about categories, object types and needs the pack has. And each cached flood (§3.6) fits the map, with the way back from every tile it reached leading to its origin. Then the invariants (§7.1) are checked. A save that fails any of these, or doesn't decode, is refused as damaged, never a crash; so is one whose pack the build can't read.
 
 **Schema evolution:**
 - **Additive changes**, meaning new fields with serde defaults, need no version bump.
 - **Breaking changes** bump `schema_version` and add a `migrate_vN_to_vN+1` that works on frozen copies of the old types. Loading runs the chain one step at a time.
+  - **Freezing** (v32): before the change, the types it touches are copied, as they are, into a module for the old schema, whose contents hold the copies; the step reads those and builds the live types. The live types then change freely. Schema 1 has no step yet.
 - A save **newer** than the build is refused.
-- Every released schema version keeps a **golden save file** in the test suite, and it must still load.
+- Every released schema version keeps a **golden save file** in the test suite, and it must still load. Schema 1's is `tests/golden/save-v1.tspr` (v32), written by an ignored test, `write_the_golden_save`, run by hand when a schema is released.
 
 **Data pack ownership:**
 - When a world is created, the data pack in use (embedded defaults or `--data` overrides) is **embedded in the world**.
@@ -1258,7 +1271,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
   ```
 
 **Panels:**
-- **Top bar:** tick, speed, seed, population, save status, and at the right end `? help` (v30). Object counts, food included, are the World tab's job.
+- **Top bar:** tick, speed, seed, population, save status, and at the right end `? help` (v30). The save status (v32) is `not saved`, `saved just now` (under a minute), `saved 3m ago` or `saved 1h 5m ago`, from the last save, autosave or load. Object counts, food included, are the World tab's job.
 - **Map view:**
   - Its viewport scrolls with `W` `A` `S` `D` or the arrow keys, or follows the selected sprite (`T`, "track", v21): Track keeps it in the middle of the map view, as far as the wall allows, and follows whichever sprite is selected. Scrolling by hand turns it off (v30).
   - A map smaller than the space gets a map view shrunk to fit it, at the top-left.
@@ -1382,7 +1395,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
     │ ☺ hunger  ☺ thirst  ☺ pain  ☺ tiredness  ☺ boredom  ☺ loneliness  ☺ crowdedness  ☺ none          │
     │ EMOTES   ! hurt  ‼ zapped  ? gave up  z resting  ♥ pleased                                       │
     │                                                                                                  │
-    │ FILES    C:\Users\Kurtis\AppData\Roaming\terra-sprites                                           │
+    │ FILES    C:\Users\Player\AppData\Roaming\terra-sprites                                           │
     └──────────────────────────────────────────────────────────────────────────────────────────────────┘
     ```
 
@@ -1582,6 +1595,8 @@ N ═ M
 | `r` | Name the selected sprite: a name you type, or one generated at random |
 | `l` | Open or close the sprite list |
 | `v` | Switch the detail view on or off: the exact action line (§6.1) |
+| `F5` / `F9` | Quicksave / quickload (§6.7, v32) |
+| `Ctrl+S` / `Ctrl+O` | Save by name / load a save from a list (§6.7, v32) |
 | `?` | Open or close help |
 | `Esc` | Close a menu or overlay; otherwise back to Select; from Select, ask to quit |
 | `Ctrl+C` | Quit at once |
@@ -1615,9 +1630,14 @@ N ═ M
 
 - **Data:** the default data pack is embedded in the binary. `--data <dir>` overrides it for **new** worlds (§2.8).
 - **Saving and loading:** `F5` quicksaves, `F9` quickloads, and `Ctrl+S` / `Ctrl+O` save or load by name.
-- **Autosave:** every 10 real-time minutes, keeping the last 3.
+  - **By name** (v32): `Ctrl+S` opens a prompt on the status line, `Save as: seed 7 tick 48210_   enter save  esc cancel`, offering the seed and the tick. Typing replaces the name offered, up to 40 characters, `Backspace` rubs out, `Enter` saves and `Esc` gives up; the same name saves over. `Ctrl+O` opens a menu, `Load`, of every save, newest first, the quicksave and autosaves included, picked as the Place menu's items are. `F9` with no quicksave says "There's no quicksave yet: F5 makes one".
+  - **Asking first** (v32): loading over a world that has run since it was last saved asks "Load quicksave? The world has run 4m since it was last saved (y/n)", or "This world has never been saved". `y` loads, as does `F9` again when it's the quicksave asked about; any other key keeps the world.
+  - **After a load** (v32) the game is paused. The screen starts afresh on the loaded world, as for a new one, with the view centred where it was when the world was saved, the Cursor where the save left it, in Grab mode if it holds or leads something, and seen if it was. The speed, the theme, the colours, the open tab, the event log's filter and the sprite list's order carry over.
+  - **Errors** go on the status line, as a refusal: "Couldn't save: …", "Couldn't load quicksave: a newer Terra Sprites (0.2.0) saved it, …".
+- **Autosave:** every 10 real-time minutes, keeping the last 3. Only time that runs, unpaused, counts (v32), and quitting autosaves too, unless the world hasn't run since its last save.
 - **Location:** saves, autosaves, exported genomes and `last_session.replay` go in the platform data folder: `%APPDATA%\terra-sprites` on Windows, `~/Library/Application Support/terra-sprites` on macOS, and elsewhere `$XDG_DATA_HOME/terra-sprites` or `~/.local/share/terra-sprites`. The help overlay shows the path.
   - **Genomes** (v28) are exported to, and the Place menu reads them from, its `genomes` folder.
+  - **Saves** (v32) go in its `saves` folder: `quicksave.tspr`, `autosave-1.tspr` (the newest) to `autosave-3.tspr`, and each save by name as its name, with any character a file name can't hold on some system made a `-`, the dots and spaces Windows drops from a name's end left off, and a `-` after a name Windows keeps for a device (`con`, `lpt1`). The game says a save's name as it's stored, which is the name the load list shows. A save is written beside its file and then put in its place, so one cut short never breaks a good one.
 - **Command-line flags:** `--seed <n>`, `--preset <file>`, `--data <dir>`, `--ascii`, `--replay <file>`.
 
 ### 6.8 UI architecture
