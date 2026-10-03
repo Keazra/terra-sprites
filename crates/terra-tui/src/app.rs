@@ -2307,13 +2307,24 @@ impl App {
         let Some(folder) = self.save_folder.clone() else {
             return self.refuse("There's no folder to save in".into());
         };
-        match saves::write(&folder, name, &world.save()) {
+        match saves::write(&folder, name, &self.save_of(world)) {
             Ok(_) => {
                 self.saved_now(world);
                 self.tell_player(format!("Saved as {}", saves::name_for(name)));
             }
             Err(err) => self.refuse(format!("Couldn't save: {err}")),
         }
+    }
+
+    /// `world`'s save, with the tile at the middle of the view, so a load
+    /// shows what the player saw (design §6.7).
+    fn save_of(&self, world: &World) -> Vec<u8> {
+        let area = self.tile_area;
+        let middle = Pos {
+            x: (self.viewport.x + area.width / 2).min(self.map_size.width - 1),
+            y: (self.viewport.y + area.height / 2).min(self.map_size.height - 1),
+        };
+        world.save_with_view(middle)
     }
 
     /// Notes that the world, as it stands, has just been saved or loaded.
@@ -2353,7 +2364,7 @@ impl App {
         let Some(folder) = self.save_folder.clone() else {
             return;
         };
-        match saves::autosave(&folder, &world.save()) {
+        match saves::autosave(&folder, &self.save_of(world)) {
             Ok(_) => {
                 self.saved_now(world);
                 self.tell_player("Autosaved".into());
@@ -2472,10 +2483,16 @@ impl App {
     }
 
     /// What an action does while the question before loading waits: `y`
-    /// loads; the mouse carries on as usual; any other key cancels.
+    /// loads, as does `F9` when the question is the quicksave's; the mouse
+    /// carries on as usual; any other key cancels.
     fn apply_load_prompt(&mut self, action: Action) -> Flow {
+        let quicksave = self
+            .to_load
+            .as_ref()
+            .is_some_and(|file| file.name == QUICKSAVE);
+        let yes = action == Action::Confirm || (action == Action::Quickload && quicksave);
         match action {
-            Action::Confirm => {
+            _ if yes => {
                 self.screen = Screen::Normal;
                 if let Some(file) = self.to_load.take() {
                     self.load(file);
@@ -2544,6 +2561,10 @@ impl App {
             fresh.pointed = tile;
             fresh.told_tile = Some(tile);
             fresh.centre_on(tile);
+        }
+        // The view as the player left it, if the save kept it.
+        if let Some(view) = world.view() {
+            fresh.centre_on(view);
         }
         if cursor.visible() {
             fresh.visible_in.insert(fresh.mode);
