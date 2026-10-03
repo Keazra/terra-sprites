@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::data::DataPack;
 use crate::map::{Dir, Map, Pos};
@@ -10,11 +10,11 @@ use crate::occupancy::Occupancy;
 
 /// An entity's ID. IDs come from a world counter that only goes up, and are
 /// never reused (design §2.3).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct EntityId(pub u64);
 
 /// One object in the world.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Object {
     /// Its type's index in the data pack.
     pub(crate) kind: usize,
@@ -35,7 +35,7 @@ pub(crate) struct Object {
 }
 
 /// A rolling item's way on (design §3.5.4).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Roll {
     /// The way it's rolling.
     pub(crate) dir: Dir,
@@ -45,7 +45,7 @@ pub(crate) struct Roll {
 
 /// Every object in the world, and the tile each stands on. A tile holds at most
 /// one object (design §3.4).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Objects {
     /// In ascending ID order, the order every per-object pass takes (design §2.3).
     by_id: BTreeMap<EntityId, Object>,
@@ -145,6 +145,23 @@ impl Objects {
     pub(crate) fn place(&mut self, id: EntityId, object: Object) {
         self.on_tile.put(object.pos, id);
         self.by_id.insert(id, object);
+    }
+
+    /// Rebuilds which object stands on each tile of `map`, after a load: every
+    /// object but a held one, which is off the map. Says what's wrong if
+    /// one is off the map or shares a tile.
+    pub(crate) fn rebuild(&mut self, map: &Map) -> Result<(), String> {
+        self.on_tile = Occupancy::new(map);
+        for (&id, object) in &self.by_id {
+            if object.held {
+                continue;
+            }
+            if !map.contains(object.pos) || self.on_tile.at(object.pos).is_some() {
+                return Err(format!("object {} has no tile of its own", id.0));
+            }
+            self.on_tile.put(object.pos, id);
+        }
+        Ok(())
     }
 
     /// Moves the object `id`, which must exist, onto the tile at `to`, which

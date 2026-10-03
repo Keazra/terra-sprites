@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::SeedableRng;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use xxhash_rust::xxh3::xxh3_64_with_seed;
 
 use crate::action::{self, ActionView, ScriptedAction};
@@ -25,6 +25,7 @@ use crate::perception::{Flood, Target, goal_tiles};
 use crate::regions::Regions;
 use crate::registry::{CategoryId, ChemicalKind};
 use crate::rolling;
+use crate::save::{self, LoadError};
 use crate::sliding;
 use crate::sprites::{Sprite, Sprites};
 use crate::variation::varied;
@@ -39,10 +40,16 @@ pub struct World {
     data: DataPack,
     /// The ID counter as `check_invariants` last saw it, to catch it going back.
     checked_next_id: Cell<u64>,
+    /// The seed the world was made from, which the top bar shows. The RNG's
+    /// state carries on from it, so nothing in the sim reads it.
+    seed: u64,
+    /// The preset a generated world was made from, kept in its saves (design
+    /// §2.8). A hand-made world has none. Nothing in the sim reads it.
+    config: Option<WorldConfig>,
 }
 
 /// Everything that determines how the world evolves. Hashed by `state_hash`.
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub(crate) struct WorldState {
     pub(crate) tick: u64,
     /// The world's only source of randomness (design §2.3).
@@ -64,6 +71,15 @@ pub(crate) struct WorldState {
 }
 
 impl WorldState {
+    /// Rebuilds what a save leaves out because it's derived from the rest
+    /// (design §2.8): which entity stands on each tile, each sprite's
+    /// compiled genome, and its levels before the tick, taken as its levels
+    /// now, so each change on the Chem tab reads blank for one tick.
+    fn rebuild(&mut self, data: &DataPack) -> Result<(), String> {
+        self.objects.rebuild(&self.map)?;
+        self.sprites.rebuild(&self.map, data)
+    }
+
     /// Gives `object` the next entity ID and puts it in the world. The caller
     /// has checked that it may go there.
     pub(crate) fn add_object(&mut self, object: Object) -> EntityId {
@@ -529,9 +545,10 @@ impl World {
     pub fn new(config: WorldConfig, data: DataPack, seed: u64) -> World {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let map = generate(&config, &data, &mut rng);
-        let mut world = World::with(map, data, rng);
+        let mut world = World::with(map, data, rng, seed);
         place_objects(&config, &world.data, &mut world.state);
         place_sprites(&config, &world.data, &mut world.state);
+        world.config = Some(config);
         world
     }
 
@@ -541,7 +558,12 @@ impl World {
         if regions != 1 {
             return Err(MapError::NotOneRegion { regions });
         }
-        Ok(World::with(map, data, ChaCha8Rng::seed_from_u64(seed)))
+        Ok(World::with(
+            map,
+            data,
+            ChaCha8Rng::seed_from_u64(seed),
+            seed,
+        ))
     }
 
     /// A world made by hand, for tests and lab scenarios. The objects get IDs
@@ -647,7 +669,7 @@ impl World {
         self.state.learning = false;
     }
 
-    fn with(map: Map, data: DataPack, rng: ChaCha8Rng) -> World {
+    fn with(map: Map, data: DataPack, rng: ChaCha8Rng, seed: u64) -> World {
         let objects = Objects::new(&map);
         let sprites = Sprites::new(&map);
         World {
@@ -665,7 +687,55 @@ impl World {
             },
             data,
             checked_next_id: Cell::new(1),
+            seed,
+            config: None,
         }
+    }
+
+    /// Saves the world (design §2.8): everything that determines how it
+    /// evolves, with the data pack and preset it was made with, so that
+    /// loading it carries on exactly as this world would.
+    pub fn save(&self) -> Vec<u8> {
+        save::write(&save::Contents {
+            seed: self.seed,
+            config: self.config.clone(),
+            pack: self.data.sources().to_vec(),
+            state: &self.state,
+        })
+    }
+
+    /// Loads a world saved by `save`, with the data pack the save embeds,
+    /// never the files on disk (design §2.8). A save from a newer build, or
+    /// one that's damaged, is refused.
+    pub fn load(bytes: &[u8]) -> Result<World, LoadError> {
+        let save::Loaded {
+            seed,
+            config,
+            pack,
+            mut state,
+        } = save::read(bytes)?;
+        let sources: Vec<(&str, &str)> = pack
+            .iter()
+            .map(|(path, text)| (path.as_str(), text.as_str()))
+            .collect();
+        let data = DataPack::from_sources(&sources).map_err(LoadError::Pack)?;
+        state.rebuild(&data).map_err(LoadError::Damaged)?;
+        let world = World {
+            checked_next_id: Cell::new(state.next_id),
+            state,
+            data,
+            seed,
+            config,
+        };
+        world
+            .check_invariants()
+            .map_err(|broken| LoadError::Damaged(broken.0))?;
+        Ok(world)
+    }
+
+    /// The seed the world was made from.
+    pub fn seed(&self) -> u64 {
+        self.seed
     }
 
     /// Advances the world by exactly one tick, running the canonical tick order

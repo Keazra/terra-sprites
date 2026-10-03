@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::action::chebyshev;
 use crate::brain::{Learned, VERBS};
@@ -16,7 +16,7 @@ use crate::world::WorldState;
 /// Instinct links (design §5.1, §5.4): a row per concept or input, a column
 /// per verb or category, each at the weight the genome gave it. They never
 /// change in a sprite's life; learning is worth and habits (§5.6).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Links {
     w: Vec<Vec<f32>>,
 }
@@ -65,7 +65,7 @@ impl Links {
 /// What a sprite learns about a thing as (design v19 §5.6): its object type,
 /// by its stable ID, or its category, for water or sprites in a pack with no
 /// object type for them.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub(crate) enum Subject {
     ObjectType(u16),
     Category(CategoryId),
@@ -94,7 +94,7 @@ impl Subject {
 /// What a sprite has learned about one object type (design v19 §5.6): its
 /// worth for each need and in general, how bad it is, its habits, how
 /// familiar it is, and whether it knows it.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct TypeMemory {
     /// Worth for each need, in the pack's needs order (0 to 1).
     pub(crate) worth: Vec<f32>,
@@ -129,7 +129,7 @@ impl TypeMemory {
 /// object type is worth for each need and in general, how bad it is, its
 /// habits and how familiar it is; the sprites it remembers; and the worth of
 /// new things.
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct Experience {
     /// What it has learned about each object type (design v19 §5.6). Object
     /// types are never forgotten.
@@ -210,7 +210,7 @@ impl Experience {
 /// What a sprite has learned about one other sprite (design v18 §5.6), or
 /// the Cursor (design v29 §5.6): its worth for each need and in general, how
 /// bad it is, and how frightening.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct SpriteMemory {
     /// Worth for each need, in the pack's needs order (0 to 1).
     pub(crate) worth: Vec<f32>,
@@ -255,7 +255,7 @@ fn within<'a>(
 
 /// What a sprite tried a verb on, and when (design §5.6): the thing a
 /// feeling is about, for `touch_window` ticks.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Touch {
     pub(crate) tick: u64,
     /// The verb it tried (design v21 §5.6), or none for a crash, a touch it
@@ -323,7 +323,7 @@ pub(crate) fn still_counts(trace_decay: f32, now: u64, then: u64) -> bool {
 
 /// One tick of a brain's trace (design §5.6): what it felt and chose at
 /// that tick's step 5.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct TraceEntry {
     pub(crate) tick: u64,
     /// The verb it chose or kept doing, if any.

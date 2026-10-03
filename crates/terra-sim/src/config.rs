@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use ron::extensions::Extensions;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::data::DataPack;
 use crate::map::MAX_SIDE;
@@ -20,7 +20,7 @@ const SPRITES: std::ops::RangeInclusive<u16> = 20..=100;
 ///
 /// A config is checked against the data pack it was parsed with, and must be
 /// used with that pack.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorldConfig {
     width: u16,
     height: u16,

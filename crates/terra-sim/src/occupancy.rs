@@ -6,7 +6,7 @@ use crate::objects::EntityId;
 
 /// The entity on each tile of a map, for one kind of entity. It's derived from
 /// where the store's entities stand, so stores don't hash it.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct Occupancy {
     /// By tile index, `y × width + x`.
     tiles: Vec<Option<EntityId>>,

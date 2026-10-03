@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, VecDeque};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::action::{Action, Did, ScriptedAction, Walk};
 use crate::biochem::{Body, Program};
@@ -16,7 +16,7 @@ use crate::perception::Flood;
 use crate::sliding::Slide;
 
 /// One sprite.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Sprite {
     pub(crate) pos: Pos,
     /// The tick it was born on.
@@ -82,7 +82,7 @@ impl Sprite {
 
 /// Every sprite in the world, and the tile each stands on. A tile holds at
 /// most one sprite (design §3.4).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Sprites {
     /// In ascending ID order, the order every per-sprite pass takes (design §2.3).
     by_id: BTreeMap<EntityId, Sprite>,
@@ -168,6 +168,23 @@ impl Sprites {
     pub(crate) fn place(&mut self, id: EntityId, sprite: Sprite) {
         self.on_tile.put(sprite.pos, id);
         self.by_id.insert(id, sprite);
+    }
+
+    /// Rebuilds what a save leaves out (design §2.8): which sprite stands on
+    /// each tile of `map`, each one's genome compiled for the chemistry
+    /// step, and its levels before the tick, taken as its levels now. Says
+    /// what's wrong if one is off the map or shares a tile.
+    pub(crate) fn rebuild(&mut self, map: &Map, data: &DataPack) -> Result<(), String> {
+        self.on_tile = Occupancy::new(map);
+        for (&id, sprite) in &mut self.by_id {
+            if !map.contains(sprite.pos) || self.on_tile.at(sprite.pos).is_some() {
+                return Err(format!("sprite {} has no tile of its own", id.0));
+            }
+            self.on_tile.put(sprite.pos, id);
+            sprite.program = Program::new(&sprite.genome, data);
+            sprite.body.chems_before_tick.clone_from(&sprite.body.chems);
+        }
+        Ok(())
     }
 
     /// Checks the sprites' invariants (design §7.1), or says which is broken:

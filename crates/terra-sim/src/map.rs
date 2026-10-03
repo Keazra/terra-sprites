@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::data::DataPack;
 use crate::terrain::Terrain;
@@ -11,7 +11,7 @@ pub struct Pos {
 }
 
 /// One of the eight step directions. North is up the screen.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Dir {
     N,
     NE,
@@ -147,12 +147,15 @@ const LEGEND: [(char, Terrain); 6] = [
 ];
 
 /// The world's fixed-size grid of tiles, with the terrain movement rules (design §3.1).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Map {
     width: u16,
     height: u16,
     /// Row-major: the tile at `(x, y)` is at `y × width + x`.
-    #[serde(serialize_with = "terrain_bytes")]
+    #[serde(
+        serialize_with = "terrain_bytes",
+        deserialize_with = "terrain_from_bytes"
+    )]
     tiles: Vec<Terrain>,
     /// Each terrain's step cost, indexed by `Terrain as usize`; `None` if unwalkable.
     step_costs: [Option<u16>; Terrain::ALL.len()],
@@ -315,4 +318,20 @@ fn step_costs(data: &DataPack) -> [Option<u16>; Terrain::ALL.len()] {
 fn terrain_bytes<S: Serializer>(tiles: &[Terrain], serializer: S) -> Result<S::Ok, S::Error> {
     let bytes: Vec<u8> = tiles.iter().map(|&terrain| terrain as u8).collect();
     serializer.serialize_bytes(&bytes)
+}
+
+/// Reads tiles back from `terrain_bytes`, as a save holds them (design
+/// §2.8), refusing a byte that names no terrain.
+fn terrain_from_bytes<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<Terrain>, D::Error> {
+    crate::save::read_bytes(deserializer)?
+        .into_iter()
+        .map(|byte| {
+            Terrain::ALL
+                .get(usize::from(byte))
+                .copied()
+                .ok_or_else(|| serde::de::Error::custom(format!("{byte} names no terrain")))
+        })
+        .collect()
 }
