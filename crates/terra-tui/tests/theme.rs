@@ -298,7 +298,7 @@ fn ascii_with(from: &str, to: &str) -> String {
 
 #[test]
 fn a_theme_file_loads_and_draws_as_written() {
-    // Design v33 §6.2: `--theme <file>` loads a theme the player has edited.
+    // Design v33 §6.7: `--theme <file>` loads a theme the player has edited.
     let pack = pack();
     let theme = Theme::from_ron(ASCII_THEME, &pack).expect("the ascii theme loads");
     assert_eq!(theme.glyph(SemanticTile::Sprite).symbol, '@');

@@ -57,7 +57,10 @@ A save that can't be loaded is refused, with the reason on the status line, and 
 | "Couldn't load *name*: it isn't a Terra Sprites save" | The file doesn't start the way every save does. |
 | "Couldn't load *name*: a newer Terra Sprites (0.2.0) saved it, in save format 2; this one reads formats up to 1" | A later version of the game wrote it. Load it in that version or newer. |
 | "Couldn't load *name*: it's damaged: …" | The file has changed since it was written, or doesn't fit its own world. Every save carries a checksum of its contents, so a file damaged on disk, or edited by hand, is caught before it's read. Try an autosave. |
-| "Couldn't load *name*: its data pack's *file* doesn't load: …" | The pack inside the save uses something this version of the game can't read. |
+| "Couldn't load *name*: its data pack has no *file*" or "…its data pack's *file* doesn't load: …" | The pack inside the save uses something this version of the game can't read. |
+| "Couldn't load *name*: …" with any other reason | The file couldn't be read at all, such as one deleted or locked by another program; the reason is the system's own words. |
+
+Saving can fail too, as "Couldn't save: …" or "Couldn't autosave: …", most often from a full disk or a folder the game can't write to. The world on screen carries on either way, and the last good save is left as it was.
 
 **Old saves keep loading.** A save made by an earlier version of the game loads in a later one: when the save format changes, the new version upgrades older saves as it reads them (design §2.8). The format's number only goes up when it has to.
 
