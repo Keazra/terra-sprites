@@ -1,6 +1,6 @@
 //! Themes map semantic tiles to glyphs and colours (design §6.2). They are UI
 //! assets and never affect the simulation. Two are embedded in the binary,
-//! and `--theme <file>` loads one the player has edited (design v33 §6.7).
+//! and `--theme <file>` loads one the player has edited (design v34 §6.7).
 
 use std::collections::BTreeMap;
 
@@ -237,7 +237,7 @@ impl Theme {
     }
 
     /// A theme from the text of a theme file, as `--theme <file>` loads it
-    /// (design v33 §6.7), checked against the data pack it will draw.
+    /// (design v34 §6.7), checked against the data pack it will draw.
     ///
     /// It must draw every semantic tile and mode mark, with glyphs CP437
     /// has (design §6.2). It may leave out object types and drives, which

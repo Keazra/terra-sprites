@@ -12,7 +12,7 @@ pub struct Args {
     /// `--ascii`: use the ascii theme.
     pub ascii: bool,
     /// `--theme <file>`: a theme to use instead of the built-in ones (design
-    /// v33 §6.7).
+    /// v34 §6.7).
     pub theme: Option<PathBuf>,
     /// Hidden developer flag: panic after the first frame, to check the terminal is restored.
     pub force_panic: bool,

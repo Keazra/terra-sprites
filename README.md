@@ -59,7 +59,7 @@ The same key in capitals or lower case does the same thing.
 | `PgUp` / `PgDn`, or the mouse wheel over the inspector | Scroll a long tab |
 | `F5` / `F9` | Quicksave / quickload. Loading over a world that has run since it was last saved asks first (`y` to load), and a loaded world starts paused |
 | `Ctrl+S` / `Ctrl+O` | Save under a name you type / pick a save to load, newest first. The world also saves itself every 10 minutes of running time and when you quit, keeping the last 3 autosaves. See [saves](docs/reference/saves.md) |
-| `Esc` | Close a menu or overlay, or cancel an aim; otherwise back to Select mode; from Select, "Quit? (y/n)": press `y` or `Esc` again |
+| `Esc` | Each press does the first that applies: close a menu or overlay, cancel an aim, let go of what the Cursor holds or leads (a held item is put down where the Cursor is), go back to Select, and from Select ask "Quit? (y/n)". Only `y` quits; `Esc` again keeps playing |
 | `Ctrl+C` | Quit at once |
 
 | Flag | Effect |
@@ -90,7 +90,7 @@ The ground, the plants and toys, a sprite's body and its instincts, the size of 
 
 ## Design
 
-- [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v33.md) (v33, the current revision). Earlier revisions and the external evaluations that shaped them are in [`docs/design/archive/`](docs/design/archive/).
+- [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v34.md) (v34, the current revision). Earlier revisions and the external evaluations that shaped them are in [`docs/design/archive/`](docs/design/archive/).
 
 ## Roadmap
 
