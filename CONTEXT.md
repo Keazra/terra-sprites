@@ -502,7 +502,7 @@ _Avoid_: icon, bubble, flash
 What the map view draws for a tile, named by meaning (such as grass terrain) rather than by character.
 
 **Theme**:
-A mapping from semantic tiles to glyphs and colours. Two are built in; `--theme <file>` loads one the player has edited.
+A mapping from semantic tiles to glyphs and colours. Two are built in; the player's own go in the themes folder and are picked with `Ctrl+T`.
 _Avoid_: skin
 
 ### The Cursor

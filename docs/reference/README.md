@@ -26,7 +26,7 @@ The game also writes files of its own, which aren't for editing: [saves](saves.m
 ## How the game uses them
 
 - **The data pack** is everything in `data/` except the presets: the first eleven rows above. It's built into the game, so a change to `data/` takes effect the next time the game is built (`cargo run --release`). A file that's wrong stops the game at start with a message naming the file and the problem. A world keeps the pack it was made with, so editing the pack never changes a world already saved (design §2.8).
-- **Presets** load at start with `--preset <file>`, and **themes** with `--theme <file>`, without rebuilding.
+- **Presets** load at start with `--preset <file>`, without rebuilding. **Themes** go in the `themes` folder of the game's folder and are picked in the game with `Ctrl+T`, or given at start with `--theme <file>`.
 - **Genome files** are what `g` exports and what the Place menu reads back, in the `genomes` folder of the game's folder (the help screen, `?`, shows where).
 - **Lab scenarios** run headless with `cargo run --release -p terra-sim --example lab -- scenarios/<name>.ron --seeds 10`.
 

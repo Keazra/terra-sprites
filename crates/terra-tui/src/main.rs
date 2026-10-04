@@ -158,6 +158,9 @@ fn run(
     if let Some(folder) = files::save_folder() {
         app.set_save_folder(folder);
     }
+    if let Some(folder) = files::theme_folder() {
+        app.set_theme_folder(folder);
+    }
     let mut last_frame = Instant::now();
 
     loop {

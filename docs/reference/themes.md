@@ -1,19 +1,29 @@
 # Themes
 
-A **theme** says how the map is drawn: the character and colour of each kind of ground, each plant and toy, sprites, their emotes, and the Cursor (design §6.2). The game has two built in, `themes/cp437.ron` (the default) and `themes/ascii.ron` (`--ascii`). To draw it your own way, copy one, edit it, and start the game with it:
+A **theme** says how the map is drawn: the character and colour of each kind of ground, each plant and toy, sprites, their emotes, and the Cursor (design §6.2). The game has two built in, `themes/cp437.ron` (the default) and `themes/ascii.ron` (`--ascii`). To draw it your own way, copy one, edit it, and put it in the `themes` folder of the game's folder (design §6.7). The help screen (`?`) shows where the game's folder is:
+
+| System | The themes folder |
+|---|---|
+| Windows | `%APPDATA%\terra-sprites\themes` |
+| macOS | `~/Library/Application Support/terra-sprites/themes` |
+| Linux and others | `$XDG_DATA_HOME/terra-sprites/themes`, or `~/.local/share/terra-sprites/themes` |
+
+Then press `Ctrl+T` in the game. The **Themes** menu lists the two built-in themes, then each `.ron` file in the folder by name; pick one with its number, the arrows and `Enter`, or a click, and the map is drawn with it at once. The status line says "Theme: my-theme". No rebuilding is needed, and you can edit the file and pick it again to see the change.
+
+The game doesn't remember the theme you picked once it's closed. To start in one, give its file when you start the game:
 
 ```bash
 cargo run --release -- --theme my-theme.ron --seed 7
 ```
 
-No rebuilding is needed. `--theme` and `--ascii` can't be used together, since both pick a theme. A theme only changes how things look: it isn't part of the world, so it never changes what happens, and a save or replay plays out the same in any theme. Frames, panels and text are the same in every theme.
+`--theme` and `--ascii` can't be used together, since both pick a theme. A theme only changes how things look: it isn't part of the world, so it never changes what happens, and a save or replay plays out the same in any theme. Frames, panels and text are the same in every theme.
 
 ## The rules
 
-- **Every character must be in CP437,** the character set of the old PC screen, so any CP437 font or tileset can draw the game (design §6.2). That includes `☺ ♣ ♠ • ○ ≈ ▲ ║ ░` and plain ASCII; it doesn't include, say, `λ`, `€` or emoji. A character outside it stops the game at start, naming the character and what it was for.
+- **Every character must be in CP437,** the character set of the old PC screen, so any CP437 font or tileset can draw the game (design §6.2). That includes `☺ ♣ ♠ • ○ ≈ ▲ ║ ░` and plain ASCII; it doesn't include, say, `λ`, `€` or emoji. A character outside it is refused, naming the character and what it was for.
 - **Colours** are the 16 terminal colours, by name: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`, `dark_gray`, `light_red`, `light_green`, `light_yellow`, `light_blue`, `light_magenta`, `light_cyan`, `white`. How each looks is up to the terminal's own palette. Terminals have no brown, so the built-in themes draw dirt in `yellow`.
 - **Give each kind of thing its own character,** and use colour for its state, as the built-in themes do: then a player who can't tell colours apart can still tell a bush from a thornbush. The game doesn't enforce this.
-- A theme that's wrong stops the game at start with a message saying what's wrong, such as `can't use theme my-theme.ron: it has no glyph for terrain(rock)`.
+- **A theme that's wrong is refused,** with a message saying what's wrong. Picked from the menu, the status line says so, such as "Couldn't use theme my-theme: it has no glyph for terrain(rock)", and the map keeps the theme it had. Given with `--theme`, the game doesn't start, and says the same.
 
 ## Fields
 
@@ -44,7 +54,7 @@ A **glyph** is `(glyph: '♣', fg: green)`, with two optional flags: `bold: true
 Each object type's visual states come from its `visual` rules in `objects.ron`, plus `"default"`, the state of an object none of its rules match. In the built-in pack, `berry_bush` has `"seedling"`, `"fruiting"` and `"default"` (bare); the others have only `"default"`.
 
 - A state left out draws the object's `"default"` look, and an object type left out, or with no `"default"`, draws as a white `?`. So a new object type from a data pack still shows in every theme.
-- A name the data pack doesn't have, of an object type, a visual state or a drive, stops the game at start, naming it. That catches a misspelling, which would otherwise draw as `?` without saying why.
+- A name the world's data pack doesn't have, of an object type, a visual state or a drive, is refused, naming it. That catches a misspelling, which would otherwise draw as `?` without saying why.
 
 ### `cursor`
 
@@ -118,4 +128,4 @@ A bright theme, for a terminal whose dark colours are hard to see: light colours
 )
 ```
 
-Save it as `bright.ron` and run `cargo run --release -- --theme bright.ron --seed 7`. Boredom and crowdedness are left out of `drives`, so a sprite bored or crowded above all else draws in white.
+Save it as `bright.ron` in the themes folder and pick it with `Ctrl+T`. Boredom and crowdedness are left out of `drives`, so a sprite bored or crowded above all else draws in white.

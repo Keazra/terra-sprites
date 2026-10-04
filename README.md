@@ -59,6 +59,7 @@ The same key in capitals or lower case does the same thing.
 | `PgUp` / `PgDn`, or the mouse wheel over the inspector | Scroll a long tab |
 | `F5` / `F9` | Quicksave / quickload. Loading over a world that has run since it was last saved asks first (`y` to load), and a loaded world starts paused |
 | `Ctrl+S` / `Ctrl+O` | Save under a name you type / pick a save to load, newest first. The world also saves itself every 10 minutes of running time and when you quit, keeping the last 3 autosaves. See [saves](docs/reference/saves.md) |
+| `Ctrl+T` | Pick a theme: how the map is drawn. It lists the two built-in themes, then your own from the `themes` folder of the game's folder; see [themes](docs/reference/themes.md) |
 | `Esc` | Each press does the first that applies: close a menu or overlay, cancel an aim, let go of what the Cursor holds or leads (a held item is put down where the Cursor is), go back to Select, and from Select ask "Quit? (y/n)". Only `y` quits; `Esc` again keeps playing |
 | `Ctrl+C` | Quit at once |
 
@@ -67,7 +68,7 @@ The same key in capitals or lower case does the same thing.
 | `--seed <n>` | Make the world from seed `n` (the top bar shows the seed of every world) |
 | `--preset <file>` | Use a world config from a RON file, such as a copy of [`data/presets/default.ron`](data/presets/default.ron) |
 | `--ascii` | Draw the map in plain ASCII instead of CP437 |
-| `--theme <file>` | Draw the map with a theme of your own, such as an edited copy of [`themes/cp437.ron`](themes/cp437.ron); see [themes](docs/reference/themes.md) |
+| `--theme <file>` | Start with a theme of your own, such as an edited copy of [`themes/cp437.ron`](themes/cp437.ron), rather than picking it with `Ctrl+T` each time |
 
 To run the checks CI runs: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`.
 

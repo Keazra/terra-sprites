@@ -49,6 +49,8 @@ pub enum Screen {
     /// "Load …? (y/n)" is waiting for an answer: the world has run since it
     /// was last saved (design §6.7).
     LoadPrompt,
+    /// The list of themes is open (`Ctrl+T`, design v34 §6.7).
+    ThemeMenu,
     /// The help screen is open (design §6.1).
     Help,
     /// The sprite list is open (design §6.1).
@@ -157,6 +159,41 @@ struct Placing {
 /// The Place menu's own items, after the object types the data offers.
 const NEW_SPRITE: &str = "new sprite";
 const FROM_A_FILE: &str = "sprite from a genome file";
+
+/// A built-in theme: its name, and how to make it.
+type BuiltInTheme = (&'static str, fn() -> Theme);
+
+/// The themes built into the game, first on the themes menu (design v34
+/// §6.7).
+const BUILT_IN_THEMES: [BuiltInTheme; 2] = [("cp437", Theme::cp437), ("ascii", Theme::ascii)];
+
+/// A file's name as the screen can show it: a file put in a folder by hand
+/// may have a name with characters outside CP437 (design §7.2).
+fn shown(name: &str) -> String {
+    name.chars()
+        .map(|c| if cp437::contains(c) { c } else { '?' })
+        .collect()
+}
+
+/// The `.ron` files in `folder`, by name, with their paths, in order. None
+/// if there's no folder, or it can't be read.
+fn ron_files(folder: Option<&Path>) -> Vec<(String, PathBuf)> {
+    let mut files: Vec<(String, PathBuf)> = folder
+        .and_then(|folder| std::fs::read_dir(folder).ok())
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let path = entry.path();
+            let is_file = entry.file_type().is_ok_and(|kind| kind.is_file());
+            let is_ron = path.extension().is_some_and(|ext| ext == "ron");
+            let name = path.file_stem()?.to_string_lossy().into_owned();
+            (is_file && is_ron).then_some((name, path))
+        })
+        .collect();
+    files.sort();
+    files
+}
 
 /// What a click on the map does (design v21 §6.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
@@ -435,6 +472,12 @@ pub struct App {
     genome_folder: Option<PathBuf>,
     /// The genome files the genome menu lists, by name, with their paths.
     genome_files: Vec<(String, PathBuf)>,
+    /// The folder the player's own themes are read from, if there is one
+    /// (design v34 §6.7).
+    theme_folder: Option<PathBuf>,
+    /// The theme files the themes menu lists after the built-in themes, by
+    /// name, with their paths.
+    theme_files: Vec<(String, PathBuf)>,
     /// While naming: the sprite, the name so far, and whether the player
     /// has typed it, rather than it being an offered random one.
     naming: Option<Naming>,
@@ -655,6 +698,8 @@ impl App {
             menu_choice: 0,
             genome_folder: None,
             genome_files: Vec::new(),
+            theme_folder: None,
+            theme_files: Vec::new(),
             naming: None,
             names_offered: 0,
             notice: None,
@@ -1369,7 +1414,7 @@ impl App {
     /// Carries out an action on `world`, and says whether the game carries on.
     pub fn apply(&mut self, action: Action, world: &World) -> Flow {
         match self.screen {
-            Screen::PlaceMenu | Screen::GenomeMenu | Screen::LoadMenu => {
+            Screen::PlaceMenu | Screen::GenomeMenu | Screen::LoadMenu | Screen::ThemeMenu => {
                 return self.apply_in_menu(action, world);
             }
             Screen::Naming => return self.apply_naming(action, world),
@@ -1470,6 +1515,7 @@ impl App {
             Action::Quickload => self.quickload(world),
             Action::SaveAs => self.start_save_naming(world),
             Action::OpenSaves => self.list_saves(),
+            Action::OpenThemes => self.list_themes(),
             Action::SelectNext => self.select_along(world, Direction::Next),
             Action::SelectPrevious => self.select_along(world, Direction::Previous),
             Action::NextTab => self.open(self.tab.along(1)),
@@ -1950,6 +1996,12 @@ impl App {
         self.genome_folder = Some(folder);
     }
 
+    /// Sets the folder the player's own themes are read from (design v34
+    /// §6.7).
+    pub fn set_theme_folder(&mut self, folder: PathBuf) {
+        self.theme_folder = Some(folder);
+    }
+
     /// What the Place menu item waiting on the Cursor is called, if one is
     /// (design v28 §6.5).
     pub fn placing(&self) -> Option<&str> {
@@ -1976,17 +2028,15 @@ impl App {
                 .iter()
                 .map(|(name, _)| name.clone())
                 .collect(),
-            // A file put there by hand may have a name the screen can't
-            // show (design §7.2).
+            Screen::ThemeMenu => BUILT_IN_THEMES
+                .iter()
+                .map(|(name, _)| format!("{name} (built in)"))
+                .chain(self.theme_files.iter().map(|(name, _)| shown(name)))
+                .collect(),
             Screen::LoadMenu => self
                 .save_files
                 .iter()
-                .map(|file| {
-                    file.name
-                        .chars()
-                        .map(|c| if cp437::contains(c) { c } else { '?' })
-                        .collect()
-                })
+                .map(|file| shown(&file.name))
                 .collect(),
             _ => Vec::new(),
         }
@@ -2008,6 +2058,7 @@ impl App {
             Screen::PlaceMenu => Some(" Place "),
             Screen::GenomeMenu => Some(" Genome files "),
             Screen::LoadMenu => Some(" Load "),
+            Screen::ThemeMenu => Some(" Themes "),
             _ => None,
         }
     }
@@ -2120,6 +2171,7 @@ impl App {
                 let file = self.save_files[index].clone();
                 return self.ask_to_load(file, world);
             }
+            Screen::ThemeMenu => return self.use_theme(index, world),
             Screen::GenomeMenu => {
                 let (name, path) = &self.genome_files[index];
                 let read = std::fs::read_to_string(path)
@@ -2148,24 +2200,40 @@ impl App {
     /// Opens the genome menu, listing the `.ron` files in the genome folder
     /// by name, in order.
     fn list_genome_files(&mut self) {
-        let mut files: Vec<(String, PathBuf)> = self
-            .genome_folder
-            .as_ref()
-            .and_then(|folder| std::fs::read_dir(folder).ok())
-            .into_iter()
-            .flatten()
-            .filter_map(|entry| {
-                let entry = entry.ok()?;
-                let path = entry.path();
-                let is_file = entry.file_type().is_ok_and(|kind| kind.is_file());
-                let is_ron = path.extension().is_some_and(|ext| ext == "ron");
-                let name = path.file_stem()?.to_string_lossy().into_owned();
-                (is_file && is_ron).then_some((name, path))
-            })
-            .collect();
-        files.sort();
-        self.genome_files = files;
+        self.genome_files = ron_files(self.genome_folder.as_deref());
         self.open_menu(Screen::GenomeMenu);
+    }
+
+    /// `Ctrl+T`: opens the themes menu, listing the built-in themes, then
+    /// the `.ron` files in the themes folder by name, in order (design v34
+    /// §6.7).
+    fn list_themes(&mut self) {
+        self.end_aim();
+        self.theme_files = ron_files(self.theme_folder.as_deref());
+        self.open_menu(Screen::ThemeMenu);
+    }
+
+    /// Draws the map with the themes menu's item `index` from now on: a
+    /// built-in theme, or a file read and checked against the world's pack.
+    /// A file that doesn't load is refused, and the theme in use stays.
+    fn use_theme(&mut self, index: usize, world: &World) {
+        let (name, theme) = match BUILT_IN_THEMES.get(index) {
+            Some(&(name, theme)) => (name.to_string(), theme()),
+            None => {
+                let (name, path) = &self.theme_files[index - BUILT_IN_THEMES.len()];
+                let read = std::fs::read_to_string(path)
+                    .map_err(|err| err.to_string())
+                    .and_then(|text| Theme::from_ron(&text, world.data()));
+                match read {
+                    Ok(theme) => (shown(name), theme),
+                    Err(why) => {
+                        return self.refuse(format!("Couldn't use theme {}: {why}", shown(name)));
+                    }
+                }
+            }
+        };
+        self.theme = theme;
+        self.tell_player(format!("Theme: {name}"));
     }
 
     /// Places the item waiting on the Cursor on `tile` (design v28 §6.5).
