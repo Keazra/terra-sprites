@@ -357,3 +357,21 @@ fn a_damaged_replay_is_refused_without_a_crash() {
         );
     }
 }
+
+#[test]
+fn a_replay_with_commands_after_its_end_is_refused() {
+    let mut world = recorded_world(3);
+    play(&mut world, 100);
+    let mut bytes = world.replay().unwrap();
+    // The end is the body's last field: 100, a one-byte number, made 30,
+    // before the commands recorded at ticks 40 to 95.
+    let at = after(&bytes, body_start(&bytes), b"\xa3end");
+    assert_eq!(at + 1, bytes.len(), "the end is the last byte");
+    assert_eq!(bytes[at], 100);
+    bytes[at] = 30;
+    fix_checksum(&mut bytes);
+    assert!(
+        matches!(Playback::new(&bytes), Err(ReplayError::Damaged(_))),
+        "a command after the end played"
+    );
+}

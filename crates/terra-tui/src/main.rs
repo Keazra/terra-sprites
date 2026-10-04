@@ -122,10 +122,10 @@ fn main() -> ExitCode {
         });
     undo_setup();
     ratatui::restore();
-    // A session the terminal failed under still writes its replay; quitting
-    // has written it already.
-    if result.is_err()
-        && let Some(path) = &session_log
+    // Quitting writes the session log, as does a session the terminal
+    // failed under (design §2.7), and a write that fails says so here, as
+    // there's no screen left to say it on.
+    if let Some(path) = &session_log
         && let Err(err) = session.write_session_log(path)
     {
         eprintln!(
@@ -246,8 +246,8 @@ fn run(terminal: &mut DefaultTerminal, session: &mut Session, setup: Setup) -> i
     if let (Some(name), Some(playback)) = (replay, session.playback()) {
         app.start_replay(name, playback);
     }
-    // The session log is written at each autosave and on quitting (design
-    // §2.7), and a write that fails says so.
+    // The session log is written at each autosave (design §2.7), and a
+    // write that fails says so on the status line.
     let write_session_log = |app: &mut App, session: &Session| {
         if let Some(session_log) = session_log
             && let Err(err) = session.write_session_log(session_log)
@@ -279,9 +279,9 @@ fn run(terminal: &mut DefaultTerminal, session: &mut Session, setup: Setup) -> i
                 && app.apply(action, session.world()) == Flow::Quit
             {
                 // Quitting saves, so a closed session is never lost (design
-                // §6.7), and writes the session log.
+                // §6.7). `main` then writes the session log, once the
+                // terminal is restored, so a failure can be told.
                 app.autosave(session.world());
-                write_session_log(&mut app, session);
                 return Ok(());
             }
             // A save the player loaded replaces the world from here on, and
