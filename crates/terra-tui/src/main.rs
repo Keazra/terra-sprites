@@ -62,7 +62,7 @@ fn main() -> ExitCode {
     let seed = args.seed.unwrap_or_else(time_seed);
     let world = World::new(config, data, seed);
     // A theme names object types and drives, so it's checked against the
-    // pack too (design v33 §6.7).
+    // pack too (design v34 §6.7).
     let theme = match &args.theme {
         None if args.ascii => Theme::ascii(),
         None => Theme::cp437(),
