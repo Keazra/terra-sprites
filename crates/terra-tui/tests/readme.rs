@@ -109,7 +109,14 @@ fn name(code: KeyCode, modifiers: KeyModifiers) -> String {
         KeyCode::PageUp => "PgUp".to_string(),
         KeyCode::PageDown => "PgDn".to_string(),
         KeyCode::F(n) => format!("F{n}"),
-        other => other.to_string(),
+        // Spelt out rather than `KeyCode`'s own names, which differ on macOS
+        // ("Return" for `Enter`).
+        KeyCode::Enter => "Enter".to_string(),
+        KeyCode::Esc => "Esc".to_string(),
+        KeyCode::Tab => "Tab".to_string(),
+        KeyCode::Backspace => "Backspace".to_string(),
+        KeyCode::Delete => "Delete".to_string(),
+        other => format!("{other:?}"),
     };
     if modifiers.contains(KeyModifiers::CONTROL) {
         format!("Ctrl+{key}")

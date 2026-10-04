@@ -347,13 +347,25 @@ impl Theme {
         ]
         .into_iter()
         .flat_map(|(name, a)| {
-            [a.up, a.down, a.left, a.right].map(|symbol| (format!("the cursor's {name}"), symbol))
+            [
+                ("up", a.up),
+                ("down", a.down),
+                ("left", a.left),
+                ("right", a.right),
+            ]
+            .map(|(side, symbol)| (format!("the cursor's {name} {side}"), symbol))
         });
         let m = self.status_marks;
         let marks = [
-            m.idle, m.sent, m.applied, m.rejected, m.grab, m.empty, m.release,
+            ("idle", m.idle),
+            ("sent", m.sent),
+            ("applied", m.applied),
+            ("rejected", m.rejected),
+            ("grab", m.grab),
+            ("empty", m.empty),
+            ("release", m.release),
         ]
-        .map(|symbol| ("the cursor's status_marks".to_string(), symbol));
+        .map(|(mark, symbol)| (format!("the cursor's {mark} status mark"), symbol));
         let mode_marks = self
             .mode_marks
             .iter()
