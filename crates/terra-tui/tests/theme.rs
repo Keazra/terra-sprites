@@ -315,6 +315,19 @@ fn a_theme_file_loads_and_draws_as_written() {
 }
 
 #[test]
+fn both_built_in_themes_load_as_a_theme_file_would() {
+    // `--theme` checks a file against the pack too; the built-in themes
+    // pass the same checks.
+    let pack = pack();
+    for (name, text) in [
+        ("cp437", include_str!("../../../themes/cp437.ron")),
+        ("ascii", ASCII_THEME),
+    ] {
+        Theme::from_ron(text, &pack).unwrap_or_else(|e| panic!("{name}: {e}"));
+    }
+}
+
+#[test]
 fn a_theme_that_is_not_ron_is_refused_saying_where() {
     let error = Theme::from_ron("(tiles: {", &pack()).expect_err("refused");
     assert!(error.contains("1:"), "{error}");
@@ -344,17 +357,22 @@ fn a_theme_missing_a_tile_or_a_mode_mark_is_refused_naming_it() {
 fn a_theme_glyph_outside_cp437_is_refused() {
     // All the screen draws stays within CP437 (design §6.2).
     let pack = pack();
-    for (from, to) in [
+    for (from, to, named) in [
         (
             "sprite:                 (glyph: '@'",
             "sprite:                 (glyph: 'λ'",
+            "sprite",
         ),
-        ("leash: (glyph: ';'", "leash: (glyph: '€'"),
-        ("idle: '-'", "idle: '✓'"),
+        ("leash: (glyph: ';'", "leash: (glyph: '€'", "the leash"),
+        ("idle: '-'", "idle: '✓'", "idle status mark"),
+        ("left: '|'", "left: '¦'", "visible_frame left"),
     ] {
         let error = Theme::from_ron(&ascii_with(from, to), &pack).expect_err("refused");
         let glyph = to.chars().rev().nth(1).unwrap();
-        assert!(error.contains(glyph) && error.contains("CP437"), "{error}");
+        assert!(
+            error.contains(glyph) && error.contains("CP437") && error.contains(named),
+            "{error}"
+        );
     }
 }
 
