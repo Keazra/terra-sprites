@@ -42,6 +42,7 @@ const COLUMNS: [&[Group]; 3] = [
                 ("F5 F9", "quicksave / load"),
                 ("Ctrl+S", "save as..."),
                 ("Ctrl+O", "load a save"),
+                ("Ctrl+T", "pick a theme"),
             ],
         ),
     ],
