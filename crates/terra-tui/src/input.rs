@@ -76,7 +76,8 @@ pub enum Action {
         at: Position,
         notches: i32,
     },
-    /// Back out of whatever is open, or ask to quit (`Esc`).
+    /// Back out of whatever is open, let go of what the Cursor has hold of,
+    /// or ask to quit (`Esc`).
     Back,
     /// Say yes to a prompt (`y`).
     Confirm,
@@ -278,7 +279,8 @@ impl Keys {
             KeyCode::Right | KeyCode::Char('d') => scroll(step, 0),
             // Holding space would flicker pause on and off, so only a fresh press toggles.
             KeyCode::Char(' ') => (!held).then_some(Action::TogglePause),
-            // Likewise, a held Esc would answer its own "Quit?" prompt.
+            // Likewise, a held Esc would let go, leave the mode, ask to quit
+            // and cancel its own question in a blur.
             KeyCode::Esc => (!held).then_some(Action::Back),
             KeyCode::Char('.') => Some(Action::StepOnce),
             KeyCode::Char('+' | '=') => Some(Action::Faster { held }),
