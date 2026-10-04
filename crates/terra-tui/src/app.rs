@@ -1381,9 +1381,13 @@ impl App {
         }
         if self.screen == Screen::QuitPrompt {
             match action {
-                // Only `y` answers it: `Esc` never quits on its own (design
-                // v33 §6.6).
                 Action::Confirm | Action::Quit => return Flow::Quit,
+                // Only `y` answers it: `Esc` cancels, as any other key does,
+                // and never quits on its own (design v33 §6.6).
+                Action::Back => {
+                    self.screen = Screen::Normal;
+                    return Flow::Continue;
+                }
                 // The mouse carries on as usual and doesn't answer the prompt;
                 // nor does letting go of a button, or of `E`, which isn't a
                 // key pressed.

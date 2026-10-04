@@ -504,6 +504,20 @@ fn leading_a_sprite_esc_lets_go_and_the_next_esc_returns_to_select() {
 }
 
 #[test]
+fn while_paused_a_second_esc_after_a_queued_let_go_returns_to_select_sending_nothing_more() {
+    // The grip follows the queue (design v23 §6.5), so the first Esc's
+    // `LetGo` already counts before time moves.
+    let mut world = field(&[], &[at(4, 2)]);
+    let mut app = grab_app(&world);
+    click(&mut app, &world, at(4, 2));
+    tick(&mut app, &mut world);
+    escape(&mut app, &world);
+    escape(&mut app, &world);
+    assert_eq!(app.mode(), CursorMode::Select);
+    assert_eq!(app.take_commands(), vec![Command::LetGo], "sent once");
+}
+
+#[test]
 fn holding_an_item_esc_puts_it_down_on_the_cursor_s_tile() {
     // Design v33 §6.5: where the Cursor is, as a click there would. The
     // pointer stays where it was, as with a key pressed.
