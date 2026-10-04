@@ -85,3 +85,8 @@ pub fn data_folder_files(dir: &Path) -> Result<DataFolder, String> {
         preset: read(DEFAULT_PRESET)?,
     })
 }
+
+/// The folder the player's own themes are read from (design v34 §6.7).
+pub fn theme_folder() -> Option<PathBuf> {
+    data_folder().map(|folder| folder.join("themes"))
+}

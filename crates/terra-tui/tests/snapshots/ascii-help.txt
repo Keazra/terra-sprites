@@ -11,19 +11,19 @@
 │ m          event filter         wheel      change mode          PgUp PgDn  scroll a tab          │
 │ v          exact detail         C again    the Place menu                                        │
 │ ?          this help            hold E     aim, let go to send                                   │
-│ Esc        back, then quit                                                                       │
+│ Esc        let go, back, quit?                                                                   │
 │ Ctrl+C     quit at once                                                                          │
 │ FILES                                                                                            │
 │ F5 F9      quicksave / load                                                                      │
 │ Ctrl+S     save as...                                                                            │
 │ Ctrl+O     load a save                                                                           │
+│ Ctrl+T     pick a theme                                                                          │
 │                                                                                                  │
 │ COLOURS: a sprite's strongest drive, once it's above half                                        │
 │ @ hunger  @ thirst  @ pain  @ tiredness  @ boredom  @ loneliness  @ crowdedness  @ none          │
 │ EMOTES   ! hurt  / zapped  ? gave up  z resting  + pleased                                       │
 │                                                                                                  │
 │ FILES    /home/kel/.local/share/terra-sprites                                                    │
-│                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
