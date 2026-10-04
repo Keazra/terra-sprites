@@ -63,8 +63,13 @@ pub fn data_folder_files(dir: &Path) -> Result<DataFolder, String> {
     }
     let read = |path: &str| -> Result<Option<String>, String> {
         let file = dir.join(path);
-        if !file.is_file() {
+        // Something there that isn't a file, such as a folder or a broken
+        // link, is a mistake to name, not a file to leave built in.
+        if file.symlink_metadata().is_err() {
             return Ok(None);
+        }
+        if !file.is_file() {
+            return Err(format!("{} isn't a file", file.display()));
         }
         std::fs::read_to_string(&file)
             .map(Some)

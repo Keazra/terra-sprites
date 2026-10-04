@@ -377,3 +377,14 @@ fn a_data_folder_that_isnt_one_is_refused_naming_it() {
         .preset;
     assert_eq!(preset, None, "no preset of its own");
 }
+
+#[test]
+fn a_data_folder_with_something_not_a_file_in_a_file_s_place_is_refused_naming_it() {
+    let dir = data_folder("not-a-file", &[]);
+    std::fs::create_dir_all(dir.join("objects.ron")).unwrap();
+    let err = files::data_folder_files(&dir).expect_err("refused");
+    assert!(
+        err.contains("objects.ron") && err.contains("isn't a file"),
+        "{err}"
+    );
+}

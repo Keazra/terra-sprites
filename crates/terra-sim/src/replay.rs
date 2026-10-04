@@ -259,8 +259,12 @@ impl Playback {
             });
         }
         let start = world.tick();
+        // Each command and checkpoint was taken by the tick the recording
+        // reached, which is where it ends.
         let ticks_ok = in_order(start, read.commands.iter().map(|&(tick, _)| tick))
             && in_order(start, read.checkpoints.iter().map(|&(tick, _)| tick))
+            && read.commands.iter().all(|&(tick, _)| tick <= read.end)
+            && read.checkpoints.iter().all(|&(tick, _)| tick <= read.end)
             && read.end >= start;
         if !ticks_ok {
             return Err(ReplayError::Damaged("its ticks are out of order".into()));
