@@ -1,29 +1,25 @@
-# Terra Sprites — M1 "A Sprite Lives" design (v33)
+# Terra Sprites — M1 "A Sprite Lives" design (v34)
 
 - **Status:** Final
-- **Date:** 2026-10-03
-- **Supersedes:** [v32](archive/m1-a-sprite-lives-v32.md) (earlier: [v31](archive/m1-a-sprite-lives-v31.md), [v30](archive/m1-a-sprite-lives-v30.md), [v29](archive/m1-a-sprite-lives-v29.md), [v28](archive/m1-a-sprite-lives-v28.md), [v27](archive/m1-a-sprite-lives-v27.md), [v26](archive/m1-a-sprite-lives-v26.md), [v25](archive/m1-a-sprite-lives-v25.md), [v24](archive/m1-a-sprite-lives-v24.md), [v23](archive/m1-a-sprite-lives-v23.md), [v22](archive/m1-a-sprite-lives-v22.md), [v21](archive/m1-a-sprite-lives-v21.md), [v20](archive/m1-a-sprite-lives-v20.md), [v19](archive/m1-a-sprite-lives-v19.md), [v18](archive/m1-a-sprite-lives-v18.md), [v17](archive/m1-a-sprite-lives-v17.md), [v16](archive/m1-a-sprite-lives-v16.md), [v15](archive/m1-a-sprite-lives-v15.md), [v14](archive/m1-a-sprite-lives-v14.md), [v13](archive/m1-a-sprite-lives-v13.md), [v12](archive/m1-a-sprite-lives-v12.md), [v11](archive/m1-a-sprite-lives-v11.md), [v10](archive/m1-a-sprite-lives-v10.md), [v9](archive/m1-a-sprite-lives-v9.md), [v8](archive/m1-a-sprite-lives-v8.md), [v7](archive/m1-a-sprite-lives-v7.md), [v6](archive/m1-a-sprite-lives-v6.md), [v5](archive/m1-a-sprite-lives-v5.md), [v4](archive/m1-a-sprite-lives-v4.md), [v3](archive/m1-a-sprite-lives-v3.md), [v2](archive/m1-a-sprite-lives-v2.md), [v1](archive/m1-a-sprite-lives.md))
+- **Date:** 2026-10-04
+- **Supersedes:** [v33](archive/m1-a-sprite-lives-v33.md) (earlier: [v32](archive/m1-a-sprite-lives-v32.md), [v31](archive/m1-a-sprite-lives-v31.md), [v30](archive/m1-a-sprite-lives-v30.md), [v29](archive/m1-a-sprite-lives-v29.md), [v28](archive/m1-a-sprite-lives-v28.md), [v27](archive/m1-a-sprite-lives-v27.md), [v26](archive/m1-a-sprite-lives-v26.md), [v25](archive/m1-a-sprite-lives-v25.md), [v24](archive/m1-a-sprite-lives-v24.md), [v23](archive/m1-a-sprite-lives-v23.md), [v22](archive/m1-a-sprite-lives-v22.md), [v21](archive/m1-a-sprite-lives-v21.md), [v20](archive/m1-a-sprite-lives-v20.md), [v19](archive/m1-a-sprite-lives-v19.md), [v18](archive/m1-a-sprite-lives-v18.md), [v17](archive/m1-a-sprite-lives-v17.md), [v16](archive/m1-a-sprite-lives-v16.md), [v15](archive/m1-a-sprite-lives-v15.md), [v14](archive/m1-a-sprite-lives-v14.md), [v13](archive/m1-a-sprite-lives-v13.md), [v12](archive/m1-a-sprite-lives-v12.md), [v11](archive/m1-a-sprite-lives-v11.md), [v10](archive/m1-a-sprite-lives-v10.md), [v9](archive/m1-a-sprite-lives-v9.md), [v8](archive/m1-a-sprite-lives-v8.md), [v7](archive/m1-a-sprite-lives-v7.md), [v6](archive/m1-a-sprite-lives-v6.md), [v5](archive/m1-a-sprite-lives-v5.md), [v4](archive/m1-a-sprite-lives-v4.md), [v3](archive/m1-a-sprite-lives-v3.md), [v2](archive/m1-a-sprite-lives-v2.md), [v1](archive/m1-a-sprite-lives.md))
 - **Covers:** Milestone 1 in full detail, plus the architecture decisions that every later milestone depends on
 
 ---
 
-## Changes from v32
+## Changes from v33
 
-Slice 13 ([#14](https://github.com/Keazra/terra-sprites/issues/14)): replays. New terms: replay, session log, checkpoint, playback, divergence (`CONTEXT.md`).
+Slice 18 ([#19](https://github.com/Keazra/terra-sprites/issues/19)), its player-docs half, and loading a theme ([#109](https://github.com/Keazra/terra-sprites/issues/109)). No new terms; the entry for theme in `CONTEXT.md` says how one is loaded.
 
 | # | Change | Source | Sections |
 |---|---|---|---|
-| 1 | **What a replay holds, exactly.** The magic `TSRP`, then a header shaped as a save's (`schema_version`, `sim_version` and a checksum of the rest); then the data pack's identity (its name, its version and a hash of its files) and its files as text; the start, `Fresh` with the seed and the preset, or `Snapshot` with a save; every command with the tick it's applied at; the checkpoints; and the tick the recording had reached when it was written, where playback ends. The preset sits in `Fresh`, as a snapshot's save carries its own. | Follows from the slice | §2.7 |
-| 2 | **A world records itself.** Asked to record, a world keeps its start, adds each command as it's submitted and each checkpoint as its tick ends; nothing else can submit a command, so nothing is missed. A world exactly as `World::new` makes it, checked by generating it again, starts `Fresh`; any other, a loaded save, a hand-made world or one that has run, starts from its save. | Recommended (silence accepts) | §2.7 |
-| 3 | **Checkpoints** are the world's hash where the recording starts and at each tick that's a multiple of 1,000. Playback checks the start at once, so a world that starts out different is caught at its first checkpoint. | Follows from the slice | §2.7, §7.1 |
-| 4 | **Divergence names two checkpoints:** the first that didn't match and the last that did, so the world parted from its recording somewhere between them: "The replay parted from its recording between ticks 1,000 and 2,000". A hash every 1,000 ticks can't name the tick itself. Only the first divergence is reported. | Follows from the slice (the issue's "the first checkpoint that diverged") | §2.7 |
-| 5 | **The pack has to be the one named.** A replay whose world, built from its start, has another pack than the one it names is refused, naming both: a snapshot's save embeds its own pack, and a fresh world's pack must be what its files say. A replay from another sim version or save format is refused saying a replay plays only in the build that recorded it. | Follows from the slice | §2.7 |
-| 6 | **The session log** starts with the session and starts afresh from each load. It's written to `last_session.replay` at each autosave, on quitting and on a panic: after the panic hook has restored the terminal, the game writes it before the panic carries on. It's written beside its file and then put in place, as saves are. | Recommended (silence accepts) | §2.7, §2.9, §6.7, §6.8 |
-| 7 | **Playback** (`--replay <file>`) starts paused, saying what it plays: "Replaying last_session.replay: from a new world to tick 48,210". The top bar shows `replay to tick 48,210` in the save status's place. At the end it pauses, once, and says so; time can run on past it, with no more commands than those still waiting when the recording stopped, such as a click made in its last moment, or in the tick a panic cut short. Where it first finds the world different from the recording it pauses and says between which checkpoints; the top bar then reads `replay diverged by tick 2,000`. | Recommended (silence accepts) | §2.7, §6.1, §6.7 |
-| 8 | **What a replay refuses:** the cursor modes that touch the world (Select only points and selects), the wheel over the map, naming a sprite, showing the Cursor to sprites, and loading a save, each saying "It's a replay: only time, the view and the inspector work". Saving and exporting a genome still work, as they only read the world. A replay never autosaves, and writes no session log, so playing `last_session.replay` never overwrites it. The recorded player's Cursor isn't drawn: the Cursor in a replay is the player's own, and holds nothing. | Recommended (silence accepts) | §2.7, §6.5, §6.7 |
-| 9 | **`--data <dir>`** reads each file of the data pack the folder has, in place of the built-in one; a file it lacks keeps the built-in one, so a mod can be the one file it changes. A `presets/default.ron` in it is the default preset for new worlds, which `--preset` still overrides. A file it has that can't be read, or that's wrong, stops the game at start, naming it. `--seed`, `--preset` and `--data` make a new world, so each is refused with `--replay`. | Recommended (silence accepts) | §2.8, §6.7 |
+| 1 | **A themes folder, picked from in the game.** The game's folder has a `themes` folder beside `saves` and `genomes`. `Ctrl+T` opens a menu, `Themes`, of the two built-in themes and then every `.ron` file in that folder by name, picked as the Place menu's items are; the map switches at once, and the status line says "Theme: night". A `--theme <file>` flag was the other way; it stays as well, to start in a theme, since the game doesn't remember a theme picked from the menu between runs. `--theme` and `--ascii` both pick a theme, so giving both is an error. | The owner (2026-10-04), choosing the folder over the flag recommended; keeping the flag is recommended (silence accepts) | §6.2, §6.5, §6.7 |
+| 2 | **A loaded theme is checked,** and one that's wrong is refused with a message saying what, in the file's words: from the menu on the status line ("Couldn't use theme night: …"), keeping the theme in use; from `--theme`, at start, as a preset is. It must draw every semantic tile and mode mark. Every character in it must be in CP437, as all the screen draws already is. Object types, visual states and drives may be left out, and fall back as before, but each it names must be in the world's data pack, so a misspelt name is caught rather than drawn as `?`. The rule that each kind of thing has its own glyph holds for the built-in themes; a player's theme is free to break it. | Follows from change 1 and §6.2 | §6.2 |
+| 3 | **Themes return to A9's list** of user-editable formats, with a page in `docs/reference/` whose example a test loads (v31 change 1 dropped them until one could be loaded). | Follows from change 1 | §7.4 |
+| 4 | **Saves are documented as opaque,** in `docs/reference/saves.md`: what a save keeps, where saves go and how they're named, and what each refusal means. Its last section names the header and the encoding for the curious, and says the rest is internal. The replay workflow joins it with slice 13 ([#14](https://github.com/Keazra/terra-sprites/issues/14)). | Follows from the slice | §7.4 |
+| 5 | **A test checks the README's controls table against the keybindings:** every key a keyboard can press goes through the keybinding table, and each that does something must be in the README's table, and each key the table's first column names must do something. It found five keys missing (`T`, `b`, `m`, `l`, `?`). | Follows from the slice (#19's acceptance criteria) | §7.4 |
 
-**Earlier changes** are in the archived revisions, in [`archive/`](archive/). Each opens with its own table: v32's changes (from v31) head [v32](archive/m1-a-sprite-lives-v32.md), and so on back to v2. So "v16 change 16" is row 16 of the table at the top of [v16](archive/m1-a-sprite-lives-v16.md). The current revision carries only its own table, so the spec doesn't open with its whole history.
+**Earlier changes** are in the archived revisions, in [`archive/`](archive/). Each opens with its own table: v33's changes (from v32) head [v33](archive/m1-a-sprite-lives-v33.md), and so on back to v2. So "v16 change 16" is row 16 of the table at the top of [v16](archive/m1-a-sprite-lives-v16.md). The current revision carries only its own table, so the spec doesn't open with its whole history.
 
 ---
 
@@ -242,23 +238,19 @@ Before step 1, the world keeps every sprite's chemical levels as they stand, so 
 
 ### 2.7 Replays
 
-A replay file contains (v33):
+A replay file contains:
 
 | Part | Contents |
 |---|---|
-| Header | the magic `TSRP`, then `schema_version`, `sim_version` and a checksum of the rest, shaped as a save's header (§2.8) |
-| Pack | the **embedded data pack**, as the text of each of its files, and its identity: name, version and a hash of its files |
-| Start | `Fresh { seed, config }`, a world generated from the seed and its `WorldConfig`, or `Snapshot(save bytes)` |
-| Commands | `[(tick, Command)]`, each with the tick it's applied at, in the order submitted, including commands that were rejected, so the rejections replay exactly too |
-| Checkpoints | `[(tick, state_hash)]`: where the recording starts, and at every tick that's a multiple of 1,000 |
-| End | the tick the recording had reached when it was written |
+| Header | `sim_version`, `schema_version`, the **embedded data pack** and its identity (name, version, content hash), the `WorldConfig` |
+| Start | `Fresh { seed }` or `Snapshot(save bytes)` |
+| Commands | `[(tick, Command)]`, including commands that were rejected, so the rejections replay exactly too |
+| Checkpoints | `[(tick, state_hash)]` every 1,000 ticks |
 
-- **Recording** (v33): a world asked to record keeps the replay itself, adding each command as it's submitted and each checkpoint as its tick ends, so nothing is missed. A world exactly as `World::new` makes it, checked by generating it again, starts `Fresh`; any other (a loaded save, a hand-made world, one that has run) starts from its save.
-- **Version mismatch:** a replay whose `sim_version` or `schema_version` differs from the running build is refused, with a clear message: a replay plays only in the build that recorded it.
-- **Pack mismatch** (v33): a replay whose world, built from its start, has another pack than the one it names is refused, naming both. A snapshot's save embeds its own pack (§2.8); a fresh world's must be what its files say.
-- **Divergence:** during playback, checkpoints are verified as playback reaches them, the start's at once. The first checkpoint that doesn't match is reported with the last one that did: the world parted from its recording somewhere after the one and by the other (v33), as a hash every 1,000 ticks can't name the tick itself.
-- **Session log:** every session writes `last_session.replay`. Its start point is the fresh world or, after a load, the loaded save: each load starts it afresh (v33). It's written at each autosave, on quitting, on a panic, after the panic hook has restored the terminal (§2.9), and when the game stops because the terminal failed. It's written beside its file and then put in place, as saves are.
-- **Playback:** `--replay <file>` disables all input that changes the world. Time controls and the inspector still work. It starts paused; at the recording's end it pauses once and says so, and time can then run on, with no more commands than those still waiting when the recording stopped; where it first finds a divergence it pauses and says so (v33, §6.7). A replay never autosaves and writes no session log.
+- **Version mismatch:** a replay whose `sim_version` or `schema_version` differs from the running build is refused, with a clear message.
+- **Divergence:** during playback, checkpoints are verified, and the first mismatch reports the **first tick where the replay diverged**.
+- **Session log:** every session writes `last_session.replay`. Its start point is the fresh world or the loaded save. It's flushed at each autosave and on exit, including from the panic hook.
+- **Playback:** `--replay <file>` disables all input that changes the world. Time controls and the inspector still work.
 
 ### 2.8 Saves and compatibility
 
@@ -292,7 +284,6 @@ A replay file contains (v33):
 
 **Data pack ownership:**
 - When a world is created, the data pack in use (embedded defaults or `--data` overrides) is **embedded in the world**.
-- `--data <dir>` (v33) reads each file of the pack the folder has in place of the built-in one, and keeps the built-in one for any it lacks, so a mod can be just the files it changes.
 - Loading a save uses the save's pack, never the files on disk.
 - `--data` affects only new worlds. Swapping the pack of an existing world is not supported in M1.
 
@@ -334,7 +325,7 @@ A replay file contains (v33):
 
 - **Expected failures return `Result` errors and never crash the sim.** That covers invalid commands (rejected with an event), malformed or invalid data and genome files, and save/load failures.
 - **Internal invariant violations** are caught by `debug_assert!` and by `World::check_invariants()` in debug and test builds.
-- A **panic hook** restores the terminal; then, as the panic carries on, the game writes `last_session.replay` before it exits (v33), so a session that ends in a panic still leaves its replay.
+- A **panic hook** restores the terminal and flushes `last_session.replay`.
 
 ---
 
@@ -1275,7 +1266,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
   ```
 
 **Panels:**
-- **Top bar:** tick, speed, seed, population, save status, and at the right end `? help` (v30). The save status (v32) is `not saved`, `saved just now` (under a minute), `saved 3m ago` or `saved 1h 5m ago`, from the last save, autosave or load. In a replay (v33) it shows how playback stands instead: `replay to tick 48,210`, then `replay ended`, or `replay diverged by tick 2,000` once it has. Object counts, food included, are the World tab's job.
+- **Top bar:** tick, speed, seed, population, save status, and at the right end `? help` (v30). The save status (v32) is `not saved`, `saved just now` (under a minute), `saved 3m ago` or `saved 1h 5m ago`, from the last save, autosave or load. Object counts, food included, are the World tab's job.
 - **Map view:**
   - Its viewport scrolls with `W` `A` `S` `D` or the arrow keys, or follows the selected sprite (`T`, "track", v21): Track keeps it in the middle of the map view, as far as the wall allows, and follows whichever sprite is selected. Scrolling by hand turns it off (v30).
   - A map smaller than the space gets a map view shrunk to fit it, at the top-left.
@@ -1392,7 +1383,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
     │ m          event filter         wheel      change mode          PgUp PgDn  scroll a tab          │
     │ v          exact detail         C again    the Place menu                                        │
     │ ?          this help            hold E     aim, let go to send                                   │
-    │ Esc        back, then quit                                                                       │
+    │ Esc        let go, back, quit?                                                                   │
     │ Ctrl+C     quit at once                                                                          │
     │                                                                                                  │
     │ COLOURS: a sprite's strongest drive, once it's above half                                        │
@@ -1423,6 +1414,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 - **Drawn from meaning:** the map renders **semantic tiles**, e.g. `Terrain(Grass)`, `Object("berry_bush", "fruiting")`, `Sprite { colour_mode_state }`, `Emote(Hurt)`, never characters directly.
 - **Themes** (`themes/*.ron`) map each semantic tile to a character, colours and modifiers.
   - Themes are **UI assets**. They aren't part of the sim data pack, and don't affect saves or replays.
+  - **Loading one** (v34): two are built in. The player's own go in the `themes` folder (§6.7) and are picked with `Ctrl+T`, or one starts the game with `--theme <file>`. A theme is checked when it's loaded, and one that's wrong is refused with a message saying what: it must draw every semantic tile and mode mark, every character in it must be in CP437, and every object type, visual state and drive it names must be in the world's data pack. It may leave object types, states and drives out, which fall back as below and as in §6.3.
   - The future Tiles milestone adds themes that map to a sheet index and tint instead.
 - **Objects are keyed by name and visual state**, e.g. `object("berry_bush", "fruiting")`. An object matching none of its visual rules is in the state `"default"`: the bare berry bush is `object("berry_bush", "default")`.
   - **Fallback:** a theme with no entry for an object's state uses that object's `"default"` entry, and failing that a `?` glyph. So a data pack's new object types still draw in any theme.
@@ -1521,7 +1513,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 - **While aiming, the Cursor sits on the thing and stays still,** still gripping it, and the pointer does the pulling. Leading, the Cursor goes onto the led sprite as the press lands, and since a led sprite walks towards the Cursor, it stands still until the aim ends; its body goes on, and pets and shocks reach it. A sprite sliding when the press lands slides on, and the Cursor rides along on it. Holding, the Cursor stays where it was pressed, and the held item is drawn there, under the Cursor, until it's thrown.
 - **The player pulls the pointer back** from the Cursor, away from where the thing should go. The thing will go the opposite way to the pull, from where it is, snapped to the nearest of the 8 directions; the pull's length, from the Cursor to the tile the pointer points at, in the game's own measure (a diagonal step is one tile), sets how far, up to the Cursor's furthest for the thing's size (§3.5.4). So pressed with the pointer off a led sprite, the aim already pulls as far as the pointer is from it.
 - **The aim line** shows it: steady dots in Grab's yellow from the thing, along its path, as far as the pull sends it, with a small circle where it would stop if nothing's in the way (§6.2). It's drawn over empty ground only, as the leash is, so a bush in the way shows through. It's straight, and doesn't predict bounces.
-- **Letting go sends it:** `Throw { from, toward, tiles }`, from where aiming began, or `Shove { toward, tiles }` (§2.5). Letting go with the pointer on the Cursor sends nothing, and `Esc` cancels: either way the thing stays held or led, whether the press grabbed it or it was held already.
+- **Letting go sends it:** `Throw { from, toward, tiles }`, from where aiming began, or `Shove { toward, tiles }` (§2.5). Letting go with the pointer on the Cursor sends nothing, and `Esc` cancels: either way the thing stays held or led, whether the press grabbed it or it was held already. A second `Esc` lets go of it (v33).
 - **From where:** a throw starts where aiming began, and is refused, as putting the item down would be, where the item can't go. Following, the Cursor sits on its sprite, so a throw starts at the sprite's feet. A shove starts from wherever the led sprite stands when it applies.
 - **With the keyboard,** `E` is the right button: hold it, pull with the mouse, and let it go. In a terminal that doesn't report a key being let go, a second press of `E` sends it. Windows Terminal reports it.
 - **A sliding sprite** can be taken hold of: its slide carries on to its end, and then it follows the Cursor. Taking hold of a sprite doesn't lift it, so unlike picking up a rolling item, it can't end the slide.
@@ -1572,7 +1564,7 @@ N ═ M
 - **The mouse wheel cycles the modes:** a notch down picks the next (Select → Train → Grab, then back to Select), a notch up the previous. A wheel event also points, like every mouse event. The wheel doesn't scroll the map. It cycles the modes over the map view; over the inspector, it scrolls the open tab instead (§6.1); elsewhere it does nothing (v22). Built in slice 10b; Grab joins in slice 11a.
 - **Place menu** (v28): `C` pressed again in Grab mode opens it over the map's top-left corner, inside the map view; a list too long for it scrolls to keep the highlighted item in view. It lists the object types whose data offers them (§3.5.1), by label, in ID order (berry bush seedling, berry, ball), then **new sprite** (the starter genome with spawn variation) and **sprite from a genome file**, which lists the `.ron` files in the genomes folder (§6.7) by name. A number key (`1`–`9`), the arrow keys and `Enter`, or a click picks an item; a click off the menu, or `Esc`, closes it. A file that doesn't read is refused with why: "Couldn't read mira-12: …".
   - **The chosen item waits on the Cursor,** in reserve through other modes, until a Grab-mode left click places it: `Place { tile, object_type }`, or `SpawnSprite { tile, genome }` carrying the file's genome in full. One click places one. While it waits, Grab's marks show `↓` and the item's glyph, the status line says `placing: berry` in every mode, and in Grab mode the hints read `click to place  right-click put away`.
-  - **A right click puts it away** (v28); it doesn't grab or aim.
+  - **A right click puts it away** (v28); it doesn't grab or aim. So does `Esc`, in any mode, before it lets go of anything else (v33).
   - **It isn't held** (v28): it waits on top of what the Cursor leads or holds, and placing leaves that as it was, so a led sprite can be fed where it stands.
 - **Feedback:** in Train mode, each click flashes `+` in both status marks at once ("sent"). When the sim reports back, they flash `☼` (applied) or `?` (rejected). Flashes last about 0.3 s of **real** time and are driven by events, like emotes (§6.3). In Grab mode the marks show the Cursor's state instead, and a rejected `TakeHold`, `PickUp`, `LetGo`, `PutDown`, `Throw`, `Shove` or `Place` flashes `?`.
   - **Both flashes show, at every speed** (v22). At speed a command can apply in the same frame it's sent, so `☼` or `?` waits until `+` has shown for its 0.3 s. `?` wins over `☼`: a command applied in the same tick as a refusal, or while its `?` is still to show or showing, doesn't replace it. The marks follow the latest click: a click that sends puts any earlier click's result not yet shown behind it.
@@ -1580,7 +1572,7 @@ N ═ M
   - A flash under way carries on through a change of mode, in the new mode's colour.
 - **Nothing to act on:** a click in Train or Grab mode, a right click in Select mode, or `F`, with nothing to act on sends no command and flashes `?` at once. The status line says so (§6.1): "No sprite here to pet".
 - **Switching modes keeps each mode's state.** What the Cursor holds or leads, or a Place item not yet put down, waits in reserve while other modes are in use, and a led sprite keeps following the Cursor (v23); the selection and Follow stay in every mode. While the Cursor holds or leads something, the status line shows it in every mode (`leading: Mira #12`, `holding: berry`), because a led sprite can't eat or drink (§2.4) and a held berry can expire.
-- **Leaving a mode:** `Esc` returns to Select, keeping Follow. `Esc` first closes any open menu or overlay. From Select, `Esc` asks to quit (§6.6). A right click no longer returns to Select (v21).
+- **`Esc`** (v33) does the first of these that applies, a step a press: closes an open menu or overlay; cancels an aim; lets go of what the Cursor has hold of, in any mode (a Place menu item waiting on it is put away first, then a led sprite is let go, or a held item put down on the Cursor's tile, as a click there would, and refused with the usual reason where it can't go); returns to Select, keeping Follow; and from Select asks to quit (§6.6). So leading a sprite in Grab mode, `Esc` lets go, then returns to Select, then asks. A right click no longer returns to Select (v21).
 - **Pausing queues actions.** Commands are stamped for the next tick (§2.5), so clicks made while paused apply, in click order, when time next moves (`space` or `.`). Grab mode's marks follow the queue: after a queued `TakeHold` or `PickUp`, `Y` shows `↓` and `N` the thing being grabbed; after a queued `Throw` or `Shove` (v25), they show the Cursor empty. If the sim rejects it, `?` flashes and the marks return to the Cursor's real state.
 
 **Other keys:**
@@ -1601,8 +1593,9 @@ N ═ M
 | `v` | Switch the detail view on or off: the exact action line (§6.1) |
 | `F5` / `F9` | Quicksave / quickload (§6.7, v32) |
 | `Ctrl+S` / `Ctrl+O` | Save by name / load a save from a list (§6.7, v32) |
+| `Ctrl+T` | Pick a theme from the built-in ones and the themes folder (§6.7, v34) |
 | `?` | Open or close help |
-| `Esc` | Close a menu or overlay; otherwise back to Select; from Select, ask to quit |
+| `Esc` | Close a menu or overlay; cancel an aim; let go of what the Cursor has hold of; back to Select; from Select, ask to quit (v33) |
 | `Ctrl+C` | Quit at once |
 
 - A rejected command shows its reason on the status line, for about 3 seconds in the key hints' place (§6.1, v22), and in the event log.
@@ -1614,7 +1607,7 @@ N ═ M
 
 - **Keys:** `space` pauses and resumes; `.` steps while paused (below); `+` and `-` step through ⅛×, ¼×, ½×, 1× (1.25 ticks per second), 2×, 4×, 8×, 16× (20 ticks per second) and **Max**. Each press halves or doubles the rate. The game starts at 1×; `-` stops at ⅛× (5/32 of a tick a second) and `+` at Max. The top bar labels the slow speeds `1/2x`, `1/4x` and `1/8x`, and shows the speed while paused too, as `|| paused 4x` (v27).
 - **A step** (v27) runs one real second's worth of ticks at the speed, rounded down, at least 1 and at most 20: 1 at 1× and slower, 2 at 2×, 5 at 4×, 10 at 8×, 20 at 16× and Max. It runs within the frame's budget like any other ticks, and what the budget cuts short runs on the next frames. A press before a step has finished starts a whole step afresh, at the speed then, rather than adding another. Resuming drops what's left of it.
-- **Quitting:** `Esc` (from Select, with no menu open) asks "Quit? (y/n)". `y` or a second `Esc` quits; any other key cancels. `Ctrl+C` quits at once.
+- **Quitting:** `Esc` (from Select, with no menu open and nothing in the Cursor's grip) asks "Quit? (y/n)". Only `y` quits; any other key, `Esc` included, cancels (v33), so `Esc` never quits on its own. `Ctrl+C` quits at once.
 - **Exact pacing:** the UI clock counts owed ticks in integer maths, with rates in 32nds of a tick per second, so every speed (including ⅛×) runs at exactly its nominal rate with no drift.
 - **Held keys:**
   - **1× is a stop for held keys.** A held `+` or `-` stops at 1×; a fresh press is needed to go past it, in either direction.
@@ -1632,8 +1625,7 @@ N ═ M
 
 ### 6.7 Files
 
-- **Data:** the default data pack is embedded in the binary. `--data <dir>` overrides it for **new** worlds (§2.8): each file of the pack the folder has replaces the built-in one, and a `presets/default.ron` in it is the default preset, which `--preset` still overrides (v33). A file that can't be read, or is wrong, stops the game at start, naming it.
-- **Replays** (v33, §2.7): the session log is written at each autosave, on quitting and on a panic. `--replay <file>` plays one back, paused at first, saying "Replaying last_session.replay: from a new world to tick 48,210" (or "from a save at tick 300"). Whatever would change the world is refused, saying "It's a replay: only time, the view and the inspector work": the Train and Grab modes, the wheel over the map, naming, showing the Cursor (`H`) and loading. Saving and exporting a genome still work. At the end it pauses once, saying "The replay ends here, at tick 48,210: time can run on, with nothing more done"; at a divergence it pauses, saying "The replay parted from its recording between ticks 1,000 and 2,000". The recorded player's Cursor isn't drawn.
+- **Data:** the default data pack is embedded in the binary. `--data <dir>` overrides it for **new** worlds (§2.8).
 - **Saving and loading:** `F5` quicksaves, `F9` quickloads, and `Ctrl+S` / `Ctrl+O` save or load by name.
   - **By name** (v32): `Ctrl+S` opens a prompt on the status line, `Save as: seed 7 tick 48210_   enter save  esc cancel`, offering the seed and the tick. Typing replaces the name offered, up to 40 characters, `Backspace` rubs out, `Enter` saves and `Esc` gives up; the same name saves over. `Ctrl+O` opens a menu, `Load`, of every save, newest first, the quicksave and autosaves included, picked as the Place menu's items are. `F9` with no quicksave says "There's no quicksave yet: F5 makes one".
   - **Asking first** (v32): loading over a world that has run since it was last saved asks "Load quicksave? The world has run 4m since it was last saved (y/n)", or "This world has never been saved". `y` loads, as does `F9` again when it's the quicksave asked about; any other key keeps the world.
@@ -1642,15 +1634,16 @@ N ═ M
 - **Autosave:** every 10 real-time minutes, keeping the last 3. Only time that runs, unpaused, counts (v32), and quitting autosaves too, unless the world hasn't run since its last save.
 - **Location:** saves, autosaves, exported genomes and `last_session.replay` go in the platform data folder: `%APPDATA%\terra-sprites` on Windows, `~/Library/Application Support/terra-sprites` on macOS, and elsewhere `$XDG_DATA_HOME/terra-sprites` or `~/.local/share/terra-sprites`. The help overlay shows the path.
   - **Genomes** (v28) are exported to, and the Place menu reads them from, its `genomes` folder.
+  - **Themes** (v34) are read from its `themes` folder: `Ctrl+T` opens a menu, `Themes`, of the built-in `cp437` and `ascii`, then each `.ron` file there by name, in order, picked as the Place menu's items are. The map switches at once and the status line says "Theme: night"; a theme that doesn't load is refused on the status line, "Couldn't use theme night: …", and the theme in use stays. The theme picked lasts until the game is closed.
   - **Saves** (v32) go in its `saves` folder: `quicksave.tspr`, `autosave-1.tspr` (the newest) to `autosave-3.tspr`, and each save by name as its name, with any character a file name can't hold on some system made a `-`, the dots and spaces Windows drops from a name's end left off, and a `-` after a name Windows keeps for a device (`con`, `lpt1`). The game says a save's name as it's stored, which is the name the load list shows. A save is written beside its file and then put in its place, so one cut short never breaks a good one.
-- **Command-line flags:** `--seed <n>`, `--preset <file>`, `--data <dir>`, `--ascii`, `--replay <file>`. `--seed`, `--preset` and `--data` make a new world, so each is refused with `--replay` (v33).
+- **Command-line flags:** `--seed <n>`, `--preset <file>`, `--data <dir>`, `--ascii`, `--theme <file>` (v34; not with `--ascii`), `--replay <file>`.
 
 ### 6.8 UI architecture
 
 - **`App`** holds the UI state: where the Cursor is, cursor mode (and each mode's reserve), Follow (v21 as the lock), viewport, selection, screen state (Normal / Menu / Prompt / Help / Sprite list), colour mode, emote and feedback timers, and the active `InfoPolicy`.
 - **Input:** a keybinding table maps keys to UI `Action`s. Each `Action` either changes `App` or produces a `Command`.
 - **Rendering** is a pure function, `render(frame, &App, &World)`.
-- **Panic hook:** it restores the terminal; the replay is written as the panic carries on (v33, §2.9).
+- **Panic hook:** it restores the terminal and flushes the replay.
 
 ---
 
@@ -1661,7 +1654,7 @@ Implementation is **test-first, one vertical slice at a time.** Everything in `t
 ### 7.1 Tools
 
 - **`World::state_hash()`:** xxh3 with a fixed seed over a canonical serialization of the world.
-- **Replay checkpoints:** a hash where the recording starts and every 1,000 ticks, and playback reports the first divergence, with the last checkpoint that matched (§2.7).
+- **Replay checkpoints:** a hash every 1,000 ticks, and playback reports the first divergence (§2.7).
 - **`World::check_invariants()`:** runs at the end of every tick, after step 7, in debug builds and tests, and panics naming the tick and the broken rule, so a violation fails on the tick that caused it. On the default map it costs about 1.2 ms a tick in a debug build (a tick itself took 0.8 ms at slice 5), which adds about 30 s to the debug test run; release builds skip it. It checks:
   - the occupancy index matches entity positions
   - concentrations are within [0, 1]
@@ -1717,7 +1710,7 @@ Implementation is **test-first, one vertical slice at a time.** Everything in `t
 3. **Determinism tests:**
    - The same inputs give the same hash on every tick.
    - Save at tick *k*, load, and continue: the result must match an uninterrupted run hash for hash.
-   - Replays round-trip, from a fresh world and from a save, and a session that ends in a panic still leaves a valid one (v33). Mismatched versions or data packs are refused.
+   - Replays round-trip. Mismatched versions or data packs are refused.
    - A deliberately introduced divergence is detected at the right checkpoint.
 4. **Compatibility tests:**
    - Golden files: the v1 save, the starter genome in RON, and a genome containing unknown gene types. All must load.
@@ -1774,7 +1767,7 @@ M1 is **done** when all of the following hold:
 | A6 | **Determinism and persistence.** Test layers 3 and 4 pass | Tests |
 | A7 | **Robustness.** A headless soak of 1,000,000 ticks at Max speed with a random script of the Cursor's commands produces no panics and no invariant violations | Baseline run's soak (§7.6) |
 | A8 | **Playability.** Every feature in §3–§6 works in Windows Terminal, and a forced panic leaves the terminal usable | Manual checklist |
-| A9 | **Docs.** A README covering controls; **every user-editable format** (`pack`, `terrain`, `categories`, `tags`, `objects`, `chemicals`, `loci`, `brain_io`, `physiology`, `names`, genome RON, world config and presets, lab scenarios), each with a working example, including the left-to-right condition semantics and the location-before-`Chance` convention (v31: themes return to the list once a theme can be loaded, [#109](https://github.com/Keazra/terra-sprites/issues/109)); and the replay workflow. Saves and replays are documented as opaque. | Review; a test loads every example in `docs/reference/` (v31) |
+| A9 | **Docs.** A README covering controls; **every user-editable format** (`pack`, `terrain`, `categories`, `tags`, `objects`, `chemicals`, `loci`, `brain_io`, `physiology`, `names`, themes (v34), genome RON, world config and presets, lab scenarios), each with a working example, including the left-to-right condition semantics and the location-before-`Chance` convention; and the replay workflow. Saves and replays are documented as opaque. | Review; a test loads every example in `docs/reference/` (v31), and a test checks the README's controls table against the keybindings (v34) |
 
 The thresholds in A1–A4 are **starting calibrations**. If tuning shows one is badly calibrated, it changes through an amendment to this document, not by deleting the test.
 

@@ -19,14 +19,15 @@ Much of Terra Sprites is data rather than code: what the ground is like, what pl
 | `data/genomes/starter.ron`, and genome files | A sprite's genes | [genomes](genomes.md) |
 | `data/presets/default.ron`, and preset files | A world's size and what's in it | [world config and presets](presets.md) |
 | `scenarios/*.ron` | Headless test worlds for the lab runner | [lab scenarios](lab-scenarios.md) |
+| `themes/*.ron`, and theme files | How the map is drawn: glyphs and colours | [themes](themes.md) |
 
-Themes (`themes/*.ron`), the glyphs and colours the screen draws, aren't on the list for now: the game can't load a theme of your own yet, only pick between its two built-in ones with `--ascii`. Loading one is [#109](https://github.com/Keazra/terra-sprites/issues/109), and themes get their page here with it.
+The game also writes files of its own, which aren't for editing: [saves](saves.md) explains what a save keeps, where saves go, and what happens when one won't load.
 
 ## How the game uses them
 
 - **The data pack** is everything in `data/` except the presets: the first eleven rows above. It's built into the game, so a change to `data/` takes effect the next time the game is built (`cargo run --release`). A file that's wrong stops the game at start with a message naming the file and the problem. A world keeps the pack it was made with, so editing the pack never changes a world already saved (design §2.8).
 - **A folder of pack files** loads at start with `--data <dir>`, without rebuilding: each file of the pack the folder has, at the same path as in `data/` (`objects.ron`, `genomes/starter.ron`), replaces the built-in one, and any it lacks stays built in. A `presets/default.ron` in it is the default preset. It's for new worlds only: a save keeps the pack it was made with (design §2.8).
-- **Presets** load at start with `--preset <file>`, without rebuilding.
+- **Presets** load at start with `--preset <file>`, without rebuilding. **Themes** go in the `themes` folder of the game's folder and are picked in the game with `Ctrl+T`, or given at start with `--theme <file>`.
 - **Genome files** are what `g` exports and what the Place menu reads back, in the `genomes` folder of the game's folder (the help screen, `?`, shows where).
 - **Lab scenarios** run headless with `cargo run --release -p terra-sim --example lab -- scenarios/<name>.ron --seeds 10`.
 

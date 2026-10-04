@@ -54,10 +54,23 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let theme = if args.ascii {
-        Theme::ascii()
-    } else {
-        Theme::cp437()
+    // A theme names object types and drives, so it's checked against the
+    // pack (design v34 §6.7).
+    let theme = match &args.theme {
+        None if args.ascii => Theme::ascii(),
+        None => Theme::cp437(),
+        Some(path) => {
+            let loaded = std::fs::read_to_string(path)
+                .map_err(|err| err.to_string())
+                .and_then(|text| Theme::from_ron(&text, session.world().data()));
+            match loaded {
+                Ok(theme) => theme,
+                Err(err) => {
+                    eprintln!("terra-sprites: can't use theme {}: {err}", path.display());
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
     };
 
     // Installs a panic hook that restores the terminal before the panic is reported.
@@ -242,6 +255,9 @@ fn run(terminal: &mut DefaultTerminal, session: &mut Session, setup: Setup) -> i
     }
     if let Some(folder) = files::save_folder() {
         app.set_save_folder(folder);
+    }
+    if let Some(folder) = files::theme_folder() {
+        app.set_theme_folder(folder);
     }
     if let (Some(name), Some(playback)) = (replay, session.playback()) {
         app.start_replay(name, playback);

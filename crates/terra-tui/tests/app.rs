@@ -244,11 +244,14 @@ fn escape_asks_to_quit_and_y_quits() {
 }
 
 #[test]
-fn a_second_escape_quits() {
+fn a_second_escape_cancels_the_quit_prompt_rather_than_quitting() {
+    // Esc never quits on its own: only `y` answers the prompt (design v33
+    // §6.6).
     let world = grass(40, 30);
     let mut app = app(&world, tile_area(20, 10));
     app.apply(Action::Back, &world);
-    assert_eq!(app.apply(Action::Back, &world), Flow::Quit);
+    assert_eq!(app.apply(Action::Back, &world), Flow::Continue);
+    assert_eq!(app.screen(), Screen::Normal);
 }
 
 #[test]
