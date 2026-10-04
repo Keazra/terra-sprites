@@ -40,7 +40,7 @@ cargo run --release -- --seed 7
 | `+` / `-` | Faster / slower: each step doubles or halves the speed, from ⅛× up to 16×, then Max. The game starts at 1× (1.25 ticks per second, slow enough to watch sprites walk). Holding either key stops at 1×; press again to go past it. |
 | `F5` / `F9` | Quicksave / quickload. Loading over a world that has run since it was last saved asks first, and a loaded world starts paused |
 | `Ctrl+S` / `Ctrl+O` | Save under a name you type / pick a save to load, newest first. The world also saves itself every 10 minutes of running time and when you quit, keeping the last 3 autosaves. Saves are in the `saves` folder of the game's folder (the help screen shows where) |
-| `Esc` | Quit, after "Quit? (y/n)": press `y` or `Esc` again |
+| `Esc` | Each press does the first that applies: close a menu, cancel an aim, let go of what the Cursor holds or leads (a held item is put down where the Cursor is), go back to Select, and from Select ask "Quit? (y/n)". Only `y` quits; `Esc` again keeps playing |
 | `Ctrl+C` | Quit at once |
 
 | Flag | Effect |
@@ -70,7 +70,7 @@ The ground, the plants and toys, a sprite's body and its instincts, and the size
 
 ## Design
 
-- [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v32.md) (v32, the current revision). Earlier revisions and the external evaluations that shaped them are in [`docs/design/archive/`](docs/design/archive/).
+- [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v33.md) (v33, the current revision). Earlier revisions and the external evaluations that shaped them are in [`docs/design/archive/`](docs/design/archive/).
 
 ## Roadmap
 

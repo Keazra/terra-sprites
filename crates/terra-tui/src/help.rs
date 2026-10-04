@@ -32,7 +32,7 @@ const COLUMNS: [&[Group]; 3] = [
                 ("m", "event filter"),
                 ("v", "exact detail"),
                 ("?", "this help"),
-                ("Esc", "back, then quit"),
+                ("Esc", "let go, back, quit?"),
                 ("Ctrl+C", "quit at once"),
             ],
         ),

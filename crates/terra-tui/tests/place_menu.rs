@@ -219,6 +219,23 @@ fn a_right_click_puts_the_waiting_item_away() {
 }
 
 #[test]
+fn esc_puts_the_waiting_item_away_before_it_lets_go_or_leaves_the_mode() {
+    // Design v33 §6.5: the item waits on the Cursor as something held
+    // would, so Esc lets go of it first, as a right click does.
+    let mut world = field(&[], &[at(4, 2)]);
+    let mut app = grab_app(&world);
+    click(&mut app, &world, at(4, 2), Button::Left);
+    tick(&mut app, &mut world);
+    pick(&mut app, &world, 2);
+    apply(&mut app, &world, Action::Back);
+    assert_eq!(app.placing(), None);
+    assert_eq!(app.take_commands(), Vec::new(), "the lead is kept");
+    assert_eq!(app.mode(), CursorMode::Grab);
+    apply(&mut app, &world, Action::Back);
+    assert_eq!(app.take_commands(), vec![Command::LetGo]);
+}
+
+#[test]
 fn a_waiting_item_is_kept_through_other_modes_and_shown_on_the_status_line() {
     let world = field(&[], &[at(4, 2)]);
     let mut app = grab_app(&world);
