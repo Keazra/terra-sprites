@@ -40,3 +40,21 @@ fn bad_flags_are_errors_that_name_the_problem() {
         assert!(error.contains(named), "{args:?}: {error:?}");
     }
 }
+
+#[test]
+fn the_theme_flag_names_a_theme_file() {
+    let args = parse(&["--theme", "themes/night.ron"]).expect("valid");
+    assert_eq!(args.theme, Some(PathBuf::from("themes/night.ron")));
+    assert_eq!(parse(&[]).expect("valid").theme, None);
+}
+
+#[test]
+fn the_theme_flag_needs_a_file_and_does_not_mix_with_ascii() {
+    let error = parse(&["--theme"]).expect_err("invalid");
+    assert!(error.contains("--theme"), "{error}");
+    let error = parse(&["--ascii", "--theme", "night.ron"]).expect_err("invalid");
+    assert!(
+        error.contains("--ascii") && error.contains("--theme"),
+        "{error}"
+    );
+}

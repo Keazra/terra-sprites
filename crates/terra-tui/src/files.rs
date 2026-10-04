@@ -29,3 +29,8 @@ pub fn genome_folder() -> Option<PathBuf> {
 pub fn save_folder() -> Option<PathBuf> {
     data_folder().map(|folder| folder.join("saves"))
 }
+
+/// The folder the player's own themes are read from (design v34 §6.7).
+pub fn theme_folder() -> Option<PathBuf> {
+    data_folder().map(|folder| folder.join("themes"))
+}
