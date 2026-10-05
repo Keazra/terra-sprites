@@ -1,5 +1,6 @@
 //! Where the game keeps its files on the player's machine (design §6.7).
 
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use terra_sim::DataPack;
@@ -9,15 +10,35 @@ use terra_sim::DataPack;
 /// `$XDG_DATA_HOME` or `~/.local/share`. `None` if the environment names
 /// none of them.
 pub fn data_folder() -> Option<PathBuf> {
-    let var = |name| std::env::var_os(name).filter(|value| !value.is_empty());
-    let base = if cfg!(windows) {
-        var("APPDATA").map(PathBuf::from)
+    let os = if cfg!(windows) {
+        Os::Windows
     } else if cfg!(target_os = "macos") {
-        var("HOME").map(|home| PathBuf::from(home).join("Library/Application Support"))
+        Os::MacOs
     } else {
-        var("XDG_DATA_HOME")
+        Os::Other
+    };
+    data_folder_on(os, |name| std::env::var_os(name))
+}
+
+/// The platforms whose data folders differ.
+enum Os {
+    Windows,
+    MacOs,
+    Other,
+}
+
+/// `data_folder` on `os`, with `var` reading the environment. A variable
+/// set but empty counts as unset.
+fn data_folder_on(os: Os, var: impl Fn(&str) -> Option<OsString>) -> Option<PathBuf> {
+    let var = |name| var(name).filter(|value| !value.is_empty());
+    let base = match os {
+        Os::Windows => var("APPDATA").map(PathBuf::from),
+        Os::MacOs => {
+            var("HOME").map(|home| PathBuf::from(home).join("Library/Application Support"))
+        }
+        Os::Other => var("XDG_DATA_HOME")
             .map(PathBuf::from)
-            .or_else(|| var("HOME").map(|home| PathBuf::from(home).join(".local/share")))
+            .or_else(|| var("HOME").map(|home| PathBuf::from(home).join(".local/share"))),
     };
     base.map(|base| base.join("terra-sprites"))
 }
@@ -89,4 +110,54 @@ pub fn data_folder_files(dir: &Path) -> Result<DataFolder, String> {
 /// The folder the player's own themes are read from (design v34 §6.7).
 pub fn theme_folder() -> Option<PathBuf> {
     data_folder().map(|folder| folder.join("themes"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `data_folder_on(os)` with only the variables `set`.
+    fn on(os: Os, set: &[(&str, &str)]) -> Option<PathBuf> {
+        data_folder_on(os, |name| {
+            set.iter()
+                .find(|&&(n, _)| n == name)
+                .map(|&(_, value)| OsString::from(value))
+        })
+    }
+
+    #[test]
+    fn each_platform_has_its_own_data_folder() {
+        // Design §6.7.
+        let appdata = [
+            ("APPDATA", "C:/Users/Player/AppData/Roaming"),
+            ("HOME", "/h"),
+        ];
+        assert_eq!(
+            on(Os::Windows, &appdata),
+            Some(PathBuf::from(
+                "C:/Users/Player/AppData/Roaming/terra-sprites"
+            ))
+        );
+        assert_eq!(on(Os::Windows, &[("HOME", "/h")]), None);
+        assert_eq!(
+            on(Os::MacOs, &[("HOME", "/Users/player")]),
+            Some(PathBuf::from(
+                "/Users/player/Library/Application Support/terra-sprites"
+            ))
+        );
+        let xdg = [("XDG_DATA_HOME", "/data"), ("HOME", "/home/player")];
+        assert_eq!(
+            on(Os::Other, &xdg),
+            Some(PathBuf::from("/data/terra-sprites"))
+        );
+        assert_eq!(
+            on(
+                Os::Other,
+                &[("XDG_DATA_HOME", ""), ("HOME", "/home/player")]
+            ),
+            Some(PathBuf::from("/home/player/.local/share/terra-sprites")),
+            "set but empty counts as unset"
+        );
+        assert_eq!(on(Os::Other, &[]), None);
+    }
 }
