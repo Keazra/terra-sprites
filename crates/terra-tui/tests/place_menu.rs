@@ -192,6 +192,31 @@ fn the_menu_is_worked_with_the_arrows_and_enter_too() {
 }
 
 #[test]
+fn the_mouse_wheel_moves_the_menu_highlight() {
+    // #128: as the arrows do, a notch a row, and no further than the ends.
+    let world = field(&[], &[]);
+    let mut app = grab_app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+    let area = app.menu_area(&world).expect("the Place menu");
+    let wheel = |notches| Action::Wheel {
+        at: Position::new(area.x + 2, area.y + 1),
+        notches,
+    };
+    apply(&mut app, &world, wheel(-1));
+    assert_eq!(app.menu_choice(), 0);
+    apply(&mut app, &world, wheel(1));
+    apply(&mut app, &world, wheel(1));
+    apply(&mut app, &world, wheel(-1));
+    assert_eq!(app.menu_choice(), 1);
+    apply(&mut app, &world, wheel(9));
+    assert_eq!(app.menu_choice(), 4, "the last item");
+    assert_eq!(app.screen(), Screen::PlaceMenu);
+    apply(&mut app, &world, wheel(-3));
+    apply(&mut app, &world, Action::Enter);
+    assert_eq!(app.placing(), Some("berry"));
+}
+
+#[test]
 fn a_new_sprite_is_spawned_from_the_starter_genome() {
     let world = field(&[], &[]);
     let mut app = grab_app(&world);
@@ -534,6 +559,31 @@ fn a_menu_longer_than_the_map_view_scrolls_to_keep_the_highlight_in_view() {
     }
     assert_eq!(app.menu_choice(), 6);
     assert_eq!(app.menu_first(&world), 3);
+    // The wheel scrolls it too (#128).
+    let inside = Position::new(area.x + 2, area.y + 1);
+    for notches in [1, 1, -1, 1] {
+        apply(
+            &mut app,
+            &world,
+            Action::Wheel {
+                at: inside,
+                notches,
+            },
+        );
+    }
+    assert_eq!(app.menu_choice(), 8);
+    assert_eq!(app.menu_first(&world), 5);
+    for _ in 0..8 {
+        apply(
+            &mut app,
+            &world,
+            Action::Wheel {
+                at: inside,
+                notches: -1,
+            },
+        );
+    }
+    assert_eq!((app.menu_choice(), app.menu_first(&world)), (0, 0));
     // A click on the top row picks the first item shown.
     apply(
         &mut app,
