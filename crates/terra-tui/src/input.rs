@@ -119,6 +119,9 @@ pub enum Action {
     /// Pick a theme from the built-in ones and the themes folder (`Ctrl+T`,
     /// design v34 §6.7).
     OpenThemes,
+    /// In a replay, take it over and play on from where it is (`Ctrl+R`,
+    /// design v36 §2.7).
+    TakeOver,
     /// While naming, a letter typed.
     Type(char),
     /// While naming, the last letter rubbed out (`Backspace`).
@@ -253,7 +256,8 @@ impl Keys {
                 KeyCode::Char('s' | 'S') if !held => Action::SaveAs,
                 KeyCode::Char('o' | 'O') if !held => Action::OpenSaves,
                 KeyCode::Char('t' | 'T') if !held => Action::OpenThemes,
-                KeyCode::Char('s' | 'S' | 'o' | 'O' | 't' | 'T') => return None,
+                KeyCode::Char('r' | 'R') if !held => Action::TakeOver,
+                KeyCode::Char('s' | 'S' | 'o' | 'O' | 't' | 'T' | 'r' | 'R') => return None,
                 _ => Action::Dismiss,
             });
         }
