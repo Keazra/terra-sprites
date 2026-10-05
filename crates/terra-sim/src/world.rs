@@ -1114,7 +1114,7 @@ impl World {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::action::{Outcome, Walk};
+    use crate::action::{Action, Outcome, Walk};
     use crate::brain::Brain;
     use crate::cursor::Grip;
     use crate::learning::{Signals, Touch, TraceEntry, TypeMemory};
@@ -1659,6 +1659,50 @@ mod tests {
         assert!(about_dying.is_empty(), "{about_dying:?}");
         assert!(world.sprite(ids[1]).is_none(), "it died");
         assert_eq!(world.sprite(ids[0]).expect("alive").pos(), west, "no swap");
+    }
+
+    #[test]
+    fn a_blocked_sprite_finds_its_way_round_to_another_of_its_target_s_goal_tiles() {
+        // Design §3.7: blocked re-planning looks for a path to the action's
+        // goal tiles. A sprite rests on the one in front of the bush, at the
+        // end of the corridor; the only other goal tiles are round the long
+        // loop, dearer than the corridor even with its occupied-tile
+        // penalty, so the walker heads down the corridor and is blocked.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let rows = [".........", ".#######.", ".........", "#########"];
+        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
+        let (walker, rester, bush) = (Pos { x: 0, y: 2 }, Pos { x: 6, y: 2 }, Pos { x: 7, y: 2 });
+        let genes = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
+        let genome = Genome::from_ron(genes, &data).expect("a valid genome");
+        let scenario = Scenario {
+            map,
+            objects: &[(bush, "berry_bush")],
+            sprites: &[(walker, Some(genome.clone())), (rester, Some(genome))],
+            scripted: &[(rester, ScriptedAction::Rest); 5],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let id = world.sprite_at(walker).expect("the walker").id();
+        let target = Target::Object(world.state.objects.at(bush).expect("the bush"));
+        world.state.sprites.get_mut(id).expect("the walker").action =
+            Some(Action::new(Verb::Eat, None, Some((target, None)), true, 0));
+        let mut ended = None;
+        for _ in 0..40 {
+            for event in world.step() {
+                if let EventKind::ActionEnded {
+                    id: who, outcome, ..
+                } = event.kind
+                    && who == id
+                {
+                    ended.get_or_insert(outcome);
+                }
+            }
+            if ended.is_some() {
+                break;
+            }
+        }
+        let pos = world.sprite(id).expect("alive").pos();
+        assert_ne!(ended, Some(Outcome::Blocked), "at {pos:?}");
+        assert_eq!(pos, Pos { x: 8, y: 1 }, "round the loop, beside the bush");
     }
 
     #[test]
