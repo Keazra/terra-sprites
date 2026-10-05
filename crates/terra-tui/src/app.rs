@@ -2842,6 +2842,7 @@ impl App {
         fresh.data_folder = self.data_folder.take();
         fresh.genome_folder = self.genome_folder.take();
         fresh.save_folder = self.save_folder.take();
+        fresh.theme_folder = self.theme_folder.take();
         // The Cursor as the world left it: where it was, what it has hold
         // of, in Grab mode, which holds and leads, and whether sprites can
         // see it.
