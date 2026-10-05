@@ -38,7 +38,7 @@ The owner's preferences and the project's conventions, for any agent session, lo
 
 ## Design documents
 
-- The spec is the highest `docs/design/*-vN.md`. Each revision is a new copy with a "Changes from vN-1" table at the top, saying what changed, where the decision came from, and which sections it touches.
+- The spec is each design's highest `docs/design/*-vN.md`: M1's (`m1-a-sprite-lives`) is the rulebook for the game as built, and M2's (`m2-generations`) plans milestone 2 and holds what its slices decide. Each revision is a new copy with a "Changes from vN-1" table at the top, saying what changed, where the decision came from, and which sections it touches.
   - **It carries only its own table.** When copying the previous revision, replace its table with the new one; the old table stays at the top of the archived copy. So a citation such as "v16 change 16" is row 16 of the table heading `archive/…-v16.md`. The owner asked for this in slice 10b: the tables of v2–v21 had grown to a third of the spec, all ahead of it. Trimming history changes no design, so it needs no new revision.
 - A revision not yet on `main` is amended in place within its PR. Once it's on `main`, the next change is a new version.
 - **`docs/design/` holds only the current revision of each design.** The PR that adds a revision moves the one it supersedes into `docs/design/archive/` with `git mv`, the new revision's "Supersedes" links point into `archive/`, and the README's design link moves to the new revision. Reviews of a design, such as the `*-eval.md` files, are archived with the revision they reviewed. Issues link to the current revision, since an archived one is history.
@@ -46,7 +46,7 @@ The owner's preferences and the project's conventions, for any agent session, lo
 
 ## The slice loop
 
-Each slice is a GitHub issue ("Slice N: …") in the M1 milestone, worked as in the `handover` skill:
+Each slice is a GitHub issue ("Slice N: …") in its milestone; M2's are Slices 20–30, worked as in the `handover` skill:
 
 1. Grill the slice's open design questions (`grilling`), in plain words.
 2. Record the decisions in a new design revision and `CONTEXT.md`.
@@ -94,7 +94,7 @@ The owner runs Gemini, and sometimes Codex, on each PR. They post Gemini's findi
 
 - **Update Rust before running the checks:** `rustup update stable`. The container's toolchain can be older than the stable CI uses, and an older clippy flags lints CI doesn't: in slice 9e-b, 1.94 flagged `nonminimal_bool` in `inspector.rs`, on `main` too.
 - **The session names its own branch** (`claude/…`). The project's is `feat/slice-N-<slug>`, so ask the owner which to use before the first push.
-- **There's no `gh`;** the GitHub tools do the same work. A review thread gets a reply to its comment, then is resolved by its thread ID.
+- **Try `gh` before saying something can't be done.** The GitHub tools cover most work: a review thread gets a reply to its comment, then is resolved by its thread ID. What they can't do, such as making a milestone, `gh api` may: in the M2 planning session it worked through the proxy, where the session had first told the owner it couldn't be done.
 - **A branch on GitHub can't be deleted from a session:** the git proxy refuses with a 403. The owner deletes a merged branch from its PR page.
 
 ## Triage

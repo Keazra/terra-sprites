@@ -2,7 +2,7 @@
 
 ## Project
 
-Terra Sprites is an ASCII artificial-life game in Rust. The spec is the current design doc in `docs/design/` (the highest `-vN`); see `docs/agents/domain.md` for how to read it.
+Terra Sprites is an ASCII artificial-life game in Rust. The spec is the current design docs in `docs/design/`, each at its highest `-vN`: M1's (`m1-a-sprite-lives`) for the game as built, and M2's (`m2-generations`) for milestone 2, which builds on it; see `docs/agents/domain.md` for how to read it.
 
 Before pushing, run the checks CI runs (`.github/workflows/ci.yml` is the source of truth):
 
