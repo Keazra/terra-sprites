@@ -9,7 +9,7 @@
 
 ## Decisions from the planning session
 
-The owner planned M2 in a `/grill-with-docs` session on 2026-10-05, in three rounds of questions (kept with the project's files, `m2-planning/round-1.md` to `round-3.md`). Each recommendation the owner didn't object to stands, as usual.
+The owner planned M2 in a `/grill-with-docs` session on 2026-10-05, in three rounds of questions. The rounds are notes in the Claude project's shared files, not in this repository; everything they settled is in the table below. Each recommendation the owner didn't object to stands, as usual.
 
 | # | Decision | Source | Sections |
 |---|---|---|---|
@@ -78,10 +78,10 @@ The owner's times, as playtime at 1× (1.25 ticks a second, M1 design §6.6):
 | Dies of old age | about 4 hours | about 18,000 | about 1 hour |
 
 - **These are the starter genome's times.** The genome brings them about (§3), so they vary from sprite to sprite and can evolve.
-- **Lifespan** is the age at which old age starts to harm a sprite (M1 design §4.8, §4.10). Old age kills within about 2,000 ticks after it, so the starter lifespan becomes about **16,000 ticks**, down from 60,000. The range lifespan may evolve within comes down in proportion, from 20,000–200,000 to about **6,000–60,000**. Slice 22 may recast lifespan as part of ageing (§3); the times above stay the aim.
+- **Growing old and lifespan are two moments.** Growing old, at about 13,500 ticks, is the start of the old stage, when decline and wear's speeding of it begin (§3). **Lifespan** comes later: it's the age at which old age starts to injure a sprite (M1 design §4.8, §4.10). Old age kills within about 2,000 ticks after it, so the starter lifespan becomes about **16,000 ticks**, down from 60,000. The range lifespan may evolve within comes down in proportion, from 20,000–200,000 to about **6,000–60,000**. Slice 22 may recast lifespan as part of ageing (§3); the times above stay the aim.
 - **A generation takes about 15–20 minutes at 4×,** the full game's top speed (Slice 27), so an evening sees several. Long runs of evolution belong to the fast-forward mode.
 - **Lives get shorter in Slice 23, with breeding.** Until sprites have young, nothing replaces the dead: with 4-hour lives, the default world would be empty after about 4 hours of play. So lives stay at 60,000 ticks through Slice 22, and Slice 23 brings both changes at once.
-- **Childhood ends at growing up.** M1's viability run counts ticks 0–10,000 as childhood because sprites had no stages (M1 design §7.4, A4). From Slice 22, childhood is a stage, and the harsher world's goal (§6, criterion 5) is counted at growing up.
+- **Childhood ends at growing up.** M1's viability run counts ticks 0–10,000 as childhood because sprites had no stages (M1 design §7.4, A4). From Slice 22, childhood is a stage, and the harsher world's goal (§6, G5) is counted at growing up.
 
 ---
 
@@ -151,4 +151,4 @@ M2 is done when these hold, as well as M1's A1–A9. Each slice sets its criteri
 | G6 | **Fast-forward.** A world can run for many generations with no screen, and be opened afterwards. | 27 |
 | G7 | **Content safety.** A child is never a mating target, for any genome or data pack (§5). | 23 |
 
-Slice 30 gathers the evidence in `docs/acceptance/m2.md`, as `docs/acceptance/m1.md` did for M1, with a play-through checklist for the owner.
+Slice 30 gathers the evidence in `docs/acceptance/m2.md`, as `docs/acceptance/m1.md` did for M1, with a play-through checklist for the owner. Slices without a row of their own are checked there: the title screen (Slice 21) and how each slice feels in play, as M1's A8 checked the game in Windows Terminal. Memory of places (Slice 20) shows in G5, which can't be met without it.
