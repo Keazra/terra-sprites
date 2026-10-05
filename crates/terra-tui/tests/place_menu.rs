@@ -252,7 +252,9 @@ fn a_waiting_item_s_key_hints_say_how_to_place_it_or_put_it_away() {
     pick(&mut app, &world, 3);
     let status = status_line(&app, &world);
     assert!(
-        status.trim_end().ends_with("click to place  right-click put away"),
+        status
+            .trim_end()
+            .ends_with("click to place  right-click put away"),
         "{status:?}"
     );
     // In another mode, clicks don't place: the usual hints.
