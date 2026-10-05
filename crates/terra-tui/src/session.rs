@@ -69,6 +69,21 @@ impl Session {
         }
     }
 
+    /// Plays on from where a replay has reached, as a live session, which
+    /// records its session log afresh from there (design v36 §2.7). The
+    /// replay's commands not yet played are dropped. A live session stays
+    /// as it is.
+    pub fn take_over(&mut self) {
+        if let Session::Replay(playback) = self {
+            // The world plays on from its own save, which is what the new
+            // session log starts from, so the log replays the very world
+            // played on.
+            let world =
+                World::load(&playback.world().save()).expect("a world loads from its own save");
+            *self = Session::live(world);
+        }
+    }
+
     /// Writes the session log to `path`, beside it first and then in its
     /// place, so a write cut short never breaks the last one. A replay
     /// writes none: it might be playing that very file.

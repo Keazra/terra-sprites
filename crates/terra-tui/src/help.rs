@@ -43,6 +43,7 @@ const COLUMNS: [&[Group]; 3] = [
                 ("Ctrl+S", "save as..."),
                 ("Ctrl+O", "load a save"),
                 ("Ctrl+T", "pick a theme"),
+                ("Ctrl+R", "take over a replay"),
             ],
         ),
     ],
