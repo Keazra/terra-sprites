@@ -117,11 +117,10 @@ fn a_new_world_has_a_map_of_the_configured_size() {
 #[test]
 fn the_seed_decides_the_map() {
     let config = "(width: 64, height: 40)";
-    assert_eq!(
-        terrain_of(&generated(config, 5)),
-        terrain_of(&generated(config, 5)),
-        "the same seed gives the same map"
-    );
+    // Two worlds generated apart, not one compared with itself.
+    let first = terrain_of(&generated(config, 5));
+    let again = terrain_of(&generated(config, 5));
+    assert_eq!(first, again, "the same seed gives the same map");
     for (a, b) in [(1, 2), (2, 3), (5, 500)] {
         assert_ne!(
             terrain_of(&generated(config, a)),
