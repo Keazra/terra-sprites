@@ -93,6 +93,10 @@ fn main() -> ExitCode {
                     // Plain letters and `+` send only text without this, with
                     // no repeats or releases.
                     | KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
+                    // A shifted key as the character it types, `?` or a
+                    // capital, on any layout, rather than the key with
+                    // Shift held (#124).
+                    | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS
             )
         )
         .is_ok();
@@ -117,7 +121,11 @@ fn main() -> ExitCode {
         undo_setup();
         restore_terminal(info);
     }));
-    let keys = Keys::with_release_reporting(cfg!(windows) || enhanced_keys);
+    let keys = if enhanced_keys {
+        Keys::kitty()
+    } else {
+        Keys::with_release_reporting(cfg!(windows))
+    };
     // A session that ends in a panic still writes its replay (design §2.9).
     let session_log = files::session_log();
     let result =
