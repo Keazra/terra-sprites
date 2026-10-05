@@ -5,8 +5,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use terra_sim::{DataPack, DeathCause, LabRun, SoakRun, Verb, Window};
 
-/// The slice that tunes the default world to meet A4 (design §7.4).
-const A4_TUNING: &str = "#18";
+/// How many grown-up deaths, over all the seeds, A4 needs before it judges
+/// what share hunger and thirst caused (design v37 §7.4).
+const A4_FEWEST_DEATHS: u64 = 10;
 
 /// A scenario's seeds, each with its run, or what it said when it panicked.
 pub type SeedRuns = [(u64, Result<LabRun, String>)];
@@ -138,18 +139,22 @@ impl Report {
             percent(v.survival.median),
             v.survival.verdict
         ));
-        let share = match v.hunger_and_thirst.median {
-            None => "no data: no sprite died".to_string(),
-            Some(_) => format!(
-                "{}, over the {} of {} seeds with deaths",
-                percent(v.hunger_and_thirst.median),
-                v.seeds_with_deaths,
-                v.finished
+        let g = &v.grown_ups;
+        let share = match g.deaths {
+            0 => "none died".to_string(),
+            n if n < A4_FEWEST_DEATHS => {
+                format!("{} of {n}: too few deaths to judge", g.hunger_and_thirst)
+            }
+            n => format!(
+                "{} of {n}: {}",
+                g.hunger_and_thirst,
+                percent(Some(g.hunger_and_thirst as f64 / n as f64))
             ),
         };
         page.push_str(&format!(
-            "| Hunger and thirst's share of deaths, ticks 0–50,000 | {share} | under 25% | {} |\n\n",
-            v.hunger_and_thirst.verdict
+            "| Hunger and thirst's share of grown-up deaths, ticks 10,000–50,000, all seeds \
+             | {share} | under 25%, once {A4_FEWEST_DEATHS} have died | {} |\n\n",
+            g.verdict
         ));
 
         page.push_str("## The thorn trap (design §7.3)\n\n");
@@ -259,13 +264,10 @@ impl Report {
                 "A4: alive at tick 10,000, median".to_string(),
                 percent(v.survival.median),
             ),
+            ("A4: grown-up deaths".into(), v.grown_ups.deaths.to_string()),
             (
-                "A4: hunger and thirst's share of deaths, median".into(),
-                percent(v.hunger_and_thirst.median),
-            ),
-            (
-                "A4: seeds with deaths".into(),
-                v.seeds_with_deaths.to_string(),
+                "A4: grown-up deaths of hunger or thirst".into(),
+                v.grown_ups.hunger_and_thirst.to_string(),
             ),
             (
                 "Thorn trap: deaths by thornbush in ticks 0–30,000, median".into(),
@@ -342,15 +344,36 @@ pub struct Viability {
     pub finished: usize,
     /// A4: the share of sprites alive at tick 10,000.
     pub survival: Criterion,
-    /// A4: starvation and dehydration's share of deaths over 50,000 ticks,
-    /// over the seeds where any sprite died.
-    pub hunger_and_thirst: Criterion,
-    /// How many seeds had a death in their 50,000 ticks.
-    pub seeds_with_deaths: usize,
+    /// A4: the deaths after childhood, over all the seeds (v37). Reports
+    /// from before it have none.
+    #[serde(default)]
+    pub grown_ups: GrownUps,
     /// The thorn trap (design §7.3): deaths by thornbush over ticks 0–30,000.
     pub thorn_trap: Count,
     /// A row for each seed that finished: who survived, what killed the rest, and the verbs.
     pub seeds: Vec<SeedRow>,
+}
+
+/// A4's grown-up deaths (design v37 §7.4): those in ticks 10,000–50,000,
+/// after childhood, over all the seeds that finished.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GrownUps {
+    pub deaths: u64,
+    /// Those of starvation or dehydration.
+    pub hunger_and_thirst: u64,
+    /// Met while fewer than `A4_FEWEST_DEATHS` died, or when hunger and
+    /// thirst caused under a quarter of them.
+    pub verdict: Verdict,
+}
+
+impl Default for GrownUps {
+    fn default() -> GrownUps {
+        GrownUps {
+            deaths: 0,
+            hunger_and_thirst: 0,
+            verdict: Verdict::NoData,
+        }
+    }
 }
 
 /// One seed's 50,000 ticks: who survived, what killed the rest, and how
@@ -385,22 +408,26 @@ pub fn viability(seeds: &SeedRuns, sprites: u64, data: &DataPack) -> Viability {
             sprites.saturating_sub(died) as f64 / sprites as f64
         })
         .collect();
-    // A seed where no one died has no share of deaths (design §7.6).
-    let hunger_and_thirst: Vec<f64> = finished
-        .iter()
-        .map(|(_, run)| &window(run, 50_000).deaths)
-        .filter_map(|deaths| {
-            let all: u64 = deaths.values().sum();
-            let hungry_or_thirsty: u64 = deaths
-                .iter()
-                .filter(|(cause, _)| {
-                    matches!(cause, DeathCause::Starvation | DeathCause::Dehydration)
-                })
-                .map(|(_, n)| n)
-                .sum();
-            (all > 0).then(|| hungry_or_thirsty as f64 / all as f64)
-        })
-        .collect();
+    // Grown-up deaths: those by tick 50,000 less those in childhood.
+    let need =
+        |cause: &DeathCause| matches!(cause, DeathCause::Starvation | DeathCause::Dehydration);
+    let (mut deaths, mut hunger_and_thirst) = (0, 0);
+    for (_, run) in &finished {
+        let (childhood, all) = (&window(run, 10_000).deaths, &window(run, 50_000).deaths);
+        for (cause, n) in all {
+            let later = n - childhood.get(cause).copied().unwrap_or(0);
+            deaths += later;
+            if need(cause) {
+                hunger_and_thirst += later;
+            }
+        }
+    }
+    let verdict = match deaths {
+        _ if finished.is_empty() => Verdict::NoData,
+        n if n < A4_FEWEST_DEATHS => Verdict::Met,
+        n if (hunger_and_thirst as f64) < 0.25 * n as f64 => Verdict::Met,
+        _ => Verdict::NotMet { until: None },
+    };
     let thornbush_deaths: Vec<(u64, u64)> = finished
         .iter()
         .map(|(seed, run)| {
@@ -441,8 +468,11 @@ pub fn viability(seeds: &SeedRuns, sprites: u64, data: &DataPack) -> Viability {
         finished: finished.len(),
         seeds: rows,
         survival: a4(median_of(&alive), |share| share >= 0.8),
-        hunger_and_thirst: a4(median_of(&hunger_and_thirst), |share| share < 0.25),
-        seeds_with_deaths: hunger_and_thirst.len(),
+        grown_ups: GrownUps {
+            deaths,
+            hunger_and_thirst,
+            verdict,
+        },
         thorn_trap: Count {
             median: median_of(&counts),
             per_seed: thornbush_deaths,
@@ -704,15 +734,12 @@ fn thousands(n: u64) -> String {
     out
 }
 
-/// One of A4's halves: its median, met when it `passes`, and otherwise
-/// not met until slice 17 is done.
+/// A4's survival: its median, met when it `passes`.
 fn a4(median: Option<f64>, passes: impl Fn(f64) -> bool) -> Criterion {
     let verdict = match median {
         None => Verdict::NoData,
         Some(share) if passes(share) => Verdict::Met,
-        Some(_) => Verdict::NotMet {
-            until: Some(A4_TUNING.into()),
-        },
+        Some(_) => Verdict::NotMet { until: None },
     };
     Criterion { median, verdict }
 }
@@ -847,7 +874,7 @@ mod tests {
     }
 
     #[test]
-    fn a4_survival_under_80_percent_is_not_met_yet_until_slice_17() {
+    fn a4_survival_under_80_percent_is_not_met() {
         let six = [(DeathCause::Starvation, 6)]; // 24 of 30 alive
         let seven = [(DeathCause::Starvation, 7)]; // 23 of 30 alive
         let seeds: Vec<_> = (1..=10)
@@ -860,12 +887,7 @@ mod tests {
         // The median is halfway between 23 and 24 of 30.
         let median = survival.median.expect("ten seeds finished");
         assert!((median - 47.0 / 60.0).abs() < 1e-12, "median {median}");
-        assert_eq!(
-            survival.verdict,
-            Verdict::NotMet {
-                until: Some("#18".into())
-            }
-        );
+        assert_eq!(survival.verdict, Verdict::NotMet { until: None });
     }
 
     /// Ten seeds whose first 50,000 ticks saw these deaths, by seed.
@@ -877,51 +899,51 @@ mod tests {
     }
 
     #[test]
-    fn a4_hunger_and_thirst_share_is_the_median_over_the_seeds_where_sprites_died() {
-        // Design §7.4, A4: starvation plus dehydration cause <25% of deaths
-        // over the first 50,000 ticks. A seed where no one died has no share
-        // (design §7.6), so five seeds give the median.
-        use DeathCause::{Dehydration, OldAge, Starvation};
-        let viability = viability(
-            &seeds_dying([
-                &[],
-                &[],
-                &[],
-                &[],
-                &[],
-                &[(Dehydration, 1)],              // 100%
-                &[(Dehydration, 2)],              // 100%
-                &[(Starvation, 1), (OldAge, 3)],  // 25%
-                &[(OldAge, 4)],                   // 0%
-                &[(Dehydration, 1), (OldAge, 1)], // 50%
-            ]),
-            30,
-            &data(),
-        );
-        assert_eq!(viability.hunger_and_thirst.median, Some(0.5));
-        assert_eq!(viability.seeds_with_deaths, 5);
-        assert_eq!(
-            viability.hunger_and_thirst.verdict,
-            Verdict::NotMet {
-                until: Some("#18".into())
-            }
-        );
+    fn a4_grown_up_deaths_are_those_after_tick_10000_pooled_over_the_seeds() {
+        // Design v37 §7.4, A4: hunger and thirst cause under 25% of the
+        // deaths after tick 10,000, counted over all the seeds together.
+        // Childhood deaths don't count: a newborn that never finds water
+        // dying of thirst is natural.
+        use DeathCause::{Dehydration, OldAge};
+        let childhood: &[(DeathCause, u64)] = &[(Dehydration, 5)];
+        let later: &[(DeathCause, u64)] = &[(Dehydration, 6), (OldAge, 2)];
+        let seeds: Vec<_> = (1..=10)
+            .map(|seed| (seed, Ok(viability_run(childhood, childhood, later))))
+            .collect();
+        let grown_ups = viability(&seeds, 30, &data()).grown_ups;
+        // Each seed: one thirst death and two of old age after tick 10,000.
+        assert_eq!((grown_ups.deaths, grown_ups.hunger_and_thirst), (30, 10));
+        assert_eq!(grown_ups.verdict, Verdict::NotMet { until: None });
     }
 
     #[test]
-    fn a4_hunger_and_thirst_share_is_met_only_under_a_quarter() {
+    fn a4_grown_ups_are_met_under_a_quarter_once_ten_have_died() {
         use DeathCause::{OldAge, Starvation};
         let quarter: &[(DeathCause, u64)] = &[(Starvation, 1), (OldAge, 3)];
         let at_a_quarter = viability(&seeds_dying([quarter; 10]), 30, &data());
+        assert_eq!(at_a_quarter.grown_ups.deaths, 40);
         assert_eq!(
-            at_a_quarter.hunger_and_thirst.verdict,
-            Verdict::NotMet {
-                until: Some("#18".into())
-            }
+            at_a_quarter.grown_ups.verdict,
+            Verdict::NotMet { until: None }
         );
         let under: &[(DeathCause, u64)] = &[(Starvation, 1), (OldAge, 4)];
         let under_a_quarter = viability(&seeds_dying([under; 10]), 30, &data());
-        assert_eq!(under_a_quarter.hunger_and_thirst.verdict, Verdict::Met);
+        assert_eq!(under_a_quarter.grown_ups.verdict, Verdict::Met);
+    }
+
+    #[test]
+    fn a4_grown_ups_are_met_with_fewer_than_ten_deaths_whatever_killed_them() {
+        // Design v37 §7.4: a share of a handful of deaths means little, and
+        // hardly anyone dying is what viability asks.
+        let mut deaths: [&[(DeathCause, u64)]; 10] = [&[]; 10];
+        deaths[0] = &[(DeathCause::Dehydration, 5)];
+        deaths[1] = &[(DeathCause::Starvation, 4)];
+        let nine = viability(&seeds_dying(deaths), 30, &data()).grown_ups;
+        assert_eq!((nine.deaths, nine.hunger_and_thirst), (9, 9));
+        assert_eq!(nine.verdict, Verdict::Met);
+        deaths[2] = &[(DeathCause::Dehydration, 1)];
+        let ten = viability(&seeds_dying(deaths), 30, &data()).grown_ups;
+        assert_eq!(ten.verdict, Verdict::NotMet { until: None });
     }
 
     #[test]
@@ -1028,11 +1050,31 @@ mod tests {
     }
 
     #[test]
-    fn a4_hunger_and_thirst_share_has_no_data_when_no_sprite_died() {
-        let viability = viability(&seeds_dying([&[]; 10]), 30, &data());
-        assert_eq!(viability.hunger_and_thirst.median, None);
-        assert_eq!(viability.hunger_and_thirst.verdict, Verdict::NoData);
-        assert_eq!(viability.seeds_with_deaths, 0);
+    fn a4_grown_ups_are_met_when_no_sprite_died_and_have_no_data_when_no_seed_finished() {
+        let none_died = viability(&seeds_dying([&[]; 10]), 30, &data()).grown_ups;
+        assert_eq!(none_died.deaths, 0);
+        assert_eq!(none_died.verdict, Verdict::Met);
+        assert_eq!(
+            viability(&[], 30, &data()).grown_ups.verdict,
+            Verdict::NoData
+        );
+    }
+
+    #[test]
+    fn a_report_from_before_the_grown_up_rule_still_reads() {
+        // Older reports have a median share and a count of seeds with deaths
+        // in place of the grown-ups' counts.
+        let text = sample().to_ron();
+        let start = text.find("grown_ups:").expect("the grown-ups' field");
+        let end = start + text[start..].find("),").expect("its end") + 2;
+        let text = format!(
+            "{}hunger_and_thirst: (median: None, verdict: NoData), seeds_with_deaths: 0,{}",
+            &text[..start],
+            &text[end..]
+        );
+        assert!(!text.contains("grown_ups"), "{text}");
+        let report = Report::from_ron(&text).expect("an older report reads");
+        assert_eq!(report.viability.grown_ups.verdict, Verdict::NoData);
     }
 
     /// A window over ticks `from` to `to` that counted these applied actions.
@@ -1255,8 +1297,8 @@ mod tests {
         );
         assert!(
             page.contains(
-                "| Hunger and thirst's share of deaths, ticks 0–50,000 \
-                 | 100%, over the 1 of 10 seeds with deaths | under 25% | not met yet (#18) |"
+                "| Hunger and thirst's share of grown-up deaths, ticks 10,000–50,000, all seeds \
+                 | 1 of 1: too few deaths to judge | under 25%, once 10 have died | met |"
             ),
             "{page}"
         );
@@ -1457,12 +1499,9 @@ mod tests {
     }
 
     #[test]
-    fn the_hunger_and_thirst_share_counts_seeds_with_deaths_among_those_that_finished() {
-        // Gemini's review on #95: "2 of 10 seeds with deaths" would suggest
-        // that the seeds which broke had no deaths.
-        let mut deaths: [&[(DeathCause, u64)]; 10] = [&[]; 10];
+    fn the_grown_up_rule_counts_only_the_seeds_that_finished() {
+        let mut deaths: [&[(DeathCause, u64)]; 10] = [&[(DeathCause::OldAge, 3)]; 10];
         deaths[0] = &[(DeathCause::Dehydration, 1)];
-        deaths[1] = &[(DeathCause::Starvation, 1)];
         let mut seeds = seeds_dying(deaths);
         for broken in &mut seeds[5..] {
             broken.1 = Err("tick 3: IDs only go up".into());
@@ -1470,10 +1509,8 @@ mod tests {
         let mut report = sample();
         report.viability = viability(&seeds, 30, &data());
         let page = report.markdown(None);
-        assert!(
-            page.contains("| 100%, over the 2 of 5 seeds with deaths |"),
-            "{page}"
-        );
+        // Seed 1's thirst death and three of old age on each of seeds 2–5.
+        assert!(page.contains("| 1 of 13: 7.7% |"), "{page}");
     }
 
     #[test]

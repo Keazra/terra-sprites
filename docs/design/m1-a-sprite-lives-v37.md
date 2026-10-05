@@ -9,7 +9,7 @@
 
 ## Changes from v36
 
-Slice 17 ([#18](https://github.com/Keazra/terra-sprites/issues/18)), its first part: the soak (A7). The viability tuning and A4's wording follow in its second part.
+Slice 17 ([#18](https://github.com/Keazra/terra-sprites/issues/18)): the soak (A7), and A4 settled as a safety floor with no tuning. New term: grown-up death (`CONTEXT.md`).
 
 | # | Change | Source | Sections |
 |---|---|---|---|
@@ -19,6 +19,8 @@ Slice 17 ([#18](https://github.com/Keazra/terra-sprites/issues/18)), its first p
 | 4 | **One seed makes the whole soak:** the default world is generated from it, and the script draws from its own RNG, seeded from it on a stream of its own, so it takes nothing from the world's RNG (§2.3) and the same seed gives the same run. Each baseline run soaks a new seed, from the clock unless one is given, and a broken soak's report gives the command that runs it again: `cargo run --profile baseline -p terra-sim --example soak -- --seed N --ticks T`. | Agreed on #18 (a new seed each run, recorded so a failure can be replayed) | §7.6 |
 | 5 | **The baseline report's soak section** gives its seed, its verdict against A7, and, if it finished, the sprites alive at the end and the most at once, the objects, the deaths, and each command given and refused. Only its verdict can count as moved, since its seed and so its counts change every run. Reports from before the soak have none. | Follows from the slice | §7.6 |
 | 6 | **The cross-platform determinism check also runs the soak's script:** after its 20,000 ticks with nobody clicking, it runs the same world again for 10,000 ticks with the script from seed 7, so the commands a player's clicks send are compared across computers too. The comparison's table groups the checkpoints by world. | Deferred from slice 15 (#16) to this slice | §7.5 |
+| 7 | **A4 judges grown-ups apart from childhood.** All of M1's sprites are newborns at tick 0, as life stages are M2's ([#49](https://github.com/Keazra/terra-sprites/issues/49)), so ticks 0–10,000 count as childhood: at least 80% must survive them, as before. Hunger and thirst must cause under 25% of the **grown-up deaths**, those in ticks 10,000–50,000, counted over all the seeds together, and judged only once at least 10 have died; fewer is met. A newborn that never finds water dying of thirst is natural; a grown sprite doing so means it can't fend for itself. This settles v24's open question: a median of per-seed shares had no value on seeds where no one died. | Owner's principle (a grown sprite fends for itself; a young one dies unless it stumbles on food and water); recommended (silence accepts) | §7.4, §7.6 |
+| 8 | **No tuning in M1: A4 is a safety floor.** The owner's ideal is that only about 20% of unattended newborns survive childhood. Measured in the default world: fewer berries barely move survival (100% with a quarter of the bushes, or a third of the berries), and water does, but scarce water kills grown sprites as well as newborns (with an eighth of today's water, 63% survive childhood and 251 of 300 are dead by tick 50,000), because nothing yet lets a sprite remember where water is ([#40](https://github.com/Keazra/terra-sprites/issues/40)). Today's world meets the floor (3 grown-up deaths in 10 seeds). The 20% goal waits for place memory and learning from others ([#66](https://github.com/Keazra/terra-sprites/issues/66)): [#122](https://github.com/Keazra/terra-sprites/issues/122). | Measured in slice 17 (#18); owner's choice | §7.4, §7.6 |
 
 **Earlier changes** are in the archived revisions, in [`archive/`](archive/). Each opens with its own table: v36's changes (from v35) head [v36](archive/m1-a-sprite-lives-v36.md), and so on back to v2. So "v16 change 16" is row 16 of the table at the top of [v16](archive/m1-a-sprite-lives-v16.md). The current revision carries only its own table, so the spec doesn't open with its whole history.
 
@@ -1771,7 +1773,7 @@ M1 is **done** when all of the following hold:
 | A1 | The thornbush lesson (§7.3) | Scenario test |
 | A2 | Reward training (§7.3) | Scenario test |
 | A3 | Correct training (§7.3) | Scenario test |
-| A4 | **Viability.** In the default world, ≥80% of sprites survive the first 10,000 ticks, and starvation plus dehydration cause <25% of deaths over the first 50,000 ticks (median of 10 seeds) | Baseline run's viability run (§7.6) |
+| A4 | **Viability,** a safety floor (v37). In the default world, ≥80% of sprites survive the first 10,000 ticks (median of 10 seeds), and starvation plus dehydration cause <25% of the grown-up deaths, those in ticks 10,000–50,000, over all 10 seeds together; with fewer than 10 such deaths it's met | Baseline run's viability run (§7.6) |
 | A5 | **Performance.** 100 sprites at ≥200 ticks per second in a release build on the development machine | Benchmark |
 | A6 | **Determinism and persistence.** Test layers 3 and 4 pass | Tests |
 | A7 | **Robustness.** A headless soak of 1,000,000 ticks at Max speed with a random script of the Cursor's commands produces no panics and no invariant violations | Baseline run's soak (§7.6) |
@@ -1802,7 +1804,7 @@ What's too slow for CI is measured on `main` instead, each time it moves, by a *
 
 - **What it measures:**
   - **The viability run:** the default world on seeds 1–10, 50,000 ticks each, with no player. It gives:
-    - A4: survival at tick 10,000, and starvation and dehydration's share of deaths over 50,000 ticks, as the median of 10 seeds
+    - A4: survival at tick 10,000, as the median of 10 seeds, and the grown-up deaths over all of them, with how many were of starvation or dehydration (v37)
     - the thorn trap's count: deaths by thornbush in ticks 0–30,000, the same worlds as its lab scenario (§7.3)
     - per seed, who survived, what killed the rest, and how often each verb was applied.
   - **A1–A3's numbers:** each scenario's medians, for its runs and their controls, on CI's seeds. CI stays the judge; the report records them so that a change shows.
@@ -1816,7 +1818,6 @@ What's too slow for CI is measured on `main` instead, each time it moves, by a *
   - Each criterion is **met**, **not met yet** or **no data**, against §7.3 and §7.4's pass marks exactly, so a share of no deaths is no data. A criterion that a tuning slice hasn't yet reached names that slice.
   - **Broken** means only a panic or a broken invariant (a crash is a shoved sprite's, §3.5.4). It's given with the seed, what it said, which names the tick for a broken invariant, and the command that replays it. The seeds that finished are still reported, and a median over fewer seeds than ran says so.
 - **The observer,** an AI agent, reads the report, the code and the commits since the last one, and writes the **briefing**. The briefing gives, in this order: in plain words, what was tested and what changed; the numbers that moved and what might explain them; anything that looks wrong, and how sure it is. The observer changes nothing itself. The launcher does everything that has an effect, and files an issue, or comments on an open one, only for a broken run; the issue carries the observer's guess at the cause, labelled as a guess, which the owner is happy to see on GitHub.
-- **Open:** A4's share of deaths means little when few sprites die. At v23, 5 of 300 sprites died in 50,000 ticks, and five of the ten seeds had no deaths, so a median of their shares has no value. Its wording is for slice 17 to settle, alongside the tuning.
 
 ---
 
