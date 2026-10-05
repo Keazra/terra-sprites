@@ -800,6 +800,14 @@ impl App {
                 self.note_gave_up(id, action);
                 self.note_done_to_selected(event.tick, id, action, world);
             }
+            // A slide that crashes into something that hurts, such as a
+            // thornbush, hurts as a bite of one does (design §6.3).
+            if let EventKind::Crashed {
+                sprite, hurt: true, ..
+            } = event.kind
+            {
+                self.start_emote(sprite, Emote::Hurt);
+            }
             self.note_rest(&event.kind);
             if let (EventKind::Rewarded { id, .. } | EventKind::Corrected { id, .. }, Some(touch)) =
                 (&event.kind, CursorTouch::reported(&event.kind))
