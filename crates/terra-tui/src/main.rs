@@ -305,6 +305,11 @@ fn run(terminal: &mut DefaultTerminal, session: &mut Session, setup: Setup) -> i
             if let Some(loaded) = app.take_loaded() {
                 session.load(loaded);
             }
+            // Taking over a replay plays on from its world, live (design
+            // v36 §2.7).
+            if app.take_taken_over() {
+                session.take_over();
+            }
             // The player's clicks, stamped for the next tick (design
             // §2.5), as each is made, so a save made next holds them. A
             // replay takes none.

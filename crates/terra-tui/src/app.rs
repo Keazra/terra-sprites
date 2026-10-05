@@ -535,6 +535,9 @@ pub struct App {
     since_autosave: Duration,
     /// While a replay plays back (design §2.7).
     replay: Option<Replay>,
+    /// Whether the player has just taken over the replay, for the frame
+    /// loop to take (`take_taken_over`).
+    taken_over: bool,
 }
 
 /// A replay as the screen follows it (design §2.7).
@@ -566,7 +569,8 @@ impl ReplayStops {
 }
 
 /// What the status line says when the player tries to change a replay.
-pub const REPLAY_REFUSAL: &str = "It's a replay: only time, the view and the inspector work";
+pub const REPLAY_REFUSAL: &str =
+    "It's a replay: only time, the view and the inspector work, until Ctrl+R takes it over";
 
 /// How often the world saves itself while time runs (design §6.7).
 pub const AUTOSAVE_EVERY: Duration = Duration::from_secs(10 * 60);
@@ -760,6 +764,7 @@ impl App {
             unsaved_run: Duration::ZERO,
             since_autosave: Duration::ZERO,
             replay: None,
+            taken_over: false,
         };
         app.centre_on(cursor);
         app
@@ -1565,6 +1570,7 @@ impl App {
             Action::SaveAs => self.start_save_naming(world),
             Action::OpenSaves => self.list_saves(),
             Action::OpenThemes => self.list_themes(),
+            Action::TakeOver => self.take_over(world),
             Action::SelectNext => self.select_along(world, Direction::Next),
             Action::SelectPrevious => self.select_along(world, Direction::Previous),
             Action::NextTab => self.open(self.tab.along(1)),
@@ -2450,6 +2456,48 @@ impl App {
             group_thousands(playback.end())
         ));
         self.take_in_replay(playback);
+    }
+
+    /// `Ctrl+R`: takes over the replay at the tick it has reached, so the
+    /// world is the player's from here on (design v36 §2.7). The player
+    /// takes over the recorded Cursor too: where it is, what it has hold of
+    /// (in Grab mode if it holds or leads something), and whether sprites
+    /// can see it. Time runs on as it was. Outside a replay it does nothing.
+    fn take_over(&mut self, world: &World) {
+        if self.replay.take().is_none() {
+            return;
+        }
+        self.taken_over = true;
+        self.commands.clear();
+        self.queued.clear();
+        let cursor = world.cursor();
+        self.mode = if cursor.leads().is_some() || cursor.holds().is_some() {
+            CursorMode::Grab
+        } else {
+            CursorMode::Select
+        };
+        self.told_tile = None;
+        if let Some(tile) = cursor.tile() {
+            self.cursor = tile;
+            self.told_tile = Some(tile);
+        }
+        self.visible_in.clear();
+        if cursor.visible() {
+            self.visible_in.insert(self.mode);
+        }
+        self.told_visible = cursor.visible();
+        self.settle_cursor(world);
+        self.tell_player(format!(
+            "You took over the replay at tick {}: it's your world now",
+            group_thousands(world.tick())
+        ));
+    }
+
+    /// Whether the player has just taken over the replay, for the frame
+    /// loop to play on from its world, recording it afresh (design v36
+    /// §2.7).
+    pub fn take_taken_over(&mut self) -> bool {
+        std::mem::take(&mut self.taken_over)
     }
 
     /// Whether a replay is playing back.

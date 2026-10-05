@@ -317,6 +317,103 @@ fn a_replay_never_autosaves() {
     );
 }
 
+#[test]
+fn ctrl_r_takes_over_a_replay() {
+    let mut keys = terra_tui::input::Keys::with_release_reporting(false);
+    let key = ratatui::crossterm::event::KeyEvent::new(
+        ratatui::crossterm::event::KeyCode::Char('r'),
+        ratatui::crossterm::event::KeyModifiers::CONTROL,
+    );
+    assert_eq!(keys.action_for(key), Some(Action::TakeOver));
+}
+
+#[test]
+fn taking_over_a_replay_plays_on_live_without_the_rest_of_the_recording() {
+    // The recording puts the ball down at tick 800.
+    let mut live = played(world(), 800);
+    live.submit(vec![Command::PutDown { tile: at(5, 5) }]);
+    for _ in 0..400 {
+        live.step();
+    }
+    assert!(live.world().cursor().holds().is_none());
+    let mut session = Session::replay(replay_of(&live, "take-over"));
+    for _ in 0..500 {
+        session.step();
+    }
+    session.take_over();
+    assert!(session.playback().is_none(), "it's live");
+    for _ in 0..400 {
+        session.step();
+    }
+    assert!(
+        session.world().cursor().holds().is_some(),
+        "the recorded putting down never played"
+    );
+    // The player's commands change the world now.
+    let sprite = session.world().sprites().next().expect("a sprite").id();
+    session.submit(vec![Command::Rename {
+        sprite,
+        name: "Mine".into(),
+    }]);
+    session.step();
+    let named = session.world().sprite(sprite).expect("the sprite");
+    assert_eq!(named.name(), Some("Mine"));
+
+    // Its session log starts where it was taken over, and replays it.
+    let mut playback = replay_of(&session, "taken-over");
+    assert!(!playback.started_fresh());
+    assert_eq!((playback.start(), playback.end()), (500, 901));
+    while playback.world().tick() < playback.end() {
+        playback.step();
+    }
+    assert_eq!(playback.divergence(), None);
+    assert_eq!(playback.world().state_hash(), session.world().state_hash());
+}
+
+#[test]
+fn taking_over_a_live_session_changes_nothing() {
+    let mut session = played(world(), 5);
+    let before = session.world().state_hash();
+    session.take_over();
+    assert!(session.playback().is_none());
+    assert_eq!(session.world().state_hash(), before);
+}
+
+#[test]
+fn after_taking_over_the_world_is_the_player_s() {
+    let mut playback = replay_of(&played(world(), 30), "app-take-over");
+    let mut app = replaying(&playback);
+    for _ in 0..5 {
+        playback.step();
+    }
+    let world = playback.world();
+    assert_eq!(app.apply(Action::TakeOver, world), Flow::Continue);
+    assert!(!app.replaying());
+    assert!(app.take_taken_over(), "the frame loop is told");
+    assert!(!app.take_taken_over(), "once");
+    let notice = app.notice().expect("a notice");
+    assert!(
+        notice.contains("You took over the replay at tick 5: it's your world now"),
+        "{notice}"
+    );
+    // The recorded Cursor holds the ball, and it's the player's now.
+    assert_eq!(app.mode(), CursorMode::Grab);
+    assert!(app.grip(world).is_some());
+    app.apply(Action::Rename, world);
+    assert_ne!(app.refusal(), Some(REPLAY_REFUSAL));
+    assert!(!top_bar(&app, world).contains("replay"));
+}
+
+#[test]
+fn ctrl_r_outside_a_replay_does_nothing() {
+    let world = world();
+    let mut app = app_for(&world);
+    app.apply(Action::TakeOver, &world);
+    assert!(!app.take_taken_over());
+    assert_eq!(app.notice(), None);
+    assert_eq!(app.mode(), CursorMode::Select);
+}
+
 /// Writes `files`, each `(path within the folder, text)`, in a fresh
 /// folder.
 fn data_folder(name: &str, files: &[(&str, &str)]) -> PathBuf {
