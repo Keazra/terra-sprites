@@ -1729,6 +1729,39 @@ mod tests {
     }
 
     #[test]
+    fn with_learning_off_familiarity_still_grows() {
+        // Design §5.6: a control run learns no worth or habit, but what a
+        // sprite attends to still grows familiar.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let map = Map::from_ascii(&["....."], &data).expect("valid drawing");
+        let genes = r#"(format: 1, genes: [
+            AttentionInstinct(input: "always", category: "toy", weight: 1.0),
+            Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),
+        ])"#;
+        let genome = Genome::from_ron(genes, &data).expect("a valid genome");
+        let scenario = Scenario {
+            map,
+            objects: &[(Pos { x: 3, y: 0 }, "ball")],
+            sprites: &[(Pos { x: 0, y: 0 }, Some(genome))],
+            scripted: &[],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        world.state.learning = false;
+        let id = world.sprites().next().expect("the sprite").id();
+        for _ in 0..50 {
+            world.step();
+        }
+        let brain = &world.state.sprites.get(id).expect("alive").brain;
+        let ball = brain
+            .experience
+            .types
+            .get(&Subject::ObjectType(4))
+            .expect("it attended to the ball");
+        assert!(ball.familiarity > 0.0);
+        assert!(ball.worth.iter().all(|&w| w == 0.0) && ball.habits.iter().all(|&h| h == 0.0));
+    }
+
+    #[test]
     fn a_sprite_with_no_stamina_left_still_walks() {
         // Design §3.7: low stamina only raises tiredness.
         let (mut world, id) = row_with_a_walker(
