@@ -244,6 +244,23 @@ fn a_right_click_puts_the_waiting_item_away() {
 }
 
 #[test]
+fn a_waiting_item_s_key_hints_say_how_to_place_it_or_put_it_away() {
+    // Design v28 §6.5, in Grab mode, where clicks place.
+    let world = field(&[], &[]);
+    let mut app = grab_app(&world);
+    assert!(!status_line(&app, &world).contains("click to place"));
+    pick(&mut app, &world, 3);
+    let status = status_line(&app, &world);
+    assert!(
+        status.trim_end().ends_with("click to place  right-click put away"),
+        "{status:?}"
+    );
+    // In another mode, clicks don't place: the usual hints.
+    apply(&mut app, &world, Action::Mode(CursorMode::Select));
+    assert!(!status_line(&app, &world).contains("click to place"));
+}
+
+#[test]
 fn esc_puts_the_waiting_item_away_before_it_lets_go_or_leaves_the_mode() {
     // Design v33 §6.5: the item waits on the Cursor as something held
     // would, so Esc lets go of it first, as a right click does.
