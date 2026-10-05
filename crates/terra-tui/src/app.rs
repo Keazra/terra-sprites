@@ -2458,6 +2458,8 @@ impl App {
         });
         self.mode = CursorMode::Select;
         self.clock.pause();
+        // A replay from a save starts with the save's names.
+        self.note_names(playback.world());
         let from = if playback.started_fresh() {
             "a new world".to_string()
         } else {
@@ -2874,6 +2876,8 @@ impl App {
             group_thousands(world.tick())
         ));
         *self = fresh;
+        // Its names show at once, paused, before any tick is taken in.
+        self.note_names(&world);
         self.settle_cursor(&world);
         Some(world)
     }

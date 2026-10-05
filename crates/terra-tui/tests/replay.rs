@@ -485,3 +485,20 @@ fn a_data_folder_with_something_not_a_file_in_a_file_s_place_is_refused_naming_i
         "{err}"
     );
 }
+
+#[test]
+fn a_replay_names_the_sprites_its_world_starts_with_before_it_plays() {
+    // A replay that starts from a save starts with the save's names (#137).
+    let mut world = world();
+    let sprite = world.sprites().next().expect("a sprite").id();
+    world.submit(Command::Rename {
+        sprite,
+        name: "Mira".into(),
+    });
+    world.step();
+    let live = played(world, 5);
+    let playback = replay_of(&live, "names");
+    assert!(!playback.started_fresh());
+    let app = replaying(&playback);
+    assert_eq!(app.names().label(sprite), format!("Mira #{}", sprite.0));
+}

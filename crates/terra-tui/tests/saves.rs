@@ -509,3 +509,23 @@ fn a_save_name_takes_only_what_the_screen_can_show() {
     type_text(&mut app, &world, "Café ☃ 1\t");
     assert_eq!(app.save_name_draft(), Some("Café  1"));
 }
+
+#[test]
+fn a_loaded_world_s_names_show_at_once_while_paused() {
+    // Before any tick runs, the screen names the sprites the save named
+    // (#137).
+    let folder = scratch_folder("names");
+    let mut world = world();
+    let sprite = world.sprites().next().expect("a sprite").id();
+    world.submit(Command::Rename {
+        sprite,
+        name: "Mira".into(),
+    });
+    run(&mut world, 1);
+    let mut app = app_for(&world, &folder);
+    apply(&mut app, &world, Action::Quicksave);
+    apply(&mut app, &world, Action::Quickload);
+    app.take_loaded().expect("the quicksave loaded");
+    assert!(app.clock.is_paused());
+    assert_eq!(app.names().label(sprite), format!("Mira #{}", sprite.0));
+}
