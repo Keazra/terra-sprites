@@ -661,8 +661,10 @@ fn top_bar_line(app: &App, world: &World, width: u16) -> Line<'static> {
     } else {
         String::new()
     };
-    // When the world was last saved or loaded (design §6.1, §6.7).
+    // When the world was last saved or loaded (design §6.1, §6.7); in a
+    // replay, how playback stands instead (design §2.7).
     let saved = match app.saved_ago() {
+        _ if app.replaying() => app.replay_status().unwrap_or_default(),
         None => "not saved".to_string(),
         Some(ago) if ago.as_secs() < 60 => "saved just now".to_string(),
         Some(ago) => format!("saved {} ago", spoken_duration(ago)),

@@ -9,6 +9,12 @@ pub struct Args {
     pub seed: Option<u64>,
     /// `--preset <file>`: a world config to use instead of the built-in one.
     pub preset: Option<PathBuf>,
+    /// `--data <dir>`: a folder of data pack files, each replacing the
+    /// built-in one, for a new world (design §2.8, §6.7).
+    pub data: Option<PathBuf>,
+    /// `--replay <file>`: play a replay back instead of a new world (design
+    /// §2.7).
+    pub replay: Option<PathBuf>,
     /// `--ascii`: use the ascii theme.
     pub ascii: bool,
     /// `--theme <file>`: a theme to use instead of the built-in ones (design
@@ -19,8 +25,8 @@ pub struct Args {
 }
 
 /// How to run the game, shown with any flag error.
-pub const USAGE: &str =
-    "usage: terra-sprites [--seed <n>] [--preset <file>] [--ascii | --theme <file>]";
+pub const USAGE: &str = "usage: terra-sprites [--seed <n>] [--preset <file>] [--data <dir>] [--ascii | --theme <file>]\n\
+                         \x20      terra-sprites --replay <file> [--ascii | --theme <file>]";
 
 impl Args {
     /// Reads the flags, not including the program name.
@@ -40,6 +46,8 @@ impl Args {
                     parsed.seed = Some(seed);
                 }
                 "--preset" => parsed.preset = Some(value_of(&flag, args.next())?.into()),
+                "--data" => parsed.data = Some(value_of(&flag, args.next())?.into()),
+                "--replay" => parsed.replay = Some(value_of(&flag, args.next())?.into()),
                 "--ascii" => parsed.ascii = true,
                 "--theme" => parsed.theme = Some(value_of(&flag, args.next())?.into()),
                 "--force-panic" => parsed.force_panic = true,
@@ -48,6 +56,20 @@ impl Args {
         }
         if parsed.ascii && parsed.theme.is_some() {
             return Err("`--ascii` and `--theme` both pick a theme: use one".into());
+        }
+        // A replay brings its own world, so what makes a new one doesn't
+        // apply (design §2.7).
+        if parsed.replay.is_some() {
+            let new_world = [
+                ("--seed", parsed.seed.is_some()),
+                ("--preset", parsed.preset.is_some()),
+                ("--data", parsed.data.is_some()),
+            ];
+            if let Some((flag, _)) = new_world.iter().find(|(_, given)| *given) {
+                return Err(format!(
+                    "`{flag}` makes a new world, and `--replay` plays a recorded one: use one or the other"
+                ));
+            }
         }
         Ok(parsed)
     }
