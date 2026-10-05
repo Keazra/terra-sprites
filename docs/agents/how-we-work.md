@@ -94,7 +94,7 @@ The owner runs Gemini, and sometimes Codex, on each PR. They post Gemini's findi
 
 - **Update Rust before running the checks:** `rustup update stable`. The container's toolchain can be older than the stable CI uses, and an older clippy flags lints CI doesn't: in slice 9e-b, 1.94 flagged `nonminimal_bool` in `inspector.rs`, on `main` too.
 - **The session names its own branch** (`claude/…`). The project's is `feat/slice-N-<slug>`, so ask the owner which to use before the first push.
-- **There's no `gh`;** the GitHub tools do the same work. A review thread gets a reply to its comment, then is resolved by its thread ID.
+- **Try `gh` before saying something can't be done.** The GitHub tools cover most work: a review thread gets a reply to its comment, then is resolved by its thread ID. What they can't do, such as making a milestone, `gh api` may: in the M2 planning session it worked through the proxy, where the session had first told the owner it couldn't be done.
 - **A branch on GitHub can't be deleted from a session:** the git proxy refuses with a 403. The owner deletes a merged branch from its PR page.
 
 ## Triage
