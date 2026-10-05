@@ -9,7 +9,7 @@
 
 ## Changes from v37
 
-Slice 19 ([#20](https://github.com/Keazra/terra-sprites/issues/20)): the acceptance check. Every rule in §3–§6 was checked against the code. Three places where the code fell short of the spec were fixed to match it, with no change to the design: a blocked sprite's search looks for a way to any of its target's goal tiles (§3.7), a sprite hurt crashing into something shows Hurt (§6.3), and a loaded world keeps the themes folder (§6.7). The rows below are where the code was right and the spec's words weren't, or left a case open, and where M1's evidence now lives.
+Slice 19 ([#20](https://github.com/Keazra/terra-sprites/issues/20)): the acceptance check. Every rule in §3–§6 was checked against the code. Three places where the code fell short were fixed. Two needed no change to the spec: a blocked sprite's search now looks for a way to any of its target's goal tiles (§3.7), and a loaded world keeps the themes folder (§6.7). The third, Hurt for a crash that hurts, spells out a case the spec left open (row 8). Rows 1–7 are where the code was right and the spec's words weren't, or left a case open, and row 9 is where M1's evidence now lives.
 
 | # | Change | Source | Sections |
 |---|---|---|---|

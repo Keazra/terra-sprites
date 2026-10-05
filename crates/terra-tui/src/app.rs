@@ -800,14 +800,7 @@ impl App {
                 self.note_gave_up(id, action);
                 self.note_done_to_selected(event.tick, id, action, world);
             }
-            // A slide that crashes into something that hurts, such as a
-            // thornbush, hurts as a bite of one does (design §6.3).
-            if let EventKind::Crashed {
-                sprite, hurt: true, ..
-            } = event.kind
-            {
-                self.start_emote(sprite, Emote::Hurt);
-            }
+            self.note_crash(&event.kind);
             self.note_rest(&event.kind);
             if let (EventKind::Rewarded { id, .. } | EventKind::Corrected { id, .. }, Some(touch)) =
                 (&event.kind, CursorTouch::reported(&event.kind))
@@ -1088,6 +1081,17 @@ impl App {
         let hurt_actor = action.hurt.actor.then_some(actor);
         for id in hurt_actor.into_iter().chain(hurt_target) {
             self.start_emote(id, Emote::Hurt);
+        }
+    }
+
+    /// Starts the Hurt emote on a sprite whose slide crashed into something
+    /// that hurts, such as a thornbush (design v38 §6.3).
+    fn note_crash(&mut self, event: &EventKind) {
+        if let EventKind::Crashed {
+            sprite, hurt: true, ..
+        } = *event
+        {
+            self.start_emote(sprite, Emote::Hurt);
         }
     }
 

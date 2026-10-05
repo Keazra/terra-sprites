@@ -824,17 +824,23 @@ fn wait(state: &mut WorldState, data: &DataPack, id: EntityId, cost: u32, events
         .as_ref()
         .filter(|action| sprite.lead.is_none() && action.verb.heads_for_goal())
         .and_then(|action| action.target);
-    let to = match aimed {
+    // A target gone since this tick's 5.0, such as a berry another sprite
+    // ate first, ends the action as failed at the next 5.0, not as blocked
+    // here (design §5.5).
+    if aimed.is_some_and(|target| state.whereabouts(data, target).is_none()) {
+        return;
+    }
+    let goal = match aimed {
         Some(target) => state.goal_for(data, &search, target),
         None => Some(destination),
     };
-    let way = to.and_then(|to| Some((to, search.path_to(to)?)));
+    let way = goal.and_then(|goal| Some((goal, search.path_to(goal)?)));
     let sprite = state.sprites.get_mut(id).expect("the walker");
     let led = sprite.lead.is_some();
     let walk = walk_of_mut(sprite).expect("a walker's way");
     match way {
-        Some((to, way)) => {
-            walk.destination = Some(to);
+        Some((goal, way)) => {
+            walk.destination = Some(goal);
             walk.committed = Some(way);
             walk.blocked_ticks = 0;
         }
