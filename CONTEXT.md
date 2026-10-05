@@ -235,6 +235,10 @@ _Avoid_: damage, health
 Being past its lifespan, which injures a sprite a little every tick.
 _Avoid_: senescence
 
+**Wear** (M2):
+Lasting harm a hard life leaves on a sprite, from hunger, thirst, injury and fear, which healing doesn't undo. Once a sprite is old, the more wear it carries, the faster it declines.
+_Avoid_: stress (that's what causes it), damage, injury (injury heals)
+
 **Cause of death**:
 What caused most of a sprite's recent injury, with the most recent counting most: starvation, dehydration, old age, or being hurt by an object type, such as a thornbush, or by another sprite.
 
@@ -401,6 +405,10 @@ A worth, fear or habit that has reached half a point from nothing. The event log
 _Avoid_: milestone (on screen)
 
 ### The screen
+
+**Title screen** (M2):
+The screen the game opens on, before any world is running.
+_Avoid_: main menu, start screen, splash screen
 
 **Map view**:
 The panel that shows the map.

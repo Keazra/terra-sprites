@@ -94,14 +94,15 @@ The ground, the plants and toys, a sprite's body and its instincts, the size of 
 
 ## Design
 
-- [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v38.md) (v38, the current revision). Earlier revisions and the external evaluations that shaped them are in [`docs/design/archive/`](docs/design/archive/).
+- [M2 "Generations" design](docs/design/m2-generations-v1.md) (v1, the plan for milestone 2: its slices, the time scale of a sprite's life, and what "M2 is done" means).
+- [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v39.md) (v39, the current revision), the rulebook for everything M2 doesn't change. Earlier revisions and the external evaluations that shaped them are in [`docs/design/archive/`](docs/design/archive/).
 
 ## Roadmap
 
 | Milestone | Contents |
 |---|---|
-| **M1 — A Sprite Lives** | World, ecology, biochemistry, learning brain, terminal UI, the hand, saves and replays |
-| **M2 — Generations** | Reproduction, genetics, lineage, headless fast-forward |
+| **M1 — A Sprite Lives** *(done)* | World, ecology, biochemistry, learning brain, terminal UI, the Cursor, saves and replays |
+| **M2 — Generations** | Memory of places, a title screen, life stages and ageing, breeding, genetics, a family tree, population graphs, fast-forward and a speed cap, learning by watching, a harsher world |
 | **M3 — Wild Terra** | Critters, more hazards and toys, possibly seasons and weather |
 | **M4 — Words** | Teaching sprites words |
 | **Tiles** | A tile-window front end with sprite-sheet support |
