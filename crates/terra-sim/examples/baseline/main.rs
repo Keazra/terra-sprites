@@ -3,7 +3,10 @@
 //!
 //! `cargo run --profile baseline -p terra-sim --example baseline -- --commit
 //! abc1234 --measured "2026-10-01 09:00" --out docs/reports [--previous
-//! <report.ron>] [--seeds N]`
+//! <report.ron>] [--seeds N] [--soak-seed N] [--soak-ticks N]`
+//!
+//! The soak (A7) runs on a new seed each time, from the clock, unless
+//! `--soak-seed` gives one; `--soak-ticks` shortens it for a quick try.
 //!
 //! Build it with the `baseline` profile, which keeps the self-check after
 //! every tick (§7.1), so a broken invariant stops its seed naming the tick.
@@ -14,10 +17,13 @@ mod report;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Mutex;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
 use report::Report;
-use terra_sim::{DataPack, LabRun, LabScenario, WorldConfig};
+use terra_sim::{DataPack, LabRun, LabScenario, Soak, SoakRun, WorldConfig};
+
+/// How many ticks the soak runs (design §7.4, A7).
+const SOAK_TICKS: u64 = 1_000_000;
 
 /// The lab scenarios a baseline run measures, by the names of their files
 /// in `scenarios/`.
@@ -47,6 +53,8 @@ struct Options {
     out: PathBuf,
     previous: Option<PathBuf>,
     seeds: u64,
+    soak_seed: u64,
+    soak_ticks: u64,
 }
 
 fn main() -> ExitCode {
@@ -56,7 +64,8 @@ fn main() -> ExitCode {
         Err(message) => {
             eprintln!(
                 "{message}\nusage: baseline --commit C --measured \"YYYY-MM-DD HH:MM\" \
-                 --out DIR [--previous REPORT.ron] [--seeds N]"
+                 --out DIR [--previous REPORT.ron] [--seeds N] [--soak-seed N] \
+                 [--soak-ticks N]"
             );
             return ExitCode::FAILURE;
         }
@@ -71,7 +80,7 @@ fn main() -> ExitCode {
     };
     let data = DataPack::builtin().expect("the built-in data pack is valid");
     let started = Instant::now();
-    let results = run_all(&data, options.seeds);
+    let (results, soak_run) = run_all(&data, options.seeds, options.soak_seed, options.soak_ticks);
     let seeds_of = |name: &str| -> &report::SeedRuns {
         &results[SCENARIOS
             .iter()
@@ -79,6 +88,12 @@ fn main() -> ExitCode {
             .expect("a scenario")]
     };
     let sprites = WorldConfig::builtin(&data).sprites() as u64;
+    let soak = report::soak(options.soak_seed, options.soak_ticks, &soak_run, &data);
+    let mut broken: Vec<_> = SCENARIOS
+        .iter()
+        .flat_map(|(name, _)| report::broken(name, seeds_of(name)))
+        .collect();
+    broken.extend(report::broken_soak(&soak, &soak_run));
     let report = Report {
         commit: options.commit,
         compared_with: previous.as_ref().map(|p| p.commit.clone()),
@@ -90,10 +105,8 @@ fn main() -> ExitCode {
         a1: report::a1(seeds_of("a1-thornbush"), &data),
         a2: report::a2(seeds_of("a2-reward-training"), &data),
         a3: report::a3(seeds_of("a3-correct-training"), &data),
-        broken: SCENARIOS
-            .iter()
-            .flat_map(|(name, _)| report::broken(name, seeds_of(name)))
-            .collect(),
+        soak: Some(soak),
+        broken,
     };
     let moved = previous.as_ref().map(|p| report::moved(p, &report));
     let page = report.markdown(moved.as_deref());
@@ -114,6 +127,7 @@ fn main() -> ExitCode {
 /// The options, from the command line.
 fn parse(args: &[String]) -> Result<Options, String> {
     let (mut commit, mut measured, mut out, mut previous, mut seeds) = (None, None, None, None, 10);
+    let (mut soak_seed, mut soak_ticks) = (None, SOAK_TICKS);
     let mut args = args.iter();
     while let Some(arg) = args.next() {
         let mut value = || args.next().cloned().ok_or(format!("{arg} needs a value"));
@@ -130,6 +144,17 @@ fn parse(args: &[String]) -> Result<Options, String> {
                     .filter(|&n| n > 0)
                     .ok_or(format!("--seeds takes a whole number above 0, not {n}"))?;
             }
+            "--soak-seed" | "--soak-ticks" => {
+                let n = value()?;
+                let n = n
+                    .parse()
+                    .map_err(|_| format!("{arg} takes a whole number, not {n}"))?;
+                if arg == "--soak-seed" {
+                    soak_seed = Some(n);
+                } else {
+                    soak_ticks = n;
+                }
+            }
             _ => return Err(format!("unexpected argument {arg}")),
         }
     }
@@ -139,7 +164,18 @@ fn parse(args: &[String]) -> Result<Options, String> {
         out: out.ok_or("where to? (--out)")?,
         previous,
         seeds,
+        soak_seed: soak_seed.unwrap_or_else(new_seed),
+        soak_ticks,
     })
+}
+
+/// A new seed for the soak, from the clock, so each run soaks another world.
+fn new_seed() -> u64 {
+    let since = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default();
+    // Below a million million, so a person can read it and type it again.
+    since.as_nanos() as u64 % 1_000_000_000_000
 }
 
 /// A report from its RON file.
@@ -153,12 +189,27 @@ fn read_report(path: &Path) -> Result<Report, String> {
     Report::from_ron(&text).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-/// Runs seeds 1 to `seeds` of every scenario, as many at once as the machine
-/// has threads, longest first. Each seed runs on a thread of its own, so a
-/// panic, or a broken invariant with the self-check on, ends only that seed:
-/// its result is what it said. The results are in `SCENARIOS`' order, then
-/// by seed.
-fn run_all(data: &DataPack, seeds: u64) -> Vec<Vec<(u64, Result<LabRun, String>)>> {
+/// A scenario's seeds, each with its run or what it said when it panicked.
+type ScenarioRuns = Vec<(u64, Result<LabRun, String>)>;
+
+/// One seed's run.
+enum Job {
+    /// A lab scenario's seed: the scenario's place in `SCENARIOS`, and the seed.
+    Lab(usize, u64),
+    Soak,
+}
+
+/// Runs seeds 1 to `seeds` of every scenario, and the soak on `soak_seed`
+/// for `soak_ticks` ticks, as many at once as the machine has threads,
+/// longest first. Each runs on a thread of its own, so a panic, or a broken
+/// invariant with the self-check on, ends only that run: its result is what
+/// it said. The scenarios' results are in `SCENARIOS`' order, then by seed.
+fn run_all(
+    data: &DataPack,
+    seeds: u64,
+    soak_seed: u64,
+    soak_ticks: u64,
+) -> (Vec<ScenarioRuns>, Result<SoakRun, String>) {
     let labs: Vec<LabScenario> = SCENARIOS
         .iter()
         .map(|(name, text)| {
@@ -166,30 +217,35 @@ fn run_all(data: &DataPack, seeds: u64) -> Vec<Vec<(u64, Result<LabRun, String>)
                 .unwrap_or_else(|e| panic!("scenarios/{name}.ron: {e}"))
         })
         .collect();
-    // Jobs are taken from the end, so the viability run's, the longest, go
-    // first.
-    let jobs: Vec<(usize, u64)> = (0..labs.len())
+    // Jobs are taken from the end, so the soak's, the longest, goes first,
+    // then the viability run's.
+    let mut jobs: Vec<Job> = (0..labs.len())
         .rev()
-        .flat_map(|lab| (1..=seeds).rev().map(move |seed| (lab, seed)))
+        .flat_map(|lab| (1..=seeds).rev().map(move |seed| Job::Lab(lab, seed)))
         .collect();
+    jobs.push(Job::Soak);
     let jobs = Mutex::new(jobs);
     let results = Mutex::new((0..labs.len()).map(|_| Vec::new()).collect::<Vec<_>>());
+    let soaked = Mutex::new(None);
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get());
     std::thread::scope(|scope| {
         for _ in 0..workers {
             scope.spawn(|| {
                 loop {
                     // Taken on a line of its own, so the lock isn't held
-                    // while the seed runs.
+                    // while the job runs.
                     let job = jobs.lock().expect("no worker panics").pop();
-                    let Some((lab, seed)) = job else { break };
-                    let run = std::thread::scope(|inner| {
-                        inner
-                            .spawn(|| labs[lab].run(data.clone(), seed))
-                            .join()
-                            .map_err(|panic| panic_message(&*panic))
-                    });
-                    results.lock().expect("no worker panics")[lab].push((seed, run));
+                    match job {
+                        None => break,
+                        Some(Job::Lab(lab, seed)) => {
+                            let run = caught(|| labs[lab].run(data.clone(), seed));
+                            results.lock().expect("no worker panics")[lab].push((seed, run));
+                        }
+                        Some(Job::Soak) => {
+                            let run = caught(|| Soak::run(data.clone(), soak_seed, soak_ticks));
+                            *soaked.lock().expect("no worker panics") = Some(run);
+                        }
+                    }
                 }
             });
         }
@@ -198,7 +254,22 @@ fn run_all(data: &DataPack, seeds: u64) -> Vec<Vec<(u64, Result<LabRun, String>)
     for runs in &mut results {
         runs.sort_by_key(|(seed, _)| *seed);
     }
-    results
+    let soaked = soaked
+        .into_inner()
+        .expect("no worker panics")
+        .expect("the soak ran");
+    (results, soaked)
+}
+
+/// What `run` returns, run on a thread of its own, or what it said if it
+/// panicked.
+fn caught<T: Send>(run: impl FnOnce() -> T + Send) -> Result<T, String> {
+    std::thread::scope(|inner| {
+        inner
+            .spawn(run)
+            .join()
+            .map_err(|panic| panic_message(&*panic))
+    })
 }
 
 /// What a panic said.
@@ -257,6 +328,7 @@ mod tests {
             a1: none(),
             a2: none(),
             a3: none(),
+            soak: None,
             broken: Vec::new(),
         }
     }
