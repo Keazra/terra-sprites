@@ -657,6 +657,10 @@ _Avoid_: baseline (that's a measurement on `main`)
 The default world run for many seeds with no player, counting who survives and what killed those who didn't (A4).
 _Avoid_: soak, ecological soak
 
+**Grown-up death**:
+A death in the viability run after tick 10,000. The first 10,000 ticks count as childhood, since every sprite there starts as a newborn. A newborn dying of thirst is natural, but a grown sprite dying of hunger or thirst means it can't fend for itself (A4).
+_Avoid_: adult death (sprites have no life stages until M2)
+
 **Soak**:
 A run of a million ticks with a random script of the Cursor's commands, looking only for panics and broken invariants (A7).
 _Avoid_: stress test; a soak for any long run without commands (that's a viability run)
