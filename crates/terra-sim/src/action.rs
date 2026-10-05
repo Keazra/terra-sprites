@@ -165,7 +165,7 @@ pub(crate) struct Did {
 }
 
 impl Action {
-    fn new(
+    pub(crate) fn new(
         verb: Verb,
         destination: Option<Pos>,
         target: Option<(Target, Option<u16>)>,
@@ -815,12 +815,32 @@ fn wait(state: &mut WorldState, data: &DataPack, id: EntityId, cost: u32, events
     let destination = walk_of(sprite).and_then(|walk| walk.destination);
     let destination = destination.expect("a walker has a destination");
     let sprite = state.sprites.get(id).expect("the walker");
-    let way = flood(state, data, sprite, Occupied::Closed).path_to(destination);
+    let search = flood(state, data, sprite, Occupied::Closed);
+    // An aimed action looks for a way to any of its target's goal tiles,
+    // as one taken by a sprite may be all that blocks it; a Wander, or a
+    // led sprite, for where it's heading (design §3.7).
+    let aimed = sprite
+        .action
+        .as_ref()
+        .filter(|action| sprite.lead.is_none() && action.verb.heads_for_goal())
+        .and_then(|action| action.target);
+    // A target gone since this tick's 5.0, such as a berry another sprite
+    // ate first, ends the action as failed at the next 5.0, not as blocked
+    // here (design §5.5).
+    if aimed.is_some_and(|target| state.whereabouts(data, target).is_none()) {
+        return;
+    }
+    let goal = match aimed {
+        Some(target) => state.goal_for(data, &search, target),
+        None => Some(destination),
+    };
+    let way = goal.and_then(|goal| Some((goal, search.path_to(goal)?)));
     let sprite = state.sprites.get_mut(id).expect("the walker");
     let led = sprite.lead.is_some();
     let walk = walk_of_mut(sprite).expect("a walker's way");
     match way {
-        Some(way) => {
+        Some((goal, way)) => {
+            walk.destination = Some(goal);
             walk.committed = Some(way);
             walk.blocked_ticks = 0;
         }

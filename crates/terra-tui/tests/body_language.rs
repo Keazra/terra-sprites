@@ -9,7 +9,7 @@ use ratatui::style::Color;
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
     ActionView, DataPack, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos, Progress,
-    Scenario, ScriptedAction, Target, Verb, World,
+    Scenario, ScriptedAction, Target, Thing, Verb, World,
 };
 use terra_tui::app::{App, ColourMode, PLEASED_AT, Ticks};
 use terra_tui::clock::Speed;
@@ -227,6 +227,25 @@ fn giving_up_on_an_action_that_hurt_shows_hurt_not_the_question_mark() {
     }
     app.record(&[event], &world);
     assert_eq!(glyph(&app, &world), "!");
+}
+
+#[test]
+fn a_sprite_hurt_crashing_into_something_shows_hurt() {
+    // Design §6.3: Hurt is being hurt by something, and a shove that ends
+    // in a thornbush hurts. A crash that doesn't hurt shows nothing.
+    for (hurt, shown) in [(true, "!"), (false, "☺")] {
+        let (world, id, mut app) = one_sprite();
+        let crash = Event {
+            tick: 1,
+            kind: EventKind::Crashed {
+                sprite: id,
+                into: Thing::ObjectType("thornbush".into()),
+                hurt,
+            },
+        };
+        app.record(&[crash], &world);
+        assert_eq!(glyph(&app, &world), shown, "hurt: {hurt}");
+    }
 }
 
 #[test]
