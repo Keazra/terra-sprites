@@ -628,8 +628,12 @@ The world's hash, kept in a replay where the recording starts and every 1,000 ti
 _Avoid_: save, snapshot, autosave
 
 **Playback**:
-Playing a replay (`--replay <file>`): its commands at their ticks, with the player's own input closed to the world. Time, the view and the inspector still work.
+Playing a replay (`--replay <file>`): its commands at their ticks, with the player's own input closed to the world. Time, the view and the inspector still work, and the player can take it over.
 _Avoid_: replay mode, rerun
+
+**Taking over**:
+Ending playback where it has reached (`Ctrl+R`), so the world is the player's from that tick: the replay's commands not yet played are dropped, and the session log starts afresh from a snapshot of it. The replay file itself doesn't change.
+_Avoid_: branching, forking, rewinding
 
 **Divergence**:
 Playback finding the world different from its recording at a checkpoint. It's reported with the last checkpoint that matched, as the world parted somewhere between the two.
