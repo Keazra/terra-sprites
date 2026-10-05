@@ -38,6 +38,7 @@ mod replay;
 mod rolling;
 mod save;
 mod sliding;
+mod soak;
 mod sprites;
 mod tags;
 mod terrain;
@@ -64,6 +65,7 @@ pub use perception::Target;
 pub use registry::{ChemicalKind, Trait, Verb};
 pub use replay::{CHECKPOINT_EVERY, Divergence, Playback, ReplayError};
 pub use save::{LoadError, SCHEMA_VERSION};
+pub use soak::{Soak, SoakRun};
 pub use terrain::{Terrain, TerrainProps};
 pub use world::{
     ChemicalLevel, CursorView, HeldView, InvariantViolation, ObjectView, Scenario, ScenarioError,

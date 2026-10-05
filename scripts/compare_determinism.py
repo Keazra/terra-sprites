@@ -33,9 +33,18 @@ class Run(NamedTuple):
         return self.lines[i] if i < len(self.lines) else None
 
     def hashes(self):
-        """Its state hash at each checkpoint, by tick."""
-        found = (checkpoint_in(line) for line in self.lines)
-        return {checkpoint.tick: checkpoint.hash for checkpoint in found if checkpoint}
+        """Its state hash at each checkpoint, by the world it ran, named by
+        the line before its checkpoints, and the tick: the check runs more
+        than one world, each from tick 0."""
+        hashes = {}
+        world = ""
+        for line in self.lines:
+            checkpoint = checkpoint_in(line)
+            if checkpoint:
+                hashes[(world, checkpoint.tick)] = checkpoint.hash
+            else:
+                world = line.strip()
+        return hashes
 
 
 class Checkpoint(NamedTuple):
@@ -91,16 +100,22 @@ def report(runs, differs_at):
         out.append(f"| {run.runner} | `{run.target}` |")
     out.append("")
 
-    # Rows go by tick, not by line, so a runner that printed a line more or
-    # less still lines up with the rest.
+    # Rows go by world and tick, not by line, so a runner that printed a
+    # line more or less still lines up with the rest. Each world's rows
+    # follow a row naming it, in the order the runs printed them.
     hashes = [run.hashes() for run in runs]
     out.append("| Tick | " + " | ".join(run.runner for run in runs) + " | Match |")
     out.append("|---:|" + "---|" * len(runs) + ":---:|")
-    for tick in sorted(set().union(*hashes)):
-        row = [by_tick.get(tick) for by_tick in hashes]
-        cells = [f"`{hash}`" if hash else "(none)" for hash in row]
-        mark = "✓" if len(set(row)) == 1 else "✗"
-        out.append(f"| {tick} | " + " | ".join(cells) + f" | {mark} |")
+    worlds = list(dict.fromkeys(world for by_tick in hashes for world, _ in by_tick))
+    for world in worlds:
+        if world:
+            out.append(f"| **{world}** |" + " |" * (len(runs) + 1))
+        ticks = sorted({tick for by_tick in hashes for w, tick in by_tick if w == world})
+        for tick in ticks:
+            row = [by_tick.get((world, tick)) for by_tick in hashes]
+            cells = [f"`{hash}`" if hash else "(none)" for hash in row]
+            mark = "✓" if len(set(row)) == 1 else "✗"
+            out.append(f"| {tick} | " + " | ".join(cells) + f" | {mark} |")
     return "\n".join(out) + "\n"
 
 

@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
-use terra_sim::{DataPack, DeathCause, LabRun, Verb, Window};
+use terra_sim::{DataPack, DeathCause, LabRun, SoakRun, Verb, Window};
 
 /// The slice that tunes the default world to meet A4 (design §7.4).
 const A4_TUNING: &str = "#18";
@@ -48,6 +48,9 @@ pub struct Report {
     pub a1: Behaviour,
     pub a2: Behaviour,
     pub a3: Behaviour,
+    /// The soak (A7). Reports from before slice 17 have none.
+    #[serde(default)]
+    pub soak: Option<Soak>,
     pub broken: Vec<Broken>,
 }
 
@@ -187,6 +190,10 @@ impl Report {
         }
         page.push('\n');
 
+        if let Some(soak) = &self.soak {
+            page.push_str(&soak.markdown());
+        }
+
         page.push_str("## Each seed (ticks 0–50,000)\n\n");
         let verbs: BTreeSet<&String> = v.seeds.iter().flat_map(|row| row.verbs.keys()).collect();
         page.push_str("| Seed | Alive | Deaths |");
@@ -271,6 +278,11 @@ impl Report {
                 format!("{what} {control}, median"),
                 number(behaviour.control_median),
             ));
+        }
+        // Only the soak's verdict: it runs on a new seed each time, so its
+        // counts always move.
+        if let Some(soak) = &self.soak {
+            numbers.push(("A7: the soak".into(), soak.verdict.to_string()));
         }
         for (seed, n) in &v.thorn_trap.per_seed {
             numbers.push((format!("Thorn trap: seed {seed}"), n.to_string()));
@@ -561,6 +573,135 @@ pub fn broken(scenario: &str, seeds: &SeedRuns) -> Vec<Broken> {
             })
         })
         .collect()
+}
+
+/// The soak (design §7.4 A7, §7.6): a million ticks of the default world
+/// with a random script of the Cursor's commands, on a new seed each run.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Soak {
+    pub seed: u64,
+    /// How many ticks it was to run.
+    pub ticks: u64,
+    /// Met when it finished with no panic and no broken invariant.
+    pub verdict: Verdict,
+    /// What it did, if it finished.
+    pub finished: Option<SoakCounts>,
+}
+
+/// What a soak that finished did, each by name.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SoakCounts {
+    /// The commands its script gave.
+    pub given: BTreeMap<String, u64>,
+    /// The commands the world refused.
+    pub refused: BTreeMap<String, u64>,
+    pub deaths: BTreeMap<String, u64>,
+    /// Sprites alive at the end.
+    pub sprites: usize,
+    /// The most sprites alive at once.
+    pub most_sprites: usize,
+    /// Objects in the world at the end.
+    pub objects: usize,
+}
+
+/// The soak's report, from its run or what it said when it broke.
+pub fn soak(seed: u64, ticks: u64, run: &Result<SoakRun, String>, data: &DataPack) -> Soak {
+    let named = |counts: &BTreeMap<&'static str, u64>| -> BTreeMap<String, u64> {
+        counts.iter().map(|(&name, &n)| (name.into(), n)).collect()
+    };
+    let finished = run.as_ref().ok().map(|run| SoakCounts {
+        given: named(&run.given),
+        refused: named(&run.refused),
+        deaths: run
+            .deaths
+            .iter()
+            .map(|(&cause, &n)| (cause_name(cause, data), n))
+            .collect(),
+        sprites: run.sprites,
+        most_sprites: run.most_sprites,
+        objects: run.objects,
+    });
+    let verdict = match finished {
+        Some(_) => Verdict::Met,
+        None => Verdict::NotMet { until: None },
+    };
+    Soak {
+        seed,
+        ticks,
+        verdict,
+        finished,
+    }
+}
+
+impl Soak {
+    /// The soak's section of the page.
+    fn markdown(&self) -> String {
+        let mut page = String::from("## A7: the soak (design §7.4)\n\n");
+        page.push_str(&format!(
+            "The default world for {} ticks on seed {}, with a random script of the Cursor's \
+             commands.\n\n",
+            thousands(self.ticks),
+            self.seed
+        ));
+        page.push_str("| | Pass mark | Verdict |\n|---|---|---|\n");
+        page.push_str(&format!(
+            "| Panics and broken invariants | none | {} |\n\n",
+            self.verdict
+        ));
+        let Some(counts) = &self.finished else {
+            page.push_str("It broke: see Broken, above.\n\n");
+            return page;
+        };
+        let deaths: Vec<String> = counts
+            .deaths
+            .iter()
+            .map(|(cause, n)| format!("{cause} {n}"))
+            .collect();
+        let deaths = if deaths.is_empty() {
+            "none".to_string()
+        } else {
+            deaths.join(", ")
+        };
+        page.push_str(&format!(
+            "It ended with {} sprites alive, and at most {} at once, and {} objects. \
+             Deaths: {deaths}.\n\n",
+            counts.sprites, counts.most_sprites, counts.objects
+        ));
+        page.push_str("| Command | Given | Refused |\n|---|---|---|\n");
+        for (name, given) in &counts.given {
+            let refused = counts.refused.get(name).copied().unwrap_or(0);
+            page.push_str(&format!("| {name} | {given} | {refused} |\n"));
+        }
+        page.push('\n');
+        page
+    }
+}
+
+/// The soak, if it broke, with the command that runs it again.
+pub fn broken_soak(soak: &Soak, run: &Result<SoakRun, String>) -> Option<Broken> {
+    let message = run.as_ref().err()?;
+    Some(Broken {
+        scenario: "soak".into(),
+        seed: soak.seed,
+        message: message.clone(),
+        replay: format!(
+            "cargo run --profile baseline -p terra-sim --example soak -- --seed {} --ticks {}",
+            soak.seed, soak.ticks
+        ),
+    })
+}
+
+/// A whole number with commas between its thousands: "1,000,000".
+fn thousands(n: u64) -> String {
+    let digits = n.to_string();
+    let mut out = String::new();
+    for (i, digit) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(digit);
+    }
+    out
 }
 
 /// One of A4's halves: its median, met when it `passes`, and otherwise
@@ -1021,6 +1162,7 @@ mod tests {
             a1: a1(&[], &data),
             a2: a2(&[], &data),
             a3: a3(&[], &data),
+            soak: None,
             broken: Vec::new(),
         }
     }
@@ -1152,6 +1294,113 @@ mod tests {
         report.compared_with = Some("def5678".into());
         report.broken = broken("viability", &[(4, Err("tick 9: \"quoted\"".into()))]);
         assert_eq!(Report::from_ron(&report.to_ron()), Ok(report));
+    }
+
+    /// A soak that finished: two pets given, one refused, and a sprite dead
+    /// of thirst.
+    fn soaked() -> Result<SoakRun, String> {
+        Ok(SoakRun {
+            ticks: 1_000_000,
+            given: [("pet", 2), ("throw", 3)].into_iter().collect(),
+            refused: [("pet", 1)].into_iter().collect(),
+            deaths: [(DeathCause::Dehydration, 1)].into_iter().collect(),
+            sprites: 41,
+            most_sprites: 60,
+            objects: 3_210,
+        })
+    }
+
+    #[test]
+    fn a_soak_that_finished_meets_a7_and_the_page_shows_what_its_script_did() {
+        // Design §7.4, A7: no panics and no invariant violations.
+        let mut report = sample();
+        report.soak = Some(soak(1717, 1_000_000, &soaked(), &data()));
+        assert_eq!(
+            report.soak.as_ref().map(|s| &s.verdict),
+            Some(&Verdict::Met)
+        );
+        let page = report.markdown(None);
+        assert!(
+            page.contains(
+                "## A7: the soak (design §7.4)\n\n\
+                 The default world for 1,000,000 ticks on seed 1717, with a random script of \
+                 the Cursor's commands.\n\n\
+                 | | Pass mark | Verdict |\n|---|---|---|\n\
+                 | Panics and broken invariants | none | met |\n\n\
+                 It ended with 41 sprites alive, and at most 60 at once, and 3210 objects. \
+                 Deaths: dehydration 1.\n\n\
+                 | Command | Given | Refused |\n|---|---|---|\n\
+                 | pet | 2 | 1 |\n| throw | 3 | 0 |\n"
+            ),
+            "{page}"
+        );
+    }
+
+    #[test]
+    fn a_soak_that_broke_is_not_met_and_listed_as_broken_with_how_to_run_it_again() {
+        let run =
+            Err("a broken invariant at the end of tick 523,114: two sprites share a tile".into());
+        let soak = soak(1717, 1_000_000, &run, &data());
+        assert_eq!(soak.verdict, Verdict::NotMet { until: None });
+        assert_eq!(soak.finished, None);
+        let broken = broken_soak(&soak, &run).expect("broken");
+        assert_eq!(broken.scenario, "soak");
+        assert_eq!(broken.seed, 1717);
+        assert_eq!(
+            broken.replay,
+            "cargo run --profile baseline -p terra-sim --example soak -- --seed 1717 --ticks 1000000"
+        );
+        assert_eq!(broken_soak(&soak, &soaked()), None);
+        let mut report = sample();
+        report.soak = Some(soak);
+        assert!(report.markdown(None).contains(
+            "| Panics and broken invariants | none | not met |\n\nIt broke: see Broken, above.\n"
+        ));
+    }
+
+    #[test]
+    fn only_the_soaks_verdict_can_move_as_it_runs_on_a_new_seed_each_time() {
+        let (mut previous, mut current) = (sample(), sample());
+        previous.soak = Some(soak(1, 1_000_000, &soaked(), &data()));
+        let mut other = soaked();
+        if let Ok(run) = &mut other {
+            run.sprites = 12;
+        }
+        current.soak = Some(soak(2, 1_000_000, &other, &data()));
+        assert_eq!(moved(&previous, &current), Vec::new());
+        current.soak = Some(soak(2, 1_000_000, &Err("it panicked".into()), &data()));
+        assert_eq!(
+            moved(&previous, &current),
+            vec![Moved {
+                name: "A7: the soak".into(),
+                was: Some("met".into()),
+                now: Some("not met".into()),
+            }]
+        );
+    }
+
+    #[test]
+    fn a_report_with_a_soak_reads_back_and_one_from_before_the_soak_has_none() {
+        let mut report = sample();
+        report.soak = Some(soak(1717, 1_000_000, &soaked(), &data()));
+        let text = report.to_ron();
+        assert_eq!(Report::from_ron(&text), Ok(report.clone()));
+        // A report written before slice 17 has no soak field.
+        let before = report_without_soak(&report);
+        assert!(!before.contains("soak"), "{before}");
+        assert_eq!(Report::from_ron(&before).map(|r| r.soak), Ok(None));
+    }
+
+    /// `report` as RON written before it had a soak field.
+    fn report_without_soak(report: &Report) -> String {
+        let mut report = report.clone();
+        report.soak = None;
+        let text = report.to_ron();
+        let lines: Vec<&str> = text
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("soak:"))
+            .collect();
+        lines.join("\n")
     }
 
     /// Ten seeds of A1 that would meet it: half the control's contacts.
