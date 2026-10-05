@@ -60,6 +60,7 @@ The same key in capitals or lower case does the same thing.
 | `F5` / `F9` | Quicksave / quickload. Loading over a world that has run since it was last saved asks first (`y` to load), and a loaded world starts paused |
 | `Ctrl+S` / `Ctrl+O` | Save under a name you type / pick a save to load, newest first. The world also saves itself every 10 minutes of running time and when you quit, keeping the last 3 autosaves. See [saves](docs/reference/saves.md) |
 | `Ctrl+T` | Pick a theme: how the map is drawn. It lists the two built-in themes, then your own from the `themes` folder of the game's folder; see [themes](docs/reference/themes.md) |
+| `Ctrl+R` | In a replay, take it over: the world is yours from the tick it has reached, and the rest of the recording is dropped. Its next autosave writes a new `last_session.replay`, so copy a replay you want to keep first |
 | `Esc` | Each press does the first that applies: close a menu or overlay, cancel an aim, let go of what the Cursor holds or leads (a held item is put down where the Cursor is), go back to Select, and from Select ask "Quit? (y/n)". Only `y` quits; `Esc` again keeps playing |
 | `Ctrl+C` | Quit at once |
 
@@ -68,7 +69,7 @@ The same key in capitals or lower case does the same thing.
 | `--seed <n>` | Make the world from seed `n` (the top bar shows the seed of every world) |
 | `--preset <file>` | Use a world config from a RON file, such as a copy of [`data/presets/default.ron`](data/presets/default.ron) |
 | `--data <dir>` | Use the data pack files in a folder, such as a changed copy of [`data/objects.ron`](data/objects.ron), in place of the built-in ones; any file the folder lacks stays built in. A `presets/default.ron` in the folder is the default preset |
-| `--replay <file>` | Play a replay back, such as `last_session.replay`, which every session writes to the game's folder (the help screen shows where). Time, the view and the inspector work, but nothing can change the world. It pauses at the end, and if the replay ever drifts from what was recorded, it pauses and says between which ticks |
+| `--replay <file>` | Play a replay back, such as `last_session.replay`, which every session writes to the game's folder (the help screen shows where). Time, the view and the inspector work, but nothing can change the world until you take it over with `Ctrl+R`. It pauses at the end, and if the replay ever drifts from what was recorded, it pauses and says between which ticks |
 | `--ascii` | Draw the map in plain ASCII instead of CP437 |
 | `--theme <file>` | Start with a theme of your own, such as an edited copy of [`themes/cp437.ron`](themes/cp437.ron), rather than picking it with `Ctrl+T` each time |
 
@@ -93,7 +94,7 @@ The ground, the plants and toys, a sprite's body and its instincts, the size of 
 
 ## Design
 
-- [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v36.md) (v36, the current revision). Earlier revisions and the external evaluations that shaped them are in [`docs/design/archive/`](docs/design/archive/).
+- [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v37.md) (v37, the current revision). Earlier revisions and the external evaluations that shaped them are in [`docs/design/archive/`](docs/design/archive/).
 
 ## Roadmap
 

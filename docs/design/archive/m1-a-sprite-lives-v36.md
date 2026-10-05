@@ -9,16 +9,14 @@
 
 ## Changes from v35
 
-Slice 17 ([#18](https://github.com/Keazra/terra-sprites/issues/18)), its first part: the soak (A7). The viability tuning and A4's wording follow in its second part.
+[#118](https://github.com/Keazra/terra-sprites/issues/118): taking over a replay. New term: taking over (`CONTEXT.md`).
 
 | # | Change | Source | Sections |
 |---|---|---|---|
-| 1 | **The soak's script.** It plays the player with every command the screen sends: pets, hugs, zaps and shocks; taking hold of a sprite, letting go and shoving it; picking up an item, putting it down and throwing it; moving the Cursor, and showing or hiding it; placing objects, spawning sprites and naming them. It acts on about one tick in ten, a busy player's pace at normal speed, and while the Cursor leads a sprite, moves it on half the ticks, as a drag does. | Agreed on #18 (a random script of the Cursor's commands); the mix recommended (silence accepts) | §7.6 |
-| 2 | **It also sends what the screen never would,** so the world shows it refuses rather than breaks: about one target in twenty is a sprite or item that isn't there, or a tile just off the map; a Place names a type the pack doesn't have as often; a throw or shove asks up to two tiles past the furthest; and one name in five is one a sprite can't carry. | Recommended (silence accepts) | §7.6 |
-| 3 | **It doesn't let the world crowd itself to a crawl:** it spawns sprites only while there are fewer than twice as many as the world started with. Placing has no cap, as the pack's own place rules and the ecology already limit it. | Recommended (silence accepts) | §7.6 |
-| 4 | **One seed makes the whole soak:** the default world is generated from it, and the script draws from its own RNG, seeded from it on a stream of its own, so it takes nothing from the world's RNG (§2.3) and the same seed gives the same run. Each baseline run soaks a new seed, from the clock unless one is given, and a broken soak's report gives the command that runs it again: `cargo run --profile baseline -p terra-sim --example soak -- --seed N --ticks T`. | Agreed on #18 (a new seed each run, recorded so a failure can be replayed) | §7.6 |
-| 5 | **The baseline report's soak section** gives its seed, its verdict against A7, and, if it finished, the sprites alive at the end and the most at once, the objects, the deaths, and each command given and refused. Only its verdict can count as moved, since its seed and so its counts change every run. Reports from before the soak have none. | Follows from the slice | §7.6 |
-| 6 | **The cross-platform determinism check also runs the soak's script:** after its 20,000 ticks with nobody clicking, it runs the same world again for 10,000 ticks with the script from seed 7, so the commands a player's clicks send are compared across computers too. The comparison's table groups the checkpoints by world. | Deferred from slice 15 (#16) to this slice | §7.5 |
+| 1 | **`Ctrl+R` takes over a replay** at the tick it has reached, so the world is the player's from there: every key that changes the world works again, and the replay's commands not yet played are dropped. The status line says "You took over the replay at tick 4,210: it's your world now", and the top bar's replay status gives way to the save status. Time runs on as it was. Outside a replay `Ctrl+R` does nothing. | The owner (2026-10-05, while trying #117); a separate PR is the owner's | §2.7, §6.5, §6.7 |
+| 2 | **The player takes over the recorded Cursor:** where it is, what it holds or leads (in Grab mode if it has hold of something), and whether sprites can see it, as after a load. | Recommended (silence accepts) | §2.7, §6.5 |
+| 3 | **The session log starts afresh from where it was taken over,** from a snapshot, as after a load, so the next autosave or quitting overwrites `last_session.replay`; a replay to keep is copied first. The live world plays on from that same snapshot, so the new log replays exactly the world played on. | Recommended (silence accepts) | §2.7, §6.7 |
+| 4 | **A replay's refusal says how to take it over:** "It's a replay: only time, the view and the inspector work, until Ctrl+R takes it over". | Follows from change 1 | §6.7 |
 
 **Earlier changes** are in the archived revisions, in [`archive/`](archive/). Each opens with its own table: v35's changes (from v34) head [v35](archive/m1-a-sprite-lives-v35.md), and so on back to v2. So "v16 change 16" is row 16 of the table at the top of [v16](archive/m1-a-sprite-lives-v16.md). The current revision carries only its own table, so the spec doesn't open with its whole history.
 
@@ -256,6 +254,7 @@ A replay file contains (v35):
 - **Divergence:** during playback, checkpoints are verified as playback reaches them, the start's at once. The first checkpoint that doesn't match is reported with the last one that did: the world parted from its recording somewhere after the one and by the other (v35), as a hash every 1,000 ticks can't name the tick itself.
 - **Session log:** every session writes `last_session.replay`. Its start point is the fresh world or, after a load, the loaded save: each load starts it afresh (v35). It's written at each autosave, on quitting, on a panic, after the panic hook has restored the terminal (§2.9), and when the game stops because the terminal failed. It's written beside its file and then put in place, as saves are.
 - **Playback:** `--replay <file>` disables all input that changes the world. Time controls and the inspector still work. It starts paused; at the recording's end it pauses once and says so, and time can then run on, with no more commands than those still waiting when the recording stopped; where it first finds a divergence it pauses and says so (v35, §6.7). A replay never autosaves and writes no session log.
+- **Taking over** (v36): `Ctrl+R` during playback ends it where it has reached, and the world is the player's from that tick, with the recorded Cursor, what it has hold of and whether it's seen. The replay's commands not yet played are dropped. The session log starts afresh, from a snapshot of the world as it was taken over, and the world plays on from that same snapshot, so the log replays exactly what's played. The replay file doesn't change, though the session log's next write replaces `last_session.replay`.
 
 ### 2.8 Saves and compatibility
 
@@ -1600,6 +1599,7 @@ N ═ M
 | `F5` / `F9` | Quicksave / quickload (§6.7, v32) |
 | `Ctrl+S` / `Ctrl+O` | Save by name / load a save from a list (§6.7, v32) |
 | `Ctrl+T` | Pick a theme from the built-in ones and the themes folder (§6.7, v34) |
+| `Ctrl+R` | In a replay, take it over: play on from where it has reached (§2.7, v36) |
 | `?` | Open or close help |
 | `Esc` | Close a menu or overlay; cancel an aim; let go of what the Cursor has hold of; back to Select; from Select, ask to quit (v33) |
 | `Ctrl+C` | Quit at once |
@@ -1632,7 +1632,7 @@ N ═ M
 ### 6.7 Files
 
 - **Data:** the default data pack is embedded in the binary. `--data <dir>` overrides it for **new** worlds (§2.8): each file of the pack the folder has replaces the built-in one, and a `presets/default.ron` in it is the default preset, which `--preset` still overrides (v35). A file that can't be read, or is wrong, stops the game at start, naming it.
-- **Replays** (v35, §2.7): the session log is written at each autosave, on quitting and on a panic. `--replay <file>` plays one back, paused at first, saying "Replaying last_session.replay: from a new world to tick 48,210" (or "from a save at tick 300"). Whatever would change the world is refused, saying "It's a replay: only time, the view and the inspector work": the Train and Grab modes, the wheel over the map, naming, showing the Cursor (`H`) and loading. Saving and exporting a genome still work. At the end it pauses once, saying "The replay ends here, at tick 48,210: time can run on, with nothing more done"; at a divergence it pauses, saying "The replay parted from its recording between ticks 1,000 and 2,000". The recorded player's Cursor isn't drawn.
+- **Replays** (v35, §2.7): the session log is written at each autosave, on quitting and on a panic. `--replay <file>` plays one back, paused at first, saying "Replaying last_session.replay: from a new world to tick 48,210" (or "from a save at tick 300"). Whatever would change the world is refused, saying "It's a replay: only time, the view and the inspector work, until Ctrl+R takes it over" (v36): the Train and Grab modes, the wheel over the map, naming, showing the Cursor (`H`) and loading. Saving and exporting a genome still work. At the end it pauses once, saying "The replay ends here, at tick 48,210: time can run on, with nothing more done"; at a divergence it pauses, saying "The replay parted from its recording between ticks 1,000 and 2,000". The recorded player's Cursor isn't drawn. `Ctrl+R` takes a replay over (v36): "You took over the replay at tick 4,210: it's your world now", and the top bar's save status returns.
 - **Saving and loading:** `F5` quicksaves, `F9` quickloads, and `Ctrl+S` / `Ctrl+O` save or load by name.
   - **By name** (v32): `Ctrl+S` opens a prompt on the status line, `Save as: seed 7 tick 48210_   enter save  esc cancel`, offering the seed and the tick. Typing replaces the name offered, up to 40 characters, `Backspace` rubs out, `Enter` saves and `Esc` gives up; the same name saves over. `Ctrl+O` opens a menu, `Load`, of every save, newest first, the quicksave and autosaves included, picked as the Place menu's items are. `F9` with no quicksave says "There's no quicksave yet: F5 makes one".
   - **Asking first** (v32): loading over a world that has run since it was last saved asks "Load quicksave? The world has run 4m since it was last saved (y/n)", or "This world has never been saved". `y` loads, as does `F9` again when it's the quicksave asked about; any other key keeps the world.
@@ -1792,7 +1792,7 @@ The thresholds in A1–A4 are **starting calibrations**. If tuning shows one is 
 
 - **Checks:**
   - `cargo fmt --check`, `clippy -D warnings`, and all tests
-  - a **cross-platform determinism check**: the default world runs from seed 7 on every runner in the matrix, for 20,000 ticks with nobody clicking and then again for 10,000 ticks with the soak's script of the Cursor's commands (§7.6, v36), and all the state hashes must match. Once it passes, §2.6's cross-platform promise applies to **exactly the targets in the matrix**. Adding a target to the promise means adding it to the matrix.
+  - a **cross-platform determinism check**: one fixed scenario runs on every runner in the matrix, and all the state hashes must match. Once it passes, §2.6's cross-platform promise applies to **exactly the targets in the matrix**. Adding a target to the promise means adding it to the matrix.
 
 ### 7.6 Baseline runs
 
@@ -1804,12 +1804,7 @@ What's too slow for CI is measured on `main` instead, each time it moves, by a *
     - the thorn trap's count: deaths by thornbush in ticks 0–30,000, the same worlds as its lab scenario (§7.3)
     - per seed, who survived, what killed the rest, and how often each verb was applied.
   - **A1–A3's numbers:** each scenario's medians, for its runs and their controls, on CI's seeds. CI stays the judge; the report records them so that a change shows.
-  - **The soak (A7)** (v36): the default world for a million ticks with a random script of the Cursor's commands, on a new seed each run, from the clock unless one is given. It runs first, as the longest job.
-    - **The script plays the player:** pets, hugs, zaps and shocks; taking hold, letting go and shoving; picking up, putting down and throwing; moving the Cursor and showing or hiding it; placing, spawning and naming. It acts on about one tick in ten, and while the Cursor leads a sprite, moves it on half the ticks.
-    - **It also sends what the screen never would,** for the world to refuse: about one target in twenty a sprite or item that isn't there or a tile just off the map, as often a type the pack doesn't have, throws and shoves up to two tiles past the furthest, and one name in five a sprite can't carry.
-    - **It spawns only while there are fewer than twice the sprites the world started with.**
-    - **One seed makes it:** the world is generated from it, and the script draws from its own RNG, seeded from it on a stream of its own, never from the world's (§2.3). `cargo run --profile baseline -p terra-sim --example soak -- --seed N --ticks T` runs one again.
-    - **Its report** gives its seed and its verdict, and, if it finished, the sprites alive at the end and the most at once, the objects, the deaths, and each command given and refused. Only its verdict can count as moved.
+  - **The soak (A7),** once slice 17 ([#18](https://github.com/Keazra/terra-sprites/issues/18)) builds it: a million ticks with a random script of the Cursor's commands, on a new seed each run.
 - **The baseline report** names the commit it measured and the one it's compared with, and opens with every number that moved.
   - Each criterion is **met**, **not met yet** or **no data**, against §7.3 and §7.4's pass marks exactly, so a share of no deaths is no data. A criterion that a tuning slice hasn't yet reached names that slice.
   - **Broken** means only a panic or a broken invariant (a crash is a shoved sprite's, §3.5.4). It's given with the seed, what it said, which names the tick for a broken invariant, and the command that replays it. The seeds that finished are still reported, and a median over fewer seeds than ran says so.
