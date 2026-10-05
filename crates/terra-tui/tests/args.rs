@@ -42,6 +42,39 @@ fn bad_flags_are_errors_that_name_the_problem() {
 }
 
 #[test]
+fn the_data_and_replay_flags_are_read() {
+    let args = parse(&["--data", "mods/bigger", "--seed", "3"]).expect("valid");
+    assert_eq!(args.data, Some(PathBuf::from("mods/bigger")));
+    let args = parse(&["--replay", "last_session.replay", "--ascii"]).expect("valid");
+    assert_eq!(args.replay, Some(PathBuf::from("last_session.replay")));
+    assert!(args.ascii);
+}
+
+#[test]
+fn a_replay_refuses_the_flags_that_make_a_new_world() {
+    for flags in [
+        &["--replay", "a.replay", "--seed", "1"][..],
+        &["--preset", "p.ron", "--replay", "a.replay"],
+        &["--replay", "a.replay", "--data", "mods"],
+    ] {
+        let error = parse(flags).expect_err("refused");
+        assert!(error.contains("--replay"), "{flags:?}: {error}");
+        assert!(
+            error.contains(
+                flags
+                    .iter()
+                    .find(|f| **f != "--replay" && f.starts_with("--"))
+                    .unwrap()
+            ),
+            "{error}"
+        );
+    }
+    for flag in ["--data", "--replay"] {
+        assert!(parse(&[flag]).expect_err("needs a value").contains(flag));
+    }
+}
+
+#[test]
 fn the_theme_flag_names_a_theme_file() {
     let args = parse(&["--theme", "themes/night.ron"]).expect("valid");
     assert_eq!(args.theme, Some(PathBuf::from("themes/night.ron")));

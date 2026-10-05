@@ -11,6 +11,7 @@ pub mod input;
 mod inspector;
 pub mod policy;
 pub mod saves;
+pub mod session;
 pub mod sprite_list;
 mod text;
 pub mod theme;

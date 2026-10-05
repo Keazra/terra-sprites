@@ -34,6 +34,7 @@ mod physiology;
 mod random;
 mod regions;
 mod registry;
+mod replay;
 mod rolling;
 mod save;
 mod sliding;
@@ -61,6 +62,7 @@ pub use names::{MAX_NAME_CHARS, NameProblem};
 pub use objects::EntityId;
 pub use perception::Target;
 pub use registry::{ChemicalKind, Trait, Verb};
+pub use replay::{CHECKPOINT_EVERY, Divergence, Playback, ReplayError};
 pub use save::{LoadError, SCHEMA_VERSION};
 pub use terrain::{Terrain, TerrainProps};
 pub use world::{

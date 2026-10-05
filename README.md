@@ -67,6 +67,8 @@ The same key in capitals or lower case does the same thing.
 |---|---|
 | `--seed <n>` | Make the world from seed `n` (the top bar shows the seed of every world) |
 | `--preset <file>` | Use a world config from a RON file, such as a copy of [`data/presets/default.ron`](data/presets/default.ron) |
+| `--data <dir>` | Use the data pack files in a folder, such as a changed copy of [`data/objects.ron`](data/objects.ron), in place of the built-in ones; any file the folder lacks stays built in. A `presets/default.ron` in the folder is the default preset |
+| `--replay <file>` | Play a replay back, such as `last_session.replay`, which every session writes to the game's folder (the help screen shows where). Time, the view and the inspector work, but nothing can change the world. It pauses at the end, and if the replay ever drifts from what was recorded, it pauses and says between which ticks |
 | `--ascii` | Draw the map in plain ASCII instead of CP437 |
 | `--theme <file>` | Start with a theme of your own, such as an edited copy of [`themes/cp437.ron`](themes/cp437.ron), rather than picking it with `Ctrl+T` each time |
 
@@ -91,7 +93,7 @@ The ground, the plants and toys, a sprite's body and its instincts, the size of 
 
 ## Design
 
-- [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v34.md) (v34, the current revision). Earlier revisions and the external evaluations that shaped them are in [`docs/design/archive/`](docs/design/archive/).
+- [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v35.md) (v35, the current revision). Earlier revisions and the external evaluations that shaped them are in [`docs/design/archive/`](docs/design/archive/).
 
 ## Roadmap
 
