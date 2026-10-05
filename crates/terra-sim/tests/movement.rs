@@ -2,8 +2,8 @@
 //! re-planning, driven through hand-made worlds.
 
 use terra_sim::{
-    ActionView, DataPack, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos, Progress,
-    Scenario, ScriptedAction, Verb, World,
+    ActionView, Command, DataPack, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos,
+    Progress, Scenario, ScriptedAction, Verb, World,
 };
 
 fn builtin() -> DataPack {
@@ -554,6 +554,48 @@ fn a_sprite_blocked_again_on_its_way_round_searches_again() {
     assert!(
         !tiles.contains(&at(3, 1)) && !tiles.contains(&rester),
         "{tiles:?}"
+    );
+}
+
+/// Two corridors joined only at their west ends, the bottom one running on
+/// east: the way along the bottom is short, the way round the top long.
+const HOOK: [&str; 6] = [
+    "########################################",
+    "........################################",
+    ".######.################################",
+    ".######.################################",
+    ".######.################################",
+    "........................................",
+];
+
+#[test]
+fn a_sprite_whose_target_leaves_its_reach_on_its_way_round_gives_up_at_the_way_s_end() {
+    // It keeps to the way round whatever its flood reaches (design §3.7),
+    // but once that way is used up, a target out of reach ends the action
+    // as failed (§5.5), rather than leaving it standing until it times out.
+    let (walker, rester, ball) = (at(0, 5), at(1, 5), at(10, 5));
+    let mut scripted = vec![(walker, ScriptedAction::Approach { at: ball })];
+    scripted.extend(rests(rester, 10));
+    let mut world = world_with(&HOOK, &[(ball, "ball")], 10.0, &[walker, rester], &scripted);
+    let id = sprite_on(&world, walker);
+    let (_, tiles) = run(&mut world, id, 6);
+    assert!(
+        tiles.contains(&at(0, 2)),
+        "it set off round the top: {tiles:?}"
+    );
+    // The Cursor carries the ball off, far out of the walker's reach.
+    let item = world.object_at(ball).expect("the ball").id();
+    world.submit(Command::PickUp { item });
+    world.submit(Command::PutDown { tile: at(39, 5) });
+    let (more, outcome) = first_action(&mut world, id, 60);
+    assert_eq!(outcome, Outcome::Failed, "{more:?}");
+    // It ends at the next 5.0 after arriving; the tick's own choice may
+    // then take it a step on.
+    let arrived = more.iter().position(|&tile| tile == at(9, 5));
+    assert_eq!(
+        arrived,
+        Some(more.len() - 2),
+        "it kept to the way: {more:?}"
     );
 }
 
