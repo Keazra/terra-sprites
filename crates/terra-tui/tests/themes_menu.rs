@@ -156,3 +156,23 @@ fn with_no_themes_folder_the_menu_still_offers_the_built_in_themes() {
         ["cp437 (built in)", "ascii (built in)"]
     );
 }
+
+#[test]
+fn the_themes_folder_is_still_listed_after_a_load() {
+    // Design v34 §6.7: the folders are the player's, not the world's, so a
+    // loaded world keeps them, the themes folder as much as the saves.
+    let folder = scratch_folder("after-load");
+    std::fs::write(folder.join("night.ron"), theme_with_sprite('N')).unwrap();
+    let world = world();
+    let mut app = app_for(&world, &folder);
+    app.set_save_folder(folder.join("saves"));
+    apply(&mut app, &world, Action::Quicksave);
+    apply(&mut app, &world, Action::Quickload);
+    let loaded = app.take_loaded().expect("the quicksave loaded");
+
+    apply(&mut app, &loaded, Action::OpenThemes);
+    assert_eq!(
+        app.menu_items(&loaded),
+        ["cp437 (built in)", "ascii (built in)", "night"]
+    );
+}
