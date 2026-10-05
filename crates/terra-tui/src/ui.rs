@@ -666,7 +666,11 @@ fn top_bar_line(app: &App, world: &World, width: u16) -> Line<'static> {
     let saved = match app.saved_ago() {
         _ if app.replaying() => app.replay_status().unwrap_or_default(),
         None => "not saved".to_string(),
-        Some(ago) if ago.as_secs() < 60 => "saved just now".to_string(),
+        // "Just now" only briefly, then seconds, whole and then in tens, so
+        // the bar never looks stuck (#129).
+        Some(ago) if ago.as_secs() < 3 => "saved just now".to_string(),
+        Some(ago) if ago.as_secs() < 10 => format!("saved {}s ago", ago.as_secs()),
+        Some(ago) if ago.as_secs() < 60 => format!("saved {}s ago", ago.as_secs() / 10 * 10),
         Some(ago) => format!("saved {} ago", spoken_duration(ago)),
     };
     let text = format!(

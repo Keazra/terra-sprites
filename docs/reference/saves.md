@@ -16,7 +16,7 @@ To carry a single sprite from one world to another, export its genome with `g` i
 - **Autosaves.** The game saves itself every 10 minutes of running time, and when you quit. Paused time doesn't count, and quitting doesn't save again if the world hasn't run since it was last saved. It keeps the last 3: `autosave-1` is the newest.
 - **Loading asks first** if the world on screen has run since it was last saved, since loading would lose that: "Load quicksave? The world has run 4m since it was last saved (y/n)". `y` loads; so does `F9` again, when it's the quicksave asked about. Any other key keeps the world.
 - **A loaded world starts paused,** with the view and the Cursor where they were when it was saved. Your settings, such as the speed, the theme and the open inspector tab, stay as they were.
-- The top bar says how long ago the world was last saved, autosaved or loaded: `not saved`, `saved just now`, `saved 3m ago`.
+- The top bar says how long ago the world was last saved, autosaved or loaded: `not saved`, `saved just now` for the first 3 seconds, then `saved 4s ago`, `saved 20s ago`, `saved 3m ago`.
 
 ## Where saves go
 
