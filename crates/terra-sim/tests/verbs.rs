@@ -190,6 +190,32 @@ fn eating_a_thornbush_pricks_and_enough_bites_kill_hurt_by_thornbush() {
 }
 
 #[test]
+fn hitting_or_playing_with_a_thornbush_pricks_too() {
+    // Design §3.5.3: every contact hurts, deliberately, not only a bite.
+    for (verb, action) in [
+        (Verb::Hit, ScriptedAction::Hit { at: at(2, 1) }),
+        (Verb::Play, ScriptedAction::Play { at: at(2, 1) }),
+    ] {
+        let mut world = world(
+            &[".....", ".....", "....."],
+            &[(at(2, 1), "thornbush")],
+            at(1, 1),
+            &[action],
+        );
+        let id = the_sprite(&world);
+        let events = world.step();
+        assert_eq!(endings(&events), [(verb, Outcome::Applied)]);
+        let hurt = events.iter().find_map(|e| match &e.kind {
+            EventKind::ActionEnded { action, .. } => Some(action.hurt),
+            _ => None,
+        });
+        assert!(hurt.is_some_and(|hurt| hurt.actor), "{verb:?}");
+        let injury = world.sprite(id).expect("the sprite").chemical("injury");
+        assert_eq!(injury, Some(0.03), "{verb:?}");
+    }
+}
+
+#[test]
 fn a_sprite_walks_to_its_target_and_bites_on_the_tick_it_arrives() {
     let bush = at(6, 1);
     let start = at(1, 1);
