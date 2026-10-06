@@ -111,14 +111,29 @@ impl BrainRanges {
 pub(crate) struct RememberedPlaces {
     /// The most places a sprite remembers: past it, the faintest goes.
     pub(crate) held: u16,
-    /// RememberedPlaces of one kind this many tiles apart or fewer, in any direction,
-    /// are one place, so a lake is one place, not each of its tiles.
+    /// The most places of one kind it remembers: past it, the faintest of
+    /// that kind goes, so a big lake's shores can't crowd out food. A world
+    /// saved before it had a limit gets the built-in one.
+    #[serde(default = "RememberedPlaces::built_in_per_kind")]
+    pub(crate) per_kind: u16,
+    /// Places of one kind this many tiles apart or fewer, in any direction,
+    /// are one place, so a pond is one place, not each of its tiles.
     pub(crate) merge: u16,
+}
+
+impl RememberedPlaces {
+    fn built_in_per_kind() -> u16 {
+        RememberedPlaces::default().per_kind
+    }
 }
 
 impl Default for RememberedPlaces {
     fn default() -> RememberedPlaces {
-        RememberedPlaces { held: 8, merge: 5 }
+        RememberedPlaces {
+            held: 8,
+            per_kind: 3,
+            merge: 5,
+        }
     }
 }
 
@@ -411,8 +426,8 @@ impl PhysiologyEntry {
                 return Err(format!("`{name}` must be at least 1 tick"));
             }
         }
-        if self.remembered_places.held == 0 {
-            return Err("`remembered_places.held` must be at least 1".into());
+        if self.remembered_places.held == 0 || self.remembered_places.per_kind == 0 {
+            return Err("`remembered_places.held` and `per_kind` must be at least 1".into());
         }
         if self.actions.retreat_bout == 0 {
             return Err("`actions.retreat_bout` must be at least 1 step".into());

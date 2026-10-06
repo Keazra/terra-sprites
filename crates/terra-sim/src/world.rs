@@ -2052,7 +2052,11 @@ mod tests {
             place.0,
             place.1,
             place.2,
-            crate::physiology::RememberedPlaces { held: 8, merge: 5 },
+            crate::physiology::RememberedPlaces {
+                held: 8,
+                per_kind: 8,
+                merge: 5,
+            },
         );
         assert_ne!(
             world.state_hash(),
@@ -2078,6 +2082,7 @@ mod tests {
                 at,
                 crate::physiology::RememberedPlaces {
                     held: 100,
+                    per_kind: 100,
                     merge: 0,
                 },
             );

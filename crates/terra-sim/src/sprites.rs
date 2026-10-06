@@ -260,6 +260,15 @@ impl Sprites {
                     places.len()
                 ));
             }
+            let per_kind = data.physiology().remembered_places.per_kind;
+            for place in places {
+                let of_kind = places.iter().filter(|p| p.subject == place.subject).count();
+                if of_kind > usize::from(per_kind) {
+                    return Err(format!(
+                        "{id:?} remembers {of_kind} places of one kind, over {per_kind}"
+                    ));
+                }
+            }
             if let Some(place) = places.iter().find(|place| !map.contains(place.at)) {
                 return Err(format!(
                     "{id:?} remembers a place off the map, at {:?}",

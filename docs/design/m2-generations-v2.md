@@ -15,7 +15,7 @@ Slice 20 (memory of places, [#138](https://github.com/Keazra/terra-sprites/issue
 | # | Change | Source | Sections |
 |---|---|---|---|
 | 1 | **A sprite remembers places where something that stays put eased a need:** water, and objects fixed in place, such as bushes. Not loose things (berries, balls), sprites or the Cursor, and not places where it was hurt. | Slice 20 Q1 | §7.1 |
-| 2 | **Up to 8 places, merged within 5 tiles, fading:** relief there remembers a place fully; it fades by the new `place_fade` brain gene, by half in about 3,500 ticks by default; the faintest makes room for a new one; one seen gone is forgotten. | Q2 | §7.2 |
+| 2 | **Up to 8 places, at most 3 of one kind, merged within 5 tiles, fading:** relief there remembers a place fully; it fades by the new `place_fade` brain gene, by half in about 3,500 ticks by default; the faintest makes room for a new one; one seen gone is forgotten. The limit of 3 a kind came from the owner's play-through, where sprites remembered only water. | Q2; the owner, 2026-10-06 | §7.2 |
 | 3 | **A remembered place competes as a thing at the edge of sight,** pulling by its worth times how well it's remembered, and only while nothing of its kind is in sight. | Q3 | §7.3 |
 | 4 | **The sprite knows the way:** setting off plans a path all the way there, and the trip has as long as the walk takes on top of the timeout. | Q4 | §7.4 |
 | 5 | **The player sees places in the Brain tab and the doing line,** not on the map. | Q5 | §7.5 |
@@ -167,10 +167,11 @@ Until Slice 20 a sprite only ever went for what it could see, about 10 tiles rou
 
 ### 7.2 How many, and how they fade
 
-- **Up to `remembered_places.held` places, 8 in the built-in physiology.** Places of the same object type within `remembered_places.merge` tiles of each other (5, counted as tiles of Chebyshev distance) are one place, so a lake is one place, not fifty water tiles: relief at a new tile of it moves the place there.
+- **Up to `remembered_places.held` places, 8 in the built-in physiology, and at most `per_kind` of one object type, 3.** Places of the same object type within `remembered_places.merge` tiles of each other (5, counted as tiles of Chebyshev distance) are one place, so a pond is one place, not fifty water tiles: relief at a new tile of it moves the place there.
+- **Why a limit a kind.** A big lake's shores are many places 5 tiles apart, and a sprite drinks far more often than it eats. Without the limit, water filled about 7 of a sprite's 8 places by tick 20,000 in a default world (seed 3), and pushed out the bushes it had eaten from: the owner saw sprites remember only water. With it, 26 of 30 sprites remember a bush by tick 10,000, against 18 of 30 by tick 20,000 without it.
 - **Relief there remembers a place fully,** strength 1, whether it's new or a visit tops it up.
 - **It fades each tick** by the `place_fade` brain parameter: its strength is multiplied by 1 − `place_fade`. The default, 0.0002, halves it in about 3,500 ticks, about 45 minutes at 1×, as worth for a need fades (M1 design §5.6). Its range is 0 to 0.01, so evolution can tune it; a long memory has a natural cost in trips to places that have changed.
-- **Forgotten** once it fades below `forget_below` (0.01), as a remembered sprite is; or when the sprite needs room, the faintest goes first, the oldest of equals; or **at once when the sprite sees it gone**: the place is within its sense radius and the thing there no longer exists, such as a bush that died.
+- **Forgotten** once it fades below `forget_below` (0.01), as a remembered sprite is; or when the sprite needs room, the faintest goes first, the oldest of equals: the faintest of its kind when it holds `per_kind` of that kind already, else the faintest of all; or **at once when the sprite sees it gone**: the place is within its sense radius and the thing there no longer exists, such as a bush that died.
 - A saved world from before Slice 20 loads with no places, and its brains get `place_fade` from their genome as the current pack expresses it (saves carry their own pack, M1 design §2.8, so the parameter's range and default fill in for a pack that doesn't name it).
 
 ### 7.3 How a remembered place competes
@@ -221,10 +222,10 @@ Set before measuring:
 |---|---|---|
 | A1–A3 lab runs | — | the same, line for line: in these small worlds the water and the bushes are always in sight, so no place is ever offered |
 | A4: median alive at tick 10,000 | 100% | 100% |
-| A4: hunger and thirst deaths, ticks 10,000–50,000, all seeds | 3 | 1 |
-| A5: ticks a second, 100 sprites | 324 | 312, met |
+| A4: hunger and thirst deaths, ticks 10,000–50,000, all seeds | 3 | 2 |
+| A5: ticks a second, 100 sprites | 324 | 309, met |
 
-Scarce water, for information: the default world with its water bands scaled down (deep 5/8 of the water, shallow 3/8, then 8% sand), with a scratch build, nothing committed. 300 sprites over the 10 seeds, 50,000 ticks:
+Scarce water, for information, measured before the limit of 3 a kind: the default world with its water bands scaled down (deep 5/8 of the water, shallow 3/8, then 8% sand), with a scratch build, nothing committed. 300 sprites over the 10 seeds, 50,000 ticks:
 
 | Water | Deaths by tick 10,000, `main` → Slice 20 | Grown-up deaths, ticks 10,000–50,000 | Of them, hunger or thirst |
 |---|---|---|---|

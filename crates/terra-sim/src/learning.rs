@@ -252,8 +252,9 @@ impl Experience {
 
     /// Remembers that `subject`'s `target`, on `at`, eased a need just now
     /// (M2 design §7): fully, as one place with any of its kind remembered
-    /// within `merge` tiles, which moves to `at`. A new place past `held`
-    /// pushes out the faintest, the oldest of the faintest.
+    /// within `merge` tiles, which moves to `at`. A new place past
+    /// `per_kind` pushes out the faintest of its kind, and one past `held`
+    /// the faintest of all: the oldest of the faintest.
     pub(crate) fn remember_place(
         &mut self,
         subject: Subject,
@@ -271,19 +272,30 @@ impl Experience {
             .places
             .iter()
             .position(|p| p.subject == subject && chebyshev(p.at, at) <= limits.merge);
+        let of_kind = self.places.iter().filter(|p| p.subject == subject).count();
         if let Some(same) = same {
             self.places.remove(same);
+        } else if of_kind >= usize::from(limits.per_kind) {
+            self.forget_faintest(|p| p.subject == subject);
         } else if self.places.len() >= usize::from(limits.held) {
-            let faintest = self
-                .places
-                .iter()
-                .enumerate()
-                .min_by(|(_, a), (_, b)| a.strength.total_cmp(&b.strength))
-                .map(|(i, _)| i);
-            self.places
-                .remove(faintest.expect("a full memory holds places"));
+            self.forget_faintest(|_| true);
         }
         self.places.push(place);
+    }
+
+    /// Forgets the faintest of the places `which` picks, the oldest of the
+    /// faintest, if it picks any.
+    fn forget_faintest(&mut self, which: impl Fn(&PlaceMemory) -> bool) {
+        let faintest = self
+            .places
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| which(p))
+            .min_by(|(_, a), (_, b)| a.strength.total_cmp(&b.strength))
+            .map(|(i, _)| i);
+        if let Some(faintest) = faintest {
+            self.places.remove(faintest);
+        }
     }
 
     /// How well it remembers the place of `target` (M2 design §7): 0 if it
@@ -543,7 +555,11 @@ mod tests {
             WATER,
             Target::Water(pos),
             pos,
-            RememberedPlaces { held: 3, merge: 5 },
+            RememberedPlaces {
+                held: 3,
+                per_kind: 3,
+                merge: 5,
+            },
         );
     }
 
@@ -562,8 +578,39 @@ mod tests {
         assert_eq!(tiles(&experience), [at(5, 3), at(11, 3)], "6 apart: two");
         // A bush beside the water is a place of its own.
         let bush = Target::Object(EntityId(7));
-        experience.remember_place(BUSH, bush, at(5, 4), RememberedPlaces { held: 3, merge: 5 });
+        experience.remember_place(
+            BUSH,
+            bush,
+            at(5, 4),
+            RememberedPlaces {
+                held: 3,
+                per_kind: 3,
+                merge: 5,
+            },
+        );
         assert_eq!(experience.places.len(), 3);
+    }
+
+    #[test]
+    fn past_the_most_of_one_kind_a_new_place_pushes_out_the_faintest_of_its_kind() {
+        // M2 design §7.2: a big lake's shores can't crowd out food, even
+        // when the food is remembered more faintly.
+        let limits = RememberedPlaces {
+            held: 8,
+            per_kind: 2,
+            merge: 5,
+        };
+        let mut experience = Experience::default();
+        let bush = Target::Object(EntityId(7));
+        experience.remember_place(BUSH, bush, at(50, 0), limits);
+        for x in [0, 10] {
+            experience.remember_place(WATER, Target::Water(at(x, 0)), at(x, 0), limits);
+        }
+        experience.places[0].strength = 0.1;
+        experience.places[1].strength = 0.5;
+        experience.places[2].strength = 0.9;
+        experience.remember_place(WATER, Target::Water(at(20, 0)), at(20, 0), limits);
+        assert_eq!(tiles(&experience), [at(50, 0), at(10, 0), at(20, 0)]);
     }
 
     #[test]

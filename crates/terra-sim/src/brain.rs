@@ -2345,7 +2345,11 @@ mod tests {
             types::WATER,
             Target::Water(at),
             at,
-            crate::physiology::RememberedPlaces { held: 8, merge: 5 },
+            crate::physiology::RememberedPlaces {
+                held: 8,
+                per_kind: 8,
+                merge: 5,
+            },
         );
         brain.fade(data.physiology().forget_below);
         assert!(close(brain.experience.places[0].strength, 0.99));

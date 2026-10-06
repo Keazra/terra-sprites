@@ -401,7 +401,7 @@ What a sprite has learned from experience: the worth of things and of individual
 _Avoid_: learned links, knowledge
 
 **Remembered place** (M2):
-Where something that stays put, such as water or a bush, eased one of a sprite's needs. A sprite holds a few; places of the same kind close together count as one, so a lake is one place. Each fades unless a visit tops it up, and one the sprite sees empty is forgotten. With nothing of its kind in sight, a remembered place draws the sprite's eye like a thing at the edge of sight. Shortened to "place" in the Brain tab.
+Where something that stays put, such as water or a bush, eased one of a sprite's needs. A sprite holds a few, and only a few of each kind; places of the same kind close together count as one, so a pond is one place. Each fades unless a visit tops it up, and one the sprite sees empty is forgotten. With nothing of its kind in sight, a remembered place draws the sprite's eye like a thing at the edge of sight. Shortened to "place" in the Brain tab.
 _Avoid_: landmark, waypoint, place (alone, outside the Brain tab: that's putting a thing down with the Cursor)
 
 **Trip** (M2):
