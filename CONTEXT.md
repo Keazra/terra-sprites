@@ -86,7 +86,7 @@ _Avoid_: flag, attribute, keyword
 
 **Contact**:
 A sprite touching a thing: eating it, hitting it, playing with it, or crashing into it. Walking past never counts.
-_Avoid_: collision, touch (the Cursor's touch is a pet or a shock)
+_Avoid_: collision, touch (for contact in general: Touch is a sprite verb under #164; the Cursor's touch is a pet or a shock)
 
 **Stage**:
 A phase of an object's life, such as a bush's seedling and mature stages. Each lasts a random time within its type's range.
@@ -119,7 +119,7 @@ A rolling item turning away from what it ran into: straight back if it met it he
 _Avoid_: collision, rebound
 
 **Size**:
-How big an object type, or a sprite, is: small, medium or large. What a rolling item does to what it meets depends on their sizes.
+How big an object type, or a sprite, is: small, medium or large. What a rolling item does to what it meets depends on their sizes. Under #164 (M3), Size also gains tiny, and how many arms a sprite needs to grab and hold a thing depends on size: tiny things stack in one arm up to a limit; a small thing needs one arm; a medium thing needs both; a large thing isn't held.
 
 **Hardness**:
 How hard an object type is, from 0 to 1. A rolling item crushes something smaller and softer than itself.
@@ -246,6 +246,10 @@ What caused most of a sprite's recent injury, with the most recent counting most
 Injury or pain that something did to a sprite: a thornbush it touched, another sprite's hit, or the Cursor's zap or shock. A zap or shock hurts without injuring. Starvation, dehydration and old age injure a sprite but don't hurt it.
 _Avoid_: damage, pricked (a thornbush word; the data names things, the screen says "hurt")
 
+**Limb** (#164 / M3):
+A part of a sprite's body that can be damaged or lost: the head, the left arm, the right arm, the left leg and the right leg. Damaged limbs make some verbs harder: locomotion depends on legs (Approach, Retreat, Wander can soften to crawling), Hit soft-gates via arms or legs, and manipulation verbs need at least one usable arm. Losing the head is a planned cause of death under #164; today a sprite dies when its injury reaches 1.
+_Avoid_: appendage, extremity, organ (organs are a separate design, #31)
+
 ### Actions and movement
 
 **Action**:
@@ -253,8 +257,12 @@ What a sprite is doing, such as wandering to a spot or resting, from when it sta
 _Avoid_: task, behaviour, activity
 
 **Verb**:
-A kind of action: Approach, Eat, Drink, Hit, Play, Retreat, Rest or Wander.
+A kind of action a sprite can take: Approach, Eat, Drink, Hit, Play, Retreat, Rest or Wander. Mate joins in M2 (Slice 23). Under #164 (M3), Play stops being a verb — it is boredom's relief, and the `played` pulse, that other verbs' effects can cause — and Touch, Grab, Push, Pull, Throw and Drop join. Speak is reserved for M4.
 _Avoid_: command (the player's commands are different), move
+
+**Holding** (#164 / M3):
+A sprite keeping things in its arms after one or more Grabs: each arm is its own slot (a small thing in one arm, another in the other; a medium thing needs both). Holding is a state, not a verb. Moving while holding is carrying — not the Cursor's Hold or Lead. A sprite's Grab, Throw and Drop are verbs; the Cursor's Grab, Hold and Throw are separate entries under The Cursor.
+_Avoid_: Carry (as a verb), inventory, inventory slot
 
 **Outcome**:
 How an action went: still walking, applied, blocked, failed or timed out.
@@ -536,23 +544,23 @@ The cursor mode for moving things: a left click grabs what's under the Cursor, a
 _Avoid_: Hand mode
 
 **Grab**:
-To take hold of what's under the Cursor: a sprite is led, an item picked up. A sprite on the tile comes before an item, and a fixture can't be grabbed.
+To take hold of what's under the Cursor: a sprite is led, an item picked up. A sprite on the tile comes before an item, and a fixture can't be grabbed. A sprite's Grab is a verb under #164.
 _Avoid_: lift, pick up (for a sprite)
 
 **Lead**:
 To hold a sprite through the Cursor without lifting it: it stays on the map and walks after the Cursor at its own pace, choosing nothing for itself, until the player **lets go**. Sprites are led, never lifted.
-_Avoid_: drag, carry, pick up
+_Avoid_: drag, carry (for the Cursor), pick up
 
 **Leash**:
 How far the Cursor may go from a sprite it leads, 5 tiles in a square, and the flashing dotted line that shows it, from the Cursor to the sprite.
 _Avoid_: lead (that's the verb), rope, tether
 
 **Hold**:
-What the Cursor does with an item it has picked up: the item leaves the map, its life going on, until the Cursor **puts it down** on a tile.
-_Avoid_: carry, in hand
+What the Cursor does with an item it has picked up: the item leaves the map, its life going on, until the Cursor **puts it down** on a tile. A sprite's holding is a different state under #164.
+_Avoid_: carry (for the Cursor; a sprite's carrying is moving while holding), in hand
 
 **Throw**:
-To let go of a held item with a push, so it rolls away like a kicked ball, as far and in the direction the player **aims**.
+To let go of a held item with a push, so it rolls away like a kicked ball, as far and in the direction the player **aims**. A sprite's Throw is a verb under #164.
 _Avoid_: toss, fling
 
 **Shove**:
