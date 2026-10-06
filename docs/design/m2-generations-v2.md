@@ -215,4 +215,20 @@ Set before measuring:
 - **No worse than `main`** on A1–A4, allowing 10% for noise.
 - **For information, no bar:** Slice 17's scarce-water runs again, water on 8% and 4% of the map.
 
-RESULTS_PLACEHOLDER
+**Measured (2026-10-06),** in release builds of `main` and of this slice, on seeds 1–10 with the lab (`scenarios/*.ron --seeds 10`):
+
+| | `main` | Slice 20 |
+|---|---|---|
+| A1–A3 lab runs | — | the same, line for line: in these small worlds the water and the bushes are always in sight, so no place is ever offered |
+| A4: median alive at tick 10,000 | 100% | 100% |
+| A4: hunger and thirst deaths, ticks 10,000–50,000, all seeds | 3 | 1 |
+| A5: ticks a second, 100 sprites | 324 | 312, met |
+
+Scarce water, for information: the default world with its water bands scaled down (deep 5/8 of the water, shallow 3/8, then 8% sand), with a scratch build, nothing committed. 300 sprites over the 10 seeds, 50,000 ticks:
+
+| Water | Deaths by tick 10,000, `main` → Slice 20 | Grown-up deaths, ticks 10,000–50,000 | Of them, hunger or thirst |
+|---|---|---|---|
+| 8% of tiles | 30 → 23 | 89 → 3 | all |
+| 4% of tiles | 92 → 55 | 139 → 1 | all |
+
+**What it shows.** A sprite that survives childhood now fends for itself, as the owner wants of a grown sprite: with water scarce, grown-up deaths fall from 89 and 139 to 3 and 1. Childhood is still the hard part, since a newborn remembers nothing until it first finds water. That's what Slice 29, the harsher world, builds on (§6, G5).
