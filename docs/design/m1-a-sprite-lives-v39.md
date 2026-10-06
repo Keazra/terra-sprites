@@ -2,7 +2,7 @@
 
 - **Status:** Final
 - **Date:** 2026-10-05
-- **Supersedes:** [v38](archive/m1-a-sprite-lives-v38.md) (earlier: [v37](archive/m1-a-sprite-lives-v37.md), [v36](archive/m1-a-sprite-lives-v36.md), [v35](archive/m1-a-sprite-lives-v35.md), [v34](archive/m1-a-sprite-lives-v34.md), [v33](archive/m1-a-sprite-lives-v33.md), [v32](archive/m1-a-sprite-lives-v32.md), [v31](archive/m1-a-sprite-lives-v31.md), [v30](archive/m1-a-sprite-lives-v30.md), [v29](archive/m1-a-sprite-lives-v29.md), [v28](archive/m1-a-sprite-lives-v28.md), [v27](archive/m1-a-sprite-lives-v27.md), [v26](archive/m1-a-sprite-lives-v26.md), [v25](archive/m1-a-sprite-lives-v25.md), [v24](archive/m1-a-sprite-lives-v24.md), [v23](archive/m1-a-sprite-lives-v23.md), [v22](archive/m1-a-sprite-lives-v22.md), [v21](archive/m1-a-sprite-lives-v21.md), [v20](archive/m1-a-sprite-lives-v20.md), [v19](archive/m1-a-sprite-lives-v19.md), [v18](archive/m1-a-sprite-lives-v18.md), [v17](archive/m1-a-sprite-lives-v17.md), [v16](archive/m1-a-sprite-lives-v16.md), [v15](archive/m1-a-sprite-lives-v15.md), [v14](archive/m1-a-sprite-lives-v14.md), [v13](archive/m1-a-sprite-lives-v13.md), [v12](archive/m1-a-sprite-lives-v12.md), [v11](archive/m1-a-sprite-lives-v11.md), [v10](archive/m1-a-sprite-lives-v10.md), [v9](archive/m1-a-sprite-lives-v9.md), [v8](archive/m1-a-sprite-lives-v8.md), [v7](archive/m1-a-sprite-lives-v7.md), [v6](archive/m1-a-sprite-lives-v6.md), [v5](archive/m1-a-sprite-lives-v5.md), [v4](archive/m1-a-sprite-lives-v4.md), [v3](archive/m1-a-sprite-lives-v3.md), [v2](archive/m1-a-sprite-lives-v2.md), [v1](archive/m1-a-sprite-lives.md))
+- **Supersedes:** [v38](m1-changelog.md#v38). Earlier revisions, v1 through v37, are in the [changelog](m1-changelog.md).
 - **Covers:** Milestone 1 in full detail, plus the architecture decisions that every later milestone depends on
 
 ---
@@ -15,7 +15,7 @@ M2 planning (2026-10-05): milestone 2 has a design of its own, [M2 "Generations"
 |---|---|---|---|
 | 1 | **M2's contents are in the [M2 design](archive/m2-generations-v1.md).** Beyond the roadmap's list, M2 takes memory of places, learning by watching, a harsher world, the speed cap and a title screen; this document stays the rulebook for everything M2 doesn't change. | M2 planning session | §1.1 |
 
-**Earlier changes** are in the archived revisions, in [`archive/`](archive/). Each opens with its own table: v38's changes (from v37) head [v38](archive/m1-a-sprite-lives-v38.md), and so on back to v2. So "v16 change 16" is row 16 of the table at the top of [v16](archive/m1-a-sprite-lives-v16.md). The current revision carries only its own table, so the spec doesn't open with its whole history.
+**Earlier changes** are in the [changelog](m1-changelog.md). Each revision's table is there, with the same row numbers: "v16 change 16" is row 16 of [v16](m1-changelog.md#v16). The full text of a revision is tag `design/m1-vN`. This revision carries only its own table.
 
 ---
 
