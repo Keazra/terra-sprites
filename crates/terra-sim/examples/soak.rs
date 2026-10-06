@@ -8,19 +8,17 @@
 //! Build it with the `baseline` profile, which keeps the self-check after
 //! every tick (§7.1), so a broken invariant panics naming the tick.
 
+#[path = "common/args.rs"]
+mod args;
+
 use std::process::ExitCode;
 use std::time::Instant;
 
 use terra_sim::{DataPack, DeathCause, Soak};
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let (seed, ticks) = match parse(&args) {
-        Ok(parsed) => parsed,
-        Err(message) => {
-            eprintln!("{message}\nusage: soak --seed N [--ticks T]");
-            return ExitCode::FAILURE;
-        }
+    let Some((seed, ticks)) = args::parse("soak --seed N [--ticks T]", parse) else {
+        return ExitCode::FAILURE;
     };
     let data = DataPack::builtin().expect("the built-in data pack is valid");
     println!("Soaking the default world, seed {seed}, for {ticks} ticks.");
@@ -61,14 +59,9 @@ fn parse(args: &[String]) -> Result<(u64, u64), String> {
     let (mut seed, mut ticks) = (None, 1_000_000);
     let mut args = args.iter();
     while let Some(arg) = args.next() {
-        let mut number = || -> Result<u64, String> {
-            let n = args.next().ok_or(format!("{arg} needs a number"))?;
-            n.parse()
-                .map_err(|_| format!("{arg} takes a whole number, not {n}"))
-        };
         match arg.as_str() {
-            "--seed" => seed = Some(number()?),
-            "--ticks" => ticks = number()?,
+            "--seed" => seed = Some(args::number("--seed", &mut args)?),
+            "--ticks" => ticks = args::number("--ticks", &mut args)?,
             _ => return Err(format!("unexpected argument {arg}")),
         }
     }

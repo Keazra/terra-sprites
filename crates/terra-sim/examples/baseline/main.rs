@@ -14,6 +14,9 @@
 
 mod report;
 
+#[path = "../common/args.rs"]
+mod args;
+
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Mutex;
@@ -58,17 +61,11 @@ struct Options {
 }
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let options = match parse(&args) {
-        Ok(options) => options,
-        Err(message) => {
-            eprintln!(
-                "{message}\nusage: baseline --commit C --measured \"YYYY-MM-DD HH:MM\" \
-                 --out DIR [--previous REPORT.ron] [--seeds N] [--soak-seed N] \
-                 [--soak-ticks N]"
-            );
-            return ExitCode::FAILURE;
-        }
+    const USAGE: &str = "baseline --commit C --measured \"YYYY-MM-DD HH:MM\" \
+         --out DIR [--previous REPORT.ron] [--seeds N] [--soak-seed N] \
+         [--soak-ticks N]";
+    let Some(options) = args::parse(USAGE, parse) else {
+        return ExitCode::FAILURE;
     };
     // Read the previous report first, so a bad one is found before the run.
     let previous = match options.previous.as_deref().map(read_report).transpose() {
@@ -136,25 +133,9 @@ fn parse(args: &[String]) -> Result<Options, String> {
             "--measured" => measured = Some(value()?),
             "--out" => out = Some(PathBuf::from(value()?)),
             "--previous" => previous = Some(PathBuf::from(value()?)),
-            "--seeds" => {
-                let n = value()?;
-                seeds = n
-                    .parse()
-                    .ok()
-                    .filter(|&n| n > 0)
-                    .ok_or(format!("--seeds takes a whole number above 0, not {n}"))?;
-            }
-            "--soak-seed" | "--soak-ticks" => {
-                let n = value()?;
-                let n = n
-                    .parse()
-                    .map_err(|_| format!("{arg} takes a whole number, not {n}"))?;
-                if arg == "--soak-seed" {
-                    soak_seed = Some(n);
-                } else {
-                    soak_ticks = n;
-                }
-            }
+            "--seeds" => seeds = args::positive("--seeds", &mut args)?,
+            "--soak-seed" => soak_seed = Some(args::number("--soak-seed", &mut args)?),
+            "--soak-ticks" => soak_ticks = args::number("--soak-ticks", &mut args)?,
             _ => return Err(format!("unexpected argument {arg}")),
         }
     }

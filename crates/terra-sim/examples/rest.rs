@@ -15,6 +15,9 @@
 //! past it, when old age injures it (design §4.8, §4.10). A rest counts toward the
 //! stretch it starts in, and so does its recovery.
 
+#[path = "common/args.rs"]
+mod args;
+
 use std::collections::BTreeMap;
 use std::process::ExitCode;
 
@@ -100,13 +103,8 @@ fn stretch(age: u64, lifespan: f32) -> usize {
 }
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let options = match parse(&args) {
-        Ok(options) => options,
-        Err(message) => {
-            eprintln!("{message}\nusage: rest [--ticks N] [--seeds A-B] [--sprites]");
-            return ExitCode::FAILURE;
-        }
+    let Some(options) = args::parse("rest [--ticks N] [--seeds A-B] [--sprites]", parse) else {
+        return ExitCode::FAILURE;
     };
     if cfg!(debug_assertions) {
         eprintln!("warning: this is a debug build; add --release, or it will take a long time");
@@ -229,12 +227,7 @@ fn parse(args: &[String]) -> Result<Options, String> {
     while let Some(flag) = args.next() {
         match flag.as_str() {
             "--sprites" => options.per_sprite = true,
-            "--ticks" => {
-                let value = args.next().ok_or("--ticks needs a number")?;
-                options.ticks = value
-                    .parse()
-                    .map_err(|_| format!("--ticks needs a number, not {value}"))?;
-            }
+            "--ticks" => options.ticks = args::number("--ticks", &mut args)?,
             "--seeds" => {
                 let value = args.next().ok_or("--seeds needs a range, such as 1-10")?;
                 let bad = || format!("--seeds needs a range, such as 1-10, not {value}");

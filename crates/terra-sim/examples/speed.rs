@@ -8,6 +8,9 @@
 //! from seed N (7 by default). Close other busy programs first: anything else
 //! the computer is doing slows it.
 
+#[path = "common/args.rs"]
+mod args;
+
 use std::process::ExitCode;
 use std::time::Instant;
 
@@ -17,13 +20,8 @@ use terra_sim::bench::crowded_world;
 const TARGET: f64 = 200.0;
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let (ticks, seed) = match parse(&args) {
-        Ok(parsed) => parsed,
-        Err(message) => {
-            eprintln!("{message}\nusage: speed [--ticks N] [--seed N]");
-            return ExitCode::FAILURE;
-        }
+    let Some((ticks, seed)) = args::parse("speed [--ticks N] [--seed N]", parse) else {
+        return ExitCode::FAILURE;
     };
     if cfg!(debug_assertions) {
         eprintln!("warning: this is a debug build; add --release for a fair measure");
@@ -55,15 +53,11 @@ fn parse(args: &[String]) -> Result<(u64, u64), String> {
     let (mut ticks, mut seed) = (5_000, 7);
     let mut args = args.iter();
     while let Some(flag) = args.next() {
-        let target = match flag.as_str() {
-            "--ticks" => &mut ticks,
-            "--seed" => &mut seed,
+        match flag.as_str() {
+            "--ticks" => ticks = args::number("--ticks", &mut args)?,
+            "--seed" => seed = args::number("--seed", &mut args)?,
             _ => return Err(format!("unknown argument {flag}")),
-        };
-        let value = args.next().ok_or(format!("{flag} needs a number"))?;
-        *target = value
-            .parse()
-            .map_err(|_| format!("{flag} needs a number, not {value}"))?;
+        }
     }
     if ticks == 0 {
         return Err("--ticks needs a number above 0".to_string());

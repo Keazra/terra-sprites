@@ -6,18 +6,18 @@
 //! `--seed N` runs only seed N, as a baseline report's replay command does
 //! (design §7.6).
 
+#[path = "common/args.rs"]
+mod args;
+
+use std::ops::RangeInclusive;
 use std::process::ExitCode;
 
 use terra_sim::{DataPack, LabScenario, report};
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let (path, seeds) = match parse(&args) {
-        Ok(parsed) => parsed,
-        Err(message) => {
-            eprintln!("{message}\nusage: lab <scenario.ron> [--seeds N | --seed N]");
-            return ExitCode::FAILURE;
-        }
+    let Some((path, seeds)) = args::parse("lab <scenario.ron> [--seeds N | --seed N]", parse)
+    else {
+        return ExitCode::FAILURE;
     };
     #[expect(
         clippy::disallowed_methods,
@@ -47,24 +47,21 @@ fn main() -> ExitCode {
 
 /// The scenario's path and which seeds to run: 1 to N, 10 unless `--seeds`
 /// says, or only the one `--seed` names.
-fn parse(args: &[String]) -> Result<(String, std::ops::RangeInclusive<u64>), String> {
+fn parse(args: &[String]) -> Result<(String, RangeInclusive<u64>), String> {
     let mut path = None;
-    let mut seeds = 1..=10;
+    let mut seed_range = 1..=10;
     let mut args = args.iter();
     while let Some(arg) = args.next() {
-        if arg == "--seeds" || arg == "--seed" {
-            let n = args.next().ok_or(format!("{arg} needs a number"))?;
-            let n = n
-                .parse()
-                .ok()
-                .filter(|&n| n > 0)
-                .ok_or(format!("{arg} takes a whole number above 0, not {n}"))?;
-            seeds = if arg == "--seeds" { 1..=n } else { n..=n };
+        if arg == "--seeds" {
+            seed_range = 1..=args::positive("--seeds", &mut args)?;
+        } else if arg == "--seed" {
+            let n = args::positive("--seed", &mut args)?;
+            seed_range = n..=n;
         } else if path.is_none() {
             path = Some(arg.clone());
         } else {
             return Err(format!("unexpected argument {arg}"));
         }
     }
-    Ok((path.ok_or("which scenario?")?, seeds))
+    Ok((path.ok_or("which scenario?")?, seed_range))
 }
