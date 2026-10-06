@@ -15,13 +15,12 @@
 //! past it, when old age injures it (design §4.8, §4.10). A rest counts toward the
 //! stretch it starts in, and so does its recovery.
 
-#[path = "common/mod.rs"]
-mod common;
+#[path = "common/args.rs"]
+mod args;
 
 use std::collections::BTreeMap;
 use std::process::ExitCode;
 
-use common::args::{self, seeds_range, ticks};
 use terra_sim::{DataPack, EntityId, EventKind, Verb, World, WorldConfig, median};
 
 /// Tiredness under this counts as recovered.
@@ -104,59 +103,54 @@ fn stretch(age: u64, lifespan: f32) -> usize {
 }
 
 fn main() -> ExitCode {
-    args::run(
-        "rest [--ticks N] [--seeds A-B] [--sprites]",
-        parse,
-        |options| {
-            if cfg!(debug_assertions) {
-                eprintln!(
-                    "warning: this is a debug build; add --release, or it will take a long time"
-                );
-            }
-            let data = DataPack::builtin().expect("the built-in data pack is valid");
-            let (first, last) = options.seeds;
-            println!(
-                "Resting by age: the default world, seeds {first}–{last}, {} ticks each.",
-                options.ticks
-            );
-            println!(
-                "Rests a 1,000 ticks and tiles a 1,000 ticks count the ticks lived in the stretch; \
+    let Some(options) = args::parse("rest [--ticks N] [--seeds A-B] [--sprites]", parse) else {
+        return ExitCode::FAILURE;
+    };
+    if cfg!(debug_assertions) {
+        eprintln!("warning: this is a debug build; add --release, or it will take a long time");
+    }
+    let data = DataPack::builtin().expect("the built-in data pack is valid");
+    let (first, last) = options.seeds;
+    println!(
+        "Resting by age: the default world, seeds {first}–{last}, {} ticks each.",
+        options.ticks
+    );
+    println!(
+        "Rests a 1,000 ticks and tiles a 1,000 ticks count the ticks lived in the stretch; \
          recovery is the median ticks from a rest starting until tiredness is under {RECOVERED}."
-            );
-            let mut total: [Tally; 5] = Default::default();
-            let mut lines = Vec::new();
-            for seed in first..=last {
-                let lives = run(&data, seed, options.ticks);
-                for (id, life) in &lives {
-                    for (all, one) in total.iter_mut().zip(&life.stretches) {
-                        all.add(one);
-                    }
-                    if options.per_sprite {
-                        for (name, tally) in STRETCHES.iter().zip(&life.stretches) {
-                            if tally.ticks > 0 {
-                                lines.push(tally.row(&format!("seed {seed} #{} {name}", id.0)));
-                            }
-                        }
-                    }
-                }
-            }
-            let header = format!(
-                "{:<22} {:>9} {:>9} {:>8} {:>10} {:>10}",
-                "Stretch of life", "Ticks", "Resting", "Rests/1k", "Recovery", "Tiles/1k"
-            );
-            println!("\n{header}");
-            for (name, tally) in STRETCHES.iter().zip(&total) {
-                println!("{}", tally.row(name));
+    );
+    let mut total: [Tally; 5] = Default::default();
+    let mut lines = Vec::new();
+    for seed in first..=last {
+        let lives = run(&data, seed, options.ticks);
+        for (id, life) in &lives {
+            for (all, one) in total.iter_mut().zip(&life.stretches) {
+                all.add(one);
             }
             if options.per_sprite {
-                println!("\n{header}");
-                for line in lines {
-                    println!("{line}");
+                for (name, tally) in STRETCHES.iter().zip(&life.stretches) {
+                    if tally.ticks > 0 {
+                        lines.push(tally.row(&format!("seed {seed} #{} {name}", id.0)));
+                    }
                 }
             }
-            ExitCode::SUCCESS
-        },
-    )
+        }
+    }
+    let header = format!(
+        "{:<22} {:>9} {:>9} {:>8} {:>10} {:>10}",
+        "Stretch of life", "Ticks", "Resting", "Rests/1k", "Recovery", "Tiles/1k"
+    );
+    println!("\n{header}");
+    for (name, tally) in STRETCHES.iter().zip(&total) {
+        println!("{}", tally.row(name));
+    }
+    if options.per_sprite {
+        println!("\n{header}");
+        for line in lines {
+            println!("{line}");
+        }
+    }
+    ExitCode::SUCCESS
 }
 
 /// Runs the default world from `seed` for `ticks` ticks, following every
@@ -233,8 +227,17 @@ fn parse(args: &[String]) -> Result<Options, String> {
     while let Some(flag) = args.next() {
         match flag.as_str() {
             "--sprites" => options.per_sprite = true,
-            "--ticks" => options.ticks = ticks(&mut args)?,
-            "--seeds" => options.seeds = seeds_range(&mut args)?,
+            "--ticks" => options.ticks = args::number("--ticks", &mut args)?,
+            "--seeds" => {
+                let value = args.next().ok_or("--seeds needs a range, such as 1-10")?;
+                let bad = || format!("--seeds needs a range, such as 1-10, not {value}");
+                let (a, b) = value.split_once('-').ok_or_else(bad)?;
+                let (a, b) = (a.parse().map_err(|_| bad())?, b.parse().map_err(|_| bad())?);
+                if a > b {
+                    return Err(bad());
+                }
+                options.seeds = (a, b);
+            }
             _ => return Err(format!("unknown argument {flag}")),
         }
     }
