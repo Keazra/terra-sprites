@@ -656,7 +656,7 @@ The world's hash, kept in a replay where the recording starts and every 1,000 ti
 _Avoid_: save, snapshot, autosave
 
 **Playback**:
-Playing a replay (`--replay \u003cfile\u003e`): its commands at their ticks, with the player's own input closed to the world. Time, the view and the inspector still work, and the player can take it over.
+Playing a replay (`--replay <file>`): its commands at their ticks, with the player's own input closed to the world. Time, the view and the inspector still work, and the player can take it over.
 _Avoid_: replay mode, rerun
 
 **Taking over**:
