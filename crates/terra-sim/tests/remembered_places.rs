@@ -172,41 +172,21 @@ fn a_sprite_with_no_way_back_to_a_place_forgets_it_and_never_sets_off() {
         });
     }
     let mut set_off = false;
-    let mut forgot_while_busy = false;
     for _ in 0..1_000 {
-        let before = world.sprites().next().expect("the sprite").action();
-        let remembered = places(&world).len();
-        let events = world.step();
-        for event in &events {
-            if let EventKind::CommandRejected { reason, .. } = &event.kind {
+        for event in world.step() {
+            if let EventKind::CommandRejected { reason, .. } = event.kind {
                 panic!("a bush wasn't placed: {reason:?}");
             }
         }
         // Thirsty, it may try drinking from the bushes it sees, but never
-        // heads for the water, nor shows a decision about it.
+        // heads for the water.
         let sprite = world.sprites().next().expect("the sprite");
         set_off |= sprite
             .action()
             .is_some_and(|a| matches!(a.target, Some(Target::Water(_))));
-        if let Some(seen) = sprite.attending_to() {
-            assert!(seen.x >= 10, "it attended to the water at {seen:?}");
-        }
-        // Forgetting it, it keeps to what it was doing.
-        if remembered == 1 && places(&world).is_empty() && before.is_some() {
-            let ended = events
-                .iter()
-                .any(|e| matches!(e.kind, EventKind::ActionEnded { .. }));
-            assert!(!ended, "forgetting the water ended what it was doing");
-            assert_eq!(sprite.action(), before, "it kept to what it was doing");
-            forgot_while_busy = true;
-        }
     }
     assert_eq!(places(&world), [], "it forgot the water");
     assert!(!set_off, "it never set off for water it can't get to");
-    assert!(
-        forgot_while_busy,
-        "it forgot the water in the middle of something"
-    );
 }
 
 /// `ROOM` walled across at column 20 but for gaps on `gaps`, with only a

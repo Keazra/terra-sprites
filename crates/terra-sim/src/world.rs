@@ -2149,6 +2149,94 @@ mod tests {
     }
 
     #[test]
+    fn a_remembered_place_with_no_way_there_leaves_what_the_sprite_is_doing_be() {
+        // M2 design §7.4: going to a ball, very thirsty, its eye turns to
+        // water it remembers beyond a wall. With no way there, it forgets
+        // the water and goes on to the ball, and decides nothing new.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        // A wall with a gap that a bush stands in.
+        let (wall, gap) = (
+            format!("~{}#{}", ".".repeat(19), ".".repeat(19)),
+            format!("~{}", ".".repeat(39)),
+        );
+        let rows = [&wall, &wall, &gap, &wall, &wall].map(String::as_str);
+        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
+        let genome = Genome::from_ron(
+            r#"(format: 1, genes: [
+                Trait(trait: "speed", value: 10.0),
+                Trait(trait: "sense_radius", value: 6.0),
+                Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
+                Instinct(inputs: [("always", false)], verb: Approach, weight: 0.3),
+                BrainParam(param: "tau_base", value: 0.05),
+                BrainParam(param: "salience_gain", value: 0.0),
+                BrainParam(param: "curiosity", value: 0.0),
+            ])"#,
+            &data,
+        )
+        .expect("a valid genome");
+        let scenario = Scenario {
+            map,
+            objects: &[
+                (Pos { x: 20, y: 2 }, "berry_bush"),
+                (Pos { x: 36, y: 2 }, "ball"),
+            ],
+            sprites: &[(Pos { x: 30, y: 2 }, Some(genome))],
+            scripted: &[],
+        };
+        let mut world = World::from_scenario(scenario, data, 7).expect("valid scenario");
+        let id = world.sprites().next().expect("the sprite").id();
+        let ball = world.object_at(Pos { x: 36, y: 2 }).expect("the ball").id();
+        let ball_type = world.data.object_type_id("ball");
+        let at = Pos { x: 0, y: 2 };
+        let water = world.state.subject_of(&world.data, Target::Water(at));
+        let needs = world.data.needs().count();
+        let quench = world.data.needs().position(|n| n == "thirst");
+        let thirst = world
+            .data
+            .chemicals()
+            .iter()
+            .position(|c| c.name == "thirst");
+        let (quench, thirst) = (quench.expect("thirst"), thirst.expect("thirst"));
+        // A step first, for its flood.
+        world.step();
+        let tick = world.state.tick;
+        let sprite = world.state.sprites.get_mut(id).expect("the sprite");
+        let limits = world.data.physiology().remembered_places;
+        sprite
+            .brain
+            .experience
+            .remember_place(water, Target::Water(at), at, limits);
+        let known = sprite.brain.experience.learn_about(water, needs);
+        known.worth[quench] = 1.0;
+        known.touched = true;
+        sprite.body.chems[thirst] = 1.0;
+        let target = Some((Target::Object(ball), ball_type));
+        let mut events = Vec::new();
+        let goal = Some(Pos { x: 35, y: 2 });
+        crate::action::start(
+            sprite,
+            id,
+            Verb::Approach,
+            goal,
+            target,
+            false,
+            tick,
+            &mut events,
+        );
+        let events = world.step();
+        let sprite = world.sprites().next().expect("the sprite");
+        assert_eq!(sprite.remembered_places(), [], "it forgot the water");
+        let ended = events
+            .iter()
+            .any(|e| matches!(e.kind, EventKind::ActionEnded { id: ended, .. } if ended == id));
+        assert!(!ended, "{events:?}");
+        let action = sprite.action().expect("its action");
+        assert_eq!(action.verb, Verb::Approach);
+        assert_eq!(action.target, Some(Target::Object(ball)));
+        assert_ne!(sprite.attending_to(), Some(at), "no decision about it");
+    }
+
+    #[test]
     fn too_many_places_of_a_kind_or_two_too_near_break_an_invariant() {
         // M2 design §7.2: 3 of a kind at most, none within 5 of another.
         assert_eq!(remembering_water_on(&[0, 6, 12]).check_invariants(), Ok(()));

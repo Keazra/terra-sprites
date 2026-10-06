@@ -240,45 +240,11 @@ pub(crate) fn decide(
         .collect();
     let attended = brain.attend(&attention, running, exploration, rng);
     let candidate = attended.and_then(|c| candidates.get(&c));
-    // A remembered place it might newly set off for needs a way there before
-    // anything changes: with none, it forgets the place and keeps to what it
-    // was doing, deciding nothing this tick (M2 design §7.4).
-    let continuing = sprite
-        .action
-        .as_ref()
-        .filter(|_| running)
-        .and_then(|a| a.target);
-    let planned = match candidate {
-        Some(c) if c.goal.is_none() && continuing != Some(c.target) => {
-            let sprite = state.sprites.get(id).expect("the same sprite");
-            let way = trip(
-                state,
-                data,
-                sprite,
-                c.target,
-                Occupied::Penalty(penalty(data)),
-            );
-            if way.is_none() {
-                let sprite = state.sprites.get_mut(id).expect("the same sprite");
-                sprite.brain.experience.forget_place(c.target);
-                return;
-            }
-            way
-        }
-        _ => None,
-    };
-    let sprite = state.sprites.get_mut(id).expect("the same sprite");
-    let rng = &mut state.rng;
-    let brain = &mut sprite.brain;
-    let mut running = running;
-    if let Some(aim) = aimed
-        && attended != Some(aim.category)
-    {
-        // Attention moved off the action's target: it changed its mind.
-        let action = sprite.action.as_mut().expect("the running action");
-        end(action, id, Outcome::Interrupted, state.tick, events);
-        running = false;
-    }
+    // Attention moved off the action's target: it changed its mind. The
+    // action ends once the new one is sure to start, as a trip with no way
+    // there doesn't (M2 design §7.4).
+    let moved = aimed.is_some_and(|aim| attended != Some(aim.category));
+    let running = running && !moved;
     let aim = if running { aimed } else { None }.or(candidate.map(|c| c.aim));
 
     // 5b: the decision.
@@ -324,7 +290,7 @@ pub(crate) fn decide(
         .or(candidate.map(|c| c.target));
     let verb = chosen.or(current);
     let motive = verb.and_then(|verb| brain.motive(verb, &activations, data));
-    brain.snapshot = Some(Snapshot {
+    let snapshot = Snapshot {
         tick: state.tick,
         inputs,
         activations,
@@ -338,8 +304,9 @@ pub(crate) fn decide(
         motive,
         sprite_seen: scoring.sprite,
         scoring: decision_scoring,
-    });
+    };
     let Some(verb) = chosen else {
+        brain.snapshot = Some(snapshot);
         return;
     };
     let (destination, target) = match verb {
@@ -358,12 +325,11 @@ pub(crate) fn decide(
             (candidate.goal, Some((candidate.target, candidate.type_id)))
         }
     };
-    // Setting off for a remembered place, it keeps to the way found above;
-    // a new verb for the place a running action is already headed to finds
-    // its own, and with none forgets the place and keeps to what it was
-    // doing (M2 design §7.4).
+    // Setting off for a remembered place, it finds the way there, which it
+    // keeps to; with none, it forgets the place and keeps to what it was
+    // doing, deciding nothing this tick, and chooses again at its next step
+    // 5 (M2 design §7.4).
     let way = match (target, destination) {
-        (Some(_), None) if verb.heads_for_goal() && planned.is_some() => planned,
         (Some((target, _)), None) if verb.heads_for_goal() => {
             let sprite = state.sprites.get(id).expect("the same sprite");
             let way = trip(
@@ -383,7 +349,8 @@ pub(crate) fn decide(
         _ => None,
     };
     let sprite = state.sprites.get_mut(id).expect("the same sprite");
-    if running {
+    sprite.brain.snapshot = Some(snapshot);
+    if running || moved {
         let action = sprite.action.as_mut().expect("the running action");
         end(action, id, Outcome::Interrupted, state.tick, events);
     }
