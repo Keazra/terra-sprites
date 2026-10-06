@@ -4,44 +4,37 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::listed::listed_enum;
+
 /// A category's permanent ID (design v19 §3.5.5): what brains perceive a
 /// thing as.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
 pub(crate) struct CategoryId(pub(crate) u16);
 
-/// A kind of action, and a brain output (design §5.2). The discriminants are
-/// the stable verb IDs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum Verb {
-    Approach = 1,
-    Eat = 2,
-    Drink = 3,
-    Hit = 4,
-    Play = 5,
-    Retreat = 6,
-    Rest = 7,
-    Wander = 8,
-    /// Reserved for M2.
-    Mate = 9,
-    /// Reserved for M4.
-    Speak = 10,
+listed_enum! {
+    /// A kind of action, and a brain output (design §5.2). The discriminants are
+    /// the stable verb IDs.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+    pub enum Verb {
+        Approach = 1,
+        Eat = 2,
+        Drink = 3,
+        Hit = 4,
+        Play = 5,
+        Retreat = 6,
+        Rest = 7,
+        Wander = 8,
+        /// Reserved for M2.
+        Mate = 9,
+        /// Reserved for M4.
+        Speak = 10,
+    }
+
+    pub(crate) const ALL;
 }
 
 impl Verb {
-    pub(crate) const ALL: [Verb; 10] = [
-        Verb::Approach,
-        Verb::Eat,
-        Verb::Drink,
-        Verb::Hit,
-        Verb::Play,
-        Verb::Retreat,
-        Verb::Rest,
-        Verb::Wander,
-        Verb::Mate,
-        Verb::Speak,
-    ];
-
     /// Whether the verb is aimed at a target (design §5.2): a movement or
     /// interaction verb.
     pub(crate) fn is_aimed(self) -> bool {
@@ -66,162 +59,84 @@ impl Verb {
     }
 }
 
-/// A setting of how the brain works (design §5.7, Appendix B), set by a
-/// `BrainParam` gene. The discriminants are the stable parameter IDs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub(crate) enum BrainParam {
-    /// Does nothing since v16, when learning became worth and habits; kept
-    /// for its ID, since genomes may carry it.
-    LearningRate = 1,
-    TraceDecay = 2,
-    /// Does nothing since v16; kept for its ID.
-    RelaxRate = 3,
-    /// Does nothing since v16; kept for its ID.
-    ConsolidateRate = 4,
-    TauBase = 5,
-    TauAttBase = 6,
-    SwitchMargin = 7,
-    AttentionMargin = 8,
-    SalienceGain = 9,
-    /// This and the next four do nothing while the recruitable pool is on
-    /// hold (design v16 §5.4); kept for their IDs.
-    PoolSize = 10,
-    MaxArity = 11,
-    RecruitThreshold = 12,
-    NoveltyThreshold = 13,
-    ForgetTicks = 14,
-    WorthRateGood = 15,
-    WorthRateBad = 16,
-    WorthFadeGood = 17,
-    WorthFadeBad = 18,
-    HabitRate = 19,
-    HabitFade = 20,
-    ValueGain = 21,
-    Curiosity = 22,
-    FamiliarityRate = 23,
-    Disappointment = 24,
-    /// How fast a particular sprite is learned good (design v18 §5.6).
-    IndividualRateGood = 25,
-    /// How fast a particular sprite is learned bad (design v18 §5.6).
-    IndividualRateBad = 26,
-    /// How fast whoever hurt it is feared (design v18 §5.6).
-    FearRate = 27,
-    /// How much fear fades each tick (design v18 §5.6).
-    FearFade = 28,
-    /// How many sprites it knows before sprites in general are judged in
-    /// full (design v18 §5.6).
-    Generalise = 29,
-    /// How strongly fear catches the eye (design v18 §5.3).
-    Vigilance = 30,
-    /// How strongly fear pulls towards backing away (design v18 §5.5).
-    Flight = 31,
-    /// The distance, as a share of sight, at which fear stops pulling
-    /// (design v18 §5.3).
-    FearReach = 32,
-    /// How many object types in a category it knows before the category's
-    /// summary counts in full (design v19 §5.6).
-    GeneraliseTypes = 33,
-    /// How much a pressing first-order need quiets what the sprite merely
-    /// likes (design v21 §5.6).
-    Quieting = 34,
-    /// How much a bad habit fades each tick (design v21 §5.6).
-    HabitFadeBad = 35,
-    /// How fast fear of the Cursor wears off while it stays near the sprite
-    /// and does nothing to it (design v29 §5.6).
-    CursorCalming = 36,
-    /// How much a remembered place fades each tick (M2 design §7).
-    PlaceFade = 37,
+listed_enum! {
+    /// A setting of how the brain works (design §5.7, Appendix B), set by a
+    /// `BrainParam` gene. The discriminants are the stable parameter IDs.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+    pub(crate) enum BrainParam {
+        /// Does nothing since v16, when learning became worth and habits; kept
+        /// for its ID, since genomes may carry it.
+        LearningRate = 1 => "learning_rate",
+        TraceDecay = 2 => "trace_decay",
+        /// Does nothing since v16; kept for its ID.
+        RelaxRate = 3 => "relax_rate",
+        /// Does nothing since v16; kept for its ID.
+        ConsolidateRate = 4 => "consolidate_rate",
+        TauBase = 5 => "tau_base",
+        TauAttBase = 6 => "tau_att_base",
+        SwitchMargin = 7 => "switch_margin",
+        AttentionMargin = 8 => "attention_margin",
+        SalienceGain = 9 => "salience_gain",
+        /// This and the next four do nothing while the recruitable pool is on
+        /// hold (design v16 §5.4); kept for their IDs.
+        PoolSize = 10 => "pool_size",
+        MaxArity = 11 => "max_arity",
+        RecruitThreshold = 12 => "recruit_threshold",
+        NoveltyThreshold = 13 => "novelty_threshold",
+        ForgetTicks = 14 => "forget_ticks",
+        WorthRateGood = 15 => "worth_rate_good",
+        WorthRateBad = 16 => "worth_rate_bad",
+        WorthFadeGood = 17 => "worth_fade_good",
+        WorthFadeBad = 18 => "worth_fade_bad",
+        HabitRate = 19 => "habit_rate",
+        HabitFade = 20 => "habit_fade",
+        ValueGain = 21 => "value_gain",
+        Curiosity = 22 => "curiosity",
+        FamiliarityRate = 23 => "familiarity_rate",
+        Disappointment = 24 => "disappointment",
+        /// How fast a particular sprite is learned good (design v18 §5.6).
+        IndividualRateGood = 25 => "individual_rate_good",
+        /// How fast a particular sprite is learned bad (design v18 §5.6).
+        IndividualRateBad = 26 => "individual_rate_bad",
+        /// How fast whoever hurt it is feared (design v18 §5.6).
+        FearRate = 27 => "fear_rate",
+        /// How much fear fades each tick (design v18 §5.6).
+        FearFade = 28 => "fear_fade",
+        /// How many sprites it knows before sprites in general are judged in
+        /// full (design v18 §5.6).
+        Generalise = 29 => "generalise",
+        /// How strongly fear catches the eye (design v18 §5.3).
+        Vigilance = 30 => "vigilance",
+        /// How strongly fear pulls towards backing away (design v18 §5.5).
+        Flight = 31 => "flight",
+        /// The distance, as a share of sight, at which fear stops pulling
+        /// (design v18 §5.3).
+        FearReach = 32 => "fear_reach",
+        /// How many object types in a category it knows before the category's
+        /// summary counts in full (design v19 §5.6).
+        GeneraliseTypes = 33 => "generalise_types",
+        /// How much a pressing first-order need quiets what the sprite merely
+        /// likes (design v21 §5.6).
+        Quieting = 34 => "quieting",
+        /// How much a bad habit fades each tick (design v21 §5.6).
+        HabitFadeBad = 35 => "habit_fade_bad",
+        /// How fast fear of the Cursor wears off while it stays near the sprite
+        /// and does nothing to it (design v29 §5.6).
+        CursorCalming = 36 => "cursor_calming",
+        /// How much a remembered place fades each tick (M2 design §7).
+        PlaceFade = 37 => "place_fade",
+    }
+
+    pub(crate) const ALL;
+
+    /// The parameter's name in genome files and `physiology.ron`.
+    pub(crate) fn name(self) -> &'static str;
+
+    /// The parameter called `name`, if there is one.
+    pub(crate) fn named;
 }
 
 impl BrainParam {
-    pub(crate) const ALL: [BrainParam; 37] = [
-        BrainParam::LearningRate,
-        BrainParam::TraceDecay,
-        BrainParam::RelaxRate,
-        BrainParam::ConsolidateRate,
-        BrainParam::TauBase,
-        BrainParam::TauAttBase,
-        BrainParam::SwitchMargin,
-        BrainParam::AttentionMargin,
-        BrainParam::SalienceGain,
-        BrainParam::PoolSize,
-        BrainParam::MaxArity,
-        BrainParam::RecruitThreshold,
-        BrainParam::NoveltyThreshold,
-        BrainParam::ForgetTicks,
-        BrainParam::WorthRateGood,
-        BrainParam::WorthRateBad,
-        BrainParam::WorthFadeGood,
-        BrainParam::WorthFadeBad,
-        BrainParam::HabitRate,
-        BrainParam::HabitFade,
-        BrainParam::ValueGain,
-        BrainParam::Curiosity,
-        BrainParam::FamiliarityRate,
-        BrainParam::Disappointment,
-        BrainParam::IndividualRateGood,
-        BrainParam::IndividualRateBad,
-        BrainParam::FearRate,
-        BrainParam::FearFade,
-        BrainParam::Generalise,
-        BrainParam::Vigilance,
-        BrainParam::Flight,
-        BrainParam::FearReach,
-        BrainParam::GeneraliseTypes,
-        BrainParam::Quieting,
-        BrainParam::HabitFadeBad,
-        BrainParam::CursorCalming,
-        BrainParam::PlaceFade,
-    ];
-
-    /// The parameter's name in genome files and `physiology.ron`.
-    pub(crate) fn name(self) -> &'static str {
-        match self {
-            BrainParam::LearningRate => "learning_rate",
-            BrainParam::TraceDecay => "trace_decay",
-            BrainParam::RelaxRate => "relax_rate",
-            BrainParam::ConsolidateRate => "consolidate_rate",
-            BrainParam::TauBase => "tau_base",
-            BrainParam::TauAttBase => "tau_att_base",
-            BrainParam::SwitchMargin => "switch_margin",
-            BrainParam::AttentionMargin => "attention_margin",
-            BrainParam::SalienceGain => "salience_gain",
-            BrainParam::PoolSize => "pool_size",
-            BrainParam::MaxArity => "max_arity",
-            BrainParam::RecruitThreshold => "recruit_threshold",
-            BrainParam::NoveltyThreshold => "novelty_threshold",
-            BrainParam::ForgetTicks => "forget_ticks",
-            BrainParam::WorthRateGood => "worth_rate_good",
-            BrainParam::WorthRateBad => "worth_rate_bad",
-            BrainParam::WorthFadeGood => "worth_fade_good",
-            BrainParam::WorthFadeBad => "worth_fade_bad",
-            BrainParam::HabitRate => "habit_rate",
-            BrainParam::HabitFade => "habit_fade",
-            BrainParam::ValueGain => "value_gain",
-            BrainParam::Curiosity => "curiosity",
-            BrainParam::FamiliarityRate => "familiarity_rate",
-            BrainParam::Disappointment => "disappointment",
-            BrainParam::IndividualRateGood => "individual_rate_good",
-            BrainParam::IndividualRateBad => "individual_rate_bad",
-            BrainParam::FearRate => "fear_rate",
-            BrainParam::FearFade => "fear_fade",
-            BrainParam::Generalise => "generalise",
-            BrainParam::Vigilance => "vigilance",
-            BrainParam::Flight => "flight",
-            BrainParam::FearReach => "fear_reach",
-            BrainParam::GeneraliseTypes => "generalise_types",
-            BrainParam::Quieting => "quieting",
-            BrainParam::HabitFadeBad => "habit_fade_bad",
-            BrainParam::CursorCalming => "cursor_calming",
-            BrainParam::PlaceFade => "place_fade",
-        }
-    }
-
-    /// The parameter called `name`, if there is one.
-    pub(crate) fn named(name: &str) -> Option<BrainParam> {
-        BrainParam::ALL.into_iter().find(|p| p.name() == name)
-    }
-
     /// Whether it counts something, so spawn variation rounds it (design §4.9).
     pub(crate) fn is_whole(self) -> bool {
         matches!(
@@ -231,33 +146,25 @@ impl BrainParam {
     }
 }
 
-/// An evolvable body trait (design §4.8). The discriminants are the stable trait IDs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum Trait {
-    /// Move points per tick.
-    Speed = 1,
-    /// How far the sprite perceives, in tiles.
-    SenseRadius = 2,
-    /// Ticks until old age.
-    Lifespan = 3,
-}
+listed_enum! {
+    /// An evolvable body trait (design §4.8). The discriminants are the stable trait IDs.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+    pub enum Trait {
+        /// Move points per tick.
+        Speed = 1 => "speed",
+        /// How far the sprite perceives, in tiles.
+        SenseRadius = 2 => "sense_radius",
+        /// Ticks until old age.
+        Lifespan = 3 => "lifespan",
+    }
 
-impl Trait {
-    pub(crate) const ALL: [Trait; 3] = [Trait::Speed, Trait::SenseRadius, Trait::Lifespan];
+    pub(crate) const ALL;
 
     /// The trait's name in genome files and `physiology.ron`.
-    pub(crate) fn name(self) -> &'static str {
-        match self {
-            Trait::Speed => "speed",
-            Trait::SenseRadius => "sense_radius",
-            Trait::Lifespan => "lifespan",
-        }
-    }
+    pub(crate) fn name(self) -> &'static str;
 
     /// The trait called `name`, if there is one.
-    pub(crate) fn named(name: &str) -> Option<Trait> {
-        Trait::ALL.into_iter().find(|t| t.name() == name)
-    }
+    pub(crate) fn named;
 }
 
 /// A chemical's stable ID (Appendix A).
@@ -352,4 +259,42 @@ pub(crate) struct Locus {
     pub(crate) id: LocusId,
     pub(crate) name: String,
     pub(crate) kind: LocusKind,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BrainParam, Trait, Verb};
+
+    #[test]
+    fn stable_ids_stay_put_and_names_round_trip() {
+        for (i, verb) in Verb::ALL.into_iter().enumerate() {
+            assert_eq!(verb as u16, (i + 1) as u16);
+        }
+        assert_eq!(Verb::Approach as u16, 1);
+        assert_eq!(Verb::Speak as u16, 10);
+
+        assert_eq!(
+            Trait::ALL.map(Trait::name),
+            ["speed", "sense_radius", "lifespan"]
+        );
+        for (i, one) in Trait::ALL.into_iter().enumerate() {
+            assert_eq!(one as u16, (i + 1) as u16);
+            assert_eq!(Trait::named(one.name()), Some(one));
+        }
+        assert_eq!(Trait::named("no_such"), None);
+
+        assert_eq!(BrainParam::ALL.len(), 37);
+        assert_eq!(BrainParam::LearningRate as u16, 1);
+        assert_eq!(BrainParam::PlaceFade as u16, 37);
+        for (i, param) in BrainParam::ALL.into_iter().enumerate() {
+            assert_eq!(param as u16, (i + 1) as u16);
+            assert_eq!(BrainParam::named(param.name()), Some(param));
+        }
+        assert_eq!(
+            BrainParam::named("learning_rate"),
+            Some(BrainParam::LearningRate)
+        );
+        assert_eq!(BrainParam::named("place_fade"), Some(BrainParam::PlaceFade));
+        assert_eq!(BrainParam::named(""), None);
+    }
 }

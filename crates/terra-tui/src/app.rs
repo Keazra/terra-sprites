@@ -16,6 +16,7 @@ use crate::clock::Clock;
 use crate::cp437;
 use crate::input::{Action, Button};
 use crate::inspector;
+use crate::listed::listed_enum;
 use crate::policy::{InfoPolicy, Omniscient, Panel, Subject};
 use crate::saves::{self, MAX_SAVE_NAME_CHARS, QUICKSAVE, SaveFile};
 use crate::sprite_list::{self, SortBy};
@@ -60,27 +61,22 @@ pub enum Screen {
     SpriteList,
 }
 
-/// What colours sprites on the map (design §6.3).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ColourMode {
-    /// The colour of its strongest drive above .5, or its own colour if
-    /// none is.
-    Drive,
-    /// Its own colour.
-    Plain,
-}
+listed_enum! {
+    /// What colours sprites on the map (design §6.3).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum ColourMode {
+        /// The colour of its strongest drive above .5, or its own colour if
+        /// none is.
+        Drive => "strongest drive",
+        /// Its own colour.
+        Plain => "plain",
+    }
 
-impl ColourMode {
     /// Every colour mode, in the order `b` goes through them.
-    pub const ALL: [ColourMode; 2] = [ColourMode::Drive, ColourMode::Plain];
+    pub const ALL;
 
     /// What the status line calls it when `b` switches to it.
-    pub fn label(self) -> &'static str {
-        match self {
-            ColourMode::Drive => "strongest drive",
-            ColourMode::Plain => "plain",
-        }
-    }
+    pub fn label(self) -> &'static str;
 }
 
 /// How strong a drive must be to colour its sprite, and to show in the
@@ -99,30 +95,26 @@ pub(crate) fn strongest_drive<'a>(sprite: &SpriteView<'a>) -> Option<ChemicalLev
         })
 }
 
-/// Which events the event log shows (design §6.1).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EventFilter {
-    /// Every event it logs.
-    All,
-    /// What the selected sprite did, or had done to it.
-    Selected,
-    /// Deaths, lessons learned and refusals.
-    Major,
+listed_enum! {
+    /// Which events the event log shows (design §6.1).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum EventFilter {
+        /// Every event it logs.
+        All => "all",
+        /// What the selected sprite did, or had done to it.
+        Selected => "selected",
+        /// Deaths, lessons learned and refusals.
+        Major => "major",
+    }
+
+    /// Every filter, in the order `m` goes through them.
+    pub const ALL;
+
+    /// Its name on the event log's border.
+    pub fn label(self) -> &'static str;
 }
 
 impl EventFilter {
-    /// Every filter, in the order `m` goes through them.
-    pub const ALL: [EventFilter; 3] = [EventFilter::All, EventFilter::Selected, EventFilter::Major];
-
-    /// Its name on the event log's border.
-    pub fn label(self) -> &'static str {
-        match self {
-            EventFilter::All => "all",
-            EventFilter::Selected => "selected",
-            EventFilter::Major => "major",
-        }
-    }
-
     /// The event log's border's label: every filter, the one in use in
     /// brackets, as the inspector's title shows its tabs.
     pub fn labels(self) -> String {
@@ -198,30 +190,26 @@ fn ron_files(folder: Option<&Path>) -> Vec<(String, PathBuf)> {
     files
 }
 
-/// What a click on the map does (design v21 §6.5).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum CursorMode {
-    Select,
-    /// Teaching: a left click rewards, a right click corrects.
-    Train,
-    /// Moving things: a left click grabs, or lets go (design v23 §6.5).
-    Grab,
+listed_enum! {
+    /// What a click on the map does (design v21 §6.5).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    pub enum CursorMode {
+        Select => "SELECT",
+        /// Teaching: a left click rewards, a right click corrects.
+        Train => "TRAIN",
+        /// Moving things: a left click grabs, or lets go (design v23 §6.5).
+        Grab => "GRAB",
+    }
+
+    /// Every cursor mode. Each theme must give all of them a mark.
+    pub const ALL;
+
+    /// The mode's name on the status line.
+    pub fn label(self) -> &'static str;
 }
 
 impl CursorMode {
-    /// Every cursor mode. Each theme must give all of them a mark.
-    pub const ALL: [CursorMode; 3] = [CursorMode::Select, CursorMode::Train, CursorMode::Grab];
-
-    /// The mode's name on the status line.
-    pub fn label(self) -> &'static str {
-        match self {
-            CursorMode::Select => "SELECT",
-            CursorMode::Train => "TRAIN",
-            CursorMode::Grab => "GRAB",
-        }
-    }
-
     /// The mode `steps` along from this one, wrapping round.
     fn along(self, steps: i32) -> CursorMode {
         along(&CursorMode::ALL, self, steps)
@@ -289,31 +277,25 @@ impl Selection {
     }
 }
 
-/// An inspector tab (design §6.1). The Brain tab joins with the brain.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Tab {
-    Body,
-    Brain,
-    Chem,
-    Genome,
-    World,
+listed_enum! {
+    /// An inspector tab (design §6.1). The Brain tab joins with the brain.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum Tab {
+        Body => "Body",
+        Brain => "Brain",
+        Chem => "Chem",
+        Genome => "Genome",
+        World => "World",
+    }
+
+    /// Every tab, in the order `[` and `]` go through them.
+    pub const ALL;
+
+    /// The tab's name in the inspector's title.
+    pub fn label(self) -> &'static str;
 }
 
 impl Tab {
-    /// Every tab, in the order `[` and `]` go through them.
-    pub const ALL: [Tab; 5] = [Tab::Body, Tab::Brain, Tab::Chem, Tab::Genome, Tab::World];
-
-    /// The tab's name in the inspector's title.
-    pub fn label(self) -> &'static str {
-        match self {
-            Tab::Body => "Body",
-            Tab::Brain => "Brain",
-            Tab::Chem => "Chem",
-            Tab::Genome => "Genome",
-            Tab::World => "World",
-        }
-    }
-
     /// The tab `steps` along from this one, wrapping around.
     fn along(self, steps: i32) -> Tab {
         along(&Tab::ALL, self, steps)

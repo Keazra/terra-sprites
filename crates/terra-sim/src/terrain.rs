@@ -1,27 +1,22 @@
 use serde::{Deserialize, Serialize};
 
-/// The kind of ground a tile has (design §3.1).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Terrain {
-    Grass,
-    Dirt,
-    Sand,
-    ShallowWater,
-    DeepWater,
-    Rock,
-}
+use crate::listed::listed_enum;
 
-impl Terrain {
+listed_enum! {
+    /// The kind of ground a tile has (design §3.1).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    pub enum Terrain {
+        Grass,
+        Dirt,
+        Sand,
+        ShallowWater,
+        DeepWater,
+        Rock,
+    }
+
     /// Every terrain, in declaration order.
-    pub const ALL: [Terrain; 6] = [
-        Terrain::Grass,
-        Terrain::Dirt,
-        Terrain::Sand,
-        Terrain::ShallowWater,
-        Terrain::DeepWater,
-        Terrain::Rock,
-    ];
+    pub const ALL;
 }
 
 /// A terrain's properties, from the data pack's `terrain.ron`.
