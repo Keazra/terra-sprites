@@ -13,6 +13,7 @@ pub mod policy;
 pub mod saves;
 pub mod session;
 pub mod sprite_list;
+pub mod start;
 mod text;
 pub mod theme;
 pub mod ui;

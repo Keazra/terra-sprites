@@ -496,3 +496,26 @@ fn a_new_objects_look_is_its_first_stages() {
     assert_eq!(data.new_look("ball"), Some("default"));
     assert_eq!(data.new_look("unicorn"), None);
 }
+
+#[test]
+fn a_placed_object_takes_its_first_turn_in_the_tick_it_is_placed() {
+    // Design §3.5.2: the Cursor places at step 1, so step 2 already sees
+    // it. A type whose first stage starts by counting shows it.
+    let counted = r#"[(id: 1, name: "counted", plural: "counteds", category: "toy",
+        size: Small, hardness: 0.1, counters: {"turns": 9},
+        stages: [(name: "only", ticks: (100, 100), next: Expire)],
+        rules: [(trigger: OnStageEnter("only"), do: [AddCounter("turns", 1)])],
+        place: (label: "counted"))]"#;
+    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, text)| (path, if path == "objects.ron" { counted } else { text }))
+        .collect();
+    let data = DataPack::from_sources(&sources).expect("a valid pack");
+    let mut world = world_in(data, &["....."], &[], &[]);
+    let tile = at(2, 0);
+    let command = place(&world, tile, "counted");
+    let events = run(&mut world, command.clone());
+    assert_eq!(refused(&events, &command), None);
+    let object = world.object_at(tile).expect("placed");
+    assert_eq!(object.counter("turns"), Some(1), "its first turn ran");
+}

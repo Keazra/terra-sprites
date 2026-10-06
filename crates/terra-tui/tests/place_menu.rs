@@ -192,6 +192,31 @@ fn the_menu_is_worked_with_the_arrows_and_enter_too() {
 }
 
 #[test]
+fn the_mouse_wheel_moves_the_menu_highlight() {
+    // #128: as the arrows do, a notch a row, and no further than the ends.
+    let world = field(&[], &[]);
+    let mut app = grab_app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+    let area = app.menu_area(&world).expect("the Place menu");
+    let wheel = |notches| Action::Wheel {
+        at: Position::new(area.x + 2, area.y + 1),
+        notches,
+    };
+    apply(&mut app, &world, wheel(-1));
+    assert_eq!(app.menu_choice(), 0);
+    apply(&mut app, &world, wheel(1));
+    apply(&mut app, &world, wheel(1));
+    apply(&mut app, &world, wheel(-1));
+    assert_eq!(app.menu_choice(), 1);
+    apply(&mut app, &world, wheel(9));
+    assert_eq!(app.menu_choice(), 4, "the last item");
+    assert_eq!(app.screen(), Screen::PlaceMenu);
+    apply(&mut app, &world, wheel(-3));
+    apply(&mut app, &world, Action::Enter);
+    assert_eq!(app.placing(), Some("berry"));
+}
+
+#[test]
 fn a_new_sprite_is_spawned_from_the_starter_genome() {
     let world = field(&[], &[]);
     let mut app = grab_app(&world);
@@ -216,6 +241,25 @@ fn a_right_click_puts_the_waiting_item_away() {
     assert_eq!(app.placing(), None);
     assert!(!app.aiming(), "it doesn't grab and aim the ball there");
     assert_eq!(app.take_commands(), Vec::new());
+}
+
+#[test]
+fn a_waiting_item_s_key_hints_say_how_to_place_it_or_put_it_away() {
+    // Design v28 §6.5, in Grab mode, where clicks place.
+    let world = field(&[], &[]);
+    let mut app = grab_app(&world);
+    assert!(!status_line(&app, &world).contains("click to place"));
+    pick(&mut app, &world, 3);
+    let status = status_line(&app, &world);
+    assert!(
+        status
+            .trim_end()
+            .ends_with("click to place  right-click put away"),
+        "{status:?}"
+    );
+    // In another mode, clicks don't place: the usual hints.
+    apply(&mut app, &world, Action::Mode(CursorMode::Select));
+    assert!(!status_line(&app, &world).contains("click to place"));
 }
 
 #[test]
@@ -534,6 +578,31 @@ fn a_menu_longer_than_the_map_view_scrolls_to_keep_the_highlight_in_view() {
     }
     assert_eq!(app.menu_choice(), 6);
     assert_eq!(app.menu_first(&world), 3);
+    // The wheel scrolls it too (#128).
+    let inside = Position::new(area.x + 2, area.y + 1);
+    for notches in [1, 1, -1, 1] {
+        apply(
+            &mut app,
+            &world,
+            Action::Wheel {
+                at: inside,
+                notches,
+            },
+        );
+    }
+    assert_eq!(app.menu_choice(), 8);
+    assert_eq!(app.menu_first(&world), 5);
+    for _ in 0..8 {
+        apply(
+            &mut app,
+            &world,
+            Action::Wheel {
+                at: inside,
+                notches: -1,
+            },
+        );
+    }
+    assert_eq!((app.menu_choice(), app.menu_first(&world)), (0, 0));
     // A click on the top row picks the first item shown.
     apply(
         &mut app,

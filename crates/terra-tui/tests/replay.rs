@@ -485,3 +485,72 @@ fn a_data_folder_with_something_not_a_file_in_a_file_s_place_is_refused_naming_i
         "{err}"
     );
 }
+
+#[test]
+fn a_replay_names_the_sprites_its_world_starts_with_before_it_plays() {
+    // A replay that starts from a save starts with the save's names (#137).
+    let mut world = world();
+    let sprite = world.sprites().next().expect("a sprite").id();
+    world.submit(Command::Rename {
+        sprite,
+        name: "Mira".into(),
+    });
+    world.step();
+    let live = played(world, 5);
+    let playback = replay_of(&live, "names");
+    assert!(!playback.started_fresh());
+    let app = replaying(&playback);
+    assert_eq!(app.names().label(sprite), format!("Mira #{}", sprite.0));
+}
+
+/// The status line, as drawn on a 120×32 screen.
+fn status_line(app: &App, world: &World) -> String {
+    let mut terminal = Terminal::new(TestBackend::new(120, 32)).expect("a test terminal");
+    terminal
+        .draw(|frame| ui::render(frame, app, world))
+        .expect("drawn");
+    let buffer = terminal.backend().buffer();
+    (0..buffer.area.width)
+        .map(|x| buffer[(x, 31)].symbol().to_string())
+        .collect()
+}
+
+#[test]
+fn in_a_replay_the_recorded_cursor_isn_t_drawn_and_holds_and_leads_nothing() {
+    // Design §2.7: the viewer has a Cursor of their own; the recorded one
+    // is the world's, and isn't shown.
+    let held = played(world(), 5);
+    assert!(held.world().cursor().holds().is_some(), "it holds the ball");
+    let mut leading = Session::live(world());
+    let sprite = leading.world().sprites().next().expect("a sprite").id();
+    leading.submit(vec![
+        Command::TakeHold { sprite },
+        Command::MoveCursor { tile: at(9, 6) },
+    ]);
+    for _ in 0..5 {
+        leading.step();
+    }
+    assert_eq!(leading.world().cursor().leads(), Some(sprite));
+    for (session, name) in [(held, "held"), (leading, "led")] {
+        let mut replay = Session::replay(replay_of(&session, name));
+        let mut app = replaying(replay.playback().expect("a replay"));
+        let cursor = app.cursor();
+        // As the frame loop does it.
+        let mut ticks = Ticks::default();
+        while replay.world().tick() < 5 {
+            let events = replay.step();
+            ticks.note(events, replay.world());
+        }
+        app.take_in(ticks, replay.world());
+        app.take_in_replay(replay.playback().expect("a replay"));
+        let world = replay.world();
+        assert_eq!(app.grip(world), None, "{name}");
+        assert_eq!(app.leash(), None, "{name}");
+        assert_eq!(app.cursor(), cursor, "the viewer's own, unmoved: {name}");
+        let status = status_line(&app, world);
+        assert!(
+            !status.contains("holding") && !status.contains("leading"),
+            "{name}: {status}"
+        );
+    }
+}

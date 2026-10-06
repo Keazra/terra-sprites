@@ -179,6 +179,10 @@ const SHIFT_STEP: i32 = 5;
 #[derive(Debug)]
 pub struct Keys {
     releases_reported: bool,
+    /// A shifted key arrives as its character without Shift, as with the
+    /// kitty protocol's alternate keys, so a capital letter means Shift:
+    /// Caps Lock alone sends the plain letter there.
+    shifted_as_characters: bool,
     down: HashSet<KeyCode>,
 }
 
@@ -193,6 +197,18 @@ impl Keys {
     pub fn with_release_reporting(releases_reported: bool) -> Keys {
         Keys {
             releases_reported,
+            shifted_as_characters: false,
+            down: HashSet::new(),
+        }
+    }
+
+    /// A tracker for a terminal with the kitty keyboard protocol on, as the
+    /// game asks for it (design §6.6): it reports releases, and a shifted
+    /// key as the character it types, `?` or `W`, without Shift.
+    pub fn kitty() -> Keys {
+        Keys {
+            releases_reported: true,
+            shifted_as_characters: true,
             down: HashSet::new(),
         }
     }
@@ -261,14 +277,13 @@ impl Keys {
                 _ => Action::Dismiss,
             });
         }
-        // Only Shift makes a scroll key jump: a capital letter may come from Caps Lock.
-        let step = if key.modifiers.contains(KeyModifiers::SHIFT) {
-            SHIFT_STEP
-        } else {
-            1
-        };
+        // Only Shift makes a scroll key jump: a capital letter may come from
+        // Caps Lock, except where a shifted key arrives as its character.
+        let shift = key.modifiers.contains(KeyModifiers::SHIFT)
+            || self.shifted_as_characters
+                && matches!(key.code, KeyCode::Char(c) if c.is_ascii_uppercase());
+        let step = if shift { SHIFT_STEP } else { 1 };
         let scroll = |dx: i32, dy: i32| Some(Action::Scroll { dx, dy });
-        let shift = key.modifiers.contains(KeyModifiers::SHIFT);
         // `Q` and `E` act once per press, like a click (design v21 §6.5).
         let press = |button| {
             (!held).then_some(Action::Press {
@@ -372,6 +387,7 @@ fn physical_key(code: KeyCode) -> KeyCode {
         KeyCode::Char('+') => KeyCode::Char('='),
         KeyCode::Char('_') => KeyCode::Char('-'),
         KeyCode::Char('>') => KeyCode::Char('.'),
+        KeyCode::Char('?') => KeyCode::Char('/'),
         KeyCode::Char(c) => KeyCode::Char(c.to_ascii_lowercase()),
         other => other,
     }
