@@ -15,6 +15,7 @@ use crate::learning::{
     Experience, Links, Signals, SpriteMemory, Subject, TRACE_CAP, Touch, TraceEntry, still_counts,
     weight,
 };
+use crate::map::Pos;
 use crate::objects::EntityId;
 use crate::perception::Target;
 use crate::random::unit;
@@ -91,6 +92,15 @@ impl BrainParams {
         BrainParams { values }
     }
 
+    /// Gives parameters added since a brain was saved the values its
+    /// `genome` expresses now (design §2.8), so an older save plays on.
+    pub(crate) fn catch_up(&mut self, genome: &Genome, data: &DataPack) {
+        let now = BrainParams::express(genome, data);
+        if let Some(added) = now.values.get(self.values.len()..) {
+            self.values.extend_from_slice(added);
+        }
+    }
+
     /// The value of `param`.
     pub(crate) fn get(&self, param: BrainParam) -> f32 {
         self.values[index(param)]
@@ -119,6 +129,29 @@ pub(crate) struct SpriteScoring {
     pub(crate) quiet: bool,
 }
 
+/// A thing attention weighs (design §5.3): what it's learned about as, its
+/// normalized distance, and how much of its worth counts.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Seen {
+    pub(crate) subject: Subject,
+    pub(crate) distance: f32,
+    /// 1 for a thing in sight; for a remembered place, how well it's
+    /// remembered (M2 design §7).
+    pub(crate) recall: f32,
+}
+
+#[cfg(test)]
+impl Seen {
+    /// A thing in sight, at normalized `distance`.
+    pub(crate) fn in_sight(subject: Subject, distance: f32) -> Seen {
+        Seen {
+            subject,
+            distance,
+            recall: 1.0,
+        }
+    }
+}
+
 /// What a sprite knows about the thing it attends to, for the Target inputs.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Aim {
@@ -129,6 +162,9 @@ pub(crate) struct Aim {
     pub(crate) distance: f32,
     /// Whether the sprite stands on one of its goal tiles.
     pub(crate) adjacent: bool,
+    /// How much of its worth draws the eye: 1 in sight, or how well a
+    /// remembered place is remembered (M2 design §7).
+    pub(crate) recall: f32,
 }
 
 /// A sprite's brain: its parameters, concepts and links (design §5.1).
@@ -244,6 +280,16 @@ pub enum Learned {
 pub struct Memory {
     pub learned: Learned,
     pub amount: f32,
+}
+
+/// A place a sprite remembers (M2 design §7): what it found there, the
+/// thing's tile, and how well it remembers it, from 1 just after it was
+/// eased there, fading towards 0.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Place {
+    pub thing: Thing,
+    pub at: Pos,
+    pub strength: f32,
 }
 
 /// How many learned things the memory lists (design §5.9).
@@ -487,6 +533,18 @@ impl Brain {
                     known.bad = (known.bad - bad * punishment).max(-1.0);
                 }
             }
+            // Relief from something that stays put makes where it is a
+            // remembered place (M2 design §7).
+            let eased = relief.iter().any(|&relief| relief > 0.0);
+            if let Some(Touch {
+                place: Some((target, at)),
+                ..
+            }) = near.filter(|_| eased)
+            {
+                let places = physiology.places;
+                let limits = (places.held, places.merge);
+                self.experience.remember_place(subject, target, at, limits);
+            }
             let experience = &mut self.experience;
             // How it went with something new teaches the worth of new things.
             let relieved: f32 = relief.iter().sum();
@@ -576,7 +634,8 @@ impl Brain {
 
     /// One tick of fading (design §5.6): good and bad, fear and habits each
     /// by their own rate. A remembered sprite faded until everything about
-    /// it is nearer 0 than `forget_below` is forgotten (design v18 §5.6).
+    /// it is nearer 0 than `forget_below` is forgotten (design v18 §5.6), and
+    /// so is a remembered place (M2 design §7).
     fn fade(&mut self, forget_below: f32) {
         let keep = |param| 1.0 - self.params.get(param);
         let (good, bad, habit, bad_habit) = (
@@ -609,6 +668,13 @@ impl Brain {
             individual.fear *= fear;
         }
         experience.forget_faded(forget_below);
+        // Remembered places fade too, and are forgotten once faint (M2
+        // design §7).
+        let place = keep(BrainParam::PlaceFade);
+        for remembered in &mut experience.places {
+            remembered.strength *= place;
+        }
+        experience.places.retain(|p| p.strength >= forget_below);
     }
 
     /// How new a thing learned about as `subject` is to the sprite (design
@@ -659,6 +725,24 @@ impl Brain {
         memory.sort_by(|a, b| b.amount.abs().total_cmp(&a.amount.abs()));
         memory.truncate(MEMORY_SIZE);
         memory
+    }
+
+    /// The places it remembers, best remembered first, ties oldest first
+    /// (M2 design §7).
+    pub(crate) fn places(&self, data: &DataPack) -> Vec<Place> {
+        let mut places: Vec<Place> = self
+            .experience
+            .places
+            .iter()
+            .map(|place| Place {
+                thing: subject_thing(place.subject, data),
+                at: place.at,
+                strength: place.strength,
+            })
+            .collect();
+        // A stable sort keeps a tie oldest first.
+        places.sort_by(|a, b| b.strength.total_cmp(&a.strength));
+        places
     }
 
     /// Every value a brain learns, named, always in the same order: worth
@@ -1055,13 +1139,14 @@ impl Brain {
 
     /// Each candidate category's attention score (design §5.3): the State
     /// inputs through the attention links, plus salience for nearness.
-    /// `candidates` gives what each category's candidate is learned about as
-    /// and its normalized distance. Target inputs never count, whatever
-    /// `inputs` holds for them.
+    /// `candidates` gives what each category's candidate is learned about as,
+    /// its normalized distance, and how much of its worth counts: a
+    /// remembered place's, as much as it's remembered (M2 design §7). Target
+    /// inputs never count, whatever `inputs` holds for them.
     pub(crate) fn attention_scores(
         &self,
         inputs: &[f32],
-        candidates: &BTreeMap<CategoryId, (Subject, f32)>,
+        candidates: &BTreeMap<CategoryId, Seen>,
         curiosity_mod: f32,
         scoring: SpriteScoring,
         data: &DataPack,
@@ -1080,13 +1165,19 @@ impl Brain {
         let boldness = self.boldness(curiosity_mod);
         candidates
             .iter()
-            .map(|(&category, &(subject, distance))| {
+            .map(|(&category, &seen)| {
+                let Seen {
+                    subject,
+                    distance,
+                    recall,
+                } = seen;
                 let c = data.category_index(category);
                 let instinct: f32 = state
                     .iter()
                     .map(|&i| inputs[i] * self.attention.get(i, c))
                     .sum();
-                let worth = value_gain * self.worth_of(subject, scoring.sprite, inputs, data);
+                let worth =
+                    recall * value_gain * self.worth_of(subject, scoring.sprite, inputs, data);
                 let curious = curiosity * self.novelty(subject) * boldness;
                 // Fear catches the eye (design v18 §5.3).
                 let watchful = vigilance * self.fright(category, scoring, distance, data);
@@ -1098,17 +1189,16 @@ impl Brain {
             .collect()
     }
 
-    /// How much a thing learned about as `subject`, the particular `sprite`
-    /// if it's one, at normalized `distance`, draws the eye beyond the
-    /// instincts about its category (design v19 §3.6, §5.3): its nearness,
-    /// what it's worth, how new it is, and, for a sprite, how frightening it
-    /// is while near. `inputs` gives the State inputs, and `curiosity_mod`
-    /// the receptor target wariness lowers.
+    /// How much a thing `seen`, the particular `sprite` if it's one, draws
+    /// the eye beyond the instincts about its category (design v19 §3.6,
+    /// §5.3): its nearness, what it's worth, as much as it's recalled (M2
+    /// design §7), how new it is, and, for a sprite, how frightening it is
+    /// while near. `inputs` gives the State inputs, and `curiosity_mod` the
+    /// receptor target wariness lowers.
     pub(crate) fn draw(
         &self,
-        subject: Subject,
+        seen: Seen,
         sprite: Option<EntityId>,
-        distance: f32,
         inputs: &[f32],
         curiosity_mod: f32,
         data: &DataPack,
@@ -1117,9 +1207,15 @@ impl Brain {
             sprite,
             quiet: false,
         };
+        let Seen {
+            subject,
+            distance,
+            recall,
+        } = seen;
         let boldness = self.boldness(curiosity_mod);
+        let worth = self.worth_of(subject, sprite, inputs, data);
         self.params.get(BrainParam::SalienceGain) * (1.0 - distance)
-            + self.params.get(BrainParam::ValueGain) * self.worth_of(subject, sprite, inputs, data)
+            + self.params.get(BrainParam::ValueGain) * recall * worth
             + self.params.get(BrainParam::Curiosity) * self.novelty(subject) * boldness
             + self.params.get(BrainParam::Vigilance)
                 * self.fright(subject.category(data), scoring, distance, data)
@@ -1348,13 +1444,16 @@ impl Brain {
 /// The verbs a sprite may choose (design §5.2): Rest and Wander always;
 /// with a target, every other verb, since a sprite may try anything on
 /// anything (v16), but Approach only while it isn't already `beside` the
-/// target, on one of its goal tiles, where Approach would do nothing.
-pub(crate) fn available(target: bool, beside: bool) -> Vec<Verb> {
+/// target, on one of its goal tiles, where Approach would do nothing, and
+/// Retreat only from a thing in sight, not one `remembered` out of sight
+/// (M2 design §7).
+pub(crate) fn available(target: bool, beside: bool, remembered: bool) -> Vec<Verb> {
     VERBS
         .into_iter()
         .filter(|&verb| match verb {
             Verb::Rest | Verb::Wander => true,
             Verb::Approach => target && !beside,
+            Verb::Retreat => target && !remembered,
             _ => target,
         })
         .collect()
@@ -1682,8 +1781,8 @@ mod tests {
             r#"BrainParam(param: "salience_gain", value: 0.5)"#,
         ]);
         let candidates = BTreeMap::from([
-            (BUSH, (types::BERRY_BUSH, 0.4)),
-            (WATER, (types::WATER, 0.0)),
+            (BUSH, Seen::in_sight(types::BERRY_BUSH, 0.4)),
+            (WATER, Seen::in_sight(types::WATER, 0.0)),
         ]);
         let hungry = inputs(&[("hunger", 0.5)]);
         let also_aimed = inputs(&[
@@ -1713,13 +1812,13 @@ mod tests {
     fn with_a_target_every_verb_can_be_tried_whatever_its_verb_table_says() {
         use Verb::*;
         assert_eq!(
-            available(false, false),
+            available(false, false, false),
             [Rest, Wander],
             "no target: targetless only"
         );
         // Design v16 §5.2: a verb table says what a try does, not what's allowed.
         assert_eq!(
-            available(true, false),
+            available(true, false, false),
             [Approach, Eat, Drink, Hit, Play, Retreat, Rest, Wander]
         );
     }
@@ -1728,7 +1827,7 @@ mod tests {
     fn approach_is_not_offered_to_a_sprite_already_beside_its_target() {
         use Verb::*;
         assert_eq!(
-            available(true, true),
+            available(true, true, false),
             [Eat, Drink, Hit, Play, Retreat, Rest, Wander]
         );
     }
@@ -1791,7 +1890,7 @@ mod tests {
         let mut brain = brain(&[]);
         let scores = BTreeMap::from([(WATER, 0.3), (TOY, 0.5)]);
         let verbs = [0.1; VERBS.len()];
-        let available = available(true, false);
+        let available = available(true, false, false);
         let mut rng = ChaCha8Rng::seed_from_u64(7);
         let untouched = rng.clone();
         // An action running: attention and switching draw nothing.
@@ -1921,6 +2020,7 @@ mod tests {
             sprite: None,
             novelty: 1.0,
             by_cursor: false,
+            place: None,
         });
         for (tick, hunger) in [(10, 1.0), (11, 0.0)] {
             let signals = hunger_at(&mut brain, &data, hunger);
@@ -1961,6 +2061,7 @@ mod tests {
             sprite: None,
             novelty: 1.0,
             by_cursor: false,
+            place: None,
         };
         brain.touched = Some(touch);
         let signals = hunger_at(&mut brain, &data, 0.5);
@@ -1994,6 +2095,7 @@ mod tests {
             sprite: None,
             novelty: 1.0,
             by_cursor: false,
+            place: None,
         });
         let signals = hunger_at(&mut brain, &data, 0.0);
         brain.learn(6, &signals, 1.0, &data);
@@ -2027,8 +2129,8 @@ mod tests {
         teach(&mut brain, types::BERRY).worth[0] = 0.5;
         teach(&mut brain, types::THORNBUSH).bad = -0.4;
         let candidates = BTreeMap::from([
-            (FRUIT, (types::BERRY, 1.0)),
-            (BUSH, (types::THORNBUSH, 1.0)),
+            (FRUIT, Seen::in_sight(types::BERRY, 1.0)),
+            (BUSH, Seen::in_sight(types::THORNBUSH, 1.0)),
         ]);
         let full = brain.attention_scores(
             &inputs(&[]),
@@ -2050,6 +2152,63 @@ mod tests {
     }
 
     #[test]
+    fn a_remembered_place_draws_the_eye_by_its_worth_as_well_as_it_is_remembered() {
+        // M2 design §7: worth × recall, and as at the edge of sight, no
+        // salience for nearness.
+        let data = builtin();
+        let mut brain = brain(&[]);
+        teach(&mut brain, types::WATER).worth[1] = 0.5;
+        teach(&mut brain, types::WATER).familiarity = 1.0;
+        let half_remembered = Seen {
+            recall: 0.5,
+            ..Seen::in_sight(types::WATER, 1.0)
+        };
+        let candidates = BTreeMap::from([(WATER, half_remembered)]);
+        let none = SpriteScoring::default();
+        let scores = brain.attention_scores(
+            &inputs(&[("thirst", 0.8)]),
+            &candidates,
+            0.0,
+            none,
+            &data,
+        );
+        assert!(close(scores[&WATER], 0.8 * 0.5 * 0.5), "{scores:?}");
+        let draw = brain.draw(half_remembered, None, &inputs(&[("thirst", 0.8)]), 0.0, &data);
+        assert!(close(draw, 0.8 * 0.5 * 0.5), "{draw}");
+    }
+
+    #[test]
+    fn a_remembered_place_out_of_sight_is_never_backed_away_from() {
+        // M2 design §7: there's nothing in sight to back away from.
+        use Verb::*;
+        assert_eq!(
+            available(true, false, true),
+            [Approach, Eat, Drink, Hit, Play, Rest, Wander]
+        );
+    }
+
+    #[test]
+    fn a_remembered_place_fades_and_is_forgotten_once_faint() {
+        // M2 design §7: × (1 − place_fade) a tick, forgotten under
+        // `forget_below` (.01).
+        let data = builtin();
+        let mut brain = brain(&[r#"BrainParam(param: "place_fade", value: 0.01)"#]);
+        let at = Pos { x: 3, y: 4 };
+        brain
+            .experience
+            .remember_place(types::WATER, Target::Water(at), at, (8, 5));
+        brain.fade(data.physiology().forget_below);
+        assert!(close(brain.experience.places[0].strength, 0.99));
+        // 0.99^458 is just over .01, and 0.99^459 just under.
+        for _ in 1..458 {
+            brain.fade(data.physiology().forget_below);
+        }
+        assert_eq!(brain.experience.places.len(), 1);
+        brain.fade(data.physiology().forget_below);
+        assert_eq!(brain.experience.places, []);
+    }
+
+    #[test]
     fn hunger_and_thirst_quiet_what_a_sprite_merely_likes_but_not_what_it_needs_or_dreads() {
         // Design v21 §5.6: general good counts × (1 − quieting (.8) ×
         // urgency²), urgency being the higher of hunger and thirst; worth for
@@ -2060,9 +2219,9 @@ mod tests {
         teach(&mut brain, types::THORNBUSH).bad = -0.4;
         teach(&mut brain, types::BERRY).worth[0] = 0.5;
         let candidates = BTreeMap::from([
-            (TOY, (types::BALL, 1.0)),
-            (BUSH, (types::THORNBUSH, 1.0)),
-            (FRUIT, (types::BERRY, 1.0)),
+            (TOY, Seen::in_sight(types::BALL, 1.0)),
+            (BUSH, Seen::in_sight(types::THORNBUSH, 1.0)),
+            (FRUIT, Seen::in_sight(types::BERRY, 1.0)),
         ]);
         let scores = |needs: &[(&str, f32)]| {
             let none = SpriteScoring::default();
@@ -2262,6 +2421,7 @@ mod tests {
             sprite: None,
             novelty: 1.0,
             by_cursor: false,
+            place: None,
         });
         let mut needs = vec![0.0; data.need_places().len()];
         needs[0] = 0.8;
@@ -2296,6 +2456,7 @@ mod tests {
             sprite: None,
             novelty: 1.0,
             by_cursor: false,
+            place: None,
         });
         let fruitless = Signals {
             needs: vec![1.0; data.need_places().len()],
@@ -2368,7 +2529,7 @@ mod tests {
         let data = builtin();
         let mut brain = brain(&[]);
         teach(&mut brain, types::BALL).familiarity = 0.5;
-        let candidates = BTreeMap::from([(FRUIT, (types::BERRY, 1.0)), (TOY, (types::BALL, 1.0))]);
+        let candidates = BTreeMap::from([(FRUIT, Seen::in_sight(types::BERRY, 1.0)), (TOY, Seen::in_sight(types::BALL, 1.0))]);
         let x = inputs(&[]);
         let score = |brain: &Brain, mood: f32| {
             brain.attention_scores(&x, &candidates, mood, SpriteScoring::default(), &data)
@@ -2396,6 +2557,7 @@ mod tests {
             sprite: None,
             novelty: 0.5,
             by_cursor: false,
+            place: None,
         });
         let hurt = Signals {
             needs: vec![0.0; data.need_places().len()],
@@ -2458,6 +2620,7 @@ mod tests {
             sprite: None,
             novelty: 1.0,
             by_cursor: false,
+            place: None,
         });
         let hit_back = Signals {
             needs: vec![0.0; data.need_places().len()],

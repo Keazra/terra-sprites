@@ -3,25 +3,36 @@
 //! snapshotted. All the brain's randomness is drawn here, and only at an
 //! action boundary.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use crate::action::{Outcome, ScriptedAction, end, is_acting, start};
-use crate::brain::{Aim, Snapshot, SpriteScoring, available, best_above};
+use crate::action::{Outcome, ScriptedAction, end, is_acting, penalty, set_off, start, trip};
+use crate::brain::{Aim, Seen, Snapshot, SpriteScoring, available, best_above};
 use crate::data::DataPack;
 use crate::events::Event;
 use crate::learning::Subject;
 use crate::map::Pos;
 use crate::objects::EntityId;
-use crate::perception::{Ground, Target};
+use crate::perception::{Ground, Occupied, Target};
 use crate::registry::{CategoryId, Verb};
 use crate::world::WorldState;
+
+/// Something a category offers the sprite (design §3.6): a thing in sight
+/// and the cost of the way there, or a remembered place out of sight, with
+/// how well it's remembered (M2 design §7).
+#[derive(Debug, Clone, Copy)]
+struct Offer {
+    target: Target,
+    cost: Option<u32>,
+    recall: f32,
+}
 
 /// Something the sprite could aim at, as it stands this tick.
 #[derive(Debug, Clone)]
 struct Candidate {
     target: Target,
-    /// Its nearest reachable goal tile.
-    goal: Pos,
+    /// Its nearest reachable goal tile; none for a remembered place out of
+    /// sight (M2 design §7).
+    goal: Option<Pos>,
     aim: Aim,
     /// The stable ID of its type: none for water or a sprite in a pack with
     /// no object type for them (design v19 §3.5.5).
@@ -63,26 +74,59 @@ pub(crate) fn decide(
     let attacker = sprite.body.sources.get(&was_hit).copied();
     // Each sprite in reach is weighed on its own, unless the attacker stands
     // for sprites while a hit is felt (design v18 §3.6).
-    let offered = flood.candidates(ground, id, attacker, state.cursor.seen_at());
-    // Each category's candidate is the thing that draws the eye most (design
-    // v19 §3.6); ties go to the lower ID, which comes first.
-    let state_only = sprite.brain.inputs(&sprite.body, None, data);
-    let curiosity_mod = sprite.body.loci[data.physiology().indices.curiosity_mod];
-    let found: BTreeMap<CategoryId, (Target, u32)> = offered
+    let mut offered: BTreeMap<CategoryId, Vec<Offer>> = flood
+        .candidates(ground, id, attacker, state.cursor.seen_at())
         .into_iter()
         .map(|(category, things)| {
-            let drawn = things.into_iter().map(|(target, cost)| {
-                let subject = state.subject_of(data, target);
-                let distance = normalized(cost, reach);
+            let things = things.into_iter().map(|(target, cost)| Offer {
+                target,
+                cost: Some(cost),
+                recall: 1.0,
+            });
+            (category, things.collect())
+        })
+        .collect();
+    // A remembered place joins its category's offers, as a thing at the
+    // edge of sight, while nothing of its kind is in sight (M2 design §7).
+    let in_view: BTreeSet<Subject> = offered
+        .values()
+        .flatten()
+        .map(|offer| state.subject_of(data, offer.target))
+        .collect();
+    for place in &sprite.brain.experience.places {
+        if in_view.contains(&place.subject) || state.whereabouts(data, place.target).is_none() {
+            continue;
+        }
+        let offer = Offer {
+            target: place.target,
+            cost: None,
+            recall: place.strength,
+        };
+        let category = place.subject.category(data);
+        offered.entry(category).or_default().push(offer);
+    }
+    // Each category's candidate is the thing that draws the eye most (design
+    // v19 §3.6); ties go to the lower ID, which comes first, and then to
+    // what's in sight.
+    let state_only = sprite.brain.inputs(&sprite.body, None, data);
+    let curiosity_mod = sprite.body.loci[data.physiology().indices.curiosity_mod];
+    let found: BTreeMap<CategoryId, Offer> = offered
+        .into_iter()
+        .map(|(category, things)| {
+            let drawn = things.into_iter().map(|offer| {
+                let seen = Seen {
+                    subject: state.subject_of(data, offer.target),
+                    distance: offer.cost.map_or(1.0, |cost| normalized(cost, reach)),
+                    recall: offer.recall,
+                };
                 let draw = sprite.brain.draw(
-                    subject,
-                    target.sprite(),
-                    distance,
+                    seen,
+                    offer.target.sprite(),
                     &state_only,
                     curiosity_mod,
                     data,
                 );
-                ((target, cost), draw)
+                (offer, draw)
             });
             let best = best_above(drawn, f32::NEG_INFINITY);
             (category, best.expect("a category offers something"))
@@ -90,16 +134,22 @@ pub(crate) fn decide(
         .collect();
     let candidates: BTreeMap<CategoryId, Candidate> = found
         .into_iter()
-        .map(|(category, (target, cost))| {
-            let goal = state
-                .goal_for(data, flood, target)
-                .expect("a candidate is reachable");
+        .map(|(category, offer)| {
+            let target = offer.target;
+            // A remembered place's way is found only if the sprite sets off
+            // for it (M2 design §7).
+            let goal = offer.cost.map(|_| {
+                state
+                    .goal_for(data, flood, target)
+                    .expect("a candidate in sight is reachable")
+            });
             let type_id = state.type_of(data, target);
             let aim = Aim {
                 category,
                 subject: state.subject_of(data, target),
-                distance: normalized(cost, reach),
+                distance: offer.cost.map_or(1.0, |cost| normalized(cost, reach)),
                 adjacent: state.on_goal_tile(data, sprite.pos, target),
+                recall: offer.recall,
             };
             let candidate = Candidate {
                 type_id,
@@ -112,7 +162,7 @@ pub(crate) fn decide(
         .collect();
     // What a running aimed action is aimed at, which may not be its
     // category's candidate now (design §5.3).
-    let aimed = action.and_then(|a| a.target).map(|target| {
+    let aimed = action.and_then(|a| a.target.map(|target| (a, target))).map(|(a, target)| {
         let (category, adjacent) = (
             state.category_of(data, target),
             state.on_goal_tile(data, sprite.pos, target),
@@ -121,11 +171,19 @@ pub(crate) fn decide(
             .whereabouts(data, target)
             .and_then(|(there, own)| flood.nearest_goal(&state.map, there, own))
             .map_or(u32::MAX, |(_, cost)| cost);
+        // A trip still out of sight is weighed as its place is remembered
+        // (M2 design §7).
+        let recall = if a.remembered {
+            sprite.brain.experience.recall(target)
+        } else {
+            1.0
+        };
         Aim {
             category,
             subject: state.subject_of(data, target),
             distance: normalized(cost, reach),
             adjacent,
+            recall,
         }
     });
     let exploration = sprite.body.loci[data.physiology().indices.exploration_mod];
@@ -149,12 +207,17 @@ pub(crate) fn decide(
         || sprite.body.loci[data.physiology().indices.cornered] > 0.0;
     // A running action's category is scored by the instance it's aimed at,
     // which a nearer one of the same category doesn't replace (design §5.3).
-    let mut in_sight: BTreeMap<CategoryId, (Subject, f32)> = candidates
+    let seen = |aim: &Aim| Seen {
+        subject: aim.subject,
+        distance: aim.distance,
+        recall: aim.recall,
+    };
+    let mut in_sight: BTreeMap<CategoryId, Seen> = candidates
         .iter()
-        .map(|(&category, c)| (category, (c.aim.subject, c.aim.distance)))
+        .map(|(&category, c)| (category, seen(&c.aim)))
         .collect();
     if let Some(aim) = aimed {
-        in_sight.insert(aim.category, (aim.subject, aim.distance));
+        in_sight.insert(aim.category, seen(&aim));
     }
 
     let sprite = state.sprites.get_mut(id).expect("the same sprite");
@@ -165,7 +228,7 @@ pub(crate) fn decide(
     let attention = brain.attention_scores(&state_only, &in_sight, curiosity_mod, scoring, data);
     let scored = in_sight
         .iter()
-        .map(|(&c, &(subject, _))| (c, subject))
+        .map(|(&c, seen)| (c, seen.subject))
         .collect();
     let attended = brain.attend(&attention, running, exploration, rng);
     let mut running = running;
@@ -206,7 +269,8 @@ pub(crate) fn decide(
         data,
     );
     let beside = candidate.is_some_and(|c| c.aim.adjacent);
-    let offered = available(candidate.is_some(), beside);
+    let remembered = candidate.is_some_and(|c| c.goal.is_none());
+    let offered = available(candidate.is_some(), beside, remembered);
     let current = sprite.action.as_ref().filter(|_| running).map(|a| a.verb);
     let chosen = match current {
         Some(verb) => brain.switch(verb, &scores, &offered),
@@ -258,21 +322,41 @@ pub(crate) fn decide(
         _ => {
             let candidate = candidate.expect("an aimed verb is offered only with a target");
             (
-                Some(candidate.goal),
+                candidate.goal,
                 Some((candidate.target, candidate.type_id)),
             )
         }
     };
+    // Setting off for a remembered place, it finds the way there over the
+    // whole map, which it keeps to; with none, it forgets the place (M2
+    // design §7).
+    let way = match (target, destination) {
+        (Some((target, _)), None) if verb.heads_for_goal() => {
+            let sprite = state.sprites.get(id).expect("the same sprite");
+            let way = trip(state, data, sprite, target, Occupied::Penalty(penalty(data)));
+            if way.is_none() {
+                let sprite = state.sprites.get_mut(id).expect("the same sprite");
+                sprite.brain.experience.forget_place(target);
+            }
+            way
+        }
+        _ => None,
+    };
+    let sprite = state.sprites.get_mut(id).expect("the same sprite");
     start(
         sprite,
         id,
         verb,
-        destination,
+        way.as_ref().map_or(destination, |way| Some(way.goal)),
         target,
         false,
         state.tick,
         events,
     );
+    if let Some(way) = way {
+        let action = sprite.action.as_mut().expect("the action just started");
+        set_off(action, way, sprite.program.traits.speed, state.tick);
+    }
 }
 
 /// Starts sprite `id` on its next scripted action.

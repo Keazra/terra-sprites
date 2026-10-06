@@ -9,7 +9,9 @@ use crate::action::chebyshev;
 use crate::brain::{Learned, VERBS};
 use crate::data::DataPack;
 use crate::events::{Event, EventKind};
+use crate::map::Pos;
 use crate::objects::EntityId;
+use crate::perception::Target;
 use crate::registry::{CategoryId, Verb};
 use crate::world::WorldState;
 
@@ -153,6 +155,24 @@ pub(crate) struct Experience {
     pub(crate) taught: BTreeSet<Learned>,
     /// Each need's level at the last step 4, to read its relief from.
     pub(crate) needs_before: Option<Vec<f32>>,
+    /// The places it remembers (M2 design §7), oldest first.
+    #[serde(default)]
+    pub(crate) places: Vec<RememberedPlace>,
+}
+
+/// A place a sprite remembers (M2 design §7): where something that stays
+/// put eased one of its needs, and how well it remembers it.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub(crate) struct RememberedPlace {
+    /// What it found there is learned about as.
+    pub(crate) subject: Subject,
+    /// The thing it found there: water, or a fixed object.
+    pub(crate) target: Target,
+    /// The thing's tile.
+    pub(crate) at: Pos,
+    /// How well it remembers it, from 1 when it was last eased there,
+    /// fading towards 0.
+    pub(crate) strength: f32,
 }
 
 impl Experience {
@@ -163,9 +183,13 @@ impl Experience {
         let needs = data.needs().count();
         let mut remembered = self.individuals.values().chain(&self.cursor);
         let levels = self.needs_before.as_ref();
-        self.types
-            .iter()
-            .all(|(subject, known)| subject.fits(data) && known.worth.len() == needs)
+        let held = usize::from(data.physiology().places.held);
+        self.places.len() <= held
+            && self.places.iter().all(|place| place.subject.fits(data))
+            && self
+                .types
+                .iter()
+                .all(|(subject, known)| subject.fits(data) && known.worth.len() == needs)
             && remembered.all(|known| known.worth.len() == needs)
             && levels.is_none_or(|levels| levels.len() == needs)
     }
@@ -187,6 +211,9 @@ impl Experience {
             within([&individual.good], (0.0, 1.0), "a sprite's good")?;
             within([&individual.bad], (-1.0, 0.0), "a sprite's bad")?;
             within([&individual.fear], (-1.0, 0.0), "a sprite's fear")?;
+        }
+        for place in &self.places {
+            within([&place.strength], (0.0, 1.0), "a place's strength")?;
         }
         Ok(())
     }
@@ -220,6 +247,56 @@ impl Experience {
     pub(crate) fn forget_faded(&mut self, below: f32) {
         self.individuals.retain(|_, memory| !memory.faded(below));
         self.cursor = self.cursor.take().filter(|memory| !memory.faded(below));
+    }
+
+    /// Remembers that `subject`'s `target`, on `at`, eased a need just now
+    /// (M2 design §7): fully, as one place with any of its kind remembered
+    /// within `merge` tiles, which moves to `at`. A new place past `held`
+    /// pushes out the faintest, the oldest of the faintest.
+    pub(crate) fn remember_place(
+        &mut self,
+        subject: Subject,
+        target: Target,
+        at: Pos,
+        (held, merge): (u16, u16),
+    ) {
+        let place = RememberedPlace {
+            subject,
+            target,
+            at,
+            strength: 1.0,
+        };
+        let same = self
+            .places
+            .iter()
+            .position(|p| p.subject == subject && chebyshev(p.at, at) <= merge);
+        if let Some(same) = same {
+            self.places.remove(same);
+        } else if self.places.len() >= usize::from(held) {
+            let faintest = self
+                .places
+                .iter()
+                .enumerate()
+                .min_by(|(_, a), (_, b)| a.strength.total_cmp(&b.strength))
+                .map(|(i, _)| i);
+            self.places.remove(faintest.expect("a full memory holds places"));
+        }
+        self.places.push(place);
+    }
+
+    /// How well it remembers the place of `target` (M2 design §7): 0 if it
+    /// doesn't.
+    pub(crate) fn recall(&self, target: Target) -> f32 {
+        self.places
+            .iter()
+            .find(|place| place.target == target)
+            .map_or(0.0, |place| place.strength)
+    }
+
+    /// Forgets the place of `target` (M2 design §7): it's gone, or there's
+    /// no way there.
+    pub(crate) fn forget_place(&mut self, target: Target) {
+        self.places.retain(|place| place.target != target);
     }
 
     /// Forgets every remembered sprite not in `alive`: a sprite that has
@@ -292,6 +369,10 @@ pub(crate) struct Touch {
     /// Whether it was a crash after a shove by a Cursor the sprite could
     /// see (design v29 §5.6).
     pub(crate) by_cursor: bool,
+    /// The thing and its tile, if it stays put, so a need it eases makes it
+    /// a remembered place (M2 design §7).
+    #[serde(default)]
+    pub(crate) place: Option<(Target, Pos)>,
 }
 
 /// What step 4 reads for one sprite (design §5.6).
@@ -439,5 +520,76 @@ pub(crate) fn commit(state: &mut WorldState, data: &DataPack) {
     let tick = state.tick;
     for (_, _, brain) in state.sprites.minds_mut() {
         brain.commit(tick, data);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn at(x: u16, y: u16) -> Pos {
+        Pos { x, y }
+    }
+
+    const WATER: Subject = Subject::ObjectType(100);
+    const BUSH: Subject = Subject::ObjectType(1);
+
+    /// Remembers water on `pos`, in a memory of 3 that takes places of a
+    /// kind 5 tiles apart as one.
+    fn water(experience: &mut Experience, pos: Pos) {
+        experience.remember_place(WATER, Target::Water(pos), pos, (3, 5));
+    }
+
+    fn tiles(experience: &Experience) -> Vec<Pos> {
+        experience.places.iter().map(|place| place.at).collect()
+    }
+
+    #[test]
+    fn places_of_a_kind_within_the_merge_distance_are_one_moved_to_the_newest() {
+        // M2 design §7: a lake is one place, not each of its tiles.
+        let mut experience = Experience::default();
+        water(&mut experience, at(0, 0));
+        water(&mut experience, at(5, 3));
+        assert_eq!(tiles(&experience), [at(5, 3)]);
+        water(&mut experience, at(11, 3));
+        assert_eq!(tiles(&experience), [at(5, 3), at(11, 3)], "6 apart: two");
+        // A bush beside the water is a place of its own.
+        let bush = Target::Object(EntityId(7));
+        experience.remember_place(BUSH, bush, at(5, 4), (3, 5));
+        assert_eq!(experience.places.len(), 3);
+    }
+
+    #[test]
+    fn a_place_eased_again_is_remembered_fully_again() {
+        let mut experience = Experience::default();
+        water(&mut experience, at(0, 0));
+        experience.places[0].strength = 0.3;
+        water(&mut experience, at(1, 0));
+        assert_eq!(experience.places[0].strength, 1.0);
+    }
+
+    #[test]
+    fn past_the_most_it_holds_a_new_place_pushes_out_the_faintest_the_oldest_of_them() {
+        let mut experience = Experience::default();
+        for x in [0, 10, 20] {
+            water(&mut experience, at(x, 0));
+        }
+        experience.places[0].strength = 0.5;
+        experience.places[1].strength = 0.2;
+        experience.places[2].strength = 0.2;
+        water(&mut experience, at(30, 0));
+        assert_eq!(tiles(&experience), [at(0, 0), at(20, 0), at(30, 0)]);
+    }
+
+    #[test]
+    fn a_place_is_forgotten_by_its_thing_and_recalled_by_it() {
+        let mut experience = Experience::default();
+        water(&mut experience, at(0, 0));
+        water(&mut experience, at(10, 0));
+        experience.places[1].strength = 0.4;
+        assert_eq!(experience.recall(Target::Water(at(10, 0))), 0.4);
+        assert_eq!(experience.recall(Target::Water(at(9, 0))), 0.0);
+        experience.forget_place(Target::Water(at(0, 0)));
+        assert_eq!(tiles(&experience), [at(10, 0)]);
     }
 }

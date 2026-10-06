@@ -8,7 +8,7 @@ use xxhash_rust::xxh3::xxh3_64_with_seed;
 
 use crate::action::{self, ActionView, ScriptedAction};
 use crate::biochem::{self, Senses, Traits};
-use crate::brain::{Explanation, Memory};
+use crate::brain::{Explanation, Memory, Place};
 use crate::command::{self, Command};
 use crate::config::WorldConfig;
 use crate::cursor::{Cursor, Grip};
@@ -350,6 +350,11 @@ impl<'a> SpriteView<'a> {
     /// (design §5.9).
     pub fn memory(&self) -> Vec<Memory> {
         self.sprite.brain.memory(&self.world.data)
+    }
+
+    /// The places it remembers, best remembered first (M2 design §7).
+    pub fn places(&self) -> Vec<Place> {
+        self.sprite.brain.places(&self.world.data)
     }
 
     /// The reward less the punishment it took in on its last tick, which
@@ -1837,6 +1842,7 @@ mod tests {
             sprite: None,
             novelty: 1.0,
             by_cursor: false,
+            place: None,
         });
         sprite.body.chems[indices.reward] = 0.5;
         let mut events = Vec::new();
@@ -1867,6 +1873,7 @@ mod tests {
             sprite: None,
             novelty: 1.0,
             by_cursor: false,
+            place: None,
         });
         world.submit(Command::Reward {
             sprite: first,
@@ -1901,6 +1908,7 @@ mod tests {
             sprite: None,
             novelty: 1.0,
             by_cursor: false,
+            place: None,
         });
         let hunger = |brain: &mut Brain, level| {
             let needs = [vec![level], vec![0.0; data.need_places().len() - 1]].concat();
@@ -1917,7 +1925,57 @@ mod tests {
         let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
         let signals = hunger(brain, 0.5);
         brain.learn(1, &signals, 1.0, &data);
-        assert_ne!(world.state_hash(), touched, "what it learned is hashed");
+        let learned = world.state_hash();
+        assert_ne!(learned, touched, "what it learned is hashed");
+        let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
+        let water = Target::Water(Pos { x: 0, y: 0 });
+        let place = (Subject::Category(data.water_category()), water, Pos { x: 0, y: 0 });
+        brain.experience.remember_place(place.0, place.1, place.2, (8, 5));
+        assert_ne!(world.state_hash(), learned, "the places it remembers are hashed");
+    }
+
+    /// Sprite `id`'s brain in `world` remembers `n` places on tiles of its
+    /// own, row by row, each its own place.
+    fn remember_places(world: &mut World, id: EntityId, n: u16) {
+        let water = Subject::Category(world.data.water_category());
+        let width = world.state.map.width();
+        let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
+        for n in 0..n {
+            let at = Pos {
+                x: n % width,
+                y: n / width,
+            };
+            brain.experience.remember_place(water, Target::Water(at), at, (100, 0));
+        }
+    }
+
+    #[test]
+    fn a_remembered_place_off_the_map_or_too_many_or_out_of_range_breaks_an_invariant() {
+        // M2 design §7.
+        let (mut world, first, _) = field_with_sprites();
+        remember_places(&mut world, first, 1);
+        assert_eq!(world.check_invariants(), Ok(()));
+        let breaks: [fn(&mut World, EntityId); 4] = [
+            |world, id| remember_places(world, id, 9),
+            |world, id| {
+                let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
+                brain.experience.places[0].at = Pos { x: 999, y: 0 };
+            },
+            |world, id| {
+                let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
+                brain.experience.places[0].strength = 1.5;
+            },
+            |world, id| {
+                let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
+                brain.experience.places[0].strength = f32::NAN;
+            },
+        ];
+        for (i, broken) in breaks.into_iter().enumerate() {
+            let (mut world, first, _) = field_with_sprites();
+            remember_places(&mut world, first, 1);
+            broken(&mut world, first);
+            assert!(world.check_invariants().is_err(), "break {i}");
+        }
     }
 
     #[test]

@@ -169,6 +169,7 @@ fn ended(tick: u64, id: EntityId, verb: Verb, outcome: Outcome, target: Option<T
         target_gone: false,
         hurt: Hurt::default(),
         progress: Progress::Ended(outcome),
+        remembered: false,
     };
     Event {
         tick,

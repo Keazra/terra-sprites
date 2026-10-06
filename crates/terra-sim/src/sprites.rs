@@ -185,7 +185,11 @@ impl Sprites {
             if sprite.born > now {
                 return Err(format!("sprite {} was born after the save", id.0));
             }
-            // The genome first: the brain is checked against it.
+            // The genome first: the brain is checked against it, once it
+            // has any brain parameter added since it was saved.
+            if sprite.genome.fits(data) {
+                sprite.brain.params.catch_up(&sprite.genome, data);
+            }
             if !sprite.genome.fits(data)
                 || !sprite.body.fits(data)
                 || !sprite.brain.fits(&sprite.genome, data, now)
@@ -204,7 +208,9 @@ impl Sprites {
 
     /// Checks the sprites' invariants (design §7.1), or says which is broken:
     /// the tile index matches where the sprites are, so no two share a tile;
-    /// none stands on a solid object; and every chemical is within 0 to 1.
+    /// none stands on a solid object; every chemical is within 0 to 1; and
+    /// each remembers no more places than it may, all on the map (M2 design
+    /// §7).
     pub(crate) fn check(
         &self,
         map: &Map,
@@ -245,6 +251,19 @@ impl Sprites {
                 .brain
                 .check()
                 .map_err(|broken| format!("{id:?} {broken}"))?;
+            // Its remembered places are few enough, and on the map (M2
+            // design §7).
+            let places = &sprite.brain.experience.places;
+            let held = data.physiology().places.held;
+            if places.len() > usize::from(held) {
+                return Err(format!(
+                    "{id:?} remembers {} places, over {held}",
+                    places.len()
+                ));
+            }
+            if let Some(place) = places.iter().find(|place| !map.contains(place.at)) {
+                return Err(format!("{id:?} remembers a place off the map, at {:?}", place.at));
+            }
         }
         Ok(())
     }

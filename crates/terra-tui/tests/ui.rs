@@ -918,6 +918,7 @@ fn the_event_log_leaves_object_and_action_events_out_and_keeps_the_latest_100() 
                         target_gone: false,
                         hurt: Hurt::default(),
                         progress: Progress::Ended(Outcome::Failed),
+                        remembered: false,
                     },
                 },
             },
@@ -964,6 +965,7 @@ fn acted(
         target_gone: false,
         hurt,
         progress: Progress::Ended(outcome),
+        remembered: false,
     };
     Event {
         tick,
@@ -1576,6 +1578,48 @@ fn the_brain_tab_shows_memory_before_the_first_decision() {
             "MEMORY",
             "thornbushes are bad                 -.80",
         ]
+    );
+}
+
+#[test]
+fn the_brain_tab_lists_the_places_the_sprite_remembers() {
+    // M2 design §7: a scripted drink at the water on its west eases its
+    // thirst, so it remembers the water there.
+    let pack = pack();
+    let map = Map::from_ascii(&["~........."; 5], &pack).expect("valid drawing");
+    let genome = r#"(format: 1, genes: [
+        InitialConcentration(chem: "thirst", value: 1.0),
+        Emitter(locus: Locus("drank"), mode: Level, gain: -0.5, chem: "thirst"),
+    ])"#;
+    let genome = terra_sim::Genome::from_ron(genome, &pack).expect("a valid genome");
+    let start = Pos { x: 1, y: 3 };
+    let sprites = [(start, Some(genome))];
+    let water = Pos { x: 0, y: 3 };
+    let scripted = [
+        (start, ScriptedAction::Drink { at: water }),
+        (start, ScriptedAction::Rest),
+    ];
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: &scripted,
+    };
+    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    for _ in 0..2 {
+        world.step();
+    }
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::SelectNext, &world);
+    open(&mut app, &world, Tab::Brain);
+    let (_, text) = inspector(&app, &world);
+    let at = text
+        .iter()
+        .position(|row| row.starts_with("PLACES"))
+        .unwrap_or_else(|| panic!("{text:?}"));
+    assert_eq!(
+        text[at..at + 2],
+        ["PLACES", "water · 1 tile W                    1.00"]
     );
 }
 
@@ -2262,6 +2306,7 @@ fn finished(tick: u64, id: EntityId, verb: Verb, outcome: Outcome) -> Event {
         target_gone: false,
         hurt: Hurt::default(),
         progress: Progress::Ended(outcome),
+        remembered: false,
     };
     Event {
         tick,
