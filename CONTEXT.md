@@ -1,1 +1,1 @@
-/workspace/CONTEXT.md
+$file:/workspace/CONTEXT.md
