@@ -1,6 +1,7 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::data::DataPack;
+use crate::listed::listed_enum;
 use crate::terrain::Terrain;
 
 /// A tile's position: `x` grows to the east, `y` to the south.
@@ -10,46 +11,28 @@ pub struct Pos {
     pub y: u16,
 }
 
-/// One of the eight step directions. North is up the screen.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub enum Dir {
-    N,
-    NE,
-    E,
-    SE,
-    S,
-    SW,
-    W,
-    NW,
+listed_enum! {
+    /// One of the eight step directions. North is up the screen.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+    pub enum Dir {
+        N => (0, -1),
+        NE => (1, -1),
+        E => (1, 0),
+        SE => (1, 1),
+        S => (0, 1),
+        SW => (-1, 1),
+        W => (-1, 0),
+        NW => (-1, -1),
+    }
+
+    /// Every direction, clockwise from north.
+    pub const ALL;
+
+    /// The change in `(x, y)` a step in this direction makes.
+    pub(crate) fn offset(self) -> (i32, i32);
 }
 
 impl Dir {
-    /// Every direction, clockwise from north.
-    pub const ALL: [Dir; 8] = [
-        Dir::N,
-        Dir::NE,
-        Dir::E,
-        Dir::SE,
-        Dir::S,
-        Dir::SW,
-        Dir::W,
-        Dir::NW,
-    ];
-
-    /// The change in `(x, y)` a step in this direction makes.
-    pub(crate) fn offset(self) -> (i32, i32) {
-        match self {
-            Dir::N => (0, -1),
-            Dir::NE => (1, -1),
-            Dir::E => (1, 0),
-            Dir::SE => (1, 1),
-            Dir::S => (0, 1),
-            Dir::SW => (-1, 1),
-            Dir::W => (-1, 0),
-            Dir::NW => (-1, -1),
-        }
-    }
-
     /// The opposite direction.
     pub(crate) fn reverse(self) -> Dir {
         let (dx, dy) = self.offset();

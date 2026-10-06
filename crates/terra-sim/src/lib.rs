@@ -23,6 +23,7 @@ mod generate;
 mod genome;
 mod lab;
 mod learning;
+mod listed;
 mod map;
 mod names;
 mod object_types;

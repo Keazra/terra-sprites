@@ -11,6 +11,7 @@ use terra_sim::{
 };
 
 use crate::app::{App, Selection, Tab};
+use crate::listed::listed_enum;
 use crate::policy::{Panel, Subject};
 use crate::text;
 use crate::text::{
@@ -954,37 +955,31 @@ fn chem_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
     lines.into_iter().map(Line::from).collect()
 }
 
-/// A group of genes on the Genome tab.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum GeneGroup {
-    Traits,
-    HalfLives,
-    Reactions,
-    Emitters,
-    Receptors,
-    StartingLevels,
-    BrainSettings,
-    Instincts,
-    Attention,
-    Unknown,
+listed_enum! {
+    /// A group of genes on the Genome tab.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum GeneGroup {
+        Traits => "TRAITS",
+        HalfLives => "HALF-LIVES",
+        Reactions => "REACTIONS",
+        Emitters => "EMITTERS",
+        Receptors => "RECEPTORS",
+        StartingLevels => "STARTING LEVELS",
+        BrainSettings => "BRAIN SETTINGS",
+        Instincts => "INSTINCTS",
+        Attention => "ATTENTION INSTINCTS",
+        Unknown => "UNKNOWN GENES",
+    }
+
+    /// Every group, in the tab's order. Traits come first, since they share
+    /// one line.
+    const ALL;
+
+    /// The group's heading.
+    fn heading(self) -> &'static str;
 }
 
 impl GeneGroup {
-    /// Every group, in the tab's order. Traits come first, since they share
-    /// one line.
-    const ALL: [GeneGroup; 10] = [
-        GeneGroup::Traits,
-        GeneGroup::HalfLives,
-        GeneGroup::Reactions,
-        GeneGroup::Emitters,
-        GeneGroup::Receptors,
-        GeneGroup::StartingLevels,
-        GeneGroup::BrainSettings,
-        GeneGroup::Instincts,
-        GeneGroup::Attention,
-        GeneGroup::Unknown,
-    ];
-
     /// The group `gene` goes in.
     fn of(gene: &GeneView) -> GeneGroup {
         match gene {
@@ -998,22 +993,6 @@ impl GeneGroup {
             GeneView::Instinct { .. } => GeneGroup::Instincts,
             GeneView::AttentionInstinct { .. } => GeneGroup::Attention,
             GeneView::Unknown { .. } => GeneGroup::Unknown,
-        }
-    }
-
-    /// The group's heading.
-    fn heading(self) -> &'static str {
-        match self {
-            GeneGroup::Traits => "TRAITS",
-            GeneGroup::HalfLives => "HALF-LIVES",
-            GeneGroup::Reactions => "REACTIONS",
-            GeneGroup::Emitters => "EMITTERS",
-            GeneGroup::Receptors => "RECEPTORS",
-            GeneGroup::StartingLevels => "STARTING LEVELS",
-            GeneGroup::BrainSettings => "BRAIN SETTINGS",
-            GeneGroup::Instincts => "INSTINCTS",
-            GeneGroup::Attention => "ATTENTION INSTINCTS",
-            GeneGroup::Unknown => "UNKNOWN GENES",
         }
     }
 }

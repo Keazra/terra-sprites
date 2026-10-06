@@ -8,36 +8,30 @@ use terra_sim::{EntityId, SpriteView, World};
 
 use crate::app::{App, strongest_drive};
 use crate::inspector;
+use crate::listed::listed_enum;
 use crate::policy::{Panel, Subject};
 use crate::text::{display_name, group_thousands};
 
-/// What the sprite list is sorted by.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SortBy {
-    /// By ID, lowest first.
-    Number,
-    /// Named sprites first, by name, then the rest by ID.
-    Name,
-    /// Oldest first.
-    Age,
-    /// By strongest drive, in the data pack's order, strongest first
-    /// within each; sprites with none above half last.
-    Drive,
-}
+listed_enum! {
+    /// What the sprite list is sorted by.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum SortBy {
+        /// By ID, lowest first.
+        Number => "number",
+        /// Named sprites first, by name, then the rest by ID.
+        Name => "name",
+        /// Oldest first.
+        Age => "age",
+        /// By strongest drive, in the data pack's order, strongest first
+        /// within each; sprites with none above half last.
+        Drive => "drive",
+    }
 
-impl SortBy {
     /// Every order, in the order `Tab` goes through them.
-    pub const ALL: [SortBy; 4] = [SortBy::Number, SortBy::Name, SortBy::Age, SortBy::Drive];
+    pub const ALL;
 
     /// What the list's title calls it.
-    pub fn label(self) -> &'static str {
-        match self {
-            SortBy::Number => "number",
-            SortBy::Name => "name",
-            SortBy::Age => "age",
-            SortBy::Drive => "drive",
-        }
-    }
+    pub fn label(self) -> &'static str;
 }
 
 /// The sprites the list shows, in the order it shows them: those the policy
