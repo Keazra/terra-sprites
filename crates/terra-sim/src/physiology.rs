@@ -42,6 +42,9 @@ pub(crate) struct Physiology {
     /// A remembered sprite is forgotten once everything learned about it is
     /// nearer 0 than this (design v18 §5.6).
     pub(crate) forget_below: f32,
+    /// How many places a sprite remembers, and how near two of a kind are
+    /// one place (M2 design §7).
+    pub(crate) remembered_places: RememberedPlaces,
     pub(crate) actions: Actions,
     pub(crate) movement: Movement,
     /// What the Cursor's touch does (design v21 §4.6).
@@ -71,6 +74,10 @@ pub(crate) struct PhysiologyEntry {
     relief_deadband: f32,
     touch_window: u64,
     forget_below: f32,
+    /// A pack from before remembered places takes the built-in ones (design
+    /// §2.8: a save carries its own pack).
+    #[serde(default)]
+    remembered_places: RememberedPlaces,
     actions: Actions,
     movement: Movement,
     cursor: Cursor,
@@ -95,6 +102,53 @@ impl BrainRanges {
     pub(crate) fn of(&self, param: BrainParam) -> ParamRange {
         let index = BrainParam::ALL.iter().position(|&p| p == param);
         self.0[index.expect("every parameter is in ALL")]
+    }
+}
+
+/// What a sprite remembers of places (M2 design §7).
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RememberedPlaces {
+    /// The most places a sprite remembers: past it, the faintest goes.
+    pub(crate) held: u16,
+    /// The most places of one kind it remembers: past it, the faintest of
+    /// that kind goes, so a big lake's shores can't crowd out food. A world
+    /// saved before it had a limit gets the built-in one.
+    #[serde(default = "RememberedPlaces::built_in_per_kind")]
+    pub(crate) per_kind: u16,
+    /// Places of one kind this many tiles apart or fewer, in any direction,
+    /// are one place, so a pond is one place, not each of its tiles.
+    pub(crate) merge: u16,
+}
+
+impl RememberedPlaces {
+    fn built_in_per_kind() -> u16 {
+        RememberedPlaces::default().per_kind
+    }
+}
+
+/// What a saved world's pack from before them gets: the built-in pack's,
+/// which a test checks they match.
+impl Default for RememberedPlaces {
+    fn default() -> RememberedPlaces {
+        RememberedPlaces {
+            held: 8,
+            per_kind: 3,
+            merge: 5,
+        }
+    }
+}
+
+/// The range and default of a brain parameter added after saves began
+/// (design §2.8), which a saved world's pack from before it doesn't name: the
+/// built-in pack's, which a test checks they match.
+fn added_since_saves(param: BrainParam) -> Option<ParamRange> {
+    match param {
+        BrainParam::PlaceFade => Some(ParamRange {
+            range: (0.0, 0.01),
+            default: 0.0002,
+        }),
+        _ => None,
     }
 }
 
@@ -309,9 +363,11 @@ impl PhysiologyEntry {
         let mut brain = Vec::new();
         for param in BrainParam::ALL {
             let name = param.name();
-            let &entry = self
+            let entry = self
                 .brain
                 .get(name)
+                .copied()
+                .or_else(|| added_since_saves(param))
                 .ok_or_else(|| format!("`brain` has no range for `{name}`"))?;
             range(&format!("brain.{name}"), entry.range)?;
             if !(entry.range.0..=entry.range.1).contains(&entry.default) {
@@ -373,6 +429,9 @@ impl PhysiologyEntry {
                 return Err(format!("`{name}` must be at least 1 tick"));
             }
         }
+        if self.remembered_places.held == 0 || self.remembered_places.per_kind == 0 {
+            return Err("`remembered_places.held` and `per_kind` must be at least 1".into());
+        }
         if self.actions.retreat_bout == 0 {
             return Err("`actions.retreat_bout` must be at least 1 step".into());
         }
@@ -426,6 +485,7 @@ impl PhysiologyEntry {
             relief_deadband: self.relief_deadband,
             touch_window: self.touch_window,
             forget_below: self.forget_below,
+            remembered_places: self.remembered_places,
             actions: self.actions,
             movement: self.movement,
             cursor: self.cursor,
@@ -577,5 +637,34 @@ impl Indices {
             petted: pulse("petted")?,
             shocked: pulse("shocked")?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data::DataPack;
+
+    #[test]
+    fn what_a_save_from_before_a_setting_gets_is_what_the_built_in_pack_says() {
+        // A pack from before a setting gets the built-in pack's, written
+        // twice: here and in `data/physiology.ron` (design §2.8).
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let physiology = data.physiology();
+        for param in BrainParam::ALL {
+            if let Some(added) = added_since_saves(param) {
+                let built_in = physiology.brain.of(param);
+                assert_eq!(
+                    (added.range, added.default),
+                    (built_in.range, built_in.default),
+                    "{param:?}"
+                );
+            }
+        }
+        let (saved, built_in) = (RememberedPlaces::default(), physiology.remembered_places);
+        assert_eq!(
+            (saved.held, saved.per_kind, saved.merge),
+            (built_in.held, built_in.per_kind, built_in.merge)
+        );
     }
 }

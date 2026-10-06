@@ -85,6 +85,9 @@
         // fastest on the sprite's own tile (design v29 §5.6): a sprite comes
         // to see it can't do anything about it. A first guess, tuned in play.
         "cursor_calming":    (range: (0.0, 0.1),     default: 0.01),
+        // How much a remembered place fades each tick (M2 design §7):
+        // by half in about 3,500 ticks, as worth for a need does.
+        "place_fade":        (range: (0.0, 0.01),    default: 0.0002),
     },
     // The range of each receptor target in `loci.ron`. Each rests at 1.0 when
     // no receptor writes it.
@@ -112,8 +115,14 @@
     relief_deadband: 0.02,
     touch_window: 3,
     // A remembered sprite is forgotten once everything learned about it has
-    // faded nearer 0 than this (design v18 §5.6).
+    // faded nearer 0 than this (design v18 §5.6), and a remembered place
+    // once it has faded below this (M2 design §7).
     forget_below: 0.01,
+    // Remembered places (M2 design §7): a sprite remembers at most `held`,
+    // and at most `per_kind` of one kind, so a big lake's shores can't
+    // crowd out food; places of one kind `merge` tiles apart or fewer are
+    // one place, so a pond is one place, not each of its tiles.
+    remembered_places: (held: 8, per_kind: 3, merge: 5),
 
     // How long actions last (design §5.5): a rest in ticks, a retreat in
     // steps. An action still going at the timeout, in ticks, ends as timed out.

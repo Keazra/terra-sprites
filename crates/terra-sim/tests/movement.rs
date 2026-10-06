@@ -156,6 +156,7 @@ fn a_sprite_told_to_wander_to_a_spot_walks_there_a_step_at_a_time_and_arrives() 
                         target_gone: false,
                         hurt: Hurt::default(),
                         progress: Progress::Ended(Outcome::Applied),
+                        remembered: false,
                     }
                 }
             ),

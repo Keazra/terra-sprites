@@ -8,7 +8,7 @@ use xxhash_rust::xxh3::xxh3_64_with_seed;
 
 use crate::action::{self, ActionView, ScriptedAction};
 use crate::biochem::{self, Senses, Traits};
-use crate::brain::{Explanation, Memory};
+use crate::brain::{Explanation, Memory, RememberedPlace};
 use crate::command::{self, Command};
 use crate::config::WorldConfig;
 use crate::cursor::{Cursor, Grip};
@@ -350,6 +350,11 @@ impl<'a> SpriteView<'a> {
     /// (design §5.9).
     pub fn memory(&self) -> Vec<Memory> {
         self.sprite.brain.memory(&self.world.data)
+    }
+
+    /// The places it remembers, best remembered first (M2 design §7).
+    pub fn remembered_places(&self) -> Vec<RememberedPlace> {
+        self.sprite.brain.remembered_places(&self.world.data)
     }
 
     /// The reward less the punishment it took in on its last tick, which
@@ -1951,6 +1956,7 @@ mod tests {
             sprite: None,
             novelty: 1.0,
             by_cursor: false,
+            place: None,
         });
         sprite.body.chems[indices.reward] = 0.5;
         let mut events = Vec::new();
@@ -1981,6 +1987,7 @@ mod tests {
             sprite: None,
             novelty: 1.0,
             by_cursor: false,
+            place: None,
         });
         world.submit(Command::Reward {
             sprite: first,
@@ -2015,6 +2022,7 @@ mod tests {
             sprite: None,
             novelty: 1.0,
             by_cursor: false,
+            place: None,
         });
         let hunger = |brain: &mut Brain, level| {
             let needs = [vec![level], vec![0.0; data.need_places().len() - 1]].concat();
@@ -2031,7 +2039,225 @@ mod tests {
         let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
         let signals = hunger(brain, 0.5);
         brain.learn(1, &signals, 1.0, &data);
-        assert_ne!(world.state_hash(), touched, "what it learned is hashed");
+        let learned = world.state_hash();
+        assert_ne!(learned, touched, "what it learned is hashed");
+        let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
+        let water = Target::Water(Pos { x: 0, y: 0 });
+        let place = (
+            Subject::Category(data.water_category()),
+            water,
+            Pos { x: 0, y: 0 },
+        );
+        brain.experience.remember_place(
+            place.0,
+            place.1,
+            place.2,
+            crate::physiology::RememberedPlaces {
+                held: 8,
+                per_kind: 8,
+                merge: 5,
+            },
+        );
+        assert_ne!(
+            world.state_hash(),
+            learned,
+            "the places it remembers are hashed"
+        );
+    }
+
+    /// Sprite `id`'s brain in `world` remembers `n` places on tiles of its
+    /// own, row by row, each its own place.
+    fn remember_places(world: &mut World, id: EntityId, n: u16) {
+        let water = Subject::Category(world.data.water_category());
+        let width = world.state.map.width();
+        let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
+        for n in 0..n {
+            let at = Pos {
+                x: n % width,
+                y: n / width,
+            };
+            brain.experience.remember_place(
+                water,
+                Target::Water(at),
+                at,
+                crate::physiology::RememberedPlaces {
+                    held: 100,
+                    per_kind: 100,
+                    merge: 0,
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn a_remembered_place_off_the_map_or_too_many_or_out_of_range_breaks_an_invariant() {
+        // M2 design §7.
+        let (mut world, first, _) = field_with_sprites();
+        remember_places(&mut world, first, 1);
+        assert_eq!(world.check_invariants(), Ok(()));
+        let breaks: [fn(&mut World, EntityId); 4] = [
+            |world, id| remember_places(world, id, 9),
+            |world, id| {
+                let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
+                brain.experience.places[0].at = Pos { x: 999, y: 0 };
+            },
+            |world, id| {
+                let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
+                brain.experience.places[0].recall = 1.5;
+            },
+            |world, id| {
+                let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
+                brain.experience.places[0].recall = f32::NAN;
+            },
+        ];
+        for (i, broken) in breaks.into_iter().enumerate() {
+            let (mut world, first, _) = field_with_sprites();
+            remember_places(&mut world, first, 1);
+            broken(&mut world, first);
+            assert!(world.check_invariants().is_err(), "break {i}");
+        }
+    }
+
+    /// A world 40 tiles wide whose one sprite remembers water on each tile
+    /// of the top row in `xs`, as no limits would stop it.
+    fn remembering_water_on(xs: &[u16]) -> World {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let (water, land) = ("~".repeat(40), ".".repeat(40));
+        let map = Map::from_ascii(&[&water, &land], &data).expect("valid drawing");
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &[(Pos { x: 0, y: 1 }, None)],
+            scripted: &[],
+        };
+        let mut world = World::from_scenario(scenario, data, 7).expect("valid scenario");
+        let id = world.sprites().next().expect("the sprite").id();
+        let water = Subject::Category(world.data.water_category());
+        let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
+        for &x in xs {
+            let at = Pos { x, y: 0 };
+            let loose = crate::physiology::RememberedPlaces {
+                held: 100,
+                per_kind: 100,
+                merge: 0,
+            };
+            brain
+                .experience
+                .remember_place(water, Target::Water(at), at, loose);
+        }
+        world
+    }
+
+    #[test]
+    fn a_remembered_place_with_no_way_there_leaves_what_the_sprite_is_doing_be() {
+        // M2 design §7.4: going to a ball, very thirsty, its eye turns to
+        // water it remembers beyond a wall. With no way there, it forgets
+        // the water and goes on to the ball, and decides nothing new.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        // A wall with a gap that a bush stands in.
+        let (wall, gap) = (
+            format!("~{}#{}", ".".repeat(19), ".".repeat(19)),
+            format!("~{}", ".".repeat(39)),
+        );
+        let rows = [&wall, &wall, &gap, &wall, &wall].map(String::as_str);
+        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
+        let genome = Genome::from_ron(
+            r#"(format: 1, genes: [
+                Trait(trait: "speed", value: 10.0),
+                Trait(trait: "sense_radius", value: 6.0),
+                Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
+                Instinct(inputs: [("always", false)], verb: Approach, weight: 0.3),
+                BrainParam(param: "tau_base", value: 0.05),
+                BrainParam(param: "salience_gain", value: 0.0),
+                BrainParam(param: "curiosity", value: 0.0),
+            ])"#,
+            &data,
+        )
+        .expect("a valid genome");
+        let scenario = Scenario {
+            map,
+            objects: &[
+                (Pos { x: 20, y: 2 }, "berry_bush"),
+                (Pos { x: 36, y: 2 }, "ball"),
+            ],
+            sprites: &[(Pos { x: 30, y: 2 }, Some(genome))],
+            scripted: &[],
+        };
+        let mut world = World::from_scenario(scenario, data, 7).expect("valid scenario");
+        let id = world.sprites().next().expect("the sprite").id();
+        let ball = world.object_at(Pos { x: 36, y: 2 }).expect("the ball").id();
+        let ball_type = world.data.object_type_id("ball");
+        let at = Pos { x: 0, y: 2 };
+        let water = world.state.subject_of(&world.data, Target::Water(at));
+        let needs = world.data.needs().count();
+        let quench = world.data.needs().position(|n| n == "thirst");
+        let thirst = world
+            .data
+            .chemicals()
+            .iter()
+            .position(|c| c.name == "thirst");
+        let (quench, thirst) = (quench.expect("thirst"), thirst.expect("thirst"));
+        // A step first, for its flood.
+        world.step();
+        let tick = world.state.tick;
+        let sprite = world.state.sprites.get_mut(id).expect("the sprite");
+        let limits = world.data.physiology().remembered_places;
+        sprite
+            .brain
+            .experience
+            .remember_place(water, Target::Water(at), at, limits);
+        let known = sprite.brain.experience.learn_about(water, needs);
+        known.worth[quench] = 1.0;
+        known.touched = true;
+        sprite.body.chems[thirst] = 1.0;
+        let target = Some((Target::Object(ball), ball_type));
+        let mut events = Vec::new();
+        let goal = Some(Pos { x: 35, y: 2 });
+        crate::action::start(
+            sprite,
+            id,
+            Verb::Approach,
+            goal,
+            target,
+            false,
+            tick,
+            &mut events,
+        );
+        let events = world.step();
+        let sprite = world.sprites().next().expect("the sprite");
+        assert_eq!(sprite.remembered_places(), [], "it forgot the water");
+        let ended = events
+            .iter()
+            .any(|e| matches!(e.kind, EventKind::ActionEnded { id: ended, .. } if ended == id));
+        assert!(!ended, "{events:?}");
+        let action = sprite.action().expect("its action");
+        assert_eq!(action.verb, Verb::Approach);
+        assert_eq!(action.target, Some(Target::Object(ball)));
+        assert_ne!(sprite.attending_to(), Some(at), "no decision about it");
+    }
+
+    #[test]
+    fn too_many_places_of_a_kind_or_two_too_near_break_an_invariant() {
+        // M2 design §7.2: 3 of a kind at most, none within 5 of another.
+        assert_eq!(remembering_water_on(&[0, 6, 12]).check_invariants(), Ok(()));
+        assert!(
+            remembering_water_on(&[0, 6, 12, 18])
+                .check_invariants()
+                .is_err()
+        );
+        assert!(remembering_water_on(&[0, 5]).check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_save_from_before_the_limits_on_a_kind_loads_within_them() {
+        // M2 design §7.2: a save from before `per_kind` and the merge rule
+        // may hold 8 places of water, some near each other.
+        let world = remembering_water_on(&[0, 2, 10, 20, 30, 36]);
+        let loaded = World::load(&world.save()).expect("the save loads");
+        assert_eq!(loaded.check_invariants(), Ok(()));
+        let sprite = loaded.sprites().next().expect("the sprite");
+        let places: Vec<Pos> = sprite.remembered_places().iter().map(|p| p.at).collect();
+        assert_eq!(places.len(), 3, "{places:?}");
     }
 
     #[test]

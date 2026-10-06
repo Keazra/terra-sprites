@@ -102,6 +102,7 @@ fn busy_app(world: &World) -> App {
             target: true,
         },
         progress: Progress::Ended(Outcome::Applied),
+        remembered: false,
     };
     let events = [
         Event {

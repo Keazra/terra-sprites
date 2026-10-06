@@ -99,6 +99,9 @@ pub struct ActionView {
     pub hurt: Hurt,
     /// How far it has got, or how it ended.
     pub progress: Progress,
+    /// Whether it's a trip to a remembered place still out of sight (M2
+    /// design §7).
+    pub remembered: bool,
 }
 
 /// Which sprites an action's attempt hurt: the actor, biting a thornbush
@@ -140,6 +143,13 @@ pub(crate) struct Action {
     pub(crate) ended: Option<Outcome>,
     /// A hand-made world started it: the brain leaves it be until it ends.
     pub(crate) scripted: bool,
+    /// A trip to a remembered place, until the place is in reach (M2
+    /// design §7).
+    #[serde(default)]
+    pub(crate) remembered: bool,
+    /// The ticks past the timeout a trip has, for its walk (M2 design §7).
+    #[serde(default)]
+    pub(crate) extra_ticks: u32,
 }
 
 /// A sprite's way to where it's heading (design §3.7).
@@ -189,8 +199,74 @@ impl Action {
             retreat_steps: 0,
             ended: None,
             scripted,
+            remembered: false,
+            extra_ticks: 0,
         }
     }
+}
+
+/// The way to a remembered place (M2 design §7): the goal tile it heads
+/// for, the tiles to it, and what walking them costs, in terrain units.
+#[derive(Debug, Clone)]
+pub(crate) struct Way {
+    pub(crate) goal: Pos,
+    pub(crate) path: Vec<Pos>,
+    pub(crate) cost: u32,
+}
+
+/// The way `sprite` takes to `target`, a remembered place out of sight (M2
+/// design §7), treating other sprites as `occupied` says: the cheapest way
+/// to its nearest goal tile, in a flood out to the place's distance plus the
+/// sprite's sense radius, since it has walked there before. `None` if
+/// there's none.
+pub(crate) fn trip(
+    state: &WorldState,
+    data: &DataPack,
+    sprite: &Sprite,
+    target: Target,
+    occupied: Occupied,
+) -> Option<Way> {
+    let (there, _) = state.whereabouts(data, target)?;
+    let ground = Ground {
+        map: &state.map,
+        objects: &state.objects,
+        sprites: &state.sprites,
+        data,
+    };
+    let reach = sprite.program.traits.sense_radius.round() as u16;
+    let radius = chebyshev(sprite.pos, there).saturating_add(reach);
+    let search = Flood::new(ground, sprite.pos, radius, occupied, state.tick);
+    let goal = state.goal_for(data, &search, target)?;
+    Some(Way {
+        goal,
+        path: search.path_to(goal)?,
+        cost: search.cost(goal)?,
+    })
+}
+
+/// Sets `action` off on `way` to a remembered place (M2 design §7.4), at
+/// `tick`, for a sprite of `speed`: it keeps to the way, and has the time
+/// the walk takes past the timeout, counted from its start.
+pub(crate) fn set_off(action: &mut Action, way: Way, speed: f32, tick: u64) {
+    let tenths_a_tick = ((speed * 10.0).round() as u32).max(1);
+    let walk = (way.cost * 10).div_ceil(tenths_a_tick);
+    let so_far = u32::try_from(tick - action.started).unwrap_or(u32::MAX);
+    action.remembered = true;
+    action.extra_ticks = so_far.saturating_add(walk);
+    keep_to(action, way);
+}
+
+/// A trip keeps to `way`, found again on the way there (M2 design §7.4).
+/// Its time is what it had when it set off, so a trip held up again and
+/// again still gives up.
+fn keep_to(action: &mut Action, way: Way) {
+    action.walk.destination = Some(way.goal);
+    action.walk.committed = Some(way.path);
+}
+
+/// What a flood adds for a tile holding another sprite (design §3.6).
+pub(crate) fn penalty(data: &DataPack) -> u32 {
+    data.physiology().movement.occupied_penalty
 }
 
 /// `sprite`'s action as the screen sees it, if it has had one.
@@ -226,6 +302,7 @@ pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
         target_gone: action.target_gone,
         hurt: action.hurt,
         progress,
+        remembered: action.remembered,
     })
 }
 
@@ -267,10 +344,10 @@ pub(crate) fn sense_and_decide(
             .as_ref()
             .is_none_or(|f| f.origin != sprite.pos || state.tick >= f.made + u64::from(refresh));
         if stale {
-            let penalty = Occupied::Penalty(physiology.movement.occupied_penalty);
-            let flood = flood(state, data, sprite, penalty);
+            let flood = flood(state, data, sprite, Occupied::Penalty(penalty(data)));
             state.sprites.get_mut(id).expect("the same sprite").flood = Some(flood);
         }
+        forget_what_is_gone(state, data, id);
         let sprite = state.sprites.get(id).expect("the same sprite");
         // A sliding sprite chooses nothing (design v25 §2.4).
         if sprite.slide.is_some() {
@@ -305,9 +382,29 @@ pub(crate) fn sense_and_decide(
                     .walk
                     .destination
                     .is_some_and(|to| flood.cost(to).is_none());
-            let outcome = if gone || action.walk.committed.is_none() && lost {
+            // A trip to a remembered place goes out of sight; once its
+            // target is in reach, it carries on as any action (M2 design
+            // §7). Off its way, it finds the way again, round sprites if
+            // they held it up; with none, it's blocked, and tries again
+            // another time.
+            let trip_way = match (action.remembered, aim) {
+                (true, Some(None)) if action.walk.committed.is_none() => {
+                    let occupied = if action.walk.blocked_ticks > 0 {
+                        Occupied::Closed
+                    } else {
+                        Occupied::Penalty(penalty(data))
+                    };
+                    let target = action.target.expect("a trip has a target");
+                    Some(trip(state, data, sprite, target, occupied))
+                }
+                _ => None,
+            };
+            let allowed = u64::from(timeout) + u64::from(action.extra_ticks);
+            let outcome = if gone || !action.remembered && action.walk.committed.is_none() && lost {
                 Some(Outcome::Failed)
-            } else if state.tick >= action.started + u64::from(timeout) {
+            } else if matches!(trip_way, Some(None)) {
+                Some(Outcome::Blocked)
+            } else if state.tick >= action.started + allowed {
                 Some(Outcome::TimedOut)
             } else {
                 None
@@ -320,6 +417,16 @@ pub(crate) fn sense_and_decide(
                     end(action, id, outcome, state.tick, events);
                 }
                 None => {
+                    if let Some(Some(way)) = trip_way {
+                        keep_to(action, way);
+                    }
+                    if let Some(Some(_)) = aim
+                        && action.remembered
+                    {
+                        // In reach: no longer from memory.
+                        action.remembered = false;
+                        action.walk.committed = None;
+                    }
                     if let Some(Some(goal)) = aim {
                         // A committed way round leads to where the target
                         // was; once it moves (a sprite, or a rolling item),
@@ -338,6 +445,31 @@ pub(crate) fn sense_and_decide(
             }
         }
         decide(state, data, id, events);
+    }
+}
+
+/// Sprite `id` forgets each remembered place it can see whose thing is gone
+/// (M2 design §7): within its flood's reach, which is how far it sees.
+fn forget_what_is_gone(state: &mut WorldState, data: &DataPack, id: EntityId) {
+    let sprite = state.sprites.get(id).expect("a sprite taking its turn");
+    let reach = sprite.flood.as_ref().map_or(0, Flood::reach);
+    let gone: Vec<Target> = sprite
+        .brain
+        .experience
+        .places
+        .iter()
+        .filter(|place| chebyshev(sprite.pos, place.at) <= reach)
+        .filter(|place| state.whereabouts(data, place.target).is_none())
+        .map(|place| place.target)
+        .collect();
+    let experience = &mut state
+        .sprites
+        .get_mut(id)
+        .expect("the same sprite")
+        .brain
+        .experience;
+    for target in gone {
+        experience.forget_place(target);
     }
 }
 
@@ -419,6 +551,7 @@ pub(crate) fn end(
         target_gone: action.target_gone,
         hurt: action.hurt,
         progress: Progress::Ended(outcome),
+        remembered: action.remembered,
     };
     events.push(Event {
         tick,
@@ -557,7 +690,8 @@ fn act(
 /// Sprite `id` touched `target`, learned about as `subject`, by trying
 /// `verb` on it, or with no verb by crashing into it (design v23 §5.6): what
 /// the next few ticks' feelings are about. Touching one, it knows its object
-/// type (design v19 §5.6).
+/// type (design v19 §5.6). Water, and an object fixed in place, keep their
+/// tile, so a need they ease makes it a remembered place (M2 design §7).
 pub(crate) fn touched(
     state: &mut WorldState,
     data: &DataPack,
@@ -566,6 +700,7 @@ pub(crate) fn touched(
     subject: Subject,
     verb: Option<Verb>,
 ) {
+    let place = stays_put(state, data, target);
     let brain = &mut state.sprites.get_mut(id).expect("the toucher").brain;
     let needs = data.need_places().len();
     brain.experience.learn_about(subject, needs).touched = true;
@@ -576,7 +711,26 @@ pub(crate) fn touched(
         sprite: target.sprite(),
         novelty: brain.novelty(subject),
         by_cursor: false,
+        place,
     });
+}
+
+/// `target` and its tile, if it stays put (M2 design §7): water, or an
+/// object fixed in place. Nothing moves a fixture, and in M1 every solid
+/// object is one and every other is an item (design §3.5.1).
+pub(crate) fn stays_put(
+    state: &WorldState,
+    data: &DataPack,
+    target: Target,
+) -> Option<(Target, Pos)> {
+    match target {
+        Target::Water(pos) => Some((target, pos)),
+        Target::Object(_) => {
+            let (pos, own_tile) = state.whereabouts(data, target)?;
+            (!own_tile).then_some((target, pos))
+        }
+        Target::Sprite(_) | Target::Cursor => None,
+    }
 }
 
 /// Shuffles `ids` with the world RNG: Fisher–Yates, one draw per place but the first.
@@ -814,7 +968,10 @@ fn held_up(sprite: &mut Sprite, cost: u32) -> u32 {
 fn wait(state: &mut WorldState, data: &DataPack, id: EntityId, cost: u32, events: &mut Vec<Event>) {
     let replan_after = data.physiology().movement.replan_after;
     let sprite = state.sprites.get_mut(id).expect("the walker");
-    if held_up(sprite, cost) < replan_after {
+    // A trip out of sight finds its way again at the next 5.0, round the
+    // sprites that held it up (M2 design §7).
+    let tripping = sprite.lead.is_none() && sprite.action.as_ref().is_some_and(|a| a.remembered);
+    if held_up(sprite, cost) < replan_after || tripping {
         return;
     }
     let destination = walk_of(sprite).and_then(|walk| walk.destination);

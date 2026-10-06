@@ -48,7 +48,7 @@ mod world;
 
 pub use action::{ActionView, Hurt, Outcome, Progress, ScriptedAction};
 pub use biochem::Traits;
-pub use brain::{Contribution, Explanation, Learned, Memory, Part, Thing};
+pub use brain::{Contribution, Explanation, Learned, Memory, Part, RememberedPlace, Thing};
 pub use command::{Blocker, Command, CursorTouch, PlaceRule, Rejection};
 pub use config::{ConfigError, WorldConfig};
 pub use cp437::is_cp437;

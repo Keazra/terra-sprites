@@ -129,10 +129,12 @@ pub(crate) enum BrainParam {
     /// How fast fear of the Cursor wears off while it stays near the sprite
     /// and does nothing to it (design v29 §5.6).
     CursorCalming = 36,
+    /// How much a remembered place fades each tick (M2 design §7).
+    PlaceFade = 37,
 }
 
 impl BrainParam {
-    pub(crate) const ALL: [BrainParam; 36] = [
+    pub(crate) const ALL: [BrainParam; 37] = [
         BrainParam::LearningRate,
         BrainParam::TraceDecay,
         BrainParam::RelaxRate,
@@ -169,6 +171,7 @@ impl BrainParam {
         BrainParam::Quieting,
         BrainParam::HabitFadeBad,
         BrainParam::CursorCalming,
+        BrainParam::PlaceFade,
     ];
 
     /// The parameter's name in genome files and `physiology.ron`.
@@ -210,6 +213,7 @@ impl BrainParam {
             BrainParam::Quieting => "quieting",
             BrainParam::HabitFadeBad => "habit_fade_bad",
             BrainParam::CursorCalming => "cursor_calming",
+            BrainParam::PlaceFade => "place_fade",
         }
     }
 

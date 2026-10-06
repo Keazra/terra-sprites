@@ -4,9 +4,9 @@
 use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
-    ActionView, Blocker, ChemicalKind, ChemicalLevel, Command, CursorTouch, DeathCause,
+    ActionView, Blocker, ChemicalKind, ChemicalLevel, Command, CursorTouch, DeathCause, Dir,
     EmitterMode, Emptied, EntityId, Event, EventKind, Explanation, Expression, GeneView, Grip,
-    Learned, MAX_NAME_CHARS, NameProblem, ObjectView, Outcome, Part, PlaceRule, Progress,
+    Learned, MAX_NAME_CHARS, NameProblem, ObjectView, Outcome, Part, PlaceRule, Pos, Progress,
     Rejection, Removal, SpriteView, Target, Terrain, Thing, Trait, Verb, World,
 };
 
@@ -292,12 +292,18 @@ fn action_line(action: &ActionView, detail: bool, data: &Words) -> String {
 fn aimed_line(action: &ActionView, data: &Words) -> Option<String> {
     action.target?;
     let what = target_words(action, data);
+    // Out of sight, it goes by what it remembers (M2 design §7).
+    let aim = match action.remembered {
+        true => format!("{what} it remembers"),
+        false => what.clone(),
+    };
     let going = match action.verb {
-        Verb::Eat => format!("Going to eat {what}"),
+        Verb::Eat => format!("Going to eat {aim}"),
+        Verb::Drink if action.remembered => format!("Going to drink at {aim}"),
         Verb::Drink => "Going to drink".into(),
-        Verb::Approach => format!("Going over to {what}"),
-        Verb::Play => format!("Going to play with {what}"),
-        Verb::Hit => format!("Going to hit {what}"),
+        Verb::Approach => format!("Going over to {aim}"),
+        Verb::Play => format!("Going to play with {aim}"),
+        Verb::Hit => format!("Going to hit {aim}"),
         Verb::Retreat => format!("Backing away from {what}"),
         _ => return None,
     };
@@ -562,6 +568,11 @@ fn exact_line(action: &ActionView, data: &Words) -> String {
         Progress::Resting { ticks, of } => format!("{ticks} of {of} ticks"),
         Progress::Ended(outcome) => outcome_name(outcome).to_string(),
     };
+    // A trip to a remembered place (M2 design §7).
+    let head = match action.remembered {
+        true => format!("{head} · from memory"),
+        false => head,
+    };
     format!("{head} · {state}")
 }
 
@@ -653,15 +664,54 @@ fn brain_tab(sprite: &SpriteView, data: &Words) -> Vec<Line<'static>> {
         .into_iter()
         .filter(|m| level(m.amount.abs()) != ".00")
         .collect();
+    let mut gap = true;
     if !remembered.is_empty() {
         lines.push(String::new());
         lines.push(" MEMORY".into());
+        gap = false;
     }
     for memory in remembered {
         let amount = signed_level(memory.amount);
         lines.extend(scored("   ", &learned_name(&memory.learned, data), &amount));
     }
+    // Its remembered places, best remembered first (M2 design §7): what,
+    // how far and which way, and how well.
+    let places: Vec<_> = sprite
+        .remembered_places()
+        .into_iter()
+        .filter(|p| level(p.recall) != ".00")
+        .collect();
+    if !places.is_empty() {
+        if gap {
+            lines.push(String::new());
+        }
+        lines.push(" PLACES".into());
+    }
+    for place in places {
+        let name = format!(
+            "{} · {}",
+            thing_name(&place.thing, data),
+            how_far(sprite.pos(), place.at)
+        );
+        lines.extend(scored("   ", &name, &level(place.recall)));
+    }
     lines.into_iter().map(Line::from).collect()
+}
+
+/// How far `to` is from `from` and which way, in tiles, the game's own
+/// measure: `34 tiles NE`, or `here`.
+fn how_far(from: Pos, to: Pos) -> String {
+    let (dx, dy) = (
+        i32::from(to.x) - i32::from(from.x),
+        i32::from(to.y) - i32::from(from.y),
+    );
+    match Dir::nearest(dx, dy) {
+        Some(toward) => {
+            let tiles = dx.unsigned_abs().max(dy.unsigned_abs());
+            format!("{} {toward:?}", counted(tiles, "tile"))
+        }
+        None => "here".into(),
+    }
 }
 
 /// The Brain tab's attention and decision: each category attention could go
@@ -1505,6 +1555,7 @@ mod tests {
             target_gone: false,
             hurt: Hurt::default(),
             progress,
+            remembered: false,
         }
     }
 
@@ -1518,6 +1569,7 @@ mod tests {
             target_gone: false,
             hurt: Hurt::default(),
             progress,
+            remembered: false,
         }
     }
 
@@ -1608,6 +1660,40 @@ mod tests {
             target_gone: false,
             hurt: Hurt::default(),
             progress,
+            remembered: false,
+        }
+    }
+
+    #[test]
+    fn the_action_line_says_a_trip_is_to_a_place_it_remembers() {
+        // M2 design §7.
+        let walking = Progress::Walking { steps_left: 34 };
+        let remembered = |view: ActionView| ActionView {
+            remembered: true,
+            ..view
+        };
+        let water = aimed(
+            Verb::Drink,
+            Target::Water(Pos { x: 40, y: 12 }),
+            100,
+            walking,
+        );
+        let bush = aimed(Verb::Eat, Target::Object(EntityId(812)), 1, walking);
+        let cases = [
+            (
+                remembered(water),
+                "Going to drink at the water it remembers · 34 tiles to go",
+                "DRINK → water (40,12) · from memory · walking (34 tiles)",
+            ),
+            (
+                remembered(bush),
+                "Going to eat the berry bush it remembers · 34 tiles to go",
+                "EAT → berry_bush #812 · from memory · walking (34 tiles)",
+            ),
+        ];
+        for (view, plain, exact) in cases {
+            assert_eq!(action_line(&view, false, &pack()), plain, "{view:?}");
+            assert_eq!(action_line(&view, true, &pack()), exact, "{view:?}");
         }
     }
 

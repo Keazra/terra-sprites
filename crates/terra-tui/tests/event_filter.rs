@@ -68,6 +68,7 @@ fn hit(tick: u64, hitter: u64, hit: u64) -> Event {
         target_gone: false,
         hurt: Hurt::default(),
         progress: Progress::Ended(Outcome::Applied),
+        remembered: false,
     };
     Event {
         tick,
