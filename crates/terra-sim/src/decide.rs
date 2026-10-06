@@ -162,30 +162,32 @@ pub(crate) fn decide(
         .collect();
     // What a running aimed action is aimed at, which may not be its
     // category's candidate now (design §5.3).
-    let aimed = action.and_then(|a| a.target.map(|target| (a, target))).map(|(a, target)| {
-        let (category, adjacent) = (
-            state.category_of(data, target),
-            state.on_goal_tile(data, sprite.pos, target),
-        );
-        let cost = state
-            .whereabouts(data, target)
-            .and_then(|(there, own)| flood.nearest_goal(&state.map, there, own))
-            .map_or(u32::MAX, |(_, cost)| cost);
-        // A trip still out of sight is weighed as its place is remembered
-        // (M2 design §7).
-        let recall = if a.remembered {
-            sprite.brain.experience.recall(target)
-        } else {
-            1.0
-        };
-        Aim {
-            category,
-            subject: state.subject_of(data, target),
-            distance: normalized(cost, reach),
-            adjacent,
-            recall,
-        }
-    });
+    let aimed = action
+        .and_then(|a| a.target.map(|target| (a, target)))
+        .map(|(a, target)| {
+            let (category, adjacent) = (
+                state.category_of(data, target),
+                state.on_goal_tile(data, sprite.pos, target),
+            );
+            let cost = state
+                .whereabouts(data, target)
+                .and_then(|(there, own)| flood.nearest_goal(&state.map, there, own))
+                .map_or(u32::MAX, |(_, cost)| cost);
+            // A trip still out of sight is weighed as its place is remembered
+            // (M2 design §7).
+            let recall = if a.remembered {
+                sprite.brain.experience.recall(target)
+            } else {
+                1.0
+            };
+            Aim {
+                category,
+                subject: state.subject_of(data, target),
+                distance: normalized(cost, reach),
+                adjacent,
+                recall,
+            }
+        });
     let exploration = sprite.body.loci[data.physiology().indices.exploration_mod];
     // The sprite that stands for sprites while attention scores: a running
     // action's target, or else the candidate (design v18 §5.3).
@@ -321,10 +323,7 @@ pub(crate) fn decide(
         }
         _ => {
             let candidate = candidate.expect("an aimed verb is offered only with a target");
-            (
-                candidate.goal,
-                Some((candidate.target, candidate.type_id)),
-            )
+            (candidate.goal, Some((candidate.target, candidate.type_id)))
         }
     };
     // Setting off for a remembered place, it finds the way there over the
@@ -333,7 +332,13 @@ pub(crate) fn decide(
     let way = match (target, destination) {
         (Some((target, _)), None) if verb.heads_for_goal() => {
             let sprite = state.sprites.get(id).expect("the same sprite");
-            let way = trip(state, data, sprite, target, Occupied::Penalty(penalty(data)));
+            let way = trip(
+                state,
+                data,
+                sprite,
+                target,
+                Occupied::Penalty(penalty(data)),
+            );
             if way.is_none() {
                 let sprite = state.sprites.get_mut(id).expect("the same sprite");
                 sprite.brain.experience.forget_place(target);

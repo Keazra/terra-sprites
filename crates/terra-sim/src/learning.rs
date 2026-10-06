@@ -279,7 +279,8 @@ impl Experience {
                 .enumerate()
                 .min_by(|(_, a), (_, b)| a.strength.total_cmp(&b.strength))
                 .map(|(i, _)| i);
-            self.places.remove(faintest.expect("a full memory holds places"));
+            self.places
+                .remove(faintest.expect("a full memory holds places"));
         }
         self.places.push(place);
     }

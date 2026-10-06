@@ -394,8 +394,7 @@ pub(crate) fn sense_and_decide(
                 _ => None,
             };
             let allowed = u64::from(timeout) + u64::from(action.extra_ticks);
-            let outcome = if gone || !action.remembered && action.walk.committed.is_none() && lost
-            {
+            let outcome = if gone || !action.remembered && action.walk.committed.is_none() && lost {
                 Some(Outcome::Failed)
             } else if matches!(trip_way, Some(None)) {
                 Some(Outcome::Blocked)
@@ -458,7 +457,12 @@ fn forget_what_is_gone(state: &mut WorldState, data: &DataPack, id: EntityId) {
         .filter(|place| state.whereabouts(data, place.target).is_none())
         .map(|place| place.target)
         .collect();
-    let experience = &mut state.sprites.get_mut(id).expect("the same sprite").brain.experience;
+    let experience = &mut state
+        .sprites
+        .get_mut(id)
+        .expect("the same sprite")
+        .brain
+        .experience;
     for target in gone {
         experience.forget_place(target);
     }
@@ -709,7 +713,11 @@ pub(crate) fn touched(
 /// `target` and its tile, if it stays put (M2 design §7): water, or an
 /// object fixed in place. Nothing moves a fixture, and in M1 every solid
 /// object is one and every other is an item (design §3.5.1).
-pub(crate) fn stays_put(state: &WorldState, data: &DataPack, target: Target) -> Option<(Target, Pos)> {
+pub(crate) fn stays_put(
+    state: &WorldState,
+    data: &DataPack,
+    target: Target,
+) -> Option<(Target, Pos)> {
     match target {
         Target::Water(pos) => Some((target, pos)),
         Target::Object(_) => {

@@ -262,7 +262,10 @@ impl Sprites {
                 ));
             }
             if let Some(place) = places.iter().find(|place| !map.contains(place.at)) {
-                return Err(format!("{id:?} remembers a place off the map, at {:?}", place.at));
+                return Err(format!(
+                    "{id:?} remembers a place off the map, at {:?}",
+                    place.at
+                ));
             }
         }
         Ok(())

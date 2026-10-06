@@ -1900,7 +1900,7 @@ mod tests {
             let mut verbs = [0.0; VERBS.len()];
             verbs[column(Verb::Eat)] = 0.5;
             verbs[column(Verb::Rest)] = 0.2;
-            let available = available(true, false);
+            let available = available(true, false, false);
             (0..200)
                 .map(|_| {
                     let attended = brain.attend(&scores, false, exploration, &mut rng);
@@ -2121,6 +2121,7 @@ mod tests {
                 sprite: None,
                 novelty: 1.0,
                 by_cursor: false,
+                place: None,
             });
             let signals = hunger_at(&mut brain, &data, 0.5);
             brain.learn(1, &signals, rate_mod, &data);
@@ -2311,15 +2312,16 @@ mod tests {
         };
         let candidates = BTreeMap::from([(WATER, half_remembered)]);
         let none = SpriteScoring::default();
-        let scores = brain.attention_scores(
+        let scores =
+            brain.attention_scores(&inputs(&[("thirst", 0.8)]), &candidates, 0.0, none, &data);
+        assert!(close(scores[&WATER], 0.8 * 0.5 * 0.5), "{scores:?}");
+        let draw = brain.draw(
+            half_remembered,
+            None,
             &inputs(&[("thirst", 0.8)]),
-            &candidates,
             0.0,
-            none,
             &data,
         );
-        assert!(close(scores[&WATER], 0.8 * 0.5 * 0.5), "{scores:?}");
-        let draw = brain.draw(half_remembered, None, &inputs(&[("thirst", 0.8)]), 0.0, &data);
         assert!(close(draw, 0.8 * 0.5 * 0.5), "{draw}");
     }
 
@@ -2675,7 +2677,10 @@ mod tests {
         let data = builtin();
         let mut brain = brain(&[]);
         teach(&mut brain, types::BALL).familiarity = 0.5;
-        let candidates = BTreeMap::from([(FRUIT, Seen::in_sight(types::BERRY, 1.0)), (TOY, Seen::in_sight(types::BALL, 1.0))]);
+        let candidates = BTreeMap::from([
+            (FRUIT, Seen::in_sight(types::BERRY, 1.0)),
+            (TOY, Seen::in_sight(types::BALL, 1.0)),
+        ]);
         let x = inputs(&[]);
         let score = |brain: &Brain, mood: f32| {
             brain.attention_scores(&x, &candidates, mood, SpriteScoring::default(), &data)

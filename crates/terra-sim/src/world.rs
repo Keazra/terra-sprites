@@ -2043,9 +2043,19 @@ mod tests {
         assert_ne!(learned, touched, "what it learned is hashed");
         let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
         let water = Target::Water(Pos { x: 0, y: 0 });
-        let place = (Subject::Category(data.water_category()), water, Pos { x: 0, y: 0 });
-        brain.experience.remember_place(place.0, place.1, place.2, (8, 5));
-        assert_ne!(world.state_hash(), learned, "the places it remembers are hashed");
+        let place = (
+            Subject::Category(data.water_category()),
+            water,
+            Pos { x: 0, y: 0 },
+        );
+        brain
+            .experience
+            .remember_place(place.0, place.1, place.2, (8, 5));
+        assert_ne!(
+            world.state_hash(),
+            learned,
+            "the places it remembers are hashed"
+        );
     }
 
     /// Sprite `id`'s brain in `world` remembers `n` places on tiles of its
@@ -2059,7 +2069,9 @@ mod tests {
                 x: n % width,
                 y: n / width,
             };
-            brain.experience.remember_place(water, Target::Water(at), at, (100, 0));
+            brain
+                .experience
+                .remember_place(water, Target::Water(at), at, (100, 0));
         }
     }
 
