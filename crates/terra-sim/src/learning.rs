@@ -568,11 +568,9 @@ pub(crate) fn commit(state: &mut WorldState, data: &DataPack) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::test_util::at;
 
-    fn at(x: u16, y: u16) -> Pos {
-        Pos { x, y }
-    }
+    use super::*;
 
     const WATER: Subject = Subject::ObjectType(100);
     const BUSH: Subject = Subject::ObjectType(1);

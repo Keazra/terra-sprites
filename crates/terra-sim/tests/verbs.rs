@@ -2,27 +2,13 @@
 //! attempt, and what the target's verb table does, driven through hand-made
 //! worlds with scripted actions.
 
+mod common;
+use common::{at, builtin, endings, walker};
+
 use terra_sim::{
     DataPack, DeathCause, EntityId, Event, EventKind, Genome, Hurt, Map, ObjectView, Outcome, Pos,
     Progress, Removal, Scenario, ScriptedAction, Target, Verb, World,
 };
-
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
-
-/// A genome with only traits, so nothing but the script decides what it does.
-fn walker(data: &DataPack) -> Genome {
-    let text = r#"(format: 1, genes: [
-        Trait(trait: "speed", value: 10.0),
-        Trait(trait: "sense_radius", value: 10.0),
-    ])"#;
-    Genome::from_ron(text, data).expect("a valid genome")
-}
 
 /// A world drawn from `rows`, with `objects`, and one walker on `sprite`
 /// doing `script`.
@@ -48,17 +34,6 @@ fn object(world: &World, pos: Pos) -> ObjectView<'_> {
 /// The ID of the sprite placed first: the one sprite, or the one acting.
 fn the_sprite(world: &World) -> EntityId {
     world.sprites().next().expect("a sprite").id()
-}
-
-/// The `ActionEnded` events in `events`, as `(verb, outcome)`.
-fn endings(events: &[Event]) -> Vec<(Verb, Outcome)> {
-    events
-        .iter()
-        .filter_map(|e| match e.kind {
-            EventKind::ActionEnded { verb, outcome, .. } => Some((verb, outcome)),
-            _ => None,
-        })
-        .collect()
 }
 
 #[test]

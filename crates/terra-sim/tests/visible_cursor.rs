@@ -2,36 +2,13 @@
 //! Cursor as a thing of its own, go to it or back away from it, and learn
 //! about it.
 
+mod common;
+use common::{at, builtin, genome};
+
 use terra_sim::{
-    Command, DataPack, EventKind, Genome, Learned, Map, Outcome, Pos, Progress, Scenario,
-    ScriptedAction, Target, Thing, Verb, World,
+    Command, EventKind, Learned, Map, Outcome, Pos, Progress, Scenario, ScriptedAction, Target,
+    Thing, Verb, World,
 };
-
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
-
-/// A sprite's genome: `genes`, with learning that doesn't fade, so what is
-/// learned reads exactly.
-fn genome(genes: &str, data: &DataPack) -> Genome {
-    let text = format!(
-        r#"(format: 1, genes: [
-            Trait(trait: "speed", value: 10.0),
-            Trait(trait: "sense_radius", value: 10.0),
-            {genes}
-            BrainParam(param: "worth_fade_good", value: 0.0),
-            BrainParam(param: "worth_fade_bad", value: 0.0),
-            BrainParam(param: "habit_fade", value: 0.0),
-            BrainParam(param: "habit_fade_bad", value: 0.0),
-            BrainParam(param: "fear_fade", value: 0.0),
-        ])"#
-    );
-    Genome::from_ron(&text, data).expect("a valid genome")
-}
 
 /// Its eye always goes to the Cursor, and it goes over to whatever it
 /// looks at.

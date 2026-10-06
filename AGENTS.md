@@ -42,7 +42,7 @@ The game's content is data in `data/*.ron` (terrain, chemicals, loci, brain inpu
 
 ## Tests
 
-- Integration tests in `crates/*/tests/` go through the public API. Build test worlds with `Scenario` rather than reaching into internals.
+- Integration tests in `crates/*/tests/` go through the public API. Build test worlds with `Scenario` rather than reaching into internals. For terra-sim, use `tests/common` (and `src/test_util` in unit tests) instead of copying helpers.
 - Golden files (`crates/terra-sim/tests/golden/`) must round-trip byte for byte. `.gitattributes` forces LF everywhere, which they rely on.
 - `proptest-regressions/` files are committed; keep them.
 

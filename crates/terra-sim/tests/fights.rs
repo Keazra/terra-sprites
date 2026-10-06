@@ -2,6 +2,9 @@
 //! a hit sprite turns to it while it feels the hit; pain leads to backing
 //! away, and some hits are hit back. Driven through hand-made worlds.
 
+mod common;
+use common::{at, builtin, walker};
+
 use terra_sim::{
     DataPack, EntityId, EventKind, Genome, Map, Outcome, Pos, Scenario, ScriptedAction, Target,
     Verb, World,
@@ -11,23 +14,6 @@ const STARTER: &str = include_str!("../../../data/genomes/starter.ron");
 
 /// Makes a sprite's genome from the data pack.
 type MakeGenome = fn(&DataPack) -> Genome;
-
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
-
-/// A genome with only traits, so nothing but a script decides what it does.
-fn walker(data: &DataPack) -> Genome {
-    let text = r#"(format: 1, genes: [
-        Trait(trait: "speed", value: 10.0),
-        Trait(trait: "sense_radius", value: 10.0),
-    ])"#;
-    Genome::from_ron(text, data).expect("a valid genome")
-}
 
 /// The starter genome, without spawn variation.
 fn starter(data: &DataPack) -> Genome {

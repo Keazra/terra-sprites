@@ -1,11 +1,10 @@
 //! M1's acceptance scenarios (design §7.3, §7.4), run from the lab scenario
 //! files they share with the lab runner.
 
-use terra_sim::{DataPack, LabScenario, Verb, Window, median};
+mod common;
+use common::builtin;
 
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
+use terra_sim::{DataPack, LabScenario, Verb, Window, median};
 
 /// Applied thornbush contacts in `window`: bites, plays and hits.
 fn thornbush_contacts(window: &Window, data: &DataPack) -> u64 {

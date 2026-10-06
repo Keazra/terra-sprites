@@ -2,18 +2,13 @@
 //! throws a held item, which rolls, and shoves a led sprite, which slides
 //! and may crash into what stops it.
 
+mod common;
+use common::{at, builtin, builtin_changing};
+
 use terra_sim::{
     Command, DataPack, DeathCause, Dir, EntityId, Event, EventKind, Map, Pos, Rejection, Scenario,
     ScriptedAction, Thing, World,
 };
-
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
 
 /// A world drawn from `rows`, with `objects`, and a starter sprite on each
 /// of `sprites`, doing `script`, by the tile it starts on.
@@ -389,25 +384,6 @@ fn a_sprite_taken_hold_of_mid_slide_slides_on_to_the_end_and_then_follows() {
         world.step();
     }
     assert_eq!(where_is(&world, sprite), at(0, 1), "then after the Cursor");
-}
-
-/// The built-in pack with `file` changed: each `(from, to)` replaced.
-fn builtin_changing(file: &str, changes: &[(&str, &str)]) -> DataPack {
-    let sources: Vec<(&str, String)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, text)| {
-            let mut text = text.to_string();
-            if path == file {
-                for &(from, to) in changes {
-                    assert!(text.contains(from), "{from:?} is in {file}");
-                    text = text.replace(from, to);
-                }
-            }
-            (path, text)
-        })
-        .collect();
-    let borrowed: Vec<(&str, &str)> = sources.iter().map(|(p, t)| (*p, t.as_str())).collect();
-    DataPack::from_sources(&borrowed).expect("the changed pack is valid")
 }
 
 #[test]

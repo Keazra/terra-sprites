@@ -4,6 +4,9 @@
 //! A page marks an example with an `<!-- example: name -->` line just
 //! before its fenced block, so the reference can't drift from the formats.
 
+mod common;
+use common::builtin;
+
 use terra_sim::{DataError, DataPack, Genome, LabScenario, WorldConfig};
 
 /// The example `name` from a reference page: the fenced block after its
@@ -52,10 +55,6 @@ fn appended(file: &str, entry: &str) -> String {
     let text = builtin_source(file);
     let end = text.rfind(']').expect("the file is a list");
     format!("{}{entry}\n{}", &text[..end], &text[end..])
-}
-
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
 }
 
 #[test]

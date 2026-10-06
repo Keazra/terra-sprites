@@ -297,16 +297,14 @@ impl Objects {
 
 #[cfg(test)]
 mod tests {
+    use crate::test_util::at;
+
     use proptest::collection::vec;
     use proptest::prelude::*;
 
     use super::*;
     use crate::data::DataPack;
     use crate::map::{Dir, Map, Pos};
-
-    fn at(x: u16, y: u16) -> Pos {
-        Pos { x, y }
-    }
 
     /// A drawn map with a store of objects on it, and the built-in pack's types.
     struct Scene {

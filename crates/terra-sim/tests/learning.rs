@@ -1,35 +1,13 @@
 //! Learning (design §5.6): step 4 consumes reward and punishment, and
 //! learns what things are worth and its habits.
 
+mod common;
+use common::{at, builtin, genome};
+
 use terra_sim::{
     Command, DataPack, Dir, EntityId, Event, EventKind, Genome, Learned, Map, Part, Pos, Scenario,
     ScriptedAction, Thing, Verb, World,
 };
-
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
-
-fn genome(genes: &str, data: &DataPack) -> Genome {
-    let text = format!(
-        r#"(format: 1, genes: [
-            Trait(trait: "speed", value: 10.0),
-            Trait(trait: "sense_radius", value: 10.0),
-            {genes}
-            // No fading, so what is learned reads exactly.
-            BrainParam(param: "worth_fade_good", value: 0.0),
-            BrainParam(param: "worth_fade_bad", value: 0.0),
-            BrainParam(param: "habit_fade", value: 0.0),
-            BrainParam(param: "habit_fade_bad", value: 0.0),
-            BrainParam(param: "fear_fade", value: 0.0),
-        ])"#
-    );
-    Genome::from_ron(&text, data).expect("a valid genome")
-}
 
 /// A world drawn from `rows`, with `objects`, and one sprite of `genes` on
 /// `sprite` doing `script`.

@@ -11,6 +11,13 @@ pub struct Pos {
     pub y: u16,
 }
 
+impl Pos {
+    /// A position at `(x, y)`.
+    pub const fn new(x: u16, y: u16) -> Pos {
+        Pos { x, y }
+    }
+}
+
 listed_enum! {
     /// One of the eight step directions. North is up the screen.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

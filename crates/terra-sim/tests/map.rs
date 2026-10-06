@@ -1,14 +1,13 @@
-use terra_sim::{DataPack, Dir, Map, MapError, Pos};
+mod common;
+use common::at;
+
+use terra_sim::{DataPack, Dir, Map, MapError};
 
 /// Draws a map with the ascii legend: `.` grass, `,` dirt, `:` sand,
 /// `~` shallow water, `=` deep water, `#` rock.
 fn draw(rows: &[&str]) -> Map {
     let data = DataPack::builtin().expect("built-in data pack is valid");
     Map::from_ascii(rows, &data).expect("valid drawing")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
 }
 
 #[test]
