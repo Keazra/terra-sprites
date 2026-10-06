@@ -407,8 +407,12 @@ _Avoid_: milestone (on screen)
 ### The screen
 
 **Title screen** (M2):
-The screen the game opens on, before any world is running.
+The screen the game opens on, before any world is running: a new random world moving behind the title and its menu (Continue, New world, Load, Help, Quit). Flags that make or load a world skip it, and `t` at a world's quit prompt goes back to it (M2 design §8).
 _Avoid_: main menu, start screen, splash screen
+
+**Opening scene** (M2):
+How the title screen starts: in the dark, the Cursor's light finds a sleeping sprite and the world fills in around it, the sprite wakes pleased, and the title and menu appear. Any key skips it (M2 design §8.1).
+_Avoid_: intro, splash, cutscene
 
 **Map view**:
 The panel that shows the map.

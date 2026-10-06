@@ -16,4 +16,5 @@ pub mod sprite_list;
 pub mod start;
 mod text;
 pub mod theme;
+pub mod title;
 pub mod ui;

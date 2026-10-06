@@ -659,3 +659,18 @@ fn b_t_m_l_and_question_mark_act_once_per_press() {
         assert_eq!(keys.action_for(repeat), None, "{code} held");
     }
 }
+
+#[test]
+fn while_typing_the_up_and_down_arrows_move_through_a_list() {
+    // New world's presets, while its seed is typed (M2 design §8.3).
+    let mut keys = Keys::with_release_reporting(false);
+    assert_eq!(
+        keys.typed_action(press(KeyCode::Up)),
+        Some(Action::Scroll { dx: 0, dy: -1 })
+    );
+    assert_eq!(
+        keys.typed_action(press(KeyCode::Down)),
+        Some(Action::Scroll { dx: 0, dy: 1 })
+    );
+    assert_eq!(keys.typed_action(press(KeyCode::Left)), None);
+}

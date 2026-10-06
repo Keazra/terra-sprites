@@ -27,13 +27,16 @@ use crate::theme::{Emote, Theme};
 pub enum Flow {
     Continue,
     Quit,
+    /// Leave the world for the title screen (M2 design §8.4).
+    Title,
 }
 
 /// What fills the screen besides the map (design §6.8).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
     Normal,
-    /// "Quit? (y/n)" is waiting for an answer.
+    /// "Quit? y quit the game  t title screen …" is waiting for an answer
+    /// (M2 design §8.4).
     QuitPrompt,
     /// The Place menu is open (design v28 §6.5).
     PlaceMenu,
@@ -584,21 +587,33 @@ struct Naming {
 
 /// A name being typed on the status line, for a sprite or a save: what's
 /// there so far, and whether the player has typed it, rather than it being
-/// the one offered, which the first letter typed replaces.
-#[derive(Debug, Clone)]
-struct Draft {
+/// the one offered, which the first letter typed replaces. The title
+/// screen's seed is typed so too (M2 design §8.3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Draft {
     text: String,
     typed: bool,
 }
 
 impl Draft {
     /// `text`, offered.
-    fn offered(text: String) -> Draft {
+    pub(crate) fn offered(text: String) -> Draft {
         Draft { text, typed: false }
     }
 
+    /// What's there so far.
+    pub(crate) fn text(&self) -> &str {
+        &self.text
+    }
+
+    /// Whether the player has typed it, rather than it being the one
+    /// offered.
+    pub(crate) fn typed(&self) -> bool {
+        self.typed
+    }
+
     /// Types `c`, replacing the name offered, up to `most` characters.
-    fn type_char(&mut self, c: char, most: usize) {
+    pub(crate) fn type_char(&mut self, c: char, most: usize) {
         if !self.typed {
             self.text.clear();
             self.typed = true;
@@ -609,7 +624,7 @@ impl Draft {
     }
 
     /// Rubs out the last character.
-    fn erase(&mut self) {
+    pub(crate) fn erase(&mut self) {
         self.text.pop();
         self.typed = true;
     }
@@ -1489,7 +1504,10 @@ impl App {
         if self.screen == Screen::QuitPrompt {
             match action {
                 Action::Confirm | Action::Quit => return Flow::Quit,
-                // Only `y` answers it: `Esc` cancels, as any other key does,
+                // `t`, which tracks a sprite elsewhere, goes back to the
+                // title screen (M2 design §8.4).
+                Action::Track => return Flow::Title,
+                // Only `y` and `t` answer it: `Esc` cancels, as any other key does,
                 // and never quits on its own (design v33 §6.6).
                 Action::Back => {
                     self.screen = Screen::Normal;
@@ -2643,7 +2661,8 @@ impl App {
     pub fn autosave_if_due(&mut self, world: &World) -> bool {
         let due = self.since_autosave >= AUTOSAVE_EVERY;
         if due {
-            self.autosave(world);
+            // A failure shows on the status line.
+            let _ = self.autosave(world);
         }
         due
     }
@@ -2651,21 +2670,26 @@ impl App {
     /// Saves the world as the newest autosave (design §6.7), as on quitting,
     /// unless it hasn't run since it was last saved: then the autosaves
     /// already hold it, or a save does, and an older autosave stays.
-    /// A replay never autosaves: it isn't the player's world.
-    pub fn autosave(&mut self, world: &World) {
+    /// A replay never autosaves: it isn't the player's world. Gives why it
+    /// couldn't, if it couldn't, as the status line says, for the frame
+    /// loop to say on, as the player leaves the world (M2 design §8.4).
+    pub fn autosave(&mut self, world: &World) -> Option<String> {
         self.since_autosave = Duration::ZERO;
         if self.replay.is_some() || !self.has_run_since_save(world) {
-            return;
+            return None;
         }
-        let Some(folder) = self.save_folder.clone() else {
-            return;
-        };
+        let folder = self.save_folder.clone()?;
         match saves::autosave(&folder, &self.save_of(world)) {
             Ok(_) => {
                 self.saved_now(world);
                 self.tell_player("Autosaved".into());
+                None
             }
-            Err(err) => self.refuse(format!("Couldn't autosave: {err}")),
+            Err(err) => {
+                let why = format!("Couldn't autosave: {err}");
+                self.refuse(why.clone());
+                Some(why)
+            }
         }
     }
 
@@ -2822,13 +2846,17 @@ impl App {
     /// Reads `file` and loads the world in it, for the frame loop to take,
     /// or says on the status line why it couldn't (design §2.9).
     fn load(&mut self, file: SaveFile) {
-        let loaded = std::fs::read(&file.path)
-            .map_err(|err| err.to_string())
-            .and_then(|bytes| World::load(&bytes).map_err(|err| err.to_string()));
-        match loaded {
+        match saves::load(&file) {
             Ok(world) => self.loaded = Some((world, file.name)),
-            Err(why) => self.refuse(format!("Couldn't load {}: {why}", file.name)),
+            Err(why) => self.refuse(why),
         }
+    }
+
+    /// Takes `world`, loaded from the save called `name` on the title
+    /// screen (M2 design §8.2), for the frame loop to take with
+    /// `take_loaded`, so it starts as a load in a world does (design §6.7).
+    pub fn load_from_title(&mut self, world: World, name: String) {
+        self.loaded = Some((world, name));
     }
 
     /// The world just loaded, if one was, for the frame loop to play from

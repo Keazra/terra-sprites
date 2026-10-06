@@ -215,7 +215,8 @@ impl Keys {
 
     /// The action for a key event while the player types a name (design v28
     /// §6.5): letters are typed rather than acting, `Backspace` rubs one out,
-    /// `Tab` offers another random name, `Enter` takes it and `Esc` gives up.
+    /// `Tab` offers another random name, `Enter` takes it and `Esc` gives up;
+    /// the up and down arrows move through a list beside it.
     /// Only presses count, and `Ctrl+C` still quits. Releases are still
     /// tracked, so the `r` that opened the prompt counts as let go after it,
     /// and a key already down when the prompt opened types nothing until it's
@@ -239,6 +240,10 @@ impl Keys {
             KeyCode::Tab => Some(Action::AnotherName),
             KeyCode::Enter => Some(Action::Enter),
             KeyCode::Esc => Some(Action::Back),
+            // New world's presets are picked while its seed is typed (M2
+            // design §8.3); naming does nothing with them.
+            KeyCode::Up => Some(Action::Scroll { dx: 0, dy: -1 }),
+            KeyCode::Down => Some(Action::Scroll { dx: 0, dy: 1 }),
             _ => None,
         }
     }
