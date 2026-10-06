@@ -1,16 +1,15 @@
 //! Sprites with a body (design §3.2, §4): the first population, and life and
 //! death without food or water.
 
+mod common;
+use common::{builtin, builtin_changing};
+
 use std::collections::BTreeSet;
 
 use terra_sim::{
     ChemicalKind, DataPack, DeathCause, EmitterMode, EntityId, EventKind, Expression, GeneView,
     Genome, Map, Pos, Scenario, ScriptedAction, Trait, Traits, World, WorldConfig,
 };
-
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
 
 #[test]
 fn a_new_world_places_the_preset_s_sprites_after_its_objects_on_empty_walkable_tiles() {
@@ -61,25 +60,6 @@ fn a_preset_may_set_20_to_100_sprites_or_leave_them_out() {
         0,
         "none unless asked for"
     );
-}
-
-/// The built-in pack's files with `file` changed: each `(from, to)` replaced.
-fn builtin_changing(file: &str, changes: &[(&str, &str)]) -> DataPack {
-    let sources: Vec<(&str, String)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, text)| {
-            let mut text = text.to_string();
-            if path == file {
-                for &(from, to) in changes {
-                    assert!(text.contains(from), "{from:?} is in {file}");
-                    text = text.replace(from, to);
-                }
-            }
-            (path, text)
-        })
-        .collect();
-    let sources: Vec<(&str, &str)> = sources.iter().map(|(p, t)| (*p, t.as_str())).collect();
-    DataPack::from_sources(&sources).expect("a valid test pack")
 }
 
 /// A single tile of grass holding one newborn sprite, made from `genome`, or

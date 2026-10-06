@@ -2,26 +2,10 @@
 //! tick, and it bounces off what it meets, driven through hand-made worlds
 //! with scripted kicks.
 
-use terra_sim::{
-    DataPack, EventKind, Genome, Map, Outcome, Pos, Removal, Scenario, ScriptedAction, Verb, World,
-};
+mod common;
+use common::{WorldBuilder, at, builtin, walker};
 
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
-
-/// A genome with only traits, so nothing but the script decides what it does.
-fn walker(data: &DataPack) -> Genome {
-    let text = r#"(format: 1, genes: [
-        Trait(trait: "speed", value: 10.0),
-        Trait(trait: "sense_radius", value: 10.0),
-    ])"#;
-    Genome::from_ron(text, data).expect("a valid genome")
-}
+use terra_sim::{DataPack, EventKind, Outcome, Pos, Removal, ScriptedAction, Verb, World};
 
 /// A world drawn from `rows`, with `objects`, and walkers on the given tiles
 /// doing their scripts.
@@ -63,7 +47,6 @@ fn world_with(
     objects: &[(Pos, &str)],
     sprites: &[(Pos, &[ScriptedAction])],
 ) -> World {
-    let map = Map::from_ascii(rows, &data).expect("valid drawing");
     let walkers: Vec<_> = sprites
         .iter()
         .map(|&(pos, _)| (pos, Some(walker(&data))))
@@ -72,13 +55,12 @@ fn world_with(
         .iter()
         .flat_map(|&(pos, script)| script.iter().map(move |&s| (pos, s)))
         .collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &walkers,
-        scripted: &scripted,
-    };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+    WorldBuilder::new(rows)
+        .data(data)
+        .objects(objects)
+        .sprites_with(walkers)
+        .scripts(&scripted)
+        .build()
 }
 
 /// A kick at the item on `pos`, then rest, so the kicker stays out of the way.

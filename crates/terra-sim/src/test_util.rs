@@ -1,8 +1,4 @@
-//! Shared helpers for unit tests inside terra-sim.
-//!
-//! Integration tests use `tests/common` instead. This module covers the
-//! helpers that unit tests under `src/` used to copy into each `#[cfg(test)]`
-//! block — mainly `at` for building a `Pos`.
+//! Shared helpers for terra-sim unit tests; integration tests use `tests/common`.
 
 use crate::map::Pos;
 

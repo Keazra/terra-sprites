@@ -19,8 +19,9 @@ pub fn at(x: u16, y: u16) -> Pos {
     Pos::new(x, y)
 }
 
-/// A genome with only traits: speed 10, sense radius 10 — so a script decides
-/// what the sprite does.
+/// A genome with only traits: speed 10, sense radius **10** — so a script
+/// decides what the sprite does. For a different sense radius (e.g. movement
+/// tests at 14), call [`traits_only`] instead.
 pub fn walker(data: &DataPack) -> Genome {
     traits_only(10.0, 10.0, data)
 }
@@ -87,6 +88,8 @@ pub fn builtin_changing(file: &str, changes: &[(&str, &str)]) -> DataPack {
 
 /// Builds a hand-drawn test world: rows, objects, sprites (optional genome),
 /// scripted actions, and a seed.
+///
+/// Sprite and script methods append; [`Self::objects`] replaces.
 pub struct WorldBuilder<'a> {
     rows: &'a [&'a str],
     objects: &'a [(Pos, &'a str)],
@@ -109,7 +112,7 @@ impl<'a> WorldBuilder<'a> {
         }
     }
 
-    /// Objects as `(tile, object type name)`.
+    /// Objects as `(tile, object type name)` (replaces any previous list).
     pub fn objects(mut self, objects: &'a [(Pos, &'a str)]) -> Self {
         self.objects = objects;
         self
@@ -127,38 +130,13 @@ impl<'a> WorldBuilder<'a> {
         self
     }
 
-    /// A sprite on `pos` with the starter genome and spawn variation.
-    pub fn sprite(mut self, pos: Pos) -> Self {
-        self.sprites.push((pos, None));
-        self
-    }
-
-    /// A sprite on `pos` with `genome` (no spawn variation).
-    pub fn sprite_genome(mut self, pos: Pos, genome: Genome) -> Self {
-        self.sprites.push((pos, Some(genome)));
-        self
-    }
-
-    /// Starter sprites (spawn variation) on each of `positions`.
-    pub fn sprites(mut self, positions: &[Pos]) -> Self {
-        self.sprites
-            .extend(positions.iter().map(|&pos| (pos, None)));
-        self
-    }
-
-    /// Sprites already built as `(pos, optional genome)`.
+    /// Sprites already built as `(pos, optional genome)` (appends).
     pub fn sprites_with(mut self, sprites: Vec<(Pos, Option<Genome>)>) -> Self {
         self.sprites.extend(sprites);
         self
     }
 
-    /// One scripted action for the sprite that starts on `pos`.
-    pub fn script(mut self, pos: Pos, action: ScriptedAction) -> Self {
-        self.scripted.push((pos, action));
-        self
-    }
-
-    /// Scripted actions by starting tile.
+    /// Scripted actions by starting tile (appends).
     pub fn scripts(mut self, scripted: &[(Pos, ScriptedAction)]) -> Self {
         self.scripted.extend_from_slice(scripted);
         self

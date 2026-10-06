@@ -1,18 +1,13 @@
 //! Grab mode's commands (design v23 §2.5, §6.5): the Cursor leads sprites
 //! and holds items, one thing at a time.
 
+mod common;
+use common::{at, builtin, builtin_changing};
+
 use terra_sim::{
     Blocker, Command, DataPack, Emptied, EntityId, Event, EventKind, Grip, Map, Outcome, Pos,
     Rejection, Removal, Scenario, ScriptedAction, Terrain, World,
 };
-
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
 
 /// A world drawn from `rows`, with `objects`, and a starter sprite on each
 /// of `sprites`, doing `script`, by the tile it starts on.
@@ -236,25 +231,6 @@ fn letting_go_with_no_sprite_led_is_refused() {
         refused(&events, Command::LetGo),
         Some(Rejection::NotLeading)
     );
-}
-
-/// The built-in data pack, with `changes` made to `file`'s text.
-fn builtin_changing(file: &str, changes: &[(&str, &str)]) -> DataPack {
-    let sources: Vec<(&str, String)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, text)| {
-            let mut text = text.to_string();
-            if path == file {
-                for &(from, to) in changes {
-                    assert!(text.contains(from), "{from:?} is in {file}");
-                    text = text.replace(from, to);
-                }
-            }
-            (path, text)
-        })
-        .collect();
-    let borrowed: Vec<(&str, &str)> = sources.iter().map(|(p, t)| (*p, t.as_str())).collect();
-    DataPack::from_sources(&borrowed).expect("the changed pack is valid")
 }
 
 #[test]

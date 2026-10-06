@@ -1,29 +1,17 @@
 //! Sprites that move (design §3.6–3.7, §5.5): walking, conflicts and
 //! re-planning, driven through hand-made worlds.
 
+mod common;
+use common::{at, builtin, traits_only};
+
 use terra_sim::{
     ActionView, Command, DataPack, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos,
     Progress, Scenario, ScriptedAction, Verb, World,
 };
 
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
-
-/// A genome with only traits: `speed`, and a sense radius of 14, the most.
+/// Sense radius 14 (not [`common::walker`]'s 10).
 fn walker(speed: f32, data: &DataPack) -> Genome {
-    seer(speed, 14.0, data)
-}
-
-/// A genome with only traits: `speed` and `sense_radius`.
-fn seer(speed: f32, sense_radius: f32, data: &DataPack) -> Genome {
-    let text = format!(
-        r#"(format: 1, genes: [
-            Trait(trait: "speed", value: {speed:?}),
-            Trait(trait: "sense_radius", value: {sense_radius:?}),
-        ])"#
-    );
-    Genome::from_ron(&text, data).expect("a valid genome")
+    traits_only(speed, 14.0, data)
 }
 
 /// A world drawn from `rows`, with walkers of `speed` on `sprites`, each
@@ -65,10 +53,6 @@ fn seeded(
         scripted,
     };
     World::from_scenario(scenario, data, seed).expect("a valid scenario")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
 }
 
 /// The ID of the sprite on `pos`.
@@ -294,7 +278,7 @@ fn wander_east(distance: u16, sense_radius: f32) -> Outcome {
     let data = builtin();
     let row = ".".repeat(usize::from(distance) + 1);
     let map = Map::from_ascii(&[row.as_str()], &data).expect("valid drawing");
-    let sprites = [(at(0, 0), Some(seer(10.0, sense_radius, &data)))];
+    let sprites = [(at(0, 0), Some(traits_only(10.0, sense_radius, &data)))];
     let wander = ScriptedAction::Wander {
         destination: at(distance, 0),
     };

@@ -651,6 +651,8 @@ fn back(pos: Pos, dir: Dir) -> Pos {
 
 #[cfg(test)]
 mod tests {
+    use crate::test_util::at;
+
     use std::collections::{BTreeMap, BTreeSet};
 
     use rand_chacha::ChaCha8Rng;
@@ -806,10 +808,6 @@ mod tests {
             data: &data,
         };
         Flood::new(ground, origin, radius, Occupied::Penalty(penalty), 0)
-    }
-
-    fn at(x: u16, y: u16) -> Pos {
-        Pos { x, y }
     }
 
     /// Every destination `flood` gives in 2,000 draws.

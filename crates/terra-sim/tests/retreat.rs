@@ -2,6 +2,9 @@
 //! from it, a step at a time, until the bout is done or the sprite is
 //! cornered. Driven through hand-made worlds with scripted actions.
 
+mod common;
+use common::{at, builtin, endings, walker};
+
 use terra_sim::{
     DataPack, Event, EventKind, Genome, Map, Outcome, Pos, Progress, Scenario, ScriptedAction,
     Verb, World,
@@ -10,30 +13,9 @@ use terra_sim::{
 /// Makes a sprite's genome from the data pack.
 type MakeGenome = fn(&DataPack) -> Genome;
 
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
-
-/// A genome with only traits: speed 10, a grass step a tick.
-fn walker(data: &DataPack) -> Genome {
-    let text = r#"(format: 1, genes: [
-        Trait(trait: "speed", value: 10.0),
-        Trait(trait: "sense_radius", value: 10.0),
-    ])"#;
-    Genome::from_ron(text, data).expect("a valid genome")
-}
-
 /// A walker that sees as little as a sprite can: 6 tiles.
 fn short_sighted(data: &DataPack) -> Genome {
-    let text = r#"(format: 1, genes: [
-        Trait(trait: "speed", value: 10.0),
-        Trait(trait: "sense_radius", value: 6.0),
-    ])"#;
-    Genome::from_ron(text, data).expect("a valid genome")
+    common::traits_only(10.0, 6.0, data)
 }
 
 /// A walker that feels being cornered: the `cornered` pulse raises `h0`.
@@ -85,17 +67,6 @@ fn scene(
         scripted,
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
-}
-
-/// The `ActionEnded` events in `events`, as `(verb, outcome)`.
-fn endings(events: &[Event]) -> Vec<(Verb, Outcome)> {
-    events
-        .iter()
-        .filter_map(|e| match e.kind {
-            EventKind::ActionEnded { verb, outcome, .. } => Some((verb, outcome)),
-            _ => None,
-        })
-        .collect()
 }
 
 /// Where the one sprite stands, or the first placed, if there are more.
