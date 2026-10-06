@@ -21,19 +21,19 @@ macro_rules! listed_enum {
             $named_vis:vis fn $named:ident;
         )?
     ) => {
-        $(#[$meta])*
-        $vis enum $Name {
-            $(
-                $(#[$vmeta])*
-                $Variant $(= $disc)?,
-            )+
+        listed_enum! {
+            $(#[$meta])*
+            $vis enum $Name {
+                $(
+                    $(#[$vmeta])*
+                    $Variant $(= $disc)?,
+                )+
+            }
+            $(#[$all_meta])*
+            $all_vis const ALL;
         }
 
         impl $Name {
-            $(#[$all_meta])*
-            $all_vis const ALL: [$Name; { [$($Name::$Variant,)+].len() }] =
-                [$($Name::$Variant,)+];
-
             $(#[$fn_meta])*
             $fn_vis fn $method(self) -> $ret {
                 match self {

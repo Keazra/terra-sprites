@@ -6,7 +6,7 @@ Terra Sprites is an ASCII artificial-life game in Rust. The spec is the current 
 
 Before pushing, run the checks CI runs (`.github/workflows/ci.yml` is the source of truth):
 
-- `cargo fmt --all --check`
+- `cargo fmt --all --check` (`listed_enum!` bodies aren't formatted by rustfmt; keep them tidy by hand)
 - `cargo clippy --workspace --all-targets -- -D warnings` (this includes the simulation's determinism lints)
 - `cargo test --workspace`
 
