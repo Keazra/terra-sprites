@@ -100,7 +100,7 @@ pub(crate) fn decide(
         let offer = Offer {
             target: place.target,
             cost: None,
-            recall: place.strength,
+            recall: place.recall,
         };
         let category = place.subject.category(data);
         offered.entry(category).or_default().push(offer);
@@ -169,20 +169,26 @@ pub(crate) fn decide(
                 state.category_of(data, target),
                 state.on_goal_tile(data, sprite.pos, target),
             );
-            let cost = state
-                .whereabouts(data, target)
+            let whereabouts = state.whereabouts(data, target);
+            let cost = whereabouts
                 .and_then(|(there, own)| flood.nearest_goal(&state.map, there, own))
                 .map_or(u32::MAX, |(_, cost)| cost);
-            // A trip still out of sight is weighed as its place is remembered
-            // (M2 design §7).
-            let recall = if a.remembered {
-                sprite.brain.experience.recall(target)
-            } else {
-                1.0
+            let subject = state.subject_of(data, target);
+            // A trip still out of sight is weighed as its place is
+            // remembered, or one of its kind near it that it merged into (M2
+            // design §7.3).
+            let recall = match whereabouts {
+                _ if !a.remembered => 1.0,
+                Some((there, _)) => sprite.brain.experience.recall(
+                    subject,
+                    there,
+                    data.physiology().remembered_places.merge,
+                ),
+                None => 0.0,
             };
             Aim {
                 category,
-                subject: state.subject_of(data, target),
+                subject,
                 distance: normalized(cost, reach),
                 adjacent,
                 recall,
@@ -233,6 +239,37 @@ pub(crate) fn decide(
         .map(|(&c, seen)| (c, seen.subject))
         .collect();
     let attended = brain.attend(&attention, running, exploration, rng);
+    let candidate = attended.and_then(|c| candidates.get(&c));
+    // A remembered place it might newly set off for needs a way there before
+    // anything changes: with none, it forgets the place and keeps to what it
+    // was doing, deciding nothing this tick (M2 design §7.4).
+    let continuing = sprite
+        .action
+        .as_ref()
+        .filter(|_| running)
+        .and_then(|a| a.target);
+    let planned = match candidate {
+        Some(c) if c.goal.is_none() && continuing != Some(c.target) => {
+            let sprite = state.sprites.get(id).expect("the same sprite");
+            let way = trip(
+                state,
+                data,
+                sprite,
+                c.target,
+                Occupied::Penalty(penalty(data)),
+            );
+            if way.is_none() {
+                let sprite = state.sprites.get_mut(id).expect("the same sprite");
+                sprite.brain.experience.forget_place(c.target);
+                return;
+            }
+            way
+        }
+        _ => None,
+    };
+    let sprite = state.sprites.get_mut(id).expect("the same sprite");
+    let rng = &mut state.rng;
+    let brain = &mut sprite.brain;
     let mut running = running;
     if let Some(aim) = aimed
         && attended != Some(aim.category)
@@ -242,7 +279,6 @@ pub(crate) fn decide(
         end(action, id, Outcome::Interrupted, state.tick, events);
         running = false;
     }
-    let candidate = attended.and_then(|c| candidates.get(&c));
     let aim = if running { aimed } else { None }.or(candidate.map(|c| c.aim));
 
     // 5b: the decision.
@@ -322,11 +358,12 @@ pub(crate) fn decide(
             (candidate.goal, Some((candidate.target, candidate.type_id)))
         }
     };
-    // Setting off for a remembered place, it finds the way there over the
-    // whole map, which it keeps to; with none, it forgets the place and
-    // keeps to what it was doing, choosing again at its next step 5 (M2
-    // design §7.4).
+    // Setting off for a remembered place, it keeps to the way found above;
+    // a new verb for the place a running action is already headed to finds
+    // its own, and with none forgets the place and keeps to what it was
+    // doing (M2 design §7.4).
     let way = match (target, destination) {
+        (Some(_), None) if verb.heads_for_goal() && planned.is_some() => planned,
         (Some((target, _)), None) if verb.heads_for_goal() => {
             let sprite = state.sprites.get(id).expect("the same sprite");
             let way = trip(

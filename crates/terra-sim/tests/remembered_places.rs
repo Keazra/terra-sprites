@@ -172,21 +172,169 @@ fn a_sprite_with_no_way_back_to_a_place_forgets_it_and_never_sets_off() {
         });
     }
     let mut set_off = false;
+    let mut forgot_while_busy = false;
     for _ in 0..1_000 {
-        for event in world.step() {
-            if let EventKind::CommandRejected { reason, .. } = event.kind {
+        let before = world.sprites().next().expect("the sprite").action();
+        let remembered = places(&world).len();
+        let events = world.step();
+        for event in &events {
+            if let EventKind::CommandRejected { reason, .. } = &event.kind {
                 panic!("a bush wasn't placed: {reason:?}");
             }
         }
         // Thirsty, it may try drinking from the bushes it sees, but never
-        // heads for the water.
+        // heads for the water, nor shows a decision about it.
         let sprite = world.sprites().next().expect("the sprite");
         set_off |= sprite
             .action()
             .is_some_and(|a| matches!(a.target, Some(Target::Water(_))));
+        if let Some(seen) = sprite.attending_to() {
+            assert!(seen.x >= 10, "it attended to the water at {seen:?}");
+        }
+        // Forgetting it, it keeps to what it was doing.
+        if remembered == 1 && places(&world).is_empty() && before.is_some() {
+            let ended = events
+                .iter()
+                .any(|e| matches!(e.kind, EventKind::ActionEnded { .. }));
+            assert!(!ended, "forgetting the water ended what it was doing");
+            assert_eq!(sprite.action(), before, "it kept to what it was doing");
+            forgot_while_busy = true;
+        }
     }
     assert_eq!(places(&world), [], "it forgot the water");
     assert!(!set_off, "it never set off for water it can't get to");
+    assert!(
+        forgot_while_busy,
+        "it forgot the water in the middle of something"
+    );
+}
+
+/// `ROOM` walled across at column 20 but for gaps on `gaps`, with only a
+/// corridor along row 2 east of it, from column 22, so a sprite there comes
+/// back through the gap on row 2. Column 21 is open on rows 0 to 2, so a
+/// gap on row 0 is a way round.
+fn walled(gaps: &[usize]) -> Vec<String> {
+    (0..ROOM.len())
+        .map(|y| {
+            ROOM[y]
+                .char_indices()
+                .map(|(x, tile)| match x {
+                    20 if !gaps.contains(&y) => '#',
+                    21 if y > 2 => '#',
+                    22.. if y != 2 => '#',
+                    _ => tile,
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// A sprite that only ever rests.
+fn resting(data: &DataPack) -> Genome {
+    genome(
+        10.0,
+        r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),
+           BrainParam(param: "tau_base", value: 0.05),"#,
+        data,
+    )
+}
+
+/// The thirsty sprite of `drank_and_wandered_off` in `rows`, run until it
+/// sets off back to the water, when a resting sprite is put down in the gap
+/// on row 2, in its way. Then up to `ticks` more, until a trip ends, with
+/// how it ended and the most ticks in a row the trip stood still.
+fn held_up_in(rows: &[String], ticks: u64) -> (World, Vec<Outcome>, u32) {
+    let data = builtin();
+    // Its eye isn't caught by the sprite in its way, so its mind stays on
+    // the water.
+    let thirsty = genome(
+        10.0,
+        r#"Emitter(locus: Locus("always"), mode: Level, gain: 0.004, chem: "thirst"),
+           Emitter(locus: Locus("drank"), mode: Level, gain: -0.5, chem: "thirst"),
+           Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
+           Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3),
+           BrainParam(param: "tau_base", value: 0.05),
+           BrainParam(param: "salience_gain", value: 0.0),
+           BrainParam(param: "curiosity", value: 0.0),
+           BrainParam(param: "vigilance", value: 0.0),"#,
+        &data,
+    );
+    let resting = resting(&data);
+    let mut script = vec![ScriptedAction::Rest; 10];
+    script.push(ScriptedAction::Drink { at: at(0, 2) });
+    script.extend(along(1, 36));
+    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let mut world = world_in(data, &rows, &[], at(1, 2), thirsty, &script);
+    assert_eq!(first_drink(&mut world, 200), Some(at(1, 2)));
+    let on_a_trip = |world: &World| {
+        let sprite = world.sprites().next().expect("the sprite");
+        sprite.action().is_some_and(|a| a.remembered)
+    };
+    for _ in 0..1_000 {
+        if on_a_trip(&world) {
+            break;
+        }
+        world.step();
+    }
+    assert!(on_a_trip(&world), "it set off for the water");
+    let here = world.sprites().next().expect("the sprite").pos();
+    assert!(here.x > 22, "it set off from {here:?}, past the wall");
+    world.submit(Command::SpawnSprite {
+        tile: at(20, 2),
+        genome: Some(resting),
+    });
+    let first = world.sprites().next().expect("the sprite").id();
+    let mut ended = Vec::new();
+    let (mut still, mut longest) = (0, 0);
+    for _ in 0..ticks {
+        let trip = on_a_trip(&world);
+        let before = world.sprites().next().expect("the sprite").pos();
+        for event in world.step() {
+            match event.kind {
+                EventKind::CommandRejected { reason, .. } => panic!("{reason:?}"),
+                EventKind::ActionEnded { id, outcome, .. } if trip && id == first => {
+                    ended.push(outcome);
+                }
+                _ => {}
+            }
+        }
+        let sprites: Vec<Pos> = world.sprites().map(|s| s.pos()).collect();
+        assert_eq!(sprites[1], at(20, 2), "the resting sprite stays put");
+        still = if trip && sprites[0] == before {
+            still + 1
+        } else {
+            0
+        };
+        longest = longest.max(still);
+        if !ended.is_empty() || !on_a_trip(&world) {
+            break;
+        }
+    }
+    (world, ended, longest)
+}
+
+#[test]
+fn a_trip_held_up_by_a_sprite_finds_the_way_round_it() {
+    // M2 design §7.4: a second gap, two rows up, is a longer way round.
+    // Held up, it plans again at once, rather than after `replan_after`
+    // ticks standing still.
+    let (world, ended, still) = held_up_in(&walled(&[0, 2]), 300);
+    let sprite = world.sprites().next().expect("the sprite");
+    assert_eq!(ended, [], "the trip carries on");
+    assert!(sprite.pos().x < 20, "it got round, to {:?}", sprite.pos());
+    assert_eq!(still, 1, "it was held up for a tick");
+}
+
+#[test]
+fn a_trip_with_no_way_round_a_sprite_ends_blocked_and_the_place_is_kept() {
+    // M2 design §7.4: a sprite in the way soon moves, so it's no reason to
+    // forget the water.
+    let (world, ended, still) = held_up_in(&walled(&[2]), 300);
+    assert_eq!(ended, [Outcome::Blocked]);
+    assert_eq!(still, 2, "held up for a tick, it found no way the next");
+    let sprite = world.sprites().next().expect("the sprite");
+    assert_eq!(sprite.pos(), at(21, 2), "it was held up beside the gap");
+    assert_eq!(places(&world).len(), 1, "it still remembers the water");
 }
 
 #[test]
@@ -302,7 +450,7 @@ fn a_bush_that_eased_hunger_is_remembered_where_it_stands_but_a_berry_on_the_gro
     assert_eq!(remembered.len(), 1, "{remembered:?}");
     assert_eq!(remembered[0].thing, Thing::from("berry_bush"));
     assert_eq!(remembered[0].at, bush);
-    assert!(remembered[0].strength == 1.0, "{remembered:?}");
+    assert!(remembered[0].recall == 1.0, "{remembered:?}");
 }
 
 #[test]

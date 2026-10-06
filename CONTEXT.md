@@ -401,11 +401,11 @@ What a sprite has learned from experience: the worth of things and of individual
 _Avoid_: learned links, knowledge
 
 **Remembered place** (M2):
-Where something that stays put, such as water or a bush, eased one of a sprite's needs. A sprite holds a few, and only a few of each kind; places of the same kind close together count as one, so a pond is one place. Each fades unless a visit tops it up, and one the sprite sees empty is forgotten. With nothing of its kind in sight, a remembered place draws the sprite's eye like a thing at the edge of sight. Shortened to "place" in the Brain tab.
+Where something that stays put, such as water or a bush, eased one of a sprite's needs. A sprite holds a few, and only a few of each kind; places of the same kind close together count as one, so a pond is one place. Each fades unless a visit tops it up, and one the sprite sees gone is forgotten. How well it's remembered is its **recall**. With nothing of its kind in sight, a remembered place draws the sprite's eye like a thing at the edge of sight. Shortened to "place" in the Brain tab.
 _Avoid_: landmark, waypoint, place (alone, outside the Brain tab: that's putting a thing down with the Cursor)
 
 **Trip** (M2):
-An action aimed at a remembered place out of sight. The sprite knows the way, so it keeps to a path planned over the whole map, and has as long as the walk takes on top of the timeout. Once the place comes into sight, the trip is an ordinary action. The screen says "the water it remembers".
+An action aimed at a remembered place out of sight. The sprite knows the way: setting off, it plans a path as far as the place's distance plus its sense radius, keeps to it, and has as long as the walk takes on top of the timeout. Once the place comes into sight, the trip is an ordinary action. The screen says "the water it remembers".
 _Avoid_: journey, expedition, recall (recall is how well the place is remembered)
 
 **Lesson**:

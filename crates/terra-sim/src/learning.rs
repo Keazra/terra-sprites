@@ -171,9 +171,11 @@ pub(crate) struct PlaceMemory {
     pub(crate) target: Target,
     /// The thing's tile.
     pub(crate) at: Pos,
-    /// How well it remembers it, from 1 when it was last eased there,
-    /// fading towards 0.
-    pub(crate) strength: f32,
+    /// Its recall: how well it remembers it, from 1 when it was last eased
+    /// there, fading towards 0. Saves from before it had this name call it
+    /// `strength`.
+    #[serde(alias = "strength")]
+    pub(crate) recall: f32,
 }
 
 impl Experience {
@@ -184,9 +186,7 @@ impl Experience {
         let needs = data.needs().count();
         let mut remembered = self.individuals.values().chain(&self.cursor);
         let levels = self.needs_before.as_ref();
-        let held = usize::from(data.physiology().remembered_places.held);
-        self.places.len() <= held
-            && self.places.iter().all(|place| place.subject.fits(data))
+        self.places.iter().all(|place| place.subject.fits(data))
             && self
                 .types
                 .iter()
@@ -214,7 +214,7 @@ impl Experience {
             within([&individual.fear], (-1.0, 0.0), "a sprite's fear")?;
         }
         for place in &self.places {
-            within([&place.strength], (0.0, 1.0), "a place's strength")?;
+            within([&place.recall], (0.0, 1.0), "a place's recall")?;
         }
         Ok(())
     }
@@ -251,10 +251,11 @@ impl Experience {
     }
 
     /// Remembers that `subject`'s `target`, on `at`, eased a need just now
-    /// (M2 design §7): fully, as one place with any of its kind remembered
-    /// within `merge` tiles, which moves to `at`. A new place past
-    /// `per_kind` pushes out the faintest of its kind, and one past `held`
-    /// the faintest of all: the oldest of the faintest.
+    /// (M2 design §7.2): fully, as one place on `at` with every place of its
+    /// kind remembered within `merge` tiles, so no two places of a kind are
+    /// that near. A new place past `per_kind` pushes out the faintest of its
+    /// kind, and one past `held` the faintest of all: the oldest of the
+    /// faintest.
     pub(crate) fn remember_place(
         &mut self,
         subject: Subject,
@@ -266,21 +267,47 @@ impl Experience {
             subject,
             target,
             at,
-            strength: 1.0,
+            recall: 1.0,
         };
-        let same = self
-            .places
-            .iter()
-            .position(|p| p.subject == subject && chebyshev(p.at, at) <= limits.merge);
+        let near = |p: &PlaceMemory| p.subject == subject && chebyshev(p.at, at) <= limits.merge;
+        let merged = self.places.iter().any(near);
+        self.places.retain(|p| !near(p));
         let of_kind = self.places.iter().filter(|p| p.subject == subject).count();
-        if let Some(same) = same {
-            self.places.remove(same);
-        } else if of_kind >= usize::from(limits.per_kind) {
-            self.forget_faintest(|p| p.subject == subject);
-        } else if self.places.len() >= usize::from(limits.held) {
-            self.forget_faintest(|_| true);
+        if !merged {
+            if of_kind >= usize::from(limits.per_kind) {
+                self.forget_faintest(|p| p.subject == subject);
+            } else if self.places.len() >= usize::from(limits.held) {
+                self.forget_faintest(|_| true);
+            }
         }
         self.places.push(place);
+    }
+
+    /// Brings places remembered under other `limits`, such as in a save from
+    /// before `per_kind`, within these (M2 design §7.2): of two of a kind
+    /// within `merge` tiles the older is forgotten, then the faintest of a
+    /// kind past `per_kind`, then the faintest past `held`.
+    pub(crate) fn keep_within(&mut self, limits: RememberedPlaces) {
+        let mut kept: Vec<PlaceMemory> = Vec::with_capacity(self.places.len());
+        for place in self.places.drain(..).rev() {
+            let near = kept
+                .iter()
+                .any(|k| k.subject == place.subject && chebyshev(k.at, place.at) <= limits.merge);
+            if !near {
+                kept.push(place);
+            }
+        }
+        kept.reverse();
+        self.places = kept;
+        while let Some(subject) = self.places.iter().map(|p| p.subject).find(|&subject| {
+            let of_kind = self.places.iter().filter(|p| p.subject == subject).count();
+            of_kind > usize::from(limits.per_kind)
+        }) {
+            self.forget_faintest(|p| p.subject == subject);
+        }
+        while self.places.len() > usize::from(limits.held) {
+            self.forget_faintest(|_| true);
+        }
     }
 
     /// Forgets the faintest of the places `which` picks, the oldest of the
@@ -291,20 +318,22 @@ impl Experience {
             .iter()
             .enumerate()
             .filter(|(_, p)| which(p))
-            .min_by(|(_, a), (_, b)| a.strength.total_cmp(&b.strength))
+            .min_by(|(_, a), (_, b)| a.recall.total_cmp(&b.recall))
             .map(|(i, _)| i);
         if let Some(faintest) = faintest {
             self.places.remove(faintest);
         }
     }
 
-    /// How well it remembers the place of `target` (M2 design §7): 0 if it
-    /// doesn't.
-    pub(crate) fn recall(&self, target: Target) -> f32 {
+    /// How well it remembers a place of `subject` within `merge` tiles of
+    /// `at` (M2 design §7.3), the best if more than one: 0 if it doesn't. A
+    /// trip keeps its pull when its place merges into one near it.
+    pub(crate) fn recall(&self, subject: Subject, at: Pos, merge: u16) -> f32 {
         self.places
             .iter()
-            .find(|place| place.target == target)
-            .map_or(0.0, |place| place.strength)
+            .filter(|place| place.subject == subject && chebyshev(place.at, at) <= merge)
+            .map(|place| place.recall)
+            .fold(0.0, f32::max)
     }
 
     /// Forgets the place of `target` (M2 design §7): it's gone, or there's
@@ -606,9 +635,9 @@ mod tests {
         for x in [0, 10] {
             experience.remember_place(WATER, Target::Water(at(x, 0)), at(x, 0), limits);
         }
-        experience.places[0].strength = 0.1;
-        experience.places[1].strength = 0.5;
-        experience.places[2].strength = 0.9;
+        experience.places[0].recall = 0.1;
+        experience.places[1].recall = 0.5;
+        experience.places[2].recall = 0.9;
         experience.remember_place(WATER, Target::Water(at(20, 0)), at(20, 0), limits);
         assert_eq!(tiles(&experience), [at(50, 0), at(10, 0), at(20, 0)]);
     }
@@ -617,9 +646,9 @@ mod tests {
     fn a_place_eased_again_is_remembered_fully_again() {
         let mut experience = Experience::default();
         water(&mut experience, at(0, 0));
-        experience.places[0].strength = 0.3;
+        experience.places[0].recall = 0.3;
         water(&mut experience, at(1, 0));
-        assert_eq!(experience.places[0].strength, 1.0);
+        assert_eq!(experience.places[0].recall, 1.0);
     }
 
     #[test]
@@ -628,22 +657,66 @@ mod tests {
         for x in [0, 10, 20] {
             water(&mut experience, at(x, 0));
         }
-        experience.places[0].strength = 0.5;
-        experience.places[1].strength = 0.2;
-        experience.places[2].strength = 0.2;
+        experience.places[0].recall = 0.5;
+        experience.places[1].recall = 0.2;
+        experience.places[2].recall = 0.2;
         water(&mut experience, at(30, 0));
         assert_eq!(tiles(&experience), [at(0, 0), at(20, 0), at(30, 0)]);
     }
 
     #[test]
-    fn a_place_is_forgotten_by_its_thing_and_recalled_by_it() {
+    fn a_place_is_forgotten_by_its_thing_and_recalled_by_its_kind_and_tile() {
         let mut experience = Experience::default();
         water(&mut experience, at(0, 0));
         water(&mut experience, at(10, 0));
-        experience.places[1].strength = 0.4;
-        assert_eq!(experience.recall(Target::Water(at(10, 0))), 0.4);
-        assert_eq!(experience.recall(Target::Water(at(9, 0))), 0.0);
+        experience.places[1].recall = 0.4;
+        assert_eq!(experience.recall(WATER, at(10, 0), 5), 0.4);
+        // A trip to a tile of the lake keeps its pull once the place moves
+        // within the lake (M2 design §7.3).
+        assert_eq!(experience.recall(WATER, at(14, 2), 5), 0.4);
+        assert_eq!(experience.recall(WATER, at(16, 0), 5), 0.0);
+        assert_eq!(experience.recall(BUSH, at(10, 0), 5), 0.0);
         experience.forget_place(Target::Water(at(0, 0)));
         assert_eq!(tiles(&experience), [at(10, 0)]);
+    }
+
+    #[test]
+    fn a_place_merges_with_every_place_of_its_kind_within_the_merge_distance() {
+        // M2 design §7.2: between two places of a lake 8 apart, the new one
+        // takes in both, so no two of a kind are within 5.
+        let mut experience = Experience::default();
+        water(&mut experience, at(0, 0));
+        water(&mut experience, at(8, 0));
+        water(&mut experience, at(4, 0));
+        assert_eq!(tiles(&experience), [at(4, 0)]);
+    }
+
+    #[test]
+    fn places_remembered_under_other_limits_are_brought_within_these() {
+        // M2 design §7.2: a save from before `per_kind` may hold 8 places of
+        // water, some near each other.
+        let loose = RememberedPlaces {
+            held: 8,
+            per_kind: 8,
+            merge: 0,
+        };
+        let mut experience = Experience::default();
+        for (x, recall) in [(0, 0.9), (2, 0.8), (10, 0.2), (20, 0.7), (30, 0.6)] {
+            experience.remember_place(WATER, Target::Water(at(x, 0)), at(x, 0), loose);
+            experience
+                .places
+                .last_mut()
+                .expect("just remembered")
+                .recall = recall;
+        }
+        experience.remember_place(BUSH, Target::Object(EntityId(7)), at(40, 0), loose);
+        experience.keep_within(RememberedPlaces {
+            held: 2,
+            per_kind: 2,
+            merge: 5,
+        });
+        // The older of the two near the start goes, then the faintest water
+        // past 2 of it, then the faintest of all past 2.
+        assert_eq!(tiles(&experience), [at(2, 0), at(40, 0)]);
     }
 }

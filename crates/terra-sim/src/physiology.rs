@@ -127,6 +127,8 @@ impl RememberedPlaces {
     }
 }
 
+/// What a saved world's pack from before them gets: the built-in pack's,
+/// which a test checks they match.
 impl Default for RememberedPlaces {
     fn default() -> RememberedPlaces {
         RememberedPlaces {
@@ -138,7 +140,8 @@ impl Default for RememberedPlaces {
 }
 
 /// The range and default of a brain parameter added after saves began
-/// (design §2.8), which a saved world's pack from before it doesn't name.
+/// (design §2.8), which a saved world's pack from before it doesn't name: the
+/// built-in pack's, which a test checks they match.
 fn added_since_saves(param: BrainParam) -> Option<ParamRange> {
     match param {
         BrainParam::PlaceFade => Some(ParamRange {
@@ -634,5 +637,34 @@ impl Indices {
             petted: pulse("petted")?,
             shocked: pulse("shocked")?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data::DataPack;
+
+    #[test]
+    fn what_a_save_from_before_a_setting_gets_is_what_the_built_in_pack_says() {
+        // A pack from before a setting gets the built-in pack's, written
+        // twice: here and in `data/physiology.ron` (design §2.8).
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let physiology = data.physiology();
+        for param in BrainParam::ALL {
+            if let Some(added) = added_since_saves(param) {
+                let built_in = physiology.brain.of(param);
+                assert_eq!(
+                    (added.range, added.default),
+                    (built_in.range, built_in.default),
+                    "{param:?}"
+                );
+            }
+        }
+        let (saved, built_in) = (RememberedPlaces::default(), physiology.remembered_places);
+        assert_eq!(
+            (saved.held, saved.per_kind, saved.merge),
+            (built_in.held, built_in.per_kind, built_in.merge)
+        );
     }
 }

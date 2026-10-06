@@ -283,13 +283,13 @@ pub struct Memory {
 }
 
 /// A place a sprite remembers (M2 design §7): what it found there, the
-/// thing's tile, and how well it remembers it, from 1 just after it was
-/// eased there, fading towards 0.
+/// thing's tile, and its recall, how well it remembers it, from 1 just after
+/// it was eased there, fading towards 0.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RememberedPlace {
     pub thing: Thing,
     pub at: Pos,
-    pub strength: f32,
+    pub recall: f32,
 }
 
 /// How many learned things the memory lists (design §5.9).
@@ -671,9 +671,9 @@ impl Brain {
         // design §7).
         let place = keep(BrainParam::PlaceFade);
         for remembered in &mut experience.places {
-            remembered.strength *= place;
+            remembered.recall *= place;
         }
-        experience.places.retain(|p| p.strength >= forget_below);
+        experience.places.retain(|p| p.recall >= forget_below);
     }
 
     /// How new a thing learned about as `subject` is to the sprite (design
@@ -736,11 +736,11 @@ impl Brain {
             .map(|place| RememberedPlace {
                 thing: subject_thing(place.subject, data),
                 at: place.at,
-                strength: place.strength,
+                recall: place.recall,
             })
             .collect();
         // A stable sort keeps a tie oldest first.
-        places.sort_by(|a, b| b.strength.total_cmp(&a.strength));
+        places.sort_by(|a, b| b.recall.total_cmp(&a.recall));
         places
     }
 
@@ -2352,7 +2352,7 @@ mod tests {
             },
         );
         brain.fade(data.physiology().forget_below);
-        assert!(close(brain.experience.places[0].strength, 0.99));
+        assert!(close(brain.experience.places[0].recall, 0.99));
         // 0.99^458 is just over .01, and 0.99^459 just under.
         for _ in 1..458 {
             brain.fade(data.physiology().forget_below);

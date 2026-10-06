@@ -2103,11 +2103,11 @@ mod tests {
             },
             |world, id| {
                 let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
-                brain.experience.places[0].strength = 1.5;
+                brain.experience.places[0].recall = 1.5;
             },
             |world, id| {
                 let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
-                brain.experience.places[0].strength = f32::NAN;
+                brain.experience.places[0].recall = f32::NAN;
             },
         ];
         for (i, broken) in breaks.into_iter().enumerate() {
@@ -2116,6 +2116,60 @@ mod tests {
             broken(&mut world, first);
             assert!(world.check_invariants().is_err(), "break {i}");
         }
+    }
+
+    /// A world 40 tiles wide whose one sprite remembers water on each tile
+    /// of the top row in `xs`, as no limits would stop it.
+    fn remembering_water_on(xs: &[u16]) -> World {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let (water, land) = ("~".repeat(40), ".".repeat(40));
+        let map = Map::from_ascii(&[&water, &land], &data).expect("valid drawing");
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &[(Pos { x: 0, y: 1 }, None)],
+            scripted: &[],
+        };
+        let mut world = World::from_scenario(scenario, data, 7).expect("valid scenario");
+        let id = world.sprites().next().expect("the sprite").id();
+        let water = Subject::Category(world.data.water_category());
+        let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
+        for &x in xs {
+            let at = Pos { x, y: 0 };
+            let loose = crate::physiology::RememberedPlaces {
+                held: 100,
+                per_kind: 100,
+                merge: 0,
+            };
+            brain
+                .experience
+                .remember_place(water, Target::Water(at), at, loose);
+        }
+        world
+    }
+
+    #[test]
+    fn too_many_places_of_a_kind_or_two_too_near_break_an_invariant() {
+        // M2 design §7.2: 3 of a kind at most, none within 5 of another.
+        assert_eq!(remembering_water_on(&[0, 6, 12]).check_invariants(), Ok(()));
+        assert!(
+            remembering_water_on(&[0, 6, 12, 18])
+                .check_invariants()
+                .is_err()
+        );
+        assert!(remembering_water_on(&[0, 5]).check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_save_from_before_the_limits_on_a_kind_loads_within_them() {
+        // M2 design §7.2: a save from before `per_kind` and the merge rule
+        // may hold 8 places of water, some near each other.
+        let world = remembering_water_on(&[0, 2, 10, 20, 30, 36]);
+        let loaded = World::load(&world.save()).expect("the save loads");
+        assert_eq!(loaded.check_invariants(), Ok(()));
+        let sprite = loaded.sprites().next().expect("the sprite");
+        let places: Vec<Pos> = sprite.remembered_places().iter().map(|p| p.at).collect();
+        assert_eq!(places.len(), 3, "{places:?}");
     }
 
     #[test]

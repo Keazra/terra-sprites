@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
-use crate::action::{Action, Did, ScriptedAction, Walk};
+use crate::action::{Action, Did, ScriptedAction, Walk, chebyshev};
 use crate::biochem::{Body, Program};
 use crate::brain::Brain;
 use crate::data::DataPack;
@@ -13,6 +13,7 @@ use crate::map::{Dir, Map, Pos};
 use crate::objects::{EntityId, Objects};
 use crate::occupancy::Occupancy;
 use crate::perception::Flood;
+use crate::physiology::RememberedPlaces;
 use crate::sliding::Slide;
 
 /// One sprite.
@@ -172,7 +173,8 @@ impl Sprites {
 
     /// Rebuilds what a save leaves out (design §2.8): which sprite stands on
     /// each tile of `map`, each one's genome compiled for the chemistry
-    /// step, and its levels before the tick, taken as its levels now. Says
+    /// step, and its levels before the tick, taken as its levels now; its
+    /// remembered places are brought within the pack's limits. Says
     /// what's wrong if one is off the map or shares a tile, was born after
     /// the tick `now`, its genome, body or brain doesn't fit `data`, or its
     /// flood doesn't fit `map`.
@@ -192,6 +194,12 @@ impl Sprites {
                 return Err(misfit());
             }
             sprite.brain.params.catch_up(&sprite.genome, data);
+            // Places remembered under other limits, in a save from before
+            // they were added, are brought within its pack's (M2 design §7.2).
+            sprite
+                .brain
+                .experience
+                .keep_within(data.physiology().remembered_places);
             if !sprite.body.fits(data) || !sprite.brain.fits(&sprite.genome, data, now) {
                 return Err(misfit());
             }
@@ -250,22 +258,34 @@ impl Sprites {
                 .brain
                 .check()
                 .map_err(|broken| format!("{id:?} {broken}"))?;
-            // Its remembered places are few enough, and on the map (M2
-            // design §7).
+            // Its remembered places are few enough, no two of a kind within
+            // the merge distance, and on the map (M2 design §7.2).
             let places = &sprite.brain.experience.places;
-            let held = data.physiology().remembered_places.held;
+            let RememberedPlaces {
+                held,
+                per_kind,
+                merge,
+            } = data.physiology().remembered_places;
             if places.len() > usize::from(held) {
                 return Err(format!(
                     "{id:?} remembers {} places, over {held}",
                     places.len()
                 ));
             }
-            let per_kind = data.physiology().remembered_places.per_kind;
-            for place in places {
+            for (i, place) in places.iter().enumerate() {
                 let of_kind = places.iter().filter(|p| p.subject == place.subject).count();
                 if of_kind > usize::from(per_kind) {
                     return Err(format!(
                         "{id:?} remembers {of_kind} places of one kind, over {per_kind}"
+                    ));
+                }
+                let near = places[i + 1..]
+                    .iter()
+                    .find(|p| p.subject == place.subject && chebyshev(p.at, place.at) <= merge);
+                if let Some(near) = near {
+                    return Err(format!(
+                        "{id:?} remembers two places of one kind within {merge} tiles, at {:?} and {:?}",
+                        place.at, near.at
                     ));
                 }
             }

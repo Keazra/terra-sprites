@@ -216,9 +216,9 @@ pub(crate) struct Way {
 
 /// The way `sprite` takes to `target`, a remembered place out of sight (M2
 /// design §7), treating other sprites as `occupied` says: the cheapest way
-/// to its nearest goal tile, over the whole map as far as the place and
-/// the sprite's reach beyond it, since it has walked there before. `None`
-/// if there's none.
+/// to its nearest goal tile, in a flood out to the place's distance plus the
+/// sprite's sense radius, since it has walked there before. `None` if
+/// there's none.
 pub(crate) fn trip(
     state: &WorldState,
     data: &DataPack,

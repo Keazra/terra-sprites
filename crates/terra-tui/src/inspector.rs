@@ -679,7 +679,7 @@ fn brain_tab(sprite: &SpriteView, data: &Words) -> Vec<Line<'static>> {
     let places: Vec<_> = sprite
         .remembered_places()
         .into_iter()
-        .filter(|p| level(p.strength) != ".00")
+        .filter(|p| level(p.recall) != ".00")
         .collect();
     if !places.is_empty() {
         if gap {
@@ -693,7 +693,7 @@ fn brain_tab(sprite: &SpriteView, data: &Words) -> Vec<Line<'static>> {
             thing_name(&place.thing, data),
             how_far(sprite.pos(), place.at)
         );
-        lines.extend(scored("   ", &name, &level(place.strength)));
+        lines.extend(scored("   ", &name, &level(place.recall)));
     }
     lines.into_iter().map(Line::from).collect()
 }
