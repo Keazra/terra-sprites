@@ -14,11 +14,15 @@
 
 mod report;
 
+#[path = "../common/mod.rs"]
+mod common;
+
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Mutex;
 use std::time::{Instant, SystemTime};
 
+use common::args;
 use report::Report;
 use terra_sim::{DataPack, LabRun, LabScenario, Soak, SoakRun, WorldConfig};
 
@@ -58,70 +62,65 @@ struct Options {
 }
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let options = match parse(&args) {
-        Ok(options) => options,
-        Err(message) => {
-            eprintln!(
-                "{message}\nusage: baseline --commit C --measured \"YYYY-MM-DD HH:MM\" \
-                 --out DIR [--previous REPORT.ron] [--seeds N] [--soak-seed N] \
-                 [--soak-ticks N]"
-            );
-            return ExitCode::FAILURE;
-        }
-    };
-    // Read the previous report first, so a bad one is found before the run.
-    let previous = match options.previous.as_deref().map(read_report).transpose() {
-        Ok(previous) => previous,
-        Err(message) => {
-            eprintln!("{message}");
-            return ExitCode::FAILURE;
-        }
-    };
-    let data = DataPack::builtin().expect("the built-in data pack is valid");
-    let started = Instant::now();
-    let (results, soak_run) = run_all(&data, options.seeds, options.soak_seed, options.soak_ticks);
-    let seeds_of = |name: &str| -> &report::SeedRuns {
-        &results[SCENARIOS
-            .iter()
-            .position(|(n, _)| *n == name)
-            .expect("a scenario")]
-    };
-    let sprites = WorldConfig::builtin(&data).sprites() as u64;
-    let soak = report::soak(options.soak_seed, options.soak_ticks, &soak_run, &data);
-    let mut broken: Vec<_> = SCENARIOS
-        .iter()
-        .flat_map(|(name, _)| report::broken(name, seeds_of(name)))
-        .collect();
-    broken.extend(report::broken_soak(&soak, &soak_run));
-    let report = Report {
-        commit: options.commit,
-        compared_with: previous.as_ref().map(|p| p.commit.clone()),
-        measured: options.measured,
-        seconds: started.elapsed().as_secs(),
-        seeds: options.seeds,
-        sprites,
-        viability: report::viability(seeds_of("viability"), sprites, &data),
-        a1: report::a1(seeds_of("a1-thornbush"), &data),
-        a2: report::a2(seeds_of("a2-reward-training"), &data),
-        a3: report::a3(seeds_of("a3-correct-training"), &data),
-        soak: Some(soak),
-        broken,
-    };
-    let moved = previous.as_ref().map(|p| report::moved(p, &report));
-    let page = report.markdown(moved.as_deref());
-    match save(&options.out, &report, &page) {
-        Ok((md, _)) => println!("{page}\nSaved as {}", md.display()),
-        Err(message) => {
-            eprintln!("{message}");
-            return ExitCode::FAILURE;
-        }
-    }
-    if report.broken.is_empty() {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(2)
-    }
+    args::run(
+        "baseline --commit C --measured \"YYYY-MM-DD HH:MM\" --out DIR [--previous REPORT.ron] [--seeds N] [--soak-seed N] [--soak-ticks N]",
+        parse,
+        |options| {
+            // Read the previous report first, so a bad one is found before the run.
+            let previous = match options.previous.as_deref().map(read_report).transpose() {
+                Ok(previous) => previous,
+                Err(message) => {
+                    eprintln!("{message}");
+                    return ExitCode::FAILURE;
+                }
+            };
+            let data = DataPack::builtin().expect("the built-in data pack is valid");
+            let started = Instant::now();
+            let (results, soak_run) =
+                run_all(&data, options.seeds, options.soak_seed, options.soak_ticks);
+            let seeds_of = |name: &str| -> &report::SeedRuns {
+                &results[SCENARIOS
+                    .iter()
+                    .position(|(n, _)| *n == name)
+                    .expect("a scenario")]
+            };
+            let sprites = WorldConfig::builtin(&data).sprites() as u64;
+            let soak = report::soak(options.soak_seed, options.soak_ticks, &soak_run, &data);
+            let mut broken: Vec<_> = SCENARIOS
+                .iter()
+                .flat_map(|(name, _)| report::broken(name, seeds_of(name)))
+                .collect();
+            broken.extend(report::broken_soak(&soak, &soak_run));
+            let report = Report {
+                commit: options.commit,
+                compared_with: previous.as_ref().map(|p| p.commit.clone()),
+                measured: options.measured,
+                seconds: started.elapsed().as_secs(),
+                seeds: options.seeds,
+                sprites,
+                viability: report::viability(seeds_of("viability"), sprites, &data),
+                a1: report::a1(seeds_of("a1-thornbush"), &data),
+                a2: report::a2(seeds_of("a2-reward-training"), &data),
+                a3: report::a3(seeds_of("a3-correct-training"), &data),
+                soak: Some(soak),
+                broken,
+            };
+            let moved = previous.as_ref().map(|p| report::moved(p, &report));
+            let page = report.markdown(moved.as_deref());
+            match save(&options.out, &report, &page) {
+                Ok((md, _)) => println!("{page}\nSaved as {}", md.display()),
+                Err(message) => {
+                    eprintln!("{message}");
+                    return ExitCode::FAILURE;
+                }
+            }
+            if report.broken.is_empty() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(2)
+            }
+        },
+    )
 }
 
 /// The options, from the command line.
