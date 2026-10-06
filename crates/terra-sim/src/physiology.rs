@@ -44,7 +44,7 @@ pub(crate) struct Physiology {
     pub(crate) forget_below: f32,
     /// How many places a sprite remembers, and how near two of a kind are
     /// one place (M2 design §7).
-    pub(crate) places: Places,
+    pub(crate) remembered_places: RememberedPlaces,
     pub(crate) actions: Actions,
     pub(crate) movement: Movement,
     /// What the Cursor's touch does (design v21 §4.6).
@@ -77,7 +77,7 @@ pub(crate) struct PhysiologyEntry {
     /// A pack from before remembered places takes the built-in ones (design
     /// §2.8: a save carries its own pack).
     #[serde(default)]
-    places: Places,
+    remembered_places: RememberedPlaces,
     actions: Actions,
     movement: Movement,
     cursor: Cursor,
@@ -108,17 +108,17 @@ impl BrainRanges {
 /// What a sprite remembers of places (M2 design §7).
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct Places {
+pub(crate) struct RememberedPlaces {
     /// The most places a sprite remembers: past it, the faintest goes.
     pub(crate) held: u16,
-    /// Places of one kind this many tiles apart or fewer, in any direction,
+    /// RememberedPlaces of one kind this many tiles apart or fewer, in any direction,
     /// are one place, so a lake is one place, not each of its tiles.
     pub(crate) merge: u16,
 }
 
-impl Default for Places {
-    fn default() -> Places {
-        Places { held: 8, merge: 5 }
+impl Default for RememberedPlaces {
+    fn default() -> RememberedPlaces {
+        RememberedPlaces { held: 8, merge: 5 }
     }
 }
 
@@ -411,8 +411,8 @@ impl PhysiologyEntry {
                 return Err(format!("`{name}` must be at least 1 tick"));
             }
         }
-        if self.places.held == 0 {
-            return Err("`places.held` must be at least 1".into());
+        if self.remembered_places.held == 0 {
+            return Err("`remembered_places.held` must be at least 1".into());
         }
         if self.actions.retreat_bout == 0 {
             return Err("`actions.retreat_bout` must be at least 1 step".into());
@@ -467,7 +467,7 @@ impl PhysiologyEntry {
             relief_deadband: self.relief_deadband,
             touch_window: self.touch_window,
             forget_below: self.forget_below,
-            places: self.places,
+            remembered_places: self.remembered_places,
             actions: self.actions,
             movement: self.movement,
             cursor: self.cursor,

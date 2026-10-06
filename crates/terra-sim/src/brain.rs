@@ -286,7 +286,7 @@ pub struct Memory {
 /// thing's tile, and how well it remembers it, from 1 just after it was
 /// eased there, fading towards 0.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Place {
+pub struct RememberedPlace {
     pub thing: Thing,
     pub at: Pos,
     pub strength: f32,
@@ -541,8 +541,7 @@ impl Brain {
                 ..
             }) = near.filter(|_| eased)
             {
-                let places = physiology.places;
-                let limits = (places.held, places.merge);
+                let limits = physiology.remembered_places;
                 self.experience.remember_place(subject, target, at, limits);
             }
             let experience = &mut self.experience;
@@ -729,12 +728,12 @@ impl Brain {
 
     /// The places it remembers, best remembered first, ties oldest first
     /// (M2 design §7).
-    pub(crate) fn places(&self, data: &DataPack) -> Vec<Place> {
-        let mut places: Vec<Place> = self
+    pub(crate) fn remembered_places(&self, data: &DataPack) -> Vec<RememberedPlace> {
+        let mut places: Vec<RememberedPlace> = self
             .experience
             .places
             .iter()
-            .map(|place| Place {
+            .map(|place| RememberedPlace {
                 thing: subject_thing(place.subject, data),
                 at: place.at,
                 strength: place.strength,
@@ -2342,9 +2341,12 @@ mod tests {
         let data = builtin();
         let mut brain = brain(&[r#"BrainParam(param: "place_fade", value: 0.01)"#]);
         let at = Pos { x: 3, y: 4 };
-        brain
-            .experience
-            .remember_place(types::WATER, Target::Water(at), at, (8, 5));
+        brain.experience.remember_place(
+            types::WATER,
+            Target::Water(at),
+            at,
+            crate::physiology::RememberedPlaces { held: 8, merge: 5 },
+        );
         brain.fade(data.physiology().forget_below);
         assert!(close(brain.experience.places[0].strength, 0.99));
         // 0.99^458 is just over .01, and 0.99^459 just under.

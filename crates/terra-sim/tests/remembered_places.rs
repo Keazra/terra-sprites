@@ -2,8 +2,8 @@
 //! something that stays put eased a need, and goes back to it out of sight.
 
 use terra_sim::{
-    DataPack, EventKind, Genome, Map, Outcome, Place, Pos, Scenario, ScriptedAction, Target, Thing,
-    Verb, World,
+    Command, DataPack, EventKind, Genome, Map, Outcome, Pos, RememberedPlace, Scenario,
+    ScriptedAction, Target, Thing, Verb, World,
 };
 
 fn builtin() -> DataPack {
@@ -153,6 +153,43 @@ fn a_trip_out_of_sight_says_it_is_from_memory_until_the_place_is_in_reach() {
 }
 
 #[test]
+fn a_sprite_with_no_way_back_to_a_place_forgets_it_and_never_sets_off() {
+    // M2 design §7.4: bushes grow across the room behind it.
+    let mut world = drank_and_wandered_off();
+    first_drink(&mut world, 200);
+    while world.sprites().next().expect("the sprite").pos().x < 30 {
+        world.step();
+    }
+    assert_eq!(places(&world).len(), 1);
+    let bush = world
+        .data()
+        .object_type_id("berry_bush")
+        .expect("a bush type");
+    for y in 0..5 {
+        world.submit(Command::Place {
+            tile: at(10, y),
+            object_type: bush,
+        });
+    }
+    let mut set_off = false;
+    for _ in 0..1_000 {
+        for event in world.step() {
+            if let EventKind::CommandRejected { reason, .. } = event.kind {
+                panic!("a bush wasn't placed: {reason:?}");
+            }
+        }
+        // Thirsty, it may try drinking from the bushes it sees, but never
+        // heads for the water.
+        let sprite = world.sprites().next().expect("the sprite");
+        set_off |= sprite
+            .action()
+            .is_some_and(|a| matches!(a.target, Some(Target::Water(_))));
+    }
+    assert_eq!(places(&world), [], "it forgot the water");
+    assert!(!set_off, "it never set off for water it can't get to");
+}
+
+#[test]
 fn a_sprite_that_never_found_the_water_never_goes_to_it_from_out_of_sight() {
     // It may wander within sight of the water, and drink then.
     let mut world = room(at(36, 2), &[]);
@@ -203,8 +240,12 @@ fn world_in(
 }
 
 /// The places the world's one sprite remembers.
-fn places(world: &World) -> Vec<Place> {
-    world.sprites().next().expect("the sprite").places()
+fn places(world: &World) -> Vec<RememberedPlace> {
+    world
+        .sprites()
+        .next()
+        .expect("the sprite")
+        .remembered_places()
 }
 
 /// Steps `world` `ticks` times.

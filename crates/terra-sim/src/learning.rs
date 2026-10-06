@@ -12,6 +12,7 @@ use crate::events::{Event, EventKind};
 use crate::map::Pos;
 use crate::objects::EntityId;
 use crate::perception::Target;
+use crate::physiology::RememberedPlaces;
 use crate::registry::{CategoryId, Verb};
 use crate::world::WorldState;
 
@@ -157,13 +158,13 @@ pub(crate) struct Experience {
     pub(crate) needs_before: Option<Vec<f32>>,
     /// The places it remembers (M2 design §7), oldest first.
     #[serde(default)]
-    pub(crate) places: Vec<RememberedPlace>,
+    pub(crate) places: Vec<PlaceMemory>,
 }
 
 /// A place a sprite remembers (M2 design §7): where something that stays
 /// put eased one of its needs, and how well it remembers it.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub(crate) struct RememberedPlace {
+pub(crate) struct PlaceMemory {
     /// What it found there is learned about as.
     pub(crate) subject: Subject,
     /// The thing it found there: water, or a fixed object.
@@ -183,7 +184,7 @@ impl Experience {
         let needs = data.needs().count();
         let mut remembered = self.individuals.values().chain(&self.cursor);
         let levels = self.needs_before.as_ref();
-        let held = usize::from(data.physiology().places.held);
+        let held = usize::from(data.physiology().remembered_places.held);
         self.places.len() <= held
             && self.places.iter().all(|place| place.subject.fits(data))
             && self
@@ -258,9 +259,9 @@ impl Experience {
         subject: Subject,
         target: Target,
         at: Pos,
-        (held, merge): (u16, u16),
+        limits: RememberedPlaces,
     ) {
-        let place = RememberedPlace {
+        let place = PlaceMemory {
             subject,
             target,
             at,
@@ -269,10 +270,10 @@ impl Experience {
         let same = self
             .places
             .iter()
-            .position(|p| p.subject == subject && chebyshev(p.at, at) <= merge);
+            .position(|p| p.subject == subject && chebyshev(p.at, at) <= limits.merge);
         if let Some(same) = same {
             self.places.remove(same);
-        } else if self.places.len() >= usize::from(held) {
+        } else if self.places.len() >= usize::from(limits.held) {
             let faintest = self
                 .places
                 .iter()
@@ -538,7 +539,12 @@ mod tests {
     /// Remembers water on `pos`, in a memory of 3 that takes places of a
     /// kind 5 tiles apart as one.
     fn water(experience: &mut Experience, pos: Pos) {
-        experience.remember_place(WATER, Target::Water(pos), pos, (3, 5));
+        experience.remember_place(
+            WATER,
+            Target::Water(pos),
+            pos,
+            RememberedPlaces { held: 3, merge: 5 },
+        );
     }
 
     fn tiles(experience: &Experience) -> Vec<Pos> {
@@ -556,7 +562,7 @@ mod tests {
         assert_eq!(tiles(&experience), [at(5, 3), at(11, 3)], "6 apart: two");
         // A bush beside the water is a place of its own.
         let bush = Target::Object(EntityId(7));
-        experience.remember_place(BUSH, bush, at(5, 4), (3, 5));
+        experience.remember_place(BUSH, bush, at(5, 4), RememberedPlaces { held: 3, merge: 5 });
         assert_eq!(experience.places.len(), 3);
     }
 

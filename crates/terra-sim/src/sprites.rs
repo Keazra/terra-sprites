@@ -187,14 +187,13 @@ impl Sprites {
             }
             // The genome first: the brain is checked against it, once it
             // has any brain parameter added since it was saved.
-            if sprite.genome.fits(data) {
-                sprite.brain.params.catch_up(&sprite.genome, data);
+            let misfit = || format!("sprite {} doesn't fit its data pack", id.0);
+            if !sprite.genome.fits(data) {
+                return Err(misfit());
             }
-            if !sprite.genome.fits(data)
-                || !sprite.body.fits(data)
-                || !sprite.brain.fits(&sprite.genome, data, now)
-            {
-                return Err(format!("sprite {} doesn't fit its data pack", id.0));
+            sprite.brain.params.catch_up(&sprite.genome, data);
+            if !sprite.body.fits(data) || !sprite.brain.fits(&sprite.genome, data, now) {
+                return Err(misfit());
             }
             if sprite.flood.as_ref().is_some_and(|flood| !flood.fits(map)) {
                 return Err(format!("sprite {}'s flood doesn't fit the map", id.0));
@@ -254,7 +253,7 @@ impl Sprites {
             // Its remembered places are few enough, and on the map (M2
             // design §7).
             let places = &sprite.brain.experience.places;
-            let held = data.physiology().places.held;
+            let held = data.physiology().remembered_places.held;
             if places.len() > usize::from(held) {
                 return Err(format!(
                     "{id:?} remembers {} places, over {held}",

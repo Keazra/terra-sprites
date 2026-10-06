@@ -21,7 +21,7 @@ The body's fixed rules, which genes can't change (design §4.4, Appendix B): how
 | `lesson_threshold` | How far from 0 a learned value must get before the event log announces the lesson. |
 | `relief_deadband`, `touch_window` | The smallest fall in a need that counts as relief, and how many ticks after a try the thing tried is still what a feeling is about. |
 | `forget_below` | A remembered sprite is forgotten once everything learned about it is nearer 0 than this, and a remembered place once it has faded below this. |
-| `places` | `(held, merge)`: a sprite remembers at most `held` places (M2 design §7), and places of one kind `merge` tiles apart or fewer are one place, so a lake is one place. `held` must be at least 1. Optional: a pack without it gets `(held: 8, merge: 5)`. |
+| `remembered_places` | `(held, merge)`: a sprite remembers at most `held` places (M2 design §7), and places of one kind `merge` tiles apart or fewer are one place, so a lake is one place. `held` must be at least 1. Optional: a pack without it gets `(held: 8, merge: 5)`. |
 | `actions` | `(rest_bout, retreat_bout, timeout)`: a rest's length in ticks, a retreat's in steps, and how many ticks before any action gives up. |
 | `movement` | `(flood_refresh, occupied_penalty, replan_after)`: how often a sprite re-plans its way, how much it avoids tiles with sprites on, and how long it waits when blocked before going round. |
 | `cursor` | The Cursor's touch: the reward a `pet` and a `hug` give; the punishment and pain a `zap` and a `shock` give; `max_reach_back`, how many ticks back a pet looks for what the sprite just tried; and `furthest`, how far it throws or shoves a `small`, `medium` or `large` thing. |

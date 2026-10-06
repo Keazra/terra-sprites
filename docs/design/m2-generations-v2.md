@@ -167,7 +167,7 @@ Until Slice 20 a sprite only ever went for what it could see, about 10 tiles rou
 
 ### 7.2 How many, and how they fade
 
-- **Up to `places.held` places, 8 in the built-in physiology.** Places of the same object type within `places.merge` tiles of each other (5, counted as tiles of Chebyshev distance) are one place, so a lake is one place, not fifty water tiles: relief at a new tile of it moves the place there.
+- **Up to `remembered_places.held` places, 8 in the built-in physiology.** Places of the same object type within `remembered_places.merge` tiles of each other (5, counted as tiles of Chebyshev distance) are one place, so a lake is one place, not fifty water tiles: relief at a new tile of it moves the place there.
 - **Relief there remembers a place fully,** strength 1, whether it's new or a visit tops it up.
 - **It fades each tick** by the `place_fade` brain parameter: its strength is multiplied by 1 − `place_fade`. The default, 0.0002, halves it in about 3,500 ticks, about 45 minutes at 1×, as worth for a need fades (M1 design §5.6). Its range is 0 to 0.01, so evolution can tune it; a long memory has a natural cost in trips to places that have changed.
 - **Forgotten** once it fades below `forget_below` (0.01), as a remembered sprite is; or when the sprite needs room, the faintest goes first, the oldest of equals; or **at once when the sprite sees it gone**: the place is within its sense radius and the thing there no longer exists, such as a bush that died.
@@ -184,9 +184,9 @@ Until Slice 20 a sprite only ever went for what it could see, about 10 tiles rou
 
 An action aimed at a remembered place out of sight is a **trip**.
 
-- **It knows the way.** Setting off, it searches a flood out to the place's distance plus its sense radius, which reaches the place wherever the walk winds, avoiding tiles with sprites on as a re-plan does (M1 design §3.7). It keeps to that path, as to a committed path. With no way there, such as a bush grown across the only path, it forgets the place and does something else.
-- **Time to get there:** a trip has the timeout (60 ticks) plus as long as the walk takes at its speed, so a long trip doesn't give up halfway.
-- **On the way,** a sprite blocking the path makes it plan the way again from where it stands, as a blocked walk does; with no way at all, the trip ends blocked and the place is kept, since a sprite in the way soon moves.
+- **It knows the way.** Setting off, it searches a flood out to the place's distance plus its sense radius, which reaches the place wherever the walk winds, weighing tiles with sprites on as its flood does (M1 design §3.6). It keeps to that path, as to a committed path (§3.7). With no way there, such as a bush grown across the only path, it forgets the place and doesn't set off: it carries on with what it was doing, and chooses again at its next step 5.
+- **Time to get there:** a trip has the timeout (60 ticks) plus as long as the walk takes at its speed, so a long trip doesn't give up halfway. That's set when it sets off: finding the way again on the way adds no time, so a trip held up again and again still gives up.
+- **On the way,** when a sprite blocks the path, it plans the way again from where it stands, round sprites, at once rather than after `replan_after` ticks as a blocked walk does (M1 design §3.7), since its whole way is planned already; with no way at all, the trip ends blocked and the place is kept, since a sprite in the way soon moves.
 - **Once the place is in reach of its flood,** the trip becomes an ordinary action, as if it had seen the thing all along: it drinks or eats when it gets there, and the drink teaches what drinks always teach, topping the place up.
 - What it attends to can still change its mind mid-trip, by the usual margin (M1 design §5.3); while out of sight, the trip is weighed by how well its place is remembered.
 
@@ -211,7 +211,7 @@ Nothing extra in Slice 20. A child that follows its parent to water and drinks t
 ### 7.7 How we know it worked
 
 Set before measuring:
-- **The issue's test:** a sprite that found water and wandered away goes back to it when thirsty, from out of sight (`crates/terra-sim/tests/places.rs`).
+- **The issue's test:** a sprite that found water and wandered away goes back to it when thirsty, from out of sight (`crates/terra-sim/tests/remembered_places.rs`).
 - **No worse than `main`** on A1–A4, allowing 10% for noise.
 - **For information, no bar:** Slice 17's scarce-water runs again, water on 8% and 4% of the map.
 

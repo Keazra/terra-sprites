@@ -121,7 +121,7 @@
     // Remembered places (M2 design §7): a sprite remembers at most
     // `held`, and places of one kind `merge` tiles apart or fewer are one
     // place, so a lake is one place, not each of its tiles.
-    places: (held: 8, merge: 5),
+    remembered_places: (held: 8, merge: 5),
 
     // How long actions last (design §5.5): a rest in ticks, a retreat in
     // steps. An action still going at the timeout, in ticks, ends as timed out.

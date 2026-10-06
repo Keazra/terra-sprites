@@ -244,7 +244,7 @@ pub(crate) fn trip(
     })
 }
 
-/// Sets `action` off on `way` to a remembered place (M2 design §7), at
+/// Sets `action` off on `way` to a remembered place (M2 design §7.4), at
 /// `tick`, for a sprite of `speed`: it keeps to the way, and has the time
 /// the walk takes past the timeout, counted from its start.
 pub(crate) fn set_off(action: &mut Action, way: Way, speed: f32, tick: u64) {
@@ -253,6 +253,13 @@ pub(crate) fn set_off(action: &mut Action, way: Way, speed: f32, tick: u64) {
     let so_far = u32::try_from(tick - action.started).unwrap_or(u32::MAX);
     action.remembered = true;
     action.extra_ticks = so_far.saturating_add(walk);
+    keep_to(action, way);
+}
+
+/// A trip keeps to `way`, found again on the way there (M2 design §7.4).
+/// Its time is what it had when it set off, so a trip held up again and
+/// again still gives up.
+fn keep_to(action: &mut Action, way: Way) {
     action.walk.destination = Some(way.goal);
     action.walk.committed = Some(way.path);
 }
@@ -337,8 +344,7 @@ pub(crate) fn sense_and_decide(
             .as_ref()
             .is_none_or(|f| f.origin != sprite.pos || state.tick >= f.made + u64::from(refresh));
         if stale {
-            let penalty = Occupied::Penalty(physiology.movement.occupied_penalty);
-            let flood = flood(state, data, sprite, penalty);
+            let flood = flood(state, data, sprite, Occupied::Penalty(penalty(data)));
             state.sprites.get_mut(id).expect("the same sprite").flood = Some(flood);
         }
         forget_what_is_gone(state, data, id);
@@ -412,8 +418,7 @@ pub(crate) fn sense_and_decide(
                 }
                 None => {
                     if let Some(Some(way)) = trip_way {
-                        let speed = sprite.program.traits.speed;
-                        set_off(action, way, speed, state.tick);
+                        keep_to(action, way);
                     }
                     if let Some(Some(_)) = aim
                         && action.remembered

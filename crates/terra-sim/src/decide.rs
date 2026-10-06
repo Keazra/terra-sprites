@@ -306,10 +306,6 @@ pub(crate) fn decide(
     let Some(verb) = chosen else {
         return;
     };
-    if running {
-        let action = sprite.action.as_mut().expect("the running action");
-        end(action, id, Outcome::Interrupted, state.tick, events);
-    }
     let (destination, target) = match verb {
         Verb::Wander => {
             let flood = sprite.flood.as_ref().expect("step 5 made the flood");
@@ -327,8 +323,9 @@ pub(crate) fn decide(
         }
     };
     // Setting off for a remembered place, it finds the way there over the
-    // whole map, which it keeps to; with none, it forgets the place (M2
-    // design §7).
+    // whole map, which it keeps to; with none, it forgets the place and
+    // keeps to what it was doing, choosing again at its next step 5 (M2
+    // design §7.4).
     let way = match (target, destination) {
         (Some((target, _)), None) if verb.heads_for_goal() => {
             let sprite = state.sprites.get(id).expect("the same sprite");
@@ -342,12 +339,17 @@ pub(crate) fn decide(
             if way.is_none() {
                 let sprite = state.sprites.get_mut(id).expect("the same sprite");
                 sprite.brain.experience.forget_place(target);
+                return;
             }
             way
         }
         _ => None,
     };
     let sprite = state.sprites.get_mut(id).expect("the same sprite");
+    if running {
+        let action = sprite.action.as_mut().expect("the running action");
+        end(action, id, Outcome::Interrupted, state.tick, events);
+    }
     start(
         sprite,
         id,

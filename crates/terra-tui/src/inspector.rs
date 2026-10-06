@@ -677,7 +677,7 @@ fn brain_tab(sprite: &SpriteView, data: &Words) -> Vec<Line<'static>> {
     // Its remembered places, best remembered first (M2 design §7): what,
     // how far and which way, and how well.
     let places: Vec<_> = sprite
-        .places()
+        .remembered_places()
         .into_iter()
         .filter(|p| level(p.strength) != ".00")
         .collect();

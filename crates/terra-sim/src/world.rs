@@ -8,7 +8,7 @@ use xxhash_rust::xxh3::xxh3_64_with_seed;
 
 use crate::action::{self, ActionView, ScriptedAction};
 use crate::biochem::{self, Senses, Traits};
-use crate::brain::{Explanation, Memory, Place};
+use crate::brain::{Explanation, Memory, RememberedPlace};
 use crate::command::{self, Command};
 use crate::config::WorldConfig;
 use crate::cursor::{Cursor, Grip};
@@ -353,8 +353,8 @@ impl<'a> SpriteView<'a> {
     }
 
     /// The places it remembers, best remembered first (M2 design §7).
-    pub fn places(&self) -> Vec<Place> {
-        self.sprite.brain.places(&self.world.data)
+    pub fn remembered_places(&self) -> Vec<RememberedPlace> {
+        self.sprite.brain.remembered_places(&self.world.data)
     }
 
     /// The reward less the punishment it took in on its last tick, which
@@ -2048,9 +2048,12 @@ mod tests {
             water,
             Pos { x: 0, y: 0 },
         );
-        brain
-            .experience
-            .remember_place(place.0, place.1, place.2, (8, 5));
+        brain.experience.remember_place(
+            place.0,
+            place.1,
+            place.2,
+            crate::physiology::RememberedPlaces { held: 8, merge: 5 },
+        );
         assert_ne!(
             world.state_hash(),
             learned,
@@ -2069,9 +2072,15 @@ mod tests {
                 x: n % width,
                 y: n / width,
             };
-            brain
-                .experience
-                .remember_place(water, Target::Water(at), at, (100, 0));
+            brain.experience.remember_place(
+                water,
+                Target::Water(at),
+                at,
+                crate::physiology::RememberedPlaces {
+                    held: 100,
+                    merge: 0,
+                },
+            );
         }
     }
 
