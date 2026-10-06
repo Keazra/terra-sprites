@@ -61,6 +61,10 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
     frame.render_widget(status_line(app, world, status.width), status);
 }
 
+/// What the status line asks when `Esc` would leave a world (M2 design
+/// §8.4).
+pub(crate) const QUIT_PROMPT: &str = "Quit? y quit the game  t title screen  any other key stays";
+
 /// The smallest screen the game draws on (design §6.1).
 pub const MIN_SIZE: Size = Size::new(100, 30);
 
@@ -72,6 +76,20 @@ fn too_small(screen: Size) -> bool {
 /// Says the terminal is too small, and how big it needs to be, in the
 /// middle of the screen (design §6.1). The game carries on beneath.
 fn render_too_small(buf: &mut Buffer, area: Rect, app: &App) {
+    let mut questions = vec![];
+    // `Esc` still asks to quit, so the question shows here too.
+    if app.screen() == Screen::QuitPrompt {
+        questions.push(QUIT_PROMPT.into());
+    }
+    if let Some(question) = app.load_question() {
+        questions.push(question);
+    }
+    render_too_small_with(buf, area, questions);
+}
+
+/// Says the terminal is too small, as the game does, with any question
+/// waiting under it: the title screen's too (M2 design §8.2).
+pub(crate) fn render_too_small_with(buf: &mut Buffer, area: Rect, questions: Vec<String>) {
     let mut lines = vec![
         "Terminal too small".to_string(),
         format!(
@@ -79,13 +97,7 @@ fn render_too_small(buf: &mut Buffer, area: Rect, app: &App) {
             MIN_SIZE.width, MIN_SIZE.height, area.width, area.height
         ),
     ];
-    // `Esc` still asks to quit, so the question shows here too.
-    if app.screen() == Screen::QuitPrompt {
-        lines.push("Quit? (y/n)".into());
-    }
-    if let Some(question) = app.load_question() {
-        lines.push(question);
-    }
+    lines.extend(questions);
     let top = area.y + area.height.saturating_sub(lines.len() as u16) / 2;
     for (row, line) in (top..area.bottom()).zip(lines) {
         let width = line.chars().count() as u16;
@@ -706,7 +718,7 @@ const KEY_HINTS: [&str; 6] = [
 /// why a click was refused in their place. An open prompt takes the line over.
 fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     if app.screen() == Screen::QuitPrompt {
-        return Line::from(" Quit? (y/n)");
+        return Line::from(format!(" {QUIT_PROMPT}"));
     }
     if let Some(question) = app.load_question() {
         return Line::from(format!(" {question}"));

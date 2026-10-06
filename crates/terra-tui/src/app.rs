@@ -27,13 +27,16 @@ use crate::theme::{Emote, Theme};
 pub enum Flow {
     Continue,
     Quit,
+    /// Leave the world for the title screen (M2 design §8.4).
+    Title,
 }
 
 /// What fills the screen besides the map (design §6.8).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
     Normal,
-    /// "Quit? (y/n)" is waiting for an answer.
+    /// "Quit? y quit the game  t title screen …" is waiting for an answer
+    /// (M2 design §8.4).
     QuitPrompt,
     /// The Place menu is open (design v28 §6.5).
     PlaceMenu,
@@ -1489,7 +1492,10 @@ impl App {
         if self.screen == Screen::QuitPrompt {
             match action {
                 Action::Confirm | Action::Quit => return Flow::Quit,
-                // Only `y` answers it: `Esc` cancels, as any other key does,
+                // `t`, which tracks a sprite elsewhere, goes back to the
+                // title screen (M2 design §8.4).
+                Action::Track => return Flow::Title,
+                // Only `y` and `t` answer it: `Esc` cancels, as any other key does,
                 // and never quits on its own (design v33 §6.6).
                 Action::Back => {
                     self.screen = Screen::Normal;
@@ -2829,6 +2835,13 @@ impl App {
             Ok(world) => self.loaded = Some((world, file.name)),
             Err(why) => self.refuse(format!("Couldn't load {}: {why}", file.name)),
         }
+    }
+
+    /// Takes `world`, loaded from the save called `name` on the title
+    /// screen (M2 design §8.2), for the frame loop to take with
+    /// `take_loaded`, so it starts as a load in a world does (design §6.7).
+    pub fn load_from_title(&mut self, world: World, name: String) {
+        self.loaded = Some((world, name));
     }
 
     /// The world just loaded, if one was, for the frame loop to play from

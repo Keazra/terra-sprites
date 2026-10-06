@@ -549,3 +549,24 @@ fn saved_just_now_lasts_3_seconds_then_the_bar_counts_up() {
     assert!(after(30).contains("│ saved 50s ago"));
     assert!(after(6).contains("│ saved 1m ago"));
 }
+
+#[test]
+fn a_save_loaded_from_the_title_screen_starts_as_a_load_in_a_world_does() {
+    // M2 design §8.2: paused, saying what was loaded.
+    let mut world = world();
+    run(&mut world, 10);
+    let loaded = World::load(&world.save()).expect("it loads");
+    let folder = scratch_folder("from-title");
+    let mut app = app_for(&loaded, &folder);
+    app.load_from_title(loaded, "autosave-1".into());
+    let world = app.take_loaded().expect("the world to play");
+    assert_eq!(world.tick(), 10);
+    assert!(app.clock.is_paused());
+    assert!(
+        bars(&app, &world)
+            .1
+            .contains("Loaded autosave-1, at tick 10"),
+        "{:?}",
+        bars(&app, &world).1
+    );
+}

@@ -102,3 +102,84 @@ fn the_theme_flag_loads_a_theme_file_at_start() {
     let err = pick(file("missing.ron")).expect_err("refused");
     assert!(err.contains("missing.ron"), "{err}");
 }
+
+#[test]
+fn only_flags_that_make_or_load_a_world_skip_the_title_screen() {
+    // M2 design §8.5: `--seed`, `--preset` and `--replay` go straight in;
+    // `--data`, `--ascii` and `--theme` only change how the title screen
+    // and its worlds are made or drawn.
+    let skips = |args: Args| start::skips_title(&args);
+    assert!(!skips(Args::default()));
+    assert!(skips(Args {
+        seed: Some(7),
+        ..Args::default()
+    }));
+    assert!(skips(Args {
+        preset: Some("small.ron".into()),
+        ..Args::default()
+    }));
+    assert!(skips(Args {
+        replay: Some("last_session.replay".into()),
+        ..Args::default()
+    }));
+    assert!(!skips(Args {
+        data: Some("mod".into()),
+        ascii: true,
+        ..Args::default()
+    }));
+    assert!(!skips(Args {
+        theme: Some("night.ron".into()),
+        ..Args::default()
+    }));
+}
+
+#[test]
+fn the_title_screen_s_world_fills_the_terminal_at_the_default_preset_s_densities() {
+    let world = start::title_world(&Args::default(), 1, (120, 40)).expect("a world");
+    assert_eq!((world.map().width(), world.map().height()), (120, 40));
+    assert_eq!(world.sprites().count(), 30, "the default preset's sprites");
+    // A data folder's own default preset gives its densities, at the
+    // terminal's size still.
+    let data = folder(
+        "title-data",
+        &[(
+            "presets/default.ron",
+            "(width: 64, height: 40, sprites: 20, objects: {\"ball\": 1}, per_tiles: 4800)",
+        )],
+    );
+    let args = Args {
+        data: Some(data),
+        ..Args::default()
+    };
+    let world = start::title_world(&args, 1, (120, 40)).expect("a world");
+    assert_eq!((world.map().width(), world.map().height()), (120, 40));
+    assert_eq!(world.sprites().count(), 20);
+}
+
+#[test]
+fn a_terminal_smaller_than_a_map_may_be_still_gets_the_smallest_map() {
+    let world = start::title_world(&Args::default(), 1, (20, 10)).expect("a world");
+    assert_eq!((world.map().width(), world.map().height()), (32, 32));
+}
+
+#[test]
+fn new_world_offers_the_default_preset_then_each_in_the_presets_folder() {
+    let presets = folder(
+        "presets",
+        &[
+            ("small.ron", "(width: 48, height: 32)"),
+            ("big.ron", "(width: 512, height: 512)"),
+            ("notes.txt", "not a preset"),
+        ],
+    );
+    let offered = start::presets(Some(&presets));
+    let names: Vec<&str> = offered.iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(names, ["default", "big", "small"]);
+    assert_eq!(
+        offered[0].path, None,
+        "the default is the built-in or --data's"
+    );
+    assert_eq!(offered[2].path, Some(presets.join("small.ron")));
+    let none = start::presets(Some(&presets.join("missing")));
+    assert_eq!(none.len(), 1, "no folder, only the default");
+}
