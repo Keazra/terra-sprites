@@ -2191,8 +2191,9 @@ impl App {
     }
 
     /// What an action does while a menu is open: a number or `Enter` picks
-    /// an item, the arrow keys move the highlight, a click picks the item
-    /// under it or, off the menu, closes it, and `Esc` closes it.
+    /// an item, the arrow keys or the wheel move the highlight, a click
+    /// picks the item under it or, off the menu, closes it, and `Esc`
+    /// closes it.
     fn apply_in_menu(&mut self, action: Action, world: &World) -> Flow {
         let count = self.menu_items(world).len();
         match action {
@@ -2203,6 +2204,13 @@ impl App {
             Action::Enter if count > 0 => self.choose(self.menu_choice, world),
             Action::Scroll { dy, .. } if count > 0 => {
                 let moved = self.menu_choice as i32 + dy.signum();
+                self.menu_choice = moved.clamp(0, count as i32 - 1) as usize;
+            }
+            // The wheel moves the highlight a row a notch, as the sprite
+            // list's does (#128).
+            Action::Wheel { at, notches } if count > 0 => {
+                self.point(at);
+                let moved = self.menu_choice as i32 + notches;
                 self.menu_choice = moved.clamp(0, count as i32 - 1) as usize;
             }
             Action::Click { at, .. } => {
@@ -2458,6 +2466,8 @@ impl App {
         });
         self.mode = CursorMode::Select;
         self.clock.pause();
+        // A replay from a save starts with the save's names.
+        self.note_names(playback.world());
         let from = if playback.started_fresh() {
             "a new world".to_string()
         } else {
@@ -2874,6 +2884,8 @@ impl App {
             group_thousands(world.tick())
         ));
         *self = fresh;
+        // Its names show at once, paused, before any tick is taken in.
+        self.note_names(&world);
         self.settle_cursor(&world);
         Some(world)
     }

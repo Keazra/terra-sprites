@@ -885,6 +885,23 @@ mod tests {
     }
 
     #[test]
+    fn of_two_pulses_in_a_tick_the_last_written_counts_and_one_with_no_source_clears_it() {
+        // Design §3.5.2: a pulse on a target records the actor as its
+        // source; one a sprite's own verb writes has none.
+        let mut sprite = physical(&[]);
+        let was_hit = sprite.locus_index("was_hit");
+        sprite.body.pulse(was_hit, Some(EntityId(4)));
+        sprite.body.pulse(was_hit, Some(EntityId(9)));
+        sprite.step();
+        assert_eq!(sprite.body.sources.get(&was_hit), Some(&EntityId(9)));
+        sprite.body.pulse(was_hit, Some(EntityId(4)));
+        sprite.body.pulse(was_hit, None);
+        sprite.step();
+        assert_eq!(sprite.locus("was_hit"), 1.0, "the pulse is live");
+        assert_eq!(sprite.body.sources.get(&was_hit), None, "with no source");
+    }
+
+    #[test]
     fn a_newborn_starts_at_physiology_s_levels_and_its_genes_initial_concentrations() {
         let sprite = physical(&[r#"InitialConcentration(chem: "boredom", value: 0.2)"#]);
         for (chemical, level) in [

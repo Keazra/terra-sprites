@@ -206,7 +206,7 @@ function Invoke-Baseline {
 You are the observer for Terra Sprites, an artificial-life simulation in Rust. You are in a clean checkout of $(if ($trial) { $Ref } else { "main" }) at commit $commit.
 Everything you need is in the .baseline folder: report.md is today's baseline report, previous.md the last one (if there was one), and commits.txt the commits since then, with the files each changed.
 Rules:
-- You cannot run commands: read files only. You may read any file in this checkout: the code, the design (the highest-numbered file in docs/design is the spec, and its section 7 has the pass marks) and CONTEXT.md (the project's words, which you should use).
+- You cannot run commands: read files only. You may read any file in this checkout: the code, the design (the highest-numbered docs/design/m1-a-sprite-lives-v*.md is the spec for what this run measures, and its section 7 has the pass marks; docs/design/m2-generations-v*.md plans what comes next) and CONTEXT.md (the project's words, which you should use).
 - The simulation is deterministic: the same commit and seed always give the same numbers. Any number that moved since the last report was moved by the commits in commits.txt.
 - No data means no data, not a pass. Not met yet means a later slice is meant to meet it.
 Write the briefing for the owner, who reads it in the morning:

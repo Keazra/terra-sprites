@@ -168,7 +168,8 @@ fn a_modifier_or_lock_key_on_its_own_does_nothing() {
 
 #[test]
 fn a_shifted_plus_reported_as_shift_and_equals_is_faster() {
-    // The kitty protocol reports the key, `=`, with Shift held.
+    // Without its alternate keys, the kitty protocol reports the key, `=`,
+    // with Shift held.
     let mut keys = Keys::with_release_reporting(true);
     let shifted_equals = KeyEvent::new(KeyCode::Char('='), KeyModifiers::SHIFT);
     assert_eq!(
@@ -189,6 +190,67 @@ fn a_plus_released_as_equals_is_still_released() {
     assert_eq!(
         keys.action_for(press(KeyCode::Char('+'))),
         Some(Action::Faster { held: false })
+    );
+}
+
+#[test]
+fn a_question_mark_released_as_slash_is_still_released() {
+    // Releasing Shift before the key makes Windows report the release as
+    // `/`; the next `?` must still open the help (#137).
+    let mut keys = Keys::with_release_reporting(true);
+    assert_eq!(
+        keys.action_for(press(KeyCode::Char('?'))),
+        Some(Action::Help)
+    );
+    keys.action_for(kind(KeyCode::Char('/'), KeyEventKind::Release));
+    assert_eq!(
+        keys.action_for(press(KeyCode::Char('?'))),
+        Some(Action::Help)
+    );
+}
+
+#[test]
+fn with_the_kitty_protocol_a_shifted_key_arrives_as_its_character_and_still_counts_as_shift() {
+    // Asked for its alternate keys, a kitty-protocol terminal sends Shift+/
+    // as `?` and Shift+w as `W`, and crossterm drops the Shift (#124).
+    // Caps Lock alone sends the plain letter there, so a capital is Shift.
+    let fresh = |code| Keys::kitty().action_for(press(code));
+    assert_eq!(fresh(KeyCode::Char('?')), Some(Action::Help));
+    assert_eq!(
+        fresh(KeyCode::Char('W')),
+        Some(Action::Scroll { dx: 0, dy: -5 })
+    );
+    assert_eq!(
+        fresh(KeyCode::Char('D')),
+        Some(Action::Scroll { dx: 5, dy: 0 })
+    );
+    assert_eq!(
+        fresh(KeyCode::Char('Q')),
+        Some(Action::Press {
+            button: Button::Left,
+            amplified: true
+        })
+    );
+    assert_eq!(
+        fresh(KeyCode::Char('w')),
+        Some(Action::Scroll { dx: 0, dy: -1 })
+    );
+    // It reports releases, so a second press without one is held.
+    let mut keys = Keys::kitty();
+    keys.action_for(press(KeyCode::Char('v')));
+    assert_eq!(keys.action_for(press(KeyCode::Char('v'))), None);
+}
+
+#[test]
+fn with_the_kitty_protocol_a_name_takes_capitals_and_shifted_symbols() {
+    let mut keys = Keys::kitty();
+    assert_eq!(
+        keys.typed_action(press(KeyCode::Char('M'))),
+        Some(Action::Type('M'))
+    );
+    assert_eq!(
+        keys.typed_action(press(KeyCode::Char(':'))),
+        Some(Action::Type(':'))
     );
 }
 

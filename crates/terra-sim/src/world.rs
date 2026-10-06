@@ -1706,6 +1706,120 @@ mod tests {
     }
 
     #[test]
+    fn a_sprite_makes_its_flood_again_on_each_new_tile() {
+        // Design §3.6: on a new tile, or 8 ticks after the last flood.
+        let (mut world, id) = row_with_a_walker(
+            6,
+            &[ScriptedAction::Wander {
+                destination: Pos { x: 5, y: 0 },
+            }],
+        );
+        world.step();
+        for tick in 1..4 {
+            world.step();
+            let sprite = world.state.sprites.get(id).expect("alive");
+            assert_eq!(sprite.pos.x, tick as u16 + 1);
+            let flood = sprite.flood.as_ref().expect("a flood");
+            assert_eq!(
+                (flood.made, flood.origin.x),
+                (tick, tick as u16),
+                "tick {tick}"
+            );
+        }
+    }
+
+    #[test]
+    fn with_learning_off_familiarity_still_grows() {
+        // Design §5.6: a control run learns no worth or habit, but what a
+        // sprite attends to still grows familiar.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let map = Map::from_ascii(&["....."], &data).expect("valid drawing");
+        let genes = r#"(format: 1, genes: [
+            AttentionInstinct(input: "always", category: "toy", weight: 1.0),
+            Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),
+        ])"#;
+        let genome = Genome::from_ron(genes, &data).expect("a valid genome");
+        let scenario = Scenario {
+            map,
+            objects: &[(Pos { x: 3, y: 0 }, "ball")],
+            sprites: &[(Pos { x: 0, y: 0 }, Some(genome))],
+            scripted: &[],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        world.state.learning = false;
+        let id = world.sprites().next().expect("the sprite").id();
+        for _ in 0..50 {
+            world.step();
+        }
+        let brain = &world.state.sprites.get(id).expect("alive").brain;
+        let ball = brain
+            .experience
+            .types
+            .get(&Subject::ObjectType(4))
+            .expect("it attended to the ball");
+        assert!(ball.familiarity > 0.0);
+        assert!(ball.worth.iter().all(|&w| w == 0.0) && ball.habits.iter().all(|&h| h == 0.0));
+    }
+
+    #[test]
+    fn a_sprite_with_no_stamina_left_still_walks() {
+        // Design §3.7: low stamina only raises tiredness.
+        let (mut world, id) = row_with_a_walker(
+            6,
+            &[ScriptedAction::Wander {
+                destination: Pos { x: 5, y: 0 },
+            }],
+        );
+        let stamina = world.data.physiology().indices.stamina;
+        let sprite = world.state.sprites.get_mut(id).expect("the walker");
+        sprite.body.start_at(stamina, 0.0);
+        for _ in 0..5 {
+            world.step();
+        }
+        let sprite = world.state.sprites.get(id).expect("the walker");
+        assert_eq!(sprite.pos, Pos { x: 5, y: 0 });
+        assert_eq!(sprite.body.chems[stamina], 0.0, "spent, and none came back");
+    }
+
+    #[test]
+    fn a_blocked_sprite_banks_points_only_up_to_its_next_step() {
+        // Design §3.7: its next step, onto the shallow water a resting
+        // sprite stands on, costs 250.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let map = Map::from_ascii(&[".~.."], &data).expect("valid drawing");
+        let (walker, rester) = (Pos { x: 0, y: 0 }, Pos { x: 1, y: 0 });
+        let genes = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
+        let genome = Genome::from_ron(genes, &data).expect("a valid genome");
+        let scripted = [
+            (
+                walker,
+                ScriptedAction::Wander {
+                    destination: Pos { x: 3, y: 0 },
+                },
+            ),
+            (rester, ScriptedAction::Rest),
+        ];
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &[(walker, Some(genome.clone())), (rester, Some(genome))],
+            scripted: &scripted,
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let id = world.sprite_at(walker).expect("the walker").id();
+        world
+            .state
+            .sprites
+            .get_mut(id)
+            .expect("the walker")
+            .move_points = 1_000;
+        world.step();
+        let sprite = world.state.sprites.get(id).expect("the walker");
+        assert_eq!(sprite.pos, walker, "held up");
+        assert_eq!(sprite.move_points, 250, "one shallow-water step's worth");
+    }
+
+    #[test]
     fn a_sprite_arriving_keeps_at_most_one_step_s_worth_of_points() {
         let (mut world, id) = row_with_a_walker(
             6,

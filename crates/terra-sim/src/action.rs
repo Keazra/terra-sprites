@@ -767,8 +767,13 @@ fn stepped(state: &mut WorldState, id: EntityId, cost: u32, events: &mut Vec<Eve
     let walk = walk_of_mut(sprite).expect("a walker's way");
     let arrived = walk.destination == Some(pos);
     walk.blocked_ticks = 0;
+    // A way round used up is dropped, so the usual rules for losing the
+    // target or the way apply again at the next 5.0 (design §3.7, §5.5).
     if let Some(committed) = &mut walk.committed {
         committed.remove(0);
+        if committed.is_empty() {
+            walk.committed = None;
+        }
     }
     if arrived {
         sprite.move_points = sprite.move_points.min(cost);

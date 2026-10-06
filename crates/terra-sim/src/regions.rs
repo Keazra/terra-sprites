@@ -298,6 +298,24 @@ mod tests {
     }
 
     #[test]
+    fn the_larger_region_is_joined_first_and_may_carry_a_smaller_one_with_it() {
+        // The right region (8 tiles) is joined before the middle column (5):
+        // its route crosses the column on its own row, joining both. Joined
+        // first, the column would carve its own way at the top.
+        let drawing = [
+            "..#.#####", //
+            "..#.#####", //
+            "..#.#####", //
+            "..#.#....", //
+            "..#.#....", //
+        ];
+        let result = connected(&drawing, 4);
+        assert_eq!(result[0], "..#.#####", "{result:#?}");
+        let carved = result.iter().filter(|row| row.contains(',')).count();
+        assert_eq!(carved, 1, "both carves on one row: {result:#?}");
+    }
+
+    #[test]
     fn regions_touching_only_at_a_corner_are_joined_by_one_orthogonal_carve() {
         let drawing = [
             "..###", //
