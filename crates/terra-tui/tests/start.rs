@@ -157,6 +157,22 @@ fn the_title_screen_s_world_fills_the_terminal_at_the_default_preset_s_densities
 }
 
 #[test]
+fn the_title_screen_s_world_takes_the_default_preset_whatever_preset_the_flags_name() {
+    // Going back to the title screen from a world `--preset` made wakes
+    // the default preset's world (M2 design §8.1).
+    let own = folder(
+        "title-preset",
+        &[("crowd.ron", "(width: 48, height: 32, sprites: 90)")],
+    );
+    let args = Args {
+        preset: Some(own.join("crowd.ron")),
+        ..Args::default()
+    };
+    let world = start::title_world(&args, 1, (120, 40)).expect("a world");
+    assert_eq!(world.sprites().count(), 30, "the default preset's sprites");
+}
+
+#[test]
 fn a_terminal_smaller_than_a_map_may_be_still_gets_the_smallest_map() {
     let world = start::title_world(&Args::default(), 1, (20, 10)).expect("a world");
     assert_eq!((world.map().width(), world.map().height()), (32, 32));

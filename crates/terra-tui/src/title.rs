@@ -11,7 +11,7 @@ use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
 use terra_sim::{EntityId, Pos, World};
 
-use crate::app::App;
+use crate::app::{App, Draft};
 use crate::input::Action;
 use crate::saves::SaveFile;
 use crate::start::Preset;
@@ -38,6 +38,21 @@ const MOST_TICKS_AT_ONCE: u32 = 5;
 const BOX_WIDTH: u16 = 56;
 /// The longest seed: `u64::MAX` has 20 digits.
 const MAX_SEED_DIGITS: usize = 20;
+/// What `Esc` asks on the title screen (M2 design §8.2).
+const QUIT_PROMPT: &str = "Quit? (y/n)";
+/// The rows of the menu's box above its choices: the border, a blank row,
+/// the lettering's two rows and another blank row.
+const ABOVE_CHOICES: u16 = 5;
+/// The menu's box's rows besides its choices: those above them, a blank
+/// row under them and the border.
+const MENU_FRAME_ROWS: u16 = ABOVE_CHOICES + 2;
+/// Where in the menu's box the choices start, from its left edge.
+const CHOICES_INDENT: u16 = 6;
+/// Where the save Continue loads is named, from the choices' left edge:
+/// past the widest choice, its mark and number, and a gap.
+const CONTINUE_SAID_AT: u16 = 17;
+/// How wide a label to the left of a field in the New world box is.
+const LABEL_WIDTH: u16 = 9;
 
 /// A choice on the title screen's menu.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,13 +111,6 @@ enum Screen {
     Help,
 }
 
-/// A seed being typed: the one offered until the first key replaces it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Draft {
-    text: String,
-    offered: bool,
-}
-
 /// The title screen's state.
 pub struct Title {
     world: World,
@@ -125,6 +133,8 @@ pub struct Title {
     refusal: Option<String>,
     /// Draws the help screen, as a world's does.
     help: App,
+    /// The terminal's size, as last told, where a click lands.
+    size: Size,
 }
 
 impl Title {
@@ -156,13 +166,11 @@ impl Title {
             screen: Screen::Menu,
             choice: 0,
             saves: Vec::new(),
-            presets: vec![Preset {
-                name: "default".into(),
-                path: None,
-            }],
+            presets: vec![Preset::default()],
             seed,
             refusal: None,
             help,
+            size: Size::new(map.width(), map.height()),
             world,
         }
     }
@@ -183,9 +191,14 @@ impl Title {
         self.choice = 0;
     }
 
-    /// The presets New world offers, the default first.
+    /// The presets New world offers, the default first. With none, it
+    /// offers the default alone.
     pub fn set_presets(&mut self, presets: Vec<Preset>) {
-        self.presets = presets;
+        self.presets = if presets.is_empty() {
+            vec![Preset::default()]
+        } else {
+            presets
+        };
     }
 
     /// The game's folder, which the help screen names.
@@ -245,6 +258,12 @@ impl Title {
         }
     }
 
+    /// The terminal is now `size`, so a click finds the menu where it's
+    /// drawn.
+    pub fn resize(&mut self, size: Size) {
+        self.size = size;
+    }
+
     /// What `action` does on the title screen.
     pub fn apply(&mut self, action: Action) -> TitleFlow {
         if action == Action::Quit {
@@ -299,9 +318,9 @@ impl Title {
                 TitleFlow::Stay
             }
             Action::Click { at, .. } => {
-                let row = self.menu_rows().find(|&(_, y)| y == at.y);
+                let row = menu_rows(self.size, choices.len()).find(|&(_, y)| y == at.y);
                 match row {
-                    Some((index, _)) if self.menu_box().contains(at) => {
+                    Some((index, _)) if menu_box(self.size, choices.len()).contains(at) => {
                         self.choice = index;
                         self.choose(choices[index])
                     }
@@ -325,10 +344,7 @@ impl Title {
             Choice::Continue => return TitleFlow::Load(self.saves[0].0.clone()),
             Choice::NewWorld => {
                 self.screen = Screen::NewWorld {
-                    seed: Draft {
-                        text: self.seed.to_string(),
-                        offered: true,
-                    },
+                    seed: Draft::offered(self.seed.to_string()),
                     preset: 0,
                 }
             }
@@ -342,32 +358,18 @@ impl Title {
     fn apply_in_new_world(&mut self, action: Action, mut seed: Draft, preset: usize) -> TitleFlow {
         let mut preset = preset;
         match action {
-            Action::Type(c) if c.is_ascii_digit() => {
-                if seed.offered {
-                    seed.text.clear();
-                    seed.offered = false;
-                }
-                if seed.text.len() < MAX_SEED_DIGITS {
-                    seed.text.push(c);
-                }
-            }
-            Action::Erase => {
-                seed.offered = false;
-                seed.text.pop();
-            }
+            Action::Type(c) if c.is_ascii_digit() => seed.type_char(c, MAX_SEED_DIGITS),
+            Action::Erase => seed.erase(),
             Action::AnotherName => {
                 self.seed = next_seed(self.seed);
-                seed = Draft {
-                    text: self.seed.to_string(),
-                    offered: true,
-                };
+                seed = Draft::offered(self.seed.to_string());
             }
             Action::Scroll { dy, .. } => preset = step(preset, dy, self.presets.len()),
             Action::Enter => {
-                if seed.text.is_empty() {
+                if seed.text().is_empty() {
                     self.refuse("Type a seed, or Tab for a random one".into());
                 } else {
-                    match seed.text.parse() {
+                    match seed.text().parse() {
                         Ok(seed) => {
                             return TitleFlow::New {
                                 seed,
@@ -407,33 +409,40 @@ impl Title {
         }
         TitleFlow::Stay
     }
+}
 
-    /// The menu's box, in the middle of a screen of `ui::MIN_SIZE` or more.
-    fn menu_box(&self) -> Rect {
-        self.centred_box(self.choices().len() as u16 + 7)
-    }
+/// The menu's box, with `choices` choices, in the middle of a screen of
+/// `screen`.
+fn menu_box(screen: Size, choices: usize) -> Rect {
+    centred_box(screen, choices as u16 + MENU_FRAME_ROWS)
+}
 
-    /// A box `BOX_WIDTH` wide and `height` tall in the middle of the
-    /// screen the world fills.
-    fn centred_box(&self, height: u16) -> Rect {
-        let screen = Size::new(self.world.map().width(), self.world.map().height());
-        let screen = Size::new(
-            screen.width.max(ui::MIN_SIZE.width),
-            screen.height.max(ui::MIN_SIZE.height),
-        );
-        let width = BOX_WIDTH.min(screen.width);
-        Rect::new(
-            (screen.width - width) / 2,
-            (screen.height.saturating_sub(1)).saturating_sub(height) / 2,
-            width,
-            height,
-        )
-    }
+/// A box `BOX_WIDTH` wide and `height` tall in the middle of a screen of
+/// `screen`, above its status line. The screen is taken to be at least
+/// `ui::MIN_SIZE`, as nothing smaller draws the boxes.
+fn centred_box(screen: Size, height: u16) -> Rect {
+    let width = BOX_WIDTH.min(screen.width.max(ui::MIN_SIZE.width));
+    let screen_height = screen.height.max(ui::MIN_SIZE.height);
+    Rect::new(
+        screen.width.max(ui::MIN_SIZE.width).saturating_sub(width) / 2,
+        screen_height.saturating_sub(1).saturating_sub(height) / 2,
+        width,
+        height,
+    )
+}
 
-    /// Each choice's index and row on the screen.
-    fn menu_rows(&self) -> impl Iterator<Item = (usize, u16)> {
-        let top = self.menu_box().y + 5;
-        (0..self.choices().len()).map(move |index| (index, top + index as u16))
+/// Each of `choices` choices' index and row on a screen of `screen`.
+fn menu_rows(screen: Size, choices: usize) -> impl Iterator<Item = (usize, u16)> {
+    let top = menu_box(screen, choices).y + ABOVE_CHOICES;
+    (0..choices).map(move |index| (index, top + index as u16))
+}
+
+/// The style of a highlighted item, or of one that isn't.
+fn chosen_style(chosen: bool) -> Style {
+    if chosen {
+        Style::default().add_modifier(Modifier::REVERSED)
+    } else {
+        Style::default()
     }
 }
 
@@ -471,7 +480,7 @@ pub fn render(frame: &mut Frame, title: &Title) {
     let buf = frame.buffer_mut();
     if area.width < ui::MIN_SIZE.width || area.height < ui::MIN_SIZE.height {
         let quitting = title.screen == Screen::QuitPrompt;
-        let question = quitting.then(|| "Quit? (y/n)".to_string());
+        let question = quitting.then(|| QUIT_PROMPT.to_string());
         return ui::render_too_small_with(buf, area, question.into_iter().collect());
     }
     draw_world(buf, area, title);
@@ -518,6 +527,9 @@ fn draw_world(buf: &mut Buffer, area: Rect, title: &Title) {
             let mut style = Style::default().fg(glyph.fg);
             if glyph.bold {
                 style = style.add_modifier(Modifier::BOLD);
+            }
+            if glyph.reversed {
+                style = style.add_modifier(Modifier::REVERSED);
             }
             cell.set_char(glyph.symbol).set_style(style);
         }
@@ -596,36 +608,35 @@ fn fade(brightness: f64) -> Color {
 /// The menu's box over the world: the title lettering, fading in as the
 /// scene ends, then the choices once it has.
 fn draw_menu(buf: &mut Buffer, title: &Title) {
-    let area = title.menu_box().intersection(buf.area);
-    clear_box(buf, area, "");
+    let choices = title.choices();
+    let screen = buf.area.as_size();
+    let area = menu_box(screen, choices.len()).intersection(buf.area);
+    double_box(buf, area, "");
     let brightness = title.shown_for.saturating_sub(LIGHT_FILLS).as_secs_f64()
         / (SCENE_ENDS - LIGHT_FILLS).as_secs_f64();
     let style = Style::default()
         .fg(fade(brightness))
         .add_modifier(Modifier::BOLD);
     for (row, line) in LETTERING.iter().enumerate() {
+        // Under the border and a blank row.
         centre(buf, area, area.y + 2 + row as u16, line, style);
     }
     if !title.scene_over() {
         return;
     }
-    let x = area.x + 6;
-    for (index, y) in title.menu_rows() {
-        let choice = title.choices()[index];
+    let x = area.x + CHOICES_INDENT;
+    for (index, y) in menu_rows(screen, choices.len()) {
+        let choice = choices[index];
         let chosen = index == title.choice && title.screen == Screen::Menu;
         let mark = if chosen { '►' } else { ' ' };
         let line = format!("{mark} {} {:<10}", index + 1, choice.label());
-        let style = if chosen {
-            Style::default().add_modifier(Modifier::REVERSED)
-        } else {
-            Style::default()
-        };
-        buf.set_string(x, y, &line, style);
+        buf.set_string(x, y, &line, chosen_style(chosen));
         if choice == Choice::Continue {
             let (save, ago) = &title.saves[0];
-            let room = usize::from(area.right().saturating_sub(x + 17 + 1));
+            let said_x = x + CONTINUE_SAID_AT;
+            let room = usize::from(area.right().saturating_sub(said_x + 1));
             let said = format!("{} · {ago}", save.name);
-            buf.set_stringn(x + 17, y, said, room, Style::default().fg(Color::Gray));
+            buf.set_stringn(said_x, y, said, room, Style::default().fg(Color::Gray));
         }
     }
 }
@@ -639,17 +650,19 @@ const LETTERING: [&str; 2] = [
 /// The New world box (M2 design §8.3), over the menu.
 fn draw_new_world(buf: &mut Buffer, title: &Title, seed: &Draft, preset: usize) {
     let rows = title.presets.len().min(8) as u16;
-    let area = title.centred_box(rows + 6).intersection(buf.area);
-    let inner = clear_box(buf, area, " New world ");
-    let cursor = if seed.offered { "" } else { "_" };
-    let seed_line = format!(" Seed    {}{cursor}", seed.text);
-    let style = if seed.offered {
-        Style::default().add_modifier(Modifier::REVERSED)
+    // The border, the seed, a blank row, the presets, a blank row, the
+    // hints and the border.
+    let area = centred_box(buf.area.as_size(), rows + 6).intersection(buf.area);
+    let inner = double_box(buf, area, " New world ");
+    // The seed offered shows highlighted, as the first key replaces it;
+    // one being typed shows where the next digit goes.
+    let (shown, style) = if seed.typed() {
+        (format!("{}_", seed.text()), Style::default())
     } else {
-        Style::default()
+        (seed.text().to_string(), chosen_style(true))
     };
     buf.set_string(inner.x, inner.y, " Seed    ", Style::default());
-    buf.set_string(inner.x + 9, inner.y, &seed_line[9..], style);
+    buf.set_string(inner.x + LABEL_WIDTH, inner.y, shown, style);
     let first = preset.saturating_sub(usize::from(rows) - 1);
     for (row, (index, choice)) in title
         .presets
@@ -664,18 +677,13 @@ fn draw_new_world(buf: &mut Buffer, title: &Title, seed: &Draft, preset: usize) 
         let mark = if chosen { '►' } else { ' ' };
         let y = inner.y + 2 + row as u16;
         buf.set_string(inner.x, y, label, Style::default());
-        let style = if chosen {
-            Style::default().add_modifier(Modifier::REVERSED)
-        } else {
-            Style::default()
-        };
-        let room = usize::from(inner.width.saturating_sub(10));
+        let room = usize::from(inner.width.saturating_sub(LABEL_WIDTH + 1));
         buf.set_stringn(
-            inner.x + 9,
+            inner.x + LABEL_WIDTH,
             y,
             format!("{mark} {}", choice.name),
             room,
-            style,
+            chosen_style(chosen),
         );
     }
     let hints = " tab another seed  ↑↓ preset  enter start  esc back";
@@ -691,8 +699,8 @@ fn draw_new_world(buf: &mut Buffer, title: &Title, seed: &Draft, preset: usize) 
 /// The list of saves to load, newest first, over the menu.
 fn draw_load(buf: &mut Buffer, title: &Title, choice: usize) {
     let rows = title.saves.len().clamp(1, 12) as u16;
-    let area = title.centred_box(rows + 2).intersection(buf.area);
-    let inner = clear_box(buf, area, " Load ");
+    let area = centred_box(buf.area.as_size(), rows + 2).intersection(buf.area);
+    let inner = double_box(buf, area, " Load ");
     if title.saves.is_empty() {
         buf.set_string(inner.x, inner.y, " No saves yet", Style::default());
         return;
@@ -712,14 +720,9 @@ fn draw_load(buf: &mut Buffer, title: &Title, choice: usize) {
             " ".into()
         };
         let line = format!(" {number} {}  ", save.name);
-        let style = if index == choice {
-            Style::default().add_modifier(Modifier::REVERSED)
-        } else {
-            Style::default()
-        };
         let y = inner.y + row as u16;
         let room = usize::from(inner.width);
-        buf.set_stringn(inner.x, y, &line, room, style);
+        buf.set_stringn(inner.x, y, &line, room, chosen_style(index == choice));
         let ago_x = inner.right().saturating_sub(ago.chars().count() as u16 + 1);
         if ago_x > inner.x + line.chars().count() as u16 {
             buf.set_string(ago_x, y, ago, Style::default().fg(Color::Gray));
@@ -731,7 +734,7 @@ fn draw_load(buf: &mut Buffer, title: &Title, choice: usize) {
 /// line.
 fn draw_help(buf: &mut Buffer, area: Rect, title: &Title) {
     let overlay = Rect::new(area.x, area.y, area.width, area.height.saturating_sub(1));
-    let inner = clear_box(buf, overlay, " Help ");
+    let inner = ui::clear_box(buf, overlay, " Help ", " esc close ");
     let lines = crate::help::lines(&title.help, &title.world, usize::from(inner.width));
     for (row, line) in (inner.y..inner.bottom()).zip(&lines) {
         buf.set_line(inner.x, row, line, inner.width);
@@ -748,7 +751,7 @@ fn draw_status_line(buf: &mut Buffer, area: Rect, title: &Title) {
         buf[(x, y)].set_char(' ');
     }
     let left = if title.screen == Screen::QuitPrompt {
-        " Quit? (y/n)".to_string()
+        format!(" {QUIT_PROMPT}")
     } else if let Some(why) = &title.refusal {
         format!(" {why}")
     } else {
@@ -764,8 +767,9 @@ fn draw_status_line(buf: &mut Buffer, area: Rect, title: &Title) {
 }
 
 /// Blanks `area` and draws a double-lined box round it, with `name` in its
-/// top edge. Gives the area inside the box.
-fn clear_box(buf: &mut Buffer, area: Rect, name: &str) -> Rect {
+/// top edge: the title screen's boxes, set apart from a world's
+/// single-lined overlays. Gives the area inside the box.
+fn double_box(buf: &mut Buffer, area: Rect, name: &str) -> Rect {
     if area.width < 2 || area.height < 2 {
         return Rect::default();
     }

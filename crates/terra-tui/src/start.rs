@@ -26,10 +26,15 @@ pub fn skips_title(args: &Args) -> bool {
 }
 
 /// The world the title screen wakes (M2 design §8.1): a new one from
-/// `seed`, made as the flags would make it, on a map the terminal's size,
-/// `(width, height)` in cells.
+/// `seed`, made from the default preset of the data pack the flags give,
+/// whatever preset they name, on a map the terminal's size, `(width,
+/// height)` in cells.
 pub fn title_world(args: &Args, seed: u64, (width, height): (u16, u16)) -> Result<World, String> {
-    let (config, data) = config(args)?;
+    let default = Args {
+        preset: None,
+        ..args.clone()
+    };
+    let (config, data) = config(&default)?;
     Ok(World::new(config.sized(width, height), data, seed))
 }
 
@@ -41,6 +46,16 @@ pub struct Preset {
     /// Its file, or `None` for the default: the built-in preset, or
     /// `--data`'s own.
     pub path: Option<PathBuf>,
+}
+
+impl Default for Preset {
+    /// The default preset, offered first.
+    fn default() -> Preset {
+        Preset {
+            name: "default".into(),
+            path: None,
+        }
+    }
 }
 
 /// The presets New world offers (M2 design §8.3): the default first, then
@@ -62,11 +77,7 @@ pub fn presets(folder: Option<&Path>) -> Vec<Preset> {
         })
         .collect();
     files.sort_by(|a, b| a.name.cmp(&b.name));
-    let default = Preset {
-        name: "default".into(),
-        path: None,
-    };
-    std::iter::once(default).chain(files).collect()
+    std::iter::once(Preset::default()).chain(files).collect()
 }
 
 /// The config and data pack a new world is made from, as the flags ask.

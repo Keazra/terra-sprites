@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::Position;
+use ratatui::layout::{Position, Size};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_tui::args::Args;
 use terra_tui::cp437;
@@ -24,7 +24,10 @@ const OFFERED: u64 = 12345;
 /// saves.
 fn title() -> Title {
     let world = start::title_world(&Args::default(), 3, (WIDTH, HEIGHT)).expect("a world");
-    Title::new(world, Theme::cp437(), OFFERED)
+    let mut title = Title::new(world, Theme::cp437(), OFFERED);
+    // The map is 32 rows, the fewest a map may have, on a 30-row terminal.
+    title.resize(Size::new(WIDTH, HEIGHT));
+    title
 }
 
 /// A title screen whose opening scene has played.
@@ -250,6 +253,19 @@ fn a_click_on_a_choice_picks_it() {
 }
 
 #[test]
+fn a_click_finds_the_menu_where_it_s_drawn_after_the_terminal_grows() {
+    let mut title = after_the_scene();
+    title.resize(Size::new(140, 45));
+    let at = find(&render_at(&title, 140, 45), "Quit").expect("Quit shows");
+    let click = Action::Click {
+        at,
+        button: Button::Left,
+        amplified: false,
+    };
+    assert_eq!(title.apply(click), TitleFlow::Quit);
+}
+
+#[test]
 fn esc_asks_before_quitting_and_ctrl_c_quits_at_once() {
     let mut title = after_the_scene();
     assert_eq!(title.apply(Action::Back), TitleFlow::Stay);
@@ -283,6 +299,20 @@ fn presets() -> Vec<Preset> {
             path: Some("small.ron".into()),
         },
     ]
+}
+
+#[test]
+fn new_world_offers_the_default_when_told_of_no_presets() {
+    let mut title = new_world(vec![]);
+    let shown = text(&render(&title));
+    assert!(shown.contains("default"), "{shown}");
+    assert_eq!(
+        title.apply(Action::Enter),
+        TitleFlow::New {
+            seed: OFFERED,
+            preset: None
+        }
+    );
 }
 
 #[test]

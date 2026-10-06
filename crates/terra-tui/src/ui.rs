@@ -561,7 +561,7 @@ pub(crate) fn top_right(area: Rect, width: u16) -> Option<Rect> {
 /// Blanks `area` and draws a single-lined box round it, with `title` at
 /// the left of its top edge and `corner` at the right, as an overlay over
 /// the panels beneath. Gives the area inside the box.
-fn clear_box(buf: &mut Buffer, area: Rect, title: &str, corner: &str) -> Rect {
+pub(crate) fn clear_box(buf: &mut Buffer, area: Rect, title: &str, corner: &str) -> Rect {
     buf.set_style(area, Style::default());
     for y in area.top()..area.bottom() {
         for x in area.left()..area.right() {

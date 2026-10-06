@@ -5,6 +5,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use terra_sim::World;
+
 /// A save file's extension, after the magic every save starts with.
 pub const EXTENSION: &str = "tspr";
 
@@ -25,6 +27,16 @@ pub struct SaveFile {
     pub path: PathBuf,
     /// When it was last written, if the system says.
     pub modified: Option<SystemTime>,
+}
+
+/// Reads `file` and loads the world in it (design §2.9), or says why it
+/// couldn't: "Couldn't load mira: …". A world's `Ctrl+O` and `F9` and the
+/// title screen's Continue and Load (M2 design §8.2) all load so.
+pub fn load(file: &SaveFile) -> Result<World, String> {
+    std::fs::read(&file.path)
+        .map_err(|err| err.to_string())
+        .and_then(|bytes| World::load(&bytes).map_err(|err| err.to_string()))
+        .map_err(|why| format!("Couldn't load {}: {why}", file.name))
 }
 
 /// The file a save named `name` is written to, in `folder`, named by

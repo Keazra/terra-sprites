@@ -164,7 +164,7 @@ The screen the game opens on, before the player's world is running. It's front e
 - **At launch the screen is dark.** The Cursor's frame of light (M1 design §0) fades in over one sprite near the middle of the screen, asleep (`z`). The world is revealed in a circle spreading out from the light, its edge drawn as `░`, until it fills the screen. The sprite wakes pleased (`♥`), then the title fades in, and the menu appears under it.
 - **It takes about 5½ seconds,** tuned by feel: the light arrives by 1 s, the sprite wakes at 2.5 s, the light fills the screen by 4 s, the title fades in from there and the menu shows at 5.5 s.
 - **It plays at every launch,** and when the player comes back from a world (§8.4). Any key or click skips to its end and does nothing else, so a key pressed to skip never also picks from the menu.
-- **The world** is a new one with a random seed, made as a new world would be from the flags (the default preset, of the data pack in use: the built-in one, or `--data`'s, so a mod's species and items show), on a map the size of the terminal. The preset's densities scale to that map, as they do for any map (M1 design §3.9), and its first population stays, so the screen is lively. A map side stays within what a generated map may be: at least 32 tiles, so a 30-row terminal shows the top of a 32-row map.
+- **The world** is a new one with a random seed, made from the default preset of the data pack in use (the built-in one, or `--data`'s, so a mod's species and items show), whatever preset `--preset` names, on a map the size of the terminal. The preset's densities scale to that map, as they do for any map (M1 design §3.9), and its first population stays, so the screen is lively. A map side stays within what a generated map may be: at least 32 tiles, so a 30-row terminal shows the top of a 32-row map.
 - It **holds still until the light has filled the screen,** then runs at 4× behind the menu for as long as the title screen is open, at most 5 ticks a frame. It's never saved, and nothing the player does on the title screen touches it.
 - **What it is in the terrarium's story:** the player arriving at the glass, before reaching in. The dark is the terrarium without the player's light, and the light finding a sprite is the first touch. Nothing on screen says so.
 
@@ -196,7 +196,7 @@ A small box over the menu, with:
 ### 8.4 Leaving a world
 
 - **`Esc` from Select** (M1 design §6.5, §6.6) asks "Quit? y quit the game  t title screen  any other key stays". `y` quits, as before; `t` goes back to the title screen, whose scene plays again on a new world. Any other key, `Esc` included, cancels.
-- **Both save first,** as quitting does (M1 design §6.7): an autosave, unless the world hasn't run since it was last saved. The session log is written too. If it can't be, the title screen says why on its status line, as quitting says on the terminal.
+- **Both save first,** as quitting does (M1 design §6.7): an autosave, unless the world hasn't run since it was last saved. The session log is written too. If either can't be, the title screen says why on its status line, and quitting says why on the terminal once the game has closed.
 - `Ctrl+C` still quits at once.
 
 ### 8.5 Flags

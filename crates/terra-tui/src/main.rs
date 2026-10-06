@@ -246,6 +246,8 @@ fn run_title(
     }
     let mut last_frame = Instant::now();
     loop {
+        // The terminal may have been resized since the last frame.
+        title.resize(terminal.size()?);
         terminal.draw(|frame| title::render(frame, &title))?;
         let deadline = last_frame + FRAME;
         while event::poll(deadline.saturating_duration_since(Instant::now()))? {
@@ -271,21 +273,16 @@ fn run_title(
                         Err(why) => title.refuse(why),
                     }
                 }
-                TitleFlow::Load(save) => {
-                    let loaded = std::fs::read(&save.path)
-                        .map_err(|err| err.to_string())
-                        .and_then(|bytes| World::load(&bytes).map_err(|err| err.to_string()));
-                    match loaded {
-                        Ok(world) => {
-                            return Ok(Some(Opening {
-                                session: Session::live(world),
-                                replay: None,
-                                loaded: Some(save.name),
-                            }));
-                        }
-                        Err(why) => title.refuse(format!("Couldn't load {}: {why}", save.name)),
+                TitleFlow::Load(save) => match saves::load(&save) {
+                    Ok(world) => {
+                        return Ok(Some(Opening {
+                            session: Session::live(world),
+                            replay: None,
+                            loaded: Some(save.name),
+                        }));
                     }
-                }
+                    Err(why) => title.refuse(why),
+                },
             }
         }
         let now = Instant::now();
@@ -319,9 +316,10 @@ struct Setup<'a> {
 }
 
 /// Plays `opening` until the player quits or goes back to the title
-/// screen, saying which, with why the session log couldn't be written, if
-/// it couldn't. A session that ends in a panic still writes its replay
-/// (design §2.9).
+/// screen, saying which, with why the world couldn't be autosaved or the
+/// session log written as it was left, if it couldn't. A session that ends
+/// in a panic still writes its replay (design §2.9), as does one the
+/// terminal failed under (design §2.7).
 fn run_world(
     terminal: &mut DefaultTerminal,
     opening: Opening,
@@ -347,9 +345,9 @@ fn run_world(
         let world = app.take_loaded().expect("the world just handed over");
         session = Session::live(world);
     }
-    let flow = session::writing_session_log_on_panic(&mut session, session_log, |session| {
+    let ran = session::writing_session_log_on_panic(&mut session, session_log, |session| {
         run(terminal, session, &mut app, keys, &setup, replay.as_deref())
-    })?;
+    });
     // Leaving writes the session log, as does a session the terminal failed
     // under (design §2.7). A write that fails is said where it can be.
     let unwritten = session_log.and_then(|path| {
@@ -358,10 +356,21 @@ fn run_world(
             .err()
             .map(|err| format!("couldn't write the replay {}: {err}", path.display()))
     });
-    Ok((flow, unwritten))
+    match ran {
+        Ok((flow, unsaved)) => {
+            let untold: Vec<String> = unsaved.into_iter().chain(unwritten).collect();
+            Ok((flow, (!untold.is_empty()).then(|| untold.join("; "))))
+        }
+        Err(err) => match unwritten {
+            Some(unwritten) => Err(io::Error::new(err.kind(), format!("{err}; {unwritten}"))),
+            None => Err(err),
+        },
+    }
 }
 
-/// The frame loop, until the player quits or goes back to the title screen.
+/// The frame loop, until the player quits or goes back to the title
+/// screen, with why the world couldn't be autosaved as it was left, if it
+/// couldn't.
 fn run(
     terminal: &mut DefaultTerminal,
     session: &mut Session,
@@ -369,7 +378,7 @@ fn run(
     keys: &mut Keys,
     setup: &Setup,
     replay: Option<&str>,
-) -> io::Result<Flow> {
+) -> io::Result<(Flow, Option<String>)> {
     let session_log = setup.session_log;
     if let Some(folder) = files::data_folder() {
         app.set_data_folder(folder);
@@ -419,8 +428,8 @@ fn run(
             if flow != Flow::Continue {
                 // Leaving saves, so a closed session is never lost (design
                 // §6.7, M2 design §8.4). The session log is written next.
-                app.autosave(session.world());
-                return Ok(flow);
+                let unsaved = app.autosave(session.world());
+                return Ok((flow, unsaved));
             }
             // A save the player loaded replaces the world from here on, and
             // the session log starts afresh from it (design §2.7).

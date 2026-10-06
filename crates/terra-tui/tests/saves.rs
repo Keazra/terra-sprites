@@ -332,6 +332,36 @@ fn a_save_that_cant_be_written_is_refused_on_the_status_line() {
 }
 
 #[test]
+fn an_autosave_that_cant_be_written_says_why_for_the_world_left() {
+    // Leaving for the title screen throws the world's screen away, so the
+    // failure goes with the player (M2 design §8.4).
+    let folder = scratch_folder("unwritable-autosave");
+    let blocked = folder.join("saves");
+    std::fs::write(&blocked, b"").expect("written");
+    let mut world = world();
+    let mut app = app_for(&world, &blocked);
+    run(&mut world, 3);
+    let why = app.autosave(&world).expect("it couldn't");
+    assert!(why.starts_with("Couldn't autosave: "), "{why}");
+    assert_eq!(
+        app.refusal(),
+        Some(why.as_str()),
+        "and the status line says so"
+    );
+}
+
+#[test]
+fn a_file_that_isnt_a_save_loads_as_nothing_naming_it() {
+    let folder = scratch_folder("not-a-save");
+    std::fs::write(saves::path_for(&folder, "notes"), b"hello").expect("written");
+    let file = saves::list(&folder).remove(0);
+    let Err(why) = saves::load(&file) else {
+        panic!("not a save");
+    };
+    assert!(why.starts_with("Couldn't load notes: "), "{why}");
+}
+
+#[test]
 fn a_loaded_world_keeps_the_cursor_as_it_was() {
     let folder = scratch_folder("cursor");
     let mut world = world();
