@@ -6,46 +6,43 @@
 //! `--seed N` runs only seed N, as a baseline report's replay command does
 //! (design §7.6).
 
-#[path = "common/mod.rs"]
-mod common;
+#[path = "common/args.rs"]
+mod args;
 
 use std::ops::RangeInclusive;
 use std::process::ExitCode;
 
-use common::args::{self, positive, seeds};
 use terra_sim::{DataPack, LabScenario, report};
 
 fn main() -> ExitCode {
-    args::run(
-        "lab <scenario.ron> [--seeds N | --seed N]",
-        parse,
-        |(path, seeds)| {
-            #[expect(
-                clippy::disallowed_methods,
-                reason = "the lab runner reads the scenario file; the sim itself never does"
-            )]
-            let text = match std::fs::read_to_string(&path) {
-                Ok(text) => text,
-                Err(error) => {
-                    eprintln!("can't read {path}: {error}");
-                    return ExitCode::FAILURE;
-                }
-            };
-            let data = DataPack::builtin().expect("the built-in data pack is valid");
-            let lab = match LabScenario::from_ron(&text, &data) {
-                Ok(lab) => lab,
-                Err(error) => {
-                    eprintln!("{path}: {error}");
-                    return ExitCode::FAILURE;
-                }
-            };
-            let runs: Vec<_> = seeds
-                .map(|seed| (seed, lab.run(data.clone(), seed)))
-                .collect();
-            print!("{}", report(&runs, &data));
-            ExitCode::SUCCESS
-        },
-    )
+    let Some((path, seeds)) = args::parse("lab <scenario.ron> [--seeds N | --seed N]", parse)
+    else {
+        return ExitCode::FAILURE;
+    };
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the lab runner reads the scenario file; the sim itself never does"
+    )]
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(error) => {
+            eprintln!("can't read {path}: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let data = DataPack::builtin().expect("the built-in data pack is valid");
+    let lab = match LabScenario::from_ron(&text, &data) {
+        Ok(lab) => lab,
+        Err(error) => {
+            eprintln!("{path}: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let runs: Vec<_> = seeds
+        .map(|seed| (seed, lab.run(data.clone(), seed)))
+        .collect();
+    print!("{}", report(&runs, &data));
+    ExitCode::SUCCESS
 }
 
 /// The scenario's path and which seeds to run: 1 to N, 10 unless `--seeds`
@@ -56,9 +53,9 @@ fn parse(args: &[String]) -> Result<(String, RangeInclusive<u64>), String> {
     let mut args = args.iter();
     while let Some(arg) = args.next() {
         if arg == "--seeds" {
-            seed_range = seeds(&mut args)?;
+            seed_range = 1..=args::positive("--seeds", &mut args)?;
         } else if arg == "--seed" {
-            let n = positive("--seed", &mut args)?;
+            let n = args::positive("--seed", &mut args)?;
             seed_range = n..=n;
         } else if path.is_none() {
             path = Some(arg.clone());
