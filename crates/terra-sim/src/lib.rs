@@ -43,6 +43,8 @@ mod soak;
 mod sprites;
 mod tags;
 mod terrain;
+#[cfg(test)]
+mod test_util;
 mod variation;
 mod verbs;
 mod world;
