@@ -1,17 +1,12 @@
 //! The step 2 engine: objects defined as data, living by their lifecycle rules
 //! (design §3.5).
 
+mod common;
+use common::{at, builtin};
+
 use terra_sim::{
     DataPack, EntityId, Event, EventKind, Map, Pos, Removal, Scenario, ScenarioError, World,
 };
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
-
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
 
 /// The built-in pack with `objects.ron` holding only `types`.
 fn pack_with(types: &[&str]) -> DataPack {

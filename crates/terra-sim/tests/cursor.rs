@@ -2,40 +2,16 @@
 //! commands, applied at step 1 of the next tick, and what a sprite learns
 //! from them.
 
+mod common;
+use common::{at, builtin, genome};
+
 use terra_sim::{
-    Command, DataPack, EntityId, EventKind, Genome, Learned, Map, Pos, Rejection, Scenario,
-    ScriptedAction, Thing, Verb, World,
+    Command, EntityId, EventKind, Genome, Learned, Map, Pos, Rejection, Scenario, ScriptedAction,
+    Thing, Verb, World,
 };
-
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
 
 fn close(a: f32, b: f32) -> bool {
     (a - b).abs() < 1e-5
-}
-
-/// A genome of `genes` and nothing else that would move a level, so what
-/// the Cursor does reads exactly.
-fn genome(genes: &str, data: &DataPack) -> Genome {
-    let text = format!(
-        r#"(format: 1, genes: [
-            Trait(trait: "speed", value: 10.0),
-            Trait(trait: "sense_radius", value: 10.0),
-            {genes}
-            // No fading, so what is learned reads exactly.
-            BrainParam(param: "worth_fade_good", value: 0.0),
-            BrainParam(param: "worth_fade_bad", value: 0.0),
-            BrainParam(param: "habit_fade", value: 0.0),
-            BrainParam(param: "habit_fade_bad", value: 0.0),
-            BrainParam(param: "fear_fade", value: 0.0),
-        ])"#
-    );
-    Genome::from_ron(&text, data).expect("a valid genome")
 }
 
 /// A world drawn from `rows`, with `objects`, and one sprite of `genes` on

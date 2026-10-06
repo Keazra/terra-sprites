@@ -2,20 +2,15 @@
 //! when hungry, drink when thirsty and wander when content, and change their
 //! minds when a drive grows.
 
+mod common;
+use common::{at, builtin};
+
 use terra_sim::{
     DataPack, EntityId, Event, EventKind, Expression, Genome, Map, Outcome, Part, Pos, Scenario,
     ScriptedAction, Thing, Verb, World,
 };
 
 const STARTER: &str = include_str!("../../../data/genomes/starter.ron");
-
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
 
 /// The starter genome, without spawn variation, with `extra` genes after its own.
 fn starter_with(extra: &[&str], data: &DataPack) -> Genome {

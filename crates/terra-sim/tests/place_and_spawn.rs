@@ -1,18 +1,13 @@
 //! The Place menu's commands (design v28 §2.5): the Cursor places a
 //! new object or spawns a new sprite, and the player names sprites.
 
+mod common;
+use common::{at, builtin};
+
 use terra_sim::{
     Blocker, Command, DataPack, EntityId, Event, EventKind, Genome, Map, NameProblem, PlaceRule,
     Pos, Rejection, Scenario, Terrain, World,
 };
-
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
 
 /// A world drawn from `rows`, with `objects`, and a starter sprite on each
 /// of `sprites`.

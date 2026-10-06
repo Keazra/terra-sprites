@@ -3,20 +3,15 @@
 //! parted from its recording was first found different; and a replay from
 //! another build, or with the wrong data pack, is refused, never a crash.
 
-use std::panic::{AssertUnwindSafe, catch_unwind};
+mod common;
+use common::{at, builtin};
+
+use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use terra_sim::{
-    CHECKPOINT_EVERY, Command, DataPack, Dir, Divergence, EventKind, Map, Playback, Pos,
-    ReplayError, Scenario, World, WorldConfig,
+    Command, Dir, Divergence, EventKind, Map, Playback, ReplayError, Scenario, World, WorldConfig,
+    CHECKPOINT_EVERY,
 };
-
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
 
 /// The default world, recording from its first tick.
 fn recorded_world(seed: u64) -> World {
