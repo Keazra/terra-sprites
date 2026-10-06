@@ -2,6 +2,8 @@
 //! the new world and the theme. `main.rs` asks; the answers are here, so
 //! they can be tested.
 
+use std::path::{Path, PathBuf};
+
 use terra_sim::{DataError, DataPack, World, WorldConfig};
 
 use crate::args::Args;
@@ -12,6 +14,74 @@ use crate::theme::Theme;
 /// folder's default preset, or the built-in one; and the data pack
 /// `--data` gives, or the built-in one.
 pub fn new_world(args: &Args, seed: u64) -> Result<World, String> {
+    let (config, data) = config(args)?;
+    Ok(World::new(config, data, seed))
+}
+
+/// Whether the flags make or load a world, and so skip the title screen
+/// (M2 design §8.5): `--seed`, `--preset` and `--replay` do; the others only
+/// change how the game's worlds are made or drawn.
+pub fn skips_title(args: &Args) -> bool {
+    args.seed.is_some() || args.preset.is_some() || args.replay.is_some()
+}
+
+/// The world the title screen wakes (M2 design §8.1): a new one from
+/// `seed`, made from the default preset of the data pack the flags give,
+/// whatever preset they name, on a map the terminal's size, `(width,
+/// height)` in cells.
+pub fn title_world(args: &Args, seed: u64, (width, height): (u16, u16)) -> Result<World, String> {
+    let default = Args {
+        preset: None,
+        ..args.clone()
+    };
+    let (config, data) = config(&default)?;
+    Ok(World::new(config.sized(width, height), data, seed))
+}
+
+/// A preset New world offers (M2 design §8.3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Preset {
+    /// Its file's name without `.ron`, or `default`.
+    pub name: String,
+    /// Its file, or `None` for the default: the built-in preset, or
+    /// `--data`'s own.
+    pub path: Option<PathBuf>,
+}
+
+impl Default for Preset {
+    /// The default preset, offered first.
+    fn default() -> Preset {
+        Preset {
+            name: "default".into(),
+            path: None,
+        }
+    }
+}
+
+/// The presets New world offers (M2 design §8.3): the default first, then
+/// each `.ron` file in `folder`, by name. A folder that isn't there has
+/// none.
+pub fn presets(folder: Option<&Path>) -> Vec<Preset> {
+    let mut files: Vec<Preset> = folder
+        .and_then(|folder| std::fs::read_dir(folder).ok())
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.ok()?.path();
+            let is_preset = path.is_file() && path.extension().is_some_and(|ext| ext == "ron");
+            let name = path.file_stem()?.to_string_lossy().into_owned();
+            is_preset.then_some(Preset {
+                name,
+                path: Some(path),
+            })
+        })
+        .collect();
+    files.sort_by(|a, b| a.name.cmp(&b.name));
+    std::iter::once(Preset::default()).chain(files).collect()
+}
+
+/// The config and data pack a new world is made from, as the flags ask.
+fn config(args: &Args) -> Result<(WorldConfig, DataPack), String> {
     let (data, folder_preset) = match &args.data {
         None => (
             DataPack::builtin()
@@ -52,7 +122,7 @@ pub fn new_world(args: &Args, seed: u64) -> Result<World, String> {
         Some((path, text)) => WorldConfig::from_ron(&text, &data)
             .map_err(|err| format!("can't use preset {}: {err}", path.display()))?,
     };
-    Ok(World::new(config, data, seed))
+    Ok((config, data))
 }
 
 /// The theme the flags ask for: `--ascii`, `--theme <file>` or the CP437

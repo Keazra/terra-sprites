@@ -93,3 +93,20 @@ fn a_preset_that_names_objects_needs_an_area_to_count_them_in() {
         "per_tiles",
     );
 }
+
+#[test]
+fn a_preset_resized_keeps_its_densities_and_sprites_on_the_new_map() {
+    // The title screen's world is the default preset at the terminal's
+    // size (M2 design §8.1).
+    let config = WorldConfig::builtin(&pack()).sized(120, 64);
+    assert_eq!((config.width(), config.height()), (120, 64));
+    assert_eq!(config.sprites(), 30);
+    // 150 berry bushes per 15,360 tiles, on 7,680 tiles.
+    assert_eq!(config.object_count("berry_bush"), 75);
+}
+
+#[test]
+fn a_preset_resized_keeps_each_side_within_what_a_map_may_be() {
+    let config = WorldConfig::builtin(&pack()).sized(20, 2000);
+    assert_eq!((config.width(), config.height()), (32, 1024));
+}

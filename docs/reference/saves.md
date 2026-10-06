@@ -13,7 +13,9 @@ To carry a single sprite from one world to another, export its genome with `g` i
 | `Ctrl+S` | Saves under a name you type, up to 40 characters. It offers the seed and tick, such as `seed 7 tick 48210`; typing replaces it. The same name saves over the old one. |
 | `Ctrl+O` | Lists every save, newest first, the quicksave and autosaves included, to pick one to load. |
 
-- **Autosaves.** The game saves itself every 10 minutes of running time, and when you quit. Paused time doesn't count, and quitting doesn't save again if the world hasn't run since it was last saved. It keeps the last 3: `autosave-1` is the newest.
+The title screen loads them too: **Continue** loads the newest save, whichever kind it is, and **Load** lists them all as `Ctrl+O` does.
+
+- **Autosaves.** The game saves itself every 10 minutes of running time, and when you quit or go back to the title screen. Paused time doesn't count, and quitting doesn't save again if the world hasn't run since it was last saved. It keeps the last 3: `autosave-1` is the newest.
 - **Loading asks first** if the world on screen has run since it was last saved, since loading would lose that: "Load quicksave? The world has run 4m since it was last saved (y/n)". `y` loads; so does `F9` again, when it's the quicksave asked about. Any other key keeps the world.
 - **A loaded world starts paused,** with the view and the Cursor where they were when it was saved. Your settings, such as the speed, the theme and the open inspector tab, stay as they were.
 - The top bar says how long ago the world was last saved, autosaved or loaded: `not saved`, `saved just now` for the first 3 seconds, then `saved 4s ago`, `saved 20s ago`, `saved 3m ago`.
@@ -79,14 +81,14 @@ That makes a replay the way to show someone what happened, such as a sprite that
 There's nothing to switch on. The session log is written:
 
 - at each autosave, every 10 minutes of running time;
-- when you quit;
+- when you quit, or go back to the title screen;
 - when the game crashes, after it has put the terminal back, so a crash still leaves its replay;
 - when the game stops because the terminal failed.
 
 It holds where the world started, every command your clicks and keys sent the world (the ones the world refused too), and a fingerprint of the world, a **checkpoint**, where the recording starts and every 1,000 ticks. Where it starts:
 
 - **A new world** starts the session log from its seed and world config.
-- **Loading a save** (`F9`, `Ctrl+O`) starts it afresh, from the save. A replay holds one stretch of play, so what came before the load is gone from it.
+- **Loading a save** (`F9`, `Ctrl+O`, or from the title screen) starts it afresh, from the save. A replay holds one stretch of play, so what came before the load is gone from it.
 - **Taking over a replay** starts it afresh too (below).
 
 **Each session writes over the last one's `last_session.replay`,** at its first autosave or when it's closed, whichever comes first. To keep a replay, copy it somewhere else, or give it another name, before you start the game again. Playing one back with `--replay` never writes the session log, so watching a replay doesn't replace it.

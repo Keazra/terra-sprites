@@ -511,7 +511,10 @@ fn the_quit_prompt_takes_over_the_status_line() {
     let world = drawn_world(&SMALL_MAP);
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::Back, &world);
-    assert_eq!(lines(&render(&app, &world, 100, 30))[29], " Quit? (y/n)");
+    assert_eq!(
+        lines(&render(&app, &world, 100, 30))[29],
+        " Quit? y quit the game  t title screen  any other key stays"
+    );
 }
 
 #[test]
@@ -812,7 +815,9 @@ fn while_the_terminal_is_too_small_the_game_runs_on_and_esc_still_asks_to_quit()
         .unwrap();
     let screen = lines(terminal.backend().buffer());
     assert!(
-        screen.iter().any(|line| line.trim() == "Quit? (y/n)"),
+        screen
+            .iter()
+            .any(|line| line.trim() == "Quit? y quit the game  t title screen  any other key stays"),
         "the quit prompt shows: {screen:?}"
     );
     assert_eq!(app.apply(Action::Confirm, &world), Flow::Quit);

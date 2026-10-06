@@ -244,6 +244,19 @@ fn escape_asks_to_quit_and_y_quits() {
 }
 
 #[test]
+fn t_at_the_quit_prompt_goes_back_to_the_title_screen() {
+    // M2 design §8.4.
+    let world = grass(40, 30);
+    let mut app = app(&world, tile_area(20, 10));
+    app.apply(Action::Back, &world);
+    assert_eq!(app.apply(Action::Track, &world), Flow::Title);
+    // Without the prompt, `t` still tracks: here, with nothing selected, it's
+    // refused.
+    let mut app = self::app(&world, tile_area(20, 10));
+    assert_eq!(app.apply(Action::Track, &world), Flow::Continue);
+}
+
+#[test]
 fn a_second_escape_cancels_the_quit_prompt_rather_than_quitting() {
     // Esc never quits on its own: only `y` answers the prompt (design v33
     // §6.6).

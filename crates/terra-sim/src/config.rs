@@ -168,6 +168,18 @@ impl WorldConfig {
         usize::from(self.sprites)
     }
 
+    /// The same preset on a map `width` by `height`, each side kept within
+    /// what a generated map may be: its densities scale to the new area, and
+    /// the first population stays. The title screen's world is made so, at
+    /// the terminal's size (M2 design §8.1).
+    pub fn sized(self, width: u16, height: u16) -> WorldConfig {
+        WorldConfig {
+            width: width.clamp(*SIDE.start(), *SIDE.end()),
+            height: height.clamp(*SIDE.start(), *SIDE.end()),
+            ..self
+        }
+    }
+
     /// The same preset, starting with `sprites` sprites, for the benchmarks.
     pub(crate) fn with_sprites(self, sprites: u16) -> WorldConfig {
         WorldConfig { sprites, ..self }

@@ -50,7 +50,7 @@ Terra Sprites is a terminal artificial-life game inspired by *Creatures*. Sprite
 | Milestone | Contents |
 |---|---|
 | **M1 — A Sprite Lives** *(this document)* | World, ecology, biochemistry, learning brain, terminal UI, the Cursor, save/load, replay |
-| **M2 — Generations** *([its own design](m2-generations-v2.md))* | Life stages; sexual and asexual reproduction decided by the genome; crossover and mutation; lineage and family-tree view; population graphs; headless fast-forward mode. Also memory of places, learning by watching, a harsher world, the speed cap and a title screen (v39) |
+| **M2 — Generations** *([its own design](m2-generations-v4.md))* | Life stages; sexual and asexual reproduction decided by the genome; crossover and mutation; lineage and family-tree view; population graphs; headless fast-forward mode. Also memory of places, learning by watching, a harsher world, the speed cap and a title screen (v39) |
 | **M3 — Wild Terra** | Critters (prey and predators); more hazards and toys; possibly seasons, weather, day/night and temperature |
 | **M4 — Words** | The player (and later, sprites) name objects and verbs; word inputs and a Speak output |
 | **Tiles** *(UI milestone, can be scheduled any time after M1)* | A tile-window front end that draws bitmap tilesets and sprite sheets through the semantic-tile seam (§6.2) |
@@ -1213,7 +1213,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 ### 6.1 Layout
 
 - The minimum terminal size is **100×30**; 140×40 is recommended.
-- A smaller terminal shows only "Terminal too small" and "needs 100x30, this is 80x24", in the middle, and the game carries on as it was set: shrinking the window doesn't pause it, and `Esc` still asks to quit, with "Quit? (y/n)" under the message (v30). At 100×30 and up, every panel always shows.
+- A smaller terminal shows only "Terminal too small" and "needs 100x30, this is 80x24", in the middle, and the game carries on as it was set: shrinking the window doesn't pause it, and `Esc` still asks to quit, with the question under the message (v30). At 100×30 and up, every panel always shows.
 - All text uses only CP437 characters (§6.2).
 
 ```
@@ -1612,7 +1612,7 @@ N ═ M
 
 - **Keys:** `space` pauses and resumes; `.` steps while paused (below); `+` and `-` step through ⅛×, ¼×, ½×, 1× (1.25 ticks per second), 2×, 4×, 8×, 16× (20 ticks per second) and **Max**. Each press halves or doubles the rate. The game starts at 1×; `-` stops at ⅛× (5/32 of a tick a second) and `+` at Max. The top bar labels the slow speeds `1/2x`, `1/4x` and `1/8x`, and shows the speed while paused too, as `|| paused 4x` (v27).
 - **A step** (v27) runs one real second's worth of ticks at the speed, rounded down, at least 1 and at most 20: 1 at 1× and slower, 2 at 2×, 5 at 4×, 10 at 8×, 20 at 16× and Max. It runs within the frame's budget like any other ticks, and what the budget cuts short runs on the next frames. A press before a step has finished starts a whole step afresh, at the speed then, rather than adding another. Resuming drops what's left of it.
-- **Quitting:** `Esc` (from Select, with no menu open and nothing in the Cursor's grip) asks "Quit? (y/n)". Only `y` quits; any other key, `Esc` included, cancels (v33), so `Esc` never quits on its own. `Ctrl+C` quits at once.
+- **Quitting:** `Esc` (from Select, with no menu open and nothing in the Cursor's grip) asks "Quit? y quit the game  t title screen  any other key stays" ([M2 design v3 §8.4](archive/m2-generations-v3.md); it asked "Quit? (y/n)" until then). Only `y` quits, and `t` goes back to the title screen; any other key, `Esc` included, cancels (v33), so `Esc` never quits on its own. `Ctrl+C` quits at once.
 - **Exact pacing:** the UI clock counts owed ticks in integer maths, with rates in 32nds of a tick per second, so every speed (including ⅛×) runs at exactly its nominal rate with no drift.
 - **Held keys:**
   - **1× is a stop for held keys.** A held `+` or `-` stops at 1×; a fresh press is needed to go past it, in either direction.

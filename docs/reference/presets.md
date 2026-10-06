@@ -30,3 +30,7 @@ A small, crowded world with no thorns.
 ```
 
 Save it as `small.ron` and run `cargo run --release -- --preset small.ron --seed 7`.
+
+## Presets on the title screen
+
+The title screen's New world box lists `default` first, then each `.ron` file in the `presets` folder of the game's folder, by name (M2 design §8.3). On Windows that's `$env:APPDATA\terra-sprites\presets` in PowerShell; `?` in the game shows where the game's folder is. Put `small.ron` there and it shows as `small`. A preset that doesn't fit the data pack in use is refused when you press `Enter`, with why, and the title screen stays.

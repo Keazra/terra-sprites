@@ -1,14 +1,14 @@
-# Terra Sprites — M2 "Generations" design (v2)
+# Terra Sprites — M2 "Generations" design (v4)
 
 - **Status:** Draft: the plan, with what each slice settles added in a new revision.
 - **Date:** 2026-10-06
-- **Supersedes:** [v1](archive/m2-generations-v1.md), whose table holds the planning session's decisions
+- **Supersedes:** [v3](archive/m2-generations-v3.md), whose table holds the title screen's decisions; [v1](archive/m2-generations-v1.md) holds the planning session's
 - **Builds on:** [M1 design v39](m1-a-sprite-lives-v39.md), which stays the rulebook for everything M2 doesn't change
-- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, and memory of places (Slice 20)
+- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20) and the title screen (Slice 21)
 
 ---
 
-## Changes from v1
+## Changes from v3
 
 Slice 20 (memory of places, [#138](https://github.com/Keazra/terra-sprites/issues/138)). Its questions went to the owner in the project's shared files (`slice-20/questions.md`), each with a recommendation; silence accepts a recommendation, and the owner raised no objection.
 
@@ -235,3 +235,54 @@ Scarce water, for information: the default world with its water bands scaled dow
 Where water is scarce, trips are common, and their way-finding costs about 12% of a tick; in the default world, where they're rare, about 3%. Both are far above A5's 200.
 
 **What it shows.** A sprite that survives childhood now fends for itself, as the owner wants of a grown sprite: with water scarce, grown-up deaths fall from 89 and 139 to 2 and 1. Childhood is still the hard part, since a newborn remembers nothing until it first finds water. That's what Slice 29, the harsher world, builds on (§6, G5).
+
+---
+
+## 8. The title screen (Slice 21)
+
+The screen the game opens on, before the player's world is running. It's front end only: the simulation gains one thing, a way to make a preset's world at another size (§8.1).
+
+### 8.1 The opening scene
+
+- **At launch the screen is dark.** The Cursor's frame of light (M1 design §0) fades in over one sprite near the middle of the screen, asleep (`z`). The world is revealed in a circle spreading out from the light, its edge drawn as `░`, until it fills the screen. The sprite wakes pleased (`♥`), then the title fades in, and the menu appears under it.
+- **It takes about 5½ seconds,** tuned by feel: the light arrives by 1 s, the sprite wakes at 2.5 s, the light fills the screen by 4 s, the title fades in from there and the menu shows at 5.5 s.
+- **It plays at every launch,** and when the player comes back from a world (§8.4). Any key or click skips to its end and does nothing else, so a key pressed to skip never also picks from the menu.
+- **The world** is a new one with a random seed, made from the default preset of the data pack in use (the built-in one, or `--data`'s, so a mod's species and items show), whatever preset `--preset` names, on a map the size of the terminal. The preset's densities scale to that map, as they do for any map (M1 design §3.9), and its first population stays, so the screen is lively. A map side stays within what a generated map may be: at least 32 tiles, so a 30-row terminal shows the top of a 32-row map.
+- It **holds still until the light has filled the screen,** then runs at 4× behind the menu for as long as the title screen is open, at most 5 ticks a frame. It's never saved, and nothing the player does on the title screen touches it.
+- **What it is in the terrarium's story:** the player arriving at the glass, before reaching in. The dark is the terrarium without the player's light, and the light finding a sprite is the first touch. Nothing on screen says so.
+
+### 8.2 The menu
+
+A box in the middle of the screen, over the moving world, holds the title lettering and the menu. The choices are numbered and picked as the Place menu's are (M1 design §6.5): `↑` `↓` and `Enter`, the wheel, a number, or a click.
+
+| Choice | What it does |
+|---|---|
+| **Continue** | Loads the newest save in the saves folder (any kind: the quicksave, an autosave or one by name), named beside it with how long ago it was saved: `autosave-1 · 2 hours ago`. Hidden when there's no save. |
+| **New world** | Opens the New world box (§8.3). |
+| **Load** | A list of every save, newest first, as `Ctrl+O` opens in a world (M1 design §6.7). |
+| **Help** | The help overlay, as `?` opens in a world. |
+| **Quit** | Closes the game. |
+
+- **`Esc` asks "Quit? (y/n)",** as in a world; only `y` quits. `Ctrl+C` quits at once.
+- **A world started or loaded from the title screen starts as one does from the flags:** a new world at 1×, a loaded one paused (M1 design §6.7). The session log starts afresh from it (M1 design §2.7). A save that can't be read, or a preset that isn't valid, is refused on the status line and the title screen stays.
+- A terminal under 100×30 shows "Terminal too small", as a world does (M1 design §6.1), and `Esc` still asks to quit under it.
+- Everything drawn stays within CP437 (M1 design §6.2).
+
+### 8.3 New world
+
+A small box over the menu, with:
+- **Seed:** a random one filled in. Typing a digit replaces it, then more digits add to it, as a save's name is typed (M1 design §6.7); `Backspace` rubs out, and `Tab` offers another random seed. A seed is a whole number from 0 to 18446744073709551615.
+- **Preset:** `↑` `↓` pick one from a list: `default` first (the built-in preset, or `--data`'s own `presets/default.ron`), then each `.ron` file in the `presets` folder of the game's folder (`%APPDATA%\terra-sprites\presets` on Windows), by name. A preset is checked against the data pack in use when the world is made.
+- `Enter` starts the world; `Esc` goes back to the menu.
+- Once Slice 27 builds Lab mode, the choice between the full game and Lab mode goes in this box.
+
+### 8.4 Leaving a world
+
+- **`Esc` from Select** (M1 design §6.5, §6.6) asks "Quit? y quit the game  t title screen  any other key stays". `y` quits, as before; `t` goes back to the title screen, whose scene plays again on a new world. Any other key, `Esc` included, cancels.
+- **Both save first,** as quitting does (M1 design §6.7): an autosave, unless the world hasn't run since it was last saved. The session log is written too. If either can't be, the title screen says why on its status line, and quitting says why on the terminal once the game has closed.
+- `Ctrl+C` still quits at once.
+
+### 8.5 Flags
+
+- **`--seed`, `--preset` and `--replay` make or load a world,** so they skip the title screen and go straight in, as before. Their world can still leave for the title screen with `t`.
+- **`--data`, `--ascii` and `--theme`** change what the game's worlds are made of or how they're drawn, not which world it opens on, so the title screen still shows, drawn with them, and a new world made from it uses `--data`'s pack.

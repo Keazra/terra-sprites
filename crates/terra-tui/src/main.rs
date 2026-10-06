@@ -1,4 +1,5 @@
-//! `terra-sprites`: owns the terminal and runs the frame loop (design §6.6).
+//! `terra-sprites`: owns the terminal and runs the title screen (M2 design
+//! §8) and the frame loop (design §6.6).
 //! All logic worth testing lives in the `terra_tui` library.
 
 use std::cell::Cell;
@@ -14,15 +15,17 @@ use ratatui::crossterm::event::{
     PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
 };
 use ratatui::crossterm::execute;
-use ratatui::crossterm::terminal::supports_keyboard_enhancement;
-use terra_sim::Playback;
+use ratatui::crossterm::terminal::{self, supports_keyboard_enhancement};
+use terra_sim::{Playback, World};
 use terra_tui::app::{App, Flow, Ticks};
 use terra_tui::args::{Args, USAGE};
 use terra_tui::files;
 use terra_tui::input::{self, Keys};
+use terra_tui::saves;
 use terra_tui::session::{self, Session};
 use terra_tui::start;
 use terra_tui::theme::Theme;
+use terra_tui::title::{self, Title, TitleFlow};
 use terra_tui::ui;
 
 /// About 30 frames per second.
@@ -38,24 +41,35 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let start = match &args.replay {
-        Some(path) => replay_from(path),
-        None => start::new_world(&args, args.seed.unwrap_or_else(time_seed)).map(|world| Opening {
-            session: Session::live(world),
-            replay: None,
-        }),
-    };
-    let Opening {
-        mut session,
-        replay,
-    } = match start {
-        Ok(start) => start,
-        Err(err) => {
-            eprintln!("terra-sprites: {err}");
-            return ExitCode::FAILURE;
+    // Flags that make or load a world go straight in (M2 design §8.5);
+    // otherwise the game opens on the title screen. What the flags get
+    // wrong stops the game here, before the terminal is taken.
+    let first = if start::skips_title(&args) {
+        let opening = match &args.replay {
+            Some(path) => replay_from(path),
+            None => start::new_world(&args, args.seed.unwrap_or_else(time_seed)).map(Opening::live),
+        };
+        match opening {
+            Ok(opening) => Next::World(opening),
+            Err(err) => {
+                eprintln!("terra-sprites: {err}");
+                return ExitCode::FAILURE;
+            }
+        }
+    } else {
+        match title_world(&args) {
+            Ok(world) => Next::title(world),
+            Err(err) => {
+                eprintln!("terra-sprites: {err}");
+                return ExitCode::FAILURE;
+            }
         }
     };
-    let theme = match start::theme(&args, session.world().data()) {
+    let data = match &first {
+        Next::World(opening) => opening.session.world().data(),
+        Next::Title { world, .. } => world.data(),
+    };
+    let theme = match start::theme(&args, data) {
         Ok(theme) => theme,
         Err(err) => {
             eprintln!("terra-sprites: {err}");
@@ -111,38 +125,49 @@ fn main() -> ExitCode {
         undo_setup();
         restore_terminal(info);
     }));
-    let keys = if enhanced_keys {
+    let mut keys = if enhanced_keys {
         Keys::kitty()
     } else {
         Keys::with_release_reporting(cfg!(windows))
     };
-    // A session that ends in a panic still writes its replay (design §2.9).
     let session_log = files::session_log();
-    let result =
-        session::writing_session_log_on_panic(&mut session, session_log.as_deref(), |session| {
-            execute!(stdout(), EnableMouseCapture).and_then(|()| {
-                let setup = Setup {
-                    theme,
-                    keys,
-                    force_panic: args.force_panic,
-                    session_log: session_log.as_deref(),
-                    replay: replay.as_deref(),
-                };
-                run(&mut terminal, session, setup)
-            })
-        });
+    // What couldn't be said on screen, said once the terminal is restored.
+    let mut afterwards = None;
+    let mut next = first;
+    let result = execute!(stdout(), EnableMouseCapture).and_then(|()| {
+        loop {
+            next = match next {
+                Next::Title { world, refusal } => {
+                    match run_title(&mut terminal, *world, refusal, &args, &theme, &mut keys)? {
+                        Some(opening) => Next::World(opening),
+                        None => return Ok(()),
+                    }
+                }
+                Next::World(opening) => {
+                    let setup = Setup {
+                        theme: theme.clone(),
+                        force_panic: args.force_panic,
+                        session_log: session_log.as_deref(),
+                    };
+                    let (flow, unwritten) = run_world(&mut terminal, opening, &mut keys, setup)?;
+                    if flow == Flow::Quit {
+                        afterwards = unwritten;
+                        return Ok(());
+                    }
+                    // Going back to the title screen wakes another world
+                    // (M2 design §8.4).
+                    Next::Title {
+                        world: Box::new(title_world(&args).map_err(io::Error::other)?),
+                        refusal: unwritten,
+                    }
+                }
+            }
+        }
+    });
     undo_setup();
     ratatui::restore();
-    // Quitting writes the session log, as does a session the terminal
-    // failed under (design §2.7), and a write that fails says so here, as
-    // there's no screen left to say it on.
-    if let Some(path) = &session_log
-        && let Err(err) = session.write_session_log(path)
-    {
-        eprintln!(
-            "terra-sprites: couldn't write the replay {}: {err}",
-            path.display()
-        );
+    if let Some(message) = afterwards {
+        eprintln!("terra-sprites: {message}");
     }
 
     match result {
@@ -154,10 +179,116 @@ fn main() -> ExitCode {
     }
 }
 
-/// What `main` starts with: the session, and for a replay, its file's name.
+/// What the game shows next: the title screen, or a world.
+enum Next {
+    /// The title screen, waking `world`, saying `refusal` if there is one.
+    Title {
+        world: Box<World>,
+        refusal: Option<String>,
+    },
+    World(Opening),
+}
+
+impl Next {
+    fn title(world: World) -> Next {
+        Next::Title {
+            world: Box::new(world),
+            refusal: None,
+        }
+    }
+}
+
+/// A world to play: the session, for a replay its file's name, and for a
+/// save loaded from the title screen, its name.
 struct Opening {
     session: Session,
     replay: Option<String>,
+    loaded: Option<String>,
+}
+
+impl Opening {
+    /// A new world, played live.
+    fn live(world: World) -> Opening {
+        Opening {
+            session: Session::live(world),
+            replay: None,
+            loaded: None,
+        }
+    }
+}
+
+/// The title screen's world, sized to the terminal (M2 design §8.1).
+fn title_world(args: &Args) -> Result<World, String> {
+    let (width, height) = terminal::size().unwrap_or((ui::MIN_SIZE.width, ui::MIN_SIZE.height));
+    start::title_world(args, time_seed(), (width, height))
+}
+
+/// Runs the title screen until the player quits, giving `None`, or starts a
+/// world, giving it.
+fn run_title(
+    terminal: &mut DefaultTerminal,
+    world: World,
+    refusal: Option<String>,
+    args: &Args,
+    theme: &Theme,
+    keys: &mut Keys,
+) -> io::Result<Option<Opening>> {
+    let mut title = Title::new(world, theme.clone(), time_seed());
+    if let Some(folder) = files::save_folder() {
+        title.set_saves(saves::list(&folder), SystemTime::now());
+    }
+    title.set_presets(start::presets(files::preset_folder().as_deref()));
+    if let Some(folder) = files::data_folder() {
+        title.set_data_folder(folder);
+    }
+    if let Some(why) = refusal {
+        title.refuse(why);
+    }
+    let mut last_frame = Instant::now();
+    loop {
+        // The terminal may have been resized since the last frame.
+        title.resize(terminal.size()?);
+        terminal.draw(|frame| title::render(frame, &title))?;
+        let deadline = last_frame + FRAME;
+        while event::poll(deadline.saturating_duration_since(Instant::now()))? {
+            let action = match event::read()? {
+                // The New world box types its seed (M2 design §8.3).
+                Event::Key(key) if title.typing() => keys.typed_action(key),
+                Event::Key(key) => keys.action_for(key),
+                Event::Mouse(mouse) => input::mouse_action(mouse),
+                _ => None,
+            };
+            let Some(action) = action else { continue };
+            match title.apply(action) {
+                TitleFlow::Stay => {}
+                TitleFlow::Quit => return Ok(None),
+                TitleFlow::New { seed, preset } => {
+                    let asked = Args {
+                        seed: Some(seed),
+                        preset,
+                        ..args.clone()
+                    };
+                    match start::new_world(&asked, seed) {
+                        Ok(world) => return Ok(Some(Opening::live(world))),
+                        Err(why) => title.refuse(why),
+                    }
+                }
+                TitleFlow::Load(save) => match saves::load(&save) {
+                    Ok(world) => {
+                        return Ok(Some(Opening {
+                            session: Session::live(world),
+                            replay: None,
+                            loaded: Some(save.name),
+                        }));
+                    }
+                    Err(why) => title.refuse(why),
+                },
+            }
+        }
+        let now = Instant::now();
+        title.animate(now - last_frame);
+        last_frame = now;
+    }
 }
 
 /// The replay in the file at `path`, to play back (design §2.7).
@@ -172,31 +303,83 @@ fn replay_from(path: &Path) -> Result<Opening, String> {
     Ok(Opening {
         session: Session::replay(playback),
         replay: Some(name),
+        loaded: None,
     })
 }
 
-/// What the frame loop runs with, besides the terminal and the session.
+/// What the frame loop runs with, besides the terminal and the world.
 struct Setup<'a> {
     theme: Theme,
-    keys: Keys,
     force_panic: bool,
     /// Where the session log goes, if anywhere (design §2.7).
     session_log: Option<&'a Path>,
-    /// For a replay, its file's name.
-    replay: Option<&'a str>,
 }
 
-fn run(terminal: &mut DefaultTerminal, session: &mut Session, setup: Setup) -> io::Result<()> {
-    let Setup {
-        theme,
-        mut keys,
-        force_panic,
-        session_log,
+/// Plays `opening` until the player quits or goes back to the title
+/// screen, saying which, with why the world couldn't be autosaved or the
+/// session log written as it was left, if it couldn't. A session that ends
+/// in a panic still writes its replay (design §2.9), as does one the
+/// terminal failed under (design §2.7).
+fn run_world(
+    terminal: &mut DefaultTerminal,
+    opening: Opening,
+    keys: &mut Keys,
+    setup: Setup,
+) -> io::Result<(Flow, Option<String>)> {
+    let Opening {
+        mut session,
         replay,
-    } = setup;
+        loaded,
+    } = opening;
+    let session_log = setup.session_log;
     let areas = ui::areas(terminal.size()?, session.world().map());
     let world = session.world();
-    let mut app = App::new(world.map(), theme, world.seed(), areas);
+    let mut app = App::new(world.map(), setup.theme.clone(), world.seed(), areas);
+    // A save loaded on the title screen starts as a load in a world does
+    // (M2 design §8.2).
+    if let Some(name) = loaded {
+        let Session::Live(world) = session else {
+            unreachable!("a save loads live");
+        };
+        app.load_from_title(*world, name);
+        let world = app.take_loaded().expect("the world just handed over");
+        session = Session::live(world);
+    }
+    let ran = session::writing_session_log_on_panic(&mut session, session_log, |session| {
+        run(terminal, session, &mut app, keys, &setup, replay.as_deref())
+    });
+    // Leaving writes the session log, as does a session the terminal failed
+    // under (design §2.7). A write that fails is said where it can be.
+    let unwritten = session_log.and_then(|path| {
+        session
+            .write_session_log(path)
+            .err()
+            .map(|err| format!("couldn't write the replay {}: {err}", path.display()))
+    });
+    match ran {
+        Ok((flow, unsaved)) => {
+            let untold: Vec<String> = unsaved.into_iter().chain(unwritten).collect();
+            Ok((flow, (!untold.is_empty()).then(|| untold.join("; "))))
+        }
+        Err(err) => match unwritten {
+            Some(unwritten) => Err(io::Error::new(err.kind(), format!("{err}; {unwritten}"))),
+            None => Err(err),
+        },
+    }
+}
+
+/// The frame loop, until the player quits or goes back to the title
+/// screen, with why the world couldn't be autosaved as it was left, if it
+/// couldn't.
+fn run(
+    terminal: &mut DefaultTerminal,
+    session: &mut Session,
+    app: &mut App,
+    keys: &mut Keys,
+    setup: &Setup,
+    replay: Option<&str>,
+) -> io::Result<(Flow, Option<String>)> {
+    let session_log = setup.session_log;
     if let Some(folder) = files::data_folder() {
         app.set_data_folder(folder);
     }
@@ -226,8 +409,8 @@ fn run(terminal: &mut DefaultTerminal, session: &mut Session, setup: Setup) -> i
     loop {
         // The terminal may have been resized since the last frame.
         app.fit(ui::areas(terminal.size()?, session.world().map()));
-        terminal.draw(|frame| ui::render(frame, &app, session.world()))?;
-        if force_panic {
+        terminal.draw(|frame| ui::render(frame, app, session.world()))?;
+        if setup.force_panic {
             panic!("forced panic (--force-panic): the terminal should now be restored");
         }
 
@@ -241,14 +424,12 @@ fn run(terminal: &mut DefaultTerminal, session: &mut Session, setup: Setup) -> i
                 Event::Mouse(mouse) => input::mouse_action(mouse),
                 _ => None,
             };
-            if let Some(action) = action
-                && app.apply(action, session.world()) == Flow::Quit
-            {
-                // Quitting saves, so a closed session is never lost (design
-                // §6.7). `main` then writes the session log, once the
-                // terminal is restored, so a failure can be told.
-                app.autosave(session.world());
-                return Ok(());
+            let flow = action.map_or(Flow::Continue, |action| app.apply(action, session.world()));
+            if flow != Flow::Continue {
+                // Leaving saves, so a closed session is never lost (design
+                // §6.7, M2 design §8.4). The session log is written next.
+                let unsaved = app.autosave(session.world());
+                return Ok((flow, unsaved));
             }
             // A save the player loaded replaces the world from here on, and
             // the session log starts afresh from it (design §2.7).
@@ -292,7 +473,7 @@ fn run(terminal: &mut DefaultTerminal, session: &mut Session, setup: Setup) -> i
             app.take_in_replay(playback);
         }
         if app.autosave_if_due(session.world()) {
-            write_session_log(&mut app, session);
+            write_session_log(app, session);
         }
     }
 }

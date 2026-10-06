@@ -17,10 +17,10 @@ You can select a sprite and look inside it: its Brain tab shows what it's paying
 You need [Rust](https://rustup.rs) (stable) and a terminal of at least 100×30 characters; 140×40 is better. On Windows, use Windows Terminal. Then, from the repository root:
 
 ```bash
-cargo run --release -- --seed 7
+cargo run --release
 ```
 
-The first build takes a minute or two. The game opens on a new terrarium, made from seed 7, with time running at 1×. Some things to try first:
+The first build takes a minute or two. The game opens on its title screen: a light finds a sleeping sprite in the dark, and a terrarium wakes around it (any key skips this). Pick **New world** and press `Enter` for a new terrarium with time running at 1×, or **Continue** to carry on from your last save. To go straight into a world instead, give it a seed: `cargo run --release -- --seed 7`. Some things to try first:
 
 1. **Watch one sprite.** Click a sprite (`☺`) to select it. The panel beside the map shows its body; `]` moves to its Brain tab, which says what it's paying attention to and why. `T` makes the view follow it.
 2. **Control time.** `space` pauses, `.` steps a little while paused, and `+` speeds up. A sprite's life is long at 1×, so try 8× or 16×.
@@ -61,7 +61,7 @@ The same key in capitals or lower case does the same thing.
 | `Ctrl+S` / `Ctrl+O` | Save under a name you type / pick a save to load, newest first. The world also saves itself every 10 minutes of running time and when you quit, keeping the last 3 autosaves. See [saves](docs/reference/saves.md) |
 | `Ctrl+T` | Pick a theme: how the map is drawn. It lists the two built-in themes, then your own from the `themes` folder of the game's folder; see [themes](docs/reference/themes.md) |
 | `Ctrl+R` | In a replay, take it over: the world is yours from the tick it has reached, and the rest of the recording is dropped. Its next autosave writes a new `last_session.replay`, so copy a replay you want to keep first |
-| `Esc` | Each press does the first that applies: close a menu or overlay, cancel an aim, let go of what the Cursor holds or leads (a held item is put down where the Cursor is), go back to Select, and from Select ask "Quit? (y/n)". Only `y` quits; `Esc` again keeps playing |
+| `Esc` | Each press does the first that applies: close a menu or overlay, cancel an aim, let go of what the Cursor holds or leads (a held item is put down where the Cursor is), go back to Select, and from Select ask to quit: `y` quits the game, `t` goes back to the title screen (both save first, as quitting does), and any other key keeps playing |
 | `Ctrl+C` | Quit at once |
 
 | Flag | Effect |
@@ -94,7 +94,7 @@ The ground, the plants and toys, a sprite's body and its instincts, the size of 
 
 ## Design
 
-- [M2 "Generations" design](docs/design/m2-generations-v2.md) (v2, the plan for milestone 2: its slices, the time scale of a sprite's life, and what "M2 is done" means; and what its slices have settled so far, starting with memory of places).
+- [M2 "Generations" design](docs/design/m2-generations-v4.md) (v4, the plan for milestone 2: its slices, the time scale of a sprite's life, and what "M2 is done" means; and what its slices have settled so far: memory of places and the title screen).
 - [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v39.md) (v39, the current revision), the rulebook for everything M2 doesn't change. Earlier revisions and the external evaluations that shaped them are in [`docs/design/archive/`](docs/design/archive/).
 
 ## Roadmap

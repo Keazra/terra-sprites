@@ -112,6 +112,12 @@ pub fn theme_folder() -> Option<PathBuf> {
     data_folder().map(|folder| folder.join("themes"))
 }
 
+/// The folder New world reads the player's own presets from (M2 design
+/// §8.3).
+pub fn preset_folder() -> Option<PathBuf> {
+    data_folder().map(|folder| folder.join("presets"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
