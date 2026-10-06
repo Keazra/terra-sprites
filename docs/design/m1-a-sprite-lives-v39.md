@@ -9,11 +9,11 @@
 
 ## Changes from v38
 
-M2 planning (2026-10-05): milestone 2 has a design of its own, [M2 "Generations"](m2-generations-v1.md). This revision changes no rule of M1; it only points the roadmap there.
+M2 planning (2026-10-05): milestone 2 has a design of its own, [M2 "Generations"](archive/m2-generations-v1.md). This revision changes no rule of M1; it only points the roadmap there.
 
 | # | Change | Source | Sections |
 |---|---|---|---|
-| 1 | **M2's contents are in the [M2 design](m2-generations-v1.md).** Beyond the roadmap's list, M2 takes memory of places, learning by watching, a harsher world, the speed cap and a title screen; this document stays the rulebook for everything M2 doesn't change. | M2 planning session | §1.1 |
+| 1 | **M2's contents are in the [M2 design](archive/m2-generations-v1.md).** Beyond the roadmap's list, M2 takes memory of places, learning by watching, a harsher world, the speed cap and a title screen; this document stays the rulebook for everything M2 doesn't change. | M2 planning session | §1.1 |
 
 **Earlier changes** are in the archived revisions, in [`archive/`](archive/). Each opens with its own table: v38's changes (from v37) head [v38](archive/m1-a-sprite-lives-v38.md), and so on back to v2. So "v16 change 16" is row 16 of the table at the top of [v16](archive/m1-a-sprite-lives-v16.md). The current revision carries only its own table, so the spec doesn't open with its whole history.
 
@@ -50,7 +50,7 @@ Terra Sprites is a terminal artificial-life game inspired by *Creatures*. Sprite
 | Milestone | Contents |
 |---|---|
 | **M1 — A Sprite Lives** *(this document)* | World, ecology, biochemistry, learning brain, terminal UI, the Cursor, save/load, replay |
-| **M2 — Generations** *([its own design](m2-generations-v1.md))* | Life stages; sexual and asexual reproduction decided by the genome; crossover and mutation; lineage and family-tree view; population graphs; headless fast-forward mode. Also memory of places, learning by watching, a harsher world, the speed cap and a title screen (v39) |
+| **M2 — Generations** *([its own design](archive/m2-generations-v1.md))* | Life stages; sexual and asexual reproduction decided by the genome; crossover and mutation; lineage and family-tree view; population graphs; headless fast-forward mode. Also memory of places, learning by watching, a harsher world, the speed cap and a title screen (v39) |
 | **M3 — Wild Terra** | Critters (prey and predators); more hazards and toys; possibly seasons, weather, day/night and temperature |
 | **M4 — Words** | The player (and later, sprites) name objects and verbs; word inputs and a Speak output |
 | **Tiles** *(UI milestone, can be scheduled any time after M1)* | A tile-window front end that draws bitmap tilesets and sprite sheets through the semantic-tile seam (§6.2) |

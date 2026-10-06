@@ -115,7 +115,8 @@
     relief_deadband: 0.02,
     touch_window: 3,
     // A remembered sprite is forgotten once everything learned about it has
-    // faded nearer 0 than this (design v18 §5.6).
+    // faded nearer 0 than this (design v18 §5.6), and a remembered place
+    // once it has faded below this (M2 design §7).
     forget_below: 0.01,
     // Remembered places (M2 design §7): a sprite remembers at most
     // `held`, and places of one kind `merge` tiles apart or fewer are one

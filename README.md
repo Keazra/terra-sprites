@@ -10,7 +10,7 @@ Sprites learn from what happens to them. Each one learns, by touch, what things 
 
 You can teach them too. In Train mode a click pets the sprite under the Cursor and a right click zaps it (hold Ctrl with a click, or Shift with `Q` or `E`, for a hug or a shock). A pet rewards what the sprite just tried, so it learns to like that thing and to do it again, and a zap does the opposite. The Cursor can also follow a sprite so it moves with it, and in Grab mode pick up items, lead a sprite, throw items and shove sprites, or place new berries, balls, bushes and sprites. You can name a sprite, and save its genome to place a copy later.
 
-You can select a sprite and look inside it: its Brain tab shows what it's paying attention to and why it does what it does, and below that its memory, everything it has learned and how strongly. The map flashes an `X` where it's heading and shades what it's paying attention to in grey. You can scroll around and point at things, and the clock can be paused, stepped and sped up. A world can be saved and loaded, and saves itself every 10 minutes; and the map can be drawn with a theme of your own.
+You can select a sprite and look inside it: its Brain tab shows what it's paying attention to and why it does what it does, and below that its memory, everything it has learned and how strongly, and the places it remembers finding water or food. The map flashes an `X` where it's heading and shades what it's paying attention to in grey. You can scroll around and point at things, and the clock can be paused, stepped and sped up. A world can be saved and loaded, and saves itself every 10 minutes; and the map can be drawn with a theme of your own.
 
 ## Getting started
 
@@ -94,7 +94,7 @@ The ground, the plants and toys, a sprite's body and its instincts, the size of 
 
 ## Design
 
-- [M2 "Generations" design](docs/design/m2-generations-v1.md) (v1, the plan for milestone 2: its slices, the time scale of a sprite's life, and what "M2 is done" means).
+- [M2 "Generations" design](docs/design/m2-generations-v2.md) (v2, the plan for milestone 2: its slices, the time scale of a sprite's life, and what "M2 is done" means; and what its slices have settled so far, starting with memory of places).
 - [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives-v39.md) (v39, the current revision), the rulebook for everything M2 doesn't change. Earlier revisions and the external evaluations that shaped them are in [`docs/design/archive/`](docs/design/archive/).
 
 ## Roadmap
