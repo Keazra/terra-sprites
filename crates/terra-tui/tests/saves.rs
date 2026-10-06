@@ -509,3 +509,43 @@ fn a_save_name_takes_only_what_the_screen_can_show() {
     type_text(&mut app, &world, "Café ☃ 1\t");
     assert_eq!(app.save_name_draft(), Some("Café  1"));
 }
+
+#[test]
+fn a_loaded_world_s_names_show_at_once_while_paused() {
+    // Before any tick runs, the screen names the sprites the save named
+    // (#137).
+    let folder = scratch_folder("names");
+    let mut world = world();
+    let sprite = world.sprites().next().expect("a sprite").id();
+    world.submit(Command::Rename {
+        sprite,
+        name: "Mira".into(),
+    });
+    run(&mut world, 1);
+    let mut app = app_for(&world, &folder);
+    apply(&mut app, &world, Action::Quicksave);
+    apply(&mut app, &world, Action::Quickload);
+    app.take_loaded().expect("the quicksave loaded");
+    assert!(app.clock.is_paused());
+    assert_eq!(app.names().label(sprite), format!("Mira #{}", sprite.0));
+}
+
+#[test]
+fn saved_just_now_lasts_3_seconds_then_the_bar_counts_up() {
+    // #129: a minute of "just now" read as stuck. Seconds count whole up to
+    // 10, then in tens, then minutes as before.
+    let folder = scratch_folder("ago");
+    let world = world();
+    let mut app = app_for(&world, &folder);
+    apply(&mut app, &world, Action::Quicksave);
+    let mut after = |secs: u64| {
+        app.animate(Duration::from_secs(secs));
+        bars(&app, &world).0
+    };
+    assert!(after(2).contains("│ saved just now"));
+    assert!(after(2).contains("│ saved 4s ago"));
+    assert!(after(5).contains("│ saved 9s ago"));
+    assert!(after(16).contains("│ saved 20s ago"));
+    assert!(after(30).contains("│ saved 50s ago"));
+    assert!(after(6).contains("│ saved 1m ago"));
+}

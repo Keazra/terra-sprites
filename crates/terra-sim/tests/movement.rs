@@ -2,8 +2,8 @@
 //! re-planning, driven through hand-made worlds.
 
 use terra_sim::{
-    ActionView, DataPack, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos, Progress,
-    Scenario, ScriptedAction, Verb, World,
+    ActionView, Command, DataPack, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos,
+    Progress, Scenario, ScriptedAction, Verb, World,
 };
 
 fn builtin() -> DataPack {
@@ -196,6 +196,37 @@ fn speed_keeps_its_decimals() {
     let row = ["..............."];
     assert_eq!(walk_east(&row, 7.4, 15)[14], 11);
     assert_eq!(walk_east(&row, 7.0, 15)[14], 10);
+}
+
+#[test]
+fn speed_above_10_takes_two_steps_in_a_tick_once_its_points_pay_for_them() {
+    // 120 tenths a tick: 20, 40, 60 and 80 left after a step each tick, so
+    // the fifth tick's 200 pays for two (design §3.7).
+    assert_eq!(walk_east(&["........"], 12.0, 5), [1, 2, 3, 4, 6]);
+}
+
+#[test]
+fn walking_past_a_thornbush_never_hurts() {
+    // Design §3.7, §3.8: only acting on it does. The walk goes round it,
+    // past each of its sides, before the sprite chooses for itself.
+    let start = at(0, 0);
+    let scripted = [
+        (start, wander_to(at(2, 0))),
+        (start, wander_to(at(2, 2))),
+        (start, wander_to(at(0, 2))),
+        (start, wander_to(at(0, 0))),
+    ];
+    let rows = ["...", "...", "..."];
+    let mut world = world_with(&rows, &[(at(1, 1), "thornbush")], 10.0, &[start], &scripted);
+    let id = sprite_on(&world, start);
+    let (events, tiles) = run(&mut world, id, 8);
+    assert_eq!(tiles.last(), Some(&start), "round it: {tiles:?}");
+    let hurts = events.iter().any(|event| {
+        matches!(&event.kind, EventKind::ActionEnded { action, .. } if action.hurt != Hurt::default())
+    });
+    assert!(!hurts, "{events:?}");
+    let injury = world.sprite(id).and_then(|s| s.chemical("injury"));
+    assert_eq!(injury, Some(0.0));
 }
 
 #[test]
@@ -431,6 +462,25 @@ fn wander_to(destination: Pos) -> ScriptedAction {
 }
 
 #[test]
+fn a_swap_ends_both_sprites_walking_for_the_tick() {
+    // At speed 12 they meet in the fifth tick with points for two steps
+    // each. Whichever moves first steps, then swaps; the swap ends both
+    // walks, so the one with a step's points left keeps them (design §3.7).
+    // Without that, it would step on, two tiles past the other.
+    for seed in 1..=6 {
+        let (west, east) = (at(0, 0), at(10, 0));
+        let scripted = [(west, wander_to(east)), (east, wander_to(west))];
+        let mut world = seeded(&["..........."], &[], 12.0, &[west, east], &scripted, seed);
+        let (a, b) = (sprite_on(&world, west), sprite_on(&world, east));
+        for _ in 0..5 {
+            world.step();
+        }
+        let x = |id| world.sprite(id).expect("alive").pos().x;
+        assert_eq!(x(a), x(b) + 1, "just past each other, seed {seed}");
+    }
+}
+
+#[test]
 fn of_two_sprites_stepping_onto_one_tile_the_first_in_the_tick_s_shuffled_order_gets_it() {
     let (left, right, middle) = (at(0, 0), at(2, 0), at(1, 0));
     let scripted = [(left, wander_to(middle)), (right, wander_to(middle))];
@@ -556,6 +606,69 @@ fn a_sprite_blocked_again_on_its_way_round_searches_again() {
         !tiles.contains(&at(3, 1)) && !tiles.contains(&rester),
         "{tiles:?}"
     );
+}
+
+/// Two corridors joined only at their west ends, the bottom one running on
+/// east: the way along the bottom is short, the way round the top long.
+const HOOK: [&str; 6] = [
+    "########################################",
+    "........################################",
+    ".######.################################",
+    ".######.################################",
+    ".######.################################",
+    "........................................",
+];
+
+#[test]
+fn a_sprite_whose_target_leaves_its_reach_on_its_way_round_gives_up_at_the_way_s_end() {
+    // It keeps to the way round whatever its flood reaches (design §3.7),
+    // but once that way is used up, a target out of reach ends the action
+    // as failed (§5.5), rather than leaving it standing until it times out.
+    let (walker, rester, ball) = (at(0, 5), at(1, 5), at(10, 5));
+    let mut scripted = vec![(walker, ScriptedAction::Approach { at: ball })];
+    scripted.extend(rests(rester, 10));
+    let mut world = world_with(&HOOK, &[(ball, "ball")], 10.0, &[walker, rester], &scripted);
+    let id = sprite_on(&world, walker);
+    let (_, tiles) = run(&mut world, id, 6);
+    assert!(
+        tiles.contains(&at(0, 2)),
+        "it set off round the top: {tiles:?}"
+    );
+    // The Cursor carries the ball off, far out of the walker's reach.
+    let item = world.object_at(ball).expect("the ball").id();
+    world.submit(Command::PickUp { item });
+    world.submit(Command::PutDown { tile: at(39, 5) });
+    let (more, outcome) = first_action(&mut world, id, 60);
+    assert_eq!(outcome, Outcome::Failed, "{more:?}");
+    // It ends at the next 5.0 after arriving; the tick's own choice may
+    // then take it a step on.
+    let arrived = more.iter().position(|&tile| tile == at(9, 5));
+    assert_eq!(
+        arrived,
+        Some(more.len() - 2),
+        "it kept to the way: {more:?}"
+    );
+}
+
+#[test]
+fn an_approach_whose_target_leaves_the_flood_ends_as_failed() {
+    // Design §3.6, §5.5: the Cursor carries the ball off, out of reach.
+    let (walker, ball) = (at(0, 0), at(6, 0));
+    let scripted = [(walker, ScriptedAction::Approach { at: ball })];
+    let mut world = world_with(
+        &["........................................"],
+        &[(ball, "ball")],
+        10.0,
+        &[walker],
+        &scripted,
+    );
+    let id = sprite_on(&world, walker);
+    run(&mut world, id, 2);
+    let item = world.object_at(ball).expect("the ball").id();
+    world.submit(Command::PickUp { item });
+    world.submit(Command::PutDown { tile: at(39, 0) });
+    let (tiles, outcome) = first_action(&mut world, id, 5);
+    assert_eq!((tiles.len(), outcome), (1, Outcome::Failed), "{tiles:?}");
 }
 
 #[test]

@@ -1501,6 +1501,29 @@ fn the_brain_tab_shows_what_the_sprite_has_learned_as_memory() {
 }
 
 #[test]
+fn the_brain_tab_leaves_out_what_rounds_to_nothing() {
+    // Learning at .004, it learns berries are worth .004 × .5 = .002 for
+    // hunger: something, but .00 to two places (design §5.9).
+    let genome = BERRY_GENOME.replace(
+        "])",
+        "    BrainParam(param: \"worth_rate_good\", value: 0.004),\n])",
+    );
+    let objects = [(Pos { x: 3, y: 3 }, "berry")];
+    let (world, mut app) = one_sprite_among(&genome, &objects, &[], 2);
+    let memory = world.sprites().next().expect("the sprite").memory();
+    assert!(
+        memory.iter().any(|m| m.amount > 0.0 && m.amount < 0.005),
+        "{memory:?}"
+    );
+    open(&mut app, &world, Tab::Brain);
+    let (_, text) = inspector(&app, &world);
+    assert!(
+        !text.iter().any(|row| row.starts_with("MEMORY")),
+        "{text:?}"
+    );
+}
+
+#[test]
 fn the_brain_tab_leaves_memory_out_until_it_has_learned_something() {
     let (world, mut app) = one_sprite(HUNGRY_GENOME, 1);
     open(&mut app, &world, Tab::Brain);

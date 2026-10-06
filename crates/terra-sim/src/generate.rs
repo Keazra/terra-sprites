@@ -30,6 +30,13 @@ const DIRT_SHARE: usize = 40;
 
 /// Generates a connected map for a new world, drawing randomness from the world's RNG.
 pub(crate) fn generate(config: &WorldConfig, data: &DataPack, rng: &mut ChaCha8Rng) -> Map {
+    let mut map = banded(config, data, rng);
+    regions::connect(&mut map, MIN_REGION);
+    map
+}
+
+/// The map's terrain by height and moisture, before its regions are joined.
+fn banded(config: &WorldConfig, data: &DataPack, rng: &mut ChaCha8Rng) -> Map {
     let (width, height) = (config.width(), config.height());
     let heights = noise(width, height, rng);
     let moisture = noise(width, height, rng);
@@ -60,8 +67,6 @@ pub(crate) fn generate(config: &WorldConfig, data: &DataPack, rng: &mut ChaCha8R
             map.set(map.pos(land[position]), Terrain::Dirt);
         }
     }
-
-    regions::connect(&mut map, MIN_REGION);
     map
 }
 
@@ -184,4 +189,73 @@ fn cell(coord: u16, spacing: u16) -> (usize, f32) {
 
 fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
+}
+
+#[cfg(test)]
+mod tests {
+    use rand_chacha::rand_core::SeedableRng;
+
+    use super::*;
+
+    fn data() -> DataPack {
+        DataPack::builtin().expect("built-in data pack is valid")
+    }
+
+    /// How many tiles of each terrain `map` has.
+    fn counts(map: &Map) -> [usize; 6] {
+        let mut counts = [0; 6];
+        for pos in map.positions() {
+            let slot = match map.terrain(pos) {
+                Terrain::DeepWater => 0,
+                Terrain::ShallowWater => 1,
+                Terrain::Sand => 2,
+                Terrain::Dirt => 3,
+                Terrain::Grass => 4,
+                Terrain::Rock => 5,
+            };
+            counts[slot] += 1;
+        }
+        counts
+    }
+
+    #[test]
+    fn the_heights_fall_into_bands_of_20_12_8_50_and_10_percent_and_40_percent_of_land_is_dirt() {
+        let data = data();
+        let config = WorldConfig::from_ron("(width: 64, height: 40)", &data).expect("valid");
+        for seed in [1, 2, 3] {
+            let map = banded(&config, &data, &mut ChaCha8Rng::seed_from_u64(seed));
+            // 2,560 tiles: a tile is in a band if under that share of the
+            // tiles rank below it.
+            let [deep, shallow, sand, dirt, grass, rock] = counts(&map);
+            assert_eq!((deep, shallow, sand), (512, 308, 204), "seed {seed}");
+            assert_eq!((dirt + grass, rock), (1280, 256), "seed {seed}");
+            assert_eq!(dirt, 512, "40% of the land, seed {seed}");
+        }
+    }
+
+    #[test]
+    fn a_region_of_64_tiles_is_joined_and_one_of_63_becomes_rock() {
+        // The mainland on the left; two regions on the right, 64 tiles
+        // above and 63 below, each a wall away from it.
+        let mut rows = Vec::new();
+        for y in 0..17 {
+            let right = match y {
+                8 => "########",
+                16 => ".......#",
+                _ => "........",
+            };
+            rows.push(format!("{}#{right}", ".".repeat(12)));
+        }
+        let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+        let mut map = Map::from_ascii(&rows, &data()).expect("valid drawing");
+        regions::connect(&mut map, MIN_REGION);
+        let walkable = |x: u16, y: u16| map.is_walkable(Pos { x, y });
+        assert!(walkable(13, 0), "the 64 stay land");
+        assert!(!walkable(13, 9), "the 63 became rock");
+        assert!(
+            (0..8).any(|y| walkable(12, y)),
+            "the 64 were joined through the wall: {:#?}",
+            map.to_ascii()
+        );
+    }
 }

@@ -1886,6 +1886,34 @@ mod tests {
     }
 
     #[test]
+    fn both_temperatures_scale_with_exploration_mod() {
+        // Design §5.3, §5.5: τ = base × exploration_mod. A brain of base 0.2
+        // at exploration 2 draws as one of base 0.4 at exploration 1, and
+        // not as itself at exploration 1.
+        let draws = |base: f32, exploration: f32| {
+            let mut brain = brain(&[
+                &format!(r#"BrainParam(param: "tau_base", value: {base:?})"#),
+                &format!(r#"BrainParam(param: "tau_att_base", value: {base:?})"#),
+            ]);
+            let mut rng = ChaCha8Rng::seed_from_u64(5);
+            let scores = BTreeMap::from([(WATER, 0.3), (TOY, 0.6), (FRUIT, 0.1)]);
+            let mut verbs = [0.0; VERBS.len()];
+            verbs[column(Verb::Eat)] = 0.5;
+            verbs[column(Verb::Rest)] = 0.2;
+            let available = available(true, false);
+            (0..200)
+                .map(|_| {
+                    let attended = brain.attend(&scores, false, exploration, &mut rng);
+                    let verb = brain.choose(&verbs, &available, exploration, &mut rng);
+                    (attended, verb)
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(draws(0.2, 2.0), draws(0.4, 1.0));
+        assert_ne!(draws(0.2, 2.0), draws(0.2, 1.0));
+    }
+
+    #[test]
     fn the_brain_draws_from_the_rng_only_when_choosing_afresh() {
         let mut brain = brain(&[]);
         let scores = BTreeMap::from([(WATER, 0.3), (TOY, 0.5)]);
@@ -2076,6 +2104,124 @@ mod tests {
             "{}",
             bush_for_hunger(&brain)
         );
+    }
+
+    #[test]
+    fn learning_rate_mod_scales_what_is_learned_but_not_fading() {
+        // Design §5.6: every learning rate is scaled by learning_rate_mod;
+        // fading isn't (and familiarity grows in `commit`, which it never
+        // reaches).
+        let data = builtin();
+        let learned_at = |rate_mod: f32| {
+            let mut brain = unfading(&[]);
+            brain.touched = Some(Touch {
+                tick: 1,
+                verb: Some(Verb::Eat),
+                subject: types::BERRY_BUSH,
+                sprite: None,
+                novelty: 1.0,
+                by_cursor: false,
+            });
+            let signals = hunger_at(&mut brain, &data, 0.5);
+            brain.learn(1, &signals, rate_mod, &data);
+            let signals = hunger_at(&mut brain, &data, 0.4);
+            brain.learn(2, &signals, rate_mod, &data);
+            bush_for_hunger(&brain)
+        };
+        assert!(close(learned_at(1.0), 0.5 * 0.1), "{}", learned_at(1.0));
+        assert!(
+            close(learned_at(2.0), 2.0 * 0.5 * 0.1),
+            "{}",
+            learned_at(2.0)
+        );
+        let faded_at = |rate_mod: f32| {
+            let mut brain = brain(&[]);
+            teach(&mut brain, types::BERRY_BUSH).worth[0] = 0.5;
+            let signals = hunger_at(&mut brain, &data, 0.0);
+            brain.learn(1, &signals, rate_mod, &data);
+            bush_for_hunger(&brain)
+        };
+        assert!(faded_at(1.0) < 0.5, "it faded");
+        assert_eq!(faded_at(2.0), faded_at(1.0));
+        assert_eq!(faded_at(0.5), faded_at(1.0));
+    }
+
+    #[test]
+    fn of_two_needs_pushing_a_verb_equally_the_motive_is_the_lower_input_id() {
+        // Design §5.5. The pack lists thirst before hunger, so the tie is
+        // settled by input ID (hunger 1, thirst 2), not by the list.
+        let brain_io = include_str!("../../../data/brain_io.ron").replace(
+            r#"needs: ["hunger", "thirst","#,
+            r#"needs: ["thirst", "hunger","#,
+        );
+        assert_ne!(brain_io, include_str!("../../../data/brain_io.ron"));
+        let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
+            .iter()
+            .map(|&(path, text)| {
+                (
+                    path,
+                    if path == "brain_io.ron" {
+                        &brain_io
+                    } else {
+                        text
+                    },
+                )
+            })
+            .collect();
+        let data = DataPack::from_sources(&sources).expect("a valid pack");
+        let genome = Genome::from_ron(
+            r#"(format: 1, genes: [
+                Instinct(inputs: [("hunger", false)], verb: Eat, weight: 0.5),
+                Instinct(inputs: [("thirst", false)], verb: Eat, weight: 0.5),
+            ])"#,
+            &data,
+        )
+        .expect("a valid genome");
+        let brain = Brain::new(&genome, &data);
+        let place = |name: &str| {
+            data.brain_inputs()
+                .position(|(_, n)| n == name)
+                .expect(name)
+        };
+        let (hunger, thirst) = (place("hunger"), place("thirst"));
+        let need = |row: usize| data.need_places().iter().position(|&r| r == row);
+        assert_eq!((need(thirst), need(hunger)), (Some(0), Some(1)));
+        let mut a = vec![0.0; brain.concepts.len()];
+        a[hunger] = 1.0;
+        a[thirst] = 1.0;
+        assert_eq!(brain.motive(Verb::Eat, &a, &data), need(hunger), "a tie");
+        a[thirst] = 1.2;
+        assert_eq!(
+            brain.motive(Verb::Eat, &a, &data),
+            need(thirst),
+            "the bigger push"
+        );
+    }
+
+    #[test]
+    fn the_memory_lists_the_five_furthest_from_nothing_ties_in_listed_order() {
+        // Design §5.9.
+        let data = builtin();
+        let mut brain = unfading(&[]);
+        teach(&mut brain, types::BALL).good = 0.9;
+        teach(&mut brain, types::THORNBUSH).bad = -0.8;
+        teach(&mut brain, types::BERRY).habits[column(Verb::Eat)] = 0.6;
+        teach(&mut brain, types::BERRY_BUSH).worth[0] = 0.3;
+        teach(&mut brain, types::BERRY).worth[0] = 0.3;
+        teach(&mut brain, types::BALL).habits[column(Verb::Play)] = 0.3;
+        let listed: Vec<Memory> = brain
+            .learned(&data)
+            .into_iter()
+            .filter(|m| m.amount != 0.0)
+            .collect();
+        let memory = brain.memory(&data);
+        assert_eq!(memory.len(), 5, "{listed:#?}");
+        let amounts: Vec<f32> = memory.iter().map(|m| m.amount).collect();
+        assert_eq!(amounts, [0.9, -0.8, 0.6, 0.3, 0.3]);
+        // The two 0.3s it keeps are the first two listed.
+        let ties: Vec<&Memory> = listed.iter().filter(|m| m.amount == 0.3).collect();
+        assert_eq!(ties.len(), 3, "{listed:#?}");
+        assert_eq!([&memory[3], &memory[4]], [ties[0], ties[1]]);
     }
 
     #[test]
