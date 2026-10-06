@@ -8,65 +8,59 @@
 //! from seed N (7 by default). Close other busy programs first: anything else
 //! the computer is doing slows it.
 
+#[path = "common/mod.rs"]
+mod common;
+
 use std::process::ExitCode;
 use std::time::Instant;
 
+use common::args::{self, seed, ticks};
 use terra_sim::bench::crowded_world;
 
 /// The target, in ticks a second.
 const TARGET: f64 = 200.0;
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let (ticks, seed) = match parse(&args) {
-        Ok(parsed) => parsed,
-        Err(message) => {
-            eprintln!("{message}\nusage: speed [--ticks N] [--seed N]");
-            return ExitCode::FAILURE;
+    args::run("speed [--ticks N] [--seed N]", parse, |(ticks, seed)| {
+        if cfg!(debug_assertions) {
+            eprintln!("warning: this is a debug build; add --release for a fair measure");
         }
-    };
-    if cfg!(debug_assertions) {
-        eprintln!("warning: this is a debug build; add --release for a fair measure");
-    }
-    println!("default world, 100 sprites, seed {seed}, settled for a few hundred ticks");
-    let mut world = crowded_world(seed);
-    let start = Instant::now();
-    for _ in 0..ticks {
-        world.step();
-    }
-    let seconds = start.elapsed().as_secs_f64();
-    let rate = ticks as f64 / seconds;
-    println!(
-        "{ticks} ticks in {seconds:.2} s: {rate:.0} ticks a second, {:.2} ms a tick",
-        1000.0 * seconds / ticks as f64
-    );
-    println!(
-        "{} sprites alive at the end, state hash {:016x}",
-        world.sprites().count(),
-        world.state_hash()
-    );
-    let verdict = if rate >= TARGET { "met" } else { "not met" };
-    println!("A5 (at least {TARGET:.0} ticks a second): {verdict}");
-    ExitCode::SUCCESS
+        println!("default world, 100 sprites, seed {seed}, settled for a few hundred ticks");
+        let mut world = crowded_world(seed);
+        let start = Instant::now();
+        for _ in 0..ticks {
+            world.step();
+        }
+        let seconds = start.elapsed().as_secs_f64();
+        let rate = ticks as f64 / seconds;
+        println!(
+            "{ticks} ticks in {seconds:.2} s: {rate:.0} ticks a second, {:.2} ms a tick",
+            1000.0 * seconds / ticks as f64
+        );
+        println!(
+            "{} sprites alive at the end, state hash {:016x}",
+            world.sprites().count(),
+            world.state_hash()
+        );
+        let verdict = if rate >= TARGET { "met" } else { "not met" };
+        println!("A5 (at least {TARGET:.0} ticks a second): {verdict}");
+        ExitCode::SUCCESS
+    })
 }
 
 /// The ticks to measure and the seed, from the arguments.
 fn parse(args: &[String]) -> Result<(u64, u64), String> {
-    let (mut ticks, mut seed) = (5_000, 7);
+    let (mut n_ticks, mut n_seed) = (5_000, 7);
     let mut args = args.iter();
     while let Some(flag) = args.next() {
-        let target = match flag.as_str() {
-            "--ticks" => &mut ticks,
-            "--seed" => &mut seed,
+        match flag.as_str() {
+            "--ticks" => n_ticks = ticks(&mut args)?,
+            "--seed" => n_seed = seed(&mut args)?,
             _ => return Err(format!("unknown argument {flag}")),
-        };
-        let value = args.next().ok_or(format!("{flag} needs a number"))?;
-        *target = value
-            .parse()
-            .map_err(|_| format!("{flag} needs a number, not {value}"))?;
+        }
     }
-    if ticks == 0 {
+    if n_ticks == 0 {
         return Err("--ticks needs a number above 0".to_string());
     }
-    Ok((ticks, seed))
+    Ok((n_ticks, n_seed))
 }
