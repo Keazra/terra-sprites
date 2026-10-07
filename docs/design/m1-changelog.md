@@ -1,6 +1,6 @@
 # M1 design changelog
 
-The change table from every superseded revision of [M1 "A Sprite Lives"](m1-a-sprite-lives-v39.md). v39 is the rulebook, and its table stays at the top of that file until the next revision. This file is the history: each earlier table is copied here with its row numbers left as they were, so "v16 change 16" is still row 16 of [v16](#v16).
+The change table from every superseded revision of [M1 "A Sprite Lives"](m1-a-sprite-lives-v40.md). v40 is the rulebook, and its table stays at the top of that file until the next revision. This file is the history: each earlier table is copied here with its row numbers left as they were, so "v16 change 16" is still row 16 of [v16](#v16).
 
 The full text of a revision is a git tag, not a file on `main`. On tag `design/m1-vN` it is `docs/design/m1-a-sprite-lives-vN.md`. v1 is `docs/design/m1-a-sprite-lives.md` on `design/m1-v1`.
 
@@ -8,11 +8,21 @@ The two reviews of v1 are [Gemini](reviews/m1-gemini-eval.md) and [GPT](reviews/
 
 M2's older revisions still live in [`archive/`](archive/).
 
-Jump to [v39](#v39) · [v38](#v38) · [v37](#v37) · [v36](#v36) · [v35](#v35) · [v34](#v34) · [v33](#v33) · [v32](#v32) · [v31](#v31) · [v30](#v30) · [v29](#v29) · [v28](#v28) · [v27](#v27) · [v26](#v26) · [v25](#v25) · [v24](#v24) · [v23](#v23) · [v22](#v22) · [v21](#v21) · [v20](#v20) · [v19](#v19) · [v18](#v18) · [v17](#v17) · [v16](#v16) · [v15](#v15) · [v14](#v14) · [v13](#v13) · [v12](#v12) · [v11](#v11) · [v10](#v10) · [v9](#v9) · [v8](#v8) · [v7](#v7) · [v6](#v6) · [v5](#v5) · [v4](#v4) · [v3](#v3) · [v2](#v2) · [v1](#v1).
+Jump to [v40](m1-a-sprite-lives-v40.md) · [v39](#v39) · [v38](#v38) · [v37](#v37) · [v36](#v36) · [v35](#v35) · [v34](#v34) · [v33](#v33) · [v32](#v32) · [v31](#v31) · [v30](#v30) · [v29](#v29) · [v28](#v28) · [v27](#v27) · [v26](#v26) · [v25](#v25) · [v24](#v24) · [v23](#v23) · [v22](#v22) · [v21](#v21) · [v20](#v20) · [v19](#v19) · [v18](#v18) · [v17](#v17) · [v16](#v16) · [v15](#v15) · [v14](#v14) · [v13](#v13) · [v12](#v12) · [v11](#v11) · [v10](#v10) · [v9](#v9) · [v8](#v8) · [v7](#v7) · [v6](#v6) · [v5](#v5) · [v4](#v4) · [v3](#v3) · [v2](#v2) · [v1](#v1).
+
+## v40
+
+The current revision. Its change table is at the top of [m1-a-sprite-lives-v40.md](m1-a-sprite-lives-v40.md). It is tagged `design/m1-v40` when this revision merges.
 
 ## v39
 
-The current revision. Its change table is at the top of [m1-a-sprite-lives-v39.md](m1-a-sprite-lives-v39.md), and it moves here when v40 supersedes it. Full text: [`design/m1-v39`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v39/docs/design/m1-a-sprite-lives-v39.md).
+Changes from v38. Full text: [`design/m1-v39`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v39/docs/design/m1-a-sprite-lives-v39.md).
+
+M2 planning (2026-10-05): milestone 2 has a design of its own, [M2 "Generations"](archive/m2-generations-v1.md). This revision changes no rule of M1; it only points the roadmap there.
+
+| # | Change | Source | Sections |
+|---|---|---|---|
+| 1 | **M2's contents are in the [M2 design](archive/m2-generations-v1.md).** Beyond the roadmap's list, M2 takes memory of places, learning by watching, a harsher world, the speed cap and a title screen; this document stays the rulebook for everything M2 doesn't change. | M2 planning session | §1.1 |
 
 ## v38
 

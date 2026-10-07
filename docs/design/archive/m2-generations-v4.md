@@ -1,27 +1,26 @@
-# Terra Sprites — M2 "Generations" design (v3)
+# Terra Sprites — M2 "Generations" design (v4)
 
 - **Status:** Draft: the plan, with what each slice settles added in a new revision.
 - **Date:** 2026-10-06
-- **Supersedes:** [v1](archive/m2-generations-v1.md), whose table holds the planning session's decisions
+- **Supersedes:** [v3](archive/m2-generations-v3.md), whose table holds the title screen's decisions; [v1](archive/m2-generations-v1.md) holds the planning session's
 - **Builds on:** [M1 design v39](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v39/docs/design/m1-a-sprite-lives-v39.md), which stays the rulebook for everything M2 doesn't change
-- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, and the title screen (Slice 21)
+- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20) and the title screen (Slice 21)
 
 ---
 
-## Changes from v1
+## Changes from v3
 
-Slice 21 (the title screen, [#139](https://github.com/Keazra/terra-sprites/issues/139)). Its design pass drew four mock-ups (a still picture, a live terrarium behind the menu, an opening scene, and a menu of things touched with the Cursor) and a prototype of each to try in Windows Terminal. The owner picked the opening scene on a card. One round of questions followed in the project's shared files (`slice-21/round-1.md`), each with a recommendation; the owner answered Q3 in their own words, and silence accepted the rest. Slice 20's memory of places takes §7 in its own revision.
+Slice 20 (memory of places, [#138](https://github.com/Keazra/terra-sprites/issues/138)). Its questions went to the owner in the project's shared files (`slice-20/questions.md`), each with a recommendation; silence accepts a recommendation, and the owner raised no objection.
 
 | # | Change | Source | Sections |
 |---|---|---|---|
-| 1 | **The title screen opens with a scene:** the terrarium starts dark, the Cursor's frame of light arrives on a sleeping sprite, the world fills in around it, the sprite wakes pleased, then the title and menu appear. | The owner's pick, Slice 21 design pass | §8.1 |
-| 2 | **The world it wakes is a new random one that keeps moving** behind the menu, never the player's save. | The owner, Slice 21 Q3 | §8.1 |
-| 3 | **The scene plays at every launch;** any key skips it. | Q2 | §8.1 |
-| 4 | **In the story, it's the player arriving at the glass,** before reaching in. No words say so. | Q4 | §8.1 |
-| 5 | **The menu:** Continue (the newest save), New world, Load, Help, Quit. | Q1, Q6 | §8.2 |
-| 6 | **New world asks for a seed and a preset** in one small box, a random seed filled in. Lab mode will be chosen there (Slice 27). | Q6 | §8.3; §4 |
-| 7 | **`Esc` in a world asks "y quit the game, t title screen".** Both save first, as quitting does. This changes M1 §6.6's quit prompt. | Q5 | §8.4; M1 §6.6 |
-| 8 | **Flags that make or load a world skip the title screen;** the others draw it their way. | Default, as #139 asks | §8.5 |
+| 1 | **A sprite remembers places where something that stays put eased a need:** water, and objects fixed in place, such as bushes. Not loose things (berries, balls), sprites or the Cursor, and not places where it was hurt. | Slice 20 Q1 | §7.1 |
+| 2 | **Up to 8 places, at most 3 of one kind, merged within 5 tiles, fading:** relief there remembers a place fully; it fades by the new `place_fade` brain gene, by half in about 3,500 ticks by default; the faintest makes room for a new one; one seen gone is forgotten. The limit of 3 a kind came from the owner's play-through, where sprites remembered only water. | Q2; the owner, 2026-10-06 | §7.2 |
+| 3 | **A remembered place competes as a thing at the edge of sight,** pulling by its worth times how well it's remembered, and only while nothing of its kind is in sight. | Q3 | §7.3 |
+| 4 | **The sprite knows the way:** setting off plans a path all the way there, and the trip has as long as the walk takes on top of the timeout. | Q4 | §7.4 |
+| 5 | **The player sees places in the Brain tab and the doing line,** not on the map. | Q5 | §7.5 |
+| 6 | **Learning by watching adds nothing to places yet.** | Q6 | §7.6 |
+| 7 | **The bar:** the behaviour test, and no worse than `main` on A1–A4; the scarce-water runs are for information. | Q7 | §7.7 |
 
 ---
 
@@ -152,6 +151,90 @@ M2 is done when these hold, as well as M1's A1–A9. Each slice sets its criteri
 | G7 | **Content safety.** A child is never a mating target, for any genome or data pack (§5). | 23 |
 
 Slice 30 gathers the evidence in `docs/acceptance/m2.md`, as `docs/acceptance/m1.md` did for M1, with a play-through checklist for the owner. Slices without a row of their own are checked there: the title screen (Slice 21) and how each slice feels in play, as M1's A8 checked the game in Windows Terminal. Memory of places (Slice 20) shows in G5, which can't be met without it.
+
+---
+
+## 7. Memory of places (Slice 20)
+
+Until Slice 20 a sprite only ever went for what it could see, about 10 tiles round it (M1 design §3.6). Water out of sight was forgotten, which is why scarce water killed grown sprites in Slice 17's measurements. A sprite now remembers where it found things, and a thirsty sprite heads back to the lake it drank from earlier. A remembered place is world state: it's saved, it's part of the state hash, and the self-check checks it every tick (M1 design §2.3, §7.1).
+
+### 7.1 What a sprite remembers
+
+- **A place where something it touched eased a need.** When learning (M1 design §5.6, step 4) credits relief of any need to the thing the sprite touched within `touch_window`, and that thing stays put, the sprite remembers the thing and its tile.
+- **Things that stay put** are water tiles and objects fixed in place: each object type's entry already says whether an object stands on its own tile (M1 design §3.5.1), so a new fixed thing that eases a need, such as a spring or a fruit tree, is remembered with no code. Loose things (berries, balls) are not remembered: they get eaten or roll away. Nor are sprites or the Cursor, which walk off.
+- **It's learned, not instinct.** A newborn remembers nothing.
+- **Not places where it got hurt.** Harm only comes from touching something the sprite can see, so knowing where danger lies out of sight changes nothing yet; critters (M3) are when it would matter.
+
+### 7.2 How many, and how they fade
+
+- **Up to `remembered_places.held` places, 8 in the built-in physiology, and at most `per_kind` of one object type, 3.** Places of the same object type within `remembered_places.merge` tiles of each other (5, counted as tiles of Chebyshev distance) are one place, so a pond is one place, not fifty water tiles: relief at a tile of it moves the place there, and takes in every other place of its kind within 5 tiles of that tile, so no two places of a kind are ever within 5 tiles of each other.
+- **Why a limit a kind.** A big lake's shores are many places 5 tiles apart, and a sprite drinks far more often than it eats. Without the limit, water filled about 7 of a sprite's 8 places by tick 20,000 in a default world (seed 3), and pushed out the bushes it had eaten from: the owner saw sprites remember only water. With it, 26 of 30 sprites remember a bush by tick 10,000, against 18 of 30 by tick 20,000 without it.
+- **Relief there remembers a place fully,** its **recall**, how well it's remembered, at 1, whether it's new or a visit tops it up.
+- **It fades each tick** by the `place_fade` brain parameter: its recall is multiplied by 1 − `place_fade`. The default, 0.0002, halves it in about 3,500 ticks, about 45 minutes at 1×, as worth for a need fades (M1 design §5.6). Its range is 0 to 0.01, so evolution can tune it; a long memory has a natural cost in trips to places that have changed.
+- **Forgotten** once it fades below `forget_below` (0.01), as a remembered sprite is; or when the sprite needs room, the faintest goes first, the oldest of equals: the faintest of its kind when it holds `per_kind` of that kind already, else the faintest of all; or **at once when the sprite sees it gone**: the place is within its sense radius and the thing there no longer exists, such as a bush that died.
+- A saved world from before Slice 20 loads with no places, and its brains get `place_fade` from their genome as the current pack expresses it (saves carry their own pack, M1 design §2.8, so the parameter's range and default fill in for a pack that doesn't name it). One saved while this slice was being built, before the limit of 3 a kind and the merge rule as above, loads with its places brought within them: of two of a kind too near, the older goes, then the faintest of a kind past 3, then the faintest past 8.
+
+### 7.3 How a remembered place competes
+
+- **A remembered place is weighed like a thing at the edge of sight:** its category offers it among what's in sight, at a distance of 1, the flood's edge, so it gets none of the pull that being close gives (M1 design §5.3). Its worth, in the draw and in attention, is multiplied by the place's recall: draw = value_gain × worth × recall, plus curiosity and fear as for any thing.
+- **Hunger and thirst pull through that worth,** as they do for things in sight: water learned to be good for thirst is worth a lot to a thirsty sprite and nothing to one that isn't. So a thirsty sprite's eye turns to the lake it remembers, and a content one doesn't give it a thought.
+- **Only while none is in sight.** A place isn't offered while anything of its object type is in the sprite's flood, so a sprite that can see water drinks there rather than walking to the lake it remembers. Nor is one whose thing is gone.
+- Then it chooses what to do as with anything it attends to: the starter genome's thirst leads to drinking, so thirsty, no water in sight and a lake remembered, it goes to drink at the lake. Every verb that goes to its target is offered for a remembered place; **Retreat is not,** since backing away from something out of sight means nothing.
+
+### 7.4 Trips: how it finds its way back
+
+An action aimed at a remembered place out of sight is a **trip**.
+
+- **It knows the way.** Setting off, it searches a flood out to the place's distance plus its sense radius, which reaches the place wherever the walk winds, weighing tiles with sprites on as its flood does (M1 design §3.6). It keeps to that path, as to a committed path (§3.7). With no way there, such as a bush grown across the only path, it forgets the place and doesn't set off: it carries on with what it was doing, decides nothing that tick, and chooses again at its next step 5. A running action it changed its mind about ends only once the new one is sure to start, so a place it can't get to never interrupts anything.
+- **Time to get there:** a trip has the timeout (60 ticks) plus as long as the walk takes at its speed, so a long trip doesn't give up halfway. That's set when it sets off: finding the way again on the way adds no time, so a trip held up again and again still gives up.
+- **On the way,** when a sprite blocks the path, it plans the way again from where it stands, round sprites, at once rather than after `replan_after` ticks as a blocked walk does (M1 design §3.7), since its whole way is planned already; with no way at all, the trip ends blocked and the place is kept, since a sprite in the way soon moves.
+- **Once the place is in reach of its flood,** the trip becomes an ordinary action, as if it had seen the thing all along: it drinks or eats when it gets there, and the drink teaches what drinks always teach, topping the place up.
+- What it attends to can still change its mind mid-trip, by the usual margin (M1 design §5.3); while out of sight, the trip is weighed by its place's recall, or that of the place of its kind within 5 tiles that took it in, so a trip keeps its pull when its place moves to another tile of the same lake.
+
+### 7.5 What the player sees
+
+- **The Brain tab** lists the places under MEMORY, best remembered first, as PLACES: what, how far and which way, and how well remembered:
+
+  ```
+   MEMORY
+     water is good for thirst            +.61
+   PLACES
+     water · 34 tiles NE                  .92
+     berry bush · 12 tiles W              .40
+  ```
+- **The doing line** says a trip is from memory: `Going to drink at the water it remembers · 34 tiles to go`, `Going to eat the berry bush it remembers · 12 tiles to go`. The detail view adds `· from memory`: `DRINK → water (40,12) · from memory · walking (34 tiles)`.
+- **The map** shows where it's heading with the flashing destination mark, as for any walk. A key that marks the selected sprite's places on the map was left as a possible small issue of its own.
+
+### 7.6 Learning by watching
+
+Nothing extra in Slice 20. A child that follows its parent to water and drinks there remembers the place itself, by §7.1. Slice 28 decides whether watching another sprite drink teaches the place too.
+
+### 7.7 How we know it worked
+
+Set before measuring:
+- **The issue's test:** a sprite that found water and wandered away goes back to it when thirsty, from out of sight (`crates/terra-sim/tests/remembered_places.rs`).
+- **No worse than `main`** on A1–A4, allowing 10% for noise.
+- **For information, no bar:** Slice 17's scarce-water runs again, water on 8% and 4% of the map.
+
+**Measured (2026-10-06),** on the slice's final code, in release builds of `main` and of this slice, on seeds 1–10 with the lab (`scenarios/*.ron --seeds 10`):
+
+| | `main` | Slice 20 |
+|---|---|---|
+| A1–A3 lab runs | — | the same, line for line: in these small worlds the water and the bushes are always in sight, so no place is ever offered |
+| A4: median alive at tick 10,000 | 100% | 100% |
+| A4: hunger and thirst deaths, ticks 10,000–50,000, all seeds | 3 | 2 |
+| A5: ticks a second, 100 sprites, median of 3 runs | 337 | 327, met |
+
+Scarce water, for information: the default world with its water bands scaled down (deep 5/8 of the water, shallow 3/8, then 8% sand). The generator's bands are fixed in code, so this was a scratch build of each, not committed; a world config that sets them is the harsher world's to add (Slice 29). 300 sprites over the 10 seeds, 50,000 ticks:
+
+| Water | Deaths by tick 10,000, `main` → Slice 20 | Grown-up deaths, ticks 10,000–50,000 | Of them, hunger or thirst | Ticks a second, 100 sprites, median of 3 |
+|---|---|---|---|---|
+| 8% of tiles | 30 → 23 | 89 → 2 | all | — |
+| 4% of tiles | 92 → 55 | 139 → 1 | all | 371 → 325 |
+
+Where water is scarce, trips are common, and their way-finding costs about 12% of a tick; in the default world, where they're rare, about 3%. Both are far above A5's 200.
+
+**What it shows.** A sprite that survives childhood now fends for itself, as the owner wants of a grown sprite: with water scarce, grown-up deaths fall from 89 and 139 to 2 and 1. Childhood is still the hard part, since a newborn remembers nothing until it first finds water. That's what Slice 29, the harsher world, builds on (§6, G5).
 
 ---
 

@@ -2,7 +2,7 @@
 
 - **Status:** Draft: the plan. Each slice adds its details in a new revision.
 - **Date:** 2026-10-05
-- **Builds on:** [M1 design v39](m1-a-sprite-lives-v39.md), which stays the rulebook for everything M2 doesn't change
+- **Builds on:** [M1 design v39](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v39/docs/design/m1-a-sprite-lives-v39.md), which stays the rulebook for everything M2 doesn't change
 - **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, and what "M2 is done" means
 
 ---

@@ -1,26 +1,20 @@
-# Terra Sprites — M2 "Generations" design (v4)
+# Terra Sprites — M2 "Generations" design (v5)
 
 - **Status:** Draft: the plan, with what each slice settles added in a new revision.
-- **Date:** 2026-10-06
-- **Supersedes:** [v3](archive/m2-generations-v3.md), whose table holds the title screen's decisions; [v1](archive/m2-generations-v1.md) holds the planning session's
-- **Builds on:** [M1 design v39](m1-a-sprite-lives-v39.md), which stays the rulebook for everything M2 doesn't change
-- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20) and the title screen (Slice 21)
+- **Date:** 2026-10-07
+- **Supersedes:** [v4](archive/m2-generations-v4.md), whose table holds memory of places; [v3](archive/m2-generations-v3.md) holds the title screen's decisions; [v1](archive/m2-generations-v1.md) holds the planning session's
+- **Builds on:** [M1 design v40](m1-a-sprite-lives-v40.md), which stays the rulebook for everything M2 doesn't change
+- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), and where places sit on the Brain tab
 
 ---
 
-## Changes from v3
+## Changes from v4
 
-Slice 20 (memory of places, [#138](https://github.com/Keazra/terra-sprites/issues/138)). Its questions went to the owner in the project's shared files (`slice-20/questions.md`), each with a recommendation; silence accepts a recommendation, and the owner raised no objection.
+The Brain tab's memory ([#160](https://github.com/Keazra/terra-sprites/issues/160)), settled with the owner on 2026-10-07. Places themselves don't change. Only where the list sits, and that its number stays bare.
 
 | # | Change | Source | Sections |
 |---|---|---|---|
-| 1 | **A sprite remembers places where something that stays put eased a need:** water, and objects fixed in place, such as bushes. Not loose things (berries, balls), sprites or the Cursor, and not places where it was hurt. | Slice 20 Q1 | §7.1 |
-| 2 | **Up to 8 places, at most 3 of one kind, merged within 5 tiles, fading:** relief there remembers a place fully; it fades by the new `place_fade` brain gene, by half in about 3,500 ticks by default; the faintest makes room for a new one; one seen gone is forgotten. The limit of 3 a kind came from the owner's play-through, where sprites remembered only water. | Q2; the owner, 2026-10-06 | §7.2 |
-| 3 | **A remembered place competes as a thing at the edge of sight,** pulling by its worth times how well it's remembered, and only while nothing of its kind is in sight. | Q3 | §7.3 |
-| 4 | **The sprite knows the way:** setting off plans a path all the way there, and the trip has as long as the walk takes on top of the timeout. | Q4 | §7.4 |
-| 5 | **The player sees places in the Brain tab and the doing line,** not on the map. | Q5 | §7.5 |
-| 6 | **Learning by watching adds nothing to places yet.** | Q6 | §7.6 |
-| 7 | **The bar:** the behaviour test, and no worse than `main` on A1–A4; the scarce-water runs are for information. | Q7 | §7.7 |
+| 1 | **Places stay their own list** below the grouped memory, not under MEMORY and not under the thing. The line is unchanged: what, how far and which way, and the recall as the number alone. | #160 | §7.5 |
 
 ---
 
@@ -193,11 +187,11 @@ An action aimed at a remembered place out of sight is a **trip**.
 
 ### 7.5 What the player sees
 
-- **The Brain tab** lists the places under MEMORY, best remembered first, as PLACES: what, how far and which way, and how well remembered:
+- **The Brain tab** lists the places in their own list, below the grouped memory (M1 design §6.1), best remembered first, as PLACES. A line is unchanged: what, how far and which way, and how well remembered, as the number alone. Places are not folded under the thing.
 
   ```
-   MEMORY
-     water is good for thirst            +.61
+   ► WATER
+     good for thirst                     +.61
    PLACES
      water · 34 tiles NE                  .92
      berry bush · 12 tiles W              .40
