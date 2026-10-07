@@ -4,7 +4,7 @@ How the engineering skills should consume this repo's domain documentation when 
 
 ## Before exploring, read these
 
-- **The current design doc** in `docs/design/`: it holds only the current revision of each design, the highest-numbered `-vN`. Read the sections that touch the area you're about to work in. Earlier revisions and the `*-eval.md` files are in `docs/design/archive/`: history, not spec.
+- **The current design doc** in `docs/design/`: it holds only the current revision of each design, the highest-numbered `-vN`. Read the sections that touch the area you're about to work in. M1's earlier revisions are tags `design/m1-vN`, and their change tables are in `docs/design/m1-changelog.md`. The v1 reviews are in `docs/design/reviews/`. M2's earlier revisions are in `docs/design/archive/`. All of that is history, not spec.
 - **`CONTEXT.md`** at the repo root: the glossary.
 - **`docs/adr/`**: read ADRs that touch the area you're about to work in.
 
@@ -20,7 +20,8 @@ This is a single-context repo:
 ├── docs/
 │   ├── adr/            ← decision records, 0001-<slug>.md (created lazily)
 │   └── design/         ← the current design doc of each design (the highest -vN)
-│       └── archive/    ← earlier revisions and their reviews: history, not spec
+│       ├── archive/    ← M2's earlier revisions
+│       └── reviews/    ← the v1 evaluations
 ├── crates/
 └── data/
 ```
