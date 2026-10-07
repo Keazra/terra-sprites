@@ -15,7 +15,7 @@ M2 planning (2026-10-05): milestone 2 has a design of its own, [M2 "Generations"
 |---|---|---|---|
 | 1 | **M2's contents are in the [M2 design](archive/m2-generations-v1.md).** Beyond the roadmap's list, M2 takes memory of places, learning by watching, a harsher world, the speed cap and a title screen; this document stays the rulebook for everything M2 doesn't change. | M2 planning session | §1.1 |
 
-**Earlier changes** are in the [changelog](m1-changelog.md). Each revision's table is there, with the same row numbers: "v16 change 16" is row 16 of [v16](m1-changelog.md#v16). The full text of a revision is tag `design/m1-vN`. This revision carries only its own table.
+**Earlier changes** are in the [changelog](m1-changelog.md). Each earlier revision's table is there, with the same row numbers: "v16 change 16" is row 16 of [v16](m1-changelog.md#v16). The full text of a revision is tag `design/m1-vN`. This revision carries only its own table.
 
 ---
 

@@ -1,6 +1,6 @@
 # M1 design changelog
 
-The change table from every revision of [M1 "A Sprite Lives"](m1-a-sprite-lives-v39.md). v39 is the rulebook. This file is the history: each revision's table is copied here with its row numbers left as they were, so "v16 change 16" is still row 16 of [v16](#v16).
+The change table from every superseded revision of [M1 "A Sprite Lives"](m1-a-sprite-lives-v39.md). v39 is the rulebook, and its table stays at the top of that file until the next revision. This file is the history: each earlier table is copied here with its row numbers left as they were, so "v16 change 16" is still row 16 of [v16](#v16).
 
 The full text of a revision is a git tag, not a file on `main`. On tag `design/m1-vN` it is `docs/design/m1-a-sprite-lives-vN.md`. v1 is `docs/design/m1-a-sprite-lives.md` on `design/m1-v1`.
 
@@ -8,65 +8,15 @@ The two reviews of v1 are [Gemini](reviews/m1-gemini-eval.md) and [GPT](reviews/
 
 M2's older revisions still live in [`archive/`](archive/).
 
-| Revision | Tag | Full text |
-|---|---|---|
-| v39 | [`design/m1-v39`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v39/docs/design/m1-a-sprite-lives-v39.md) | `docs/design/m1-a-sprite-lives-v39.md` |
-| v38 | [`design/m1-v38`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v38/docs/design/m1-a-sprite-lives-v38.md) | `docs/design/m1-a-sprite-lives-v38.md` |
-| v37 | [`design/m1-v37`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v37/docs/design/m1-a-sprite-lives-v37.md) | `docs/design/m1-a-sprite-lives-v37.md` |
-| v36 | [`design/m1-v36`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v36/docs/design/m1-a-sprite-lives-v36.md) | `docs/design/m1-a-sprite-lives-v36.md` |
-| v35 | [`design/m1-v35`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v35/docs/design/m1-a-sprite-lives-v35.md) | `docs/design/m1-a-sprite-lives-v35.md` |
-| v34 | [`design/m1-v34`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v34/docs/design/m1-a-sprite-lives-v34.md) | `docs/design/m1-a-sprite-lives-v34.md` |
-| v33 | [`design/m1-v33`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v33/docs/design/m1-a-sprite-lives-v33.md) | `docs/design/m1-a-sprite-lives-v33.md` |
-| v32 | [`design/m1-v32`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v32/docs/design/m1-a-sprite-lives-v32.md) | `docs/design/m1-a-sprite-lives-v32.md` |
-| v31 | [`design/m1-v31`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v31/docs/design/m1-a-sprite-lives-v31.md) | `docs/design/m1-a-sprite-lives-v31.md` |
-| v30 | [`design/m1-v30`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v30/docs/design/m1-a-sprite-lives-v30.md) | `docs/design/m1-a-sprite-lives-v30.md` |
-| v29 | [`design/m1-v29`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v29/docs/design/m1-a-sprite-lives-v29.md) | `docs/design/m1-a-sprite-lives-v29.md` |
-| v28 | [`design/m1-v28`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v28/docs/design/m1-a-sprite-lives-v28.md) | `docs/design/m1-a-sprite-lives-v28.md` |
-| v27 | [`design/m1-v27`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v27/docs/design/m1-a-sprite-lives-v27.md) | `docs/design/m1-a-sprite-lives-v27.md` |
-| v26 | [`design/m1-v26`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v26/docs/design/m1-a-sprite-lives-v26.md) | `docs/design/m1-a-sprite-lives-v26.md` |
-| v25 | [`design/m1-v25`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v25/docs/design/m1-a-sprite-lives-v25.md) | `docs/design/m1-a-sprite-lives-v25.md` |
-| v24 | [`design/m1-v24`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v24/docs/design/m1-a-sprite-lives-v24.md) | `docs/design/m1-a-sprite-lives-v24.md` |
-| v23 | [`design/m1-v23`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v23/docs/design/m1-a-sprite-lives-v23.md) | `docs/design/m1-a-sprite-lives-v23.md` |
-| v22 | [`design/m1-v22`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v22/docs/design/m1-a-sprite-lives-v22.md) | `docs/design/m1-a-sprite-lives-v22.md` |
-| v21 | [`design/m1-v21`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v21/docs/design/m1-a-sprite-lives-v21.md) | `docs/design/m1-a-sprite-lives-v21.md` |
-| v20 | [`design/m1-v20`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v20/docs/design/m1-a-sprite-lives-v20.md) | `docs/design/m1-a-sprite-lives-v20.md` |
-| v19 | [`design/m1-v19`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v19/docs/design/m1-a-sprite-lives-v19.md) | `docs/design/m1-a-sprite-lives-v19.md` |
-| v18 | [`design/m1-v18`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v18/docs/design/m1-a-sprite-lives-v18.md) | `docs/design/m1-a-sprite-lives-v18.md` |
-| v17 | [`design/m1-v17`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v17/docs/design/m1-a-sprite-lives-v17.md) | `docs/design/m1-a-sprite-lives-v17.md` |
-| v16 | [`design/m1-v16`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v16/docs/design/m1-a-sprite-lives-v16.md) | `docs/design/m1-a-sprite-lives-v16.md` |
-| v15 | [`design/m1-v15`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v15/docs/design/m1-a-sprite-lives-v15.md) | `docs/design/m1-a-sprite-lives-v15.md` |
-| v14 | [`design/m1-v14`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v14/docs/design/m1-a-sprite-lives-v14.md) | `docs/design/m1-a-sprite-lives-v14.md` |
-| v13 | [`design/m1-v13`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v13/docs/design/m1-a-sprite-lives-v13.md) | `docs/design/m1-a-sprite-lives-v13.md` |
-| v12 | [`design/m1-v12`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v12/docs/design/m1-a-sprite-lives-v12.md) | `docs/design/m1-a-sprite-lives-v12.md` |
-| v11 | [`design/m1-v11`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v11/docs/design/m1-a-sprite-lives-v11.md) | `docs/design/m1-a-sprite-lives-v11.md` |
-| v10 | [`design/m1-v10`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v10/docs/design/m1-a-sprite-lives-v10.md) | `docs/design/m1-a-sprite-lives-v10.md` |
-| v9 | [`design/m1-v9`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v9/docs/design/m1-a-sprite-lives-v9.md) | `docs/design/m1-a-sprite-lives-v9.md` |
-| v8 | [`design/m1-v8`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v8/docs/design/m1-a-sprite-lives-v8.md) | `docs/design/m1-a-sprite-lives-v8.md` |
-| v7 | [`design/m1-v7`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v7/docs/design/m1-a-sprite-lives-v7.md) | `docs/design/m1-a-sprite-lives-v7.md` |
-| v6 | [`design/m1-v6`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v6/docs/design/m1-a-sprite-lives-v6.md) | `docs/design/m1-a-sprite-lives-v6.md` |
-| v5 | [`design/m1-v5`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v5/docs/design/m1-a-sprite-lives-v5.md) | `docs/design/m1-a-sprite-lives-v5.md` |
-| v4 | [`design/m1-v4`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v4/docs/design/m1-a-sprite-lives-v4.md) | `docs/design/m1-a-sprite-lives-v4.md` |
-| v3 | [`design/m1-v3`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v3/docs/design/m1-a-sprite-lives-v3.md) | `docs/design/m1-a-sprite-lives-v3.md` |
-| v2 | [`design/m1-v2`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v2/docs/design/m1-a-sprite-lives-v2.md) | `docs/design/m1-a-sprite-lives-v2.md` |
-| v1 | [`design/m1-v1`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v1/docs/design/m1-a-sprite-lives.md) | `docs/design/m1-a-sprite-lives.md` |
+Jump to [v39](#v39) · [v38](#v38) · [v37](#v37) · [v36](#v36) · [v35](#v35) · [v34](#v34) · [v33](#v33) · [v32](#v32) · [v31](#v31) · [v30](#v30) · [v29](#v29) · [v28](#v28) · [v27](#v27) · [v26](#v26) · [v25](#v25) · [v24](#v24) · [v23](#v23) · [v22](#v22) · [v21](#v21) · [v20](#v20) · [v19](#v19) · [v18](#v18) · [v17](#v17) · [v16](#v16) · [v15](#v15) · [v14](#v14) · [v13](#v13) · [v12](#v12) · [v11](#v11) · [v10](#v10) · [v9](#v9) · [v8](#v8) · [v7](#v7) · [v6](#v6) · [v5](#v5) · [v4](#v4) · [v3](#v3) · [v2](#v2) · [v1](#v1).
 
 ## v39
 
-Full text: [`design/m1-v39`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v39/docs/design/m1-a-sprite-lives-v39.md).
-
-## Changes from v38
-
-M2 planning (2026-10-05): milestone 2 has a design of its own, [M2 "Generations"](archive/m2-generations-v1.md). This revision changes no rule of M1; it only points the roadmap there.
-
-| # | Change | Source | Sections |
-|---|---|---|---|
-| 1 | **M2's contents are in the [M2 design](archive/m2-generations-v1.md).** Beyond the roadmap's list, M2 takes memory of places, learning by watching, a harsher world, the speed cap and a title screen; this document stays the rulebook for everything M2 doesn't change. | M2 planning session | §1.1 |
+The current revision. Its change table is at the top of [m1-a-sprite-lives-v39.md](m1-a-sprite-lives-v39.md), and it moves here when v40 supersedes it. Full text: [`design/m1-v39`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v39/docs/design/m1-a-sprite-lives-v39.md).
 
 ## v38
 
-Full text: [`design/m1-v38`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v38/docs/design/m1-a-sprite-lives-v38.md).
-
-## Changes from v37
+Changes from v37. Full text: [`design/m1-v38`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v38/docs/design/m1-a-sprite-lives-v38.md).
 
 Slice 19 ([#20](https://github.com/Keazra/terra-sprites/issues/20)): the acceptance check. Every rule in §3–§6 was checked against the code. Three places where the code fell short were fixed. Two needed no change to the spec: a blocked sprite's search now looks for a way to any of its target's goal tiles (§3.7), and a loaded world keeps the themes folder (§6.7). The third, Hurt for a crash that hurts, spells out a case the spec left open (row 8). Rows 1–7 are where the code was right and the spec's words weren't, or left a case open, and row 9 is where M1's evidence now lives.
 
@@ -84,9 +34,7 @@ Slice 19 ([#20](https://github.com/Keazra/terra-sprites/issues/20)): the accepta
 
 ## v37
 
-Full text: [`design/m1-v37`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v37/docs/design/m1-a-sprite-lives-v37.md).
-
-## Changes from v36
+Changes from v36. Full text: [`design/m1-v37`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v37/docs/design/m1-a-sprite-lives-v37.md).
 
 Slice 17 ([#18](https://github.com/Keazra/terra-sprites/issues/18)): the soak (A7), and A4 settled as a safety floor with no tuning. New term: grown-up death (`CONTEXT.md`).
 
@@ -103,9 +51,7 @@ Slice 17 ([#18](https://github.com/Keazra/terra-sprites/issues/18)): the soak (A
 
 ## v36
 
-Full text: [`design/m1-v36`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v36/docs/design/m1-a-sprite-lives-v36.md).
-
-## Changes from v35
+Changes from v35. Full text: [`design/m1-v36`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v36/docs/design/m1-a-sprite-lives-v36.md).
 
 [#118](https://github.com/Keazra/terra-sprites/issues/118): taking over a replay. New term: taking over (`CONTEXT.md`).
 
@@ -118,9 +64,7 @@ Full text: [`design/m1-v36`](https://github.com/Keazra/terra-sprites/blob/refs/t
 
 ## v35
 
-Full text: [`design/m1-v35`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v35/docs/design/m1-a-sprite-lives-v35.md).
-
-## Changes from v34
+Changes from v34. Full text: [`design/m1-v35`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v35/docs/design/m1-a-sprite-lives-v35.md).
 
 Slice 13 ([#14](https://github.com/Keazra/terra-sprites/issues/14)): replays. New terms: replay, session log, checkpoint, playback, divergence (`CONTEXT.md`).
 
@@ -138,9 +82,7 @@ Slice 13 ([#14](https://github.com/Keazra/terra-sprites/issues/14)): replays. Ne
 
 ## v34
 
-Full text: [`design/m1-v34`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v34/docs/design/m1-a-sprite-lives-v34.md).
-
-## Changes from v33
+Changes from v33. Full text: [`design/m1-v34`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v34/docs/design/m1-a-sprite-lives-v34.md).
 
 Slice 18 ([#19](https://github.com/Keazra/terra-sprites/issues/19)), its player-docs half, and loading a theme ([#109](https://github.com/Keazra/terra-sprites/issues/109)). No new terms; the entry for theme in `CONTEXT.md` says how one is loaded.
 
@@ -154,9 +96,7 @@ Slice 18 ([#19](https://github.com/Keazra/terra-sprites/issues/19)), its player-
 
 ## v33
 
-Full text: [`design/m1-v33`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v33/docs/design/m1-a-sprite-lives-v33.md).
-
-## Changes from v32
+Changes from v32. Full text: [`design/m1-v33`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v33/docs/design/m1-a-sprite-lives-v33.md).
 
 [#114](https://github.com/Keazra/terra-sprites/issues/114): `Esc` lets go of a grab or a lead, and never quits on its own. No new terms.
 
@@ -167,9 +107,7 @@ Full text: [`design/m1-v33`](https://github.com/Keazra/terra-sprites/blob/refs/t
 
 ## v32
 
-Full text: [`design/m1-v32`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v32/docs/design/m1-a-sprite-lives-v32.md).
-
-## Changes from v31
+Changes from v31. Full text: [`design/m1-v32`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v32/docs/design/m1-a-sprite-lives-v32.md).
 
 Slice 12 ([#13](https://github.com/Keazra/terra-sprites/issues/13)): save and load. New terms: save, quicksave, autosave, save format (`CONTEXT.md`).
 
@@ -188,9 +126,7 @@ Slice 12 ([#13](https://github.com/Keazra/terra-sprites/issues/13)): save and lo
 
 ## v31
 
-Full text: [`design/m1-v31`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v31/docs/design/m1-a-sprite-lives-v31.md).
-
-## Changes from v30
+Changes from v30. Full text: [`design/m1-v31`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v31/docs/design/m1-a-sprite-lives-v31.md).
 
 Slice 18 ([#19](https://github.com/Keazra/terra-sprites/issues/19)), its data-format half: the reference for every user-editable format. The README's controls and the replay workflow wait for the slices they document. No new terms.
 
@@ -202,9 +138,7 @@ Slice 18 ([#19](https://github.com/Keazra/terra-sprites/issues/19)), its data-fo
 
 ## v30
 
-Full text: [`design/m1-v30`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v30/docs/design/m1-a-sprite-lives-v30.md).
-
-## Changes from v29
+Changes from v29. Full text: [`design/m1-v30`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v30/docs/design/m1-a-sprite-lives-v30.md).
 
 Slice 14 ([#15](https://github.com/Keazra/terra-sprites/issues/15)), body language and the finished screen, settled with the owner before building and built alongside slice 11d's v29: seven questions, each with a recommendation, all accepted. New terms in [`CONTEXT.md`](../../CONTEXT.md): Track, event filter, colour mode, help screen, sprite list, information policy.
 
@@ -226,9 +160,7 @@ Slice 14 ([#15](https://github.com/Keazra/terra-sprites/issues/15)), body langua
 
 ## v29
 
-Full text: [`design/m1-v29`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v29/docs/design/m1-a-sprite-lives-v29.md).
-
-## Changes from v28
+Changes from v28. Full text: [`design/m1-v29`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v29/docs/design/m1-a-sprite-lives-v29.md).
 
 Slice 11d ([#60](https://github.com/Keazra/terra-sprites/issues/60)), the visible Cursor, settled with the owner before building. Decided in slice 10: each cursor mode has its own switch, every mode starts invisible, and while visible the Cursor is part of the lesson. Open here: what a visible Cursor's touch teaches (three readings), what sprites see, whether they can go to it or flee it, a Cursor following a sprite, what being led or shoved by it teaches, and what onlookers learn. The owner accepted every recommendation, and added that a sprite must get used to a feared Cursor that sits on it. After the PR opened, the owner chose the other option for how a player tells a visible Cursor: a frame of light on the map as well as the status line. New terms in [`CONTEXT.md`](../../CONTEXT.md): visible (the Cursor), getting used to the Cursor.
 
@@ -248,9 +180,7 @@ Slice 11d ([#60](https://github.com/Keazra/terra-sprites/issues/60)), the visibl
 
 ## v28
 
-Full text: [`design/m1-v28`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v28/docs/design/m1-a-sprite-lives-v28.md).
-
-## Changes from v27
+Changes from v27. Full text: [`design/m1-v28`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v28/docs/design/m1-a-sprite-lives-v28.md).
 
 Slice 11c ([#12](https://github.com/Keazra/terra-sprites/issues/12)), the Place menu, new sprites, genome files and names, settled with the owner before building. Four questions were open: two carried from slices 3 and 4 (do hand-placed solid objects keep paths open; where a random name comes from) and two from slice 11b (what a right click does while a Place item waits; whether placing works while the Cursor has hold of something). New terms in [`CONTEXT.md`](../../CONTEXT.md): Place menu, Place item, place, spawn, genome file.
 
@@ -268,9 +198,7 @@ Slice 11c ([#12](https://github.com/Keazra/terra-sprites/issues/12)), the Place 
 
 ## v27
 
-Full text: [`design/m1-v27`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v27/docs/design/m1-a-sprite-lives-v27.md).
-
-## Changes from v26
+Changes from v26. Full text: [`design/m1-v27`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v27/docs/design/m1-a-sprite-lives-v27.md).
 
 Three small fixes from the owner's issues: the speed shows while paused and a step runs by it ([#51](https://github.com/Keazra/terra-sprites/issues/51)), held keys are told from presses on terminals with the kitty keyboard protocol ([#22](https://github.com/Keazra/terra-sprites/issues/22)), and the Cursor sits up and left of the pointer so the pointer doesn't hide it ([#42](https://github.com/Keazra/terra-sprites/issues/42)). In [`CONTEXT.md`](../../CONTEXT.md), the pointer **points at** a tile.
 
@@ -283,9 +211,7 @@ Three small fixes from the owner's issues: the speed shows while paused and a st
 
 ## v26
 
-Full text: [`design/m1-v26`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v26/docs/design/m1-a-sprite-lives-v26.md).
-
-## Changes from v25
+Changes from v25. Full text: [`design/m1-v26`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v26/docs/design/m1-a-sprite-lives-v26.md).
 
 Follow ([#92](https://github.com/Keazra/terra-sprites/issues/92)), decided by the owner after trying slices 11a and 11b: the lock on moves to its own key, `F`, under a new name, **Follow**, the middle mouse button does the same, and Follow no longer needs the sprite to be selected; Select mode's right click becomes **Activate**. New and changed terms in [`CONTEXT.md`](../../CONTEXT.md): Follow (was lock on), Activate.
 
@@ -300,9 +226,7 @@ Follow ([#92](https://github.com/Keazra/terra-sprites/issues/92)), decided by th
 
 ## v25
 
-Full text: [`design/m1-v25`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v25/docs/design/m1-a-sprite-lives-v25.md).
-
-## Changes from v24
+Changes from v24. Full text: [`design/m1-v25`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v25/docs/design/m1-a-sprite-lives-v25.md).
 
 Slice 11b ([#12](https://github.com/Keazra/terra-sprites/issues/12)), throwing and shoving, settled with the owner before building. v23 left to this slice how a throw or a shove is aimed, and when in the tick a slide moves. New terms in [`CONTEXT.md`](../../CONTEXT.md): aim, aim line, slide; throw, shove and crash are sharpened.
 
@@ -325,9 +249,7 @@ Slice 11b ([#12](https://github.com/Keazra/terra-sprites/issues/12)), throwing a
 
 ## v24
 
-Full text: [`design/m1-v24`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v24/docs/design/m1-a-sprite-lives-v24.md).
-
-## Changes from v23
+Changes from v23. Full text: [`design/m1-v24`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v24/docs/design/m1-a-sprite-lives-v24.md).
 
 Baseline runs ([#94](https://github.com/Keazra/terra-sprites/issues/94)), settled with the owner in a `/grill-with-docs` session. They replace a daily soak report that ran too briefly for any sprite to die, gave the same numbers every day for the same code, and didn't say which commit it had measured. New terms in [`CONTEXT.md`](../../CONTEXT.md): viability run, soak, baseline run, baseline report, broken, briefing, observer.
 
@@ -341,9 +263,7 @@ Baseline runs ([#94](https://github.com/Keazra/terra-sprites/issues/94)), settle
 
 ## v23
 
-Full text: [`design/m1-v23`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v23/docs/design/m1-a-sprite-lives-v23.md).
-
-## Changes from v22
+Changes from v22. Full text: [`design/m1-v23`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v23/docs/design/m1-a-sprite-lives-v23.md).
 
 Slice 11 ([#12](https://github.com/Keazra/terra-sprites/issues/12)), the Cursor moves things, settled with the owner before building. The biggest change is the owner's: sprites are led, not lifted. New terms in [`CONTEXT.md`](../../CONTEXT.md): contact, grab, lead, hold, throw, shove, crash; tag is redefined.
 
@@ -366,9 +286,7 @@ Slice 11 ([#12](https://github.com/Keazra/terra-sprites/issues/12)), the Cursor 
 
 ## v22
 
-Full text: [`design/m1-v22`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v22/docs/design/m1-a-sprite-lives-v22.md).
-
-## Changes from v21
+Changes from v21. Full text: [`design/m1-v22`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v22/docs/design/m1-a-sprite-lives-v22.md).
 
 Slice 10b ([#11](https://github.com/Keazra/terra-sprites/issues/11)), the Cursor's polish, settled with the owner before building: what 10a left as placeholders, and how the status marks' flashes behave. New term in [`CONTEXT.md`](../../CONTEXT.md): status marks.
 
@@ -382,9 +300,7 @@ Slice 10b ([#11](https://github.com/Keazra/terra-sprites/issues/11)), the Cursor
 
 ## v21
 
-Full text: [`design/m1-v21`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v21/docs/design/m1-a-sprite-lives-v21.md).
-
-## Changes from v20
+Changes from v20. Full text: [`design/m1-v21`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v21/docs/design/m1-a-sprite-lives-v21.md).
 
 Slice 10 ([#11](https://github.com/Keazra/terra-sprites/issues/11)), the Cursor teaches, settled with the owner before building. The owner asked for a diegetic outlook: what the player controls is a thing in the terrarium, so it gets a name and a place in the lore, and whether sprites can perceive it is a design question of its own. New and changed terms are in [`CONTEXT.md`](../../CONTEXT.md): the Cursor, lock on, Train mode, Grab mode, pet, hug, zap, shock, amplified, reach back, hurt, first-order need.
 
@@ -409,9 +325,7 @@ Slice 10 ([#11](https://github.com/Keazra/terra-sprites/issues/11)), the Cursor 
 
 ## v20
 
-Full text: [`design/m1-v20`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v20/docs/design/m1-a-sprite-lives-v20.md).
-
-## Changes from v19
+Changes from v19. Full text: [`design/m1-v20`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v20/docs/design/m1-a-sprite-lives-v20.md).
 
 Slice 9e-b ([#77](https://github.com/Keazra/terra-sprites/issues/77)) moved thornbushes into the bush category, as v19 change 3 allowed if the lab agreed, and measured it against a bar agreed with the owner before measuring. No new domain terms.
 
@@ -422,9 +336,7 @@ Slice 9e-b ([#77](https://github.com/Keazra/terra-sprites/issues/77)) moved thor
 
 ## v19
 
-Full text: [`design/m1-v19`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v19/docs/design/m1-a-sprite-lives-v19.md).
-
-## Changes from v18
+Changes from v18. Full text: [`design/m1-v19`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v19/docs/design/m1-a-sprite-lives-v19.md).
 
 Decided with the owner in the design session on easy modding ([#73](https://github.com/Keazra/terra-sprites/issues/73)), after a look at how Creatures 3 and Docking Station package the agents players download (the comparison is on #73). The owner's principles: each thing we add is its own self-contained thing, and adding an item or a species should be easy, as it was in Creatures. The new domain terms (category, category summary) are in [`CONTEXT.md`](../../CONTEXT.md).
 
@@ -444,9 +356,7 @@ Decided with the owner in the design session on easy modding ([#73](https://gith
 
 ## v18
 
-Full text: [`design/m1-v18`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v18/docs/design/m1-a-sprite-lives-v18.md).
-
-## Changes from v17
+Changes from v17. Full text: [`design/m1-v18`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v18/docs/design/m1-a-sprite-lives-v18.md).
 
 Decided with the owner in the design session for slice 9c ([#62](https://github.com/Keazra/terra-sprites/issues/62)), then measured with a throwaway prototype (on #62: default world, 30 sprites, 30,000 ticks, 10 seeds, and a bully arena). The owner's rule was to fear individuals fast and kinds slowly (v16 change 17). The new domain terms (individual, fear, frightening, sprites in general) are in [`CONTEXT.md`](../../CONTEXT.md).
 
@@ -464,9 +374,7 @@ Decided with the owner in the design session for slice 9c ([#62](https://github.
 
 ## v17
 
-Full text: [`design/m1-v17`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v17/docs/design/m1-a-sprite-lives-v17.md).
-
-## Changes from v16
+Changes from v16. Full text: [`design/m1-v17`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v17/docs/design/m1-a-sprite-lives-v17.md).
 
 Decided with the owner in the session for slice 9b ([#10](https://github.com/Keazra/terra-sprites/issues/10)), the Brain tab.
 
@@ -477,9 +385,7 @@ Decided with the owner in the session for slice 9b ([#10](https://github.com/Kea
 
 ## v16
 
-Full text: [`design/m1-v16`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v16/docs/design/m1-a-sprite-lives-v16.md).
-
-## Changes from v15
+Changes from v15. Full text: [`design/m1-v16`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v16/docs/design/m1-a-sprite-lives-v16.md).
 
 Decided with the owner in the design session for slice 9 ([#10](https://github.com/Keazra/terra-sprites/issues/10)), after two throwaway prototypes were measured (on #10). The owner asked what the simulated fruit-fly brain could teach the sprites. The answer adopted is how the fly's brain works, abstracted for a species that is visual, social and tactile rather than scent-based, not a copy of its parts. The new domain terms (need, relief, worth, habit, thing touched, fruitless try, motive, familiarity, curiosity, wariness) are in [`CONTEXT.md`](../../CONTEXT.md).
 
@@ -506,9 +412,7 @@ Decided with the owner in the design session for slice 9 ([#10](https://github.c
 
 ## v15
 
-Full text: [`design/m1-v15`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v15/docs/design/m1-a-sprite-lives-v15.md).
-
-## Changes from v14
+Changes from v14. Full text: [`design/m1-v15`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v15/docs/design/m1-a-sprite-lives-v15.md).
 
 Decided with the owner in the design session for slice 8 ([#9](https://github.com/Keazra/terra-sprites/issues/9)), which gives sprites learning. The new domain terms (link, trace, felt, memory, lesson, lab scenario) are in [`CONTEXT.md`](../../CONTEXT.md).
 
@@ -528,9 +432,7 @@ Decided with the owner in the design session for slice 8 ([#9](https://github.co
 
 ## v14
 
-Full text: [`design/m1-v14`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v14/docs/design/m1-a-sprite-lives-v14.md).
-
-## Changes from v13
+Changes from v13. Full text: [`design/m1-v14`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v14/docs/design/m1-a-sprite-lives-v14.md).
 
 Decided with the owner in the design session for slice 7c ([#8](https://github.com/Keazra/terra-sprites/issues/8)), which gives sprites Retreat, turning on an attacker, and crowding. The new domain terms (retreat, attacker, cornered) are in [`CONTEXT.md`](../../CONTEXT.md). Temperament, fear, how far a sprite runs, a threatening aura and species were raised in the same session and parked as a design of their own ([#53](https://github.com/Keazra/terra-sprites/issues/53)).
 
@@ -550,9 +452,7 @@ Decided with the owner in the design session for slice 7c ([#8](https://github.c
 
 ## v13
 
-Full text: [`design/m1-v13`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v13/docs/design/m1-a-sprite-lives-v13.md).
-
-## Changes from v12
+Changes from v12. Full text: [`design/m1-v13`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v13/docs/design/m1-a-sprite-lives-v13.md).
 
 Decided with the owner in the design session for slice 7b ([#8](https://github.com/Keazra/terra-sprites/issues/8)), which gives objects a size and a hardness. No new domain terms.
 
@@ -567,9 +467,7 @@ Decided with the owner in the design session for slice 7b ([#8](https://github.c
 
 ## v12
 
-Full text: [`design/m1-v12`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v12/docs/design/m1-a-sprite-lives-v12.md).
-
-## Changes from v11
+Changes from v11. Full text: [`design/m1-v12`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v12/docs/design/m1-a-sprite-lives-v12.md).
 
 Decided with the owner in the design session for slice 7 ([#8](https://github.com/Keazra/terra-sprites/issues/8)), which gives sprites play, fights and flight. The new domain terms (roll, bounce, size, hardness, knock on, crush, hurt, emote) are in [`CONTEXT.md`](../../CONTEXT.md).
 
@@ -589,9 +487,7 @@ Decided with the owner in the design session for slice 7 ([#8](https://github.co
 
 ## v11
 
-Full text: [`design/m1-v11`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v11/docs/design/m1-a-sprite-lives-v11.md).
-
-## Changes from v10
+Changes from v10. Full text: [`design/m1-v11`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v11/docs/design/m1-a-sprite-lives-v11.md).
 
 Decided while building the Brain tab, slice 6b ([#7](https://github.com/Keazra/terra-sprites/issues/7)). The slice ran without the owner, so each is the conservative choice, awaiting their review of the PR.
 
@@ -609,9 +505,7 @@ Decided while building the Brain tab, slice 6b ([#7](https://github.com/Keazra/t
 
 ## v10
 
-Full text: [`design/m1-v10`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v10/docs/design/m1-a-sprite-lives-v10.md).
-
-## Changes from v9
+Changes from v9. Full text: [`design/m1-v10`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v10/docs/design/m1-a-sprite-lives-v10.md).
 
 Decided with the owner in the design session for slice 6 ([#7](https://github.com/Keazra/terra-sprites/issues/7)), which gives sprites a brain that eats and drinks on instinct. The new domain terms (brain input, attention, attended target, concept, instinct, brain parameter) are in [`CONTEXT.md`](../../CONTEXT.md).
 
@@ -636,9 +530,7 @@ Decided with the owner in the design session for slice 6 ([#7](https://github.co
 
 ## v9
 
-Full text: [`design/m1-v9`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v9/docs/design/m1-a-sprite-lives-v9.md).
-
-## Changes from v8
+Changes from v8. Full text: [`design/m1-v9`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v9/docs/design/m1-a-sprite-lives-v9.md).
 
 Decided with the owner in the design session for slice 5 ([#6](https://github.com/Keazra/terra-sprites/issues/6)), which makes sprites move. It also folds in [#29](https://github.com/Keazra/terra-sprites/issues/29), the self-check every tick. The new domain terms (action, verb, outcome, timeout, move points, perception flood, reachable, destination, goal tile, candidate, swap, committed path and detail view) are in [`CONTEXT.md`](../../CONTEXT.md).
 
@@ -664,9 +556,7 @@ Decided with the owner in the design session for slice 5 ([#6](https://github.co
 
 ## v8
 
-Full text: [`design/m1-v8`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v8/docs/design/m1-a-sprite-lives-v8.md).
-
-## Changes from v7
+Changes from v7. Full text: [`design/m1-v8`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v8/docs/design/m1-a-sprite-lives-v8.md).
 
 Decided with the owner while starting slice 4b ([#5](https://github.com/Keazra/terra-sprites/issues/5)), which lets the player select a sprite and look inside it.
 
@@ -684,9 +574,7 @@ Decided with the owner while starting slice 4b ([#5](https://github.com/Keazra/t
 
 ## v7
 
-Full text: [`design/m1-v7`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v7/docs/design/m1-a-sprite-lives-v7.md).
-
-## Changes from v6
+Changes from v6. Full text: [`design/m1-v7`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v7/docs/design/m1-a-sprite-lives-v7.md).
 
 Decided with the owner in the design session for slice 4 ([#5](https://github.com/Keazra/terra-sprites/issues/5)), which gives sprites bodies. The new domain terms (sprite, genome, gene, chemical, drive, locus, pulse, physiology, cause of death, selection, inspector, event log and the rest) are in [`CONTEXT.md`](../../CONTEXT.md).
 
@@ -711,9 +599,7 @@ Decided with the owner in the design session for slice 4 ([#5](https://github.co
 
 ## v6
 
-Full text: [`design/m1-v6`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v6/docs/design/m1-a-sprite-lives-v6.md).
-
-## Changes from v5
+Changes from v5. Full text: [`design/m1-v6`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v6/docs/design/m1-a-sprite-lives-v6.md).
 
 Decided with the owner in the design session for slice 3 ([#4](https://github.com/Keazra/terra-sprites/issues/4)), which brings objects to life. The domain terms (solid, fixture, item, tag, stage, expire and the rest) are in [`CONTEXT.md`](../../CONTEXT.md).
 
@@ -734,9 +620,7 @@ Decided with the owner in the design session for slice 3 ([#4](https://github.co
 
 ## v5
 
-Full text: [`design/m1-v5`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v5/docs/design/m1-a-sprite-lives-v5.md).
-
-## Changes from v4
+Changes from v4. Full text: [`design/m1-v5`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v5/docs/design/m1-a-sprite-lives-v5.md).
 
 Decided with the owner while building slice 2 ([#3](https://github.com/Keazra/terra-sprites/issues/3)): the controls and the hand are reworked around a mouse-driven cursor, and the slice's refinements to terrain and the map view are recorded. The domain terms are in [`CONTEXT.md`](../../CONTEXT.md).
 
@@ -754,9 +638,7 @@ Decided with the owner while building slice 2 ([#3](https://github.com/Keazra/te
 
 ## v4
 
-Full text: [`design/m1-v4`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v4/docs/design/m1-a-sprite-lives-v4.md).
-
-## Changes from v3
+Changes from v3. Full text: [`design/m1-v4`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v4/docs/design/m1-a-sprite-lives-v4.md).
 
 Three small amendments, all made while building slice 1 ([#2](https://github.com/Keazra/terra-sprites/issues/2)).
 
@@ -768,9 +650,7 @@ Three small amendments, all made while building slice 1 ([#2](https://github.com
 
 ## v3
 
-Full text: [`design/m1-v3`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v3/docs/design/m1-a-sprite-lives-v3.md).
-
-## Changes from v2
+Changes from v2. Full text: [`design/m1-v3`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v3/docs/design/m1-a-sprite-lives-v3.md).
 
 v2 was reviewed once more and graded PASS, with two clarifications requested. Both are adopted, plus one related gap found while working on the first.
 
@@ -782,9 +662,7 @@ v2 was reviewed once more and graded PASS, with two clarifications requested. Bo
 
 ## v2
 
-Full text: [`design/m1-v2`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v2/docs/design/m1-a-sprite-lives-v2.md).
-
-## Changes from v1
+Changes from v1. Full text: [`design/m1-v2`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v2/docs/design/m1-a-sprite-lives-v2.md).
 
 The changes come from the GPT and Gemini evaluations of v1 ([m1-gpt-eval.md](reviews/m1-gpt-eval.md), [m1-gemini-eval.md](reviews/m1-gemini-eval.md)) and from self-review. Evaluation points were assessed on their merits, not adopted wholesale.
 

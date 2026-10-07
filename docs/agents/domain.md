@@ -20,7 +20,8 @@ This is a single-context repo:
 ├── docs/
 │   ├── adr/            ← decision records, 0001-<slug>.md (created lazily)
 │   └── design/         ← the current design doc of each design (the highest -vN)
-│       └── archive/    ← earlier revisions and their reviews: history, not spec
+│       ├── archive/    ← M2's earlier revisions
+│       └── reviews/    ← the v1 evaluations
 ├── crates/
 └── data/
 ```
