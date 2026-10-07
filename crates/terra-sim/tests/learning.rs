@@ -2,7 +2,7 @@
 //! learns what things are worth and its habits.
 
 mod common;
-use common::{at, builtin, genome};
+use common::{at, builtin, close, genome};
 
 use terra_sim::{
     Command, DataPack, Dir, EntityId, Event, EventKind, Genome, Learned, Map, Part, Pos, Scenario,
@@ -114,10 +114,6 @@ fn value_of(world: &World, learned: &Learned) -> f32 {
         .into_iter()
         .find(|(l, _)| l == learned)
         .map_or(0.0, |(_, value)| value)
-}
-
-fn close(a: f32, b: f32) -> bool {
-    (a - b).abs() < 1e-5
 }
 
 /// A sprite's genome that is hungry and whose eating halves its hunger, as

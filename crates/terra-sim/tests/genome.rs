@@ -1,10 +1,9 @@
 //! Genomes and the genome file format (design §2.8, §4.3).
 
-use terra_sim::{DataPack, Genome, GenomeError};
+mod common;
+use common::builtin;
 
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
+use terra_sim::{Genome, GenomeError};
 
 /// A genome file holding `genes`, one per line, laid out as exporting writes it.
 fn genome_file(genes: &[&str]) -> String {

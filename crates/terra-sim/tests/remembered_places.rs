@@ -1,18 +1,13 @@
 //! Remembered places (M2 design §7): a sprite remembers where
 //! something that stays put eased a need, and goes back to it out of sight.
 
+mod common;
+use common::{at, builtin};
+
 use terra_sim::{
     Command, DataPack, EventKind, Genome, Map, Outcome, Pos, RememberedPlace, Scenario,
     ScriptedAction, Target, Thing, Verb, World,
 };
-
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
 
 /// A thirsty sprite that sees 6 tiles: thirst creeps up all the time and
 /// drops at a drink; thirst leads to drinking, and with nothing pressing it

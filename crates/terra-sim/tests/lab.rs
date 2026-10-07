@@ -1,16 +1,15 @@
 //! Lab scenarios (design §7.1): a world, run for any seed, with what
 //! happened in each window counted.
 
+mod common;
+use common::builtin;
+
 use std::collections::BTreeMap;
 
 use terra_sim::{
-    CursorTouch, DataPack, DeathCause, Event, EventKind, LabError, LabRun, LabScenario, Learned,
-    Map, Outcome, Pos, Scenario, Verb, Window, Without, World, report,
+    CursorTouch, DeathCause, Event, EventKind, LabError, LabRun, LabScenario, Learned, Map,
+    Outcome, Pos, Scenario, Verb, Window, Without, World, report,
 };
-
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
 
 const ARENA: &str = r#"(
     world: Drawn(

@@ -2,18 +2,13 @@
 //! would have, with the data pack its save embeds; a save from a newer
 //! build, or a damaged one, is refused rather than crashing.
 
+mod common;
+use common::{at, builtin};
+
 use terra_sim::{
-    Command, DataPack, EntityId, EventKind, Genome, LoadError, Map, Pos, SCHEMA_VERSION, Scenario,
+    Command, DataPack, EntityId, EventKind, Genome, LoadError, Map, SCHEMA_VERSION, Scenario,
     World, WorldConfig,
 };
-
-fn builtin() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
 
 /// The default world, with the Cursor busy: it leads a sprite for a while,
 /// lets go, then picks up a ball and holds it.
