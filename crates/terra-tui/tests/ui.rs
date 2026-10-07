@@ -1496,12 +1496,244 @@ fn the_brain_tab_shows_what_the_sprite_has_learned_as_memory() {
     let (_, text) = inspector(&app, &world);
     let at = text
         .iter()
-        .position(|row| row.starts_with("MEMORY"))
+        .position(|row| row == "BERRIES")
         .unwrap_or_else(|| panic!("{text:?}"));
     assert_eq!(text[at - 1], "", "a blank row before it");
+    assert!(
+        text[at + 1].starts_with("good for hunger") && text[at + 1].ends_with("+.25"),
+        "{:?}",
+        text[at + 1]
+    );
+}
+
+/// The inspector's text, keeping the indent the Brain tab uses.
+fn brain_lines(app: &App, world: &World) -> Vec<String> {
+    let rows = right_part(&render(app, world, 100, 30), 46);
+    rows[2..rows.len() - 7]
+        .iter()
+        .map(|row| {
+            row.trim_start_matches('│')
+                .trim_end_matches('│')
+                .trim_end()
+                .to_string()
+        })
+        .collect()
+}
+
+/// A left click on the inspector row that contains `needle`.
+fn click_brain_row(app: &mut App, world: &World, needle: &str) {
+    let at = brain_cell(app, world, needle);
+    app.apply(Action::left_click(at), world);
+}
+
+/// The screen cell of the inspector row that contains `needle`.
+fn brain_cell(app: &App, world: &World, needle: &str) -> Position {
+    let rows = brain_lines(app, world);
+    let row = rows
+        .iter()
+        .position(|line| line.contains(needle))
+        .unwrap_or_else(|| panic!("{needle} not in {rows:?}"));
+    // The inspector's text starts one cell in from its left border, on the
+    // row under the title. On a 100-wide screen the border is at column 54.
+    Position::new(55, 2 + row as u16)
+}
+
+#[test]
+fn the_brain_tab_opens_the_rest_of_a_things_lessons() {
+    // Six lessons about berries, all the same size, so the old list of five
+    // would have dropped the last. Three show until the player opens them.
+    let genome = r#"(format: 1, genes: [
+        InitialConcentration(chem: "hunger", value: 1.0),
+        InitialConcentration(chem: "thirst", value: 1.0),
+        InitialConcentration(chem: "tiredness", value: 1.0),
+        InitialConcentration(chem: "boredom", value: 1.0),
+        InitialConcentration(chem: "loneliness", value: 1.0),
+        InitialConcentration(chem: "crowdedness", value: 1.0),
+        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "hunger"),
+        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "thirst"),
+        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "tiredness"),
+        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "boredom"),
+        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "loneliness"),
+        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "crowdedness"),
+        BrainParam(param: "habit_rate", value: 0.0),
+        BrainParam(param: "tau_base", value: 0.05),
+        BrainParam(param: "tau_att_base", value: 0.05),
+        AttentionInstinct(input: "hunger", category: "fruit", weight: 1.0),
+        Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
+    ])"#;
+    let objects = [(Pos { x: 3, y: 3 }, "berry")];
+    let (world, mut app) = one_sprite_among(genome, &objects, &[], 2);
+    open(&mut app, &world, Tab::Brain);
+    let text = brain_lines(&app, &world);
+    assert!(text.iter().any(|row| row == " ► BERRIES"), "{text:?}");
+    assert!(
+        text.iter().any(|row| row.contains("and 3 more")),
+        "{text:?}"
+    );
+    assert!(
+        !text.iter().any(|row| row.contains("crowdedness")),
+        "{text:?}"
+    );
+    let selected = app.selection();
+    click_brain_row(&mut app, &world, "good for hunger");
     assert_eq!(
-        text[at..at + 2],
-        ["MEMORY", "berries are good for hunger         +.25"]
+        app.selection(),
+        selected,
+        "a lesson is not a click on the world"
+    );
+    assert!(
+        !brain_lines(&app, &world)
+            .iter()
+            .any(|row| row.contains("crowdedness")),
+        "a lesson line does not open the rest"
+    );
+    click_brain_row(&mut app, &world, "and 3 more");
+    let text = brain_lines(&app, &world);
+    assert!(text.iter().any(|row| row == " ▼ BERRIES"), "{text:?}");
+    assert!(
+        text.iter().any(|row| row.contains("crowdedness")),
+        "{text:?}"
+    );
+    assert!(!text.iter().any(|row| row.contains("and ")), "{text:?}");
+    click_brain_row(&mut app, &world, "BERRIES");
+    assert!(
+        brain_lines(&app, &world)
+            .iter()
+            .any(|row| row.contains("and 3 more")),
+        "clicking the name shuts it"
+    );
+    let at = brain_cell(&app, &world, "and 3 more");
+    app.apply(Action::Point(at), &world);
+    app.apply(Action::Enter, &world);
+    assert!(
+        brain_lines(&app, &world)
+            .iter()
+            .any(|row| row.contains("crowdedness")),
+        "Enter opens the thing under the pointer"
+    );
+}
+
+#[test]
+fn choosing_another_sprite_shuts_lessons_that_were_open() {
+    let genome = r#"(format: 1, genes: [
+        InitialConcentration(chem: "hunger", value: 1.0),
+        InitialConcentration(chem: "thirst", value: 1.0),
+        InitialConcentration(chem: "tiredness", value: 1.0),
+        InitialConcentration(chem: "boredom", value: 1.0),
+        InitialConcentration(chem: "loneliness", value: 1.0),
+        InitialConcentration(chem: "crowdedness", value: 1.0),
+        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "hunger"),
+        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "thirst"),
+        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "tiredness"),
+        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "boredom"),
+        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "loneliness"),
+        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "crowdedness"),
+        BrainParam(param: "habit_rate", value: 0.0),
+        BrainParam(param: "tau_base", value: 0.05),
+        BrainParam(param: "tau_att_base", value: 0.05),
+        AttentionInstinct(input: "hunger", category: "fruit", weight: 1.0),
+        Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
+    ])"#;
+    let pack = pack();
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let genome = terra_sim::Genome::from_ron(genome, &pack).expect("a valid genome");
+    let neighbor = terra_sim::Genome::from_ron("(format: 1, genes: [])", &pack).expect("valid");
+    let (eater, bystander) = (Pos { x: 2, y: 3 }, Pos { x: 8, y: 1 });
+    let sprites = [(eater, Some(genome)), (bystander, Some(neighbor))];
+    let objects = [(Pos { x: 3, y: 3 }, "berry")];
+    let scenario = Scenario {
+        map,
+        objects: &objects,
+        sprites: &sprites,
+        scripted: &[],
+    };
+    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    for _ in 0..2 {
+        world.step();
+    }
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::SelectNext, &world);
+    let eater_id = app.selection().expect("the eater").id();
+    open(&mut app, &world, Tab::Brain);
+    click_brain_row(&mut app, &world, "and 3 more");
+    assert!(
+        brain_lines(&app, &world)
+            .iter()
+            .any(|row| row.contains("crowdedness"))
+    );
+    app.apply(Action::SelectNext, &world);
+    assert_ne!(app.selection().map(|s| s.id()), Some(eater_id));
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(app.selection().map(|s| s.id()), Some(eater_id));
+    let text = brain_lines(&app, &world);
+    assert!(
+        text.iter().any(|row| row.contains("and 3 more")),
+        "{text:?}"
+    );
+    assert!(
+        !text.iter().any(|row| row.contains("crowdedness")),
+        "{text:?}"
+    );
+}
+
+#[test]
+fn sprites_in_general_sit_above_the_sprites_it_remembers() {
+    // Two bullies, each a punishment of 1, so each is frightening at -1.
+    // Sprites in general are half that average until it knows three: -.50,
+    // and that line comes before either of them.
+    let pack = pack();
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let genome = |text: &str| terra_sim::Genome::from_ron(text, &pack).expect("a valid genome");
+    let walker = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
+    let (me, first, second) = (Pos { x: 2, y: 3 }, Pos { x: 3, y: 3 }, Pos { x: 1, y: 3 });
+    let sprites = [
+        (me, Some(genome(SKITTISH_GENOME))),
+        (first, Some(genome(walker))),
+        (second, Some(genome(walker))),
+    ];
+    let scripted = [
+        (me, ScriptedAction::Rest),
+        (first, ScriptedAction::Hit { at: me }),
+        (
+            second,
+            ScriptedAction::Wander {
+                destination: Pos { x: 0, y: 3 },
+            },
+        ),
+        (second, ScriptedAction::Hit { at: me }),
+    ];
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: &scripted,
+    };
+    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    for _ in 0..8 {
+        world.step();
+    }
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::SelectNext, &world);
+    open(&mut app, &world, Tab::Brain);
+    let text = brain_lines(&app, &world);
+    let sprites_at = text
+        .iter()
+        .position(|row| row == " SPRITES")
+        .unwrap_or_else(|| panic!("{text:?}"));
+    let general = text[sprites_at + 1].as_str();
+    assert!(
+        general.starts_with("   frightening") && general.ends_with("-.50"),
+        "{text:?}"
+    );
+    let people: Vec<_> = text[sprites_at + 1..]
+        .iter()
+        .filter(|row| row.starts_with("   #"))
+        .collect();
+    assert_eq!(people.len(), 2, "{text:?}");
+    assert!(
+        text.iter()
+            .any(|row| row.starts_with("     frightening") && row.ends_with("-1.00")),
+        "{text:?}"
     );
 }
 
@@ -1603,8 +1835,8 @@ fn the_brain_tab_shows_memory_before_the_first_decision() {
         [
             "Nothing decided yet",
             "",
-            "MEMORY",
-            "thornbushes are bad                 -.80",
+            "THORNBUSHES",
+            "bad                                 -.80",
         ]
     );
 }
@@ -1670,8 +1902,10 @@ fn the_brain_tab_shows_what_the_sprite_thinks_of_a_category_once_it_counts() {
     let (world, mut app) = one_sprite_among(genome, &objects, &scripted, 3);
     open(&mut app, &world, Tab::Brain);
     let (_, text) = inspector(&app, &world);
+    assert!(text.iter().any(|row| row == "BUSHES"), "{text:?}");
     assert!(
-        text.contains(&"bushes are bad                      -.20".to_string()),
+        text.iter()
+            .any(|row| row.starts_with("bad") && row.ends_with("-.20")),
         "{text:?}"
     );
 }
@@ -2507,9 +2741,13 @@ fn the_brain_tab_names_the_sprite_it_attends_to_and_how_frightening_it_is() {
         row("fear: Sprite #2").is_some_and(|r| r.ends_with("+.80")),
         "{text:?}"
     );
+    let kept = brain_lines(&app, &world);
+    assert!(kept.iter().any(|row| row == " SPRITES"), "{kept:?}");
+    assert!(kept.iter().any(|row| row == "   #2"), "{kept:?}");
     assert!(
-        row("Sprite #2 is frightening").is_some_and(|r| r.ends_with("-1.00")),
-        "{text:?}"
+        kept.iter()
+            .any(|row| row.starts_with("     frightening") && row.ends_with("-1.00")),
+        "{kept:?}"
     );
     let screen = lines(&render(&app, &world, 100, 30));
     assert!(
@@ -2517,6 +2755,22 @@ fn the_brain_tab_names_the_sprite_it_attends_to_and_how_frightening_it_is() {
             .iter()
             .any(|row| row.contains("Sprite #1 learned: Sprite #2 is frightening")),
         "{screen:?}"
+    );
+    let bully = world.sprites().nth(1).expect("the bully").id();
+    app.record(
+        &[Event {
+            tick: 3,
+            kind: EventKind::Renamed {
+                id: bully,
+                name: "Mira".into(),
+            },
+        }],
+        &world,
+    );
+    assert!(
+        brain_lines(&app, &world).iter().any(|row| row == "   Mira"),
+        "{:?}",
+        brain_lines(&app, &world)
     );
 }
 

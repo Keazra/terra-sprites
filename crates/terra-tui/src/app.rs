@@ -412,6 +412,12 @@ pub struct App {
     tab: Tab,
     /// How many lines the open tab is scrolled down.
     tab_scroll: usize,
+    /// Memory blocks the player has opened on the Brain tab (design v40
+    /// §6.1). Shut when another sprite is selected. Not part of the world.
+    open_lessons: BTreeSet<inspector::MemoryOpen>,
+    /// The last screen cell the pointer was on, including the inspector,
+    /// so Enter can open the lesson under it.
+    mouse: Option<Position>,
     /// Whether the detail view is on (design §6.1).
     detail: bool,
     /// Real time the app has been running, for the Decision marker's flashing.
@@ -718,6 +724,8 @@ impl App {
             selection: None,
             tab: Tab::World,
             tab_scroll: 0,
+            open_lessons: BTreeSet::new(),
+            mouse: None,
             detail: false,
             running_for: Duration::ZERO,
             emotes: BTreeMap::new(),
@@ -1542,9 +1550,12 @@ impl App {
                 amplified,
             } => {
                 self.point(at);
-                // A click lands where the Cursor is: not past the leash
-                // (design v23 §6.5).
-                if let Some(tile) = self.pointed_at(at) {
+                // A click on a memory heading stays in the inspector (design
+                // v40 §6.1). Anywhere else on the map, it acts.
+                let on_a_lesson = button == Button::Left && self.toggle_lesson(at, world);
+                if !on_a_lesson && let Some(tile) = self.pointed_at(at) {
+                    // A click lands where the Cursor is: not past the leash
+                    // (design v23 §6.5).
                     self.act(self.within_leash(tile), button, amplified, world);
                 }
             }
@@ -1633,10 +1644,14 @@ impl App {
             Action::Confirm
             | Action::Dismiss
             | Action::Pick(_)
-            | Action::Enter
             | Action::Type(_)
             | Action::Erase
             | Action::AnotherName => {}
+            Action::Enter => {
+                if let Some(at) = self.mouse {
+                    self.toggle_lesson(at, world);
+                }
+            }
             Action::Quit => return Flow::Quit,
         }
         // Only Grab mode aims.
@@ -2973,6 +2988,7 @@ impl App {
         }
         if another {
             self.observed.clear();
+            self.open_lessons.clear();
         }
         self.selection = Some(Selection::Living(id));
     }
@@ -3065,11 +3081,34 @@ impl App {
         }
     }
 
+    /// The inspector, border included, if the screen has room for it.
+    pub(crate) fn inspector_bounds(&self) -> Option<Rect> {
+        self.inspector
+    }
+
+    /// Which memory block is open on the Brain tab.
+    pub(crate) fn lessons_open(&self) -> &BTreeSet<inspector::MemoryOpen> {
+        &self.open_lessons
+    }
+
+    /// Opens or shuts the memory block under `at`, if that line opens one.
+    /// A click on a lesson line, or off the Brain tab, does nothing.
+    fn toggle_lesson(&mut self, at: Position, world: &World) -> bool {
+        let Some(which) = inspector::lesson_at(self, world, at) else {
+            return false;
+        };
+        if !self.open_lessons.remove(&which) {
+            self.open_lessons.insert(which);
+        }
+        true
+    }
+
     /// Notes the tile the pointer on screen cell `cell` points at as the
     /// pointer's, and puts the Cursor there, within the leash, unless it
     /// follows a sprite. Where it points at no tile, both stay on their last
     /// tile.
     fn point(&mut self, cell: Position) {
+        self.mouse = Some(cell);
         match self.pointed_at(cell) {
             Some(tile) => {
                 self.pointer = Some(cell);

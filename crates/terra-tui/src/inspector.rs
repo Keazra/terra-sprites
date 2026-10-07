@@ -1,6 +1,7 @@
 //! What the inspector shows (design §6.1): its title, and the lines of the
 //! open tab, for drawing and for knowing how far a tab scrolls.
 
+use ratatui::layout::{Margin, Position};
 use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
@@ -119,7 +120,7 @@ pub(crate) fn first_shown(scroll: usize, length: usize, rows: usize) -> usize {
 fn sprite_tab(tab: Tab, sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
     match tab {
         Tab::Body => body_tab(sprite, app, world),
-        Tab::Brain => brain_tab(sprite, &app.words(world)),
+        Tab::Brain => brain_tab(sprite, app, world),
         Tab::Chem => chem_tab(sprite),
         Tab::Genome => genome_tab(sprite),
         Tab::World => Vec::new(),
@@ -643,40 +644,101 @@ fn trait_text(which: Trait, value: f32) -> String {
 /// How many concepts the Brain tab lists under the decision.
 const CONCEPTS_SHOWN: usize = 5;
 
+/// How many lessons the Brain tab shows under a thing before "and N more"
+/// (design v40 §6.1). What it thinks of sprites in general is not capped.
+const LESSONS_SHOWN: usize = 3;
+
+/// The sprite category's name. Every pack has it (design v19 §3.5.5).
+const SPRITE_KIND: &str = "sprite";
+
+/// A memory block the player can open on the Brain tab (design v40 §6.1).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum MemoryOpen {
+    /// An object type, a category, or the Cursor.
+    Thing(Thing),
+    /// New things, which aren't a thing in the pack.
+    NewThings,
+    /// One remembered sprite, nested under Sprites.
+    Sprite(EntityId),
+}
+
+/// The memory block under screen cell `at`, if that line opens or shuts one.
+pub(crate) fn lesson_at(app: &App, world: &World, at: Position) -> Option<MemoryOpen> {
+    if app.tab() != Tab::Brain {
+        return None;
+    }
+    let area = app.inspector_bounds()?;
+    let inner = area.inner(Margin::new(1, 1));
+    if at.y < inner.y || at.y >= inner.bottom() || at.x < inner.x || at.x >= inner.right() {
+        return None;
+    }
+    let sprite = match app.selection() {
+        Some(Selection::Living(id)) => world.sprite(id)?,
+        _ => return None,
+    };
+    let rows = brain_rows(&sprite, app, world);
+    let row = usize::from(at.y - inner.y);
+    let first = first_shown(app.tab_scroll(), rows.len(), usize::from(inner.height));
+    rows.get(first + row).and_then(|(_, open)| open.clone())
+}
+
 /// The Brain tab (design §5.9, §6.1): what the sprite attended to and
 /// decided at its latest step 5, or "Nothing decided yet", or while led
-/// "Being led: it decides nothing"; then its memory, which it can have
-/// before it first decides.
-fn brain_tab(sprite: &SpriteView, data: &Words) -> Vec<Line<'static>> {
+/// "Being led: it decides nothing"; then its memory, grouped under each
+/// thing (v40), which it can have before it first decides.
+fn brain_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
+    brain_rows(sprite, app, world)
+        .into_iter()
+        .map(|(text, _)| Line::from(text))
+        .collect()
+}
+
+/// One learned value, with where it stood in the memory list so a tie
+/// keeps that order.
+struct Lesson {
+    index: usize,
+    learned: Learned,
+    amount: f32,
+}
+
+/// The Brain tab's lines, and which of them open or shut a memory block.
+fn brain_rows(sprite: &SpriteView, app: &App, world: &World) -> Vec<(String, Option<MemoryOpen>)> {
+    let data = &app.words(world);
     // Led, it decides nothing, so its last decision would mislead (design
-    // v23 §2.4).
-    let mut lines = match sprite.explain() {
-        // Sliding, likewise (design v25 §2.4).
-        _ if sprite.slide().is_some() => vec![" Shoved: it decides nothing".to_string()],
+    // v23 §2.4). Sliding, likewise (design v25 §2.4).
+    let mut lines: Vec<(String, Option<MemoryOpen>)> = match sprite.explain() {
+        _ if sprite.slide().is_some() => vec![(" Shoved: it decides nothing".into(), None)],
         _ if sprite.lead_steps_left().is_some() => {
-            vec![" Being led: it decides nothing".to_string()]
+            vec![(" Being led: it decides nothing".into(), None)]
         }
-        Some(explained) => explained_lines(&explained, data),
-        None => vec![" Nothing decided yet".to_string()],
+        Some(explained) => explained_lines(&explained, data)
+            .into_iter()
+            .map(|text| (text, None))
+            .collect(),
+        None => vec![(" Nothing decided yet".into(), None)],
     };
-    // What has learned only a rounding's worth has nothing worth showing.
-    let remembered: Vec<_> = sprite
+    let remembered: Vec<Lesson> = sprite
         .memory()
         .into_iter()
-        .filter(|m| level(m.amount.abs()) != ".00")
+        .enumerate()
+        .filter(|(_, memory)| level(memory.amount.abs()) != ".00")
+        .map(|(index, memory)| Lesson {
+            index,
+            learned: memory.learned,
+            amount: memory.amount,
+        })
         .collect();
     let mut gap = true;
-    if !remembered.is_empty() {
-        lines.push(String::new());
-        lines.push(" MEMORY".into());
+    let blocks = memory_blocks(&remembered);
+    if !blocks.is_empty() {
+        lines.push((String::new(), None));
         gap = false;
+        for block in blocks {
+            push_block(&mut lines, block, data, app.lessons_open());
+        }
     }
-    for memory in remembered {
-        let amount = signed_level(memory.amount);
-        lines.extend(scored("   ", &learned_name(&memory.learned, data), &amount));
-    }
-    // Its remembered places, best remembered first (M2 design §7): what,
-    // how far and which way, and how well.
+    // Its remembered places, best remembered first (M2 design §7.5): what,
+    // how far and which way, and how well, as the number alone.
     let places: Vec<_> = sprite
         .remembered_places()
         .into_iter()
@@ -684,9 +746,9 @@ fn brain_tab(sprite: &SpriteView, data: &Words) -> Vec<Line<'static>> {
         .collect();
     if !places.is_empty() {
         if gap {
-            lines.push(String::new());
+            lines.push((String::new(), None));
         }
-        lines.push(" PLACES".into());
+        lines.push((" PLACES".into(), None));
     }
     for place in places {
         let name = format!(
@@ -694,9 +756,273 @@ fn brain_tab(sprite: &SpriteView, data: &Words) -> Vec<Line<'static>> {
             thing_name(&place.thing, data),
             how_far(sprite.pos(), place.at)
         );
-        lines.extend(scored("   ", &name, &level(place.recall)));
+        for row in scored("   ", &name, &level(place.recall)) {
+            lines.push((row, None));
+        }
     }
-    lines.into_iter().map(Line::from).collect()
+    lines
+}
+
+/// Where a lesson is drawn: under its own heading, or under Sprites.
+enum Block {
+    Plain {
+        thing: Thing,
+        lessons: Vec<Lesson>,
+    },
+    New {
+        lessons: Vec<Lesson>,
+    },
+    Sprites {
+        general: Vec<Lesson>,
+        individuals: Vec<(EntityId, Vec<Lesson>)>,
+    },
+}
+
+impl Block {
+    /// How loud it is, and which lesson that came from, so a tie keeps the
+    /// memory list's order.
+    fn peak(&self) -> (f32, usize) {
+        let lessons: Vec<&Lesson> = match self {
+            Block::Plain { lessons, .. } | Block::New { lessons } => lessons.iter().collect(),
+            Block::Sprites {
+                general,
+                individuals,
+            } => general
+                .iter()
+                .chain(individuals.iter().flat_map(|(_, lessons)| lessons))
+                .collect(),
+        };
+        peak_of(lessons)
+    }
+}
+
+/// The loudest of `lessons`: the furthest from nothing, and on a tie the
+/// one earlier in the memory list.
+fn peak_of<'a>(lessons: impl IntoIterator<Item = &'a Lesson>) -> (f32, usize) {
+    lessons
+        .into_iter()
+        .map(|lesson| (lesson.amount.abs(), lesson.index))
+        .max_by(|a, b| a.0.total_cmp(&b.0).then(b.1.cmp(&a.1)))
+        .unwrap_or((0.0, 0))
+}
+
+/// Furthest from nothing first. A tie keeps the memory list's order.
+fn by_loudness(lessons: &mut [Lesson]) {
+    lessons.sort_by(|a, b| {
+        b.amount
+            .abs()
+            .total_cmp(&a.amount.abs())
+            .then(a.index.cmp(&b.index))
+    });
+}
+
+fn memory_blocks(remembered: &[Lesson]) -> Vec<Block> {
+    let mut plain: Vec<(Thing, Vec<Lesson>)> = Vec::new();
+    let mut new_things = Vec::new();
+    let mut general = Vec::new();
+    let mut individuals: Vec<(EntityId, Vec<Lesson>)> = Vec::new();
+    for lesson in remembered {
+        match lesson_home(&lesson.learned) {
+            Home::Plain(thing) => match plain.iter_mut().find(|(got, _)| got == &thing) {
+                Some((_, lessons)) => lessons.push(lesson.clone_lesson()),
+                None => plain.push((thing, vec![lesson.clone_lesson()])),
+            },
+            Home::New => new_things.push(lesson.clone_lesson()),
+            Home::General => general.push(lesson.clone_lesson()),
+            Home::Sprite(id) => match individuals.iter_mut().find(|(got, _)| *got == id) {
+                Some((_, lessons)) => lessons.push(lesson.clone_lesson()),
+                None => individuals.push((id, vec![lesson.clone_lesson()])),
+            },
+        }
+    }
+    let mut blocks = Vec::new();
+    for (thing, mut lessons) in plain {
+        by_loudness(&mut lessons);
+        blocks.push(Block::Plain { thing, lessons });
+    }
+    if !new_things.is_empty() {
+        by_loudness(&mut new_things);
+        blocks.push(Block::New {
+            lessons: new_things,
+        });
+    }
+    if !general.is_empty() || !individuals.is_empty() {
+        by_loudness(&mut general);
+        for (_, lessons) in &mut individuals {
+            by_loudness(lessons);
+        }
+        individuals.sort_by(|a, b| {
+            let pa = peak_of(a.1.iter());
+            let pb = peak_of(b.1.iter());
+            pb.0.total_cmp(&pa.0).then(pa.1.cmp(&pb.1))
+        });
+        blocks.push(Block::Sprites {
+            general,
+            individuals,
+        });
+    }
+    blocks.sort_by(|a, b| {
+        let pa = a.peak();
+        let pb = b.peak();
+        pb.0.total_cmp(&pa.0).then(pa.1.cmp(&pb.1))
+    });
+    blocks
+}
+
+impl Lesson {
+    fn clone_lesson(&self) -> Lesson {
+        Lesson {
+            index: self.index,
+            learned: self.learned.clone(),
+            amount: self.amount,
+        }
+    }
+}
+
+/// Where one lesson is listed.
+enum Home {
+    Plain(Thing),
+    New,
+    /// Sprites in general, or a habit about sprites as a kind.
+    General,
+    Sprite(EntityId),
+}
+
+fn lesson_home(learned: &Learned) -> Home {
+    match learned {
+        Learned::NewThings => Home::New,
+        Learned::Worth { thing, .. }
+        | Learned::Bad { thing }
+        | Learned::Fear { thing }
+        | Learned::Habit { thing, .. } => match thing {
+            Thing::Sprite(id) => Home::Sprite(*id),
+            Thing::Category(name) | Thing::ObjectType(name) if name == SPRITE_KIND => Home::General,
+            thing => Home::Plain(thing.clone()),
+        },
+    }
+}
+
+fn push_block(
+    lines: &mut Vec<(String, Option<MemoryOpen>)>,
+    block: Block,
+    data: &Words,
+    open: &std::collections::BTreeSet<MemoryOpen>,
+) {
+    match block {
+        Block::Plain { thing, lessons } => {
+            let key = MemoryOpen::Thing(thing.clone());
+            let name = things(&thing, data).0.to_uppercase();
+            push_headed(lines, " ", &name, lessons, key, data, open);
+        }
+        Block::New { lessons } => {
+            push_headed(
+                lines,
+                " ",
+                "NEW THINGS",
+                lessons,
+                MemoryOpen::NewThings,
+                data,
+                open,
+            );
+        }
+        Block::Sprites {
+            general,
+            individuals,
+        } => {
+            lines.push((" SPRITES".into(), None));
+            for lesson in general {
+                push_lesson(lines, &lesson, "   ", data);
+            }
+            for (id, lessons) in individuals {
+                let key = MemoryOpen::Sprite(id);
+                let name = sprite_heading(id, data);
+                push_headed(lines, "   ", &name, lessons, key, data, open);
+            }
+        }
+    }
+}
+
+/// A heading, then its lessons: three of them, or all if `key` is open.
+fn push_headed(
+    lines: &mut Vec<(String, Option<MemoryOpen>)>,
+    head: &str,
+    name: &str,
+    lessons: Vec<Lesson>,
+    key: MemoryOpen,
+    data: &Words,
+    open: &std::collections::BTreeSet<MemoryOpen>,
+) {
+    let folds = lessons.len() > LESSONS_SHOWN;
+    let opened = open.contains(&key);
+    let marker = folds.then_some(if opened { "▼" } else { "►" });
+    let heading = match marker {
+        Some(marker) => format!("{head}{marker} {name}"),
+        None => format!("{head}{name}"),
+    };
+    let toggle = folds.then_some(key.clone());
+    lines.push((heading, toggle));
+    let shown = if folds && !opened {
+        &lessons[..LESSONS_SHOWN]
+    } else {
+        &lessons[..]
+    };
+    // Lessons sit two columns in from the heading.
+    let lesson_indent = format!("{head}  ");
+    for lesson in shown {
+        push_lesson(lines, lesson, &lesson_indent, data);
+    }
+    if folds && !opened {
+        let rest = lessons.len() - LESSONS_SHOWN;
+        lines.push((format!("{lesson_indent}and {rest} more"), Some(key)));
+    }
+}
+
+fn push_lesson(
+    lines: &mut Vec<(String, Option<MemoryOpen>)>,
+    lesson: &Lesson,
+    indent: &str,
+    data: &Words,
+) {
+    let text = lesson_text(&lesson.learned, lesson.amount, data);
+    for row in scored(indent, &text, &signed_level(lesson.amount)) {
+        lines.push((row, None));
+    }
+}
+
+/// A lesson without the thing's name: the heading already says it.
+fn lesson_text(learned: &Learned, amount: f32, data: &Words) -> String {
+    match learned {
+        Learned::Worth {
+            need: Some(need), ..
+        } => format!("good for {}", display_name(need)),
+        Learned::Worth { need: None, .. } => "good".into(),
+        Learned::Bad { .. } => "bad".into(),
+        Learned::Fear { .. } => "frightening".into(),
+        Learned::Habit { thing, verb } => {
+            let pronoun = if things(thing, data).1 == "are" {
+                "them"
+            } else {
+                "it"
+            };
+            format!("{} {pronoun}", doing(*verb))
+        }
+        Learned::NewThings => {
+            if amount < 0.0 {
+                "bad".into()
+            } else {
+                "good".into()
+            }
+        }
+    }
+}
+
+/// A remembered sprite's heading: the name the player gave it, or its
+/// number. The Sprites heading already says what it is.
+fn sprite_heading(id: EntityId, data: &Words) -> String {
+    match data.names.get(id) {
+        Some(name) => name.to_string(),
+        None => format!("#{}", id.0),
+    }
 }
 
 /// How far `to` is from `from` and which way, in tiles, the game's own

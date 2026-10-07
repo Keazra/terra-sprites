@@ -292,9 +292,6 @@ pub struct RememberedPlace {
     pub recall: f32,
 }
 
-/// How many learned things the memory lists (design §5.9).
-const MEMORY_SIZE: usize = 5;
-
 /// What a sprite thinks of the things in a category it hasn't met (design
 /// v19 §5.6): the category's summary of each need's worth, of general good
 /// and of bad.
@@ -715,14 +712,14 @@ impl Brain {
             .collect()
     }
 
-    /// What the sprite has learned, furthest from nothing first, up to
-    /// five (design §5.9); ties keep the order they're listed in.
+    /// What the sprite has learned, furthest from nothing first (design v40
+    /// §5.9). Ties keep the order they're listed in. The Brain tab groups
+    /// them, and leaves out one that rounds to nothing.
     pub(crate) fn memory(&self, data: &DataPack) -> Vec<Memory> {
         let mut memory = self.learned(data);
         memory.retain(|m| m.amount != 0.0);
         // A stable sort keeps a tie in listed order.
         memory.sort_by(|a, b| b.amount.abs().total_cmp(&a.amount.abs()));
-        memory.truncate(MEMORY_SIZE);
         memory
     }
 
