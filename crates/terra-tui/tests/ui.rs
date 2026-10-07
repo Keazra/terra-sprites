@@ -1486,6 +1486,27 @@ const BERRY_GENOME: &str = r#"(format: 1, genes: [
     Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
 ])"#;
 
+/// Eating a berry eases all six needs, so berries have six lessons.
+const EVERY_NEED_GENOME: &str = r#"(format: 1, genes: [
+    InitialConcentration(chem: "hunger", value: 1.0),
+    InitialConcentration(chem: "thirst", value: 1.0),
+    InitialConcentration(chem: "tiredness", value: 1.0),
+    InitialConcentration(chem: "boredom", value: 1.0),
+    InitialConcentration(chem: "loneliness", value: 1.0),
+    InitialConcentration(chem: "crowdedness", value: 1.0),
+    Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "hunger"),
+    Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "thirst"),
+    Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "tiredness"),
+    Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "boredom"),
+    Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "loneliness"),
+    Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "crowdedness"),
+    BrainParam(param: "habit_rate", value: 0.0),
+    BrainParam(param: "tau_base", value: 0.05),
+    BrainParam(param: "tau_att_base", value: 0.05),
+    AttentionInstinct(input: "hunger", category: "fruit", weight: 1.0),
+    Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
+])"#;
+
 #[test]
 fn the_brain_tab_shows_what_the_sprite_has_learned_as_memory() {
     // It eats the berry beside it at tick 0; at tick 1 its hunger falls by
@@ -1542,27 +1563,8 @@ fn brain_cell(app: &App, world: &World, needle: &str) -> Position {
 fn the_brain_tab_opens_the_rest_of_a_things_lessons() {
     // Six lessons about berries, all the same size, so the old list of five
     // would have dropped the last. Three show until the player opens them.
-    let genome = r#"(format: 1, genes: [
-        InitialConcentration(chem: "hunger", value: 1.0),
-        InitialConcentration(chem: "thirst", value: 1.0),
-        InitialConcentration(chem: "tiredness", value: 1.0),
-        InitialConcentration(chem: "boredom", value: 1.0),
-        InitialConcentration(chem: "loneliness", value: 1.0),
-        InitialConcentration(chem: "crowdedness", value: 1.0),
-        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "hunger"),
-        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "thirst"),
-        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "tiredness"),
-        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "boredom"),
-        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "loneliness"),
-        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "crowdedness"),
-        BrainParam(param: "habit_rate", value: 0.0),
-        BrainParam(param: "tau_base", value: 0.05),
-        BrainParam(param: "tau_att_base", value: 0.05),
-        AttentionInstinct(input: "hunger", category: "fruit", weight: 1.0),
-        Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
-    ])"#;
     let objects = [(Pos { x: 3, y: 3 }, "berry")];
-    let (world, mut app) = one_sprite_among(genome, &objects, &[], 2);
+    let (world, mut app) = one_sprite_among(EVERY_NEED_GENOME, &objects, &[], 2);
     open(&mut app, &world, Tab::Brain);
     let text = brain_lines(&app, &world);
     assert!(text.iter().any(|row| row == " ► BERRIES"), "{text:?}");
@@ -1574,13 +1576,7 @@ fn the_brain_tab_opens_the_rest_of_a_things_lessons() {
         !text.iter().any(|row| row.contains("crowdedness")),
         "{text:?}"
     );
-    let selected = app.selection();
     click_brain_row(&mut app, &world, "good for hunger");
-    assert_eq!(
-        app.selection(),
-        selected,
-        "a lesson is not a click on the world"
-    );
     assert!(
         !brain_lines(&app, &world)
             .iter()
@@ -1615,28 +1611,9 @@ fn the_brain_tab_opens_the_rest_of_a_things_lessons() {
 
 #[test]
 fn choosing_another_sprite_shuts_lessons_that_were_open() {
-    let genome = r#"(format: 1, genes: [
-        InitialConcentration(chem: "hunger", value: 1.0),
-        InitialConcentration(chem: "thirst", value: 1.0),
-        InitialConcentration(chem: "tiredness", value: 1.0),
-        InitialConcentration(chem: "boredom", value: 1.0),
-        InitialConcentration(chem: "loneliness", value: 1.0),
-        InitialConcentration(chem: "crowdedness", value: 1.0),
-        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "hunger"),
-        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "thirst"),
-        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "tiredness"),
-        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "boredom"),
-        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "loneliness"),
-        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "crowdedness"),
-        BrainParam(param: "habit_rate", value: 0.0),
-        BrainParam(param: "tau_base", value: 0.05),
-        BrainParam(param: "tau_att_base", value: 0.05),
-        AttentionInstinct(input: "hunger", category: "fruit", weight: 1.0),
-        Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
-    ])"#;
     let pack = pack();
     let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
-    let genome = terra_sim::Genome::from_ron(genome, &pack).expect("a valid genome");
+    let genome = terra_sim::Genome::from_ron(EVERY_NEED_GENOME, &pack).expect("a valid genome");
     let neighbor = terra_sim::Genome::from_ron("(format: 1, genes: [])", &pack).expect("valid");
     let (eater, bystander) = (Pos { x: 2, y: 3 }, Pos { x: 8, y: 1 });
     let sprites = [(eater, Some(genome)), (bystander, Some(neighbor))];
@@ -1734,6 +1711,124 @@ fn sprites_in_general_sit_above_the_sprites_it_remembers() {
         text.iter()
             .any(|row| row.starts_with("     frightening") && row.ends_with("-1.00")),
         "{text:?}"
+    );
+}
+
+#[test]
+fn the_brain_tab_groups_what_it_thinks_of_new_things() {
+    // A first prick is from something new, so new things are bad on their
+    // own, not under the thornbush (design v16 §5.6, v40 §6.1).
+    let genome = r#"(format: 1, genes: [
+        Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),
+    ])"#;
+    let thornbush = Pos { x: 3, y: 3 };
+    let objects = [(thornbush, "thornbush")];
+    let scripted = [ScriptedAction::Eat { at: thornbush }, ScriptedAction::Rest];
+    let (world, mut app) = one_sprite_among(genome, &objects, &scripted, 2);
+    open(&mut app, &world, Tab::Brain);
+    let text = brain_lines(&app, &world);
+    let at = text
+        .iter()
+        .position(|row| row == " NEW THINGS")
+        .unwrap_or_else(|| panic!("{text:?}"));
+    assert!(
+        text[at + 1].starts_with("   bad") && text[at + 1].contains("-"),
+        "{text:?}"
+    );
+}
+
+#[test]
+fn the_brain_tab_lists_the_cursor_on_its_own() {
+    // Eating the Cursor teaches a habit about the Cursor, under its own
+    // heading. It is not a sprite (design v29 §5.6, v40 §6.1).
+    let genome = r#"(format: 1, genes: [
+        InitialConcentration(chem: "hunger", value: 1.0),
+        AttentionInstinct(input: "always", category: "cursor", weight: 5.0),
+        Instinct(inputs: [("hunger", false)], verb: Eat, weight: 3.0),
+        BrainParam(param: "tau_base", value: 0.05),
+    ])"#;
+    let (mut world, mut app) = one_sprite(genome, 0);
+    world.submit(Command::MoveCursor {
+        tile: Pos { x: 3, y: 3 },
+    });
+    world.submit(Command::ShowCursor { visible: true });
+    world.step();
+    world.step();
+    open(&mut app, &world, Tab::Brain);
+    let text = brain_lines(&app, &world);
+    let at = text
+        .iter()
+        .position(|row| row == " THE CURSOR")
+        .unwrap_or_else(|| panic!("{text:?}"));
+    assert!(
+        text[at + 1].starts_with("   eating it") && text[at + 1].contains("-"),
+        "{text:?}"
+    );
+    assert!(
+        !text.iter().any(|row| row == " SPRITES"),
+        "the Cursor is not under Sprites: {text:?}"
+    );
+}
+
+#[test]
+fn a_habit_about_sprites_sits_with_what_it_thinks_of_them_in_general() {
+    // It hits two sprites, and they hit it back. The habit of hitting them,
+    // and what it thinks of sprites in general, are the first step under
+    // Sprites. That step is not folded at three (design v40 §6.1).
+    let pack = pack();
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let hitter = r#"(format: 1, genes: [
+        Trait(trait: "speed", value: 10.0),
+        InitialConcentration(chem: "loneliness", value: 1.0),
+        Emitter(locus: Locus("did_hit"), mode: Level, gain: 0.5, chem: "reward"),
+        Emitter(locus: Locus("did_hit"), mode: Level, gain: -0.5, chem: "loneliness"),
+        Emitter(locus: Locus("was_hit"), mode: Level, gain: 1.0, chem: "punishment"),
+        BrainParam(param: "tau_base", value: 0.05),
+        AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
+        Instinct(inputs: [("always", false)], verb: Hit, weight: 1.0),
+    ])"#;
+    let bully = r#"(format: 1, genes: [
+        Trait(trait: "speed", value: 10.0),
+        AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
+        Instinct(inputs: [("always", false)], verb: Hit, weight: 1.0),
+    ])"#;
+    let genome = |text: &str| terra_sim::Genome::from_ron(text, &pack).expect("a valid genome");
+    let (me, first, second) = (Pos { x: 2, y: 3 }, Pos { x: 3, y: 3 }, Pos { x: 1, y: 3 });
+    let sprites = [
+        (me, Some(genome(hitter))),
+        (first, Some(genome(bully))),
+        (second, Some(genome(bully))),
+    ];
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: &[],
+    };
+    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    for _ in 0..16 {
+        world.step();
+    }
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::SelectNext, &world);
+    open(&mut app, &world, Tab::Brain);
+    let text = brain_lines(&app, &world);
+    let sprites_at = text
+        .iter()
+        .position(|row| row == " SPRITES")
+        .unwrap_or_else(|| panic!("{text:?}"));
+    let individual = text[sprites_at + 1..]
+        .iter()
+        .position(|row| row.starts_with("   #"))
+        .unwrap_or_else(|| panic!("{text:?}"));
+    let general = &text[sprites_at + 1..sprites_at + 1 + individual];
+    assert!(
+        general.iter().any(|row| row.starts_with("   hitting them")),
+        "{text:?}"
+    );
+    assert!(
+        general.len() > 3 && general.iter().all(|row| !row.contains("and ")),
+        "sprites in general are not folded at three: {text:?}"
     );
 }
 

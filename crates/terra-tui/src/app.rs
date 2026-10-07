@@ -1550,10 +1550,13 @@ impl App {
                 amplified,
             } => {
                 self.point(at);
-                // A click on a memory heading stays in the inspector (design
-                // v40 §6.1). Anywhere else on the map, it acts.
-                let on_a_lesson = button == Button::Left && self.toggle_lesson(at, world);
-                if !on_a_lesson && let Some(tile) = self.pointed_at(at) {
+                // A click on a memory heading toggles it (design v40 §6.1).
+                // The inspector sits outside the map view's reach, so the
+                // same click is never also a tile.
+                if button == Button::Left {
+                    self.toggle_lesson(at, world);
+                }
+                if let Some(tile) = self.pointed_at(at) {
                     // A click lands where the Cursor is: not past the leash
                     // (design v23 §6.5).
                     self.act(self.within_leash(tile), button, amplified, world);

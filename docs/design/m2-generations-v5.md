@@ -190,7 +190,7 @@ An action aimed at a remembered place out of sight is a **trip**.
 - **The Brain tab** lists the places in their own list, below the grouped memory (M1 design §6.1), best remembered first, as PLACES. A line is unchanged: what, how far and which way, and how well remembered, as the number alone. Places are not folded under the thing.
 
   ```
-   ► WATER
+   WATER
      good for thirst                     +.61
    PLACES
      water · 34 tiles NE                  .92

@@ -1257,8 +1257,8 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 │ SPRITES                                    │
 │   frightening                         -.30 │
 │   hitting them                        -.22 │
-│   ► #7                                     │
-│       frightening                     -.80 │
+│   #7                                       │
+│     frightening                       -.80 │
 │   Mira                                     │
 │     good for loneliness               +.41 │
 │ THE CURSOR                                 │
