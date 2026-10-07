@@ -6,11 +6,11 @@
 mod common;
 use common::{at, builtin};
 
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use terra_sim::{
-    Command, Dir, Divergence, EventKind, Map, Playback, ReplayError, Scenario, World, WorldConfig,
-    CHECKPOINT_EVERY,
+    CHECKPOINT_EVERY, Command, Dir, Divergence, EventKind, Map, Playback, ReplayError, Scenario,
+    World, WorldConfig,
 };
 
 /// The default world, recording from its first tick.

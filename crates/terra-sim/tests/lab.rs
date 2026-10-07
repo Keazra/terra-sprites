@@ -7,8 +7,8 @@ use common::builtin;
 use std::collections::BTreeMap;
 
 use terra_sim::{
-    report, CursorTouch, DeathCause, Event, EventKind, LabError, LabRun, LabScenario, Learned, Map,
-    Outcome, Pos, Scenario, Verb, Window, Without, World,
+    CursorTouch, DeathCause, Event, EventKind, LabError, LabRun, LabScenario, Learned, Map,
+    Outcome, Pos, Scenario, Verb, Window, Without, World, report,
 };
 
 const ARENA: &str = r#"(

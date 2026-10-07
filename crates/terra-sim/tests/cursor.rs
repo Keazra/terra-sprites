@@ -3,16 +3,12 @@
 //! from them.
 
 mod common;
-use common::{at, builtin, genome};
+use common::{WorldBuilder, at, builtin, close, genome};
 
 use terra_sim::{
     Command, EntityId, EventKind, Genome, Learned, Map, Pos, Rejection, Scenario, ScriptedAction,
     Thing, Verb, World,
 };
-
-fn close(a: f32, b: f32) -> bool {
-    (a - b).abs() < 1e-5
-}
 
 /// A world drawn from `rows`, with `objects`, and one sprite of `genes` on
 /// `sprite` doing `script`.
@@ -24,16 +20,13 @@ fn world(
     script: &[ScriptedAction],
 ) -> World {
     let data = builtin();
-    let map = Map::from_ascii(rows, &data).expect("valid drawing");
-    let sprites = [(sprite, Some(genome(genes, &data)))];
     let scripted: Vec<(Pos, ScriptedAction)> = script.iter().map(|&s| (sprite, s)).collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted: &scripted,
-    };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+    WorldBuilder::new(rows)
+        .objects(objects)
+        .sprites_with(vec![(sprite, Some(genome(genes, &data)))])
+        .scripts(&scripted)
+        .data(data)
+        .build()
 }
 
 /// A sprite resting alone in a field, and its ID.

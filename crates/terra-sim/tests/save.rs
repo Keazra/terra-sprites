@@ -6,8 +6,8 @@ mod common;
 use common::{at, builtin};
 
 use terra_sim::{
-    Command, DataPack, EntityId, EventKind, Genome, LoadError, Map, Scenario, World, WorldConfig,
-    SCHEMA_VERSION,
+    Command, DataPack, EntityId, EventKind, Genome, LoadError, Map, SCHEMA_VERSION, Scenario,
+    World, WorldConfig,
 };
 
 /// The default world, with the Cursor busy: it leads a sprite for a while,

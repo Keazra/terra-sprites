@@ -19,6 +19,11 @@ pub fn at(x: u16, y: u16) -> Pos {
     Pos::new(x, y)
 }
 
+/// True when two levels are the same, give or take a little.
+pub fn close(a: f32, b: f32) -> bool {
+    (a - b).abs() < 1e-5
+}
+
 /// A genome with only traits: speed 10, sense radius **10** — so a script
 /// decides what the sprite does. For a different sense radius (e.g. movement
 /// tests at 14), call [`traits_only`] instead.
