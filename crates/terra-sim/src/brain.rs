@@ -292,9 +292,6 @@ pub struct RememberedPlace {
     pub recall: f32,
 }
 
-/// How many learned things the memory lists (design §5.9).
-const MEMORY_SIZE: usize = 5;
-
 /// What a sprite thinks of the things in a category it hasn't met (design
 /// v19 §5.6): the category's summary of each need's worth, of general good
 /// and of bad.
@@ -715,14 +712,14 @@ impl Brain {
             .collect()
     }
 
-    /// What the sprite has learned, furthest from nothing first, up to
-    /// five (design §5.9); ties keep the order they're listed in.
+    /// What the sprite has learned, furthest from nothing first (design v40
+    /// §5.9). Ties keep the order they're listed in. The Brain tab groups
+    /// them, and leaves out one that rounds to nothing.
     pub(crate) fn memory(&self, data: &DataPack) -> Vec<Memory> {
         let mut memory = self.learned(data);
         memory.retain(|m| m.amount != 0.0);
         // A stable sort keeps a tie in listed order.
         memory.sort_by(|a, b| b.amount.abs().total_cmp(&a.amount.abs()));
-        memory.truncate(MEMORY_SIZE);
         memory
     }
 
@@ -2199,8 +2196,9 @@ mod tests {
     }
 
     #[test]
-    fn the_memory_lists_the_five_furthest_from_nothing_ties_in_listed_order() {
-        // Design §5.9.
+    fn the_memory_lists_every_value_furthest_from_nothing_ties_in_listed_order() {
+        // Design v40 §5.9: every value, not the furthest five. The two
+        // bushes make their category a lesson too, at half strength.
         let data = builtin();
         let mut brain = unfading(&[]);
         teach(&mut brain, types::BALL).good = 0.9;
@@ -2215,13 +2213,16 @@ mod tests {
             .filter(|m| m.amount != 0.0)
             .collect();
         let memory = brain.memory(&data);
-        assert_eq!(memory.len(), 5, "{listed:#?}");
+        assert_eq!(memory.len(), 8, "{listed:#?}");
         let amounts: Vec<f32> = memory.iter().map(|m| m.amount).collect();
-        assert_eq!(amounts, [0.9, -0.8, 0.6, 0.3, 0.3]);
-        // The two 0.3s it keeps are the first two listed.
+        assert_eq!(amounts, [0.9, -0.8, 0.6, 0.3, 0.3, 0.3, -0.2, 0.075]);
+        // All three 0.3s are kept, in the order they were listed.
         let ties: Vec<&Memory> = listed.iter().filter(|m| m.amount == 0.3).collect();
         assert_eq!(ties.len(), 3, "{listed:#?}");
-        assert_eq!([&memory[3], &memory[4]], [ties[0], ties[1]]);
+        assert_eq!(
+            [&memory[3], &memory[4], &memory[5]],
+            [ties[0], ties[1], ties[2]]
+        );
     }
 
     #[test]

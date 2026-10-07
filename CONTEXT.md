@@ -365,15 +365,15 @@ What a sprite learns about someone that hurt it by its own doing, such as a spri
 _Avoid_: bad (bad is about touching), wariness (a passing mood), threat
 
 **Individual**:
-A particular sprite that another remembers, with what it has learned about it: its worth and how frightening it is. Individuals are learned fast, fade, and are forgotten once faded or dead.
+A particular sprite that another remembers, with what it has learned about it: its worth and how frightening it is. Individuals are learned fast, fade, and are forgotten once faded or dead. On the Brain tab each one is nested under Sprites, by the name the player gave it, or by its number.
 _Avoid_: acquaintance, contact, relationship
 
 **Category summary**:
-What a sprite thinks of the things in a category it hasn't met: the average of those it knows in it, which counts for nothing while it knows only one. So one thornbush doesn't make every bush bad. On screen it reads as the category: "bushes are bad".
+What a sprite thinks of the things in a category it hasn't met: the average of those it knows in it, which counts for nothing while it knows only one. So one thornbush doesn't make every bush bad. On the Brain tab the heading is the category and the line under it drops the name: "bad".
 _Avoid_: stereotype, prior
 
 **Sprites in general**:
-The sprite category's summary: what a sprite thinks of sprites it doesn't know, from the individuals it remembers. So one bully doesn't make it shy of everyone, but three might.
+The sprite category's summary: what a sprite thinks of sprites it doesn't know, from the individuals it remembers. So one bully doesn't make it shy of everyone, but three might. On the Brain tab it is the first step in under Sprites, and each remembered sprite is nested under that.
 _Avoid_: the sprite kind (on screen), stereotype
 
 **Habit**:
@@ -409,7 +409,7 @@ What a sprite has learned from experience: the worth of things and of individual
 _Avoid_: learned links, knowledge
 
 **Remembered place** (M2):
-Where something that stays put, such as water or a bush, eased one of a sprite's needs. A sprite holds a few, and only a few of each kind; places of the same kind close together count as one, so a pond is one place. Each fades unless a visit tops it up, and one the sprite sees gone is forgotten. How well it's remembered is its **recall**. With nothing of its kind in sight, a remembered place draws the sprite's eye like a thing at the edge of sight. Shortened to "place" in the Brain tab.
+Where something that stays put, such as water or a bush, eased one of a sprite's needs. A sprite holds a few, and only a few of each kind; places of the same kind close together count as one, so a pond is one place. Each fades unless a visit tops it up, and one the sprite sees gone is forgotten. How well it's remembered is its **recall**. With nothing of its kind in sight, a remembered place draws the sprite's eye like a thing at the edge of sight. The Brain tab lists them as places, and the number on the line is the recall alone.
 _Avoid_: landmark, waypoint, place (alone, outside the Brain tab: that's putting a thing down with the Cursor)
 
 **Trip** (M2):

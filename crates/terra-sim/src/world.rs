@@ -346,8 +346,8 @@ impl<'a> SpriteView<'a> {
         self.sprite.brain.explain(&self.world.data)
     }
 
-    /// What it has learned, furthest from nothing first, up to five
-    /// (design §5.9).
+    /// What it has learned, furthest from nothing first (design v40 §5.9).
+    /// Ties keep the order they're listed in.
     pub fn memory(&self) -> Vec<Memory> {
         self.sprite.brain.memory(&self.world.data)
     }

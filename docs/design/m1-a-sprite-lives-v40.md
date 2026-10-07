@@ -1,19 +1,23 @@
-# Terra Sprites — M1 "A Sprite Lives" design (v39)
+# Terra Sprites — M1 "A Sprite Lives" design (v40)
 
 - **Status:** Final
-- **Date:** 2026-10-05
-- **Supersedes:** [v38](m1-changelog.md#v38). Earlier revisions, v1 through v37, are in the [changelog](m1-changelog.md).
+- **Date:** 2026-10-07
+- **Supersedes:** [v39](m1-changelog.md#v39). Earlier revisions, v1 through v38, are in the [changelog](m1-changelog.md).
 - **Covers:** Milestone 1 in full detail, plus the architecture decisions that every later milestone depends on
 
 ---
 
-## Changes from v38
+## Changes from v39
 
-M2 planning (2026-10-05): milestone 2 has a design of its own, [M2 "Generations"](archive/m2-generations-v1.md). This revision changes no rule of M1; it only points the roadmap there.
+The Brain tab's memory ([#160](https://github.com/Keazra/terra-sprites/issues/160)), settled with the owner on 2026-10-07. Each question had a recommendation; they answered the ones they wanted changed, and silence accepted the rest.
 
 | # | Change | Source | Sections |
 |---|---|---|---|
-| 1 | **M2's contents are in the [M2 design](archive/m2-generations-v1.md).** Beyond the roadmap's list, M2 takes memory of places, learning by watching, a harsher world, the speed cap and a title screen; this document stays the rulebook for everything M2 doesn't change. | M2 planning session | §1.1 |
+| 1 | **Memory is grouped under each thing,** not the five strongest lines in one list. The tab reads every learned value that doesn't round to `.00`. | #160 | §5.9, §6.1 |
+| 2 | **Three loudest lessons show** under a thing. Clicking its name, or "and N more", or Enter while the pointer is on that line, opens the rest. Clicking again shuts it. As many things as are opened stay open, and they all shut when another sprite is selected. A click on the inspector is not a click on the world. | #160 | §6.1 |
+| 3 | **A line doesn't repeat the thing's name.** The heading names it. The event log keeps the full sentence. | #160 | §6.1 |
+| 4 | **Particular sprites nest under Sprites.** The first step in is sprites in general, the average already in §5.6, plus a habit about sprites as a kind. Each remembered sprite is the second step in. The Cursor stays its own heading. A category of objects does not nest its types. | #160 | §6.1 |
+| 5 | **Places stay their own list,** below the things, best remembered first, and the number is the recall alone. | #160 | §6.1 |
 
 **Earlier changes** are in the [changelog](m1-changelog.md). Each earlier revision's table is there, with the same row numbers: "v16 change 16" is row 16 of [v16](m1-changelog.md#v16). The full text of a revision is tag `design/m1-vN`. This revision carries only its own table.
 
@@ -50,7 +54,7 @@ Terra Sprites is a terminal artificial-life game inspired by *Creatures*. Sprite
 | Milestone | Contents |
 |---|---|
 | **M1 — A Sprite Lives** *(this document)* | World, ecology, biochemistry, learning brain, terminal UI, the Cursor, save/load, replay |
-| **M2 — Generations** *([its own design](m2-generations-v4.md))* | Life stages; sexual and asexual reproduction decided by the genome; crossover and mutation; lineage and family-tree view; population graphs; headless fast-forward mode. Also memory of places, learning by watching, a harsher world, the speed cap and a title screen (v39) |
+| **M2 — Generations** *([its own design](m2-generations-v5.md))* | Life stages; sexual and asexual reproduction decided by the genome; crossover and mutation; lineage and family-tree view; population graphs; headless fast-forward mode. Also memory of places, learning by watching, a harsher world, the speed cap and a title screen (v39) |
 | **M3 — Wild Terra** | Critters (prey and predators); more hazards and toys; possibly seasons, weather, day/night and temperature |
 | **M4 — Words** | The player (and later, sprites) name objects and verbs; word inputs and a Speak output |
 | **Tiles** *(UI milestone, can be scheduled any time after M1)* | A tile-window front end that draws bitmap tilesets and sprite sheets through the semantic-tile seam (§6.2) |
@@ -1204,7 +1208,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 - what adds to or takes from the current verb's score, largest first whatever the sign, from the same snapshot: each instinct concept, the attended thing's habit for the verb, its worth, and how frightening it is (v18)
 - which thing each category's score is for: its candidate's object type (v19), or for sprites which sprite (v18); and the thing a verb is aimed at
 
-`SpriteView::memory` returns the sprite's **memory** (v16): its learned values furthest from 0, largest first, of every kind (a worth for a need, a general good, a bad, a fear, a habit, the worth of new things), about object types, category summaries (v19), remembered sprites and sprites in general (v18), up to five; ties keep that order. The Brain tab leaves out one that rounds to `.00`. It is read on its own, not through `explain`, since a sprite has learned things before it first decides. Step 4 runs before step 5, so the values the tab shows are the ones step 5 scored with.
+`SpriteView::memory` returns every learned value the Brain tab groups (v40): a worth for a need, a general good, a bad, a fear, a habit, and the worth of new things, about object types, category summaries (v19), remembered sprites and sprites in general (v18). It no longer stops at five. The tab leaves out one that rounds to `.00`. It is read on its own, not through `explain`, since a sprite has learned things before it first decides. Step 4 runs before step 5, so the values the tab shows are the ones step 5 scored with.
 
 ---
 
@@ -1235,38 +1239,51 @@ The species is dropped into a world it doesn't know and has to learn about it. I
  (61,40) grass · Mira #12 │ SELECT │ following Mira #12 │ holding: berry   Z select  X train  C grab
 ```
 
-**Brain tab** (v16; the layout is agreed in slice 9, and this revision is amended to match):
+**Brain tab** (v16; the memory layout is v40, [#160](https://github.com/Keazra/terra-sprites/issues/160)):
 
 ```
 ┌─ #12 ── Body [Brain] Chem Genome World ────┐
 │ ATTENTION                                  │
-│ ► Sprite #7                           1.40 │
-│   berry bush                           .52 │
-│   water                                .34 │
+│ ► water                                .62 │
+│   berries                              .21 │
 │                                            │
-│ DECISION: RETREAT                     1.10 │
-│   fear: Sprite #7                     +.62 │
-│   pain                                +.40 │
+│ DECISION: drink                        .71 │
 │                                            │
-│ MEMORY                                     │
-│   Sprite #7 is frightening            -.80 │
-│   thornbushes are bad                 -.62 │
-│   Mira #12 is good for loneliness     +.41 │
+│ ► WATER                                    │
+│   good for thirst                     +.70 │
+│   playing with it                     -.38 │
+│   drinking from it                    +.12 │
+│   and 1 more                               │
+│ SPRITES                                    │
+│   frightening                         -.30 │
+│   hitting them                        -.22 │
+│   #7                                       │
+│     frightening                       -.80 │
+│   Mira                                     │
+│     good for loneliness               +.41 │
+│ THE CURSOR                                 │
+│   frightening                         -.55 │
+│                                            │
+│ PLACES                                     │
+│   water · 13 tiles S                   .89 │
 └────────────────────────────────────────────┘
 ```
 
 - **Attention** lists each category in reach with its score, highest first, and marks the attended one `►`. With nothing in reach it reads "nothing in sight". Each row names the thing it scored (v19): the object type, "berry bush", or for sprites the sprite (v18), as the event log names sprites, "Sprite #7", "Mira #12". That's the one a running action is aimed at, or else the one that draws the eye most (§3.6, §5.3).
 - **The decision** names the verb chosen, or kept, at the latest step 5, with its score, then the five parts adding most to it, largest first whatever the sign: instinct concepts, named by their inputs as the Genome tab names instincts; the attended thing's worth; its habit for the verb; and how frightening it is, "fear: Sprite #7" (v18). Worth and fear name the object type or the sprite, not the category. One whose part rounds to `.00` is left out. A name too long for its row wraps between words.
-- **Memory** lists the sprite's learned values furthest from 0 (§5.9), each with its value, worded as the event log words a lesson: "Sprite #7 is frightening", "Mira #12 is good for loneliness", and sprites in general as "sprites are frightening" (v18). The part is left out while nothing has been learned.
-- **An object type, in general,** is worded by its `plural` (§3.5.1): "thornbushes are bad". One without a plural, such as water, reads with "is". **A category's summary** (v19) is worded by the category's own `plural` (§3.5.5), "bushes are bad", or by its name with "is", and shows once it counts, as "sprites" does. This replaces v17's wording of a kind by the plural of the first object type perceived as it.
+- **Memory** (v40) groups the learned values (§5.9) under the thing they're about. The thing with the loudest lesson comes first, and the loudest lesson comes first under it; a tie keeps the order the values are stored in (§5.6). A heading is the thing's name in capitals, as the log would name it: `WATER`, `THORNBUSHES`, `BUSHES`, `THE CURSOR`, `NEW THINGS`. A line under it does not repeat that name: `good for thirst`, `good`, `bad`, `frightening`, or the habit without the thing, `playing with it`, `eating them`. The sign stays as it is today, so frightening still reads as a minus. The event log keeps the full sentence.
+- **Three lessons show**, the loudest. When more remain, the next line is `and N more`. `►` on the heading means more is hidden; `▼` means it is open; a thing with nothing hidden has no mark. Clicking the heading, or `and N more`, opens or shuts that thing. Enter does the same for the thing the pointer is on. A click on a lesson line does nothing. As many things as are opened stay open. Selecting another sprite shuts them all. Opening is the inspector's own state: it isn't saved, and it isn't part of the world. A click that lands on the inspector does not also act on the world.
+- **Sprites** (v40) are one heading, `SPRITES`, which does not itself fold. The first step in is sprites in general (§5.6): each of its feelings that doesn't round away, and a habit about sprites as a kind, such as `hitting them`. Those lines are not capped at three. The second step in is each remembered sprite, loudest first, with the same three-line fold. Its heading is the name the player gave it, or `#7` when it has none. What it learned about that one sprite is a worth, a good, a bad or a fear. Hitting that sprite taught fear of them, not a habit of its own. One remembered sprite still gets the heading, with no general line, because the average counts for nothing until it knows more than one (§5.6). The Cursor is not under Sprites.
+- **A category of objects does not nest its types** (v40). `BUSHES` with `bad` under it is its own block, beside `THORNBUSHES`, not a parent of it.
+- **Places** (v40), when the sprite has any, are their own list below the things. What a line says is M2 design §7.5: the thing, how far and which way, and the recall as the number alone. They are not folded under the thing.
 - **While the Cursor leads it** (v23), attention and the decision read "Being led: it decides nothing", since the decision from before it was taken hold of would mislead; its memory still shows below.
 - Before a sprite's first decision, attention and the decision read "Nothing decided yet", as they do while a sprite in a hand-made world works through its scripted actions. Its memory still shows below (v17), since such a sprite can learn before it decides:
 
   ```
   │ Nothing decided yet                        │
   │                                            │
-  │ MEMORY                                     │
-  │   thornbushes are bad                 -.93 │
+  │ THORNBUSHES                                │
+  │   bad                                 -.93 │
   ```
 
 **Panels:**
@@ -1281,7 +1298,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 | Tab | Shows |
 |---|---|
 | **Body** | What the sprite is doing, in plain words (below); age and lifespan; speed and sense radius as expressed; a bar for each drive, with its level and an arrow for its change over the last tick (`▲` rising, `▼` falling, none when steady); the physical levels; the observed list (below) |
-| **Brain** | Output of `explain()` (below) |
+| **Brain** | What it attended to and decided, then its memory grouped under each thing (v40), then its places |
 | **Chem** | One list: each chemical on its own line with its level and its change per tick (`-.0002`, blank when it rounds to 0), the physical chemicals, then a blank line and the signal chemicals. From slice 8 the reward line also shows `last_r` as "felt": `reward  .00  felt -.42`. The 16 hormones sit in a 4×4 grid of levels below, so all of it fits at 100×30. Reward and punishment are consumed every tick, so their levels always read 0 between ticks. |
 | **Genome** | Genes grouped under headings: traits first, on one line (`speed 7.21 · sense 9.87 · lifespan 61,204`), then half-lives, reactions, emitters, receptors, starting levels, brain settings (`tau base .2`), instincts (`thirst & not target adjacent → drink -.5`) and attention instincts (`hunger → attends to bush +.8`, naming the category as the gene does, v19), and unknown genes last, each group in genome order. Each gene is a plain line with 3 significant figures, so spawn variation shows: `low energy → hunger +.00428 past .515`, `hunger falls → reward +1.02 past .0198`, `hunger halves every 2,041 ticks`. A line too long for the tab wraps, indented. A flagged, unexpressed, unknown or unmatched (v19) gene is dimmed, with its reason on the line below (§4.3); an unmatched gene written by number shows as its number, as an unknown gene does. `g` exports to RON. |
 | **World** | The data pack's identity; population and deaths by cause (counted by the sim, so they're saved); each object type in ID order with its count, the count in each stage (left out for a type with only one stage), and the total of each counter (such as the fruit on all bushes). It's drawn from the data, so a pack's new object types appear with no new code. |
