@@ -91,3 +91,18 @@ fn the_theme_flag_needs_a_file_and_does_not_mix_with_ascii() {
         "{error}"
     );
 }
+
+#[test]
+fn the_version_flag_is_read_and_the_version_names_the_commit() {
+    assert!(parse(&["--version"]).expect("valid").version);
+    assert!(!parse(&[]).expect("valid").version);
+    // "0.1.0 (cc96347)": the package version, then the commit it was built
+    // from, so the owner can tell which build they're trying.
+    let version = terra_tui::args::VERSION;
+    assert!(version.starts_with(env!("CARGO_PKG_VERSION")), "{version}");
+    let commit = version
+        .split_once(" (")
+        .and_then(|(_, rest)| rest.strip_suffix(')'))
+        .expect("a commit in brackets");
+    assert!(!commit.is_empty(), "{version}");
+}

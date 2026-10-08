@@ -18,7 +18,7 @@ use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{self, supports_keyboard_enhancement};
 use terra_sim::{Playback, World};
 use terra_tui::app::{App, Flow, Ticks};
-use terra_tui::args::{Args, USAGE};
+use terra_tui::args::{Args, USAGE, VERSION};
 use terra_tui::files;
 use terra_tui::input::{self, Keys};
 use terra_tui::saves;
@@ -41,6 +41,10 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    if args.version {
+        println!("terra-sprites {VERSION}");
+        return ExitCode::SUCCESS;
+    }
     // Flags that make or load a world go straight in (M2 design §8.5);
     // otherwise the game opens on the title screen. What the flags get
     // wrong stops the game here, before the terminal is taken.

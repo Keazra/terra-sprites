@@ -20,13 +20,21 @@ pub struct Args {
     /// `--theme <file>`: a theme to use instead of the built-in ones (design
     /// v34 §6.7).
     pub theme: Option<PathBuf>,
+    /// `--version`: print the version and the commit the game was built
+    /// from, and stop (design §6.7).
+    pub version: bool,
     /// Hidden developer flag: panic after the first frame, to check the terminal is restored.
     pub force_panic: bool,
 }
 
+/// The version and the commit the game was built from, as "0.1.0 (cc96347)"
+/// (design §6.7). The commit is "unknown" when it wasn't built from git.
+pub const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("TERRA_COMMIT"), ")");
+
 /// How to run the game, shown with any flag error.
 pub const USAGE: &str = "usage: terra-sprites [--seed <n>] [--preset <file>] [--data <dir>] [--ascii | --theme <file>]\n\
-                         \x20      terra-sprites --replay <file> [--ascii | --theme <file>]";
+                         \x20      terra-sprites --replay <file> [--ascii | --theme <file>]\n\
+                         \x20      terra-sprites --version";
 
 impl Args {
     /// Reads the flags, not including the program name.
@@ -50,6 +58,7 @@ impl Args {
                 "--replay" => parsed.replay = Some(value_of(&flag, args.next())?.into()),
                 "--ascii" => parsed.ascii = true,
                 "--theme" => parsed.theme = Some(value_of(&flag, args.next())?.into()),
+                "--version" => parsed.version = true,
                 "--force-panic" => parsed.force_panic = true,
                 _ => return Err(format!("unknown flag `{flag}`")),
             }
