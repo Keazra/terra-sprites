@@ -4,11 +4,9 @@
 
 ## Try it on your PC
 
-<!-- PowerShell, from the terra-sprites folder. Pick a seed that shows the change, and say what to look for. -->
+<!-- PowerShell, from the terra-sprites folder. Pick a seed that shows the change, and say what to look for. The script pulls the PR's newest commit, whatever branch the folder is on. -->
 
 ```powershell
-git switch main
-.\scripts\try-pr.ps1 main -NoRun
 .\scripts\try-pr.ps1 NUMBER -Seed 7
 ```
 

@@ -5,7 +5,7 @@ The owner's preferences and the project's conventions, for any agent session, lo
 ## Working with the owner
 
 - **They review by feel, after trying the build** in Windows Terminal, and change direction when something feels off. Don't build on a direction they haven't confirmed.
-  - **Every PR says how to try it,** in PowerShell, starting with `git switch main` and `.\scripts\try-pr.ps1 main -NoRun`, which pulls `main` and mends a copy from before the history rewrite that `git pull` refuses, then `.\scripts\try-pr.ps1 <number>`, which takes the PR's newest commit whatever older copy of the branch their folder has, and says which commit it is (`--version` says it too). Say what to look for, and which seed shows it.
+  - **Every PR says how to try it,** in the template's "Try it on your PC" section: PowerShell, with what to look for and which seed shows it. `scripts/try-pr.ps1` takes the newest commit from GitHub whatever older copy their folder has (a plain `git pull` refused theirs, from before the history rewrite) and says which commit it is.
 - **Plain words, from the start.** Write questions and options for someone who hasn't read the code: say what the player sees or what changes, not step letters, gene jargon or type names. A question once had to be asked again because it wasn't plain.
   - **Name a place by what it's for, not by its file:** "a word list of its own", not `themes/words.ron`. Slice 9b's question about where plurals should live had to be asked again for that reason.
   - **Results too.** Before any numbers, say in a sentence or two what was tested and why, then what happened, as a story; tables come after. In slice 10 the owner had to ask twice ("in plain language?", "what is it we are testing, again?") before a measurement round made sense to them.
@@ -41,8 +41,7 @@ The owner's preferences and the project's conventions, for any agent session, lo
 
 - The spec is the two designs in `docs/design/`: M1's (`m1-a-sprite-lives.md`) is the rulebook for the game as built, and M2's (`m2-generations.md`) plans milestone 2 and holds what its slices decide.
 - **A change edits the design in place and adds a file to `docs/design/changes/`,** named by the date it was settled (`2026-10-08-version-flag.md`), with a table per design it changes: what changed, where the decision came from, and which sections it touches. That folder's README has the template. Until the PR merges, both may be amended freely; after that, a later change is a new file. A rule it adds is marked with its issue, "(#160)".
-  - **Why not numbered revisions:** until 2026-10-08 each change was a new copy, `-vN`, with its table at the top. Two slices at once both took the next number, and the second to merge had to renumber and redo its links, at least five times (#101, #108, #117, #120, #152). Numbering stopped at M1 v40 and M2 v5.
-  - **The numbered history stays:** M1's tables in `docs/design/m1-changelog.md`, row numbers unchanged ("v16 change 16" is row 16 of the v16 section), with the full text of each as tag `design/m1-vN`; M2's v1 to v5 in `docs/design/archive/`, each with its table at the top. M1's v1 reviews are in `docs/design/reviews/`. Old citations such as "design v37 change 7" still point there.
+  - **Why, and where the numbered revisions (M1 v1–v40, M2 v1–v5) are:** that folder's README.
 - The designs keep their names, so the README's links and issues' links to them don't go stale.
 - New or changed terms go in `CONTEXT.md` (the `domain-modeling` skill); code and comments use its words, not the ones on its _Avoid_ lists.
 

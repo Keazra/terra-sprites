@@ -2,15 +2,9 @@
 
 - **Status:** Draft: the plan, with what each slice settles added as it's settled.
 - **Date:** 2026-10-08
-- **Revisions:** numbered up to v5 (2026-10-07), kept in [`archive/`](archive/). Since then this file is edited in place, with each change recorded in [`changes/`](changes/).
+- **History:** edited in place since v5; each change is a file in [`changes/`](changes/), whose README says where v1 to v5 are
 - **Builds on:** [M1 design](m1-a-sprite-lives.md), which stays the rulebook for everything M2 doesn't change
 - **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), and where places sit on the Brain tab
-
----
-
-## Changes
-
-Each change since v5 is a file in [`changes/`](changes/), named by the date it was settled: what changed, where the decision came from, and which sections it touches. v1 to v5, each with its own table at the top, are in [`archive/`](archive/). A rule marked "(v5)" came in that revision; one added since is marked with its issue, "(#N)", or its date.
 
 ---
 

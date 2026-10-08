@@ -97,7 +97,7 @@ The ground, the plants and toys, a sprite's body and its instincts, the size of 
 
 - [M2 "Generations" design](docs/design/m2-generations.md) (the plan for milestone 2: its slices, the time scale of a sprite's life, and what "M2 is done" means; and what its slices have settled so far: memory of places, the title screen, and where places sit on the Brain tab).
 - [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives.md), the rulebook for everything M2 doesn't change.
-- [Design changes](docs/design/changes/): each change to either design, one file per PR. M1's numbered revisions, v1 to v40, are in its [changelog](docs/design/m1-changelog.md), and the full text of each is tag `design/m1-vN`; M2's, v1 to v5, are in [`docs/design/archive/`](docs/design/archive/). The evaluations of v1 are in [`docs/design/reviews/`](docs/design/reviews/).
+- [Design changes](docs/design/changes/): each change to either design, one file per PR; its README says where the earlier numbered revisions are. The evaluations of v1 are in [`docs/design/reviews/`](docs/design/reviews/).
 
 ## Roadmap
 

@@ -6,11 +6,12 @@
 #   .\scripts\try-pr.ps1 main            back to main, up to date with GitHub (a
 #                                        git pull that also mends an old main)
 #
-# It always takes the PR's newest commit from GitHub, whatever older copy of
-# its branch this folder has, and says which commit that is. It puts the PR on
-# a branch of its own, try-pr-170, so nothing else changes. Files other tools
-# made and never committed are left alone. Keep this file ASCII: Windows
-# PowerShell 5.1 reads it as ANSI.
+# It always takes the newest commit from GitHub, whatever older copy this
+# folder has, and says which commit that is. A PR goes on a branch of its own,
+# try-pr-170. If main or try-pr-170 has commits GitHub's lacks, they're kept
+# on a backup branch first. Files other tools made and never committed are
+# left alone: git refuses rather than overwrite one. Keep this file ASCII:
+# Windows PowerShell 5.1 reads it as ANSI.
 
 param(
     [Parameter(Mandatory = $true, Position = 0)][string]$Pr,
@@ -33,31 +34,34 @@ if ($changed) {
     Fail "Put them aside with 'git stash' first ('git stash pop' brings them back), then run this again."
 }
 
+# Puts $branch at $target. Commits on $branch that $target lacks, such as a
+# main from before the history rewrite of 2026-10-05, go on a backup branch.
+function Switch-To($branch, $target) {
+    git rev-parse -q --verify "refs/heads/$branch" > $null
+    if ($LASTEXITCODE -eq 0) {
+        git merge-base --is-ancestor $branch $target
+        if ($LASTEXITCODE -ne 0) {
+            $backup = "$branch-backup-" + (Get-Date -Format "yyyyMMdd-HHmmss")
+            git branch $backup $branch
+            if ($LASTEXITCODE -ne 0) { Fail "Couldn't save $branch as $backup, so it's left as it was." }
+            Write-Host "$branch had commits GitHub's doesn't have. They're kept on branch $backup." -ForegroundColor Yellow
+        }
+    }
+    git switch -q -C $branch $target
+    if ($LASTEXITCODE -ne 0) { Fail "Couldn't switch to $branch. If git named files in the way, move them aside and run this again." }
+}
+
 if ($Pr -eq "main") {
     git fetch -q origin main
     if ($LASTEXITCODE -ne 0) { Fail "Couldn't fetch main from GitHub." }
-    git switch -q main
-    if ($LASTEXITCODE -ne 0) { Fail "Couldn't switch to main." }
-    # main only moves through merged PRs, so this folder's main should only
-    # ever be behind GitHub's. A copy from before the history rewrite of
-    # 2026-10-05 can't be pulled at all; keep it on a branch and start over.
-    git merge-base --is-ancestor HEAD origin/main
-    if ($LASTEXITCODE -ne 0) {
-        $backup = "main-backup-" + (Get-Date -Format "yyyyMMdd-HHmmss")
-        git branch $backup
-        if ($LASTEXITCODE -ne 0) { Fail "Couldn't save this folder's main as $backup, so it's left as it was." }
-        Write-Host "This folder's main had commits GitHub's main doesn't have, such as an old copy from before the history was rewritten. They're kept on branch $backup, and main now matches GitHub's." -ForegroundColor Yellow
-    }
-    git reset -q --hard origin/main
-    if ($LASTEXITCODE -ne 0) { Fail "Couldn't bring main up to date with GitHub." }
+    Switch-To "main" "origin/main"
     $label = "main"
 } else {
     if ($Pr -notmatch '^\d+$') { Fail "Give a PR number, such as 170, or 'main'." }
     Write-Host "Fetching PR #$Pr from GitHub..."
     git fetch -q origin "pull/$Pr/head"
     if ($LASTEXITCODE -ne 0) { Fail "Couldn't fetch PR #$Pr. Is the number right?" }
-    git switch -q -C "try-pr-$Pr" FETCH_HEAD
-    if ($LASTEXITCODE -ne 0) { Fail "Couldn't switch to PR #$Pr." }
+    Switch-To "try-pr-$Pr" (git rev-parse FETCH_HEAD)
     $label = "PR #$Pr"
 }
 

@@ -15,8 +15,10 @@ Code comments cite the design by section, `design §6.7`, as before.
 
 ## Before 2026-10-08
 
-- **M1:** the tables of v1 to v40 are in [`m1-changelog.md`](../m1-changelog.md), and the full text of each is tag `design/m1-vN`.
-- **M2:** v1 to v5 are in [`archive/`](../archive/), each with its table at the top.
+- **M1:** the tables of v1 to v40 are in [`m1-changelog.md`](../m1-changelog.md), with their row numbers unchanged ("v16 change 16" is row 16 of v16), and the full text of each is tag `design/m1-vN`.
+- **M2:** v1, v3 and v4 are in [`archive/`](../archive/), each with its table at the top. v5's full text is tag [`design/m2-v5`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m2-v5/docs/design/m2-generations-v5.md), and its one change is in [`2026-10-07-brain-tab-memory.md`](2026-10-07-brain-tab-memory.md).
+
+A rule marked with a revision, "(v40)", came in that revision. Old citations such as "design v37 change 7" still point there.
 
 Git keeps every version of each design since.
 

@@ -2,14 +2,8 @@
 
 - **Status:** Final
 - **Date:** 2026-10-08
-- **Revisions:** numbered up to v40 (2026-10-07), whose full text is tag `design/m1-v40`. Since then this file is edited in place, with each change recorded in [`changes/`](changes/).
+- **History:** edited in place since v40; each change is a file in [`changes/`](changes/), whose README says where v1 to v40 are
 - **Covers:** Milestone 1 in full detail, plus the architecture decisions that every later milestone depends on
-
----
-
-## Changes
-
-Each change since v40 is a file in [`changes/`](changes/), named by the date it was settled: what changed, where the decision came from, and which sections it touches. The tables of v1 to v40 are in the [changelog](m1-changelog.md), with their row numbers unchanged: "v16 change 16" is row 16 of [v16](m1-changelog.md#v16). A rule marked "(v40)" came in that revision; one added since is marked with its issue, "(#N)", or its date.
 
 ---
 

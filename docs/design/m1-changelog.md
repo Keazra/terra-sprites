@@ -24,8 +24,6 @@ The Brain tab's memory ([#160](https://github.com/Keazra/terra-sprites/issues/16
 | 4 | **Particular sprites nest under Sprites.** The first step in is sprites in general, the average already in §5.6, plus a habit about sprites as a kind. Each remembered sprite is the second step in. The Cursor stays its own heading. A category of objects does not nest its types. | #160 | §6.1 |
 | 5 | **Places stay their own list,** below the things, best remembered first, and the number is the recall alone. | #160 | §6.1 |
 
-**Earlier changes** are in the [changelog](m1-changelog.md). Each earlier revision's table is there, with the same row numbers: "v16 change 16" is row 16 of [v16](m1-changelog.md#v16). The full text of a revision is tag `design/m1-vN`. This revision carries only its own table.
-
 ## v39
 
 Changes from v38. Full text: [`design/m1-v39`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v39/docs/design/m1-a-sprite-lives-v39.md).
