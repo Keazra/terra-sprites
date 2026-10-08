@@ -8,7 +8,7 @@
 
 ```powershell
 git switch main
-git pull
+.\scripts\try-pr.ps1 main -NoRun
 .\scripts\try-pr.ps1 NUMBER -Seed 7
 ```
 

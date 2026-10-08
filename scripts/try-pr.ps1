@@ -3,7 +3,8 @@
 #   .\scripts\try-pr.ps1 170             PR #170, exactly as it is on GitHub, then start the game
 #   .\scripts\try-pr.ps1 170 -Seed 7     the same, on world seed 7
 #   .\scripts\try-pr.ps1 170 -NoRun      switch to it without starting the game
-#   .\scripts\try-pr.ps1 main            back to main, up to date
+#   .\scripts\try-pr.ps1 main            back to main, up to date with GitHub (a
+#                                        git pull that also mends an old main)
 #
 # It always takes the PR's newest commit from GitHub, whatever older copy of
 # its branch this folder has, and says which commit that is. It puts the PR on
@@ -33,9 +34,21 @@ if ($changed) {
 }
 
 if ($Pr -eq "main") {
+    git fetch -q origin main
+    if ($LASTEXITCODE -ne 0) { Fail "Couldn't fetch main from GitHub." }
     git switch -q main
     if ($LASTEXITCODE -ne 0) { Fail "Couldn't switch to main." }
-    git pull --ff-only -q
+    # main only moves through merged PRs, so this folder's main should only
+    # ever be behind GitHub's. A copy from before the history rewrite of
+    # 2026-10-05 can't be pulled at all; keep it on a branch and start over.
+    git merge-base --is-ancestor HEAD origin/main
+    if ($LASTEXITCODE -ne 0) {
+        $backup = "main-backup-" + (Get-Date -Format "yyyyMMdd-HHmmss")
+        git branch $backup
+        if ($LASTEXITCODE -ne 0) { Fail "Couldn't save this folder's main as $backup, so it's left as it was." }
+        Write-Host "This folder's main had commits GitHub's main doesn't have, such as an old copy from before the history was rewritten. They're kept on branch $backup, and main now matches GitHub's." -ForegroundColor Yellow
+    }
+    git reset -q --hard origin/main
     if ($LASTEXITCODE -ne 0) { Fail "Couldn't bring main up to date with GitHub." }
     $label = "main"
 } else {

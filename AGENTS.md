@@ -72,7 +72,7 @@ The skills live in the repo, in `.claude/skills/`. If a skill the workflow names
 ## Git and GitHub
 
 - Work on a feature branch and open a PR. Never commit to `main` directly: it moves only through merged PRs.
-- Fill in the PR template (`.github/pull_request_template.md`). Its "Try it on your PC" section is PowerShell for the owner, starting from `git switch main` and `git pull`, then `.\scripts\try-pr.ps1 <number>`, and says what to look for.
+- Fill in the PR template (`.github/pull_request_template.md`). Its "Try it on your PC" section is PowerShell for the owner, starting from `git switch main` and `.\scripts\try-pr.ps1 main -NoRun` (a `git pull` of main that also mends an old copy), then `.\scripts\try-pr.ps1 <number>`, and says what to look for.
 - Stage files by name, never with `git add -A` or `git add .`. The owner's review tooling writes files into the repo folder (`.agents/`, `ORIGINAL_REQUEST.md`).
 - Post issue and PR bodies and comments with `--body-file` and a temp file, never an inline `--body`: inline text breaks on backticks, quotes and paths.
 - After opening an issue or a PR, post a plain-language comment on it for a human reader: what it changes or proposes, why it matters, and any caveats for the reviewer.
