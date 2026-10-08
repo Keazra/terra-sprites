@@ -1,18 +1,30 @@
 # M1 design changelog
 
-The change table from every superseded revision of [M1 "A Sprite Lives"](m1-a-sprite-lives-v40.md). v40 is the rulebook, and its table stays at the top of that file until the next revision. This file is the history: each earlier table is copied here with its row numbers left as they were, so "v16 change 16" is still row 16 of [v16](#v16).
+The change table of every numbered revision of [M1 "A Sprite Lives"](m1-a-sprite-lives.md), v1 to v40, with its row numbers left as they were, so "v16 change 16" is still row 16 of [v16](#v16). The numbering stopped at v40: since then the design is edited in place, and each change is a file in [`changes/`](changes/).
 
-The full text of a revision is a git tag, not a file on `main`. On tag `design/m1-vN` it is `docs/design/m1-a-sprite-lives-vN.md`. v1 is `docs/design/m1-a-sprite-lives.md` on `design/m1-v1`.
+The full text of a numbered revision is a git tag, not a file on `main`. On tag `design/m1-vN` it is `docs/design/m1-a-sprite-lives-vN.md`. v1 is `docs/design/m1-a-sprite-lives.md` on `design/m1-v1`.
 
 The two reviews of v1 are [Gemini](reviews/m1-gemini-eval.md) and [GPT](reviews/m1-gpt-eval.md).
 
 M2's older revisions still live in [`archive/`](archive/).
 
-Jump to [v40](m1-a-sprite-lives-v40.md) · [v39](#v39) · [v38](#v38) · [v37](#v37) · [v36](#v36) · [v35](#v35) · [v34](#v34) · [v33](#v33) · [v32](#v32) · [v31](#v31) · [v30](#v30) · [v29](#v29) · [v28](#v28) · [v27](#v27) · [v26](#v26) · [v25](#v25) · [v24](#v24) · [v23](#v23) · [v22](#v22) · [v21](#v21) · [v20](#v20) · [v19](#v19) · [v18](#v18) · [v17](#v17) · [v16](#v16) · [v15](#v15) · [v14](#v14) · [v13](#v13) · [v12](#v12) · [v11](#v11) · [v10](#v10) · [v9](#v9) · [v8](#v8) · [v7](#v7) · [v6](#v6) · [v5](#v5) · [v4](#v4) · [v3](#v3) · [v2](#v2) · [v1](#v1).
+Jump to [v40](#v40) · [v39](#v39) · [v38](#v38) · [v37](#v37) · [v36](#v36) · [v35](#v35) · [v34](#v34) · [v33](#v33) · [v32](#v32) · [v31](#v31) · [v30](#v30) · [v29](#v29) · [v28](#v28) · [v27](#v27) · [v26](#v26) · [v25](#v25) · [v24](#v24) · [v23](#v23) · [v22](#v22) · [v21](#v21) · [v20](#v20) · [v19](#v19) · [v18](#v18) · [v17](#v17) · [v16](#v16) · [v15](#v15) · [v14](#v14) · [v13](#v13) · [v12](#v12) · [v11](#v11) · [v10](#v10) · [v9](#v9) · [v8](#v8) · [v7](#v7) · [v6](#v6) · [v5](#v5) · [v4](#v4) · [v3](#v3) · [v2](#v2) · [v1](#v1).
 
 ## v40
 
-The current revision. Its change table is at the top of [m1-a-sprite-lives-v40.md](m1-a-sprite-lives-v40.md). It is tagged `design/m1-v40` when this revision merges.
+Changes from v39, the last numbered revision. Full text: [`design/m1-v40`](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v40/docs/design/m1-a-sprite-lives-v40.md).
+
+The Brain tab's memory ([#160](https://github.com/Keazra/terra-sprites/issues/160)), settled with the owner on 2026-10-07. Each question had a recommendation; they answered the ones they wanted changed, and silence accepted the rest.
+
+| # | Change | Source | Sections |
+|---|---|---|---|
+| 1 | **Memory is grouped under each thing,** not the five strongest lines in one list. The tab reads every learned value that doesn't round to `.00`. | #160 | §5.9, §6.1 |
+| 2 | **Three loudest lessons show** under a thing. Clicking its name, or "and N more", or Enter while the pointer is on that line, opens the rest. Clicking again shuts it. As many things as are opened stay open, and they all shut when another sprite is selected. A click on the inspector is not a click on the world. | #160 | §6.1 |
+| 3 | **A line doesn't repeat the thing's name.** The heading names it. The event log keeps the full sentence. | #160 | §6.1 |
+| 4 | **Particular sprites nest under Sprites.** The first step in is sprites in general, the average already in §5.6, plus a habit about sprites as a kind. Each remembered sprite is the second step in. The Cursor stays its own heading. A category of objects does not nest its types. | #160 | §6.1 |
+| 5 | **Places stay their own list,** below the things, best remembered first, and the number is the recall alone. | #160 | §6.1 |
+
+**Earlier changes** are in the [changelog](m1-changelog.md). Each earlier revision's table is there, with the same row numbers: "v16 change 16" is row 16 of [v16](m1-changelog.md#v16). The full text of a revision is tag `design/m1-vN`. This revision carries only its own table.
 
 ## v39
 

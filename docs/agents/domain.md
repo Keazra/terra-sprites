@@ -4,7 +4,7 @@ How the engineering skills should consume this repo's domain documentation when 
 
 ## Before exploring, read these
 
-- **The current design doc** in `docs/design/`: it holds only the current revision of each design, the highest-numbered `-vN`. Read the sections that touch the area you're about to work in. M1's earlier revisions are tags `design/m1-vN`, and their change tables are in `docs/design/m1-changelog.md`. The v1 reviews are in `docs/design/reviews/`. M2's earlier revisions are in `docs/design/archive/`. All of that is history, not spec.
+- **The design docs** in `docs/design/`: `m1-a-sprite-lives.md` and `m2-generations.md`. Read the sections that touch the area you're about to work in. What changed when is in `docs/design/changes/`. M1's numbered revisions (v1 to v40) are tags `design/m1-vN`, with their change tables in `docs/design/m1-changelog.md`; M2's (v1 to v5) are in `docs/design/archive/`. The v1 reviews are in `docs/design/reviews/`. The numbered revisions are history, not spec.
 - **`CONTEXT.md`** at the repo root: the glossary.
 - **`docs/adr/`**: read ADRs that touch the area you're about to work in.
 
@@ -19,8 +19,9 @@ This is a single-context repo:
 ├── CONTEXT.md          ← glossary (created lazily)
 ├── docs/
 │   ├── adr/            ← decision records, 0001-<slug>.md (created lazily)
-│   └── design/         ← the current design doc of each design (the highest -vN)
-│       ├── archive/    ← M2's earlier revisions
+│   └── design/         ← one design doc per milestone, edited in place
+│       ├── changes/    ← one file per change, by date
+│       ├── archive/    ← M2's numbered revisions, v1 to v5
 │       └── reviews/    ← the v1 evaluations
 ├── crates/
 └── data/
@@ -40,4 +41,4 @@ If your output contradicts an existing ADR or the current design doc, surface it
 
 > _Contradicts ADR-000N (<title>) / design §N.N, but worth reopening because…_
 
-Design changes go in a new `-vN` revision with a "Changes from vN-1" table, not an edit to the current one. The exception is a revision that hasn't reached `main` yet, which may be amended within its PR.
+A design change edits the design in place and adds a file to `docs/design/changes/` with its change table (see that folder's README).
