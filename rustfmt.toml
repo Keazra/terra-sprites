@@ -1,0 +1,4 @@
+# Lets `rustfmt` run on a single file format it as `cargo fmt` does. Without
+# it, rustfmt doesn't know the workspace's edition and sorts imports the old
+# way, which CI's `cargo fmt --all --check` then rejects (#167).
+edition = "2024"
