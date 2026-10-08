@@ -59,6 +59,7 @@ How the owner likes to work, the project's conventions and the slice loop are in
 1. Start from an up-to-date `main` (`git pull --ff-only`) and a clean tree, and check the open PRs: one may already touch what you're about to change.
 2. For the next slice, take the earliest open "Slice N" issue in the current milestone whose `## Blocked by` issues are closed, and read its comments for items deferred from earlier slices.
 3. In a local session, read the newest briefing in `docs/reports/` (design §7.6), if there is one.
+4. Open issues with no triage label (`docs/agents/triage-labels.md`) go through `/triage`: mention them to the owner.
 
 **Before you finish:**
 

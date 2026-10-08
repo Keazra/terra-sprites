@@ -6,6 +6,7 @@
 #
 # It runs `cargo fmt --all --check`, not `cargo fmt --all`: the latter would
 # reformat other agents' untracked files (docs/agents/how-we-work.md).
+# Keep this file ASCII: Windows PowerShell 5.1 reads it as ANSI.
 
 $ErrorActionPreference = "Stop"
 Set-Location (git rev-parse --show-toplevel)
@@ -22,7 +23,7 @@ function Step($name, [scriptblock]$run) {
 Step "Formatting" { cargo fmt --all --check }
 Step "Lints (including the simulation's determinism rules)" { cargo clippy --workspace --all-targets -- -D warnings }
 Step "Tests" { cargo test --workspace }
-Write-Host "`n== The simulation crate has no terminal dependencies (design §2.1)"
+Write-Host "`n== The simulation crate has no terminal dependencies (design section 2.1)"
 $terminal = cargo tree -p terra-sim -e normal --prefix none | Select-String -Pattern '^(ratatui|crossterm)'
 if ($terminal) {
     Write-Host "terra-sim must not depend on terminal crates" -ForegroundColor Red

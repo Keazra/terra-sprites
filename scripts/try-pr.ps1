@@ -8,7 +8,8 @@
 # It always takes the PR's newest commit from GitHub, whatever older copy of
 # its branch this folder has, and says which commit that is. It puts the PR on
 # a branch of its own, try-pr-170, so nothing else changes. Files other tools
-# made and never committed are left alone.
+# made and never committed are left alone. Keep this file ASCII: Windows
+# PowerShell 5.1 reads it as ANSI.
 
 param(
     [Parameter(Mandatory = $true, Position = 0)][string]$Pr,
@@ -47,7 +48,7 @@ if ($Pr -eq "main") {
     $label = "PR #$Pr"
 }
 
-$commit = git log -1 --format="%h, %s (%cr)"
+$commit = git log -1 '--format=%h, %s (%cr)'
 Write-Host "You're on $label at commit $commit." -ForegroundColor Green
 Write-Host "The game shows the same commit with: cargo run --release -- --version"
 
@@ -56,4 +57,5 @@ if ($NoRun) { exit 0 }
 $gameArgs = @()
 if ($null -ne $Seed) { $gameArgs = @("--seed", "$Seed") }
 Write-Host "Building and starting the game (the first build takes a few minutes)..."
-cargo run --release -- @gameArgs
+# '--' is quoted so PowerShell passes it on rather than reading it itself.
+cargo run --release '--' @gameArgs
