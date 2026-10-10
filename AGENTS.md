@@ -69,6 +69,8 @@ How the owner likes to work, the project's conventions and the slice loop are in
 
 The skills live in the repo, in `.claude/skills/`. If a skill the workflow names isn't available to you (cloud sessions haven't always loaded the repo's skills), read its `.claude/skills/<name>/SKILL.md` and follow it as written.
 
+**A message that starts with a skill's name, such as `/triage` or `/tdd`, asks you to run that skill.** Claude Code Projects and other cloud chats have no slash-command menu, so the name arrives as plain text rather than as a command: load the skill with the Skill tool, or read its `SKILL.md` if it isn't listed. `/grill-with-docs` means `grilling` with `domain-modeling` (`docs/agents/how-we-work.md`). The skills are copies of Matt Pocock's; the plugin itself is off for this project and never loads in cloud sessions (`.claude/skills/THIRD-PARTY.md`).
+
 ## Git and GitHub
 
 - Work on a feature branch and open a PR. Never commit to `main` directly: it moves only through merged PRs.
@@ -83,7 +85,7 @@ The skills live in the repo, in `.claude/skills/`. If a skill the workflow names
 
 ### Issue tracker
 
-Issues live in GitHub Issues for Keazra/terra-sprites and are handled with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Issues live in GitHub Issues for Keazra/terra-sprites and are handled with the `gh` CLI, or in cloud sessions, where `gh` isn't signed in, with the GitHub MCP tools. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
