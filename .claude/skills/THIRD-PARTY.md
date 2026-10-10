@@ -1,6 +1,6 @@
 # Skills copied from mattpocock/skills
 
-These skills are copied from [mattpocock/skills](https://github.com/mattpocock/skills), plugin version 1.2.3, so that cloud sessions have them. Cloud sessions don't install plugins, but they load a repo's `.claude/skills/`. The Claude Code plugin is turned off for this project in `.claude/settings.json`, so local sessions use these copies too.
+These skills are copied from [mattpocock/skills](https://github.com/mattpocock/skills), plugin version 1.2.3, and adjusted for this project (below). The Claude Code plugin `mattpocock-skills` is turned off for this project in `.claude/settings.json`. When a session also loads the owner's account plugin (1.2.3 as of 2026-10-10, the same version as these copies), `AGENTS.md` says which to pick.
 
 | Skill | From |
 |---|---|
@@ -26,7 +26,7 @@ These skills are copied from [mattpocock/skills](https://github.com/mattpocock/s
 
 ## Updating
 
-Copy a skill's folder again from a newer version of the plugin, and redo the changes above.
+Copy a skill's folder again from a newer version of the plugin, redo the changes above, and update the version at the top.
 
 ## License
 
