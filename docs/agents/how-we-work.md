@@ -1,10 +1,11 @@
 # How we work
 
-The owner's preferences and the project's conventions, for any agent session, local or in the cloud. The session routine itself is the `handover` skill (`.claude/skills/handover/SKILL.md`); the rules for git and GitHub are in `AGENTS.md`.
+The owner's preferences and the project's conventions, for any agent session, local or in the cloud. Starting and finishing a session, the checks before pushing, and the rules for git and GitHub are in `AGENTS.md`.
 
 ## Working with the owner
 
 - **They review by feel, after trying the build** in Windows Terminal, and change direction when something feels off. Don't build on a direction they haven't confirmed.
+  - **Every PR says how to try it,** in the template's "Try it on your PC" section: PowerShell, with what to look for and which seed shows it. `scripts/try-pr.ps1` takes the newest commit from GitHub whatever older copy their folder has (a plain `git pull` refused theirs, from before the history rewrite) and says which commit it is.
 - **Plain words, from the start.** Write questions and options for someone who hasn't read the code: say what the player sees or what changes, not step letters, gene jargon or type names. A question once had to be asked again because it wasn't plain.
   - **Name a place by what it's for, not by its file:** "a word list of its own", not `themes/words.ron`. Slice 9b's question about where plurals should live had to be asked again for that reason.
   - **Results too.** Before any numbers, say in a sentence or two what was tested and why, then what happened, as a story; tables come after. In slice 10 the owner had to ask twice ("in plain language?", "what is it we are testing, again?") before a measurement round made sense to them.
@@ -14,9 +15,9 @@ The owner's preferences and the project's conventions, for any agent session, lo
 - **When measuring shows a design won't work,** stop and bring the numbers, what was tried and the options, rather than retuning quietly. Slice 8's decisions to drop no-op Approaches and to shorten the trace were made that way (design v15, changes 9–10).
 - **When something they asked for can't be done as written,** say so before building, with options, rather than quietly doing something else. If an agreed detail changes during the work, say so in the PR.
 - **When they raise a broad idea, lay out what it could mean before narrowing it.** In slice 9 "the simulated fly brain" was first read as one mechanism, a concept pool, and measured. The owner had meant the brain as a whole, so the idea had to be revisited: first say which readings there are, and ask.
-- **`/grill-with-docs`** is the owner's name for the `grilling` skill together with `domain-modeling`: questions in rounds, with each settled term written into `CONTEXT.md` as it's decided, and the decisions in a new design revision.
+- **`/grill-with-docs`** is the owner's name for the `grilling` skill together with `domain-modeling`: questions in rounds, with each settled term written into `CONTEXT.md` as it's decided, and the decisions in the design, with a file in `docs/design/changes/`.
 - **Other agents may work in the same folder.** The owner runs tools such as Antigravity alongside a session, so untracked files you didn't make are theirs: leave them unstaged and untouched, and pull before pushing in case they committed to the branch.
-  - **`cargo fmt --all` would reformat their untracked Rust files:** run `rustfmt` on your own files, and `cargo fmt --all --check` to check.
+  - **`cargo fmt --all` would reformat their untracked Rust files:** run `rustfmt` on your own files, and `cargo fmt --all --check` to check. `rustfmt.toml` gives `rustfmt` the 2024 edition; without it, it sorted imports the old way and CI failed (#167).
 
 ## The owner's design principles
 
@@ -38,22 +39,22 @@ The owner's preferences and the project's conventions, for any agent session, lo
 
 ## Design documents
 
-- The spec is each design's highest `docs/design/*-vN.md`: M1's (`m1-a-sprite-lives`) is the rulebook for the game as built, and M2's (`m2-generations`) plans milestone 2 and holds what its slices decide. Each revision is a new copy with a "Changes from vN-1" table at the top, saying what changed, where the decision came from, and which sections it touches.
-  - **It carries only its own table.** When copying the previous revision, replace its table with the new one. For M1, the old tables are in `docs/design/m1-changelog.md`, row numbers unchanged: "v16 change 16" is row 16 of the v16 section. The full text is tag `design/m1-vN` (`docs/design/m1-a-sprite-lives-vN.md`; v1 is `m1-a-sprite-lives.md`). For M2, the old table stays at the top of the archived copy. The owner asked for this in slice 10b: the tables of v2–v21 had grown to a third of the spec, all ahead of it. Trimming history changes no design, so it needs no new revision.
-- A revision not yet on `main` is amended in place within its PR. Once it's on `main`, the next change is a new version.
-- **`docs/design/` holds only the current revision of each design.** For M2, the PR that adds a revision moves the one it supersedes into `docs/design/archive/` with `git mv`, and the new revision's "Supersedes" links point into `archive/`. M1's earlier revisions are the `design/m1-vN` tags, not files. A new M1 revision deletes the one it supersedes, moves that revision's table into `m1-changelog.md`, and gets its own `design/m1-vN` tag when it merges. M1's v1 reviews are in `docs/design/reviews/`. The README's design link moves to the new revision. Issues link to the current revision, since an older one is history.
+- The spec is the two designs in `docs/design/`: M1's (`m1-a-sprite-lives.md`) is the rulebook for the game as built, and M2's (`m2-generations.md`) plans milestone 2 and holds what its slices decide.
+- **A change edits the design in place and adds a file to `docs/design/changes/`,** named by the date it was settled (`2026-10-08-version-flag.md`), with a table per design it changes: what changed, where the decision came from, and which sections it touches. That folder's README has the template. Until the PR merges, both may be amended freely; after that, a later change is a new file. A rule it adds is marked with its issue, "(#160)".
+  - **Why, and where the numbered revisions (M1 v1–v40, M2 v1–v5) are:** that folder's README.
+- The designs keep their names, so the README's links and issues' links to them don't go stale.
 - New or changed terms go in `CONTEXT.md` (the `domain-modeling` skill); code and comments use its words, not the ones on its _Avoid_ lists.
 
 ## The slice loop
 
-Each slice is a GitHub issue ("Slice N: …") in its milestone; M2's are Slices 20–30, worked as in the `handover` skill:
+Each slice is a GitHub issue ("Slice N: …") in its milestone; M2's are Slices 20–30. Starting work and finishing it are in `AGENTS.md`; the slice itself goes:
 
 1. Grill the slice's open design questions (`grilling`), in plain words.
-2. Record the decisions in a new design revision and `CONTEXT.md`.
+2. Record the decisions in the design, a file in `docs/design/changes/`, and `CONTEXT.md`.
 3. Agree the seams (the public interfaces tests go through) and the list of behaviours.
 4. Build red-green with `tdd`, one behaviour at a time, committing as it goes.
-5. Run `two-axis-review` against `main` (Standards and Spec, in parallel sub-agents). Fix every finding that holds up, and give reasons for the ones declined.
-6. Open the PR ("Closes #N"), with the checks in `AGENTS.md` passing.
+5. Run `two-axis-review` against `main` (Standards and Spec, in parallel sub-agents), with `docs/agents/review-checklist.md`: the slips outside reviews kept finding. Fix every finding that holds up, and give reasons for the ones declined.
+6. Open the PR from the template ("Closes #N"), with `scripts/check` passing and its "Try it on your PC" steps filled in.
 7. Answer outside reviews (below), then merge when the owner says so: a merge commit, not a squash, then delete the branch and pull `main`. PR descriptions and review replies cite the slice's commits by hash, and a squash would drop them from `main`'s history.
 
 A slice too big for one PR ships as two ("4a", "4b"); only the last PR's description says "Closes #N".
@@ -77,7 +78,7 @@ A slice too big for one PR ships as two ("4a", "4b"); only the last PR's descrip
 
 ## Baseline runs
 
-Each time `main` moves, a baseline run (design v24 §7.6) measures what's too slow for CI, and the observer, Gemini, writes a briefing on it. Both are in `docs/reports/`, which git ignores, on the owner's machine: `<date>-<commit>-report.md` and `<date>-<commit>-briefing.md`, with `baseline.log`. `/handover start` reads the newest briefing. `scripts/baseline.ps1` runs one, by hand or from the task that `scripts/schedule-baseline.ps1` sets up.
+Each time `main` moves, a baseline run (design v24 §7.6) measures what's too slow for CI, and the observer, Gemini, writes a briefing on it. Both are in `docs/reports/`, which git ignores, on the owner's machine: `<date>-<commit>-report.md` and `<date>-<commit>-briefing.md`, with `baseline.log`. A local session reads the newest briefing when it starts (`AGENTS.md`). `scripts/baseline.ps1` runs one, by hand or from the task that `scripts/schedule-baseline.ps1` sets up.
 
 - **The numbers are `main`'s baseline.** When the newest report's commit is `main`'s, its viability run, thorn trap and A1–A3 numbers (seeds 1–10) are what a slice compares itself with, without measuring `main` again.
 - **The observer's guesses are leads.** It reads the code but can't run it, so check a suggested cause before acting on it.

@@ -2,13 +2,17 @@
 
 ## Project
 
-Terra Sprites is an ASCII artificial-life game in Rust. The spec is the current design docs in `docs/design/`, each at its highest `-vN`: M1's (`m1-a-sprite-lives`) for the game as built, and M2's (`m2-generations`) for milestone 2, which builds on it; see `docs/agents/domain.md` for how to read it.
+Terra Sprites is an ASCII artificial-life game in Rust. The spec is the design docs in `docs/design/`: M1's (`m1-a-sprite-lives.md`) for the game as built, and M2's (`m2-generations.md`) for milestone 2, which builds on it; see `docs/agents/domain.md` for how to read them.
 
-Before pushing, run the checks CI runs (`.github/workflows/ci.yml` is the source of truth):
+Before pushing, run the checks CI runs: `scripts/check.sh`, or `.\scripts\check.ps1` in PowerShell. They run, as CI's test job does (`.github/workflows/ci.yml` is the source of truth):
 
 - `cargo fmt --all --check` (`listed_enum!` bodies aren't formatted by rustfmt; keep them tidy by hand)
 - `cargo clippy --workspace --all-targets -- -D warnings` (this includes the simulation's determinism lints)
-- `cargo test --workspace`
+- `cargo test --workspace`: every test, the unit tests inside `src/` too, not only the files you changed
+
+A pre-push hook (`.githooks/pre-push`) runs them if you haven't, which makes the push take minutes; run them first and the push is instant. It's on once a clone has `git config core.hooksPath .githooks`; Claude Code sessions switch it on themselves. Don't skip it with `--no-verify`: three of six PRs in a row (#163, #167, #168) were opened with CI red for a check that wasn't run.
+
+To format a file of your own, `rustfmt <file>` (it reads `rustfmt.toml` for the 2024 edition) or `cargo fmt --all` when no other agent has untracked Rust files in the folder.
 
 `terra-sim` must not depend on terminal crates (`ratatui`, `crossterm`); CI checks this too.
 
@@ -48,13 +52,27 @@ The game's content is data in `data/*.ron` (terrain, chemicals, loci, brain inpu
 
 ## Workflow
 
-Sessions start and end with the `handover` skill (`/handover start`, `/handover end`), which runs each slice. How the owner likes to work, and the project's conventions, are in `docs/agents/how-we-work.md`. Read it before starting.
+How the owner likes to work, the project's conventions and the slice loop are in `docs/agents/how-we-work.md`. Read it before starting.
 
-The skills live in the repo, in `.claude/skills/`. If `/handover`, or any skill the workflow names, isn't available to you (cloud sessions haven't always loaded the repo's skills), read its `.claude/skills/<name>/SKILL.md` and follow it as written.
+**Starting work:**
+
+1. Start from an up-to-date `main` (`git pull --ff-only`) and a clean tree, and check the open PRs: one may already touch what you're about to change.
+2. For the next slice, take the earliest open "Slice N" issue in the current milestone whose `## Blocked by` issues are closed, and read its comments for items deferred from earlier slices.
+3. In a local session, read the newest briefing in `docs/reports/` (design §7.6), if there is one.
+4. Open issues with no triage label (`docs/agents/triage-labels.md`) go through `/triage`: mention them to the owner.
+
+**Before you finish:**
+
+1. Everything is committed and pushed to the feature branch, with `scripts/check` passing, and the PR is open with the template filled in.
+2. Follow-ups are on GitHub (below), not only in the conversation.
+3. A new convention or owner preference is in `docs/agents/how-we-work.md`, in the PR or a small one of its own.
+
+The skills live in the repo, in `.claude/skills/`. If a skill the workflow names isn't available to you (cloud sessions haven't always loaded the repo's skills), read its `.claude/skills/<name>/SKILL.md` and follow it as written.
 
 ## Git and GitHub
 
 - Work on a feature branch and open a PR. Never commit to `main` directly: it moves only through merged PRs.
+- Fill in the PR template (`.github/pull_request_template.md`), its "Try it on your PC" section included.
 - Stage files by name, never with `git add -A` or `git add .`. The owner's review tooling writes files into the repo folder (`.agents/`, `ORIGINAL_REQUEST.md`).
 - Post issue and PR bodies and comments with `--body-file` and a temp file, never an inline `--body`: inline text breaks on backticks, quotes and paths.
 - After opening an issue or a PR, post a plain-language comment on it for a human reader: what it changes or proposes, why it matters, and any caveats for the reviewer.

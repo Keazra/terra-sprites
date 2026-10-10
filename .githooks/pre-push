@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Terra Sprites: runs CI's checks on each commit being pushed, so a PR isn't
+# opened red. Switched on per clone with `git config core.hooksPath .githooks`;
+# Claude Code sessions switch it on themselves (.claude/settings.json).
+#
+# A commit whose tree scripts/check.sh already passed goes straight through.
+# Any other is checked out on its own in a scratch worktree, so neither
+# uncommitted changes nor untracked files (a forgotten module, another agent's
+# test) sway the result. That takes a few minutes. Tags and deletes are skipped.
+set -euo pipefail
+check="$(cd "$(dirname "$0")/.." && pwd)/scripts/check.sh"
+cd "$(git rev-parse --show-toplevel)"
+
+zero=0000000000000000000000000000000000000000
+stamps="$(git rev-parse --git-common-dir)/terra-checks-passed"
+to_check=()
+while read -r local_ref local_sha _remote_ref _remote_sha; do
+    case "$local_ref" in refs/tags/*) continue ;; esac
+    [ "$local_sha" = "$zero" ] && continue
+    tree=$(git rev-parse "$local_sha^{tree}")
+    [ -f "$stamps" ] && grep -qx "$tree" "$stamps" && continue
+    to_check+=("$local_sha")
+done
+
+[ "${#to_check[@]}" = 0 ] && exit 0
+
+scratch="$(git rev-parse --git-common-dir)/terra-check"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$PWD/target}"
+cleanup() {
+    git worktree remove --force "$scratch" >/dev/null 2>&1 || rm -rf "$scratch"
+    git worktree prune
+}
+trap cleanup EXIT
+for sha in "${to_check[@]}"; do
+    echo "pre-push: running CI's checks on $(git rev-parse --short "$sha") on its own before pushing."
+    echo "Run scripts/check.sh (or check.ps1) on a clean, committed tree first and this step is instant."
+    cleanup
+    git worktree add -q --detach "$scratch" "$sha"
+    (cd "$scratch" && bash "$check")
+done

@@ -1,25 +1,9 @@
-# Terra Sprites — M1 "A Sprite Lives" design (v40)
+# Terra Sprites — M1 "A Sprite Lives" design
 
 - **Status:** Final
-- **Date:** 2026-10-07
-- **Supersedes:** [v39](m1-changelog.md#v39). Earlier revisions, v1 through v38, are in the [changelog](m1-changelog.md).
+- **Date:** 2026-10-08
+- **History:** edited in place since v40; each change is a file in [`changes/`](changes/), whose README says where v1 to v40 are
 - **Covers:** Milestone 1 in full detail, plus the architecture decisions that every later milestone depends on
-
----
-
-## Changes from v39
-
-The Brain tab's memory ([#160](https://github.com/Keazra/terra-sprites/issues/160)), settled with the owner on 2026-10-07. Each question had a recommendation; they answered the ones they wanted changed, and silence accepted the rest.
-
-| # | Change | Source | Sections |
-|---|---|---|---|
-| 1 | **Memory is grouped under each thing,** not the five strongest lines in one list. The tab reads every learned value that doesn't round to `.00`. | #160 | §5.9, §6.1 |
-| 2 | **Three loudest lessons show** under a thing. Clicking its name, or "and N more", or Enter while the pointer is on that line, opens the rest. Clicking again shuts it. As many things as are opened stay open, and they all shut when another sprite is selected. A click on the inspector is not a click on the world. | #160 | §6.1 |
-| 3 | **A line doesn't repeat the thing's name.** The heading names it. The event log keeps the full sentence. | #160 | §6.1 |
-| 4 | **Particular sprites nest under Sprites.** The first step in is sprites in general, the average already in §5.6, plus a habit about sprites as a kind. Each remembered sprite is the second step in. The Cursor stays its own heading. A category of objects does not nest its types. | #160 | §6.1 |
-| 5 | **Places stay their own list,** below the things, best remembered first, and the number is the recall alone. | #160 | §6.1 |
-
-**Earlier changes** are in the [changelog](m1-changelog.md). Each earlier revision's table is there, with the same row numbers: "v16 change 16" is row 16 of [v16](m1-changelog.md#v16). The full text of a revision is tag `design/m1-vN`. This revision carries only its own table.
 
 ---
 
@@ -54,7 +38,7 @@ Terra Sprites is a terminal artificial-life game inspired by *Creatures*. Sprite
 | Milestone | Contents |
 |---|---|
 | **M1 — A Sprite Lives** *(this document)* | World, ecology, biochemistry, learning brain, terminal UI, the Cursor, save/load, replay |
-| **M2 — Generations** *([its own design](m2-generations-v5.md))* | Life stages; sexual and asexual reproduction decided by the genome; crossover and mutation; lineage and family-tree view; population graphs; headless fast-forward mode. Also memory of places, learning by watching, a harsher world, the speed cap and a title screen (v39) |
+| **M2 — Generations** *([its own design](m2-generations.md))* | Life stages; sexual and asexual reproduction decided by the genome; crossover and mutation; lineage and family-tree view; population graphs; headless fast-forward mode. Also memory of places, learning by watching, a harsher world, the speed cap and a title screen (v39) |
 | **M3 — Wild Terra** | Critters (prey and predators); more hazards and toys; possibly seasons, weather, day/night and temperature |
 | **M4 — Words** | The player (and later, sprites) name objects and verbs; word inputs and a Speak output |
 | **Tiles** *(UI milestone, can be scheduled any time after M1)* | A tile-window front end that draws bitmap tilesets and sprite sheets through the semantic-tile seam (§6.2) |
@@ -1659,7 +1643,7 @@ N ═ M
   - **Genomes** (v28) are exported to, and the Place menu reads them from, its `genomes` folder.
   - **Themes** (v34) are read from its `themes` folder: `Ctrl+T` opens a menu, `Themes`, of the built-in `cp437` and `ascii`, then each `.ron` file there by name, in order, picked as the Place menu's items are. The map switches at once and the status line says "Theme: night"; a theme that doesn't load is refused on the status line, "Couldn't use theme night: …", and the theme in use stays. The theme picked lasts until the game is closed.
   - **Saves** (v32) go in its `saves` folder: `quicksave.tspr`, `autosave-1.tspr` (the newest) to `autosave-3.tspr`, and each save by name as its name, with any character a file name can't hold on some system made a `-`, the dots and spaces Windows drops from a name's end left off, and a `-` after a name Windows keeps for a device (`con`, `lpt1`). The game says a save's name as it's stored, which is the name the load list shows. A save is written beside its file and then put in its place, so one cut short never breaks a good one.
-- **Command-line flags:** `--seed <n>`, `--preset <file>`, `--data <dir>`, `--ascii`, `--theme <file>` (v34; not with `--ascii`), `--replay <file>`. `--seed`, `--preset` and `--data` make a new world, so each is refused with `--replay` (v35).
+- **Command-line flags:** `--seed <n>`, `--preset <file>`, `--data <dir>`, `--ascii`, `--theme <file>` (v34; not with `--ascii`), `--replay <file>`. `--seed`, `--preset` and `--data` make a new world, so each is refused with `--replay` (v35). `--version` prints the version and the commit the game was built from, as `terra-sprites 0.1.0 (cc96347)`, and stops (2026-10-08).
 
 ### 6.8 UI architecture
 

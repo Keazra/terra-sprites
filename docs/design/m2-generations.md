@@ -1,20 +1,10 @@
-# Terra Sprites — M2 "Generations" design (v5)
+# Terra Sprites — M2 "Generations" design
 
-- **Status:** Draft: the plan, with what each slice settles added in a new revision.
-- **Date:** 2026-10-07
-- **Supersedes:** [v4](archive/m2-generations-v4.md), whose table holds memory of places; [v3](archive/m2-generations-v3.md) holds the title screen's decisions; [v1](archive/m2-generations-v1.md) holds the planning session's
-- **Builds on:** [M1 design v40](m1-a-sprite-lives-v40.md), which stays the rulebook for everything M2 doesn't change
+- **Status:** Draft: the plan, with what each slice settles added as it's settled.
+- **Date:** 2026-10-08
+- **History:** edited in place since v5; each change is a file in [`changes/`](changes/), whose README says where v1 to v5 are
+- **Builds on:** [M1 design](m1-a-sprite-lives.md), which stays the rulebook for everything M2 doesn't change
 - **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), and where places sit on the Brain tab
-
----
-
-## Changes from v4
-
-The Brain tab's memory ([#160](https://github.com/Keazra/terra-sprites/issues/160)), settled with the owner on 2026-10-07. Places themselves don't change. Only where the list sits, and that its number stays bare.
-
-| # | Change | Source | Sections |
-|---|---|---|---|
-| 1 | **Places stay their own list** below the grouped memory, not under MEMORY and not under the thing. The line is unchanged: what, how far and which way, and the recall as the number alone. | #160 | §7.5 |
 
 ---
 
@@ -97,7 +87,7 @@ The owner (round 2): the body stops growing at around 1 hour, and at around 3 ho
 
 ## 4. The slices
 
-Each slice is a GitHub issue and its own PR, worked as in the `handover` skill: its open questions are settled first, in plain words, and recorded in a new revision of this document and in `CONTEXT.md`. Each issue lists its slice's questions. Numbering carries on from M1's last, slice 19, so every slice number stays unique.
+Each slice is a GitHub issue and its own PR, worked as in `docs/agents/how-we-work.md`: its open questions are settled first, in plain words, and recorded in this document, in a file in [`changes/`](changes/) and in `CONTEXT.md`. Each issue lists its slice's questions. Numbering carries on from M1's last, slice 19, so every slice number stays unique.
 
 | Slice | What the player sees | Needs first |
 |---|---|---|

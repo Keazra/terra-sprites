@@ -1,6 +1,6 @@
 # Data-format reference
 
-Much of Terra Sprites is data rather than code: what the ground is like, what plants and toys do, what a sprite's body and instincts are, how big the world is. This reference covers every file you can edit, with a working example of each. The design doc (`docs/design/`, the highest `-vN`) is the full spec; each page here cites the sections it summarises.
+Much of Terra Sprites is data rather than code: what the ground is like, what plants and toys do, what a sprite's body and instincts are, how big the world is. This reference covers every file you can edit, with a working example of each. The design doc (`docs/design/m1-a-sprite-lives.md`, and `m2-generations.md` for what M2 changes) is the full spec; each page here cites the sections it summarises.
 
 ## The files
 

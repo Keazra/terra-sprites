@@ -14,11 +14,10 @@ These skills are copied from [mattpocock/skills](https://github.com/mattpocock/s
 | `implement` | `skills/engineering/implement` |
 | `grilling` | `skills/productivity/grilling` |
 
-`handover` is this project's own skill, not a copy.
-
 ## Changes from the originals
 
 - **`code-review` is `two-axis-review`.** A project skill named `code-review` would replace Claude Code's built-in `/code-review`, including `/code-review ultra`. `tdd` and `implement` name it by its new name.
+- **`two-axis-review` reads this project's review checklist,** `docs/agents/review-checklist.md`, as a standards source on every review (step 3).
 - **Line endings** are LF, as the rest of the repo.
 
 ## Updating
