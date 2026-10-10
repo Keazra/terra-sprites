@@ -26,7 +26,7 @@ fi
 
 # Cargo reads untracked files too (a forgotten module, another agent's test),
 # so a pass with any around says nothing about the commit.
-untracked=$(git ls-files --others --exclude-standard -- crates data Cargo.toml Cargo.lock rustfmt.toml)
+untracked=$(git ls-files --others --exclude-standard -- crates data themes Cargo.toml Cargo.lock rustfmt.toml)
 if [ -n "$untracked" ]; then
     printf '\nAll checks passed, with files git doesn'"'"'t track that cargo read:\n%s\n' "$untracked"
     echo "Add the ones that belong to your change; pushing then checks the commit on its own."

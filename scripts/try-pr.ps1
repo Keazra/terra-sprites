@@ -3,6 +3,7 @@
 #   .\scripts\try-pr.ps1 170             PR #170, exactly as it is on GitHub, then start the game
 #   .\scripts\try-pr.ps1 170 -Seed 7     the same, on world seed 7
 #   .\scripts\try-pr.ps1 170 -NoRun      switch to it without starting the game
+#   .\scripts\try-pr.ps1 170 --ascii     any further flags go to the game
 #   .\scripts\try-pr.ps1 main            back to main, up to date with GitHub (a
 #                                        git pull that also mends an old main)
 #
@@ -16,7 +17,8 @@
 param(
     [Parameter(Mandatory = $true, Position = 0)][string]$Pr,
     [Nullable[UInt64]]$Seed,
-    [switch]$NoRun
+    [switch]$NoRun,
+    [Parameter(ValueFromRemainingArguments = $true)][string[]]$GameFlags
 )
 
 $ErrorActionPreference = "Continue"
@@ -57,6 +59,7 @@ if ($Pr -eq "main") {
     Switch-To "main" "origin/main"
     $label = "main"
 } else {
+    $Pr = $Pr.TrimStart('#')
     if ($Pr -notmatch '^\d+$') { Fail "Give a PR number, such as 170, or 'main'." }
     Write-Host "Fetching PR #$Pr from GitHub..."
     git fetch -q origin "pull/$Pr/head"
@@ -73,6 +76,7 @@ if ($NoRun) { exit 0 }
 
 $gameArgs = @()
 if ($null -ne $Seed) { $gameArgs = @("--seed", "$Seed") }
+if ($GameFlags) { $gameArgs += $GameFlags }
 Write-Host "Building and starting the game (the first build takes a few minutes)..."
 # '--' is quoted so PowerShell passes it on rather than reading it itself.
 cargo run --release '--' @gameArgs
