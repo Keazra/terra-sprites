@@ -1,6 +1,6 @@
 # Skills copied from mattpocock/skills
 
-These skills are copied from [mattpocock/skills](https://github.com/mattpocock/skills), plugin version 1.2.3, and adjusted for this project (below). The Claude Code plugin `mattpocock-skills` is turned off for this project in `.claude/settings.json`. The owner also has the whole set on their claude.ai account, as the "Skills For Real Engineers" plugin, which sessions load under a prefix (`<plugin>:tdd`). `AGENTS.md` tells agents to pick these copies over it.
+These skills are copied from [mattpocock/skills](https://github.com/mattpocock/skills), plugin version 1.2.3, and adjusted for this project (below). The Claude Code plugin `mattpocock-skills` is turned off for this project in `.claude/settings.json`. The owner also has the whole set on their claude.ai account, as the "Skills For Real Engineers" plugin, which sessions load under a prefix (`mattpocock-skills:tdd`). `AGENTS.md` tells agents to pick these copies over it.
 
 | Skill | From |
 |---|---|
