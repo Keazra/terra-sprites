@@ -3,7 +3,7 @@
 //! and may crash into what stops it.
 
 mod common;
-use common::{at, builtin, builtin_changing};
+use common::{at, builtin, builtin_changing, builtin_changing_files};
 
 use terra_sim::{
     Command, DataPack, DeathCause, Dir, EntityId, Event, EventKind, Map, Pos, Rejection, Scenario,
@@ -414,6 +414,40 @@ fn a_crash_runs_the_thing_s_tags_so_a_thornbush_pricks_and_can_kill() {
     // The thornbush's stable object type ID.
     assert_eq!(died, Some(DeathCause::HurtBy(3)));
     assert_eq!(world.data().object_type_name(3), Some("thornbush"));
+}
+
+#[test]
+fn a_thing_s_tags_run_in_the_order_its_type_lists_them() {
+    // Design v23 §3.5.6. Each injection is clamped to 0–1 as it lands, so
+    // filling the gut and then draining half leaves it half full, where
+    // draining first and filling after leaves it full.
+    let tags = r#"(name: "Fill", contact: {Crash: [Inject(Actor, "water", 1.0)]}),
+     (name: "Drain", contact: {Crash: [Inject(Actor, "water", -0.5)]}),
+     (name: "Thorny","#;
+    let water_after_crashing = |listed: &str| {
+        let data = builtin_changing_files(&[
+            ("tags.ron", &[(r#"(name: "Thorny","#, tags)]),
+            ("objects.ron", &[("tags: [Solid, Fixture, Thorny]", listed)]),
+        ]);
+        let lane = ["......", "......"];
+        let thorns = [(at(3, 0), "thornbush")];
+        let (world, sprite, events) =
+            shoved_in(data, &lane, &thorns, &[at(1, 0)], at(1, 0), Dir::E, 3);
+        let thornbush = Thing::ObjectType("thornbush".into());
+        assert_eq!(crashes(&events, sprite), [(thornbush, false)]);
+        world.sprite(sprite).unwrap().chemical("water").unwrap()
+    };
+
+    let fill_first = water_after_crashing("tags: [Solid, Fixture, Fill, Drain]");
+    let drain_first = water_after_crashing("tags: [Solid, Fixture, Drain, Fill]");
+    assert!(
+        (0.45..0.5).contains(&fill_first),
+        "filled, then drained: {fill_first}"
+    );
+    assert!(
+        (0.95..=1.0).contains(&drain_first),
+        "drained, then filled: {drain_first}"
+    );
 }
 
 #[test]

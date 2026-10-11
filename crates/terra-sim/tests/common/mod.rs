@@ -74,11 +74,16 @@ pub fn endings(events: &[Event]) -> Vec<(Verb, Outcome)> {
 
 /// The built-in data pack, with `changes` made to `file`'s text.
 pub fn builtin_changing(file: &str, changes: &[(&str, &str)]) -> DataPack {
+    builtin_changing_files(&[(file, changes)])
+}
+
+/// The built-in data pack, with each file's `changes` made to its text.
+pub fn builtin_changing_files(files: &[(&str, &[(&str, &str)])]) -> DataPack {
     let sources: Vec<(&str, String)> = DataPack::builtin_sources()
         .iter()
         .map(|&(path, text)| {
             let mut text = text.to_string();
-            if path == file {
+            for &(file, changes) in files.iter().filter(|(file, _)| *file == path) {
                 for &(from, to) in changes {
                     assert!(text.contains(from), "{from:?} is in {file}");
                     text = text.replace(from, to);
