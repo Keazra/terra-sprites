@@ -404,9 +404,9 @@ impl<'a> SpriteView<'a> {
             .collect()
     }
 
-    /// Its life stage (M2 design §9.1).
+    /// Its life stage (M2 design §9.1), as of the latest tick.
     pub fn life_stage(&self) -> LifeStage {
-        self.sprite.life_stage(self.world.state.tick)
+        self.sprite.stage
     }
 
     /// Every chemical in the sprite, in the data pack's order.
@@ -837,6 +837,7 @@ impl World {
         self.remember_levels();
         self.apply_commands(&mut events); // 1
         self.run_environment(&mut events); // 2
+        self.grow(&mut events); // 3, first
         let dying = self.run_biochemistry(); // 3
         self.run_learning(&dying, &mut events); // 4
         self.sense_and_decide(&dying, &mut events); // 5
@@ -1008,6 +1009,21 @@ impl World {
 
     /// Step 3: every sprite's chemistry (design §4.4), then death check #1.
     /// Returns the sprites marked dying, in ascending ID order.
+    /// Step 3 begins with each sprite growing to its life stage (M2 design
+    /// §9.2), so genes that switch on with it work from this tick's
+    /// chemistry on.
+    fn grow(&mut self, events: &mut Vec<Event>) {
+        let tick = self.state.tick;
+        for (id, sprite) in self.state.sprites.iter_mut() {
+            let kind = match sprite.grow(tick, &self.data) {
+                Some(LifeStage::Adult) => EventKind::GrewUp { id },
+                Some(LifeStage::Old) => EventKind::GrewOld { id },
+                Some(LifeStage::Young) | None => continue,
+            };
+            events.push(Event { tick, kind });
+        }
+    }
+
     fn run_biochemistry(&mut self) -> Vec<EntityId> {
         let state = &mut self.state;
         let data = &self.data;

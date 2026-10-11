@@ -30,6 +30,11 @@ pub(crate) struct Sprite {
     /// genome, so it isn't hashed.
     #[serde(skip)]
     pub(crate) program: Program,
+    /// Its life stage at the latest tick's step 3 (M2 design §9.1), which
+    /// its genes are expressed for. It's derived from its age and traits,
+    /// so it isn't hashed.
+    #[serde(skip)]
+    pub(crate) stage: LifeStage,
     pub(crate) body: Body,
     pub(crate) brain: Brain,
     /// What it's doing, or the action that last ended until the next starts.
@@ -57,9 +62,18 @@ impl Sprite {
         tick - self.born
     }
 
-    /// The sprite's life stage on the tick `tick` (M2 design §9.1).
-    pub(crate) fn life_stage(&self, tick: u64) -> LifeStage {
-        self.program.traits.life_stage(self.age(tick))
+    /// Grows the sprite to its life stage on the tick `tick` (M2 design
+    /// §9.2): if that's a new one, its genes are expressed afresh for it,
+    /// leaving what it has learned as it was. Returns the new stage, if any.
+    pub(crate) fn grow(&mut self, tick: u64, data: &DataPack) -> Option<LifeStage> {
+        let stage = self.program.traits.life_stage(self.age(tick));
+        if stage == self.stage {
+            return None;
+        }
+        self.stage = stage;
+        self.program = Program::new(&self.genome, data, stage);
+        self.brain.reach(&self.genome, data, stage);
+        Some(stage)
     }
 
     /// A newborn with `genome` on `pos`, born on the tick `born` (design §4.7).
@@ -73,6 +87,7 @@ impl Sprite {
             name: None,
             genome,
             program,
+            stage: LifeStage::Young,
             body,
             brain,
             action: None,
@@ -115,6 +130,12 @@ impl Sprites {
     /// Every sprite, in ascending ID order.
     pub(crate) fn iter(&self) -> impl Iterator<Item = (EntityId, &Sprite)> {
         self.by_id.iter().map(|(&id, sprite)| (id, sprite))
+    }
+
+    /// Every sprite, in ascending ID order, to change. Where each stands
+    /// isn't theirs to change: `move_to` and `swap` keep the tile index.
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = (EntityId, &mut Sprite)> {
+        self.by_id.iter_mut().map(|(&id, sprite)| (id, sprite))
     }
 
     /// The sprite `id`, if it exists.
@@ -199,10 +220,12 @@ impl Sprites {
             if !sprite.genome.fits(data) {
                 return Err(misfit());
             }
-            // Its traits don't depend on its life stage, which they set.
+            // Its stage at the latest tick's step 3, from its traits, which
+            // don't depend on its stage.
             let stage = Program::new(&sprite.genome, data, LifeStage::Young)
                 .traits
-                .life_stage(sprite.age(now));
+                .life_stage(sprite.age(now).saturating_sub(1));
+            sprite.stage = stage;
             sprite.brain.params.catch_up(&sprite.genome, data, stage);
             // Places remembered under other limits, in a save from before
             // they were added, are brought within its pack's (M2 design §7.2).

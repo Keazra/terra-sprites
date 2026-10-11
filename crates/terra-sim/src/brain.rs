@@ -409,6 +409,20 @@ impl Brain {
         }
     }
 
+    /// Expresses `genome` afresh for `stage` (M2 design §9.2): its
+    /// parameters, concepts and instinct links become those of its genes
+    /// working at `stage`. What it has learned, attends to and remembers
+    /// doing stays as it was; the snapshot, whose concepts may be gone, is
+    /// taken again at step 5.
+    pub(crate) fn reach(&mut self, genome: &Genome, data: &DataPack, stage: LifeStage) {
+        let grown = Brain::new(genome, data, stage);
+        self.params = grown.params;
+        self.concepts = grown.concepts;
+        self.decision = grown.decision;
+        self.attention = grown.attention;
+        self.snapshot = None;
+    }
+
     /// Step 4 at `tick` (design §2.4, §5.6), from `signals`, every rate
     /// scaled by `learning_rate_mod`. Instinct links never change. Each
     /// need's relief teaches what the thing touched is worth for it. Returns

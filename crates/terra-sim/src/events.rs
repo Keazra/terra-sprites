@@ -44,6 +44,10 @@ pub enum EventKind {
         /// Its age in ticks.
         age: u64,
     },
+    /// A sprite grew up (M2 design §9.1).
+    GrewUp { id: EntityId },
+    /// A sprite grew old (M2 design §9.1).
+    GrewOld { id: EntityId },
     /// A sprite learned a lesson (design §5.6): something it learned got
     /// half a point from nothing for the first time, up if `good`.
     LearnedMilestone {

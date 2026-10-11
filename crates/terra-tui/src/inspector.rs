@@ -1687,6 +1687,9 @@ pub(crate) fn event_line(event: &Event, data: &Words) -> Option<String> {
             group_thousands(*age)
         )),
         EventKind::ActionEnded { id, action, .. } => logged_line(*id, action, data),
+        // Life stages (M2 design §9.6).
+        EventKind::GrewUp { id } => Some(format!("{} grew up", data.label(*id))),
+        EventKind::GrewOld { id } => Some(format!("{} grew old", data.label(*id))),
         EventKind::LearnedMilestone { id, learned, good } => {
             Some(learned_line(*id, learned, *good, data))
         }
@@ -1771,6 +1774,8 @@ pub(crate) fn event_sprites(event: &Event) -> Vec<EntityId> {
         | EventKind::Corrected { id, .. }
         | EventKind::Spawned { id, .. }
         | EventKind::Renamed { id, .. }
+        | EventKind::GrewUp { id }
+        | EventKind::GrewOld { id }
         | EventKind::ActionStarted { id, .. } => vec![*id],
         EventKind::ActionEnded { id, action, .. } => match action.target {
             Some(Target::Sprite(target)) => vec![*id, target],
