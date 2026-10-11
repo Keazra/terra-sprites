@@ -52,7 +52,7 @@
         // fall to `gives_out` on average in `ticks` for an unworn sprite.
         // There its body gives out and old age harms it. About 10 hours at
         // 1x until breeding (Slice 23) shortens it.
-        decay: (ticks: 46500, hit: 0.1, gives_out: 0.5),
+        decay: (ticks: 46500, hit: 0.01, gives_out: 0.5),
         // While its injury is above `above`, each tick a random gene may be
         // scarred, losing `hit` health for good, at any age.
         scar: (above: 0.5, chance: 0.002, hit: 0.05),

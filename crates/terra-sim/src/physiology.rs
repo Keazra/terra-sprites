@@ -376,7 +376,7 @@ impl Default for Ageing {
             sooner: 0.33,
             decay: Decay {
                 ticks: 46_500,
-                hit: 0.1,
+                hit: 0.01,
                 gives_out: 0.5,
             },
             scar: Scar {
