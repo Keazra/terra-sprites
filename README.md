@@ -14,7 +14,7 @@ You can select a sprite and look inside it: its Brain tab shows what it's paying
 
 ## Getting started
 
-You need [Rust](https://rustup.rs) (stable) and a terminal of at least 100×30 characters; 140×40 is better. On Windows, use Windows Terminal. Then, from the repository root:
+You need [Rust](https://rustup.rs) 1.97.1 or newer (`rustup update stable`) and a terminal of at least 100×30 characters; 140×40 is better. On Windows, use Windows Terminal. Then, from the repository root:
 
 ```bash
 cargo run --release

@@ -5,9 +5,8 @@ members = ["crates/terra-sim", "crates/terra-tui"]
 [workspace.package]
 edition = "2024"
 version = "0.1.0"
-# Rust 1.97.0 miscompiles the simulation: an LLVM bug, fixed in 1.97.1, makes
-# sprites at opt-level 1 end actions they should keep, so the same seed plays
-# differently (#171, design §2.3). Cargo refuses an older compiler outright.
+# An LLVM miscompilation fixed in 1.97.1 (present since at least 1.87) made the
+# same seed play differently on 1.97.0 (#171, design §2.6); Cargo refuses older.
 rust-version = "1.97.1"
 
 # Tests and debug builds run lightly optimised: sprites flood and walk every
