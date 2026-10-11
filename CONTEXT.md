@@ -240,8 +240,8 @@ The physical chemical that measures harm. A sprite dies when its injury reaches 
 _Avoid_: damage, health
 
 **Life stage** (M2):
-A phase of a sprite's life: young, adult or old. Its genes set when it grows up and when it grows old, and some genes switch with it.
-_Avoid_: stage (that's an object's), age group
+Where a sprite is in its life: young, adult or old. Its genes set when it grows up and when it grows old, and some genes switch with it. Code may call it `stage` where only a sprite's is meant.
+_Avoid_: stage alone in what the player reads (that's an object's), age group
 
 **Grows up** (M2):
 The age at which a sprite stops being young: its `grows_up` trait. Growing up costs energy, spread over childhood.
@@ -252,7 +252,7 @@ The age at which a sprite becomes old: its `grows_old` trait, brought sooner by 
 _Avoid_: lifespan (the M1 word for it), dies of old age (that comes later)
 
 **Gene health** (M2):
-How whole one of a sprite's genes is, from 1 down to 0. It only falls, and the gene works in proportion to it. Not inherited.
+How whole one of a sprite's genes is, from 1 down to 0. It only falls, and the gene works in proportion to it. Not inherited. A sprite has no health of its own: how hurt it is, is its injury.
 _Avoid_: gene damage (that's what lowers it), mutation (that's inherited, from Slice 24), gene quality (Slice 24)
 
 **Decay** (M2):

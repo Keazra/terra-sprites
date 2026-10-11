@@ -4,7 +4,7 @@
 
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use terra_sim::{EntityId, SpriteView, World};
+use terra_sim::{EntityId, LifeStage, SpriteView, World};
 
 use crate::app::{App, strongest_drive};
 use crate::inspector;
@@ -113,9 +113,16 @@ pub(crate) fn lines(
         .chain(["Drive".len()])
         .max()
         .unwrap_or(0);
+    // Each sprite's life stage after its age (M2 design §9.6).
+    let stage_width = [LifeStage::Young, LifeStage::Adult, LifeStage::Old]
+        .iter()
+        .map(|stage| stage.name().len())
+        .chain(["Stage".len()])
+        .max()
+        .unwrap_or(0);
     let heading = format!(
-        " {:<label_width$}  {:>age_width$}  {:<drive_width$}  Doing",
-        "Sprite", "Age", "Drive"
+        " {:<label_width$}  {:>age_width$}  {:<stage_width$}  {:<drive_width$}  Doing",
+        "Sprite", "Age", "Stage", "Drive"
     );
     let mut lines = vec![Line::styled(
         clipped(&heading, width),
@@ -133,7 +140,8 @@ pub(crate) fn lines(
         if let Some(colour) = colour {
             drive_style = drive_style.fg(colour);
         }
-        let head = format!(" {label:<label_width$}  {age:>age_width$}  ");
+        let stage = sprite.life_stage().name();
+        let head = format!(" {label:<label_width$}  {age:>age_width$}  {stage:<stage_width$}  ");
         let drive = format!("{drive:<drive_width$}");
         let tail = format!("  {doing}");
         let mut room = width;

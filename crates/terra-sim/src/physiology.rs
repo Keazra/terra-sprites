@@ -394,10 +394,10 @@ impl Default for Ageing {
 pub(crate) struct TraitRanges {
     pub(crate) speed: (f32, f32),
     pub(crate) sense_radius: (f32, f32),
-    /// A pack from before M2 calls it `lifespan` (design §9.3).
+    /// A pack from before M2 calls it `lifespan` (M2 design §9.3).
     #[serde(alias = "lifespan")]
     pub(crate) grows_old: (f32, f32),
-    /// Added in M2 (design §9.3); a pack saved before then has none.
+    /// Added in M2 (M2 design §9.3); a pack saved before then has none.
     #[serde(default = "grows_up_range")]
     pub(crate) grows_up: (f32, f32),
 }

@@ -297,7 +297,7 @@ Settled with the owner on 2026-10-11 ([#140](https://github.com/Keazra/terra-spr
 ### 9.3 When a sprite grows up and grows old
 
 - **Two trait genes set the ages,** so each can evolve on its own: `grows_up` (1,500–13,500 ticks; the starter's 4,500 is about an hour at 1×) and `grows_old` (6,000–60,000; the starter's 13,500 is about 3 hours).
-- **`grows_old` is M1's lifespan,** which it replaces (§2). A genome or save that says `lifespan` reads as `grows_old`.
+- **`grows_old` is M1's lifespan,** which it replaces (§2). A genome or save that says `lifespan` reads as `grows_old`. The `age` body sensor is age as a share of it, so it reaches 1 as a sprite grows old, at about 13,500 ticks rather than M1's 60,000.
 - **Growing up costs food.** Growing takes `growth` energy (0.3) whenever it happens, spread evenly over childhood, so a sprite that grows up sooner is a hungrier child.
 - **A later old age will cost a little,** all its life: `upkeep` energy a tick for every 10,000 ticks of `grows_old` (§3). **It's 0 until genes evolve** (Slice 24, noted on [#142](https://github.com/Keazra/terra-sprites/issues/142)), the owner's call on 2026-10-11: until then nothing can push old age later, so the cost only made every sprite hungrier, and even 0.00001 undid A3's training (median hits after training 45 against 81 untrained; 1.5 against 70 without it).
 
@@ -308,9 +308,9 @@ The owner (2026-10-11): old age is the genome wearing out, and a hard life damag
 - **Every gene has a health,** from 1 (whole) to 0. It only ever falls, and it scales the gene's effect: a feeling's gain, a receptor's gain, a reaction's rate, an instinct's weight, and how far a speed or sense radius gene reaches above the least its trait can be. A gene that's a setting, not a strength, doesn't weaken: half-lives, starting levels, brain parameters, and the timing genes.
 - **Before old age, repair keeps up.** Once old, damage lands on random genes, a `hit` (0.1 of health) at a time. **An instinct takes half,** so the mind outlasts the body.
 - **The pace:** an unworn sprite's genes fall to `gives_out` (0.5 on average) in about `decay.ticks` (46,500, about 10 hours at 1×; Slice 23 shortens it to about 1 hour).
-- **A hard life wears the body for good,** and wear never heals: `wear.starving` (0.0002) a tick while energy is under `wear.low` (.25), `wear.parched` (0.0002) while hydration is, and `wear.injured` (0.001) a tick for each unit of injury. It reads the body, not feelings, which genes could switch off.
+- **A hard life wears the body for good,** and wear never heals: `wear.starving` (0.0002) a tick while energy is under `wear.low` (.25), `wear.parched` (0.0002) while hydration is, and `wear.injured` (0.001) a tick for each unit of injury, so a hit or a prick wears the body through the injury it does, for as long as it takes to heal. It reads the body, not feelings, which genes could switch off.
 - **Wear brings old age sooner and speeds the decay.** The most worn sprite grows old at (1 − `sooner`) of its `grows_old` (`sooner` is .33), and its genes decay `wear_speedup` (3) times as fast; less worn, in proportion.
-- **A bad injury can scar a gene at any age:** while injury is above `scar.above` (.5), each tick has a `scar.chance` (0.002) that a random gene loses `scar.hit` (0.05).
+- **A bad injury can scar a gene at any age:** while injury is above `scar.above` (.5), each tick has a `scar.chance` (0.002) that a random gene loses `scar.hit` (0.05; half that on an instinct).
 - **Healing slows** in proportion to its genes' average health, since repair is what fails.
 - **The body gives out** once that average is at `gives_out`: old age then injures it (`injury.old_age`), and it dies of old age. An old sprite whose thirst feeling has weakened may die of thirst first.
 - **It isn't inherited.** The damage is in the body, not in its eggs. Inherited gene damage is Slice 24's; stress chemicals such as adrenaline damaging genes join then (noted on [#142](https://github.com/Keazra/terra-sprites/issues/142)). Mild stress lengthening life (hormesis) is a later idea, and botched repairs leading to cancer is [#178](https://github.com/Keazra/terra-sprites/issues/178).
@@ -327,5 +327,6 @@ The owner (2026-10-11): old age is the genome wearing out, and a hard life damag
 
 - **On the map, the young are drawn small:** `ö` in CP437 and `a` in ASCII, the theme keys `young_sprite` and `selected_young_sprite`. A theme without them draws the young as grown. The old show by moving slowly.
 - **The log** says "Pip grew up" and "Pip grew old".
+- **The sprite list** has a Stage column after Age: young, adult or old.
 - **The Body tab** shows the stage after the age, with when the next one comes: `age 3,120 · young · grows up 4,500`, `adult · grows old 13,500` (sooner for a worn sprite), or `old`. After the physical levels, `wear .12`, and `· genes .83`, its genes' average health, once any has weakened.
 - **The Genome tab** shows a weakened gene's health after it, `· health .62`, and a gene that switches with its stages, `· from adult` or `· until adult`. A dormant gene is dimmed, with "dormant: switched off at this life stage".

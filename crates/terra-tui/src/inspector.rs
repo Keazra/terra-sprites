@@ -1381,7 +1381,7 @@ fn health_text(health: f32) -> String {
 }
 
 /// When a gene that switches with life stage works (M2 design §9.2), after
-/// the gene: ` · adults only`, ` · from adult`, ` · until adult`. Nothing for
+/// the gene: ` · from adult`, ` · until adult`, ` · from adult until old`. Nothing for
 /// a gene that works all its life.
 fn switch_text(switch: Switch) -> String {
     match (switch.from, switch.until) {

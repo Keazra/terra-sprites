@@ -38,6 +38,12 @@ impl Traits {
         }
     }
 
+    /// The age at which a sprite with these traits grows old, in ticks (M2
+    /// design §9.3, §9.4): `grows_old`, brought `sooner` by a hard life.
+    pub(crate) fn grows_old_at(&self, sooner: f32) -> f32 {
+        self.grows_old * (1.0 - sooner)
+    }
+
     /// The life stage of a sprite with these traits at `age` (M2 design
     /// §9.1): young until it grows up, an adult until it grows old, then
     /// old. A hard life brings old age `sooner`, by that share of the age
@@ -47,7 +53,7 @@ impl Traits {
         let age = age as f32;
         if age < self.grows_up {
             LifeStage::Young
-        } else if age < self.grows_old * (1.0 - sooner) {
+        } else if age < self.grows_old_at(sooner) {
             LifeStage::Adult
         } else {
             LifeStage::Old
@@ -641,6 +647,7 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_util::builtin_changing;
 
     fn builtin() -> DataPack {
         DataPack::builtin().expect("built-in data pack is valid")
@@ -687,25 +694,6 @@ mod tests {
             })
             .collect();
         DataPack::from_sources(&sources).expect("the quiet pack is valid")
-    }
-
-    /// The built-in pack with physiology's `from` changed to `to`.
-    fn builtin_changing(from: &str, to: &str) -> DataPack {
-        let physiology = include_str!("../../../data/physiology.ron");
-        assert!(physiology.contains(from), "{from:?} is in physiology.ron");
-        let physiology = physiology.replace(from, to);
-        let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
-            .iter()
-            .map(|&(path, text)| {
-                let text = if path == "physiology.ron" {
-                    physiology.as_str()
-                } else {
-                    text
-                };
-                (path, text)
-            })
-            .collect();
-        DataPack::from_sources(&sources).expect("the changed pack is valid")
     }
 
     /// A sprite with a genome of `genes`, newborn in `data`.
@@ -1203,7 +1191,7 @@ mod tests {
     fn a_later_old_age_costs_a_little_energy_every_tick() {
         // The built-in pack's upkeep is 0 until genes evolve (M2 design
         // §9.3), so this sets one.
-        let data = builtin_changing("upkeep: 0.0,", "upkeep: 0.00001,");
+        let data = builtin_changing("physiology.ron", &[("upkeep: 0.0,", "upkeep: 0.00001,")]);
         let early = r#"Trait(trait: "grows_old", value: 20000.0)"#;
         let late = r#"Trait(trait: "grows_old", value: 50000.0)"#;
         let with = |grows_old| {
@@ -1384,7 +1372,7 @@ mod tests {
         /// Trait genes: the one gene type allowed to change physical costs.
         fn traits() -> impl Strategy<Value = Vec<Gene>> {
             (4.0f32..12.0, 6.0f32..14.0, 20_000.0f32..30_000.0).prop_map(
-                |(speed, sense, lifespan)| {
+                |(speed, sense, grows_old)| {
                     vec![
                         Gene::Trait {
                             which: Trait::Speed,
@@ -1396,7 +1384,7 @@ mod tests {
                         },
                         Gene::Trait {
                             which: Trait::GrowsOld,
-                            value: lifespan,
+                            value: grows_old,
                         },
                     ]
                 },

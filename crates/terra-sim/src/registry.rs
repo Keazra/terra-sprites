@@ -177,7 +177,7 @@ listed_enum! {
 
 impl Trait {
     /// The trait a genome file calls `name`: by its name, or by the name it
-    /// had before M2 (design §9.3), so older files still load.
+    /// had before M2 (M2 design §9.3), so older files still load.
     pub(crate) fn read(name: &str) -> Option<Trait> {
         Trait::named(name).or(match name {
             "lifespan" => Some(Trait::GrowsOld),

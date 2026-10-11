@@ -2,11 +2,10 @@
 //! genes set, and a gene may switch on as they do.
 
 mod common;
-use common::{at, builtin, builtin_changing, genome};
+use common::{WorldBuilder, at, builtin, builtin_changing, genome};
 
 use terra_sim::{
-    DataPack, Event, EventKind, Learned, LifeStage, Map, Part, Pos, Scenario, ScriptedAction,
-    Thing, Verb, World,
+    DataPack, Event, EventKind, Learned, LifeStage, Part, Pos, ScriptedAction, Thing, Verb, World,
 };
 
 /// A newborn sprite of `genes` alone in a small field with `objects`,
@@ -22,18 +21,16 @@ fn world_in(
     objects: &[(Pos, &str)],
     script: &[ScriptedAction],
 ) -> World {
-    let map = Map::from_ascii(&["......", "......", "......"], &data).expect("valid drawing");
     let sprite = at(1, 1);
-    let sprites = [(sprite, Some(genome(genes, &data)))];
+    let genome = genome(genes, &data);
     let scripted: Vec<_> = script.iter().map(|&s| (sprite, s)).collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[sprite],
-    };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+    WorldBuilder::new(&["......", "......", "......"])
+        .data(data)
+        .objects(objects)
+        .sprites_with(vec![(sprite, Some(genome))])
+        .scripts(&scripted)
+        .newborns(&[sprite])
+        .build()
 }
 
 /// A newborn sprite of `genes` alone in a small field, whose body never
@@ -224,4 +221,46 @@ fn an_old_sprite_s_weakened_genes_are_saved_and_hashed() {
     run_to(&mut world, 6_600);
     run_to(&mut loaded, 6_600);
     assert_eq!(loaded.state_hash(), world.state_hash());
+}
+
+#[test]
+fn a_starter_sprite_grows_up_at_about_an_hour_and_grows_old_at_about_three() {
+    // M2 design §2, §9.3: about 4,500 and 13,500 ticks for the starter
+    // genome, at the ages its own genes say.
+    let data = builtin_changing(
+        "physiology.ron",
+        &[
+            ("basal: 0.0001,", "basal: 0.0,"),
+            ("per_sense_tile: 0.0000067,", "per_sense_tile: 0.0,"),
+            ("per_step: 0.0002,", "per_step: 0.0,"),
+            ("hydration_loss: 0.00033", "hydration_loss: 0.0"),
+            ("growth: 0.3,", "growth: 0.0,"),
+        ],
+    );
+    let sprite = at(1, 1);
+    let mut world = WorldBuilder::new(&["......", "......", "......"])
+        .data(data)
+        .sprites_with(vec![(sprite, None)])
+        .newborns(&[sprite])
+        .build();
+    // Spawn variation moves each time by up to a tenth.
+    let traits = world.sprites().next().expect("the sprite").traits();
+    for (time, aim) in [(traits.grows_up, 4_500.0), (traits.grows_old, 13_500.0)] {
+        assert!((aim * 0.9..=aim * 1.1).contains(&time), "{time} for {aim}");
+    }
+    let events = run_to(&mut world, 15_000);
+    let id = world.sprites().next().expect("the sprite").id();
+    let stages: Vec<_> = events
+        .iter()
+        .filter(|e| matches!(e.kind, EventKind::GrewUp { .. } | EventKind::GrewOld { .. }))
+        .map(|e| (e.tick, e.kind.clone()))
+        .collect();
+    let tick = |time: f32| time.ceil() as u64;
+    assert_eq!(
+        stages,
+        [
+            (tick(traits.grows_up), EventKind::GrewUp { id }),
+            (tick(traits.grows_old), EventKind::GrewOld { id })
+        ]
+    );
 }

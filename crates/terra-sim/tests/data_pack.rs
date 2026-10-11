@@ -918,7 +918,7 @@ fn ageing_shares_are_fractions_and_its_rates_are_numbers() {
 #[test]
 fn a_pack_from_before_life_stages_still_loads() {
     // A save carries its own pack (design §2.8). One from before M2's life
-    // stages (design §9) calls `grows_old` `lifespan` and has no `ageing`.
+    // stages (M2 design §9) calls `grows_old` `lifespan` and has no `ageing`.
     let physiology = include_str!("../../../data/physiology.ron");
     let start = physiology
         .find("    // Growing up and growing old")

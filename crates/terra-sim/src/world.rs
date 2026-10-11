@@ -423,7 +423,7 @@ impl<'a> SpriteView<'a> {
     /// `grows_old` trait, brought sooner by a hard life.
     pub fn grows_old_at(&self) -> f32 {
         let sooner = self.sprite.sooner(&self.world.data);
-        self.sprite.program.traits.grows_old * (1.0 - sooner)
+        self.sprite.program.traits.grows_old_at(sooner)
     }
 
     /// The average health of its genes that weaken, from 1 (all whole) to

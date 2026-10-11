@@ -105,6 +105,7 @@ pub struct WorldBuilder<'a> {
     objects: &'a [(Pos, &'a str)],
     sprites: Vec<(Pos, Option<Genome>)>,
     scripted: Vec<(Pos, ScriptedAction)>,
+    newborns: Vec<Pos>,
     data: Option<DataPack>,
     seed: u64,
 }
@@ -117,6 +118,7 @@ impl<'a> WorldBuilder<'a> {
             objects: &[],
             sprites: Vec::new(),
             scripted: Vec::new(),
+            newborns: Vec::new(),
             data: None,
             seed: 1,
         }
@@ -152,6 +154,13 @@ impl<'a> WorldBuilder<'a> {
         self
     }
 
+    /// The tiles of sprites that start as newborns, not grown up (M2 design
+    /// §9.1) (appends).
+    pub fn newborns(mut self, newborns: &[Pos]) -> Self {
+        self.newborns.extend_from_slice(newborns);
+        self
+    }
+
     /// Builds the world.
     pub fn build(self) -> World {
         let data = self.data.unwrap_or_else(builtin);
@@ -161,7 +170,7 @@ impl<'a> WorldBuilder<'a> {
             objects: self.objects,
             sprites: &self.sprites,
             scripted: &self.scripted,
-            newborns: &[],
+            newborns: &self.newborns,
         };
         World::from_scenario(scenario, data, self.seed).expect("a valid scenario")
     }
