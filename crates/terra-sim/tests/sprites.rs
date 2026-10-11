@@ -148,7 +148,7 @@ fn a_motionless_sprite_that_never_thirsts_dies_of_starvation() {
 }
 
 #[test]
-fn a_sprite_that_never_hungers_or_thirsts_dies_of_old_age_once_its_body_wears_out() {
+fn a_sprite_that_never_hungers_or_thirsts_dies_of_old_age_once_its_genes_give_out() {
     let data = builtin_changing(
         "physiology.ron",
         &[
@@ -157,16 +157,21 @@ fn a_sprite_that_never_hungers_or_thirsts_dies_of_old_age_once_its_body_wears_ou
             ("hydration_loss: 0.00033", "hydration_loss: 0.0"),
             ("growth: 0.3,", "growth: 0.0,"),
             ("upkeep: 0.00001,", "upkeep: 0.0,"),
-            ("decline: 46500,", "decline: 1000,"),
+            ("ticks: 46500,", "ticks: 1000,"),
         ],
     );
-    let genome = r#"(format: 1, genes: [Trait(trait: "grows_old", value: 20000.0)])"#;
+    let genome = r#"(format: 1, genes: [
+        Trait(trait: "speed", value: 8.0),
+        Trait(trait: "sense_radius", value: 10.0),
+        Trait(trait: "grows_old", value: 20000.0),
+    ])"#;
     let mut world = lone_sprite(data, Some(genome));
-    // It grows old at 20,000 ticks, its unworn body wears out over 1,000
-    // more, and then old age kills it within about 2,000 (M2 design §9.4).
-    let death = first_death(&mut world, 24_000);
+    // It grows old at 20,000 ticks, its two genes that weaken fall to half
+    // in about 1,000 more, and then old age kills it in about 1,800 (M2
+    // design §9.4).
+    let death = first_death(&mut world, 26_000);
     assert_eq!(death.cause, DeathCause::OldAge);
-    assert!((22_500..23_000).contains(&death.age), "{death:?}");
+    assert!((21_800..24_500).contains(&death.age), "{death:?}");
 }
 
 /// Object types for testing where solid objects may go.

@@ -299,29 +299,45 @@ pub(crate) struct Ageing {
     /// Energy per tick, all its life, for every 10,000 ticks of `grows_old`
     /// (§9.3).
     pub(crate) upkeep: f32,
-    /// The ticks an unworn old body takes to wear out (§9.4).
-    pub(crate) decline: u32,
-    /// How many times as fast the most worn body wears out (§9.4).
-    pub(crate) wear_speedup: f32,
-    /// What a worn-out body keeps of its best (§9.4).
-    pub(crate) worn_out: WornOut,
     /// What wears a body (§9.4).
     pub(crate) wear: Wear,
+    /// How many times as fast the most worn old sprite's genes decay (§9.4).
+    pub(crate) wear_speedup: f32,
+    /// How much sooner than its genes say the most worn sprite grows old, as
+    /// a share of that age (§9.4).
+    pub(crate) sooner: f32,
+    /// How an old sprite's genes decay (§9.4).
+    pub(crate) decay: Decay,
+    /// How a bad injury scars a gene, at any age (§9.4).
+    pub(crate) scar: Scar,
 }
 
-/// What a worn-out old body keeps of its best, each a share of it (M2 design
-/// §9.4). It falls steadily from all of it as the body declines.
+/// How an old sprite's genes decay (M2 design §9.4): damage its repair no
+/// longer keeps up with lands on random genes, a hit at a time.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct WornOut {
-    /// Of its speed.
-    pub(crate) walks: f32,
-    /// Of its sense radius.
-    pub(crate) sees: f32,
-    /// Of the stamina it gets back, idle or resting.
-    pub(crate) recovers: f32,
-    /// Of physiology's healing.
-    pub(crate) heals: f32,
+pub(crate) struct Decay {
+    /// The ticks an unworn old sprite's genes take to fall to `gives_out`
+    /// on average.
+    pub(crate) ticks: u32,
+    /// The health one hit takes off a gene; half that off an instinct, so
+    /// the mind outlasts the body.
+    pub(crate) hit: f32,
+    /// The average health of its genes at which an old body gives out, and
+    /// old age harms it.
+    pub(crate) gives_out: f32,
+}
+
+/// How a bad injury scars a gene (M2 design §9.4).
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Scar {
+    /// The injury level above which a sprite may be scarred.
+    pub(crate) above: f32,
+    /// The chance each tick above it that a random gene is scarred.
+    pub(crate) chance: f32,
+    /// The health a scar takes off the gene.
+    pub(crate) hit: f32,
 }
 
 /// What wears a body, a little every tick, for good (M2 design §9.4).
@@ -346,19 +362,23 @@ impl Default for Ageing {
             young_speed: 0.67,
             growth: 0.3,
             upkeep: 0.00001,
-            decline: 46_500,
-            wear_speedup: 3.0,
-            worn_out: WornOut {
-                walks: 0.55,
-                sees: 0.6,
-                recovers: 0.5,
-                heals: 0.3,
-            },
             wear: Wear {
                 low: 0.25,
                 starving: 0.0002,
                 parched: 0.0002,
                 injured: 0.001,
+            },
+            wear_speedup: 3.0,
+            sooner: 0.33,
+            decay: Decay {
+                ticks: 46_500,
+                hit: 0.1,
+                gives_out: 0.5,
+            },
+            scar: Scar {
+                above: 0.5,
+                chance: 0.002,
+                hit: 0.05,
             },
         }
     }
@@ -435,14 +455,16 @@ impl PhysiologyEntry {
             }
         }
         let ageing = self.ageing;
-        let (worn_out, wear) = (ageing.worn_out, ageing.wear);
+        let (wear, decay, scar) = (ageing.wear, ageing.decay, ageing.scar);
         for (name, level) in [
             ("ageing.young_speed", ageing.young_speed),
-            ("ageing.worn_out.walks", worn_out.walks),
-            ("ageing.worn_out.sees", worn_out.sees),
-            ("ageing.worn_out.recovers", worn_out.recovers),
-            ("ageing.worn_out.heals", worn_out.heals),
             ("ageing.wear.low", wear.low),
+            ("ageing.sooner", ageing.sooner),
+            ("ageing.decay.hit", decay.hit),
+            ("ageing.decay.gives_out", decay.gives_out),
+            ("ageing.scar.above", scar.above),
+            ("ageing.scar.chance", scar.chance),
+            ("ageing.scar.hit", scar.hit),
         ] {
             fraction(name, level)?;
         }
@@ -462,8 +484,14 @@ impl PhysiologyEntry {
         if ageing.young_speed == 0.0 {
             return Err("`ageing.young_speed` must be above 0: a newborn has to move".into());
         }
-        if ageing.decline == 0 {
-            return Err("`ageing.decline` must be at least 1 tick".into());
+        if decay.ticks == 0 {
+            return Err("`ageing.decay.ticks` must be at least 1 tick".into());
+        }
+        if decay.hit == 0.0 || decay.gives_out == 1.0 {
+            return Err(
+                "`ageing.decay` needs a `hit` above 0 and `gives_out` below 1, or old age never ends"
+                    .into(),
+            );
         }
         if !(ageing.wear_speedup.is_finite() && ageing.wear_speedup >= 1.0) {
             return Err(format!(

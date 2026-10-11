@@ -312,7 +312,7 @@ pub(crate) fn decide(
     let (destination, target) = match verb {
         Verb::Wander => {
             let flood = sprite.flood.as_ref().expect("step 5 made the flood");
-            let sense_radius = sprite.sense_radius(data);
+            let sense_radius = sprite.program.traits.sense_radius;
             (flood.wander_destination(sense_radius, rng), None)
         }
         Verb::Rest => (None, None),

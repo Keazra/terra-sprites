@@ -419,10 +419,23 @@ impl<'a> SpriteView<'a> {
         self.sprite.body.wear
     }
 
-    /// How far its old body has worn out, from 0 to 1 (M2 design §9.4): 0
-    /// until it's old.
-    pub fn decline(&self) -> f32 {
-        self.sprite.body.decline
+    /// The age at which it grows old, in ticks (M2 design §9.3, §9.4): its
+    /// `grows_old` trait, brought sooner by a hard life.
+    pub fn grows_old_at(&self) -> f32 {
+        let sooner = self.sprite.sooner(&self.world.data);
+        self.sprite.program.traits.grows_old * (1.0 - sooner)
+    }
+
+    /// The average health of its genes that weaken, from 1 (all whole) to
+    /// 0 (M2 design §9.4). Its body gives out at about half.
+    pub fn vigour(&self) -> f32 {
+        self.sprite.program.vigour
+    }
+
+    /// The health of each of its genes, in genome order, from 1 (whole) to
+    /// 0 (M2 design §9.4).
+    pub fn gene_health(&self) -> &'a [f32] {
+        &self.sprite.health
     }
 
     /// Every chemical in the sprite, in the data pack's order.
@@ -1029,11 +1042,14 @@ impl World {
 
     /// Step 3 begins with each sprite growing to its life stage (M2 design
     /// §9.2), so genes that switch on with it work from this tick's
-    /// chemistry on.
+    /// chemistry on, then ageing its genes (§9.4), in ascending ID order.
     fn grow(&mut self, events: &mut Vec<Event>) {
-        let tick = self.state.tick;
-        for (id, sprite) in self.state.sprites.iter_mut() {
-            let Some((was, stage)) = sprite.grow(tick, &self.data) else {
+        let state = &mut self.state;
+        let tick = state.tick;
+        for (id, sprite) in state.sprites.iter_mut() {
+            let grew = sprite.grow(tick, &self.data);
+            sprite.age_genes(&self.data, &mut state.rng);
+            let Some((was, stage)) = grew else {
                 continue;
             };
             // One whose genes have it grow old before it grows up does both

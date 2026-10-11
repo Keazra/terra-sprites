@@ -155,8 +155,9 @@ fn sprite_tab(
 
 /// The Body tab (design §6.1): what the sprite is doing, its age, life stage
 /// and when it reaches the next (M2 design §9.6), its traits, a bar for each
-/// drive, the physical levels, three to a line, with its wear (and an old
-/// body's decline) after them, and what the player has observed it do.
+/// drive, the physical levels, three to a line, with its wear (and its
+/// genes' average health, once any has weakened) after them, and what the
+/// player has observed it do.
 fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
     let traits = sprite.traits();
     let doing = doing_line(sprite, app, world).map(|line| format!(" {line}"));
@@ -169,7 +170,10 @@ fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>>
                     format!("young · {}", trait_text(Trait::GrowsUp, traits.grows_up))
                 }
                 LifeStage::Adult => {
-                    format!("adult · {}", trait_text(Trait::GrowsOld, traits.grows_old))
+                    format!(
+                        "adult · {}",
+                        trait_text(Trait::GrowsOld, sprite.grows_old_at())
+                    )
                 }
                 LifeStage::Old => stage.name().to_string(),
             }
@@ -201,13 +205,13 @@ fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>>
     for three in physical.chunks(3) {
         lines.push(format!(" {}", three.join(" · ")));
     }
-    lines.push(match sprite.life_stage() {
-        LifeStage::Old => format!(
-            " wear {} · declined {}",
-            level(sprite.wear()),
-            level(sprite.decline())
-        ),
-        _ => format!(" wear {}", level(sprite.wear())),
+    // Its genes' average health shows once any has weakened (M2 design
+    // §9.4, §9.6).
+    let vigour = sprite.vigour();
+    lines.push(if vigour < 1.0 {
+        format!(" wear {} · genes {}", level(sprite.wear()), level(vigour))
+    } else {
+        format!(" wear {}", level(sprite.wear()))
     });
     lines.push(String::new());
     lines.extend(observed_lines(app, world.tick()));
@@ -1310,35 +1314,41 @@ impl GeneGroup {
 /// group in genome order, as plain lines. The expressed traits share one
 /// line. A gene with no effect is dimmed, with the reason below it.
 fn genome_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
-    let genes: Vec<(GeneView, Expression, Switch)> = sprite
+    let genes: Vec<(GeneView, Expression, Switch, f32)> = sprite
         .genes()
         .into_iter()
         .zip(sprite.switches())
-        .map(|((gene, how), switch)| (gene, how, switch))
+        .zip(sprite.gene_health().iter().copied())
+        .map(|(((gene, how), switch), health)| (gene, how, switch, health))
         .collect();
     let mut lines = Vec::new();
     for group in GeneGroup::ALL {
-        let members: Vec<&(GeneView, Expression, Switch)> = genes
+        let members: Vec<&(GeneView, Expression, Switch, f32)> = genes
             .iter()
-            .filter(|(gene, _, _)| GeneGroup::of(gene) == group)
+            .filter(|(gene, ..)| GeneGroup::of(gene) == group)
             .collect();
         if members.is_empty() {
             continue;
         }
         lines.push(Line::from(format!(" {}", group.heading())));
         let (together, apart): (Vec<_>, Vec<_>) =
-            members.into_iter().partition(|(gene, how, _)| {
+            members.into_iter().partition(|(gene, how, ..)| {
                 matches!(gene, GeneView::Trait { .. }) && *how == Expression::Expressed
             });
         if !together.is_empty() {
             let traits: Vec<String> = together
                 .iter()
-                .map(|(gene, _, _)| gene_text(gene))
+                .map(|(gene, _, _, health)| format!("{}{}", gene_text(gene), health_text(*health)))
                 .collect();
             lines.extend(wrapped(&listed(&traits), 1, Style::default()));
         }
-        for (gene, how, switch) in apart {
-            let text = format!("{}{}", gene_text(gene), switch_text(*switch));
+        for (gene, how, switch, health) in apart {
+            let text = format!(
+                "{}{}{}",
+                gene_text(gene),
+                switch_text(*switch),
+                health_text(*health)
+            );
             let reason = match how {
                 Expression::Expressed => {
                     lines.extend(wrapped(&text, 1, Style::default()));
@@ -1358,6 +1368,16 @@ fn genome_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
         }
     }
     lines
+}
+
+/// How weakened a gene is (M2 design §9.4), after the gene: ` · health .62`.
+/// Nothing for a whole gene.
+fn health_text(health: f32) -> String {
+    if health < 1.0 {
+        format!(" · health{BOUND}{}", level(health))
+    } else {
+        String::new()
+    }
 }
 
 /// When a gene that switches with life stage works (M2 design §9.2), after

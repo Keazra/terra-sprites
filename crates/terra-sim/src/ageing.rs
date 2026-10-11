@@ -4,6 +4,9 @@
 
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::genome::Gene;
+use crate::registry::Trait;
+
 /// A phase of a sprite's life (M2 design §9.1). Objects have stages of their
 /// own; a sprite's are life stages. They come in this order.
 #[derive(
@@ -70,6 +73,33 @@ impl Switch {
         }
         text
     }
+}
+
+/// How much of a hit of damage `gene` takes (M2 design §9.4): all of it for
+/// a gene that's a strength of the body, half for an instinct, so the mind
+/// outlasts the body, and none for a gene that's a setting, not a strength,
+/// which doesn't weaken.
+pub(crate) fn frailty(gene: &Gene) -> f32 {
+    match gene {
+        Gene::Emitter { .. } | Gene::Receptor { .. } | Gene::Reaction { .. } => 1.0,
+        Gene::Trait {
+            which: Trait::Speed | Trait::SenseRadius,
+            ..
+        } => 1.0,
+        Gene::Instinct { .. } | Gene::AttentionInstinct { .. } => 0.5,
+        Gene::Trait { .. }
+        | Gene::HalfLife { .. }
+        | Gene::InitialConcentration { .. }
+        | Gene::BrainParam { .. }
+        | Gene::Unknown { .. }
+        | Gene::Unmatched(_) => 0.0,
+    }
+}
+
+/// The health of the gene at `index`, from 1 (whole) to 0 (M2 design
+/// §9.4): whole where `health` has no entry for it.
+pub(crate) fn health_of(health: &[f32], index: usize) -> f32 {
+    health.get(index).copied().unwrap_or(1.0)
 }
 
 /// Reads a bare life stage as `Some`, for a genome file's `until`.

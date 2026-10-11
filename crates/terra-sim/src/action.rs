@@ -233,7 +233,7 @@ pub(crate) fn trip(
         sprites: &state.sprites,
         data,
     };
-    let reach = sprite.sense_radius(data).round() as u16;
+    let reach = sprite.program.traits.sense_radius.round() as u16;
     let radius = chebyshev(sprite.pos, there).saturating_add(reach);
     let search = Flood::new(ground, sprite.pos, radius, occupied, state.tick);
     let goal = state.goal_for(data, &search, target)?;
@@ -787,7 +787,7 @@ pub(crate) fn flood(
         sprites: &state.sprites,
         data,
     };
-    let radius = sprite.sense_radius(data).round() as u16;
+    let radius = sprite.program.traits.sense_radius.round() as u16;
     Flood::new(ground, sprite.pos, radius, occupied, state.tick)
 }
 

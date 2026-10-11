@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, VecDeque};
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
-use crate::ageing::LifeStage;
+use crate::ageing::{LifeStage, health_of};
 use crate::biochem::Body;
 use crate::brain_io::Source;
 use crate::data::DataPack;
@@ -350,6 +350,17 @@ impl Brain {
     /// input, a conjunction per expressed multi-input `Instinct` signature,
     /// and each link at its instinct's weight, or 0.
     pub(crate) fn new(genome: &Genome, data: &DataPack, stage: LifeStage) -> Brain {
+        Brain::weakened(genome, data, stage, &[])
+    }
+
+    /// The same, each instinct's weight weakened to its gene's `health`
+    /// (M2 design §9.4).
+    pub(crate) fn weakened(
+        genome: &Genome,
+        data: &DataPack,
+        stage: LifeStage,
+        health: &[f32],
+    ) -> Brain {
         let inputs = data.brain_inputs_in_order();
         let place = |id| {
             inputs
@@ -360,10 +371,16 @@ impl Brain {
         let mut concepts: Vec<Signature> = (0..inputs.len()).map(|i| vec![(i, false)]).collect();
         let mut decision = vec![vec![0.0; VERBS.len()]; inputs.len()];
         let mut attention = vec![vec![0.0; data.categories().len()]; inputs.len()];
-        for (gene, expression) in genome.genes.iter().zip(expressions(genome, data, stage)) {
+        for (index, (gene, expression)) in genome
+            .genes
+            .iter()
+            .zip(expressions(genome, data, stage))
+            .enumerate()
+        {
             if expression != Expression::Expressed {
                 continue;
             }
+            let strength = health_of(health, index);
             match *gene {
                 Gene::Instinct {
                     ref inputs,
@@ -383,13 +400,13 @@ impl Brain {
                             concepts.len() - 1
                         }
                     };
-                    decision[concept][column(verb)] = weight;
+                    decision[concept][column(verb)] = weight * strength;
                 }
                 Gene::AttentionInstinct {
                     input,
                     category,
                     weight,
-                } => attention[place(input)][data.category_index(category)] = weight,
+                } => attention[place(input)][data.category_index(category)] = weight * strength,
                 _ => {}
             }
         }
@@ -411,11 +428,17 @@ impl Brain {
 
     /// Expresses `genome` afresh for `stage` (M2 design §9.2): its
     /// parameters, concepts and instinct links become those of its genes
-    /// working at `stage`. What it has learned, attends to and remembers
+    /// working at `stage`, as weakened as their `health` says (§9.4). What it has learned, attends to and remembers
     /// doing stays as it was; the snapshot, whose concepts may be gone, is
     /// taken again at step 5.
-    pub(crate) fn reach(&mut self, genome: &Genome, data: &DataPack, stage: LifeStage) {
-        let grown = Brain::new(genome, data, stage);
+    pub(crate) fn reach(
+        &mut self,
+        genome: &Genome,
+        data: &DataPack,
+        stage: LifeStage,
+        health: &[f32],
+    ) {
+        let grown = Brain::weakened(genome, data, stage, health);
         self.params = grown.params;
         self.concepts = grown.concepts;
         self.decision = grown.decision;
@@ -921,7 +944,7 @@ impl Brain {
 
     /// Whether a loaded brain fits `genome` and `data` at the tick `now`
     /// (design §2.8): its parameters, concepts and instincts are the ones
-    /// the genome gives; whatever it attends to, has learned or remembers
+    /// the genome gives, at `stage` and with its genes' `health`; whatever it attends to, has learned or remembers
     /// doing is about categories, object types and needs the pack has; and
     /// what it remembers doing was done by `now`.
     pub(crate) fn fits(
@@ -929,9 +952,10 @@ impl Brain {
         genome: &Genome,
         data: &DataPack,
         stage: LifeStage,
+        health: &[f32],
         now: u64,
     ) -> bool {
-        let born = Brain::new(genome, data, stage);
+        let born = Brain::weakened(genome, data, stage, health);
         let needs = data.needs().count();
         let category = |id: CategoryId| data.category(id).is_some();
         let subject = |subject: Subject| subject.fits(data);

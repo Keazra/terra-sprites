@@ -39,17 +39,20 @@ fn world_in(
 /// A newborn sprite of `genes` alone in a small field, whose body never
 /// needs anything, so it lives until old age harms it.
 fn carefree(genes: &str) -> World {
-    let data = builtin_changing(
-        "physiology.ron",
-        &[
-            ("basal: 0.0001,", "basal: 0.0,"),
-            ("per_sense_tile: 0.0000067,", "per_sense_tile: 0.0,"),
-            ("hydration_loss: 0.00033", "hydration_loss: 0.0"),
-            ("growth: 0.3,", "growth: 0.0,"),
-            ("upkeep: 0.00001,", "upkeep: 0.0,"),
-        ],
-    );
-    world_in(data, genes, &[], &[])
+    carefree_changing(genes, &[])
+}
+
+/// The same, with `changes` to its physiology too.
+fn carefree_changing(genes: &str, changes: &[(&str, &str)]) -> World {
+    let mut all = vec![
+        ("basal: 0.0001,", "basal: 0.0,"),
+        ("per_sense_tile: 0.0000067,", "per_sense_tile: 0.0,"),
+        ("hydration_loss: 0.00033", "hydration_loss: 0.0"),
+        ("growth: 0.3,", "growth: 0.0,"),
+        ("upkeep: 0.00001,", "upkeep: 0.0,"),
+    ];
+    all.extend_from_slice(changes);
+    world_in(builtin_changing("physiology.ron", &all), genes, &[], &[])
 }
 
 /// Steps `world` until its tick is `tick`, returning every event.
@@ -154,7 +157,7 @@ fn a_grown_up_sprite_loads_grown_up_with_its_switched_genes_working() {
 }
 
 #[test]
-fn a_sprite_grows_old_at_the_age_its_genes_set_and_its_body_starts_to_decline() {
+fn a_sprite_grows_old_at_the_age_its_genes_set() {
     let mut world = carefree(
         r#"Trait(trait: "grows_up", value: 1500.0),
            Trait(trait: "grows_old", value: 6000.0),"#,
@@ -169,7 +172,6 @@ fn a_sprite_grows_old_at_the_age_its_genes_set_and_its_body_starts_to_decline() 
         .collect();
     assert_eq!(grew_old.len(), 1, "{grew_old:?}");
     assert_eq!(grew_old[0].tick, 6000);
-    assert!(sprite.decline() > 0.0, "its body has begun to wear out");
     assert_eq!(sprite.wear(), 0.0, "an easy life, alone with nothing");
 }
 
@@ -193,4 +195,34 @@ fn a_sprite_whose_genes_have_it_grow_old_before_it_grows_up_does_both_at_once() 
             (13_500, EventKind::GrewOld { id })
         ]
     );
+}
+
+#[test]
+fn an_old_sprite_s_weakened_genes_are_saved_and_hashed() {
+    // M2 design §9.4: gene health is world state.
+    // Its speed and sense radius genes come first, and weaken.
+    let mut world = carefree_changing(
+        r#"Trait(trait: "grows_up", value: 1500.0),
+           Trait(trait: "grows_old", value: 6000.0),"#,
+        &[("ticks: 46500,", "ticks: 500,")],
+    );
+    run_to(&mut world, 6_400);
+    let sprite = world.sprites().next().expect("the sprite");
+    assert_eq!(sprite.life_stage(), LifeStage::Old);
+    assert!(sprite.vigour() < 1.0, "its genes have weakened");
+    assert!(sprite.gene_health()[..2].iter().any(|&h| h < 1.0));
+    assert!(
+        sprite.gene_health()[2..].iter().all(|&h| h == 1.0),
+        "settings don't weaken: {:?}",
+        sprite.gene_health()
+    );
+    let before = world.state_hash();
+    let mut loaded = World::load(&world.save()).expect("the save loads");
+    assert_eq!(loaded.state_hash(), before);
+    let loaded_sprite = loaded.sprites().next().expect("the sprite");
+    assert_eq!(loaded_sprite.gene_health(), sprite.gene_health());
+    assert_eq!(loaded_sprite.traits(), sprite.traits());
+    run_to(&mut world, 6_600);
+    run_to(&mut loaded, 6_600);
+    assert_eq!(loaded.state_hash(), world.state_hash());
 }

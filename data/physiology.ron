@@ -23,7 +23,7 @@
     stamina: (per_step: 0.002, idle: 0.0005, resting: 0.002),
     healing: 0.0001,  // injury healed per tick
     // Injury per tick while energy is at 0, while hydration is at 0, and once
-    // an old body has worn out.
+    // an old body has given out.
     injury: (starvation: 0.0011, dehydration: 0.0011, old_age: 0.0006),
     // Growing up and growing old (M2 design §9). First guesses, tuned in play
     // and in the viability run with A4 holding.
@@ -37,19 +37,23 @@
         // Energy per tick, all its life, for every 10,000 ticks of
         // `grows_old`: a later old age costs a little.
         upkeep: 0.00001,
-        // An old body wears out over this many ticks, then old age harms it.
-        // Wear speeds that up, to `wear_speedup` times as fast for the most
-        // worn. About 10 hours at 1x until breeding (Slice 23) shortens it.
-        decline: 46500,
-        wear_speedup: 3.0,
-        // What a worn-out body keeps of its best: of its speed, its sense
-        // radius, the stamina it gets back, and its healing. Each falls
-        // steadily from all of it as the body declines.
-        worn_out: (walks: 0.55, sees: 0.6, recovers: 0.5, heals: 0.3),
-        // Wear, which never heals: per tick while energy is below `low`
-        // (starving) or hydration is (parched), and per tick for each unit
-        // of injury.
+        // Wear from a hard life, which never heals: per tick while energy
+        // is below `low` (starving) or hydration is (parched), and per tick
+        // for each unit of injury. The most worn sprite grows old `sooner`
+        // (a share of the age its genes say), and its genes then decay
+        // `wear_speedup` times as fast.
         wear: (low: 0.25, starving: 0.0002, parched: 0.0002, injured: 0.001),
+        wear_speedup: 3.0,
+        sooner: 0.33,
+        // Old, its repair no longer keeps up: damage lands on random genes,
+        // `hit` health at a time (half that on an instinct), so its genes
+        // fall to `gives_out` on average in `ticks` for an unworn sprite.
+        // There its body gives out and old age harms it. About 10 hours at
+        // 1x until breeding (Slice 23) shortens it.
+        decay: (ticks: 46500, hit: 0.1, gives_out: 0.5),
+        // While its injury is above `above`, each tick a random gene may be
+        // scarred, losing `hit` health for good, at any age.
+        scar: (above: 0.5, chance: 0.002, hit: 0.05),
     ),
     // Each cause-of-death tally halves every this many ticks (design §4.10).
     cause_fade: 350,
