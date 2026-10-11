@@ -292,7 +292,7 @@ Settled with the owner on 2026-10-11 ([#140](https://github.com/Keazra/terra-spr
 - **A gene can carry `from` and `until`,** a life stage each: it works from `from` (young if it has none) until `until` (never, if it has none). Outside them it's **dormant**: in the genome, but not working.
 - **Traits and starting levels can't switch.** Traits work all life, since two of them set the stages, and a starting level applies only at birth. Such a gene that carries a switch is flagged and doesn't work (M1 design §4.3), as is one that switches off before it switches on.
 - **When its stage changes, a sprite's genes are expressed afresh:** its chemistry, brain parameters, concepts and instinct links become those of the genes working now. What it has learned, what it attends to and what it remembers doing stay as they were. So an instinct that switches on mid-life joins the instinct pathway without touching what was learned (#49).
-- **Genome files with switches are format 2;** format 1 still loads.
+- **Genome files with switches are format 2;** format 1 still loads, and a format 1 file with a switch is refused.
 
 ### 9.3 When a sprite grows up and grows old
 

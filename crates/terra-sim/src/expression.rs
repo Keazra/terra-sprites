@@ -209,7 +209,7 @@ mod tests {
     /// How each gene of a genome holding `genes` is expressed.
     fn expressions_of(genes: &[&str]) -> Vec<Expression> {
         let data = builtin();
-        let text = format!("(format: 1, genes: [{}])", genes.join(", "));
+        let text = format!("(format: 2, genes: [{}])", genes.join(", "));
         let genome = Genome::from_ron(&text, &data).expect("a valid genome");
         expressions(&genome, &data, LifeStage::Adult)
     }
@@ -227,7 +227,7 @@ mod tests {
     /// How each gene of a genome holding `genes` is expressed in a sprite at `stage`.
     fn expressions_at(genes: &[&str], stage: LifeStage) -> Vec<Expression> {
         let data = builtin();
-        let text = format!("(format: 1, genes: [{}])", genes.join(", "));
+        let text = format!("(format: 2, genes: [{}])", genes.join(", "));
         let genome = Genome::from_ron(&text, &data).expect("a valid genome");
         expressions(&genome, &data, stage)
     }

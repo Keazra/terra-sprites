@@ -409,3 +409,35 @@ fn a_theme_may_leave_out_objects_and_drives() {
     assert_eq!(theme.object_glyph("ball", "default").symbol, '?');
     assert_eq!(theme.drive_colour("boredom"), None);
 }
+
+#[test]
+fn a_theme_from_before_the_young_draws_them_as_grown() {
+    // M2 design §9.6: a theme without the young sprite's keys still loads,
+    // drawing a young sprite, selected or not, as a grown one.
+    let pack = pack();
+    let edited = ascii_with(
+        "        young_sprite:           (glyph: 'a', fg: white),\n",
+        "",
+    );
+    let edited = edited.replacen(
+        "        selected_young_sprite:  (glyph: 'a', fg: white, reversed: true),\n",
+        "",
+        1,
+    );
+    let theme = Theme::from_ron(&edited, &pack).expect("loads");
+    assert_eq!(
+        theme.glyph(SemanticTile::YoungSprite),
+        theme.glyph(SemanticTile::Sprite)
+    );
+    assert_eq!(
+        theme.glyph(SemanticTile::SelectedYoungSprite),
+        theme.glyph(SemanticTile::SelectedSprite)
+    );
+    assert_ne!(
+        theme.glyph(SemanticTile::YoungSprite),
+        Theme::from_ron(ASCII_THEME, &pack)
+            .expect("loads")
+            .glyph(SemanticTile::YoungSprite),
+        "the edit took the young sprite out"
+    );
+}

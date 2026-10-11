@@ -64,6 +64,25 @@ fn a_gene_switched_by_life_stage_writes_its_switch_after_its_fields() {
 }
 
 #[test]
+fn a_format_1_genome_with_a_switch_is_an_error_naming_the_gene() {
+    // M2 design §9.2: format 1 is from before genes switched, so a build
+    // that reads only it must be able to trust every gene works all its life.
+    let text = genome_file(&[
+        r#"Trait(trait: "speed", value: 7.0)"#,
+        r#"BrainParam(param: "curiosity", value: 0.6, until: Adult)"#,
+    ]);
+    match Genome::from_ron(&text, &builtin()) {
+        Err(GenomeError::Invalid(message)) => {
+            assert!(message.contains("gene 2"), "{message}");
+            assert!(message.contains("format 2"), "{message}");
+        }
+        other => panic!("expected an invalid genome, got {other:?}"),
+    }
+    let text = text.replace("format: 1", "format: 2");
+    assert!(Genome::from_ron(&text, &builtin()).is_ok());
+}
+
+#[test]
 fn fields_at_their_defaults_may_be_left_out_and_are_written_without_them() {
     let data = builtin();
     let written_out = genome_file(&[

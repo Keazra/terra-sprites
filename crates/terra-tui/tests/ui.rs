@@ -2222,6 +2222,47 @@ fn the_genome_tab_shows_brain_settings_instincts_and_attention_instincts() {
 }
 
 #[test]
+fn the_genome_tab_shows_switches_dormant_genes_and_weakened_genes() {
+    // M2 design §9.6. In this pack water runs out at once and thirst
+    // injures badly, and a bad injury scars a gene every tick: the tick its
+    // injury first passes .5, its one gene that weakens, the emitter, is
+    // scarred to .62. Its brain setting switches off as it grows up, so in
+    // an adult it's dormant.
+    let physiology = include_str!("../../../data/physiology.ron")
+        .replace("hydration_loss: 0.00033", "hydration_loss: 1.0")
+        .replace("dehydration: 0.0011", "dehydration: 0.3")
+        .replace("chance: 0.002, hit: 0.05", "chance: 1.0, hit: 0.38");
+    let pack =
+        DataPack::from_sources(&builtin_with("physiology.ron", &physiology)).expect("valid pack");
+    let genome = r#"(format: 2, genes: [
+        BrainParam(param: "curiosity", value: 0.6, until: Adult),
+        Emitter(locus: Locus("always"), mode: Level, gain: 0.001, chem: "boredom"),
+    ])"#;
+    let (mut world, mut app) = one_sprite_in(pack, genome, &[], &[], 0);
+    let vigour = |world: &World| world.sprites().next().expect("a sprite").vigour();
+    for _ in 0..10 {
+        if vigour(&world) < 1.0 {
+            break;
+        }
+        world.step();
+    }
+    assert!(vigour(&world) < 1.0, "a gene was scarred");
+    open(&mut app, &world, Tab::Genome);
+    let rows = right_part(&render(&app, &world, 100, 30), 46);
+    let text: Vec<&str> = rows[2..7].iter().map(|row| inside(row)).collect();
+    assert_eq!(
+        text,
+        [
+            "EMITTERS",
+            "always → boredom +.001 · health .62",
+            "BRAIN SETTINGS",
+            "curiosity .6 · until adult",
+            "dormant: switched off at this life stage",
+        ]
+    );
+}
+
+#[test]
 fn the_genome_tab_groups_genes_as_plain_lines_and_marks_those_with_no_effect() {
     let genome = r#"(format: 1, genes: [
         Trait(trait: "speed", value: 7.25),

@@ -239,6 +239,16 @@ impl Genome {
             )));
         }
         let switches: Vec<Switch> = file.genes.iter().map(GeneEntry::switch).collect();
+        // Format 1 is from before genes switched, so a build that reads only
+        // it can trust that every gene works all its life (M2 design §9.2).
+        if file.format < 2
+            && let Some(index) = switches.iter().position(|switch| !switch.is_always())
+        {
+            return Err(GenomeError::Invalid(format!(
+                "gene {} switches with life stage, which needs format 2",
+                index + 1
+            )));
+        }
         let genes = file
             .genes
             .into_iter()

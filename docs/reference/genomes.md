@@ -9,7 +9,7 @@ A sprite's genes, as text (design §2.8, §4.3, §5.7). The pack's `data/genomes
 )
 ```
 
-- **`format`** is 1, or 2 for a genome with a gene that switches with life stage. A file with a newer format than the game knows is refused.
+- **`format`** is 1, or 2 for a genome with a gene that switches with life stage. A file with a newer format than the game knows is refused, as is a format 1 file with a gene that switches.
 - **A gene can switch with life stage** (M2 design §9.2): `from: Adult` and `until: Adult` after its fields, with `Young`, `Adult` or `Old`. It works from `from` (young if left out) until `until` (never if left out), and is **dormant** outside them. A `Trait` or `InitialConcentration` can't switch: one that does is flagged, as is one that switches off before it switches on.
 - **Genes are written by type name,** with chemicals, loci, traits and categories by name. A field at its default can be left out: `invert: false`, `threshold: 0`.
 - **The genes decide how things feel, not what they do to the body.** A gene that would change a physical chemical directly is kept but **flagged**, and does nothing. The genome tab of the inspector marks it.
