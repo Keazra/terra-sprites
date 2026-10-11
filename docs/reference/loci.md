@@ -9,7 +9,7 @@ The values genes and objects read and write, other than chemical levels (design 
 | `kind` | `BodySensor`, `Pulse` or `ReceptorTarget`. |
 
 **The kinds:**
-- **`BodySensor`:** physiology fills it in every tick. The game needs `always` (always 1), `age` (as a fraction of lifespan), `nearby_sprites`, `moving` and `resting`, and computes each.
+- **`BodySensor`:** physiology fills it in every tick. The game needs `always` (always 1), `age` (as a fraction of the age it grows old at, capped at 1), `nearby_sprites`, `moving` and `resting`, and computes each.
 - **`Pulse`:** an event that lasts one tick, such as `ate` or `was_hit`. Object verbs and tags `Signal` pulses, and a sprite feels one on the tick after it's sent. A pulse sent to a sprite by another (a `Signal(Target, ...)`) remembers who sent it, which is how a sprite knows who hit it. The game itself sends `cornered`, `was_hit`, `fruitless`, `petted` and `shocked`, so those must be here.
 - **`ReceptorTarget`:** written by receptor genes to adjust the brain: `learning_rate_mod`, `exploration_mod` and `curiosity_mod`, all required. Each rests at 1 when no receptor writes it, within the range [physiology](physiology.md) gives it.
 

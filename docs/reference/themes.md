@@ -46,6 +46,7 @@ A **glyph** is `(glyph: '♣', fg: green)`, with two optional flags: `bold: true
 | `terrain(grass)`, `terrain(dirt)`, `terrain(sand)`, `terrain(shallow_water)`, `terrain(deep_water)`, `terrain(rock)` | The ground ([terrain](terrain.md)). |
 | `sprite` | A sprite. Its colour shows when no drive colours it, and always with `b`'s plain colours. |
 | `selected_sprite` | The selected sprite. |
+| `young_sprite`, `selected_young_sprite` | A young sprite, and one selected (M2 design §9.6). Optional: a theme without them draws the young as grown. |
 | `decision_marker` | Where the selected sprite is heading. It flashes. |
 | `emote(hurt)`, `emote(pleased)`, `emote(shocked)`, `emote(failed)`, `emote(resting)` | What takes turns with a sprite's glyph when it's hurt, petted, zapped, gives up, or rests (design §6.3). |
 
