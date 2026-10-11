@@ -341,25 +341,52 @@ impl Flood {
         sense_radius: f32,
         rng: &mut ChaCha8Rng,
     ) -> Option<Pos> {
-        let reached: Vec<Pos> = (0..self.costs.len())
-            .filter(|&index| self.costs[index] != UNREACHED)
-            .map(|index| self.pos(index))
-            .filter(|&pos| pos != self.origin)
-            .collect();
         let origin = self.origin;
-        let far: Vec<Pos> = reached
-            .iter()
-            .copied()
-            .filter(|pos| {
-                let distance = pos.x.abs_diff(origin.x).max(pos.y.abs_diff(origin.y));
-                f32::from(distance) > sense_radius / 2.0
-            })
-            .collect();
-        let pool = if far.is_empty() { reached } else { far };
-        if pool.is_empty() {
+        let threshold = sense_radius / 2.0;
+        let mut far_count = 0u64;
+        let mut reached_count = 0u64;
+        for index in 0..self.costs.len() {
+            let cost = self.costs[index];
+            if cost == UNREACHED {
+                continue;
+            }
+            let pos = self.pos(index);
+            if pos == origin {
+                continue;
+            }
+            reached_count += 1;
+            let distance = pos.x.abs_diff(origin.x).max(pos.y.abs_diff(origin.y));
+            if f32::from(distance) > threshold {
+                far_count += 1;
+            }
+        }
+        let take_far = far_count != 0;
+        let count = if take_far { far_count } else { reached_count };
+        if count == 0 {
             return None;
         }
-        Some(pool[uniform(rng, pool.len() as u64) as usize])
+        let pick = uniform(rng, count) as usize;
+        let mut seen = 0usize;
+        for index in 0..self.costs.len() {
+            let cost = self.costs[index];
+            if cost == UNREACHED {
+                continue;
+            }
+            let pos = self.pos(index);
+            if pos == origin {
+                continue;
+            }
+            let distance = pos.x.abs_diff(origin.x).max(pos.y.abs_diff(origin.y));
+            let far = f32::from(distance) > threshold;
+            if take_far && !far {
+                continue;
+            }
+            if seen == pick {
+                return Some(pos);
+            }
+            seen += 1;
+        }
+        None
     }
 
     /// Of the tiles it reached that `free` allows, the one nearest `to` in a
