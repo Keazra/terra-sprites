@@ -3,6 +3,7 @@ name = "terra-sim"
 description = "The Terra Sprites simulation: no terminal, no filesystem."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 libm = "0.2.16"
