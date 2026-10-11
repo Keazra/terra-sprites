@@ -320,9 +320,16 @@ impl Program {
             }
         }
         let (sum, count) = weakening;
+        // A genome with no gene that weakens has nothing to wear down, so
+        // its body gives out as soon as it's old (M2 design §9.4).
+        let vigour = match (count, stage) {
+            (0, LifeStage::Old) => data.physiology().ageing.decay.gives_out,
+            (0, _) => 1.0,
+            _ => sum / count as f32,
+        };
         Program {
             traits,
-            vigour: if count == 0 { 1.0 } else { sum / count as f32 },
+            vigour,
             decay,
             reactions,
             level_emitters,
@@ -1265,6 +1272,19 @@ mod tests {
         // gain of 0.05 emits 0.02.
         assert_close(sprite.level("h1"), 0.1);
         assert_close(sprite.level("h2"), 0.02);
+    }
+
+    #[test]
+    fn a_body_with_nothing_to_weaken_gives_out_when_old() {
+        // M2 design §9.4: settings alone never weaken, so an old sprite
+        // with no other genes would otherwise live for ever.
+        let data = quiet();
+        let text = r#"(format: 1, genes: [Trait(trait: "grows_old", value: 20000.0)])"#;
+        let genome = Genome::from_ron(text, &data).expect("a valid genome");
+        let adult = Program::weakened(&genome, &data, LifeStage::Adult, &[1.0]);
+        assert_eq!(adult.vigour, 1.0);
+        let old = Program::weakened(&genome, &data, LifeStage::Old, &[1.0]);
+        assert_eq!(old.vigour, data.physiology().ageing.decay.gives_out);
     }
 
     #[test]

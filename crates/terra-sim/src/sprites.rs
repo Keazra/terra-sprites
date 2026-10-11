@@ -10,7 +10,7 @@ use crate::ageing::{LifeStage, frailty};
 use crate::biochem::{Body, Program};
 use crate::brain::Brain;
 use crate::data::DataPack;
-use crate::genome::Genome;
+use crate::genome::{Gene, Genome};
 use crate::map::{Dir, Map, Pos};
 use crate::objects::{EntityId, Objects};
 use crate::occupancy::Occupancy;
@@ -100,9 +100,14 @@ impl Sprite {
     /// they are (M2 design §9.2, §9.4), leaving what it has learned as it
     /// was.
     fn express(&mut self, data: &DataPack) {
-        let stage = self.stage();
-        self.program = Program::weakened(&self.genome, data, stage, &self.health);
-        self.brain.reach(&self.genome, data, stage, &self.health);
+        self.express_body(data);
+        self.brain
+            .reach(&self.genome, data, self.stage(), &self.health);
+    }
+
+    /// The same for its body's genes only, for when only they changed.
+    fn express_body(&mut self, data: &DataPack) {
+        self.program = Program::weakened(&self.genome, data, self.stage(), &self.health);
     }
 
     /// Ages its genes for a tick (M2 design §9.4): while its injury is bad,
@@ -114,41 +119,60 @@ impl Sprite {
     pub(crate) fn age_genes(&mut self, data: &DataPack, rng: &mut ChaCha8Rng) -> bool {
         let physiology = data.physiology();
         let ageing = physiology.ageing;
-        let frail: Vec<usize> = (0..self.genome.genes.len())
-            .filter(|&i| frailty(&self.genome.genes[i]) > 0.0)
-            .collect();
-        if frail.is_empty() {
-            return false;
-        }
-        let mut hits = Vec::new();
         let (scar, decay) = (ageing.scar, ageing.decay);
-        if self.body.chems[physiology.indices.injury] > scar.above && chance(rng, scar.chance) {
-            hits.push(scar.hit);
-        }
-        if self.stage() == LifeStage::Old {
-            // A hit takes `hit` times the frailty of the gene it lands on, so
-            // `hit` × the average frailty on average, which brings the
-            // average health of `n` genes down by that over `n`. The odds
-            // are of enough hits to bring it to `gives_out` in `ticks`.
-            let n = frail.len() as f32;
-            let frailty: f32 = frail.iter().map(|&i| frailty(&self.genome.genes[i])).sum();
-            let needed = (1.0 - decay.gives_out) * n * n / (decay.hit * frailty);
-            let pace = 1.0 + (ageing.wear_speedup - 1.0) * self.body.wear;
-            let odds = (pace * needed / decay.ticks as f32).min(1.0);
-            if chance(rng, odds) {
-                hits.push(decay.hit);
-            }
-        }
-        for &hit in &hits {
-            let gene = frail[uniform(rng, frail.len() as u64) as usize];
-            let health = &mut self.health[gene];
-            *health = (*health - hit * frailty(&self.genome.genes[gene])).max(0.0);
-        }
-        if hits.is_empty() {
+        let injured = self.body.chems[physiology.indices.injury] > scar.above;
+        let old = self.stage() == LifeStage::Old;
+        // Most ticks nothing can happen, so skip counting the genes.
+        if !injured && !old {
             return false;
         }
-        self.express(data);
-        true
+        let (n, frailty_sum) = self
+            .genome
+            .genes
+            .iter()
+            .map(frailty)
+            .filter(|&f| f > 0.0)
+            .fold((0_usize, 0.0_f32), |(n, sum), f| (n + 1, sum + f));
+        if n == 0 {
+            return false;
+        }
+        let scarred = (injured && chance(rng, scar.chance)).then_some(scar.hit);
+        let decayed = old && {
+            // A hit takes `hit` times the frailty of the gene it lands
+            // on, so `hit` × the average frailty on average, which
+            // brings the average health of `n` genes down by that over
+            // `n`. The odds are of enough hits to bring it to
+            // `gives_out` in `ticks`.
+            let n = n as f32;
+            let needed = (1.0 - decay.gives_out) * n * n / (decay.hit * frailty_sum);
+            let pace = 1.0 + (ageing.wear_speedup - 1.0) * self.body.wear;
+            chance(rng, (pace * needed / decay.ticks as f32).min(1.0))
+        };
+        let decayed = decayed.then_some(decay.hit);
+        let mut weakened = false;
+        let mut mind = false;
+        for hit in [scarred, decayed].into_iter().flatten() {
+            let nth = uniform(rng, n as u64) as usize;
+            let (index, gene) = self
+                .genome
+                .genes
+                .iter()
+                .enumerate()
+                .filter(|(_, gene)| frailty(gene) > 0.0)
+                .nth(nth)
+                .expect("the nth of n frail genes");
+            let health = &mut self.health[index];
+            *health = (*health - hit * frailty(gene)).max(0.0);
+            weakened = true;
+            mind |= matches!(gene, Gene::Instinct { .. } | Gene::AttentionInstinct { .. });
+        }
+        if mind {
+            self.express(data);
+        } else if weakened {
+            // The brain reads only its instincts' health.
+            self.express_body(data);
+        }
+        weakened
     }
 
     /// Grows the sprite to its life stage on the tick `tick` (M2 design
@@ -606,7 +630,7 @@ mod tests {
             .find(|&i| {
                 matches!(
                     old.genome.genes[i],
-                    crate::genome::Gene::Trait {
+                    Gene::Trait {
                         which: crate::registry::Trait::Speed,
                         ..
                     }

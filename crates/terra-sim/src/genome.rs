@@ -274,7 +274,10 @@ impl Genome {
     /// one a spawn carries is checked, since a replay may bring it from
     /// another pack (design v28 §2.5).
     pub(crate) fn fits(&self, data: &DataPack) -> bool {
-        self.genes.iter().all(|gene| gene.check(data).is_ok())
+        // A switch for every gene, or none for a genome whose genes all
+        // work all their life (M2 design §9.2).
+        let switched = self.switches.is_empty() || self.switches.len() == self.genes.len();
+        switched && self.genes.iter().all(|gene| gene.check(data).is_ok())
     }
 
     /// The genome as a genome file: genes this build knows by name, the rest by number.
@@ -1192,5 +1195,20 @@ mod tests {
         assert_eq!(gene(6).check(&data), Ok(()));
         let error = gene(26).check(&data).expect_err("no category 26");
         assert!(error.contains("category 26"), "{error}");
+    }
+
+    #[test]
+    fn a_genome_fits_only_with_a_switch_for_every_gene() {
+        // A damaged save with too few switches would otherwise quietly
+        // switch the rest of its genes on for life (M2 design §9.2).
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let starter = data.starter().clone();
+        assert!(!starter.switches.is_empty(), "the starter switches genes");
+        assert!(starter.fits(&data));
+        let mut short = starter.clone();
+        short.switches.pop();
+        assert!(!short.fits(&data));
+        let unswitched = Genome::switched(starter.genes.clone(), Vec::new());
+        assert!(unswitched.fits(&data));
     }
 }

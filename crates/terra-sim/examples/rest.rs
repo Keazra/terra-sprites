@@ -92,7 +92,10 @@ struct Life {
     recovering: Option<(u64, usize)>,
 }
 
-/// The stretch of life a sprite of `age` that grows old at `grows_old` is in.
+/// The stretch of life a sprite of `age` that grows old at `grows_old` is in:
+/// a quarter of its life up to growing old each, then its old age. Pass the
+/// age it grows old at with its wear (M2 design §9.4), so the last stretch
+/// starts when it really grows old.
 fn stretch(age: u64, grows_old: f32) -> usize {
     let lived = age as f64 / f64::from(grows_old.max(1.0));
     if lived >= 1.0 {
@@ -168,7 +171,7 @@ fn run(data: &DataPack, seed: u64, ticks: u64) -> BTreeMap<EntityId, Life> {
             } = event.kind
                 && let Some(sprite) = world.sprite(id)
             {
-                let at = stretch(sprite.age(), sprite.traits().grows_old);
+                let at = stretch(sprite.age(), sprite.grows_old_at());
                 let life = lives.entry(id).or_default();
                 life.stretches[at].rests += 1;
                 // A rest begun rested has nothing to recover from.
@@ -187,7 +190,7 @@ fn observe(world: &World, lives: &mut BTreeMap<EntityId, Life>) {
     let tick = world.tick();
     for sprite in world.sprites() {
         let life = lives.entry(sprite.id()).or_default();
-        let tally = &mut life.stretches[stretch(sprite.age(), sprite.traits().grows_old)];
+        let tally = &mut life.stretches[stretch(sprite.age(), sprite.grows_old_at())];
         tally.ticks += 1;
         if sprite
             .action()
