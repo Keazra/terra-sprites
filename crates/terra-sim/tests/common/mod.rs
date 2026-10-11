@@ -42,11 +42,12 @@ pub fn traits_only(speed: f32, sense_radius: f32, data: &DataPack) -> Genome {
     Genome::from_ron(&text, data).expect("a valid genome")
 }
 
-/// A genome of `genes` plus speed and sense 10, with learning that does not
-/// fade, so what is learned reads exactly.
+/// A genome of `genes`, which may switch with life stage, plus speed and
+/// sense 10, with learning that does not fade, so what is learned reads
+/// exactly.
 pub fn genome(genes: &str, data: &DataPack) -> Genome {
     let text = format!(
-        r#"(format: 1, genes: [
+        r#"(format: 2, genes: [
             Trait(trait: "speed", value: 10.0),
             Trait(trait: "sense_radius", value: 10.0),
             {genes}
