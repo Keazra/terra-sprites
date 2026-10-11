@@ -3,7 +3,7 @@
 //! and may crash into what stops it.
 
 mod common;
-use common::{at, builtin, builtin_changing};
+use common::{at, builtin, builtin_changing, builtin_changing_files, close};
 
 use terra_sim::{
     Command, DataPack, DeathCause, Dir, EntityId, Event, EventKind, Map, Pos, Rejection, Scenario,
@@ -386,12 +386,18 @@ fn a_sprite_taken_hold_of_mid_slide_slides_on_to_the_end_and_then_follows() {
     assert_eq!(where_is(&world, sprite), at(0, 1), "then after the Cursor");
 }
 
+/// What `shoved_in` does in a lane of `data`'s, where the sprite is shoved
+/// three tiles east into a thornbush two tiles away.
+fn shoved_into_a_thornbush(data: DataPack) -> (World, EntityId, Vec<Event>) {
+    let lane = ["......", "......"];
+    let thorns = [(at(3, 0), "thornbush")];
+    shoved_in(data, &lane, &thorns, &[at(1, 0)], at(1, 0), Dir::E, 3)
+}
+
 #[test]
 fn a_crash_runs_the_thing_s_tags_so_a_thornbush_pricks_and_can_kill() {
     // Design v25 §3.5.4, v23 §3.5.6: a crash is a contact.
-    let lane = ["......", "......"];
-    let thorns = [(at(3, 0), "thornbush")];
-    let (world, sprite, events) = shoved(&lane, &thorns, &[at(1, 0)], at(1, 0), Dir::E, 3);
+    let (world, sprite, events) = shoved_into_a_thornbush(builtin());
     let thornbush = Thing::ObjectType("thornbush".into());
     assert_eq!(crashes(&events, sprite), [(thornbush, true)]);
     let injury = world.sprite(sprite).unwrap().chemical("injury").unwrap();
@@ -405,8 +411,7 @@ fn a_crash_runs_the_thing_s_tags_so_a_thornbush_pricks_and_can_kill() {
         "tags.ron",
         &[(crash, r#"Crash: [Inject(Actor, "injury", 1.0)"#)],
     );
-    let (world, sprite, events) =
-        shoved_in(deadly, &lane, &thorns, &[at(1, 0)], at(1, 0), Dir::E, 3);
+    let (world, sprite, events) = shoved_into_a_thornbush(deadly);
     let died = events.iter().find_map(|e| match e.kind {
         EventKind::Died { id, cause, .. } if id == sprite => Some(cause),
         _ => None,
@@ -414,6 +419,36 @@ fn a_crash_runs_the_thing_s_tags_so_a_thornbush_pricks_and_can_kill() {
     // The thornbush's stable object type ID.
     assert_eq!(died, Some(DeathCause::HurtBy(3)));
     assert_eq!(world.data().object_type_name(3), Some("thornbush"));
+}
+
+#[test]
+fn a_thing_s_tags_run_in_the_order_its_type_lists_them() {
+    // Design v23 §3.5.6. Each injection is clamped to 0–1 as it lands, so
+    // filling the gut and then draining half leaves it half full, where
+    // draining first and filling after leaves it full. Digestion, which
+    // would empty the gut a little on each tick after the crash, is off.
+    let tags = r#"(name: "Fill", contact: {Crash: [Inject(Actor, "water", 1.0)]}),
+     (name: "Drain", contact: {Crash: [Inject(Actor, "water", -0.5)]}),
+     (name: "Thorny","#;
+    let water_after_crashing = |listed: &str| {
+        let data = builtin_changing_files(&[
+            ("tags.ron", &[(r#"(name: "Thorny","#, tags)]),
+            ("objects.ron", &[("tags: [Solid, Fixture, Thorny]", listed)]),
+            ("physiology.ron", &[("water: 0.002)", "water: 0.0)")]),
+        ]);
+        let (world, sprite, events) = shoved_into_a_thornbush(data);
+        let thornbush = Thing::ObjectType("thornbush".into());
+        assert_eq!(crashes(&events, sprite), [(thornbush, false)]);
+        world.sprite(sprite).unwrap().chemical("water").unwrap()
+    };
+
+    let fill_first = water_after_crashing("tags: [Solid, Fixture, Fill, Drain]");
+    let drain_first = water_after_crashing("tags: [Solid, Fixture, Drain, Fill]");
+    assert!(close(fill_first, 0.5), "filled, then drained: {fill_first}");
+    assert!(
+        close(drain_first, 1.0),
+        "drained, then filled: {drain_first}"
+    );
 }
 
 #[test]
