@@ -139,6 +139,7 @@ fn a_hand_made_world_replays_from_its_save() {
         objects: &[(at(4, 1), "ball")],
         sprites: &[(at(1, 1), None), (at(2, 3), None)],
         scripted: &[],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data, 5).unwrap();
     world.start_recording();

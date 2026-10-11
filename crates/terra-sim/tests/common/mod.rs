@@ -161,6 +161,7 @@ impl<'a> WorldBuilder<'a> {
             objects: self.objects,
             sprites: &self.sprites,
             scripted: &self.scripted,
+            newborns: &[],
         };
         World::from_scenario(scenario, data, self.seed).expect("a valid scenario")
     }

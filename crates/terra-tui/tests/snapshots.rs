@@ -52,6 +52,7 @@ fn field() -> World {
         objects: &objects,
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     for _ in 0..3 {

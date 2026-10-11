@@ -30,6 +30,7 @@ fn field(sprites: &[Pos]) -> World {
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     World::from_scenario(scenario, pack(), 1).expect("valid scenario")
 }

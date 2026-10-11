@@ -46,6 +46,7 @@ fn field() -> World {
         objects: &objects,
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     world.step();
@@ -216,6 +217,7 @@ fn a_policy_that_hides_map_colours_draws_sprites_in_their_own_colour() {
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let areas = ui::areas(Size::new(100, 30), world.map());

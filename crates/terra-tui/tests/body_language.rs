@@ -45,6 +45,7 @@ fn field(sprites: &[(Pos, Genome)]) -> World {
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     World::from_scenario(scenario, pack, 7).expect("valid scenario")
 }
@@ -404,6 +405,7 @@ fn the_resting_emote_shows_for_a_second_at_16x_and_at_max_through_the_frame_loop
             objects: &[],
             sprites: &sprites,
             scripted: &scripted,
+            newborns: &[],
         };
         let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
         let id = world.sprites().next().expect("a sprite").id();

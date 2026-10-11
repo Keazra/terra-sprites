@@ -33,6 +33,7 @@ fn world() -> World {
         objects: &[(at(5, 5), "ball")],
         sprites: &[(at(2, 2), None), (at(8, 3), None)],
         scripted: &[],
+        newborns: &[],
     };
     World::from_scenario(scenario, pack(), 7).expect("valid scenario")
 }
@@ -392,6 +393,7 @@ fn a_loaded_world_shows_what_the_screen_showed_when_it_was_saved() {
         objects: &[],
         sprites: &[(at(2, 2), None)],
         scripted: &[],
+        newborns: &[],
     };
     let world = World::from_scenario(scenario, pack(), 7).expect("valid scenario");
     let mut app = app_for(&world, &folder);

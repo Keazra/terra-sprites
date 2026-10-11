@@ -25,6 +25,7 @@ fn world(
         objects,
         sprites: &sprites,
         scripted: script,
+        newborns: &[],
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }
@@ -252,6 +253,7 @@ fn a_led_sprite_that_dies_empties_the_cursor() {
         objects: &[],
         sprites: &[(at(0, 0), None)],
         scripted: &[],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
     let id = sprite_on(&world, at(0, 0));
@@ -458,6 +460,7 @@ fn a_held_berry_expires_and_empties_the_cursor_but_never_sprouts() {
         objects: &[(at(2, 0), "berry")],
         sprites: &[],
         scripted: &[],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
     let berry = object_on(&world, at(2, 0));
@@ -500,6 +503,7 @@ fn a_held_items_location_conditions_are_false() {
         objects: &objects,
         sprites: &[],
         scripted: &[],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
     let held = object_on(&world, at(2, 0));

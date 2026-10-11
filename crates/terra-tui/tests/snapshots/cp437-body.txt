@@ -1,7 +1,7 @@
  Terra Sprites │ tick 3 │ ► 1x │ seed 7 │ sprites 3 │ not saved                              ? help
 ╔═ Map ══════════════════╗                            ┌─ #5 ── [Body] Brain Chem Genome World ─────┐
 ║..............,,,,::~~≈≈║                            │ Wandering off · 6 tiles to go              │
-║.'..........♠.,,,,::~~≈≈║                            │ age 3 · lifespan 56,185                    │
+║.'..........♠.,,,,::~~≈≈║                            │ age 7,503 · lifespan 56,185                │
 ║..•.##...☺....,,,,::~~≈≈║                            │ speed 6.5 · sense 9.32                     │
 ║....##..............~~≈≈║                            │                                            │
 ║.......♦↓·X....☺....~~≈≈║                            │ hunger      ░░░░░░░░░░ .00                 │

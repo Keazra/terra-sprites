@@ -62,6 +62,7 @@ fn scene_with(
         objects,
         sprites: &sprites,
         scripted,
+        newborns: &[],
     };
     World::from_scenario(scenario, data, seed).expect("a valid scenario")
 }
@@ -162,6 +163,7 @@ fn a_hit_sprite_mostly_backs_away_from_its_attacker_and_sometimes_hits_back() {
             objects: &[],
             sprites: &sprites,
             scripted: &script,
+            newborns: &[],
         };
         let mut world = World::from_scenario(scenario, data, seed).expect("a valid scenario");
         let (id, them) = (id_at(&world, me), id_at(&world, attacker));
@@ -215,6 +217,7 @@ fn a_crowded_sprite_mostly_backs_away_and_sometimes_hits_a_neighbour() {
             objects: &[],
             sprites: &sprites,
             scripted: &script,
+            newborns: &[],
         };
         let mut world = World::from_scenario(scenario, data, seed).expect("a valid scenario");
         let id = id_at(&world, me);

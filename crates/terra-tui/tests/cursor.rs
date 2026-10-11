@@ -26,6 +26,7 @@ fn field(sprites: &[Pos]) -> World {
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     World::from_scenario(scenario, pack(), 1).expect("valid scenario")
 }
@@ -395,6 +396,7 @@ fn following_the_cursor_moves_with_its_sprite() {
         objects: &[],
         sprites: &[(at(1, 2), None)],
         scripted: &[(at(1, 2), walk)],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
     let mut app = app(&world);

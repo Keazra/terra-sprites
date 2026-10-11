@@ -43,6 +43,7 @@ fn try_scenario(
         objects: &objects,
         sprites: &[],
         scripted: &[],
+        newborns: &[],
     };
     World::from_scenario(scenario, data.clone(), 7)
 }
@@ -420,6 +421,7 @@ fn spawn_nearby_chooses_uniformly_among_the_candidates() {
             objects: &[(at(3, 2), "ticker")],
             sprites: &[],
             scripted: &[],
+            newborns: &[],
         };
         let mut world = World::from_scenario(scenario, pack, seed).expect("valid");
         world.step();

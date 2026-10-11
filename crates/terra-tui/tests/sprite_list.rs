@@ -28,7 +28,7 @@ fn starting(chem: &str, value: f32, pack: &DataPack) -> Genome {
     Genome::from_ron(&ron, pack).expect("a valid genome")
 }
 
-/// A 120×60 field with four sprites, by ID: #1 at (2, 3) with no strong
+/// A 120×60 field with four newborn sprites, by ID: #1 at (2, 3) with no strong
 /// drive, wandering to (8, 3); #2 at (110, 55), very hungry; #3 at (6, 1),
 /// thirsty; #4 at (4, 4), a little hungry. #1 is named Zed, and #3 Abel.
 fn field() -> World {
@@ -52,6 +52,7 @@ fn field() -> World {
         objects: &[],
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[at(2, 3), at(110, 55), at(6, 1), at(4, 4)],
     };
     World::from_scenario(scenario, pack, 7).expect("valid scenario")
 }
@@ -329,6 +330,7 @@ fn with_no_sprites_the_list_says_so() {
         objects: &[],
         sprites: &[],
         scripted: &[],
+        newborns: &[],
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let areas = ui::areas(Size::new(100, 30), world.map());
@@ -352,6 +354,7 @@ fn a_long_list_scrolls_to_keep_the_highlight_in_view() {
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let areas = ui::areas(Size::new(100, 30), world.map());

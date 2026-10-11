@@ -74,6 +74,7 @@ fn lone_sprite(data: DataPack, genome: Option<&str>) -> World {
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns: &[Pos { x: 0, y: 0 }],
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }
@@ -189,6 +190,7 @@ fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> Result<World, terra_sim::S
             objects,
             sprites: &sprites,
             scripted: &rests,
+            newborns: &[],
         },
         data,
         1,
@@ -209,6 +211,7 @@ fn sprites_see_water_and_each_other_in_a_pack_with_no_object_types_for_them() {
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
     for _ in 0..2_000 {

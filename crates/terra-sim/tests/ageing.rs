@@ -9,8 +9,8 @@ use terra_sim::{
     World,
 };
 
-/// A sprite of `genes` alone in a small field with `objects`, doing
-/// `script` first.
+/// A newborn sprite of `genes` alone in a small field with `objects`,
+/// doing `script` first.
 fn world(genes: &str, objects: &[(Pos, &str)], script: &[ScriptedAction]) -> World {
     let data = builtin();
     let map = Map::from_ascii(&["......", "......", "......"], &data).expect("valid drawing");
@@ -22,6 +22,7 @@ fn world(genes: &str, objects: &[(Pos, &str)], script: &[ScriptedAction]) -> Wor
         objects,
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[sprite],
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }

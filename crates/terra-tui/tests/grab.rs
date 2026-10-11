@@ -27,6 +27,7 @@ fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> World {
         objects,
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     World::from_scenario(scenario, pack(), 1).expect("valid scenario")
 }
@@ -282,6 +283,7 @@ fn while_leading_a_cursor_following_another_walking_sprite_tells_the_world_where
         objects: &[],
         sprites: &[(at(1, 1), None), (walker, None)],
         scripted: &[(walker, wander)],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
     let mut app = grab_app(&world);
@@ -318,6 +320,7 @@ fn the_observed_list_tells_of_being_pulled_away_and_along_as_the_sprite_felt_it(
         objects: &[],
         sprites: &[(start, None)],
         scripted: &[(start, wander)],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
     let mut app = grab_app(&world);
@@ -349,6 +352,7 @@ fn resting_sprite_and_ball() -> World {
         objects: &[(at(1, 1), "ball")],
         sprites: &[(resting, None)],
         scripted: &[(resting, ScriptedAction::Rest); 5],
+        newborns: &[],
     };
     World::from_scenario(scenario, pack(), 1).expect("valid scenario")
 }
@@ -429,6 +433,7 @@ fn leading_in_a_wide_field() -> (World, App) {
         objects: &[],
         sprites: &[(led, None), (other, None)],
         scripted: &scripted,
+        newborns: &[],
     };
     let world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
     let areas = Areas {

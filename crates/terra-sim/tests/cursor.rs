@@ -391,6 +391,7 @@ fn scene(rows: &[&str], sprites: &[(Pos, &str)], script: &[(Pos, ScriptedAction)
         objects: &[],
         sprites: &sprites,
         scripted: script,
+        newborns: &[],
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }

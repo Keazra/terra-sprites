@@ -96,6 +96,7 @@ fn a_run_counts_applied_actions_and_deaths_in_each_window() {
         objects: &objects,
         sprites: &[(Pos { x: 1, y: 1 }, None)],
         scripted: &[],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data.clone(), 5).expect("a valid scenario");
     let mut windows = [(0, 1000), (2000, 3000)].map(|(from, to)| Window {

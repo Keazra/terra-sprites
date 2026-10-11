@@ -266,13 +266,17 @@ pub struct Scenario<'a> {
     pub map: Map,
     /// Objects as `(tile, object type name)`. Each starts at the beginning of its first stage.
     pub objects: &'a [(Pos, &'a str)],
-    /// Newborn sprites as `(tile, genome)`: `None` is the starter genome with
-    /// spawn variation, as for the `SpawnSprite` command.
+    /// Sprites as `(tile, genome)`: `None` is the starter genome with spawn
+    /// variation, as for the `SpawnSprite` command. Each starts just grown
+    /// up, as old as its genes say it grows up (M2 design §9.1), unless its
+    /// tile is in `newborns`.
     pub sprites: &'a [(Pos, Option<Genome>)],
     /// Actions to start sprites on, by the tile each sprite starts on,
     /// instead of what they would choose. A sprite given several does them in
     /// the order given.
     pub scripted: &'a [(Pos, ScriptedAction)],
+    /// The tiles of the sprites that start as newborns.
+    pub newborns: &'a [Pos],
 }
 
 /// A chemical's level in one sprite.
@@ -406,7 +410,7 @@ impl<'a> SpriteView<'a> {
 
     /// Its life stage (M2 design §9.1), as of the latest tick.
     pub fn life_stage(&self) -> LifeStage {
-        self.sprite.stage
+        self.sprite.stage()
     }
 
     /// Every chemical in the sprite, in the data pack's order.
@@ -628,7 +632,11 @@ impl World {
                 Some(genome) => genome.clone(),
                 None => varied(world.data.starter(), &world.data, &mut state.rng),
             };
-            let sprite = Sprite::newborn(genome, pos, state.tick, &world.data);
+            let sprite = if scenario.newborns.contains(&pos) {
+                Sprite::newborn(genome, pos, state.tick, &world.data)
+            } else {
+                Sprite::grown_up(genome, pos, state.tick, &world.data)
+            };
             state.add_sprite(sprite);
         }
         for &(pos, script) in scenario.scripted {
@@ -1169,6 +1177,7 @@ mod tests {
             objects: &[(Pos { x: 2, y: 2 }, "berry_bush")],
             sprites: &[],
             scripted: &[],
+            newborns: &[],
         };
         World::from_scenario(scenario, data, 7).expect("valid scenario")
     }
@@ -1211,7 +1220,7 @@ mod tests {
             // A sprite born, or a trace entry made, after the save.
             |state, _| {
                 let tick = state.tick;
-                the_sprite(state).born = tick + 1;
+                the_sprite(state).born = tick as i64 + 1;
             },
             |state, _| {
                 let tick = state.tick;
@@ -1349,6 +1358,7 @@ mod tests {
             objects: &[(Pos { x: 2, y: 2 }, "berry_bush")],
             sprites: &[(Pos { x: 5, y: 1 }, None), (Pos { x: 5, y: 2 }, None)],
             scripted: &[],
+            newborns: &[],
         };
         let world = World::from_scenario(scenario, data, 7).expect("valid scenario");
         let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
@@ -1516,6 +1526,7 @@ mod tests {
             objects: &[],
             sprites: &sprites,
             scripted: &[],
+            newborns: &[],
         };
         let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
         world.step();
@@ -1555,6 +1566,7 @@ mod tests {
             objects: &[],
             sprites: &[(start, Some(genome))],
             scripted: &scripted,
+            newborns: &[],
         };
         let world = World::from_scenario(scenario, data, 1).expect("valid scenario");
         let id = world.sprites().next().expect("the walker").id();
@@ -1616,6 +1628,7 @@ mod tests {
                 (a, ScriptedAction::Wander { destination: b }),
                 (b, ScriptedAction::Wander { destination: a }),
             ],
+            newborns: &[],
         };
         let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
         world.step();
@@ -1678,6 +1691,7 @@ mod tests {
                     },
                 ),
             ],
+            newborns: &[],
         };
         let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
         let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
@@ -1715,6 +1729,7 @@ mod tests {
             objects: &[(bush, "berry_bush")],
             sprites: &[(walker, Some(genome.clone())), (rester, Some(genome))],
             scripted: &[(rester, ScriptedAction::Rest); 5],
+            newborns: &[],
         };
         let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
         let id = world.sprite_at(walker).expect("the walker").id();
@@ -1780,6 +1795,7 @@ mod tests {
             objects: &[(Pos { x: 3, y: 0 }, "ball")],
             sprites: &[(Pos { x: 0, y: 0 }, Some(genome))],
             scripted: &[],
+            newborns: &[],
         };
         let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
         world.state.learning = false;
@@ -1840,6 +1856,7 @@ mod tests {
             objects: &[],
             sprites: &[(walker, Some(genome.clone())), (rester, Some(genome))],
             scripted: &scripted,
+            newborns: &[],
         };
         let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
         let id = world.sprite_at(walker).expect("the walker").id();
@@ -1902,6 +1919,7 @@ mod tests {
             objects: &[(Pos { x: 2, y: 2 }, "berry_bush")],
             sprites: &[(at, Some(genome))],
             scripted: &scripted,
+            newborns: &[],
         };
         let world = World::from_scenario(scenario, data, 7).expect("valid scenario");
         let id = world.sprites().next().expect("the sprite").id();
@@ -2160,6 +2178,7 @@ mod tests {
             objects: &[],
             sprites: &[(Pos { x: 0, y: 1 }, None)],
             scripted: &[],
+            newborns: &[],
         };
         let mut world = World::from_scenario(scenario, data, 7).expect("valid scenario");
         let id = world.sprites().next().expect("the sprite").id();
@@ -2213,6 +2232,7 @@ mod tests {
             ],
             sprites: &[(Pos { x: 30, y: 2 }, Some(genome))],
             scripted: &[],
+            newborns: &[],
         };
         let mut world = World::from_scenario(scenario, data, 7).expect("valid scenario");
         let id = world.sprites().next().expect("the sprite").id();

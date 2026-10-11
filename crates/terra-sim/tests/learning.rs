@@ -67,6 +67,7 @@ fn world_in(
         objects,
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }
@@ -564,6 +565,7 @@ fn scene(rows: &[&str], sprites: &[(Pos, &str)], script: &[(Pos, ScriptedAction)
         objects: &[],
         sprites: &sprites,
         scripted: script,
+        newborns: &[],
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }
@@ -753,6 +755,7 @@ fn a_sprite_that_dies_is_forgotten() {
         objects: &[(thornbush, "thornbush")],
         sprites: &sprites,
         scripted: &script,
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
     let (me, attacker) = (

@@ -24,6 +24,7 @@ fn world() -> World {
         objects: &[],
         sprites: &[(Pos { x: 2, y: 2 }, None)],
         scripted: &[],
+        newborns: &[],
     };
     World::from_scenario(scenario, pack(), 7).expect("valid scenario")
 }

@@ -138,7 +138,8 @@ pub(crate) fn place_sprites(config: &WorldConfig, data: &DataPack, state: &mut W
         let choice = uniform(&mut state.rng, candidates.len() as u64) as usize;
         let pos = candidates.swap_remove(choice);
         let genome = varied(data.starter(), data, &mut state.rng);
-        let mut sprite = Sprite::newborn(genome, pos, state.tick, data);
+        // The first sprites start grown up (M2 design §9.1).
+        let mut sprite = Sprite::grown_up(genome, pos, state.tick, data);
         for index in [physiology.indices.energy, physiology.indices.hydration] {
             let level = sprite.body.chems[index] * (low + (high - low) * unit(&mut state.rng));
             sprite.body.start_at(index, level);

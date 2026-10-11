@@ -31,6 +31,7 @@ fn field() -> (World, App) {
         objects: &[],
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     let world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
     let areas = Areas {

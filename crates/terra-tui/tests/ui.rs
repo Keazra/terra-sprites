@@ -353,6 +353,7 @@ fn a_flashing_dotted_leash_runs_from_the_cursor_to_the_led_sprite_over_empty_gro
         objects: &[(Pos { x: 4, y: 2 }, "berry")],
         sprites: &[(Pos { x: 1, y: 2 }, None)],
         scripted: &[(Pos { x: 1, y: 2 }, ScriptedAction::Rest)],
+        newborns: &[],
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let mut app = app_for(&world, Theme::cp437(), 40, 10);
@@ -546,6 +547,7 @@ fn garden(pack: DataPack) -> World {
         objects: &objects,
         sprites: &[],
         scripted: &[],
+        newborns: &[],
     };
     World::from_scenario(scenario, pack, 7).expect("valid scenario")
 }
@@ -569,6 +571,7 @@ fn garden_with_sprites() -> World {
         objects: &objects,
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     World::from_scenario(scenario, pack, 7).expect("valid scenario")
 }
@@ -1288,6 +1291,7 @@ fn one_sprite_in(
         objects,
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     for _ in 0..ticks {
@@ -1320,7 +1324,7 @@ fn the_body_tab_shows_age_traits_drives_and_physical_levels() {
         text[..14],
         [
             "Resting · 9 ticks left",
-            "age 1 · lifespan 61,204",
+            "age 7,501 · lifespan 61,204",
             "speed 7.25 · sense 9.5",
             "",
             "hunger      ████░░░░░░ .40 ▼",
@@ -1623,6 +1627,7 @@ fn choosing_another_sprite_shuts_lessons_that_were_open() {
         objects: &objects,
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     for _ in 0..2 {
@@ -1684,6 +1689,7 @@ fn sprites_in_general_sit_above_the_sprites_it_remembers() {
         objects: &[],
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     for _ in 0..8 {
@@ -1804,6 +1810,7 @@ fn a_habit_about_sprites_sits_with_what_it_thinks_of_them_in_general() {
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     for _ in 0..16 {
@@ -1959,6 +1966,7 @@ fn the_brain_tab_lists_the_places_the_sprite_remembers() {
         objects: &[],
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     for _ in 0..2 {
@@ -2406,6 +2414,7 @@ fn selecting_another_sprite_starts_its_tab_from_the_top_and_the_same_one_again_d
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     let world = World::from_scenario(scenario, pack.clone(), 7).expect("valid scenario");
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
@@ -2508,6 +2517,7 @@ fn the_world_tab_shows_the_population_and_the_deaths_by_cause() {
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let app = app_for(&world, Theme::cp437(), 100, 30);
@@ -2619,6 +2629,7 @@ fn chemical_names_show_with_spaces_for_underscores() {
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
@@ -2807,6 +2818,7 @@ fn hit_by_a_bully(ticks: u32) -> (World, App) {
         objects: &[],
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
@@ -3334,6 +3346,7 @@ fn holding_world(objects: &[(Pos, &str)], held: Pos) -> (World, App) {
         objects,
         sprites: &[],
         scripted: &[],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let mut app = app_for(&world, Theme::cp437(), 60, 12);

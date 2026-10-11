@@ -21,8 +21,9 @@ use crate::sliding::Slide;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Sprite {
     pub(crate) pos: Pos,
-    /// The tick it was born on.
-    pub(crate) born: u64,
+    /// The tick it was born on: before the world began for a sprite that
+    /// starts it grown (M2 design §9.1).
+    pub(crate) born: i64,
     /// The name the player gave it, if any (design v28 §6.5).
     pub(crate) name: Option<String>,
     pub(crate) genome: Genome,
@@ -30,11 +31,11 @@ pub(crate) struct Sprite {
     /// genome, so it isn't hashed.
     #[serde(skip)]
     pub(crate) program: Program,
-    /// Its life stage at the latest tick's step 3 (M2 design §9.1), which
-    /// its genes are expressed for. It's derived from its age and traits,
-    /// so it isn't hashed.
-    #[serde(skip)]
-    pub(crate) stage: LifeStage,
+    /// The life stage its genes are expressed for (M2 design §9.1): the
+    /// one it grew to at the latest step 3, or was made at. `None` only in
+    /// a save from before life stages, until it's loaded.
+    #[serde(default)]
+    stage: Option<LifeStage>,
     pub(crate) body: Body,
     pub(crate) brain: Brain,
     /// What it's doing, or the action that last ended until the next starts.
@@ -59,7 +60,12 @@ pub(crate) struct Sprite {
 impl Sprite {
     /// The sprite's age on the tick `tick`.
     pub(crate) fn age(&self, tick: u64) -> u64 {
-        tick - self.born
+        u64::try_from(tick as i64 - self.born).expect("a sprite is born by now")
+    }
+
+    /// The life stage its genes are expressed for (M2 design §9.1).
+    pub(crate) fn stage(&self) -> LifeStage {
+        self.stage.expect("a loaded sprite has a life stage")
     }
 
     /// Grows the sprite to its life stage on the tick `tick` (M2 design
@@ -67,10 +73,10 @@ impl Sprite {
     /// leaving what it has learned as it was. Returns the new stage, if any.
     pub(crate) fn grow(&mut self, tick: u64, data: &DataPack) -> Option<LifeStage> {
         let stage = self.program.traits.life_stage(self.age(tick));
-        if stage == self.stage {
+        if Some(stage) == self.stage {
             return None;
         }
-        self.stage = stage;
+        self.stage = Some(stage);
         self.program = Program::new(&self.genome, data, stage);
         self.brain.reach(&self.genome, data, stage);
         Some(stage)
@@ -78,16 +84,35 @@ impl Sprite {
 
     /// A newborn with `genome` on `pos`, born on the tick `born` (design §4.7).
     pub(crate) fn newborn(genome: Genome, pos: Pos, born: u64, data: &DataPack) -> Sprite {
-        let program = Program::new(&genome, data, LifeStage::Young);
+        Sprite::aged(genome, pos, born, 0, data)
+    }
+
+    /// A sprite with `genome` on `pos` that has just grown up on the tick
+    /// `tick` (M2 design §9.1), with a newborn's body (design §4.7).
+    pub(crate) fn grown_up(genome: Genome, pos: Pos, tick: u64, data: &DataPack) -> Sprite {
+        let grows_up = Program::new(&genome, data, LifeStage::Young)
+            .traits
+            .grows_up;
+        Sprite::aged(genome, pos, tick, libm::ceilf(grows_up) as u64, data)
+    }
+
+    /// A sprite with `genome` on `pos` that is `age` ticks old on the tick
+    /// `tick`, its genes expressed for its life stage then (M2 design §9.1).
+    /// Its body is a newborn's (design §4.7), and it has learned nothing.
+    pub(crate) fn aged(genome: Genome, pos: Pos, tick: u64, age: u64, data: &DataPack) -> Sprite {
+        // Its traits, which set its stage, don't depend on it.
+        let traits = Program::new(&genome, data, LifeStage::Young).traits;
+        let stage = traits.life_stage(age);
+        let program = Program::new(&genome, data, stage);
         let body = Body::newborn(&program, data);
-        let brain = Brain::new(&genome, data, LifeStage::Young);
+        let brain = Brain::new(&genome, data, stage);
         Sprite {
             pos,
-            born,
+            born: tick as i64 - age as i64,
             name: None,
             genome,
             program,
-            stage: LifeStage::Young,
+            stage: Some(stage),
             body,
             brain,
             action: None,
@@ -211,7 +236,7 @@ impl Sprites {
             if !map.contains(sprite.pos) || self.on_tile.at(sprite.pos).is_some() {
                 return Err(format!("sprite {} has no tile of its own", id.0));
             }
-            if sprite.born > now {
+            if sprite.born > now as i64 {
                 return Err(format!("sprite {} was born after the save", id.0));
             }
             // The genome first: the brain is checked against it, once it
@@ -220,12 +245,15 @@ impl Sprites {
             if !sprite.genome.fits(data) {
                 return Err(misfit());
             }
-            // Its stage at the latest tick's step 3, from its traits, which
-            // don't depend on its stage.
-            let stage = Program::new(&sprite.genome, data, LifeStage::Young)
-                .traits
-                .life_stage(sprite.age(now).saturating_sub(1));
-            sprite.stage = stage;
+            // A save from before life stages has none: its stage is the one
+            // its age gives, from its traits, which don't depend on it.
+            let stage = match sprite.stage {
+                Some(stage) => stage,
+                None => Program::new(&sprite.genome, data, LifeStage::Young)
+                    .traits
+                    .life_stage(sprite.age(now)),
+            };
+            sprite.stage = Some(stage);
             sprite.brain.params.catch_up(&sprite.genome, data, stage);
             // Places remembered under other limits, in a save from before
             // they were added, are brought within its pack's (M2 design §7.2).
@@ -271,6 +299,9 @@ impl Sprites {
             }
             if objects.is_solid_at(data, pos) {
                 return Err(format!("{id:?} stands on a solid object at {pos:?}"));
+            }
+            if sprite.stage.is_none() {
+                return Err(format!("{id:?} has no life stage"));
             }
             if sprite.body.chems_before_tick.len() != sprite.body.chems.len() {
                 return Err(format!(

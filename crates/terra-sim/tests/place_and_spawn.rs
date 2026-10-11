@@ -23,6 +23,7 @@ fn world_in(data: DataPack, rows: &[&str], objects: &[(Pos, &str)], sprites: &[P
         objects,
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }
