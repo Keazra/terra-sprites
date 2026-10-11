@@ -330,3 +330,17 @@ The owner (2026-10-11): old age is the genome wearing out, and a hard life damag
 - **The sprite list** has a Stage column after Age: young, adult or old.
 - **The Body tab** shows the stage after the age, with when the next one comes: `age 3,120 · young · grows up 4,500`, `adult · grows old 13,500` (sooner for a worn sprite), or `old`. After the physical levels, `wear .12`, and `· genes .83`, its genes' average health, once any has weakened.
 - **The Genome tab** shows a weakened gene's health after it, `· health .62`, and a gene that switches with its stages, `· from adult` or `· until adult`. A dormant gene is dimmed, with "dormant: switched off at this life stage".
+
+### 9.7 How we know it worked
+
+**Measured (2026-10-11)** on the slice's final code, in release builds of `main` and of this slice, on seeds 1–10:
+
+| What | `main` | Slice 22 |
+|---|---|---|
+| A3: hits on sprites after training, median against the untrained control | 2.5 against 70 | 1.5 against 70 (45 against 81 with the long-life cost, which is why it's held at 0) |
+| Viability, ticks 0–50,000: deaths of old age | 0 | 237 (about 25 of 30 sprites a seed) |
+| Viability, ticks 0–50,000: deaths of thirst / hunger | 2 / 0 | 26 / 2 |
+| A4: hunger and thirst's share of grown-up deaths | met (under 10 died) | 11%, met (under 25%) |
+| A5: ticks a second, 100 sprites | 318 | 309, met (at least 200) |
+
+**What it shows.** The world's first sprites now start at ages through adulthood and grow old within the first 9,000 ticks, so by tick 50,000 most have died of old age: the default world empties after about 11 hours at 1×, where it lasted about 14 before. Slice 23's breeding replaces them. Thirst deaths rise late in the run, among old sprites whose genes have weakened, as §9.4 expects; A4 still holds, though old age now fills most of its count.
