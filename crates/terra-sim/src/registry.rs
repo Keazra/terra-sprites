@@ -125,6 +125,9 @@ listed_enum! {
         CursorCalming = 36 => "cursor_calming",
         /// How much a remembered place fades each tick (M2 design §7).
         PlaceFade = 37 => "place_fade",
+        /// How much faster than its other rates say a sprite learns: the
+        /// young learn faster (M2 design §9.5).
+        Plasticity = 38 => "plasticity",
     }
 
     pub(crate) const ALL;
@@ -305,7 +308,7 @@ mod tests {
         // `ALL`'s order is the ID order, from 1. Renaming a parameter still
         // round-trips here. Loading `physiology.ron` is what rejects a name
         // the data doesn't list, and a missing range for one it does.
-        assert_eq!(BrainParam::ALL.len(), 37);
+        assert_eq!(BrainParam::ALL.len(), 38);
         for (i, param) in BrainParam::ALL.into_iter().enumerate() {
             assert_eq!(param as u16, (i + 1) as u16);
             assert_eq!(BrainParam::named(param.name()), Some(param));

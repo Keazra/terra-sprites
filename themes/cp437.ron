@@ -14,6 +14,9 @@
         // Drawn over any item on the sprite's tile.
         sprite:                 (glyph: '☺', fg: white),
         selected_sprite:        (glyph: '☻', fg: white),
+        // The young are drawn small (M2 design §9.6). `•` is the berry.
+        young_sprite:           (glyph: 'ö', fg: white),
+        selected_young_sprite:  (glyph: 'ö', fg: white, reversed: true),
         // The Decision marker: where the selected sprite is heading. It flashes. CP437 has no `×`.
         decision_marker:        (glyph: 'X', fg: white),
         // Emotes take turns with a sprite's glyph (design §6.3): hurt by something.

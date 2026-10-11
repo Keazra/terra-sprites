@@ -447,7 +447,7 @@ impl Brain {
     }
 
     /// Step 4 at `tick` (design §2.4, §5.6), from `signals`, every rate
-    /// scaled by `learning_rate_mod`. Instinct links never change. Each
+    /// scaled by `learning_rate_mod` and its plasticity (M2 design §9.5). Instinct links never change. Each
     /// need's relief teaches what the thing touched is worth for it. Returns
     /// the lessons it learned.
     pub(crate) fn learn(
@@ -459,6 +459,7 @@ impl Brain {
     ) -> Vec<(Learned, bool)> {
         let physiology = data.physiology();
         let relief = &signals.relief;
+        let learning_rate_mod = learning_rate_mod * self.params.get(BrainParam::Plasticity);
         // A hurt done to it teaches fear of whoever did it (design v18 §5.6).
         if signals.hit
             && let Some(attacker) = signals.attacker
@@ -2187,6 +2188,33 @@ mod tests {
         assert!(faded_at(1.0) < 0.5, "it faded");
         assert_eq!(faded_at(2.0), faded_at(1.0));
         assert_eq!(faded_at(0.5), faded_at(1.0));
+    }
+
+    #[test]
+    fn plasticity_scales_what_is_learned_as_learning_rate_mod_does() {
+        // M2 design §9.5: the young learn faster.
+        let data = builtin();
+        let learned_with = |genes: &[&str]| {
+            let mut brain = unfading(genes);
+            brain.touched = Some(Touch {
+                tick: 1,
+                verb: Some(Verb::Eat),
+                subject: types::BERRY_BUSH,
+                sprite: None,
+                novelty: 1.0,
+                by_cursor: false,
+                place: None,
+            });
+            let signals = hunger_at(&mut brain, &data, 0.5);
+            brain.learn(1, &signals, 1.0, &data);
+            let signals = hunger_at(&mut brain, &data, 0.4);
+            brain.learn(2, &signals, 1.0, &data);
+            bush_for_hunger(&brain)
+        };
+        let usual = learned_with(&[]);
+        assert!(close(usual, 0.5 * 0.1), "{usual}");
+        let plastic = learned_with(&[r#"BrainParam(param: "plasticity", value: 1.5)"#]);
+        assert!(close(plastic, 1.5 * 0.5 * 0.1), "{plastic}");
     }
 
     #[test]

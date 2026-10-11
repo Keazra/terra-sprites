@@ -154,6 +154,10 @@ fn added_since_saves(param: BrainParam) -> Option<ParamRange> {
             range: (0.0, 0.01),
             default: 0.0002,
         }),
+        BrainParam::Plasticity => Some(ParamRange {
+            range: (0.25, 4.0),
+            default: 1.0,
+        }),
         _ => None,
     }
 }
@@ -361,7 +365,7 @@ impl Default for Ageing {
         Ageing {
             young_speed: 0.67,
             growth: 0.3,
-            upkeep: 0.00001,
+            upkeep: 0.0,
             wear: Wear {
                 low: 0.25,
                 starving: 0.0002,

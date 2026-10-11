@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 
 use terra_sim::{
     ChemicalKind, DataPack, DeathCause, EmitterMode, EntityId, EventKind, Expression, GeneView,
-    Genome, Map, Pos, Scenario, ScriptedAction, Trait, Traits, World, WorldConfig,
+    Genome, LifeStage, Map, Pos, Scenario, ScriptedAction, Trait, Traits, World, WorldConfig,
 };
 
 #[test]
@@ -42,6 +42,26 @@ fn the_first_population_starts_between_60_and_100_percent_full() {
         energies.insert(sprite.chemical("energy").expect("energy").to_bits());
     }
     assert!(energies.len() > 20, "drawn, not all the same");
+}
+
+#[test]
+fn the_first_population_are_adults_of_all_ages() {
+    // M2 design §9.1: ages drawn through adulthood, so a fresh world isn't
+    // all children and doesn't all grow old at once.
+    let data = builtin();
+    let world = World::new(WorldConfig::builtin(&data), data, 3);
+    let mut ages = BTreeSet::new();
+    for sprite in world.sprites() {
+        assert_eq!(sprite.life_stage(), LifeStage::Adult);
+        let traits = sprite.traits();
+        let age = sprite.age() as f32;
+        assert!(
+            (traits.grows_up..traits.grows_old).contains(&age),
+            "age {age} in {traits:?}"
+        );
+        ages.insert(sprite.age());
+    }
+    assert!(ages.len() > 20, "drawn, not all the same");
 }
 
 #[test]
@@ -156,7 +176,6 @@ fn a_sprite_that_never_hungers_or_thirsts_dies_of_old_age_once_its_genes_give_ou
             ("per_sense_tile: 0.0000067,", "per_sense_tile: 0.0,"),
             ("hydration_loss: 0.00033", "hydration_loss: 0.0"),
             ("growth: 0.3,", "growth: 0.0,"),
-            ("upkeep: 0.00001,", "upkeep: 0.0,"),
             ("ticks: 46500,", "ticks: 1000,"),
         ],
     );

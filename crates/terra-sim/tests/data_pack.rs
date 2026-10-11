@@ -743,7 +743,11 @@ fn physiology_ranges_go_from_low_to_high() {
         "first_population",
     );
     assert_invalid_physiology("speed: (4.0, 12.0)", "speed: (12.0, 4.0)", "speed");
-    assert_invalid_physiology("(0.25, 4.0)", "(4.0, 0.25)", "exploration_mod");
+    assert_invalid_physiology(
+        "\"exploration_mod\": (0.25, 4.0)",
+        "\"exploration_mod\": (4.0, 0.25)",
+        "exploration_mod",
+    );
 }
 
 #[test]

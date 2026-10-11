@@ -7,7 +7,7 @@ use ratatui::{
     style::{Color, Modifier, Style},
     text::Line,
 };
-use terra_sim::{EntityId, Grip, Map, ObjectView, Pos, Progress, SpriteView, World};
+use terra_sim::{EntityId, Grip, LifeStage, Map, ObjectView, Pos, Progress, SpriteView, World};
 
 use crate::app::{
     App, Areas, ColourMode, CursorMode, PlaceItem, Screen, Selection, spoken_duration,
@@ -227,12 +227,15 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
                 let emote = app
                     .emote(sprite.id())
                     .filter(|_| app.can_view(Panel::Emotes, Subject::Sprite(sprite.id())));
-                let tile = if let Some(emote) = emote {
-                    SemanticTile::Emote(emote)
-                } else if app.selection() == Some(Selection::Living(sprite.id())) {
-                    SemanticTile::SelectedSprite
-                } else {
-                    SemanticTile::Sprite
+                // The young are drawn small (M2 design §9.6).
+                let young = sprite.life_stage() == LifeStage::Young;
+                let selected = app.selection() == Some(Selection::Living(sprite.id()));
+                let tile = match (emote, selected, young) {
+                    (Some(emote), _, _) => SemanticTile::Emote(emote),
+                    (None, true, true) => SemanticTile::SelectedYoungSprite,
+                    (None, true, false) => SemanticTile::SelectedSprite,
+                    (None, false, true) => SemanticTile::YoungSprite,
+                    (None, false, false) => SemanticTile::Sprite,
                 };
                 app.theme.glyph(tile)
             } else if let Some((_, (name, state))) = thrown.filter(|&(from, _)| from == pos) {

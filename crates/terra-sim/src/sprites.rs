@@ -177,10 +177,16 @@ impl Sprite {
     /// A sprite with `genome` on `pos` that has just grown up on the tick
     /// `tick` (M2 design §9.1), with a newborn's body (design §4.7).
     pub(crate) fn grown_up(genome: Genome, pos: Pos, tick: u64, data: &DataPack) -> Sprite {
-        let grows_up = Program::new(&genome, data, LifeStage::Young)
-            .traits
-            .grows_up;
-        Sprite::aged(genome, pos, tick, libm::ceilf(grows_up) as u64, data)
+        let (grows_up, _) = Sprite::adulthood(&genome, data);
+        Sprite::aged(genome, pos, tick, grows_up, data)
+    }
+
+    /// The ages, in whole ticks, at which a sprite with `genome` and an
+    /// easy life grows up and grows old (M2 design §9.3).
+    pub(crate) fn adulthood(genome: &Genome, data: &DataPack) -> (u64, u64) {
+        let traits = Program::new(genome, data, LifeStage::Young).traits;
+        let age = |trait_value: f32| libm::ceilf(trait_value) as u64;
+        (age(traits.grows_up), age(traits.grows_old))
     }
 
     /// A sprite with `genome` on `pos` that is `age` ticks old on the tick

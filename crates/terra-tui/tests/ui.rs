@@ -3497,3 +3497,27 @@ fn a_short_aim_s_end_shows_even_beside_the_cursor() {
         .collect();
     assert_eq!(row, "...........°○←......");
 }
+
+#[test]
+fn the_event_log_says_when_a_sprite_grows_up_and_grows_old() {
+    // M2 design §9.6.
+    let world = garden(pack());
+    let id = EntityId(12);
+    let rows = logged(
+        &world,
+        &[
+            Event {
+                tick: 4_500,
+                kind: EventKind::GrewUp { id },
+            },
+            Event {
+                tick: 13_500,
+                kind: EventKind::GrewOld { id },
+            },
+        ],
+    );
+    assert_eq!(
+        rows[..2],
+        ["13,500  Sprite #12 grew old", "4,500  Sprite #12 grew up"]
+    );
+}

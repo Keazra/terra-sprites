@@ -4,7 +4,7 @@
 // The starting values aim for these timescales, for a sprite at rest: full
 // hydration lasts about 3,000 ticks and full energy about 6,000; once either
 // runs out, injury kills in about 1,000 more; an old sprite whose body has
-// worn out dies within about 2,000. Slice 17 tunes them.
+// given out dies within about 2,000. Slice 17 tunes them.
 (
     // What a newborn's physical chemicals start at. Injury and gut contents start at 0.
     newborn: (energy: 1.0, hydration: 1.0, stamina: 1.0),
@@ -35,8 +35,10 @@
         // sprite that grows up sooner is a hungrier child.
         growth: 0.3,
         // Energy per tick, all its life, for every 10,000 ticks of
-        // `grows_old`: a later old age costs a little.
-        upkeep: 0.00001,
+        // `grows_old`: a later old age costs a little. 0 until genes evolve
+        // (Slice 24): until then it only makes every sprite hungrier, and
+        // even that undid A3's training.
+        upkeep: 0.0,
         // Wear from a hard life, which never heals: per tick while energy
         // is below `low` (starving) or hydration is (parched), and per tick
         // for each unit of injury. The most worn sprite grows old `sooner`
@@ -120,6 +122,9 @@
         // How much a remembered place fades each tick (M2 design §7):
         // by half in about 3,500 ticks, as worth for a need does.
         "place_fade":        (range: (0.0, 0.01),    default: 0.0002),
+        // Every learning rate is multiplied by it (M2 design §9.5): the
+        // starter genome's young learn faster.
+        "plasticity":        (range: (0.25, 4.0),    default: 1.0),
     },
     // The range of each receptor target in `loci.ron`. Each rests at 1.0 when
     // no receptor writes it.

@@ -94,9 +94,11 @@
         BrainParam(param: "switch_margin", value: 0.2),
         BrainParam(param: "attention_margin", value: 0.2),
         BrainParam(param: "salience_gain", value: 0.5),
-        // The young are more curious: they try new things more readily
-        // (M2 design §9.5). Grown up, it has physiology's default.
+        // The young are more curious: they try new things more readily; and
+        // they learn faster (M2 design §9.5). Grown up, each has
+        // physiology's default.
         BrainParam(param: "curiosity", value: 0.5, until: Adult),
+        BrainParam(param: "plasticity", value: 1.5, until: Adult),
 
         // It knows its own kind: loneliness draws its eye to other sprites.
         // Nothing draws it to food, water or toys; it learns what they're for.

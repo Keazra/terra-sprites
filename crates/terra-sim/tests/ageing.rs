@@ -49,7 +49,6 @@ fn carefree_changing(genes: &str, changes: &[(&str, &str)]) -> World {
         ("per_sense_tile: 0.0000067,", "per_sense_tile: 0.0,"),
         ("hydration_loss: 0.00033", "hydration_loss: 0.0"),
         ("growth: 0.3,", "growth: 0.0,"),
-        ("upkeep: 0.00001,", "upkeep: 0.0,"),
     ];
     all.extend_from_slice(changes);
     world_in(builtin_changing("physiology.ron", &all), genes, &[], &[])

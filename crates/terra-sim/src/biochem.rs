@@ -689,6 +689,25 @@ mod tests {
         DataPack::from_sources(&sources).expect("the quiet pack is valid")
     }
 
+    /// The built-in pack with physiology's `from` changed to `to`.
+    fn builtin_changing(from: &str, to: &str) -> DataPack {
+        let physiology = include_str!("../../../data/physiology.ron");
+        assert!(physiology.contains(from), "{from:?} is in physiology.ron");
+        let physiology = physiology.replace(from, to);
+        let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
+            .iter()
+            .map(|&(path, text)| {
+                let text = if path == "physiology.ron" {
+                    physiology.as_str()
+                } else {
+                    text
+                };
+                (path, text)
+            })
+            .collect();
+        DataPack::from_sources(&sources).expect("the changed pack is valid")
+    }
+
     /// A sprite with a genome of `genes`, newborn in `data`.
     struct Subject {
         data: DataPack,
@@ -781,10 +800,6 @@ mod tests {
             ..Senses::default()
         }
     }
-
-    /// The energy a sprite that grows old at 20,000 ticks spends on it each
-    /// tick (M2 design §9.3).
-    const UPKEEP: f32 = 0.00001 * 2.0;
 
     /// Asserts that `actual` is `expected`, give or take rounding.
     fn assert_close(actual: f32, expected: f32) {
@@ -1031,10 +1046,7 @@ mod tests {
     fn a_resting_sprite_spends_basal_energy_and_the_cost_of_its_sense_radius() {
         let mut sprite = physical(&[]);
         sprite.step();
-        assert_close(
-            sprite.level("energy"),
-            1.0 - (0.0001 + 10.0 * 0.0000067) - UPKEEP,
-        );
+        assert_close(sprite.level("energy"), 1.0 - (0.0001 + 10.0 * 0.0000067));
     }
 
     #[test]
@@ -1054,7 +1066,7 @@ mod tests {
         let steps = 2.0 * 0.0002 * (12.0f32 / 8.0) * (12.0 / 8.0);
         assert_close(
             sprite.level("energy"),
-            1.0 - (0.0001 + 10.0 * 0.0000067) - steps - UPKEEP,
+            1.0 - (0.0001 + 10.0 * 0.0000067) - steps,
         );
         assert_close(sprite.level("stamina"), 1.0 - 2.0 * 0.002);
     }
@@ -1083,7 +1095,7 @@ mod tests {
         assert_close(sprite.level("food"), 0.299);
         assert_close(
             sprite.level("energy"),
-            0.5 + 0.001 - (0.0001 + 10.0 * 0.0000067) - UPKEEP,
+            0.5 + 0.001 - (0.0001 + 10.0 * 0.0000067),
         );
         assert_close(sprite.level("water"), 0.198);
         assert_close(sprite.level("hydration"), 0.5 + 0.002 - 0.00033);
@@ -1189,15 +1201,21 @@ mod tests {
 
     #[test]
     fn a_later_old_age_costs_a_little_energy_every_tick() {
-        let mut early = physical(&[]);
-        let mut late = Subject::new(
-            builtin(),
-            &[
+        // The built-in pack's upkeep is 0 until genes evolve (M2 design
+        // §9.3), so this sets one.
+        let data = builtin_changing("upkeep: 0.0,", "upkeep: 0.00001,");
+        let early = r#"Trait(trait: "grows_old", value: 20000.0)"#;
+        let late = r#"Trait(trait: "grows_old", value: 50000.0)"#;
+        let with = |grows_old| {
+            [
                 r#"Trait(trait: "speed", value: 8.0)"#,
                 r#"Trait(trait: "sense_radius", value: 10.0)"#,
-                r#"Trait(trait: "grows_old", value: 50000.0)"#,
-            ],
-        );
+                r#"Trait(trait: "grows_up", value: 2000.0)"#,
+                grows_old,
+            ]
+        };
+        let mut early = Subject::new(data.clone(), &with(early));
+        let mut late = Subject::new(data, &with(late));
         early.step();
         late.step();
         // 0.00001 a tick for every 10,000 ticks: 0.00002 against 0.00005.
