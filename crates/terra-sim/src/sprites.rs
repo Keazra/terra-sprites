@@ -68,18 +68,42 @@ impl Sprite {
         self.stage.expect("a loaded sprite has a life stage")
     }
 
+    /// How fast it walks on the tick `tick`, in move points (M2 design §9.4,
+    /// §9.5): its speed trait, less while it's young, rising steadily to
+    /// all of it as it grows up, and less as its old body declines.
+    pub(crate) fn speed(&self, tick: u64, data: &DataPack) -> f32 {
+        let ageing = data.physiology().ageing;
+        let traits = self.program.traits;
+        let growing = if self.stage() == LifeStage::Young {
+            let grown = (self.age(tick) as f32 / traits.grows_up).min(1.0);
+            ageing.young_speed + (1.0 - ageing.young_speed) * grown
+        } else {
+            1.0
+        };
+        traits.speed * growing * self.body.kept(ageing.worn_out.walks)
+    }
+
+    /// How far it perceives, in tiles (M2 design §9.4): its sense radius
+    /// trait, less as its old body declines.
+    pub(crate) fn sense_radius(&self, data: &DataPack) -> f32 {
+        let sees = data.physiology().ageing.worn_out.sees;
+        self.program.traits.sense_radius * self.body.kept(sees)
+    }
+
     /// Grows the sprite to its life stage on the tick `tick` (M2 design
     /// §9.2): if that's a new one, its genes are expressed afresh for it,
-    /// leaving what it has learned as it was. Returns the new stage, if any.
-    pub(crate) fn grow(&mut self, tick: u64, data: &DataPack) -> Option<LifeStage> {
+    /// leaving what it has learned as it was. Returns the stage it was in
+    /// and the new one, if it has one.
+    pub(crate) fn grow(&mut self, tick: u64, data: &DataPack) -> Option<(LifeStage, LifeStage)> {
+        let was = self.stage();
         let stage = self.program.traits.life_stage(self.age(tick));
-        if Some(stage) == self.stage {
+        if stage == was {
             return None;
         }
         self.stage = Some(stage);
         self.program = Program::new(&self.genome, data, stage);
         self.brain.reach(&self.genome, data, stage);
-        Some(stage)
+        Some((was, stage))
     }
 
     /// A newborn with `genome` on `pos`, born on the tick `born` (design §4.7).
@@ -303,6 +327,14 @@ impl Sprites {
             if sprite.stage.is_none() {
                 return Err(format!("{id:?} has no life stage"));
             }
+            for (name, level) in [("wear", sprite.body.wear), ("decline", sprite.body.decline)] {
+                if !(0.0..=1.0).contains(&level) {
+                    return Err(format!("{id:?} has a {name} of {level}, outside 0 to 1"));
+                }
+            }
+            if sprite.body.decline > 0.0 && sprite.stage() != LifeStage::Old {
+                return Err(format!("{id:?} has declined, but isn't old"));
+            }
             if sprite.body.chems_before_tick.len() != sprite.body.chems.len() {
                 return Err(format!(
                     "{id:?} has {} levels from a tick ago, but {} chemicals",
@@ -361,5 +393,62 @@ impl Sprites {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_util::at;
+
+    /// A sprite of speed 9 and sense radius 10 that grows up at 3,000 ticks
+    /// and old at 6,000, `age` ticks old on tick 10,000.
+    fn sprite(age: u64, data: &DataPack) -> Sprite {
+        let genome = Genome::from_ron(
+            r#"(format: 1, genes: [
+                Trait(trait: "speed", value: 9.0),
+                Trait(trait: "sense_radius", value: 10.0),
+                Trait(trait: "grows_up", value: 3000.0),
+                Trait(trait: "grows_old", value: 6000.0),
+            ])"#,
+            data,
+        )
+        .expect("a valid genome");
+        Sprite::aged(genome, at(0, 0), 10_000, age, data)
+    }
+
+    fn assert_close(actual: f32, expected: f32) {
+        assert!(
+            (actual - expected).abs() < 1e-5,
+            "{actual} should be {expected}"
+        );
+    }
+
+    #[test]
+    fn the_young_walk_slower_until_they_grow_up() {
+        // M2 design §9.5: from 0.67 of its speed at birth, rising steadily.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        assert_close(sprite(0, &data).speed(10_000, &data), 9.0 * 0.67);
+        assert_close(
+            sprite(1_500, &data).speed(10_000, &data),
+            9.0 * (0.67 + 0.33 * 0.5),
+        );
+        assert_close(sprite(3_000, &data).speed(10_000, &data), 9.0);
+        assert_close(sprite(0, &data).sense_radius(&data), 10.0);
+    }
+
+    #[test]
+    fn an_old_body_walks_slower_and_sees_less_far_as_it_declines() {
+        // M2 design §9.4: a worn-out body keeps 0.55 of its speed and 0.6 of
+        // its sense radius.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let mut old = sprite(7_000, &data);
+        assert_eq!(old.stage(), LifeStage::Old);
+        assert_close(old.speed(10_000, &data), 9.0);
+        old.body.decline = 0.5;
+        assert_close(old.speed(10_000, &data), 9.0 * (1.0 - 0.5 * 0.45));
+        old.body.decline = 1.0;
+        assert_close(old.speed(10_000, &data), 9.0 * 0.55);
+        assert_close(old.sense_radius(&data), 6.0);
     }
 }

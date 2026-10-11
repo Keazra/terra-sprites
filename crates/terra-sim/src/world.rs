@@ -413,6 +413,18 @@ impl<'a> SpriteView<'a> {
         self.sprite.stage()
     }
 
+    /// How worn a hard life has left its body, from 0 to 1 (M2 design
+    /// §9.4).
+    pub fn wear(&self) -> f32 {
+        self.sprite.body.wear
+    }
+
+    /// How far its old body has worn out, from 0 to 1 (M2 design §9.4): 0
+    /// until it's old.
+    pub fn decline(&self) -> f32 {
+        self.sprite.body.decline
+    }
+
     /// Every chemical in the sprite, in the data pack's order.
     pub fn chemicals(&self) -> impl Iterator<Item = ChemicalLevel<'a>> + use<'a> {
         let body = &self.sprite.body;
@@ -1015,23 +1027,34 @@ impl World {
         sliding::run(&mut self.state, &self.data, events);
     }
 
-    /// Step 3: every sprite's chemistry (design §4.4), then death check #1.
-    /// Returns the sprites marked dying, in ascending ID order.
     /// Step 3 begins with each sprite growing to its life stage (M2 design
     /// §9.2), so genes that switch on with it work from this tick's
     /// chemistry on.
     fn grow(&mut self, events: &mut Vec<Event>) {
         let tick = self.state.tick;
         for (id, sprite) in self.state.sprites.iter_mut() {
-            let kind = match sprite.grow(tick, &self.data) {
-                Some(LifeStage::Adult) => EventKind::GrewUp { id },
-                Some(LifeStage::Old) => EventKind::GrewOld { id },
-                Some(LifeStage::Young) | None => continue,
+            let Some((was, stage)) = sprite.grow(tick, &self.data) else {
+                continue;
             };
-            events.push(Event { tick, kind });
+            // One whose genes have it grow old before it grows up does both
+            // at once (M2 design §9.1).
+            if was == LifeStage::Young {
+                events.push(Event {
+                    tick,
+                    kind: EventKind::GrewUp { id },
+                });
+            }
+            if stage == LifeStage::Old {
+                events.push(Event {
+                    tick,
+                    kind: EventKind::GrewOld { id },
+                });
+            }
         }
     }
 
+    /// Step 3: every sprite's chemistry (design §4.4), then death check #1.
+    /// Returns the sprites marked dying, in ascending ID order.
     fn run_biochemistry(&mut self) -> Vec<EntityId> {
         let state = &mut self.state;
         let data = &self.data;
@@ -1048,6 +1071,7 @@ impl World {
                     nearby_sprites: (others as f32 / f32::from(nearby.full)).min(1.0),
                     steps: sprite.did.steps,
                     resting: sprite.did.rested,
+                    stage: sprite.stage(),
                 };
                 (id, senses)
             })

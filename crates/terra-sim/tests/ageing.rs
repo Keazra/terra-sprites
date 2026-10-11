@@ -2,17 +2,26 @@
 //! genes set, and a gene may switch on as they do.
 
 mod common;
-use common::{at, builtin, genome};
+use common::{at, builtin, builtin_changing, genome};
 
 use terra_sim::{
-    Event, EventKind, Learned, LifeStage, Map, Part, Pos, Scenario, ScriptedAction, Thing, Verb,
-    World,
+    DataPack, Event, EventKind, Learned, LifeStage, Map, Part, Pos, Scenario, ScriptedAction,
+    Thing, Verb, World,
 };
 
 /// A newborn sprite of `genes` alone in a small field with `objects`,
 /// doing `script` first.
 fn world(genes: &str, objects: &[(Pos, &str)], script: &[ScriptedAction]) -> World {
-    let data = builtin();
+    world_in(builtin(), genes, objects, script)
+}
+
+/// The same, in `data`.
+fn world_in(
+    data: DataPack,
+    genes: &str,
+    objects: &[(Pos, &str)],
+    script: &[ScriptedAction],
+) -> World {
     let map = Map::from_ascii(&["......", "......", "......"], &data).expect("valid drawing");
     let sprite = at(1, 1);
     let sprites = [(sprite, Some(genome(genes, &data)))];
@@ -25,6 +34,22 @@ fn world(genes: &str, objects: &[(Pos, &str)], script: &[ScriptedAction]) -> Wor
         newborns: &[sprite],
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
+}
+
+/// A newborn sprite of `genes` alone in a small field, whose body never
+/// needs anything, so it lives until old age harms it.
+fn carefree(genes: &str) -> World {
+    let data = builtin_changing(
+        "physiology.ron",
+        &[
+            ("basal: 0.0001,", "basal: 0.0,"),
+            ("per_sense_tile: 0.0000067,", "per_sense_tile: 0.0,"),
+            ("hydration_loss: 0.00033", "hydration_loss: 0.0"),
+            ("growth: 0.3,", "growth: 0.0,"),
+            ("upkeep: 0.00001,", "upkeep: 0.0,"),
+        ],
+    );
+    world_in(data, genes, &[], &[])
 }
 
 /// Steps `world` until its tick is `tick`, returning every event.
@@ -125,5 +150,47 @@ fn a_grown_up_sprite_loads_grown_up_with_its_switched_genes_working() {
             .iter()
             .any(|e| matches!(e.kind, EventKind::GrewUp { .. })),
         "it grew up once, before the save"
+    );
+}
+
+#[test]
+fn a_sprite_grows_old_at_the_age_its_genes_set_and_its_body_starts_to_decline() {
+    let mut world = carefree(
+        r#"Trait(trait: "grows_up", value: 1500.0),
+           Trait(trait: "grows_old", value: 6000.0),"#,
+    );
+    let events = run_to(&mut world, 6001);
+    let sprite = world.sprites().next().expect("the sprite");
+    assert_eq!(sprite.life_stage(), LifeStage::Old);
+    let id = sprite.id();
+    let grew_old: Vec<_> = events
+        .iter()
+        .filter(|e| e.kind == EventKind::GrewOld { id })
+        .collect();
+    assert_eq!(grew_old.len(), 1, "{grew_old:?}");
+    assert_eq!(grew_old[0].tick, 6000);
+    assert!(sprite.decline() > 0.0, "its body has begun to wear out");
+    assert_eq!(sprite.wear(), 0.0, "an easy life, alone with nothing");
+}
+
+#[test]
+fn a_sprite_whose_genes_have_it_grow_old_before_it_grows_up_does_both_at_once() {
+    let mut world = carefree(
+        r#"Trait(trait: "grows_up", value: 13500.0),
+           Trait(trait: "grows_old", value: 6000.0),"#,
+    );
+    let events = run_to(&mut world, 13_501);
+    let id = world.sprites().next().expect("the sprite").id();
+    let stages: Vec<_> = events
+        .iter()
+        .filter(|e| matches!(e.kind, EventKind::GrewUp { .. } | EventKind::GrewOld { .. }))
+        .map(|e| (e.tick, e.kind.clone()))
+        .collect();
+    assert_eq!(
+        stages,
+        [
+            (13_500, EventKind::GrewUp { id }),
+            (13_500, EventKind::GrewOld { id })
+        ]
     );
 }

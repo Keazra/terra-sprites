@@ -246,7 +246,9 @@ fn a_touch_from_a_visible_cursor_is_told_as_coming_from_the_cursor() {
             },
         );
         tick(&mut app, &mut world);
-        assert_eq!(observed(&app).first().map(String::as_str), Some(line));
+        // What it did of its own in the same tick may be listed too.
+        let lines = observed(&app);
+        assert!(lines.iter().any(|l| l == line), "{lines:?}");
     }
 }
 

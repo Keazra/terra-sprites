@@ -133,31 +133,40 @@ fn a_motionless_sprite_gets_hungry_and_thirsty_then_dies_of_dehydration() {
 fn a_motionless_sprite_that_never_thirsts_dies_of_starvation() {
     let data = builtin_changing(
         "physiology.ron",
-        &[("hydration_loss: 0.00033", "hydration_loss: 0.0")],
+        &[
+            ("hydration_loss: 0.00033", "hydration_loss: 0.0"),
+            ("growth: 0.3,", "growth: 0.0,"),
+        ],
     );
     let mut world = lone_sprite(data, None);
-    // Energy lasts about 6,000 ticks at sense radius 10, then injury kills in about 1,000.
+    // Energy lasts about 6,000 ticks at sense radius 10, then injury kills
+    // in about 1,000. Growing up would cost more (M2 design §9.3), so this
+    // sprite grows for nothing.
     let death = first_death(&mut world, 9_000);
     assert_eq!(death.cause, DeathCause::Starvation);
     assert!((6_000..8_000).contains(&death.age), "{death:?}");
 }
 
 #[test]
-fn a_sprite_that_never_hungers_or_thirsts_dies_of_old_age() {
+fn a_sprite_that_never_hungers_or_thirsts_dies_of_old_age_once_its_body_wears_out() {
     let data = builtin_changing(
         "physiology.ron",
         &[
             ("basal: 0.0001,", "basal: 0.0,"),
             ("per_sense_tile: 0.0000067,", "per_sense_tile: 0.0,"),
             ("hydration_loss: 0.00033", "hydration_loss: 0.0"),
+            ("growth: 0.3,", "growth: 0.0,"),
+            ("upkeep: 0.00001,", "upkeep: 0.0,"),
+            ("decline: 46500,", "decline: 1000,"),
         ],
     );
-    let genome = r#"(format: 1, genes: [Trait(trait: "lifespan", value: 20000.0)])"#;
+    let genome = r#"(format: 1, genes: [Trait(trait: "grows_old", value: 20000.0)])"#;
     let mut world = lone_sprite(data, Some(genome));
-    // Past its lifespan, a sprite dies within about 2,000 ticks.
-    let death = first_death(&mut world, 23_000);
+    // It grows old at 20,000 ticks, its unworn body wears out over 1,000
+    // more, and then old age kills it within about 2,000 (M2 design §9.4).
+    let death = first_death(&mut world, 24_000);
     assert_eq!(death.cause, DeathCause::OldAge);
-    assert!((21_500..22_500).contains(&death.age), "{death:?}");
+    assert!((22_500..23_000).contains(&death.age), "{death:?}");
 }
 
 /// Object types for testing where solid objects may go.
@@ -294,7 +303,7 @@ fn a_sprite_shows_its_age_and_its_traits_as_its_body_has_them() {
     // takes the middle of its range, 10 (design §4.8).
     let genome = r#"(format: 1, genes: [
         Trait(trait: "speed", value: 50.0),
-        Trait(trait: "lifespan", value: 61234.5),
+        Trait(trait: "grows_old", value: 61234.5),
     ])"#;
     let mut world = lone_sprite(builtin(), Some(genome));
     assert_eq!(world.sprites().next().expect("the sprite").age(), 0);
@@ -308,7 +317,8 @@ fn a_sprite_shows_its_age_and_its_traits_as_its_body_has_them() {
         Traits {
             speed: 12.0,
             sense_radius: 10.0,
-            lifespan: 61234.5,
+            // Clamped to 60,000.
+            grows_old: 60000.0,
             // The middle of its range, with no gene for it.
             grows_up: 7500.0,
         }

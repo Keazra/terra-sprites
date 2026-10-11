@@ -119,7 +119,7 @@ pub enum DeathCause {
     Starvation,
     /// Its hydration ran out.
     Dehydration,
-    /// It lived past its lifespan.
+    /// Its old body wore out (M2 design §9.4).
     OldAge,
     /// Injury an object's verb injected: the stable ID of the object type
     /// whose verb table did it, such as a thornbush's.

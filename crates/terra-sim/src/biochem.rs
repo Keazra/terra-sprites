@@ -21,8 +21,9 @@ pub struct Traits {
     pub speed: f32,
     /// How far it perceives, in tiles.
     pub sense_radius: f32,
-    /// Ticks until old age.
-    pub lifespan: f32,
+    /// The age it grows old at, in ticks (M2 design §9.3). Genome files
+    /// from before M2 call it `lifespan`.
+    pub grows_old: f32,
     /// The age it grows up at, in ticks (M2 design §9.3).
     pub grows_up: f32,
 }
@@ -32,18 +33,20 @@ impl Traits {
         match which {
             Trait::Speed => self.speed = value,
             Trait::SenseRadius => self.sense_radius = value,
-            Trait::Lifespan => self.lifespan = value,
+            Trait::GrowsOld => self.grows_old = value,
             Trait::GrowsUp => self.grows_up = value,
         }
     }
 
     /// The life stage of a sprite with these traits at `age` (M2 design
-    /// §9.1): young until it grows up, then an adult until old age.
+    /// §9.1): young until it grows up, an adult until it grows old, then
+    /// old. One whose genes have it grow old before it grows up grows old
+    /// as it grows up, and is never an adult.
     pub fn life_stage(&self, age: u64) -> LifeStage {
         let age = age as f32;
         if age < self.grows_up {
             LifeStage::Young
-        } else if age <= self.lifespan {
+        } else if age < self.grows_old {
             LifeStage::Adult
         } else {
             LifeStage::Old
@@ -195,7 +198,7 @@ impl Program {
         let mut traits = Traits {
             speed: middle(Trait::Speed),
             sense_radius: middle(Trait::SenseRadius),
-            lifespan: middle(Trait::Lifespan),
+            grows_old: middle(Trait::GrowsOld),
             grows_up: middle(Trait::GrowsUp),
         };
         let chem = |id: ChemId| data.chemical_index(id).expect("a checked gene");
@@ -321,6 +324,14 @@ pub(crate) struct Body {
     /// The injury each cause added lately, fading (design §4.10). A cause
     /// that has never added any has no entry.
     pub(crate) tallies: BTreeMap<DeathCause, f32>,
+    /// How worn a hard life has left the body, from 0 to 1 (M2 design
+    /// §9.4). It never heals. A world saved before it had none.
+    #[serde(default)]
+    pub(crate) wear: f32,
+    /// How far an old body has worn out, from 0 to 1 (M2 design §9.4): 0
+    /// until it grows old; at 1 old age harms it.
+    #[serde(default)]
+    pub(crate) decline: f32,
 }
 
 impl Body {
@@ -371,7 +382,16 @@ impl Body {
             chems,
             loci,
             tallies: BTreeMap::new(),
+            wear: 0.0,
+            decline: 0.0,
         }
+    }
+
+    /// The share of its best that a body keeping `kept` of it once worn out
+    /// has left now (M2 design §9.4): all of it before it declines, falling
+    /// steadily to `kept`.
+    pub(crate) fn kept(&self, kept: f32) -> f32 {
+        1.0 - self.decline * (1.0 - kept)
     }
 
     /// Starts the chemical at `index` at `level`, as if it had been there
@@ -435,6 +455,8 @@ pub(crate) struct Senses {
     pub(crate) steps: u32,
     /// Whether it rested during the previous tick.
     pub(crate) resting: bool,
+    /// Its life stage (M2 design §9.1).
+    pub(crate) stage: LifeStage,
 }
 
 /// Step 3 for one sprite (design §4.4). Returns whether its injury has
@@ -517,6 +539,13 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
     chems[indices.energy] -= metabolism.basal
         + metabolism.per_sense_tile * traits.sense_radius
         + steps * metabolism.per_step * pace * pace;
+    // Growing up takes the same energy however long it takes, and a later
+    // old age costs a little all life (M2 design §9.3).
+    let ageing = physiology.ageing;
+    if senses.stage == LifeStage::Young {
+        chems[indices.energy] -= ageing.growth / traits.grows_up;
+    }
+    chems[indices.energy] -= ageing.upkeep * traits.grows_old / 10_000.0;
     for (gut, into, rate) in [
         (indices.food, indices.energy, physiology.digestion.food),
         (indices.water, indices.hydration, physiology.digestion.water),
@@ -526,14 +555,18 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
         chems[into] += digested;
     }
     chems[indices.hydration] -= physiology.hydration_loss;
+    // A declining body gets less stamina back, and heals slower (M2 design
+    // §9.4).
+    let (worn_out, decline) = (ageing.worn_out, body.decline);
+    let kept = |share: f32| 1.0 - decline * (1.0 - share);
     chems[indices.stamina] += if senses.steps > 0 {
         -steps * physiology.stamina.per_step
     } else if senses.resting {
-        physiology.stamina.resting
+        physiology.stamina.resting * kept(worn_out.recovers)
     } else {
-        physiology.stamina.idle
+        physiology.stamina.idle * kept(worn_out.recovers)
     };
-    chems[indices.injury] -= physiology.healing;
+    chems[indices.injury] -= physiology.healing * kept(worn_out.heals);
 
     let age = senses.age as f32;
     let injury = physiology.injury;
@@ -548,7 +581,7 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
             chems[indices.hydration] <= 0.0,
             injury.dehydration,
         ),
-        (DeathCause::OldAge, age > traits.lifespan, injury.old_age),
+        (DeathCause::OldAge, decline >= 1.0, injury.old_age),
     ];
     for tally in body.tallies.values_mut() {
         *tally *= physiology.tally_fade;
@@ -560,9 +593,26 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
         }
     }
 
+    // A hard life wears the body for good, and an old body declines, the
+    // faster the more worn it is (M2 design §9.4). Both read the body, not
+    // feelings, which genes could switch off.
+    let wear = ageing.wear;
+    let mut worn = wear.injured * chems[indices.injury].clamp(0.0, 1.0);
+    if chems[indices.energy] < wear.low {
+        worn += wear.starving;
+    }
+    if chems[indices.hydration] < wear.low {
+        worn += wear.parched;
+    }
+    body.wear = (body.wear + worn).min(1.0);
+    if senses.stage == LifeStage::Old {
+        let pace = 1.0 + (ageing.wear_speedup - 1.0) * body.wear;
+        body.decline = (body.decline + pace / ageing.decline as f32).min(1.0);
+    }
+
     let loci = &mut body.loci;
     loci[indices.always] = 1.0;
-    loci[indices.age] = (age / traits.lifespan).min(1.0);
+    loci[indices.age] = (age / traits.grows_old).min(1.0);
     loci[indices.nearby_sprites] = senses.nearby_sprites;
     loci[indices.moving] = if senses.steps > 0 { 1.0 } else { 0.0 };
     loci[indices.resting] = if senses.resting { 1.0 } else { 0.0 };
@@ -685,18 +735,36 @@ mod tests {
             step(&self.program, &mut self.body, &senses, &self.data)
         }
 
-        /// Runs step 3 with the sprite at rest, as if `age` ticks old. Says whether it's dying.
+        /// Runs step 3 with the sprite at rest, an adult `age` ticks old. Says whether it's dying.
         fn step_at(&mut self, age: u64) -> bool {
-            self.step_with(Senses {
-                age,
-                ..Senses::default()
-            })
+            self.step_with(Senses { age, ..adult() })
         }
 
         fn step(&mut self) -> bool {
             self.step_at(0)
         }
+
+        /// Runs step 3 with the sprite old and at rest. Says whether it's dying.
+        fn step_old(&mut self) -> bool {
+            self.step_with(Senses {
+                age: 30_000,
+                stage: LifeStage::Old,
+                ..Senses::default()
+            })
+        }
     }
+
+    /// What an adult at rest senses.
+    fn adult() -> Senses {
+        Senses {
+            stage: LifeStage::Adult,
+            ..Senses::default()
+        }
+    }
+
+    /// The energy a sprite that grows old at 20,000 ticks spends on it each
+    /// tick (M2 design §9.3).
+    const UPKEEP: f32 = 0.00001 * 2.0;
 
     /// Asserts that `actual` is `expected`, give or take rounding.
     fn assert_close(actual: f32, expected: f32) {
@@ -891,13 +959,15 @@ mod tests {
         assert_eq!(sprite.locus("exploration_mod"), 1.0);
     }
 
-    /// A sprite with the built-in physiology, at speed 8, sense radius 10 and
-    /// a lifespan of 20,000 ticks, whose genome also holds `genes`.
+    /// A sprite with the built-in physiology, at speed 8 and sense radius
+    /// 10, growing up at 2,000 ticks and old at 20,000, whose genome also
+    /// holds `genes`.
     fn physical(genes: &[&str]) -> Subject {
         let mut all = vec![
             r#"Trait(trait: "speed", value: 8.0)"#,
             r#"Trait(trait: "sense_radius", value: 10.0)"#,
-            r#"Trait(trait: "lifespan", value: 20000.0)"#,
+            r#"Trait(trait: "grows_up", value: 2000.0)"#,
+            r#"Trait(trait: "grows_old", value: 20000.0)"#,
         ];
         all.extend_from_slice(genes);
         Subject::new(builtin(), &all)
@@ -941,7 +1011,10 @@ mod tests {
     fn a_resting_sprite_spends_basal_energy_and_the_cost_of_its_sense_radius() {
         let mut sprite = physical(&[]);
         sprite.step();
-        assert_close(sprite.level("energy"), 1.0 - (0.0001 + 10.0 * 0.0000067));
+        assert_close(
+            sprite.level("energy"),
+            1.0 - (0.0001 + 10.0 * 0.0000067) - UPKEEP,
+        );
     }
 
     #[test]
@@ -951,16 +1024,17 @@ mod tests {
             &[
                 r#"Trait(trait: "speed", value: 12.0)"#,
                 r#"Trait(trait: "sense_radius", value: 10.0)"#,
+                r#"Trait(trait: "grows_old", value: 20000.0)"#,
             ],
         );
         sprite.step_with(Senses {
             steps: 2,
-            ..Senses::default()
+            ..adult()
         });
         let steps = 2.0 * 0.0002 * (12.0f32 / 8.0) * (12.0 / 8.0);
         assert_close(
             sprite.level("energy"),
-            1.0 - (0.0001 + 10.0 * 0.0000067) - steps,
+            1.0 - (0.0001 + 10.0 * 0.0000067) - steps - UPKEEP,
         );
         assert_close(sprite.level("stamina"), 1.0 - 2.0 * 0.002);
     }
@@ -973,7 +1047,7 @@ mod tests {
         assert_close(sprite.level("stamina"), 0.5005);
         sprite.step_with(Senses {
             resting: true,
-            ..Senses::default()
+            ..adult()
         });
         assert_close(sprite.level("stamina"), 0.5025);
     }
@@ -989,7 +1063,7 @@ mod tests {
         assert_close(sprite.level("food"), 0.299);
         assert_close(
             sprite.level("energy"),
-            0.5 + 0.001 - (0.0001 + 10.0 * 0.0000067),
+            0.5 + 0.001 - (0.0001 + 10.0 * 0.0000067) - UPKEEP,
         );
         assert_close(sprite.level("water"), 0.198);
         assert_close(sprite.level("hydration"), 0.5 + 0.002 - 0.00033);
@@ -1024,10 +1098,13 @@ mod tests {
         assert_close(parched.level("injury"), net);
 
         let mut old = physical(&[]);
-        old.step_at(20_000);
-        assert_eq!(old.level("injury"), 0.0, "at its lifespan, not yet past it");
-        old.step_at(20_001);
-        assert_close(old.level("injury"), 0.0006 - 0.0001);
+        old.body.decline = 0.99;
+        old.step_old();
+        assert_eq!(old.level("injury"), 0.0, "its body isn't worn out yet");
+        old.body.decline = 1.0;
+        old.step_old();
+        // A worn-out body heals at 0.3 of the rate.
+        assert_close(old.level("injury"), 0.0006 - 0.0001 * 0.3);
     }
 
     #[test]
@@ -1038,20 +1115,108 @@ mod tests {
             nearby_sprites: 0.5,
             steps: 1,
             resting: false,
+            stage: LifeStage::Adult,
         });
         assert_eq!(sprite.locus("always"), 1.0);
-        assert_eq!(sprite.locus("age"), 0.25, "5,000 of a 20,000-tick lifespan");
+        assert_eq!(
+            sprite.locus("age"),
+            0.25,
+            "5,000 of the 20,000 ticks to old age"
+        );
         assert_eq!(sprite.locus("nearby_sprites"), 0.5);
         assert_eq!(sprite.locus("moving"), 1.0);
         assert_eq!(sprite.locus("resting"), 0.0);
         sprite.step_with(Senses {
             age: 40_000,
             resting: true,
-            ..Senses::default()
+            ..adult()
         });
-        assert_eq!(sprite.locus("age"), 1.0, "capped at 1 past the lifespan");
+        assert_eq!(sprite.locus("age"), 1.0, "capped at 1 once old");
         assert_eq!(sprite.locus("moving"), 0.0);
         assert_eq!(sprite.locus("resting"), 1.0);
+    }
+
+    #[test]
+    fn growing_up_costs_energy_spread_over_childhood() {
+        // Growing up at 2,000 ticks, it spends 0.3 / 2,000 each young tick
+        // on growing (M2 design §9.3).
+        let mut young = physical(&[]);
+        young.step_with(Senses::default());
+        let mut adult = physical(&[]);
+        adult.step();
+        assert_close(adult.level("energy") - young.level("energy"), 0.3 / 2000.0);
+    }
+
+    #[test]
+    fn a_later_old_age_costs_a_little_energy_every_tick() {
+        let mut early = physical(&[]);
+        let mut late = Subject::new(
+            builtin(),
+            &[
+                r#"Trait(trait: "speed", value: 8.0)"#,
+                r#"Trait(trait: "sense_radius", value: 10.0)"#,
+                r#"Trait(trait: "grows_old", value: 50000.0)"#,
+            ],
+        );
+        early.step();
+        late.step();
+        // 0.00001 a tick for every 10,000 ticks: 0.00002 against 0.00005.
+        assert_close(early.level("energy") - late.level("energy"), 0.00003);
+    }
+
+    #[test]
+    fn a_hard_life_wears_the_body_for_good() {
+        let mut sprite = physical(&[]);
+        sprite.step();
+        assert_eq!(sprite.body.wear, 0.0, "a full, unhurt body doesn't wear");
+        sprite.set("energy", 0.2);
+        sprite.step();
+        assert_close(sprite.body.wear, 0.0002);
+        sprite.set("energy", 1.0);
+        sprite.set("hydration", 0.2);
+        sprite.step();
+        assert_close(sprite.body.wear, 0.0004);
+        sprite.set("hydration", 1.0);
+        sprite.set("injury", 0.5001);
+        sprite.step();
+        // 0.001 for each unit of injury, after this tick's healing.
+        assert_close(sprite.body.wear, 0.0004 + 0.0005);
+        sprite.set("injury", 0.0);
+        for _ in 0..100 {
+            sprite.step();
+        }
+        assert_close(sprite.body.wear, 0.0009);
+    }
+
+    #[test]
+    fn an_old_body_declines_and_the_more_worn_the_faster() {
+        let mut adult = physical(&[]);
+        adult.step();
+        assert_eq!(adult.body.decline, 0.0, "only an old body declines");
+        let mut easy = physical(&[]);
+        easy.step_old();
+        assert_close(easy.body.decline, 1.0 / 46_500.0);
+        let mut hard = physical(&[]);
+        hard.body.wear = 1.0;
+        hard.step_old();
+        assert_close(hard.body.decline, 3.0 / 46_500.0);
+        let mut middling = physical(&[]);
+        middling.body.wear = 0.5;
+        middling.step_old();
+        assert_close(middling.body.decline, 2.0 / 46_500.0);
+    }
+
+    #[test]
+    fn a_declining_body_heals_and_recovers_stamina_more_slowly() {
+        let mut sprite = physical(&[]);
+        sprite.body.decline = 0.5;
+        sprite.set("injury", 0.5);
+        sprite.set("stamina", 0.5);
+        sprite.step_old();
+        // Halfway worn out, it keeps halfway between all and a worn-out
+        // body's share: healing 0.65 of 0.0001, idle stamina 0.75 of 0.0005.
+        assert_close(sprite.level("injury"), 0.5 - 0.000065);
+        assert_close(sprite.level("stamina"), 0.5 + 0.000375);
     }
 
     #[test]
@@ -1148,7 +1313,7 @@ mod tests {
                             value: sense,
                         },
                         Gene::Trait {
-                            which: Trait::Lifespan,
+                            which: Trait::GrowsOld,
                             value: lifespan,
                         },
                     ]
@@ -1188,6 +1353,7 @@ mod tests {
                     nearby_sprites: (roll % 5) as f32 / 4.0,
                     steps: roll % 3,
                     resting: roll % 7 == 0,
+                    stage: LifeStage::Adult,
                 };
                 // What verbs did last tick: food, water or injury, and a pulse.
                 let injection = [
@@ -1422,18 +1588,18 @@ mod tests {
         let traits = program(&[
             r#"Trait(trait: "speed", value: 30.0)"#,
             r#"Trait(trait: "sense_radius", value: 9.0)"#,
-            r#"Trait(trait: "lifespan", value: 100.0)"#,
+            r#"Trait(trait: "grows_old", value: 100.0)"#,
             r#"Trait(trait: "grows_up", value: 99000.0)"#,
         ])
         .traits;
-        // Physiology's ranges: speed 4–12, sense_radius 6–14, lifespan
-        // 20,000–200,000, grows_up 1,500–13,500.
+        // Physiology's ranges: speed 4–12, sense_radius 6–14, grows_old
+        // 6,000–60,000, grows_up 1,500–13,500.
         assert_eq!(
             traits,
             Traits {
                 speed: 12.0,
                 sense_radius: 9.0,
-                lifespan: 20_000.0,
+                grows_old: 6_000.0,
                 grows_up: 13_500.0,
             }
         );
@@ -1446,7 +1612,7 @@ mod tests {
             Traits {
                 speed: 8.0,
                 sense_radius: 10.0,
-                lifespan: 110_000.0,
+                grows_old: 33_000.0,
                 grows_up: 7_500.0,
             }
         );

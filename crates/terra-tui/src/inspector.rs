@@ -153,19 +153,27 @@ fn sprite_tab(
     }
 }
 
-/// The Body tab (design §6.1): what the sprite is doing, age and traits, a
-/// bar for each drive, the physical levels, three to a line, and what the
-/// player has observed it do.
+/// The Body tab (design §6.1): what the sprite is doing, its age, life stage
+/// and when it reaches the next (M2 design §9.6), its traits, a bar for each
+/// drive, the physical levels, three to a line, with its wear (and an old
+/// body's decline) after them, and what the player has observed it do.
 fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
     let traits = sprite.traits();
     let doing = doing_line(sprite, app, world).map(|line| format!(" {line}"));
     let mut lines: Vec<String> = doing.into_iter().collect();
     lines.extend([
-        format!(
-            " age {} · {}",
-            group_thousands(sprite.age()),
-            trait_text(Trait::Lifespan, traits.lifespan)
-        ),
+        format!(" age {} · {}", group_thousands(sprite.age()), {
+            let stage = sprite.life_stage();
+            match stage {
+                LifeStage::Young => {
+                    format!("young · {}", trait_text(Trait::GrowsUp, traits.grows_up))
+                }
+                LifeStage::Adult => {
+                    format!("adult · {}", trait_text(Trait::GrowsOld, traits.grows_old))
+                }
+                LifeStage::Old => stage.name().to_string(),
+            }
+        }),
         format!(
             " {} · {}",
             trait_text(Trait::Speed, traits.speed),
@@ -193,6 +201,14 @@ fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>>
     for three in physical.chunks(3) {
         lines.push(format!(" {}", three.join(" · ")));
     }
+    lines.push(match sprite.life_stage() {
+        LifeStage::Old => format!(
+            " wear {} · declined {}",
+            level(sprite.wear()),
+            level(sprite.decline())
+        ),
+        _ => format!(" wear {}", level(sprite.wear())),
+    });
     lines.push(String::new());
     lines.extend(observed_lines(app, world.tick()));
     lines.into_iter().map(Line::from).collect()
@@ -658,12 +674,12 @@ fn trend(amount: f32) -> &'static str {
     }
 }
 
-/// A trait and its value: `speed 7.25`, `sense 9.5`, `lifespan 61,204`.
+/// A trait and its value: `speed 7.25`, `sense 9.5`, `grows old 13,500`.
 fn trait_text(which: Trait, value: f32) -> String {
     match which {
         Trait::Speed => format!("speed {}", significant(value)),
         Trait::SenseRadius => format!("sense {}", significant(value)),
-        Trait::Lifespan => format!("lifespan {}", whole(f64::from(value))),
+        Trait::GrowsOld => format!("grows old {}", whole(f64::from(value))),
         Trait::GrowsUp => format!("grows up {}", whole(f64::from(value))),
     }
 }

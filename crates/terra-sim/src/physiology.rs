@@ -24,6 +24,8 @@ pub(crate) struct Physiology {
     pub(crate) stamina: Stamina,
     pub(crate) healing: f32,
     pub(crate) injury: Injury,
+    /// How a sprite grows up and grows old (M2 design §9).
+    pub(crate) ageing: Ageing,
     /// What each cause-of-death tally is multiplied by every tick: the file's
     /// `cause_fade` is how many ticks it takes to halve.
     pub(crate) tally_fade: f32,
@@ -64,6 +66,10 @@ pub(crate) struct PhysiologyEntry {
     stamina: Stamina,
     healing: f32,
     injury: Injury,
+    /// A pack from before life stages takes the built-in ageing (design
+    /// §2.8: a save carries its own pack).
+    #[serde(default)]
+    ageing: Ageing,
     cause_fade: u32,
     traits: TraitRanges,
     brain: BTreeMap<String, ParamRange>,
@@ -281,13 +287,92 @@ pub(crate) struct Injury {
     pub(crate) old_age: f32,
 }
 
+/// How a sprite grows up and grows old (M2 design §9).
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Ageing {
+    /// The share of its speed a newborn walks at, rising steadily to all of
+    /// it as it grows up (§9.5).
+    pub(crate) young_speed: f32,
+    /// The energy growing up takes, spread evenly over childhood (§9.3).
+    pub(crate) growth: f32,
+    /// Energy per tick, all its life, for every 10,000 ticks of `grows_old`
+    /// (§9.3).
+    pub(crate) upkeep: f32,
+    /// The ticks an unworn old body takes to wear out (§9.4).
+    pub(crate) decline: u32,
+    /// How many times as fast the most worn body wears out (§9.4).
+    pub(crate) wear_speedup: f32,
+    /// What a worn-out body keeps of its best (§9.4).
+    pub(crate) worn_out: WornOut,
+    /// What wears a body (§9.4).
+    pub(crate) wear: Wear,
+}
+
+/// What a worn-out old body keeps of its best, each a share of it (M2 design
+/// §9.4). It falls steadily from all of it as the body declines.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WornOut {
+    /// Of its speed.
+    pub(crate) walks: f32,
+    /// Of its sense radius.
+    pub(crate) sees: f32,
+    /// Of the stamina it gets back, idle or resting.
+    pub(crate) recovers: f32,
+    /// Of physiology's healing.
+    pub(crate) heals: f32,
+}
+
+/// What wears a body, a little every tick, for good (M2 design §9.4).
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Wear {
+    /// The level below which energy is starving, or hydration parched.
+    pub(crate) low: f32,
+    /// Wear per tick while starving.
+    pub(crate) starving: f32,
+    /// Wear per tick while parched.
+    pub(crate) parched: f32,
+    /// Wear per tick for each unit of injury.
+    pub(crate) injured: f32,
+}
+
+/// What a saved world's pack from before life stages gets: the built-in
+/// pack's, which a test checks they match.
+impl Default for Ageing {
+    fn default() -> Ageing {
+        Ageing {
+            young_speed: 0.67,
+            growth: 0.3,
+            upkeep: 0.00001,
+            decline: 46_500,
+            wear_speedup: 3.0,
+            worn_out: WornOut {
+                walks: 0.55,
+                sees: 0.6,
+                recovers: 0.5,
+                heals: 0.3,
+            },
+            wear: Wear {
+                low: 0.25,
+                starving: 0.0002,
+                parched: 0.0002,
+                injured: 0.001,
+            },
+        }
+    }
+}
+
 /// The range each trait is clamped to.
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct TraitRanges {
     pub(crate) speed: (f32, f32),
     pub(crate) sense_radius: (f32, f32),
-    pub(crate) lifespan: (f32, f32),
+    /// A pack from before M2 calls it `lifespan` (design §9.3).
+    #[serde(alias = "lifespan")]
+    pub(crate) grows_old: (f32, f32),
     /// Added in M2 (design §9.3); a pack saved before then has none.
     #[serde(default = "grows_up_range")]
     pub(crate) grows_up: (f32, f32),
@@ -304,7 +389,7 @@ impl TraitRanges {
         match which {
             Trait::Speed => self.speed,
             Trait::SenseRadius => self.sense_radius,
-            Trait::Lifespan => self.lifespan,
+            Trait::GrowsOld => self.grows_old,
             Trait::GrowsUp => self.grows_up,
         }
     }
@@ -349,6 +434,43 @@ impl PhysiologyEntry {
                 ));
             }
         }
+        let ageing = self.ageing;
+        let (worn_out, wear) = (ageing.worn_out, ageing.wear);
+        for (name, level) in [
+            ("ageing.young_speed", ageing.young_speed),
+            ("ageing.worn_out.walks", worn_out.walks),
+            ("ageing.worn_out.sees", worn_out.sees),
+            ("ageing.worn_out.recovers", worn_out.recovers),
+            ("ageing.worn_out.heals", worn_out.heals),
+            ("ageing.wear.low", wear.low),
+        ] {
+            fraction(name, level)?;
+        }
+        for (name, rate) in [
+            ("ageing.growth", ageing.growth),
+            ("ageing.upkeep", ageing.upkeep),
+            ("ageing.wear.starving", wear.starving),
+            ("ageing.wear.parched", wear.parched),
+            ("ageing.wear.injured", wear.injured),
+        ] {
+            if !(rate.is_finite() && rate >= 0.0) {
+                return Err(format!(
+                    "`{name}` is {rate}, but must be a number, and can't be negative"
+                ));
+            }
+        }
+        if ageing.young_speed == 0.0 {
+            return Err("`ageing.young_speed` must be above 0: a newborn has to move".into());
+        }
+        if ageing.decline == 0 {
+            return Err("`ageing.decline` must be at least 1 tick".into());
+        }
+        if !(ageing.wear_speedup.is_finite() && ageing.wear_speedup >= 1.0) {
+            return Err(format!(
+                "`ageing.wear_speedup` is {}, but must be a number, at least 1",
+                ageing.wear_speedup
+            ));
+        }
         if self.cause_fade == 0 {
             return Err("`cause_fade` must be at least 1 tick".into());
         }
@@ -357,11 +479,11 @@ impl PhysiologyEntry {
         for (name, bounds) in [
             ("traits.speed", traits.speed),
             ("traits.sense_radius", traits.sense_radius),
-            ("traits.lifespan", traits.lifespan),
+            ("traits.grows_old", traits.grows_old),
             ("traits.grows_up", traits.grows_up),
         ] {
             range(name, bounds)?;
-            // A lifespan of 0 would make the age sensor 0 ÷ 0.
+            // A `grows_old` of 0 would make the age sensor 0 ÷ 0.
             if !(bounds.0 > 0.0 && bounds.1.is_finite()) {
                 return Err(format!(
                     "`{name}` goes from {} to {}, but must be numbers above 0",
@@ -485,6 +607,7 @@ impl PhysiologyEntry {
             stamina,
             healing: self.healing,
             injury,
+            ageing,
             tally_fade: halving_factor(self.cause_fade as f32),
             traits,
             brain: BrainRanges(brain),
@@ -676,5 +799,7 @@ mod tests {
             (saved.held, saved.per_kind, saved.merge),
             (built_in.held, built_in.per_kind, built_in.merge)
         );
+        assert_eq!(Ageing::default(), physiology.ageing);
+        assert_eq!(grows_up_range(), physiology.traits.grows_up);
     }
 }

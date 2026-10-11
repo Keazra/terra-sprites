@@ -14,13 +14,19 @@
 // doesn't know and learns it.
 //
 // The values are first cuts; slice 17 tunes them.
+//
+// A gene with `from` or `until` works only from that life stage on, or
+// until it (M2 design §9.2): young, adult or old.
 (
-    format: 1,
+    format: 2,
     genes: [
         // Traits (design §4.8).
         Trait(trait: "speed", value: 7.0),
         Trait(trait: "sense_radius", value: 10.0),
-        Trait(trait: "lifespan", value: 60000.0),
+        // It grows up at about an hour at 1x and grows old at about three
+        // (M2 design §9.3).
+        Trait(trait: "grows_up", value: 4500.0),
+        Trait(trait: "grows_old", value: 13500.0),
 
         // Hunger rises as energy falls below half, and drops at once on eating.
         Emitter(locus: Chem("energy"), mode: Level, invert: true, threshold: 0.5, gain: 0.004, chem: "hunger"),
@@ -88,6 +94,9 @@
         BrainParam(param: "switch_margin", value: 0.2),
         BrainParam(param: "attention_margin", value: 0.2),
         BrainParam(param: "salience_gain", value: 0.5),
+        // The young are more curious: they try new things more readily
+        // (M2 design §9.5). Grown up, it has physiology's default.
+        BrainParam(param: "curiosity", value: 0.5, until: Adult),
 
         // It knows its own kind: loneliness draws its eye to other sprites.
         // Nothing draws it to food, water or toys; it learns what they're for.
@@ -114,10 +123,11 @@
         // about one sprite in four one that hits back.
         Instinct(inputs: [("pain", false)], verb: Retreat, weight: 1.0),
         Instinct(inputs: [("was_hit", false), ("attended_sprite", false)], verb: Hit, weight: 0.56),
-        // Crowding leads to backing away, and sometimes to hitting a
-        // neighbour: the deliberate mistake, which correcting should cure.
+        // Crowding leads to backing away, and in a grown sprite sometimes to
+        // hitting a neighbour: the deliberate mistake, which correcting
+        // should cure. The young don't fight for room (M2 design §9.5).
         Instinct(inputs: [("crowdedness", false)], verb: Retreat, weight: 1.0),
-        Instinct(inputs: [("crowdedness", false), ("attended_sprite", false)], verb: Hit, weight: 0.6),
+        Instinct(inputs: [("crowdedness", false), ("attended_sprite", false)], verb: Hit, weight: 0.6, from: Adult),
         // A cornered sprite, looking at a sprite, turns on it.
         Instinct(inputs: [("cornered", false), ("attended_sprite", false)], verb: Hit, weight: 1.0),
         // A mild habit of wandering, which any drive that has grown outweighs.

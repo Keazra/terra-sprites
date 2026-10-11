@@ -11,8 +11,8 @@
 //! the seeds A to B (1-10 by default), and `--sprites` adds a line for
 //! each sprite.
 //!
-//! A sprite's life is cut into quarters of its own lifespan, and a stretch
-//! past it, when old age injures it (design §4.8, §4.10). A rest counts toward the
+//! A sprite's life is cut into quarters of the time until it grows old, and
+//! a stretch once it's old (M2 design §9.3). A rest counts toward the
 //! stretch it starts in, and so does its recovery.
 
 #[path = "common/args.rs"]
@@ -26,8 +26,8 @@ use terra_sim::{DataPack, EntityId, EventKind, Verb, World, WorldConfig, median}
 /// Tiredness under this counts as recovered.
 const RECOVERED: f32 = 0.1;
 
-/// The stretches of a life, by the share of its lifespan lived.
-const STRETCHES: [&str; 5] = ["0–25%", "25–50%", "50–75%", "75–100%", "past it"];
+/// The stretches of a life, by the share of the time until it grows old.
+const STRETCHES: [&str; 5] = ["0–25%", "25–50%", "50–75%", "75–100%", "old"];
 
 /// What was counted in one stretch of life, for one sprite or for many.
 /// A rest still going when the run ends, or the sprite dies, has no
@@ -92,9 +92,9 @@ struct Life {
     recovering: Option<(u64, usize)>,
 }
 
-/// The stretch of life a sprite of `age` with `lifespan` is in.
-fn stretch(age: u64, lifespan: f32) -> usize {
-    let lived = age as f64 / f64::from(lifespan.max(1.0));
+/// The stretch of life a sprite of `age` that grows old at `grows_old` is in.
+fn stretch(age: u64, grows_old: f32) -> usize {
+    let lived = age as f64 / f64::from(grows_old.max(1.0));
     if lived >= 1.0 {
         4
     } else {
@@ -168,7 +168,7 @@ fn run(data: &DataPack, seed: u64, ticks: u64) -> BTreeMap<EntityId, Life> {
             } = event.kind
                 && let Some(sprite) = world.sprite(id)
             {
-                let at = stretch(sprite.age(), sprite.traits().lifespan);
+                let at = stretch(sprite.age(), sprite.traits().grows_old);
                 let life = lives.entry(id).or_default();
                 life.stretches[at].rests += 1;
                 // A rest begun rested has nothing to recover from.
@@ -187,7 +187,7 @@ fn observe(world: &World, lives: &mut BTreeMap<EntityId, Life>) {
     let tick = world.tick();
     for sprite in world.sprites() {
         let life = lives.entry(sprite.id()).or_default();
-        let tally = &mut life.stretches[stretch(sprite.age(), sprite.traits().lifespan)];
+        let tally = &mut life.stretches[stretch(sprite.age(), sprite.traits().grows_old)];
         tally.ticks += 1;
         if sprite
             .action()

@@ -14,8 +14,8 @@ fn at(x: u16, y: u16) -> Pos {
     Pos { x, y }
 }
 
-/// A 60×40 field with a starter sprite at (50, 30) wandering to (10, 30),
-/// and one at (5, 5), and an app showing 20×10 tiles of it.
+/// A 60×40 field with a starter sprite at (50, 30) wandering to (42, 30),
+/// within its sight, and one at (5, 5), and an app showing 20×10 tiles of it.
 fn field() -> (World, App) {
     let row = ".".repeat(60);
     let map = Map::from_ascii(&vec![row.as_str(); 40], &pack()).expect("valid drawing");
@@ -23,7 +23,7 @@ fn field() -> (World, App) {
     let scripted = [(
         at(50, 30),
         ScriptedAction::Wander {
-            destination: at(10, 30),
+            destination: at(42, 30),
         },
     )];
     let scenario = Scenario {
@@ -66,12 +66,16 @@ fn t_has_the_view_follow_the_selected_sprite_as_it_walks() {
     assert!(app.tracking());
     assert!(centred_on(&app, at(50, 30)), "{:?}", app.viewport());
     assert_eq!(app.notice(), Some("Tracking Sprite #1"));
+    let walker = |world: &World| world.sprites().next().expect("the walker").pos();
     for _ in 0..30 {
         let events = world.step();
         app.record(&events, &world);
+        if walker(&world) == at(42, 30) {
+            break;
+        }
     }
-    let now = world.sprites().next().expect("the walker").pos();
-    assert!(now.x < 45, "it walked: {now:?}");
+    let now = walker(&world);
+    assert_eq!(now, at(42, 30), "it walked");
     assert!(centred_on(&app, now), "{:?} for {now:?}", app.viewport());
 }
 

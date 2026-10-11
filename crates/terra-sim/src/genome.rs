@@ -929,7 +929,7 @@ impl GeneEntry {
                 value,
             },
             GeneEntry::Trait { which, value, .. } => Gene::Trait {
-                which: Trait::named(&which)
+                which: Trait::read(&which)
                     .ok_or_else(|| format!("names the unknown trait `{which}`"))?,
                 value,
             },

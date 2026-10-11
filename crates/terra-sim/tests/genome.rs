@@ -437,3 +437,16 @@ fn a_brain_gene_written_by_number_reads_the_same_as_by_name() {
     let genome = Genome::from_ron(&by_number, &data).expect("a valid genome");
     assert_eq!(genome.to_ron(&data), by_name);
 }
+
+#[test]
+fn a_lifespan_gene_from_before_m2_reads_as_when_it_grows_old() {
+    // M2 design §9.3: `lifespan` became `grows_old`. An older file still
+    // loads, and is written back with the new name.
+    let data = builtin();
+    let older = genome_file(&[r#"Trait(trait: "lifespan", value: 13500.0)"#]);
+    let genome = Genome::from_ron(&older, &data).expect("an older genome loads");
+    assert_eq!(
+        genome.to_ron(&data),
+        genome_file(&[r#"Trait(trait: "grows_old", value: 13500.0)"#])
+    );
+}

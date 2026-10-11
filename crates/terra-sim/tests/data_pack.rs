@@ -888,15 +888,59 @@ fn physiology_needs_its_physical_chemicals_and_body_sensors() {
 fn trait_ranges_are_finite_and_above_0() {
     assert_invalid_physiology("speed: (4.0, 12.0)", "speed: (0.0, 12.0)", "speed");
     assert_invalid_physiology(
-        "lifespan: (20000.0, 200000.0)",
-        "lifespan: (0.0, 200000.0)",
-        "lifespan",
+        "grows_old: (6000.0, 60000.0)",
+        "grows_old: (0.0, 60000.0)",
+        "grows_old",
     );
     assert_invalid_physiology(
-        "lifespan: (20000.0, 200000.0)",
-        "lifespan: (20000.0, inf)",
-        "lifespan",
+        "grows_old: (6000.0, 60000.0)",
+        "grows_old: (6000.0, inf)",
+        "grows_old",
     );
+}
+
+#[test]
+fn ageing_shares_are_fractions_and_its_rates_are_numbers() {
+    assert_invalid_physiology("young_speed: 0.67", "young_speed: 0.0", "young_speed");
+    assert_invalid_physiology("walks: 0.55", "walks: 1.5", "walks");
+    assert_invalid_physiology("growth: 0.3", "growth: -0.3", "growth");
+    assert_invalid_physiology("decline: 46500", "decline: 0", "decline");
+    assert_invalid_physiology("wear_speedup: 3.0", "wear_speedup: 0.5", "wear_speedup");
+}
+
+#[test]
+fn a_pack_from_before_life_stages_still_loads() {
+    // A save carries its own pack (design §2.8). One from before M2's life
+    // stages (design §9) calls `grows_old` `lifespan` and has no `ageing`.
+    let physiology = include_str!("../../../data/physiology.ron");
+    let start = physiology
+        .find("    // Growing up and growing old")
+        .expect("ageing");
+    let end = physiology[start..].find("    ),\n").expect("its end") + start + 7;
+    let older = format!("{}{}", &physiology[..start], &physiology[end..])
+        .replace(
+            "grows_old: (6000.0, 60000.0),",
+            "lifespan: (20000.0, 200000.0),",
+        )
+        .replace("        grows_up: (1500.0, 13500.0),\n", "");
+    assert!(
+        !older.contains("ageing") && !older.contains("grows_"),
+        "{older}"
+    );
+    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, text)| {
+            (
+                path,
+                if path == "physiology.ron" {
+                    &older
+                } else {
+                    text
+                },
+            )
+        })
+        .collect();
+    DataPack::from_sources(&sources).expect("the older pack loads");
 }
 
 #[test]

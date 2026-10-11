@@ -1307,7 +1307,7 @@ fn one_sprite_in(
 const WORKED_GENOME: &str = r#"(format: 1, genes: [
     Trait(trait: "speed", value: 7.25),
     Trait(trait: "sense_radius", value: 9.5),
-    Trait(trait: "lifespan", value: 61204.0),
+    Trait(trait: "grows_old", value: 13500.0),
     InitialConcentration(chem: "hunger", value: 0.8),
     HalfLife(chem: "hunger", ticks: 1),
     InitialConcentration(chem: "thirst", value: 0.18),
@@ -1317,14 +1317,14 @@ const WORKED_GENOME: &str = r#"(format: 1, genes: [
 ])"#;
 
 #[test]
-fn the_body_tab_shows_age_traits_drives_and_physical_levels() {
+fn the_body_tab_shows_age_life_stage_traits_drives_physical_levels_and_wear() {
     let (world, app) = one_sprite_doing(WORKED_GENOME, &[ScriptedAction::Rest], 1);
     let (_, text) = inspector(&app, &world);
     assert_eq!(
-        text[..14],
+        text[..15],
         [
             "Resting · 9 ticks left",
-            "age 7,501 · lifespan 61,204",
+            "age 7,501 · adult · grows old 13,500",
             "speed 7.25 · sense 9.5",
             "",
             "hunger      ████░░░░░░ .40 ▼",
@@ -1338,10 +1338,11 @@ fn the_body_tab_shows_age_traits_drives_and_physical_levels() {
             // A newborn's are full, and one tick at rest takes them only to .9998 or so.
             "energy 1.00 · hydration 1.00 · stamina 1.00",
             "food .00 · water .00 · injury .00",
+            "wear .00",
         ]
     );
-    assert_eq!(text[14..17], ["", "Observed", "nothing yet"]);
-    assert!(text[17..].iter().all(String::is_empty), "{text:?}");
+    assert_eq!(text[15..18], ["", "Observed", "nothing yet"]);
+    assert!(text[18..].iter().all(String::is_empty), "{text:?}");
 }
 
 /// A genome that walks a grass step a tick.
@@ -2233,7 +2234,7 @@ fn the_genome_tab_groups_genes_as_plain_lines_and_marks_those_with_no_effect() {
         Emitter(locus: Locus("nearby_sprites"), mode: Level, invert: true, threshold: 0.5, gain: 0.0005, chem: "loneliness"),
         Emitter(locus: Locus("ate"), mode: Level, gain: 0.3, chem: "food"),
         HalfLife(chem: "hunger", ticks: 20),
-        Trait(trait: "lifespan", value: 61204.0),
+        Trait(trait: "grows_old", value: 13500.0),
         Reaction(reactants: [("h0", 2)], products: [("h1", 1), ("h2", 1)], rate: 0.1),
         Receptor(chem: "reward", threshold: 0.2, gain: 0.5, target: "learning_rate_mod"),
         Trait(trait: "speed", value: 9.0),
@@ -2250,7 +2251,7 @@ fn the_genome_tab_groups_genes_as_plain_lines_and_marks_those_with_no_effect() {
         text,
         [
             "TRAITS",
-            "speed 7.25 · sense 9.5 · lifespan 61,204",
+            "speed 7.25 · sense 9.5 · grows old 13,500",
             "speed 9",
             "unexpressed: an earlier gene sets this",
             "HALF-LIVES",
@@ -2461,6 +2462,7 @@ fn a_change_too_small_to_show_leaves_no_number_and_no_arrow() {
 
 #[test]
 fn big_and_negative_gene_values_keep_3_significant_figures_and_their_sign() {
+    // `lifespan` is what genome files from before M2 call `grows_old`.
     let genome = r#"(format: 1, genes: [
         Trait(trait: "lifespan", value: -1234.5),
         Emitter(locus: Locus("always"), mode: Level, gain: 1234.5, chem: "boredom"),
@@ -2473,7 +2475,7 @@ fn big_and_negative_gene_values_keep_3_significant_figures_and_their_sign() {
         text[..5],
         [
             "TRAITS",
-            "lifespan -1,235",
+            "grows old -1,235",
             "EMITTERS",
             "always → boredom +1,230",
             "always → boredom -98,800",

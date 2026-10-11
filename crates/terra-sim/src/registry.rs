@@ -154,8 +154,11 @@ listed_enum! {
         Speed = 1 => "speed",
         /// How far the sprite perceives, in tiles.
         SenseRadius = 2 => "sense_radius",
-        /// Ticks until old age.
-        Lifespan = 3 => "lifespan",
+        /// The age it grows old at, in ticks (M2 design §9.3). It was
+        /// `lifespan` before M2, when it was the age old age harmed it from,
+        /// and saves from then call it that.
+        #[serde(alias = "Lifespan")]
+        GrowsOld = 3 => "grows_old",
         /// The age it grows up at, in ticks (M2 design §9.3).
         GrowsUp = 4 => "grows_up",
     }
@@ -167,6 +170,17 @@ listed_enum! {
 
     /// The trait called `name`, if there is one.
     pub(crate) fn named;
+}
+
+impl Trait {
+    /// The trait a genome file calls `name`: by its name, or by the name it
+    /// had before M2 (design §9.3), so older files still load.
+    pub(crate) fn read(name: &str) -> Option<Trait> {
+        Trait::named(name).or(match name {
+            "lifespan" => Some(Trait::GrowsOld),
+            _ => None,
+        })
+    }
 }
 
 /// A chemical's stable ID (Appendix A).
@@ -275,13 +289,18 @@ mod tests {
 
         assert_eq!(
             Trait::ALL.map(Trait::name),
-            ["speed", "sense_radius", "lifespan", "grows_up"]
+            ["speed", "sense_radius", "grows_old", "grows_up"]
         );
         for (i, one) in Trait::ALL.into_iter().enumerate() {
             assert_eq!(one as u16, (i + 1) as u16);
             assert_eq!(Trait::named(one.name()), Some(one));
         }
         assert_eq!(Trait::named("no_such"), None);
+        assert_eq!(
+            Trait::read("lifespan"),
+            Some(Trait::GrowsOld),
+            "its old name"
+        );
 
         // `ALL`'s order is the ID order, from 1. Renaming a parameter still
         // round-trips here. Loading `physiology.ron` is what rejects a name

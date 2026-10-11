@@ -1,9 +1,9 @@
  Terra Sprites │ tick 3 │ ► 1x │ seed 7 │ sprites 3 │ not saved                              ? help
 ┌─ Sprites ── sorted by number ──────────────────────────────────────────────────────── esc close ─┐
 │ Sprite       Age  Drive        Doing                                                             │
-│ Sprite #5  7,503  -            Wandering off · 6 tiles to go                                     │
-│ Sprite #6  7,503  -            Wandering off · 6 tiles to go                                     │
-│ Sprite #7  7,503  -            Wandering off · 3 tiles to go                                     │
+│ Sprite #5  4,217  -            Wandering off · 5 tiles to go                                     │
+│ Sprite #6  4,595  -            Wandering off · 7 tiles to go                                     │
+│ Sprite #7  4,813  -            Wandering off · 7 tiles to go                                     │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
