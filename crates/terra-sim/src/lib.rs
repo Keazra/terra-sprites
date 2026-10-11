@@ -4,6 +4,7 @@
 //! pack as already-read text and is driven one tick at a time.
 
 mod action;
+mod ageing;
 #[doc(hidden)]
 pub mod bench;
 mod biochem;
@@ -50,6 +51,7 @@ mod verbs;
 mod world;
 
 pub use action::{ActionView, Hurt, Outcome, Progress, ScriptedAction};
+pub use ageing::{LifeStage, Switch};
 pub use biochem::Traits;
 pub use brain::{Contribution, Explanation, Learned, Memory, Part, RememberedPlace, Thing};
 pub use command::{Blocker, Command, CursorTouch, PlaceRule, Rejection};

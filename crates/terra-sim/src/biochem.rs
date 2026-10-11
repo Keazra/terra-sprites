@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::ageing::LifeStage;
 use crate::data::DataPack;
 use crate::events::DeathCause;
 use crate::expression::{Expression, expressions};
@@ -22,6 +23,8 @@ pub struct Traits {
     pub sense_radius: f32,
     /// Ticks until old age.
     pub lifespan: f32,
+    /// The age it grows up at, in ticks (M2 design §9.3).
+    pub grows_up: f32,
 }
 
 impl Traits {
@@ -30,6 +33,20 @@ impl Traits {
             Trait::Speed => self.speed = value,
             Trait::SenseRadius => self.sense_radius = value,
             Trait::Lifespan => self.lifespan = value,
+            Trait::GrowsUp => self.grows_up = value,
+        }
+    }
+
+    /// The life stage of a sprite with these traits at `age` (M2 design
+    /// §9.1): young until it grows up, then an adult until old age.
+    pub fn life_stage(&self, age: u64) -> LifeStage {
+        let age = age as f32;
+        if age < self.grows_up {
+            LifeStage::Young
+        } else if age <= self.lifespan {
+            LifeStage::Adult
+        } else {
+            LifeStage::Old
         }
     }
 }
@@ -167,8 +184,8 @@ impl Reaction {
 }
 
 impl Program {
-    /// Compiles `genome`'s expressed genes.
-    pub(crate) fn new(genome: &Genome, data: &DataPack) -> Program {
+    /// Compiles `genome`'s genes expressed at `stage`.
+    pub(crate) fn new(genome: &Genome, data: &DataPack, stage: LifeStage) -> Program {
         let range = |which: Trait| data.physiology().traits.range(which);
         // A trait no gene sets takes the middle of its range.
         let middle = |which: Trait| {
@@ -179,6 +196,7 @@ impl Program {
             speed: middle(Trait::Speed),
             sense_radius: middle(Trait::SenseRadius),
             lifespan: middle(Trait::Lifespan),
+            grows_up: middle(Trait::GrowsUp),
         };
         let chem = |id: ChemId| data.chemical_index(id).expect("a checked gene");
         let mut decay = vec![1.0; data.chemicals().len()];
@@ -196,7 +214,7 @@ impl Program {
                 receptors: Vec::new(),
             })
             .collect();
-        for (gene, expression) in genome.genes.iter().zip(expressions(genome, data)) {
+        for (gene, expression) in genome.genes.iter().zip(expressions(genome, data, stage)) {
             if expression != Expression::Expressed {
                 continue;
             }
@@ -614,6 +632,7 @@ mod tests {
             let program = Program::new(
                 &Genome::from_ron(&text, &data).expect("a valid genome"),
                 &data,
+                LifeStage::Adult,
             );
             let body = Body::newborn(&program, &data);
             Subject {
@@ -1139,7 +1158,8 @@ mod tests {
 
         /// A newborn with `genes`.
         fn newborn(genes: Vec<Gene>, data: &DataPack) -> (Program, Body) {
-            let program = Program::new(&Genome { genes }, data);
+            let program =
+                Program::new(&Genome::switched(genes, Vec::new()), data, LifeStage::Adult);
             let body = Body::newborn(&program, data);
             (program, body)
         }
@@ -1289,7 +1309,7 @@ mod tests {
     /// A newborn made from the built-in starter genome, unvaried.
     fn starter() -> Subject {
         let data = builtin();
-        let program = Program::new(data.starter(), &data);
+        let program = Program::new(data.starter(), &data, LifeStage::Adult);
         let body = Body::newborn(&program, &data);
         Subject {
             data,
@@ -1393,6 +1413,7 @@ mod tests {
         Program::new(
             &Genome::from_ron(&text, &data).expect("a valid genome"),
             &data,
+            LifeStage::Adult,
         )
     }
 
@@ -1402,15 +1423,18 @@ mod tests {
             r#"Trait(trait: "speed", value: 30.0)"#,
             r#"Trait(trait: "sense_radius", value: 9.0)"#,
             r#"Trait(trait: "lifespan", value: 100.0)"#,
+            r#"Trait(trait: "grows_up", value: 99000.0)"#,
         ])
         .traits;
-        // Physiology's ranges: speed 4–12, sense_radius 6–14, lifespan 20,000–200,000.
+        // Physiology's ranges: speed 4–12, sense_radius 6–14, lifespan
+        // 20,000–200,000, grows_up 1,500–13,500.
         assert_eq!(
             traits,
             Traits {
                 speed: 12.0,
                 sense_radius: 9.0,
-                lifespan: 20_000.0
+                lifespan: 20_000.0,
+                grows_up: 13_500.0,
             }
         );
     }
@@ -1422,7 +1446,8 @@ mod tests {
             Traits {
                 speed: 8.0,
                 sense_radius: 10.0,
-                lifespan: 110_000.0
+                lifespan: 110_000.0,
+                grows_up: 7_500.0,
             }
         );
     }

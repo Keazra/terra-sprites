@@ -288,6 +288,14 @@ pub(crate) struct TraitRanges {
     pub(crate) speed: (f32, f32),
     pub(crate) sense_radius: (f32, f32),
     pub(crate) lifespan: (f32, f32),
+    /// Added in M2 (design §9.3); a pack saved before then has none.
+    #[serde(default = "grows_up_range")]
+    pub(crate) grows_up: (f32, f32),
+}
+
+/// The range of `grows_up` in a pack from before it was added.
+fn grows_up_range() -> (f32, f32) {
+    (1500.0, 13500.0)
 }
 
 impl TraitRanges {
@@ -297,6 +305,7 @@ impl TraitRanges {
             Trait::Speed => self.speed,
             Trait::SenseRadius => self.sense_radius,
             Trait::Lifespan => self.lifespan,
+            Trait::GrowsUp => self.grows_up,
         }
     }
 }
@@ -349,6 +358,7 @@ impl PhysiologyEntry {
             ("traits.speed", traits.speed),
             ("traits.sense_radius", traits.sense_radius),
             ("traits.lifespan", traits.lifespan),
+            ("traits.grows_up", traits.grows_up),
         ] {
             range(name, bounds)?;
             // A lifespan of 0 would make the age sensor 0 ÷ 0.

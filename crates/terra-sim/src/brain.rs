@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, VecDeque};
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
+use crate::ageing::LifeStage;
 use crate::biochem::Body;
 use crate::brain_io::Source;
 use crate::data::DataPack;
@@ -76,13 +77,13 @@ pub(crate) struct BrainParams {
 }
 
 impl BrainParams {
-    pub(crate) fn express(genome: &Genome, data: &DataPack) -> BrainParams {
+    pub(crate) fn express(genome: &Genome, data: &DataPack, stage: LifeStage) -> BrainParams {
         let ranges = &data.physiology().brain;
         let mut values: Vec<f32> = BrainParam::ALL
             .iter()
             .map(|&param| ranges.of(param).default)
             .collect();
-        for (gene, expression) in genome.genes.iter().zip(expressions(genome, data)) {
+        for (gene, expression) in genome.genes.iter().zip(expressions(genome, data, stage)) {
             if let (&Gene::BrainParam { param, value }, Expression::Expressed) = (gene, expression)
             {
                 let (low, high) = ranges.of(param).range;
@@ -93,9 +94,10 @@ impl BrainParams {
     }
 
     /// Gives parameters added since a brain was saved the values its
-    /// `genome` expresses now (design §2.8), so an older save plays on.
-    pub(crate) fn catch_up(&mut self, genome: &Genome, data: &DataPack) {
-        let now = BrainParams::express(genome, data);
+    /// `genome` expresses now, at `stage` (design §2.8), so an older save
+    /// plays on.
+    pub(crate) fn catch_up(&mut self, genome: &Genome, data: &DataPack, stage: LifeStage) {
+        let now = BrainParams::express(genome, data, stage);
         if let Some(added) = now.values.get(self.values.len()..) {
             self.values.extend_from_slice(added);
         }
@@ -347,7 +349,7 @@ impl Brain {
     /// A newborn's brain from its genome (design §5.4, §5.7): a singleton per
     /// input, a conjunction per expressed multi-input `Instinct` signature,
     /// and each link at its instinct's weight, or 0.
-    pub(crate) fn new(genome: &Genome, data: &DataPack) -> Brain {
+    pub(crate) fn new(genome: &Genome, data: &DataPack, stage: LifeStage) -> Brain {
         let inputs = data.brain_inputs_in_order();
         let place = |id| {
             inputs
@@ -358,7 +360,7 @@ impl Brain {
         let mut concepts: Vec<Signature> = (0..inputs.len()).map(|i| vec![(i, false)]).collect();
         let mut decision = vec![vec![0.0; VERBS.len()]; inputs.len()];
         let mut attention = vec![vec![0.0; data.categories().len()]; inputs.len()];
-        for (gene, expression) in genome.genes.iter().zip(expressions(genome, data)) {
+        for (gene, expression) in genome.genes.iter().zip(expressions(genome, data, stage)) {
             if expression != Expression::Expressed {
                 continue;
             }
@@ -392,7 +394,7 @@ impl Brain {
             }
         }
         Brain {
-            params: BrainParams::express(genome, data),
+            params: BrainParams::express(genome, data, stage),
             concepts,
             decision: Links::new(decision),
             attention: Links::new(attention),
@@ -908,8 +910,14 @@ impl Brain {
     /// the genome gives; whatever it attends to, has learned or remembers
     /// doing is about categories, object types and needs the pack has; and
     /// what it remembers doing was done by `now`.
-    pub(crate) fn fits(&self, genome: &Genome, data: &DataPack, now: u64) -> bool {
-        let born = Brain::new(genome, data);
+    pub(crate) fn fits(
+        &self,
+        genome: &Genome,
+        data: &DataPack,
+        stage: LifeStage,
+        now: u64,
+    ) -> bool {
+        let born = Brain::new(genome, data, stage);
         let needs = data.needs().count();
         let category = |id: CategoryId| data.category(id).is_some();
         let subject = |subject: Subject| subject.fits(data);
@@ -1659,7 +1667,7 @@ mod tests {
         let data = builtin();
         let text = format!("(format: 1, genes: [{}])", genes.join(", "));
         let genome = Genome::from_ron(&text, &data).expect("a valid genome");
-        Brain::new(&genome, &data)
+        Brain::new(&genome, &data, LifeStage::Adult)
     }
 
     /// A brain of `genes` whose learned values never fade, so they read exactly.
@@ -2174,7 +2182,7 @@ mod tests {
             &data,
         )
         .expect("a valid genome");
-        let brain = Brain::new(&genome, &data);
+        let brain = Brain::new(&genome, &data, LifeStage::Adult);
         let place = |name: &str| {
             data.brain_inputs()
                 .position(|(_, n)| n == name)

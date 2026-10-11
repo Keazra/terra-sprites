@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, VecDeque};
 use serde::{Deserialize, Serialize};
 
 use crate::action::{Action, Did, ScriptedAction, Walk, chebyshev};
+use crate::ageing::LifeStage;
 use crate::biochem::{Body, Program};
 use crate::brain::Brain;
 use crate::data::DataPack;
@@ -56,11 +57,16 @@ impl Sprite {
         tick - self.born
     }
 
+    /// The sprite's life stage on the tick `tick` (M2 design §9.1).
+    pub(crate) fn life_stage(&self, tick: u64) -> LifeStage {
+        self.program.traits.life_stage(self.age(tick))
+    }
+
     /// A newborn with `genome` on `pos`, born on the tick `born` (design §4.7).
     pub(crate) fn newborn(genome: Genome, pos: Pos, born: u64, data: &DataPack) -> Sprite {
-        let program = Program::new(&genome, data);
+        let program = Program::new(&genome, data, LifeStage::Young);
         let body = Body::newborn(&program, data);
-        let brain = Brain::new(&genome, data);
+        let brain = Brain::new(&genome, data, LifeStage::Young);
         Sprite {
             pos,
             born,
@@ -193,21 +199,25 @@ impl Sprites {
             if !sprite.genome.fits(data) {
                 return Err(misfit());
             }
-            sprite.brain.params.catch_up(&sprite.genome, data);
+            // Its traits don't depend on its life stage, which they set.
+            let stage = Program::new(&sprite.genome, data, LifeStage::Young)
+                .traits
+                .life_stage(sprite.age(now));
+            sprite.brain.params.catch_up(&sprite.genome, data, stage);
             // Places remembered under other limits, in a save from before
             // they were added, are brought within its pack's (M2 design §7.2).
             sprite
                 .brain
                 .experience
                 .keep_within(data.physiology().remembered_places);
-            if !sprite.body.fits(data) || !sprite.brain.fits(&sprite.genome, data, now) {
+            if !sprite.body.fits(data) || !sprite.brain.fits(&sprite.genome, data, stage, now) {
                 return Err(misfit());
             }
             if sprite.flood.as_ref().is_some_and(|flood| !flood.fits(map)) {
                 return Err(format!("sprite {}'s flood doesn't fit the map", id.0));
             }
             self.on_tile.put(sprite.pos, id);
-            sprite.program = Program::new(&sprite.genome, data);
+            sprite.program = Program::new(&sprite.genome, data, stage);
             sprite.body.chems_before_tick.clone_from(&sprite.body.chems);
         }
         Ok(())

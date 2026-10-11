@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use xxhash_rust::xxh3::xxh3_64_with_seed;
 
 use crate::action::{self, ActionView, ScriptedAction};
+use crate::ageing::{LifeStage, Switch};
 use crate::biochem::{self, Senses, Traits};
 use crate::brain::{Explanation, Memory, RememberedPlace};
 use crate::command::{self, Command};
@@ -382,7 +383,8 @@ impl<'a> SpriteView<'a> {
         self.sprite.program.traits
     }
 
-    /// Every gene in the sprite's genome, in order, with how it's expressed.
+    /// Every gene in the sprite's genome, in order, with how it's expressed
+    /// at its life stage.
     pub fn genes(&self) -> Vec<(GeneView<'a>, Expression)> {
         let data = &self.world.data;
         let genome = &self.sprite.genome;
@@ -390,8 +392,21 @@ impl<'a> SpriteView<'a> {
             .genes
             .iter()
             .map(|gene| gene.view(data))
-            .zip(expressions(genome, data))
+            .zip(expressions(genome, data, self.life_stage()))
             .collect()
+    }
+
+    /// When each gene in its genome works, in genome order (M2 design §9.2).
+    pub fn switches(&self) -> Vec<Switch> {
+        let genome = &self.sprite.genome;
+        (0..genome.genes.len())
+            .map(|index| genome.switch(index))
+            .collect()
+    }
+
+    /// Its life stage (M2 design §9.1).
+    pub fn life_stage(&self) -> LifeStage {
+        self.sprite.life_stage(self.world.state.tick)
     }
 
     /// Every chemical in the sprite, in the data pack's order.

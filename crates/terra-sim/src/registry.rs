@@ -156,6 +156,8 @@ listed_enum! {
         SenseRadius = 2 => "sense_radius",
         /// Ticks until old age.
         Lifespan = 3 => "lifespan",
+        /// The age it grows up at, in ticks (M2 design §9.3).
+        GrowsUp = 4 => "grows_up",
     }
 
     pub(crate) const ALL;
@@ -273,7 +275,7 @@ mod tests {
 
         assert_eq!(
             Trait::ALL.map(Trait::name),
-            ["speed", "sense_radius", "lifespan"]
+            ["speed", "sense_radius", "lifespan", "grows_up"]
         );
         for (i, one) in Trait::ALL.into_iter().enumerate() {
             assert_eq!(one as u16, (i + 1) as u16);

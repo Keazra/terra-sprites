@@ -9,8 +9,8 @@ use ratatui::text::Line;
 use terra_sim::{
     ActionView, Blocker, ChemicalKind, ChemicalLevel, Command, CursorTouch, DeathCause, Dir,
     EmitterMode, Emptied, EntityId, Event, EventKind, Explanation, Expression, GeneView, Grip,
-    Learned, MAX_NAME_CHARS, NameProblem, ObjectView, Outcome, Part, PlaceRule, Pos, Progress,
-    Rejection, Removal, SpriteView, Target, Terrain, Thing, Trait, Verb, World,
+    Learned, LifeStage, MAX_NAME_CHARS, NameProblem, ObjectView, Outcome, Part, PlaceRule, Pos,
+    Progress, Rejection, Removal, SpriteView, Switch, Target, Terrain, Thing, Trait, Verb, World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -664,6 +664,7 @@ fn trait_text(which: Trait, value: f32) -> String {
         Trait::Speed => format!("speed {}", significant(value)),
         Trait::SenseRadius => format!("sense {}", significant(value)),
         Trait::Lifespan => format!("lifespan {}", whole(f64::from(value))),
+        Trait::GrowsUp => format!("grows up {}", whole(f64::from(value))),
     }
 }
 
@@ -1293,28 +1294,38 @@ impl GeneGroup {
 /// group in genome order, as plain lines. The expressed traits share one
 /// line. A gene with no effect is dimmed, with the reason below it.
 fn genome_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
-    let genes = sprite.genes();
+    let genes: Vec<(GeneView, Expression, Switch)> = sprite
+        .genes()
+        .into_iter()
+        .zip(sprite.switches())
+        .map(|((gene, how), switch)| (gene, how, switch))
+        .collect();
     let mut lines = Vec::new();
     for group in GeneGroup::ALL {
-        let members: Vec<&(GeneView, Expression)> = genes
+        let members: Vec<&(GeneView, Expression, Switch)> = genes
             .iter()
-            .filter(|(gene, _)| GeneGroup::of(gene) == group)
+            .filter(|(gene, _, _)| GeneGroup::of(gene) == group)
             .collect();
         if members.is_empty() {
             continue;
         }
         lines.push(Line::from(format!(" {}", group.heading())));
-        let (together, apart): (Vec<_>, Vec<_>) = members.into_iter().partition(|(gene, how)| {
-            matches!(gene, GeneView::Trait { .. }) && *how == Expression::Expressed
-        });
+        let (together, apart): (Vec<_>, Vec<_>) =
+            members.into_iter().partition(|(gene, how, _)| {
+                matches!(gene, GeneView::Trait { .. }) && *how == Expression::Expressed
+            });
         if !together.is_empty() {
-            let traits: Vec<String> = together.iter().map(|(gene, _)| gene_text(gene)).collect();
+            let traits: Vec<String> = together
+                .iter()
+                .map(|(gene, _, _)| gene_text(gene))
+                .collect();
             lines.extend(wrapped(&listed(&traits), 1, Style::default()));
         }
-        for (gene, how) in apart {
+        for (gene, how, switch) in apart {
+            let text = format!("{}{}", gene_text(gene), switch_text(*switch));
             let reason = match how {
                 Expression::Expressed => {
-                    lines.extend(wrapped(&gene_text(gene), 1, Style::default()));
+                    lines.extend(wrapped(&text, 1, Style::default()));
                     continue;
                 }
                 Expression::Flagged(reason) => format!("flagged: {reason}"),
@@ -1323,13 +1334,28 @@ fn genome_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
                 Expression::Unmatched => {
                     "unmatched: names a category this world doesn't have".into()
                 }
+                Expression::Dormant => "dormant: switched off at this life stage".into(),
             };
             let dim = Style::default().fg(Color::DarkGray);
-            lines.extend(wrapped(&gene_text(gene), 1, dim));
+            lines.extend(wrapped(&text, 1, dim));
             lines.extend(wrapped(&reason, 3, dim));
         }
     }
     lines
+}
+
+/// When a gene that switches with life stage works (M2 design §9.2), after
+/// the gene: ` · adults only`, ` · from adult`, ` · until adult`. Nothing for
+/// a gene that works all its life.
+fn switch_text(switch: Switch) -> String {
+    match (switch.from, switch.until) {
+        (LifeStage::Young, None) => String::new(),
+        (from, None) => format!(" · from{BOUND}{}", from.name()),
+        (LifeStage::Young, Some(until)) => format!(" · until{BOUND}{}", until.name()),
+        (from, Some(until)) => {
+            format!(" · from{BOUND}{} until{BOUND}{}", from.name(), until.name())
+        }
+    }
 }
 
 /// Keeps a word with the number after it when a line wraps.

@@ -305,7 +305,9 @@ fn a_sprite_shows_its_age_and_its_traits_as_its_body_has_them() {
         Traits {
             speed: 12.0,
             sense_radius: 10.0,
-            lifespan: 61234.5
+            lifespan: 61234.5,
+            // The middle of its range, with no gene for it.
+            grows_up: 7500.0,
         }
     );
 }

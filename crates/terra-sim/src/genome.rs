@@ -6,12 +6,16 @@ use std::fmt::Write as _;
 
 use serde::{Deserialize, Serialize};
 
+use crate::ageing::{LifeStage, Switch, some_stage};
 use crate::brain_io::{ATTENDED, InputId, TARGET_IDS};
 use crate::data::DataPack;
 use crate::registry::{BrainParam, CategoryId, ChemId, LocusId, Trait, Verb};
 
-/// The genome file format this build writes, and the newest it reads.
-const FORMAT: u32 = 1;
+/// The newest genome file format this build reads. It writes format 1 for
+/// a genome whose genes work all life, as builds before life stages read,
+/// and format 2 for one with a gene that switches with life stage (M2
+/// design §9.2), which they refuse.
+const FORMAT: u32 = 2;
 /// The payload version of every gene type this build knows.
 const VERSION: u8 = 1;
 
@@ -20,6 +24,11 @@ const VERSION: u8 = 1;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Genome {
     pub(crate) genes: Vec<Gene>,
+    /// When each gene works, in gene order (M2 design §9.2). Empty when
+    /// every gene works all its life, as in a genome from before life
+    /// stages, so such a genome hashes as it did.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) switches: Vec<Switch>,
 }
 
 /// Why a genome file could not be read.
@@ -229,6 +238,7 @@ impl Genome {
                 file.format
             )));
         }
+        let switches: Vec<Switch> = file.genes.iter().map(GeneEntry::switch).collect();
         let genes = file
             .genes
             .into_iter()
@@ -243,7 +253,20 @@ impl Genome {
                     })
             })
             .collect::<Result<Vec<Gene>, GenomeError>>()?;
-        Ok(Genome { genes })
+        Ok(Genome::switched(genes, switches))
+    }
+
+    /// A genome of `genes`, each working as its switch in `switches` says.
+    pub(crate) fn switched(genes: Vec<Gene>, mut switches: Vec<Switch>) -> Genome {
+        if switches.iter().all(|switch| switch.is_always()) {
+            switches.clear();
+        }
+        Genome { genes, switches }
+    }
+
+    /// When the gene at `index` works.
+    pub(crate) fn switch(&self, index: usize) -> Switch {
+        self.switches.get(index).copied().unwrap_or_default()
     }
 
     /// Whether every gene fits `data`: what each refers to is in the pack,
@@ -256,9 +279,14 @@ impl Genome {
 
     /// The genome as a genome file: genes this build knows by name, the rest by number.
     pub fn to_ron(&self, data: &DataPack) -> String {
-        let mut text = format!("(\n    format: {FORMAT},\n    genes: [\n");
-        for gene in &self.genes {
-            let _ = writeln!(text, "        {},", gene.to_ron(data));
+        let format = if self.switches.is_empty() { 1 } else { FORMAT };
+        let mut text = format!("(\n    format: {format},\n    genes: [\n");
+        for (index, gene) in self.genes.iter().enumerate() {
+            let written = gene.to_ron(data);
+            // The switch goes inside the gene's brackets, after its fields.
+            let (fields, close) = written.split_at(written.len() - 1);
+            let switch = self.switch(index).to_ron();
+            let _ = writeln!(text, "        {fields}{switch}{close},");
         }
         text + "    ],\n)\n"
     }
@@ -684,11 +712,19 @@ enum GeneEntry {
     HalfLife {
         chem: String,
         ticks: u32,
+        #[serde(default)]
+        from: LifeStage,
+        #[serde(default, deserialize_with = "some_stage")]
+        until: Option<LifeStage>,
     },
     Reaction {
         reactants: Vec<(String, u8)>,
         products: Vec<(String, u8)>,
         rate: f32,
+        #[serde(default)]
+        from: LifeStage,
+        #[serde(default, deserialize_with = "some_stage")]
+        until: Option<LifeStage>,
     },
     Emitter {
         locus: LocusEntry,
@@ -699,6 +735,10 @@ enum GeneEntry {
         threshold: f32,
         gain: f32,
         chem: String,
+        #[serde(default)]
+        from: LifeStage,
+        #[serde(default, deserialize_with = "some_stage")]
+        until: Option<LifeStage>,
     },
     Receptor {
         chem: String,
@@ -706,29 +746,53 @@ enum GeneEntry {
         threshold: f32,
         gain: f32,
         target: String,
+        #[serde(default)]
+        from: LifeStage,
+        #[serde(default, deserialize_with = "some_stage")]
+        until: Option<LifeStage>,
     },
     InitialConcentration {
         chem: String,
         value: f32,
+        #[serde(default)]
+        from: LifeStage,
+        #[serde(default, deserialize_with = "some_stage")]
+        until: Option<LifeStage>,
     },
     Trait {
         #[serde(rename = "trait")]
         which: String,
         value: f32,
+        #[serde(default)]
+        from: LifeStage,
+        #[serde(default, deserialize_with = "some_stage")]
+        until: Option<LifeStage>,
     },
     BrainParam {
         param: String,
         value: f32,
+        #[serde(default)]
+        from: LifeStage,
+        #[serde(default, deserialize_with = "some_stage")]
+        until: Option<LifeStage>,
     },
     Instinct {
         inputs: Vec<(String, bool)>,
         verb: Verb,
         weight: f32,
+        #[serde(default)]
+        from: LifeStage,
+        #[serde(default, deserialize_with = "some_stage")]
+        until: Option<LifeStage>,
     },
     AttentionInstinct {
         input: String,
         category: String,
         weight: f32,
+        #[serde(default)]
+        from: LifeStage,
+        #[serde(default, deserialize_with = "some_stage")]
+        until: Option<LifeStage>,
     },
     /// Any gene, by number: its type ID, payload version and payload bytes in hex.
     Gene {
@@ -736,6 +800,10 @@ enum GeneEntry {
         type_id: u16,
         version: u8,
         payload: String,
+        #[serde(default)]
+        from: LifeStage,
+        #[serde(default, deserialize_with = "some_stage")]
+        until: Option<LifeStage>,
     },
 }
 
@@ -746,6 +814,22 @@ enum LocusEntry {
 }
 
 impl GeneEntry {
+    /// When the gene works.
+    fn switch(&self) -> Switch {
+        match *self {
+            GeneEntry::HalfLife { from, until, .. }
+            | GeneEntry::Reaction { from, until, .. }
+            | GeneEntry::Emitter { from, until, .. }
+            | GeneEntry::Receptor { from, until, .. }
+            | GeneEntry::InitialConcentration { from, until, .. }
+            | GeneEntry::Trait { from, until, .. }
+            | GeneEntry::BrainParam { from, until, .. }
+            | GeneEntry::Instinct { from, until, .. }
+            | GeneEntry::AttentionInstinct { from, until, .. }
+            | GeneEntry::Gene { from, until, .. } => Switch { from, until },
+        }
+    }
+
     /// The gene type's name, for messages.
     fn type_name(&self) -> &'static str {
         match self {
@@ -791,7 +875,9 @@ impl GeneEntry {
                 .collect::<Result<Vec<Term>, String>>()
         };
         Ok(match self {
-            GeneEntry::HalfLife { chem: name, ticks } => Gene::HalfLife {
+            GeneEntry::HalfLife {
+                chem: name, ticks, ..
+            } => Gene::HalfLife {
                 chem: chem(&name)?,
                 ticks,
             },
@@ -799,6 +885,7 @@ impl GeneEntry {
                 reactants,
                 products,
                 rate,
+                ..
             } => Gene::Reaction {
                 reactants: terms(reactants)?,
                 products: terms(products)?,
@@ -811,6 +898,7 @@ impl GeneEntry {
                 threshold,
                 gain,
                 chem: name,
+                ..
             } => Gene::Emitter {
                 locus: match read {
                     LocusEntry::Chem(name) => LocusRef::Chem(chem(&name)?),
@@ -827,22 +915,25 @@ impl GeneEntry {
                 threshold,
                 gain,
                 target,
+                ..
             } => Gene::Receptor {
                 chem: chem(&name)?,
                 threshold,
                 gain,
                 target: locus(&target)?,
             },
-            GeneEntry::InitialConcentration { chem: name, value } => Gene::InitialConcentration {
+            GeneEntry::InitialConcentration {
+                chem: name, value, ..
+            } => Gene::InitialConcentration {
                 chem: chem(&name)?,
                 value,
             },
-            GeneEntry::Trait { which, value } => Gene::Trait {
+            GeneEntry::Trait { which, value, .. } => Gene::Trait {
                 which: Trait::named(&which)
                     .ok_or_else(|| format!("names the unknown trait `{which}`"))?,
                 value,
             },
-            GeneEntry::BrainParam { param, value } => Gene::BrainParam {
+            GeneEntry::BrainParam { param, value, .. } => Gene::BrainParam {
                 param: BrainParam::named(&param)
                     .ok_or_else(|| format!("names the unknown brain parameter `{param}`"))?,
                 value,
@@ -851,6 +942,7 @@ impl GeneEntry {
                 inputs,
                 verb,
                 weight,
+                ..
             } => {
                 // Any unknown input but a missing category's is an error.
                 let ids = inputs
@@ -876,6 +968,7 @@ impl GeneEntry {
                 input: name,
                 category,
                 weight,
+                ..
             } => {
                 let id = input(&name)?;
                 match data.category_named(&category) {
@@ -895,6 +988,7 @@ impl GeneEntry {
                 type_id,
                 version,
                 payload,
+                ..
             } => {
                 let payload = hex(&payload)?;
                 let gene = decode(type_id, version, payload.clone())?;
