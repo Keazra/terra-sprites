@@ -132,7 +132,7 @@ fn l_lists_every_sprite_over_the_panels_with_its_age_stage_drive_and_doing() {
     assert!(title.ends_with(" esc close ─┐"), "{title}");
     let heading = row(&screen, 2);
     assert!(
-        heading.starts_with("│ Sprite     Age  Stage  Drive"),
+        heading.starts_with("│ Sprite     Age  Life stage  Drive"),
         "{heading}"
     );
     assert!(heading.contains("Doing"), "{heading}");
@@ -141,7 +141,10 @@ fn l_lists_every_sprite_over_the_panels_with_its_age_stage_drive_and_doing() {
         ["Zed #1", "Sprite #2", "Abel #3", "Sprite #4"]
     );
     let first = row(&screen, 3);
-    assert!(first.starts_with("│ Zed #1       1  young  -"), "{first}");
+    assert!(
+        first.starts_with("│ Zed #1       1  young       -"),
+        "{first}"
+    );
     assert!(first.contains("Wandering"), "the Body tab's line: {first}");
     let hungry = row_of(&screen, "Sprite #2");
     assert!(row(&screen, hungry).contains("hunger"));
