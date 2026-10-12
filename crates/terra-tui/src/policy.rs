@@ -26,6 +26,10 @@ pub enum Panel {
     SpriteList,
     /// The status line's part about the tile under the Cursor.
     TileInfo,
+    /// The Cursor's own lines (#174): the status line's parts about the
+    /// sprite it follows and what it leads or holds, and the prompt for
+    /// naming a sprite.
+    CursorLines,
     /// An inspector tab.
     Tab(Tab),
 }

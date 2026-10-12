@@ -6,8 +6,8 @@ mod common;
 use common::{at, builtin};
 
 use terra_sim::{
-    DataPack, EntityId, Event, EventKind, Expression, Genome, Map, Outcome, Part, Pos, Scenario,
-    ScriptedAction, Thing, Verb, World,
+    Command, DataPack, EntityId, Event, EventKind, Expression, Genome, Map, Outcome, Part, Pos,
+    Scenario, ScriptedAction, Target, Thing, Verb, World,
 };
 
 const STARTER: &str = include_str!("../../../data/genomes/starter.ron");
@@ -244,6 +244,50 @@ fn a_growing_drive_interrupts_what_the_sprite_was_doing() {
         }
     }
     panic!("hunger should interrupt it");
+}
+
+#[test]
+fn a_sprite_that_changes_its_mind_mid_walk_acts_on_what_it_was_walking_to() {
+    // Design §5.3, #173: the new verb is aimed at what the decision weighed,
+    // the bush it was walking to, and not at a nearer bush that now draws
+    // the eye more. Going over to things is all the sprite wants at first;
+    // hunger then climbs fast and soon outscores that by more than the
+    // switch margin, while a seedling placed after it set off is nearer.
+    let data = builtin();
+    let genome = starter_with(
+        &[
+            r#"Instinct(inputs: [("always", false)], verb: Approach, weight: 0.6)"#,
+            r#"Emitter(locus: Locus("always"), mode: Level, gain: 0.2, chem: "hunger")"#,
+        ],
+        &data,
+    );
+    let mut world = world(&FIELD, &[(at(9, 3), "berry_bush")], at(1, 3), genome, 1);
+    let id = world.sprites().next().expect("the sprite").id();
+    let walking_to = world.object_at(at(9, 3)).expect("the bush").id();
+    assert_eq!(started(&world.step(), id), [Verb::Approach]);
+    let berry_bush = world
+        .data()
+        .object_type_id("berry_bush")
+        .expect("a berry bush type");
+    // The Place menu's berry bush is a seedling.
+    world.submit(Command::Place {
+        tile: at(4, 5),
+        object_type: berry_bush,
+    });
+    for _ in 0..10 {
+        let events = world.step();
+        if started(&events, id) == [Verb::Eat] {
+            let sprite = world.sprite(id).expect("the sprite");
+            let action = sprite.action().expect("the action it started");
+            assert_eq!(action.target, Some(Target::Object(walking_to)));
+            assert_eq!(ended(&events, id), [(Verb::Approach, Outcome::Interrupted)]);
+            // The seedling was the nearer bush as it changed its mind.
+            let from = |x: u16| sprite.pos().x.abs_diff(x);
+            assert!(from(4) < from(9), "at {:?}", sprite.pos());
+            return;
+        }
+    }
+    panic!("hunger should interrupt the walk");
 }
 
 #[test]

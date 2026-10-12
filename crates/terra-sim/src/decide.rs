@@ -31,8 +31,11 @@ struct Offer {
 struct Candidate {
     target: Target,
     /// Its nearest reachable goal tile; none for a remembered place out of
-    /// sight (M2 design §7).
+    /// sight (M2 design §7), or a running action's target out of reach
+    /// (#173).
     goal: Option<Pos>,
+    /// Whether it's a remembered place out of sight (M2 design §7).
+    remembered: bool,
     aim: Aim,
     /// The stable ID of its type: none for water or a sprite in a pack with
     /// no object type for them (design v19 §3.5.5).
@@ -155,6 +158,7 @@ pub(crate) fn decide(
                 type_id,
                 target,
                 goal,
+                remembered: offer.cost.is_none(),
                 aim,
             };
             (category, candidate)
@@ -170,9 +174,9 @@ pub(crate) fn decide(
                 state.on_goal_tile(data, sprite.pos, target),
             );
             let whereabouts = state.whereabouts(data, target);
-            let cost = whereabouts
-                .and_then(|(there, own)| flood.nearest_goal(&state.map, there, own))
-                .map_or(u32::MAX, |(_, cost)| cost);
+            let nearest =
+                whereabouts.and_then(|(there, own)| flood.nearest_goal(&state.map, there, own));
+            let cost = nearest.map_or(u32::MAX, |(_, cost)| cost);
             let subject = state.subject_of(data, target);
             // A trip still out of sight is weighed as its place is
             // remembered, or one of its kind near it that it merged into (M2
@@ -186,12 +190,19 @@ pub(crate) fn decide(
                 ),
                 None => 0.0,
             };
-            Aim {
+            let aim = Aim {
                 category,
                 subject,
                 distance: normalized(cost, reach),
                 adjacent,
                 recall,
+            };
+            Candidate {
+                target,
+                goal: nearest.map(|(goal, _)| goal),
+                remembered: a.remembered,
+                aim,
+                type_id: a.target_type,
             }
         });
     let exploration = sprite.body.loci[data.physiology().indices.exploration_mod];
@@ -224,8 +235,8 @@ pub(crate) fn decide(
         .iter()
         .map(|(&category, c)| (category, seen(&c.aim)))
         .collect();
-    if let Some(aim) = aimed {
-        in_sight.insert(aim.category, seen(&aim));
+    if let Some(aimed) = &aimed {
+        in_sight.insert(aimed.aim.category, seen(&aimed.aim));
     }
 
     let sprite = state.sprites.get_mut(id).expect("the same sprite");
@@ -243,9 +254,15 @@ pub(crate) fn decide(
     // Attention moved off the action's target: it changed its mind. The
     // action ends once the new one is sure to start, as a trip with no way
     // there doesn't (M2 design §7.4).
-    let moved = aimed.is_some_and(|aim| attended != Some(aim.category));
+    let moved = aimed
+        .as_ref()
+        .is_some_and(|aimed| attended != Some(aimed.aim.category));
     let running = running && !moved;
-    let aim = if running { aimed } else { None }.or(candidate.map(|c| c.aim));
+    // What the decision weighs, and what a verb it chooses is aimed at: a
+    // running action's target, which a nearer one of its category doesn't
+    // replace, or else the candidate (design §5.3, #173).
+    let weighed = aimed.as_ref().filter(|_| running).or(candidate);
+    let aim = weighed.map(|c| c.aim);
 
     // 5b: the decision.
     let inputs = brain.inputs(&sprite.body, aim, data);
@@ -272,22 +289,19 @@ pub(crate) fn decide(
         decision_scoring,
         data,
     );
-    let beside = candidate.is_some_and(|c| c.aim.adjacent);
-    let remembered = candidate.is_some_and(|c| c.goal.is_none());
-    let offered = available(candidate.is_some(), beside, remembered);
+    // Verbs are offered on it only while there's a way to it: a running
+    // action's target out of reach, unless it's a remembered place, offers
+    // only what needs no target (design §5.5, #173).
+    let reachable = weighed.filter(|c| c.goal.is_some() || c.remembered);
+    let beside = reachable.is_some_and(|c| c.aim.adjacent);
+    let remembered = reachable.is_some_and(|c| c.remembered);
+    let offered = available(reachable.is_some(), beside, remembered);
     let current = sprite.action.as_ref().filter(|_| running).map(|a| a.verb);
     let chosen = match current {
         Some(verb) => brain.switch(verb, &scores, &offered),
         None => Some(brain.choose(&scores, &offered, exploration, rng)),
     };
-    // A new action is aimed at the candidate; a running one keeps its target.
-    let running_target = sprite
-        .action
-        .as_ref()
-        .filter(|_| running && chosen.is_none());
-    let target = running_target
-        .and_then(|a| a.target)
-        .or(candidate.map(|c| c.target));
+    let target = weighed.map(|c| c.target);
     let verb = chosen.or(current);
     let motive = verb.and_then(|verb| brain.motive(verb, &activations, data));
     let snapshot = Snapshot {
@@ -317,12 +331,12 @@ pub(crate) fn decide(
         }
         Verb::Rest => (None, None),
         Verb::Retreat => {
-            let candidate = candidate.expect("an aimed verb is offered only with a target");
-            (None, Some((candidate.target, candidate.type_id)))
+            let weighed = weighed.expect("an aimed verb is offered only with a target");
+            (None, Some((weighed.target, weighed.type_id)))
         }
         _ => {
-            let candidate = candidate.expect("an aimed verb is offered only with a target");
-            (candidate.goal, Some((candidate.target, candidate.type_id)))
+            let weighed = weighed.expect("an aimed verb is offered only with a target");
+            (weighed.goal, Some((weighed.target, weighed.type_id)))
         }
     };
     // Setting off for a remembered place, it finds the way there, which it
