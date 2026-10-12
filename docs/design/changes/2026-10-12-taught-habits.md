@@ -1,6 +1,6 @@
 # What the Cursor teaches lasts
 
-A3 had passed or failed by luck since Milestone 1: one shock wore off for 9 sprites in 10, and it took three to last ([#187](https://github.com/Keazra/terra-sprites/issues/187)). On 2026-10-12 the owner chose to fix it before breeding merged. This is the fix recommended to them, "Lasting lessons": what the Cursor teaches is kept apart and lasts.
+A3 had passed or failed by luck since Milestone 1: one shock wore off for 9 sprites in 10, and it took three to last ([#187](https://github.com/Keazra/terra-sprites/issues/187)). On 2026-10-12 the owner chose to fix it before breeding merged. This is the fix recommended to them, "Lasting lessons": what the Cursor teaches is kept apart and lasts, in [PR #189](https://github.com/Keazra/terra-sprites/pull/189).
 
 ## M1 "A Sprite Lives"
 
