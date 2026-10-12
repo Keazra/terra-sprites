@@ -64,7 +64,7 @@ The owner's times, as playtime at 1× (1.25 ticks a second, M1 design §6.6):
 
 - **These are the starter genome's times.** The genome brings them about (§3), so they vary from sprite to sprite and can evolve.
 - **Growing old is where M1's lifespan went** (#140). The `grows_old` gene sets when a sprite grows old, and its genes then weaken until its body gives out and old age kills it (§9.4). How long that takes depends on the life it has had, not on a second gene. A save or genome that says `lifespan` reads it as `grows_old`, whose range is about **6,000–60,000**.
-- **A generation takes about 15–20 minutes at 4×,** the full game's top speed (Slice 27), so an evening sees several. Long runs of evolution belong to the fast-forward mode.
+- **A generation takes about 15–20 minutes at 4×,** Story mode's top speed (Slice 27), so an evening sees several. Long runs of evolution belong to the fast-forward mode.
 - **Lives get shorter in Slice 23, with breeding.** Until sprites have young, nothing replaces the dead: with 4-hour lives, the default world would be empty after about 4 hours of play. So in Slice 22 sprites grow up and grow old at their times above, but old age lasts about 10 hours (§9.4), and Slice 23 shortens it to about 1.
 - **Childhood ends at growing up.** M1's viability run counts ticks 0–10,000 as childhood because sprites had no stages (M1 design §7.4, A4). From Slice 22, childhood is a stage, and the harsher world's goal (§6, G5) is counted at growing up.
 
@@ -102,7 +102,7 @@ Each slice is a GitHub issue and its own PR, worked as in `docs/agents/how-we-wo
 | **24. Mixing and mutating genes** | Children differ from their parents; gene quality joins ageing | 23 |
 | **25. Family tree** | A sprite's parents, grandparents and children, living or dead | 23 |
 | **26. Population graph** | The population over time | 23 |
-| **27. Fast-forward and the speed cap** | A world run for many generations with no screen; 4× in the full game, faster in a Lab mode | 23 (and 21, if Lab mode is chosen there) |
+| **27. Fast-forward and the speed cap** | A world run for many generations with no screen; 4× in Story mode, faster in Lab mode | 23 (and 21, if Lab mode is chosen there) |
 | **28. Learning by watching** | The young copy what adults do, their parents most | 22, 25 |
 | **29. A harsher world** | About 20% of unattended newborns grow up | 20, 28 |
 | **30. M2 acceptance** | The criteria of §6, measured and played | all |
@@ -264,7 +264,7 @@ A small box over the menu, with:
 - **Seed:** a random one filled in. Typing a digit replaces it, then more digits add to it, as a save's name is typed (M1 design §6.7); `Backspace` rubs out, and `Tab` offers another random seed. A seed is a whole number from 0 to 18446744073709551615.
 - **Preset:** `↑` `↓` pick one from a list: `default` first (the built-in preset, or `--data`'s own `presets/default.ron`), then each `.ron` file in the `presets` folder of the game's folder (`%APPDATA%\terra-sprites\presets` on Windows), by name. A preset is checked against the data pack in use when the world is made.
 - `Enter` starts the world; `Esc` goes back to the menu.
-- Once Slice 27 builds Lab mode, the choice between the full game and Lab mode goes in this box.
+- Once Slice 27 builds Lab mode, the choice between Story mode and Lab mode goes in this box (2026-10-12).
 
 ### 8.4 Leaving a world
 

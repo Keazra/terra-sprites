@@ -462,6 +462,14 @@ _Avoid_: main menu, start screen, splash screen
 How the title screen starts: in the dark, the Cursor's light finds a sleeping sprite and the world fills in around it, the sprite wakes pleased, and the title and menu appear. Any key skips it (M2 design §8.1).
 _Avoid_: intro, splash, cutscene
 
+**Story mode** (M2):
+The game as it's meant to be played, at 4× speed at most (M2 design, Slice 27). On the ship, a sealed door opens only when a sprite works its panel.
+_Avoid_: full game, play mode, campaign
+
+**Lab mode** (M2):
+The game for experiments: faster than 4× (M2 design, Slice 27), and on the ship, every sector can be visited from the start and the keeper can open any door. It isn't a lab scenario, which is a test file.
+_Avoid_: free mode, sandbox, creative mode
+
 **Map view**:
 The panel that shows the map.
 _Avoid_: map (for the panel)
@@ -779,8 +787,20 @@ The part of a biome that the ship built to make it work: plating and hull juttin
 _Avoid_: annex, outpost
 
 **Door** (#181):
-A way through the wall between two sectors: an open doorway, or a sealed door that stays shut until a sprite opens it, and never closes again.
+A way through the wall between two sectors: an open doorway, or a sealed door that stays shut until it's opened, and never closes again. In Story mode only a sprite can open one, by working its panel; in Lab mode the keeper can too.
 _Avoid_: portal, gate
+
+**Panel** (#181):
+The device beside a sealed door that opens it: a plate to touch, a button to push or a lever to pull, as its data says. One sprite working it once opens the door for good. In Story mode only a sprite can work one.
+_Avoid_: lock, keypad
+
+**Ship plan** (#181):
+The ship's outline, shown over the map view, with each open sector's name and how many sprites are in it; picking a sector takes the view there. In Story mode it's the keeper's memory, so a sealed sector is dark on it until its door opens.
+_Avoid_: minimap, map (the map is the world's tiles)
+
+**Builders' log** (#181):
+Lines the ship's builders left, one or two per sector in its recipe's data, which the keeper remembers when the sector's door first opens. They hint at what the ship is for, and never say outright what a device does.
+_Avoid_: lore, journal
 
 **Plating** (#181):
 The ship's metal floor: a terrain that sprites walk on and nothing grows on.
@@ -798,7 +818,7 @@ A small hand-made piece of the ship, a few tiles big, that a sector's recipe pla
 _Avoid_: prefab, stamp, vault
 
 **Device**:
-An object of the ship's that does a job, such as an incubator, a pump, or one whose job nobody remembers. It's a fixture, and what it does is in its data: it may change the land or affect sprites near it, and the game never says what it's for. Some can be activated.
+An object of the ship's that does a job, such as an incubator, a pump, or one whose job nobody remembers. It's a fixture, and what it does is in its data: it may change the land or affect sprites near it, and the game never says what it's for. Some can be activated, and some have a switch that a sprite or the keeper can turn off and on again. A device never wears out or breaks.
 _Avoid_: machine, machinery, building
 
 **Space** (#180):
