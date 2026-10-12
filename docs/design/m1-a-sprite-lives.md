@@ -1102,7 +1102,7 @@ In this section, *c* is an object type (v19). Sprites are learned about one by o
 
 With no attempt within reach, the tick teaches as any other: no worth, and the sprite's own habits along the trace, not its taught habits. Relief, disappointment and fear are unchanged: relief keeps the touch window, and while a `was_hit` pulse is live punishment teaches fear of the hitter (below), even a shock's. **Why the latest attempt:** the player rewards what they saw the sprite do, and at 8× a player reacts after the sprite has moved on. The trace would spread the pet over the walk to whatever came next, and a fixed 20-tick window would span 16 seconds at 1×, long enough to credit a meal eaten well before a pet for resting.
 
-**Why taught habits are kept apart** (#187, measured). Until #187 a pet or shock went into the habit the sprite learns itself, at `habit_rate`. One shock made a sprite stop hitting for a while, but what it learned afterwards and the habit's fading soon washed it out, and it took about three to last (#187 counts them, sprite by sprite). The shock works so fast that most sprites get only one or two, so A3 passed or failed by how many each world's sprites happened to get. Kept apart, at `taught_rate` (three times `habit_rate`) and fading by half in about 35,000 ticks (about 8 hours at 1×), a shock or two lasts most of a life, and a sprite nobody trains learns exactly as before. A3 over seeds 1–30 (`cargo run --release -p terra-sim --example lab -- scenarios/a3-correct-training.ron --seeds 30`): trained sprites' median of hits in ticks 10,000–20,000 was 23 on `main` at `3b246f3` and 0 with taught habits, against 69 for the control both times. A mistaken shock lasts too, as a player would expect of training.
+**Why taught habits are kept apart** (#187). A pet or shock used to go into the habit the sprite learns itself, where what it learned afterwards and the habit's fading soon washed it out. It took about three shocks to last, and most sprites got one or two, so A3 passed or failed by luck. Kept apart, a shock or two lasts most of a life, and a sprite nobody trains learns exactly as before. A mistaken shock lasts too, as a player would expect of training. The measurements are in [the change file](changes/2026-10-12-taught-habits.md).
 
 **Worth and bad,** for the thing touched, of object type *c*. A hit's punishment (a `was_hit` pulse live) teaches fear instead, below, even when the sprite had just touched a sprite itself:
 - `G_n[c] += worth_rate_good × relief_n` for each need; `G[c] += worth_rate_good × reward`; `B[c] −= worth_rate_bad × punishment`.
@@ -1131,6 +1131,8 @@ With no attempt within reach, the tick teaches as any other: no worth, and the s
 - **Praise credits both** (owner decision): a pet just after a sprite tries to eat a ball raises the ball's general good *and* the habit of eating balls (its taught habit, #187). Players can teach tricks and quirks, on purpose or by accident, and without more praise the habit fades, slowly.
 
 **Fading.** Every tick, after learning: each `G_n` and `G` and `new_things` is multiplied by `1 − worth_fade_good`, each `B` by `1 − worth_fade_bad`, each `F` by `1 − fear_fade`, each good habit by `1 − habit_fade`, each bad habit by `1 − habit_fade_bad` (v21) and each taught habit, good or bad, by `1 − taught_fade` (#187). The starter genome's defaults learn bad faster than good and fade it about four times more slowly (Appendix B), habits as well as worth since v21.
+
+**Lessons fade slowly** (2026-10-12). The owner: lessons "shouldn't fade quickly, in general, whether self-taught or corrected/rewarded", while the Cursor's may teach more. So good worth and good habits fade by half in about 28,000 ticks, about 6 hours at 1×, an average life (M2 design §2); bad worth, bad habits, fear and taught habits in about 110,000 ticks, so in effect they last a life; and the Cursor's lessons stay three times as strong (`taught_rate`). Until then a good lesson halved in about 3,500 ticks, under an hour, and a bad one in about 14,000. A remembered place still fades by half in about 3,500 (M2 design §7.2): it can change under the sprite, as a bush dies.
 
 **Forgetting** (v18). A remembered sprite all of whose values are under `forget_below` (physiology, 0.01) is forgotten, and so is one that has died, at step 4. So is the Cursor (v29), once all its values are under `forget_below`. There's no limit on how many a sprite remembers.
 
@@ -2034,10 +2036,10 @@ This file fixes the **mechanisms and ranges**. The starting values are tuned wit
 | `forget_ticks` | 100–100,000 | 5,000 |
 | `worth_rate_good` | 0–1 | 0.5 |
 | `worth_rate_bad` | 0–1 | 0.8 |
-| `worth_fade_good` | 0–0.01 | 0.0002 |
-| `worth_fade_bad` | 0–0.01 | 0.00005 |
+| `worth_fade_good` | 0–0.01 | 0.000025 |
+| `worth_fade_bad` | 0–0.01 | 0.00000625 |
 | `habit_rate` | 0–1 | 0.3 |
-| `habit_fade` | 0–0.01 | 0.0002 |
+| `habit_fade` | 0–0.01 | 0.000025 |
 | `value_gain` | 0–2 | 1.0 |
 | `curiosity` | 0–1 | 0.3 |
 | `familiarity_rate` | 0–0.05 | 0.002 |
@@ -2045,17 +2047,17 @@ This file fixes the **mechanisms and ranges**. The starting values are tuned wit
 | `individual_rate_good` (v18) | 0–1 | 0.8 |
 | `individual_rate_bad` (v18) | 0–1 | 0.9 |
 | `fear_rate` (v18) | 0–1 | 1.0 |
-| `fear_fade` (v18) | 0–0.01 | 0.00005 |
+| `fear_fade` (v18) | 0–0.01 | 0.00000625 |
 | `generalise` (v18) | 2–10 | 3 |
 | `vigilance` (v18) | 0–2 | 0.8 |
 | `flight` (v18) | 0–2 | 0.8 |
 | `fear_reach` (v18) | 0.1–1 | 0.5 |
 | `generalise_types` (v19) | 2–10 | 3 |
 | `quieting` (v21) | 0–1 | 0.8 |
-| `habit_fade_bad` (v21) | 0–0.01 | 0.00005 |
+| `habit_fade_bad` (v21) | 0–0.01 | 0.00000625 |
 | `cursor_calming` (v29) | 0–0.1 | 0.01 |
 | `taught_rate` (#187) | 0–1 | 0.9 |
-| `taught_fade` (#187) | 0–0.01 | 0.00002 |
+| `taught_fade` (#187) | 0–0.01 | 0.00000625 |
 
 The v16 defaults are the prototype's (#10), a starting point for slice 9's tuning, and the v18 ones slice 9c's prototype's (#62). `generalise_types` starts at `generalise`'s value. Rows for parameters that do nothing since v16 stay, since a genome may still carry their genes.
 

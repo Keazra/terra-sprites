@@ -461,7 +461,7 @@ What a sprite has learned about doing one verb to one object type, or to sprites
 _Avoid_: skill (a later design, #48), reflex
 
 **Taught habit**:
-The part of a habit the Cursor taught: a Reward or Correct for what the sprite just tried. It is kept apart from the habit the sprite learns by itself, so what it learns afterwards doesn't wash it out, and it fades slowly, over most of a life. A sprite acts on the two together, and the Brain tab shows them together as its habit.
+The part of a habit the Cursor taught: a Reward or Correct for what the sprite just tried. It is kept apart from the habit the sprite learns by itself, so what it learns afterwards doesn't wash it out, and it fades as slowly as a bad lesson, so in effect it lasts a life. A sprite acts on the two together, and the Brain tab shows them together as its habit.
 _Avoid_: training (that's what the player does), conditioning
 
 **Thing touched**:

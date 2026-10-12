@@ -107,12 +107,15 @@
         // Learning (design v16 §5.6). Since v16 learning_rate, relax_rate and
         // consolidate_rate do nothing, nor do pool_size to forget_ticks while
         // the recruitable pool is on hold; genomes may still carry them.
+        // Lessons fade slowly (design §5.6): a good one by half in about
+        // 28,000 ticks, 6 hours at 1x, an average life; a bad one, and fear,
+        // in about 110,000, so in effect it lasts a life.
         "worth_rate_good":   (range: (0.0, 1.0),     default: 0.5),
         "worth_rate_bad":    (range: (0.0, 1.0),     default: 0.8),
-        "worth_fade_good":   (range: (0.0, 0.01),    default: 0.0002),
-        "worth_fade_bad":    (range: (0.0, 0.01),    default: 0.00005),
+        "worth_fade_good":   (range: (0.0, 0.01),    default: 0.000025),
+        "worth_fade_bad":    (range: (0.0, 0.01),    default: 0.00000625),
         "habit_rate":        (range: (0.0, 1.0),     default: 0.3),
-        "habit_fade":        (range: (0.0, 0.01),    default: 0.0002),
+        "habit_fade":        (range: (0.0, 0.01),    default: 0.000025),
         "value_gain":        (range: (0.0, 2.0),     default: 1.0),
         "curiosity":         (range: (0.0, 1.0),     default: 0.3),
         "familiarity_rate":  (range: (0.0, 0.05),    default: 0.002),
@@ -122,7 +125,7 @@
         "individual_rate_good": (range: (0.0, 1.0),  default: 0.8),
         "individual_rate_bad":  (range: (0.0, 1.0),  default: 0.9),
         "fear_rate":         (range: (0.0, 1.0),     default: 1.0),
-        "fear_fade":         (range: (0.0, 0.01),    default: 0.00005),
+        "fear_fade":         (range: (0.0, 0.01),    default: 0.00000625),
         "generalise":        (range: (2.0, 10.0),    default: 3.0),
         "vigilance":         (range: (0.0, 2.0),     default: 0.8),
         "flight":            (range: (0.0, 2.0),     default: 0.8),
@@ -133,24 +136,22 @@
         // at most this much, never all of it; and bad habits fade as slowly
         // as bad things (design v21 §5.6).
         "quieting":          (range: (0.0, 1.0),     default: 0.8),
-        "habit_fade_bad":    (range: (0.0, 0.01),    default: 0.00005),
+        "habit_fade_bad":    (range: (0.0, 0.01),    default: 0.00000625),
         // Fear of the Cursor wears off while it stays near and does nothing,
         // fastest on the sprite's own tile (design v29 §5.6): a sprite comes
         // to see it can't do anything about it. A first guess, tuned in play.
         "cursor_calming":    (range: (0.0, 0.1),     default: 0.01),
         // How much a remembered place fades each tick (M2 design §7):
-        // by half in about 3,500 ticks, as worth for a need does.
+        // by half in about 3,500 ticks. A place can change, as a bush dies,
+        // so it fades faster than a lesson.
         "place_fade":        (range: (0.0, 0.01),    default: 0.0002),
         // Every learning rate is multiplied by it (M2 design §9.5): the
         // starter genome's young learn faster.
         "plasticity":        (range: (0.25, 4.0),    default: 1.0),
-        // A Reward or Correct teaches the taught habit of the sprite's
-        // latest try, kept apart from the habit it learns itself (design
-        // §5.6, #187), at `taught_rate`, three times `habit_rate`. It fades
-        // by half in about 35,000 ticks (8 hours at 1x), so one or two
-        // shocks last most of a life.
+        // Taught habits: 3x habit_rate, fading as slowly as a bad lesson
+        // (design §5.6, #187).
         "taught_rate":       (range: (0.0, 1.0),     default: 0.9),
-        "taught_fade":       (range: (0.0, 0.01),    default: 0.00002),
+        "taught_fade":       (range: (0.0, 0.01),    default: 0.00000625),
     },
     // The range of each receptor target in `loci.ron`. Each rests at 1.0 when
     // no receptor writes it.
