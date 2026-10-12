@@ -3,8 +3,9 @@
 //! reports for each seed the sprites alive at the end, the most at once,
 //! the eggs laid with a partner and alone, the hatchings, the sprites that
 //! turned female, the deepest generation reached and how many hatchlings
-//! grew up. The bar: sprites alive at the end in at least 8 of 10 seeds,
-//! and never more than the world's limit.
+//! grew up; then how long its sprites lived and what they died of. The bar:
+//! sprites alive at the end in at least 8 of 10 seeds, and never more than
+//! the world's limit.
 //!
 //! `cargo run --release -p terra-sim --example generations`
 //!
@@ -17,7 +18,10 @@ mod args;
 use std::collections::BTreeMap;
 use std::process::ExitCode;
 
-use terra_sim::{DataPack, EntityId, EventKind, Outcome, Verb, World, WorldConfig};
+use terra_sim::{DataPack, DeathCause, EntityId, EventKind, Outcome, Verb, World, WorldConfig};
+
+/// Ticks in an hour at 1×, 1.25 ticks a second (design §6.6).
+const HOUR: f64 = 4_500.0;
 
 struct Options {
     ticks: u64,
@@ -45,6 +49,15 @@ struct Run {
     generation: u32,
     /// The tick the last sprite died, if they all did.
     died_out: Option<u64>,
+    /// The ages at which hatchlings and the first sprites died of old age.
+    lives: Vec<u64>,
+    first_lives: Vec<u64>,
+    /// Deaths after tick 10,000, once the first sprites' ages have spread
+    /// out (A4's window starts there): of old age, hunger, thirst, and hurt.
+    old_age: u64,
+    hunger: u64,
+    thirst: u64,
+    hurt: u64,
 }
 
 fn main() -> ExitCode {
@@ -80,6 +93,7 @@ fn main() -> ExitCode {
         "Died out"
     );
     let (mut going, mut over) = (0, 0);
+    let mut runs = Vec::new();
     for seed in first..=last {
         let run = run(&data, &config, seed, options.ticks);
         going += usize::from(run.alive + run.eggs > 0);
@@ -100,10 +114,74 @@ fn main() -> ExitCode {
             run.grew_up,
             run.generation
         );
+        runs.push((seed, run));
     }
     let seeds = last - first + 1;
     println!("\nStill going in {going} of {seeds} seeds; over the limit in {over}.");
+    lives(&runs);
     ExitCode::SUCCESS
+}
+
+/// How long the sprites lived, in hours at 1×, and what they died of after
+/// tick 10,000.
+fn lives(runs: &[(u64, Run)]) {
+    println!(
+        "\nLives ended by old age, in hours at 1x: hatchlings' shortest, median and longest, \
+         then the first sprites'; and deaths after tick 10,000."
+    );
+    println!(
+        "\n{:>5} {:>6} {:>6} {:>6} {:>6} {:>6} {:>6} {:>8} {:>6} {:>6} {:>5}",
+        "Seed", "Short", "Median", "Long", "First", "to", "Old", "Hunger", "Thirst", "Hurt", "Need"
+    );
+    let hours = |ticks: u64| ticks as f64 / HOUR;
+    let (mut all, mut needs, mut deaths) = (Vec::new(), 0, 0);
+    for (seed, run) in runs {
+        let mut lives = run.lives.clone();
+        lives.sort_unstable();
+        all.extend(&lives);
+        let at = |share: f64| lives.get(((lives.len() - 1) as f64 * share) as usize);
+        let shown =
+            |age: Option<&u64>| age.map_or("-".to_string(), |&a| format!("{:.1}", hours(a)));
+        let first = |pick: fn(&u64, &u64) -> bool| {
+            run.first_lives
+                .iter()
+                .copied()
+                .reduce(|a, b| if pick(&a, &b) { a } else { b })
+        };
+        let need = run.hunger + run.thirst;
+        let died = need + run.old_age + run.hurt;
+        needs += need;
+        deaths += died;
+        println!(
+            "{seed:>5} {:>6} {:>6} {:>6} {:>6} {:>6} {:>6} {:>8} {:>6} {:>6} {:>4.1}%",
+            shown(at(0.0)),
+            shown(at(0.5)),
+            shown(at(1.0)),
+            shown(first(|a, b| a < b).as_ref()),
+            shown(first(|a, b| a > b).as_ref()),
+            run.old_age,
+            run.hunger,
+            run.thirst,
+            run.hurt,
+            100.0 * need as f64 / died.max(1) as f64
+        );
+    }
+    all.sort_unstable();
+    if !all.is_empty() {
+        let at = |share: f64| hours(all[((all.len() - 1) as f64 * share) as usize]);
+        println!(
+            "\nHatchlings' lives, all seeds: {} ended by old age, a tenth by {:.1} hours, half by \
+             {:.1}, nine tenths by {:.1}.",
+            all.len(),
+            at(0.1),
+            at(0.5),
+            at(0.9)
+        );
+    }
+    println!(
+        "Hunger and thirst: {needs} of {deaths} deaths after tick 10,000 ({:.1}%).",
+        100.0 * needs as f64 / deaths.max(1) as f64
+    );
 }
 
 /// Runs the default world from `seed` for `ticks` ticks.
@@ -138,6 +216,23 @@ fn run(data: &DataPack, config: &WorldConfig, seed: u64, ticks: u64) -> Run {
                     hatchlings.push(id);
                 }
                 EventKind::GrewUp { id } if hatchlings.contains(&id) => run.grew_up += 1,
+                EventKind::Died { id, cause, age, .. } => {
+                    if cause == DeathCause::OldAge {
+                        if hatchlings.contains(&id) {
+                            run.lives.push(age);
+                        } else {
+                            run.first_lives.push(age);
+                        }
+                    }
+                    if world.tick() > 10_000 {
+                        *match cause {
+                            DeathCause::OldAge => &mut run.old_age,
+                            DeathCause::Starvation => &mut run.hunger,
+                            DeathCause::Dehydration => &mut run.thirst,
+                            DeathCause::HurtBy(_) => &mut run.hurt,
+                        } += 1;
+                    }
+                }
                 EventKind::TurnedFemale { .. } => run.turned_female += 1,
                 EventKind::ActionEnded {
                     verb: Verb::Mate,
