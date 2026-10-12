@@ -376,7 +376,7 @@ fn a_sprite_lists_its_chemicals_in_pack_order_with_their_kinds() {
         ("crowdedness", Drive),
         ("reward", LearningSignal),
         ("punishment", LearningSignal),
-        ("broodiness", Drive),
+        ("arousal", Drive),
     ]
     .into_iter()
     .map(|(name, kind)| (name.to_string(), kind))

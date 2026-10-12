@@ -22,7 +22,7 @@
     (id: 23, name: "reward",      class: Signal),
     (id: 24, name: "punishment",  class: Signal),
     // The drive to breed (M2 design §10).
-    (id: 25, name: "broodiness",  class: Signal),
+    (id: 25, name: "arousal",     class: Signal),
 
     (id: 32, name: "h0",  class: Hormone),
     (id: 33, name: "h1",  class: Hormone),

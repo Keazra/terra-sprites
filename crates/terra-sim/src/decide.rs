@@ -6,7 +6,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::action::{Outcome, ScriptedAction, end, is_acting, penalty, set_off, start, trip};
-use crate::brain::{Aim, Seen, Snapshot, SpriteScoring, available, best_above};
+use crate::brain::{self, Aim, Seen, Snapshot, SpriteScoring, available, best_above};
 use crate::breeding;
 use crate::data::DataPack;
 use crate::events::Event;
@@ -109,7 +109,7 @@ pub(crate) fn decide(
     // Each category's candidate is the thing that draws the eye most (design
     // v19 §3.6); ties go to the lower ID, which comes first, and then to
     // what's in sight.
-    let state_only = sprite.brain.inputs(&sprite.body, None, data);
+    let state_only = sprite.brain.inputs(&sprite.body, None, None, data);
     let curiosity_mod = sprite.body.loci[data.physiology().indices.curiosity_mod];
     let found: BTreeMap<CategoryId, Offer> = offered
         .into_iter()
@@ -240,6 +240,19 @@ pub(crate) fn decide(
         .stage()
         .is_grown();
 
+    // What each sprite it may attend to shows it (M2 design §10): an egg
+    // shows nothing.
+    let shown: BTreeMap<EntityId, Vec<f32>> = candidates
+        .values()
+        .map(|c| c.target)
+        .chain(action.and_then(|a| a.target))
+        .filter_map(Target::sprite)
+        .filter_map(|other| {
+            let other_sprite = state.sprites.get(other).filter(|s| !s.is_egg())?;
+            Some((other, brain::shown(&other_sprite.body, data)))
+        })
+        .collect();
+
     let sprite = state.sprites.get_mut(id).expect("the same sprite");
     let rng = &mut state.rng;
     let brain = &mut sprite.brain;
@@ -259,16 +272,22 @@ pub(crate) fn decide(
     let running = running && !moved;
     let aim = if running { aimed } else { None }.or(candidate.map(|c| c.aim));
 
-    // 5b: the decision.
-    let inputs = brain.inputs(&sprite.body, aim, data);
-    let activations = brain.activations(&inputs);
-    // The sprite the decision is about, as `aim` is: a running action's
-    // target, or else the candidate (design v18 §5.5).
+    // 5b: the decision, with what the sprite it attends to shows (M2
+    // design §10).
     let aimed_target = sprite
         .action
         .as_ref()
         .filter(|_| running)
         .and_then(|a| a.target);
+    let seen = aimed_target
+        .or(candidate.map(|c| c.target))
+        .and_then(Target::sprite)
+        .and_then(|other| shown.get(&other))
+        .map(Vec::as_slice);
+    let inputs = brain.inputs(&sprite.body, aim, seen, data);
+    let activations = brain.activations(&inputs);
+    // The sprite the decision is about, as `aim` is: a running action's
+    // target, or else the candidate (design v18 §5.5).
     let aimed_sprite = match aimed_target {
         Some(target) => target.sprite(),
         None => candidate_sprite,

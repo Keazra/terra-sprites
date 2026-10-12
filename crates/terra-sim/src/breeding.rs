@@ -53,7 +53,7 @@ pub(crate) fn adults(state: &WorldState, a: EntityId, b: EntityId) -> bool {
 }
 
 /// Whether the world has room for another sprite, egg or not (M2 design
-/// §10). In a full world no sprite is fertile, so none feels broody: the
+/// §10). In a full world no sprite is fertile, so none is aroused: the
 /// glass of the terrarium.
 pub(crate) fn room(state: &WorldState) -> bool {
     state.sprites.len() < usize::from(state.most_sprites)

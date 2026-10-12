@@ -57,18 +57,21 @@
         Emitter(locus: Locus("nearby_sprites"), mode: Level, threshold: 0.5, gain: 0.01, chem: "crowdedness"),
         Emitter(locus: Locus("nearby_sprites"), mode: Level, invert: true, threshold: 0.5, gain: -0.5, chem: "crowdedness"),
 
-        // Broodiness (M2 design §10) rises while it's fertile, and drops at
-        // once when it lays an egg or fathers one. It fades once it's no
-        // longer fertile. The young are never fertile.
-        Emitter(locus: Locus("fertile"), mode: Level, threshold: 0.5, gain: 0.002, chem: "broodiness"),
-        Emitter(locus: Locus("bred"), mode: Level, gain: -1.0, chem: "broodiness"),
-        HalfLife(chem: "broodiness", ticks: 500),
+        // Arousal (M2 design §10) rises fast while it's fertile, and drops at
+        // once when it lays an egg or fathers one, or within a few ticks of
+        // its no longer being fertile, so others can read it as a sign of
+        // fertility. The young are never fertile.
+        Emitter(locus: Locus("fertile"), mode: Level, threshold: 0.5, gain: 0.01, chem: "arousal"),
+        Emitter(locus: Locus("bred"), mode: Level, gain: -1.0, chem: "arousal"),
+        Emitter(locus: Locus("fertile"), mode: Level, invert: true, threshold: 0.5, gain: -0.1, chem: "arousal"),
+        HalfLife(chem: "arousal", ticks: 500),
 
         // Every sprite hatches male. Grown up, the feminiser builds while it
-        // sees no female adult and fades while it sees one; past
+        // sees no female adult and falls fast while it sees one; past
         // physiology's level it turns female, for good (M2 design §10). A
-        // loner turns in about 800 ticks.
+        // male that sees no female for about 800 ticks turns.
         Emitter(locus: Locus("female_near"), mode: Level, invert: true, threshold: 0.5, gain: 0.003, chem: "feminiser", from: Adult),
+        Emitter(locus: Locus("female_near"), mode: Level, gain: -0.01, chem: "feminiser"),
         HalfLife(chem: "feminiser", ticks: 600),
 
         // Pain comes with new injury, thorns and blows, and fades fast.
@@ -121,8 +124,8 @@
         AttentionInstinct(input: "was_hit", category: "sprite", weight: 1.0),
         // Crowding draws attention to sprites.
         AttentionInstinct(input: "crowdedness", category: "sprite", weight: 1.0),
-        // So does broodiness, in a grown sprite (M2 design §10).
-        AttentionInstinct(input: "broodiness", category: "sprite", weight: 1.0),
+        // So does arousal, in a grown sprite (M2 design §10).
+        AttentionInstinct(input: "arousal", category: "sprite", weight: 1.0),
 
         // Each need leads to its action, on whatever is attended: hunger to
         // eating, thirst to drinking. Trying it on the wrong thing does nothing.
@@ -148,11 +151,12 @@
         Instinct(inputs: [("crowdedness", false), ("attended_sprite", false)], verb: Hit, weight: 0.6, from: Adult),
         // A cornered sprite, looking at a sprite, turns on it.
         Instinct(inputs: [("cornered", false), ("attended_sprite", false)], verb: Hit, weight: 1.0),
-        // Broodiness leads to mating with the sprite attended to; in a
-        // lonely female, more weakly, to laying an egg alone (M2 design §10).
+        // Arousal leads to mating with the sprite attended to, if its body
+        // language shows it's aroused too, and of the other sex; in a lonely
+        // female, more weakly, to laying an egg alone (M2 design §10).
         // Mating works only between a male and a female, both fertile.
-        Instinct(inputs: [("broodiness", false), ("attended_sprite", false)], verb: Mate, weight: 1.0),
-        Instinct(inputs: [("broodiness", false), ("female", false), ("loneliness", false)], verb: BreedAlone, weight: 0.6),
+        Instinct(inputs: [("arousal", false), ("target_arousal", false), ("target_other_sex", false)], verb: Mate, weight: 1.5),
+        Instinct(inputs: [("arousal", false), ("female", false), ("loneliness", false)], verb: BreedAlone, weight: 0.6),
         // A mild habit of wandering, which any drive that has grown outweighs.
         Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3),
     ],

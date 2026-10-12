@@ -50,6 +50,14 @@ pub(crate) fn attended_input(id: CategoryId) -> u16 {
 pub(crate) enum Source {
     /// A State input: a drive, a hormone, a body sensor or a pulse.
     State(LocusRef),
+    /// What the sprite it attends to shows (M2 design §10): that sprite's
+    /// drive, hormone, body sensor or pulse, as a State input would read its
+    /// own; 0 unless attention is on a sprite that has hatched.
+    Shown(LocusRef),
+    /// How far what the sprite it attends to shows differs from its own
+    /// (M2 design §10): the gap between the two levels; 0 unless attention
+    /// is on a sprite that has hatched.
+    Differs(LocusRef),
     /// 1 while attention is on this category, else 0.
     Attended(CategoryId),
     /// The attended target's path cost, over the flood's reach.
@@ -96,11 +104,15 @@ pub(crate) struct InputEntry {
     reads: ReadsEntry,
 }
 
-/// What an entry reads, by name.
+/// What an entry reads, by name: in the sprite's own body; with `Target`,
+/// in the body of the sprite it attends to; or with `Differs`, how far that
+/// differs from its own (M2 design §10).
 #[derive(Debug, Clone, Deserialize)]
 enum ReadsEntry {
     Chem(String),
     Locus(String),
+    Target(Box<ReadsEntry>),
+    Differs(Box<ReadsEntry>),
 }
 
 /// The Target inputs as `(id, name, source)`: one for each of the
@@ -204,37 +216,25 @@ fn brain_inputs(
     let mut inputs = Vec::new();
     for entry in entries {
         let source = match &entry.reads {
-            ReadsEntry::Chem(name) => {
-                let chemical = chemicals.iter().find(|c| &c.name == name).ok_or_else(|| {
-                    invalid(format!(
-                        "`{}` reads the unknown chemical `{name}`",
-                        entry.name
-                    ))
-                })?;
-                if !matches!(chemical.kind(), ChemicalKind::Drive | ChemicalKind::Hormone) {
-                    return Err(invalid(format!(
-                        "`{}` reads `{name}`, but the brain feels only drives and hormones among chemicals",
-                        entry.name
-                    )));
-                }
-                LocusRef::Chem(chemical.id)
+            ReadsEntry::Target(reads) | ReadsEntry::Differs(reads)
+                if matches!(**reads, ReadsEntry::Target(_) | ReadsEntry::Differs(_)) =>
+            {
+                return Err(invalid(format!(
+                    "`{}` reads one sprite in another, but a sprite sees only the sprite it attends to",
+                    entry.name
+                )));
             }
-            ReadsEntry::Locus(name) => {
-                let locus = loci.iter().find(|l| &l.name == name).ok_or_else(|| {
-                    invalid(format!("`{}` reads the unknown locus `{name}`", entry.name))
-                })?;
-                if !matches!(locus.kind, LocusKind::BodySensor | LocusKind::Pulse) {
-                    return Err(invalid(format!(
-                        "`{}` reads `{name}`, but the brain feels only body sensors and pulses among loci",
-                        entry.name
-                    )));
-                }
-                LocusRef::Locus(locus.id)
+            ReadsEntry::Target(reads) => {
+                Source::Shown(state_source(&entry.name, reads, chemicals, loci)?)
             }
+            ReadsEntry::Differs(reads) => {
+                Source::Differs(state_source(&entry.name, reads, chemicals, loci)?)
+            }
+            reads => Source::State(state_source(&entry.name, reads, chemicals, loci)?),
         };
         if entry.id == 0 || TARGET_IDS.contains(&entry.id) {
             return Err(invalid(format!(
-                "`{}` has the id {}, but State inputs are numbered from 1, and {} to {} are kept for Target inputs",
+                "`{}` has the id {}, but inputs listed here are numbered from 1, and {} to {} are kept for the Target inputs made from categories",
                 entry.name,
                 entry.id,
                 TARGET_IDS.start(),
@@ -244,7 +244,7 @@ fn brain_inputs(
         inputs.push(BrainInput {
             id: InputId(entry.id),
             name: entry.name,
-            source: Source::State(source),
+            source,
         });
     }
     inputs.extend(
@@ -260,4 +260,47 @@ fn brain_inputs(
         inputs.iter().map(|input| (input.id.0, input.name.as_str())),
     )?;
     Ok(inputs)
+}
+
+/// What a body's input named `name` `reads`: a drive, a hormone, a body
+/// sensor or a pulse, as anything else is an error.
+fn state_source(
+    name: &str,
+    reads: &ReadsEntry,
+    chemicals: &[Chemical],
+    loci: &[Locus],
+) -> Result<LocusRef, DataError> {
+    let invalid = |message: String| DataError::Invalid {
+        file: BRAIN_IO.into(),
+        message,
+    };
+    match reads {
+        ReadsEntry::Chem(chem) => {
+            let chemical = chemicals
+                .iter()
+                .find(|c| &c.name == chem)
+                .ok_or_else(|| invalid(format!("`{name}` reads the unknown chemical `{chem}`")))?;
+            if !matches!(chemical.kind(), ChemicalKind::Drive | ChemicalKind::Hormone) {
+                return Err(invalid(format!(
+                    "`{name}` reads `{chem}`, but the brain feels only drives and hormones among chemicals"
+                )));
+            }
+            Ok(LocusRef::Chem(chemical.id))
+        }
+        ReadsEntry::Locus(locus) => {
+            let found = loci
+                .iter()
+                .find(|l| &l.name == locus)
+                .ok_or_else(|| invalid(format!("`{name}` reads the unknown locus `{locus}`")))?;
+            if !matches!(found.kind, LocusKind::BodySensor | LocusKind::Pulse) {
+                return Err(invalid(format!(
+                    "`{name}` reads `{locus}`, but the brain feels only body sensors and pulses among loci"
+                )));
+            }
+            Ok(LocusRef::Locus(found.id))
+        }
+        ReadsEntry::Target(_) | ReadsEntry::Differs(_) => {
+            unreachable!("the caller unwraps a Target or Differs")
+        }
+    }
 }

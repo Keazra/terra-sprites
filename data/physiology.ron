@@ -64,7 +64,7 @@
     // or more after its last egg. Every sprite hatches male; an adult male
     // turns female for good once its `feminiser` hormone is above
     // `turns_female`.
-    breeding: (hatches: 750, cost: 0.3, fed: 0.6, rest: 1500, turns_female: 0.8),
+    breeding: (hatches: 750, cost: 0.3, fed: 0.5, rest: 1500, turns_female: 0.8),
     // Each cause-of-death tally halves every this many ticks (design §4.10).
     cause_fade: 350,
 

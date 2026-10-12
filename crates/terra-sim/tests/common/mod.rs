@@ -75,7 +75,7 @@ pub fn endings(events: &[Event]) -> Vec<(Verb, Outcome)> {
 
 /// The change to `physiology.ron` that puts breeding out of reach: no
 /// sprite is ever fertile (M2 design §10).
-pub const BARREN: (&str, &str) = ("fed: 0.6,", "fed: 1.0,");
+pub const BARREN: (&str, &str) = ("fed: 0.5,", "fed: 1.0,");
 
 /// The built-in data pack with breeding out of reach, for a test of
 /// something else that watches grown sprites long enough to breed.

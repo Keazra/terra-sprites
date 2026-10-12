@@ -1008,15 +1008,17 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
         (45, "attended_egg"),
     ]);
     // State inputs carry on from 64, past the IDs kept for Target inputs,
-    // with breeding's from 66 (M2 design §10).
+    // with breeding's from 66, and its body language (M2 design §10).
     expected.extend([
         (64, "cornered"),
         (65, "fruitless"),
-        (66, "broodiness"),
+        (66, "arousal"),
         (67, "fertile"),
         (68, "female"),
         (69, "female_near"),
         (70, "bred"),
+        (71, "target_arousal"),
+        (72, "target_other_sex"),
     ]);
     assert_eq!(inputs, expected);
 }
@@ -1079,6 +1081,11 @@ fn a_brain_input_reads_a_drive_hormone_body_sensor_or_pulse_that_exists() {
         // Learning signals.
         (r#"Chem("reward")"#, "reward"),
         (r#"Locus("exploration_mod")"#, "exploration_mod"),
+        // So too in the sprite attended to (M2 design §10), which is the
+        // only one a sprite sees.
+        (r#"Target(Chem("energy"))"#, "energy"),
+        (r#"Differs(Locus("glow"))"#, "glow"),
+        (r#"Target(Differs(Locus("female")))"#, "attends to"),
     ] {
         let text = format!(r#"(inputs: [(id: 1, name: "odd", reads: {reads})], needs: [])"#);
         assert_invalid("brain_io.ron", &text, word);
@@ -1135,7 +1142,7 @@ fn the_needs_are_the_drives_whose_relief_teaches() {
             "boredom",
             "loneliness",
             "crowdedness",
-            "broodiness"
+            "arousal"
         ],
         "pain is a drive but not a need"
     );
@@ -1156,7 +1163,7 @@ fn the_drives_are_the_signal_chemicals_but_reward_and_punishment() {
             "boredom",
             "loneliness",
             "crowdedness",
-            "broodiness"
+            "arousal"
         ]
     );
 }

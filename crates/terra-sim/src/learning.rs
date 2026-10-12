@@ -76,7 +76,7 @@ impl Links {
 }
 
 /// The need whose relief teaches only about a partner (M2 design §10).
-const BROODINESS: &str = "broodiness";
+const AROUSAL: &str = "arousal";
 
 /// Reads a value for each verb, in `VERBS` order. A save from before Mate
 /// and BreedAlone has fewer, and theirs are 0 (M2 design §5, §10).
@@ -526,7 +526,7 @@ pub(crate) fn run(
     let tick = state.tick;
     let learning = state.learning;
     let window = data.physiology().touch_window;
-    let broodiness = data.needs().position(|need| need == BROODINESS);
+    let arousal = data.needs().position(|need| need == AROUSAL);
     // A sprite that has died is forgotten (design v18 §5.6).
     let alive: BTreeSet<EntityId> = state
         .sprites
@@ -570,7 +570,7 @@ pub(crate) fn run(
         let mated = brain
             .touched
             .is_some_and(|t| t.verb == Some(Verb::Mate) && tick - t.tick <= window);
-        if let Some(need) = broodiness.filter(|_| !mated) {
+        if let Some(need) = arousal.filter(|_| !mated) {
             relief[need] = 0.0;
         }
         brain.felt = relief.iter().sum::<f32>() + reward - punishment;

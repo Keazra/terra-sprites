@@ -419,7 +419,7 @@ impl Default for Breeding {
         Breeding {
             hatches: 750,
             cost: 0.3,
-            fed: 0.6,
+            fed: 0.5,
             rest: 1_500,
             turns_female: 0.8,
         }

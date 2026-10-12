@@ -482,6 +482,65 @@ fn births_replay_exactly() {
     assert_eq!(playback.world().state_hash(), world.state_hash());
 }
 
+/// Mates with the sprite it attends to while both are aroused and of the
+/// other sex, as the starter genome does (M2 design §10), and arousal comes
+/// fast with fertility. Otherwise it rests, and it hardly ever tries
+/// anything at random.
+const BODY_LANGUAGE: &str = r#"
+    Emitter(locus: Locus("fertile"), mode: Level, threshold: 0.5, gain: 0.1, chem: "arousal"),
+    AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
+    Instinct(inputs: [("arousal", false), ("target_arousal", false), ("target_other_sex", false)], verb: Mate, weight: 2.0),
+    Instinct(inputs: [("always", false)], verb: Rest, weight: 0.5),
+    BrainParam(param: "tau_base", value: 0.05),
+"#;
+
+#[test]
+fn a_sprite_reads_whether_the_one_it_watches_is_aroused_and_of_the_other_sex() {
+    // M2 design §10: body language. A male and a female mate, while two
+    // males never try.
+    let female = format!("{BODY_LANGUAGE}{FEMALE}");
+    let mut pair = family(&[(at(2, 1), &female), (at(3, 1), BODY_LANGUAGE)], &[], 1);
+    let laying = laid(&mut pair, 200).expect("the pair laid an egg");
+    assert!(laying.with.is_some(), "with a partner");
+
+    let mut males = family(
+        &[(at(2, 1), BODY_LANGUAGE), (at(3, 1), BODY_LANGUAGE)],
+        &[],
+        1,
+    );
+    for _ in 0..200 {
+        let tried = males.step().iter().any(|event| {
+            matches!(
+                event.kind,
+                EventKind::ActionStarted {
+                    verb: Verb::Mate,
+                    ..
+                }
+            )
+        });
+        assert!(!tried, "a male tried to mate with a male");
+    }
+}
+
+#[test]
+fn a_male_leaves_a_female_alone_while_she_shows_no_arousal() {
+    // Without the emitter her arousal stays at 0, fertile as she is, so
+    // the aroused male watching her never tries.
+    let calm = BODY_LANGUAGE.replace(
+        r#"Emitter(locus: Locus("fertile"), mode: Level, threshold: 0.5, gain: 0.1, chem: "arousal"),"#,
+        "",
+    );
+    let female = format!("{calm}{FEMALE}");
+    let mut world = family(&[(at(2, 1), &female), (at(3, 1), BODY_LANGUAGE)], &[], 1);
+    let ended = (0..200)
+        .flat_map(|_| endings(&world.step()))
+        .collect::<Vec<_>>();
+    assert!(
+        !ended.iter().any(|&(verb, _)| verb == Verb::Mate),
+        "{ended:?}"
+    );
+}
+
 /// A state input a random gene may read.
 fn state_input() -> impl Strategy<Value = &'static str> {
     prop::sample::select(vec![

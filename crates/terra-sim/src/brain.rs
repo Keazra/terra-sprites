@@ -1158,18 +1158,26 @@ impl Brain {
     }
 
     /// Every input's value (design §5.2), in the pack's input order: State
-    /// inputs from `body`, Target inputs from `aim`.
-    pub(crate) fn inputs(&self, body: &Body, aim: Option<Aim>, data: &DataPack) -> Vec<f32> {
+    /// inputs from `body`, Target inputs from `aim`, and what the sprite it
+    /// attends to shows from `shown`, that sprite's [`shown`] (M2 design
+    /// §10), or 0 if it attends to none.
+    pub(crate) fn inputs(
+        &self,
+        body: &Body,
+        aim: Option<Aim>,
+        shown: Option<&[f32]>,
+        data: &DataPack,
+    ) -> Vec<f32> {
         let flag = |on: bool| if on { 1.0 } else { 0.0 };
+        let mut shown = shown.unwrap_or_default().iter();
         data.brain_inputs_in_order()
             .iter()
             .map(|input| match input.source {
-                Source::State(LocusRef::Chem(id)) => {
-                    body.chems[data.chemical_index(id).expect("a checked input")]
-                }
-                Source::State(LocusRef::Locus(id)) => {
-                    body.loci[data.locus_index(id).expect("a checked input")]
-                }
+                Source::State(locus) => read(body, locus, data),
+                Source::Shown(_) => shown.next().copied().unwrap_or(0.0),
+                Source::Differs(locus) => shown
+                    .next()
+                    .map_or(0.0, |&theirs| (theirs - read(body, locus, data)).abs()),
                 Source::Attended(category) => flag(aim.is_some_and(|a| a.category == category)),
                 Source::TargetDistance => aim.map_or(0.0, |a| a.distance),
                 Source::TargetAdjacent => flag(aim.is_some_and(|a| a.adjacent)),
@@ -1495,6 +1503,27 @@ impl Brain {
     }
 }
 
+/// What a body reads as a brain input at `locus`.
+fn read(body: &Body, locus: LocusRef, data: &DataPack) -> f32 {
+    match locus {
+        LocusRef::Chem(id) => body.chems[data.chemical_index(id).expect("a checked input")],
+        LocusRef::Locus(id) => body.loci[data.locus_index(id).expect("a checked input")],
+    }
+}
+
+/// What a hatched sprite's `body` shows a sprite attending to it (M2 design
+/// §10): for each brain input that reads the attended sprite's body, in
+/// input order, the level it reads there.
+pub(crate) fn shown(body: &Body, data: &DataPack) -> Vec<f32> {
+    data.brain_inputs_in_order()
+        .iter()
+        .filter_map(|input| match input.source {
+            Source::Shown(locus) | Source::Differs(locus) => Some(read(body, locus, data)),
+            _ => None,
+        })
+        .collect()
+}
+
 /// The verbs a sprite may choose (design §5.2): Rest and Wander always;
 /// with a target, every other verb, since a sprite may try anything on
 /// anything (v16), but Approach only while it isn't already `beside` the
@@ -1796,7 +1825,10 @@ mod tests {
             r#"Instinct(inputs: [("hunger", false), ("target_adjacent", true)], verb: Eat, weight: 0.3)"#,
         ]);
         let n = builtin().brain_inputs().count();
-        assert_eq!(n, 51, "42 State inputs and 9 Target inputs");
+        assert_eq!(
+            n, 53,
+            "42 State inputs, 2 of body language and 9 Target inputs"
+        );
         // One singleton per input, and one conjunction for both genes naming it.
         assert_eq!(brain.concepts.len(), n + 1);
         assert_eq!(
