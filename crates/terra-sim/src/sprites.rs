@@ -738,7 +738,7 @@ mod tests {
     }
 
     /// The starter, `age` ticks old on tick 100,000: it grows old at
-    /// 13,500 ticks.
+    /// 22,500 ticks.
     fn starter(age: u64, data: &DataPack) -> Sprite {
         Sprite::aged(data.starter().clone(), at(0, 0), 100_000, age, data)
     }
@@ -781,7 +781,7 @@ mod tests {
         // M2 design §9.4: 3,600 ticks for an unworn body, a third of that
         // for the most worn, when more than one gene weakens a tick.
         let data = DataPack::builtin().expect("built-in data pack is valid");
-        let mut easy = starter(20_000, &data);
+        let mut easy = starter(30_000, &data);
         assert_eq!(easy.stage(), LifeStage::Old);
         let genome = easy.genome.clone();
         let ticks = until_it_gives_out(&mut easy, &data, 100_000);
@@ -789,7 +789,7 @@ mod tests {
             (3_100..4_100).contains(&ticks),
             "an unworn body gave out after {ticks} ticks"
         );
-        let mut hard = starter(20_000, &data);
+        let mut hard = starter(30_000, &data);
         hard.body.wear = 1.0;
         let ticks = until_it_gives_out(&mut hard, &data, 100_000);
         assert!(
@@ -815,14 +815,14 @@ mod tests {
                 "decay: (ticks: 2, hit: 0.000000001,",
             )],
         );
-        let mut old = starter(20_000, &data);
+        let mut old = starter(30_000, &data);
         assert_eq!(until_it_gives_out(&mut old, &data, 10), 2);
     }
 
     #[test]
     fn a_weakened_speed_gene_slows_the_sprite() {
         let data = DataPack::builtin().expect("built-in data pack is valid");
-        let mut old = starter(20_000, &data);
+        let mut old = starter(30_000, &data);
         let speed = (0..old.genome.genes.len())
             .find(|&i| {
                 matches!(

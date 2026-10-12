@@ -167,6 +167,10 @@
     // Spawn variation (design §4.9): each gene value is multiplied by a factor
     // drawn between 1 − this and 1 + this.
     spawn_variation: 0.1,
+    // A trait named here varies by its own share instead (M2 design §9.3):
+    // the age a sprite grows old at, by up to 40%, so that lives last from
+    // about 4 hours to about 8 at 1x (M2 design §2).
+    trait_variation: { "grows_old": 0.4 },
 
     // A learned value this far from 0 is a lesson, which the event log
     // announces once (design v16 §5.6).

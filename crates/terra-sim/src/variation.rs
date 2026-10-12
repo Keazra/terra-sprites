@@ -8,14 +8,15 @@ use crate::genome::{Gene, Genome};
 use crate::random::unit;
 
 /// `genome` with each gene value multiplied by a factor drawn uniformly
-/// within physiology's `spawn_variation` of 1, then clamped to its range and,
-/// for a whole number, rounded. Values are drawn in genome order, one draw
+/// within physiology's `spawn_variation` of 1, or a trait's own share from
+/// `trait_variation` (M2 design §9.3), then clamped to its range and, for a
+/// whole number, rounded. Values are drawn in genome order, one draw
 /// each. Structural fields, such as what a gene refers to, never change, so a
 /// valid gene stays valid and an expressed one stays expressed.
 pub(crate) fn varied(genome: &Genome, data: &DataPack, rng: &mut ChaCha8Rng) -> Genome {
     let physiology = data.physiology();
     let spread = physiology.spawn_variation;
-    let mut vary = |value: f32| value * (1.0 - spread + 2.0 * spread * unit(rng));
+    let mut vary = |value: f32, spread: f32| value * (1.0 - spread + 2.0 * spread * unit(rng));
     let level = |value: f32| value.clamp(0.0, 1.0);
     let genes = genome
         .genes
@@ -24,9 +25,9 @@ pub(crate) fn varied(genome: &Genome, data: &DataPack, rng: &mut ChaCha8Rng) -> 
             let mut gene = gene.clone();
             match gene {
                 Gene::HalfLife { ref mut ticks, .. } => {
-                    *ticks = (vary(*ticks as f32).round() as u32).max(1);
+                    *ticks = (vary(*ticks as f32, spread).round() as u32).max(1);
                 }
-                Gene::Reaction { ref mut rate, .. } => *rate = level(vary(*rate)),
+                Gene::Reaction { ref mut rate, .. } => *rate = level(vary(*rate, spread)),
                 Gene::Emitter {
                     ref mut threshold,
                     ref mut gain,
@@ -37,23 +38,30 @@ pub(crate) fn varied(genome: &Genome, data: &DataPack, rng: &mut ChaCha8Rng) -> 
                     ref mut gain,
                     ..
                 } => {
-                    *threshold = vary(*threshold).max(0.0);
-                    *gain = vary(*gain);
+                    *threshold = vary(*threshold, spread).max(0.0);
+                    *gain = vary(*gain, spread);
                 }
-                Gene::InitialConcentration { ref mut value, .. } => *value = level(vary(*value)),
+                Gene::InitialConcentration { ref mut value, .. } => {
+                    *value = level(vary(*value, spread))
+                }
                 Gene::Trait {
                     which,
                     ref mut value,
                 } => {
                     let (low, high) = physiology.traits.range(which);
-                    *value = vary(*value).clamp(low, high);
+                    let spread = physiology
+                        .trait_variation
+                        .get(&which)
+                        .copied()
+                        .unwrap_or(spread);
+                    *value = vary(*value, spread).clamp(low, high);
                 }
                 Gene::BrainParam {
                     param,
                     ref mut value,
                 } => {
                     let (low, high) = physiology.brain.of(param).range;
-                    let varied = vary(*value).clamp(low, high);
+                    let varied = vary(*value, spread).clamp(low, high);
                     *value = if param.is_whole() {
                         varied.round()
                     } else {
@@ -61,7 +69,7 @@ pub(crate) fn varied(genome: &Genome, data: &DataPack, rng: &mut ChaCha8Rng) -> 
                     };
                 }
                 Gene::Instinct { ref mut weight, .. }
-                | Gene::AttentionInstinct { ref mut weight, .. } => *weight = vary(*weight),
+                | Gene::AttentionInstinct { ref mut weight, .. } => *weight = vary(*weight, spread),
                 Gene::Unknown { .. } | Gene::Unmatched(_) => {}
             }
             gene
@@ -250,6 +258,40 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_trait_with_its_own_variation_varies_by_that_instead() {
+        let data = builtin();
+        let text = r#"(format: 1, genes: [
+            Trait(trait: "speed", value: 7.0),
+            Trait(trait: "grows_old", value: 20000.0),
+        ])"#;
+        let original = Genome::from_ron(text, &data).expect("a valid genome");
+        let (mut least, mut most) = (f32::MAX, f32::MIN);
+        for seed in 0..200 {
+            let varied = varied(&original, &data, &mut ChaCha8Rng::seed_from_u64(seed));
+            for gene in &varied.genes {
+                match *gene {
+                    Gene::Trait {
+                        which: Trait::Speed,
+                        value,
+                    } => assert!(within_ten_percent(7.0, value), "{value}"),
+                    Gene::Trait {
+                        which: Trait::GrowsOld,
+                        value,
+                    } => {
+                        // The built-in pack's `trait_variation` gives
+                        // `grows_old` 40%.
+                        assert!((12000.0..=28000.0).contains(&value), "{value}");
+                        least = least.min(value);
+                        most = most.max(value);
+                    }
+                    _ => unreachable!("only traits"),
+                }
+            }
+        }
+        assert!(least < 15000.0 && most > 25000.0, "{least}–{most}");
     }
 
     #[test]

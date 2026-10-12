@@ -838,6 +838,22 @@ fn spawn_variation_is_a_fraction_below_1() {
 }
 
 #[test]
+fn a_trait_varies_by_a_fraction_below_1_and_only_a_trait_does() {
+    let line = "trait_variation: { \"grows_old\": 0.4 },";
+    assert_invalid_physiology(
+        line,
+        "trait_variation: { \"grows_old\": 1.0 },",
+        "trait_variation.grows_old",
+    );
+    assert_invalid_physiology(
+        line,
+        "trait_variation: { \"grows_old\": -0.1 },",
+        "trait_variation.grows_old",
+    );
+    assert_invalid_physiology(line, "trait_variation: { \"lifetime\": 0.4 },", "lifetime");
+}
+
+#[test]
 fn every_receptor_target_has_a_range_and_nothing_else_does() {
     assert_invalid_physiology("\"exploration_mod\": (0.25, 4.0),", "", "exploration_mod");
     assert_invalid_physiology(
@@ -965,7 +981,8 @@ fn a_pack_from_before_life_stages_still_loads() {
             "grows_old: (6000.0, 60000.0),",
             "lifespan: (20000.0, 200000.0),",
         )
-        .replace("        grows_up: (1500.0, 13500.0),\n", "");
+        .replace("        grows_up: (1500.0, 13500.0),\n", "")
+        .replace("    trait_variation: { \"grows_old\": 0.4 },\n", "");
     assert!(
         !older.contains("ageing") && !older.contains("grows_"),
         "{older}"

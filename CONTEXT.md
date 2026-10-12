@@ -157,7 +157,7 @@ The genome in the data pack that sprites are made from when they have no parents
 A number in a gene that variation may change, such as a strength or a threshold. The rest of a gene, such as which chemical it touches, never varies.
 
 **Spawn variation**:
-The small random change to the gene values of a sprite made from the starter genome.
+The small random change to the gene values of a sprite made from the starter genome, larger for `grows_old` so that lives differ.
 _Avoid_: mutation (that comes with inheritance)
 
 **Flagged gene**:

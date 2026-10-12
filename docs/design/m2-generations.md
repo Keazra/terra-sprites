@@ -13,7 +13,7 @@
 M1 made a sprite live: it feels, learns and dies. M2 makes **generations**. Sprites grow up, grow old and have young; children take after their parents but not exactly; and over an evening the player watches a family line, and a species, change.
 
 The owner's principles carry over unchanged (`docs/agents/how-we-work.md`). Three matter most here:
-- **The player has to care first.** A life long enough to get attached to is why a sprite lives about 4 hours at 1× (§2).
+- **The player has to care first.** A life long enough to get attached to is why a sprite lives 4 to 8 hours at 1×, about 6 on average (§2).
 - **Grown sprites fend for themselves; the young survive by luck or guidance.** M2 is when this can be met (Slice 29).
 - **Content safety is the engine's one exception** to "the engine enforces physics only" (§5).
 
@@ -57,13 +57,14 @@ The owner's times, as playtime at 1× (1.25 ticks a second, M1 design §6.6):
 | Moment | Playtime at 1× | Ticks | At 4× |
 |---|---|---|---|
 | Grows up | about 1 hour | about 4,500 | about 15 minutes |
-| Grows old | about 3 hours | about 13,500 | about 45 minutes |
-| Dies of old age | about 4 hours | about 18,000 | about 1 hour |
+| Grows old | about 5 hours (3 to 7) | about 22,500 | about 1¼ hours |
+| Dies of old age | about 6 hours (4 to 8) | about 27,000 | about 1½ hours |
 
 - **These are the starter genome's times.** The genome brings them about (§3), so they vary from sprite to sprite and can evolve.
+- **Lives differ by up to 2 hours either way.** The owner (2026-10-12): "4 hours should be the shortest, and eight at the longest, for an average of 6 hours." A new sprite's `grows_old` varies by up to 40% at spawn where its other genes vary by 10% (§9.3), and a hatchling takes one parent's (§10.5). Old age still lasts about an hour, and a hard life can still bring it sooner (§9.4).
 - **Growing old is where M1's lifespan went** (#140). The `grows_old` gene sets when a sprite grows old, and its genes then weaken until its body gives out and old age kills it (§9.4). How long that takes depends on the life it has had, not on a second gene. A save or genome that says `lifespan` reads it as `grows_old`, whose range is about **6,000–60,000**.
 - **A generation takes about 15–20 minutes at 4×,** the full game's top speed (Slice 27), so an evening sees several. Long runs of evolution belong to the fast-forward mode.
-- **Lives got shorter in Slice 23, with breeding.** Until sprites had young, nothing replaced the dead: with 4-hour lives, the default world would have been empty after about 4 hours of play. So in Slice 22 sprites grew up and grew old at their times above, but old age lasted about 10 hours, and Slice 23 shortened it to about 1 (§9.4).
+- **Lives got shorter in Slice 23, with breeding.** Until sprites had young, nothing replaced the dead: with 4-hour lives, the default world would have been empty after about 4 hours of play. So in Slice 22 sprites grew up and grew old at 1 and 3 hours, but old age lasted about 10 hours, and Slice 23 shortened it to about 1 (§9.4), for lives of about 4 hours. Later in Slice 23 the owner set them at 4 to 8 (2026-10-12), by growing old later.
 - **Childhood ends at growing up.** M1's viability run counts ticks 0–10,000 as childhood because sprites had no stages (M1 design §7.4, A4). From Slice 22, childhood is a stage, and the harsher world's goal (§6, G5) is counted at growing up.
 
 ---
@@ -296,8 +297,9 @@ Settled with the owner on 2026-10-11 ([#140](https://github.com/Keazra/terra-spr
 
 ### 9.3 When a sprite grows up and grows old
 
-- **Two trait genes set the ages,** so each can evolve on its own: `grows_up` (1,500–13,500 ticks; the starter's 4,500 is about an hour at 1×) and `grows_old` (6,000–60,000; the starter's 13,500 is about 3 hours).
-- **`grows_old` is M1's lifespan,** which it replaces (§2). A genome or save that says `lifespan` reads as `grows_old`. The `age` body sensor is age as a share of it, so it reaches 1 as a sprite grows old, at about 13,500 ticks rather than M1's 60,000.
+- **Two trait genes set the ages,** so each can evolve on its own: `grows_up` (1,500–13,500 ticks; the starter's 4,500 is about an hour at 1×) and `grows_old` (6,000–60,000; the starter's 22,500 is about 5 hours).
+- **`grows_old` varies more at spawn** (2026-10-12): by up to 40%, physiology's `trait_variation`, where every other gene varies by `spawn_variation`'s 10% (M1 design §4.9). So the world's first sprites, and those the Cursor places from the starter genome, grow old at 3 to 7 hours and die of it at 4 to 8 (§2).
+- **`grows_old` is M1's lifespan,** which it replaces (§2). A genome or save that says `lifespan` reads as `grows_old`. The `age` body sensor is age as a share of it, so it reaches 1 as a sprite grows old, at about 22,500 ticks rather than M1's 60,000.
 - **Growing up costs food.** Growing takes `growth` energy (0.3) whenever it happens, spread evenly over childhood, so a sprite that grows up sooner is a hungrier child.
 - **A later old age will cost a little,** all its life: `upkeep` energy a tick for every 10,000 ticks of `grows_old` (§3). **It's 0 until genes evolve** (Slice 24, noted on [#142](https://github.com/Keazra/terra-sprites/issues/142)), the owner's call on 2026-10-11: until then nothing can push old age later, so the cost only made every sprite hungrier, and even 0.00001 undid A3's training (median hits after training 45 against 81 untrained; 1.5 against 70 without it).
 

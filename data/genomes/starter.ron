@@ -23,10 +23,10 @@
         // Traits (design §4.8).
         Trait(trait: "speed", value: 7.0),
         Trait(trait: "sense_radius", value: 10.0),
-        // It grows up at about an hour at 1x and grows old at about three
-        // (M2 design §9.3).
+        // It grows up at about an hour at 1x and grows old at about five, two
+        // hours sooner or later from sprite to sprite (M2 design §9.3).
         Trait(trait: "grows_up", value: 4500.0),
-        Trait(trait: "grows_old", value: 13500.0),
+        Trait(trait: "grows_old", value: 22500.0),
 
         // Hunger rises as energy falls below half, and drops at once on eating.
         Emitter(locus: Chem("energy"), mode: Level, invert: true, threshold: 0.5, gain: 0.004, chem: "hunger"),

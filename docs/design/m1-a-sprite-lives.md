@@ -908,7 +908,7 @@ The starter genome's traits are speed 7, sense_radius 10 and lifespan 60,000 tic
 
 ### 4.9 Spawn variation
 
-A sprite spawned from the starter genome (`SpawnSprite { genome: None }`, or the initial population) has **each value field (§4.3) multiplied by a uniform factor in [0.9, 1.1]**, drawn from the world RNG, then clamped to its range. Fields are processed in genome order, with one draw per value field. Integer values, such as `HalfLife` ticks, pool size and arity, are rounded afterwards. Structural fields are never touched.
+A sprite spawned from the starter genome (`SpawnSprite { genome: None }`, or the initial population) has **each value field (§4.3) multiplied by a uniform factor in [0.9, 1.1]**, drawn from the world RNG, then clamped to its range. Fields are processed in genome order, with one draw per value field. Integer values, such as `HalfLife` ticks, pool size and arity, are rounded afterwards. Structural fields are never touched. Since M2 a trait can vary by a share of its own, physiology's `trait_variation`: `grows_old` varies by up to 40%, so lives differ (M2 design §9.3).
 
 ### 4.10 Death
 

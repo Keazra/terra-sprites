@@ -37,6 +37,9 @@ pub(crate) struct Physiology {
     pub(crate) receptor_targets: BTreeMap<LocusId, (f32, f32)>,
     pub(crate) nearby_sprites: NearbySprites,
     pub(crate) spawn_variation: f32,
+    /// The traits that vary by their own share at spawn rather than by
+    /// `spawn_variation` (M2 design §9.3).
+    pub(crate) trait_variation: BTreeMap<Trait, f32>,
     /// How far a learned value gets from 0 to be a lesson (design §5.6).
     pub(crate) lesson_threshold: f32,
     /// The least fall of a need in a tick that is relief (design §5.6).
@@ -82,6 +85,10 @@ pub(crate) struct PhysiologyEntry {
     receptor_targets: BTreeMap<String, (f32, f32)>,
     nearby_sprites: NearbySprites,
     spawn_variation: f32,
+    /// A pack from before lives grew longer has none: every trait varies by
+    /// `spawn_variation` (design §2.8).
+    #[serde(default)]
+    trait_variation: BTreeMap<String, f32>,
     lesson_threshold: f32,
     relief_deadband: f32,
     touch_window: u64,
@@ -654,6 +661,17 @@ impl PhysiologyEntry {
                 self.spawn_variation
             ));
         }
+        let mut trait_variation = BTreeMap::new();
+        for (name, &spread) in &self.trait_variation {
+            let which = Trait::named(name)
+                .ok_or_else(|| format!("`trait_variation` names `{name}`, which isn't a trait"))?;
+            if !(0.0..1.0).contains(&spread) {
+                return Err(format!(
+                    "`trait_variation.{name}` is {spread}, but must be at least 0 and below 1"
+                ));
+            }
+            trait_variation.insert(which, spread);
+        }
 
         for (name, ticks) in [
             ("actions.rest_bout", self.actions.rest_bout),
@@ -719,6 +737,7 @@ impl PhysiologyEntry {
             receptor_targets,
             nearby_sprites: self.nearby_sprites,
             spawn_variation: self.spawn_variation,
+            trait_variation,
             lesson_threshold: self.lesson_threshold,
             relief_deadband: self.relief_deadband,
             touch_window: self.touch_window,

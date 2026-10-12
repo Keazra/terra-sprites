@@ -20,6 +20,7 @@ The body's fixed rules, which genes can't change (design §4.4, Appendix B): how
 | `receptor_targets` | `(min, max)` for every receptor target in [`loci.ron`](loci.md). |
 | `nearby_sprites` | `(radius, full)`: the `nearby_sprites` sensor counts other sprites within `radius` tiles, reading 1 at `full` of them. |
 | `spawn_variation` | Each gene value of a new sprite is multiplied by a random factor between 1 − this and 1 + this, so no two are quite alike. |
+| `trait_variation` | Optional. Traits that vary by their own share instead, as `{ "grows_old": 0.4 }`: each from 0 to below 1, named as in `traits`. A pack without it varies every trait by `spawn_variation`. |
 | `lesson_threshold` | How far from 0 a learned value must get before the event log announces the lesson. |
 | `relief_deadband`, `touch_window` | The smallest fall in a need that counts as relief, and how many ticks after a try the thing tried is still what a feeling is about. |
 | `forget_below` | A remembered sprite is forgotten once everything learned about it is nearer 0 than this, and a remembered place once it has faded below this. |
