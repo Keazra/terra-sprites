@@ -11,7 +11,7 @@ Slice 31 ([#184](https://github.com/Keazra/terra-sprites/issues/184), from [#180
 | 3 | **A map smaller than the map view is drawn in its middle,** with space around, instead of in a map view shrunk to fit. | This write-up, to go with 2 | §11.1 |
 | 4 | **The wall is drawn as glass one tile outside the map,** and the map view's border is single-lined all round. | Owner, round 1, Q3, Q4 | §11.2 |
 | 5 | **Stars in three depths drift right to left** with the game's speed, capped at 4×, and shift a little as the view scrolls. They're scenery: never in the world, its saves or its replays. | Owner, round 1, Q5 | §11.3 |
-| 6 | **The pointer over glass or space hides the Cursor,** which stays on its last tile; a click does nothing and the status line says "space". | Owner, round 2, Q11 | §11.4 |
+| 6 | **The pointer over glass or space hides a Cursor that follows the pointer,** which stays on its last tile; a click, `Q` or `E` does nothing and the status line says "space". A Cursor that follows a sprite carries on as before. | Owner, round 2, Q11; the Follow case from review | §11.4 |
 | 7 | **Themes gain the glass and the three depths of star.** | Owner, round 2, Q11 | §11.5 |
 
 ## M1 "A Sprite Lives"

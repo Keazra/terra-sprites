@@ -755,7 +755,7 @@ The terrarium seen for what it is: an ark flying through space, made of sectors 
 _Avoid_: station, vessel, level
 
 **Keeper** (#181):
-The ship's AI, which the player is. Its builders are gone and it woke with its memory damaged, so half its own ship is a mystery to it. The Cursor is its hand; to the sprites, it's an advanced creature.
+The ship's AI, which the player is. Its builders are gone and it woke with its memory damaged, so half its own ship is a mystery to it. It reaches into the terrarium through the Cursor; to the sprites, it's an advanced creature.
 _Avoid_: captain, overseer
 
 **Sector** (#181):
@@ -798,7 +798,7 @@ A small hand-made piece of the ship, a few tiles big, that a sector's recipe pla
 _Avoid_: prefab, stamp, vault
 
 **Device**:
-An object of the ship's that does a job, such as an incubator, a pump, or a machine whose job nobody remembers. It's a fixture, and what it does is in its data: it may change the land or affect sprites near it, and the game never says what it's for. Some can be activated.
+An object of the ship's that does a job, such as an incubator, a pump, or one whose job nobody remembers. It's a fixture, and what it does is in its data: it may change the land or affect sprites near it, and the game never says what it's for. Some can be activated.
 _Avoid_: machine, machinery, building
 
 **Space** (#180):

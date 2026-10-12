@@ -389,8 +389,8 @@ Past the glass is space: black, with stars drifting right to left, since the shi
 
 ### 11.4 The pointer over space
 
-- **The Cursor can't reach past the wall** (round 2, Q11). When the tile pointed at (M1 design §6.5) is glass or space, the Cursor isn't drawn, a click or `Q` and `E` do nothing, and the status line says "space".
-- **The Cursor stays where it was,** on its last tile on the map, as when the pointer leaves the map view: a sprite it leads stands still and an item it holds stays held. It shows again when the pointer comes back over the map. Follow carries on as before.
+- **The Cursor can't reach past the wall** (round 2, Q11). While it follows the pointer and the tile pointed at (M1 design §6.5) is glass or space, the Cursor stays on its last tile on the map, as when the pointer leaves the map view, but isn't drawn there. A click, `Q` or `E` does nothing, rather than act on that last tile, and the status line says "space". A sprite it leads stands still and an item it holds stays held. It shows again when the pointer comes back over the map.
+- **A Cursor that follows a sprite carries on as before** (M1 design §6.5): it stays on its sprite and is drawn wherever the pointer is, and a click, over space too, or `Q` and `E` reach the sprite. While it leads the followed sprite, Follow steps aside and the Cursor follows the pointer, so the rule above applies.
 
 ### 11.5 Themes
 
@@ -398,7 +398,7 @@ Both built-in themes gain the glass's six glyphs and the stars' three depths, as
 
 ### 11.6 How we know it worked
 
-- **UI tests** (ratatui's `TestBackend`): scrolling stops at the margin on every side; the glass runs all round the map, one tile out; the border is single-lined; stars appear only on space; stars stand still while paused and drift as far at 16× as at 4× in the same time; a small map is centred; with the pointer over space the Cursor isn't drawn and a click sends no command.
+- **UI tests** (ratatui's `TestBackend`): scrolling stops at the margin on every side; the glass runs all round the map, one tile out; the border is single-lined; stars appear only on space; stars stand still while paused and drift as far at 16× as at 4× in the same time; a small map is centred; with the pointer moved over space after the Cursor was on a sprite, the Cursor isn't drawn and a click, `Q` or `E` sends no command (`docs/agents/how-we-work.md`: test every input that reaches a rule); with Follow on, a click over space and `Q` still reach the followed sprite.
 - **The simulation is untouched:** its tests and golden files pass unchanged.
 - **Played** in Windows Terminal at 140×40 and at the smallest size the game allows.
 
