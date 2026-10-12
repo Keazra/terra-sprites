@@ -1130,6 +1130,8 @@ With no attempt within reach, the tick teaches as any other: no worth, and the s
 
 **Fading.** Every tick, after learning: each `G_n` and `G` and `new_things` is multiplied by `1 − worth_fade_good`, each `B` by `1 − worth_fade_bad`, each `F` by `1 − fear_fade`, each good habit by `1 − habit_fade`, each bad habit by `1 − habit_fade_bad` (v21) and each taught habit, good or bad, by `1 − taught_fade` (#187). The starter genome's defaults learn bad faster than good and fade it about four times more slowly (Appendix B), habits as well as worth since v21.
 
+**Lessons fade slowly** (2026-10-12). The owner: lessons "shouldn't fade quickly, in general, whether self-taught or corrected/rewarded", while the Cursor's may teach more. So good worth and good habits fade by half in about 28,000 ticks, about 6 hours at 1×, an average life (M2 design §2); bad worth, bad habits, fear and taught habits in about 110,000 ticks, so in effect they last a life; and the Cursor's lessons stay three times as strong (`taught_rate`). Until then a good lesson halved in about 3,500 ticks, under an hour, and a bad one in about 14,000. A remembered place still fades by half in about 3,500 (M2 design §7.2): it can change under the sprite, as a bush dies.
+
 **Forgetting** (v18). A remembered sprite all of whose values are under `forget_below` (physiology, 0.01) is forgotten, and so is one that has died, at step 4. So is the Cursor (v29), once all its values are under `forget_below`. There's no limit on how many a sprite remembers.
 
 **Familiarity** rises by `familiarity_rate` for the attended object type (v19) on each tick the sprite commits a trace entry, and never falls in M1. (Whether it should wear off again belongs with habituation, below.)
@@ -2032,10 +2034,10 @@ This file fixes the **mechanisms and ranges**. The starting values are tuned wit
 | `forget_ticks` | 100–100,000 | 5,000 |
 | `worth_rate_good` | 0–1 | 0.5 |
 | `worth_rate_bad` | 0–1 | 0.8 |
-| `worth_fade_good` | 0–0.01 | 0.0002 |
-| `worth_fade_bad` | 0–0.01 | 0.00005 |
+| `worth_fade_good` | 0–0.01 | 0.000025 |
+| `worth_fade_bad` | 0–0.01 | 0.00000625 |
 | `habit_rate` | 0–1 | 0.3 |
-| `habit_fade` | 0–0.01 | 0.0002 |
+| `habit_fade` | 0–0.01 | 0.000025 |
 | `value_gain` | 0–2 | 1.0 |
 | `curiosity` | 0–1 | 0.3 |
 | `familiarity_rate` | 0–0.05 | 0.002 |
@@ -2043,17 +2045,17 @@ This file fixes the **mechanisms and ranges**. The starting values are tuned wit
 | `individual_rate_good` (v18) | 0–1 | 0.8 |
 | `individual_rate_bad` (v18) | 0–1 | 0.9 |
 | `fear_rate` (v18) | 0–1 | 1.0 |
-| `fear_fade` (v18) | 0–0.01 | 0.00005 |
+| `fear_fade` (v18) | 0–0.01 | 0.00000625 |
 | `generalise` (v18) | 2–10 | 3 |
 | `vigilance` (v18) | 0–2 | 0.8 |
 | `flight` (v18) | 0–2 | 0.8 |
 | `fear_reach` (v18) | 0.1–1 | 0.5 |
 | `generalise_types` (v19) | 2–10 | 3 |
 | `quieting` (v21) | 0–1 | 0.8 |
-| `habit_fade_bad` (v21) | 0–0.01 | 0.00005 |
+| `habit_fade_bad` (v21) | 0–0.01 | 0.00000625 |
 | `cursor_calming` (v29) | 0–0.1 | 0.01 |
 | `taught_rate` (#187) | 0–1 | 0.9 |
-| `taught_fade` (#187) | 0–0.01 | 0.00002 |
+| `taught_fade` (#187) | 0–0.01 | 0.00000625 |
 
 The v16 defaults are the prototype's (#10), a starting point for slice 9's tuning, and the v18 ones slice 9c's prototype's (#62). `generalise_types` starts at `generalise`'s value. Rows for parameters that do nothing since v16 stay, since a genome may still carry their genes.
 
