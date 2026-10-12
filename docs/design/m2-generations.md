@@ -379,7 +379,7 @@ The game's rule, "the world decides what happens to the body, the genes decide h
 ### 10.3 Mating and breeding alone
 
 - **Two actions, chosen by instinct** (the owner, Q1): `Mate`, with the sprite attended to, and `BreedAlone`. They show on the doing line and the Brain tab.
-- **`Mate` is offered only when both are adults** (§5). It works, once, if both are fertile, one is male and the other female, and she has a free tile beside her: she lays an egg there (§10.4). The partner learns about the one that mated with it too, as if touched. Otherwise it's a fruitless try.
+- **`Mate` is offered only when both are adults** (§5): the sprite, and the one the verb would be aimed at, a running action's target or else the candidate (M1 design §5.5, #173). It works, once, if both are fertile, one is male and the other female, and she has a free tile beside her: she lays an egg there (§10.4). The partner learns about the one that mated with it too, as if touched. Otherwise it's a fruitless try.
 - **`BreedAlone` is offered only to a grown sprite.** It works for a fertile female whose **longing** has reached `breeds_alone` (0.5), with a free tile beside her; for a male, or a female not fertile or not longing enough, it's a fruitless try.
 - **Longing** is a hormone the starter genes raise while a grown sprite sees no male adult and lower fast while it sees one: about 1,100 ticks with no male in sight takes it to 0.5. It came after the owner saw that 9 eggs in 10 were laid alone. Most of those came from chance: a sprite now and then tries what it isn't drawn to (M1 design §5.5), and for a fertile female, breeding alone always worked. The body's rule stops that; the genes set how fast longing builds, so evolution can still tune it.
 - **The egg costs `cost` (0.3) energy** (Q2): split between a pair, or all hers alone. Per bite of food, both pass on as much of the parents' genes, so neither wins on cost; what makes partners pay is Slice 24, when a sprite breeding alone passes on every broken gene it has.
@@ -425,11 +425,12 @@ Agreed before measuring (Q9):
 
 `cargo run --release -p terra-sim --example generations` runs the first.
 
-**Measured (2026-10-12)** in release builds of this slice at `1ccd210` and of `main` at `fd745bd`, on seeds 1–10, with:
+**Measured (2026-10-12)** in release builds of this slice at `05a8c67`, with `main` and the fix for A3 (#187, PR #189) merged in, and of `main` with that fix at `0d76256`, on seeds 1–10, with:
 
 ```
 cargo run --release -p terra-sim --example generations
 cargo run --release -p terra-sim --example lab -- scenarios/viability.ron --seeds 10
+cargo run --release -p terra-sim --example lab -- scenarios/a3-correct-training.ron --seeds 30
 cargo run --release -p terra-sim --example speed
 ```
 
@@ -437,20 +438,21 @@ The default world left alone for 100,000 ticks:
 
 | Seed | Alive at the end (and eggs) | Most at once | Eggs with a partner | Eggs alone | Hatched | Grew up | Generations |
 |---|---|---|---|---|---|---|---|
-| 1 | 92 (7) | 100 | 46 | 495 | 534 | 509 | 10 |
-| 2 | 95 (5) | 100 | 53 | 470 | 518 | 498 | 9 |
-| 3 | 99 (1) | 100 | 43 | 480 | 522 | 503 | 8 |
-| 4 | 95 (5) | 100 | 37 | 494 | 526 | 505 | 10 |
-| 5 | 97 (3) | 100 | 50 | 474 | 521 | 498 | 9 |
-| 6 | 96 (4) | 100 | 52 | 464 | 512 | 494 | 9 |
-| 7 | 99 (1) | 100 | 58 | 460 | 517 | 504 | 9 |
-| 8 | 98 (1) | 100 | 29 | 496 | 524 | 505 | 10 |
-| 9 | 95 (5) | 100 | 37 | 487 | 519 | 501 | 8 |
-| 10 | 95 (5) | 100 | 32 | 484 | 511 | 496 | 9 |
+| 1 | 86 (2) | 96 | 239 | 124 | 361 | 339 | 12 |
+| 2 | 63 (4) | 70 | 138 | 174 | 308 | 290 | 13 |
+| 3 | 96 (3) | 100 | 372 | 90 | 459 | 434 | 13 |
+| 4 | 92 (3) | 100 | 279 | 139 | 415 | 393 | 12 |
+| 5 | 97 (3) | 100 | 363 | 74 | 434 | 412 | 12 |
+| 6 | 95 (4) | 100 | 259 | 147 | 402 | 382 | 13 |
+| 7 | 85 (3) | 100 | 333 | 89 | 419 | 404 | 14 |
+| 8 | 98 (2) | 100 | 351 | 129 | 478 | 455 | 13 |
+| 9 | 94 (3) | 100 | 328 | 115 | 440 | 417 | 12 |
+| 10 | 95 (4) | 100 | 357 | 92 | 445 | 420 | 13 |
 
-- **Keeps going: met.** Sprites are alive at the end in all 10 seeds, 8 to 10 generations deep, and no world went over its limit of 100.
-- **A4, grown-up hunger and thirst: met.** Of 1,835 deaths in ticks 10,000–50,000 over all seeds, 9 were of thirst and none of hunger (0.5%, under 25%). The rest were old age, but for one sprite hurt by another.
-- **A4, alive at tick 10,000: 40% (median), by design.** The world's first 30 sprites start at ages through adulthood (§9.1) and old age now lasts about an hour, so most die of it before tick 10,000: 175 of the 176 deaths by then were old age. M1's stand-in for childhood no longer measures childhood: it ends at growing up (§2), and Slice 29 makes that A4's measure. Counted that way, almost every hatchling survives (below).
-- **A5: met,** 243–264 ticks a second with 100 sprites (`speed`, six runs), against 293–308 for `main` (three runs) on the same machine.
-- **A1 to A3: met** (their tests pass, with `most_sprites` as §10.6 says).
-- **For information:** almost every hatchling grows up, as expected until Slice 29: in ticks 0–50,000 over all ten seeds, 11 sprites of any age died of something other than old age. Between 5% and 11% of eggs come from a pair: food keeps the world at its limit, where no sprite is fertile, and a female fertile in a moment with no aroused male in view breeds alone. Before body language, with `fed` at 0.6 and arousal fading slowly, far fewer came from a pair. Most tries to mate come to nothing (381 to 522 a seed, against 29 to 58 that lay an egg): Mate is offered between any two adults, but lays an egg only when both are fertile and of different sexes.
+- **Keeps going: met.** Sprites are alive at the end in all 10 seeds, 12 to 14 generations deep, and no world went over its limit of 100.
+- **A4, grown-up hunger and thirst: met.** Of 1,146 deaths in ticks 10,000–50,000 over all seeds, 5 were of thirst and 3 of hunger (0.7%, under 25%). The rest were old age, but for 3 sprites hurt by another.
+- **A4, alive at tick 10,000: 42% (median), by design.** The world's first 30 sprites start at ages through adulthood (§9.1) and old age now lasts about an hour, so most die of it before tick 10,000: all 172 deaths by then were old age. M1's stand-in for childhood no longer measures childhood: it ends at growing up (§2), and Slice 29 makes that A4's measure. Counted that way, almost every hatchling survives (below).
+- **A3: met, and no longer by luck.** Before the fix for #187, this slice's longing genes left A3 failing in most sets of seeds: one shock wore off. With it, over seeds 1–30, trained sprites hit a median of 1.5 times in ticks 10,000–20,000 against 77.5 untrained, and every random set of 10 of those seeds passes.
+- **A5: met,** 257–266 ticks a second with 100 sprites (`speed`, three runs), against 302–308 for `main` with the A3 fix (three runs, alternating) on the same machine.
+- **A1 and A2: met** (their tests pass, with `most_sprites` as §10.6 says).
+- **For information:** almost every hatchling grows up, as expected until Slice 29: in ticks 0–50,000 over all ten seeds, 11 sprites of any age died of something other than old age. Between 44% and 83% of eggs come from a pair, 74% in the median seed: a female lays alone only once she has longed for a male a while (§10.3), and seed 2, where the population never reached its limit, has the most lone eggs. Most tries to mate come to nothing (334 to 886 a seed, against 138 to 372 that lay an egg): Mate is offered between any two adults, but lays an egg only when both are fertile and of different sexes.
