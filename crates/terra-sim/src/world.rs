@@ -434,6 +434,46 @@ impl<'a> SpriteView<'a> {
         self.sprite.stage()
     }
 
+    /// Whether it's still an egg (M2 design §10).
+    pub fn is_egg(&self) -> bool {
+        self.sprite.is_egg()
+    }
+
+    /// The tick it hatches on, while it's an egg (M2 design §10).
+    pub fn hatches(&self) -> Option<u64> {
+        self.sprite.hatches
+    }
+
+    /// Its parents (M2 design §10): the one that laid it, then its partner,
+    /// if it had one. None for a sprite the world began with or the Cursor
+    /// made. A parent may have died since.
+    pub fn parents(&self) -> &'a [EntityId] {
+        &self.sprite.parents
+    }
+
+    /// Its sex (M2 design §10).
+    pub fn sex(&self) -> Sex {
+        self.sprite.sex
+    }
+
+    /// Whether it's fertile now (M2 design §10): grown up, fed, watered and
+    /// rested since its last egg, in a world with room for another sprite.
+    pub fn is_fertile(&self) -> bool {
+        let state = &self.world.state;
+        breeding::room(state) && breeding::fertile(self.sprite, state.tick, &self.world.data)
+    }
+
+    /// The level of its `feminiser` hormone over the level at which a male
+    /// turns female, capped at 1 (M2 design §10): how near it is to turning.
+    /// `None` for a female, or in a pack without breeding.
+    pub fn turning(&self) -> Option<f32> {
+        let physiology = self.world.data.physiology();
+        let indices = physiology.indices.breeding?;
+        let level = self.sprite.body.chems[indices.feminiser];
+        let share = level / physiology.breeding.turns_female.max(f32::MIN_POSITIVE);
+        (self.sprite.sex == Sex::Male).then_some(share.min(1.0))
+    }
+
     /// How worn a hard life has left its body, from 0 to 1 (M2 design
     /// §9.4).
     pub fn wear(&self) -> f32 {
@@ -1142,6 +1182,7 @@ impl World {
                 .and_then(|id| sprites.get(id))
                 .is_some_and(|sprite| !sprite.is_egg())
         };
+        let room = breeding::room(state);
         let females: Vec<(EntityId, Pos)> = sprites
             .iter()
             .filter(|(_, sprite)| sprite.sex == Sex::Female && sprite.stage().is_grown())
@@ -1164,7 +1205,7 @@ impl World {
                     steps: sprite.did.steps,
                     resting: sprite.did.rested,
                     stage: sprite.stage(),
-                    fertile: breeding::fertile(sprite, tick, data),
+                    fertile: room && breeding::fertile(sprite, tick, data),
                     female: sprite.sex == Sex::Female,
                     female_near,
                 };

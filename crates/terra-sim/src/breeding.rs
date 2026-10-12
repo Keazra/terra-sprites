@@ -52,8 +52,16 @@ pub(crate) fn adults(state: &WorldState, a: EntityId, b: EntityId) -> bool {
     a != b && grown(a) && grown(b)
 }
 
-/// Whether `sprite` is fertile on the tick `tick` (M2 design §10): grown up,
-/// fed and watered, and rested long enough since its last egg.
+/// Whether the world has room for another sprite, egg or not (M2 design
+/// §10). In a full world no sprite is fertile, so none feels broody: the
+/// glass of the terrarium.
+pub(crate) fn room(state: &WorldState) -> bool {
+    state.sprites.len() < usize::from(state.most_sprites)
+}
+
+/// Whether `sprite`'s body is fertile on the tick `tick` (M2 design §10):
+/// grown up, fed and watered, and rested long enough since its last egg.
+/// It's fertile if the world has `room` too.
 pub(crate) fn fertile(sprite: &Sprite, tick: u64, data: &DataPack) -> bool {
     let physiology = data.physiology();
     let (breeding, indices) = (physiology.breeding, physiology.indices);
@@ -147,7 +155,7 @@ fn lay(
     father: Option<EntityId>,
     events: &mut Vec<Event>,
 ) -> Option<EntityId> {
-    if state.sprites.len() >= usize::from(state.most_sprites) {
+    if !room(state) {
         return None;
     }
     let pos = state.sprites.get(mother).expect("the mother").pos;
@@ -222,4 +230,104 @@ pub(crate) fn mixed(mine: &Genome, theirs: &Genome, rng: &mut rand_chacha::ChaCh
         switches.clear();
     }
     Genome { genes, switches }
+}
+
+#[cfg(test)]
+mod tests {
+    use rand_chacha::ChaCha8Rng;
+    use rand_chacha::rand_core::SeedableRng;
+
+    use super::*;
+    use crate::map::Map;
+    use crate::test_util::at;
+    use crate::world::{Scenario, World};
+
+    /// A genome whose instincts all have `weight`, one per verb listed.
+    fn weighted(weight: f32, data: &DataPack) -> Genome {
+        let genes: String = [
+            "Eat", "Drink", "Play", "Hit", "Rest", "Wander", "Mate", "Approach",
+        ]
+        .iter()
+        .map(|verb| {
+            format!(r#"Instinct(inputs: [("always", false)], verb: {verb}, weight: {weight:?}),"#)
+        })
+        .collect();
+        Genome::from_ron(&format!("(format: 1, genes: [{genes}])"), data).expect("a valid genome")
+    }
+
+    #[test]
+    fn a_child_takes_each_gene_from_one_parent_or_the_other() {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let (mine, theirs) = (weighted(0.25, &data), weighted(0.75, &data));
+        let mut rng = ChaCha8Rng::seed_from_u64(3);
+        let child = mixed(&mine, &theirs, &mut rng);
+        assert_eq!(child.genes.len(), mine.genes.len());
+        let from_mine = child
+            .genes
+            .iter()
+            .zip(&mine.genes)
+            .filter(|(gene, mine)| gene == mine)
+            .count();
+        let from_theirs = child
+            .genes
+            .iter()
+            .zip(&theirs.genes)
+            .filter(|(gene, theirs)| gene == theirs)
+            .count();
+        assert_eq!(from_mine + from_theirs, child.genes.len());
+        assert!(
+            from_mine > 0 && from_theirs > 0,
+            "{from_mine} and {from_theirs}"
+        );
+    }
+
+    #[test]
+    fn genomes_that_dont_line_up_give_a_copy_of_the_mothers() {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let mine = weighted(0.25, &data);
+        let mut theirs = weighted(0.75, &data);
+        theirs.genes.pop();
+        let mut rng = ChaCha8Rng::seed_from_u64(3);
+        assert_eq!(mixed(&mine, &theirs, &mut rng), mine);
+    }
+
+    #[test]
+    fn a_full_world_is_infertile_and_lays_nothing() {
+        // M2 design §10: the limit counts eggs, and a sprite in a full world
+        // isn't fertile.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let genome = Genome::from_ron(
+            r#"(format: 1, genes: [
+                InitialConcentration(chem: "feminiser", value: 1.0),
+                Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
+            ])"#,
+            &data,
+        )
+        .expect("a valid genome");
+        let map = Map::from_ascii(&[".....", ".....", "....."], &data).expect("valid drawing");
+        let sprites = [(at(1, 1), Some(genome.clone())), (at(3, 1), Some(genome))];
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &sprites,
+            scripted: &[],
+            newborns: &[],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        world.set_most_sprites(2);
+        let laid = |world: &mut World| {
+            (0..50).any(|_| {
+                world
+                    .step()
+                    .iter()
+                    .any(|event| matches!(event.kind, EventKind::Laid { .. }))
+            })
+        };
+        assert!(!laid(&mut world), "an egg in a full world");
+        assert!(world.sprites().all(|sprite| !sprite.is_fertile()));
+        world.set_most_sprites(3);
+        assert!(laid(&mut world), "no egg once there was room");
+        assert_eq!(world.sprites().count(), 3);
+        assert!(!laid(&mut world), "a second egg over the limit");
+    }
 }

@@ -1,11 +1,16 @@
-//! Breeding (M2 design §5): mating happens only between adults, enforced by
-//! the engine for any genome and data pack.
+//! Breeding (M2 design §5, §10): mating happens only between adults,
+//! enforced by the engine for any genome and data pack; a male and a female
+//! lay an egg, or a female alone; it hatches into a young male; a lone adult
+//! turns female; and births are world state, saved, hashed and replayed.
 
 mod common;
-use common::{WorldBuilder, at, builtin, genome};
+use common::{WorldBuilder, at, builtin, close, endings, genome};
 
 use proptest::prelude::*;
-use terra_sim::{EventKind, LifeStage, Pos, Target, Verb, World};
+use terra_sim::{
+    Command, EntityId, Event, EventKind, LifeStage, Outcome, Playback, Pos, Rejection, Sex, Target,
+    Verb, World,
+};
 
 /// A small field of grass with a sprite of `genes` on each tile of
 /// `sprites`, those on `young` as newborns and the rest just grown up.
@@ -34,30 +39,43 @@ const KEEN: &str = r#"
 /// of the sprite it's aimed at, or `None` if it's aimed at no sprite.
 type Mating = (LifeStage, Option<LifeStage>);
 
-/// Steps `world` `ticks` times, returning each Mate action started.
+/// Steps `world` `ticks` times, returning each Mate action started. It
+/// checks too that only a grown sprite starts to breed alone, and that
+/// every egg is laid by a grown female, with a grown male if with anyone
+/// (M2 design §10).
 fn matings(world: &mut World, ticks: u64) -> Vec<Mating> {
     let mut found = Vec::new();
     for _ in 0..ticks {
-        for event in world.step() {
-            let EventKind::ActionStarted {
-                id,
-                verb: Verb::Mate,
-            } = event.kind
-            else {
+        let events = world.step();
+        for event in &events {
+            if let EventKind::Laid { by, with, .. } = event.kind {
+                let mother = world.sprite(by).expect("the mother");
+                assert!(mother.life_stage().is_grown() && mother.sex() == Sex::Female);
+                if let Some(father) = with.and_then(|id| world.sprite(id)) {
+                    assert!(father.life_stage().is_grown() && father.sex() == Sex::Male);
+                }
+            }
+            let EventKind::ActionStarted { id, verb } = event.kind else {
                 continue;
             };
             // One that died in the same tick: the self-check saw its action.
             let Some(sprite) = world.sprite(id) else {
                 continue;
             };
-            let partner = match sprite.action().and_then(|a| a.target) {
-                Some(Target::Sprite(other)) => match world.sprite(other) {
-                    Some(other) => Some(other.life_stage()),
-                    None => continue,
-                },
-                _ => None,
-            };
-            found.push((sprite.life_stage(), partner));
+            match verb {
+                Verb::BreedAlone => assert!(sprite.life_stage().is_grown()),
+                Verb::Mate => {
+                    let partner = match sprite.action().and_then(|a| a.target) {
+                        Some(Target::Sprite(other)) => match world.sprite(other) {
+                            Some(other) => Some(other.life_stage()),
+                            None => continue,
+                        },
+                        _ => None,
+                    };
+                    found.push((sprite.life_stage(), partner));
+                }
+                _ => {}
+            }
         }
     }
     found
@@ -84,6 +102,386 @@ fn an_adult_never_mates_with_a_young_sprite_nor_a_young_one_at_all() {
     assert_eq!(matings(&mut world, 200), []);
 }
 
+/// A body that turns female at once, as an adult (M2 design §10).
+const FEMALE: &str = r#"InitialConcentration(chem: "feminiser", value: 1.0),"#;
+
+/// An instinct to breed alone whenever it can.
+const ALONE: &str = r#"Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),"#;
+
+/// An instinct to rest, so the sprites watched don't come to blows.
+const REST: &str = r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),"#;
+
+/// The starter genome's genes for turning female (M2 design §10): the
+/// feminiser rises while no female adult is near, and fades. And it rests.
+const TURNING: &str = r#"
+    Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),
+    Emitter(locus: Locus("female_near"), mode: Level, invert: true, threshold: 0.5, gain: 0.003, chem: "feminiser", from: Adult),
+    HalfLife(chem: "feminiser", ticks: 600),
+"#;
+
+/// A small field of grass with a sprite of its own genes on each tile, the
+/// ones on `young` as newborns and the rest just grown up.
+fn family(sprites: &[(Pos, &str)], young: &[Pos], seed: u64) -> World {
+    let data = builtin();
+    let placed = sprites
+        .iter()
+        .map(|&(pos, genes)| (pos, Some(genome(genes, &data))))
+        .collect();
+    WorldBuilder::new(&["........", "........", "........", "........"])
+        .data(data)
+        .sprites_with(placed)
+        .newborns(young)
+        .seed(seed)
+        .build()
+}
+
+/// Steps `world` until `found` picks something out of a tick's events, or
+/// `ticks` ticks have passed.
+fn until<T>(
+    world: &mut World,
+    ticks: u64,
+    mut found: impl FnMut(&Event) -> Option<T>,
+) -> Option<T> {
+    for _ in 0..ticks {
+        if let Some(found) = world.step().iter().find_map(&mut found) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+/// An egg laid: the egg, who laid it, with whom, and on which tick.
+struct Laying {
+    egg: EntityId,
+    by: EntityId,
+    with: Option<EntityId>,
+    tick: u64,
+}
+
+/// Steps `world` until an egg is laid.
+fn laid(world: &mut World, ticks: u64) -> Option<Laying> {
+    until(world, ticks, |event| match event.kind {
+        EventKind::Laid { egg, by, with } => Some(Laying {
+            egg,
+            by,
+            with,
+            tick: event.tick,
+        }),
+        _ => None,
+    })
+}
+
+/// A sprite's energy.
+fn energy(world: &World, id: EntityId) -> f32 {
+    let sprite = world.sprite(id).expect("alive");
+    sprite.chemical("energy").expect("energy")
+}
+
+#[test]
+fn a_male_and_a_female_lay_an_egg_beside_her_and_split_its_cost() {
+    let female = format!("{KEEN}{FEMALE}");
+    let mut world = family(&[(at(2, 1), &female), (at(3, 1), KEEN)], &[], 1);
+    let (mother, father) = (
+        world.sprite_at(at(2, 1)).unwrap().id(),
+        world.sprite_at(at(3, 1)).unwrap().id(),
+    );
+    let mut before = (energy(&world, mother), energy(&world, father));
+    let mut found = None;
+    for _ in 0..100 {
+        let events = world.step();
+        found = events.iter().find_map(|event| match event.kind {
+            EventKind::Laid { egg, by, with } => Some((egg, by, with)),
+            _ => None,
+        });
+        if found.is_some() {
+            break;
+        }
+        before = (energy(&world, mother), energy(&world, father));
+    }
+    let (egg, by, with) = found.expect("an egg was laid");
+    assert_eq!((by, with), (mother, Some(father)));
+    let egg = world.sprite(egg).expect("the egg");
+    assert!(egg.is_egg());
+    assert_eq!(egg.life_stage(), LifeStage::Egg);
+    assert_eq!(egg.parents(), [mother, father]);
+    let her = world.sprite(mother).unwrap().pos();
+    let (dx, dy) = (egg.pos().x.abs_diff(her.x), egg.pos().y.abs_diff(her.y));
+    assert_eq!(dx.max(dy), 1, "the egg is beside her");
+    // An egg costs 0.3 of a full belly, half each (M2 design §10), give or
+    // take a tick's metabolism.
+    let paid = (
+        before.0 - energy(&world, mother),
+        before.1 - energy(&world, father),
+    );
+    assert!((paid.0 - 0.15).abs() < 0.01, "she paid {}", paid.0);
+    assert!((paid.1 - 0.15).abs() < 0.01, "he paid {}", paid.1);
+}
+
+#[test]
+fn two_males_or_two_females_lay_nothing_together() {
+    // Two females may still each breed alone (M2 design §10).
+    let female = format!("{KEEN}{FEMALE}");
+    for genes in [KEEN, female.as_str()] {
+        let mut world = family(&[(at(2, 1), genes), (at(3, 1), genes)], &[], 1);
+        let mut tries = Vec::new();
+        for _ in 0..300 {
+            let events = world.step();
+            assert!(
+                !events
+                    .iter()
+                    .any(|event| matches!(event.kind, EventKind::Laid { with: Some(_), .. })),
+                "a pair of one sex laid an egg"
+            );
+            tries.extend(endings(&events));
+        }
+        assert!(
+            tries.contains(&(Verb::Mate, Outcome::Failed)),
+            "they tried, fruitlessly: {tries:?}"
+        );
+    }
+}
+
+#[test]
+fn a_female_breeds_alone_and_pays_it_all_but_a_male_cannot() {
+    let female = format!("{ALONE}{FEMALE}");
+    let mut world = family(&[(at(2, 1), &female), (at(5, 2), ALONE)], &[], 1);
+    let (mother, male) = (
+        world.sprite_at(at(2, 1)).unwrap().id(),
+        world.sprite_at(at(5, 2)).unwrap().id(),
+    );
+    let Laying { egg, by, with, .. } = laid(&mut world, 50).expect("she laid an egg");
+    assert_eq!((by, with), (mother, None));
+    let egg = world.sprite(egg).unwrap();
+    assert_eq!(egg.parents(), [mother]);
+    assert_eq!(egg.genome(), world.sprite(mother).unwrap().genome());
+    assert!(energy(&world, mother) < 0.72, "she paid the whole 0.3");
+    // The male tries, and keeps failing.
+    let mut tries = Vec::new();
+    for _ in 0..100 {
+        tries.extend(world.step().iter().filter_map(|event| match event.kind {
+            EventKind::ActionEnded {
+                id,
+                verb: Verb::BreedAlone,
+                outcome,
+                ..
+            } if id == male => Some(outcome),
+            _ => None,
+        }));
+    }
+    assert!(
+        !tries.is_empty() && tries.iter().all(|&o| o == Outcome::Failed),
+        "{tries:?}"
+    );
+    assert_eq!(world.sprite(male).unwrap().sex(), Sex::Male);
+}
+
+#[test]
+fn an_egg_needs_nothing_and_hatches_after_750_ticks_as_a_young_male() {
+    let female = format!("{ALONE}{FEMALE}");
+    let mut world = family(&[(at(2, 1), &female)], &[], 1);
+    let Laying {
+        egg,
+        by: mother,
+        tick: laid_on,
+        ..
+    } = laid(&mut world, 50).expect("an egg");
+    let view = world.sprite(egg).unwrap();
+    assert_eq!(view.hatches(), Some(laid_on + 750));
+    let pos = view.pos();
+    let hatched = until(&mut world, 800, |event| match &event.kind {
+        EventKind::Hatched { id, parents } if *id == egg => Some((event.tick, parents.clone())),
+        _ => None,
+    });
+    let (tick, parents) = hatched.expect("it hatched");
+    assert_eq!(tick, laid_on + 750);
+    assert_eq!(parents, [mother]);
+    let young = world.sprite(egg).expect("the hatchling");
+    assert!(!young.is_egg());
+    assert_eq!(young.life_stage(), LifeStage::Young);
+    assert_eq!(young.sex(), Sex::Male);
+    assert_eq!(world.tick() - young.age(), tick, "born as it hatched");
+    assert_eq!(young.pos(), pos, "it hatched where it lay");
+}
+
+#[test]
+fn an_egg_body_stays_as_it_was_laid() {
+    let female = format!("{ALONE}{FEMALE}");
+    let mut world = family(&[(at(2, 1), &female)], &[], 1);
+    let egg = laid(&mut world, 50).expect("an egg").egg;
+    let body = |world: &World| -> Vec<f32> {
+        let egg = world.sprite(egg).unwrap();
+        egg.chemicals().map(|c| c.level).collect()
+    };
+    let laid_with = body(&world);
+    for _ in 0..700 {
+        world.step();
+        let egg_now = world.sprite(egg).unwrap();
+        assert!(egg_now.is_egg());
+        assert!(egg_now.action().is_none(), "an egg does nothing");
+        assert_eq!(body(&world), laid_with, "an egg needs nothing");
+    }
+}
+
+#[test]
+fn the_cursor_can_neither_touch_nor_hold_an_egg() {
+    let female = format!("{ALONE}{FEMALE}");
+    let mut world = family(&[(at(2, 1), &female)], &[], 1);
+    let egg = laid(&mut world, 50).expect("an egg").egg;
+    let commands = [
+        Command::Reward {
+            sprite: egg,
+            amplified: false,
+            reach_back: 10,
+        },
+        Command::Correct {
+            sprite: egg,
+            amplified: true,
+        },
+        Command::TakeHold { sprite: egg },
+    ];
+    for command in &commands {
+        world.submit(command.clone());
+    }
+    let refused: Vec<_> = world
+        .step()
+        .into_iter()
+        .filter_map(|event| match event.kind {
+            EventKind::CommandRejected { command, reason } => Some((command, reason)),
+            _ => None,
+        })
+        .collect();
+    let expected: Vec<_> = commands
+        .iter()
+        .map(|c| (c.clone(), Rejection::Egg))
+        .collect();
+    assert_eq!(refused, expected);
+    assert_eq!(world.cursor().leads(), None);
+}
+
+/// Hits whatever egg it sees, and nothing else.
+const EGG_HITTER: &str = r#"
+    AttentionInstinct(input: "always", category: "egg", weight: 1.0),
+    Instinct(inputs: [("always", false), ("attended_egg", false)], verb: Hit, weight: 1.0),
+    Instinct(inputs: [("always", false), ("attended_egg", false), ("target_adjacent", true)], verb: Approach, weight: 2.0),
+"#;
+
+#[test]
+fn hitting_an_egg_does_nothing() {
+    // M2 design §10: an egg can't be hurt until something in the world is
+    // meant to hurt eggs, so it's a fruitless try.
+    let female = format!("{ALONE}{FEMALE}");
+    let mut world = family(&[(at(2, 1), &female), (at(6, 3), EGG_HITTER)], &[], 1);
+    let egg = laid(&mut world, 50).expect("an egg").egg;
+    let body = |world: &World| -> Vec<f32> {
+        let egg = world.sprite(egg).unwrap();
+        egg.chemicals().map(|c| c.level).collect()
+    };
+    let laid_with = body(&world);
+    let mut hits = Vec::new();
+    for _ in 0..300 {
+        hits.extend(
+            endings(&world.step())
+                .into_iter()
+                .filter(|&(verb, _)| verb == Verb::Hit),
+        );
+    }
+    assert!(!hits.is_empty(), "it hit the egg");
+    assert!(hits.iter().all(|&(_, o)| o == Outcome::Failed), "{hits:?}");
+    assert_eq!(body(&world), laid_with);
+}
+
+#[test]
+fn a_lone_adult_turns_female_but_a_young_one_never_does() {
+    // M2 design §10: no young sprite changes, whatever its hormones. This
+    // one's feminiser stays full all along.
+    let young = format!("{FEMALE}{REST}");
+    let mut world = family(&[(at(1, 1), TURNING), (at(6, 2), &young)], &[at(6, 2)], 1);
+    let (adult, child) = (
+        world.sprite_at(at(1, 1)).unwrap().id(),
+        world.sprite_at(at(6, 2)).unwrap().id(),
+    );
+    let turned = until(&mut world, 3_000, |event| match event.kind {
+        EventKind::TurnedFemale { id } => Some(id),
+        _ => None,
+    });
+    assert_eq!(turned, Some(adult));
+    assert_eq!(world.sprite(adult).unwrap().sex(), Sex::Female);
+    let child = world.sprite(child).unwrap();
+    assert!(!child.life_stage().is_grown());
+    assert_eq!(child.sex(), Sex::Male);
+    assert!(close(child.chemical("feminiser").unwrap(), 1.0));
+}
+
+#[test]
+fn a_male_that_sees_a_female_stays_male() {
+    let female = format!("{FEMALE}{TURNING}");
+    let mut world = family(&[(at(1, 1), &female), (at(6, 2), TURNING)], &[], 1);
+    let male = world.sprite_at(at(6, 2)).unwrap().id();
+    let turned: Vec<_> = (0..3_000)
+        .flat_map(|_| world.step())
+        .filter_map(|event| match event.kind {
+            EventKind::TurnedFemale { id } => Some(id),
+            _ => None,
+        })
+        .collect();
+    assert!(!turned.contains(&male), "{turned:?}");
+    assert_eq!(world.sprite(male).unwrap().sex(), Sex::Male);
+}
+
+#[test]
+fn an_egg_saved_and_loaded_hatches_the_same() {
+    let female = format!("{ALONE}{FEMALE}");
+    let mut world = family(&[(at(2, 1), &female), (at(5, 2), KEEN)], &[], 4);
+    let egg = laid(&mut world, 50).expect("an egg").egg;
+    world.step();
+    let mut loaded = World::load(&world.save()).expect("the save loads");
+    assert_eq!(loaded.state_hash(), world.state_hash());
+    let loaded_egg = loaded.sprite(egg).expect("the egg was saved");
+    assert!(loaded_egg.is_egg());
+    assert_eq!(loaded_egg.hatches(), world.sprite(egg).unwrap().hatches());
+    for _ in 0..800 {
+        assert_eq!(world.step(), loaded.step());
+        assert_eq!(loaded.state_hash(), world.state_hash());
+    }
+    assert!(!loaded.sprite(egg).unwrap().is_egg(), "it hatched");
+}
+
+#[test]
+fn a_birth_hashes_differently() {
+    // Births are world state (M2 design §10): two worlds alike but for an
+    // egg aren't the same world.
+    let female = format!("{ALONE}{FEMALE}");
+    let mut laying = family(&[(at(2, 1), &female)], &[], 1);
+    let mut not = family(&[(at(2, 1), FEMALE)], &[], 1);
+    laid(&mut laying, 50).expect("an egg");
+    while not.tick() < laying.tick() {
+        not.step();
+    }
+    assert_ne!(laying.state_hash(), not.state_hash());
+}
+
+#[test]
+fn births_replay_exactly() {
+    let female = format!("{ALONE}{FEMALE}");
+    let mut world = family(&[(at(2, 1), &female), (at(5, 2), KEEN)], &[], 2);
+    world.start_recording();
+    let mut births = 0;
+    for _ in 0..2_000 {
+        births += world
+            .step()
+            .iter()
+            .filter(|e| matches!(e.kind, EventKind::Laid { .. } | EventKind::Hatched { .. }))
+            .count();
+    }
+    assert!(births >= 2, "an egg was laid and hatched");
+    let mut playback = Playback::new(&world.replay().unwrap()).expect("the replay plays");
+    while playback.world().tick() < playback.end() {
+        playback.step();
+    }
+    assert_eq!(playback.divergence(), None);
+    assert_eq!(playback.world().state_hash(), world.state_hash());
+}
+
 /// A state input a random gene may read.
 fn state_input() -> impl Strategy<Value = &'static str> {
     prop::sample::select(vec![
@@ -108,7 +506,16 @@ fn switch() -> impl Strategy<Value = &'static str> {
 /// A random instinct, leaning to Mate.
 fn instinct() -> impl Strategy<Value = String> {
     let verb = prop::sample::select(vec![
-        "Mate", "Mate", "Mate", "Approach", "Play", "Hit", "Wander", "Rest",
+        "Mate",
+        "Mate",
+        "Mate",
+        "BreedAlone",
+        "BreedAlone",
+        "Approach",
+        "Play",
+        "Hit",
+        "Wander",
+        "Rest",
     ]);
     let attended = prop::sample::select(vec!["", r#", ("attended_sprite", false)"#]);
     (state_input(), any::<bool>(), attended, verb, -1.0f32..1.0, switch()).prop_map(
@@ -133,19 +540,23 @@ fn attention() -> impl Strategy<Value = String> {
 }
 
 /// A random genome of brain genes: each sprite grows up and old at random
-/// ages, so some cross a life stage mid-run.
+/// ages, so some cross a life stage mid-run, and some have a full
+/// feminiser, so they turn female if grown.
 fn random_genes() -> impl Strategy<Value = String> {
     (
         prop::collection::vec(instinct(), 1..8),
         prop::collection::vec(attention(), 0..4),
         1500.0f32..2500.0,
         6000.0f32..7000.0,
+        prop::sample::select(vec!["", FEMALE]),
     )
-        .prop_map(|(instincts, attention, grows_up, grows_old)| {
+        .prop_map(|(instincts, attention, grows_up, grows_old, female)| {
             format!(
                 r#"Trait(trait: "grows_up", value: {grows_up:?}),
                    Trait(trait: "grows_old", value: {grows_old:?}),
                    Instinct(inputs: [("always", false), ("attended_sprite", false)], verb: Mate, weight: 1.0, from: Young),
+                   Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 0.5, from: Young),
+                   {female}
                    {}
                    {}"#,
                 attention.join("\n"),
@@ -158,7 +569,7 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(24))]
 
     #[test]
-    fn whatever_the_genome_only_adults_ever_mate_and_only_with_adults(
+    fn whatever_the_genome_only_adults_ever_breed_and_only_with_adults(
         genes in random_genes(),
         young in prop::collection::vec(any::<bool>(), 4),
         seed: u64,
