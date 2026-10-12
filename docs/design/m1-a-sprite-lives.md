@@ -25,7 +25,7 @@ Terra Sprites is a terminal artificial-life game inspired by *Creatures*. Sprite
 | Player role | Through the Cursor: observe, reward, correct, grab, place | Player feedback feeds directly into learning |
 | Reproduction (M2) | Sexual and asexual; the genome decides which | Mode of reproduction can itself evolve |
 | Population | 20–100 sprites | Individuals still matter, and evolution is visible within hours |
-| Language | M4 | Brain I/O is designed now so words can plug in later |
+| Language | M6 | Brain I/O is designed now so words can plug in later |
 | Information UI | Omniscient, plus body language on the map | M1 is about observing and tuning learning; a policy seam leaves room for a diegetic mode later |
 | Rendering | Real terminal in M1; tile window with sprite sheets later | M1 risk stays on the sim; semantic tiles and CP437-only text keep the door open |
 
@@ -39,8 +39,10 @@ Terra Sprites is a terminal artificial-life game inspired by *Creatures*. Sprite
 |---|---|
 | **M1 — A Sprite Lives** *(this document)* | World, ecology, biochemistry, learning brain, terminal UI, the Cursor, save/load, replay |
 | **M2 — Generations** *([its own design](m2-generations.md))* | Life stages; sexual and asexual reproduction decided by the genome; crossover and mutation; lineage and family-tree view; population graphs; headless fast-forward mode. Also memory of places, learning by watching, a harsher world, the speed cap and a title screen (v39) |
-| **M3 — Wild Terra** | Critters (prey and predators); more hazards and toys; possibly seasons, weather, day/night and temperature |
-| **M4 — Words** | The player (and later, sprites) name objects and verbs; word inputs and a Speak output |
+| **M3 — Body & verbs** *([#164](https://github.com/Keazra/terra-sprites/issues/164))* | Limbs that give sprites their verbs; Touch, Grab, Push, Pull, Throw and Drop; holding by size (2026-10-12) |
+| **M4 — Terra** *([its own design](m4-terra.md))* | The terrarium is a ship, Terra: sectors, biomes and bays, devices, sealed doors that sprites open, Story mode and Lab mode on the ship, and the keeper's inventory (2026-10-12) |
+| **M5 — Wild Terra** | Critters (prey and predators); more hazards and toys; possibly seasons, weather, day/night and temperature. On the ship, its weather and critters come from devices (M4 design §6.4) |
+| **M6 — Words** | The player (and later, sprites) name objects and verbs; word inputs and a Speak output |
 | **Tiles** *(UI milestone, can be scheduled any time after M1)* | A tile-window front end that draws bitmap tilesets and sprite sheets through the semantic-tile seam (§6.2) |
 | **Beyond Terra Sprites** *(vision, [#47](https://github.com/Keazra/terra-sprites/issues/47))* | A larger game: the player is one adventurer in a world of unique NPCs that run on a version of the Sprite system, with skills a player can lock, and a character the player can hand over to live as an NPC and take back. Nothing is built for it; it's why `terra-sim` stays a general engine |
 
@@ -77,7 +79,7 @@ Terra Sprites is a terminal artificial-life game inspired by *Creatures*. Sprite
 ### 1.4 Obligations M1 carries for later milestones
 
 - **Genome format:** gene type IDs are stable, payloads are versioned, and unknown genes are preserved (§2.8).
-- **Registries:** every ID is stable and append-only. This covers chemicals, loci, brain inputs and outputs, categories and object types. `Mate` (M2) and `Speak` (M4) have IDs reserved now.
+- **Registries:** every ID is stable and append-only. This covers chemicals, loci, brain inputs and outputs, categories and object types. `Mate` (M2) and `Speak` (M6) have IDs reserved now.
 - **Objects:** defined as data, with a closed rule vocabulary (§3.5).
 - **Easy modding** (v19): a mod will be able to add object types, genomes and tags of its own (v23), and nothing else (§3.5.5). Instincts and genomes name categories, never object types, and nothing outside a world's own pack refers to an object type by number. A mod's own tags are known by an ID the mod is given at random once, when it's made, and keeps in its file, so two mods' tags of the same name never clash ([#73](https://github.com/Keazra/terra-sprites/issues/73)).
 - **Rendering:** the map is drawn from semantic tiles, and all UI text uses only CP437 characters (§6.2).
@@ -473,7 +475,7 @@ An object is **solid** if nothing can move through it, and a **fixture** if it's
   - a pseudo type's verb that does anything but `Inject` and `Signal`: water and sprites aren't objects, so nothing else applies (from slice 7a)
   - a verb table for a verb other than Eat, Drink, Hit and Play: the others move, rest or are reserved, and never act through a target's table (§5.2)
 
-**Scope rule:** any later object type that fits this vocabulary needs **no new code**. A genuinely new behaviour means adding one case to the rule enum. (M3 critters are agents, not objects.)
+**Scope rule:** any later object type that fits this vocabulary needs **no new code**. A genuinely new behaviour means adding one case to the rule enum. (M5 critters are agents, not objects.)
 
 #### 3.5.3 M1 object types
 
@@ -977,7 +979,7 @@ Every input and output has a stable, append-only ID (Appendix A). Each input bel
 | **Interaction** | Eat, Drink, Hit, Play | **Any attended target** (v16): a sprite can try anything on anything it can reach |
 | **Targetless** | Rest, Wander | Always |
 
-`Mate` (M2) and `Speak` (M4) have IDs reserved.
+`Mate` (M2) and `Speak` (M6) have IDs reserved.
 
 **Trying anything** (v16). A verb table says what an attempt *does*, not what is *allowed*. A try whose target has no verb table (water or a sprite in a pack with no pseudo type for it, v20), whose verb table has no rule for the verb, or whose rule's requirement isn't met (a bush with no fruit), is a **fruitless try**: nothing happens, the action ends `failed`, and the sprite feels a `fruitless` pulse (§4.2). Eating a ball, drinking from a bush or eating another sprite are fruitless tries; for now a sprite that is tried on doesn't notice (being nibbled belongs with social play, [#46](https://github.com/Keazra/terra-sprites/issues/46)). An object's data may also give a verb an unintended effect, such as a device that sparks when hit; effects that reach others nearby need an area effect of their own ([#61](https://github.com/Keazra/terra-sprites/issues/61)).
 
@@ -991,7 +993,7 @@ Approach still has its own jobs:
 - **Closeness.** Loneliness falls as `nearby_sprites` rises, without having to touch anyone.
 - **Following** another sprite.
 - **Going towards what is worth it** (v16): a thing's worth adds to Approach as well as to the interactions.
-- **A counterpart to Retreat,** which M3 (hunting, herding) and M4 ("come here") will build on.
+- **A counterpart to Retreat,** which M5 (hunting, herding) and M6 ("come here") will build on.
 
 **Stored per brain:** no index → ID tables (v38). A brain's places in the pack's brain inputs are valid because a save carries its own pack (§2.8), and a brain that doesn't fit its pack is refused as damaged. Concepts are identified by **input signature**, never by index; worth and habits by object type ID (v19) and verb ID, and remembered sprites by entity ID.
 
@@ -1937,7 +1939,7 @@ IDs are stable and append-only. Gaps are left for growth, and the ranges are a c
 | 7 | Rest | |
 | 8 | Wander | |
 | 9 | Mate | reserved for M2 |
-| 10 | Speak | reserved for M4 |
+| 10 | Speak | reserved for M6 |
 
 **Brain parameters** (in `BrainParam` genes, and in `physiology.ron` by name):
 

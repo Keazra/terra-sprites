@@ -27,7 +27,7 @@ listed_enum! {
         Wander = 8,
         /// Reserved for M2.
         Mate = 9,
-        /// Reserved for M4.
+        /// Reserved for M6 (Words).
         Speak = 10,
     }
 

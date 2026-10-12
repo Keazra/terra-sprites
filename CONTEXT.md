@@ -289,7 +289,7 @@ What a sprite is doing, such as wandering to a spot or resting, from when it sta
 _Avoid_: task, behaviour, activity
 
 **Verb**:
-A kind of action a sprite can take: Approach, Eat, Drink, Hit, Play, Retreat, Rest or Wander. Mate joins in M2 (Slice 23). Under #164 (M3), Play stops being a verb — it is boredom's relief, and the `played` pulse, that other verbs' effects can cause — and Touch, Grab, Push, Pull, Throw and Drop join. Speak is reserved for M4.
+A kind of action a sprite can take: Approach, Eat, Drink, Hit, Play, Retreat, Rest or Wander. Mate joins in M2 (Slice 23). Under #164 (M3), Play stops being a verb — it is boredom's relief, and the `played` pulse, that other verbs' effects can cause — and Touch, Grab, Push, Pull, Throw and Drop join. Speak is reserved for M6 (Words).
 _Avoid_: command (the player's commands are different), move
 
 **Holding** (#164 / M3):
@@ -756,7 +756,7 @@ _Avoid_: summary, analysis
 The AI agent that reads a baseline report, and the code and commits behind it, and writes the briefing. It changes nothing itself.
 _Avoid_: monitor, watcher
 
-### The ship (a later milestone)
+### The ship (M4)
 
 **Ship** (#181):
 The terrarium seen for what it is: Terra, an ark flying through space, made of sectors joined by doors. Its sprites are the Terra Sprites.

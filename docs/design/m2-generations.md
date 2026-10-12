@@ -48,7 +48,7 @@ The owner's principles carry over unchanged (`docs/agents/how-we-work.md`). Thre
 
 A clean-up thread, separate from the slices, checks the outside review's claims ([#137](https://github.com/Keazra/terra-sprites/issues/137)) against the code and fixes what holds up, with the small notes from the owner's M1 play-through that an agent can do alone (#124, #126, #128, #129, #130).
 
-**The view past the wall** (Slice 31, [#184](https://github.com/Keazra/terra-sprites/issues/184), from [#180](https://github.com/Keazra/terra-sprites/issues/180)) lets the view go past the terrarium's wall into space, with stars going by (§11). It touches only the front end, so it can be built beside any slice. It was designed with the ship ([#181](https://github.com/Keazra/terra-sprites/issues/181)), which is a milestone of its own after Body & verbs.
+**The view past the wall** (Slice 31, [#184](https://github.com/Keazra/terra-sprites/issues/184), from [#180](https://github.com/Keazra/terra-sprites/issues/180)) lets the view go past the terrarium's wall into space, with stars going by (§11). It touches only the front end, so it can be built beside any slice. It was designed with the ship ([#181](https://github.com/Keazra/terra-sprites/issues/181)), which is a milestone of its own after Body & verbs: M4, Terra ([its design](m4-terra.md)).
 
 ---
 
@@ -153,7 +153,7 @@ Until Slice 20 a sprite only ever went for what it could see, about 10 tiles rou
 - **A place where something it touched eased a need.** When learning (M1 design §5.6, step 4) credits relief of any need to the thing the sprite touched within `touch_window`, and that thing stays put, the sprite remembers the thing and its tile.
 - **Things that stay put** are water tiles and objects fixed in place: each object type's entry already says whether an object stands on its own tile (M1 design §3.5.1), so a new fixed thing that eases a need, such as a spring or a fruit tree, is remembered with no code. Loose things (berries, balls) are not remembered: they get eaten or roll away. Nor are sprites or the Cursor, which walk off.
 - **It's learned, not instinct.** A newborn remembers nothing.
-- **Not places where it got hurt.** Harm only comes from touching something the sprite can see, so knowing where danger lies out of sight changes nothing yet; critters (M3) are when it would matter.
+- **Not places where it got hurt.** Harm only comes from touching something the sprite can see, so knowing where danger lies out of sight changes nothing yet; critters (M5) are when it would matter.
 
 ### 7.2 How many, and how they fade
 
