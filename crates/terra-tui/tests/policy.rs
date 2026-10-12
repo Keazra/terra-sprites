@@ -9,7 +9,7 @@ use terra_sim::{
     ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Map, Outcome, Pos,
     Progress, Scenario, ScriptedAction, Target, Verb, World,
 };
-use terra_tui::app::{App, Tab};
+use terra_tui::app::{App, CursorMode, Tab};
 use terra_tui::input::Action;
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
 use terra_tui::theme::Theme;
@@ -25,6 +25,15 @@ struct Blind;
 impl InfoPolicy for Blind {
     fn can_view(&self, _panel: Panel, _subject: Subject) -> bool {
         false
+    }
+}
+
+/// A policy that shows everything but the Cursor's own lines.
+struct NoCursorLines;
+
+impl InfoPolicy for NoCursorLines {
+    fn can_view(&self, panel: Panel, _subject: Subject) -> bool {
+        panel != Panel::CursorLines
     }
 }
 
@@ -226,4 +235,58 @@ fn a_policy_that_hides_map_colours_draws_sprites_in_their_own_colour() {
     assert_eq!(render(&app, &world)[WANDERER].fg, Color::Yellow);
     app.set_policy(Blind);
     assert_eq!(render(&app, &world)[WANDERER].fg, Color::White);
+}
+
+#[test]
+fn the_cursors_own_lines_ask_the_policy_about_the_sprite_they_name() {
+    // Design §6.4 (#174): what the Cursor follows, leads or holds, and the
+    // prompt for naming a sprite, show only what the policy lets them.
+    let world = field();
+    let on_wanderer = Position::new(4, 6);
+    let status = |app: &App| row(&render(app, &world), 29, 0..100);
+    let areas = ui::areas(Size::new(100, 30), world.map());
+
+    let mut following = App::new(world.map(), Theme::cp437(), 7, areas);
+    following.apply(Action::left_click(on_wanderer), &world);
+    following.apply(Action::Follow { at: None }, &world);
+    assert!(status(&following).contains("│ following Sprite #"));
+    following.set_policy(NoCursorLines);
+    let line = status(&following);
+    assert!(!line.contains("following"), "{line}");
+
+    let mut leading = App::new(world.map(), Theme::cp437(), 7, areas);
+    leading.apply(Action::Mode(CursorMode::Grab), &world);
+    leading.apply(Action::left_click(on_wanderer), &world);
+    assert!(status(&leading).contains("│ leading: Sprite #"));
+    leading.set_policy(NoCursorLines);
+    let line = status(&leading);
+    assert!(!line.contains("leading"), "{line}");
+
+    let pack = pack();
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let scenario = Scenario {
+        map,
+        objects: &[(Pos { x: 4, y: 1 }, "ball")],
+        sprites: &[],
+        scripted: &[],
+        newborns: &[],
+    };
+    let ball_field = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut holding = App::new(ball_field.map(), Theme::cp437(), 7, areas);
+    holding.apply(Action::Mode(CursorMode::Grab), &ball_field);
+    holding.apply(Action::left_click(Position::new(6, 4)), &ball_field);
+    let line = row(&render(&holding, &ball_field), 29, 0..100);
+    assert!(line.contains("│ holding: ball"), "{line}");
+    holding.set_policy(NoCursorLines);
+    let line = row(&render(&holding, &ball_field), 29, 0..100);
+    assert!(!line.contains("holding"), "{line}");
+
+    let mut naming = App::new(world.map(), Theme::cp437(), 7, areas);
+    naming.apply(Action::left_click(on_wanderer), &world);
+    naming.apply(Action::Rename, &world);
+    assert!(status(&naming).starts_with(" Name Sprite #"));
+    naming.set_policy(NoCursorLines);
+    let line = status(&naming);
+    assert!(line.starts_with(" Name: "), "{line}");
+    assert!(!line.contains("Sprite #"), "{line}");
 }
