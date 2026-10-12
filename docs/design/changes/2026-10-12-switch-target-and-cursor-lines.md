@@ -1,6 +1,6 @@
 # A change of mind keeps its target; the Cursor's own lines ask the policy
 
-Two small questions left open by the M1 acceptance check (#126), settled with the owner on 2026-10-12: [#173](https://github.com/Keazra/terra-sprites/issues/173) and [#174](https://github.com/Keazra/terra-sprites/issues/174).
+Two small questions left open by the M1 acceptance check (#126), settled with the owner on 2026-10-12: [#173](https://github.com/Keazra/terra-sprites/issues/173) and [#174](https://github.com/Keazra/terra-sprites/issues/174), in [PR #182](https://github.com/Keazra/terra-sprites/pull/182).
 
 ## M1 "A Sprite Lives"
 
