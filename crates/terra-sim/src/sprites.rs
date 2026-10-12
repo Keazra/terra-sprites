@@ -568,8 +568,8 @@ impl Sprites {
             if sprite.stage.is_none() {
                 return Err(format!("{id:?} has no life stage"));
             }
-            // An egg is laid, and lies still until it hatches (M2 design
-            // §10).
+            // An egg is laid, and lies still until it hatches, unless the
+            // Cursor leads it (M2 design §10.4).
             if sprite.is_egg() != (sprite.stage() == LifeStage::Egg) {
                 return Err(format!(
                     "{id:?} is at the life stage {:?}, but hatches at {:?}",
@@ -579,7 +579,6 @@ impl Sprites {
             }
             if sprite.is_egg()
                 && (sprite.action.is_some()
-                    || sprite.lead.is_some()
                     || sprite.slide.is_some()
                     || !sprite.scripted.is_empty())
             {

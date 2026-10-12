@@ -978,6 +978,7 @@ impl World {
         let dying = self.run_biochemistry(); // 3
         let still = self.still(&dying);
         self.run_learning(&still, &mut events); // 4
+        let still = self.unled(still);
         self.sense_and_decide(&still, &mut events); // 5
         self.resolve_actions(&still, &mut events); // 6
         self.finish_tick(&dying, &mut events); // 7
@@ -1257,7 +1258,7 @@ impl World {
 
     /// The sprites that take no part in steps 4 to 6, in ascending ID
     /// order: the `dying` (design §2.4), and eggs, which don't learn, sense
-    /// or act (M2 design §10).
+    /// or act (M2 design §10), but for walking after the Cursor (`unled`).
     fn still(&self, dying: &[EntityId]) -> Vec<EntityId> {
         self.state
             .sprites
@@ -1265,6 +1266,17 @@ impl World {
             .filter(|(id, sprite)| sprite.is_egg() || dying.contains(id))
             .map(|(id, _)| id)
             .collect()
+    }
+
+    /// `still` without the egg the Cursor leads, if it does: it learns
+    /// nothing at step 4, but walks after the Cursor at steps 5 and 6, as a
+    /// led sprite does (M2 design §10.4, #190).
+    fn unled(&self, mut still: Vec<EntityId>) -> Vec<EntityId> {
+        let sprites = &self.state.sprites;
+        let led = self.state.cursor.leads();
+        let egg = led.filter(|&id| sprites.get(id).is_some_and(Sprite::is_egg));
+        still.retain(|&id| Some(id) != egg);
+        still
     }
 
     /// Step 4: reinforcement from consumed reward and punishment, for every

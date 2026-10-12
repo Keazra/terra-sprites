@@ -394,10 +394,10 @@ The game's rule, "the world decides what happens to the body, the genes decide h
 ### 10.4 Eggs and hatching
 
 - **An egg is the new sprite, at the first life stage, Egg** (Q5). It's laid on a random free tile beside its mother.
-- **An egg feels, learns, moves and needs nothing:** its body stays as it was laid and it decides nothing. Step 3 only counts it towards hatching, and steps 4 to 6 pass it by.
+- **An egg feels, learns and needs nothing, and moves only when the Cursor leads it:** its body stays as it was laid and it decides nothing. Step 3 only counts it towards hatching, and steps 4 to 6 pass it by, but for an egg the Cursor leads, which goes after the Cursor at steps 5 and 6 as a led sprite does (#190).
 - **It hatches after `hatches` (750) ticks,** where it lies, as a young male with a newborn's body; its age counts from then.
 - **Other sprites see an egg as a thing of its own kind,** the category `egg` and the pseudo type `egg`, not as a sprite: so "crowded, so hit a neighbour" never aims at one, and `nearby_sprites`, `female_near` and `male_near` don't count one. Its verb table is empty, so whatever a sprite tries on it is a fruitless try: an egg can't be hurt until something in the world is meant to hurt eggs.
-- **The Cursor can't touch, lead or hold an egg;** it says it's still an egg. Whether it can move one is for an issue of its own. The player can name one.
+- **The Cursor can't touch an egg or shove one;** it says it's still an egg. **It can lead one,** as it leads a sprite (M1 design §6.5): the egg goes after the Cursor at a newborn's pace, choosing nothing, and lies where it's let go. One that hatches while led is led on as a young sprite (#190). The player can name one.
 - **A sprite remembers its parents:** the one that laid it, then its partner.
 
 ### 10.5 The child's genes

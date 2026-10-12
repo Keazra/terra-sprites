@@ -599,3 +599,66 @@ fn esc_putting_an_item_down_where_it_cant_go_is_refused_with_why() {
     );
     assert_eq!(world.cursor().holds().map(|o| o.id()), Some(ball));
 }
+
+/// A field with a sprite on (1, 1) that lays an egg alone as soon as it
+/// can, stepped until it has: the world and the egg.
+fn field_with_an_egg() -> (World, EntityId) {
+    let pack = pack();
+    let genome = terra_sim::Genome::from_ron(
+        r#"(format: 1, genes: [
+            InitialConcentration(chem: "feminiser", value: 1.0),
+            InitialConcentration(chem: "longing", value: 1.0),
+            Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
+        ])"#,
+        &pack,
+    )
+    .expect("a valid genome");
+    let map = Map::from_ascii(&[".........."; 6], &pack).expect("valid drawing");
+    let sprites = [(at(1, 1), Some(genome))];
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: &[],
+        newborns: &[],
+    };
+    let mut world = World::from_scenario(scenario, pack, 1).expect("valid scenario");
+    let egg = (0..50)
+        .flat_map(|_| world.step())
+        .find_map(|event| match event.kind {
+            terra_sim::EventKind::Laid { egg, .. } => Some(egg),
+            _ => None,
+        })
+        .expect("she laid an egg");
+    (world, egg)
+}
+
+#[test]
+fn a_grab_click_on_an_egg_leads_it_but_it_cant_be_shoved() {
+    // M2 design §10.4 (#190): the Cursor carries an egg as it leads a
+    // sprite, and refuses to shove one.
+    let (mut world, egg) = field_with_an_egg();
+    let mut app = grab_app(&world);
+    let laid_on = world.sprite(egg).expect("the egg").pos();
+    click(&mut app, &world, laid_on);
+    point(&mut app, &world, at(5, 3));
+    for _ in 0..60 {
+        tick(&mut app, &mut world);
+    }
+    assert_eq!(world.cursor().leads(), Some(egg));
+    assert_eq!(world.sprite(egg).expect("the egg").pos(), at(5, 3));
+    let right_click = |app: &mut App, world: &World, tile: Pos| {
+        let action = Action::Click {
+            at: pointing_at(tile),
+            button: Button::Right,
+            amplified: false,
+        };
+        apply(app, world, action);
+    };
+    right_click(&mut app, &world, at(5, 3));
+    point(&mut app, &world, at(3, 3));
+    right_click(&mut app, &world, at(3, 3));
+    tick(&mut app, &mut world);
+    assert_eq!(app.refusal(), Some("Couldn't shove: it's still an egg"));
+    assert_eq!(world.cursor().leads(), Some(egg), "still led");
+}

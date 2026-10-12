@@ -3626,14 +3626,17 @@ fn the_event_log_says_who_laid_an_egg_hatched_and_turned_female() {
             parents: vec![mother],
         },
         EventKind::CommandRejected {
-            command: Command::TakeHold { sprite: egg },
+            command: Command::Shove {
+                toward: terra_sim::Dir::E,
+                tiles: 2,
+            },
             reason: Rejection::Egg,
         },
     ]);
     assert_eq!(
         logged(&world, &then),
         [
-            "3  Couldn't take hold of Sprite #20: it's still an egg",
+            "3  Couldn't shove: it's still an egg",
             "2  Sprite #21 hatched (Sprite #12's)",
             "1  Sprite #20 hatched (Sprite #12 and Sprite #13's)",
         ]
