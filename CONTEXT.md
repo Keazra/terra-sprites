@@ -7,7 +7,7 @@ An ASCII artificial-life game: sprites live, learn and die in a terrarium, a sma
 ### The world
 
 **Map**:
-The world's fixed-size grid of tiles.
+The world's fixed-size grid of tiles. On the ship (#181) it holds every sector.
 _Avoid_: grid, board, level
 
 **Tile**:
@@ -15,7 +15,7 @@ One cell of the map. It has exactly one terrain.
 _Avoid_: cell, square
 
 **Wall**:
-The map's edge: the terrarium's wall, which nothing crosses.
+The terrarium's edge, which nothing crosses: today the map's edge. On the ship (#181), each sector has walls of its own, crossed only through a door, and a wall that faces outward is glass onto space.
 _Avoid_: border, boundary
 
 **Terrain**:
@@ -467,7 +467,7 @@ The panel that shows the map.
 _Avoid_: map (for the panel)
 
 **Viewport**:
-The part of the map currently shown in the map view.
+The part of the map currently shown in the map view. It can go a little past the wall, into space (#180).
 _Avoid_: camera
 
 **Track**:
@@ -743,6 +743,24 @@ _Avoid_: summary, analysis
 **Observer**:
 The AI agent that reads a baseline report, and the code and commits behind it, and writes the briefing. It changes nothing itself.
 _Avoid_: monitor, watcher
+
+### The ship (a later milestone)
+
+**Ship** (#181):
+The terrarium seen for what it is: an ark flying through space, made of sectors joined by doors.
+_Avoid_: station, vessel, level
+
+**Sector** (#181):
+One part of the ship, with walls of its own, which the map view shows on its own. Sprites cross between sectors through doors, and the whole ship lives at once, on screen or not.
+_Avoid_: level, area, screen, zone (a zone is a purpose)
+
+**Door** (#181):
+A way through the wall between two sectors.
+_Avoid_: portal, gate
+
+**Space** (#180):
+What lies outside the ship: stars going by. It's scenery, not part of the map, so sprites can't sense it and the Cursor can't reach into it.
+_Avoid_: void, sky
 
 ### Zones (a later milestone)
 
