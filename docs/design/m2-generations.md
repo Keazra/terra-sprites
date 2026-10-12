@@ -430,7 +430,7 @@ Agreed before measuring (Q9):
 
 `cargo run --release -p terra-sim --example generations` runs the first.
 
-**Measured (2026-10-12)** in release builds of this slice at `05a8c67`, with `main` and the fix for A3 (#187, PR #189) merged in, and of `main` with that fix at `0d76256`, on seeds 1–10, with:
+**Measured (2026-10-12)** in release builds of this slice at `0385ebe`, with lives of 4 to 8 hours (§2) and slow-fading lessons and the fix for A3 (#187, PR #189) merged in, on seeds 1–10 (A3 on 1–30), on the owner's PC, with:
 
 ```
 cargo run --release -p terra-sim --example generations
@@ -443,24 +443,40 @@ The default world left alone for 100,000 ticks:
 
 | Seed | Alive at the end (and eggs) | Most at once | Eggs with a partner | Eggs alone | Hatched | Grew up | Generations |
 |---|---|---|---|---|---|---|---|
-| 1 | 86 (2) | 96 | 239 | 124 | 361 | 339 | 12 |
-| 2 | 63 (4) | 70 | 138 | 174 | 308 | 290 | 13 |
-| 3 | 96 (3) | 100 | 372 | 90 | 459 | 434 | 13 |
-| 4 | 92 (3) | 100 | 279 | 139 | 415 | 393 | 12 |
-| 5 | 97 (3) | 100 | 363 | 74 | 434 | 412 | 12 |
-| 6 | 95 (4) | 100 | 259 | 147 | 402 | 382 | 13 |
-| 7 | 85 (3) | 100 | 333 | 89 | 419 | 404 | 14 |
-| 8 | 98 (2) | 100 | 351 | 129 | 478 | 455 | 13 |
-| 9 | 94 (3) | 100 | 328 | 115 | 440 | 417 | 12 |
-| 10 | 95 (4) | 100 | 357 | 92 | 445 | 420 | 13 |
+| 1 | 96 (4) | 100 | 295 | 57 | 348 | 333 | 10 |
+| 2 | 96 (3) | 100 | 235 | 89 | 321 | 315 | 10 |
+| 3 | 99 (1) | 100 | 240 | 73 | 312 | 303 | 10 |
+| 4 | 99 (1) | 100 | 241 | 66 | 306 | 293 | 11 |
+| 5 | 96 (4) | 100 | 289 | 53 | 338 | 321 | 10 |
+| 6 | 96 (1) | 100 | 226 | 100 | 325 | 317 | 9 |
+| 7 | 97 (3) | 100 | 259 | 61 | 317 | 308 | 10 |
+| 8 | 95 (5) | 100 | 256 | 78 | 329 | 319 | 12 |
+| 9 | 96 (3) | 100 | 274 | 57 | 328 | 314 | 11 |
+| 10 | 98 (2) | 100 | 276 | 84 | 358 | 337 | 11 |
 
-- **Keeps going: met.** Sprites are alive at the end in all 10 seeds, 12 to 14 generations deep, and no world went over its limit of 100.
-- **A4, grown-up hunger and thirst: met.** Of 1,146 deaths in ticks 10,000–50,000 over all seeds, 5 were of thirst and 3 of hunger (0.7%, under 25%). The rest were old age, but for 3 sprites hurt by another.
-- **A4, alive at tick 10,000: 42% (median), by design.** The world's first 30 sprites start at ages through adulthood (§9.1) and old age now lasts about an hour, so most die of it before tick 10,000: all 172 deaths by then were old age. M1's stand-in for childhood no longer measures childhood: it ends at growing up (§2), and Slice 29 makes that A4's measure. Counted that way, almost every hatchling survives (below).
-- **A3: met, and no longer by luck.** Before the fix for #187, this slice's longing genes left A3 failing in most sets of seeds: one shock wore off. With it, over seeds 1–30, trained sprites hit a median of 1.5 times in ticks 10,000–20,000 against 77.5 untrained, and every random set of 10 of those seeds passes.
-- **A5: met,** 257–266 ticks a second with 100 sprites (`speed`, three runs), against 302–308 for `main` with the A3 fix (three runs, alternating) on the same machine.
+How long hatchlings lived, in hours at 1×, of those old age killed (`generations` counts them, 205 to 258 a seed), and the world's first sprites, who start at ages through adulthood (§9.1):
+
+| Seed | Shortest | A tenth by | Half by | Nine tenths by | Longest | First sprites |
+|---|---|---|---|---|---|---|
+| 1 | 3.8 | 5.1 | 5.9 | 7.7 | 8.1 | 4.4–8.0 |
+| 2 | 4.2 | 5.6 | 6.6 | 7.6 | 7.8 | 4.1–7.8 |
+| 3 | 3.0 | 4.7 | 7.6 | 7.9 | 8.0 | 4.2–7.9 |
+| 4 | 3.8 | 4.8 | 7.4 | 7.9 | 8.0 | 2.9–8.0 |
+| 5 | 4.1 | 4.9 | 6.3 | 7.5 | 7.8 | 4.5–7.7 |
+| 6 | 3.6 | 5.2 | 7.0 | 7.6 | 8.0 | 4.3–8.0 |
+| 7 | 4.2 | 5.1 | 6.8 | 7.7 | 7.9 | 4.5–7.8 |
+| 8 | 4.1 | 5.0 | 6.5 | 7.8 | 7.9 | 4.0–7.7 |
+| 9 | 4.1 | 5.1 | 6.2 | 7.7 | 8.0 | 4.1–8.0 |
+| 10 | 3.1 | 4.3 | 6.0 | 6.6 | 7.5 | 4.1–7.8 |
+
+- **Keeps going: met.** Sprites are alive at the end in all 10 seeds, 9 to 12 generations deep, and no world went over its limit of 100.
+- **A4, grown-up hunger and thirst: met.** Of 964 deaths in ticks 10,000–50,000 over all seeds, 1 was of thirst (0.1%, under 25%). The rest were old age, but for 12 sprites hurt by another. Over the whole 100,000 ticks, 4 of 2,518 deaths after tick 10,000 were of hunger or thirst.
+- **A4, alive at tick 10,000: 68% (median) of the world's first 30.** They still start at ages through adulthood (§9.1), but now grow old later, so 7 to 12 of them a seed die before tick 10,000, all of old age but 2. M1's stand-in for childhood no longer measures childhood: it ends at growing up (§2), and Slice 29 makes that A4's measure. Counted that way, almost every hatchling survives (below).
+- **A3: met, and no longer by luck.** Before the fix for #187, this slice's longing genes left A3 failing in most sets of seeds: one shock wore off. With it and slow fades, over seeds 1–30, trained sprites hit a median of once in ticks 10,000–20,000 against 42 times untrained, and every random set of 10 of those seeds passes.
+- **A5: met,** 418–440 ticks a second with 100 sprites (`speed`, three runs) on the owner's PC. Measured in the cloud at `05a8c67`, it was 257–266, against 302–308 for `main` with the A3 fix.
 - **A1 and A2: met** (their tests pass, with `most_sprites` as §10.6 says).
-- **For information:** almost every hatchling grows up, as expected until Slice 29: in ticks 0–50,000 over all ten seeds, 11 sprites of any age died of something other than old age. Between 44% and 83% of eggs come from a pair, 74% in the median seed: a female lays alone only once she has longed for a male a while (§10.3), and seed 2, where the population never reached its limit, has the most lone eggs. Most tries to mate come to nothing (334 to 886 a seed, against 138 to 372 that lay an egg): Mate is offered between any two adults, but lays an egg only when both are fertile and of different sexes.
+- **Lives: about as the owner set them, a little long.** The median hatchling lived 5.9 to 7.6 hours a seed, 6.5 in the median seed; a tenth died by 4.3 to 5.6 hours, and nine tenths by 6.6 to 7.9. The few lives under 4 hours are sprites a hard life wore into old age sooner (§9.4). Lives run long because a sprite that lives longer has more young, who take its `grows_old` (§10.5): nothing pulls the other way until Slice 24 gives a later old age its cost (§9.3). Before, with lives of about 4 hours, a tenth died by 3.7 hours and nine tenths by 4.3 (all seeds together).
+- **For information:** almost every hatchling grows up, as expected until Slice 29: in ticks 0–50,000 over all ten seeds, 15 sprites of any age died of something other than old age (13 hurt by another, 2 of thirst). Between 69% and 85% of eggs come from a pair, 78% in the median seed: a female lays alone only once she has longed for a male a while (§10.3). Most tries to mate come to nothing (513 to 696 a seed, against 226 to 295 that lay an egg): Mate is offered between any two adults, but lays an egg only when both are fertile and of different sexes.
 
 ---
 
