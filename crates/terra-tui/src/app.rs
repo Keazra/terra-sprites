@@ -1813,10 +1813,23 @@ impl App {
     /// from the Cursor to the pointer. With the Cursor empty, it grabs what's
     /// there first, as a left click would. Aiming already, it sends the aim,
     /// as `E` pressed again does in a terminal that doesn't report a key let
-    /// go.
+    /// go. An egg, led or about to be grabbed, is never shoved, so it aims
+    /// nothing and grabs nothing (M2 design §10.4).
     fn aim_click(&mut self, tile: Pos, sprite: Option<EntityId>, world: &World) {
         if self.aim.is_some() {
             self.send_aimed(world);
+            return;
+        }
+        let shoved = match self.grip(world) {
+            Some(Grip::Leads(id)) => Some(id),
+            Some(Grip::Holds(_)) => None,
+            None => self.followed().or(sprite),
+        };
+        let shoving_an_egg = shoved
+            .and_then(|id| world.sprite(id))
+            .is_some_and(|sprite| sprite.is_egg());
+        if shoving_an_egg {
+            self.refuse("Can't shove an egg".into());
             return;
         }
         if self.grip(world).is_none() && !self.grab(tile, sprite, world, TO_SEND) {

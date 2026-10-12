@@ -606,6 +606,10 @@ fn held_glyph(app: &App, world: &World) -> char {
         Some(Grip::Holds(id)) => {
             item_look(world, id).map(|(name, state)| theme.object_glyph(name, state))
         }
+        // An egg as an egg (M2 design §10.4).
+        Some(Grip::Leads(id)) if world.sprite(id).is_some_and(|s| s.is_egg()) => {
+            Some(theme.glyph(SemanticTile::Egg))
+        }
         Some(Grip::Leads(_)) => Some(theme.glyph(SemanticTile::Sprite)),
         None => None,
     };

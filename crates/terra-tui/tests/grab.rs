@@ -635,7 +635,7 @@ fn field_with_an_egg() -> (World, EntityId) {
 
 #[test]
 fn a_grab_click_on_an_egg_leads_it_but_it_cant_be_shoved() {
-    // M2 design §10.4 (#190): the Cursor carries an egg as it leads a
+    // M2 design §10.4 (#190): the Cursor leads an egg as it leads a
     // sprite, and refuses to shove one.
     let (mut world, egg) = field_with_an_egg();
     let mut app = grab_app(&world);
@@ -655,10 +655,20 @@ fn a_grab_click_on_an_egg_leads_it_but_it_cant_be_shoved() {
         };
         apply(app, world, action);
     };
-    right_click(&mut app, &world, at(5, 3));
-    point(&mut app, &world, at(3, 3));
-    right_click(&mut app, &world, at(3, 3));
-    tick(&mut app, &mut world);
-    assert_eq!(app.refusal(), Some("Couldn't shove: it's still an egg"));
-    assert_eq!(world.cursor().leads(), Some(egg), "still led");
+    // Led, or with the Cursor empty, a right click aims nothing and grabs
+    // nothing.
+    for leading in [true, false] {
+        app.take_commands();
+        right_click(&mut app, &world, at(5, 3));
+        assert!(!app.aiming());
+        assert_eq!(app.take_commands(), Vec::new());
+        assert_eq!(app.status_mark(), StatusMark::Rejected);
+        assert_eq!(app.refusal(), Some("Can't shove an egg"));
+        if leading {
+            assert_eq!(world.cursor().leads(), Some(egg), "still led");
+            click(&mut app, &world, at(5, 3));
+            tick(&mut app, &mut world);
+            assert_eq!(world.cursor().leads(), None, "let go");
+        }
+    }
 }

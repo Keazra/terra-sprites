@@ -391,9 +391,9 @@ fn the_cursor_leads_an_egg_where_it_goes_but_cant_shove_it() {
         took_hold |= events
             .iter()
             .any(|e| e.kind == EventKind::TookHold { sprite: egg });
-        let carried = world.sprite(egg).unwrap();
-        assert!(carried.is_egg());
-        assert!(carried.action().is_none(), "an egg does nothing");
+        let led = world.sprite(egg).unwrap();
+        assert!(led.is_egg());
+        assert!(led.action().is_none(), "an egg does nothing");
         assert_eq!(body(&world), laid_with, "an egg needs nothing");
     }
     assert!(took_hold);

@@ -334,7 +334,7 @@ fn correct(
 }
 
 /// The sprite `sprite`, to touch: refused if it's gone, or still an egg
-/// (M2 design §10).
+/// (M2 design §10.4).
 fn hatched(sprites: &mut Sprites, sprite: EntityId) -> Result<&mut Sprite, Rejection> {
     let sprite = sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
     if sprite.is_egg() {
@@ -432,7 +432,7 @@ fn shove(
     tiles: u16,
 ) -> Result<EventKind, Rejection> {
     let sprite = state.cursor.leads().ok_or(Rejection::NotLeading)?;
-    if state.sprites.get(sprite).is_some_and(Sprite::is_egg) {
+    if state.is_egg(sprite) {
         return Err(Rejection::Egg);
     }
     let left = sent(state, data, Target::Sprite(sprite), tiles);
