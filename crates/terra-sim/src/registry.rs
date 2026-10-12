@@ -128,6 +128,11 @@ listed_enum! {
         /// How much faster than its other rates say a sprite learns: the
         /// young learn faster (M2 design §9.5).
         Plasticity = 38 => "plasticity",
+        /// How much a Reward or Correct teaches the habit of the sprite's
+        /// latest try, kept apart from the habits it learns itself (#187).
+        TaughtRate = 39 => "taught_rate",
+        /// How much a habit the Cursor taught fades each tick (#187).
+        TaughtFade = 40 => "taught_fade",
     }
 
     pub(crate) const ALL;
@@ -308,7 +313,7 @@ mod tests {
         // `ALL`'s order is the ID order, from 1. Renaming a parameter still
         // round-trips here. Loading `physiology.ron` is what rejects a name
         // the data doesn't list, and a missing range for one it does.
-        assert_eq!(BrainParam::ALL.len(), 38);
+        assert_eq!(BrainParam::ALL.len(), 40);
         for (i, param) in BrainParam::ALL.into_iter().enumerate() {
             assert_eq!(param as u16, (i + 1) as u16);
             assert_eq!(BrainParam::named(param.name()), Some(param));
@@ -318,6 +323,10 @@ mod tests {
             Some(BrainParam::LearningRate)
         );
         assert_eq!(BrainParam::named("place_fade"), Some(BrainParam::PlaceFade));
+        assert_eq!(
+            BrainParam::named("taught_fade"),
+            Some(BrainParam::TaughtFade)
+        );
         assert_eq!(BrainParam::named(""), None);
     }
 }

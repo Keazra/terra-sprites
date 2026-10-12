@@ -125,6 +125,13 @@
         // Every learning rate is multiplied by it (M2 design §9.5): the
         // starter genome's young learn faster.
         "plasticity":        (range: (0.25, 4.0),    default: 1.0),
+        // What the Cursor teaches is kept apart from what a sprite learns
+        // itself (#187): a Reward or Correct teaches the habit of its latest
+        // try at `taught_rate`, three times `habit_rate`, and that fades by
+        // half in about 35,000 ticks (8 hours at 1x), so one or two shocks
+        // last most of a life.
+        "taught_rate":       (range: (0.0, 1.0),     default: 0.9),
+        "taught_fade":       (range: (0.0, 0.01),    default: 0.00002),
     },
     // The range of each receptor target in `loci.ron`. Each rests at 1.0 when
     // no receptor writes it.
