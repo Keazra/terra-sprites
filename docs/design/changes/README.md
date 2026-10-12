@@ -1,6 +1,6 @@
 # Design changes
 
-Each change to a design is a file here, from the PR that makes it. The designs themselves keep one name each, [`m1-a-sprite-lives.md`](../m1-a-sprite-lives.md) and [`m2-generations.md`](../m2-generations.md), and are edited in place.
+Each change to a design is a file here, from the PR that makes it. The designs themselves keep one name each, [`m1-a-sprite-lives.md`](../m1-a-sprite-lives.md), [`m2-generations.md`](../m2-generations.md) and [`m4-terra.md`](../m4-terra.md), and are edited in place.
 
 Until 2026-10-08 every change was a new numbered revision, a whole copy of the design. Two slices built at once both took the next number, and the second to merge had to renumber and redo its links: it happened at least five times. The numbering stopped at M1 v40 and M2 v5.
 

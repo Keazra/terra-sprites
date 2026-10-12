@@ -97,7 +97,8 @@ The ground, the plants and toys, a sprite's body and its instincts, the size of 
 
 - [M2 "Generations" design](docs/design/m2-generations.md) (the plan for milestone 2: its slices, the time scale of a sprite's life, and what "M2 is done" means; and what its slices have settled so far: memory of places, the title screen, and where places sit on the Brain tab).
 - [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives.md), the rulebook for everything M2 doesn't change.
-- [Design changes](docs/design/changes/): each change to either design, one file per PR; its README says where the earlier numbered revisions are. The evaluations of v1 are in [`docs/design/reviews/`](docs/design/reviews/).
+- [M4 "Terra" design](docs/design/m4-terra.md) (the plan for the ship, a later milestone: its sectors, devices and sealed doors, and what "M4 is done" means).
+- [Design changes](docs/design/changes/): each change to a design, one file per PR; its README says where the earlier numbered revisions are. The evaluations of v1 are in [`docs/design/reviews/`](docs/design/reviews/).
 
 ## Roadmap
 
@@ -105,8 +106,10 @@ The ground, the plants and toys, a sprite's body and its instincts, the size of 
 |---|---|
 | **M1 — A Sprite Lives** *(done)* | World, ecology, biochemistry, learning brain, terminal UI, the Cursor, saves and replays |
 | **M2 — Generations** | Memory of places, a title screen, life stages and ageing, breeding, genetics, a family tree, population graphs, fast-forward and a speed cap, learning by watching, a harsher world |
-| **M3 — Wild Terra** | Critters, more hazards and toys, possibly seasons and weather |
-| **M4 — Words** | Teaching sprites words |
+| **M3 — Body & verbs** | Limbs that give sprites their verbs: touching, grabbing, pushing, pulling, throwing and dropping things |
+| **M4 — Terra** | The terrarium is a ship, Terra: its sectors open one by one as the sprites learn |
+| **M5 — Wild Terra** | Critters, more hazards and toys, possibly seasons and weather |
+| **M6 — Words** | Teaching sprites words |
 | **Tiles** | A tile-window front end with sprite-sheet support |
 
 Built in Rust with [ratatui](https://ratatui.rs).

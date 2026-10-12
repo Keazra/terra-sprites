@@ -7,7 +7,7 @@ An ASCII artificial-life game: sprites live, learn and die in a terrarium, a sma
 ### The world
 
 **Map**:
-The world's fixed-size grid of tiles.
+The world's fixed-size grid of tiles. On the ship (#181) it holds every sector.
 _Avoid_: grid, board, level
 
 **Tile**:
@@ -15,12 +15,12 @@ One cell of the map. It has exactly one terrain.
 _Avoid_: cell, square
 
 **Wall**:
-The map's edge: the terrarium's wall, which nothing crosses.
+The terrarium's edge, which nothing crosses: today the map's edge. On the ship (#181), each sector has walls of its own, crossed only through a door, and a wall that faces outward is glass onto space, except at the prow.
 _Avoid_: border, boundary
 
 **Terrain**:
-The kind of ground a tile has: grass, dirt, sand, shallow water, deep water or rock.
-_Avoid_: tile type, biome, ground
+The kind of ground a tile has: grass, dirt, sand, shallow water, deep water or rock; on the ship (#181), plating, hull and Hydroponics' beds too.
+_Avoid_: tile type, biome (that's a kind of sector), ground
 
 **Walkable**:
 Said of a terrain that sprites can stand on and step onto on foot. Shallow water is walkable; deep water and rock are not.
@@ -337,12 +337,12 @@ What a sprite is doing, such as wandering to a spot or resting, from when it sta
 _Avoid_: task, behaviour, activity
 
 **Verb**:
-A kind of action a sprite can take: Approach, Eat, Drink, Hit, Play, Retreat, Rest or Wander. Mate and BreedAlone join in M2 (Slice 23). Under #164 (M3), Play stops being a verb — it is boredom's relief, and the `played` pulse, that other verbs' effects can cause — and Touch, Grab, Push, Pull, Throw and Drop join. Speak is reserved for M4.
+A kind of action a sprite can take: Approach, Eat, Drink, Hit, Play, Retreat, Rest or Wander. Mate and BreedAlone join in M2 (Slice 23). Under #164 (M3), Play stops being a verb — it is boredom's relief, and the `played` pulse, that other verbs' effects can cause — and Touch, Grab, Push, Pull, Throw and Drop join. Speak is reserved for M6 (Words).
 _Avoid_: command (the player's commands are different), move
 
 **Holding** (#164 / M3):
 A sprite keeping things in its arms after one or more Grabs: each arm is its own slot (a small thing in one arm, another in the other; a medium thing needs both). Holding is a state, not a verb. Moving while holding is carrying — not the Cursor's Hold or Lead. A sprite's Grab, Throw and Drop are verbs; the Cursor's Grab, Hold and Throw are separate entries under The Cursor.
-_Avoid_: Carry (as a verb), inventory, inventory slot
+_Avoid_: Carry (as a verb), inventory (that's the keeper's), inventory slot
 
 **Outcome**:
 How an action went: still walking, applied, blocked, failed or timed out.
@@ -514,20 +514,32 @@ _Avoid_: main menu, start screen, splash screen
 How the title screen starts: in the dark, the Cursor's light finds a sleeping sprite and the world fills in around it, the sprite wakes pleased, and the title and menu appear. Any key skips it (M2 design §8.1).
 _Avoid_: intro, splash, cutscene
 
+**Story mode** (M2):
+The game as it's meant to be played, at 4× speed at most (M2 design, Slice 27). What it allows on the ship is in the M4 design, §2.2.
+_Avoid_: full game, play mode, campaign
+
+**Lab mode** (M2):
+The game for experiments, faster than 4× (M2 design, Slice 27). What it allows on the ship is in the M4 design, §2.2. It isn't a lab scenario, which is a test file.
+_Avoid_: free mode, sandbox, creative mode
+
 **Map view**:
 The panel that shows the map.
 _Avoid_: map (for the panel)
 
 **Viewport**:
-The part of the map currently shown in the map view.
+The part of the map currently shown in the map view. It can go a quarter of the map view past the wall, where the glass and space show (Slice 31, #180).
 _Avoid_: camera
+
+**Glass**:
+How the wall is drawn where it faces space: a line of light cyan one tile outside the map (Slice 31). It isn't a tile, so nothing on the map reaches it. On the ship (#181), it's drawn one tile outside a sector, over a tile of space.
+_Avoid_: window, border (that's the map view's)
 
 **Track**:
 The viewport following the selected sprite, so it stays in the middle of the map view. `T` turns it on or off; scrolling by hand turns it off. It follows whichever sprite is selected, and does nothing while none is.
 _Avoid_: follow (that's the Cursor fixed on a sprite, with `F`), lock on
 
 **Cursor**:
-The player's hard-light projection into the terrarium: to the sprites the player is an advanced creature, and this is how they reach in. It shows on the map as a 3×3 grid that follows the pointer, unless it follows a sprite, and a click acts as the cursor mode says. Sprites see it only where the player has made it **visible**; otherwise its touch is a feeling from nowhere. It holds an item or leads a sprite, one thing at a time.
+The player's hard-light projection into the terrarium: to the sprites the player is an advanced creature, and this is how they reach in. On the ship (#181), the player is its keeper, and the Cursor is cast by the ship's projectors. It shows on the map as a 3×3 grid that follows the pointer, unless it follows a sprite, and a click acts as the cursor mode says. Sprites see it only where the player has made it **visible**; otherwise its touch is a feeling from nowhere. It holds an item or leads a sprite, one thing at a time.
 _Avoid_: hand, orb, selection (the selection is the chosen sprite)
 
 **Visible (the Cursor)**:
@@ -676,7 +688,7 @@ What the player picked from the Place menu, waiting on the Cursor until a Grab-m
 _Avoid_: held item (that's an item picked up), brush
 
 **Place**:
-To make a new object on a tile through the Cursor, at the start of its first stage. Only the types whose data offers them can be placed, and their data says what the tile must meet; the built-in ones ask nothing, so a placed bush may wall things off.
+To make a new object on a tile through the Cursor, at the start of its first stage. Only the types whose data offers them can be placed, and their data says what the tile must meet; the built-in ones ask nothing, so a placed bush may wall things off. On the ship, Story mode takes it from the inventory instead (#181).
 _Avoid_: put down (that's a held item), plant, build
 
 **Spawn**:
@@ -796,12 +808,79 @@ _Avoid_: summary, analysis
 The AI agent that reads a baseline report, and the code and commits behind it, and writes the briefing. It changes nothing itself.
 _Avoid_: monitor, watcher
 
-### Zones (a later milestone)
+### The ship (M4)
 
-**Zone**:
-A discrete area of the terrarium that the player gives a purpose, such as a hatchery.
-_Avoid_: biome, region (a region is about reachability)
+**Ship** (#181):
+The terrarium seen for what it is: Terra, an ark flying through space, made of sectors joined by doors. Its sprites are the Terra Sprites.
+_Avoid_: station, vessel, level
+
+**Keeper** (#181):
+The ship's AI, which the player is. Its builders are gone and it woke with its memory damaged, so half its own ship is a mystery to it. It reaches into the terrarium through the Cursor; to the sprites, it's an advanced creature.
+_Avoid_: captain, overseer
+
+**Inventory** (#181):
+The things the keeper has put away, out of the world, to place again later; devices around the ship make the things that fill it. Story mode places from it (M4 design §2.2).
+_Avoid_: stock, store (that's a bay), holding (that's a sprite's)
+
+**Sector** (#181):
+One part of the ship, with walls of its own, which the map view shows on its own: a biome or a bay. Every tile of the ship is in one sector, walls included, or is space. Sprites cross between sectors through doors. Every open sector lives at once, on screen or not; a sealed one sleeps until its door opens.
+_Avoid_: level, area, screen, zone, module, compartment
+
+**Active sector** (#181):
+The sector the map view shows, bright, with its neighbours dimmed past its walls. A click on a dimmed tile makes that sector the active one. It belongs to the screen, not the world.
+_Avoid_: current sector, focused sector
+
+**Biome** (#181):
+A large sector generated from the seed, to a recipe in the game's data that says its size and its mix of terrain, plants and set pieces, such as the Meadow or the Marsh. Its staging area is part of it.
+_Avoid_: terrain (a tile's ground), biosphere, environment
+
+**Bay** (#181):
+A small sector with a job in running the ship, drawn by hand tile by tile in the game's data, such as Hydroponics Bay or the Reservoir. Bays are what #26 called zones.
+_Avoid_: room, zone, lab, block
+
+**Main deck** (#181):
+The hall along the ship's length that every sector opens onto, and that each biome's staging area juts in from. It's three bays, the aft, middle and fore deck, joined by doors.
+_Avoid_: hub, concourse, corridor
+
+**Staging area** (#181):
+The part of a biome that the ship built to make it work: plating and hull jutting in from the main deck, whose devices keep the biome's climate, water and fauna to its recipe. The biome's door onto the main deck opens into it.
+_Avoid_: annex, outpost
+
+**Door** (#181):
+A way through the wall between two sectors: an open doorway, or a sealed door that stays shut until it's opened, and never closes again.
+_Avoid_: portal, gate
+
+**Panel** (#181):
+The device on each side of a sealed door that opens it: a plate to touch, a button to push or a lever to pull, as its data says. One sprite working it once opens the door for good.
+_Avoid_: lock, keypad
+
+**Ship plan** (#181):
+The ship's outline, shown over the map view, with each open sector's name and how many sprites are in it; picking a sector takes the view there.
+_Avoid_: minimap, map (the map is the world's tiles)
+
+**Builders' log** (#181):
+Lines the ship's builders left, one or two per sector in its recipe's data, which the keeper remembers when the sector's door first opens. They hint at what the ship is for, and never say outright what a device does.
+_Avoid_: lore, journal
+
+**Plating** (#181):
+The ship's metal floor: a terrain that sprites walk on and nothing grows on.
+_Avoid_: deck (that's the main deck), floor
+
+**Hull** (#181):
+The ship's frame: a solid terrain, like rock, which the walls between sectors are made of.
+
+**Prow** (#181):
+The ship's front: a blade of iron like a scythe. Unlike the rest of the ship's outer wall, it isn't glass.
+_Avoid_: bow, nose
+
+**Set piece** (#181):
+A small hand-made piece of the ship, a few tiles big, that a sector's recipe places into its land: a rib of hull, a causeway, a pump house.
+_Avoid_: prefab, stamp, vault
 
 **Device**:
-An object in a zone that makes the zone's purpose possible, such as a hatchery's incubator.
-_Avoid_: machine, building
+An object of the ship's that does a job, such as an incubator, a pump, or one whose job nobody remembers. It's a fixture, and what it does is in its data: it may change the land or affect sprites near it, and the game never says what it's for. Some can be activated, and some have a switch that a sprite or the keeper can turn off and on again. A device never wears out or breaks.
+_Avoid_: machine, machinery, building
+
+**Space** (#180):
+What lies outside the ship: stars going by. It's scenery, so sprites can't sense it and the Cursor can't reach into it. Today it's past the map; on the ship (#181), where the map is the rectangle around the whole ship, it's also the map's tiles in no sector.
+_Avoid_: void, sky

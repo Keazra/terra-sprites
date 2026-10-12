@@ -27,7 +27,7 @@ listed_enum! {
         Wander = 8,
         /// Having young with another adult (M2 design §5).
         Mate = 9,
-        /// Reserved for M4.
+        /// Reserved for M6 (Words).
         Speak = 10,
         /// Laying an egg alone, as a female can (M2 design §10).
         BreedAlone = 11,

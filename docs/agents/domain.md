@@ -4,7 +4,7 @@ How the engineering skills should consume this repo's domain documentation when 
 
 ## Before exploring, read these
 
-- **The design docs** in `docs/design/`: `m1-a-sprite-lives.md` and `m2-generations.md`. Read the sections that touch the area you're about to work in. What changed when is in `docs/design/changes/`, whose README says where the earlier numbered revisions are: history, not spec. The v1 reviews are in `docs/design/reviews/`.
+- **The design docs** in `docs/design/`: `m1-a-sprite-lives.md`, `m2-generations.md`, and `m4-terra.md` for the ship, a later milestone. Read the sections that touch the area you're about to work in. What changed when is in `docs/design/changes/`, whose README says where the earlier numbered revisions are: history, not spec. The v1 reviews are in `docs/design/reviews/`.
 - **`CONTEXT.md`** at the repo root: the glossary.
 - **`docs/adr/`**: read ADRs that touch the area you're about to work in.
 
