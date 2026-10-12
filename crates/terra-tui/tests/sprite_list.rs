@@ -28,7 +28,7 @@ fn starting(chem: &str, value: f32, pack: &DataPack) -> Genome {
     Genome::from_ron(&ron, pack).expect("a valid genome")
 }
 
-/// A 120×60 field with four sprites, by ID: #1 at (2, 3) with no strong
+/// A 120×60 field with four newborn sprites, by ID: #1 at (2, 3) with no strong
 /// drive, wandering to (8, 3); #2 at (110, 55), very hungry; #3 at (6, 1),
 /// thirsty; #4 at (4, 4), a little hungry. #1 is named Zed, and #3 Abel.
 fn field() -> World {
@@ -52,6 +52,7 @@ fn field() -> World {
         objects: &[],
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[at(2, 3), at(110, 55), at(6, 1), at(4, 4)],
     };
     World::from_scenario(scenario, pack, 7).expect("valid scenario")
 }
@@ -113,7 +114,7 @@ fn row_of(buffer: &Buffer, label: &str) -> u16 {
 }
 
 #[test]
-fn l_lists_every_sprite_over_the_panels_with_its_age_drive_and_doing() {
+fn l_lists_every_sprite_over_the_panels_with_its_age_stage_drive_and_doing() {
     let mut world = field();
     let mut app = named(&mut world);
     app.apply(Action::SpriteList, &world);
@@ -130,14 +131,20 @@ fn l_lists_every_sprite_over_the_panels_with_its_age_drive_and_doing() {
     );
     assert!(title.ends_with(" esc close ─┐"), "{title}");
     let heading = row(&screen, 2);
-    assert!(heading.starts_with("│ Sprite     Age  Drive"), "{heading}");
+    assert!(
+        heading.starts_with("│ Sprite     Age  Life stage  Drive"),
+        "{heading}"
+    );
     assert!(heading.contains("Doing"), "{heading}");
     assert_eq!(
         listed(&screen),
         ["Zed #1", "Sprite #2", "Abel #3", "Sprite #4"]
     );
     let first = row(&screen, 3);
-    assert!(first.starts_with("│ Zed #1       1  -"), "{first}");
+    assert!(
+        first.starts_with("│ Zed #1       1  young       -"),
+        "{first}"
+    );
     assert!(first.contains("Wandering"), "the Body tab's line: {first}");
     let hungry = row_of(&screen, "Sprite #2");
     assert!(row(&screen, hungry).contains("hunger"));
@@ -329,6 +336,7 @@ fn with_no_sprites_the_list_says_so() {
         objects: &[],
         sprites: &[],
         scripted: &[],
+        newborns: &[],
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let areas = ui::areas(Size::new(100, 30), world.map());
@@ -352,6 +360,7 @@ fn a_long_list_scrolls_to_keep_the_highlight_in_view() {
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let areas = ui::areas(Size::new(100, 30), world.map());

@@ -47,6 +47,7 @@ fn room(start: Pos, script: &[ScriptedAction]) -> World {
         objects: &[],
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }
@@ -358,6 +359,7 @@ fn world_in(
         objects,
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }

@@ -365,8 +365,9 @@ pub(crate) fn decide(
         events,
     );
     if let Some(way) = way {
+        let speed = sprite.speed(state.tick, data);
         let action = sprite.action.as_mut().expect("the action just started");
-        set_off(action, way, sprite.program.traits.speed, state.tick);
+        set_off(action, way, speed, state.tick);
     }
 }
 

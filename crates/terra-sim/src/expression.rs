@@ -4,6 +4,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::ageing::{LifeStage, Switch};
 use crate::brain_io::{InputId, Source};
 use crate::data::DataPack;
 use crate::genome::{Gene, Genome, Term};
@@ -24,6 +25,9 @@ pub enum Expression {
     /// It names a category this world doesn't have (design v19 §5.7), so it
     /// has no effect.
     Unmatched,
+    /// It's switched off at the sprite's life stage (M2 design §9.2), so it
+    /// has no effect for now.
+    Dormant,
 }
 
 /// The one value a gene sets, for the genes that set one. The others add up.
@@ -64,20 +68,29 @@ impl Setting {
     }
 }
 
-/// How each of `genome`'s genes is expressed, in genome order.
-pub(crate) fn expressions(genome: &Genome, data: &DataPack) -> Vec<Expression> {
+/// How each of `genome`'s genes is expressed in a sprite at `stage`, in
+/// genome order. A dormant gene doesn't set its value, so the next gene
+/// that sets it does (M2 design §9.2).
+pub(crate) fn expressions(genome: &Genome, data: &DataPack, stage: LifeStage) -> Vec<Expression> {
     let mut settings = BTreeSet::new();
     genome
         .genes
         .iter()
-        .map(|gene| {
+        .enumerate()
+        .map(|(index, gene)| {
             match gene {
                 Gene::Unknown { .. } => return Expression::Unknown,
                 Gene::Unmatched(_) => return Expression::Unmatched,
                 _ => {}
             }
-            if let Some(reason) = breaks_restrictions(gene, data) {
+            let switch = genome.switch(index);
+            if let Some(reason) =
+                breaks_restrictions(gene, data).or_else(|| breaks_switching(gene, switch))
+            {
                 return Expression::Flagged(reason);
+            }
+            if !switch.is_on(stage) {
+                return Expression::Dormant;
             }
             match Setting::of(gene) {
                 Some(setting) if settings.contains(&setting) => Expression::Unexpressed,
@@ -89,6 +102,30 @@ pub(crate) fn expressions(genome: &Genome, data: &DataPack) -> Vec<Expression> {
             }
         })
         .collect()
+}
+
+/// Why `gene` can't have `switch` (M2 design §9.2), if it can't: a trait
+/// works all life, since traits set when a sprite grows up and grows old,
+/// and a level at birth applies only at birth; and a gene must switch on
+/// before it switches off.
+fn breaks_switching(gene: &Gene, switch: Switch) -> Option<String> {
+    if switch.is_always() {
+        return None;
+    }
+    match gene {
+        Gene::Trait { .. } => {
+            Some("is a trait, which works all life, but switches with life stage".into())
+        }
+        Gene::InitialConcentration { .. } => Some(
+            "sets a level at birth, which works only at birth, but switches with life stage".into(),
+        ),
+        _ if !switch.ever_on() => Some(format!(
+            "switches off at {} before it switches on at {}, so it would never work",
+            switch.until.map_or("", LifeStage::name),
+            switch.from.name()
+        )),
+        _ => None,
+    }
 }
 
 /// Why `gene` breaks the restrictions (design §4.3), if it does. Genes may
@@ -172,9 +209,9 @@ mod tests {
     /// How each gene of a genome holding `genes` is expressed.
     fn expressions_of(genes: &[&str]) -> Vec<Expression> {
         let data = builtin();
-        let text = format!("(format: 1, genes: [{}])", genes.join(", "));
+        let text = format!("(format: 2, genes: [{}])", genes.join(", "));
         let genome = Genome::from_ron(&text, &data).expect("a valid genome");
-        expressions(&genome, &data)
+        expressions(&genome, &data, LifeStage::Adult)
     }
 
     /// Asserts that `gene` is flagged, with a reason mentioning `word`.
@@ -185,6 +222,70 @@ mod tests {
             }
             other => panic!("expected {gene} to be flagged, got {other:?}"),
         }
+    }
+
+    /// How each gene of a genome holding `genes` is expressed in a sprite at `stage`.
+    fn expressions_at(genes: &[&str], stage: LifeStage) -> Vec<Expression> {
+        let data = builtin();
+        let text = format!("(format: 2, genes: [{}])", genes.join(", "));
+        let genome = Genome::from_ron(&text, &data).expect("a valid genome");
+        expressions(&genome, &data, stage)
+    }
+
+    #[test]
+    fn a_gene_works_only_in_the_life_stages_it_is_switched_on_for() {
+        use Expression::{Dormant, Expressed};
+        use LifeStage::{Adult, Old, Young};
+        let genes = [
+            r#"Instinct(inputs: [("crowdedness", false)], verb: Hit, weight: 0.6, from: Adult)"#,
+            r#"Emitter(locus: Locus("always"), mode: Level, gain: 0.001, chem: "boredom", until: Adult)"#,
+            r#"Receptor(chem: "pain", gain: 1.0, target: "exploration_mod", from: Adult, until: Old)"#,
+        ];
+        assert_eq!(expressions_at(&genes, Young), [Dormant, Expressed, Dormant]);
+        assert_eq!(
+            expressions_at(&genes, Adult),
+            [Expressed, Dormant, Expressed]
+        );
+        assert_eq!(expressions_at(&genes, Old), [Expressed, Dormant, Dormant]);
+    }
+
+    #[test]
+    fn a_dormant_gene_leaves_the_value_it_sets_to_the_next_gene() {
+        use Expression::{Dormant, Expressed, Unexpressed};
+        let genes = [
+            r#"BrainParam(param: "curiosity", value: 0.6, until: Adult)"#,
+            r#"BrainParam(param: "curiosity", value: 0.3)"#,
+        ];
+        assert_eq!(
+            expressions_at(&genes, LifeStage::Young),
+            [Expressed, Unexpressed]
+        );
+        assert_eq!(
+            expressions_at(&genes, LifeStage::Adult),
+            [Dormant, Expressed]
+        );
+    }
+
+    #[test]
+    fn traits_and_levels_at_birth_work_all_life() {
+        // A trait sets when a sprite grows up and grows old, so it can't
+        // wait for a stage; a level at birth only ever applies at birth.
+        assert_flagged(
+            r#"Trait(trait: "speed", value: 7.0, from: Adult)"#,
+            "life stage",
+        );
+        assert_flagged(
+            r#"InitialConcentration(chem: "boredom", value: 0.2, until: Adult)"#,
+            "life stage",
+        );
+    }
+
+    #[test]
+    fn a_gene_switched_off_before_it_switches_on_is_flagged() {
+        assert_flagged(
+            r#"Instinct(inputs: [("pain", false)], verb: Retreat, weight: 0.5, from: Old, until: Adult)"#,
+            "never",
+        );
     }
 
     fn assert_expressed(gene: &str) {

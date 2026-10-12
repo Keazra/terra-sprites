@@ -1,10 +1,10 @@
 # Terra Sprites — M2 "Generations" design
 
 - **Status:** Draft: the plan, with what each slice settles added as it's settled.
-- **Date:** 2026-10-08
+- **Date:** 2026-10-11
 - **History:** edited in place since v5; each change is a file in [`changes/`](changes/), whose README says where v1 to v5 are
 - **Builds on:** [M1 design](m1-a-sprite-lives.md), which stays the rulebook for everything M2 doesn't change
-- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), and where places sit on the Brain tab
+- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, and life stages and ageing (Slice 22)
 
 ---
 
@@ -58,12 +58,12 @@ The owner's times, as playtime at 1× (1.25 ticks a second, M1 design §6.6):
 |---|---|---|---|
 | Grows up | about 1 hour | about 4,500 | about 15 minutes |
 | Grows old | about 3 hours | about 13,500 | about 45 minutes |
-| Dies of old age | about 4 hours | about 18,000 | about 1 hour |
+| Dies of old age | about 4 hours (about 13 until Slice 23) | about 18,000 | about 1 hour |
 
 - **These are the starter genome's times.** The genome brings them about (§3), so they vary from sprite to sprite and can evolve.
-- **Growing old and lifespan are two moments.** Growing old, at about 13,500 ticks, is the start of the old stage, when decline and wear's speeding of it begin (§3). **Lifespan** comes later: it's the age at which old age starts to injure a sprite (M1 design §4.8, §4.10). Old age kills within about 2,000 ticks after it, so the starter lifespan becomes about **16,000 ticks**, down from 60,000. The range lifespan may evolve within comes down in proportion, from 20,000–200,000 to about **6,000–60,000**. Slice 22 may recast lifespan as part of ageing (§3); the times above stay the aim.
+- **Growing old is where M1's lifespan went** (#140). The `grows_old` gene sets when a sprite grows old, and its genes then weaken until its body gives out and old age kills it (§9.4). How long that takes depends on the life it has had, not on a second gene. A save or genome that says `lifespan` reads it as `grows_old`, whose range is about **6,000–60,000**.
 - **A generation takes about 15–20 minutes at 4×,** the full game's top speed (Slice 27), so an evening sees several. Long runs of evolution belong to the fast-forward mode.
-- **Lives get shorter in Slice 23, with breeding.** Until sprites have young, nothing replaces the dead: with 4-hour lives, the default world would be empty after about 4 hours of play. So lives stay at 60,000 ticks through Slice 22, and Slice 23 brings both changes at once.
+- **Lives get shorter in Slice 23, with breeding.** Until sprites have young, nothing replaces the dead: with 4-hour lives, the default world would be empty after about 4 hours of play. So in Slice 22 sprites grow up and grow old at their times above, but old age lasts about 10 hours (§9.4), and Slice 23 shortens it to about 1.
 - **Childhood ends at growing up.** M1's viability run counts ticks 0–10,000 as childhood because sprites had no stages (M1 design §7.4, A4). From Slice 22, childhood is a stage, and the harsher world's goal (§6, G5) is counted at growing up.
 
 ---
@@ -81,7 +81,9 @@ The owner (round 2): the body stops growing at around 1 hour, and at around 3 ho
 
 **The direction:** A sets when a sprite grows up and grows old; B sets how much a hard life speeds decline; C joins in Slice 24. Whether decline is the body wearing out (slower, duller senses, slower healing, then old-age harm) or genes failing one by one (D) is the first question of Slice 22's design round, tried in a prototype.
 
-**A long life costs something.** Anything the genome controls about ageing needs a cost, or evolution breeds sprites that never grow old (M1 design §4.1). In M1, lifespan costs nothing, so with inheritance it would creep up to the most allowed. Real animals pay for long life: repair takes energy, so the long-lived spend more on upkeep and breed more slowly. **A later old age costs a little energy every tick,** as a bigger sense radius does (M1 design §4.8); Slice 22 sets how much.
+**Settled in Slice 22 (#140): A, B and D.** Genes switch with life stage (§9.2), and old age is the genome wearing out: each gene has a health that weakens its effect, damage lands on random genes once a sprite is old, and a hard life brings that sooner and speeds it up (§9.4). Rather than failing outright, genes weaken a little at a time, so a sprite slows and dulls as it ages.
+
+**A long life costs something.** Anything the genome controls about ageing needs a cost, or evolution breeds sprites that never grow old (M1 design §4.1). In M1, lifespan costs nothing, so with inheritance it would creep up to the most allowed. Real animals pay for long life: repair takes energy, so the long-lived spend more on upkeep and breed more slowly. **A later old age costs a little energy every tick,** as a bigger sense radius does (M1 design §4.8): how much, and when, is in §9.3.
 
 ---
 
@@ -270,3 +272,81 @@ A small box over the menu, with:
 
 - **`--seed`, `--preset` and `--replay` make or load a world,** so they skip the title screen and go straight in, as before. Their world can still leave for the title screen with `t`.
 - **`--data`, `--ascii` and `--theme`** change what the game's worlds are made of or how they're drawn, not which world it opens on, so the title screen still shows, drawn with them, and a new world made from it uses `--data`'s pack.
+
+---
+
+## 9. Life stages and ageing (Slice 22)
+
+Settled with the owner on 2026-10-11 ([#140](https://github.com/Keazra/terra-sprites/issues/140)). A sprite grows up and grows old at ages its genes set, a gene can switch on or off as it does, and once it's old its genes weaken until its body gives out. The numbers are data, the `ageing` section of `physiology.ron`: first guesses, tuned in play and in the viability run with A4 holding.
+
+### 9.1 Life stages
+
+- **A sprite's life stage is young, adult or old.** "Stage" alone is an object's (M1 design §3.5); a sprite's is its life stage. An old sprite still counts as an adult for §5's rule.
+- **It's young until it grows up, an adult until it grows old, then old** (§9.3). One whose genes have it grow old before it grows up does both at once, and is never an adult.
+- **The stage changes at the start of step 3** (M1 design §2.4), so genes that switch with it work from that tick's chemistry on.
+- **A world's first sprites start as adults,** at ages drawn evenly through adulthood, with a newborn's body (M1 design §4.7), so a fresh world isn't all children. A sprite the player places is a newborn. A scenario's sprites start just grown up, unless it lists them as newborns.
+- **An Egg stage** may come with breeding or after it (noted on [#141](https://github.com/Keazra/terra-sprites/issues/141)).
+
+### 9.2 Genes that switch with life stage
+
+- **A gene can carry `from` and `until`,** a life stage each: it works from `from` (young if it has none) until `until` (never, if it has none). Outside them it's **dormant**: in the genome, but not working.
+- **Traits and starting levels can't switch.** Traits work all life, since two of them set the stages, and a starting level applies only at birth. Such a gene that carries a switch is flagged and doesn't work (M1 design §4.3), as is one that switches off before it switches on.
+- **When its stage changes, a sprite's genes are expressed afresh:** its chemistry, brain parameters, concepts and instinct links become those of the genes working now. What it has learned, what it attends to and what it remembers doing stay as they were. So an instinct that switches on mid-life joins the instinct pathway without touching what was learned (#49).
+- **Genome files with switches are format 2;** format 1 still loads, and a format 1 file with a switch is refused.
+
+### 9.3 When a sprite grows up and grows old
+
+- **Two trait genes set the ages,** so each can evolve on its own: `grows_up` (1,500–13,500 ticks; the starter's 4,500 is about an hour at 1×) and `grows_old` (6,000–60,000; the starter's 13,500 is about 3 hours).
+- **`grows_old` is M1's lifespan,** which it replaces (§2). A genome or save that says `lifespan` reads as `grows_old`. The `age` body sensor is age as a share of it, so it reaches 1 as a sprite grows old, at about 13,500 ticks rather than M1's 60,000.
+- **Growing up costs food.** Growing takes `growth` energy (0.3) whenever it happens, spread evenly over childhood, so a sprite that grows up sooner is a hungrier child.
+- **A later old age will cost a little,** all its life: `upkeep` energy a tick for every 10,000 ticks of `grows_old` (§3). **It's 0 until genes evolve** (Slice 24, noted on [#142](https://github.com/Keazra/terra-sprites/issues/142)), the owner's call on 2026-10-11: until then nothing can push old age later, so the cost only made every sprite hungrier, and even 0.00001 undid A3's training (median hits after training 45 against 81 untrained; 1.5 against 70 without it).
+
+### 9.4 Old age: genes weaken
+
+The owner (2026-10-11): old age is the genome wearing out, and a hard life damages genes. Research backs the shape below: damage to DNA happens all life and is mostly repaired, repair falls off in old age, species die at about the same level of damage, and chronic stress makes cells age sooner (sources in the PR).
+
+- **Every gene has a health,** from 1 (whole) to 0. It only ever falls, and it scales the gene's effect: a feeling's gain, a receptor's gain, a reaction's rate, an instinct's weight, and how far a speed or sense radius gene reaches above the least its trait can be. A gene that's a setting, not a strength, doesn't weaken: half-lives, starting levels, brain parameters, and the timing genes.
+- **Before old age, repair keeps up.** Once old, damage lands on random genes, a `hit` (0.01 of health) at a time, so health falls in small, frequent steps (the owner, 2026-10-11). **An instinct takes half,** so the mind outlasts the body.
+- **The pace:** an unworn sprite's genes fall to `gives_out` (0.5 on average) in about `decay.ticks` (46,500, about 10 hours at 1×; Slice 23 shortens it to about 1 hour).
+- **A hard life wears the body for good,** and wear never heals: `wear.starving` (0.0002) a tick while energy is under `wear.low` (.25), `wear.parched` (0.0002) while hydration is, and `wear.injured` (0.001) a tick for each unit of injury, so a hit or a prick wears the body through the injury it does, for as long as it takes to heal. It reads the body, not feelings, which genes could switch off.
+- **Wear brings old age sooner and speeds the decay.** The most worn sprite grows old at (1 − `sooner`) of its `grows_old` (`sooner` is .33), and its genes decay `wear_speedup` (3) times as fast; less worn, in proportion.
+- **A bad injury can scar a gene at any age:** while injury is above `scar.above` (.5), each tick has a `scar.chance` (0.002) that a random gene loses `scar.hit` (0.05; half that on an instinct).
+- **Healing slows** in proportion to its genes' average health, since repair is what fails.
+- **The body gives out** once that average is at `gives_out`: old age then injures it (`injury.old_age`), and it dies of old age. An old sprite whose thirst feeling has weakened may die of thirst first.
+- **It isn't inherited.** The damage is in the body, not in its eggs. Inherited gene damage is Slice 24's; stress chemicals such as adrenaline damaging genes join then (noted on [#142](https://github.com/Keazra/terra-sprites/issues/142)). Mild stress lengthening life (hormesis) is a later idea, and botched repairs leading to cancer is [#178](https://github.com/Keazra/terra-sprites/issues/178).
+- **Gene health, wear and life stage are world state:** saved, in the state hash, and checked every tick (M1 design §7.1): one health per gene, each from 0 to 1, and wear from 0 to 1.
+
+### 9.5 The young
+
+- **They walk slower:** `young_speed` (.67) of their speed at birth, rising steadily to all of it as they grow up.
+- **They're more curious and learn faster.** The starter genome sets `curiosity` to .5 until adult (adults .3), and `plasticity` to 1.5 until adult: every learning rate is multiplied by it (M1 design §5.6).
+- **Only adults fight for room:** the starter's "crowded, so hit a neighbour" instinct works from adult. The young still hit back when hit.
+- **`plasticity` is a new brain parameter** (ID 38, range .25–4, default 1). A pack from before it gets the built-in range.
+
+### 9.6 What the player sees
+
+- **On the map, the young are drawn small:** `ö` in CP437 and `a` in ASCII, the theme keys `young_sprite` and `selected_young_sprite`. A theme without them draws the young as grown. The old show by moving slowly.
+- **The log** says "Pip grew up" and "Pip grew old".
+- **The sprite list** has a Life stage column after Age: young, adult or old.
+- **The Body tab** shows the stage after the age, with when the next one comes: `age 3,120 · young · grows up 4,500`, `adult · grows old 13,500` (sooner for a worn sprite), or `old`. After the physical levels, `wear .12`, and `· genes .83`, its genes' average health, once any has weakened.
+- **The Genome tab** shows a weakened gene's health after it, `· health .62`, and a gene that switches with its stages, `· from adult` or `· until adult`. A dormant gene is dimmed, with "dormant: switched off at this life stage".
+
+### 9.7 How we know it worked
+
+**Measured (2026-10-11)** in release builds of `main` at `a9b5b06` and of this slice at `3083765`, on seeds 1–10, with:
+
+```
+cargo run --release -p terra-sim --example lab -- scenarios/a3-correct-training.ron --seeds 10
+cargo run --release -p terra-sim --example lab -- scenarios/viability.ron --seeds 10
+cargo run --release -p terra-sim --example speed
+```
+
+| What | `main` | Slice 22 |
+|---|---|---|
+| A3: hits on sprites after training (ticks 10,000–20,000), median against the untrained control | 2.5 against 70 | 4.5 against 79, met (at most half). With the long-life cost it was 45 against 81, which is why that's held at 0 |
+| Viability, ticks 0–50,000: deaths of old age | 0 | 262 of 300 |
+| Viability, ticks 0–50,000: deaths of thirst / hunger | 2 / 0 | 6 / 0 |
+| A4: hunger and thirst's share of grown-up deaths | met (under 10 died) | 2%, met (under 25%) |
+| A5: ticks a second, 100 sprites (`speed`, a few runs) | 318 | 293–303, met (at least 200) |
+
+**What it shows.** The world's first sprites now start at ages through adulthood and grow old within the first 9,000 ticks, so by tick 50,000 almost all have died of old age; Slice 23's breeding replaces them. When genes weakened in steps of .1, thirst killed 26 by tick 50,000 (11% for A4), most likely old sprites that lost a gene for finding water early; in steps of .01 every gene fades together. A4 still holds, though old age now fills most of its count.

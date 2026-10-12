@@ -81,7 +81,7 @@ fn tally(events: &[Event], window: &mut Window) {
 fn a_run_counts_applied_actions_and_deaths_in_each_window() {
     let data = builtin();
     let lab = LabScenario::from_ron(ARENA, &data).expect("a valid scenario");
-    let run = lab.run(data.clone(), 5);
+    let run = lab.run(data.clone(), 1);
 
     // The same world, drawn by hand, stepped here: objects in reading
     // order, then the sprite.
@@ -96,8 +96,9 @@ fn a_run_counts_applied_actions_and_deaths_in_each_window() {
         objects: &objects,
         sprites: &[(Pos { x: 1, y: 1 }, None)],
         scripted: &[],
+        newborns: &[],
     };
-    let mut world = World::from_scenario(scenario, data.clone(), 5).expect("a valid scenario");
+    let mut world = World::from_scenario(scenario, data.clone(), 1).expect("a valid scenario");
     let mut windows = [(0, 1000), (2000, 3000)].map(|(from, to)| Window {
         from,
         to,

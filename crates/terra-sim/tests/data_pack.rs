@@ -743,7 +743,11 @@ fn physiology_ranges_go_from_low_to_high() {
         "first_population",
     );
     assert_invalid_physiology("speed: (4.0, 12.0)", "speed: (12.0, 4.0)", "speed");
-    assert_invalid_physiology("(0.25, 4.0)", "(4.0, 0.25)", "exploration_mod");
+    assert_invalid_physiology(
+        "\"exploration_mod\": (0.25, 4.0)",
+        "\"exploration_mod\": (4.0, 0.25)",
+        "exploration_mod",
+    );
 }
 
 #[test]
@@ -888,15 +892,62 @@ fn physiology_needs_its_physical_chemicals_and_body_sensors() {
 fn trait_ranges_are_finite_and_above_0() {
     assert_invalid_physiology("speed: (4.0, 12.0)", "speed: (0.0, 12.0)", "speed");
     assert_invalid_physiology(
-        "lifespan: (20000.0, 200000.0)",
-        "lifespan: (0.0, 200000.0)",
-        "lifespan",
+        "grows_old: (6000.0, 60000.0)",
+        "grows_old: (0.0, 60000.0)",
+        "grows_old",
     );
     assert_invalid_physiology(
-        "lifespan: (20000.0, 200000.0)",
-        "lifespan: (20000.0, inf)",
-        "lifespan",
+        "grows_old: (6000.0, 60000.0)",
+        "grows_old: (6000.0, inf)",
+        "grows_old",
     );
+}
+
+#[test]
+fn ageing_shares_are_fractions_and_its_rates_are_numbers() {
+    assert_invalid_physiology("young_speed: 0.67", "young_speed: 0.0", "young_speed");
+    assert_invalid_physiology("sooner: 0.33", "sooner: 1.5", "sooner");
+    assert_invalid_physiology("growth: 0.3", "growth: -0.3", "growth");
+    assert_invalid_physiology("ticks: 46500", "ticks: 0", "decay.ticks");
+    assert_invalid_physiology("hit: 0.01,", "hit: 0.0,", "decay");
+    assert_invalid_physiology("gives_out: 0.5", "gives_out: 1.0", "decay");
+    assert_invalid_physiology("chance: 0.002", "chance: 2.0", "scar.chance");
+    assert_invalid_physiology("wear_speedup: 3.0", "wear_speedup: 0.5", "wear_speedup");
+}
+
+#[test]
+fn a_pack_from_before_life_stages_still_loads() {
+    // A save carries its own pack (design §2.8). One from before M2's life
+    // stages (M2 design §9) calls `grows_old` `lifespan` and has no `ageing`.
+    let physiology = include_str!("../../../data/physiology.ron");
+    let start = physiology
+        .find("    // Growing up and growing old")
+        .expect("ageing");
+    let end = physiology[start..].find("    ),\n").expect("its end") + start + 7;
+    let older = format!("{}{}", &physiology[..start], &physiology[end..])
+        .replace(
+            "grows_old: (6000.0, 60000.0),",
+            "lifespan: (20000.0, 200000.0),",
+        )
+        .replace("        grows_up: (1500.0, 13500.0),\n", "");
+    assert!(
+        !older.contains("ageing") && !older.contains("grows_"),
+        "{older}"
+    );
+    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, text)| {
+            (
+                path,
+                if path == "physiology.ron" {
+                    &older
+                } else {
+                    text
+                },
+            )
+        })
+        .collect();
+    DataPack::from_sources(&sources).expect("the older pack loads");
 }
 
 #[test]

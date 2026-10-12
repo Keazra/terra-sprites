@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, VecDeque};
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
+use crate::ageing::{LifeStage, health_of};
 use crate::biochem::Body;
 use crate::brain_io::Source;
 use crate::data::DataPack;
@@ -76,13 +77,13 @@ pub(crate) struct BrainParams {
 }
 
 impl BrainParams {
-    pub(crate) fn express(genome: &Genome, data: &DataPack) -> BrainParams {
+    pub(crate) fn express(genome: &Genome, data: &DataPack, stage: LifeStage) -> BrainParams {
         let ranges = &data.physiology().brain;
         let mut values: Vec<f32> = BrainParam::ALL
             .iter()
             .map(|&param| ranges.of(param).default)
             .collect();
-        for (gene, expression) in genome.genes.iter().zip(expressions(genome, data)) {
+        for (gene, expression) in genome.genes.iter().zip(expressions(genome, data, stage)) {
             if let (&Gene::BrainParam { param, value }, Expression::Expressed) = (gene, expression)
             {
                 let (low, high) = ranges.of(param).range;
@@ -93,9 +94,10 @@ impl BrainParams {
     }
 
     /// Gives parameters added since a brain was saved the values its
-    /// `genome` expresses now (design §2.8), so an older save plays on.
-    pub(crate) fn catch_up(&mut self, genome: &Genome, data: &DataPack) {
-        let now = BrainParams::express(genome, data);
+    /// `genome` expresses now, at `stage` (design §2.8), so an older save
+    /// plays on.
+    pub(crate) fn catch_up(&mut self, genome: &Genome, data: &DataPack, stage: LifeStage) {
+        let now = BrainParams::express(genome, data, stage);
         if let Some(added) = now.values.get(self.values.len()..) {
             self.values.extend_from_slice(added);
         }
@@ -347,7 +349,18 @@ impl Brain {
     /// A newborn's brain from its genome (design §5.4, §5.7): a singleton per
     /// input, a conjunction per expressed multi-input `Instinct` signature,
     /// and each link at its instinct's weight, or 0.
-    pub(crate) fn new(genome: &Genome, data: &DataPack) -> Brain {
+    pub(crate) fn new(genome: &Genome, data: &DataPack, stage: LifeStage) -> Brain {
+        Brain::weakened(genome, data, stage, &[])
+    }
+
+    /// The same, each instinct's weight weakened to its gene's `health`
+    /// (M2 design §9.4).
+    pub(crate) fn weakened(
+        genome: &Genome,
+        data: &DataPack,
+        stage: LifeStage,
+        health: &[f32],
+    ) -> Brain {
         let inputs = data.brain_inputs_in_order();
         let place = |id| {
             inputs
@@ -358,10 +371,16 @@ impl Brain {
         let mut concepts: Vec<Signature> = (0..inputs.len()).map(|i| vec![(i, false)]).collect();
         let mut decision = vec![vec![0.0; VERBS.len()]; inputs.len()];
         let mut attention = vec![vec![0.0; data.categories().len()]; inputs.len()];
-        for (gene, expression) in genome.genes.iter().zip(expressions(genome, data)) {
+        for (index, (gene, expression)) in genome
+            .genes
+            .iter()
+            .zip(expressions(genome, data, stage))
+            .enumerate()
+        {
             if expression != Expression::Expressed {
                 continue;
             }
+            let strength = health_of(health, index);
             match *gene {
                 Gene::Instinct {
                     ref inputs,
@@ -381,18 +400,18 @@ impl Brain {
                             concepts.len() - 1
                         }
                     };
-                    decision[concept][column(verb)] = weight;
+                    decision[concept][column(verb)] = weight * strength;
                 }
                 Gene::AttentionInstinct {
                     input,
                     category,
                     weight,
-                } => attention[place(input)][data.category_index(category)] = weight,
+                } => attention[place(input)][data.category_index(category)] = weight * strength,
                 _ => {}
             }
         }
         Brain {
-            params: BrainParams::express(genome, data),
+            params: BrainParams::express(genome, data, stage),
             concepts,
             decision: Links::new(decision),
             attention: Links::new(attention),
@@ -407,8 +426,28 @@ impl Brain {
         }
     }
 
+    /// Expresses `genome` afresh for `stage` (M2 design §9.2): its
+    /// parameters, concepts and instinct links become those of its genes
+    /// working at `stage`, as weakened as their `health` says (§9.4). What it has learned, attends to and remembers
+    /// doing stays as it was; the snapshot, whose concepts may be gone, is
+    /// taken again at step 5.
+    pub(crate) fn reach(
+        &mut self,
+        genome: &Genome,
+        data: &DataPack,
+        stage: LifeStage,
+        health: &[f32],
+    ) {
+        let grown = Brain::weakened(genome, data, stage, health);
+        self.params = grown.params;
+        self.concepts = grown.concepts;
+        self.decision = grown.decision;
+        self.attention = grown.attention;
+        self.snapshot = None;
+    }
+
     /// Step 4 at `tick` (design §2.4, §5.6), from `signals`, every rate
-    /// scaled by `learning_rate_mod`. Instinct links never change. Each
+    /// scaled by `learning_rate_mod` and its plasticity (M2 design §9.5). Instinct links never change. Each
     /// need's relief teaches what the thing touched is worth for it. Returns
     /// the lessons it learned.
     pub(crate) fn learn(
@@ -420,6 +459,7 @@ impl Brain {
     ) -> Vec<(Learned, bool)> {
         let physiology = data.physiology();
         let relief = &signals.relief;
+        let learning_rate_mod = learning_rate_mod * self.params.get(BrainParam::Plasticity);
         // A hurt done to it teaches fear of whoever did it (design v18 §5.6).
         if signals.hit
             && let Some(attacker) = signals.attacker
@@ -905,11 +945,18 @@ impl Brain {
 
     /// Whether a loaded brain fits `genome` and `data` at the tick `now`
     /// (design §2.8): its parameters, concepts and instincts are the ones
-    /// the genome gives; whatever it attends to, has learned or remembers
+    /// the genome gives, at `stage` and with its genes' `health`; whatever it attends to, has learned or remembers
     /// doing is about categories, object types and needs the pack has; and
     /// what it remembers doing was done by `now`.
-    pub(crate) fn fits(&self, genome: &Genome, data: &DataPack, now: u64) -> bool {
-        let born = Brain::new(genome, data);
+    pub(crate) fn fits(
+        &self,
+        genome: &Genome,
+        data: &DataPack,
+        stage: LifeStage,
+        health: &[f32],
+        now: u64,
+    ) -> bool {
+        let born = Brain::weakened(genome, data, stage, health);
         let needs = data.needs().count();
         let category = |id: CategoryId| data.category(id).is_some();
         let subject = |subject: Subject| subject.fits(data);
@@ -1659,7 +1706,7 @@ mod tests {
         let data = builtin();
         let text = format!("(format: 1, genes: [{}])", genes.join(", "));
         let genome = Genome::from_ron(&text, &data).expect("a valid genome");
-        Brain::new(&genome, &data)
+        Brain::new(&genome, &data, LifeStage::Adult)
     }
 
     /// A brain of `genes` whose learned values never fade, so they read exactly.
@@ -2144,6 +2191,33 @@ mod tests {
     }
 
     #[test]
+    fn plasticity_scales_what_is_learned_as_learning_rate_mod_does() {
+        // M2 design §9.5: the young learn faster.
+        let data = builtin();
+        let learned_with = |genes: &[&str]| {
+            let mut brain = unfading(genes);
+            brain.touched = Some(Touch {
+                tick: 1,
+                verb: Some(Verb::Eat),
+                subject: types::BERRY_BUSH,
+                sprite: None,
+                novelty: 1.0,
+                by_cursor: false,
+                place: None,
+            });
+            let signals = hunger_at(&mut brain, &data, 0.5);
+            brain.learn(1, &signals, 1.0, &data);
+            let signals = hunger_at(&mut brain, &data, 0.4);
+            brain.learn(2, &signals, 1.0, &data);
+            bush_for_hunger(&brain)
+        };
+        let usual = learned_with(&[]);
+        assert!(close(usual, 0.5 * 0.1), "{usual}");
+        let plastic = learned_with(&[r#"BrainParam(param: "plasticity", value: 1.5)"#]);
+        assert!(close(plastic, 1.5 * 0.5 * 0.1), "{plastic}");
+    }
+
+    #[test]
     fn of_two_needs_pushing_a_verb_equally_the_motive_is_the_lower_input_id() {
         // Design §5.5. The pack lists thirst before hunger, so the tie is
         // settled by input ID (hunger 1, thirst 2), not by the list.
@@ -2174,7 +2248,7 @@ mod tests {
             &data,
         )
         .expect("a valid genome");
-        let brain = Brain::new(&genome, &data);
+        let brain = Brain::new(&genome, &data, LifeStage::Adult);
         let place = |name: &str| {
             data.brain_inputs()
                 .position(|(_, n)| n == name)

@@ -28,6 +28,7 @@ fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> World {
         objects,
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     World::from_scenario(scenario, pack(), 1).expect("valid scenario")
 }
@@ -245,6 +246,7 @@ fn the_aim_is_cancelled_when_what_the_cursor_held_is_gone() {
         objects: &[(at(5, 5), "berry")],
         sprites: &[],
         scripted: &[],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
     let mut app = grab_app(&world);
@@ -373,6 +375,7 @@ fn shove_seen(objects: &[(Pos, &str)], others: &[Pos]) -> Vec<String> {
         objects,
         sprites: &sprites,
         scripted: &rests,
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
     let mut app = grab_app(&world);
@@ -594,6 +597,7 @@ fn the_aim_is_cancelled_when_the_led_sprite_dies() {
         objects: &[],
         sprites: &[(at(5, 5), None)],
         scripted: &[(at(5, 5), ScriptedAction::Rest)],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
     let mut app = grab_app(&world);

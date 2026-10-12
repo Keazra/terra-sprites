@@ -9,8 +9,8 @@ use ratatui::text::Line;
 use terra_sim::{
     ActionView, Blocker, ChemicalKind, ChemicalLevel, Command, CursorTouch, DeathCause, Dir,
     EmitterMode, Emptied, EntityId, Event, EventKind, Explanation, Expression, GeneView, Grip,
-    Learned, MAX_NAME_CHARS, NameProblem, ObjectView, Outcome, Part, PlaceRule, Pos, Progress,
-    Rejection, Removal, SpriteView, Target, Terrain, Thing, Trait, Verb, World,
+    Learned, LifeStage, MAX_NAME_CHARS, NameProblem, ObjectView, Outcome, Part, PlaceRule, Pos,
+    Progress, Rejection, Removal, SpriteView, Switch, Target, Terrain, Thing, Trait, Verb, World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -153,19 +153,31 @@ fn sprite_tab(
     }
 }
 
-/// The Body tab (design §6.1): what the sprite is doing, age and traits, a
-/// bar for each drive, the physical levels, three to a line, and what the
+/// The Body tab (design §6.1): what the sprite is doing, its age, life stage
+/// and when it reaches the next (M2 design §9.6), its traits, a bar for each
+/// drive, the physical levels, three to a line, with its wear (and its
+/// genes' average health, once any has weakened) after them, and what the
 /// player has observed it do.
 fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
     let traits = sprite.traits();
     let doing = doing_line(sprite, app, world).map(|line| format!(" {line}"));
     let mut lines: Vec<String> = doing.into_iter().collect();
     lines.extend([
-        format!(
-            " age {} · {}",
-            group_thousands(sprite.age()),
-            trait_text(Trait::Lifespan, traits.lifespan)
-        ),
+        format!(" age {} · {}", group_thousands(sprite.age()), {
+            let stage = sprite.life_stage();
+            match stage {
+                LifeStage::Young => {
+                    format!("young · {}", trait_text(Trait::GrowsUp, traits.grows_up))
+                }
+                LifeStage::Adult => {
+                    format!(
+                        "adult · {}",
+                        trait_text(Trait::GrowsOld, sprite.grows_old_at())
+                    )
+                }
+                LifeStage::Old => stage.name().to_string(),
+            }
+        }),
         format!(
             " {} · {}",
             trait_text(Trait::Speed, traits.speed),
@@ -193,6 +205,19 @@ fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>>
     for three in physical.chunks(3) {
         lines.push(format!(" {}", three.join(" · ")));
     }
+    // Its genes' average health shows once any has weakened (M2 design
+    // §9.4, §9.6). A genome with nothing to weaken gives out when old
+    // without any gene losing health, so that isn't shown.
+    let weakened = sprite.gene_health().iter().any(|&health| health < 1.0);
+    lines.push(if weakened {
+        format!(
+            " wear {} · genes {}",
+            level(sprite.wear()),
+            level(sprite.vigour())
+        )
+    } else {
+        format!(" wear {}", level(sprite.wear()))
+    });
     lines.push(String::new());
     lines.extend(observed_lines(app, world.tick()));
     lines.into_iter().map(Line::from).collect()
@@ -658,12 +683,13 @@ fn trend(amount: f32) -> &'static str {
     }
 }
 
-/// A trait and its value: `speed 7.25`, `sense 9.5`, `lifespan 61,204`.
+/// A trait and its value: `speed 7.25`, `sense 9.5`, `grows old 13,500`.
 fn trait_text(which: Trait, value: f32) -> String {
     match which {
         Trait::Speed => format!("speed {}", significant(value)),
         Trait::SenseRadius => format!("sense {}", significant(value)),
-        Trait::Lifespan => format!("lifespan {}", whole(f64::from(value))),
+        Trait::GrowsOld => format!("grows old {}", whole(f64::from(value))),
+        Trait::GrowsUp => format!("grows up {}", whole(f64::from(value))),
     }
 }
 
@@ -1293,28 +1319,44 @@ impl GeneGroup {
 /// group in genome order, as plain lines. The expressed traits share one
 /// line. A gene with no effect is dimmed, with the reason below it.
 fn genome_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
-    let genes = sprite.genes();
+    let genes: Vec<(GeneView, Expression, Switch, f32)> = sprite
+        .genes()
+        .into_iter()
+        .zip(sprite.switches())
+        .zip(sprite.gene_health().iter().copied())
+        .map(|(((gene, how), switch), health)| (gene, how, switch, health))
+        .collect();
     let mut lines = Vec::new();
     for group in GeneGroup::ALL {
-        let members: Vec<&(GeneView, Expression)> = genes
+        let members: Vec<&(GeneView, Expression, Switch, f32)> = genes
             .iter()
-            .filter(|(gene, _)| GeneGroup::of(gene) == group)
+            .filter(|(gene, ..)| GeneGroup::of(gene) == group)
             .collect();
         if members.is_empty() {
             continue;
         }
         lines.push(Line::from(format!(" {}", group.heading())));
-        let (together, apart): (Vec<_>, Vec<_>) = members.into_iter().partition(|(gene, how)| {
-            matches!(gene, GeneView::Trait { .. }) && *how == Expression::Expressed
-        });
+        let (together, apart): (Vec<_>, Vec<_>) =
+            members.into_iter().partition(|(gene, how, ..)| {
+                matches!(gene, GeneView::Trait { .. }) && *how == Expression::Expressed
+            });
         if !together.is_empty() {
-            let traits: Vec<String> = together.iter().map(|(gene, _)| gene_text(gene)).collect();
+            let traits: Vec<String> = together
+                .iter()
+                .map(|(gene, _, _, health)| format!("{}{}", gene_text(gene), health_text(*health)))
+                .collect();
             lines.extend(wrapped(&listed(&traits), 1, Style::default()));
         }
-        for (gene, how) in apart {
+        for (gene, how, switch, health) in apart {
+            let text = format!(
+                "{}{}{}",
+                gene_text(gene),
+                switch_text(*switch),
+                health_text(*health)
+            );
             let reason = match how {
                 Expression::Expressed => {
-                    lines.extend(wrapped(&gene_text(gene), 1, Style::default()));
+                    lines.extend(wrapped(&text, 1, Style::default()));
                     continue;
                 }
                 Expression::Flagged(reason) => format!("flagged: {reason}"),
@@ -1323,13 +1365,38 @@ fn genome_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
                 Expression::Unmatched => {
                     "unmatched: names a category this world doesn't have".into()
                 }
+                Expression::Dormant => "dormant: switched off at this life stage".into(),
             };
             let dim = Style::default().fg(Color::DarkGray);
-            lines.extend(wrapped(&gene_text(gene), 1, dim));
+            lines.extend(wrapped(&text, 1, dim));
             lines.extend(wrapped(&reason, 3, dim));
         }
     }
     lines
+}
+
+/// How weakened a gene is (M2 design §9.4), after the gene: ` · health .62`.
+/// Nothing for a whole gene.
+fn health_text(health: f32) -> String {
+    if health < 1.0 {
+        format!(" · health{BOUND}{}", level(health))
+    } else {
+        String::new()
+    }
+}
+
+/// When a gene that switches with life stage works (M2 design §9.2), after
+/// the gene: ` · from adult`, ` · until adult`, ` · from adult until old`. Nothing for
+/// a gene that works all its life.
+fn switch_text(switch: Switch) -> String {
+    match (switch.from, switch.until) {
+        (LifeStage::Young, None) => String::new(),
+        (from, None) => format!(" · from{BOUND}{}", from.name()),
+        (LifeStage::Young, Some(until)) => format!(" · until{BOUND}{}", until.name()),
+        (from, Some(until)) => {
+            format!(" · from{BOUND}{} until{BOUND}{}", from.name(), until.name())
+        }
+    }
 }
 
 /// Keeps a word with the number after it when a line wraps.
@@ -1661,6 +1728,9 @@ pub(crate) fn event_line(event: &Event, data: &Words) -> Option<String> {
             group_thousands(*age)
         )),
         EventKind::ActionEnded { id, action, .. } => logged_line(*id, action, data),
+        // Life stages (M2 design §9.6).
+        EventKind::GrewUp { id } => Some(format!("{} grew up", data.label(*id))),
+        EventKind::GrewOld { id } => Some(format!("{} grew old", data.label(*id))),
         EventKind::LearnedMilestone { id, learned, good } => {
             Some(learned_line(*id, learned, *good, data))
         }
@@ -1745,6 +1815,8 @@ pub(crate) fn event_sprites(event: &Event) -> Vec<EntityId> {
         | EventKind::Corrected { id, .. }
         | EventKind::Spawned { id, .. }
         | EventKind::Renamed { id, .. }
+        | EventKind::GrewUp { id }
+        | EventKind::GrewOld { id }
         | EventKind::ActionStarted { id, .. } => vec![*id],
         EventKind::ActionEnded { id, action, .. } => match action.target {
             Some(Target::Sprite(target)) => vec![*id, target],

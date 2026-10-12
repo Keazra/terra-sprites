@@ -18,6 +18,10 @@ pub enum SemanticTile {
     Sprite,
     /// The selected sprite (design §6.1).
     SelectedSprite,
+    /// A young sprite, drawn small (M2 design §9.6).
+    YoungSprite,
+    /// The selected sprite, while it's young.
+    SelectedYoungSprite,
     /// The Decision marker: where the selected sprite is heading (design
     /// §6.1). It flashes.
     DecisionMarker,
@@ -59,6 +63,17 @@ impl SemanticTile {
         SemanticTile::Emote(Emote::Shocked),
         SemanticTile::Emote(Emote::Failed),
         SemanticTile::Emote(Emote::Resting),
+    ];
+
+    /// The tiles a theme may leave out, each with the tile drawn in its
+    /// place: a theme from before the young had a look of their own draws
+    /// them as grown (M2 design §9.6).
+    pub const OPTIONAL: [(SemanticTile, SemanticTile); 2] = [
+        (SemanticTile::YoungSprite, SemanticTile::Sprite),
+        (
+            SemanticTile::SelectedYoungSprite,
+            SemanticTile::SelectedSprite,
+        ),
     ];
 }
 
@@ -279,12 +294,16 @@ impl Theme {
     /// A theme from a theme file's text, complete and within CP437.
     fn parse(text: &str) -> Result<Theme, String> {
         let file: ThemeFile = ron::from_str(text).map_err(|e| e.to_string())?;
-        let tiles = glyphs(file.tiles);
+        let mut tiles = glyphs(file.tiles);
         if let Some(&tile) = SemanticTile::ALL
             .iter()
             .find(|tile| !tiles.contains_key(tile))
         {
             return Err(format!("it has no glyph for {}", tile_name(tile)));
+        }
+        for (tile, instead) in SemanticTile::OPTIONAL {
+            let glyph = tiles[&instead];
+            tiles.entry(tile).or_insert(glyph);
         }
         let mode_marks = glyphs(file.cursor.mode_marks);
         if let Some(&mode) = CursorMode::ALL

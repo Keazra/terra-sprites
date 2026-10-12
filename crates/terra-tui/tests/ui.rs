@@ -353,6 +353,7 @@ fn a_flashing_dotted_leash_runs_from_the_cursor_to_the_led_sprite_over_empty_gro
         objects: &[(Pos { x: 4, y: 2 }, "berry")],
         sprites: &[(Pos { x: 1, y: 2 }, None)],
         scripted: &[(Pos { x: 1, y: 2 }, ScriptedAction::Rest)],
+        newborns: &[],
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let mut app = app_for(&world, Theme::cp437(), 40, 10);
@@ -546,6 +547,7 @@ fn garden(pack: DataPack) -> World {
         objects: &objects,
         sprites: &[],
         scripted: &[],
+        newborns: &[],
     };
     World::from_scenario(scenario, pack, 7).expect("valid scenario")
 }
@@ -569,6 +571,7 @@ fn garden_with_sprites() -> World {
         objects: &objects,
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     World::from_scenario(scenario, pack, 7).expect("valid scenario")
 }
@@ -1288,6 +1291,7 @@ fn one_sprite_in(
         objects,
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     for _ in 0..ticks {
@@ -1303,7 +1307,7 @@ fn one_sprite_in(
 const WORKED_GENOME: &str = r#"(format: 1, genes: [
     Trait(trait: "speed", value: 7.25),
     Trait(trait: "sense_radius", value: 9.5),
-    Trait(trait: "lifespan", value: 61204.0),
+    Trait(trait: "grows_old", value: 13500.0),
     InitialConcentration(chem: "hunger", value: 0.8),
     HalfLife(chem: "hunger", ticks: 1),
     InitialConcentration(chem: "thirst", value: 0.18),
@@ -1313,14 +1317,14 @@ const WORKED_GENOME: &str = r#"(format: 1, genes: [
 ])"#;
 
 #[test]
-fn the_body_tab_shows_age_traits_drives_and_physical_levels() {
+fn the_body_tab_shows_age_life_stage_traits_drives_physical_levels_and_wear() {
     let (world, app) = one_sprite_doing(WORKED_GENOME, &[ScriptedAction::Rest], 1);
     let (_, text) = inspector(&app, &world);
     assert_eq!(
-        text[..14],
+        text[..15],
         [
             "Resting · 9 ticks left",
-            "age 1 · lifespan 61,204",
+            "age 7,501 · adult · grows old 13,500",
             "speed 7.25 · sense 9.5",
             "",
             "hunger      ████░░░░░░ .40 ▼",
@@ -1334,10 +1338,11 @@ fn the_body_tab_shows_age_traits_drives_and_physical_levels() {
             // A newborn's are full, and one tick at rest takes them only to .9998 or so.
             "energy 1.00 · hydration 1.00 · stamina 1.00",
             "food .00 · water .00 · injury .00",
+            "wear .00",
         ]
     );
-    assert_eq!(text[14..17], ["", "Observed", "nothing yet"]);
-    assert!(text[17..].iter().all(String::is_empty), "{text:?}");
+    assert_eq!(text[15..18], ["", "Observed", "nothing yet"]);
+    assert!(text[18..].iter().all(String::is_empty), "{text:?}");
 }
 
 /// A genome that walks a grass step a tick.
@@ -1623,6 +1628,7 @@ fn choosing_another_sprite_shuts_lessons_that_were_open() {
         objects: &objects,
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     for _ in 0..2 {
@@ -1684,6 +1690,7 @@ fn sprites_in_general_sit_above_the_sprites_it_remembers() {
         objects: &[],
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     for _ in 0..8 {
@@ -1804,6 +1811,7 @@ fn a_habit_about_sprites_sits_with_what_it_thinks_of_them_in_general() {
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     for _ in 0..16 {
@@ -1959,6 +1967,7 @@ fn the_brain_tab_lists_the_places_the_sprite_remembers() {
         objects: &[],
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     for _ in 0..2 {
@@ -2213,6 +2222,47 @@ fn the_genome_tab_shows_brain_settings_instincts_and_attention_instincts() {
 }
 
 #[test]
+fn the_genome_tab_shows_switches_dormant_genes_and_weakened_genes() {
+    // M2 design §9.6. In this pack water runs out at once and thirst
+    // injures badly, and a bad injury scars a gene every tick: the tick its
+    // injury first passes .5, its one gene that weakens, the emitter, is
+    // scarred to .62. Its brain setting switches off as it grows up, so in
+    // an adult it's dormant.
+    let physiology = include_str!("../../../data/physiology.ron")
+        .replace("hydration_loss: 0.00033", "hydration_loss: 1.0")
+        .replace("dehydration: 0.0011", "dehydration: 0.3")
+        .replace("chance: 0.002, hit: 0.05", "chance: 1.0, hit: 0.38");
+    let pack =
+        DataPack::from_sources(&builtin_with("physiology.ron", &physiology)).expect("valid pack");
+    let genome = r#"(format: 2, genes: [
+        BrainParam(param: "curiosity", value: 0.6, until: Adult),
+        Emitter(locus: Locus("always"), mode: Level, gain: 0.001, chem: "boredom"),
+    ])"#;
+    let (mut world, mut app) = one_sprite_in(pack, genome, &[], &[], 0);
+    let vigour = |world: &World| world.sprites().next().expect("a sprite").vigour();
+    for _ in 0..10 {
+        if vigour(&world) < 1.0 {
+            break;
+        }
+        world.step();
+    }
+    assert!(vigour(&world) < 1.0, "a gene was scarred");
+    open(&mut app, &world, Tab::Genome);
+    let rows = right_part(&render(&app, &world, 100, 30), 46);
+    let text: Vec<&str> = rows[2..7].iter().map(|row| inside(row)).collect();
+    assert_eq!(
+        text,
+        [
+            "EMITTERS",
+            "always → boredom +.001 · health .62",
+            "BRAIN SETTINGS",
+            "curiosity .6 · until adult",
+            "dormant: switched off at this life stage",
+        ]
+    );
+}
+
+#[test]
 fn the_genome_tab_groups_genes_as_plain_lines_and_marks_those_with_no_effect() {
     let genome = r#"(format: 1, genes: [
         Trait(trait: "speed", value: 7.25),
@@ -2225,7 +2275,7 @@ fn the_genome_tab_groups_genes_as_plain_lines_and_marks_those_with_no_effect() {
         Emitter(locus: Locus("nearby_sprites"), mode: Level, invert: true, threshold: 0.5, gain: 0.0005, chem: "loneliness"),
         Emitter(locus: Locus("ate"), mode: Level, gain: 0.3, chem: "food"),
         HalfLife(chem: "hunger", ticks: 20),
-        Trait(trait: "lifespan", value: 61204.0),
+        Trait(trait: "grows_old", value: 13500.0),
         Reaction(reactants: [("h0", 2)], products: [("h1", 1), ("h2", 1)], rate: 0.1),
         Receptor(chem: "reward", threshold: 0.2, gain: 0.5, target: "learning_rate_mod"),
         Trait(trait: "speed", value: 9.0),
@@ -2242,7 +2292,7 @@ fn the_genome_tab_groups_genes_as_plain_lines_and_marks_those_with_no_effect() {
         text,
         [
             "TRAITS",
-            "speed 7.25 · sense 9.5 · lifespan 61,204",
+            "speed 7.25 · sense 9.5 · grows old 13,500",
             "speed 9",
             "unexpressed: an earlier gene sets this",
             "HALF-LIVES",
@@ -2406,6 +2456,7 @@ fn selecting_another_sprite_starts_its_tab_from_the_top_and_the_same_one_again_d
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     let world = World::from_scenario(scenario, pack.clone(), 7).expect("valid scenario");
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
@@ -2452,6 +2503,7 @@ fn a_change_too_small_to_show_leaves_no_number_and_no_arrow() {
 
 #[test]
 fn big_and_negative_gene_values_keep_3_significant_figures_and_their_sign() {
+    // `lifespan` is what genome files from before M2 call `grows_old`.
     let genome = r#"(format: 1, genes: [
         Trait(trait: "lifespan", value: -1234.5),
         Emitter(locus: Locus("always"), mode: Level, gain: 1234.5, chem: "boredom"),
@@ -2464,7 +2516,7 @@ fn big_and_negative_gene_values_keep_3_significant_figures_and_their_sign() {
         text[..5],
         [
             "TRAITS",
-            "lifespan -1,235",
+            "grows old -1,235",
             "EMITTERS",
             "always → boredom +1,230",
             "always → boredom -98,800",
@@ -2508,6 +2560,7 @@ fn the_world_tab_shows_the_population_and_the_deaths_by_cause() {
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let app = app_for(&world, Theme::cp437(), 100, 30);
@@ -2619,6 +2672,7 @@ fn chemical_names_show_with_spaces_for_underscores() {
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
@@ -2807,6 +2861,7 @@ fn hit_by_a_bully(ticks: u32) -> (World, App) {
         objects: &[],
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
@@ -3334,6 +3389,7 @@ fn holding_world(objects: &[(Pos, &str)], held: Pos) -> (World, App) {
         objects,
         sprites: &[],
         scripted: &[],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let mut app = app_for(&world, Theme::cp437(), 60, 12);
@@ -3481,4 +3537,28 @@ fn a_short_aim_s_end_shows_even_beside_the_cursor() {
         .take(20)
         .collect();
     assert_eq!(row, "...........°○←......");
+}
+
+#[test]
+fn the_event_log_says_when_a_sprite_grows_up_and_grows_old() {
+    // M2 design §9.6.
+    let world = garden(pack());
+    let id = EntityId(12);
+    let rows = logged(
+        &world,
+        &[
+            Event {
+                tick: 4_500,
+                kind: EventKind::GrewUp { id },
+            },
+            Event {
+                tick: 13_500,
+                kind: EventKind::GrewOld { id },
+            },
+        ],
+    );
+    assert_eq!(
+        rows[..2],
+        ["13,500  Sprite #12 grew old", "4,500  Sprite #12 grew up"]
+    );
 }

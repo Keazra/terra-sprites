@@ -120,7 +120,8 @@ pub(crate) fn place_objects(config: &WorldConfig, data: &DataPack, state: &mut W
 /// Places the preset's first population (design §3.2), after the objects:
 /// each sprite on a tile drawn uniformly from the walkable tiles holding no
 /// object and no sprite, made from the starter genome with spawn variation,
-/// and with its energy and hydration drawn between physiology's
+/// at an age drawn uniformly through adulthood (M2 design §9.1), and with
+/// its energy and hydration drawn between physiology's
 /// `first_population` fractions of the newborn level, so the sprites don't
 /// all run dry together. If the map runs out of room, the rest are skipped.
 pub(crate) fn place_sprites(config: &WorldConfig, data: &DataPack, state: &mut WorldState) {
@@ -138,7 +139,10 @@ pub(crate) fn place_sprites(config: &WorldConfig, data: &DataPack, state: &mut W
         let choice = uniform(&mut state.rng, candidates.len() as u64) as usize;
         let pos = candidates.swap_remove(choice);
         let genome = varied(data.starter(), data, &mut state.rng);
-        let mut sprite = Sprite::newborn(genome, pos, state.tick, data);
+        // The first sprites are adults, of all ages (M2 design §9.1).
+        let (grows_up, grows_old) = Sprite::adulthood(&genome, data);
+        let age = grows_up + uniform(&mut state.rng, grows_old.saturating_sub(grows_up).max(1));
+        let mut sprite = Sprite::aged(genome, pos, state.tick, age, data);
         for index in [physiology.indices.energy, physiology.indices.hydration] {
             let level = sprite.body.chems[index] * (low + (high - low) * unit(&mut state.rng));
             sprite.body.start_at(index, level);

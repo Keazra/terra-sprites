@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use ron::extensions::Extensions;
 use serde::Deserialize;
 
+use crate::ageing::LifeStage;
 use crate::brain_io::{BRAIN_IO, BrainInput, BrainIoFile, InputId, brain_io};
 use crate::categories::{CATEGORIES, CURSOR, Category, SPRITE, WATER, categories};
 use crate::expression::{Expression, expressions};
@@ -257,7 +258,7 @@ impl DataPack {
             tags,
             object_types,
             physiology,
-            starter: Genome { genes: Vec::new() },
+            starter: Genome::switched(Vec::new(), Vec::new()),
             syllables,
             sources: sources
                 .iter()
@@ -630,7 +631,7 @@ fn starter_genome(text: &str, data: &DataPack) -> Result<Genome, DataError> {
     for (index, (gene, expression)) in genome
         .genes
         .iter()
-        .zip(expressions(&genome, data))
+        .zip(expressions(&genome, data, LifeStage::Young))
         .enumerate()
     {
         let number = index + 1;

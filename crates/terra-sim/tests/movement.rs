@@ -51,6 +51,7 @@ fn seeded(
         objects,
         sprites: &sprites,
         scripted,
+        newborns: &[],
     };
     World::from_scenario(scenario, data, seed).expect("a valid scenario")
 }
@@ -287,6 +288,7 @@ fn wander_east(distance: u16, sense_radius: f32) -> Outcome {
         objects: &[],
         sprites: &sprites,
         scripted: &[(at(0, 0), wander)],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
     for _ in 0..30 {

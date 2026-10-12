@@ -32,13 +32,18 @@ fn pack() -> DataPack {
 /// for: a terrain, or an object type in any of its visual states.
 fn map_glyphs(theme: &Theme) -> Vec<(char, String)> {
     let pack = pack();
-    // The selected sprite is still a sprite, so it may share the sprite's glyph.
+    // The selected sprite, and a young one, are still sprites, so they may
+    // share the sprite's glyph.
     let kind = |tile: SemanticTile| match tile {
-        SemanticTile::SelectedSprite => format!("{:?}", SemanticTile::Sprite),
+        SemanticTile::SelectedSprite
+        | SemanticTile::YoungSprite
+        | SemanticTile::SelectedYoungSprite => format!("{:?}", SemanticTile::Sprite),
         tile => format!("{tile:?}"),
     };
+    let optional = SemanticTile::OPTIONAL.map(|(tile, _)| tile);
     let terrain = SemanticTile::ALL
         .iter()
+        .chain(&optional)
         .map(|&tile| (theme.glyph(tile).symbol, kind(tile)));
     let objects = pack.object_type_names().flat_map(|name| {
         pack.visual_states(name)
@@ -403,4 +408,36 @@ fn a_theme_may_leave_out_objects_and_drives() {
     let theme = Theme::from_ron(&edited, &pack).expect("loads");
     assert_eq!(theme.object_glyph("ball", "default").symbol, '?');
     assert_eq!(theme.drive_colour("boredom"), None);
+}
+
+#[test]
+fn a_theme_from_before_the_young_draws_them_as_grown() {
+    // M2 design §9.6: a theme without the young sprite's keys still loads,
+    // drawing a young sprite, selected or not, as a grown one.
+    let pack = pack();
+    let edited = ascii_with(
+        "        young_sprite:           (glyph: 'a', fg: white),\n",
+        "",
+    );
+    let edited = edited.replacen(
+        "        selected_young_sprite:  (glyph: 'a', fg: white, reversed: true),\n",
+        "",
+        1,
+    );
+    let theme = Theme::from_ron(&edited, &pack).expect("loads");
+    assert_eq!(
+        theme.glyph(SemanticTile::YoungSprite),
+        theme.glyph(SemanticTile::Sprite)
+    );
+    assert_eq!(
+        theme.glyph(SemanticTile::SelectedYoungSprite),
+        theme.glyph(SemanticTile::SelectedSprite)
+    );
+    assert_ne!(
+        theme.glyph(SemanticTile::YoungSprite),
+        Theme::from_ron(ASCII_THEME, &pack)
+            .expect("loads")
+            .glyph(SemanticTile::YoungSprite),
+        "the edit took the young sprite out"
+    );
 }

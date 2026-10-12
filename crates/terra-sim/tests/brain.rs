@@ -30,6 +30,7 @@ fn world(rows: &[&str], objects: &[(Pos, &str)], pos: Pos, genome: Genome, seed:
         objects,
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data, seed).expect("a valid scenario");
     for &(at, kind) in objects {
@@ -267,6 +268,7 @@ fn a_lone_sprite_with_a_bush_and_water_nearby_survives_10_000_ticks() {
             objects: &[(bush, "berry_bush")],
             sprites: &sprites,
             scripted: &[],
+            newborns: &[],
         };
         let mut world = World::from_scenario(scenario, data, seed).expect("a valid scenario");
         world
@@ -430,6 +432,7 @@ fn a_lonely_sprite_goes_over_to_another_or_plays_with_it() {
             objects: &[],
             sprites: &sprites,
             scripted: &[],
+            newborns: &[],
         };
         let mut world = World::from_scenario(scenario, data, seed).expect("a valid scenario");
         let id = world.sprite_at(at(1, 3)).expect("the lonely sprite").id();
@@ -464,6 +467,7 @@ fn boredom_eased_by_playing(objects: &[(Pos, &str)], sprites_at: &[Pos], with: P
         objects,
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
     let boredom = |world: &World| {

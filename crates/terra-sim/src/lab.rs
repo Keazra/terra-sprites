@@ -396,6 +396,7 @@ impl LabScenario {
             objects: &objects,
             sprites: &sprites,
             scripted: &[],
+            newborns: &[],
         };
         World::from_scenario(scenario, data, seed).map_err(LabError::Scenario)
     }

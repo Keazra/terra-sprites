@@ -41,6 +41,48 @@ fn a_genome_file_reads_each_kind_of_gene_by_name_and_writes_it_back() {
 }
 
 #[test]
+fn a_gene_switched_by_life_stage_writes_its_switch_after_its_fields() {
+    // M2 design §9.2. A genome with a switch is format 2, which older builds
+    // refuse by name rather than misreading.
+    let text = genome_file(&[
+        r#"Instinct(inputs: [("crowdedness", false)], verb: Hit, weight: 0.6, from: Adult)"#,
+        r#"BrainParam(param: "curiosity", value: 0.6, until: Adult)"#,
+        r#"Gene(type: 1, version: 1, payload: "92121e", from: Adult, until: Old)"#,
+        r#"Trait(trait: "speed", value: 7.0)"#,
+    ])
+    .replace("format: 1", "format: 2");
+    let data = builtin();
+    let genome = Genome::from_ron(&text, &data).expect("a valid genome");
+    let written = genome.to_ron(&data);
+    assert_eq!(
+        written,
+        text.replace(
+            r#"Gene(type: 1, version: 1, payload: "92121e""#,
+            r#"HalfLife(chem: "pain", ticks: 30"#
+        )
+    );
+}
+
+#[test]
+fn a_format_1_genome_with_a_switch_is_an_error_naming_the_gene() {
+    // M2 design §9.2: format 1 is from before genes switched, so a build
+    // that reads only it must be able to trust every gene works all its life.
+    let text = genome_file(&[
+        r#"Trait(trait: "speed", value: 7.0)"#,
+        r#"BrainParam(param: "curiosity", value: 0.6, until: Adult)"#,
+    ]);
+    match Genome::from_ron(&text, &builtin()) {
+        Err(GenomeError::Invalid(message)) => {
+            assert!(message.contains("gene 2"), "{message}");
+            assert!(message.contains("format 2"), "{message}");
+        }
+        other => panic!("expected an invalid genome, got {other:?}"),
+    }
+    let text = text.replace("format: 1", "format: 2");
+    assert!(Genome::from_ron(&text, &builtin()).is_ok());
+}
+
+#[test]
 fn fields_at_their_defaults_may_be_left_out_and_are_written_without_them() {
     let data = builtin();
     let written_out = genome_file(&[
@@ -254,10 +296,10 @@ fn golden_a_genome_with_unknown_genes_round_trips_byte_for_byte() {
 
 #[test]
 fn a_genome_file_newer_than_the_build_is_refused() {
-    let newer = genome_file(&[]).replace("format: 1", "format: 2");
+    let newer = genome_file(&[]).replace("format: 1", "format: 3");
     match Genome::from_ron(&newer, &builtin()) {
         Err(GenomeError::Invalid(message)) => assert!(message.contains("format"), "{message}"),
-        other => panic!("expected format 2 to be refused, got {other:?}"),
+        other => panic!("expected format 3 to be refused, got {other:?}"),
     }
     let zero = genome_file(&[]).replace("format: 1", "format: 0");
     assert!(
@@ -413,4 +455,17 @@ fn a_brain_gene_written_by_number_reads_the_same_as_by_name() {
     ]);
     let genome = Genome::from_ron(&by_number, &data).expect("a valid genome");
     assert_eq!(genome.to_ron(&data), by_name);
+}
+
+#[test]
+fn a_lifespan_gene_from_before_m2_reads_as_when_it_grows_old() {
+    // M2 design §9.3: `lifespan` became `grows_old`. An older file still
+    // loads, and is written back with the new name.
+    let data = builtin();
+    let older = genome_file(&[r#"Trait(trait: "lifespan", value: 13500.0)"#]);
+    let genome = Genome::from_ron(&older, &data).expect("an older genome loads");
+    assert_eq!(
+        genome.to_ron(&data),
+        genome_file(&[r#"Trait(trait: "grows_old", value: 13500.0)"#])
+    );
 }

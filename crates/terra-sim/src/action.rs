@@ -599,7 +599,7 @@ pub(crate) fn resolve(
         let sprite = state.sprites.get_mut(id).expect("the same sprite");
         sprite.did = Did::default();
         if is_walking(sprite) && !arrived {
-            sprite.move_points += (sprite.program.traits.speed * 10.0).round() as u32;
+            sprite.move_points += (sprite.speed(state.tick, data) * 10.0).round() as u32;
         }
         // Counted before anyone's turn, so a swap ending an action on
         // another's turn doesn't make the count depend on the order.

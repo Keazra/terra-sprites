@@ -31,6 +31,7 @@ fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> World {
         objects,
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     World::from_scenario(scenario, pack(), 1).expect("valid scenario")
 }
@@ -549,6 +550,7 @@ fn the_place_menu_draws_over_the_map_with_its_items_numbered() {
         objects: &[],
         sprites: &[],
         scripted: &[],
+        newborns: &[],
     };
     let world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
     let mut app = grab_app(&world);

@@ -2,26 +2,30 @@
 
 use std::collections::{BTreeMap, VecDeque};
 
+use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::action::{Action, Did, ScriptedAction, Walk, chebyshev};
+use crate::ageing::{LifeStage, frailty};
 use crate::biochem::{Body, Program};
 use crate::brain::Brain;
 use crate::data::DataPack;
-use crate::genome::Genome;
+use crate::genome::{Gene, Genome};
 use crate::map::{Dir, Map, Pos};
 use crate::objects::{EntityId, Objects};
 use crate::occupancy::Occupancy;
 use crate::perception::Flood;
 use crate::physiology::RememberedPlaces;
+use crate::random::{chance, uniform};
 use crate::sliding::Slide;
 
 /// One sprite.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Sprite {
     pub(crate) pos: Pos,
-    /// The tick it was born on.
-    pub(crate) born: u64,
+    /// The tick it was born on: before the world began for a sprite that
+    /// starts it grown (M2 design §9.1).
+    pub(crate) born: i64,
     /// The name the player gave it, if any (design v28 §6.5).
     pub(crate) name: Option<String>,
     pub(crate) genome: Genome,
@@ -29,6 +33,16 @@ pub(crate) struct Sprite {
     /// genome, so it isn't hashed.
     #[serde(skip)]
     pub(crate) program: Program,
+    /// The life stage its genes are expressed for (M2 design §9.1): the
+    /// one it grew to at the latest step 3, or was made at. `None` only in
+    /// a save from before life stages, until it's loaded.
+    #[serde(default)]
+    stage: Option<LifeStage>,
+    /// Each gene's health, in genome order, from 1 (whole) to 0 (M2 design
+    /// §9.4): it only ever falls, and scales the gene's effect. Empty only
+    /// in a save from before ageing, until it's loaded.
+    #[serde(default)]
+    pub(crate) health: Vec<f32>,
     pub(crate) body: Body,
     pub(crate) brain: Brain,
     /// What it's doing, or the action that last ended until the next starts.
@@ -53,20 +67,171 @@ pub(crate) struct Sprite {
 impl Sprite {
     /// The sprite's age on the tick `tick`.
     pub(crate) fn age(&self, tick: u64) -> u64 {
-        tick - self.born
+        u64::try_from(tick as i64 - self.born).expect("a sprite is born by now")
+    }
+
+    /// The life stage its genes are expressed for (M2 design §9.1).
+    pub(crate) fn stage(&self) -> LifeStage {
+        self.stage.expect("a loaded sprite has a life stage")
+    }
+
+    /// How fast it walks on the tick `tick`, in move points (M2 design
+    /// §9.5): its speed trait, less while it's young, rising steadily to all
+    /// of it as it grows up.
+    pub(crate) fn speed(&self, tick: u64, data: &DataPack) -> f32 {
+        let ageing = data.physiology().ageing;
+        let traits = self.program.traits;
+        let growing = if self.stage() == LifeStage::Young {
+            let grown = (self.age(tick) as f32 / traits.grows_up).min(1.0);
+            ageing.young_speed + (1.0 - ageing.young_speed) * grown
+        } else {
+            1.0
+        };
+        traits.speed * growing
+    }
+
+    /// The share of the age its genes say that a hard life has brought its
+    /// old age sooner by (M2 design §9.4).
+    pub(crate) fn sooner(&self, data: &DataPack) -> f32 {
+        data.physiology().ageing.sooner * self.body.wear
+    }
+
+    /// Expresses its genes afresh, for its life stage and as weakened as
+    /// they are (M2 design §9.2, §9.4), leaving what it has learned as it
+    /// was.
+    fn express(&mut self, data: &DataPack) {
+        self.express_body(data);
+        self.brain
+            .reach(&self.genome, data, self.stage(), &self.health);
+    }
+
+    /// The same for its body's genes only, for when only they changed.
+    fn express_body(&mut self, data: &DataPack) {
+        self.program = Program::weakened(&self.genome, data, self.stage(), &self.health);
+    }
+
+    /// Ages its genes for a tick (M2 design §9.4): while its injury is bad,
+    /// a random gene may be scarred, at any age; and once it's old, damage
+    /// its repair no longer keeps up with lands on random genes, faster the
+    /// more a hard life has worn it, so that an unworn sprite's genes fall
+    /// to where its body gives out in `decay.ticks`. Returns whether any
+    /// gene weakened.
+    pub(crate) fn age_genes(&mut self, data: &DataPack, rng: &mut ChaCha8Rng) -> bool {
+        let physiology = data.physiology();
+        let ageing = physiology.ageing;
+        let (scar, decay) = (ageing.scar, ageing.decay);
+        let injured = self.body.chems[physiology.indices.injury] > scar.above;
+        let old = self.stage() == LifeStage::Old;
+        // Most ticks nothing can happen, so skip counting the genes.
+        if !injured && !old {
+            return false;
+        }
+        let (n, frailty_sum) = self
+            .genome
+            .genes
+            .iter()
+            .map(frailty)
+            .filter(|&f| f > 0.0)
+            .fold((0_usize, 0.0_f32), |(n, sum), f| (n + 1, sum + f));
+        if n == 0 {
+            return false;
+        }
+        let scarred = (injured && chance(rng, scar.chance)).then_some(scar.hit);
+        let decayed = old && {
+            // A hit takes `hit` times the frailty of the gene it lands
+            // on, so `hit` × the average frailty on average, which
+            // brings the average health of `n` genes down by that over
+            // `n`. The odds are of enough hits to bring it to
+            // `gives_out` in `ticks`.
+            let n = n as f32;
+            let needed = (1.0 - decay.gives_out) * n * n / (decay.hit * frailty_sum);
+            let pace = 1.0 + (ageing.wear_speedup - 1.0) * self.body.wear;
+            chance(rng, (pace * needed / decay.ticks as f32).min(1.0))
+        };
+        let decayed = decayed.then_some(decay.hit);
+        let mut weakened = false;
+        let mut mind = false;
+        for hit in [scarred, decayed].into_iter().flatten() {
+            let nth = uniform(rng, n as u64) as usize;
+            let (index, gene) = self
+                .genome
+                .genes
+                .iter()
+                .enumerate()
+                .filter(|(_, gene)| frailty(gene) > 0.0)
+                .nth(nth)
+                .expect("the nth of n frail genes");
+            let health = &mut self.health[index];
+            *health = (*health - hit * frailty(gene)).max(0.0);
+            weakened = true;
+            mind |= matches!(gene, Gene::Instinct { .. } | Gene::AttentionInstinct { .. });
+        }
+        if mind {
+            self.express(data);
+        } else if weakened {
+            // The brain reads only its instincts' health.
+            self.express_body(data);
+        }
+        weakened
+    }
+
+    /// Grows the sprite to its life stage on the tick `tick` (M2 design
+    /// §9.2): if that's a new one, its genes are expressed afresh for it,
+    /// leaving what it has learned as it was. Returns the stage it was in
+    /// and the new one, if it has one.
+    pub(crate) fn grow(&mut self, tick: u64, data: &DataPack) -> Option<(LifeStage, LifeStage)> {
+        let was = self.stage();
+        let stage = self
+            .program
+            .traits
+            .life_stage(self.age(tick), self.sooner(data));
+        if stage == was {
+            return None;
+        }
+        self.stage = Some(stage);
+        self.express(data);
+        Some((was, stage))
     }
 
     /// A newborn with `genome` on `pos`, born on the tick `born` (design §4.7).
     pub(crate) fn newborn(genome: Genome, pos: Pos, born: u64, data: &DataPack) -> Sprite {
-        let program = Program::new(&genome, data);
+        Sprite::aged(genome, pos, born, 0, data)
+    }
+
+    /// A sprite with `genome` on `pos` that has just grown up on the tick
+    /// `tick` (M2 design §9.1), with a newborn's body (design §4.7).
+    pub(crate) fn grown_up(genome: Genome, pos: Pos, tick: u64, data: &DataPack) -> Sprite {
+        let (grows_up, _) = Sprite::adulthood(&genome, data);
+        Sprite::aged(genome, pos, tick, grows_up, data)
+    }
+
+    /// The ages, in whole ticks, at which a sprite with `genome` and an
+    /// easy life grows up and grows old (M2 design §9.3).
+    pub(crate) fn adulthood(genome: &Genome, data: &DataPack) -> (u64, u64) {
+        let traits = Program::new(genome, data, LifeStage::Young).traits;
+        let age = |trait_value: f32| libm::ceilf(trait_value) as u64;
+        (age(traits.grows_up), age(traits.grows_old))
+    }
+
+    /// A sprite with `genome` on `pos` that is `age` ticks old on the tick
+    /// `tick`, its genes expressed for its life stage then (M2 design §9.1).
+    /// Its body is a newborn's (design §4.7), and it has learned nothing.
+    pub(crate) fn aged(genome: Genome, pos: Pos, tick: u64, age: u64, data: &DataPack) -> Sprite {
+        // Its traits, which set its stage, don't depend on it.
+        let traits = Program::new(&genome, data, LifeStage::Young).traits;
+        let stage = traits.life_stage(age, 0.0);
+        let program = Program::new(&genome, data, stage);
         let body = Body::newborn(&program, data);
-        let brain = Brain::new(&genome, data);
+        let brain = Brain::new(&genome, data, stage);
+        let genome_len = genome.genes.len();
         Sprite {
             pos,
-            born,
+            born: tick as i64 - age as i64,
             name: None,
             genome,
             program,
+            stage: Some(stage),
+            health: vec![1.0; genome_len],
             body,
             brain,
             action: None,
@@ -109,6 +274,12 @@ impl Sprites {
     /// Every sprite, in ascending ID order.
     pub(crate) fn iter(&self) -> impl Iterator<Item = (EntityId, &Sprite)> {
         self.by_id.iter().map(|(&id, sprite)| (id, sprite))
+    }
+
+    /// Every sprite, in ascending ID order, to change. Where each stands
+    /// isn't theirs to change: `move_to` and `swap` keep the tile index.
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = (EntityId, &mut Sprite)> {
+        self.by_id.iter_mut().map(|(&id, sprite)| (id, sprite))
     }
 
     /// The sprite `id`, if it exists.
@@ -184,7 +355,7 @@ impl Sprites {
             if !map.contains(sprite.pos) || self.on_tile.at(sprite.pos).is_some() {
                 return Err(format!("sprite {} has no tile of its own", id.0));
             }
-            if sprite.born > now {
+            if sprite.born > now as i64 {
                 return Err(format!("sprite {} was born after the save", id.0));
             }
             // The genome first: the brain is checked against it, once it
@@ -193,21 +364,43 @@ impl Sprites {
             if !sprite.genome.fits(data) {
                 return Err(misfit());
             }
-            sprite.brain.params.catch_up(&sprite.genome, data);
+            // A save from before ageing has whole genes (M2 design §9.4).
+            if sprite.health.is_empty() {
+                sprite.health = vec![1.0; sprite.genome.genes.len()];
+            }
+            if sprite.health.len() != sprite.genome.genes.len() {
+                return Err(misfit());
+            }
+            // A save from before life stages has none: its stage is the one
+            // its age gives, from its traits, which don't depend on it.
+            let stage = match sprite.stage {
+                Some(stage) => stage,
+                None => Program::new(&sprite.genome, data, LifeStage::Young)
+                    .traits
+                    .life_stage(sprite.age(now), sprite.sooner(data)),
+            };
+            sprite.stage = Some(stage);
+            sprite.brain.params.catch_up(&sprite.genome, data, stage);
             // Places remembered under other limits, in a save from before
             // they were added, are brought within its pack's (M2 design §7.2).
             sprite
                 .brain
                 .experience
                 .keep_within(data.physiology().remembered_places);
-            if !sprite.body.fits(data) || !sprite.brain.fits(&sprite.genome, data, now) {
+            let fits = |sprite: &Sprite| {
+                sprite.body.fits(data)
+                    && sprite
+                        .brain
+                        .fits(&sprite.genome, data, stage, &sprite.health, now)
+            };
+            if !fits(sprite) {
                 return Err(misfit());
             }
             if sprite.flood.as_ref().is_some_and(|flood| !flood.fits(map)) {
                 return Err(format!("sprite {}'s flood doesn't fit the map", id.0));
             }
             self.on_tile.put(sprite.pos, id);
-            sprite.program = Program::new(&sprite.genome, data);
+            sprite.program = Program::weakened(&sprite.genome, data, stage, &sprite.health);
             sprite.body.chems_before_tick.clone_from(&sprite.body.chems);
         }
         Ok(())
@@ -238,6 +431,25 @@ impl Sprites {
             }
             if objects.is_solid_at(data, pos) {
                 return Err(format!("{id:?} stands on a solid object at {pos:?}"));
+            }
+            if sprite.stage.is_none() {
+                return Err(format!("{id:?} has no life stage"));
+            }
+            let wear = sprite.body.wear;
+            if !(0.0..=1.0).contains(&wear) {
+                return Err(format!("{id:?} has a wear of {wear}, outside 0 to 1"));
+            }
+            if sprite.health.len() != sprite.genome.genes.len() {
+                return Err(format!(
+                    "{id:?} has {} gene healths, but {} genes",
+                    sprite.health.len(),
+                    sprite.genome.genes.len()
+                ));
+            }
+            if let Some(health) = sprite.health.iter().find(|h| !(0.0..=1.0).contains(*h)) {
+                return Err(format!(
+                    "{id:?} has a gene of health {health}, outside 0 to 1"
+                ));
             }
             if sprite.body.chems_before_tick.len() != sprite.body.chems.len() {
                 return Err(format!(
@@ -297,5 +509,159 @@ impl Sprites {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rand_chacha::rand_core::SeedableRng;
+
+    use super::*;
+    use crate::test_util::at;
+
+    /// A sprite of speed 9 and sense radius 10 that grows up at 3,000 ticks
+    /// and old at 6,000, `age` ticks old on tick 10,000.
+    fn sprite(age: u64, data: &DataPack) -> Sprite {
+        let genome = Genome::from_ron(
+            r#"(format: 1, genes: [
+                Trait(trait: "speed", value: 9.0),
+                Trait(trait: "sense_radius", value: 10.0),
+                Trait(trait: "grows_up", value: 3000.0),
+                Trait(trait: "grows_old", value: 6000.0),
+            ])"#,
+            data,
+        )
+        .expect("a valid genome");
+        Sprite::aged(genome, at(0, 0), 10_000, age, data)
+    }
+
+    fn assert_close(actual: f32, expected: f32) {
+        assert!(
+            (actual - expected).abs() < 1e-5,
+            "{actual} should be {expected}"
+        );
+    }
+
+    #[test]
+    fn the_young_walk_slower_until_they_grow_up() {
+        // M2 design §9.5: from 0.67 of its speed at birth, rising steadily.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        assert_close(sprite(0, &data).speed(10_000, &data), 9.0 * 0.67);
+        assert_close(
+            sprite(1_500, &data).speed(10_000, &data),
+            9.0 * (0.67 + 0.33 * 0.5),
+        );
+        assert_close(sprite(3_000, &data).speed(10_000, &data), 9.0);
+    }
+
+    /// The starter, `age` ticks old on tick 100,000: it grows old at
+    /// 13,500 ticks.
+    fn starter(age: u64, data: &DataPack) -> Sprite {
+        Sprite::aged(data.starter().clone(), at(0, 0), 100_000, age, data)
+    }
+
+    /// Ages `sprite`'s genes until its body gives out, or for at most
+    /// `limit` ticks. Returns how many ticks that took.
+    fn until_it_gives_out(sprite: &mut Sprite, data: &DataPack, limit: u32) -> u32 {
+        let mut rng = ChaCha8Rng::seed_from_u64(7);
+        let gives_out = data.physiology().ageing.decay.gives_out;
+        for tick in 1..=limit {
+            sprite.age_genes(data, &mut rng);
+            if sprite.program.vigour <= gives_out {
+                return tick;
+            }
+        }
+        limit
+    }
+
+    /// The average health of `sprite`'s genes that `frailty` picks.
+    fn mean_health(sprite: &Sprite, pick: impl Fn(f32) -> bool) -> f32 {
+        let healths: Vec<f32> = (0..sprite.genome.genes.len())
+            .filter(|&i| pick(frailty(&sprite.genome.genes[i])))
+            .map(|i| sprite.health[i])
+            .collect();
+        healths.iter().sum::<f32>() / healths.len() as f32
+    }
+
+    #[test]
+    fn an_adult_s_genes_stay_whole_while_it_isn_t_hurt() {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let mut adult = starter(6_000, &data);
+        assert_eq!(adult.stage(), LifeStage::Adult);
+        until_it_gives_out(&mut adult, &data, 20_000);
+        assert!(adult.health.iter().all(|&h| h == 1.0));
+        assert_eq!(adult.program.vigour, 1.0);
+    }
+
+    #[test]
+    fn an_old_sprite_s_genes_decay_until_its_body_gives_out_in_about_the_ticks_set() {
+        // M2 design §9.4: 46,500 ticks for an unworn body, a third of that
+        // for the most worn.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let mut easy = starter(20_000, &data);
+        assert_eq!(easy.stage(), LifeStage::Old);
+        let genome = easy.genome.clone();
+        let ticks = until_it_gives_out(&mut easy, &data, 100_000);
+        assert!(
+            (37_000..56_000).contains(&ticks),
+            "an unworn body gave out after {ticks} ticks"
+        );
+        let mut hard = starter(20_000, &data);
+        hard.body.wear = 1.0;
+        let ticks = until_it_gives_out(&mut hard, &data, 100_000);
+        assert!(
+            (12_000..19_000).contains(&ticks),
+            "the most worn body gave out after {ticks} ticks"
+        );
+        // Settings don't weaken, instincts weaken at half the pace of the
+        // body's genes, and none of it is in the genome its eggs get.
+        assert_eq!(mean_health(&easy, |f| f == 0.0), 1.0);
+        let body = 1.0 - mean_health(&easy, |f| f == 1.0);
+        let mind = 1.0 - mean_health(&easy, |f| f == 0.5);
+        assert!(mind < body * 0.75, "the mind lost {mind}, the body {body}");
+        assert_eq!(easy.genome, genome);
+    }
+
+    #[test]
+    fn a_weakened_speed_gene_slows_the_sprite() {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let mut old = starter(20_000, &data);
+        let speed = (0..old.genome.genes.len())
+            .find(|&i| {
+                matches!(
+                    old.genome.genes[i],
+                    Gene::Trait {
+                        which: crate::registry::Trait::Speed,
+                        ..
+                    }
+                )
+            })
+            .expect("the starter has a speed gene");
+        old.health[speed] = 0.5;
+        old.express(&data);
+        // Halfway between the least speed, 4, and its gene's 7.
+        assert_close(old.speed(100_000, &data), 5.5);
+    }
+
+    #[test]
+    fn a_bad_injury_can_scar_a_gene_at_any_age() {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let injury = data.physiology().indices.injury;
+        let mut rng = ChaCha8Rng::seed_from_u64(3);
+        let mut hurt = starter(500, &data);
+        assert_eq!(hurt.stage(), LifeStage::Young);
+        hurt.body.chems[injury] = 0.5;
+        for _ in 0..5_000 {
+            hurt.age_genes(&data, &mut rng);
+        }
+        assert_eq!(hurt.program.vigour, 1.0, "an injury of .5 isn't bad enough");
+        hurt.body.chems[injury] = 0.6;
+        for _ in 0..5_000 {
+            hurt.age_genes(&data, &mut rng);
+        }
+        // About 10 scars, each 0.05 off a gene.
+        let scarred = hurt.health.iter().filter(|&&h| h < 1.0).count();
+        assert!((3..20).contains(&scarred), "{scarred} genes scarred");
+        assert!(hurt.program.vigour < 1.0);
     }
 }

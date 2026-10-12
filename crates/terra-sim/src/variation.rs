@@ -67,7 +67,11 @@ pub(crate) fn varied(genome: &Genome, data: &DataPack, rng: &mut ChaCha8Rng) -> 
             gene
         })
         .collect();
-    Genome { genes }
+    // Only values vary: when each gene works is structural (M2 design §9.2).
+    Genome {
+        genes,
+        switches: genome.switches.clone(),
+    }
 }
 
 #[cfg(test)]
@@ -76,6 +80,7 @@ mod tests {
     use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
+    use crate::ageing::LifeStage;
     use crate::expression::expressions;
     use crate::genome::{EmitterMode, Gene, LocusRef};
     use crate::random::unit;
@@ -315,9 +320,9 @@ mod tests {
         fn a_varied_genome_has_no_flagged_genes(seed: u64) {
             let data = builtin();
             for genome in [data.starter().clone(), every_kind(&data)] {
-                let before = expressions(&genome, &data);
+                let before = expressions(&genome, &data, LifeStage::Adult);
                 let varied = varied(&genome, &data, &mut ChaCha8Rng::seed_from_u64(seed));
-                prop_assert_eq!(expressions(&varied, &data), before);
+                prop_assert_eq!(expressions(&varied, &data, LifeStage::Adult), before);
             }
         }
     }

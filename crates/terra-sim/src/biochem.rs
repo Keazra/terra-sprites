@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::ageing::{LifeStage, frailty, health_of};
 use crate::data::DataPack;
 use crate::events::DeathCause;
 use crate::expression::{Expression, expressions};
@@ -20,8 +21,11 @@ pub struct Traits {
     pub speed: f32,
     /// How far it perceives, in tiles.
     pub sense_radius: f32,
-    /// Ticks until old age.
-    pub lifespan: f32,
+    /// The age it grows old at, in ticks (M2 design §9.3). Genome files
+    /// from before M2 call it `lifespan`.
+    pub grows_old: f32,
+    /// The age it grows up at, in ticks (M2 design §9.3).
+    pub grows_up: f32,
 }
 
 impl Traits {
@@ -29,7 +33,31 @@ impl Traits {
         match which {
             Trait::Speed => self.speed = value,
             Trait::SenseRadius => self.sense_radius = value,
-            Trait::Lifespan => self.lifespan = value,
+            Trait::GrowsOld => self.grows_old = value,
+            Trait::GrowsUp => self.grows_up = value,
+        }
+    }
+
+    /// The age at which a sprite with these traits grows old, in ticks (M2
+    /// design §9.3, §9.4): `grows_old`, brought `sooner` by a hard life,
+    /// but never before it grows up (§9.1).
+    pub(crate) fn grows_old_at(&self, sooner: f32) -> f32 {
+        (self.grows_old * (1.0 - sooner)).max(self.grows_up)
+    }
+
+    /// The life stage of a sprite with these traits at `age` (M2 design
+    /// §9.1): young until it grows up, an adult until it grows old, then
+    /// old. A hard life brings old age `sooner`, by that share of the age
+    /// its genes say (§9.4). One that grows old before it grows up grows
+    /// old as it grows up, and is never an adult.
+    pub(crate) fn life_stage(&self, age: u64, sooner: f32) -> LifeStage {
+        let age = age as f32;
+        if age < self.grows_up {
+            LifeStage::Young
+        } else if age < self.grows_old_at(sooner) {
+            LifeStage::Adult
+        } else {
+            LifeStage::Old
         }
     }
 }
@@ -39,6 +67,9 @@ impl Traits {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Program {
     pub(crate) traits: Traits,
+    /// The average health of its genes that weaken (M2 design §9.4): 1
+    /// while they're whole.
+    pub(crate) vigour: f32,
     /// What each chemical is multiplied by every tick: 1 where no half-life is set.
     decay: Vec<f32>,
     reactions: Vec<Reaction>,
@@ -167,8 +198,20 @@ impl Reaction {
 }
 
 impl Program {
-    /// Compiles `genome`'s expressed genes.
-    pub(crate) fn new(genome: &Genome, data: &DataPack) -> Program {
+    /// Compiles `genome`'s genes expressed at `stage`.
+    pub(crate) fn new(genome: &Genome, data: &DataPack, stage: LifeStage) -> Program {
+        Program::weakened(genome, data, stage, &[])
+    }
+
+    /// The same, each gene's effect weakened to its `health` (M2 design
+    /// §9.4): a feeling's gain, a receptor's, a reaction's rate, and a speed
+    /// or sense trait's reach above the least it can be.
+    pub(crate) fn weakened(
+        genome: &Genome,
+        data: &DataPack,
+        stage: LifeStage,
+        health: &[f32],
+    ) -> Program {
         let range = |which: Trait| data.physiology().traits.range(which);
         // A trait no gene sets takes the middle of its range.
         let middle = |which: Trait| {
@@ -178,7 +221,8 @@ impl Program {
         let mut traits = Traits {
             speed: middle(Trait::Speed),
             sense_radius: middle(Trait::SenseRadius),
-            lifespan: middle(Trait::Lifespan),
+            grows_old: middle(Trait::GrowsOld),
+            grows_up: middle(Trait::GrowsUp),
         };
         let chem = |id: ChemId| data.chemical_index(id).expect("a checked gene");
         let mut decay = vec![1.0; data.chemicals().len()];
@@ -196,7 +240,17 @@ impl Program {
                 receptors: Vec::new(),
             })
             .collect();
-        for (gene, expression) in genome.genes.iter().zip(expressions(genome, data)) {
+        let mut weakening = (0.0, 0);
+        for (index, (gene, expression)) in genome
+            .genes
+            .iter()
+            .zip(expressions(genome, data, stage))
+            .enumerate()
+        {
+            let strength = health_of(health, index);
+            if frailty(gene) > 0.0 {
+                weakening = (weakening.0 + strength, weakening.1 + 1);
+            }
             if expression != Expression::Expressed {
                 continue;
             }
@@ -208,7 +262,7 @@ impl Program {
                     ref reactants,
                     ref products,
                     rate,
-                } => reactions.push(Reaction::new(reactants, products, rate, chem)),
+                } => reactions.push(Reaction::new(reactants, products, rate * strength, chem)),
                 Gene::Emitter {
                     locus,
                     mode,
@@ -226,7 +280,7 @@ impl Program {
                         },
                         invert,
                         threshold,
-                        gain,
+                        gain: gain * strength,
                         chem: chem(id),
                     };
                     match mode {
@@ -246,12 +300,16 @@ impl Program {
                         .iter_mut()
                         .find(|t| t.index == index)
                         .expect("an expressed receptor writes a receptor target");
-                    target.receptors.push((chem(id), threshold, gain));
+                    target
+                        .receptors
+                        .push((chem(id), threshold, gain * strength));
                 }
                 Gene::InitialConcentration { chem: id, value } => initial.push((chem(id), value)),
                 Gene::Trait { which, value } => {
                     let (low, high) = range(which);
-                    traits.set(which, value.clamp(low, high));
+                    let value = value.clamp(low, high);
+                    let weakened = low + (value - low) * strength;
+                    traits.set(which, if frailty(gene) > 0.0 { weakened } else { value });
                 }
                 // The brain's genes (design §5.7) don't touch the chemistry.
                 Gene::BrainParam { .. }
@@ -262,8 +320,17 @@ impl Program {
                 }
             }
         }
+        let (sum, count) = weakening;
+        // A genome with no gene that weakens has nothing to wear down, so
+        // its body gives out as soon as it's old (M2 design §9.4).
+        let vigour = match (count, stage) {
+            (0, LifeStage::Old) => data.physiology().ageing.decay.gives_out,
+            (0, _) => 1.0,
+            _ => sum / count as f32,
+        };
         Program {
             traits,
+            vigour,
             decay,
             reactions,
             level_emitters,
@@ -303,6 +370,10 @@ pub(crate) struct Body {
     /// The injury each cause added lately, fading (design §4.10). A cause
     /// that has never added any has no entry.
     pub(crate) tallies: BTreeMap<DeathCause, f32>,
+    /// How worn a hard life has left the body, from 0 to 1 (M2 design
+    /// §9.4). It never heals. A world saved before it had none.
+    #[serde(default)]
+    pub(crate) wear: f32,
 }
 
 impl Body {
@@ -353,6 +424,7 @@ impl Body {
             chems,
             loci,
             tallies: BTreeMap::new(),
+            wear: 0.0,
         }
     }
 
@@ -417,6 +489,8 @@ pub(crate) struct Senses {
     pub(crate) steps: u32,
     /// Whether it rested during the previous tick.
     pub(crate) resting: bool,
+    /// Its life stage (M2 design §9.1).
+    pub(crate) stage: LifeStage,
 }
 
 /// Step 3 for one sprite (design §4.4). Returns whether its injury has
@@ -499,6 +573,13 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
     chems[indices.energy] -= metabolism.basal
         + metabolism.per_sense_tile * traits.sense_radius
         + steps * metabolism.per_step * pace * pace;
+    // Growing up takes the same energy however long it takes, and a later
+    // old age costs a little all life (M2 design §9.3).
+    let ageing = physiology.ageing;
+    if senses.stage == LifeStage::Young {
+        chems[indices.energy] -= ageing.growth / traits.grows_up;
+    }
+    chems[indices.energy] -= ageing.upkeep * traits.grows_old / 10_000.0;
     for (gut, into, rate) in [
         (indices.food, indices.energy, physiology.digestion.food),
         (indices.water, indices.hydration, physiology.digestion.water),
@@ -515,7 +596,9 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
     } else {
         physiology.stamina.idle
     };
-    chems[indices.injury] -= physiology.healing;
+    // Repair is what fails as genes weaken, so a body heals slower as they
+    // do (M2 design §9.4).
+    chems[indices.injury] -= physiology.healing * program.vigour;
 
     let age = senses.age as f32;
     let injury = physiology.injury;
@@ -530,7 +613,13 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
             chems[indices.hydration] <= 0.0,
             injury.dehydration,
         ),
-        (DeathCause::OldAge, age > traits.lifespan, injury.old_age),
+        // Once an old sprite's genes have weakened to where its body
+        // gives out (M2 design §9.4).
+        (
+            DeathCause::OldAge,
+            senses.stage == LifeStage::Old && program.vigour <= ageing.decay.gives_out,
+            injury.old_age,
+        ),
     ];
     for tally in body.tallies.values_mut() {
         *tally *= physiology.tally_fade;
@@ -542,9 +631,24 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
         }
     }
 
+    // A hard life wears the body for good (M2 design §9.4), which brings
+    // old age sooner and speeds the decay of its genes then. It reads the
+    // body, not feelings, which genes could switch off.
+    let grows_old_at = traits.grows_old_at(ageing.sooner * body.wear);
+    let wear = ageing.wear;
+    let mut worn = wear.injured * chems[indices.injury].clamp(0.0, 1.0);
+    if chems[indices.energy] < wear.low {
+        worn += wear.starving;
+    }
+    if chems[indices.hydration] < wear.low {
+        worn += wear.parched;
+    }
+    body.wear = (body.wear + worn).min(1.0);
+
     let loci = &mut body.loci;
     loci[indices.always] = 1.0;
-    loci[indices.age] = (age / traits.lifespan).min(1.0);
+    // It reaches 1 as the sprite grows old, sooner for a worn one (§9.3).
+    loci[indices.age] = (age / grows_old_at).min(1.0);
     loci[indices.nearby_sprites] = senses.nearby_sprites;
     loci[indices.moving] = if senses.steps > 0 { 1.0 } else { 0.0 };
     loci[indices.resting] = if senses.resting { 1.0 } else { 0.0 };
@@ -553,6 +657,7 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_util::builtin_changing;
 
     fn builtin() -> DataPack {
         DataPack::builtin().expect("built-in data pack is valid")
@@ -614,6 +719,7 @@ mod tests {
             let program = Program::new(
                 &Genome::from_ron(&text, &data).expect("a valid genome"),
                 &data,
+                LifeStage::Adult,
             );
             let body = Body::newborn(&program, &data);
             Subject {
@@ -666,16 +772,30 @@ mod tests {
             step(&self.program, &mut self.body, &senses, &self.data)
         }
 
-        /// Runs step 3 with the sprite at rest, as if `age` ticks old. Says whether it's dying.
+        /// Runs step 3 with the sprite at rest, an adult `age` ticks old. Says whether it's dying.
         fn step_at(&mut self, age: u64) -> bool {
-            self.step_with(Senses {
-                age,
-                ..Senses::default()
-            })
+            self.step_with(Senses { age, ..adult() })
         }
 
         fn step(&mut self) -> bool {
             self.step_at(0)
+        }
+
+        /// Runs step 3 with the sprite old and at rest. Says whether it's dying.
+        fn step_old(&mut self) -> bool {
+            self.step_with(Senses {
+                age: 30_000,
+                stage: LifeStage::Old,
+                ..Senses::default()
+            })
+        }
+    }
+
+    /// What an adult at rest senses.
+    fn adult() -> Senses {
+        Senses {
+            stage: LifeStage::Adult,
+            ..Senses::default()
         }
     }
 
@@ -872,13 +992,15 @@ mod tests {
         assert_eq!(sprite.locus("exploration_mod"), 1.0);
     }
 
-    /// A sprite with the built-in physiology, at speed 8, sense radius 10 and
-    /// a lifespan of 20,000 ticks, whose genome also holds `genes`.
+    /// A sprite with the built-in physiology, at speed 8 and sense radius
+    /// 10, growing up at 2,000 ticks and old at 20,000, whose genome also
+    /// holds `genes`.
     fn physical(genes: &[&str]) -> Subject {
         let mut all = vec![
             r#"Trait(trait: "speed", value: 8.0)"#,
             r#"Trait(trait: "sense_radius", value: 10.0)"#,
-            r#"Trait(trait: "lifespan", value: 20000.0)"#,
+            r#"Trait(trait: "grows_up", value: 2000.0)"#,
+            r#"Trait(trait: "grows_old", value: 20000.0)"#,
         ];
         all.extend_from_slice(genes);
         Subject::new(builtin(), &all)
@@ -932,11 +1054,12 @@ mod tests {
             &[
                 r#"Trait(trait: "speed", value: 12.0)"#,
                 r#"Trait(trait: "sense_radius", value: 10.0)"#,
+                r#"Trait(trait: "grows_old", value: 20000.0)"#,
             ],
         );
         sprite.step_with(Senses {
             steps: 2,
-            ..Senses::default()
+            ..adult()
         });
         let steps = 2.0 * 0.0002 * (12.0f32 / 8.0) * (12.0 / 8.0);
         assert_close(
@@ -954,7 +1077,7 @@ mod tests {
         assert_close(sprite.level("stamina"), 0.5005);
         sprite.step_with(Senses {
             resting: true,
-            ..Senses::default()
+            ..adult()
         });
         assert_close(sprite.level("stamina"), 0.5025);
     }
@@ -1005,10 +1128,18 @@ mod tests {
         assert_close(parched.level("injury"), net);
 
         let mut old = physical(&[]);
-        old.step_at(20_000);
-        assert_eq!(old.level("injury"), 0.0, "at its lifespan, not yet past it");
-        old.step_at(20_001);
-        assert_close(old.level("injury"), 0.0006 - 0.0001);
+        old.program.vigour = 0.51;
+        old.step_old();
+        assert_eq!(old.level("injury"), 0.0, "its body hasn't given out yet");
+        old.program.vigour = 0.5;
+        old.step_old();
+        // Genes at half their health heal at half the rate.
+        assert_close(old.level("injury"), 0.0006 - 0.0001 * 0.5);
+
+        let mut adult = physical(&[]);
+        adult.program.vigour = 0.5;
+        adult.step();
+        assert_eq!(adult.level("injury"), 0.0, "only an old body gives out");
     }
 
     #[test]
@@ -1019,20 +1150,181 @@ mod tests {
             nearby_sprites: 0.5,
             steps: 1,
             resting: false,
+            stage: LifeStage::Adult,
         });
         assert_eq!(sprite.locus("always"), 1.0);
-        assert_eq!(sprite.locus("age"), 0.25, "5,000 of a 20,000-tick lifespan");
+        assert_eq!(
+            sprite.locus("age"),
+            0.25,
+            "5,000 of the 20,000 ticks to old age"
+        );
         assert_eq!(sprite.locus("nearby_sprites"), 0.5);
         assert_eq!(sprite.locus("moving"), 1.0);
         assert_eq!(sprite.locus("resting"), 0.0);
         sprite.step_with(Senses {
             age: 40_000,
             resting: true,
-            ..Senses::default()
+            ..adult()
         });
-        assert_eq!(sprite.locus("age"), 1.0, "capped at 1 past the lifespan");
+        assert_eq!(sprite.locus("age"), 1.0, "capped at 1 once old");
         assert_eq!(sprite.locus("moving"), 0.0);
         assert_eq!(sprite.locus("resting"), 1.0);
+    }
+
+    #[test]
+    fn a_worn_sprite_s_age_sensor_reaches_1_as_it_grows_old() {
+        // M2 design §9.3, §9.4: the most worn sprite grows old at (1 −
+        // `sooner`) of its `grows_old`, here .67 of 20,000 ticks.
+        let mut sprite = physical(&[]);
+        sprite.body.wear = 1.0;
+        sprite.step_at(6_700);
+        assert_close(sprite.locus("age"), 0.5);
+    }
+
+    #[test]
+    fn a_hard_life_brings_old_age_sooner() {
+        // M2 design §9.4: `sooner` is a share of the age its genes say.
+        let traits = physical(&[]).program.traits;
+        assert_eq!(traits.life_stage(19_999, 0.0), LifeStage::Adult);
+        assert_eq!(traits.life_stage(20_000, 0.0), LifeStage::Old);
+        assert_eq!(traits.life_stage(14_999, 0.25), LifeStage::Adult);
+        assert_eq!(traits.life_stage(15_000, 0.25), LifeStage::Old);
+        assert_eq!(
+            traits.life_stage(1_000, 0.99),
+            LifeStage::Young,
+            "never before it grows up"
+        );
+        assert_eq!(
+            traits.grows_old_at(0.99),
+            2_000.0,
+            "never before it grows up"
+        );
+    }
+
+    #[test]
+    fn growing_up_costs_energy_spread_over_childhood() {
+        // Growing up at 2,000 ticks, it spends 0.3 / 2,000 each young tick
+        // on growing (M2 design §9.3).
+        let mut young = physical(&[]);
+        young.step_with(Senses::default());
+        let mut adult = physical(&[]);
+        adult.step();
+        assert_close(adult.level("energy") - young.level("energy"), 0.3 / 2000.0);
+    }
+
+    #[test]
+    fn a_later_old_age_costs_a_little_energy_every_tick() {
+        // The built-in pack's upkeep is 0 until genes evolve (M2 design
+        // §9.3), so this sets one.
+        let data = builtin_changing("physiology.ron", &[("upkeep: 0.0,", "upkeep: 0.00001,")]);
+        let early = r#"Trait(trait: "grows_old", value: 20000.0)"#;
+        let late = r#"Trait(trait: "grows_old", value: 50000.0)"#;
+        let with = |grows_old| {
+            [
+                r#"Trait(trait: "speed", value: 8.0)"#,
+                r#"Trait(trait: "sense_radius", value: 10.0)"#,
+                r#"Trait(trait: "grows_up", value: 2000.0)"#,
+                grows_old,
+            ]
+        };
+        let mut early = Subject::new(data.clone(), &with(early));
+        let mut late = Subject::new(data, &with(late));
+        early.step();
+        late.step();
+        // 0.00001 a tick for every 10,000 ticks: 0.00002 against 0.00005.
+        assert_close(early.level("energy") - late.level("energy"), 0.00003);
+    }
+
+    #[test]
+    fn a_hard_life_wears_the_body_for_good() {
+        let mut sprite = physical(&[]);
+        sprite.step();
+        assert_eq!(sprite.body.wear, 0.0, "a full, unhurt body doesn't wear");
+        sprite.set("energy", 0.2);
+        sprite.step();
+        assert_close(sprite.body.wear, 0.0002);
+        sprite.set("energy", 1.0);
+        sprite.set("hydration", 0.2);
+        sprite.step();
+        assert_close(sprite.body.wear, 0.0004);
+        sprite.set("hydration", 1.0);
+        sprite.set("injury", 0.5001);
+        sprite.step();
+        // 0.001 for each unit of injury, after this tick's healing.
+        assert_close(sprite.body.wear, 0.0004 + 0.0005);
+        sprite.set("injury", 0.0);
+        for _ in 0..100 {
+            sprite.step();
+        }
+        assert_close(sprite.body.wear, 0.0009);
+    }
+
+    #[test]
+    fn a_weakened_gene_has_less_effect() {
+        // M2 design §9.4: a reaction runs, a feeling rises and speed reaches
+        // above its least in proportion to the gene's health; a setting,
+        // such as when it grows old, doesn't weaken.
+        let data = quiet();
+        let text = r#"(format: 1, genes: [
+            Reaction(reactants: [("h0", 1)], products: [("h1", 1)], rate: 0.5),
+            Emitter(locus: Chem("h3"), mode: Level, threshold: 0.0, gain: 0.2, chem: "h2"),
+            Trait(trait: "speed", value: 8.0),
+            Trait(trait: "grows_old", value: 20000.0),
+        ])"#;
+        let genome = Genome::from_ron(text, &data).expect("a valid genome");
+        let health = [0.5, 0.25, 0.5, 0.0];
+        let program = Program::weakened(&genome, &data, LifeStage::Adult, &health);
+        assert_close(program.traits.speed, 4.0 + (8.0 - 4.0) * 0.5);
+        assert_eq!(program.traits.grows_old, 20_000.0);
+        // The average of the three genes that weaken.
+        assert_close(program.vigour, (0.5 + 0.25 + 0.5) / 3.0);
+        let mut sprite = Subject {
+            body: Body::newborn(&program, &data),
+            program,
+            data,
+        };
+        sprite.set("h0", 0.4);
+        sprite.set("h3", 0.4);
+        sprite.step();
+        // The reaction at a rate of 0.25 moves 0.1, and the feeling at a
+        // gain of 0.05 emits 0.02.
+        assert_close(sprite.level("h1"), 0.1);
+        assert_close(sprite.level("h2"), 0.02);
+    }
+
+    #[test]
+    fn a_body_with_nothing_to_weaken_gives_out_when_old() {
+        // M2 design §9.4: settings alone never weaken, so an old sprite
+        // with no other genes would otherwise live for ever.
+        let data = quiet();
+        let text = r#"(format: 1, genes: [Trait(trait: "grows_old", value: 20000.0)])"#;
+        let genome = Genome::from_ron(text, &data).expect("a valid genome");
+        let adult = Program::weakened(&genome, &data, LifeStage::Adult, &[1.0]);
+        assert_eq!(adult.vigour, 1.0);
+        let old = Program::weakened(&genome, &data, LifeStage::Old, &[1.0]);
+        assert_eq!(old.vigour, data.physiology().ageing.decay.gives_out);
+    }
+
+    #[test]
+    fn whole_genes_are_as_strong_as_ever() {
+        let data = builtin();
+        let genome = data.starter().clone();
+        let whole = vec![1.0; genome.genes.len()];
+        let weakened = Program::weakened(&genome, &data, LifeStage::Adult, &whole);
+        let born = Program::new(&genome, &data, LifeStage::Adult);
+        assert_eq!(weakened.traits, born.traits);
+        assert_eq!(weakened.vigour, 1.0);
+    }
+
+    #[test]
+    fn weakened_genes_heal_slower_but_recover_stamina_as_ever() {
+        let mut sprite = physical(&[]);
+        sprite.program.vigour = 0.5;
+        sprite.set("injury", 0.5);
+        sprite.set("stamina", 0.5);
+        sprite.step();
+        assert_close(sprite.level("injury"), 0.5 - 0.00005);
+        assert_close(sprite.level("stamina"), 0.5 + 0.0005);
     }
 
     #[test]
@@ -1118,7 +1410,7 @@ mod tests {
         /// Trait genes: the one gene type allowed to change physical costs.
         fn traits() -> impl Strategy<Value = Vec<Gene>> {
             (4.0f32..12.0, 6.0f32..14.0, 20_000.0f32..30_000.0).prop_map(
-                |(speed, sense, lifespan)| {
+                |(speed, sense, grows_old)| {
                     vec![
                         Gene::Trait {
                             which: Trait::Speed,
@@ -1129,8 +1421,8 @@ mod tests {
                             value: sense,
                         },
                         Gene::Trait {
-                            which: Trait::Lifespan,
-                            value: lifespan,
+                            which: Trait::GrowsOld,
+                            value: grows_old,
                         },
                     ]
                 },
@@ -1139,7 +1431,8 @@ mod tests {
 
         /// A newborn with `genes`.
         fn newborn(genes: Vec<Gene>, data: &DataPack) -> (Program, Body) {
-            let program = Program::new(&Genome { genes }, data);
+            let program =
+                Program::new(&Genome::switched(genes, Vec::new()), data, LifeStage::Adult);
             let body = Body::newborn(&program, data);
             (program, body)
         }
@@ -1168,6 +1461,7 @@ mod tests {
                     nearby_sprites: (roll % 5) as f32 / 4.0,
                     steps: roll % 3,
                     resting: roll % 7 == 0,
+                    stage: LifeStage::Adult,
                 };
                 // What verbs did last tick: food, water or injury, and a pulse.
                 let injection = [
@@ -1289,7 +1583,7 @@ mod tests {
     /// A newborn made from the built-in starter genome, unvaried.
     fn starter() -> Subject {
         let data = builtin();
-        let program = Program::new(data.starter(), &data);
+        let program = Program::new(data.starter(), &data, LifeStage::Adult);
         let body = Body::newborn(&program, &data);
         Subject {
             data,
@@ -1393,6 +1687,7 @@ mod tests {
         Program::new(
             &Genome::from_ron(&text, &data).expect("a valid genome"),
             &data,
+            LifeStage::Adult,
         )
     }
 
@@ -1401,16 +1696,19 @@ mod tests {
         let traits = program(&[
             r#"Trait(trait: "speed", value: 30.0)"#,
             r#"Trait(trait: "sense_radius", value: 9.0)"#,
-            r#"Trait(trait: "lifespan", value: 100.0)"#,
+            r#"Trait(trait: "grows_old", value: 100.0)"#,
+            r#"Trait(trait: "grows_up", value: 99000.0)"#,
         ])
         .traits;
-        // Physiology's ranges: speed 4–12, sense_radius 6–14, lifespan 20,000–200,000.
+        // Physiology's ranges: speed 4–12, sense_radius 6–14, grows_old
+        // 6,000–60,000, grows_up 1,500–13,500.
         assert_eq!(
             traits,
             Traits {
                 speed: 12.0,
                 sense_radius: 9.0,
-                lifespan: 20_000.0
+                grows_old: 6_000.0,
+                grows_up: 13_500.0,
             }
         );
     }
@@ -1422,7 +1720,8 @@ mod tests {
             Traits {
                 speed: 8.0,
                 sense_radius: 10.0,
-                lifespan: 110_000.0
+                grows_old: 33_000.0,
+                grows_up: 7_500.0,
             }
         );
     }

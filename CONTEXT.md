@@ -139,7 +139,7 @@ A living creature of the terrarium, with a genome, a body and a brain. Sprites d
 _Avoid_: agent, critter, pet
 
 **Genome**:
-A sprite's ordered list of genes, fixed for its whole life. It decides how the body feels, never what happens to it.
+A sprite's ordered list of genes, fixed for its whole life. It decides how the body feels, never what happens to it. Its genes' health can fall as it ages, but the genome itself, which its eggs get, doesn't change.
 _Avoid_: DNA
 
 **Gene**:
@@ -168,6 +168,14 @@ A gene that sets something an earlier gene in the genome already set, so it has 
 
 **Unknown gene**:
 A gene this version of the game can't read. It's kept exactly as it is, and has no effect.
+
+**Dormant gene** (M2):
+A gene switched off at the sprite's life stage, such as one that works only from adulthood in a young sprite. It's in the genome, but has no effect until its stage comes.
+_Avoid_: inactive gene, silenced gene
+
+**Switch** (M2):
+The life stages a gene works in: from one stage (young, if it names none) until another (never, if it names none). Traits and starting levels can't switch.
+_Avoid_: toggle, trigger
 
 **Unmatched gene**:
 A gene that names a category this world doesn't have, such as one from a newer version of the game. It's kept exactly as it is, and has no effect.
@@ -221,7 +229,7 @@ The sprite whose hit a sprite has just felt: the source of its `was_hit` pulse. 
 _Avoid_: aggressor, enemy
 
 **Trait**:
-A body property the genome sets, within limits and at a cost that physiology fixes: speed, sense radius or lifespan.
+A body property the genome sets, within limits and at a cost that physiology fixes: speed, sense radius, when it grows up or when it grows old.
 
 **Physiology**:
 The body's fixed rules: metabolism, digestion, water loss, healing, and the injury that starvation, dehydration and old age cause. Genes can't change them.
@@ -231,12 +239,36 @@ _Avoid_: physics (for the body)
 The physical chemical that measures harm. A sprite dies when its injury reaches 1.
 _Avoid_: damage, health
 
+**Life stage** (M2):
+Where a sprite is in its life: young, adult or old. Its genes set when it grows up and when it grows old, and some genes switch with it. Code may call it `stage` where only a sprite's is meant.
+_Avoid_: stage alone in what the player reads (that's an object's), age group
+
+**Grows up** (M2):
+The age at which a sprite stops being young: its `grows_up` trait. Growing up costs energy, spread over childhood.
+_Avoid_: matures, comes of age
+
+**Grows old** (M2):
+The age at which a sprite becomes old: its `grows_old` trait, brought sooner by wear. It replaced lifespan.
+_Avoid_: lifespan (the M1 word for it), dies of old age (that comes later)
+
+**Gene health** (M2):
+How whole one of a sprite's genes is, from 1 down to 0. It only falls, and the gene works in proportion to it. Not inherited. A sprite has no health of its own: how hurt it is, is its injury.
+_Avoid_: gene damage (that's what lowers it), mutation (that's inherited, from Slice 24), gene quality (Slice 24)
+
+**Decay** (M2):
+Old age's harm to the genome: once a sprite is old, its repair stops keeping up, and damage lands on random genes, lowering their health. An instinct takes half.
+_Avoid_: decline, senescence
+
+**Scar** (M2):
+A little health a bad injury takes off a random gene for good, at any age.
+_Avoid_: wound, mutation
+
 **Old age**:
-Being past its lifespan, which injures a sprite a little every tick.
-_Avoid_: senescence
+What kills an old sprite once its genes' average health has fallen to where its body gives out: it injures it a little every tick.
+_Avoid_: senescence, past its lifespan (lifespan is now when it grows old)
 
 **Wear** (M2):
-Lasting harm a hard life leaves on a sprite, from hunger, thirst, injury and fear, which healing doesn't undo. Once a sprite is old, the more wear it carries, the faster it declines.
+Lasting harm a hard life leaves on a sprite's body, from starving, going without water and injury, which healing doesn't undo. The more wear it carries, the sooner it grows old and the faster its genes decay.
 _Avoid_: stress (that's what causes it), damage, injury (injury heals)
 
 **Cause of death**:
@@ -687,7 +719,7 @@ _Avoid_: soak, ecological soak
 
 **Grown-up death**:
 A death in the viability run after tick 10,000. The first 10,000 ticks count as childhood, since every sprite there starts as a newborn. A newborn dying of thirst is natural, but a grown sprite dying of hunger or thirst means it can't fend for itself (A4).
-_Avoid_: adult death (sprites have no life stages until M2)
+_Avoid_: adult death (A4 counts by tick, not by life stage, so the founders, who start as adults since M2, count as children until tick 10,000)
 
 **Soak**:
 A run of a million ticks with a random script of the Cursor's commands, looking only for panics and broken invariants (A7).

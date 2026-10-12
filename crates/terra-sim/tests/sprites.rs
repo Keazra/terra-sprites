@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 
 use terra_sim::{
     ChemicalKind, DataPack, DeathCause, EmitterMode, EntityId, EventKind, Expression, GeneView,
-    Genome, Map, Pos, Scenario, ScriptedAction, Trait, Traits, World, WorldConfig,
+    Genome, LifeStage, Map, Pos, Scenario, ScriptedAction, Trait, Traits, World, WorldConfig,
 };
 
 #[test]
@@ -45,6 +45,26 @@ fn the_first_population_starts_between_60_and_100_percent_full() {
 }
 
 #[test]
+fn the_first_population_are_adults_of_all_ages() {
+    // M2 design §9.1: ages drawn through adulthood, so a fresh world isn't
+    // all children and doesn't all grow old at once.
+    let data = builtin();
+    let world = World::new(WorldConfig::builtin(&data), data, 3);
+    let mut ages = BTreeSet::new();
+    for sprite in world.sprites() {
+        assert_eq!(sprite.life_stage(), LifeStage::Adult);
+        let traits = sprite.traits();
+        let age = sprite.age() as f32;
+        assert!(
+            (traits.grows_up..traits.grows_old).contains(&age),
+            "age {age} in {traits:?}"
+        );
+        ages.insert(sprite.age());
+    }
+    assert!(ages.len() > 20, "drawn, not all the same");
+}
+
+#[test]
 fn a_preset_may_set_20_to_100_sprites_or_leave_them_out() {
     let data = builtin();
     let with =
@@ -74,6 +94,7 @@ fn lone_sprite(data: DataPack, genome: Option<&str>) -> World {
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns: &[Pos { x: 0, y: 0 }],
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }
@@ -132,31 +153,44 @@ fn a_motionless_sprite_gets_hungry_and_thirsty_then_dies_of_dehydration() {
 fn a_motionless_sprite_that_never_thirsts_dies_of_starvation() {
     let data = builtin_changing(
         "physiology.ron",
-        &[("hydration_loss: 0.00033", "hydration_loss: 0.0")],
+        &[
+            ("hydration_loss: 0.00033", "hydration_loss: 0.0"),
+            ("growth: 0.3,", "growth: 0.0,"),
+        ],
     );
     let mut world = lone_sprite(data, None);
-    // Energy lasts about 6,000 ticks at sense radius 10, then injury kills in about 1,000.
+    // Energy lasts about 6,000 ticks at sense radius 10, then injury kills
+    // in about 1,000. Growing up would cost more (M2 design §9.3), so this
+    // sprite grows for nothing.
     let death = first_death(&mut world, 9_000);
     assert_eq!(death.cause, DeathCause::Starvation);
     assert!((6_000..8_000).contains(&death.age), "{death:?}");
 }
 
 #[test]
-fn a_sprite_that_never_hungers_or_thirsts_dies_of_old_age() {
+fn a_sprite_that_never_hungers_or_thirsts_dies_of_old_age_once_its_genes_give_out() {
     let data = builtin_changing(
         "physiology.ron",
         &[
             ("basal: 0.0001,", "basal: 0.0,"),
             ("per_sense_tile: 0.0000067,", "per_sense_tile: 0.0,"),
             ("hydration_loss: 0.00033", "hydration_loss: 0.0"),
+            ("growth: 0.3,", "growth: 0.0,"),
+            ("ticks: 46500,", "ticks: 1000,"),
         ],
     );
-    let genome = r#"(format: 1, genes: [Trait(trait: "lifespan", value: 20000.0)])"#;
+    let genome = r#"(format: 1, genes: [
+        Trait(trait: "speed", value: 8.0),
+        Trait(trait: "sense_radius", value: 10.0),
+        Trait(trait: "grows_old", value: 20000.0),
+    ])"#;
     let mut world = lone_sprite(data, Some(genome));
-    // Past its lifespan, a sprite dies within about 2,000 ticks.
-    let death = first_death(&mut world, 23_000);
+    // It grows old at 20,000 ticks, its two genes that weaken fall to half
+    // in about 1,000 more, and then old age kills it in about 1,800 (M2
+    // design §9.4).
+    let death = first_death(&mut world, 26_000);
     assert_eq!(death.cause, DeathCause::OldAge);
-    assert!((21_500..22_500).contains(&death.age), "{death:?}");
+    assert!((21_800..24_500).contains(&death.age), "{death:?}");
 }
 
 /// Object types for testing where solid objects may go.
@@ -189,6 +223,7 @@ fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> Result<World, terra_sim::S
             objects,
             sprites: &sprites,
             scripted: &rests,
+            newborns: &[],
         },
         data,
         1,
@@ -209,6 +244,7 @@ fn sprites_see_water_and_each_other_in_a_pack_with_no_object_types_for_them() {
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
     for _ in 0..2_000 {
@@ -291,7 +327,7 @@ fn a_sprite_shows_its_age_and_its_traits_as_its_body_has_them() {
     // takes the middle of its range, 10 (design §4.8).
     let genome = r#"(format: 1, genes: [
         Trait(trait: "speed", value: 50.0),
-        Trait(trait: "lifespan", value: 61234.5),
+        Trait(trait: "grows_old", value: 61234.5),
     ])"#;
     let mut world = lone_sprite(builtin(), Some(genome));
     assert_eq!(world.sprites().next().expect("the sprite").age(), 0);
@@ -305,7 +341,10 @@ fn a_sprite_shows_its_age_and_its_traits_as_its_body_has_them() {
         Traits {
             speed: 12.0,
             sense_radius: 10.0,
-            lifespan: 61234.5
+            // Clamped to 60,000.
+            grows_old: 60000.0,
+            // The middle of its range, with no gene for it.
+            grows_up: 7500.0,
         }
     );
 }

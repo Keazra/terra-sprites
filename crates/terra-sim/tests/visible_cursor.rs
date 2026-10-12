@@ -27,6 +27,7 @@ fn world(rows: &[&str], sprite: Pos, genes: &str) -> World {
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns: &[],
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }
@@ -218,6 +219,7 @@ fn eating_a_berry(berry: Pos) -> World {
         objects: &[(berry, "berry")],
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }
@@ -318,6 +320,7 @@ fn a_sprite_that_fears_the_cursor_backs_away_from_it_and_one_that_likes_it_goes_
             objects: &[],
             sprites: &sprites,
             scripted: &scripted,
+            newborns: &[],
         };
         let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
         show_cursor(&mut world, at(2, 2));
@@ -376,6 +379,7 @@ fn afraid_of_the_cursor_in(rows: &[&str], rests: usize) -> World {
         objects: &[],
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
     show_cursor(&mut world, at(2, 2));
@@ -459,6 +463,7 @@ fn about_to_be_shoved_into(into: &str, visible: bool, genes: &str) -> World {
         objects: &[(at(3, 2), into)],
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
     world.submit(Command::MoveCursor { tile: at(1, 2) });

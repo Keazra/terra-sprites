@@ -176,6 +176,7 @@ fn an_unknown_gene_survives_a_save_and_load_byte_for_byte() {
         objects: &[],
         sprites: &[(at(1, 1), Some(genome.clone()))],
         scripted: &[],
+        newborns: &[],
     };
     let world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
 
@@ -284,6 +285,7 @@ fn golden_world() -> World {
         ],
         sprites: &[(at(3, 3), None), (at(9, 2), None)],
         scripted: &[],
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data, 2026).expect("a valid scenario");
     let [first, second] = sprite_ids(&world);

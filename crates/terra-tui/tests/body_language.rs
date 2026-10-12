@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Size};
-use ratatui::style::Color;
+use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
     ActionView, DataPack, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos, Progress,
@@ -34,6 +34,11 @@ fn feeling(levels: &[(&str, f32)]) -> Genome {
 /// A field with a sprite on each of `sprites`' tiles, with its genome, before
 /// its first tick.
 fn field(sprites: &[(Pos, Genome)]) -> World {
+    field_with_newborns(sprites, &[])
+}
+
+/// The same, those on `newborns` newborns and the rest grown up.
+fn field_with_newborns(sprites: &[(Pos, Genome)], newborns: &[Pos]) -> World {
     let pack = pack();
     let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
     let sprites: Vec<(Pos, Option<Genome>)> = sprites
@@ -45,6 +50,7 @@ fn field(sprites: &[(Pos, Genome)]) -> World {
         objects: &[],
         sprites: &sprites,
         scripted: &[],
+        newborns,
     };
     World::from_scenario(scenario, pack, 7).expect("valid scenario")
 }
@@ -121,6 +127,26 @@ fn the_selected_sprite_takes_its_colour_too() {
     let screen = render(&app, &world);
     assert_eq!(screen[cell(at(2, 3))].symbol(), "☻");
     assert_eq!(screen[cell(at(2, 3))].fg, Color::Cyan);
+}
+
+#[test]
+fn the_young_are_drawn_small() {
+    // M2 design §9.6: `ö` in CP437 and `a` in ASCII, selected or not.
+    let (young, grown) = (at(2, 3), at(5, 3));
+    let world = field_with_newborns(&[(young, feeling(&[])), (grown, feeling(&[]))], &[young]);
+    for (theme, small, big) in [(Theme::cp437(), "ö", "☺"), (Theme::ascii(), "a", "@")] {
+        let mut app = app_for(&world, theme);
+        let screen = render(&app, &world);
+        assert_eq!(screen[cell(young)].symbol(), small);
+        assert_eq!(screen[cell(grown)].symbol(), big);
+        app.apply(Action::SelectNext, &world);
+        let screen = render(&app, &world);
+        assert_eq!(screen[cell(young)].symbol(), small);
+        assert!(
+            screen[cell(young)].modifier.contains(Modifier::REVERSED),
+            "the selected young sprite is in reverse video"
+        );
+    }
 }
 
 #[test]
@@ -404,6 +430,7 @@ fn the_resting_emote_shows_for_a_second_at_16x_and_at_max_through_the_frame_loop
             objects: &[],
             sprites: &sprites,
             scripted: &scripted,
+            newborns: &[],
         };
         let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
         let id = world.sprites().next().expect("a sprite").id();

@@ -22,6 +22,7 @@ fn world(rows: &[&str], objects: &[(Pos, &str)], sprite: Pos, script: &[Scripted
         objects,
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }
@@ -247,6 +248,7 @@ fn world_of(rows: &[&str], objects: &[(Pos, &str)], sprites: &[(Pos, &[ScriptedA
         objects,
         sprites: &walkers,
         scripted: &scripted,
+        newborns: &[],
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }
@@ -480,6 +482,7 @@ fn playing_with_a_sprite_eases_both_sprites_boredom_and_loneliness_at_once() {
         objects: &[],
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
     let levels = |world: &World| {
@@ -612,6 +615,7 @@ fn feeling_world_in(
         objects,
         sprites: &sprites,
         scripted: &scripted,
+        newborns: &[],
     };
     World::from_scenario(scenario, data, 1).expect("a valid scenario")
 }
