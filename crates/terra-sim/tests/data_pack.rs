@@ -771,6 +771,14 @@ fn breeding_s_drive_must_be_a_need() {
 }
 
 #[test]
+fn an_egg_hatches_and_a_sprite_rests_for_at_least_a_tick() {
+    // M2 design §10: with no rest, a female mated in a tick could lay again
+    // in the same tick.
+    assert_invalid_physiology("hatches: 750", "hatches: 0", "breeding.hatches");
+    assert_invalid_physiology("rest: 1500", "rest: 0", "breeding.rest");
+}
+
+#[test]
 fn breeding_s_hormone_levels_are_fractions() {
     // M2 design §10: a hormone's level runs from 0 to 1.
     assert_invalid_physiology(

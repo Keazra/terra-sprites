@@ -570,6 +570,11 @@ impl PhysiologyEntry {
         if breeding.hatches == 0 {
             return Err("`breeding.hatches` must be at least 1 tick".into());
         }
+        // With no rest, a female mated in a tick could lay again in the same
+        // tick (M2 design §10).
+        if breeding.rest == 0 {
+            return Err("`breeding.rest` must be at least 1 tick".into());
+        }
         if self.cause_fade == 0 {
             return Err("`cause_fade` must be at least 1 tick".into());
         }
