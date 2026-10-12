@@ -424,4 +424,22 @@ Agreed before measuring (Q9):
 
 `cargo run --release -p terra-sim --example generations` runs the first.
 
-MEASUREMENT
+**Measured (2026-10-12)** in a release build of this slice, the default world left alone for 100,000 ticks:
+
+| Seed | Alive at the end (and eggs) | Most at once | Eggs with a partner | Eggs alone | Hatched | Grew up | Generations |
+|---|---|---|---|---|---|---|---|
+| 1 | 98 (1) | 100 | 61 | 473 | 533 | 504 | 10 |
+| 2 | 97 (3) | 100 | 62 | 466 | 525 | 510 | 9 |
+| 3 | 97 (3) | 100 | 40 | 475 | 512 | 502 | 10 |
+| 4 | 97 (3) | 100 | 35 | 484 | 516 | 506 | 10 |
+| 5 | 95 (5) | 100 | 50 | 480 | 525 | 504 | 8 |
+| 6 | 97 (3) | 100 | 39 | 481 | 517 | 499 | 9 |
+| 7 | 97 (3) | 100 | 51 | 479 | 527 | 507 | 9 |
+| 8 | 98 (2) | 100 | 43 | 482 | 523 | 502 | 10 |
+| 9 | 96 (4) | 100 | 57 | 480 | 533 | 509 | 9 |
+| 10 | 92 (8) | 100 | 30 | 489 | 511 | 490 | 9 |
+
+- **Keeps going: met.** Sprites are alive at the end in all 10 seeds, 8 to 10 generations deep, and no world went over its limit of 100.
+- **A5: met,** 259 ticks a second with 100 sprites (`speed`); Slice 22 measured 293–303.
+- **A1 to A3: met** (their tests pass, with `most_sprites` as §10.6 says).
+- **For information:** almost every hatchling grows up, as expected until Slice 29. Between 6% and 12% of eggs come from a pair: food keeps the world at its limit, where no sprite is fertile, and a female fertile in a moment with no aroused male in view breeds alone. With `fed` at 0.6 and arousal fading slowly, before body language, it was one in forty.
