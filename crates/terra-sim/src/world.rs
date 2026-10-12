@@ -2019,6 +2019,28 @@ mod tests {
             .expect("it attended to the ball");
         assert!(ball.familiarity > 0.0);
         assert!(ball.worth.iter().all(|&w| w == 0.0) && ball.habits.iter().all(|&h| h == 0.0));
+        assert!(ball.taught_habits.iter().all(|&h| h == 0.0));
+    }
+
+    #[test]
+    fn a_world_nobody_trains_is_taught_nothing() {
+        // Design §5.6, #187: only the Cursor's Reward and Correct teach a
+        // taught habit, so sprites nobody trains learn as they did before.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let config = WorldConfig::builtin(&data);
+        let mut world = World::new(config, data, 7);
+        for _ in 0..2_000 {
+            world.step();
+        }
+        let types = || {
+            let brains = world.state.sprites.iter().map(|(_, sprite)| &sprite.brain);
+            brains.flat_map(|brain| brain.experience.types.values())
+        };
+        assert!(
+            types().any(|known| known.habits.iter().any(|&h| h != 0.0)),
+            "it learns"
+        );
+        assert!(types().all(|known| known.taught_habits.iter().all(|&h| h == 0.0)));
     }
 
     #[test]
@@ -2536,11 +2558,12 @@ mod tests {
         fn known(brain: &mut Brain) -> &mut TypeMemory {
             brain.experience.learn_about(Subject::ObjectType(1), 1)
         }
-        let breaks: [fn(&mut Brain); 5] = [
+        let breaks: [fn(&mut Brain); 6] = [
             |brain| known(brain).worth[0] = -0.1,
             |brain| known(brain).good = 1.5,
             |brain| known(brain).bad = 0.2,
             |brain| known(brain).habits[0] = f32::NAN,
+            |brain| known(brain).taught_habits[0] = 1.5,
             |brain| known(brain).familiarity = 2.0,
         ];
         for (i, broken) in breaks.into_iter().enumerate() {

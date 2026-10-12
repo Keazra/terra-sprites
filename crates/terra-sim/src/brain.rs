@@ -612,8 +612,11 @@ impl Brain {
         // Cursor rewarded the sprite, the reward goes instead to the habit of
         // the latest try within the Reward's reach back, at full weight; in a
         // tick it corrected it, the punishment likewise to the latest try
-        // within the touch window (design v21 §5.6).
+        // within the touch window (design v21 §5.6). Each goes to the taught
+        // habit, kept apart at its own rate so what the sprite learns itself
+        // doesn't wash it out (design §5.6, #187).
         let rate = self.params.get(BrainParam::HabitRate) * learning_rate_mod;
+        let taught_rate = self.params.get(BrainParam::TaughtRate) * learning_rate_mod;
         let rewarded = reached.filter(|_| signals.reach_back.is_some());
         let corrected = near.filter(|_| signals.corrected);
         let mut r = 0.0;
@@ -627,8 +630,8 @@ impl Brain {
                     ..
                 }) => {
                     let known = self.experience.learn_about(subject, needs);
-                    let habit = &mut known.habits[column(verb)];
-                    *habit = (*habit + rate * felt).clamp(-1.0, 1.0);
+                    let habit = &mut known.taught_habits[column(verb)];
+                    *habit = (*habit + taught_rate * felt).clamp(-1.0, 1.0);
                 }
                 None => r += felt,
             }
@@ -688,17 +691,19 @@ impl Brain {
         found
     }
 
-    /// One tick of fading (design §5.6): good and bad, fear and habits each
-    /// by their own rate. A remembered sprite faded until everything about
-    /// it is nearer 0 than `forget_below` is forgotten (design v18 §5.6), and
-    /// so is a remembered place (M2 design §7).
+    /// One tick of fading (design §5.6): good and bad, fear, habits and
+    /// taught habits (#187) each by their own rate. A remembered
+    /// sprite faded until everything about it is nearer 0 than
+    /// `forget_below` is forgotten (design v18 §5.6), and so is a remembered
+    /// place (M2 design §7).
     fn fade(&mut self, forget_below: f32) {
         let keep = |param| 1.0 - self.params.get(param);
-        let (good, bad, habit, bad_habit) = (
+        let (good, bad, habit, bad_habit, taught) = (
             keep(BrainParam::WorthFadeGood),
             keep(BrainParam::WorthFadeBad),
             keep(BrainParam::HabitFade),
             keep(BrainParam::HabitFadeBad),
+            keep(BrainParam::TaughtFade),
         );
         let experience = &mut self.experience;
         for known in experience.types.values_mut() {
@@ -710,6 +715,9 @@ impl Brain {
             // Bad habits fade at their own rate (design v21 §5.6).
             for value in &mut known.habits {
                 *value *= if *value < 0.0 { bad_habit } else { habit };
+            }
+            for value in &mut known.taught_habits {
+                *value *= taught;
             }
         }
         experience.new_things *= good;
@@ -877,9 +885,9 @@ impl Brain {
             types.filter(move |(s, _)| s.category(data) == category.id)
         });
         for (&subject, known) in habits {
-            for (&verb, &value) in VERBS.iter().zip(&known.habits) {
+            for (i, &verb) in VERBS.iter().enumerate() {
                 let thing = ThingKey::Subject(subject);
-                visit(LearnedKey::Habit { thing, verb }, value);
+                visit(LearnedKey::Habit { thing, verb }, known.habit(i));
             }
         }
         visit(LearnedKey::NewThings, self.experience.new_things);
@@ -1432,7 +1440,9 @@ impl Brain {
             .experience
             .types
             .get(&subject)
-            .map_or([0.0; VERBS.len()], |known| known.habits);
+            .map_or([0.0; VERBS.len()], |known| {
+                std::array::from_fn(|i| known.habit(i))
+            });
         // A pressing first-order need quiets good habits, never bad ones
         // (design v21 §5.6).
         let quiet = self.quiet(inputs, data);
@@ -1843,6 +1853,7 @@ mod tests {
             r#"BrainParam(param: "worth_fade_bad", value: 0.0)"#,
             r#"BrainParam(param: "habit_fade", value: 0.0)"#,
             r#"BrainParam(param: "habit_fade_bad", value: 0.0)"#,
+            r#"BrainParam(param: "taught_fade", value: 0.0)"#,
         ];
         brain(&[genes, &no_fade].concat())
     }
@@ -2700,6 +2711,94 @@ mod tests {
         let habits = about(&brain, types::BALL).habits;
         assert!(close(habits[column(Play)], 0.5 * 0.99), "{habits:?}");
         assert!(close(habits[column(Hit)], -0.5 * 0.999), "{habits:?}");
+    }
+
+    #[test]
+    fn what_the_cursor_taught_fades_at_its_own_rate_good_or_bad() {
+        // #187: by taught_fade, whatever the habit fades sprites learn
+        // themselves.
+        use Verb::*;
+        let data = builtin();
+        let mut brain = brain(&[
+            r#"BrainParam(param: "habit_fade_bad", value: 0.01)"#,
+            r#"BrainParam(param: "taught_fade", value: 0.001)"#,
+        ]);
+        teach(&mut brain, types::BALL).taught_habits[column(Play)] = 0.5;
+        teach(&mut brain, types::BALL).taught_habits[column(Hit)] = -0.5;
+        brain.fade(data.physiology().forget_below);
+        let taught = about(&brain, types::BALL).taught_habits;
+        assert!(close(taught[column(Play)], 0.5 * 0.999), "{taught:?}");
+        assert!(close(taught[column(Hit)], -0.5 * 0.999), "{taught:?}");
+    }
+
+    #[test]
+    fn what_the_cursor_teaches_is_kept_apart_from_what_the_sprite_learns_itself() {
+        // #187: a shock just after hitting a ball teaches the habit the
+        // Cursor taught, at taught_rate (.9); what the sprite learns after,
+        // along the trace, goes to its own, and the two count together.
+        let data = builtin();
+        let mut brain = unfading(&[]);
+        decide(&mut brain, 9, Verb::Hit, Some(types::BALL), &[]);
+        brain.touched = Some(Touch {
+            tick: 9,
+            verb: Some(Verb::Hit),
+            subject: types::BALL,
+            sprite: None,
+            novelty: 1.0,
+            by_cursor: false,
+            place: None,
+        });
+        let needs = vec![0.0; data.need_places().len()];
+        let shocked = Signals {
+            needs: needs.clone(),
+            punishment: 1.0,
+            corrected: true,
+            ..Default::default()
+        };
+        brain.learn(10, &shocked, 1.0, &data);
+        let hit = column(Verb::Hit);
+        let ball = about(&brain, types::BALL);
+        assert!(
+            close(ball.taught_habits[hit], -0.9),
+            "{:?}",
+            ball.taught_habits
+        );
+        assert_eq!(ball.habits[hit], 0.0, "none of its own yet");
+        // Hitting a ball again, it's rewarded with no Cursor near.
+        decide(&mut brain, 20, Verb::Hit, Some(types::BALL), &[]);
+        let rewarded = Signals {
+            needs,
+            reward: 1.0,
+            ..Default::default()
+        };
+        brain.learn(21, &rewarded, 1.0, &data);
+        let ball = about(&brain, types::BALL);
+        assert!(ball.habits[hit] > 0.0, "{:?}", ball.habits);
+        assert!(
+            close(ball.taught_habits[hit], -0.9),
+            "untouched: {:?}",
+            ball.taught_habits
+        );
+        assert!(close(ball.habit(hit), ball.habits[hit] - 0.9));
+    }
+
+    #[test]
+    fn a_habit_the_cursor_taught_counts_with_the_sprite_s_own_within_one() {
+        let data = builtin();
+        let mut brain = brain(&[]);
+        teach(&mut brain, types::BALL).habits[column(Verb::Eat)] = -0.4;
+        teach(&mut brain, types::BALL).taught_habits[column(Verb::Eat)] = -0.9;
+        teach(&mut brain, types::BALL).taught_habits[column(Verb::Play)] = 0.3;
+        let x = inputs(&[]);
+        let scores = brain.scores(
+            &brain.activations(&x),
+            &x,
+            Some(types::BALL),
+            SpriteScoring::default(),
+            &data,
+        );
+        assert_eq!(scores[column(Verb::Eat)], -1.0);
+        assert!(close(scores[column(Verb::Play)], 0.3));
     }
 
     #[test]

@@ -57,6 +57,7 @@ pub fn genome(genes: &str, data: &DataPack) -> Genome {
             BrainParam(param: "habit_fade", value: 0.0),
             BrainParam(param: "habit_fade_bad", value: 0.0),
             BrainParam(param: "fear_fade", value: 0.0),
+            BrainParam(param: "taught_fade", value: 0.0),
         ])"#
     );
     Genome::from_ron(&text, data).expect("a valid genome")

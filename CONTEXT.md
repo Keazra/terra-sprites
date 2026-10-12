@@ -460,6 +460,10 @@ _Avoid_: the sprite kind (on screen), stereotype
 What a sprite has learned about doing one verb to one object type, or to sprites, such as "eating balls doesn't work" or "hitting sprites is bad".
 _Avoid_: skill (a later design, #48), reflex
 
+**Taught habit**:
+The part of a habit the Cursor taught: a Reward or Correct for what the sprite just tried. It is kept apart from the habit the sprite learns by itself, so what it learns afterwards doesn't wash it out, and it fades slowly, over most of a life. A sprite acts on the two together, and the Brain tab shows them together as its habit.
+_Avoid_: training (that's what the player does), conditioning
+
 **Thing touched**:
 What a feeling is about: the thing the sprite tried a verb on a moment ago, or the particular sprite. Worth is learned about it and nothing else. A sprite that hit it isn't one: that teaches fear of the sprite instead. For the Cursor's touch, "a moment ago" stretches to its reach back.
 _Avoid_: target (for this), culprit
