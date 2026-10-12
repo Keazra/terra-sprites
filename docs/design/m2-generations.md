@@ -1,10 +1,10 @@
 # Terra Sprites — M2 "Generations" design
 
 - **Status:** Draft: the plan, with what each slice settles added as it's settled.
-- **Date:** 2026-10-11
+- **Date:** 2026-10-12
 - **History:** edited in place since v5; each change is a file in [`changes/`](changes/), whose README says where v1 to v5 are
 - **Builds on:** [M1 design](m1-a-sprite-lives.md), which stays the rulebook for everything M2 doesn't change
-- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, and life stages and ageing (Slice 22)
+- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), and the view past the wall (Slice 31)
 
 ---
 
@@ -47,6 +47,8 @@ The owner's principles carry over unchanged (`docs/agents/how-we-work.md`). Thre
 ### 1.3 Alongside M2
 
 A clean-up thread, separate from the slices, checks the outside review's claims ([#137](https://github.com/Keazra/terra-sprites/issues/137)) against the code and fixes what holds up, with the small notes from the owner's M1 play-through that an agent can do alone (#124, #126, #128, #129, #130).
+
+**The view past the wall** (Slice 31, [#184](https://github.com/Keazra/terra-sprites/issues/184), from [#180](https://github.com/Keazra/terra-sprites/issues/180)) lets the view go past the terrarium's wall into space, with stars going by (§11). It touches only the front end, so it can be built beside any slice. It was designed with the ship ([#181](https://github.com/Keazra/terra-sprites/issues/181)), which is a milestone of its own after Body & verbs.
 
 ---
 
@@ -104,9 +106,11 @@ Each slice is a GitHub issue and its own PR, worked as in `docs/agents/how-we-wo
 | **28. Learning by watching** | The young copy what adults do, their parents most | 22, 25 |
 | **29. A harsher world** | About 20% of unattended newborns grow up | 20, 28 |
 | **30. M2 acceptance** | The criteria of §6, measured and played | all |
+| **31. The view past the wall** | The view scrolls past the glass into space, with stars going by (§11) | — |
 
 - **20, 21 and 22 can start at once.** 21 touches only the front end. 20 and 22 both touch the brain and the body, so running them side by side means merging carefully.
 - **24, 25, 26 and 27 can run side by side** once 23 is in.
+- **31 touches only the front end,** so it can run beside any of them (§1.3).
 
 ---
 
@@ -350,3 +354,52 @@ cargo run --release -p terra-sim --example speed
 | A5: ticks a second, 100 sprites (`speed`, a few runs) | 318 | 293–303, met (at least 200) |
 
 **What it shows.** The world's first sprites now start at ages through adulthood and grow old within the first 9,000 ticks, so by tick 50,000 almost all have died of old age; Slice 23's breeding replaces them. When genes weakened in steps of .1, thirst killed 26 by tick 50,000 (11% for A4), most likely old sprites that lost a gene for finding water early; in steps of .01 every gene fades together. A4 still holds, though old age now fills most of its count.
+
+---
+
+## 11. The view past the wall (Slice 31)
+
+The terrarium is a ship flying through space (#181, a milestone of its own after Body & verbs). This slice lets the view go past the terrarium's wall and see space outside, with stars going by ([#180](https://github.com/Keazra/terra-sprites/issues/180)). Settled with the owner on 2026-10-12, in the ship's design pass, rounds 1 and 2. It touches only the front end: the simulation, its saves and its replays don't change.
+
+### 11.1 Past the wall
+
+- **The viewport scrolls past the wall by a quarter of the map view** on each side, the same however it moves: at 140×40, about 23 tiles sideways and 7 up or down (round 1, Q3). Half the view would let Track centre a sprite at the wall, but leave half the screen empty at the far edge.
+- **Track** keeps the selected sprite in the middle of the map view as far as that margin allows, and `Tab`'s centring stops there too (M1 design §6.1, §6.5).
+- **A map smaller than the map view** is drawn in the middle of it, with space around it, rather than in a map view shrunk to fit (M1 design §6.1). It doesn't scroll in a direction it fits.
+
+### 11.2 The glass
+
+- **The wall is drawn as a line of glass one tile outside the map,** all round: `═` along the top and bottom, `║` down the sides and `╔ ╗ ╚ ╝` at the corners, light cyan (round 1, Q3, Q4). It isn't a tile: sprites, objects and the Cursor never reach it.
+- **The map view's border is single-lined on every side,** since the glass shows where the wall is. Its double-lined sides go (M1 design §6.1).
+
+### 11.3 Space and the stars
+
+Past the glass is space: black, with stars drifting right to left, since the ship flies towards the right of the screen (round 1, Q5). Sideways drift looks smoother than up or down, because a terminal's characters are twice as tall as they are wide.
+
+| Depth | CP437 | ASCII | Colour | Share of space's tiles | Drift at 1× | Shift when scrolling |
+|---|---|---|---|---|---|---|
+| Far | `·` | `.` | dark gray | about 5% | 0.55 tiles a second | 8% of the scroll |
+| Near | `∙` | `+` | gray | about 2.2% | 1.3 tiles a second | 20% |
+| Nearest | `*` | `*` | white | about 0.9% | 3.2 tiles a second | 45% |
+
+- **The stars move with the game:** still while it's paused, quicker at higher speeds, and no quicker than at 4×, so 16× doesn't blur. A step while paused doesn't move them.
+- **Scrolling shifts them a little** against the view, the far ones least: the share in the table sideways, and half of it up and down. That gives depth.
+- **They belong to the screen, like the theme.** They're fixed to the map view and wrap around it, from a pattern of the front end's own, not the world's dice, so they're never part of the world, its saves, its replays or its state hash. A star is drawn only on space, never over the map or the glass.
+- The numbers are those of the preview the owner tried in round 1, and the theme sets the glyphs and colours.
+
+### 11.4 The pointer over space
+
+- **The Cursor can't reach past the wall** (round 2, Q11). When the tile pointed at (M1 design §6.5) is glass or space, the Cursor isn't drawn, a click or `Q` and `E` do nothing, and the status line says "space".
+- **The Cursor stays where it was,** on its last tile on the map, as when the pointer leaves the map view: a sprite it leads stands still and an item it holds stays held. It shows again when the pointer comes back over the map. Follow carries on as before.
+
+### 11.5 Themes
+
+Both built-in themes gain the glass's six glyphs and the stars' three depths, as theme keys (`docs/reference/themes.md`). In ASCII the glass is `-` along the top and bottom, `|` down the sides and `+` at the corners. A theme without the new keys draws the built-in theme's.
+
+### 11.6 How we know it worked
+
+- **UI tests** (ratatui's `TestBackend`): scrolling stops at the margin on every side; the glass runs all round the map, one tile out; the border is single-lined; stars appear only on space; stars stand still while paused and drift as far at 16× as at 4× in the same time; a small map is centred; with the pointer over space the Cursor isn't drawn and a click sends no command.
+- **The simulation is untouched:** its tests and golden files pass unchanged.
+- **Played** in Windows Terminal at 140×40 and at the smallest size the game allows.
+
+The ship's own walls come later: its prow is iron, and walls between sectors are hull (#181). Until then, every wall of the terrarium faces space.

@@ -15,12 +15,12 @@ One cell of the map. It has exactly one terrain.
 _Avoid_: cell, square
 
 **Wall**:
-The terrarium's edge, which nothing crosses: today the map's edge. On the ship (#181), each sector has walls of its own, crossed only through a door, and a wall that faces outward is glass onto space.
+The terrarium's edge, which nothing crosses: today the map's edge. On the ship (#181), each sector has walls of its own, crossed only through a door, and a wall that faces outward is glass onto space, except at the prow.
 _Avoid_: border, boundary
 
 **Terrain**:
-The kind of ground a tile has: grass, dirt, sand, shallow water, deep water or rock.
-_Avoid_: tile type, biome, ground
+The kind of ground a tile has: grass, dirt, sand, shallow water, deep water or rock; on the ship (#181), plating and hull too.
+_Avoid_: tile type, biome (that's a kind of sector), ground
 
 **Walkable**:
 Said of a terrain that sprites can stand on and step onto on foot. Shallow water is walkable; deep water and rock are not.
@@ -467,15 +467,19 @@ The panel that shows the map.
 _Avoid_: map (for the panel)
 
 **Viewport**:
-The part of the map currently shown in the map view. It can go a little past the wall, into space (#180).
+The part of the map currently shown in the map view. It can go a quarter of the map view past the wall, where the glass and space show (Slice 31, #180).
 _Avoid_: camera
+
+**Glass**:
+How the wall is drawn where it faces space: a line of light cyan one tile outside the map (Slice 31). It isn't a tile, so nothing on the map reaches it.
+_Avoid_: window, border (that's the map view's)
 
 **Track**:
 The viewport following the selected sprite, so it stays in the middle of the map view. `T` turns it on or off; scrolling by hand turns it off. It follows whichever sprite is selected, and does nothing while none is.
 _Avoid_: follow (that's the Cursor fixed on a sprite, with `F`), lock on
 
 **Cursor**:
-The player's hard-light projection into the terrarium: to the sprites the player is an advanced creature, and this is how they reach in. It shows on the map as a 3×3 grid that follows the pointer, unless it follows a sprite, and a click acts as the cursor mode says. Sprites see it only where the player has made it **visible**; otherwise its touch is a feeling from nowhere. It holds an item or leads a sprite, one thing at a time.
+The player's hard-light projection into the terrarium: to the sprites the player is an advanced creature, and this is how they reach in. On the ship (#181), the player is its keeper, and the Cursor is cast by the ship's projectors. It shows on the map as a 3×3 grid that follows the pointer, unless it follows a sprite, and a click acts as the cursor mode says. Sprites see it only where the player has made it **visible**; otherwise its touch is a feeling from nowhere. It holds an item or leads a sprite, one thing at a time.
 _Avoid_: hand, orb, selection (the selection is the chosen sprite)
 
 **Visible (the Cursor)**:
@@ -750,24 +754,53 @@ _Avoid_: monitor, watcher
 The terrarium seen for what it is: an ark flying through space, made of sectors joined by doors.
 _Avoid_: station, vessel, level
 
+**Keeper** (#181):
+The ship's AI, which the player is. Its builders are gone and it woke with its memory damaged, so half its own ship is a mystery to it. The Cursor is its hand; to the sprites, it's an advanced creature.
+_Avoid_: captain, overseer
+
 **Sector** (#181):
-One part of the ship, with walls of its own, which the map view shows on its own. Sprites cross between sectors through doors, and the whole ship lives at once, on screen or not.
-_Avoid_: level, area, screen, zone (a zone is a purpose)
+One part of the ship, with walls of its own, which the map view shows on its own: a biome or a bay. Sprites cross between sectors through doors, and the whole ship lives at once, on screen or not.
+_Avoid_: level, area, screen, zone, module, compartment
+
+**Biome** (#181):
+A large sector generated from the seed, to a recipe in the game's data that says its mix of terrain, plants and set pieces, such as the Meadow or the Marsh.
+_Avoid_: terrain (a tile's ground), biosphere, environment
+
+**Bay** (#181):
+A small sector with a job in running the ship, drawn by hand tile by tile in the game's data, such as Hydroponics Bay or the Reservoir. Bays are what #26 called zones.
+_Avoid_: room, zone, lab, block
+
+**Main deck** (#181):
+The largest bay: the hall along the ship's length that every sector opens onto, and that juts into each biome as its staging area.
+_Avoid_: hub, concourse, corridor
+
+**Staging area** (#181):
+A part of the main deck that juts right into a biome to make it work: its devices keep the biome's climate, water and fauna going, and the door into the biome is in it.
+_Avoid_: annex, outpost
 
 **Door** (#181):
-A way through the wall between two sectors.
+A way through the wall between two sectors: an open doorway, or a sealed door that stays shut until the ship opens it, and never closes again.
 _Avoid_: portal, gate
+
+**Plating** (#181):
+The ship's metal floor: a terrain that sprites walk on and nothing grows on.
+_Avoid_: deck (that's the main deck), floor
+
+**Hull** (#181):
+The ship's frame: a solid terrain, like rock, which the walls between sectors are made of.
+
+**Prow** (#181):
+The ship's front: an iron scythe that turns debris aside before it can hit the ship. It's iron, not glass.
+_Avoid_: bow, nose
+
+**Set piece** (#181):
+A small hand-made piece of the ship, a few tiles big, that a sector's recipe places into its land: a rib of hull, a causeway, a pump house.
+_Avoid_: prefab, stamp, vault
+
+**Device**:
+An object of the ship's that does a job, such as an incubator, a pump, or a machine whose job nobody remembers. It's a fixture, and what it does is in its data: it may change the land or affect sprites near it, and the game never says what it's for. Some can be activated.
+_Avoid_: machine, machinery, building
 
 **Space** (#180):
 What lies outside the ship: stars going by. It's scenery, not part of the map, so sprites can't sense it and the Cursor can't reach into it.
 _Avoid_: void, sky
-
-### Zones (a later milestone)
-
-**Zone**:
-A discrete area of the terrarium that the player gives a purpose, such as a hatchery.
-_Avoid_: biome, region (a region is about reachability)
-
-**Device**:
-An object in a zone that makes the zone's purpose possible, such as a hatchery's incubator.
-_Avoid_: machine, building
