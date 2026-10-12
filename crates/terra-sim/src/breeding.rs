@@ -110,7 +110,8 @@ pub(crate) fn mate(
 }
 
 /// Sprite `actor` tries to breed alone, once (M2 design §10). It works if
-/// it's a fertile adult female with a free tile beside her: she lays an egg
+/// it's a fertile adult female whose longing has reached
+/// `breeding.breeds_alone`, with a free tile beside her: she lays an egg
 /// there, its genes hers. Otherwise it's a fruitless try.
 pub(crate) fn breed_alone(
     state: &mut WorldState,
@@ -119,7 +120,14 @@ pub(crate) fn breed_alone(
     events: &mut Vec<Event>,
 ) -> Outcome {
     let sprite = state.sprites.get(actor).expect("the actor");
-    let able = sprite.sex == Sex::Female && fertile(state, sprite, data);
+    let physiology = data.physiology();
+    let longing = physiology
+        .indices
+        .breeding
+        .map_or(0.0, |indices| sprite.body.chems[indices.longing]);
+    let able = sprite.sex == Sex::Female
+        && longing >= physiology.breeding.breeds_alone
+        && fertile(state, sprite, data);
     let laid = able
         .then(|| lay(state, data, actor, None, events))
         .flatten();
@@ -294,6 +302,7 @@ mod tests {
         let genome = Genome::from_ron(
             r#"(format: 1, genes: [
                 InitialConcentration(chem: "feminiser", value: 1.0),
+                InitialConcentration(chem: "longing", value: 1.0),
                 Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
             ])"#,
             &data,
@@ -324,5 +333,65 @@ mod tests {
         assert!(laid(&mut world), "no egg once there was room");
         assert_eq!(world.sprites().count(), 3);
         assert!(!laid(&mut world), "a second egg over the limit");
+    }
+
+    #[test]
+    fn a_partner_keeps_the_touch_of_its_mate_whatever_it_touches_later_that_tick() {
+        // M2 design §10: each learns about the other, even when the one
+        // mated with acts after, on the same tick.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let map = Map::from_ascii(&[".....", ".....", "....."], &data).expect("valid drawing");
+        let sprites = [(at(1, 1), None), (at(2, 1), None), (at(3, 1), None)];
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &sprites,
+            scripted: &[],
+            newborns: &[],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let (state, data) = world.parts();
+        let ids: Vec<EntityId> = state.sprites.iter().map(|(id, _)| id).collect();
+        let (she, he, other) = (ids[0], ids[1], ids[2]);
+        let indices = data.physiology().indices;
+        for &id in &ids {
+            let sprite = state.sprites.get_mut(id).expect("a sprite");
+            sprite.body.chems[indices.energy] = 1.0;
+            sprite.body.chems[indices.hydration] = 1.0;
+        }
+        state.sprites.get_mut(she).expect("her").sex = Sex::Female;
+        let mut events = Vec::new();
+        mate(state, data, he, Target::Sprite(she), &mut events);
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event.kind, EventKind::Laid { .. })),
+            "they mated"
+        );
+        // Her own try, later that tick, is on another sprite.
+        let subject = state.subject_of(data, Target::Sprite(other));
+        action::touched(
+            state,
+            data,
+            she,
+            Target::Sprite(other),
+            subject,
+            Some(Verb::Mate),
+        );
+        let touch = state.sprites.get(she).expect("her").brain.touched;
+        let touch = touch.expect("a touch");
+        assert_eq!((touch.verb, touch.sprite), (Some(Verb::Mate), Some(he)));
+        // The next tick, she touches what she touches.
+        state.tick += 1;
+        action::touched(
+            state,
+            data,
+            she,
+            Target::Sprite(other),
+            subject,
+            Some(Verb::Mate),
+        );
+        let touch = state.sprites.get(she).expect("her").brain.touched;
+        assert_eq!(touch.expect("a touch").sprite, Some(other));
     }
 }

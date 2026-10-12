@@ -771,6 +771,21 @@ fn breeding_s_drive_must_be_a_need() {
 }
 
 #[test]
+fn breeding_s_hormone_levels_are_fractions() {
+    // M2 design §10: a hormone's level runs from 0 to 1.
+    assert_invalid_physiology(
+        "turns_female: 0.8",
+        "turns_female: 1.2",
+        "breeding.turns_female",
+    );
+    assert_invalid_physiology(
+        "breeds_alone: 0.5",
+        "breeds_alone: -0.5",
+        "breeding.breeds_alone",
+    );
+}
+
+#[test]
 fn the_cursor_s_touch_raises_levels_by_fractions_and_reaches_back_at_least_the_touch_window() {
     // Design v21 §4.6, §2.5.
     assert_invalid_physiology("pet: 0.5", "pet: 1.5", "cursor.pet");
@@ -1020,7 +1035,8 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
         (45, "attended_egg"),
     ]);
     // State inputs carry on from 64, past the IDs kept for Target inputs,
-    // with breeding's from 66, and its body language (M2 design §10).
+    // with breeding's from 66, its body language, and longing (M2 design
+    // §10).
     expected.extend([
         (64, "cornered"),
         (65, "fruitless"),
@@ -1031,6 +1047,7 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
         (70, "bred"),
         (71, "target_arousal"),
         (72, "target_other_sex"),
+        (73, "longing"),
     ]);
     assert_eq!(inputs, expected);
 }

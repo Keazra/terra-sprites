@@ -346,7 +346,7 @@ fn a_genome_from_another_pack_that_doesnt_fit_this_world_is_refused() {
     // A pack with a chemical this world's lacks, and a genome that uses it.
     let chemicals = builtin_source("chemicals.ron").replace(
         r#"    (id: 47, name: "h15", class: Hormone),"#,
-        "    (id: 47, name: \"h15\", class: Hormone),\n    (id: 49, name: \"zest\", class: Hormone),",
+        "    (id: 47, name: \"h15\", class: Hormone),\n    (id: 50, name: \"zest\", class: Hormone),",
     );
     let other = pack_with("chemicals.ron", &chemicals);
     let text = builtin_source("genomes/starter.ron").replace(r#""h0""#, r#""zest""#);

@@ -491,11 +491,12 @@ pub(crate) struct Senses {
     pub(crate) resting: bool,
     /// Its life stage (M2 design §9.1).
     pub(crate) stage: LifeStage,
-    /// Whether it's fertile, female, and sees a female adult (M2 design
-    /// §10).
+    /// Whether it's fertile, female, and sees a female adult or a male one
+    /// (M2 design §10).
     pub(crate) fertile: bool,
     pub(crate) female: bool,
     pub(crate) female_near: bool,
+    pub(crate) male_near: bool,
 }
 
 /// Step 3 for one sprite (design §4.4). Returns whether its injury has
@@ -662,6 +663,7 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
         loci[breeding.fertile] = level(senses.fertile);
         loci[breeding.female] = level(senses.female);
         loci[breeding.female_near] = level(senses.female_near);
+        loci[breeding.male_near] = level(senses.male_near);
     }
 }
 

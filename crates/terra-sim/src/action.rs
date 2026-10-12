@@ -702,7 +702,10 @@ fn act(
 /// `verb` on it, or with no verb by crashing into it (design v23 §5.6): what
 /// the next few ticks' feelings are about. Touching one, it knows its object
 /// type (design v19 §5.6). Water, and an object fixed in place, keep their
-/// tile, so a need they ease makes it a remembered place (M2 design §7).
+/// tile, so a need they ease makes it a remembered place (M2 design §7). A
+/// sprite that bred this tick keeps the touch of its mate till the tick
+/// ends, whatever it touches after, so it learns about its partner (M2
+/// design §10).
 pub(crate) fn touched(
     state: &mut WorldState,
     data: &DataPack,
@@ -712,9 +715,18 @@ pub(crate) fn touched(
     verb: Option<Verb>,
 ) {
     let place = stays_put(state, data, target);
-    let brain = &mut state.sprites.get_mut(id).expect("the toucher").brain;
+    let tick = state.tick;
+    let sprite = state.sprites.get_mut(id).expect("the toucher");
+    let brain = &mut sprite.brain;
     let needs = data.need_places().len();
     brain.experience.learn_about(subject, needs).touched = true;
+    let mated = sprite.last_bred == Some(tick)
+        && brain
+            .touched
+            .is_some_and(|touch| touch.tick == tick && touch.verb == Some(Verb::Mate));
+    if mated {
+        return;
+    }
     brain.touched = Some(Touch {
         tick: state.tick,
         verb,

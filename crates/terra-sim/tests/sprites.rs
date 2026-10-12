@@ -383,6 +383,7 @@ fn a_sprite_lists_its_chemicals_in_pack_order_with_their_kinds() {
     .collect();
     expected.extend((0..16).map(|n| (format!("h{n}"), Hormone)));
     expected.push(("feminiser".to_string(), Hormone));
+    expected.push(("longing".to_string(), Hormone));
     assert_eq!(listed, expected);
 }
 

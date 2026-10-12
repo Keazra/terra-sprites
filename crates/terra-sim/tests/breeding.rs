@@ -109,8 +109,11 @@ fn an_adult_never_mates_with_a_young_sprite_nor_a_young_one_at_all() {
 /// A body that turns female at once, as an adult (M2 design §10).
 const FEMALE: &str = r#"InitialConcentration(chem: "feminiser", value: 1.0),"#;
 
-/// An instinct to breed alone whenever it can.
-const ALONE: &str = r#"Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),"#;
+/// An instinct to breed alone whenever it can, and the longing it takes.
+const ALONE: &str = r#"
+    Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
+    InitialConcentration(chem: "longing", value: 1.0),
+"#;
 
 /// An instinct to rest, so the sprites watched don't come to blows.
 const REST: &str = r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),"#;
@@ -126,7 +129,11 @@ const TURNING: &str = r#"
 /// A small field of grass with a sprite of its own genes on each tile, the
 /// ones on `young` as newborns and the rest just grown up.
 fn family(sprites: &[(Pos, &str)], young: &[Pos], seed: u64) -> World {
-    let data = builtin();
+    family_in(builtin(), sprites, young, seed)
+}
+
+/// The same, with `data`.
+fn family_in(data: DataPack, sprites: &[(Pos, &str)], young: &[Pos], seed: u64) -> World {
     let placed = sprites
         .iter()
         .map(|&(pos, genes)| (pos, Some(genome(genes, &data))))
@@ -432,6 +439,66 @@ fn a_male_that_sees_a_female_stays_male() {
     assert_eq!(world.sprite(male).unwrap().sex(), Sex::Male);
 }
 
+/// Longing enough to breed alone, from the start.
+const LONGS: &str = r#"InitialConcentration(chem: "longing", value: 1.0),"#;
+
+/// The starter genome's genes for longing (M2 design §10): it builds while
+/// no male adult is in sight, and falls fast while one is.
+const LONGING: &str = r#"
+    Emitter(locus: Locus("male_near"), mode: Level, invert: true, threshold: 0.5, gain: 0.001, chem: "longing", from: Adult),
+    Emitter(locus: Locus("male_near"), mode: Level, gain: -0.01, chem: "longing"),
+    HalfLife(chem: "longing", ticks: 3000),
+"#;
+
+/// The starter genome's way to breeding alone: arousal while fertile, and
+/// longing, lead a female to it. And a weak habit of resting.
+const LONGS_TO_BREED: &str = r#"
+    Instinct(inputs: [("always", false)], verb: Rest, weight: 0.3),
+    Emitter(locus: Locus("fertile"), mode: Level, threshold: 0.5, gain: 0.01, chem: "arousal"),
+    Instinct(inputs: [("arousal", false), ("female", false), ("longing", false)], verb: BreedAlone, weight: 1.0),
+"#;
+
+#[test]
+fn a_female_longs_for_a_male_only_while_she_sees_no_male_adult() {
+    // M2 design §10. A young male, which can't mate, doesn't count.
+    let female = format!("{FEMALE}{LONGING}{REST}");
+    let longing = |young: &[Pos]| {
+        let mut world = family(&[(at(1, 1), &female), (at(6, 2), REST)], young, 1);
+        let her = world.sprite_at(at(1, 1)).unwrap().id();
+        for _ in 0..2_000 {
+            world.step();
+        }
+        let her = world.sprite(her).unwrap();
+        assert_eq!(her.sex(), Sex::Female);
+        her.chemical("longing").unwrap()
+    };
+    assert!(longing(&[at(6, 2)]) > 0.75, "{}", longing(&[at(6, 2)]));
+    assert!(close(longing(&[]), 0.0), "{}", longing(&[]));
+}
+
+#[test]
+fn the_starter_s_female_breeds_alone_only_after_long_without_a_male() {
+    // M2 design §10: breeding alone is a lonely female's fallback. With an
+    // adult male in sight she lays nothing alone; out of sight of one, she
+    // does once her longing has built.
+    let female = format!("{FEMALE}{LONGING}{LONGS_TO_BREED}");
+    let laid_alone = |young: &[Pos]| {
+        let mut world = family(&[(at(1, 1), &female), (at(6, 2), REST)], young, 1);
+        let ticks: Vec<u64> = (0..3_000)
+            .flat_map(|_| world.step())
+            .filter_map(|event| match event.kind {
+                EventKind::Laid { with: None, .. } => Some(event.tick),
+                _ => None,
+            })
+            .collect();
+        ticks
+    };
+    let watched = laid_alone(&[]);
+    assert!(watched.is_empty(), "{watched:?}");
+    let alone = laid_alone(&[at(6, 2)]);
+    assert!(alone.first().is_some_and(|&tick| tick > 500), "{alone:?}");
+}
+
 #[test]
 fn an_egg_saved_and_loaded_hatches_the_same() {
     let female = format!("{ALONE}{FEMALE}");
@@ -569,9 +636,14 @@ const WATCHING: &str = r#"
 /// the sprite on the right, and the one on the right at the one on the
 /// left, each of its own genes, the one on the right young if `young`.
 fn goes_after(left: &str, right: &str, young: bool) -> (usize, usize) {
+    goes_after_in(builtin(), left, right, young)
+}
+
+/// The same, with `data`.
+fn goes_after_in(data: DataPack, left: &str, right: &str, young: bool) -> (usize, usize) {
     let (a, b) = (at(1, 1), at(6, 2));
     let newborns: &[Pos] = if young { &[b] } else { &[] };
-    let mut world = family(&[(a, left), (b, right)], newborns, 1);
+    let mut world = family_in(data, &[(a, left), (b, right)], newborns, 1);
     let ids = [a, b].map(|pos| world.sprite_at(pos).expect("a sprite").id());
     let mut counts = (0, 0);
     for _ in 0..200 {
@@ -610,6 +682,35 @@ fn a_young_sprite_s_arousal_moves_it_to_nothing() {
     assert!(by_adult > 0, "the adult went after the other");
     let (_, by_young) = goes_after(AROUSED, AROUSED, true);
     assert_eq!(by_young, 0, "the young sprite went after the adult");
+}
+
+#[test]
+fn the_drive_works_only_between_adults_in_a_pack_that_doesnt_breed_too() {
+    // M2 design §5, whether or not the pack breeds: this one has no sense
+    // of a male in sight, so no breeding, but its drive is still a need.
+    let male_near = r#"(id: 9,  name: "male_near",         kind: BodySensor),"#;
+    let longing = |line: &str| {
+        let starter = include_str!("../../../data/genomes/starter.ron");
+        let found = starter.lines().find(|l| l.contains(line));
+        found.expect("the starter's longing gene").to_string()
+    };
+    let (raise, drop) = (
+        longing("invert: true, threshold: 0.5, gain: 0.001"),
+        longing("gain: -0.01, chem: \"longing\""),
+    );
+    let data = || {
+        builtin_changing_files(&[
+            ("loci.ron", &[(male_near, "")]),
+            ("genomes/starter.ron", &[(&raise, ""), (&drop, "")]),
+        ])
+    };
+    let world = family_in(data(), &[(at(1, 1), AROUSED)], &[], 1);
+    let male = world.sprites().next().expect("a sprite");
+    assert_eq!(male.turning(), None, "the pack has no breeding");
+    let (to_adult, by_adult) = goes_after_in(data(), AROUSED, AROUSED, false);
+    assert!(to_adult > 0 && by_adult > 0, "{to_adult} and {by_adult}");
+    let (to_young, by_young) = goes_after_in(data(), AROUSED, AROUSED, true);
+    assert_eq!((to_young, by_young), (0, 0));
 }
 
 #[test]
@@ -704,8 +805,9 @@ fn random_genes() -> impl Strategy<Value = String> {
         200.0f32..900.0,
         prop::sample::select(vec!["", FEMALE]),
         aroused,
+        prop::sample::select(vec!["", LONGS]),
     )
-        .prop_map(|(instincts, attention, grows_up, grows_old, female, aroused)| {
+        .prop_map(|(instincts, attention, grows_up, grows_old, female, aroused, longs)| {
             format!(
                 r#"Trait(trait: "grows_up", value: {grows_up:?}),
                    Trait(trait: "grows_old", value: {grows_old:?}),
@@ -713,6 +815,7 @@ fn random_genes() -> impl Strategy<Value = String> {
                    Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 0.5, from: Young),
                    {female}
                    {aroused}
+                   {longs}
                    {}
                    {}"#,
                 attention.join("\n"),

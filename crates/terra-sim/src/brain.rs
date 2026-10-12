@@ -597,7 +597,7 @@ impl Brain {
             // How it went with something new teaches the worth of new things,
             // but the breeding drive eased teaches only about the partner (M2
             // design §5).
-            let drive = physiology.indices.breeding.map(|b| b.drive);
+            let drive = physiology.indices.drive;
             let relieved: f32 = relief
                 .iter()
                 .enumerate()
@@ -921,7 +921,7 @@ impl Brain {
         if share == 0.0 {
             return summary;
         }
-        let drive = data.physiology().indices.breeding.map(|b| b.drive);
+        let drive = data.physiology().indices.drive;
         for individual in known.values() {
             for (need, (summary, worth)) in
                 summary.worth.iter_mut().zip(&individual.worth).enumerate()
@@ -1552,14 +1552,14 @@ pub(crate) fn shown(body: &Body, data: &DataPack) -> Vec<f32> {
 }
 
 /// Every brain input that reads the breeding drive, in the sprite or in
-/// the one it attends to, by place (M2 design §5): none in a pack without
-/// breeding.
+/// the one it attends to, by place (M2 design §5): none in a pack whose
+/// needs don't include it.
 fn drive_inputs(data: &DataPack) -> Vec<usize> {
-    let Some(breeding) = data.physiology().indices.breeding else {
+    let Some(need) = data.physiology().indices.drive else {
         return Vec::new();
     };
     let inputs = data.brain_inputs_in_order();
-    let Source::State(drive) = inputs[data.need_places()[breeding.drive]].source else {
+    let Source::State(drive) = inputs[data.need_places()[need]].source else {
         return Vec::new();
     };
     inputs
@@ -1902,8 +1902,8 @@ mod tests {
         ]);
         let n = builtin().brain_inputs().count();
         assert_eq!(
-            n, 53,
-            "42 State inputs, 2 of body language and 9 Target inputs"
+            n, 54,
+            "43 State inputs, 2 of body language and 9 Target inputs"
         );
         // One singleton per input, and one conjunction for both genes naming it.
         assert_eq!(brain.concepts.len(), n + 1);

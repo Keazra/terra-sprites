@@ -74,6 +74,13 @@
         Emitter(locus: Locus("female_near"), mode: Level, gain: -0.01, chem: "feminiser"),
         HalfLife(chem: "feminiser", ticks: 600),
 
+        // Longing builds while it sees no male adult and falls fast while it
+        // sees one. A female can breed alone only once it's past physiology's
+        // level (M2 design §10): about 1,100 ticks with no male in sight.
+        Emitter(locus: Locus("male_near"), mode: Level, invert: true, threshold: 0.5, gain: 0.001, chem: "longing", from: Adult),
+        Emitter(locus: Locus("male_near"), mode: Level, gain: -0.01, chem: "longing"),
+        HalfLife(chem: "longing", ticks: 3000),
+
         // Pain comes with new injury, thorns and blows, and fades fast.
         Emitter(locus: Locus("pricked"), mode: Level, gain: 0.3, chem: "pain"),
         Emitter(locus: Locus("was_hit"), mode: Level, gain: 0.3, chem: "pain"),
@@ -152,11 +159,11 @@
         // A cornered sprite, looking at a sprite, turns on it.
         Instinct(inputs: [("cornered", false), ("attended_sprite", false)], verb: Hit, weight: 1.0),
         // Arousal leads to mating with the sprite attended to, if its body
-        // language shows it's aroused too, and of the other sex; in a lonely
-        // female, more weakly, to laying an egg alone (M2 design §10).
+        // language shows it's aroused too, and of the other sex; in a female
+        // longing for a male, to laying an egg alone (M2 design §10).
         // Mating works only between a male and a female, both fertile.
         Instinct(inputs: [("arousal", false), ("target_arousal", false), ("target_other_sex", false)], verb: Mate, weight: 1.5),
-        Instinct(inputs: [("arousal", false), ("female", false), ("loneliness", false)], verb: BreedAlone, weight: 0.6),
+        Instinct(inputs: [("arousal", false), ("female", false), ("longing", false)], verb: BreedAlone, weight: 1.0),
         // A mild habit of wandering, which any drive that has grown outweighs.
         Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3),
     ],

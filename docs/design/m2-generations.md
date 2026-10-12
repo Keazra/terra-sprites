@@ -355,14 +355,14 @@ cargo run --release -p terra-sim --example speed
 
 ## 10. Breeding (Slice 23)
 
-Settled with the owner on 2026-10-12 ([#141](https://github.com/Keazra/terra-sprites/issues/141)), in a round of ten questions and two decision cards. Grown sprites have young, alone or with a partner as their genes lean, and only ever between adults (§5). The numbers are data, the `breeding` section of `physiology.ron` and the starter genome: first guesses, tuned against §10.8. A save from before this slice keeps the pack it was made with (M1 design §2.8), which has no breeding, so its sprites never have young.
+Settled with the owner on 2026-10-12 ([#141](https://github.com/Keazra/terra-sprites/issues/141)), in a round of ten questions and two decision cards. Grown sprites have young, alone or with a partner as their genes lean, and only ever between adults (§5). Seeing the slice built, the owner set its direction: sprites are a social species, and a female laying alone should be very rare. Pairs can't yet carry a world on their own (§10.8), so for now a female lays alone only after a long while with no male in sight (§10.3), and Slice 32 ([#186](https://github.com/Keazra/terra-sprites/issues/186)), courtship and family units, makes it very rare. The numbers are data, the `breeding` section of `physiology.ron` and the starter genome: first guesses, tuned against §10.8. A save from before this slice keeps the pack it was made with (M1 design §2.8), which has no breeding, so its sprites never have young.
 
 ### 10.1 Sexes, by neighbours
 
 The owner chose sex by neighbours, as in clownfish and gobies, over hermaphrodites, two fixed sexes and mating types.
 
 - **Every sprite hatches male,** and no young sprite changes.
-- **A body sensor, `female_near`,** is 1 while a female adult is within the sprite's sense radius, and 0 otherwise. `female` is 1 for a female. The round had it count how many females are near; one is enough to keep a male male, so it's on or off.
+- **A body sensor, `female_near`,** is 1 while a female adult is within the sprite's sense radius, and 0 otherwise. `female` is 1 for a female. The round had it count how many females are near; one is enough to keep a male male, so it's on or off. `male_near` is the same for a male adult; it feeds longing (§10.3).
 - **A hormone, the `feminiser`, decides when a male turns.** The starter genes raise it while the sprite, grown up, sees no female adult and lower it fast while it sees one: a male long without females (about 800 ticks) turns. The genes set the pace, so evolution can tune it.
 - **Past `turns_female` (0.8), an adult male turns female for good,** at the start of step 3 (M1 design §2.4), as its life stage changes. It's the engine's rule, like growing up: the genes move the hormone, the body does the rest.
 - **Only a female lays eggs.** A pair needs a male and a female; a female can breed alone (§10.3).
@@ -380,17 +380,18 @@ The game's rule, "the world decides what happens to the body, the genes decide h
 
 - **Two actions, chosen by instinct** (the owner, Q1): `Mate`, with the sprite attended to, and `BreedAlone`. They show on the doing line and the Brain tab.
 - **`Mate` is offered only when both are adults** (§5). It works, once, if both are fertile, one is male and the other female, and she has a free tile beside her: she lays an egg there (§10.4). The partner learns about the one that mated with it too, as if touched. Otherwise it's a fruitless try.
-- **`BreedAlone` is offered only to a grown sprite.** It works for a fertile female with a free tile beside her; for a male, or a female not fertile, it's a fruitless try.
+- **`BreedAlone` is offered only to a grown sprite.** It works for a fertile female whose **longing** has reached `breeds_alone` (0.5), with a free tile beside her; for a male, or a female not fertile or not longing enough, it's a fruitless try.
+- **Longing** is a hormone the starter genes raise while a grown sprite sees no male adult and lower fast while it sees one: about 1,100 ticks with no male in sight takes it to 0.5. It came after the owner saw that 9 eggs in 10 were laid alone. Most of those came from chance: a sprite now and then tries what it isn't drawn to (M1 design §5.5), and for a fertile female, breeding alone always worked. The body's rule stops that; the genes set how fast longing builds, so evolution can still tune it.
 - **The egg costs `cost` (0.3) energy** (Q2): split between a pair, or all hers alone. Per bite of food, both pass on as much of the parents' genes, so neither wins on cost; what makes partners pay is Slice 24, when a sprite breeding alone passes on every broken gene it has.
 - **Body language** (the owner's card, 2026-10-12): a sprite sees how aroused the sprite it attends to is, `target_arousal`, and whether it's of the other sex, `target_other_sex`. Before it, in tuning, most tries to mate met a partner of the same sex or one not fertile, and nearly every egg was laid alone. These are brain inputs `brain_io.ron` lists like any other: one that reads `Target(...)` reads the sprite attended to, and one that reads `Differs(...)` how far that differs from the sprite's own; both are 0 unless attention is on a sprite that has hatched, and any that reads arousal is 0 unless both are grown (§5). Attention can't read them, as it can't any input about what it attends to (M1 design §5.3).
-- **The starter's instincts:** arousal draws attention to sprites; arousal with an aroused sprite of the other sex in view leads to Mate; and in a lonely female, more weakly, arousal leads to breeding alone.
+- **The starter's instincts:** arousal draws attention to sprites; arousal with an aroused sprite of the other sex in view leads to Mate; and in a female longing for a male, arousal leads to breeding alone.
 
 ### 10.4 Eggs and hatching
 
 - **An egg is the new sprite, at the first life stage, Egg** (Q5). It's laid on a random free tile beside its mother.
 - **An egg feels, learns, moves and needs nothing:** its body stays as it was laid and it decides nothing. Step 3 only counts it towards hatching, and steps 4 to 6 pass it by.
 - **It hatches after `hatches` (750) ticks,** where it lies, as a young male with a newborn's body; its age counts from then.
-- **Other sprites see an egg as a thing of its own kind,** the category `egg` and the pseudo type `egg`, not as a sprite: so "crowded, so hit a neighbour" never aims at one, and `nearby_sprites` and `female_near` don't count one. Its verb table is empty, so whatever a sprite tries on it is a fruitless try: an egg can't be hurt until something in the world is meant to hurt eggs.
+- **Other sprites see an egg as a thing of its own kind,** the category `egg` and the pseudo type `egg`, not as a sprite: so "crowded, so hit a neighbour" never aims at one, and `nearby_sprites`, `female_near` and `male_near` don't count one. Its verb table is empty, so whatever a sprite tries on it is a fruitless try: an egg can't be hurt until something in the world is meant to hurt eggs.
 - **The Cursor can't touch, lead or hold an egg;** it says it's still an egg. Whether it can move one is for an issue of its own. The player can name one.
 - **A sprite remembers its parents:** the one that laid it, then its partner.
 

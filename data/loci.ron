@@ -12,11 +12,12 @@
     (id: 3,  name: "nearby_sprites",    kind: BodySensor),
     (id: 4,  name: "moving",            kind: BodySensor),
     (id: 5,  name: "resting",           kind: BodySensor),
-    // Breeding (M2 design §10): 1 while it's fertile, 1 if it's female, and
-    // 1 while it sees a female adult.
+    // Breeding (M2 design §10): 1 while it's fertile, 1 if it's female, 1
+    // while it sees a female adult, and 1 while it sees a male adult.
     (id: 6,  name: "fertile",           kind: BodySensor),
     (id: 7,  name: "female",            kind: BodySensor),
     (id: 8,  name: "female_near",       kind: BodySensor),
+    (id: 9,  name: "male_near",         kind: BodySensor),
 
     (id: 32, name: "ate",               kind: Pulse),
     (id: 33, name: "drank",             kind: Pulse),

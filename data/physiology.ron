@@ -63,15 +63,17 @@
     // while its energy and hydration are both above `fed`, and `rest` ticks
     // or more after its last egg. Every sprite hatches male; an adult male
     // turns female for good once its `feminiser` hormone is above
-    // `turns_female`. The need `drive` drives breeding: whatever the genes,
-    // it works only between adults, and what easing it teaches is only
-    // about the partner (M2 design §5).
+    // `turns_female`. A female can breed alone only once her `longing`
+    // hormone has reached `breeds_alone`. The need `drive` drives breeding:
+    // whatever the genes, it works only between adults, and what easing it
+    // teaches is only about the partner (M2 design §5).
     breeding: (
         hatches: 750,
         cost: 0.3,
         fed: 0.5,
         rest: 1500,
         turns_female: 0.8,
+        breeds_alone: 0.5,
         drive: "arousal",
     ),
     // Each cause-of-death tally halves every this many ticks (design §4.10).

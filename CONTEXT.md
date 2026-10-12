@@ -291,6 +291,10 @@ _Avoid_: gender, mating type
 The hormone that turns a male adult female. The starter genes raise it while the sprite sees no female adult and lower it fast while it sees one, so a male long without females turns, as clownfish do.
 _Avoid_: sex hormone
 
+**Longing** (M2):
+The hormone a female needs to breed alone. The starter genes raise it while the sprite sees no male adult and lower it fast while it sees one, and a female can breed alone only once it has reached physiology's `breeds_alone`. A stopgap until courtship and families make lone eggs very rare.
+_Avoid_: loneliness (the drive for any sprite's company)
+
 **Fertile** (M2):
 Able to breed: grown up, its energy and hydration above `fed` (0.5), rested since its last egg (1,500 ticks), in a world with room for another sprite. It's the body's say, not the genes'.
 _Avoid_: ready, in season

@@ -524,7 +524,7 @@ pub(crate) fn run(
     let tick = state.tick;
     let learning = state.learning;
     let window = data.physiology().touch_window;
-    let drive = indices.breeding.map(|breeding| breeding.drive);
+    let drive = indices.drive;
     // A sprite that has died is forgotten (design v18 §5.6); an egg is
     // alive.
     let alive: BTreeSet<EntityId> = state

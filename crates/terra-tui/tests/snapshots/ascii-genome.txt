@@ -1,15 +1,16 @@
  Terra Sprites │ tick 3 │ ► 1x │ seed 7 │ sprites 3 │ not saved                              ? help
 ╔═ Map ══════════════════╗                            ┌─ #5 ── Body Brain Chem [Genome] World ─────┐
-║..............,,,,::~~==║                            │ TRAITS                                     │
+║.....X........,,,,::~~==║                            │ TRAITS                                     │
 ║.'..........*.,,,,::~~==║                            │ speed 6.5 · sense 9.32 · grows up 4,214 ·  │
-║..%.##........,,,,::~~==║                            │   grows old 12,604                         │
-║....##...X..........~~==║                            │ HALF-LIVES                                 │
-║.......Sv-..........~~==║                            │ hunger halves every 1,828 ticks            │
-║...@...>.<........::~~==║                            │ thirst halves every 1,833 ticks            │
-║.......-^S......@.::~~==║                            │ arousal halves every 479 ticks             │
+║..%.##....@...,,,,::~~==║                            │   grows old 12,604                         │
+║....##..............~~==║                            │ HALF-LIVES                                 │
+║...@...Sv-..........~~==║                            │ hunger halves every 1,828 ticks            │
+║.......>.<........::~~==║                            │ thirst halves every 1,833 ticks            │
+║.......-^S....@...::~~==║                            │ arousal halves every 479 ticks             │
 ║..................::~~==║                            │ feminiser halves every 543 ticks           │
-╚════════════════════════╝                            │ pain halves every 20 ticks                 │
-                                                      │ h0 halves every 296 ticks                  │
+╚════════════════════════╝                            │ longing halves every 3,026 ticks           │
+                                                      │ pain halves every 18 ticks                 │
+                                                      │ h0 halves every 280 ticks                  │
                                                       │ EMITTERS                                   │
                                                       │ low energy → hunger +.00416 past .477      │
                                                       │ ate → hunger -.523                         │
@@ -20,7 +21,6 @@
                                                       │ always → boredom +.00022                   │
                                                       │ played → boredom -.47                      │
                                                       │ played social → boredom -.147              │
-                                                      │ low nearby sprites → loneliness +.000502   │
                                                       └────────────────────────────────────────────┘
 ┌─ Events ────────────────────────────────────────────────────────────────── [all] selected major ─┐
 │                                                                                                  │

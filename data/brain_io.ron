@@ -67,6 +67,8 @@ inputs: [
     // of the other sex.
     (id: 71, name: "target_arousal",   reads: Target(Chem("arousal"))),
     (id: 72, name: "target_other_sex", reads: Differs(Locus("female"))),
+    // How long it's gone without seeing a male adult.
+    (id: 73, name: "longing",       reads: Chem("longing")),
 ],
 
 // The needs (design v16 §5.2, §5.6): the drives whose relief teaches a

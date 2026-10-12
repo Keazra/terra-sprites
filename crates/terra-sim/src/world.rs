@@ -1164,7 +1164,7 @@ impl World {
 
     /// Step 3: every sprite's chemistry (design §4.4), then death check #1.
     /// An egg has none (M2 design §10), and isn't counted as a sprite
-    /// nearby. A sprite sees a female adult within its sense radius.
+    /// nearby. A sprite sees a female or male adult within its sense radius.
     /// Returns the sprites marked dying, in ascending ID order.
     fn run_biochemistry(&mut self) -> Vec<EntityId> {
         let state = &mut self.state;
@@ -1177,11 +1177,14 @@ impl World {
                 .and_then(|id| sprites.get(id))
                 .is_some_and(|sprite| !sprite.is_egg())
         };
-        let females: Vec<(EntityId, Pos)> = sprites
-            .iter()
-            .filter(|(_, sprite)| sprite.sex == Sex::Female && sprite.stage().is_grown())
-            .map(|(id, sprite)| (id, sprite.pos))
-            .collect();
+        let adults = |sex| -> Vec<(EntityId, Pos)> {
+            sprites
+                .iter()
+                .filter(|(_, sprite)| sprite.sex == sex && sprite.stage().is_grown())
+                .map(|(id, sprite)| (id, sprite.pos))
+                .collect()
+        };
+        let (females, males) = (adults(Sex::Female), adults(Sex::Male));
         let senses: Vec<(EntityId, Senses)> = sprites
             .iter()
             .filter(|(_, sprite)| !sprite.is_egg())
@@ -1190,9 +1193,11 @@ impl World {
                     .filter(|&tile| tile != sprite.pos && hatched(tile))
                     .count();
                 let sight = sprite.program.traits.sense_radius.round() as u16;
-                let female_near = females
-                    .iter()
-                    .any(|&(other, at)| other != id && chebyshev(at, sprite.pos) <= sight);
+                let near = |adults: &[(EntityId, Pos)]| {
+                    adults
+                        .iter()
+                        .any(|&(other, at)| other != id && chebyshev(at, sprite.pos) <= sight)
+                };
                 let senses = Senses {
                     age: sprite.age(tick),
                     nearby_sprites: (others as f32 / f32::from(nearby.full)).min(1.0),
@@ -1201,7 +1206,8 @@ impl World {
                     stage: sprite.stage(),
                     fertile: breeding::fertile(state, sprite, data),
                     female: sprite.sex == Sex::Female,
-                    female_near,
+                    female_near: near(&females),
+                    male_near: near(&males),
                 };
                 (id, senses)
             })

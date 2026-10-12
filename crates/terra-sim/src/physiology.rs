@@ -410,6 +410,9 @@ pub(crate) struct Breeding {
     /// The level of the hormone `feminiser` at which a male adult turns
     /// female, for good.
     pub(crate) turns_female: f32,
+    /// The level of the hormone `longing` a female must have reached to
+    /// breed alone.
+    pub(crate) breeds_alone: f32,
     /// The need that drives breeding, one of `brain_io.ron`'s: the engine
     /// has it work only between adults (M2 design §5).
     pub(crate) drive: String,
@@ -425,6 +428,7 @@ impl Default for Breeding {
             fed: 0.5,
             rest: 1_500,
             turns_female: 0.8,
+            breeds_alone: 0.5,
             drive: "arousal".into(),
         }
     }
@@ -554,6 +558,7 @@ impl PhysiologyEntry {
         fraction("breeding.cost", breeding.cost)?;
         fraction("breeding.fed", breeding.fed)?;
         fraction("breeding.turns_female", breeding.turns_female)?;
+        fraction("breeding.breeds_alone", breeding.breeds_alone)?;
         if breeding.hatches == 0 {
             return Err("`breeding.hatches` must be at least 1 tick".into());
         }
@@ -778,23 +783,28 @@ pub(crate) struct Indices {
     /// What breeding reads and writes (M2 design §10), if the pack has it
     /// all: a pack from before breeding doesn't.
     pub(crate) breeding: Option<BreedingIndices>,
+    /// The need that drives breeding, `breeding.drive`, by its place among
+    /// the needs, if it's one: it works only between adults, whether or not
+    /// the pack breeds (M2 design §5).
+    pub(crate) drive: Option<usize>,
 }
 
 /// The loci and chemicals breeding reads and writes (M2 design §10).
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct BreedingIndices {
-    /// The body sensors: 1 while it's fertile, 1 if it's female, and 1
-    /// while it sees a female adult.
+    /// The body sensors: 1 while it's fertile, 1 if it's female, 1 while
+    /// it sees a female adult, and 1 while it sees a male adult.
     pub(crate) fertile: usize,
     pub(crate) female: usize,
     pub(crate) female_near: usize,
+    pub(crate) male_near: usize,
     /// The pulse each parent fires as an egg is laid.
     pub(crate) bred: usize,
     /// The hormone that turns a male female, past `breeding.turns_female`.
     pub(crate) feminiser: usize,
-    /// The need that drives breeding, `breeding.drive`, by its place among
-    /// the needs: it works only between adults (M2 design §5).
-    pub(crate) drive: usize,
+    /// The hormone a female must have past `breeding.breeds_alone` to
+    /// breed alone.
+    pub(crate) longing: usize,
 }
 
 impl Indices {
@@ -855,35 +865,48 @@ impl Indices {
                 .position(|l| l.name == name && l.kind == LocusKind::Pulse)
                 .ok_or_else(|| ("loci.ron", format!("sprites need a pulse called `{name}`")))
         };
-        // A pack with breeding's loci and hormone has breeding, and its
-        // drive must be one of the needs.
+        // The breeding drive works only between adults whenever it's one
+        // of the needs, whether or not the pack breeds (M2 design §5). A
+        // pack with breeding's loci and hormones has breeding, and its drive
+        // must be one of the needs.
+        let drive_place = needs.iter().position(|&need| need == drive);
         let locus = |name: &str, kind| loci.iter().position(|l| l.name == name && l.kind == kind);
-        let breeding =
-            match (
-                locus("fertile", LocusKind::BodySensor),
-                locus("female", LocusKind::BodySensor),
-                locus("female_near", LocusKind::BodySensor),
-                locus("bred", LocusKind::Pulse),
-                chemicals.iter().position(|c| c.name == "feminiser"),
-            ) {
-                (Some(fertile), Some(female), Some(female_near), Some(bred), Some(feminiser)) => {
-                    let drive = needs.iter().position(|&need| need == drive).ok_or_else(|| {
-                    (
+        let breeding = match (
+            locus("fertile", LocusKind::BodySensor),
+            locus("female", LocusKind::BodySensor),
+            locus("female_near", LocusKind::BodySensor),
+            locus("male_near", LocusKind::BodySensor),
+            locus("bred", LocusKind::Pulse),
+            chemicals.iter().position(|c| c.name == "feminiser"),
+            chemicals.iter().position(|c| c.name == "longing"),
+        ) {
+            (
+                Some(fertile),
+                Some(female),
+                Some(female_near),
+                Some(male_near),
+                Some(bred),
+                Some(feminiser),
+                Some(longing),
+            ) => {
+                if drive_place.is_none() {
+                    return Err((
                         "physiology.ron",
                         format!("`breeding.drive` is `{drive}`, but brain_io.ron has no such need"),
-                    )
-                })?;
-                    Some(BreedingIndices {
-                        fertile,
-                        female,
-                        female_near,
-                        bred,
-                        feminiser,
-                        drive,
-                    })
+                    ));
                 }
-                _ => None,
-            };
+                Some(BreedingIndices {
+                    fertile,
+                    female,
+                    female_near,
+                    male_near,
+                    bred,
+                    feminiser,
+                    longing,
+                })
+            }
+            _ => None,
+        };
         Ok(Indices {
             energy: chem("energy")?,
             hydration: chem("hydration")?,
@@ -908,6 +931,7 @@ impl Indices {
             petted: pulse("petted")?,
             shocked: pulse("shocked")?,
             breeding,
+            drive: drive_place,
         })
     }
 }

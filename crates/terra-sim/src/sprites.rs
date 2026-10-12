@@ -176,9 +176,24 @@ impl Sprite {
         } else {
             0
         };
-        let decayed = std::iter::repeat_n(decay.hit, decayed);
+        // Hits enough to land on every gene, which only a data pack with
+        // a tiny `hit` makes, land a round at a time, one on each, and the
+        // rest at random: the same damage on average, in work that doesn't
+        // grow with the hits.
+        let (rounds, decayed) = (decayed / n, decayed % n);
         let mut weakened = false;
         let mut mind = false;
+        if rounds > 0 {
+            let hit = rounds as f32 * decay.hit;
+            for (health, gene) in self.health.iter_mut().zip(&self.genome.genes) {
+                if frailty(gene) > 0.0 {
+                    *health = (*health - hit * frailty(gene)).max(0.0);
+                    mind |= matches!(gene, Gene::Instinct { .. } | Gene::AttentionInstinct { .. });
+                }
+            }
+            weakened = true;
+        }
+        let decayed = std::iter::repeat_n(decay.hit, decayed);
         for hit in scarred.into_iter().chain(decayed) {
             let nth = uniform(rng, n as u64) as usize;
             let (index, gene) = self
@@ -685,7 +700,7 @@ mod tests {
     use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
-    use crate::test_util::at;
+    use crate::test_util::{at, builtin_changing};
 
     /// A sprite of speed 9 and sense radius 10 that grows up at 3,000 ticks
     /// and old at 6,000, `age` ticks old on tick 10,000.
@@ -788,6 +803,20 @@ mod tests {
         let mind = 1.0 - mean_health(&easy, |f| f == 0.5);
         assert!(mind < body * 0.75, "the mind lost {mind}, the body {body}");
         assert_eq!(easy.genome, genome);
+    }
+
+    #[test]
+    fn a_tiny_hit_lands_in_rounds_and_still_wears_the_body_out_in_the_ticks_set() {
+        // A billion hits a tick would stall the world if each landed alone.
+        let data = builtin_changing(
+            "physiology.ron",
+            &[(
+                "decay: (ticks: 3600, hit: 0.01,",
+                "decay: (ticks: 2, hit: 0.000000001,",
+            )],
+        );
+        let mut old = starter(20_000, &data);
+        assert_eq!(until_it_gives_out(&mut old, &data, 10), 2);
     }
 
     #[test]

@@ -3632,6 +3632,7 @@ fn an_egg_is_drawn_as_an_egg_and_the_body_tab_says_when_it_hatches() {
     let genome = terra_sim::Genome::from_ron(
         r#"(format: 1, genes: [
             InitialConcentration(chem: "feminiser", value: 1.0),
+            InitialConcentration(chem: "longing", value: 1.0),
             Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
         ])"#,
         &pack,
