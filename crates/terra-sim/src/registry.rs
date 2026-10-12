@@ -128,10 +128,10 @@ listed_enum! {
         /// How much faster than its other rates say a sprite learns: the
         /// young learn faster (M2 design §9.5).
         Plasticity = 38 => "plasticity",
-        /// How much a Reward or Correct teaches the habit of the sprite's
-        /// latest try, kept apart from the habits it learns itself (#187).
+        /// How much a Reward or Correct teaches the taught habit of the
+        /// sprite's latest try (design §5.6, #187).
         TaughtRate = 39 => "taught_rate",
-        /// How much a habit the Cursor taught fades each tick (#187).
+        /// How much a taught habit fades each tick (design §5.6, #187).
         TaughtFade = 40 => "taught_fade",
     }
 

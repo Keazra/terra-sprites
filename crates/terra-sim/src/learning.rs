@@ -103,8 +103,9 @@ impl Subject {
 }
 
 /// What a sprite has learned about one object type (design v19 §5.6): its
-/// worth for each need and in general, how bad it is, its habits and those
-/// the Cursor taught (#187), how familiar it is, and whether it knows it.
+/// worth for each need and in general, how bad it is, its habits and its
+/// taught habits (design §5.6, #187), how familiar it is, and whether it
+/// knows it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct TypeMemory {
     /// Worth for each need, in the pack's needs order (0 to 1).
@@ -115,10 +116,11 @@ pub(crate) struct TypeMemory {
     pub(crate) bad: f32,
     /// Habits: doing each verb to it, in `VERBS` order.
     pub(crate) habits: [f32; VERBS.len()],
-    /// The habits the Cursor taught, kept apart from those it learned
-    /// itself (#187), in `VERBS` order. A save from before them has none.
+    /// Taught habits: what the Cursor taught about doing each verb to it,
+    /// kept apart from the habits it learns itself (design §5.6, #187), in
+    /// `VERBS` order. A save from before them has none.
     #[serde(default)]
-    pub(crate) taught: [f32; VERBS.len()],
+    pub(crate) taught_habits: [f32; VERBS.len()],
     /// How familiar it is, from attending to it (0 to 1).
     pub(crate) familiarity: f32,
     /// Whether it has touched one, and so knows it: until then, it's
@@ -134,16 +136,17 @@ impl TypeMemory {
             good: 0.0,
             bad: 0.0,
             habits: [0.0; VERBS.len()],
-            taught: [0.0; VERBS.len()],
+            taught_habits: [0.0; VERBS.len()],
             familiarity: 0.0,
             touched: false,
         }
     }
 
-    /// Its habit of doing `VERBS[i]` to it: the one it learned and the one
-    /// the Cursor taught, together (#187).
+    /// Its habit of doing `VERBS[i]` to it, as a decision weighs it: the
+    /// one it learned and the one the Cursor taught, together (design §5.5,
+    /// #187).
     pub(crate) fn habit(&self, i: usize) -> f32 {
-        (self.habits[i] + self.taught[i]).clamp(-1.0, 1.0)
+        (self.habits[i] + self.taught_habits[i]).clamp(-1.0, 1.0)
     }
 }
 
@@ -215,7 +218,7 @@ impl Experience {
             within([&known.good], (0.0, 1.0), "a good")?;
             within([&known.bad], (-1.0, 0.0), "a bad")?;
             within(&known.habits, (-1.0, 1.0), "a habit")?;
-            within(&known.taught, (-1.0, 1.0), "a taught habit")?;
+            within(&known.taught_habits, (-1.0, 1.0), "a taught habit")?;
             within([&known.familiarity], (0.0, 1.0), "a familiarity")?;
         }
         within([&self.new_things], (-1.0, 1.0), "the worth of new things")?;
