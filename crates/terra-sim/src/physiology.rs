@@ -158,6 +158,14 @@ fn added_since_saves(param: BrainParam) -> Option<ParamRange> {
             range: (0.25, 4.0),
             default: 1.0,
         }),
+        BrainParam::TaughtRate => Some(ParamRange {
+            range: (0.0, 1.0),
+            default: 0.9,
+        }),
+        BrainParam::TaughtFade => Some(ParamRange {
+            range: (0.0, 0.01),
+            default: 0.00000625,
+        }),
         _ => None,
     }
 }

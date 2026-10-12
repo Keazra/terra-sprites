@@ -302,7 +302,7 @@ fn a_pet_within_its_reach_back_makes_the_last_thing_tried_and_that_habit_good() 
     // Design v21 §5.6: the kick at tick 0 is 6 ticks old when the pet lands,
     // past the touch window's 3 but within its reach back of 10. So balls
     // are good, .5 × worth_rate_good (.5), and so is kicking them, at full
-    // weight: .5 × habit_rate (.3).
+    // weight: .5 × taught_rate (.9, #187).
     let (mut world, id) = kicker("");
     run_to(&mut world, 6);
     world.submit(Command::Reward {
@@ -312,7 +312,7 @@ fn a_pet_within_its_reach_back_makes_the_last_thing_tried_and_that_habit_good() 
     });
     world.step();
     assert!(close(value_of(&world, id, &balls_good()), 0.25));
-    assert!(close(value_of(&world, id, &kicking_balls()), 0.15));
+    assert!(close(value_of(&world, id, &kicking_balls()), 0.45));
 }
 
 /// Kicks the ball at tick 0, and pets the sprite at `tick` with `reach_back`.
@@ -336,16 +336,16 @@ fn pet_after_a_kick(tick: u64, reach_back: u64) -> (f32, f32) {
 fn a_pet_after_its_reach_back_has_passed_teaches_nothing_of_the_last_try() {
     // Design v21 §5.6: 6 ticks after the kick, a reach back of 5 misses it.
     assert_eq!(pet_after_a_kick(6, 5), (0.0, 0.0));
-    assert_eq!(pet_after_a_kick(5, 5), (0.25, 0.15), "just within");
+    assert_eq!(pet_after_a_kick(5, 5), (0.25, 0.45), "just within");
 }
 
 #[test]
 fn a_reach_back_below_the_touch_window_or_past_the_longest_is_taken_as_that_bound() {
     // Design v21 §2.5: at least touch_window (3), at most max_reach_back (40).
-    assert_eq!(pet_after_a_kick(3, 0), (0.25, 0.15), "0 is taken as 3");
+    assert_eq!(pet_after_a_kick(3, 0), (0.25, 0.45), "0 is taken as 3");
     assert_eq!(
         pet_after_a_kick(40, 1000),
-        (0.25, 0.15),
+        (0.25, 0.45),
         "1,000 is taken as 40"
     );
     assert_eq!(pet_after_a_kick(41, 1000), (0.0, 0.0));
@@ -466,10 +466,11 @@ fn zap_after_a_kick(tick: u64) -> (f32, f32) {
 fn a_zap_looks_back_only_the_touch_window_whatever_the_speed() {
     // Design v21 §5.6: a late shock mustn't land on the wrong thing, so a
     // Correct carries no reach back. 3 ticks after the kick the zap makes
-    // balls bad, .5 × worth_rate_bad (.8), and kicking them, .5 × habit_rate
-    // (.3) at full weight; 4 ticks after, it teaches nothing about them.
+    // balls bad, .5 × worth_rate_bad (.8), and kicking them, .5 ×
+    // taught_rate (.9, #187) at full weight; 4 ticks after, it teaches
+    // nothing about them.
     let (bad, habit) = zap_after_a_kick(3);
-    assert!(close(bad, -0.4) && close(habit, -0.15), "{bad}, {habit}");
+    assert!(close(bad, -0.4) && close(habit, -0.45), "{bad}, {habit}");
     assert_eq!(zap_after_a_kick(4), (0.0, 0.0));
 }
 
@@ -491,7 +492,7 @@ fn a_zap_with_a_pet_in_the_same_tick_still_looks_back_only_the_touch_window() {
     };
     assert!(close(value_of(&world, id, &balls_good()), 0.25));
     assert!(
-        close(value_of(&world, id, &kicking_balls()), 0.15),
+        close(value_of(&world, id, &kicking_balls()), 0.45),
         "the zap took nothing off"
     );
     assert_eq!(value_of(&world, id, &balls_bad), 0.0);

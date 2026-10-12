@@ -1032,9 +1032,9 @@ Approach still has its own jobs:
 3. **5b Decision:**
    - **Score** each *available* verb (v16):
 
-     `s_v = Σₖ aₖ·W[k][v] + H[c][v] + side_v × value_gain × value_c − shy_v × value_gain × fear_c + back_v × flight × fear_c`
+     `s_v = Σₖ aₖ·W[k][v] + clamp(H[c][v] + T[c][v], −1, 1) + side_v × value_gain × value_c − shy_v × value_gain × fear_c + back_v × flight × fear_c`
 
-     where `W` holds the instinct links (concepts × verbs, which never learn), `c` is the attended thing (the candidate of the attended category, or the target aimed at), `H[c][v]` the habit for doing `v` to its object type (v19; for sprites, to sprites), `value_c` its worth now (§5.6) and `fear_c` how frightening it is while near (§5.3). `side_v` is +1 for Approach and the interactions, and 0 for Retreat, Rest and Wander (v18: badness no longer backs away); `shy_v` is 1 for Approach, Eat, Drink and Play; `back_v` is 1 for Retreat. With nothing attended, the habit, worth and fear terms are 0. So a thing worth having draws the sprite to it, a bad one is left alone, and a frightening one nearby is backed away from and not gone near. **Fear never adds to Hit** (v18, measured: it started feuds); hitting back is the instinct's. While a `was_hit` or `cornered` pulse is live, `fear_c` is 0 here: what the sprite does in those moments is instinct's, though fear still catches its eye (§5.3).
+     where `W` holds the instinct links (concepts × verbs, which never learn), `c` is the attended thing (the candidate of the attended category, or the target aimed at), `H[c][v]` the habit for doing `v` to its object type (v19; for sprites, to sprites) and `T[c][v]` the taught habit (§5.6, #187), counted together within ±1, `value_c` its worth now (§5.6) and `fear_c` how frightening it is while near (§5.3). `side_v` is +1 for Approach and the interactions, and 0 for Retreat, Rest and Wander (v18: badness no longer backs away); `shy_v` is 1 for Approach, Eat, Drink and Play; `back_v` is 1 for Retreat. With nothing attended, the habit, worth and fear terms are 0. So a thing worth having draws the sprite to it, a bad one is left alone, and a frightening one nearby is backed away from and not gone near. **Fear never adds to Hit** (v18, measured: it started feuds); hitting back is the instinct's. While a `was_hit` or `cornered` pulse is live, `fear_c` is 0 here: what the sprite does in those moments is instinct's, though fear still catches its eye (§5.3).
    - **With no current action:** sample a verb from softmax(s / τ), where **τ = τ_base × `exploration_mod`**, drawing on the world RNG.
      - If the chosen verb is **Wander**, its destination is sampled now: uniformly from the reachable tiles in the flood whose Chebyshev distance from the sprite is more than `sense_radius / 2`, the trait as it is, not rounded as the flood's reach is. If there are none, it samples from all reachable tiles other than the sprite's own. If there are none at all, Wander ends straight away with outcome `failed`.
    - **With a current action, verb c:** it continues unless some available verb v has `s_v > s_c + switch_margin`. If one does, the sprite switches **deterministically** to the highest-scoring such verb, with ties going to the lower `OutputId`. Which verbs are available, and what the new one is aimed at, go by the current action's target (§5.3, #173). While that target is out of reach, as a retreat's can be, only Rest and Wander are available: there's no way to it. A trip's remembered place out of sight is the exception, since the sprite knows the way (M2 §7).
@@ -1075,6 +1075,7 @@ World randomness is separate: plant rules and the order actions resolve in. It c
 | **Bad**, `B[c]` (−1 to 0) | object type, or remembered sprite | `punishment` from its own touch (hurts, shocks) | the thing touched |
 | **Fear**, `F[s]` (−1 to 0) (v18) | remembered sprite, or the Cursor (v29) | `punishment` from a hurt done to it (a `was_hit` pulse live), or from a visible Cursor's correction or shove (v29) | the one who did it |
 | **Habit**, `H[c][v]` | object type × verb; sprites as a whole × verb | good less bad, and disappointment | the trace |
+| **Taught habit**, `T[c][v]` (#187) | object type × verb; sprites as a whole × verb | the Cursor's pets and shocks | the latest attempt |
 | **The worth of new things**, `new_things` | brain | good less bad, times how new the thing touched was | the thing touched |
 | **Familiarity**, `familiarity_c` (0 to 1) | object type; sprites as a whole | attending to it | — |
 
@@ -1097,9 +1098,11 @@ In this section, *c* is an object type (v19). Sprites are learned about one by o
 
 **The Cursor's reach back** (v21). A pet or hug carries its reach back (§2.5): about two seconds of the player's time at their speed, at least `touch_window` and at most `max_reach_back`. A zap or shock looks back only `touch_window`, whatever the speed: measured, a shock reaching further nearly always found something to blame, often a recent drink, and sprites shocked at random moments learned to avoid water and died of thirst (v21 change 6). In a tick when the Cursor rewarded the sprite (a `petted` pulse is live at step 4), that tick's reward goes to the sprite's **latest attempt, if it was within the Reward's reach back**; in a tick when it corrected the sprite (a `shocked` pulse is live), that tick's punishment goes to its latest attempt within `touch_window`, even when a pet lands in the same tick. Each goes:
 - **to worth:** good, or bad, for the thing that attempt touched, by the rules below;
-- **to the habit** for that thing and that attempt's verb, at full weight, `H[c][v] += habit_rate × reward` (or `− habit_rate × punishment`), in place of the trace.
+- **to the taught habit** (#187) for that thing and that attempt's verb, at full weight, `T[c][v] += taught_rate × reward` (or `− taught_rate × punishment`), in place of the trace. It is kept apart from the habit the sprite learns itself; the decision (§5.5), the Brain tab and the lessons count the two together, `clamp(H[c][v] + T[c][v], −1, 1)`.
 
-With no attempt within reach, the tick teaches as any other: no worth, and habits along the trace. Relief, disappointment and fear are unchanged: relief keeps the touch window, and while a `was_hit` pulse is live punishment teaches fear of the hitter (below), even a shock's. **Why the latest attempt:** the player rewards what they saw the sprite do, and at 8× a player reacts after the sprite has moved on. The trace would spread the pet over the walk to whatever came next, and a fixed 20-tick window would span 16 seconds at 1×, long enough to credit a meal eaten well before a pet for resting.
+With no attempt within reach, the tick teaches as any other: no worth, and the sprite's own habits along the trace, not its taught habits. Relief, disappointment and fear are unchanged: relief keeps the touch window, and while a `was_hit` pulse is live punishment teaches fear of the hitter (below), even a shock's. **Why the latest attempt:** the player rewards what they saw the sprite do, and at 8× a player reacts after the sprite has moved on. The trace would spread the pet over the walk to whatever came next, and a fixed 20-tick window would span 16 seconds at 1×, long enough to credit a meal eaten well before a pet for resting.
+
+**Why taught habits are kept apart** (#187). A pet or shock used to go into the habit the sprite learns itself, where what it learned afterwards and the habit's fading soon washed it out. It took about three shocks to last, and most sprites got one or two, so A3 passed or failed by luck. Kept apart, a shock or two lasts most of a life, and a sprite nobody trains learns exactly as before. A mistaken shock lasts too, as a player would expect of training. The measurements are in [the change file](changes/2026-10-12-taught-habits.md).
 
 **Worth and bad,** for the thing touched, of object type *c*. A hit's punishment (a `was_hit` pulse live) teaches fear instead, below, even when the sprite had just touched a sprite itself:
 - `G_n[c] += worth_rate_good × relief_n` for each need; `G[c] += worth_rate_good × reward`; `B[c] −= worth_rate_bad × punishment`.
@@ -1125,9 +1128,11 @@ With no attempt within reach, the tick teaches as any other: no worth, and habit
 - For each entry with an aimed verb and an attended object type: `H[c_j][v_j] += habit_rate × (reward − punishment − disappointment_j) × weight_j`.
 - **Disappointment:** a fruitless try disappoints the need that chose it. If the latest attempt was fruitless and its entry has a motive *n*, that entry's `disappointment_j = disappointment × level_n`. Playing with a ball out of plain curiosity costs nothing; a hungry sprite that tries to eat a ball learns that eating balls doesn't work.
 - **Relief doesn't teach habits:** it teaches worth, which draws the sprite back. Measured, habits from good less bad and disappointment were enough.
-- **Praise credits both** (owner decision): a pet just after a sprite tries to eat a ball raises the ball's general good *and* the habit of eating balls. Players can teach tricks and quirks, on purpose or by accident, and without more praise the habit fades.
+- **Praise credits both** (owner decision): a pet just after a sprite tries to eat a ball raises the ball's general good *and* the habit of eating balls (its taught habit, #187). Players can teach tricks and quirks, on purpose or by accident, and without more praise the habit fades, slowly.
 
-**Fading.** Every tick, after learning: each `G_n` and `G` and `new_things` is multiplied by `1 − worth_fade_good`, each `B` by `1 − worth_fade_bad`, each `F` by `1 − fear_fade`, each good habit by `1 − habit_fade` and each bad habit by `1 − habit_fade_bad` (v21). The starter genome's defaults learn bad faster than good and fade it about four times more slowly (Appendix B), habits as well as worth since v21.
+**Fading.** Every tick, after learning: each `G_n` and `G` and `new_things` is multiplied by `1 − worth_fade_good`, each `B` by `1 − worth_fade_bad`, each `F` by `1 − fear_fade`, each good habit by `1 − habit_fade`, each bad habit by `1 − habit_fade_bad` (v21) and each taught habit, good or bad, by `1 − taught_fade` (#187). The starter genome's defaults learn bad faster than good and fade it about four times more slowly (Appendix B), habits as well as worth since v21.
+
+**Lessons fade slowly** (2026-10-12). The owner: lessons "shouldn't fade quickly, in general, whether self-taught or corrected/rewarded", while the Cursor's may teach more. So good worth and good habits fade by half in about 28,000 ticks, about 6 hours at 1×, an average life (M2 design §2); bad worth, bad habits, fear and taught habits in about 110,000 ticks, so in effect they last a life; and the Cursor's lessons stay three times as strong (`taught_rate`). Until then a good lesson halved in about 3,500 ticks, under an hour, and a bad one in about 14,000. A remembered place still fades by half in about 3,500 (M2 design §7.2): it can change under the sprite, as a bush dies.
 
 **Forgetting** (v18). A remembered sprite all of whose values are under `forget_below` (physiology, 0.01) is forgotten, and so is one that has died, at step 4. So is the Cursor (v29), once all its values are under `forget_below`. There's no limit on how many a sprite remembers.
 
@@ -1184,7 +1189,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 
 ### 5.8.1 Budget
 
-- **Per sprite:** instinct links (≤ ~105 concepts × 8 verbs, plus 37 × one per category attention), and learned values for each object type (v19; 6 in M1, counting water and sprites): 6 needs, 2 general, 8 habits and a familiarity; and 1 new-things. Category summaries are worked out when needed, not stored. Under 1.2k numbers, about 5 KB. Plus 9 numbers for each sprite it remembers (v18): measured, about 5 on average and 15 at most, with no measurable cost in run time.
+- **Per sprite:** instinct links (≤ ~105 concepts × 8 verbs, plus 37 × one per category attention), and learned values for each object type (v19; 6 in M1, counting water and sprites): 6 needs, 2 general, 8 habits, 8 taught habits (#187) and a familiarity; and 1 new-things. Category summaries are worked out when needed, not stored. Under 1.2k numbers, about 5 KB. Plus 9 numbers for each sprite it remembers (v18): measured, about 5 on average and 15 at most, with no measurable cost in run time.
 - **Whole world:** 100 sprites is about 0.5 MB.
 - **Per tick:** a few thousand multiply-adds per sprite for the instincts; learning touches one thing and at most the trace's habit cells.
 
@@ -1711,7 +1716,7 @@ Implementation is **test-first, one vertical slice at a time.** Everything in `t
      - verb-only effects in lifecycle rules are load errors; objects created during step 2 first run next tick
    - **Commands:** stamping for the next tick, applying in submission order, the amounts each injects and the pulse it sends, levels capped at 1 however many land in a tick, every rejection path, and the reach back's bounds.
    - **Throws, shoves and crashes** (v25): a throw's bounds and where it starts; a slide's timing, what stops it, and what a crash is with; a crash runs the thing's tags, counts as the thing touched, and teaches no habit, not even along the trace; a sliding sprite taken hold of slides on to the end.
-   - **The Cursor's reach back** (v21): its feeling goes to the latest attempt within the reach back, at full weight, and not to an older one or along the trace; with no attempt within the reach back, the tick teaches as any other; relief keeps the touch window; a `was_hit` pulse still makes punishment teach fear.
+   - **The Cursor's reach back** (v21): its feeling goes to the latest attempt within the reach back, at full weight, and not to an older one or along the trace, and to its taught habit, which what the sprite learns itself leaves alone (#187); with no attempt within the reach back, the tick teaches as any other; relief keeps the touch window; a `was_hit` pulse still makes punishment teach fear.
 2. **Property tests (`proptest`):**
    - The map is connected for any seed.
    - Among random placements and removals, placing a solid object where `KeepsPathsOpen` holds never splits the open ground into more pieces.
@@ -1982,6 +1987,10 @@ IDs are stable and append-only. Gaps are left for growth, and the ranges are a c
 | 34 | quieting (v21) |
 | 35 | habit_fade_bad (v21) |
 | 36 | cursor_calming (v29) |
+| 37 | place_fade (M2 design §7.2) |
+| 38 | plasticity (M2 design §9.5) |
+| 39 | taught_rate (#187) |
+| 40 | taught_fade (#187) |
 
 Since v16, `learning_rate`, `relax_rate` and `consolidate_rate` do nothing (learning is worth and habits, §5.6), nor do 10–14 while the recruitable pool is on hold (§5.4). Their IDs stay taken.
 
@@ -2027,10 +2036,10 @@ This file fixes the **mechanisms and ranges**. The starting values are tuned wit
 | `forget_ticks` | 100–100,000 | 5,000 |
 | `worth_rate_good` | 0–1 | 0.5 |
 | `worth_rate_bad` | 0–1 | 0.8 |
-| `worth_fade_good` | 0–0.01 | 0.0002 |
-| `worth_fade_bad` | 0–0.01 | 0.00005 |
+| `worth_fade_good` | 0–0.01 | 0.000025 |
+| `worth_fade_bad` | 0–0.01 | 0.00000625 |
 | `habit_rate` | 0–1 | 0.3 |
-| `habit_fade` | 0–0.01 | 0.0002 |
+| `habit_fade` | 0–0.01 | 0.000025 |
 | `value_gain` | 0–2 | 1.0 |
 | `curiosity` | 0–1 | 0.3 |
 | `familiarity_rate` | 0–0.05 | 0.002 |
@@ -2038,15 +2047,17 @@ This file fixes the **mechanisms and ranges**. The starting values are tuned wit
 | `individual_rate_good` (v18) | 0–1 | 0.8 |
 | `individual_rate_bad` (v18) | 0–1 | 0.9 |
 | `fear_rate` (v18) | 0–1 | 1.0 |
-| `fear_fade` (v18) | 0–0.01 | 0.00005 |
+| `fear_fade` (v18) | 0–0.01 | 0.00000625 |
 | `generalise` (v18) | 2–10 | 3 |
 | `vigilance` (v18) | 0–2 | 0.8 |
 | `flight` (v18) | 0–2 | 0.8 |
 | `fear_reach` (v18) | 0.1–1 | 0.5 |
 | `generalise_types` (v19) | 2–10 | 3 |
 | `quieting` (v21) | 0–1 | 0.8 |
-| `habit_fade_bad` (v21) | 0–0.01 | 0.00005 |
+| `habit_fade_bad` (v21) | 0–0.01 | 0.00000625 |
 | `cursor_calming` (v29) | 0–0.1 | 0.01 |
+| `taught_rate` (#187) | 0–1 | 0.9 |
+| `taught_fade` (#187) | 0–0.01 | 0.00000625 |
 
 The v16 defaults are the prototype's (#10), a starting point for slice 9's tuning, and the v18 ones slice 9c's prototype's (#62). `generalise_types` starts at `generalise`'s value. Rows for parameters that do nothing since v16 stay, since a genome may still carry their genes.
 
