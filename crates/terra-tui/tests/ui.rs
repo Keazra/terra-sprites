@@ -889,6 +889,21 @@ fn the_event_log_lists_deaths_newest_first_under_the_map() {
 }
 
 #[test]
+fn a_line_that_repeats_in_the_event_log_counts_up_within_cp437() {
+    let world = garden(pack());
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    // Two lines that read the same, in a row.
+    app.record(&[died(4_012, 31, DeathCause::Dehydration, 4_012)], &world);
+    app.record(&[died(4_100, 31, DeathCause::Dehydration, 4_012)], &world);
+    let screen = lines(&render(&app, &world, 100, 30));
+    assert_eq!(
+        inside(&screen[25]),
+        "4,100  Sprite #31 died (dehydration, age 4,012) x2"
+    );
+    assert!(screen[25].chars().all(terra_tui::cp437::contains));
+}
+
+#[test]
 fn the_event_log_leaves_object_and_action_events_out_and_keeps_the_latest_100() {
     let world = garden(pack());
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
@@ -2774,7 +2789,7 @@ fn the_body_tab_ends_with_what_was_observed_and_how_long_ago() {
             "        just now · Rested",
             "     8 ticks ago · Wandered off, but gave",
             "                   up: the way was blocked",
-            "     9 ticks ago · Wandered off ×2",
+            "     9 ticks ago · Wandered off x2",
             " 1,296 ticks ago · Rested",
         ]
     );
@@ -3265,7 +3280,7 @@ fn the_same_line_again_merges_into_one_with_a_count() {
         logged(&world, &events),
         [
             "11  You zapped Sprite #12",
-            "10  You petted Sprite #12 ×10",
+            "10  You petted Sprite #12 x10",
             "",
         ]
     );
@@ -3344,8 +3359,8 @@ fn lines_that_read_the_same_merge_though_their_events_differ() {
     assert_eq!(
         rows,
         [
-            "4  Couldn't pet Sprite #12: it's gone ×2",
-            "2  Sprite #12 kicked a ball ×2",
+            "4  Couldn't pet Sprite #12: it's gone x2",
+            "2  Sprite #12 kicked a ball x2",
             "",
         ]
     );

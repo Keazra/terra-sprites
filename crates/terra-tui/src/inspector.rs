@@ -295,7 +295,8 @@ fn observed_lines(app: &App, now: u64) -> Vec<String> {
                 n => format!("{} ticks ago", group_thousands(n)),
             };
             let times = if o.count > 1 {
-                format!(" ×{}", o.count)
+                // An x: CP437 has no × (design §6.2).
+                format!(" x{}", o.count)
             } else {
                 String::new()
             };

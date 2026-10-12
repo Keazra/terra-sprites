@@ -920,7 +920,8 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     });
     for (row, (tick, text, count)) in (inner.y..inner.bottom()).zip(lines) {
         let times = if count > 1 {
-            format!(" ×{count}")
+            // An x: CP437 has no × (design §6.2).
+            format!(" x{count}")
         } else {
             String::new()
         };
