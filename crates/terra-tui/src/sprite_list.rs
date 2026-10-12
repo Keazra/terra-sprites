@@ -114,12 +114,17 @@ pub(crate) fn lines(
         .max()
         .unwrap_or(0);
     // Each sprite's life stage after its age (M2 design §9.6).
-    let stage_width = [LifeStage::Young, LifeStage::Adult, LifeStage::Old]
-        .iter()
-        .map(|stage| stage.name().len())
-        .chain(["Life stage".len()])
-        .max()
-        .unwrap_or(0);
+    let stage_width = [
+        LifeStage::Egg,
+        LifeStage::Young,
+        LifeStage::Adult,
+        LifeStage::Old,
+    ]
+    .iter()
+    .map(|stage| stage.name().len())
+    .chain(["Life stage".len()])
+    .max()
+    .unwrap_or(0);
     let heading = format!(
         " {:<label_width$}  {:>age_width$}  {:<stage_width$}  {:<drive_width$}  Doing",
         "Sprite", "Age", "Life stage", "Drive"

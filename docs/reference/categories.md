@@ -10,6 +10,7 @@ What a sprite perceives a thing as (design §3.5.5). A sprite pays attention to 
 
 - **Things share a category because they look alike to a sprite,** never because of what they do. A berry bush and a thornbush are both `bush`, so a sprite that has learned thornbushes hurt has to tell them apart by trying. A bush and a berry are different categories, though berries grow on bushes.
 - **`water`, `sprite` and `cursor` must be in the list.** Water tiles, sprites and the Cursor aren't objects, but every world has them, and the engine perceives them as the categories with these names.
+- **`egg` may be.** The engine perceives eggs as it, a kind of thing of their own, not as sprites (M2 design §10). In a pack without it, sprites don't see eggs at all.
 - **Each category is a brain input,** `attended_<name>`, with the ID `35 + id` for IDs 1 to 6 and `37 + id` from 7. So category IDs go up to 26.
 - **This list belongs to the core game.** A mod picks categories for its object types from it and doesn't add to it (design §1.4): a genome names categories, so one a mod added would mean nothing to sprites from another pack.
 
@@ -26,5 +27,6 @@ The built-in list.
     (id: 5, name: "toy",    plural: "toys"),
     (id: 6, name: "sprite", plural: "sprites"),
     (id: 7, name: "cursor"),
+    (id: 8, name: "egg",    plural: "eggs"),
 ]
 ```

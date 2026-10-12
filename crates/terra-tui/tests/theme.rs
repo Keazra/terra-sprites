@@ -33,11 +33,12 @@ fn pack() -> DataPack {
 fn map_glyphs(theme: &Theme) -> Vec<(char, String)> {
     let pack = pack();
     // The selected sprite, and a young one, are still sprites, so they may
-    // share the sprite's glyph.
+    // share the sprite's glyph; and a selected egg is still an egg.
     let kind = |tile: SemanticTile| match tile {
         SemanticTile::SelectedSprite
         | SemanticTile::YoungSprite
         | SemanticTile::SelectedYoungSprite => format!("{:?}", SemanticTile::Sprite),
+        SemanticTile::SelectedEgg => format!("{:?}", SemanticTile::Egg),
         tile => format!("{tile:?}"),
     };
     let optional = SemanticTile::OPTIONAL.map(|(tile, _)| tile);
@@ -272,7 +273,7 @@ fn the_aim_line_is_yellow_dots_ending_in_a_small_circle_or_semicolons_and_an_o()
 
 #[test]
 fn each_theme_colours_every_drive_of_the_built_in_pack_as_the_design_table_says() {
-    // Design §6.3.
+    // Design §6.3, and arousal M2 design §10.
     let expected = [
         ("hunger", Color::Yellow),
         ("thirst", Color::Cyan),
@@ -281,6 +282,7 @@ fn each_theme_colours_every_drive_of_the_built_in_pack_as_the_design_table_says(
         ("boredom", Color::DarkGray),
         ("loneliness", Color::Magenta),
         ("crowdedness", Color::LightRed),
+        ("arousal", Color::LightMagenta),
     ];
     let pack = pack();
     let drives: Vec<&str> = pack.drives().collect();

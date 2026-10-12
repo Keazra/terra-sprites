@@ -491,6 +491,12 @@ pub(crate) struct Senses {
     pub(crate) resting: bool,
     /// Its life stage (M2 design §9.1).
     pub(crate) stage: LifeStage,
+    /// Whether it's fertile, female, and sees a female adult or a male one
+    /// (M2 design §10).
+    pub(crate) fertile: bool,
+    pub(crate) female: bool,
+    pub(crate) female_near: bool,
+    pub(crate) male_near: bool,
 }
 
 /// Step 3 for one sprite (design §4.4). Returns whether its injury has
@@ -652,6 +658,13 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
     loci[indices.nearby_sprites] = senses.nearby_sprites;
     loci[indices.moving] = if senses.steps > 0 { 1.0 } else { 0.0 };
     loci[indices.resting] = if senses.resting { 1.0 } else { 0.0 };
+    if let Some(breeding) = indices.breeding {
+        let level = |sensed: bool| if sensed { 1.0 } else { 0.0 };
+        loci[breeding.fertile] = level(senses.fertile);
+        loci[breeding.female] = level(senses.female);
+        loci[breeding.female_near] = level(senses.female_near);
+        loci[breeding.male_near] = level(senses.male_near);
+    }
 }
 
 #[cfg(test)]
@@ -1151,6 +1164,7 @@ mod tests {
             steps: 1,
             resting: false,
             stage: LifeStage::Adult,
+            ..Senses::default()
         });
         assert_eq!(sprite.locus("always"), 1.0);
         assert_eq!(
@@ -1462,6 +1476,7 @@ mod tests {
                     steps: roll % 3,
                     resting: roll % 7 == 0,
                     stage: LifeStage::Adult,
+                    ..Senses::default()
                 };
                 // What verbs did last tick: food, water or injury, and a pulse.
                 let injection = [

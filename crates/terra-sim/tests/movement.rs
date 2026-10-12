@@ -414,10 +414,11 @@ fn a_sprite_with_nothing_to_do_wanders_or_rests_of_its_own_accord() {
         .collect();
     assert!(started.contains(&Verb::Wander), "{started:?}");
     assert!(started.contains(&Verb::Rest), "{started:?}");
+    // A grown sprite may try breeding alone, too (M2 design §10).
     assert!(
         started
             .iter()
-            .all(|v| matches!(v, Verb::Wander | Verb::Rest))
+            .all(|v| matches!(v, Verb::Wander | Verb::Rest | Verb::BreedAlone))
     );
 }
 

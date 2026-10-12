@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
+use crate::breeding;
 use crate::data::DataPack;
 use crate::decide::decide;
 use crate::events::{Event, EventKind};
@@ -321,14 +322,15 @@ pub(crate) fn is_acting(sprite: &Sprite) -> bool {
     sprite.action.as_ref().is_some_and(|a| a.ended.is_none())
 }
 
-/// Step 5 for every sprite not marked dying (design §2.4): refresh its flood
+/// Step 5 for every sprite not `still`, dying or an egg (design §2.4, M2
+/// design §10): refresh its flood
 /// if it moved or the flood is due; end its action if that has timed out, or
 /// lost its target or destination (5.0); then attention and the decision
 /// (5a, 5b).
 pub(crate) fn sense_and_decide(
     state: &mut WorldState,
     data: &DataPack,
-    dying: &[EntityId],
+    still: &[EntityId],
     events: &mut Vec<Event>,
 ) {
     let physiology = data.physiology();
@@ -337,7 +339,7 @@ pub(crate) fn sense_and_decide(
         physiology.actions.timeout,
     );
     let ids: Vec<EntityId> = state.sprites.iter().map(|(id, _)| id).collect();
-    for id in ids.into_iter().filter(|id| !dying.contains(id)) {
+    for id in ids.into_iter().filter(|id| !still.contains(id)) {
         let sprite = state.sprites.get(id).expect("a sprite taking its turn");
         let stale = sprite
             .flood
@@ -564,8 +566,8 @@ pub(crate) fn end(
     });
 }
 
-/// Step 6 (design §2.4, §3.7): every sprite not marked dying carries out its
-/// action, in an order shuffled each tick by the world RNG. Moving sprites
+/// Step 6 (design §2.4, §3.7): every sprite not `still`, dying or an egg
+/// (M2 design §10), carries out its action, in an order shuffled each tick by the world RNG. Moving sprites
 /// all gain their move points first, in tenths; then each, on its turn,
 /// steps along its path while its points last. The first to claim a tile
 /// gets it: a sprite can't enter a tile another sprite stands on, except by
@@ -574,7 +576,7 @@ pub(crate) fn end(
 pub(crate) fn resolve(
     state: &mut WorldState,
     data: &DataPack,
-    dying: &[EntityId],
+    still: &[EntityId],
     events: &mut Vec<Event>,
 ) {
     let rest_bout = data.physiology().actions.rest_bout;
@@ -582,7 +584,7 @@ pub(crate) fn resolve(
         .sprites
         .iter()
         .map(|(id, _)| id)
-        .filter(|id| !dying.contains(id))
+        .filter(|id| !still.contains(id))
         .collect();
     shuffle(&mut order, &mut state.rng);
     for &id in &order {
@@ -608,9 +610,9 @@ pub(crate) fn resolve(
         }
     }
     // The sprites whose movement this tick is over: by stepping, or by a
-    // swap; and the dying, which take no part (design §2.4), so nothing
+    // swap; and the still, which take no part (design §2.4), so nothing
     // swaps with them.
-    let mut moved: BTreeSet<EntityId> = dying.iter().copied().collect();
+    let mut moved: BTreeSet<EntityId> = still.iter().copied().collect();
     for &id in &order {
         let sprite = state.sprites.get_mut(id).expect("a sprite taking its turn");
         // A sliding sprite slid at step 2, and takes no steps (design v25
@@ -633,6 +635,13 @@ pub(crate) fn resolve(
             if action.ticks >= rest_bout {
                 end(action, id, Outcome::Applied, state.tick, events);
             }
+        } else if action.verb == Verb::BreedAlone {
+            // It tries at once, where it stands (M2 design §10).
+            let outcome = breeding::breed_alone(state, data, id, events);
+            let sprite = state.sprites.get_mut(id).expect("the same sprite");
+            let action = sprite.action.as_mut().expect("an action");
+            action.attempted = true;
+            end(action, id, outcome, state.tick, events);
         } else if action.verb == Verb::Retreat {
             let target = action.target.expect("a retreat has a target");
             if !moved.contains(&id) {
@@ -654,7 +663,8 @@ pub(crate) fn resolve(
 }
 
 /// Sprite `id`, on a goal tile of `target`, ends its aimed action: an
-/// Approach has arrived, and Eat or Drink makes its one attempt (design §5.5).
+/// Approach has arrived, and Eat, Drink or Mate makes its one attempt
+/// (design §5.5, M2 design §5).
 fn act(
     state: &mut WorldState,
     data: &DataPack,
@@ -668,6 +678,7 @@ fn act(
     let subject = state.subject_of(data, target);
     let (outcome, hurt) = match verb {
         Verb::Approach => (Outcome::Applied, Hurt::default()),
+        Verb::Mate => breeding::mate(state, data, id, target, events),
         verb => verbs::attempt(state, data, id, verb, target, events),
     };
     let gone = state.whereabouts(data, target).is_none();
@@ -682,7 +693,7 @@ fn act(
     action.target_gone = gone;
     action.hurt = hurt;
     end(action, id, outcome, state.tick, events);
-    if verb.is_interaction() {
+    if verb.is_contact() {
         touched(state, data, id, target, subject, Some(verb));
     }
 }
@@ -691,7 +702,10 @@ fn act(
 /// `verb` on it, or with no verb by crashing into it (design v23 §5.6): what
 /// the next few ticks' feelings are about. Touching one, it knows its object
 /// type (design v19 §5.6). Water, and an object fixed in place, keep their
-/// tile, so a need they ease makes it a remembered place (M2 design §7).
+/// tile, so a need they ease makes it a remembered place (M2 design §7). A
+/// sprite that bred this tick keeps the touch of its mate till the tick
+/// ends, whatever it touches after, so it learns about its partner (M2
+/// design §10).
 pub(crate) fn touched(
     state: &mut WorldState,
     data: &DataPack,
@@ -701,9 +715,18 @@ pub(crate) fn touched(
     verb: Option<Verb>,
 ) {
     let place = stays_put(state, data, target);
-    let brain = &mut state.sprites.get_mut(id).expect("the toucher").brain;
+    let tick = state.tick;
+    let sprite = state.sprites.get_mut(id).expect("the toucher");
+    let brain = &mut sprite.brain;
     let needs = data.need_places().len();
     brain.experience.learn_about(subject, needs).touched = true;
+    let mated = sprite.last_bred == Some(tick)
+        && brain
+            .touched
+            .is_some_and(|touch| touch.tick == tick && touch.verb == Some(Verb::Mate));
+    if mated {
+        return;
+    }
     brain.touched = Some(Touch {
         tick: state.tick,
         verb,

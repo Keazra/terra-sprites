@@ -8,6 +8,11 @@
     // size. Leave it out for a world with no sprites.
     sprites: 30,
 
+    // The most sprites the world holds, eggs included, from 1 to 1000 and at
+    // least `sprites`: past it, breeding does nothing. The terrarium's glass.
+    // Leave it out for 100.
+    most_sprites: 100,
+
     // Plants and toys, by density: how many of each object type go in every
     // `per_tiles` tiles, so a bigger map gets proportionally more. A type not
     // named here gets none. Names are object types from the data pack's

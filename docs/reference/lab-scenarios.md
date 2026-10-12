@@ -9,6 +9,8 @@ cargo run --release -p terra-sim --example lab -- scenarios/a1-thornbush.ron --s
 | Field | Meaning |
 |---|---|
 | `world` | `Generated`, a world from the built-in default preset; or `Drawn(rows: [...], key: {...})`, a map drawn by hand. |
+| `grows_old` | Optional. The age, in ticks, the world's sprites grow old at, whatever their genes say: for watching the same sprites for longer than a life, 18,000 to 36,000 ticks. A1 to A3 use 60,000. |
+| `most_sprites` | Optional. The most sprites the world holds, eggs included (M2 design §10): for a scenario that watches only its own sprites. A1 to A3 hold as many as they start with. |
 | `ticks` | How long each seed runs. |
 | `windows` | `[(from, to)]`: the tick ranges to count in. Each runs from `from` up to, but not including, `to`, and must end by `ticks`. |
 | `control` | Optional. `NoLearning` runs each seed a second time with learning switched off; `NoTrainer` a second time without the trainer. |

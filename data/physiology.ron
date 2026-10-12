@@ -50,12 +50,31 @@
         // Old, its repair no longer keeps up: damage lands on random genes,
         // `hit` health at a time (half that on an instinct), so its genes
         // fall to `gives_out` on average in `ticks` for an unworn sprite.
-        // There its body gives out and old age harms it. About 10 hours at
-        // 1x until breeding (Slice 23) shortens it.
-        decay: (ticks: 46500, hit: 0.01, gives_out: 0.5),
+        // There its body gives out and old age harms it, so that old age
+        // lasts about an hour at 1x (M2 design §2).
+        decay: (ticks: 3600, hit: 0.01, gives_out: 0.5),
         // While its injury is above `above`, each tick a random gene may be
         // scarred, losing `hit` health for good, at any age.
         scar: (above: 0.5, chance: 0.002, hit: 0.05),
+    ),
+    // Having young (M2 design §10). An egg hatches after `hatches` ticks (10
+    // minutes at 1x). It costs its parents `cost` energy in all, split
+    // between them, or all of it for one breeding alone. An adult is fertile
+    // while its energy and hydration are both above `fed`, and `rest` ticks
+    // or more after its last egg. Every sprite hatches male; an adult male
+    // turns female for good once its `feminiser` hormone is above
+    // `turns_female`. A female can breed alone only once her `longing`
+    // hormone has reached `breeds_alone`. The need `drive` drives breeding:
+    // whatever the genes, it works only between adults, and what easing it
+    // teaches is only about the partner (M2 design §5).
+    breeding: (
+        hatches: 750,
+        cost: 0.3,
+        fed: 0.5,
+        rest: 1500,
+        turns_female: 0.8,
+        breeds_alone: 0.5,
+        drive: "arousal",
     ),
     // Each cause-of-death tally halves every this many ticks (design §4.10).
     cause_fade: 350,
@@ -149,6 +168,10 @@
     // Spawn variation (design §4.9): each gene value is multiplied by a factor
     // drawn between 1 − this and 1 + this.
     spawn_variation: 0.1,
+    // A trait named here varies by its own share instead (M2 design §9.3):
+    // the age a sprite grows old at, by up to 40%, so that lives last from
+    // about 4 hours to about 8 at 1x (M2 design §2).
+    trait_variation: { "grows_old": 0.4 },
 
     // A learned value this far from 0 is a lesson, which the event log
     // announces once (design v16 §5.6).

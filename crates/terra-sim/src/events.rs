@@ -44,8 +44,23 @@ pub enum EventKind {
         /// Its age in ticks.
         age: u64,
     },
+    /// A sprite laid an egg, `egg` (M2 design §10): with a partner, or
+    /// alone.
+    Laid {
+        egg: EntityId,
+        by: EntityId,
+        with: Option<EntityId>,
+    },
+    /// An egg hatched into a young sprite (M2 design §10). `parents` are the
+    /// one that laid it, then its partner, if it had one.
+    Hatched {
+        id: EntityId,
+        parents: Vec<EntityId>,
+    },
     /// A sprite grew up (M2 design §9.1).
     GrewUp { id: EntityId },
+    /// A male adult turned female, for good (M2 design §10).
+    TurnedFemale { id: EntityId },
     /// A sprite grew old (M2 design §9.1).
     GrewOld { id: EntityId },
     /// A sprite learned a lesson (design §5.6): something it learned got

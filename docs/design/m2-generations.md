@@ -4,7 +4,7 @@
 - **Date:** 2026-10-12
 - **History:** edited in place since v5; each change is a file in [`changes/`](changes/), whose README says where v1 to v5 are
 - **Builds on:** [M1 design](m1-a-sprite-lives.md), which stays the rulebook for everything M2 doesn't change
-- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), and the view past the wall (Slice 31)
+- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), breeding (Slice 23), and the view past the wall (Slice 31)
 
 ---
 
@@ -13,7 +13,7 @@
 M1 made a sprite live: it feels, learns and dies. M2 makes **generations**. Sprites grow up, grow old and have young; children take after their parents but not exactly; and over an evening the player watches a family line, and a species, change.
 
 The owner's principles carry over unchanged (`docs/agents/how-we-work.md`). Three matter most here:
-- **The player has to care first.** A life long enough to get attached to is why a sprite lives about 4 hours at 1× (§2).
+- **The player has to care first.** A life long enough to get attached to is why a sprite lives 4 to 8 hours at 1×, about 6 on average (§2).
 - **Grown sprites fend for themselves; the young survive by luck or guidance.** M2 is when this can be met (Slice 29).
 - **Content safety is the engine's one exception** to "the engine enforces physics only" (§5).
 
@@ -59,13 +59,14 @@ The owner's times, as playtime at 1× (1.25 ticks a second, M1 design §6.6):
 | Moment | Playtime at 1× | Ticks | At 4× |
 |---|---|---|---|
 | Grows up | about 1 hour | about 4,500 | about 15 minutes |
-| Grows old | about 3 hours | about 13,500 | about 45 minutes |
-| Dies of old age | about 4 hours (about 13 until Slice 23) | about 18,000 | about 1 hour |
+| Grows old | about 5 hours (3 to 7) | about 22,500 | about 1¼ hours |
+| Dies of old age | about 6 hours (4 to 8) | about 27,000 | about 1½ hours |
 
 - **These are the starter genome's times.** The genome brings them about (§3), so they vary from sprite to sprite and can evolve.
+- **Lives differ by up to 2 hours either way.** The owner (2026-10-12): "4 hours should be the shortest, and eight at the longest, for an average of 6 hours." A new sprite's `grows_old` varies by up to 40% at spawn where its other genes vary by 10% (§9.3), and a hatchling takes one parent's (§10.5). Old age still lasts about an hour, and a hard life can still bring it sooner (§9.4).
 - **Growing old is where M1's lifespan went** (#140). The `grows_old` gene sets when a sprite grows old, and its genes then weaken until its body gives out and old age kills it (§9.4). How long that takes depends on the life it has had, not on a second gene. A save or genome that says `lifespan` reads it as `grows_old`, whose range is about **6,000–60,000**.
 - **A generation takes about 15–20 minutes at 4×,** Story mode's top speed (Slice 27), so an evening sees several. Long runs of evolution belong to the fast-forward mode.
-- **Lives get shorter in Slice 23, with breeding.** Until sprites have young, nothing replaces the dead: with 4-hour lives, the default world would be empty after about 4 hours of play. So in Slice 22 sprites grow up and grow old at their times above, but old age lasts about 10 hours (§9.4), and Slice 23 shortens it to about 1.
+- **Lives got shorter in Slice 23, with breeding.** Until sprites had young, nothing replaced the dead: with 4-hour lives, the default world would have been empty after about 4 hours of play. So in Slice 22 sprites grew up and grew old at 1 and 3 hours, but old age lasted about 10 hours, and Slice 23 shortened it to about 1 (§9.4), for lives of about 4 hours. Later in Slice 23 the owner set them at 4 to 8 (2026-10-12), by growing old later.
 - **Childhood ends at growing up.** M1's viability run counts ticks 0–10,000 as childhood because sprites had no stages (M1 design §7.4, A4). From Slice 22, childhood is a stage, and the harsher world's goal (§6, G5) is counted at growing up.
 
 ---
@@ -98,7 +99,7 @@ Each slice is a GitHub issue and its own PR, worked as in `docs/agents/how-we-wo
 | **20. Memory of places** | A thirsty sprite heads back to water it found earlier, even out of sight | — |
 | **21. Title screen** | A screen at launch, before any world; flags that make or load a world skip it. Opens with a design pass: mock-ups to pick from, then a rough prototype played in Windows Terminal | — |
 | **22. Life stages and ageing** | The young look and act young; sprites grow old and decline (§3) | — |
-| **23. Breeding** | Adults have young, alone or with a partner as their genes decide; only between adults (§5); the 4-hour life (§2) | 22 |
+| **23. Breeding** | Adults have young, alone or with a partner as their genes decide; only between adults (§5); lives of 4 to 8 hours (§2) | 22 |
 | **24. Mixing and mutating genes** | Children differ from their parents; gene quality joins ageing | 23 |
 | **25. Family tree** | A sprite's parents, grandparents and children, living or dead | 23 |
 | **26. Population graph** | The population over time | 23 |
@@ -118,8 +119,8 @@ Each slice is a GitHub issue and its own PR, worked as in `docs/agents/how-we-wo
 The owner's one content-safety rule ([#69](https://github.com/Keazra/terra-sprites/issues/69), `docs/agents/how-we-work.md`): **attraction and mating attempts towards a sprite that isn't an adult are impossible,** for every genome and every data pack. Data can be edited and genes evolve, so the engine enforces it, the one exception to "the engine enforces physics only".
 
 Slice 23 builds it:
-- `Mate` is never offered unless both sprites are adults. It's a hard check in verb availability, not a learned or genetic lean.
-- Attraction, whatever form it takes, never targets a non-adult.
+- `Mate` is never offered unless both sprites are adults (an old sprite counts as one, §9.1). It's a hard check in verb availability, not a learned or genetic lean. Nor is `BreedAlone`, unless the sprite is grown (§10.3).
+- Attraction, whatever form it takes, never targets a non-adult. **The breeding drive works only between adults** (Slice 23): `physiology.ron` names it (`breeding.drive`, the starter's `arousal`), and whatever the genes, it reads 0 in a sprite not grown up, and in an adult's choices about one: it draws no eye to it, moves the sprite to do nothing to it, and its body language shows none, to other sprites or on screen: the engine's views read it as 0 in a young sprite. Its fall teaches worth only after a Mate, and only about that partner, never sprites in general or new things (§10.2).
 - `check_invariants` checks it every tick, and property tests with random genomes pin it.
 - Genes that switch on at adulthood (§3, reading A) are the natural home for mating instincts; the engine's check holds regardless.
 
@@ -284,11 +285,11 @@ Settled with the owner on 2026-10-11 ([#140](https://github.com/Keazra/terra-spr
 
 ### 9.1 Life stages
 
-- **A sprite's life stage is young, adult or old.** "Stage" alone is an object's (M1 design §3.5); a sprite's is its life stage. An old sprite still counts as an adult for §5's rule.
+- **A sprite's life stage is young, adult or old,** after an egg from Slice 23 (§10.4). "Stage" alone is an object's (M1 design §3.5); a sprite's is its life stage. An old sprite still counts as an adult for §5's rule.
 - **It's young until it grows up, an adult until it grows old, then old** (§9.3). One whose genes have it grow old before it grows up does both at once, and is never an adult.
 - **The stage changes at the start of step 3** (M1 design §2.4), so genes that switch with it work from that tick's chemistry on.
 - **A world's first sprites start as adults,** at ages drawn evenly through adulthood, with a newborn's body (M1 design §4.7), so a fresh world isn't all children. A sprite the player places is a newborn. A scenario's sprites start just grown up, unless it lists them as newborns.
-- **An Egg stage** may come with breeding or after it (noted on [#141](https://github.com/Keazra/terra-sprites/issues/141)).
+- **An egg comes first:** since Slice 23, a sprite's life starts as an egg, which hatches into a young sprite (§10.4). An egg isn't an adult, and in what genes and switches see it counts as young.
 
 ### 9.2 Genes that switch with life stage
 
@@ -299,8 +300,9 @@ Settled with the owner on 2026-10-11 ([#140](https://github.com/Keazra/terra-spr
 
 ### 9.3 When a sprite grows up and grows old
 
-- **Two trait genes set the ages,** so each can evolve on its own: `grows_up` (1,500–13,500 ticks; the starter's 4,500 is about an hour at 1×) and `grows_old` (6,000–60,000; the starter's 13,500 is about 3 hours).
-- **`grows_old` is M1's lifespan,** which it replaces (§2). A genome or save that says `lifespan` reads as `grows_old`. The `age` body sensor is age as a share of it, so it reaches 1 as a sprite grows old, at about 13,500 ticks rather than M1's 60,000.
+- **Two trait genes set the ages,** so each can evolve on its own: `grows_up` (1,500–13,500 ticks; the starter's 4,500 is about an hour at 1×) and `grows_old` (6,000–60,000; the starter's 22,500 is about 5 hours).
+- **`grows_old` varies more at spawn** (2026-10-12): by up to 40%, physiology's `trait_variation`, where every other gene varies by `spawn_variation`'s 10% (M1 design §4.9). So the world's first sprites, and those the Cursor places from the starter genome, grow old at 3 to 7 hours and die of it at 4 to 8 (§2).
+- **`grows_old` is M1's lifespan,** which it replaces (§2). A genome or save that says `lifespan` reads as `grows_old`. The `age` body sensor is age as a share of it, so it reaches 1 as a sprite grows old, at about 22,500 ticks rather than M1's 60,000.
 - **Growing up costs food.** Growing takes `growth` energy (0.3) whenever it happens, spread evenly over childhood, so a sprite that grows up sooner is a hungrier child.
 - **A later old age will cost a little,** all its life: `upkeep` energy a tick for every 10,000 ticks of `grows_old` (§3). **It's 0 until genes evolve** (Slice 24, noted on [#142](https://github.com/Keazra/terra-sprites/issues/142)), the owner's call on 2026-10-11: until then nothing can push old age later, so the cost only made every sprite hungrier, and even 0.00001 undid A3's training (median hits after training 45 against 81 untrained; 1.5 against 70 without it).
 
@@ -310,7 +312,7 @@ The owner (2026-10-11): old age is the genome wearing out, and a hard life damag
 
 - **Every gene has a health,** from 1 (whole) to 0. It only ever falls, and it scales the gene's effect: a feeling's gain, a receptor's gain, a reaction's rate, an instinct's weight, and how far a speed or sense radius gene reaches above the least its trait can be. A gene that's a setting, not a strength, doesn't weaken: half-lives, starting levels, brain parameters, and the timing genes.
 - **Before old age, repair keeps up.** Once old, damage lands on random genes, a `hit` (0.01 of health) at a time, so health falls in small, frequent steps (the owner, 2026-10-11). **An instinct takes half,** so the mind outlasts the body.
-- **The pace:** an unworn sprite's genes fall to `gives_out` (0.5 on average) in about `decay.ticks` (46,500, about 10 hours at 1×; Slice 23 shortens it to about 1 hour).
+- **The pace:** an unworn sprite's genes fall to `gives_out` (0.5 on average) in about `decay.ticks` (3,600; a unit test, `an_old_sprite_s_genes_decay_until_its_body_gives_out_in_about_the_ticks_set`, holds it to 3,100–4,100), and old age kills it soon after, so old age lasts about an hour at 1× (Slice 23; it was 46,500, about 10 hours, until sprites had young). When that takes more than one hit a tick, as it does for a worn sprite, the whole hits land each tick and the odds are of one more.
 - **A hard life wears the body for good,** and wear never heals: `wear.starving` (0.0002) a tick while energy is under `wear.low` (.25), `wear.parched` (0.0002) while hydration is, and `wear.injured` (0.001) a tick for each unit of injury, so a hit or a prick wears the body through the injury it does, for as long as it takes to heal. It reads the body, not feelings, which genes could switch off.
 - **Wear brings old age sooner and speeds the decay.** The most worn sprite grows old at (1 − `sooner`) of its `grows_old` (`sooner` is .33), and its genes decay `wear_speedup` (3) times as fast; less worn, in proportion.
 - **A bad injury can scar a gene at any age:** while injury is above `scar.above` (.5), each tick has a `scar.chance` (0.002) that a random gene loses `scar.hit` (0.05; half that on an instinct).
@@ -331,7 +333,7 @@ The owner (2026-10-11): old age is the genome wearing out, and a hard life damag
 - **On the map, the young are drawn small:** `ö` in CP437 and `a` in ASCII, the theme keys `young_sprite` and `selected_young_sprite`. A theme without them draws the young as grown. The old show by moving slowly.
 - **The log** says "Pip grew up" and "Pip grew old".
 - **The sprite list** has a Life stage column after Age: young, adult or old.
-- **The Body tab** shows the stage after the age, with when the next one comes: `age 3,120 · young · grows up 4,500`, `adult · grows old 13,500` (sooner for a worn sprite), or `old`. After the physical levels, `wear .12`, and `· genes .83`, its genes' average health, once any has weakened.
+- **The Body tab** shows the stage after the age, with when the next one comes: `age 3,120 · young · grows up 4,500`, `adult · grows old 22,500` (sooner for a worn sprite), or `old`. After the physical levels, `wear .12`, and `· genes .83`, its genes' average health, once any has weakened.
 - **The Genome tab** shows a weakened gene's health after it, `· health .62`, and a gene that switches with its stages, `· from adult` or `· until adult`. A dormant gene is dimmed, with "dormant: switched off at this life stage".
 
 ### 9.7 How we know it worked
@@ -353,6 +355,128 @@ cargo run --release -p terra-sim --example speed
 | A5: ticks a second, 100 sprites (`speed`, a few runs) | 318 | 293–303, met (at least 200) |
 
 **What it shows.** The world's first sprites now start at ages through adulthood and grow old within the first 9,000 ticks, so by tick 50,000 almost all have died of old age; Slice 23's breeding replaces them. When genes weakened in steps of .1, thirst killed 26 by tick 50,000 (11% for A4), most likely old sprites that lost a gene for finding water early; in steps of .01 every gene fades together. A4 still holds, though old age now fills most of its count.
+
+---
+
+## 10. Breeding (Slice 23)
+
+Settled with the owner on 2026-10-12 ([#141](https://github.com/Keazra/terra-sprites/issues/141)), in a round of ten questions and two decision cards. Grown sprites have young, alone or with a partner as their genes lean, and only ever between adults (§5). Seeing the slice built, the owner set its direction: sprites are a social species, and a female laying alone should be very rare. Pairs can't yet carry a world on their own (§10.8), so for now a female lays alone only after a long while with no male in sight (§10.3), and Slice 32 ([#186](https://github.com/Keazra/terra-sprites/issues/186)), courtship and family units, makes it very rare. The numbers are data, the `breeding` section of `physiology.ron` and the starter genome: first guesses, tuned against §10.8. A save from before this slice keeps the pack it was made with (M1 design §2.8), which has no breeding, so its sprites never have young.
+
+### 10.1 Sexes, by neighbours
+
+The owner chose sex by neighbours, as in clownfish and gobies, over hermaphrodites, two fixed sexes and mating types.
+
+- **Every sprite hatches male,** and no young sprite changes.
+- **A body sensor, `female_near`,** is 1 while a female adult is within the sprite's sense radius, and 0 otherwise. `female` is 1 for a female. The round had it count how many females are near; one is enough to keep a male male, so it's on or off. `male_near` is the same for a male adult; it feeds longing (§10.3).
+- **A hormone, the `feminiser`, decides when a male turns.** The starter genes raise it while the sprite, grown up, sees no female adult and lower it fast while it sees one: a male long without females (about 800 ticks) turns. The genes set the pace, so evolution can tune it.
+- **Past `turns_female` (0.8), an adult male turns female for good,** at the start of step 3 (M1 design §2.4), as its life stage changes. It's the engine's rule, like growing up: the genes move the hormone, the body does the rest.
+- **Only a female lays eggs.** A pair needs a male and a female; a female can breed alone (§10.3).
+
+### 10.2 Fertility and arousal
+
+The game's rule, "the world decides what happens to the body, the genes decide how it feels":
+
+- **The body says whether a sprite can breed.** In a pack with breeding, it's **fertile** while it's grown (old counts), its energy and hydration are both above `fed` (0.5), it's at least `rest` (1,500, and never less than 1) ticks since its last egg, laid or fathered, and the world has room for another sprite (§10.6). The `fertile` body sensor reads it. `fed` was 0.6 in the round; in tuning, at 0.6 a pair was seldom fertile at the same time, so it's 0.5.
+- **The genes say whether it wants to.** **Arousal** is a drive and a need, second-order like loneliness (#50). The starter genes raise it fast while the sprite is fertile, drop it at once when it breeds (the `bred` pulse), and drop it within a few ticks of its no longer being fertile, so it reads as fertility (§10.3). It draws the eye to sprites.
+- **Only mating relieves it, in what a sprite learns.** Arousal's fall teaches worth only when the sprite's latest touch was a Mate, and only about that partner: it learns which sprites it bred with were good for it, and what it learns never spreads to sprites in general or to new things, so it never learns that a young sprite is. Whatever the genes, arousal reads 0 in a young sprite and in an adult's choices about one (§5).
+- It was called **broodiness** in the round; the owner renamed it on 2026-10-12. Brooding is sitting on eggs, which may come later.
+
+### 10.3 Mating and breeding alone
+
+- **Two actions, chosen by instinct** (the owner, Q1): `Mate`, with the sprite attended to, and `BreedAlone`. They show on the doing line and the Brain tab.
+- **`Mate` is offered only when both are adults** (§5): the sprite, and the one the verb would be aimed at, a running action's target or else the candidate (M1 design §5.5, #173). It works, once, if both are fertile, one is male and the other female, and she has a free tile beside her: she lays an egg there (§10.4). The partner learns about the one that mated with it too, as if touched. Otherwise it's a fruitless try.
+- **`BreedAlone` is offered only to a grown sprite.** It works for a fertile female whose **longing** has reached `breeds_alone` (0.5), with a free tile beside her; for a male, or a female not fertile or not longing enough, it's a fruitless try.
+- **Longing** is a hormone the starter genes raise while a grown sprite sees no male adult and lower fast while it sees one: about 1,100 ticks with no male in sight takes it to 0.5. It came after the owner saw that 9 eggs in 10 were laid alone. Most of those came from chance: a sprite now and then tries what it isn't drawn to (M1 design §5.5), and for a fertile female, breeding alone always worked. The body's rule stops that; the genes set how fast longing builds, so evolution can still tune it.
+- **The egg costs `cost` (0.3) energy** (Q2): split between a pair, or all hers alone. Per bite of food, both pass on as much of the parents' genes, so neither wins on cost; what makes partners pay is Slice 24, when a sprite breeding alone passes on every broken gene it has.
+- **Body language** (the owner's card, 2026-10-12): a sprite sees how aroused the sprite it attends to is, `target_arousal`, and whether it's of the other sex, `target_other_sex`. Before it, in tuning, most tries to mate met a partner of the same sex or one not fertile, and nearly every egg was laid alone. These are brain inputs `brain_io.ron` lists like any other: one that reads `Target(...)` reads the sprite attended to, and one that reads `Differs(...)` how far that differs from the sprite's own; both are 0 unless attention is on a sprite that has hatched, and any that reads arousal is 0 unless both are grown (§5). Attention can't read them, as it can't any input about what it attends to (M1 design §5.3).
+- **The starter's instincts:** arousal draws attention to sprites; arousal with an aroused sprite of the other sex in view leads to Mate; and in a female longing for a male, arousal leads to breeding alone.
+
+### 10.4 Eggs and hatching
+
+- **An egg is the new sprite, at the first life stage, Egg** (Q5). It's laid on a random free tile beside its mother.
+- **An egg feels, learns, moves and needs nothing:** its body stays as it was laid and it decides nothing. Step 3 only counts it towards hatching, and steps 4 to 6 pass it by.
+- **It hatches after `hatches` (750) ticks,** where it lies, as a young male with a newborn's body; its age counts from then.
+- **Other sprites see an egg as a thing of its own kind,** the category `egg` and the pseudo type `egg`, not as a sprite: so "crowded, so hit a neighbour" never aims at one, and `nearby_sprites`, `female_near` and `male_near` don't count one. Its verb table is empty, so whatever a sprite tries on it is a fruitless try: an egg can't be hurt until something in the world is meant to hurt eggs.
+- **The Cursor can't touch, lead or hold an egg;** it says it's still an egg. Whether it can move one is for an issue of its own. The player can name one.
+- **A sprite remembers its parents:** the one that laid it, then its partner.
+
+### 10.5 The child's genes
+
+- **Mixed** (Q6): each gene, with its switch, comes from one parent or the other at random, where the two genomes line up gene for gene, as the starter's do. Where they don't, as with one placed from a genome file, the child takes its mother's.
+- **The damage old age did to a parent's genes isn't passed on** (§9.4); a child's genes are whole. Mutation is Slice 24's.
+
+### 10.6 What stops the world filling up
+
+- **Food and a limit** (Q7): births need fed and watered parents, so food holds numbers down. The **limit**, the preset's `most_sprites` (100 in the default world, eggs counted), is the safety net: in a full world no sprite is fertile, so none is aroused and none tries in vain. In the terrarium's story, the limit is the glass.
+- **The Cursor may place a sprite past the limit:** that's the player's call, not the sprites'.
+- **A lab scenario can set `most_sprites`.** A1 to A3 and the thorn trap watch only their own sprites, so they hold no more than they start with (an egg may replace a sprite that died).
+
+### 10.7 What the player sees
+
+- **The log:** `Pip #12 laid an egg (with Bo #7)`, `Pip #12 laid an egg alone`, `Sprite #31 hatched (Pip #12 and Bo #7's)`, `Pip #12 turned female`.
+- **The map:** an egg is `o` in CP437 and `0` in ASCII, where `o` is the ball; the theme keys `egg` and `selected_egg`. A theme without them draws eggs as the young.
+- **The Body tab:** after the traits, the sex, `· fertile` while it is, and for a male, how near it is to turning, `male · fertile · turning 40%`; then `parents Pip #12 and Bo #7`. An egg shows `egg · hatches in 750 ticks` for its life stage.
+- **The sprite list** shows `egg` as the life stage; **the doing line** says `Going to mate with Bo #7`, `Mated with Bo #7`, `Breeding alone`, `Laid an egg alone`.
+- **Arousal** colours a sprite light magenta when it's its strongest drive above half.
+- The full family tree is Slice 25.
+
+### 10.8 How we know it worked
+
+Agreed before measuring (Q9):
+
+- **Keeps going:** the default world, left alone for 100,000 ticks (about 22 hours at 1×, five or so generations), seeds 1–10: sprites alive at the end in **at least 8 of 10 seeds**, and never more than the limit.
+- **Nothing else got worse:** A1–A4 still met, and A5 at the limit, 100 sprites, still at least 200 ticks a second.
+- **For information:** how many hatchlings grow up. Today almost all would; Slice 29 makes childhood hard (about 20%).
+
+`cargo run --release -p terra-sim --example generations` runs the first.
+
+**Measured (2026-10-12)** in release builds of this slice at `0385ebe`, with lives of 4 to 8 hours (§2) and slow-fading lessons and the fix for A3 (#187, PR #189) merged in, on seeds 1–10 (A3 on 1–30), on the owner's PC, with:
+
+```
+cargo run --release -p terra-sim --example generations
+cargo run --release -p terra-sim --example lab -- scenarios/viability.ron --seeds 10
+cargo run --release -p terra-sim --example lab -- scenarios/a3-correct-training.ron --seeds 30
+cargo run --release -p terra-sim --example speed
+```
+
+The default world left alone for 100,000 ticks:
+
+| Seed | Alive at the end (and eggs) | Most at once | Eggs with a partner | Eggs alone | Hatched | Grew up | Generations |
+|---|---|---|---|---|---|---|---|
+| 1 | 96 (4) | 100 | 295 | 57 | 348 | 333 | 10 |
+| 2 | 96 (3) | 100 | 235 | 89 | 321 | 315 | 10 |
+| 3 | 99 (1) | 100 | 240 | 73 | 312 | 303 | 10 |
+| 4 | 99 (1) | 100 | 241 | 66 | 306 | 293 | 11 |
+| 5 | 96 (4) | 100 | 289 | 53 | 338 | 321 | 10 |
+| 6 | 96 (1) | 100 | 226 | 100 | 325 | 317 | 9 |
+| 7 | 97 (3) | 100 | 259 | 61 | 317 | 308 | 10 |
+| 8 | 95 (5) | 100 | 256 | 78 | 329 | 319 | 12 |
+| 9 | 96 (3) | 100 | 274 | 57 | 328 | 314 | 11 |
+| 10 | 98 (2) | 100 | 276 | 84 | 358 | 337 | 11 |
+
+How long hatchlings lived, in hours at 1×, of those old age killed (`generations` counts them, 205 to 258 a seed), and the world's first sprites, who start at ages through adulthood (§9.1):
+
+| Seed | Shortest | A tenth by | Half by | Nine tenths by | Longest | First sprites |
+|---|---|---|---|---|---|---|
+| 1 | 3.8 | 5.1 | 5.9 | 7.7 | 8.1 | 4.4–8.0 |
+| 2 | 4.2 | 5.6 | 6.6 | 7.6 | 7.8 | 4.1–7.8 |
+| 3 | 3.0 | 4.7 | 7.6 | 7.9 | 8.0 | 4.2–7.9 |
+| 4 | 3.8 | 4.8 | 7.4 | 7.9 | 8.0 | 2.9–8.0 |
+| 5 | 4.1 | 4.9 | 6.3 | 7.5 | 7.8 | 4.5–7.7 |
+| 6 | 3.6 | 5.2 | 7.0 | 7.6 | 8.0 | 4.3–8.0 |
+| 7 | 4.2 | 5.1 | 6.8 | 7.7 | 7.9 | 4.5–7.8 |
+| 8 | 4.1 | 5.0 | 6.5 | 7.8 | 7.9 | 4.0–7.7 |
+| 9 | 4.1 | 5.1 | 6.2 | 7.7 | 8.0 | 4.1–8.0 |
+| 10 | 3.1 | 4.3 | 6.0 | 6.6 | 7.5 | 4.1–7.8 |
+
+- **Keeps going: met.** Sprites are alive at the end in all 10 seeds, 9 to 12 generations deep, and no world went over its limit of 100.
+- **A4, grown-up hunger and thirst: met.** Of 964 deaths in ticks 10,000–50,000 over all seeds, 1 was of thirst (0.1%, under 25%). The rest were old age, but for 12 sprites hurt by another. Over the whole 100,000 ticks, 4 of 2,518 deaths after tick 10,000 were of hunger or thirst.
+- **A4, alive at tick 10,000: 68% (median) of the world's first 30.** They still start at ages through adulthood (§9.1), but now grow old later, so 7 to 12 of them a seed die before tick 10,000, all of old age but 2. M1's stand-in for childhood no longer measures childhood: it ends at growing up (§2), and Slice 29 makes that A4's measure. Counted that way, almost every hatchling survives (below).
+- **A3: met, and no longer by luck.** Before the fix for #187, this slice's longing genes left A3 failing in most sets of seeds: one shock wore off. With it and slow fades, over seeds 1–30, trained sprites hit a median of once in ticks 10,000–20,000 against 42 times untrained, and every random set of 10 of those seeds passes.
+- **A5: met,** 418–440 ticks a second with 100 sprites (`speed`, three runs) on the owner's PC. Measured in the cloud at `05a8c67`, it was 257–266, against 302–308 for `main` with the A3 fix.
+- **A1 and A2: met** (their tests pass, with `most_sprites` as §10.6 says).
+- **Lives: about as the owner set them, a little long.** The median hatchling lived 5.9 to 7.6 hours a seed, 6.5 in the median seed; a tenth died by 4.3 to 5.6 hours, and nine tenths by 6.6 to 7.9. The few lives under 4 hours are sprites a hard life wore into old age sooner (§9.4). Lives run long because a sprite that lives longer has more young, who take its `grows_old` (§10.5): nothing pulls the other way until Slice 24 gives a later old age its cost (§9.3). Before, with lives of about 4 hours, a tenth died by 3.7 hours and nine tenths by 4.3 (all seeds together).
+- **For information:** almost every hatchling grows up, as expected until Slice 29: in ticks 0–50,000 over all ten seeds, 15 sprites of any age died of something other than old age (13 hurt by another, 2 of thirst). Between 69% and 85% of eggs come from a pair, 78% in the median seed: a female lays alone only once she has longed for a male a while (§10.3). Most tries to mate come to nothing (513 to 696 a seed, against 226 to 295 that lay an egg): Mate is offered between any two adults, but lays an egg only when both are fertile and of different sexes.
 
 ---
 

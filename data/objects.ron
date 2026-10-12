@@ -117,4 +117,8 @@
     // It's hard light, so every try on it is fruitless; a pack may give it
     // verbs, such as Play for chasing the light.
     (id: 102, name: "cursor", category: "cursor", pseudo: true, verbs: {}),
+
+    // An egg (M2 design §10). Nothing a sprite tries on one does anything
+    // yet: an egg can't be hurt until something in the world is meant to.
+    (id: 103, name: "egg", plural: "eggs", category: "egg", pseudo: true, verbs: {}),
 ]

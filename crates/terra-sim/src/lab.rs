@@ -22,6 +22,8 @@ use crate::world::{Scenario, ScenarioError, World};
 #[derive(Debug, Clone)]
 pub struct LabScenario {
     world: LabWorld,
+    grows_old: Option<f32>,
+    most_sprites: Option<u16>,
     ticks: u64,
     windows: Vec<(u64, u64)>,
     control: Control,
@@ -88,6 +90,16 @@ struct TrainerFile {
 #[serde(deny_unknown_fields)]
 struct LabFile {
     world: LabWorld,
+    /// The age its drawn sprites grow old at, in place of what their genes
+    /// say: for a scenario that watches the same sprites for longer than a
+    /// life (M2 design §2), so they don't die of old age partway.
+    #[serde(default)]
+    grows_old: Option<f32>,
+    /// The most sprites its drawn world holds, eggs included, in place of
+    /// the default (M2 design §10): its own sprites alone, for a scenario
+    /// that watches only them.
+    #[serde(default)]
+    most_sprites: Option<u16>,
     ticks: u64,
     /// A control run of each seed, if any.
     #[serde(default)]
@@ -250,6 +262,8 @@ impl LabScenario {
         }
         let lab = LabScenario {
             world: file.world,
+            grows_old: file.grows_old,
+            most_sprites: file.most_sprites,
             ticks: file.ticks,
             windows: file.windows,
             control: file.control,
@@ -360,46 +374,63 @@ impl LabScenario {
     /// The scenario's world for `seed`. A drawn one gets its objects in
     /// reading order, then its sprites.
     fn world(&self, data: DataPack, seed: u64) -> Result<World, LabError> {
-        let (rows, key) = match &self.world {
+        let mut world = match &self.world {
             LabWorld::Generated => {
                 let config = WorldConfig::builtin(&data);
-                return Ok(World::new(config, data, seed));
+                World::new(config, data, seed)
             }
-            LabWorld::Drawn { rows, key } => (rows, key),
+            LabWorld::Drawn { rows, key } => drawn(rows, key, data, seed)?,
         };
-        let mut objects: Vec<(Pos, &str)> = Vec::new();
-        let mut sprites = Vec::new();
-        let mut terrain: Vec<String> = Vec::new();
-        for (y, row) in rows.iter().enumerate() {
-            let mut drawn = String::new();
-            for (x, glyph) in row.chars().enumerate() {
-                let pos = Pos {
-                    x: x as u16,
-                    y: y as u16,
-                };
-                match key.get(&glyph) {
-                    Some(Placed::Object(name)) => objects.push((pos, name)),
-                    Some(Placed::Sprite) => sprites.push((pos, None)),
-                    None => {
-                        drawn.push(glyph);
-                        continue;
-                    }
-                }
-                drawn.push('.');
-            }
-            terrain.push(drawn);
+        if let Some(age) = self.grows_old {
+            world.set_grows_old(age);
         }
-        let terrain: Vec<&str> = terrain.iter().map(String::as_str).collect();
-        let map = Map::from_ascii(&terrain, &data).map_err(LabError::Map)?;
-        let scenario = Scenario {
-            map,
-            objects: &objects,
-            sprites: &sprites,
-            scripted: &[],
-            newborns: &[],
-        };
-        World::from_scenario(scenario, data, seed).map_err(LabError::Scenario)
+        if let Some(most) = self.most_sprites {
+            world.set_most_sprites(most);
+        }
+        Ok(world)
     }
+}
+
+/// The world drawn in `rows`, by `key`, from `seed`: its objects in
+/// reading order, then its sprites.
+fn drawn(
+    rows: &[String],
+    key: &BTreeMap<char, Placed>,
+    data: DataPack,
+    seed: u64,
+) -> Result<World, LabError> {
+    let mut objects: Vec<(Pos, &str)> = Vec::new();
+    let mut sprites = Vec::new();
+    let mut terrain: Vec<String> = Vec::new();
+    for (y, row) in rows.iter().enumerate() {
+        let mut drawn = String::new();
+        for (x, glyph) in row.chars().enumerate() {
+            let pos = Pos {
+                x: x as u16,
+                y: y as u16,
+            };
+            match key.get(&glyph) {
+                Some(Placed::Object(name)) => objects.push((pos, name)),
+                Some(Placed::Sprite) => sprites.push((pos, None)),
+                None => {
+                    drawn.push(glyph);
+                    continue;
+                }
+            }
+            drawn.push('.');
+        }
+        terrain.push(drawn);
+    }
+    let terrain: Vec<&str> = terrain.iter().map(String::as_str).collect();
+    let map = Map::from_ascii(&terrain, &data).map_err(LabError::Map)?;
+    let scenario = Scenario {
+        map,
+        objects: &objects,
+        sprites: &sprites,
+        scripted: &[],
+        newborns: &[],
+    };
+    World::from_scenario(scenario, data, seed).map_err(LabError::Scenario)
 }
 
 /// Each window of `runs`, one per seed, as a table: a row for each count

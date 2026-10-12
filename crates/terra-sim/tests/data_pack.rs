@@ -576,7 +576,8 @@ fn each_object_type_is_in_the_category_it_names() {
 fn categories_with(extra: &str) -> String {
     format!(
         r#"[(id: 1, name: "bush"), (id: 2, name: "fruit"), (id: 4, name: "water"),
-            (id: 5, name: "toy"), (id: 6, name: "sprite"), (id: 7, name: "cursor"), {extra}]"#
+            (id: 5, name: "toy"), (id: 6, name: "sprite"), (id: 7, name: "cursor"),
+            (id: 8, name: "egg"), {extra}]"#
     )
 }
 
@@ -600,11 +601,11 @@ fn each_category_is_worded_in_general_by_its_plural() {
     );
     assert_eq!(pack.category_plural("dragon"), None, "no such category");
 
-    let text = categories_with(r#"(id: 8, name: "tree", plural: "  trees ")"#);
+    let text = categories_with(r#"(id: 9, name: "tree", plural: "  trees ")"#);
     let pack = builtin_with("categories.ron", &text).expect("a valid pack");
     assert_eq!(pack.category_plural("tree"), Some("trees"));
     for plural in [r#""""#, r#""  ""#] {
-        let text = categories_with(&format!(r#"(id: 8, name: "tree", plural: {plural})"#));
+        let text = categories_with(&format!(r#"(id: 9, name: "tree", plural: {plural})"#));
         assert_invalid("categories.ron", &text, "`tree` has an empty plural");
     }
 }
@@ -626,7 +627,7 @@ fn category_ids_and_names_are_unique_and_from_1_to_26() {
         &categories_with(r#"(id: 1, name: "tree")"#),
         "the id 1",
     );
-    assert_invalid(file, &categories_with(r#"(id: 8, name: "bush")"#), "`bush`");
+    assert_invalid(file, &categories_with(r#"(id: 9, name: "bush")"#), "`bush`");
     for id in [0, 27] {
         let text = categories_with(&format!(r#"(id: {id}, name: "tree")"#));
         assert_invalid(file, &text, &format!("the id {id}"));
@@ -758,6 +759,41 @@ fn physiology_rates_are_not_negative() {
 }
 
 #[test]
+fn breeding_s_drive_must_be_a_need() {
+    // M2 design §5: the engine keeps the drive between adults, so it must
+    // know which need it is.
+    assert_invalid_physiology(r#"drive: "arousal""#, r#"drive: "glee""#, "breeding.drive");
+    assert_invalid_physiology(
+        r#"drive: "arousal""#,
+        r#"drive: "feminiser""#,
+        "breeding.drive",
+    );
+}
+
+#[test]
+fn an_egg_hatches_and_a_sprite_rests_for_at_least_a_tick() {
+    // M2 design §10: with no rest, a female mated in a tick could lay again
+    // in the same tick.
+    assert_invalid_physiology("hatches: 750", "hatches: 0", "breeding.hatches");
+    assert_invalid_physiology("rest: 1500", "rest: 0", "breeding.rest");
+}
+
+#[test]
+fn breeding_s_hormone_levels_are_fractions() {
+    // M2 design §10: a hormone's level runs from 0 to 1.
+    assert_invalid_physiology(
+        "turns_female: 0.8",
+        "turns_female: 1.2",
+        "breeding.turns_female",
+    );
+    assert_invalid_physiology(
+        "breeds_alone: 0.5",
+        "breeds_alone: -0.5",
+        "breeding.breeds_alone",
+    );
+}
+
+#[test]
 fn the_cursor_s_touch_raises_levels_by_fractions_and_reaches_back_at_least_the_touch_window() {
     // Design v21 §4.6, §2.5.
     assert_invalid_physiology("pet: 0.5", "pet: 1.5", "cursor.pet");
@@ -799,6 +835,22 @@ fn spawn_variation_is_a_fraction_below_1() {
         "spawn_variation: -0.1",
         "spawn_variation",
     );
+}
+
+#[test]
+fn a_trait_varies_by_a_fraction_below_1_and_only_a_trait_does() {
+    let line = "trait_variation: { \"grows_old\": 0.4 },";
+    assert_invalid_physiology(
+        line,
+        "trait_variation: { \"grows_old\": 1.0 },",
+        "trait_variation.grows_old",
+    );
+    assert_invalid_physiology(
+        line,
+        "trait_variation: { \"grows_old\": -0.1 },",
+        "trait_variation.grows_old",
+    );
+    assert_invalid_physiology(line, "trait_variation: { \"lifetime\": 0.4 },", "lifetime");
 }
 
 #[test]
@@ -908,7 +960,7 @@ fn ageing_shares_are_fractions_and_its_rates_are_numbers() {
     assert_invalid_physiology("young_speed: 0.67", "young_speed: 0.0", "young_speed");
     assert_invalid_physiology("sooner: 0.33", "sooner: 1.5", "sooner");
     assert_invalid_physiology("growth: 0.3", "growth: -0.3", "growth");
-    assert_invalid_physiology("ticks: 46500", "ticks: 0", "decay.ticks");
+    assert_invalid_physiology("ticks: 3600", "ticks: 0", "decay.ticks");
     assert_invalid_physiology("hit: 0.01,", "hit: 0.0,", "decay");
     assert_invalid_physiology("gives_out: 0.5", "gives_out: 1.0", "decay");
     assert_invalid_physiology("chance: 0.002", "chance: 2.0", "scar.chance");
@@ -929,7 +981,8 @@ fn a_pack_from_before_life_stages_still_loads() {
             "grows_old: (6000.0, 60000.0),",
             "lifespan: (20000.0, 200000.0),",
         )
-        .replace("        grows_up: (1500.0, 13500.0),\n", "");
+        .replace("        grows_up: (1500.0, 13500.0),\n", "")
+        .replace("    trait_variation: { \"grows_old\": 0.4 },\n", "");
     assert!(
         !older.contains("ageing") && !older.contains("grows_"),
         "{older}"
@@ -1004,9 +1057,23 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
         (42, "target_distance"),
         (43, "target_adjacent"),
         (44, "attended_cursor"),
+        (45, "attended_egg"),
     ]);
-    // State inputs carry on from 64, past the IDs kept for Target inputs.
-    expected.extend([(64, "cornered"), (65, "fruitless")]);
+    // State inputs carry on from 64, past the IDs kept for Target inputs,
+    // with breeding's from 66, its body language, and longing (M2 design
+    // §10).
+    expected.extend([
+        (64, "cornered"),
+        (65, "fruitless"),
+        (66, "arousal"),
+        (67, "fertile"),
+        (68, "female"),
+        (69, "female_near"),
+        (70, "bred"),
+        (71, "target_arousal"),
+        (72, "target_other_sex"),
+        (73, "longing"),
+    ]);
     assert_eq!(inputs, expected);
 }
 
@@ -1014,7 +1081,7 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
 fn a_category_s_brain_input_takes_its_id_from_the_category_s() {
     // 35 + id for categories 1 to 6, and 37 + id from 7, past target_distance
     // and target_adjacent (design v19 §3.5.5).
-    let text = categories_with(r#"(id: 8, name: "tree"), (id: 26, name: "shell")"#);
+    let text = categories_with(r#"(id: 9, name: "tree"), (id: 26, name: "shell")"#);
     let pack = builtin_with("categories.ron", &text).expect("a valid pack");
     let targets: Vec<(u16, &str)> = pack
         .brain_inputs()
@@ -1031,7 +1098,8 @@ fn a_category_s_brain_input_takes_its_id_from_the_category_s() {
             (42, "target_distance"),
             (43, "target_adjacent"),
             (44, "attended_cursor"),
-            (45, "attended_tree"),
+            (45, "attended_egg"),
+            (46, "attended_tree"),
             (63, "attended_shell"),
         ]
     );
@@ -1039,14 +1107,14 @@ fn a_category_s_brain_input_takes_its_id_from_the_category_s() {
     // A retired category leaves its input's ID unused.
     let text = r#"[(id: 1, name: "bush"), (id: 2, name: "fruit"), (id: 4, name: "water"),
         (id: 5, name: "toy"), (id: 6, name: "sprite"), (id: 7, name: "cursor"),
-        (id: 9, name: "thornbush")]"#;
+        (id: 8, name: "egg"), (id: 10, name: "thornbush")]"#;
     let pack = builtin_with("categories.ron", text).expect("a valid pack");
     let ids: Vec<u16> = pack
         .brain_inputs()
         .map(|(id, _)| id)
         .filter(|id| (36..=63).contains(id))
         .collect();
-    assert_eq!(ids, [36, 37, 39, 40, 41, 42, 43, 44, 46]);
+    assert_eq!(ids, [36, 37, 39, 40, 41, 42, 43, 44, 45, 47]);
 }
 
 #[test]
@@ -1067,6 +1135,11 @@ fn a_brain_input_reads_a_drive_hormone_body_sensor_or_pulse_that_exists() {
         // Learning signals.
         (r#"Chem("reward")"#, "reward"),
         (r#"Locus("exploration_mod")"#, "exploration_mod"),
+        // So too in the sprite attended to (M2 design §10), which is the
+        // only one a sprite sees.
+        (r#"Target(Chem("energy"))"#, "energy"),
+        (r#"Differs(Locus("glow"))"#, "glow"),
+        (r#"Target(Differs(Locus("female")))"#, "attends to"),
     ] {
         let text = format!(r#"(inputs: [(id: 1, name: "odd", reads: {reads})], needs: [])"#);
         assert_invalid("brain_io.ron", &text, word);
@@ -1122,7 +1195,8 @@ fn the_needs_are_the_drives_whose_relief_teaches() {
             "tiredness",
             "boredom",
             "loneliness",
-            "crowdedness"
+            "crowdedness",
+            "arousal"
         ],
         "pain is a drive but not a need"
     );
@@ -1142,7 +1216,8 @@ fn the_drives_are_the_signal_chemicals_but_reward_and_punishment() {
             "tiredness",
             "boredom",
             "loneliness",
-            "crowdedness"
+            "crowdedness",
+            "arousal"
         ]
     );
 }

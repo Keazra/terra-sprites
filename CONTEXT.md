@@ -157,7 +157,7 @@ The genome in the data pack that sprites are made from when they have no parents
 A number in a gene that variation may change, such as a strength or a threshold. The rest of a gene, such as which chemical it touches, never varies.
 
 **Spawn variation**:
-The small random change to the gene values of a sprite made from the starter genome.
+The small random change to the gene values of a sprite made from the starter genome, larger for `grows_old` so that lives differ.
 _Avoid_: mutation (that comes with inheritance)
 
 **Flagged gene**:
@@ -240,7 +240,7 @@ The physical chemical that measures harm. A sprite dies when its injury reaches 
 _Avoid_: damage, health
 
 **Life stage** (M2):
-Where a sprite is in its life: young, adult or old. Its genes set when it grows up and when it grows old, and some genes switch with it. Code may call it `stage` where only a sprite's is meant.
+Where a sprite is in its life: egg, young, adult or old. Its genes set when it grows up and when it grows old, and some genes switch with it. Code may call it `stage` where only a sprite's is meant.
 _Avoid_: stage alone in what the player reads (that's an object's), age group
 
 **Grows up** (M2):
@@ -271,6 +271,54 @@ _Avoid_: senescence, past its lifespan (lifespan is now when it grows old)
 Lasting harm a hard life leaves on a sprite's body, from starving, going without water and injury, which healing doesn't undo. The more wear it carries, the sooner it grows old and the faster its genes decay.
 _Avoid_: stress (that's what causes it), damage, injury (injury heals)
 
+**Egg** (M2):
+A sprite's first life stage, laid on a free tile beside its mother. It feels, learns, moves and needs nothing, the Cursor can't touch it, and nothing a sprite does to it does anything. It hatches where it lies. Other sprites see it as a thing of its own kind, not as a sprite.
+_Avoid_: unborn sprite, larva
+
+**Hatch** (M2):
+When an egg becomes a young sprite, a set time after it was laid (750 ticks), with a newborn's body. Its age counts from then.
+_Avoid_: born (a hatchling is born as it hatches; the world's first sprites and the Cursor's are born without hatching), spawn (that's the Cursor's)
+
+**Parents** (M2):
+The sprite that laid an egg, its mother, then its partner, if it had one, its father. A sprite the world began with, or that the Cursor made, has none.
+_Avoid_: sire and dam
+
+**Sex** (M2):
+Male or female. Every sprite hatches male, and an adult male turns female for good once its feminiser is high enough. Only a female lays eggs.
+_Avoid_: gender, mating type
+
+**Feminiser** (M2):
+The hormone that turns a male adult female. The starter genes raise it while the sprite sees no female adult and lower it fast while it sees one, so a male long without females turns, as clownfish do.
+_Avoid_: sex hormone
+
+**Longing** (M2):
+The hormone a female needs to breed alone. The starter genes raise it while the sprite sees no male adult and lower it fast while it sees one, and a female can breed alone only once it has reached physiology's `breeds_alone`. A stopgap until courtship and families make lone eggs very rare.
+_Avoid_: loneliness (the drive for any sprite's company)
+
+**Fertile** (M2):
+Able to breed: grown up, its energy and hydration above `fed` (0.5), rested since its last egg (1,500 ticks), in a world with room for another sprite. It's the body's say, not the genes'.
+_Avoid_: ready, in season
+
+**Arousal** (M2):
+The drive to breed, which `physiology.ron` names as breeding's drive. The starter genes raise it fast while the sprite is fertile and drop it within a few ticks of its not being, or once it has bred, so others read it as fertility. It's a need, but only mating relieves it in what a sprite learns, and only about the partner. Whatever the genes, it works only between adults.
+_Avoid_: broodiness (its first name; brooding is sitting on eggs), desire, libido
+
+**Body language** (M2):
+What a sprite sees of the sprite it attends to: its arousal (`target_arousal`) and whether it's of the other sex (`target_other_sex`). Brain inputs that read another's body are listed in `brain_io.ron` as `Target(...)` or `Differs(...)`.
+_Avoid_: signals, display
+
+**Mate** (M2):
+The action of breeding with a partner beside it. It works only between two fertile adults, a male and a female: she lays an egg, its genes mixed from both, and they split its cost. Mate is never offered toward a sprite that isn't an adult.
+_Avoid_: courtship (nothing comes before it yet), copulate
+
+**Breed alone** (M2):
+The action of a female laying an egg with no partner, its genes a copy of hers, its whole cost hers. Offered only to a grown sprite.
+_Avoid_: parthenogenesis in what the player reads, cloning, self-mating
+
+**Most sprites** (M2):
+The most sprites a world holds, eggs included: the preset's `most_sprites` (100 in the default world). A full world has no fertile sprite. The Cursor may still place one past it.
+_Avoid_: population cap, carrying capacity (food sets that)
+
 **Cause of death**:
 What caused most of a sprite's recent injury, with the most recent counting most: starvation, dehydration, old age, or being hurt by an object type, such as a thornbush, or by another sprite.
 
@@ -289,7 +337,7 @@ What a sprite is doing, such as wandering to a spot or resting, from when it sta
 _Avoid_: task, behaviour, activity
 
 **Verb**:
-A kind of action a sprite can take: Approach, Eat, Drink, Hit, Play, Retreat, Rest or Wander. Mate joins in M2 (Slice 23). Under #164 (M3), Play stops being a verb — it is boredom's relief, and the `played` pulse, that other verbs' effects can cause — and Touch, Grab, Push, Pull, Throw and Drop join. Speak is reserved for M6 (Words).
+A kind of action a sprite can take: Approach, Eat, Drink, Hit, Play, Retreat, Rest or Wander. Mate and BreedAlone join in M2 (Slice 23). Under #164 (M3), Play stops being a verb — it is boredom's relief, and the `played` pulse, that other verbs' effects can cause — and Touch, Grab, Push, Pull, Throw and Drop join. Speak is reserved for M6 (Words).
 _Avoid_: command (the player's commands are different), move
 
 **Holding** (#164 / M3):
@@ -421,7 +469,7 @@ What a feeling is about: the thing the sprite tried a verb on a moment ago, or t
 _Avoid_: target (for this), culprit
 
 **Fruitless try**:
-A try at a verb on a thing that has no rule for it, or whose rule can't be met, such as eating a ball or a bare bush. Nothing happens, and the sprite feels it.
+A try at a verb on a thing that has no rule for it, or whose rule can't be met, such as eating a ball or a bare bush, mating with a sprite that isn't fertile or is of the same sex, or a male breeding alone. Nothing happens, and the sprite feels it.
 _Avoid_: fizzle, failed attempt (failed is an outcome)
 
 **Motive**:

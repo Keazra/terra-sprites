@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use crate::ageing::LifeStage;
 use crate::brain_io::{BRAIN_IO, BrainInput, BrainIoFile, InputId, brain_io};
-use crate::categories::{CATEGORIES, CURSOR, Category, SPRITE, WATER, categories};
+use crate::categories::{CATEGORIES, CURSOR, Category, EGG, SPRITE, WATER, categories};
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, GenomeError};
 use crate::names::{NAMES, Syllables};
@@ -229,17 +229,25 @@ impl DataPack {
             &chemicals,
             &loci,
         )?;
-        let indices =
-            Indices::find(&chemicals, &loci).map_err(|(file, message)| DataError::Invalid {
+        let physiology = parse::<PhysiologyEntry>(sources, PHYSIOLOGY)?;
+        let needs: Vec<&str> = brain_io
+            .needs
+            .iter()
+            .map(|&place| brain_io.inputs[place].name.as_str())
+            .collect();
+        let indices = Indices::find(&chemicals, &loci, &needs, physiology.drive()).map_err(
+            |(file, message)| DataError::Invalid {
                 file: file.into(),
                 message,
-            })?;
-        let physiology = parse::<PhysiologyEntry>(sources, PHYSIOLOGY)?
-            .validate(indices, &loci)
-            .map_err(|message| DataError::Invalid {
-                file: PHYSIOLOGY.into(),
-                message,
-            })?;
+            },
+        )?;
+        let physiology =
+            physiology
+                .validate(indices, &loci)
+                .map_err(|message| DataError::Invalid {
+                    file: PHYSIOLOGY.into(),
+                    message,
+                })?;
         let syllables = parse::<Syllables>(sources, NAMES)?
             .validate()
             .map_err(|message| DataError::Invalid {
@@ -589,6 +597,12 @@ impl DataPack {
     pub(crate) fn sprite_category(&self) -> CategoryId {
         self.category_named(SPRITE)
             .expect("a checked pack has sprites")
+    }
+
+    /// The category eggs are perceived as, if the pack has one (M2 design
+    /// §10).
+    pub(crate) fn egg_category(&self) -> Option<CategoryId> {
+        self.category_named(EGG)
     }
 
     /// The category the Cursor is perceived as, while sprites can see it

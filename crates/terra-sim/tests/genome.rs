@@ -242,8 +242,8 @@ fn an_instinct_built_on_a_missing_category_s_input_is_kept_as_written() {
     let data = builtin();
     let text = genome_file(&[
         r#"Instinct(inputs: [("hunger", false), ("attended_tree", false)], verb: Eat, weight: 0.5)"#,
-        // [[[1, false], [45, false]], Eat, 0.5]: input 45 would be category 8's.
-        r#"Gene(type: 8, version: 1, payload: "93929201c2922dc202ca3f000000")"#,
+        // [[[1, false], [46, false]], Eat, 0.5]: input 46 would be category 9's.
+        r#"Gene(type: 8, version: 1, payload: "93929201c2922ec202ca3f000000")"#,
     ]);
     let genome = Genome::from_ron(&text, &data).expect("a valid genome");
     assert_eq!(genome.to_ron(&data), text);
@@ -417,8 +417,8 @@ fn an_instinct_combines_one_to_three_different_inputs() {
 #[test]
 fn an_instinct_may_not_lead_to_a_reserved_verb() {
     assert_invalid(
-        &[r#"Instinct(inputs: [("loneliness", false)], verb: Mate, weight: 1.0)"#],
-        "Mate",
+        &[r#"Instinct(inputs: [("loneliness", false)], verb: Speak, weight: 1.0)"#],
+        "Speak",
     );
 }
 

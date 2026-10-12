@@ -8,6 +8,7 @@ A **world config** says how big a generated world is and what it starts with (de
 | `sprites` | The first population, from 20 to 100, whatever the map's size. Left out, the world has no sprites. |
 | `objects` | A map from object type names ([objects](objects.md)) to how many of each go in every `per_tiles` tiles, so a bigger map gets more. A type not named gets none, and pseudo types (`water`, `sprite`, `cursor`) can't be named. |
 | `per_tiles` | The area `objects` counts are for, above 0. Needed whenever `objects` is given. |
+| `most_sprites` | The most sprites the world holds, eggs included (M2 design §10), from 1 to 1,000 and at least `sprites`. In a full world no sprite is fertile. Left out, 100. |
 
 Plants start partway through their lives, so a new world doesn't all ripen at once (design §3.2).
 

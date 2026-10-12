@@ -151,17 +151,22 @@ pub(crate) struct Preset {
     objects: BTreeMap<String, u32>,
     per_tiles: u32,
     sprites: u16,
+    /// A save from before breeding had none, so it gets the default (M2
+    /// design §10).
+    #[serde(default = "crate::config::most_sprites")]
+    most_sprites: u16,
 }
 
 impl From<&WorldConfig> for Preset {
     fn from(config: &WorldConfig) -> Preset {
-        let (width, height, objects, per_tiles, sprites) = config.parts();
+        let (width, height, objects, per_tiles, sprites, most_sprites) = config.parts();
         Preset {
             width,
             height,
             objects: objects.clone(),
             per_tiles,
             sprites,
+            most_sprites,
         }
     }
 }
@@ -174,6 +179,7 @@ impl From<Preset> for WorldConfig {
             preset.objects,
             preset.per_tiles,
             preset.sprites,
+            preset.most_sprites,
         )
     }
 }

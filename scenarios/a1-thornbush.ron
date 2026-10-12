@@ -19,6 +19,12 @@
         ],
         key: {'S': Sprite, 'T': Object("thornbush"), 'B': Object("berry_bush")},
     ),
+    // The same sprites are watched for longer than a 4-hour life, so they
+    // grow old at 60,000 ticks, as before M2 (M2 design §2).
+    grows_old: 60000.0,
+    // It watches only its own sprite, so the box holds no more: no eggs
+    // (M2 design §10).
+    most_sprites: 1,
     ticks: 20000,
     control: NoLearning,
     windows: [(0, 5000), (5000, 10000), (10000, 15000), (15000, 20000)],

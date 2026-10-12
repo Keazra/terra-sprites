@@ -13,7 +13,12 @@ use crate::registry::Trait;
     Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
 )]
 pub enum LifeStage {
-    /// From birth until it grows up.
+    /// From being laid until it hatches (M2 design §10): it feels, learns,
+    /// moves and needs nothing. No gene switches at it: an egg's genes are
+    /// expressed as a young sprite's, ready for it to hatch.
+    Egg,
+    /// From hatching, or for a sprite placed young, being born, until it
+    /// grows up.
     #[default]
     Young,
     /// From growing up until it grows old.
@@ -23,9 +28,22 @@ pub enum LifeStage {
 }
 
 impl LifeStage {
+    /// Whether a sprite at this stage is grown up: an adult, or old, which
+    /// still counts as one for mating (M2 design §5, §9.1).
+    pub fn is_grown(self) -> bool {
+        matches!(self, LifeStage::Adult | LifeStage::Old)
+    }
+
+    /// The stage its genes are expressed for: an egg's are a young
+    /// sprite's (M2 design §10).
+    pub(crate) fn expressed(self) -> LifeStage {
+        self.max(LifeStage::Young)
+    }
+
     /// The stage's name, as genome files and the player see it.
     pub fn name(self) -> &'static str {
         match self {
+            LifeStage::Egg => "egg",
             LifeStage::Young => "young",
             LifeStage::Adult => "adult",
             LifeStage::Old => "old",
@@ -45,8 +63,9 @@ pub struct Switch {
 }
 
 impl Switch {
-    /// Whether the gene works in `stage`.
+    /// Whether the gene works in `stage`, an egg's being a young sprite's.
     pub fn is_on(self, stage: LifeStage) -> bool {
+        let stage = stage.expressed();
         self.from <= stage && self.until.is_none_or(|until| stage < until)
     }
 

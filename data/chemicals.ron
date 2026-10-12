@@ -21,6 +21,8 @@
     (id: 22, name: "crowdedness", class: Signal),
     (id: 23, name: "reward",      class: Signal),
     (id: 24, name: "punishment",  class: Signal),
+    // The drive to breed (M2 design §10).
+    (id: 25, name: "arousal",     class: Signal),
 
     (id: 32, name: "h0",  class: Hormone),
     (id: 33, name: "h1",  class: Hormone),
@@ -38,4 +40,11 @@
     (id: 45, name: "h13", class: Hormone),
     (id: 46, name: "h14", class: Hormone),
     (id: 47, name: "h15", class: Hormone),
+
+    // The hormone that turns a male female, once it's above the level in
+    // physiology's `breeding` (M2 design §10).
+    (id: 48, name: "feminiser",  class: Hormone),
+    // Longing builds while a sprite sees no male adult; in the starter
+    // genome it's what leads a female to breed alone (M2 design §10).
+    (id: 49, name: "longing",    class: Hormone),
 ]

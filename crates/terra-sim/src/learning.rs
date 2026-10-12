@@ -58,11 +58,38 @@ impl Links {
         }
     }
 
+    /// Widens every row to `columns` with links at 0: a save's decision
+    /// instincts from before a verb was added (M2 design §5).
+    pub(crate) fn widen(&mut self, columns: usize) {
+        for row in &mut self.w {
+            if row.len() < columns {
+                row.resize(columns, 0.0);
+            }
+        }
+    }
+
     /// Sets the weight in `row` and `column`, unchecked.
     #[cfg(test)]
     pub(crate) fn set(&mut self, row: usize, column: usize, w: f32) {
         self.w[row][column] = w;
     }
+}
+
+/// Reads a value for each verb, in `VERBS` order. A save from before Mate
+/// and BreedAlone has fewer, and theirs are 0 (M2 design §5, §10).
+pub(crate) fn per_verb<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<[f32; VERBS.len()], D::Error> {
+    let values = Vec::<f32>::deserialize(deserializer)?;
+    let mut row = [0.0; VERBS.len()];
+    if values.len() > VERBS.len() {
+        return Err(serde::de::Error::invalid_length(
+            values.len(),
+            &"a value for each verb",
+        ));
+    }
+    row[..values.len()].copy_from_slice(&values);
+    Ok(row)
 }
 
 /// What a sprite learns about a thing as (design v19 §5.6): its object type,
@@ -115,6 +142,7 @@ pub(crate) struct TypeMemory {
     /// Bad, from `punishment` (−1 to 0).
     pub(crate) bad: f32,
     /// Habits: doing each verb to it, in `VERBS` order.
+    #[serde(deserialize_with = "per_verb")]
     pub(crate) habits: [f32; VERBS.len()],
     /// Taught habits: what the Cursor taught about doing each verb to it,
     /// kept apart from the habits it learns itself (design §5.6, #187), in
@@ -497,24 +525,28 @@ pub(crate) struct TraceEntry {
     pub(crate) motive: Option<usize>,
 }
 
-/// Step 4 for every sprite not `dying` (design §2.4): reads each need's
-/// relief, reward and punishment, resets the last two to 0, keeps what the
-/// sprite felt, and learns from them, reporting each lesson.
+/// Step 4 for every sprite not `still`, dying or an egg (design §2.4, M2
+/// design §10): reads each need's relief, reward and punishment, resets the
+/// last two to 0, keeps what the sprite felt, and learns from them,
+/// reporting each lesson.
 pub(crate) fn run(
     state: &mut WorldState,
     data: &DataPack,
-    dying: &[EntityId],
+    still: &[EntityId],
     events: &mut Vec<Event>,
 ) {
     let indices = &data.physiology().indices;
     let tick = state.tick;
     let learning = state.learning;
-    // A sprite that has died is forgotten (design v18 §5.6).
+    let window = data.physiology().touch_window;
+    let drive = indices.drive;
+    // A sprite that has died is forgotten (design v18 §5.6); an egg is
+    // alive.
     let alive: BTreeSet<EntityId> = state
         .sprites
         .iter()
+        .filter(|(id, sprite)| sprite.is_egg() || !still.contains(id))
         .map(|(id, _)| id)
-        .filter(|id| !dying.contains(id))
         .collect();
     // How far each sprite that knows the Cursor sees it, by its flood's
     // reach, if its flood reaches it (design v29 §3.6, §5.6): only those can
@@ -534,7 +566,7 @@ pub(crate) fn run(
     let living = state
         .sprites
         .minds_mut()
-        .filter(|(id, ..)| !dying.contains(id));
+        .filter(|(id, ..)| !still.contains(id));
     for (id, body, brain) in living {
         let cursor_distance = cursor_distances.get(&id).copied();
         let (reward, punishment) = (body.chems[indices.reward], body.chems[indices.punishment]);
@@ -544,7 +576,17 @@ pub(crate) fn run(
         let seen_cursor = std::mem::take(&mut brain.seen_cursor);
         brain.experience.forget_dead(&alive);
         let needs = brain.need_levels(body, data);
-        let relief = brain.relief(&needs, data);
+        let mut relief = brain.relief(&needs, data);
+        // The breeding drive eased teaches only about a partner: it's relief
+        // only when the sprite has just mated, which only adults do, so no
+        // genome can have a sprite learn that a young one, or anything else,
+        // is good for it (M2 design §5).
+        let mated = brain
+            .touched
+            .is_some_and(|t| t.verb == Some(Verb::Mate) && tick - t.tick <= window);
+        if let Some(need) = drive.filter(|_| !mated) {
+            relief[need] = 0.0;
+        }
         brain.felt = relief.iter().sum::<f32>() + reward - punishment;
         if !learning {
             continue;

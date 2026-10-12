@@ -25,10 +25,12 @@ listed_enum! {
         Retreat = 6,
         Rest = 7,
         Wander = 8,
-        /// Reserved for M2.
+        /// Having young with another adult (M2 design §5).
         Mate = 9,
         /// Reserved for M6 (Words).
         Speak = 10,
+        /// Laying an egg alone, as a female can (M2 design §10).
+        BreedAlone = 11,
     }
 
     pub(crate) const ALL;
@@ -36,9 +38,9 @@ listed_enum! {
 
 impl Verb {
     /// Whether the verb is aimed at a target (design §5.2): a movement or
-    /// interaction verb.
+    /// contact verb.
     pub(crate) fn is_aimed(self) -> bool {
-        matches!(self, Verb::Approach | Verb::Retreat) || self.is_interaction()
+        matches!(self, Verb::Approach | Verb::Retreat) || self.is_contact()
     }
 
     /// Whether the verb walks to a goal tile of its target (design §3.6,
@@ -49,13 +51,21 @@ impl Verb {
 
     /// Whether the verb's ID is only reserved, for a later milestone.
     pub(crate) fn is_reserved(self) -> bool {
-        matches!(self, Verb::Mate | Verb::Speak)
+        self == Verb::Speak
     }
 
     /// Whether the verb acts on its target through the target's verb table
-    /// (design §5.2). The others move, rest or are reserved.
+    /// (design §5.2). The others move, rest, mate or are reserved.
     pub(crate) fn is_interaction(self) -> bool {
         matches!(self, Verb::Eat | Verb::Drink | Verb::Hit | Verb::Play)
+    }
+
+    /// Whether the verb walks to its target and makes one attempt on it,
+    /// which the sprite learns from as a touch (design §5.5, §5.6): an
+    /// interaction, or mating, which the engine itself resolves (M2 design
+    /// §5).
+    pub(crate) fn is_contact(self) -> bool {
+        self.is_interaction() || self == Verb::Mate
     }
 }
 

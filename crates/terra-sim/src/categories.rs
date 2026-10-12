@@ -17,6 +17,10 @@ pub(crate) const WATER: &str = "water";
 pub(crate) const SPRITE: &str = "sprite";
 pub(crate) const CURSOR: &str = "cursor";
 
+/// The category eggs are perceived as (M2 design §10). A pack may leave it
+/// out, as one from before eggs does: then no sprite sees eggs.
+pub(crate) const EGG: &str = "egg";
+
 /// One category.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]

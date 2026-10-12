@@ -16,6 +16,18 @@ const SIDE: std::ops::RangeInclusive<u16> = 32..=MAX_SIDE;
 /// The allowed range for the first population (design §3.9).
 const SPRITES: std::ops::RangeInclusive<u16> = 20..=100;
 
+/// The most sprites a world holds with no `most_sprites` in its preset,
+/// eggs included (M2 design §10): the size the speed check measures (A5).
+pub(crate) const MOST_SPRITES: u16 = 100;
+
+/// `MOST_SPRITES`, for a save from before breeding.
+pub(crate) fn most_sprites() -> u16 {
+    MOST_SPRITES
+}
+
+/// The allowed range for `most_sprites` (M2 design §10).
+const MOST: std::ops::RangeInclusive<u16> = 1..=1000;
+
 /// The settings a new world is made from. A preset file holds one.
 ///
 /// A config is checked against the data pack it was parsed with, and must be
@@ -29,6 +41,9 @@ pub struct WorldConfig {
     per_tiles: u32,
     /// How many sprites a new world starts with.
     sprites: u16,
+    /// The most sprites the world holds, eggs included: past it, breeding
+    /// is a fruitless try (M2 design §10).
+    most_sprites: u16,
 }
 
 /// Why a preset could not be read.
@@ -60,6 +75,8 @@ struct Preset {
     per_tiles: Option<u32>,
     #[serde(default)]
     sprites: Option<u16>,
+    #[serde(default)]
+    most_sprites: Option<u16>,
 }
 
 impl WorldConfig {
@@ -115,23 +132,33 @@ impl WorldConfig {
                 )));
             }
         };
+        let most_sprites = preset.most_sprites.unwrap_or(MOST_SPRITES);
+        if !MOST.contains(&most_sprites) || most_sprites < sprites {
+            return Err(ConfigError::Invalid(format!(
+                "`most_sprites` is {most_sprites}, but must be from {} to {}, and at least `sprites`",
+                MOST.start(),
+                MOST.end()
+            )));
+        }
         Ok(WorldConfig {
             width: preset.width,
             height: preset.height,
             objects: preset.objects,
             per_tiles,
             sprites,
+            most_sprites,
         })
     }
 
     /// The fields, for a save to keep (design §2.8).
-    pub(crate) fn parts(&self) -> (u16, u16, &BTreeMap<String, u32>, u32, u16) {
+    pub(crate) fn parts(&self) -> (u16, u16, &BTreeMap<String, u32>, u32, u16, u16) {
         (
             self.width,
             self.height,
             &self.objects,
             self.per_tiles,
             self.sprites,
+            self.most_sprites,
         )
     }
 
@@ -143,6 +170,7 @@ impl WorldConfig {
         objects: BTreeMap<String, u32>,
         per_tiles: u32,
         sprites: u16,
+        most_sprites: u16,
     ) -> WorldConfig {
         WorldConfig {
             width,
@@ -150,6 +178,7 @@ impl WorldConfig {
             objects,
             per_tiles,
             sprites,
+            most_sprites,
         }
     }
 
@@ -166,6 +195,11 @@ impl WorldConfig {
     /// How many sprites a new world starts with.
     pub fn sprites(&self) -> usize {
         usize::from(self.sprites)
+    }
+
+    /// The most sprites the world holds, eggs included (M2 design §10).
+    pub fn most_sprites(&self) -> usize {
+        usize::from(self.most_sprites)
     }
 
     /// The same preset on a map `width` by `height`, each side kept within

@@ -17,6 +17,9 @@
         // The young are drawn small (M2 design §9.6). `•` is the berry.
         young_sprite:           (glyph: 'ö', fg: white),
         selected_young_sprite:  (glyph: 'ö', fg: white, reversed: true),
+        // An egg (M2 design §10). `○` is the ball.
+        egg:                    (glyph: 'o', fg: light_yellow),
+        selected_egg:           (glyph: 'o', fg: light_yellow, reversed: true),
         // The Decision marker: where the selected sprite is heading. It flashes. CP437 has no `×`.
         decision_marker:        (glyph: 'X', fg: white),
         // Emotes take turns with a sprite's glyph (design §6.3): hurt by something.
@@ -42,6 +45,7 @@
         "boredom":     dark_gray,
         "loneliness":  magenta,
         "crowdedness": light_red,
+        "arousal":     light_magenta,
     },
     // Objects, by type name from the data pack's `objects.ron`, then visual
     // state. An object whose state isn't listed is drawn with its "default"

@@ -231,16 +231,7 @@ fn parse(args: &[String]) -> Result<Options, String> {
         match flag.as_str() {
             "--sprites" => options.per_sprite = true,
             "--ticks" => options.ticks = args::number("--ticks", &mut args)?,
-            "--seeds" => {
-                let value = args.next().ok_or("--seeds needs a range, such as 1-10")?;
-                let bad = || format!("--seeds needs a range, such as 1-10, not {value}");
-                let (a, b) = value.split_once('-').ok_or_else(bad)?;
-                let (a, b) = (a.parse().map_err(|_| bad())?, b.parse().map_err(|_| bad())?);
-                if a > b {
-                    return Err(bad());
-                }
-                options.seeds = (a, b);
-            }
+            "--seeds" => options.seeds = args::seeds("--seeds", &mut args)?,
             _ => return Err(format!("unknown argument {flag}")),
         }
     }

@@ -15,6 +15,9 @@
         // The young are drawn small (M2 design §9.6). `o` is the ball.
         young_sprite:           (glyph: 'a', fg: white),
         selected_young_sprite:  (glyph: 'a', fg: white, reversed: true),
+        // An egg (M2 design §10). `o` is the ball.
+        egg:                    (glyph: '0', fg: light_yellow),
+        selected_egg:           (glyph: '0', fg: light_yellow, reversed: true),
         // The Decision marker: where the selected sprite is heading. It flashes.
         decision_marker:        (glyph: 'X', fg: white),
         // Emotes take turns with a sprite's glyph (design §6.3): hurt by something.
@@ -35,6 +38,7 @@
         "boredom":     dark_gray,
         "loneliness":  magenta,
         "crowdedness": light_red,
+        "arousal":     light_magenta,
     },
     objects: {
         "berry_bush": {

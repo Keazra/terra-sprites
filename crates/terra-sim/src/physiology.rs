@@ -26,6 +26,8 @@ pub(crate) struct Physiology {
     pub(crate) injury: Injury,
     /// How a sprite grows up and grows old (M2 design §9).
     pub(crate) ageing: Ageing,
+    /// How sprites have young (M2 design §10).
+    pub(crate) breeding: Breeding,
     /// What each cause-of-death tally is multiplied by every tick: the file's
     /// `cause_fade` is how many ticks it takes to halve.
     pub(crate) tally_fade: f32,
@@ -35,6 +37,9 @@ pub(crate) struct Physiology {
     pub(crate) receptor_targets: BTreeMap<LocusId, (f32, f32)>,
     pub(crate) nearby_sprites: NearbySprites,
     pub(crate) spawn_variation: f32,
+    /// The traits that vary by their own share at spawn rather than by
+    /// `spawn_variation` (M2 design §9.3).
+    pub(crate) trait_variation: BTreeMap<Trait, f32>,
     /// How far a learned value gets from 0 to be a lesson (design §5.6).
     pub(crate) lesson_threshold: f32,
     /// The least fall of a need in a tick that is relief (design §5.6).
@@ -70,12 +75,20 @@ pub(crate) struct PhysiologyEntry {
     /// §2.8: a save carries its own pack).
     #[serde(default)]
     ageing: Ageing,
+    /// A pack from before breeding takes the built-in breeding (design
+    /// §2.8).
+    #[serde(default)]
+    breeding: Breeding,
     cause_fade: u32,
     traits: TraitRanges,
     brain: BTreeMap<String, ParamRange>,
     receptor_targets: BTreeMap<String, (f32, f32)>,
     nearby_sprites: NearbySprites,
     spawn_variation: f32,
+    /// A pack from before lives grew longer has none: every trait varies by
+    /// `spawn_variation` (design §2.8).
+    #[serde(default)]
+    trait_variation: BTreeMap<String, f32>,
     lesson_threshold: f32,
     relief_deadband: f32,
     touch_window: u64,
@@ -383,7 +396,7 @@ impl Default for Ageing {
             wear_speedup: 3.0,
             sooner: 0.33,
             decay: Decay {
-                ticks: 46_500,
+                ticks: 3_600,
                 hit: 0.01,
                 gives_out: 0.5,
             },
@@ -392,6 +405,46 @@ impl Default for Ageing {
                 chance: 0.002,
                 hit: 0.05,
             },
+        }
+    }
+}
+
+/// How sprites have young (M2 design §10).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Breeding {
+    /// How many ticks an egg takes to hatch.
+    pub(crate) hatches: u64,
+    /// The energy an egg costs, in all: its parents split it.
+    pub(crate) cost: f32,
+    /// The level an adult's energy and hydration must both be above for it
+    /// to be fertile.
+    pub(crate) fed: f32,
+    /// How many ticks after its last egg an adult is fertile again.
+    pub(crate) rest: u64,
+    /// The level of the hormone `feminiser` at which a male adult turns
+    /// female, for good.
+    pub(crate) turns_female: f32,
+    /// The level of the hormone `longing` a female must have reached to
+    /// breed alone.
+    pub(crate) breeds_alone: f32,
+    /// The need that drives breeding, one of `brain_io.ron`'s: the engine
+    /// has it work only between adults (M2 design §5).
+    pub(crate) drive: String,
+}
+
+/// What a saved world's pack from before breeding gets: the built-in
+/// pack's, which a test checks they match.
+impl Default for Breeding {
+    fn default() -> Breeding {
+        Breeding {
+            hatches: 750,
+            cost: 0.3,
+            fed: 0.5,
+            rest: 1_500,
+            turns_female: 0.8,
+            breeds_alone: 0.5,
+            drive: "arousal".into(),
         }
     }
 }
@@ -428,6 +481,11 @@ impl TraitRanges {
 }
 
 impl PhysiologyEntry {
+    /// The need that drives breeding, as the file names it.
+    pub(crate) fn drive(&self) -> &str {
+        &self.breeding.drive
+    }
+
     /// The validated physiology, or what's wrong with it. Receptor targets are
     /// checked against the pack's `loci`.
     pub(crate) fn validate(self, indices: Indices, loci: &[Locus]) -> Result<Physiology, String> {
@@ -511,6 +569,19 @@ impl PhysiologyEntry {
                 ageing.wear_speedup
             ));
         }
+        let breeding = &self.breeding;
+        fraction("breeding.cost", breeding.cost)?;
+        fraction("breeding.fed", breeding.fed)?;
+        fraction("breeding.turns_female", breeding.turns_female)?;
+        fraction("breeding.breeds_alone", breeding.breeds_alone)?;
+        if breeding.hatches == 0 {
+            return Err("`breeding.hatches` must be at least 1 tick".into());
+        }
+        // With no rest, a female mated in a tick could lay again in the same
+        // tick (M2 design §10).
+        if breeding.rest == 0 {
+            return Err("`breeding.rest` must be at least 1 tick".into());
+        }
         if self.cause_fade == 0 {
             return Err("`cause_fade` must be at least 1 tick".into());
         }
@@ -590,6 +661,17 @@ impl PhysiologyEntry {
                 self.spawn_variation
             ));
         }
+        let mut trait_variation = BTreeMap::new();
+        for (name, &spread) in &self.trait_variation {
+            let which = Trait::named(name)
+                .ok_or_else(|| format!("`trait_variation` names `{name}`, which isn't a trait"))?;
+            if !(0.0..1.0).contains(&spread) {
+                return Err(format!(
+                    "`trait_variation.{name}` is {spread}, but must be at least 0 and below 1"
+                ));
+            }
+            trait_variation.insert(which, spread);
+        }
 
         for (name, ticks) in [
             ("actions.rest_bout", self.actions.rest_bout),
@@ -648,12 +730,14 @@ impl PhysiologyEntry {
             healing: self.healing,
             injury,
             ageing,
+            breeding: self.breeding,
             tally_fade: halving_factor(self.cause_fade as f32),
             traits,
             brain: BrainRanges(brain),
             receptor_targets,
             nearby_sprites: self.nearby_sprites,
             spawn_variation: self.spawn_variation,
+            trait_variation,
             lesson_threshold: self.lesson_threshold,
             relief_deadband: self.relief_deadband,
             touch_window: self.touch_window,
@@ -728,16 +812,43 @@ pub(crate) struct Indices {
     /// The pulses the Cursor's Reward and Correct fire (design v21 §4.6).
     pub(crate) petted: usize,
     pub(crate) shocked: usize,
+    /// What breeding reads and writes (M2 design §10), if the pack has it
+    /// all: a pack from before breeding doesn't.
+    pub(crate) breeding: Option<BreedingIndices>,
+    /// The need that drives breeding, `breeding.drive`, by its place among
+    /// the needs, if it's one: it works only between adults, whether or not
+    /// the pack breeds (M2 design §5).
+    pub(crate) drive: Option<usize>,
+}
+
+/// The loci and chemicals breeding reads and writes (M2 design §10).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct BreedingIndices {
+    /// The body sensors: 1 while it's fertile, 1 if it's female, 1 while
+    /// it sees a female adult, and 1 while it sees a male adult.
+    pub(crate) fertile: usize,
+    pub(crate) female: usize,
+    pub(crate) female_near: usize,
+    pub(crate) male_near: usize,
+    /// The pulse each parent fires as an egg is laid.
+    pub(crate) bred: usize,
+    /// The hormone that turns a male female, past `breeding.turns_female`.
+    pub(crate) feminiser: usize,
+    /// The hormone a female must have past `breeding.breeds_alone` to
+    /// breed alone.
+    pub(crate) longing: usize,
 }
 
 impl Indices {
     /// Finds each physical chemical and body sensor physiology needs, the
     /// receptor target the brain reads, and the pulses a cornered retreat
     /// and a fruitless try fire and an attacker is known by, or says which
-    /// file lacks one.
+    /// file lacks one. For breeding, it finds `drive` among the `needs`.
     pub(crate) fn find(
         chemicals: &[Chemical],
         loci: &[Locus],
+        needs: &[&str],
+        drive: &str,
     ) -> Result<Indices, (&'static str, String)> {
         let chem = |name: &str| {
             chemicals
@@ -786,6 +897,48 @@ impl Indices {
                 .position(|l| l.name == name && l.kind == LocusKind::Pulse)
                 .ok_or_else(|| ("loci.ron", format!("sprites need a pulse called `{name}`")))
         };
+        // The breeding drive works only between adults whenever it's one
+        // of the needs, whether or not the pack breeds (M2 design §5). A
+        // pack with breeding's loci and hormones has breeding, and its drive
+        // must be one of the needs.
+        let drive_place = needs.iter().position(|&need| need == drive);
+        let locus = |name: &str, kind| loci.iter().position(|l| l.name == name && l.kind == kind);
+        let breeding = match (
+            locus("fertile", LocusKind::BodySensor),
+            locus("female", LocusKind::BodySensor),
+            locus("female_near", LocusKind::BodySensor),
+            locus("male_near", LocusKind::BodySensor),
+            locus("bred", LocusKind::Pulse),
+            chemicals.iter().position(|c| c.name == "feminiser"),
+            chemicals.iter().position(|c| c.name == "longing"),
+        ) {
+            (
+                Some(fertile),
+                Some(female),
+                Some(female_near),
+                Some(male_near),
+                Some(bred),
+                Some(feminiser),
+                Some(longing),
+            ) => {
+                if drive_place.is_none() {
+                    return Err((
+                        "physiology.ron",
+                        format!("`breeding.drive` is `{drive}`, but brain_io.ron has no such need"),
+                    ));
+                }
+                Some(BreedingIndices {
+                    fertile,
+                    female,
+                    female_near,
+                    male_near,
+                    bred,
+                    feminiser,
+                    longing,
+                })
+            }
+            _ => None,
+        };
         Ok(Indices {
             energy: chem("energy")?,
             hydration: chem("hydration")?,
@@ -809,6 +962,8 @@ impl Indices {
             fruitless: pulse("fruitless")?,
             petted: pulse("petted")?,
             shocked: pulse("shocked")?,
+            breeding,
+            drive: drive_place,
         })
     }
 }
@@ -840,6 +995,7 @@ mod tests {
             (built_in.held, built_in.per_kind, built_in.merge)
         );
         assert_eq!(Ageing::default(), physiology.ageing);
+        assert_eq!(Breeding::default(), physiology.breeding);
         assert_eq!(grows_up_range(), physiology.traits.grows_up);
     }
 }

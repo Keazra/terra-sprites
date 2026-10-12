@@ -2,7 +2,7 @@
 //! genes set, and a gene may switch on as they do.
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_changing, genome};
+use common::{BARREN, WorldBuilder, at, builtin, builtin_changing, genome};
 
 use terra_sim::{
     DataPack, Event, EventKind, Learned, LifeStage, Part, Pos, ScriptedAction, Thing, Verb, World,
@@ -200,7 +200,7 @@ fn an_old_sprite_s_weakened_genes_are_saved_and_hashed() {
     let mut world = carefree_changing(
         r#"Trait(trait: "grows_up", value: 1500.0),
            Trait(trait: "grows_old", value: 6000.0),"#,
-        &[("ticks: 46500,", "ticks: 500,")],
+        &[("ticks: 3600,", "ticks: 500,")],
     );
     run_to(&mut world, 6_400);
     let sprite = world.sprites().next().expect("the sprite");
@@ -224,8 +224,8 @@ fn an_old_sprite_s_weakened_genes_are_saved_and_hashed() {
 }
 
 #[test]
-fn a_starter_sprite_grows_up_at_about_an_hour_and_grows_old_at_about_three() {
-    // M2 design §2, §9.3: about 4,500 and 13,500 ticks for the starter
+fn a_starter_sprite_grows_up_at_about_an_hour_and_grows_old_at_about_five() {
+    // M2 design §2, §9.3: about 4,500 and 22,500 ticks for the starter
     // genome, at the ages its own genes say.
     let data = builtin_changing(
         "physiology.ron",
@@ -235,6 +235,7 @@ fn a_starter_sprite_grows_up_at_about_an_hour_and_grows_old_at_about_three() {
             ("per_step: 0.0002,", "per_step: 0.0,"),
             ("hydration_loss: 0.00033", "hydration_loss: 0.0"),
             ("growth: 0.3,", "growth: 0.0,"),
+            BARREN,
         ],
     );
     let sprite = at(1, 1);
@@ -243,13 +244,18 @@ fn a_starter_sprite_grows_up_at_about_an_hour_and_grows_old_at_about_three() {
         .sprites_with(vec![(sprite, None)])
         .newborns(&[sprite])
         .build();
-    // Spawn variation moves each time by up to a tenth.
+    // Spawn variation moves growing up by up to a tenth, and growing old by
+    // up to two fifths, so lives differ (`trait_variation`).
     let traits = world.sprites().next().expect("the sprite").traits();
-    for (time, aim) in [(traits.grows_up, 4_500.0), (traits.grows_old, 13_500.0)] {
-        assert!((aim * 0.9..=aim * 1.1).contains(&time), "{time} for {aim}");
+    for (time, aim, spread) in [
+        (traits.grows_up, 4_500.0, 0.1),
+        (traits.grows_old, 22_500.0, 0.4),
+    ] {
+        let within = aim * (1.0 - spread)..=aim * (1.0 + spread);
+        assert!(within.contains(&time), "{time} for {aim}");
     }
-    let events = run_to(&mut world, 15_000);
     let id = world.sprites().next().expect("the sprite").id();
+    let events = run_to(&mut world, traits.grows_old.ceil() as u64 + 10);
     let stages: Vec<_> = events
         .iter()
         .filter(|e| matches!(e.kind, EventKind::GrewUp { .. } | EventKind::GrewOld { .. }))

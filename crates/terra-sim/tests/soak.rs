@@ -44,7 +44,8 @@ fn another_seed_gives_another_script() {
 #[test]
 fn a_soak_gives_every_kind_of_command_and_the_world_refuses_the_strays_unbroken() {
     let data = DataPack::builtin().expect("built-in data pack is valid");
-    let sprites = WorldConfig::builtin(&data).sprites();
+    let config = WorldConfig::builtin(&data);
+    let sprites = config.sprites();
     // Debug assertions are on in tests, so a broken invariant panics here.
     let run = Soak::run(data, 5, 5_000);
     assert_eq!(run.ticks, 5_000);
@@ -80,5 +81,10 @@ fn a_soak_gives_every_kind_of_command_and_the_world_refuses_the_strays_unbroken(
             "the world refused no {kind}: {run:?}"
         );
     }
-    assert!(run.most_sprites <= 2 * sprites, "{run:?}");
+    // It spawns up to twice the first population, and sprites breed up to
+    // the world's limit (M2 design §10).
+    assert!(
+        run.most_sprites <= (2 * sprites).max(config.most_sprites()),
+        "{run:?}"
+    );
 }

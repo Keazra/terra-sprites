@@ -425,12 +425,14 @@ fn the_resting_emote_shows_for_a_second_at_16x_and_at_max_through_the_frame_loop
         let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
         let sprites = [(at(2, 3), Some(feeling(&[])))];
         let scripted = [(at(2, 3), ScriptedAction::Rest)];
+        // Young, so it can't try breeding alone, fail and show that instead
+        // (M2 design §10).
         let scenario = Scenario {
             map,
             objects: &[],
             sprites: &sprites,
             scripted: &scripted,
-            newborns: &[],
+            newborns: &[at(2, 3)],
         };
         let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
         let id = world.sprites().next().expect("a sprite").id();

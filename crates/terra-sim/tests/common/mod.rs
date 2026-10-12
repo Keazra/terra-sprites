@@ -74,6 +74,16 @@ pub fn endings(events: &[Event]) -> Vec<(Verb, Outcome)> {
         .collect()
 }
 
+/// The change to `physiology.ron` that puts breeding out of reach: no
+/// sprite is ever fertile (M2 design §10).
+pub const BARREN: (&str, &str) = ("fed: 0.5,", "fed: 1.0,");
+
+/// The built-in data pack with breeding out of reach, for a test of
+/// something else that watches grown sprites long enough to breed.
+pub fn barren() -> DataPack {
+    builtin_changing("physiology.ron", &[BARREN])
+}
+
 /// The built-in data pack, with `changes` made to `file`'s text.
 pub fn builtin_changing(file: &str, changes: &[(&str, &str)]) -> DataPack {
     builtin_changing_files(&[(file, changes)])
