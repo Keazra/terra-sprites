@@ -324,6 +324,10 @@ mod tests {
         );
         assert_eq!(BrainParam::named("place_fade"), Some(BrainParam::PlaceFade));
         assert_eq!(
+            BrainParam::named("taught_rate"),
+            Some(BrainParam::TaughtRate)
+        );
+        assert_eq!(
             BrainParam::named("taught_fade"),
             Some(BrainParam::TaughtFade)
         );

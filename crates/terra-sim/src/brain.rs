@@ -589,12 +589,12 @@ impl Brain {
         }
         // Habits, along the trace: each aimed verb and the thing it attended.
         // A fruitless try disappoints the need that chose it. In a tick the
-        // Cursor rewarded the sprite, the reward goes instead to the habit of
-        // the latest try within the Reward's reach back, at full weight; in a
-        // tick it corrected it, the punishment likewise to the latest try
-        // within the touch window (design v21 §5.6). Each goes to the taught
-        // habit, kept apart at its own rate so what the sprite learns itself
-        // doesn't wash it out (design §5.6, #187).
+        // Cursor rewarded the sprite, the reward goes instead to the taught
+        // habit of the latest try within the Reward's reach back, at
+        // `taught_rate` and full weight; in a tick it corrected it, the
+        // punishment likewise to the latest try within the touch window. The
+        // taught habit is kept apart so what the sprite learns itself doesn't
+        // wash it out (design §5.6, #187).
         let rate = self.params.get(BrainParam::HabitRate) * learning_rate_mod;
         let taught_rate = self.params.get(BrainParam::TaughtRate) * learning_rate_mod;
         let rewarded = reached.filter(|_| signals.reach_back.is_some());

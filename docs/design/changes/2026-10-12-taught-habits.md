@@ -2,6 +2,8 @@
 
 A3 had passed or failed by luck since Milestone 1: one shock wore off for 9 sprites in 10, and it took three to last ([#187](https://github.com/Keazra/terra-sprites/issues/187)). On 2026-10-12 the owner chose to fix it before breeding merged. This is the fix recommended to them, "Lasting lessons": what the Cursor teaches is kept apart and lasts, in [PR #189](https://github.com/Keazra/terra-sprites/pull/189).
 
+**Measured** over A3's seeds 1–30, with `cargo run --release -p terra-sim --example lab -- scenarios/a3-correct-training.ron --seeds 30`: trained sprites' median of hits in ticks 10,000–20,000 was 23 on `main` at `3b246f3` and 0 with taught habits at `acb2809`, against 69 for the control both times. Every random set of 10 of those seeds passes, against 84 in 100 on `main`.
+
 ## M1 "A Sprite Lives"
 
 | # | Change | Source | Sections |
