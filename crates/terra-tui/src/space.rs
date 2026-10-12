@@ -18,14 +18,22 @@ use crate::app::Origin;
 pub enum Place {
     /// A tile of the map.
     Tile(Pos),
-    /// The glass, one tile outside the map, all round (§11.2). It isn't a
-    /// tile: nothing on the map reaches it.
+    /// The glass, one tile outside the map, all round (M2 design §11.2).
+    /// It isn't a tile: nothing on the map reaches it.
     Glass(Pane),
-    /// Space, past the glass (§11.3).
+    /// Space, past the glass (M2 design §11.3).
     Space,
 }
 
 impl Place {
+    /// The map's tile, if this is one.
+    pub fn tile(self) -> Option<Pos> {
+        match self {
+            Place::Tile(tile) => Some(tile),
+            Place::Glass(_) | Place::Space => None,
+        }
+    }
+
     /// What's at (`x`, `y`), on or around a map of `map` tiles.
     pub fn at(x: i32, y: i32, map: Size) -> Place {
         let (width, height) = (i32::from(map.width), i32::from(map.height));
@@ -52,8 +60,9 @@ impl Place {
     }
 }
 
-/// A piece of the glass, each with a glyph of the theme's (§11.5): `═`
-/// along the top and bottom, `║` down the sides, and the four corners.
+/// A piece of the glass, each with a glyph of the theme's (M2 design
+/// §11.5): `═` along the top and bottom, `║` down the sides, and the four
+/// corners.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Pane {
@@ -79,8 +88,8 @@ impl Pane {
     ];
 }
 
-/// A depth of stars (§11.3). The numbers are those of the preview the owner
-/// tried in the ship's design pass, round 1.
+/// A depth of stars (M2 design §11.3). The numbers are those of the
+/// preview the owner tried in the ship's design pass, round 1.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Depth {

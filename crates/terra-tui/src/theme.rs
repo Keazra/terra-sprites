@@ -320,8 +320,8 @@ impl Theme {
     /// (M2 design §11.5), such as one made before there was space.
     fn default_space() -> SpaceFile {
         let space = ron::from_str::<ThemeFile>(CP437)
-            .ok()
-            .and_then(|file| file.space)
+            .unwrap_or_else(|e| panic!("the built-in cp437 theme is invalid: {e}"))
+            .space
             .expect("the built-in cp437 theme draws space");
         assert!(
             Pane::ALL.iter().all(|pane| space.glass.contains_key(pane))
@@ -537,13 +537,13 @@ struct ThemeFile {
     /// The glass and the stars past the wall (M2 design §11.5). A theme
     /// without them, or without some of them, such as one made before there
     /// was space, draws the default theme's.
-    #[serde(default, deserialize_with = "present")]
+    #[serde(default, deserialize_with = "implicit_some")]
     space: Option<SpaceFile>,
 }
 
 /// A section a theme file may leave out, written without `Some(…)` when
 /// it's there.
-fn present<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
+fn implicit_some<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
     section: D,
 ) -> Result<Option<T>, D::Error> {
     T::deserialize(section).map(Some)

@@ -8,7 +8,9 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
-use terra_sim::{CursorTouch, DataPack, EntityId, Map, Pos, Scenario, World};
+use terra_sim::{
+    Command, CursorTouch, DataPack, Dir, EntityId, Grip, Map, Pos, Scenario, ScriptedAction, World,
+};
 use terra_tui::app::{App, CursorMode, Flow};
 use terra_tui::input::{Action, Button};
 use terra_tui::space::Place;
@@ -28,17 +30,36 @@ fn pack() -> DataPack {
 
 /// An all-grass world `width`×`height`, with starter sprites on `sprites`.
 fn field(width: usize, height: usize, sprites: &[Pos]) -> World {
+    field_with(width, height, &[], sprites)
+}
+
+/// An all-grass world `width`×`height`, with `objects`, and starter sprites
+/// on `sprites` that rest, so they go only where they're led.
+fn field_with(width: usize, height: usize, objects: &[(Pos, &str)], sprites: &[Pos]) -> World {
     let row = ".".repeat(width);
     let map = Map::from_ascii(&vec![row.as_str(); height], &pack()).expect("valid drawing");
+    let scripted: Vec<(Pos, ScriptedAction)> = sprites
+        .iter()
+        .flat_map(|&pos| [(pos, ScriptedAction::Rest); 50])
+        .collect();
     let sprites: Vec<(Pos, _)> = sprites.iter().map(|&pos| (pos, None)).collect();
     let scenario = Scenario {
         map,
-        objects: &[],
+        objects,
         sprites: &sprites,
-        scripted: &[],
+        scripted: &scripted,
         newborns: &[],
     };
     World::from_scenario(scenario, pack(), 1).expect("valid scenario")
+}
+
+/// Hands the app's commands to the world and runs a tick, as a frame does.
+fn tick(app: &mut App, world: &mut World) {
+    for command in app.take_commands() {
+        world.submit(command);
+    }
+    let events = world.step();
+    app.record(&events, world);
 }
 
 /// A 10×6 field with a sprite on (4, 3). It fits in the map view with its
@@ -123,7 +144,7 @@ fn stars_are_drawn_only_on_space() {
     for _ in 0..8 {
         let screen = render(&app, &world);
         let stars = stars(&screen);
-        assert!(stars.len() > 20, "a sky full of them: {}", stars.len());
+        assert!(stars.len() > 20, "plenty of them: {}", stars.len());
         for at in stars {
             assert_eq!(app.place_at(at), Some(Place::Space), "{at:?}");
             let fg = screen[at].fg;
@@ -210,7 +231,7 @@ fn over_space_the_cursor_is_not_drawn_and_the_status_line_says_space() {
     assert!(status.starts_with(&format!(" (4,3) grass · Sprite #{}", id.0)));
     for over in [SPACE, Position::new(21, 9), Position::new(33, 16)] {
         apply(&mut app, &world, Action::Point(over));
-        assert!(app.in_space(), "{over:?}");
+        assert!(app.out_of_reach(), "{over:?}");
         assert_eq!(app.cursor(), sprite, "on its last tile");
         let (grid, reversed, status) = drawn(&app);
         assert_eq!((grid.as_str(), reversed), ("....☺....", false), "{over:?}");
@@ -268,7 +289,7 @@ fn following_a_sprite_a_click_over_space_and_q_still_reach_it() {
     apply(&mut app, &world, Action::middle_click(on(sprite)));
     assert_eq!(app.followed(), Some(id));
     apply(&mut app, &world, Action::Point(SPACE));
-    assert!(!app.in_space(), "following, it isn't out of reach");
+    assert!(!app.out_of_reach(), "following, it isn't out of reach");
     let screen = render(&app, &world);
     assert!(!status_line(&screen).contains("space"));
     let cell = cell(sprite);
@@ -300,7 +321,7 @@ fn following_a_sprite_a_click_over_space_and_q_still_reach_it() {
     // `F` over space stops following, as anywhere.
     apply(&mut app, &world, Action::middle_click(SPACE));
     assert_eq!(app.followed(), None);
-    assert!(app.in_space(), "now the pointer's out of reach");
+    assert!(app.out_of_reach(), "now the pointer's out of reach");
     apply(&mut app, &world, Action::left_click(SPACE));
     assert_eq!(app.take_commands(), [], "and a click does nothing");
 }
@@ -336,4 +357,126 @@ fn out_of_sight_the_cursor_draws_no_leash() {
     assert_eq!(leash(&app), ["·", "·"], "led");
     apply(&mut app, &world, Action::Point(SPACE));
     assert_eq!(leash(&app), [".", "."], "out of sight");
+}
+
+#[test]
+fn the_cursor_s_arrows_and_marks_never_cover_the_glass() {
+    // M2 design §11.4: on the map's corner tile, the arrows and marks that
+    // would fall on the glass aren't drawn.
+    let (world, _) = small_field();
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Point(on(Pos { x: 0, y: 0 })));
+    let screen = render(&app, &world);
+    let corner = cell(Pos { x: 0, y: 0 });
+    let row = |y: u16| -> String {
+        (corner.x - 1..=corner.x + 1)
+            .map(|x| screen[(x, y)].symbol())
+            .collect()
+    };
+    assert_eq!(
+        [row(corner.y - 1), row(corner.y), row(corner.y + 1)],
+        ["╔══", "║.←", "║↑♦"]
+    );
+}
+
+#[test]
+fn leading_a_sprite_over_space_the_cursor_stays_and_the_sprite_is_not_led_on() {
+    // M2 design §11.4. The sprite is on (1, 3); pointed at (9, 3), the
+    // Cursor waits at the leash's end, (6, 3), for it to catch up.
+    let mut world = field(10, 6, &[Pos { x: 1, y: 3 }]);
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+    apply(&mut app, &world, Action::left_click(on(Pos { x: 1, y: 3 })));
+    tick(&mut app, &mut world);
+    apply(&mut app, &world, Action::Point(on(Pos { x: 9, y: 3 })));
+    assert_eq!(app.cursor(), Pos { x: 6, y: 3 });
+    apply(&mut app, &world, Action::Point(SPACE));
+    for _ in 0..40 {
+        tick(&mut app, &mut world);
+        assert_eq!(app.cursor(), Pos { x: 6, y: 3 }, "it stays");
+    }
+    assert!(matches!(app.grip(&world), Some(Grip::Leads(_))));
+    let led = world.sprites().next().expect("the sprite").pos();
+    assert!(led.x <= 6, "led no further than the Cursor: {led:?}");
+}
+
+#[test]
+fn aiming_over_space_a_right_click_or_e_still_sends_the_aim() {
+    // M2 design §11.4: the Cursor sits on what the player aims, so it isn't
+    // out of reach. Pulled back from the ball on (5, 3) to (1, 3), then over
+    // space, it's thrown 4 tiles east. A right click sends an aim where the
+    // terminal doesn't say when the button's let go (design v25 §6.5).
+    let throw = Command::Throw {
+        from: Pos { x: 5, y: 3 },
+        toward: Dir::E,
+        tiles: 4,
+    };
+    let sends = [
+        Action::right_click(SPACE),
+        Action::Press {
+            button: Button::Right,
+            amplified: false,
+        },
+    ];
+    for send in sends {
+        let mut world = field_with(10, 6, &[(Pos { x: 5, y: 3 }, "ball")], &[]);
+        let mut app = app(&world);
+        apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+        apply(&mut app, &world, Action::left_click(on(Pos { x: 5, y: 3 })));
+        tick(&mut app, &mut world);
+        apply(
+            &mut app,
+            &world,
+            Action::right_click(on(Pos { x: 5, y: 3 })),
+        );
+        apply(&mut app, &world, Action::Point(on(Pos { x: 1, y: 3 })));
+        apply(&mut app, &world, Action::Point(SPACE));
+        assert!(!app.out_of_reach(), "{send:?}");
+        apply(&mut app, &world, send);
+        assert_eq!(
+            app.take_commands(),
+            std::slice::from_ref(&throw),
+            "{send:?}"
+        );
+    }
+}
+
+#[test]
+fn leading_the_followed_sprite_over_space_q_does_nothing() {
+    // M2 design §11.4: Follow steps aside while the Cursor leads its sprite,
+    // so the Cursor follows the pointer, and over space it's out of reach.
+    let mut world = field(10, 6, &[Pos { x: 4, y: 3 }]);
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+    apply(&mut app, &world, Action::left_click(on(Pos { x: 4, y: 3 })));
+    tick(&mut app, &mut world);
+    apply(
+        &mut app,
+        &world,
+        Action::middle_click(on(Pos { x: 4, y: 3 })),
+    );
+    tick(&mut app, &mut world);
+    apply(&mut app, &world, Action::Point(SPACE));
+    assert!(app.out_of_reach());
+    app.take_commands();
+    let q = Action::Press {
+        button: Button::Left,
+        amplified: false,
+    };
+    apply(&mut app, &world, q);
+    assert_eq!(app.take_commands(), [], "a grab click would let go");
+    assert!(matches!(app.grip(&world), Some(Grip::Leads(_))));
+}
+
+#[test]
+fn the_wheel_over_space_cycles_the_modes() {
+    // M2 design §11.4: as anywhere over the map view (design v22 §6.5).
+    let (world, _) = small_field();
+    let mut app = app(&world);
+    let wheel = Action::Wheel {
+        at: SPACE,
+        notches: 1,
+    };
+    apply(&mut app, &world, wheel);
+    assert_eq!(app.mode(), CursorMode::Train);
 }

@@ -6,5 +6,5 @@ What building Slice 31 ([#184](https://github.com/Keazra/terra-sprites/issues/18
 
 | # | Change | Source | Sections |
 |---|---|---|---|
-| 1 | **`F` or a middle click over space reaches no tile:** following, the Cursor stops; otherwise it follows the selected sprite, if any, not the sprite on the Cursor's last tile. The wheel over space cycles the modes. | Slice 31's PR, to keep §11.4's "does nothing to that last tile" | §11.4 |
-| 2 | **Out of sight, the Cursor draws no leash,** and its arrows and marks show only over the map's tiles, never over the glass. | Slice 31's PR | §11.4 |
+| 1 | **`F` or a middle click over space reaches no tile:** following, the Cursor stops; otherwise it follows the selected sprite, if any, not the sprite on the Cursor's last tile. The wheel over space cycles the modes. | #184, to keep §11.4's "rather than act on that last tile" | §11.4 |
+| 2 | **Out of sight, the Cursor draws no leash,** and its arrows and marks show only over the map's tiles, never over the glass. | #184 | §11.4 |

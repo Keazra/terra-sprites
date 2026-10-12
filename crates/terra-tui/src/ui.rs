@@ -201,7 +201,7 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
         .thrown_from(world)
         .and_then(|(item, from)| Some((from, item_look(world, item)?)));
     // Out of reach in space, the Cursor isn't drawn (M2 design §11.4).
-    let cursor = (!app.in_space()).then(|| app.cursor());
+    let cursor = app.shown_cursor();
     for y in inner.top()..inner.bottom() {
         for x in inner.left()..inner.right() {
             let pos = match app.place_from(inner.as_position(), Position::new(x, y)) {
@@ -350,7 +350,7 @@ fn marked(app: &App) -> Option<EntityId> {
 /// N ↑ M
 /// ```
 fn draw_cursor(buf: &mut Buffer, app: &App, world: &World) {
-    let Some(centre) = app.cell_of(app.cursor()).filter(|_| !app.in_space()) else {
+    let Some(centre) = app.shown_cursor().and_then(|cursor| app.cell_of(cursor)) else {
         return;
     };
     let arrows = if app.visible() {
@@ -396,7 +396,7 @@ fn draw_cursor(buf: &mut Buffer, app: &App, world: &World) {
 /// Cursor, it isn't drawn while the Cursor is out of reach in space (M2
 /// design §11.4).
 fn draw_leash(buf: &mut Buffer, app: &App, world: &World) {
-    let Some(led) = app.leash().filter(|_| !app.in_space()) else {
+    let Some(led) = app.leash().filter(|_| app.shown_cursor().is_some()) else {
         return;
     };
     let cursor = app.cursor();
@@ -771,7 +771,7 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     // The tile under the Cursor is information the policy may hide (design
     // §6.4). Out of reach past the wall, there's only space (M2 design
     // §11.4).
-    let under = if app.in_space() {
+    let under = if app.out_of_reach() {
         " space │".to_string()
     } else if app.can_view(Panel::TileInfo, Subject::Tile(cursor)) {
         format!(" ({},{}) {terrain}{sprite}{object} │", cursor.x, cursor.y)
