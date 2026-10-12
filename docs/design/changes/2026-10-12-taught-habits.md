@@ -4,6 +4,8 @@ A3 had passed or failed by luck since Milestone 1: one shock wore off for 9 spri
 
 **Measured** over A3's seeds 1–30, with `cargo run --release -p terra-sim --example lab -- scenarios/a3-correct-training.ron --seeds 30`: trained sprites' median of hits in ticks 10,000–20,000 was 23 on `main` at `3b246f3` and 0 with taught habits at `acb2809`, against 69 for the control both times. Every random set of 10 of those seeds passes, against 84 in 100 on `main`.
 
+**Measured again with every lesson fading slowly** (row 3), at `a79e4dd`, against the same branch with the old fades, with the `lab` example: A3 over seeds 1–30, trained 0 against 48 for the control (0 against 69 before; the untrained sprites' inborn wariness now lasts longer too), and every random set of 10 seeds passes. A1 on seeds 1–10: 1 thornbush touch for a learning sprite in ticks 0–20,000 against 40 for the control (2 before). A2 on seeds 1–10: 8,464.5 ball plays trained against 209 for the control (5,456 against 233.5 before). A4, `scenarios/viability.ron` on seeds 1–10: every sprite alive at tick 10,000, and 1 of 228 deaths in ticks 10,000–50,000 was of hunger, against 3 of 277 of thirst before.
+
 ## M1 "A Sprite Lives"
 
 | # | Change | Source | Sections |
