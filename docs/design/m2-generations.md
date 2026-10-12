@@ -1,10 +1,10 @@
 # Terra Sprites — M2 "Generations" design
 
 - **Status:** Draft: the plan, with what each slice settles added as it's settled.
-- **Date:** 2026-10-11
+- **Date:** 2026-10-12
 - **History:** edited in place since v5; each change is a file in [`changes/`](changes/), whose README says where v1 to v5 are
 - **Builds on:** [M1 design](m1-a-sprite-lives.md), which stays the rulebook for everything M2 doesn't change
-- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, and life stages and ageing (Slice 22)
+- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), and breeding (Slice 23)
 
 ---
 
@@ -115,7 +115,7 @@ Each slice is a GitHub issue and its own PR, worked as in `docs/agents/how-we-wo
 The owner's one content-safety rule ([#69](https://github.com/Keazra/terra-sprites/issues/69), `docs/agents/how-we-work.md`): **attraction and mating attempts towards a sprite that isn't an adult are impossible,** for every genome and every data pack. Data can be edited and genes evolve, so the engine enforces it, the one exception to "the engine enforces physics only".
 
 Slice 23 builds it:
-- `Mate` is never offered unless both sprites are adults (an old sprite counts as one, §9.1). It's a hard check in verb availability, not a learned or genetic lean.
+- `Mate` is never offered unless both sprites are adults (an old sprite counts as one, §9.1). It's a hard check in verb availability, not a learned or genetic lean. Nor is `BreedAlone`, unless the sprite is grown (§10.3).
 - Attraction, whatever form it takes, never targets a non-adult.
 - `check_invariants` checks it every tick, and property tests with random genomes pin it.
 - Genes that switch on at adulthood (§3, reading A) are the natural home for mating instincts; the engine's check holds regardless.
@@ -281,11 +281,11 @@ Settled with the owner on 2026-10-11 ([#140](https://github.com/Keazra/terra-spr
 
 ### 9.1 Life stages
 
-- **A sprite's life stage is young, adult or old.** "Stage" alone is an object's (M1 design §3.5); a sprite's is its life stage. An old sprite still counts as an adult for §5's rule.
+- **A sprite's life stage is young, adult or old,** after an egg from Slice 23 (§10.4). "Stage" alone is an object's (M1 design §3.5); a sprite's is its life stage. An old sprite still counts as an adult for §5's rule.
 - **It's young until it grows up, an adult until it grows old, then old** (§9.3). One whose genes have it grow old before it grows up does both at once, and is never an adult.
 - **The stage changes at the start of step 3** (M1 design §2.4), so genes that switch with it work from that tick's chemistry on.
 - **A world's first sprites start as adults,** at ages drawn evenly through adulthood, with a newborn's body (M1 design §4.7), so a fresh world isn't all children. A sprite the player places is a newborn. A scenario's sprites start just grown up, unless it lists them as newborns.
-- **An Egg stage** may come with breeding or after it (noted on [#141](https://github.com/Keazra/terra-sprites/issues/141)).
+- **An egg comes first:** since Slice 23, a sprite's life starts as an egg, which hatches into a young sprite (§10.4). An egg isn't an adult, and in what genes and switches see it counts as young.
 
 ### 9.2 Genes that switch with life stage
 
@@ -350,3 +350,78 @@ cargo run --release -p terra-sim --example speed
 | A5: ticks a second, 100 sprites (`speed`, a few runs) | 318 | 293–303, met (at least 200) |
 
 **What it shows.** The world's first sprites now start at ages through adulthood and grow old within the first 9,000 ticks, so by tick 50,000 almost all have died of old age; Slice 23's breeding replaces them. When genes weakened in steps of .1, thirst killed 26 by tick 50,000 (11% for A4), most likely old sprites that lost a gene for finding water early; in steps of .01 every gene fades together. A4 still holds, though old age now fills most of its count.
+
+---
+
+## 10. Breeding (Slice 23)
+
+Settled with the owner on 2026-10-12 ([#141](https://github.com/Keazra/terra-sprites/issues/141)), in a round of ten questions and two decision cards. Grown sprites have young, alone or with a partner as their genes lean, and only ever between adults (§5). The numbers are data, the `breeding` section of `physiology.ron` and the starter genome: first guesses, tuned against §10.8.
+
+### 10.1 Sexes, by neighbours
+
+The owner chose sex by neighbours, as in clownfish and gobies, over hermaphrodites, two fixed sexes and mating types.
+
+- **Every sprite hatches male,** and no young sprite changes.
+- **A body sensor, `female_near`,** is 1 while a female adult is within the sprite's sense radius, and 0 otherwise. `female` is 1 for a female.
+- **A hormone, the `feminiser`, decides when a male turns.** The starter genes raise it while the sprite, grown up, sees no female adult and lower it fast while it sees one: a male long without females (about 800 ticks) turns. The genes set the pace, so evolution can tune it.
+- **Past `turns_female` (0.8), an adult male turns female for good,** at the start of step 3 (M1 design §2.4), as its life stage changes. It's the engine's rule, like growing up: the genes move the hormone, the body does the rest.
+- **Only a female lays eggs.** A pair needs a male and a female; a female can breed alone (§10.3).
+
+### 10.2 Fertility and arousal
+
+The game's rule, "the world decides what happens to the body, the genes decide how it feels":
+
+- **The body says whether a sprite can breed.** It's **fertile** while it's grown (old counts), its energy and hydration are both above `fed` (0.5), it's at least `rest` (1,500) ticks since its last egg, laid or fathered, and the world has room for another sprite (§10.6). The `fertile` body sensor reads it. `fed` was 0.6 in the round; at 0.6 a pair was almost never fertile at once (§10.8).
+- **The genes say whether it wants to.** **Arousal** is a drive and a need, second-order like loneliness (#50). The starter genes raise it fast while the sprite is fertile, drop it at once when it breeds (the `bred` pulse), and drop it within a few ticks of its no longer being fertile, so it reads as fertility (§10.3). It draws the eye to sprites.
+- **Only mating relieves it, in what a sprite learns.** Arousal's fall teaches worth only when the sprite's latest touch was a Mate, so it learns which sprites it bred with were good for it, and never that a young sprite is: mating with one is impossible.
+- It was called **broodiness** in the round; the owner renamed it on 2026-10-12. Brooding is sitting on eggs, which may come later.
+
+### 10.3 Mating and breeding alone
+
+- **Two actions, chosen by instinct** (the owner, Q1): `Mate`, with the sprite attended to, and `BreedAlone`. They show on the doing line and the Brain tab.
+- **`Mate` is offered only when both are adults** (§5). It works, once, if both are fertile, one is male and the other female, and she has a free tile beside her: she lays an egg there (§10.4). The partner learns about the one that mated with it too, as if touched. Otherwise it's a fruitless try.
+- **`BreedAlone` is offered only to a grown sprite.** It works for a fertile female with a free tile beside her; for a male, or a female not fertile, it's a fruitless try.
+- **The egg costs `cost` (0.3) energy** (Q2): split between a pair, or all hers alone. Per bite of food, both pass on as much of the parents' genes, so neither wins on cost; what makes partners pay is Slice 24, when a sprite breeding alone passes on every broken gene it has.
+- **Body language** (the owner's card, 2026-10-12): a sprite sees how aroused the sprite it attends to is, `target_arousal`, and whether it's of the other sex, `target_other_sex`. Before it, most tries to mate met a partner of the same sex or not fertile, and 97% of eggs were laid alone. These are brain inputs `brain_io.ron` lists like any other: one that reads `Target(...)` reads the sprite attended to, and one that reads `Differs(...)` how far that differs from the sprite's own; both are 0 unless attention is on a sprite that has hatched. Attention can't read them, as it can't any input about what it attends to (M1 design §5.3).
+- **The starter's instincts:** arousal draws attention to sprites; arousal with an aroused sprite of the other sex in view leads to Mate; and in a lonely female, more weakly, arousal leads to breeding alone.
+
+### 10.4 Eggs and hatching
+
+- **An egg is the new sprite, at the first life stage, Egg** (Q5). It's laid on a random free tile beside its mother.
+- **An egg feels, learns, moves and needs nothing:** its body stays as it was laid, it decides nothing, and steps 3 to 6 pass it by.
+- **It hatches after `hatches` (750) ticks,** where it lies, as a young male with a newborn's body; its age counts from then.
+- **Other sprites see an egg as a thing of its own kind,** the category `egg` and the pseudo type `egg`, not as a sprite: so "crowded, so hit a neighbour" never aims at one, and `nearby_sprites` and `female_near` don't count one. Its verb table is empty, so whatever a sprite tries on it is a fruitless try: an egg can't be hurt until something in the world is meant to hurt eggs.
+- **The Cursor can't touch, lead or hold an egg;** it says it's still an egg. Whether it can move one is for an issue of its own. The player can name one.
+- **A sprite remembers its parents:** the one that laid it, then its partner.
+
+### 10.5 The child's genes
+
+- **Mixed** (Q6): each gene, with its switch, comes from one parent or the other at random, where the two genomes line up gene for gene, as the starter's do. Where they don't, as with one placed from a genome file, the child takes its mother's.
+- **The damage old age did to a parent's genes isn't passed on** (§9.4); a child's genes are whole. Mutation is Slice 24's.
+
+### 10.6 What stops the world filling up
+
+- **Food and a limit** (Q7): births need fed and watered parents, so food holds numbers down. The **limit**, the preset's `most_sprites` (100 in the default world, eggs counted), is the safety net: in a full world no sprite is fertile, so none is aroused and none tries in vain. In the terrarium's story, the limit is the glass.
+- **The Cursor may place a sprite past the limit:** that's the player's call, not the sprites'.
+- **A lab scenario can set `most_sprites`.** A1 to A3 and the thorn trap watch only their own sprites, so they hold no more than they start with (an egg may replace a sprite that died).
+
+### 10.7 What the player sees
+
+- **The log:** `Pip #12 laid an egg (with Bo #7)`, `Pip #12 laid an egg alone`, `Sprite #31 hatched (Pip #12 and Bo #7's)`, `Pip #12 turned female`.
+- **The map:** an egg is `o` in CP437 and `0` in ASCII, where `o` is the ball; the theme keys `egg` and `selected_egg`. A theme without them draws eggs as the young.
+- **The Body tab:** after the traits, the sex, `· fertile` while it is, and for a male, how near it is to turning, `male · fertile · turning 40%`; then `parents Pip #12 and Bo #7`. An egg shows `egg · hatches in 750 ticks` for its life stage.
+- **The sprite list** shows `egg` as the life stage; **the doing line** says `Going to mate with Bo #7`, `Mated with Bo #7`, `Breeding alone`, `Laid an egg alone`.
+- **Arousal** colours a sprite light magenta when it's its strongest drive above half.
+- The full family tree is Slice 25.
+
+### 10.8 How we know it worked
+
+Agreed before measuring (Q9):
+
+- **Keeps going:** the default world, left alone for 100,000 ticks (about 22 hours at 1×, five or so generations), seeds 1–10: sprites alive at the end in **at least 8 of 10 seeds**, and never more than the limit.
+- **Nothing else got worse:** A1–A4 still met, and A5 at the limit, 100 sprites, still at least 200 ticks a second.
+- **For information:** how many hatchlings grow up. Today almost all would; Slice 29 makes childhood hard (about 20%).
+
+`cargo run --release -p terra-sim --example generations` runs the first.
+
+MEASUREMENT
