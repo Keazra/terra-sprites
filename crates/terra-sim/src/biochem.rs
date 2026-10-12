@@ -39,9 +39,10 @@ impl Traits {
     }
 
     /// The age at which a sprite with these traits grows old, in ticks (M2
-    /// design §9.3, §9.4): `grows_old`, brought `sooner` by a hard life.
+    /// design §9.3, §9.4): `grows_old`, brought `sooner` by a hard life,
+    /// but never before it grows up (§9.1).
     pub(crate) fn grows_old_at(&self, sooner: f32) -> f32 {
-        self.grows_old * (1.0 - sooner)
+        (self.grows_old * (1.0 - sooner)).max(self.grows_up)
     }
 
     /// The life stage of a sprite with these traits at `age` (M2 design
@@ -633,6 +634,7 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
     // A hard life wears the body for good (M2 design §9.4), which brings
     // old age sooner and speeds the decay of its genes then. It reads the
     // body, not feelings, which genes could switch off.
+    let grows_old_at = traits.grows_old_at(ageing.sooner * body.wear);
     let wear = ageing.wear;
     let mut worn = wear.injured * chems[indices.injury].clamp(0.0, 1.0);
     if chems[indices.energy] < wear.low {
@@ -645,7 +647,8 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
 
     let loci = &mut body.loci;
     loci[indices.always] = 1.0;
-    loci[indices.age] = (age / traits.grows_old).min(1.0);
+    // It reaches 1 as the sprite grows old, sooner for a worn one (§9.3).
+    loci[indices.age] = (age / grows_old_at).min(1.0);
     loci[indices.nearby_sprites] = senses.nearby_sprites;
     loci[indices.moving] = if senses.steps > 0 { 1.0 } else { 0.0 };
     loci[indices.resting] = if senses.resting { 1.0 } else { 0.0 };
@@ -1169,6 +1172,16 @@ mod tests {
     }
 
     #[test]
+    fn a_worn_sprite_s_age_sensor_reaches_1_as_it_grows_old() {
+        // M2 design §9.3, §9.4: the most worn sprite grows old at (1 −
+        // `sooner`) of its `grows_old`, here .67 of 20,000 ticks.
+        let mut sprite = physical(&[]);
+        sprite.body.wear = 1.0;
+        sprite.step_at(6_700);
+        assert_close(sprite.locus("age"), 0.5);
+    }
+
+    #[test]
     fn a_hard_life_brings_old_age_sooner() {
         // M2 design §9.4: `sooner` is a share of the age its genes say.
         let traits = physical(&[]).program.traits;
@@ -1179,6 +1192,11 @@ mod tests {
         assert_eq!(
             traits.life_stage(1_000, 0.99),
             LifeStage::Young,
+            "never before it grows up"
+        );
+        assert_eq!(
+            traits.grows_old_at(0.99),
+            2_000.0,
             "never before it grows up"
         );
     }

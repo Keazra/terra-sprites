@@ -206,10 +206,15 @@ fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>>
         lines.push(format!(" {}", three.join(" · ")));
     }
     // Its genes' average health shows once any has weakened (M2 design
-    // §9.4, §9.6).
-    let vigour = sprite.vigour();
-    lines.push(if vigour < 1.0 {
-        format!(" wear {} · genes {}", level(sprite.wear()), level(vigour))
+    // §9.4, §9.6). A genome with nothing to weaken gives out when old
+    // without any gene losing health, so that isn't shown.
+    let weakened = sprite.gene_health().iter().any(|&health| health < 1.0);
+    lines.push(if weakened {
+        format!(
+            " wear {} · genes {}",
+            level(sprite.wear()),
+            level(sprite.vigour())
+        )
     } else {
         format!(" wear {}", level(sprite.wear()))
     });
