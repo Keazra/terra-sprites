@@ -514,6 +514,8 @@ Past the glass is space: black, with stars drifting right to left, since the shi
 
 - **The Cursor can't reach past the wall** (round 2, Q11). While it follows the pointer and the tile pointed at (M1 design §6.5) is glass or space, the Cursor stays on its last tile on the map, as when the pointer leaves the map view, but isn't drawn there. A click, `Q` or `E` does nothing, rather than act on that last tile, and the status line says "space". A sprite it leads stands still and an item it holds stays held. It shows again when the pointer comes back over the map.
 - **A Cursor that follows a sprite carries on as before** (M1 design §6.5): it stays on its sprite and is drawn wherever the pointer is, and a click, over space too, or `Q` and `E` reach the sprite. While it leads the followed sprite, Follow steps aside and the Cursor follows the pointer, so the rule above applies.
+- **`F`, or a middle click, over space reaches no tile** (#184): following, the Cursor stops, as anywhere; otherwise it follows the selected sprite, if there is one, rather than the sprite on its last tile (M1 design §6.5). The wheel over space cycles the modes, as anywhere over the map view.
+- **Out of sight, the Cursor draws no leash either** (#184). Wherever it's drawn, its arrows and marks show only over the map's tiles, never over the glass, as they stopped at the map view's border before.
 
 ### 11.5 Themes
 
