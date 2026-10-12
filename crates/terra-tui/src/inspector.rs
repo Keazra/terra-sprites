@@ -1942,6 +1942,20 @@ pub(crate) fn event_sprites(event: &Event) -> Vec<EntityId> {
     }
 }
 
+/// The sprites a refused command's line names: the one it was aimed at,
+/// and the one the Cursor already leads if that's why (design §6.4, #174).
+pub(crate) fn refusal_sprites(event: &Event) -> Vec<EntityId> {
+    let mut sprites = event_sprites(event);
+    if let EventKind::CommandRejected {
+        reason: Rejection::Busy(Grip::Leads(led)),
+        ..
+    } = event.kind
+    {
+        sprites.push(led);
+    }
+    sprites
+}
+
 /// What a sprite crashed into, as a sentence says it: "a thornbush", or
 /// "Sprite #7" (design v25 §6.1).
 pub(crate) fn crashed_into(into: &Thing, data: &Words) -> String {

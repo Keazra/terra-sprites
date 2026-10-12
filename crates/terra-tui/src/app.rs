@@ -455,8 +455,9 @@ pub struct App {
     /// The world's latest report on a command, and when it began to show.
     report: Option<(StatusMark, Duration)>,
     /// Why the player's latest click was refused, which the status line
-    /// says in the key hints' place, and since when (design v22 §6.1).
-    refusal: Option<(String, Duration)>,
+    /// says in the key hints' place, the sprites it names, and since when
+    /// (design v22 §6.1).
+    refusal: Option<(String, Vec<EntityId>, Duration)>,
     /// The names the player has given sprites, as last seen, so the log
     /// keeps naming a sprite after it dies (design §6.5).
     names: Names,
@@ -854,7 +855,8 @@ impl App {
                 // And why, on the status line, as the log words it (design
                 // v22 §6.1).
                 if let Some(why) = inspector::event_line(event, &self.words(world)) {
-                    self.refusal = Some((why, self.running_for));
+                    let names = inspector::refusal_sprites(event);
+                    self.refusal = Some((why, names, self.running_for));
                 }
             }
             if let EventKind::Died { id, cause, age, .. } = event.kind {
@@ -1282,10 +1284,13 @@ impl App {
     }
 
     /// Why the player's latest click was refused, while the status line
-    /// says so (design v22 §6.1).
+    /// says so (design v22 §6.1). It's one of the Cursor's own lines, so it
+    /// shows only if the policy lets each sprite it names be (design §6.4,
+    /// #174).
     pub fn refusal(&self) -> Option<&str> {
-        let (why, from) = self.refusal.as_ref()?;
-        self.shows(*from, REFUSAL_FOR).then_some(why.as_str())
+        let (why, names, from) = self.refusal.as_ref()?;
+        let named = |&id: &EntityId| self.can_view(Panel::CursorLines, Subject::Sprite(id));
+        (names.iter().all(named) && self.shows(*from, REFUSAL_FOR)).then_some(why.as_str())
     }
 
     /// Whether something that shows from `from`, for `lasting`, shows now.
@@ -1921,7 +1926,7 @@ impl App {
     /// once, and the status line says why (design v22 §6.5).
     fn refuse(&mut self, why: String) {
         self.report = Some((StatusMark::Rejected, self.running_for));
-        self.refusal = Some((why, self.running_for));
+        self.refusal = Some((why, Vec::new(), self.running_for));
         self.notice = None;
     }
 

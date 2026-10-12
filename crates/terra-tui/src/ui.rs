@@ -737,10 +737,13 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         return Line::from(if fits { prompt + HINTS } else { prompt });
     }
     // Naming takes the line over, with its key hints if they fit (design
-    // v28 §6.5).
+    // v28 §6.5). Like the Cursor's own lines, it names the sprite only if
+    // the policy lets it (design §6.4, #174).
     if let (Some(draft), Some(sprite)) = (app.name_draft(), app.naming_sprite()) {
-        let label = app.names().label(sprite);
-        let prompt = format!(" Name {label}: {draft}_");
+        let label = cursor_part(app, Subject::Sprite(sprite), || {
+            format!(" {}", app.names().label(sprite))
+        });
+        let prompt = format!(" Name{label}: {draft}_");
         const HINTS: &str = "   enter ok  tab another  esc cancel";
         let fits = prompt.chars().count() + HINTS.chars().count() <= usize::from(width);
         return Line::from(if fits { prompt + HINTS } else { prompt });
@@ -760,15 +763,21 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     let mode = format!("{}{seen}", app.mode().label());
     let followed = app
         .followed()
-        .map(|id| format!(" │ following {}", app.names().label(id)))
+        .map(|id| {
+            cursor_part(app, Subject::Sprite(id), || {
+                format!(" │ following {}", app.names().label(id))
+            })
+        })
         .unwrap_or_default();
     // What the Cursor has hold of, in every mode (design v23 §6.1).
     let grip = match app.grip(world) {
-        Some(Grip::Leads(id)) => format!(" │ leading: {}", app.names().label(id)),
-        Some(Grip::Holds(id)) => {
+        Some(Grip::Leads(id)) => cursor_part(app, Subject::Sprite(id), || {
+            format!(" │ leading: {}", app.names().label(id))
+        }),
+        Some(Grip::Holds(id)) => cursor_part(app, Subject::World, || {
             let name = item_look(world, id).map_or("?", |(name, _)| name);
             format!(" │ holding: {}", display_name(name))
-        }
+        }),
         None => String::new(),
     };
     // A Place menu item waiting on the Cursor, in every mode (design v28 §6.5).
@@ -817,6 +826,16 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     }
     let gap = width.saturating_sub(tile.chars().count() + right.chars().count() + 1);
     Line::from(format!("{tile}{}{right} ", " ".repeat(gap)))
+}
+
+/// A part of the status line among the Cursor's own lines, about `subject`,
+/// or nothing if the policy hides it (design §6.4, #174).
+fn cursor_part(app: &App, subject: Subject, part: impl FnOnce() -> String) -> String {
+    if app.can_view(Panel::CursorLines, subject) {
+        part()
+    } else {
+        String::new()
+    }
 }
 
 /// `hint`, if it fits in `room` columns, or nothing.

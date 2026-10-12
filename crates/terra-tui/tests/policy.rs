@@ -6,10 +6,10 @@ use ratatui::layout::{Position, Size};
 use ratatui::style::Color;
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
-    ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Map, Outcome, Pos,
-    Progress, Scenario, ScriptedAction, Target, Verb, World,
+    ActionView, Command, DataPack, DeathCause, EntityId, Event, EventKind, Grip, Hurt, Map,
+    Outcome, Pos, Progress, Rejection, Scenario, ScriptedAction, Target, Verb, World,
 };
-use terra_tui::app::{App, Tab};
+use terra_tui::app::{App, CursorMode, Tab};
 use terra_tui::input::Action;
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
 use terra_tui::theme::Theme;
@@ -25,6 +25,16 @@ struct Blind;
 impl InfoPolicy for Blind {
     fn can_view(&self, _panel: Panel, _subject: Subject) -> bool {
         false
+    }
+}
+
+/// A policy that shows everything but the Cursor's own lines about one
+/// subject.
+struct HideCursorLinesAbout(Subject);
+
+impl InfoPolicy for HideCursorLinesAbout {
+    fn can_view(&self, panel: Panel, subject: Subject) -> bool {
+        panel != Panel::CursorLines || subject != self.0
     }
 }
 
@@ -226,4 +236,95 @@ fn a_policy_that_hides_map_colours_draws_sprites_in_their_own_colour() {
     assert_eq!(render(&app, &world)[WANDERER].fg, Color::Yellow);
     app.set_policy(Blind);
     assert_eq!(render(&app, &world)[WANDERER].fg, Color::White);
+}
+
+#[test]
+fn the_cursors_own_lines_ask_the_policy_about_the_sprite_they_name() {
+    // Design §6.4 (#174): what the Cursor follows, leads or holds, the
+    // prompt for naming a sprite, and why a click was refused show only if
+    // the policy lets the Cursor's own lines be about what they name.
+    // Hiding something else leaves them be.
+    let world = field();
+    let wanderer = world.sprite_at(Pos { x: 2, y: 3 }).unwrap().id();
+    let other = world.sprites().map(|s| s.id()).find(|&id| id != wanderer);
+    let other = other.expect("a second sprite");
+    let hide = |id| HideCursorLinesAbout(Subject::Sprite(id));
+    let on_wanderer = Position::new(4, 6);
+    let status = |app: &App| row(&render(app, &world), 29, 0..100);
+    let areas = ui::areas(Size::new(100, 30), world.map());
+
+    let mut following = App::new(world.map(), Theme::cp437(), 7, areas);
+    following.apply(Action::left_click(on_wanderer), &world);
+    following.apply(Action::Follow { at: None }, &world);
+    assert!(status(&following).contains("│ following Sprite #"));
+    following.set_policy(hide(other));
+    assert!(status(&following).contains("│ following Sprite #"));
+    following.set_policy(hide(wanderer));
+    let line = status(&following);
+    assert!(!line.contains("following"), "{line}");
+
+    let mut leading = App::new(world.map(), Theme::cp437(), 7, areas);
+    leading.apply(Action::Mode(CursorMode::Grab), &world);
+    leading.apply(Action::left_click(on_wanderer), &world);
+    assert!(status(&leading).contains("│ leading: Sprite #"));
+    leading.set_policy(hide(other));
+    assert!(status(&leading).contains("│ leading: Sprite #"));
+    leading.set_policy(hide(wanderer));
+    let line = status(&leading);
+    assert!(!line.contains("leading"), "{line}");
+
+    let pack = pack();
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let scenario = Scenario {
+        map,
+        objects: &[(Pos { x: 4, y: 1 }, "ball")],
+        sprites: &[],
+        scripted: &[],
+        newborns: &[],
+    };
+    let ball_field = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let holding_line = |app: &App| row(&render(app, &ball_field), 29, 0..100);
+    let mut holding = App::new(ball_field.map(), Theme::cp437(), 7, areas);
+    holding.apply(Action::Mode(CursorMode::Grab), &ball_field);
+    holding.apply(Action::left_click(Position::new(6, 4)), &ball_field);
+    let line = holding_line(&holding);
+    assert!(line.contains("│ holding: ball"), "{line}");
+    holding.set_policy(hide(wanderer));
+    let line = holding_line(&holding);
+    assert!(line.contains("│ holding: ball"), "{line}");
+    holding.set_policy(HideCursorLinesAbout(Subject::World));
+    let line = holding_line(&holding);
+    assert!(!line.contains("holding"), "{line}");
+
+    let mut naming = App::new(world.map(), Theme::cp437(), 7, areas);
+    naming.apply(Action::left_click(on_wanderer), &world);
+    naming.apply(Action::Rename, &world);
+    assert!(status(&naming).starts_with(" Name Sprite #"));
+    naming.set_policy(hide(other));
+    assert!(status(&naming).starts_with(" Name Sprite #"));
+    naming.set_policy(hide(wanderer));
+    let line = status(&naming);
+    assert!(line.starts_with(" Name: "), "{line}");
+    assert!(!line.contains("Sprite #"), "{line}");
+
+    // A refusal names both sprites: the one the click took hold of, and the
+    // one already led.
+    let mut refused = App::new(world.map(), Theme::cp437(), 7, areas);
+    let rejected = Event {
+        tick: 1,
+        kind: EventKind::CommandRejected {
+            command: Command::TakeHold { sprite: wanderer },
+            reason: Rejection::Busy(Grip::Leads(other)),
+        },
+    };
+    refused.record(&[rejected], &world);
+    assert!(status(&refused).contains("already leading Sprite #"));
+    let third = HideCursorLinesAbout(Subject::Sprite(EntityId(999)));
+    refused.set_policy(third);
+    assert!(status(&refused).contains("already leading Sprite #"));
+    for named in [wanderer, other] {
+        refused.set_policy(hide(named));
+        let line = status(&refused);
+        assert!(!line.contains("leading"), "{named:?} hidden: {line}");
+    }
 }

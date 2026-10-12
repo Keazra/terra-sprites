@@ -1931,6 +1931,40 @@ mod tests {
     }
 
     #[test]
+    fn a_change_of_mind_aims_at_nothing_out_of_reach() {
+        // Design §5.5, #173: a verb switched to mid-action is aimed at the
+        // action's target, so while that's out of reach, as a retreat's can
+        // be, only what needs no target is offered. A hungry sprite backing
+        // away from a bush beyond its reach doesn't change its mind to eat
+        // that bush, nor the one in reach beside it.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let starter = include_str!("../../../data/genomes/starter.ron");
+        let hungry = r#"        InitialConcentration(chem: "hunger", value: 0.9),"#;
+        let text = starter.replace("    ],\n)", &format!("{hungry}\n    ],\n)"));
+        let genome = Genome::from_ron(&text, &data).expect("a valid genome");
+        let rows = [".............................."; 3];
+        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
+        let (far, near) = (Pos { x: 28, y: 1 }, Pos { x: 3, y: 0 });
+        let scenario = Scenario {
+            map,
+            objects: &[(far, "berry_bush"), (near, "berry_bush")],
+            sprites: &[(Pos { x: 1, y: 1 }, Some(genome))],
+            scripted: &[],
+            newborns: &[],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let id = world.sprites().next().expect("the sprite").id();
+        let target = Target::Object(world.state.objects.at(far).expect("the far bush"));
+        let kind = world.state.type_of(&world.data, target);
+        let backing_away = Action::new(Verb::Retreat, None, Some((target, kind)), false, 0);
+        world.state.sprites.get_mut(id).expect("the sprite").action = Some(backing_away);
+        world.step();
+        let action = world.sprite(id).expect("the sprite").action();
+        let action = action.expect("an action");
+        assert_eq!((action.verb, action.target), (Verb::Wander, None));
+    }
+
+    #[test]
     fn a_sprite_makes_its_flood_again_on_each_new_tile() {
         // Design §3.6: on a new tile, or 8 ticks after the last flood.
         let (mut world, id) = row_with_a_walker(
