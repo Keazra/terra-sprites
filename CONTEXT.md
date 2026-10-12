@@ -759,11 +759,11 @@ The ship's AI, which the player is. Its builders are gone and it woke with its m
 _Avoid_: captain, overseer
 
 **Sector** (#181):
-One part of the ship, with walls of its own, which the map view shows on its own: a biome or a bay. Sprites cross between sectors through doors, and the whole ship lives at once, on screen or not.
+One part of the ship, with walls of its own, which the map view shows on its own: a biome or a bay. Sprites cross between sectors through doors. Every open sector lives at once, on screen or not; a sealed one sleeps until its door opens.
 _Avoid_: level, area, screen, zone, module, compartment
 
 **Biome** (#181):
-A large sector generated from the seed, to a recipe in the game's data that says its mix of terrain, plants and set pieces, such as the Meadow or the Marsh.
+A large sector generated from the seed, to a recipe in the game's data that says its size and its mix of terrain, plants and set pieces, such as the Meadow or the Marsh. Its staging area is part of it.
 _Avoid_: terrain (a tile's ground), biosphere, environment
 
 **Bay** (#181):
@@ -771,15 +771,15 @@ A small sector with a job in running the ship, drawn by hand tile by tile in the
 _Avoid_: room, zone, lab, block
 
 **Main deck** (#181):
-The largest bay: the hall along the ship's length that every sector opens onto, and that juts into each biome as its staging area.
+The hall along the ship's length that every sector opens onto, and that each biome's staging area juts in from. It's three bays, the aft, middle and fore deck, joined by doors.
 _Avoid_: hub, concourse, corridor
 
 **Staging area** (#181):
-A part of the main deck that juts right into a biome to make it work: its devices keep the biome's climate, water and fauna going, and the door into the biome is in it.
+The part of a biome that the ship built to make it work: plating and hull jutting in from the main deck, whose devices keep the biome's climate, water and fauna to its recipe. The biome's door onto the main deck opens into it.
 _Avoid_: annex, outpost
 
 **Door** (#181):
-A way through the wall between two sectors: an open doorway, or a sealed door that stays shut until the ship opens it, and never closes again.
+A way through the wall between two sectors: an open doorway, or a sealed door that stays shut until a sprite opens it, and never closes again.
 _Avoid_: portal, gate
 
 **Plating** (#181):
@@ -790,7 +790,7 @@ _Avoid_: deck (that's the main deck), floor
 The ship's frame: a solid terrain, like rock, which the walls between sectors are made of.
 
 **Prow** (#181):
-The ship's front: an iron scythe that turns debris aside before it can hit the ship. It's iron, not glass.
+The ship's front: a blade of iron like a scythe. Unlike the rest of the ship's outer wall, it isn't glass.
 _Avoid_: bow, nose
 
 **Set piece** (#181):
