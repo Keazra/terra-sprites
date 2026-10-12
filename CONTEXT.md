@@ -294,7 +294,7 @@ _Avoid_: command (the player's commands are different), move
 
 **Holding** (#164 / M3):
 A sprite keeping things in its arms after one or more Grabs: each arm is its own slot (a small thing in one arm, another in the other; a medium thing needs both). Holding is a state, not a verb. Moving while holding is carrying — not the Cursor's Hold or Lead. A sprite's Grab, Throw and Drop are verbs; the Cursor's Grab, Hold and Throw are separate entries under The Cursor.
-_Avoid_: Carry (as a verb), inventory, inventory slot
+_Avoid_: Carry (as a verb), inventory (that's the keeper's), inventory slot
 
 **Outcome**:
 How an action went: still walking, applied, blocked, failed or timed out.
@@ -636,7 +636,7 @@ What the player picked from the Place menu, waiting on the Cursor until a Grab-m
 _Avoid_: held item (that's an item picked up), brush
 
 **Place**:
-To make a new object on a tile through the Cursor, at the start of its first stage. Only the types whose data offers them can be placed, and their data says what the tile must meet; the built-in ones ask nothing, so a placed bush may wall things off.
+To make a new object on a tile through the Cursor, at the start of its first stage. Only the types whose data offers them can be placed, and their data says what the tile must meet; the built-in ones ask nothing, so a placed bush may wall things off. On the ship, in Story mode, placing takes the thing from the inventory instead (#181).
 _Avoid_: put down (that's a held item), plant, build
 
 **Spawn**:
@@ -759,12 +759,16 @@ _Avoid_: monitor, watcher
 ### The ship (a later milestone)
 
 **Ship** (#181):
-The terrarium seen for what it is: an ark flying through space, made of sectors joined by doors.
+The terrarium seen for what it is: Terra, an ark flying through space, made of sectors joined by doors. Its sprites are the Terra Sprites.
 _Avoid_: station, vessel, level
 
 **Keeper** (#181):
 The ship's AI, which the player is. Its builders are gone and it woke with its memory damaged, so half its own ship is a mystery to it. It reaches into the terrarium through the Cursor; to the sprites, it's an advanced creature.
 _Avoid_: captain, overseer
+
+**Inventory** (#181):
+The things the keeper has put away, out of the world, to place again later. In Story mode, placing takes from it instead of making things from nothing, and devices around the ship make the things that fill it. Lab mode places from nothing, as before.
+_Avoid_: stock, store (that's a bay), holding (that's a sprite's)
 
 **Sector** (#181):
 One part of the ship, with walls of its own, which the map view shows on its own: a biome or a bay. Sprites cross between sectors through doors. Every open sector lives at once, on screen or not; a sealed one sleeps until its door opens.
