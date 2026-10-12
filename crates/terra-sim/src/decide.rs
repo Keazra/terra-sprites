@@ -232,6 +232,13 @@ pub(crate) fn decide(
     // Mate is offered only when the sprite and the one it would aim at are
     // both adults (M2 design §5).
     let partner = candidate_sprite.filter(|&other| breeding::adults(state, id, other));
+    // And breeding alone only to an adult (§10).
+    let grown = state
+        .sprites
+        .get(id)
+        .expect("the sprite")
+        .stage()
+        .is_grown();
 
     let sprite = state.sprites.get_mut(id).expect("the same sprite");
     let rng = &mut state.rng;
@@ -280,7 +287,7 @@ pub(crate) fn decide(
     let beside = candidate.is_some_and(|c| c.aim.adjacent);
     let remembered = candidate.is_some_and(|c| c.goal.is_none());
     let adults = partner.is_some() && candidate.and_then(|c| c.target.sprite()) == partner;
-    let offered = available(candidate.is_some(), beside, remembered, adults);
+    let offered = available(candidate.is_some(), beside, remembered, adults, grown);
     let current = sprite.action.as_ref().filter(|_| running).map(|a| a.verb);
     let chosen = match current {
         Some(verb) => brain.switch(verb, &scores, &offered),
@@ -321,7 +328,7 @@ pub(crate) fn decide(
             let sense_radius = sprite.program.traits.sense_radius;
             (flood.wander_destination(sense_radius, rng), None)
         }
-        Verb::Rest => (None, None),
+        Verb::Rest | Verb::BreedAlone => (None, None),
         Verb::Retreat => {
             let candidate = candidate.expect("an aimed verb is offered only with a target");
             (None, Some((candidate.target, candidate.type_id)))

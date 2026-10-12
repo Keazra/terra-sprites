@@ -26,6 +26,8 @@ pub(crate) struct Physiology {
     pub(crate) injury: Injury,
     /// How a sprite grows up and grows old (M2 design §9).
     pub(crate) ageing: Ageing,
+    /// How sprites have young (M2 design §10).
+    pub(crate) breeding: Breeding,
     /// What each cause-of-death tally is multiplied by every tick: the file's
     /// `cause_fade` is how many ticks it takes to halve.
     pub(crate) tally_fade: f32,
@@ -70,6 +72,10 @@ pub(crate) struct PhysiologyEntry {
     /// §2.8: a save carries its own pack).
     #[serde(default)]
     ageing: Ageing,
+    /// A pack from before breeding takes the built-in breeding (design
+    /// §2.8).
+    #[serde(default)]
+    breeding: Breeding,
     cause_fade: u32,
     traits: TraitRanges,
     brain: BTreeMap<String, ParamRange>,
@@ -388,6 +394,38 @@ impl Default for Ageing {
     }
 }
 
+/// How sprites have young (M2 design §10).
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Breeding {
+    /// How many ticks an egg takes to hatch.
+    pub(crate) hatches: u64,
+    /// The energy an egg costs, in all: its parents split it.
+    pub(crate) cost: f32,
+    /// The level an adult's energy and hydration must both be above for it
+    /// to be fertile.
+    pub(crate) fed: f32,
+    /// How many ticks after its last egg an adult is fertile again.
+    pub(crate) rest: u64,
+    /// The level of the hormone `feminiser` at which a male adult turns
+    /// female, for good.
+    pub(crate) turns_female: f32,
+}
+
+/// What a saved world's pack from before breeding gets: the built-in
+/// pack's, which a test checks they match.
+impl Default for Breeding {
+    fn default() -> Breeding {
+        Breeding {
+            hatches: 750,
+            cost: 0.3,
+            fed: 0.6,
+            rest: 1_500,
+            turns_female: 0.8,
+        }
+    }
+}
+
 /// The range each trait is clamped to.
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -502,6 +540,13 @@ impl PhysiologyEntry {
                 "`ageing.wear_speedup` is {}, but must be a number, at least 1",
                 ageing.wear_speedup
             ));
+        }
+        let breeding = self.breeding;
+        fraction("breeding.cost", breeding.cost)?;
+        fraction("breeding.fed", breeding.fed)?;
+        fraction("breeding.turns_female", breeding.turns_female)?;
+        if breeding.hatches == 0 {
+            return Err("`breeding.hatches` must be at least 1 tick".into());
         }
         if self.cause_fade == 0 {
             return Err("`cause_fade` must be at least 1 tick".into());
@@ -640,6 +685,7 @@ impl PhysiologyEntry {
             healing: self.healing,
             injury,
             ageing,
+            breeding,
             tally_fade: halving_factor(self.cause_fade as f32),
             traits,
             brain: BrainRanges(brain),
@@ -720,6 +766,23 @@ pub(crate) struct Indices {
     /// The pulses the Cursor's Reward and Correct fire (design v21 §4.6).
     pub(crate) petted: usize,
     pub(crate) shocked: usize,
+    /// What breeding reads and writes (M2 design §10), if the pack has it
+    /// all: a pack from before breeding doesn't.
+    pub(crate) breeding: Option<BreedingIndices>,
+}
+
+/// The loci and chemicals breeding reads and writes (M2 design §10).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct BreedingIndices {
+    /// The body sensors: 1 while it's fertile, 1 if it's female, and 1
+    /// while it sees a female adult.
+    pub(crate) fertile: usize,
+    pub(crate) female: usize,
+    pub(crate) female_near: usize,
+    /// The pulse each parent fires as an egg is laid.
+    pub(crate) bred: usize,
+    /// The hormone that turns a male female, past `breeding.turns_female`.
+    pub(crate) feminiser: usize,
 }
 
 impl Indices {
@@ -778,6 +841,17 @@ impl Indices {
                 .position(|l| l.name == name && l.kind == LocusKind::Pulse)
                 .ok_or_else(|| ("loci.ron", format!("sprites need a pulse called `{name}`")))
         };
+        let breeding = || {
+            let locus =
+                |name: &str, kind| loci.iter().position(|l| l.name == name && l.kind == kind);
+            Some(BreedingIndices {
+                fertile: locus("fertile", LocusKind::BodySensor)?,
+                female: locus("female", LocusKind::BodySensor)?,
+                female_near: locus("female_near", LocusKind::BodySensor)?,
+                bred: locus("bred", LocusKind::Pulse)?,
+                feminiser: chemicals.iter().position(|c| c.name == "feminiser")?,
+            })
+        };
         Ok(Indices {
             energy: chem("energy")?,
             hydration: chem("hydration")?,
@@ -801,6 +875,7 @@ impl Indices {
             fruitless: pulse("fruitless")?,
             petted: pulse("petted")?,
             shocked: pulse("shocked")?,
+            breeding: breeding(),
         })
     }
 }
@@ -832,6 +907,7 @@ mod tests {
             (built_in.held, built_in.per_kind, built_in.merge)
         );
         assert_eq!(Ageing::default(), physiology.ageing);
+        assert_eq!(Breeding::default(), physiology.breeding);
         assert_eq!(grows_up_range(), physiology.traits.grows_up);
     }
 }

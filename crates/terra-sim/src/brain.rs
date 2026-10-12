@@ -24,8 +24,9 @@ use crate::registry::{BrainParam, CategoryId, Verb};
 
 /// The verbs the brain scores, in verb ID order: every verb but the reserved
 /// ones. A verb's place here is its column in the decision links. A save
-/// from before Mate has a column fewer, which it gains at 0 (M2 design §5).
-pub(crate) const VERBS: [Verb; 9] = [
+/// from before Mate and BreedAlone has columns fewer, which it gains at 0
+/// (M2 design §5, §10).
+pub(crate) const VERBS: [Verb; 10] = [
     Verb::Approach,
     Verb::Eat,
     Verb::Drink,
@@ -35,6 +36,7 @@ pub(crate) const VERBS: [Verb; 9] = [
     Verb::Rest,
     Verb::Wander,
     Verb::Mate,
+    Verb::BreedAlone,
 ];
 
 /// Which way a thing's worth pushes a verb aimed at it (design v18 §5.5):
@@ -43,7 +45,7 @@ pub(crate) const VERBS: [Verb; 9] = [
 /// from), or the targetless verbs.
 fn side(verb: Verb) -> f32 {
     match verb {
-        Verb::Retreat | Verb::Rest | Verb::Wander => 0.0,
+        Verb::Retreat | Verb::Rest | Verb::Wander | Verb::BreedAlone => 0.0,
         _ => 1.0,
     }
 }
@@ -1499,9 +1501,16 @@ impl Brain {
 /// target, on one of its goal tiles, where Approach would do nothing, and
 /// Retreat only from a thing in sight, not one `remembered` out of sight
 /// (M2 design §7). Mate is offered only when the sprite and its target are
-/// both adults, which the caller says in `adults`: the content-safety rule
-/// the engine enforces for every genome and data pack (M2 design §5).
-pub(crate) fn available(target: bool, beside: bool, remembered: bool, adults: bool) -> Vec<Verb> {
+/// both adults, which the caller says in `adults`, and BreedAlone only when
+/// the sprite is `grown`: the content-safety rule the engine enforces for
+/// every genome and data pack (M2 design §5, §10).
+pub(crate) fn available(
+    target: bool,
+    beside: bool,
+    remembered: bool,
+    adults: bool,
+    grown: bool,
+) -> Vec<Verb> {
     VERBS
         .into_iter()
         .filter(|&verb| match verb {
@@ -1509,6 +1518,7 @@ pub(crate) fn available(target: bool, beside: bool, remembered: bool, adults: bo
             Verb::Approach => target && !beside,
             Verb::Retreat => target && !remembered,
             Verb::Mate => target && adults,
+            Verb::BreedAlone => grown,
             _ => target,
         })
         .collect()
@@ -1786,7 +1796,7 @@ mod tests {
             r#"Instinct(inputs: [("hunger", false), ("target_adjacent", true)], verb: Eat, weight: 0.3)"#,
         ]);
         let n = builtin().brain_inputs().count();
-        assert_eq!(n, 45, "37 State inputs and 8 Target inputs");
+        assert_eq!(n, 51, "42 State inputs and 9 Target inputs");
         // One singleton per input, and one conjunction for both genes naming it.
         assert_eq!(brain.concepts.len(), n + 1);
         assert_eq!(
@@ -1867,13 +1877,13 @@ mod tests {
     fn with_a_target_every_verb_can_be_tried_whatever_its_verb_table_says() {
         use Verb::*;
         assert_eq!(
-            available(false, false, false, false),
+            available(false, false, false, false, false),
             [Rest, Wander],
             "no target: targetless only"
         );
         // Design v16 §5.2: a verb table says what a try does, not what's allowed.
         assert_eq!(
-            available(true, false, false, false),
+            available(true, false, false, false, false),
             [Approach, Eat, Drink, Hit, Play, Retreat, Rest, Wander]
         );
     }
@@ -1882,19 +1892,30 @@ mod tests {
     fn mate_is_offered_only_when_both_are_adults() {
         // M2 design §5: the engine's one content-safety rule.
         use Verb::*;
-        assert!(!available(true, false, false, false).contains(&Mate));
+        assert!(!available(true, false, false, false, false).contains(&Mate));
         assert_eq!(
-            available(true, false, false, true),
+            available(true, false, false, true, false),
             [Approach, Eat, Drink, Hit, Play, Retreat, Rest, Wander, Mate]
         );
-        assert_eq!(available(false, false, false, true), [Rest, Wander]);
+        assert_eq!(available(false, false, false, true, false), [Rest, Wander]);
+    }
+
+    #[test]
+    fn breeding_alone_is_offered_only_to_an_adult() {
+        // M2 design §10: the same rule, for breeding alone.
+        use Verb::*;
+        assert!(!available(true, false, false, false, false).contains(&BreedAlone));
+        assert_eq!(
+            available(false, false, false, false, true),
+            [Rest, Wander, BreedAlone]
+        );
     }
 
     #[test]
     fn approach_is_not_offered_to_a_sprite_already_beside_its_target() {
         use Verb::*;
         assert_eq!(
-            available(true, true, false, false),
+            available(true, true, false, false, false),
             [Eat, Drink, Hit, Play, Retreat, Rest, Wander]
         );
     }
@@ -1967,7 +1988,7 @@ mod tests {
             let mut verbs = [0.0; VERBS.len()];
             verbs[column(Verb::Eat)] = 0.5;
             verbs[column(Verb::Rest)] = 0.2;
-            let available = available(true, false, false, false);
+            let available = available(true, false, false, false, false);
             (0..200)
                 .map(|_| {
                     let attended = brain.attend(&scores, false, exploration, &mut rng);
@@ -1985,7 +2006,7 @@ mod tests {
         let mut brain = brain(&[]);
         let scores = BTreeMap::from([(WATER, 0.3), (TOY, 0.5)]);
         let verbs = [0.1; VERBS.len()];
-        let available = available(true, false, false, false);
+        let available = available(true, false, false, false, false);
         let mut rng = ChaCha8Rng::seed_from_u64(7);
         let untouched = rng.clone();
         // An action running: attention and switching draw nothing.
@@ -2428,7 +2449,7 @@ mod tests {
         // M2 design §7: there's nothing in sight to back away from.
         use Verb::*;
         assert_eq!(
-            available(true, false, true, false),
+            available(true, false, true, false, false),
             [Approach, Eat, Drink, Hit, Play, Rest, Wander]
         );
     }

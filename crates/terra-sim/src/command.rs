@@ -15,7 +15,7 @@ use crate::object_types::{Condition, Size};
 use crate::objects::{EntityId, Roll};
 use crate::perception::Target;
 use crate::sliding::Slide;
-use crate::sprites::Sprite;
+use crate::sprites::{Sprite, Sprites};
 use crate::terrain::Terrain;
 use crate::variation::varied;
 use crate::world::WorldState;
@@ -164,6 +164,9 @@ impl CursorTouch {
 pub enum Rejection {
     /// The sprite isn't in the world: it never was, or it has died.
     Gone,
+    /// The sprite is still an egg, which feels nothing and the Cursor
+    /// can't move yet (M2 design §10).
+    Egg,
     /// The Cursor already has hold of something (design v23 §6.5).
     Busy(Grip),
     /// The Cursor leads no sprite to let go of.
@@ -289,7 +292,7 @@ fn reward(
 ) -> Result<EventKind, Rejection> {
     let physiology = data.physiology();
     let (cursor, indices) = (&physiology.cursor, &physiology.indices);
-    let touched = state.sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
+    let touched = hatched(&mut state.sprites, sprite)?;
     let reach_back = reach_back.clamp(physiology.touch_window, cursor.max_reach_back);
     let brain = &mut touched.brain;
     brain.reach_back = brain.reach_back.max(Some(reach_back));
@@ -315,7 +318,7 @@ fn correct(
 ) -> Result<EventKind, Rejection> {
     let physiology = data.physiology();
     let (cursor, indices) = (&physiology.cursor, &physiology.indices);
-    let touched = state.sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
+    let touched = hatched(&mut state.sprites, sprite)?;
     touched.brain.seen_cursor |= state.cursor.visible;
     let body = &mut touched.body;
     let correction = if amplified { cursor.shock } else { cursor.zap };
@@ -328,6 +331,16 @@ fn correct(
     })
 }
 
+/// The sprite `sprite`, to touch or lead: refused if it's gone, or still
+/// an egg (M2 design §10).
+fn hatched(sprites: &mut Sprites, sprite: EntityId) -> Result<&mut Sprite, Rejection> {
+    let sprite = sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
+    if sprite.is_egg() {
+        return Err(Rejection::Egg);
+    }
+    Ok(sprite)
+}
+
 /// The Cursor takes hold of `sprite`, and leads it (design v23 §6.5):
 /// whatever it was doing ends, pulled away.
 fn take_hold(
@@ -336,7 +349,7 @@ fn take_hold(
     events: &mut Vec<Event>,
 ) -> Result<EventKind, Rejection> {
     state.cursor.free()?;
-    let led = state.sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
+    let led = hatched(&mut state.sprites, sprite)?;
     if let Some(doing) = led.action.as_mut().filter(|a| a.ended.is_none()) {
         action::end(doing, sprite, Outcome::PulledAway, state.tick, events);
     }

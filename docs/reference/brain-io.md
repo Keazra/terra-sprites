@@ -24,10 +24,10 @@ The new `chill` drive from [chemicals](chemicals.md), felt by the brain as a Sta
 
 <!-- example: brain_io -->
 ```ron
-(id: 66, name: "chill", reads: Chem("chill")),
+(id: 71, name: "chill", reads: Chem("chill")),
 ```
 
 <!-- example: brain_io_needs -->
 ```ron
-needs: ["hunger", "thirst", "tiredness", "boredom", "loneliness", "crowdedness", "chill"],
+needs: ["hunger", "thirst", "tiredness", "boredom", "loneliness", "crowdedness", "broodiness", "chill"],
 ```

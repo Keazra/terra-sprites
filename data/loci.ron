@@ -12,6 +12,11 @@
     (id: 3,  name: "nearby_sprites",    kind: BodySensor),
     (id: 4,  name: "moving",            kind: BodySensor),
     (id: 5,  name: "resting",           kind: BodySensor),
+    // Breeding (M2 design §10): 1 while it's fertile, 1 if it's female, and
+    // 1 while it sees a female adult.
+    (id: 6,  name: "fertile",           kind: BodySensor),
+    (id: 7,  name: "female",            kind: BodySensor),
+    (id: 8,  name: "female_near",       kind: BodySensor),
 
     (id: 32, name: "ate",               kind: Pulse),
     (id: 33, name: "drank",             kind: Pulse),
@@ -24,6 +29,7 @@
     (id: 40, name: "shocked",           kind: Pulse),
     (id: 41, name: "cornered",          kind: Pulse),  // a retreat found no step away
     (id: 42, name: "fruitless",         kind: Pulse),  // a try that did nothing (design v16 §5.2)
+    (id: 43, name: "bred",              kind: Pulse),  // it laid an egg or fathered one (M2 design §10)
 
     (id: 64, name: "learning_rate_mod", kind: ReceptorTarget),
     (id: 65, name: "exploration_mod",   kind: ReceptorTarget),

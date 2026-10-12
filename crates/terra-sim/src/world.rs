@@ -6,12 +6,13 @@ use rand_chacha::rand_core::SeedableRng;
 use serde::{Deserialize, Serialize};
 use xxhash_rust::xxh3::xxh3_64_with_seed;
 
-use crate::action::{self, ActionView, ScriptedAction};
+use crate::action::{self, ActionView, ScriptedAction, chebyshev};
 use crate::ageing::{LifeStage, Switch};
 use crate::biochem::{self, Senses, Traits};
 use crate::brain::{Explanation, Memory, RememberedPlace};
+use crate::breeding::{self, Sex};
 use crate::command::{self, Command};
-use crate::config::WorldConfig;
+use crate::config::{MOST_SPRITES, WorldConfig};
 use crate::cursor::{Cursor, Grip};
 use crate::data::DataPack;
 use crate::ecology::{self, holds_without_drawing, new_object, square};
@@ -77,6 +78,15 @@ pub(crate) struct WorldState {
     pub(crate) commands: Vec<Command>,
     /// What the Cursor has hold of (design v23 §6.5).
     pub(crate) cursor: Cursor,
+    /// The most sprites the world holds, eggs included (M2 design §10):
+    /// its preset's, or for a hand-made world or a save from before
+    /// breeding, the default.
+    #[serde(default = "most_sprites")]
+    pub(crate) most_sprites: u16,
+}
+
+fn most_sprites() -> u16 {
+    MOST_SPRITES
 }
 
 impl WorldState {
@@ -183,15 +193,22 @@ impl WorldState {
     }
 
     /// The index of `target`'s object type, whose verb table it answers
-    /// with: a pseudo type for water, a sprite or the Cursor. `None` if it's gone, or
-    /// the pack has no such pseudo type.
+    /// with: a pseudo type for water, a sprite, an egg or the Cursor. `None`
+    /// if it's gone, or the pack has no such pseudo type; for an egg, if
+    /// the pack has no category for eggs either (M2 design §10).
     pub(crate) fn kind_of(&self, data: &DataPack, target: Target) -> Option<usize> {
         match target {
             Target::Object(id) => self.objects.get(id).map(|o| o.kind),
             Target::Water(_) => data.pseudo_type(data.water_category()),
+            Target::Sprite(id) if self.is_egg(id) => data.pseudo_type(data.egg_category()?),
             Target::Sprite(_) => data.pseudo_type(data.sprite_category()),
             Target::Cursor => data.pseudo_type(data.cursor_category()),
         }
+    }
+
+    /// Whether the sprite `id` is there, and an egg (M2 design §10).
+    pub(crate) fn is_egg(&self, id: EntityId) -> bool {
+        self.sprites.get(id).is_some_and(Sprite::is_egg)
     }
 
     /// The stable ID of `target`'s object type, as `kind_of` finds it.
@@ -200,12 +217,16 @@ impl WorldState {
             .map(|kind| data.object_types()[kind].id)
     }
 
-    /// The category `target` is perceived as (design v19 §3.5.5).
+    /// The category `target` is perceived as (design v19 §3.5.5): an egg
+    /// as an egg, if the pack has eggs (M2 design §10).
     pub(crate) fn category_of(&self, data: &DataPack, target: Target) -> CategoryId {
         match target {
             Target::Object(id) => data.object_types()[self.objects.kind(id)].category,
             Target::Water(_) => data.water_category(),
-            Target::Sprite(_) => data.sprite_category(),
+            Target::Sprite(id) => match data.egg_category() {
+                Some(egg) if self.is_egg(id) => egg,
+                _ => data.sprite_category(),
+            },
             Target::Cursor => data.cursor_category(),
         }
     }
@@ -604,6 +625,7 @@ impl World {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let map = generate(&config, &data, &mut rng);
         let mut world = World::with(map, data, rng, seed);
+        world.state.most_sprites = config.most_sprites() as u16;
         place_objects(&config, &world.data, &mut world.state);
         place_sprites(&config, &world.data, &mut world.state);
         world.config = Some(config);
@@ -725,6 +747,12 @@ impl World {
         Ok(())
     }
 
+    /// Has the world hold at most `most` sprites, eggs included, for a lab
+    /// scenario that watches only its own (M2 design §10).
+    pub(crate) fn set_most_sprites(&mut self, most: u16) {
+        self.state.most_sprites = most;
+    }
+
     /// Has every sprite grow old at `age` ticks, whatever its genes say,
     /// for a lab scenario that watches the same sprites for longer than a
     /// life (M2 design §2).
@@ -757,6 +785,7 @@ impl World {
                 learning: true,
                 commands: Vec::new(),
                 cursor: Cursor::default(),
+                most_sprites: MOST_SPRITES,
             },
             data,
             checked_next_id: Cell::new(1),
@@ -883,9 +912,10 @@ impl World {
         self.run_environment(&mut events); // 2
         self.grow(&mut events); // 3, first
         let dying = self.run_biochemistry(); // 3
-        self.run_learning(&dying, &mut events); // 4
-        self.sense_and_decide(&dying, &mut events); // 5
-        self.resolve_actions(&dying, &mut events); // 6
+        let still = self.still(&dying);
+        self.run_learning(&still, &mut events); // 4
+        self.sense_and_decide(&still, &mut events); // 5
+        self.resolve_actions(&still, &mut events); // 6
         self.finish_tick(&dying, &mut events); // 7
         self.checkpoint();
         #[cfg(debug_assertions)]
@@ -1053,19 +1083,36 @@ impl World {
 
     /// Step 3 begins with each sprite growing to its life stage (M2 design
     /// §9.2), so genes that switch on with it work from this tick's
-    /// chemistry on, then ageing its genes (§9.4), in ascending ID order.
+    /// chemistry on, an egg hatching on its tick (§10), then ageing its
+    /// genes (§9.4), and then a male adult turning female if its hormone
+    /// says so (§10), in ascending ID order.
     fn grow(&mut self, events: &mut Vec<Event>) {
         let state = &mut self.state;
         let tick = state.tick;
         for (id, sprite) in state.sprites.iter_mut() {
             let grew = sprite.grow(tick, &self.data);
-            sprite.age_genes(&self.data, &mut state.rng);
+            if !sprite.is_egg() {
+                sprite.age_genes(&self.data, &mut state.rng);
+            }
+            if sprite.turn(&self.data) {
+                events.push(Event {
+                    tick,
+                    kind: EventKind::TurnedFemale { id },
+                });
+            }
             let Some((was, stage)) = grew else {
                 continue;
             };
+            if was == LifeStage::Egg {
+                let parents = sprite.parents.clone();
+                events.push(Event {
+                    tick,
+                    kind: EventKind::Hatched { id, parents },
+                });
+            }
             // One whose genes have it grow old before it grows up does both
             // at once (M2 design §9.1).
-            if was == LifeStage::Young {
+            if was <= LifeStage::Young && stage.is_grown() {
                 events.push(Event {
                     tick,
                     kind: EventKind::GrewUp { id },
@@ -1081,24 +1128,45 @@ impl World {
     }
 
     /// Step 3: every sprite's chemistry (design §4.4), then death check #1.
+    /// An egg has none (M2 design §10), and isn't counted as a sprite
+    /// nearby. A sprite sees a female adult within its sense radius.
     /// Returns the sprites marked dying, in ascending ID order.
     fn run_biochemistry(&mut self) -> Vec<EntityId> {
         let state = &mut self.state;
         let data = &self.data;
         let nearby = data.physiology().nearby_sprites;
-        let senses: Vec<(EntityId, Senses)> = state
-            .sprites
+        let (tick, sprites) = (state.tick, &state.sprites);
+        let hatched = |tile| {
+            sprites
+                .at(tile)
+                .and_then(|id| sprites.get(id))
+                .is_some_and(|sprite| !sprite.is_egg())
+        };
+        let females: Vec<(EntityId, Pos)> = sprites
             .iter()
+            .filter(|(_, sprite)| sprite.sex == Sex::Female && sprite.stage().is_grown())
+            .map(|(id, sprite)| (id, sprite.pos))
+            .collect();
+        let senses: Vec<(EntityId, Senses)> = sprites
+            .iter()
+            .filter(|(_, sprite)| !sprite.is_egg())
             .map(|(id, sprite)| {
                 let others = square(&state.map, sprite.pos, nearby.radius)
-                    .filter(|&tile| tile != sprite.pos && state.sprites.at(tile).is_some())
+                    .filter(|&tile| tile != sprite.pos && hatched(tile))
                     .count();
+                let sight = sprite.program.traits.sense_radius.round() as u16;
+                let female_near = females
+                    .iter()
+                    .any(|&(other, at)| other != id && chebyshev(at, sprite.pos) <= sight);
                 let senses = Senses {
-                    age: sprite.age(state.tick),
+                    age: sprite.age(tick),
                     nearby_sprites: (others as f32 / f32::from(nearby.full)).min(1.0),
                     steps: sprite.did.steps,
                     resting: sprite.did.rested,
                     stage: sprite.stage(),
+                    fertile: breeding::fertile(sprite, tick, data),
+                    female: sprite.sex == Sex::Female,
+                    female_near,
                 };
                 (id, senses)
             })
@@ -1115,6 +1183,18 @@ impl World {
             }
         }
         dying
+    }
+
+    /// The sprites that take no part in steps 4 to 6, in ascending ID
+    /// order: the `dying` (design §2.4), and eggs, which don't learn, sense
+    /// or act (M2 design §10).
+    fn still(&self, dying: &[EntityId]) -> Vec<EntityId> {
+        self.state
+            .sprites
+            .iter()
+            .filter(|(id, sprite)| sprite.is_egg() || dying.contains(id))
+            .map(|(id, _)| id)
+            .collect()
     }
 
     /// Step 4: reinforcement from consumed reward and punishment, for every

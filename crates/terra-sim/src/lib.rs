@@ -53,6 +53,7 @@ mod world;
 
 pub use action::{ActionView, Hurt, Outcome, Progress, ScriptedAction};
 pub use ageing::{LifeStage, Switch};
+pub use breeding::Sex;
 pub use biochem::Traits;
 pub use brain::{Contribution, Explanation, Learned, Memory, Part, RememberedPlace, Thing};
 pub use command::{Blocker, Command, CursorTouch, PlaceRule, Rejection};

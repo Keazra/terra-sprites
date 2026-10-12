@@ -2,7 +2,7 @@
 //! happened in each window counted.
 
 mod common;
-use common::builtin;
+use common::{barren, builtin};
 
 use std::collections::BTreeMap;
 
@@ -384,7 +384,7 @@ fn a_scenario_can_have_its_sprites_grow_old_at_another_age() {
     // life gives them a later old age; here, a sooner one. Starting just
     // grown up at 4,500 ticks, a starter sprite would grow old at tick
     // 9,000; at 6,000 it grows old at tick 1,500 and dies of it within 7,000.
-    let data = builtin();
+    let data = barren();
     let whole = ARENA
         .replace("ticks: 3000", "ticks: 7000")
         .replace("windows: [(0, 1000), (2000, 3000)]", "windows: [(0, 7000)]");

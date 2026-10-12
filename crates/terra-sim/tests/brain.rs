@@ -3,7 +3,7 @@
 //! minds when a drive grows.
 
 mod common;
-use common::{at, builtin};
+use common::{at, barren, builtin};
 
 use terra_sim::{
     DataPack, EntityId, Event, EventKind, Expression, Genome, Map, Outcome, Part, Pos, Scenario,
@@ -258,7 +258,8 @@ fn a_lone_sprite_with_a_bush_and_water_nearby_survives_10_000_ticks() {
         "...............",
     ];
     for seed in [1, 2, 3] {
-        let data = builtin();
+        // It lives alone, with no young to share its bush (M2 design §10).
+        let data = barren();
         let map = Map::from_ascii(&rows, &data).expect("valid drawing");
         // The starter genome, with spawn variation, as the first population gets it.
         let sprites = [(at(7, 3), None)];

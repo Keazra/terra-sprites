@@ -9,6 +9,7 @@ use crate::action::{Action, Did, ScriptedAction, Walk, chebyshev};
 use crate::ageing::{LifeStage, Switch, frailty};
 use crate::biochem::{Body, Program};
 use crate::brain::Brain;
+use crate::breeding::Sex;
 use crate::data::DataPack;
 use crate::genome::{Gene, Genome};
 use crate::map::{Dir, Map, Pos};
@@ -25,8 +26,23 @@ use crate::sliding::Slide;
 pub(crate) struct Sprite {
     pub(crate) pos: Pos,
     /// The tick it was born on: before the world began for a sprite that
-    /// starts it grown (M2 design §9.1).
+    /// starts it grown (M2 design §9.1). For an egg, the tick it was laid
+    /// on, until it hatches, which is its birth (M2 design §10).
     pub(crate) born: i64,
+    /// The tick it hatches on, while it's an egg (M2 design §10).
+    #[serde(default)]
+    pub(crate) hatches: Option<u64>,
+    /// Its parents (M2 design §10): the one that laid it, then its partner,
+    /// if it had one. None for a sprite the world began with or the Cursor
+    /// placed.
+    #[serde(default)]
+    pub(crate) parents: Vec<EntityId>,
+    /// The tick it last had young on, if it has (M2 design §10).
+    #[serde(default)]
+    pub(crate) last_bred: Option<u64>,
+    /// Its sex: male until it turns female (M2 design §10).
+    #[serde(default)]
+    pub(crate) sex: Sex,
     /// The name the player gave it, if any (design v28 §6.5).
     pub(crate) name: Option<String>,
     pub(crate) genome: Genome,
@@ -71,9 +87,15 @@ impl Sprite {
         u64::try_from(tick as i64 - self.born).expect("a sprite is born by now")
     }
 
-    /// The life stage its genes are expressed for (M2 design §9.1).
+    /// Its life stage (M2 design §9.1): an egg's genes are expressed as a
+    /// young sprite's.
     pub(crate) fn stage(&self) -> LifeStage {
         self.stage.expect("a loaded sprite has a life stage")
+    }
+
+    /// Whether it's still an egg (M2 design §10).
+    pub(crate) fn is_egg(&self) -> bool {
+        self.hatches.is_some()
     }
 
     /// How fast it walks on the tick `tick`, in move points (M2 design
@@ -82,7 +104,7 @@ impl Sprite {
     pub(crate) fn speed(&self, tick: u64, data: &DataPack) -> f32 {
         let ageing = data.physiology().ageing;
         let traits = self.program.traits;
-        let growing = if self.stage() == LifeStage::Young {
+        let growing = if self.stage() <= LifeStage::Young {
             let grown = (self.age(tick) as f32 / traits.grows_up).min(1.0);
             ageing.young_speed + (1.0 - ageing.young_speed) * grown
         } else {
@@ -216,16 +238,43 @@ impl Sprite {
         self.express(data);
     }
 
+    /// Turns it female, if it's a male adult whose `feminiser` hormone is
+    /// past the level physiology sets (M2 design §10), and says whether it
+    /// did. A young sprite never turns.
+    pub(crate) fn turn(&mut self, data: &DataPack) -> bool {
+        let physiology = data.physiology();
+        let Some(indices) = physiology.indices.breeding else {
+            return false;
+        };
+        let level = self.body.chems[indices.feminiser];
+        let turns = self.sex == Sex::Male
+            && self.stage().is_grown()
+            && level >= physiology.breeding.turns_female;
+        if turns {
+            self.sex = Sex::Female;
+        }
+        turns
+    }
+
     /// Grows the sprite to its life stage on the tick `tick` (M2 design
     /// §9.2): if that's a new one, its genes are expressed afresh for it,
-    /// leaving what it has learned as it was. Returns the stage it was in
-    /// and the new one, if it has one.
+    /// leaving what it has learned as it was. An egg hatches on its tick,
+    /// and is born then (§10). Returns the stage it was in and the new one,
+    /// if it has one.
     pub(crate) fn grow(&mut self, tick: u64, data: &DataPack) -> Option<(LifeStage, LifeStage)> {
         let was = self.stage();
-        let stage = self
-            .program
-            .traits
-            .life_stage(self.age(tick), self.sooner(data));
+        let stage = match self.hatches {
+            Some(hatches) if tick < hatches => return None,
+            Some(_) => {
+                self.hatches = None;
+                self.born = tick as i64;
+                self.program.traits.life_stage(0, self.sooner(data))
+            }
+            None => self
+                .program
+                .traits
+                .life_stage(self.age(tick), self.sooner(data)),
+        };
         if stage == was {
             return None;
         }
@@ -237,6 +286,23 @@ impl Sprite {
     /// A newborn with `genome` on `pos`, born on the tick `born` (design §4.7).
     pub(crate) fn newborn(genome: Genome, pos: Pos, born: u64, data: &DataPack) -> Sprite {
         Sprite::aged(genome, pos, born, 0, data)
+    }
+
+    /// An egg with `genome` on `pos`, laid on the tick `laid` by `parents`
+    /// (M2 design §10): it hatches `breeding.hatches` ticks later, with a
+    /// newborn's body (design §4.7).
+    pub(crate) fn egg(
+        genome: Genome,
+        pos: Pos,
+        laid: u64,
+        parents: Vec<EntityId>,
+        data: &DataPack,
+    ) -> Sprite {
+        let mut egg = Sprite::newborn(genome, pos, laid, data);
+        egg.stage = Some(LifeStage::Egg);
+        egg.hatches = Some(laid + data.physiology().breeding.hatches);
+        egg.parents = parents;
+        egg
     }
 
     /// A sprite with `genome` on `pos` that has just grown up on the tick
@@ -268,6 +334,10 @@ impl Sprite {
         Sprite {
             pos,
             born: tick as i64 - age as i64,
+            hatches: None,
+            parents: Vec::new(),
+            last_bred: None,
+            sex: Sex::Male,
             name: None,
             genome,
             program,
@@ -305,6 +375,11 @@ impl Sprites {
             by_id: BTreeMap::new(),
             on_tile: Occupancy::new(map),
         }
+    }
+
+    /// How many sprites there are, eggs included.
+    pub(crate) fn len(&self) -> usize {
+        self.by_id.len()
     }
 
     /// The sprite on the tile at `pos`, if any.
@@ -478,6 +553,29 @@ impl Sprites {
             if sprite.stage.is_none() {
                 return Err(format!("{id:?} has no life stage"));
             }
+            // An egg is laid, and lies still until it hatches (M2 design
+            // §10).
+            if sprite.is_egg() != (sprite.stage() == LifeStage::Egg) {
+                return Err(format!(
+                    "{id:?} is at the life stage {:?}, but hatches at {:?}",
+                    sprite.stage(),
+                    sprite.hatches
+                ));
+            }
+            if sprite.is_egg()
+                && (sprite.action.is_some()
+                    || sprite.lead.is_some()
+                    || sprite.slide.is_some()
+                    || !sprite.scripted.is_empty())
+            {
+                return Err(format!("{id:?} is an egg, but has something to do"));
+            }
+            if sprite.parents.len() > 2 || sprite.parents.contains(&id) {
+                return Err(format!(
+                    "{id:?} has the parents {:?}: at most two, never itself",
+                    sprite.parents
+                ));
+            }
             let wear = sprite.body.wear;
             if !(0.0..=1.0).contains(&wear) {
                 return Err(format!("{id:?} has a wear of {wear}, outside 0 to 1"));
@@ -507,6 +605,21 @@ impl Sprites {
             if let Some(value) = sprite.body.loci.iter().find(|v| !v.is_finite()) {
                 return Err(format!(
                     "{id:?} has a locus at {value}, which isn't a number"
+                ));
+            }
+            // Only an adult is female, and only an adult breeds alone (M2
+            // design §10).
+            if sprite.sex == Sex::Female && !sprite.stage().is_grown() {
+                return Err(format!("{id:?} is female, but not grown up"));
+            }
+            if sprite
+                .action
+                .as_ref()
+                .is_some_and(|a| a.verb == Verb::BreedAlone)
+                && !sprite.stage().is_grown()
+            {
+                return Err(format!(
+                    "{id:?} has a BreedAlone action, but isn't grown up"
                 ));
             }
             // Mating only ever between adults, whatever its genes or the

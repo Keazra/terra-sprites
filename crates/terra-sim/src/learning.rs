@@ -75,14 +75,17 @@ impl Links {
     }
 }
 
+/// The need whose relief teaches only about a partner (M2 design §10).
+const BROODINESS: &str = "broodiness";
+
 /// Reads a value for each verb, in `VERBS` order. A save from before Mate
-/// has one fewer, and Mate's is 0 (M2 design §5).
+/// and BreedAlone has fewer, and theirs are 0 (M2 design §5, §10).
 pub(crate) fn per_verb<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<[f32; VERBS.len()], D::Error> {
     let values = Vec::<f32>::deserialize(deserializer)?;
     let mut row = [0.0; VERBS.len()];
-    if !(VERBS.len() - 1..=VERBS.len()).contains(&values.len()) {
+    if values.len() > VERBS.len() {
         return Err(serde::de::Error::invalid_length(
             values.len(),
             &"a value for each verb",
@@ -522,6 +525,8 @@ pub(crate) fn run(
     let indices = &data.physiology().indices;
     let tick = state.tick;
     let learning = state.learning;
+    let window = data.physiology().touch_window;
+    let broodiness = data.needs().position(|need| need == BROODINESS);
     // A sprite that has died is forgotten (design v18 §5.6).
     let alive: BTreeSet<EntityId> = state
         .sprites
@@ -557,7 +562,17 @@ pub(crate) fn run(
         let seen_cursor = std::mem::take(&mut brain.seen_cursor);
         brain.experience.forget_dead(&alive);
         let needs = brain.need_levels(body, data);
-        let relief = brain.relief(&needs, data);
+        let mut relief = brain.relief(&needs, data);
+        // Broodiness eased teaches only about a partner: it's relief only
+        // when the sprite has just mated, so no genome can have a sprite
+        // learn that a young one, or anything else, is good for it (M2
+        // design §10).
+        let mated = brain
+            .touched
+            .is_some_and(|t| t.verb == Some(Verb::Mate) && tick - t.tick <= window);
+        if let Some(need) = broodiness.filter(|_| !mated) {
+            relief[need] = 0.0;
+        }
         brain.felt = relief.iter().sum::<f32>() + reward - punishment;
         if !learning {
             continue;

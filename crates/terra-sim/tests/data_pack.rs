@@ -576,7 +576,8 @@ fn each_object_type_is_in_the_category_it_names() {
 fn categories_with(extra: &str) -> String {
     format!(
         r#"[(id: 1, name: "bush"), (id: 2, name: "fruit"), (id: 4, name: "water"),
-            (id: 5, name: "toy"), (id: 6, name: "sprite"), (id: 7, name: "cursor"), {extra}]"#
+            (id: 5, name: "toy"), (id: 6, name: "sprite"), (id: 7, name: "cursor"),
+            (id: 8, name: "egg"), {extra}]"#
     )
 }
 
@@ -600,11 +601,11 @@ fn each_category_is_worded_in_general_by_its_plural() {
     );
     assert_eq!(pack.category_plural("dragon"), None, "no such category");
 
-    let text = categories_with(r#"(id: 8, name: "tree", plural: "  trees ")"#);
+    let text = categories_with(r#"(id: 9, name: "tree", plural: "  trees ")"#);
     let pack = builtin_with("categories.ron", &text).expect("a valid pack");
     assert_eq!(pack.category_plural("tree"), Some("trees"));
     for plural in [r#""""#, r#""  ""#] {
-        let text = categories_with(&format!(r#"(id: 8, name: "tree", plural: {plural})"#));
+        let text = categories_with(&format!(r#"(id: 9, name: "tree", plural: {plural})"#));
         assert_invalid("categories.ron", &text, "`tree` has an empty plural");
     }
 }
@@ -626,7 +627,7 @@ fn category_ids_and_names_are_unique_and_from_1_to_26() {
         &categories_with(r#"(id: 1, name: "tree")"#),
         "the id 1",
     );
-    assert_invalid(file, &categories_with(r#"(id: 8, name: "bush")"#), "`bush`");
+    assert_invalid(file, &categories_with(r#"(id: 9, name: "bush")"#), "`bush`");
     for id in [0, 27] {
         let text = categories_with(&format!(r#"(id: {id}, name: "tree")"#));
         assert_invalid(file, &text, &format!("the id {id}"));
@@ -1004,9 +1005,19 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
         (42, "target_distance"),
         (43, "target_adjacent"),
         (44, "attended_cursor"),
+        (45, "attended_egg"),
     ]);
-    // State inputs carry on from 64, past the IDs kept for Target inputs.
-    expected.extend([(64, "cornered"), (65, "fruitless")]);
+    // State inputs carry on from 64, past the IDs kept for Target inputs,
+    // with breeding's from 66 (M2 design §10).
+    expected.extend([
+        (64, "cornered"),
+        (65, "fruitless"),
+        (66, "broodiness"),
+        (67, "fertile"),
+        (68, "female"),
+        (69, "female_near"),
+        (70, "bred"),
+    ]);
     assert_eq!(inputs, expected);
 }
 
@@ -1014,7 +1025,7 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
 fn a_category_s_brain_input_takes_its_id_from_the_category_s() {
     // 35 + id for categories 1 to 6, and 37 + id from 7, past target_distance
     // and target_adjacent (design v19 §3.5.5).
-    let text = categories_with(r#"(id: 8, name: "tree"), (id: 26, name: "shell")"#);
+    let text = categories_with(r#"(id: 9, name: "tree"), (id: 26, name: "shell")"#);
     let pack = builtin_with("categories.ron", &text).expect("a valid pack");
     let targets: Vec<(u16, &str)> = pack
         .brain_inputs()
@@ -1031,7 +1042,8 @@ fn a_category_s_brain_input_takes_its_id_from_the_category_s() {
             (42, "target_distance"),
             (43, "target_adjacent"),
             (44, "attended_cursor"),
-            (45, "attended_tree"),
+            (45, "attended_egg"),
+            (46, "attended_tree"),
             (63, "attended_shell"),
         ]
     );
@@ -1039,14 +1051,14 @@ fn a_category_s_brain_input_takes_its_id_from_the_category_s() {
     // A retired category leaves its input's ID unused.
     let text = r#"[(id: 1, name: "bush"), (id: 2, name: "fruit"), (id: 4, name: "water"),
         (id: 5, name: "toy"), (id: 6, name: "sprite"), (id: 7, name: "cursor"),
-        (id: 9, name: "thornbush")]"#;
+        (id: 8, name: "egg"), (id: 10, name: "thornbush")]"#;
     let pack = builtin_with("categories.ron", text).expect("a valid pack");
     let ids: Vec<u16> = pack
         .brain_inputs()
         .map(|(id, _)| id)
         .filter(|id| (36..=63).contains(id))
         .collect();
-    assert_eq!(ids, [36, 37, 39, 40, 41, 42, 43, 44, 46]);
+    assert_eq!(ids, [36, 37, 39, 40, 41, 42, 43, 44, 45, 47]);
 }
 
 #[test]
@@ -1122,7 +1134,8 @@ fn the_needs_are_the_drives_whose_relief_teaches() {
             "tiredness",
             "boredom",
             "loneliness",
-            "crowdedness"
+            "crowdedness",
+            "broodiness"
         ],
         "pain is a drive but not a need"
     );
@@ -1142,7 +1155,8 @@ fn the_drives_are_the_signal_chemicals_but_reward_and_punishment() {
             "tiredness",
             "boredom",
             "loneliness",
-            "crowdedness"
+            "crowdedness",
+            "broodiness"
         ]
     );
 }

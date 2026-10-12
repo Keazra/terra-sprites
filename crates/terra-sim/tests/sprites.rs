@@ -247,10 +247,12 @@ fn sprites_see_water_and_each_other_in_a_pack_with_no_object_types_for_them() {
         newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    let ids: Vec<EntityId> = world.sprites().map(|sprite| sprite.id()).collect();
     for _ in 0..2_000 {
         world.step();
     }
-    assert_eq!(world.sprites().count(), 2, "both still living");
+    let living = ids.iter().filter(|&&id| world.sprite(id).is_some()).count();
+    assert_eq!(living, 2, "both still living");
 }
 
 fn type_at(world: &World, pos: Pos) -> Option<String> {
@@ -374,11 +376,13 @@ fn a_sprite_lists_its_chemicals_in_pack_order_with_their_kinds() {
         ("crowdedness", Drive),
         ("reward", LearningSignal),
         ("punishment", LearningSignal),
+        ("broodiness", Drive),
     ]
     .into_iter()
     .map(|(name, kind)| (name.to_string(), kind))
     .collect();
     expected.extend((0..16).map(|n| (format!("h{n}"), Hormone)));
+    expected.push(("feminiser".to_string(), Hormone));
     assert_eq!(listed, expected);
 }
 

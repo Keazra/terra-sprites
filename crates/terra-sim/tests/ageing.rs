@@ -2,7 +2,7 @@
 //! genes set, and a gene may switch on as they do.
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_changing, genome};
+use common::{BARREN, WorldBuilder, at, builtin, builtin_changing, genome};
 
 use terra_sim::{
     DataPack, Event, EventKind, Learned, LifeStage, Part, Pos, ScriptedAction, Thing, Verb, World,
@@ -235,6 +235,7 @@ fn a_starter_sprite_grows_up_at_about_an_hour_and_grows_old_at_about_three() {
             ("per_step: 0.0002,", "per_step: 0.0,"),
             ("hydration_loss: 0.00033", "hydration_loss: 0.0"),
             ("growth: 0.3,", "growth: 0.0,"),
+            BARREN,
         ],
     );
     let sprite = at(1, 1);

@@ -15,13 +15,15 @@ The chemicals in a sprite's body (design §4.1, Appendix A). Each has a level fr
 
 **Names the game needs:** physical `energy`, `hydration`, `stamina`, `food`, `water` and `injury`, and signal `reward`, `punishment` and `pain`. A pack without one fails to load, saying which.
 
+**Breeding** (M2 design §10) reads the hormone `feminiser`: a male adult turns female once it's above physiology's `breeding.turns_female`. The built-in list also has the drive `broodiness`, which only genes use. A pack without `feminiser` (or without breeding's [loci](loci.md)) has no sprite that turns female, and so no breeding.
+
 ## Working example
 
 A new drive, `chill`, added to the list. To matter, it needs genes that raise and lower it ([genomes](genomes.md)), and a brain input so sprites can feel it ([brain inputs](brain-io.md)).
 
 <!-- example: chemicals -->
 ```ron
-(id: 25, name: "chill", class: Signal),
+(id: 26, name: "chill", class: Signal),
 ```
 
 The built-in list in `data/chemicals.ron` is the full working example.

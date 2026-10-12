@@ -29,6 +29,8 @@ listed_enum! {
         Mate = 9,
         /// Reserved for M4.
         Speak = 10,
+        /// Laying an egg alone, as a female can (M2 design §10).
+        BreedAlone = 11,
     }
 
     pub(crate) const ALL;

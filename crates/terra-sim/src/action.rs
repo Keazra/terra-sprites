@@ -634,6 +634,13 @@ pub(crate) fn resolve(
             if action.ticks >= rest_bout {
                 end(action, id, Outcome::Applied, state.tick, events);
             }
+        } else if action.verb == Verb::BreedAlone {
+            // It tries at once, where it stands (M2 design §10).
+            let outcome = breeding::breed_alone(state, data, id, events);
+            let sprite = state.sprites.get_mut(id).expect("the same sprite");
+            let action = sprite.action.as_mut().expect("an action");
+            action.attempted = true;
+            end(action, id, outcome, state.tick, events);
         } else if action.verb == Verb::Retreat {
             let target = action.target.expect("a retreat has a target");
             if !moved.contains(&id) {
@@ -670,7 +677,7 @@ fn act(
     let subject = state.subject_of(data, target);
     let (outcome, hurt) = match verb {
         Verb::Approach => (Outcome::Applied, Hurt::default()),
-        Verb::Mate => breeding::mate(state, data, id),
+        Verb::Mate => breeding::mate(state, data, id, target, events),
         verb => verbs::attempt(state, data, id, verb, target, events),
     };
     let gone = state.whereabouts(data, target).is_none();

@@ -57,6 +57,14 @@
         // scarred, losing `hit` health for good, at any age.
         scar: (above: 0.5, chance: 0.002, hit: 0.05),
     ),
+    // Having young (M2 design §10). An egg hatches after `hatches` ticks (10
+    // minutes at 1x). It costs its parents `cost` energy in all, split
+    // between them, or all of it for one breeding alone. An adult is fertile
+    // while its energy and hydration are both above `fed`, and `rest` ticks
+    // or more after its last egg. Every sprite hatches male; an adult male
+    // turns female for good once its `feminiser` hormone is above
+    // `turns_female`.
+    breeding: (hatches: 750, cost: 0.3, fed: 0.6, rest: 1500, turns_female: 0.8),
     // Each cause-of-death tally halves every this many ticks (design §4.10).
     cause_fade: 350,
 

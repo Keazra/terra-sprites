@@ -19,4 +19,7 @@
     // The Cursor, which sprites see while it's visible (design v29 §6.5).
     // There's one, so it has no plural.
     (id: 7, name: "cursor"),
+    // Eggs, which sprites see as a kind of thing of their own, not as
+    // sprites (M2 design §10). A pack without it has eggs no sprite sees.
+    (id: 8, name: "egg",       plural: "eggs"),
 ]
