@@ -554,7 +554,7 @@ fn the_place_menu_draws_over_the_map_with_its_items_numbered() {
     };
     let world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
     let mut app = grab_app(&world);
-    app.fit(ui::areas(Size::new(100, 30), world.map()));
+    app.fit(ui::areas(Size::new(100, 30)));
     apply(&mut app, &world, Action::Mode(CursorMode::Grab));
     let screen = rendered(&app, &world, 100, 30);
     assert!(screen.contains("1 berry bush seedling"), "{screen}");

@@ -10,7 +10,7 @@ use ratatui::backend::TestBackend;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
 use terra_sim::{Command, DataPack, Map, Pos, Scenario, World};
-use terra_tui::app::{AUTOSAVE_EVERY, App, Areas, CursorMode, Flow, Screen};
+use terra_tui::app::{AUTOSAVE_EVERY, App, Areas, CursorMode, Flow, Origin, Screen};
 use terra_tui::input::{Action, Keys};
 use terra_tui::saves::{self, QUICKSAVE};
 use terra_tui::theme::Theme;
@@ -397,14 +397,15 @@ fn a_loaded_world_shows_what_the_screen_showed_when_it_was_saved() {
     };
     let world = World::from_scenario(scenario, pack(), 7).expect("valid scenario");
     let mut app = app_for(&world, &folder);
-    // The view starts at the middle of the map; this takes it to a corner.
+    // The view starts at the middle of the map; this takes it to a corner,
+    // as far past the wall as it goes (M2 design §11.1).
     apply(&mut app, &world, Action::Scroll { dx: 20, dy: 15 });
     let viewport = app.viewport();
-    assert_eq!(viewport, at(29, 22));
+    assert_eq!(viewport, Origin { x: 31, y: 24 });
     apply(&mut app, &world, Action::Quicksave);
 
     apply(&mut app, &world, Action::Scroll { dx: -40, dy: -30 });
-    assert_eq!(app.viewport(), at(0, 0));
+    assert_eq!(app.viewport(), Origin { x: -2, y: -2 });
     apply(&mut app, &world, Action::Quickload);
     app.take_loaded().expect("the quicksave loaded");
     assert_eq!(app.viewport(), viewport);

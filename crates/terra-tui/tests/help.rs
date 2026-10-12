@@ -32,7 +32,7 @@ fn field() -> World {
 }
 
 fn app_for(world: &World, theme: Theme) -> App {
-    let areas = ui::areas(Size::new(100, 30), world.map());
+    let areas = ui::areas(Size::new(100, 30));
     let mut app = App::new(world.map(), theme, 7, areas);
     app.set_data_folder(PathBuf::from("/home/kel/.local/share/terra-sprites"));
     app

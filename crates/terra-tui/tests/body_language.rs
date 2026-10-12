@@ -56,10 +56,15 @@ fn field_with_newborns(sprites: &[(Pos, Genome)], newborns: &[Pos]) -> World {
 }
 
 fn app_for(world: &World, theme: Theme) -> App {
-    let areas = ui::areas(Size::new(100, 30), world.map());
+    let areas = ui::areas(Size::new(100, 30));
     let mut app = App::new(world.map(), theme, 7, areas);
-    // The Cursor out of the way, on (9, 4).
-    app.apply(Action::Point(Position::new(11, 7)), world);
+    // The Cursor out of the way, on (9, 4): the pointer is one down and
+    // right of it (design v27 §6.5).
+    let corner = cell(at(9, 4));
+    app.apply(
+        Action::Point(Position::new(corner.x + 1, corner.y + 1)),
+        world,
+    );
     app
 }
 
@@ -71,10 +76,18 @@ fn render(app: &App, world: &World) -> Buffer {
     terminal.backend().buffer().clone()
 }
 
-/// The screen cell tile `tile` is drawn on: the map view's tiles start at
-/// (1, 2).
+/// The screen cell tile `tile` of the field is drawn on, on a 100×30
+/// screen: the field is small, so it's in the middle of the map view (M2
+/// design §11.1).
 fn cell(tile: Pos) -> Position {
-    Position::new(1 + tile.x, 2 + tile.y)
+    let world = field(&[]);
+    let app = App::new(
+        world.map(),
+        Theme::cp437(),
+        7,
+        ui::areas(Size::new(100, 30)),
+    );
+    app.cell_of(tile).expect("in view")
 }
 
 fn at(x: u16, y: u16) -> Pos {

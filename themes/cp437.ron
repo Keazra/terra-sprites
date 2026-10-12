@@ -98,4 +98,23 @@
         // ball's `○` (design v25 §6.5).
         aim: (path: (glyph: '·', fg: yellow), end: (glyph: '°', fg: yellow)),
     ),
+    // Past the wall (M2 design §11): the glass, one tile outside the map all
+    // round, and the stars in space beyond it, drifting right to left, far to
+    // nearest. What a theme leaves out of this section, it draws as the default
+    // theme does.
+    space: (
+        glass: {
+            horizontal:   (glyph: '═', fg: light_cyan),
+            vertical:     (glyph: '║', fg: light_cyan),
+            top_left:     (glyph: '╔', fg: light_cyan),
+            top_right:    (glyph: '╗', fg: light_cyan),
+            bottom_left:  (glyph: '╚', fg: light_cyan),
+            bottom_right: (glyph: '╝', fg: light_cyan),
+        },
+        stars: {
+            far:     (glyph: '·', fg: dark_gray),
+            near:    (glyph: '∙', fg: gray),
+            nearest: (glyph: '*', fg: white),
+        },
+    ),
 )

@@ -155,7 +155,7 @@ impl Title {
                 pos.x.abs_diff(centre.x) + 2 * pos.y.abs_diff(centre.y)
             })
             .map(|sprite| (sprite.id(), sprite.pos()));
-        let areas = ui::areas(ui::MIN_SIZE, map);
+        let areas = ui::areas(ui::MIN_SIZE);
         let help = App::new(map, theme.clone(), world.seed(), areas);
         Title {
             theme,

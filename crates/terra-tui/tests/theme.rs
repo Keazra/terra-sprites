@@ -2,6 +2,7 @@ use ratatui::style::Color;
 use terra_sim::{DataPack, Terrain};
 use terra_tui::app::{CursorMode, StatusMark};
 use terra_tui::cp437;
+use terra_tui::space::{Depth, Pane};
 use terra_tui::theme::{SemanticTile, Theme};
 
 #[test]
@@ -137,7 +138,7 @@ fn a_theme_falls_back_to_the_objects_default_look_then_to_a_question_mark() {
 
 #[test]
 fn cp437_covers_the_glyphs_the_design_uses_and_nothing_outside_the_code_page() {
-    for c in "☺♣♠•○►♥≈═║╔╗╚╝╒╕╘╛╓╖╙╜│─┌┐└┘ az~#".chars()
+    for c in "☺♣♠•○►♥≈═║╔╗╚╝╒╕╘╛╓╖╙╜│─┌┐└┘·∙ az~#".chars()
     {
         assert!(cp437::contains(c), "{c:?} is in CP437");
     }
@@ -373,6 +374,12 @@ fn a_theme_glyph_outside_cp437_is_refused() {
         ("leash: (glyph: ';'", "leash: (glyph: '€'", "the leash"),
         ("idle: '-'", "idle: '✓'", "idle status mark"),
         ("left: '|'", "left: '¦'", "visible_frame left"),
+        (
+            "top_left:     (glyph: '+'",
+            "top_left:     (glyph: '┏'",
+            "glass's top_left",
+        ),
+        ("far:     (glyph: '.'", "far:     (glyph: '✦'", "far stars"),
     ] {
         let error = Theme::from_ron(&ascii_with(from, to), &pack).expect_err("refused");
         let glyph = to.chars().rev().nth(1).unwrap();
@@ -442,4 +449,66 @@ fn a_theme_from_before_the_young_draws_them_as_grown() {
             .glyph(SemanticTile::YoungSprite),
         "the edit took the young sprite out"
     );
+}
+
+/// A theme's glass, by piece, then its stars, far to nearest: glyph and
+/// colour.
+fn space(theme: &Theme) -> Vec<(char, Color)> {
+    let glass = Pane::ALL.map(|pane| theme.glass(pane));
+    let stars = Depth::ALL.map(|depth| theme.star(depth));
+    glass
+        .iter()
+        .chain(&stars)
+        .map(|glyph| (glyph.symbol, glyph.fg))
+        .collect()
+}
+
+#[test]
+fn the_themes_draw_the_glass_and_the_stars_as_the_design_tables_say() {
+    // M2 design §11.2, §11.3, §11.5: horizontal, vertical, then the four
+    // corners, from top left; the stars far, near and nearest.
+    let expected = |glass: &str, far, near| {
+        let glass = glass.chars().map(|c| (c, Color::LightCyan));
+        let stars = [
+            (far, Color::DarkGray),
+            (near, Color::Gray),
+            ('*', Color::White),
+        ];
+        glass.chain(stars).collect::<Vec<_>>()
+    };
+    assert_eq!(space(&Theme::cp437()), expected("═║╔╗╚╝", '·', '∙'));
+    assert_eq!(space(&Theme::ascii()), expected("-|++++", '.', '+'));
+}
+
+#[test]
+fn a_theme_from_before_space_draws_the_default_theme_s_glass_and_stars() {
+    // M2 design §11.5.
+    let pack = pack();
+    let start = ASCII_THEME.find("    space: (").expect("a space section");
+    let end = ASCII_THEME.rfind(')').expect("the theme's end");
+    let edited = format!("{}{}", &ASCII_THEME[..start], &ASCII_THEME[end..]);
+    assert!(!edited.contains("space:"), "{edited}");
+    let theme = Theme::from_ron(&edited, &pack).expect("loads");
+    assert_eq!(space(&theme), space(&Theme::cp437()));
+}
+
+#[test]
+fn a_theme_draws_what_it_leaves_out_of_space_as_the_default_theme_does() {
+    // M2 design §11.5: a piece of glass or a depth of stars at a time.
+    let pack = pack();
+    let edited = ascii_with(
+        "            top_left:     (glyph: '+', fg: light_cyan),\n",
+        "",
+    );
+    let edited = edited.replacen("            near:    (glyph: '+', fg: gray),\n", "", 1);
+    let theme = Theme::from_ron(&edited, &pack).expect("loads");
+    let (default, ascii) = (Theme::cp437(), Theme::ascii());
+    assert_eq!(theme.glass(Pane::TopLeft), default.glass(Pane::TopLeft));
+    assert_eq!(theme.glass(Pane::TopRight), ascii.glass(Pane::TopRight));
+    assert_eq!(theme.star(Depth::Near), default.star(Depth::Near));
+    assert_eq!(theme.star(Depth::Far), ascii.star(Depth::Far));
+    // A misspelt key is refused, rather than quietly drawn as the default.
+    let misspelt = ascii_with("top_left:", "top_lft:");
+    let error = Theme::from_ron(&misspelt, &pack).expect_err("refused");
+    assert!(error.contains("top_lft"), "{error}");
 }

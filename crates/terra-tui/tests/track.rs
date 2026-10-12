@@ -2,7 +2,7 @@
 
 use ratatui::layout::Rect;
 use terra_sim::{DataPack, Map, Pos, Scenario, ScriptedAction, World};
-use terra_tui::app::{App, Areas};
+use terra_tui::app::{App, Areas, Origin};
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
 
@@ -54,7 +54,12 @@ fn select(app: &mut App, world: &World, tile: Pos) {
 
 /// Whether the viewport has `tile` at its centre.
 fn centred_on(app: &App, tile: Pos) -> bool {
-    app.viewport() == at(tile.x - 10, tile.y - 5)
+    let (x, y) = (i32::from(tile.x), i32::from(tile.y));
+    app.viewport()
+        == Origin {
+            x: x - 10,
+            y: y - 5,
+        }
 }
 
 #[test]
@@ -101,8 +106,36 @@ fn tracking_follows_whichever_sprite_is_selected() {
     app.apply(Action::Track, &world);
     select(&mut app, &world, at(5, 5));
     assert!(app.tracking());
-    // At the wall, as close to centred as the wall lets it be.
-    assert_eq!(app.viewport(), at(0, 0));
+    // Centred, with the view a quarter of its width past the wall (M2
+    // design §11.1).
+    assert!(centred_on(&app, at(5, 5)), "{:?}", app.viewport());
+}
+
+#[test]
+fn track_stops_a_quarter_of_the_view_past_the_wall() {
+    // M2 design §11.1: a sprite in the corner, at (1, 1), would be centred
+    // from (-9, -4); the 20×10 view goes only 5 tiles past the wall
+    // sideways, and 2 up.
+    let row = ".".repeat(60);
+    let map = Map::from_ascii(&vec![row.as_str(); 40], &pack()).expect("valid drawing");
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &[(at(1, 1), None)],
+        scripted: &[],
+        newborns: &[],
+    };
+    let world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
+    let areas = Areas {
+        tiles: Rect::new(1, 2, 20, 10),
+        inspector: None,
+        event_log: None,
+        overlay: None,
+    };
+    let mut app = App::new(world.map(), Theme::cp437(), 1, areas);
+    select(&mut app, &world, at(1, 1));
+    app.apply(Action::Track, &world);
+    assert_eq!(app.viewport(), Origin { x: -5, y: -2 });
 }
 
 #[test]

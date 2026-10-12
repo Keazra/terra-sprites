@@ -36,7 +36,7 @@ fn assert_cp437(screen: &Buffer, what: &str) {
 fn played(ticks: u32, theme: Theme) -> (World, App) {
     let pack = DataPack::builtin().expect("built-in data pack is valid");
     let mut world = World::new(WorldConfig::builtin(&pack), pack, 7);
-    let areas = ui::areas(Size::new(100, 30), world.map());
+    let areas = ui::areas(Size::new(100, 30));
     let mut app = App::new(world.map(), theme, 7, areas);
     app.set_data_folder("/home/kel/.local/share/terra-sprites".into());
     for _ in 0..ticks {

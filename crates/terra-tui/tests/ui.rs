@@ -32,7 +32,7 @@ fn drawn_world(rows: &[&str]) -> World {
 /// The game draws nothing smaller than 100×30 (design §6.1), so a smaller
 /// screen is a corner of one that size: see `render`.
 fn app_for(world: &World, theme: Theme, width: u16, height: u16) -> App {
-    let areas = ui::areas(at_least_min(width, height), world.map());
+    let areas = ui::areas(at_least_min(width, height));
     App::new(world.map(), theme, 7, areas)
 }
 
@@ -91,11 +91,34 @@ fn before_hints(status: &str) -> &str {
     status.split("  ").next().expect("a status line")
 }
 
-/// The screen cell the pointer is on to point at tile (x, y), in a map view
-/// drawn from cell (1, 2) and not scrolled: one down and right of the tile
-/// (design v27 §6.5).
-fn pointer_on(x: u16, y: u16) -> Position {
-    Position::new(2 + x, 3 + y)
+/// The screen cell where `world`'s map tile (x, y) is drawn on a 100×30
+/// screen, as `app_for` makes for any smaller one, not scrolled. A small map
+/// is drawn in the middle of the map view (M2 design §11.1).
+fn cell(world: &World, x: u16, y: u16) -> Position {
+    let app = app_for(world, Theme::cp437(), 100, 30);
+    app.cell_of(Pos { x, y }).expect("in view")
+}
+
+/// The screen cell the pointer is on to point at `world`'s map tile (x, y),
+/// as `cell` places it: one down and right of the tile (design v27 §6.5).
+fn pointer_on(world: &World, x: u16, y: u16) -> Position {
+    let at = cell(world, x, y);
+    Position::new(at.x + 1, at.y + 1)
+}
+
+/// `world`'s map as drawn on `screen`, a row a line, with the glass round it
+/// (M2 design §11.2): the first line is the glass along its top, and each
+/// line starts and ends with the glass at its sides.
+fn map_rows(screen: &Buffer, world: &World) -> Vec<String> {
+    let first = cell(world, 0, 0);
+    let (width, height) = (world.map().width(), world.map().height());
+    (first.y - 1..=first.y + height)
+        .map(|y| {
+            (first.x - 1..=first.x + width)
+                .map(|x| screen[(x, y)].symbol())
+                .collect()
+        })
+        .collect()
 }
 
 /// Renders one frame of the default world and returns the top line as text.
@@ -170,55 +193,74 @@ const SMALL_MAP: [&str; 4] = [
 ];
 
 #[test]
-fn the_map_view_draws_its_tiles_inside_its_border() {
-    let small = drawn_world(&SMALL_MAP);
-    assert_eq!(
-        ui::areas(Size::new(100, 30), small.map()).tiles,
-        Rect::new(1, 2, 10, 4),
-        "a small map gets a shrunk map view"
-    );
-    assert_eq!(
-        ui::areas(Size::new(100, 30), big_world().map()).tiles,
-        Rect::new(1, 2, 52, 21),
-        "a big map fills the space between the top bar and the event log"
-    );
+fn the_map_view_takes_the_room_between_the_top_bar_and_the_event_log() {
+    // M2 design §11.1: a small map no longer shrinks it.
+    assert_eq!(ui::areas(Size::new(100, 30)).tiles, Rect::new(1, 2, 52, 21));
 }
 
 #[test]
-fn a_small_map_in_the_cp437_theme_shows_the_select_cursor() {
+fn a_small_map_is_drawn_in_the_middle_of_the_map_view_with_space_round_it() {
+    // M2 design §11.1: the 10×4 map, in the 52×21 tiles of a 100×30 screen's
+    // map view, has 21 columns of space on either side, its glass included,
+    // 8 rows above and 9 below.
     let world = drawn_world(&SMALL_MAP);
-    let app = app_for(&world, Theme::cp437(), 40, 8);
-    let screen = render(&app, &world, 40, 8);
-    // The cursor starts at the map's centre, (5, 2), and covers (4, 1) to (6, 3).
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    assert_eq!(app.cell_of(Pos { x: 0, y: 0 }), Some(Position::new(22, 10)));
+    assert_eq!(app.cell_of(Pos { x: 9, y: 3 }), Some(Position::new(31, 13)));
+    let screen = render(&app, &world, 100, 30);
+    let corners = [(21, 9, "╔"), (32, 9, "╗"), (21, 14, "╚"), (32, 14, "╝")];
+    for (x, y, pane) in corners {
+        assert_eq!(screen[(x, y)].symbol(), pane, "({x}, {y})");
+    }
+    for (x, y) in [(20, 10), (33, 13), (22, 8), (31, 15), (1, 2), (52, 22)] {
+        let star = screen[(x, y)].symbol();
+        assert!(matches!(star, " " | "·" | "∙" | "*"), "space at ({x}, {y})");
+    }
+    // It doesn't scroll, in any direction.
+    for (dx, dy) in [(-5, 0), (5, 0), (0, -5), (0, 5)] {
+        app.apply(Action::Scroll { dx, dy }, &world);
+        assert_eq!(app.cell_of(Pos { x: 0, y: 0 }), Some(Position::new(22, 10)));
+    }
+}
+
+#[test]
+fn a_small_map_in_the_cp437_theme_shows_the_select_cursor_inside_its_glass() {
+    let world = drawn_world(&SMALL_MAP);
+    let app = app_for(&world, Theme::cp437(), 100, 30);
+    let screen = render(&app, &world, 100, 30);
+    // The cursor starts at the map's centre, (5, 2), and covers (4, 1) to
+    // (6, 3). The glass, one tile out, is light cyan (M2 design §11.2).
     assert_eq!(
-        lines(&screen),
+        map_rows(&screen, &world),
         [
-            " Terra Sprites │ tick 0 │ ► 1x │ seed 7",
-            "╔═ Map ════╗",
+            "╔══════════╗",
             "║....~~~~..║",
             "║..#.♦↓·~..║",
             "║..#.→~←.,,║",
             "║::..·↑♦,,,║",
             "╚══════════╝",
-            " (5,2) shallow water │ SELECT",
         ]
     );
+    let corner = cell(&world, 0, 0);
+    assert_eq!(screen[(corner.x - 1, corner.y - 1)].fg, Color::LightCyan);
+    assert!(lines(&screen)[29].starts_with(" (5,2) shallow water │ SELECT"));
 }
 
 #[test]
 fn a_small_map_in_the_ascii_theme_differs_only_in_its_glyphs() {
+    // In ASCII the glass is `-`, `|` and `+` (M2 design §11.5).
     let world = drawn_world(&SMALL_MAP);
-    let app = app_for(&world, Theme::ascii(), 40, 8);
-    let screen = render(&app, &world, 40, 8);
+    let app = app_for(&world, Theme::ascii(), 100, 30);
+    let screen = render(&app, &world, 100, 30);
     assert_eq!(
-        lines(&screen)[1..7],
+        map_rows(&screen, &world),
         [
-            "╔═ Map ════╗",
-            "║....~~~~..║",
-            "║..#.Sv-~..║",
-            "║..#.>~<.,,║",
-            "║::..-^S,,,║",
-            "╚══════════╝",
+            "+----------+",
+            "|....~~~~..|",
+            "|..#.Sv-~..|",
+            "|..#.>~<.,,|",
+            "|::..-^S,,,|",
+            "+----------+",
         ]
     );
 }
@@ -226,25 +268,32 @@ fn a_small_map_in_the_ascii_theme_differs_only_in_its_glyphs() {
 #[test]
 fn the_cursor_centre_is_reverse_video_and_its_marks_take_the_modes_colour() {
     let world = drawn_world(&SMALL_MAP);
-    let app = app_for(&world, Theme::cp437(), 40, 8);
-    let screen = render(&app, &world, 40, 8);
-    // The cursor's centre, (5, 2), is at screen column 1 + 5, row 2 + 2.
-    let centre = &screen[(6, 4)];
-    assert_eq!(centre.symbol(), "~");
-    assert!(centre.modifier.contains(Modifier::REVERSED));
-    assert_eq!(centre.fg, Color::Cyan, "the tile keeps its own colour");
-    for (column, row) in [
-        (5, 3),
-        (6, 3),
-        (7, 3),
-        (5, 4),
-        (7, 4),
-        (5, 5),
-        (6, 5),
-        (7, 5),
+    let app = app_for(&world, Theme::cp437(), 100, 30);
+    let screen = render(&app, &world, 100, 30);
+    // The cursor's centre is the map's, (5, 2).
+    let centre = cell(&world, 5, 2);
+    assert_eq!(screen[centre].symbol(), "~");
+    assert!(screen[centre].modifier.contains(Modifier::REVERSED));
+    assert_eq!(
+        screen[centre].fg,
+        Color::Cyan,
+        "the tile keeps its own colour"
+    );
+    for (dx, dy) in [
+        (-1, -1),
+        (0, -1),
+        (1, -1),
+        (-1, 0),
+        (1, 0),
+        (-1, 1),
+        (0, 1),
+        (1, 1),
     ] {
-        let piece = &screen[(column, row)];
-        assert_eq!(piece.fg, Color::White, "Select is white: ({column}, {row})");
+        let piece = &screen[(
+            centre.x.wrapping_add_signed(dx),
+            centre.y.wrapping_add_signed(dy),
+        )];
+        assert_eq!(piece.fg, Color::White, "Select is white: ({dx}, {dy})");
         assert!(!piece.modifier.contains(Modifier::REVERSED));
     }
 }
@@ -253,13 +302,18 @@ fn the_cursor_centre_is_reverse_video_and_its_marks_take_the_modes_colour() {
 fn in_train_mode_the_cursor_is_light_magenta_in_every_theme() {
     // Design v22 §6.5: it stands out on grass, where it mostly sits.
     let world = drawn_world(&SMALL_MAP);
+    let centre = cell(&world, 5, 2);
     for theme in [Theme::cp437(), Theme::ascii()] {
-        let mut app = app_for(&world, theme, 40, 8);
+        let mut app = app_for(&world, theme, 100, 30);
         app.apply(Action::Mode(CursorMode::Train), &world);
-        let screen = render(&app, &world, 40, 8);
-        // The cursor's mode mark, at the top left of its centre (6, 4).
-        assert_eq!(screen[(5, 3)].fg, Color::LightMagenta);
-        assert_eq!(screen[(6, 3)].fg, Color::LightMagenta, "and its arrows");
+        let screen = render(&app, &world, 100, 30);
+        // The cursor's mode mark, at the top left of its centre.
+        assert_eq!(screen[(centre.x - 1, centre.y - 1)].fg, Color::LightMagenta);
+        assert_eq!(
+            screen[(centre.x, centre.y - 1)].fg,
+            Color::LightMagenta,
+            "and its arrows"
+        );
     }
 }
 
@@ -269,18 +323,18 @@ fn following_the_cursor_s_arrows_are_solid() {
     // arrows; its status line says the Cursor follows it. Following doesn't
     // select it (design v26 §6.5), so it's drawn as any sprite is.
     let world = garden_with_sprites();
-    let on_it = pointer_on(2, 3);
+    let on_it = pointer_on(&world, 2, 3);
     for (theme, expected) in [
         (Theme::cp437(), [".♦▼·......", ".►☺◄..○...", ".·▲♦......"]),
         (Theme::ascii(), [".Sv-......", ".>@<..o...", ".-^S......"]),
     ] {
-        let mut app = app_for(&world, theme, 40, 10);
+        let mut app = app_for(&world, theme, 100, 30);
         app.apply(Action::middle_click(on_it), &world);
-        let map_rows: Vec<String> = lines(&render(&app, &world, 40, 10))[4..7]
+        let rows: Vec<String> = map_rows(&render(&app, &world, 100, 30), &world)[3..6]
             .iter()
             .map(|row| row.chars().skip(1).take(10).collect())
             .collect();
-        assert_eq!(map_rows, expected);
+        assert_eq!(rows, expected);
     }
 }
 
@@ -289,14 +343,15 @@ fn the_status_marks_show_what_the_cursor_reports() {
     // Design v21 §6.5: a Train click flashes `+` in both status marks, top
     // right and bottom left, in the mode's colour.
     let world = garden_with_sprites();
-    let on_it = pointer_on(2, 3);
-    let mut app = app_for(&world, Theme::cp437(), 40, 10);
+    let on_it = pointer_on(&world, 2, 3);
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::Mode(CursorMode::Train), &world);
     app.apply(Action::left_click(on_it), &world);
-    let screen = render(&app, &world, 40, 10);
-    for (column, row) in [(4, 4), (2, 6)] {
-        assert_eq!(screen[(column, row)].symbol(), "+", "({column}, {row})");
-        assert_eq!(screen[(column, row)].fg, Color::LightMagenta);
+    let screen = render(&app, &world, 100, 30);
+    let centre = cell(&world, 2, 3);
+    for at in [(centre.x + 1, centre.y - 1), (centre.x - 1, centre.y + 1)] {
+        assert_eq!(screen[at].symbol(), "+", "{at:?}");
+        assert_eq!(screen[at].fg, Color::LightMagenta);
     }
 }
 
@@ -308,15 +363,15 @@ fn in_grab_mode_the_status_marks_show_what_the_cursor_has_hold_of() {
     // Cursor's centre.
     let world = garden_with_sprites();
     let marks = |app: &App, centre: (u16, u16)| {
-        let screen = render(app, &world, 40, 10);
+        let screen = render(app, &world, 100, 30);
         [(centre.0 + 1, centre.1 - 1), (centre.0 - 1, centre.1 + 1)].map(|cell| {
             assert_eq!(screen[cell].fg, Color::Yellow, "{cell:?}");
             screen[cell].symbol().to_string()
         })
     };
-    let (sprite, ball) = (pointer_on(2, 3), pointer_on(6, 3));
+    let (sprite, ball) = (pointer_on(&world, 2, 3), pointer_on(&world, 6, 3));
     for (on, glyph) in [(sprite, "☺"), (ball, "○")] {
-        let mut app = app_for(&world, Theme::cp437(), 40, 10);
+        let mut app = app_for(&world, Theme::cp437(), 100, 30);
         app.apply(Action::Mode(CursorMode::Grab), &world);
         app.apply(Action::Point(on), &world);
         // The Cursor's centre is up and left of the pointer.
@@ -330,11 +385,11 @@ fn in_grab_mode_the_status_marks_show_what_the_cursor_has_hold_of() {
 #[test]
 fn a_grab_click_with_nothing_to_act_on_flashes_a_question_mark() {
     let world = garden_with_sprites();
-    let empty = pointer_on(4, 3);
-    let mut app = app_for(&world, Theme::cp437(), 40, 10);
+    let empty = pointer_on(&world, 4, 3);
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::Mode(CursorMode::Grab), &world);
     app.apply(Action::left_click(empty), &world);
-    let screen = render(&app, &world, 40, 10);
+    let screen = render(&app, &world, 100, 30);
     // The Cursor's centre is up and left of the pointer.
     let centre = (empty.x - 1, empty.y - 1);
     for cell in [(centre.0 + 1, centre.1 - 1), (centre.0 - 1, centre.1 + 1)] {
@@ -345,7 +400,7 @@ fn a_grab_click_with_nothing_to_act_on_flashes_a_question_mark() {
 #[test]
 fn a_flashing_dotted_leash_runs_from_the_cursor_to_the_led_sprite_over_empty_ground() {
     // Design v23 §6.5. The sprite is on map tile (1, 2) and a berry on
-    // (4, 2); a map tile (x, y) is drawn at screen cell (x + 1, y + 2).
+    // (4, 2).
     let pack = pack();
     let map = Map::from_ascii(&["............"; 5], &pack).expect("valid drawing");
     let scenario = Scenario {
@@ -356,19 +411,19 @@ fn a_flashing_dotted_leash_runs_from_the_cursor_to_the_led_sprite_over_empty_gro
         newborns: &[],
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
-    let mut app = app_for(&world, Theme::cp437(), 40, 10);
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::Mode(CursorMode::Grab), &world);
-    app.apply(Action::left_click(pointer_on(1, 2)), &world);
-    app.apply(Action::Point(pointer_on(6, 2)), &world);
+    app.apply(Action::left_click(pointer_on(&world, 1, 2)), &world);
+    app.apply(Action::Point(pointer_on(&world, 6, 2)), &world);
     let row = |app: &App| -> String {
-        lines(&render(app, &world, 40, 10))[4]
+        map_rows(&render(app, &world, 100, 30), &world)[1 + 2]
             .chars()
             .skip(1)
             .take(12)
             .collect()
     };
     assert_eq!(row(&app), ".☺··•→.←....", "dots, and the berry over them");
-    let dot = &render(&app, &world, 40, 10)[(1 + 2, 2 + 2)];
+    let dot = &render(&app, &world, 100, 30)[cell(&world, 2, 2)];
     assert_eq!(dot.fg, Color::Yellow);
     app.animate(Duration::from_millis(500));
     assert_eq!(
@@ -384,38 +439,70 @@ fn a_flashing_dotted_leash_runs_from_the_cursor_to_the_led_sprite_over_empty_gro
 #[test]
 fn map_tiles_take_their_theme_colours() {
     let world = drawn_world(&SMALL_MAP);
-    let mut app = app_for(&world, Theme::cp437(), 40, 8);
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
     // Point at the top-left tile, so the cursor sits clear of the tiles checked.
-    app.apply(Action::Point(Position::new(1, 2)), &world);
-    let screen = render(&app, &world, 40, 8);
-    assert_eq!(screen[(3, 2)].fg, Color::Green, "grass");
-    assert_eq!(screen[(6, 3)].fg, Color::Blue, "deep water");
-    assert_eq!(screen[(3, 3)].fg, Color::Gray, "rock");
+    app.apply(Action::Point(pointer_on(&world, 0, 0)), &world);
+    let screen = render(&app, &world, 100, 30);
+    assert_eq!(screen[cell(&world, 2, 0)].fg, Color::Green, "grass");
+    assert_eq!(screen[cell(&world, 5, 1)].fg, Color::Blue, "deep water");
+    assert_eq!(screen[cell(&world, 2, 1)].fg, Color::Gray, "rock");
 }
 
 #[test]
-fn the_border_is_single_where_the_map_carries_on_and_double_at_the_wall() {
+fn the_border_is_single_lined_on_every_side_and_the_wall_is_glass() {
+    // M2 design §11.2: the glass shows where the wall is, one tile outside
+    // the map, so the border needn't.
     let world = big_world();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    // In the middle of the map, every side has more map beyond it.
-    let rows = map_view_rows(&render(&app, &world, 100, 30));
     let ends = |row: &String| {
         let chars: Vec<char> = row.chars().collect();
         (chars[0], chars[chars.len() - 1])
     };
-    assert!(rows[0].starts_with("┌─ Map ──"), "{}", rows[0]);
-    assert_eq!(ends(&rows[0]), ('┌', '┐'));
-    assert!(rows[1..22].iter().all(|row| ends(row) == ('│', '│')));
-    assert_eq!(ends(&rows[22]), ('└', '┘'));
-    assert!(rows[22].chars().skip(1).take(52).all(|c| c == '─'));
-
-    // Scrolled to the top-left corner, the top and left sides are the wall.
+    for (dx, dy) in [(0, 0), (-200, -200), (200, 200)] {
+        app.apply(Action::Scroll { dx, dy }, &world);
+        let rows = map_view_rows(&render(&app, &world, 100, 30));
+        assert!(rows[0].starts_with("┌─ Map ──"), "{}", rows[0]);
+        assert_eq!(ends(&rows[0]), ('┌', '┐'));
+        assert!(rows[1..22].iter().all(|row| ends(row) == ('│', '│')));
+        assert_eq!(ends(&rows[22]), ('└', '┘'));
+        assert!(rows[22].chars().skip(1).take(52).all(|c| c == '─'));
+    }
+    // Scrolled to the top-left corner, the view is a quarter of itself past
+    // the wall: 13 columns and 5 rows, the glass in the last of each.
     app.apply(Action::Scroll { dx: -200, dy: -200 }, &world);
     let rows = map_view_rows(&render(&app, &world, 100, 30));
-    assert!(rows[0].starts_with("╔═ Map ══"), "{}", rows[0]);
-    assert_eq!(ends(&rows[0]), ('╔', '╕'));
-    assert!(rows[1..22].iter().all(|row| ends(row) == ('║', '│')));
-    assert_eq!(ends(&rows[22]), ('╙', '┘'));
+    let glass: String = rows[5].chars().skip(13).take(6).collect();
+    assert_eq!(glass, "╔═════");
+    let side: String = rows[6].chars().skip(13).take(3).collect();
+    assert_eq!(side, "║..");
+}
+
+#[test]
+fn the_glass_runs_all_round_the_map_one_tile_out() {
+    // M2 design §11.2. From each corner of a big map, scrolled as far as it
+    // goes, the glass's corner is a tile out from the map's, and its sides
+    // run along the map's edges.
+    let world = big_world();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    for (dx, dy, corner, glass, beside) in [
+        (-200, -200, Pos { x: 0, y: 0 }, "╔", ["═", "║"]),
+        (200, -200, Pos { x: 119, y: 0 }, "╗", ["═", "║"]),
+        (-200, 200, Pos { x: 0, y: 59 }, "╚", ["═", "║"]),
+        (200, 200, Pos { x: 119, y: 59 }, "╝", ["═", "║"]),
+    ] {
+        app.apply(Action::Scroll { dx, dy }, &world);
+        let screen = render(&app, &world, 100, 30);
+        let at = app.cell_of(corner).expect("the corner in view");
+        let (out_x, out_y) = (
+            if corner.x == 0 { at.x - 1 } else { at.x + 1 },
+            if corner.y == 0 { at.y - 1 } else { at.y + 1 },
+        );
+        assert_eq!(screen[(out_x, out_y)].symbol(), glass, "{corner:?}");
+        assert_eq!(screen[(out_x, out_y)].fg, Color::LightCyan);
+        assert_eq!(screen[(at.x, out_y)].symbol(), beside[0], "{corner:?}");
+        assert_eq!(screen[(out_x, at.y)].symbol(), beside[1], "{corner:?}");
+        assert_eq!(screen[at].symbol(), ".", "the map's corner tile");
+    }
 }
 
 #[test]
@@ -452,7 +539,7 @@ fn a_cursor_whose_target_is_out_of_view_is_not_drawn_at_all() {
     // border beside it, then move the pointer off the map and scroll left, so
     // the cursor's tile leaves the view.
     app.apply(Action::Point(Position::new(53, 12)), &world);
-    assert_eq!(app.cursor().x, app.viewport().x + 51);
+    assert_eq!(i32::from(app.cursor().x), app.viewport().x + 51);
     app.apply(Action::Point(Position::new(0, 12)), &world);
     app.apply(Action::Scroll { dx: -1, dy: 0 }, &world);
     let rows = map_view_rows(&render(&app, &world, 100, 30));
@@ -478,8 +565,7 @@ fn the_status_line_names_the_terrain_under_the_cursor() {
     ];
     for ((x, y), expected) in cases {
         let mut app = app_for(&world, Theme::cp437(), 40, 8);
-        // Tiles are drawn from screen cell (1, 2).
-        app.apply(Action::Point(pointer_on(x, y)), &world);
+        app.apply(Action::Point(pointer_on(&world, x, y)), &world);
         assert_eq!(
             before_hints(&lines(&render(&app, &world, 40, 8))[7]),
             expected
@@ -519,17 +605,28 @@ fn the_quit_prompt_takes_over_the_status_line() {
 }
 
 #[test]
-fn a_frame_bigger_than_the_fitted_view_draws_no_tiles_past_the_wall() {
+fn a_frame_bigger_than_the_fitted_view_draws_the_glass_and_space_past_the_wall() {
     // The terminal can grow between the app fitting its view and the frame
     // being drawn, so for one frame the map view can be wider and taller than
-    // the part of the map the viewport has room for.
+    // the part of the map the viewport has room for: it shows the map as far
+    // as it goes, and the glass and space past it.
     let world = big_world();
     let mut app = app_for(&world, Theme::cp437(), 100, 30); // 52×21 tiles
-    app.apply(Action::Scroll { dx: 200, dy: 200 }, &world); // tiles (68, 39) to (119, 59): the bottom-right corner
+    // Tiles (81, 44) on: a quarter of the view, 13 and 5, past the wall.
+    app.apply(Action::Scroll { dx: 200, dy: 200 }, &world);
     let screen = render(&app, &world, 140, 40); // room for 92×31 tiles
-    for y in 2..23 {
-        let tiles: String = (1..54).map(|x| screen[(x, y)].symbol()).collect();
-        assert_eq!(tiles, format!("{} ", ".".repeat(52)), "row {y}");
+    let row = |y: u16| -> String { (1..41).map(|x| screen[(x, y)].symbol()).collect() };
+    for y in 2..18 {
+        assert_eq!(row(y), format!("{}║", ".".repeat(39)), "row {y}");
+    }
+    assert_eq!(row(18), format!("{}╝", "═".repeat(39)));
+    for y in 19..33 {
+        for x in 41..93 {
+            assert!(
+                matches!(screen[(x, y)].symbol(), " " | "·" | "∙" | "*"),
+                "space at ({x}, {y})"
+            );
+        }
     }
 }
 
@@ -579,59 +676,69 @@ fn garden_with_sprites() -> World {
 #[test]
 fn sprites_are_drawn_with_their_theme_glyph_over_any_item() {
     let world = garden_with_sprites();
-    let cp437 = pointing_at(&world, Theme::cp437(), 40, 9, 0, 4);
-    let screen = render(&cp437, &world, 40, 9);
-    assert_eq!(lines(&screen)[3], "║.'..♠..☺..║", "the sprite on the berry");
-    assert_eq!(screen[(3, 5)].symbol(), "☺");
-    let ascii = pointing_at(&world, Theme::ascii(), 40, 9, 0, 4);
-    assert_eq!(lines(&render(&ascii, &world, 40, 9))[3], "║.'..*..@..║");
+    let cp437 = pointing_at(&world, Theme::cp437(), 100, 30, 0, 4);
+    let screen = render(&cp437, &world, 100, 30);
+    assert_eq!(
+        map_rows(&screen, &world)[2],
+        "║.'..♠..☺..║",
+        "the sprite on the berry"
+    );
+    assert_eq!(screen[cell(&world, 2, 3)].symbol(), "☺");
+    let ascii = pointing_at(&world, Theme::ascii(), 100, 30, 0, 4);
+    let screen = render(&ascii, &world, 100, 30);
+    assert_eq!(map_rows(&screen, &world)[2], "|.'..*..@..|");
 }
 
 #[test]
 fn the_selected_sprite_is_drawn_with_its_own_glyph() {
     let world = garden_with_sprites();
-    let mut cp437 = pointing_at(&world, Theme::cp437(), 40, 9, 7, 1);
-    cp437.apply(Action::left_click(pointer_on(7, 1)), &world);
-    cp437.apply(Action::Point(pointer_on(0, 4)), &world); // the cursor out of the way
-    let screen = render(&cp437, &world, 40, 9);
-    assert_eq!(lines(&screen)[3], "║.'..♠..☻..║", "the selected sprite");
-    assert_eq!(screen[(3, 5)].symbol(), "☺", "the other sprite");
+    let mut cp437 = pointing_at(&world, Theme::cp437(), 100, 30, 7, 1);
+    cp437.apply(Action::left_click(pointer_on(&world, 7, 1)), &world);
+    cp437.apply(Action::Point(pointer_on(&world, 0, 4)), &world); // the cursor out of the way
+    let screen = render(&cp437, &world, 100, 30);
+    assert_eq!(
+        map_rows(&screen, &world)[2],
+        "║.'..♠..☻..║",
+        "the selected sprite"
+    );
+    assert_eq!(screen[cell(&world, 2, 3)].symbol(), "☺", "the other sprite");
 
     // In ascii, `&` is already the berry bush, so the selected sprite is `@` in reverse video.
-    let mut ascii = pointing_at(&world, Theme::ascii(), 40, 9, 7, 1);
-    ascii.apply(Action::left_click(pointer_on(7, 1)), &world);
-    ascii.apply(Action::Point(pointer_on(0, 4)), &world);
-    let screen = render(&ascii, &world, 40, 9);
-    assert_eq!(screen[(8, 3)].symbol(), "@");
-    assert!(screen[(8, 3)].modifier.contains(Modifier::REVERSED));
-    assert!(!screen[(3, 5)].modifier.contains(Modifier::REVERSED));
+    let mut ascii = pointing_at(&world, Theme::ascii(), 100, 30, 7, 1);
+    ascii.apply(Action::left_click(pointer_on(&world, 7, 1)), &world);
+    ascii.apply(Action::Point(pointer_on(&world, 0, 4)), &world);
+    let screen = render(&ascii, &world, 100, 30);
+    let (selected, other) = (cell(&world, 7, 1), cell(&world, 2, 3));
+    assert_eq!(screen[selected].symbol(), "@");
+    assert!(screen[selected].modifier.contains(Modifier::REVERSED));
+    assert!(!screen[other].modifier.contains(Modifier::REVERSED));
 }
 
-/// An app on `world` with the cursor pointed at tile `(x, y)` of a small map,
-/// whose tiles are drawn from screen cell (1, 2).
+/// An app on `world` with the cursor pointed at tile `(x, y)` of a small map.
 fn pointing_at(world: &World, theme: Theme, width: u16, height: u16, x: u16, y: u16) -> App {
     let mut app = app_for(world, theme, width, height);
-    app.apply(Action::Point(pointer_on(x, y)), world);
+    app.apply(Action::Point(pointer_on(world, x, y)), world);
     app
 }
 
 #[test]
 fn objects_are_drawn_with_their_themes_glyph_for_their_visual_state() {
     let world = garden(pack());
-    let app = pointing_at(&world, Theme::cp437(), 40, 9, 0, 4); // the cursor out of the way
-    let screen = render(&app, &world, 40, 9);
-    assert_eq!(lines(&screen)[3], "║.'..♠..•..║");
+    let app = pointing_at(&world, Theme::cp437(), 100, 30, 0, 4); // the cursor out of the way
+    let screen = render(&app, &world, 100, 30);
+    assert_eq!(map_rows(&screen, &world)[2], "║.'..♠..•..║");
     assert_eq!(
-        screen[(7, 5)].symbol(),
+        screen[cell(&world, 6, 3)].symbol(),
         "○",
         "the ball, beside the cursor's arrows"
     );
-    assert_eq!(screen[(2, 3)].fg, Color::Green, "a seedling");
-    assert_eq!(screen[(5, 3)].fg, Color::Magenta, "a thornbush");
-    assert_eq!(screen[(8, 3)].fg, Color::Red, "a berry");
+    assert_eq!(screen[cell(&world, 1, 1)].fg, Color::Green, "a seedling");
+    assert_eq!(screen[cell(&world, 4, 1)].fg, Color::Magenta, "a thornbush");
+    assert_eq!(screen[cell(&world, 7, 1)].fg, Color::Red, "a berry");
 
-    let ascii = pointing_at(&world, Theme::ascii(), 40, 9, 0, 4);
-    assert_eq!(lines(&render(&ascii, &world, 40, 9))[3], "║.'..*..%..║");
+    let ascii = pointing_at(&world, Theme::ascii(), 100, 30, 0, 4);
+    let screen = render(&ascii, &world, 100, 30);
+    assert_eq!(map_rows(&screen, &world)[2], "|.'..*..%..|");
 }
 
 #[test]
@@ -645,8 +752,8 @@ fn a_fruiting_bush_is_drawn_bold_red() {
     for _ in 0..3 {
         world.step();
     }
-    let app = pointing_at(&world, Theme::cp437(), 40, 9, 0, 4);
-    let bush = &render(&app, &world, 40, 9)[(2, 3)];
+    let app = pointing_at(&world, Theme::cp437(), 100, 30, 0, 4);
+    let bush = &render(&app, &world, 100, 30)[cell(&world, 1, 1)];
     assert_eq!(bush.symbol(), "♣");
     assert_eq!(bush.fg, Color::Red);
     assert!(bush.modifier.contains(Modifier::BOLD));
@@ -767,7 +874,7 @@ fn below_100_by_30_the_screen_says_the_terminal_is_too_small() {
     // Design §6.1: it replaces every panel, and nothing can be clicked.
     let world = big_world();
     for (width, height) in [(99, 30), (100, 29), (80, 24)] {
-        let areas = ui::areas(Size::new(width, height), world.map());
+        let areas = ui::areas(Size::new(width, height));
         assert!(areas.tiles.is_empty() && areas.inspector.is_none());
         let app = app_for(&world, Theme::cp437(), 100, 30);
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
@@ -784,7 +891,7 @@ fn below_100_by_30_the_screen_says_the_terminal_is_too_small() {
         assert_eq!(text, ["Terminal too small", size.as_str()]);
     }
     assert_eq!(
-        ui::areas(Size::new(100, 30), world.map()).tiles.width,
+        ui::areas(Size::new(100, 30)).tiles.width,
         52,
         "from 100 columns, the inspector takes 46"
     );
@@ -795,12 +902,7 @@ fn while_the_terminal_is_too_small_the_game_runs_on_and_esc_still_asks_to_quit()
     // Design v29 §6.1: shrinking the window doesn't pause it.
     let mut world = big_world();
     let small = Size::new(80, 24);
-    let mut app = App::new(
-        world.map(),
-        Theme::cp437(),
-        7,
-        ui::areas(small, world.map()),
-    );
+    let mut app = App::new(world.map(), Theme::cp437(), 7, ui::areas(small));
     let before = world.tick();
     let mut ran = 0;
     for _ in 0..10 {
@@ -1918,8 +2020,7 @@ fn the_attention_marker_shades_the_one_thing_the_selected_sprite_attends_to() {
     );
 
     // With no sprite selected, nothing is marked.
-    let grass = app.cell_of(Pos { x: 0, y: 0 }).expect("in view");
-    app.apply(Action::left_click(grass), &world);
+    app.apply(Action::left_click(pointer_on(&world, 0, 0)), &world);
     assert_eq!(app.selection(), None);
     assert_eq!(render(&app, &world, 100, 30)[berry_cell].bg, Color::Reset);
 }
@@ -2436,7 +2537,7 @@ fn the_wheel_over_the_inspector_scrolls_3_lines_a_notch_and_elsewhere_does_not()
     assert_eq!(app.mode(), CursorMode::Select, "the mode stays");
     app.apply(
         Action::Wheel {
-            at: Position::new(4, 4),
+            at: pointer_on(&world, 2, 1),
             notches: 2,
         },
         &world,
@@ -2489,7 +2590,7 @@ fn selecting_another_sprite_starts_its_tab_from_the_top_and_the_same_one_again_d
     open(&mut app, &world, Tab::Genome);
     app.apply(Action::ScrollTab { pages: 1 }, &world);
     // The first sprite is at (2, 3).
-    app.apply(Action::left_click(pointer_on(2, 3)), &world);
+    app.apply(Action::left_click(pointer_on(&world, 2, 3)), &world);
     assert_eq!(
         first_and_last(&app, &world).0,
         "always → boredom +.021",
@@ -2505,7 +2606,7 @@ fn after_the_inspector_grows_page_up_scrolls_from_what_is_shown() {
     open(&mut app, &world, Tab::Genome);
     app.apply(Action::ScrollTab { pages: 2 }, &world); // the end: line 40 at the top
     // At 100×40 the tab has 31 rows, so the end is line 30 at the top.
-    app.fit(ui::areas(Size::new(100, 40), world.map()));
+    app.fit(ui::areas(Size::new(100, 40)));
     app.apply(Action::ScrollTab { pages: -1 }, &world);
     let rows = right_part(&render(&app, &world, 100, 40), 46);
     assert_eq!(inside(&rows[2]), "EMITTERS", "a page up from line 30");
@@ -2668,7 +2769,7 @@ fn selecting_the_selected_sprite_from_a_scrolled_world_tab_opens_body_at_the_top
     app.apply(Action::PreviousTab, &world);
     app.apply(Action::ScrollTab { pages: 1 }, &world);
     // The first sprite is at (2, 3).
-    app.apply(Action::left_click(pointer_on(2, 3)), &world);
+    app.apply(Action::left_click(pointer_on(&world, 2, 3)), &world);
     let rows = right_part(&render(&app, &world, 100, 12), 46);
     assert!(rows[1].contains("[Body]"), "{:?}", rows[1]);
     assert!(inside(&rows[2]).starts_with("age "), "{:?}", rows[2]);
@@ -2974,7 +3075,7 @@ fn the_status_line_names_train_mode_and_what_the_cursor_follows() {
     let world = garden_with_sprites();
     let id = world.sprite_at(Pos { x: 2, y: 3 }).expect("a sprite").id();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    let on_it = pointer_on(2, 3);
+    let on_it = pointer_on(&world, 2, 3);
     app.apply(Action::left_click(on_it), &world);
     app.apply(Action::middle_click(on_it), &world);
     app.apply(Action::Mode(CursorMode::Train), &world);
@@ -2996,10 +3097,10 @@ fn the_status_line_says_what_the_cursor_holds_or_leads_in_every_mode() {
         .id();
     let cases = [
         (
-            pointer_on(2, 3),
+            pointer_on(&world, 2, 3),
             format!(" │ leading: Sprite #{}", sprite.0),
         ),
-        (pointer_on(6, 3), " │ holding: ball".to_string()),
+        (pointer_on(&world, 6, 3), " │ holding: ball".to_string()),
     ];
     for (on, says) in cases {
         let mut app = app_for(&world, Theme::cp437(), 100, 30);
@@ -3036,7 +3137,7 @@ fn short_of_room_whole_key_hints_drop_from_the_end() {
     // follows it, the mode keys and the first hints after them still show.
     let world = garden_with_sprites();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    let on_it = pointer_on(2, 3);
+    let on_it = pointer_on(&world, 2, 3);
     app.apply(Action::middle_click(on_it), &world);
     app.apply(Action::Mode(CursorMode::Train), &world);
     let status = status_line(&app, &world);
@@ -3053,7 +3154,7 @@ fn a_train_click_with_nothing_to_act_on_says_so_in_the_hints_place_for_3_seconds
     let world = drawn_world(&SMALL_MAP);
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::Mode(CursorMode::Train), &world);
-    let empty = pointer_on(1, 1);
+    let empty = pointer_on(&world, 1, 1);
     for (button, amplified, expected) in [
         (Button::Left, false, "No sprite here to pet"),
         (Button::Left, true, "No sprite here to hug"),
@@ -3392,7 +3493,7 @@ fn a_refusal_shows_even_when_the_status_line_is_crowded() {
     // is too full for the reason, so what's under the Cursor is cut short.
     let world = garden_with_sprites();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    let on_it = pointer_on(7, 1);
+    let on_it = pointer_on(&world, 7, 1);
     app.apply(Action::middle_click(on_it), &world);
     app.record(&[touched(1, "refused pet")], &world);
     let status = status_line(&app, &world);
@@ -3405,8 +3506,7 @@ fn a_refusal_shows_even_when_the_status_line_is_crowded() {
 }
 
 /// A world on a 20×5 grass map with `objects`, and the app for it in Grab
-/// mode, holding the item on `held`, on a 60×12 screen. A map tile (x, y) is
-/// drawn at screen cell (x + 1, y + 2).
+/// mode, holding the item on `held`, on a 100×30 screen.
 fn holding_world(objects: &[(Pos, &str)], held: Pos) -> (World, App) {
     let pack = pack();
     let map = Map::from_ascii(&["...................."; 5], &pack).expect("valid drawing");
@@ -3418,9 +3518,12 @@ fn holding_world(objects: &[(Pos, &str)], held: Pos) -> (World, App) {
         newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
-    let mut app = app_for(&world, Theme::cp437(), 60, 12);
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::Mode(CursorMode::Grab), &world);
-    app.apply(Action::left_click(pointer_on(held.x, held.y)), &world);
+    app.apply(
+        Action::left_click(pointer_on(&world, held.x, held.y)),
+        &world,
+    );
     for command in app.take_commands() {
         world.submit(command.clone());
     }
@@ -3439,17 +3542,17 @@ fn a_steady_aim_line_runs_the_way_the_thing_will_go_as_far_as_it_can_over_empty_
         &[(Pos { x: 12, y: 2 }, "ball"), (Pos { x: 8, y: 2 }, "berry")],
         Pos { x: 12, y: 2 },
     );
-    app.apply(Action::right_click(pointer_on(12, 2)), &world);
-    app.apply(Action::Point(pointer_on(19, 2)), &world);
+    app.apply(Action::right_click(pointer_on(&world, 12, 2)), &world);
+    app.apply(Action::Point(pointer_on(&world, 19, 2)), &world);
     let row = |app: &App| -> String {
-        lines(&render(app, &world, 60, 12))[2 + 2]
+        map_rows(&render(app, &world, 100, 30), &world)[2 + 1]
             .chars()
             .skip(1)
             .take(20)
             .collect()
     };
     assert_eq!(row(&app), "......°·•··→○←......");
-    let end = &render(&app, &world, 60, 12)[(6 + 1, 2 + 2)];
+    let end = &render(&app, &world, 100, 30)[cell(&world, 6, 2)];
     assert_eq!(end.fg, Color::Yellow);
     app.animate(Duration::from_millis(500));
     assert_eq!(row(&app), "......°·•··→○←......", "steady");
@@ -3461,14 +3564,14 @@ fn while_aiming_a_held_item_it_is_drawn_under_the_cursor_where_it_will_be_thrown
     // map, and in reverse video, as the Cursor's target.
     let (world, mut app) = holding_world(&[(Pos { x: 12, y: 2 }, "ball")], Pos { x: 12, y: 2 });
     let under_the_cursor = |app: &App| {
-        let cell = render(app, &world, 60, 12)[(12 + 1, 2 + 2)].clone();
+        let cell = render(app, &world, 100, 30)[cell(&world, 12, 2)].clone();
         (
             cell.symbol().to_string(),
             cell.modifier.contains(Modifier::REVERSED),
         )
     };
     assert_eq!(under_the_cursor(&app), (".".into(), true), "held");
-    app.apply(Action::right_click(pointer_on(12, 2)), &world);
+    app.apply(Action::right_click(pointer_on(&world, 12, 2)), &world);
     assert_eq!(under_the_cursor(&app), ("○".into(), true), "aimed");
     app.apply(Action::Back, &world);
     assert_eq!(under_the_cursor(&app), (".".into(), true), "cancelled");
@@ -3477,7 +3580,7 @@ fn while_aiming_a_held_item_it_is_drawn_under_the_cursor_where_it_will_be_thrown
 #[test]
 fn while_aiming_the_hints_say_how_to_send_it_or_cancel() {
     let (world, mut app) = holding_world(&[(Pos { x: 12, y: 2 }, "ball")], Pos { x: 12, y: 2 });
-    app.apply(Action::right_click(pointer_on(12, 2)), &world);
+    app.apply(Action::right_click(pointer_on(&world, 12, 2)), &world);
     let status = lines(&render(&app, &world, 100, 30))[29].clone();
     assert!(
         status.ends_with("let go to throw  esc cancel"),
@@ -3555,9 +3658,9 @@ fn a_short_aim_s_end_shows_even_beside_the_cursor() {
     // Design v25 §6.5: a ball pulled one tile east goes one tile west, onto
     // the Cursor's left arm; the end mark shows there, so it isn't lost.
     let (world, mut app) = holding_world(&[(Pos { x: 12, y: 2 }, "ball")], Pos { x: 12, y: 2 });
-    app.apply(Action::right_click(pointer_on(12, 2)), &world);
-    app.apply(Action::Point(pointer_on(13, 2)), &world);
-    let row: String = lines(&render(&app, &world, 60, 12))[2 + 2]
+    app.apply(Action::right_click(pointer_on(&world, 12, 2)), &world);
+    app.apply(Action::Point(pointer_on(&world, 13, 2)), &world);
+    let row: String = map_rows(&render(&app, &world, 100, 30), &world)[2 + 1]
         .chars()
         .skip(1)
         .take(20)
@@ -3674,9 +3777,8 @@ fn an_egg_is_drawn_as_an_egg_and_the_body_tab_says_when_it_hatches() {
     let at = world.sprite(egg).expect("the egg").pos();
     for (theme, glyph) in [(Theme::cp437(), 'o'), (Theme::ascii(), '0')] {
         let mut app = app_for(&world, theme, 100, 30);
-        let screen = lines(&render(&app, &world, 100, 30));
-        let row: Vec<char> = screen[usize::from(at.y) + 2].chars().collect();
-        assert_eq!(row[usize::from(at.x) + 1], glyph);
+        let screen = render(&app, &world, 100, 30);
+        assert_eq!(screen[cell(&world, at.x, at.y)].symbol(), glyph.to_string());
         while app.selection() != Some(terra_tui::app::Selection::Living(egg)) {
             app.apply(Action::SelectNext, &world);
         }

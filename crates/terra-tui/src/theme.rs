@@ -9,6 +9,7 @@ use serde::Deserialize;
 use terra_sim::{DataPack, Terrain};
 
 use crate::app::{CursorMode, StatusMark};
+use crate::space::{Depth, Pane};
 
 /// What the map view draws for a tile, named by meaning rather than by character.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
@@ -94,6 +95,9 @@ pub struct Glyph {
     pub reversed: bool,
 }
 
+/// The default theme's file.
+const CP437: &str = include_str!("../../../themes/cp437.ron");
+
 /// What a theme draws for an object it has no glyph for, so a data pack's new
 /// object types still show.
 const UNKNOWN_OBJECT: Glyph = Glyph {
@@ -169,12 +173,16 @@ pub struct Theme {
     attention_marker: Color,
     /// By drive name, the colour of a sprite whose strongest drive it is.
     drives: BTreeMap<String, Color>,
+    /// The glass round the map, by piece (M2 design §11.2).
+    glass: BTreeMap<Pane, Glyph>,
+    /// The stars past it, by depth (M2 design §11.3).
+    stars: BTreeMap<Depth, Glyph>,
 }
 
 impl Theme {
     /// The default theme: CP437 glyphs.
     pub fn cp437() -> Theme {
-        Theme::builtin("cp437", include_str!("../../../themes/cp437.ron"))
+        Theme::builtin("cp437", CP437)
     }
 
     /// The `--ascii` theme: the same meanings in plain ASCII.
@@ -258,6 +266,16 @@ impl Theme {
         self.aim_end
     }
 
+    /// A piece of the glass round the map (M2 design §11.2).
+    pub fn glass(&self, pane: Pane) -> Glyph {
+        self.glass[&pane]
+    }
+
+    /// A star of `depth`, in space past the glass (M2 design §11.3).
+    pub fn star(&self, depth: Depth) -> Glyph {
+        self.stars[&depth]
+    }
+
     /// A theme from the text of a theme file, as `--theme <file>` loads it
     /// (design v34 §6.7), checked against the data pack it will draw.
     ///
@@ -298,6 +316,23 @@ impl Theme {
         Theme::parse(text).unwrap_or_else(|e| panic!("the built-in {name} theme is invalid: {e}"))
     }
 
+    /// The default theme's glass and stars, for a theme without its own
+    /// (M2 design §11.5), such as one made before there was space.
+    fn default_space() -> SpaceFile {
+        let space = ron::from_str::<ThemeFile>(CP437)
+            .ok()
+            .and_then(|file| file.space)
+            .expect("the built-in cp437 theme draws space");
+        assert!(
+            Pane::ALL.iter().all(|pane| space.glass.contains_key(pane))
+                && Depth::ALL
+                    .iter()
+                    .all(|depth| space.stars.contains_key(depth)),
+            "the built-in cp437 theme draws every piece of glass and depth of stars"
+        );
+        space
+    }
+
     /// A theme from a theme file's text, complete and within CP437.
     fn parse(text: &str) -> Result<Theme, String> {
         let file: ThemeFile = ron::from_str(text).map_err(|e| e.to_string())?;
@@ -324,6 +359,14 @@ impl Theme {
             .into_iter()
             .map(|(object, states)| (object, glyphs(states)))
             .collect();
+        // Any piece of glass or depth of stars a theme leaves out, it draws
+        // as the default theme does (M2 design §11.5).
+        let builtin = Theme::default_space();
+        let (mut glass, mut stars) = (glyphs(builtin.glass), glyphs(builtin.stars));
+        if let Some(space) = file.space {
+            glass.extend(glyphs(space.glass));
+            stars.extend(glyphs(space.stars));
+        }
         let theme = Theme {
             tiles,
             objects,
@@ -341,6 +384,8 @@ impl Theme {
                 .into_iter()
                 .map(|(drive, colour)| (drive, colour.into()))
                 .collect(),
+            glass,
+            stars,
         };
         if let Some((what, symbol)) = theme
             .symbols()
@@ -402,12 +447,22 @@ impl Theme {
             ("the aim line's end", self.aim_end),
         ]
         .map(|(what, glyph)| (what.to_string(), glyph.symbol));
+        let glass = self
+            .glass
+            .iter()
+            .map(|(pane, glyph)| (format!("the glass's {}", snake_case(pane)), glyph.symbol));
+        let stars = self
+            .stars
+            .iter()
+            .map(|(depth, glyph)| (format!("the {} stars", snake_case(depth)), glyph.symbol));
         tiles
             .chain(objects)
             .chain(arrows)
             .chain(marks)
             .chain(mode_marks)
             .chain(lines)
+            .chain(glass)
+            .chain(stars)
             .collect()
     }
 }
@@ -479,6 +534,32 @@ struct ThemeFile {
     /// The Attention marker: the background of the tile the selected sprite
     /// attends to.
     attention_marker: Colour,
+    /// The glass and the stars past the wall (M2 design §11.5). A theme
+    /// without them, or without some of them, such as one made before there
+    /// was space, draws the default theme's.
+    #[serde(default, deserialize_with = "present")]
+    space: Option<SpaceFile>,
+}
+
+/// A section a theme file may leave out, written without `Some(…)` when
+/// it's there.
+fn present<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
+    section: D,
+) -> Result<Option<T>, D::Error> {
+    T::deserialize(section).map(Some)
+}
+
+/// A theme file's `space` section: what's drawn past the wall (M2 design
+/// §11).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SpaceFile {
+    /// The glass round the map, by piece.
+    #[serde(default)]
+    glass: BTreeMap<Pane, GlyphEntry>,
+    /// The stars past it, by depth.
+    #[serde(default)]
+    stars: BTreeMap<Depth, GlyphEntry>,
 }
 
 /// A theme file's `cursor` section.

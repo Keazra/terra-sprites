@@ -86,7 +86,7 @@ fn hit(tick: u64, hitter: u64, hit: u64) -> Event {
 /// refused pet of #2, #1 hitting #2, a pet of #1, #3 hitting #4, and #3's
 /// death.
 fn logged(world: &World) -> App {
-    let areas = ui::areas(Size::new(100, 30), world.map());
+    let areas = ui::areas(Size::new(100, 30));
     let mut app = App::new(world.map(), Theme::cp437(), 7, areas);
     let events = [
         Event {
