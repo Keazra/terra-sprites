@@ -341,25 +341,32 @@ impl Flood {
         sense_radius: f32,
         rng: &mut ChaCha8Rng,
     ) -> Option<Pos> {
-        let reached: Vec<Pos> = (0..self.costs.len())
-            .filter(|&index| self.costs[index] != UNREACHED)
-            .map(|index| self.pos(index))
-            .filter(|&pos| pos != self.origin)
-            .collect();
         let origin = self.origin;
-        let far: Vec<Pos> = reached
-            .iter()
-            .copied()
-            .filter(|pos| {
-                let distance = pos.x.abs_diff(origin.x).max(pos.y.abs_diff(origin.y));
-                f32::from(distance) > sense_radius / 2.0
-            })
-            .collect();
-        let pool = if far.is_empty() { reached } else { far };
-        if pool.is_empty() {
+        let reached = || {
+            (0..self.costs.len())
+                .filter(|&index| self.costs[index] != UNREACHED)
+                .map(|index| self.pos(index))
+                .filter(move |&pos| pos != origin)
+        };
+        let far = |pos: &Pos| {
+            let distance = pos.x.abs_diff(origin.x).max(pos.y.abs_diff(origin.y));
+            f32::from(distance) > sense_radius / 2.0
+        };
+        // Counted first and walked again to the drawn one, so nothing is
+        // collected: the same tile, in row order, as from a list of them.
+        let far_count = reached().filter(far).count();
+        let take_far = far_count > 0;
+        let count = if take_far {
+            far_count
+        } else {
+            reached().count()
+        };
+        if count == 0 {
             return None;
         }
-        Some(pool[uniform(rng, pool.len() as u64) as usize])
+        let pick = uniform(rng, count as u64) as usize;
+        let drawn = reached().filter(|pos| !take_far || far(pos)).nth(pick);
+        Some(drawn.expect("the drawn tile is one of those counted"))
     }
 
     /// Of the tiles it reached that `free` allows, the one nearest `to` in a
@@ -850,6 +857,39 @@ mod tests {
         let flood = flood(&["..."], &[], at(0, 0), 4, 0);
         let drawn = destinations(&flood);
         assert_eq!(drawn, BTreeSet::from([Some(at(1, 0)), Some(at(2, 0))]));
+    }
+
+    #[test]
+    fn a_wander_draws_the_same_tile_a_list_of_the_pool_would() {
+        // The destination is the drawn one of the pool in row order, as if
+        // the pool were collected first: a different order or a second draw
+        // would change where every wander after it heads.
+        let rows = ["..#....", ".##.#..", "......#", ".#....."];
+        for (origin, sense_radius) in [(at(3, 2), 3.0), (at(0, 0), 6.0), (at(6, 3), 2.0)] {
+            let flood = flood(&rows, &[], origin, 3, 0);
+            let reached: Vec<Pos> = (0..4)
+                .flat_map(|y| (0..7).map(move |x| at(x, y)))
+                .filter(|&pos| pos != origin && flood.cost(pos).is_some())
+                .collect();
+            let far: Vec<Pos> = reached
+                .iter()
+                .copied()
+                .filter(|pos| {
+                    let distance = pos.x.abs_diff(origin.x).max(pos.y.abs_diff(origin.y));
+                    f32::from(distance) > sense_radius / 2.0
+                })
+                .collect();
+            let pool = if far.is_empty() { reached } else { far };
+            let mut rng = ChaCha8Rng::seed_from_u64(11);
+            let mut listed = ChaCha8Rng::seed_from_u64(11);
+            for _ in 0..200 {
+                let expected = pool[uniform(&mut listed, pool.len() as u64) as usize];
+                assert_eq!(
+                    flood.wander_destination(sense_radius, &mut rng),
+                    Some(expected)
+                );
+            }
+        }
     }
 
     #[test]
