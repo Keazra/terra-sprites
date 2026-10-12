@@ -3,7 +3,7 @@
 - **Status:** Draft: the plan, from the ship's design pass with the owner (rounds 1 to 6, 2026-10-12). Each slice adds what it settles as it's built.
 - **Date:** 2026-10-12
 - **History:** edited in place; each change is a file in [`changes/`](changes/)
-- **Builds on:** [M1 design](m1-a-sprite-lives.md), the rulebook for everything this doesn't change; [M2 design](m2-generations.md), whose Slice 31 (§11) draws the view past the wall; and M3, Body & verbs ([#164](https://github.com/Keazra/terra-sprites/issues/164)), whose verbs sprites open doors with
+- **Builds on:** [M1 design](m1-a-sprite-lives.md), the rulebook for everything this doesn't change; [M2 design](m2-generations.md), whose Slice 31 (§11) draws the view past the wall; and M3, Body & verbs ([#164](https://github.com/Keazra/terra-sprites/issues/164)), which comes first: its Touch, Push and Pull are how sprites work panels and switches, and its Grab and Drop how they plant a garden
 - **Covers:** what the ship is, its sectors and how they're made, devices, sealed doors and how the ship opens, Story mode and Lab mode on the ship, the keeper's inventory, what the screen shows, what a bigger world costs, old worlds, and what "M4 is done" means. From [#181](https://github.com/Keazra/terra-sprites/issues/181), with [#26](https://github.com/Keazra/terra-sprites/issues/26)'s zones
 
 ---
@@ -30,7 +30,7 @@ Slice numbers run on across milestones, so these get theirs when M3's slices are
 | Slice | What it adds | Needs |
 |---|---|---|
 | **Turns when due** | The engine gives an object its turn only when it has something to do (§10) | nothing; it can come sooner, even in M2, if the speed check needs it |
-| **Sectors and doors** | The map in sectors, with hull between them and open doorways; one sector on screen, its neighbours dimmed; a click switches; Track, Follow and `Tab` cross with a sprite; old worlds as a ship of one sector (§3, §9, §11) | M2's Slice 31 |
+| **Sectors and doors** | The map in sectors, with hull between them and open doorways, and counting that stops at the hull; one sector on screen, its neighbours dimmed; a click switches; Track, Follow and `Tab` cross with a sprite; the mode in the world; old worlds as a ship of one sector (§3, §9, §11) | M2's Slice 31 |
 | **The built-in ship** | Terra's plan in data: the bays drawn by hand, the main deck in three, plating, hull, glass and the prow (§3, §5) | Sectors and doors |
 | **Biome recipes** | Biomes made from recipes, with their staging areas and set pieces: the five biomes (§4) | The built-in ship |
 | **Devices** | Rules that reach a whole sector, and switches. Staging areas keep their biomes to their recipes; Hydroponics and the Reservoir work (§6) | Biome recipes |
@@ -49,10 +49,6 @@ Slice numbers run on across milestones, so these get theirs when M3's slices are
 - **A refill station,** like *Creatures 1*'s honey pots: an empty jug dropped at the Reservoir's tap fills with water, so sprites can carry water.
 - **Landing,** and the larger game ([#47](https://github.com/Keazra/terra-sprites/issues/47)).
 
-### 1.3 Before M4
-
-M3, Body & verbs (#164), comes first: its Touch, Push and Pull are how sprites work panels and switches, and its Grab and Drop how they plant a garden. M2's Slice 31 draws the view past the wall, the glass and the stars, for a terrarium whose walls all face space; M4 builds on it.
-
 ---
 
 ## 2. The story and the modes
@@ -66,7 +62,7 @@ M3, Body & verbs (#164), comes first: its Touch, Push and Pull are how sprites w
 
 ### 2.2 Story mode and Lab mode
 
-The mode is picked in the new world box (M2 design §8.3) and saved with the world.
+The mode is picked in the new world box (M2 design §8.3) and kept for the world's life (§11).
 
 | | **Story mode** | **Lab mode** |
 |---|---|---|
@@ -89,19 +85,20 @@ The mode is picked in the new world box (M2 design §8.3) and saved with the wor
 
 ### 3.1 Sectors
 
-- **The ship is one world, as the terrarium is today:** one map, one population, one clock, one save (round 1, Q1). Its sectors sit side by side in it, each with walls of its own, joined by doors in the walls they share. This is the shape of *Creatures 3*'s ark.
+- **The ship is one world, as the terrarium is today:** one map, one population, one clock, one save (round 1, Q1). Its sectors sit side by side in it, each with walls of its own, joined by doors through the walls between them. This is the shape of *Creatures 3*'s ark.
 - **Every open sector lives at once,** on screen or not. A sealed one sleeps until its door opens (§7.1).
 - **Two kinds of sector:** a **biome**, large and made from a recipe with the seed (§4), and a **bay**, small and drawn by hand for a job in running the ship (§5). Bays are what #26 called zones.
 - **The main deck** runs along the ship's length, and every sector opens onto it. It's three bays, the aft, middle and fore deck, joined by doors (round 3, Q3).
 - **Neighbours can share a door too,** such as a causeway from the Marsh into the Highland, but the deck is the main way round (round 2, Q6).
-- **Everything sprites do already works across sectors:** they see through an open doorway, walk through it, and remember water in the next sector. A thirsty sprite that drank at the Marsh's lake last week walks through the doorway to it, as on any trip to water it remembers.
+- **Sight, walking and memory already work across sectors:** sprites see through an open doorway, walk through it, and remember water in the next sector. A thirsty sprite that drank at the Marsh's lake last week walks through the doorway to it, as on any trip to water it remembers.
+- **Counting stops at the hull.** What counts the things within some distance counts only those in its own sector: a sprite's sense of company (`nearby_sprites`), its sense of a mate near by (M2's Slice 23), and an object rule's `DensityBelow`. Sight stops at hull already, since a sprite's view floods out from it (`perception.rs`). In a world of one sector, nothing changes.
 - **The sprite limit,** the preset's `most_sprites` (100 in the default world), is for the whole ship (round 2, Q5).
 
 ### 3.2 What the ship is made of
 
 - **Plating:** the ship's metal floor, a terrain that sprites walk on and nothing grows on.
-- **Hull:** the ship's frame, a solid terrain like rock. The walls between sectors are hull, a few tiles thick, with doorways through them (round 2, Q9).
-- **Glass:** the ship's outer wall, along its flanks and around the engines at the stern, with space past it, as Slice 31 draws it (M2 design §11.2, §11.3). On the ship, the map is the rectangle around the whole ship, and a tile in no sector is **space**: sprites can't reach or sense it, and the glass is drawn one tile outside a sector wherever it faces space.
+- **Hull:** the ship's frame, a solid terrain like rock. A sector's walls are hull of its own, so the wall between two sectors, a few tiles thick, is their two walls back to back, with each doorway through both (round 2, Q9).
+- **Glass:** the ship's outer wall, along its flanks and around the engines at the stern, with space past it, as Slice 31 draws it (M2 design §11.2, §11.3). On the ship, the map is the rectangle around the whole ship, and **every tile in it is in one sector, walls included, or is space.** Sprites can't reach or sense space, and the glass is drawn one tile outside a sector wherever it faces space.
 - **The prow:** the ship's front, a blade of iron like a scythe, swept back past the flanks. It's only a look (round 3, Q4): drawn past the wall as glass is, iron instead of stars, with no debris.
 - **Set pieces:** small hand-made pieces of the ship, a few tiles big, that a sector's recipe places into its land: a rib of hull from the glass, a causeway of plating over water, a pump house (round 2, Q2).
 
@@ -207,10 +204,11 @@ When Wild Terra comes (M5), its weather and critters are the ship's doing, and s
 - **A door is a way through the wall between two sectors:** an open doorway one to three tiles wide, or a sealed door.
 - **A sealed door is a solid object across the doorway,** whose data says what opens it, as a berry bush's data says what eating it does (round 3, Q8). Once open, it never shuts again.
 - **A sealed sector sleeps:** nothing in it takes a turn until a door into it opens. Nothing can get in, so nothing is lost. At the start, that's most of the ship.
+- **Its clock stops while it sleeps.** Its things don't age, and when it wakes, each one's next turn comes as long after waking as it was due after the sector fell asleep, so nothing in it comes due at once. Since doors never shut again, a sector only sleeps from the world's start, and wakes as it was made.
 
 ### 7.2 Panels
 
-- **Each sealed door has a panel beside it,** a device that a sprite works with M3's verbs: a plate that a touch opens, a button that's pushed, or a lever that's pulled, as its data says (round 4, Q5). Different doors can ask for different lessons, and a new panel needs no new code.
+- **Each sealed door has a panel on each side,** so it opens from whichever sector reaches it first: a device that a sprite works with M3's verbs: a plate that a touch opens, a button that's pushed, or a lever that's pulled, as its data says (round 4, Q5). Different doors can ask for different lessons, and a new panel needs no new code.
 - **The first doors are the easiest.** The Engines' and the Scrub's doors, and the door from the aft deck to the middle deck, each take a touch, which sprites give new things anyway. The doors further forward take a push or a pull, which a sprite has to be taught.
 - **Once is enough:** one sprite working a panel once opens its door for good.
 - **In Story mode, only a sprite can work a panel.** The keeper's hard light can't work the ship's old locks: activating one does nothing, and the status line says "The lock doesn't answer you: only a sprite can work it". In Lab mode the keeper opens the door itself (§2.2).
@@ -262,7 +260,7 @@ Devices make things as *Creatures*' machines do (researched for round 6, Q2), wi
 - **The Hatchery is the ark's store of eggs.** Once its door opens, activating its egg layer gives an egg from the starter genome, now and then, while the world has room for another sprite, as a sprite can lay one only then (M2's Slice 23).
 - **An egg put in an incubator hatches sooner,** as in *Creatures 1*.
 - **The Cursor can hold an egg** (round 6, Q3), as *Creatures 1*'s hand could: pick it up, carry it and put it down, never throw or shove it. So an egg can go in the inventory, where it doesn't hatch until it's placed again, and the keeper can carry one to an incubator. M2's Slice 23 doesn't let the Cursor move an egg; M4 does.
-- **A world that dies out before the Hatchery opens is lost,** as a terrarium left untended would be. It's the one way to lose in Story mode; the world runs on, and a save can be loaded.
+- **A world with no sprites and no eggs left, in it or in the inventory, before the Hatchery opens is lost,** as a terrarium left untended would be. A major event in the event log says so: "No sprite or egg is left, and the Hatchery is sealed". It's the one way to lose in Story mode; the world runs on, and a save can be loaded.
 
 ---
 
@@ -273,17 +271,20 @@ Devices make things as *Creatures*' machines do (researched for round 6, Q2), wi
 - **The map view shows one sector at a time, the active one,** scrolling within it as the map does today, with Slice 31's margin past its walls (M2 design §11.1). Scrolling never flips to the next sector, which would be easy to do by accident (round 2, Q8).
 - **The top bar and the status line name the active sector.**
 - **Past a wall:**
-  - **Hull,** a few tiles thick, and then the neighbouring sector, **dimmed**, as far as the margin reaches: its land, things and sprites, still moving (round 3, Q7).
+  - **Hull,** the active sector's own and then, **dimmed**, its neighbour's, and the neighbouring sector past it, dimmed too, as far as the margin reaches: its land, things and sprites, still moving (round 3, Q7).
   - **Glass, then space,** where the sector faces out (§3.2).
   - **Iron,** where it faces the prow.
 - **Sealed sectors are dark,** not dimmed: only their walls, their doors and their staging areas' outlines show. The keeper's memory of them is gone.
 
 ### 9.2 Switching
 
-- **A click on a dimmed tile makes its sector the active one.** The view stays where it is, so nothing jumps: the sector clicked brightens, the one left dims, and the view's limits become the new sector's. That click does nothing else, so the keeper can't drop a berry into the Marsh by mistake; the next one does.
+- **A click on a dimmed tile makes its sector the active one,** and so does `Q` there, which is a click (M1 design §6.5). That click does nothing else, so the keeper can't drop a berry into the Marsh by mistake; the next one does. A right click or `E` does nothing there, as over space.
+- **The view stays where it is,** so nothing jumps: the sector clicked brightens, the one left dims, and the view's limits become the new sector's. If the view is past the new sector's margin, it stays there until it scrolls, and then it can scroll back towards the sector but no further out.
 - **The pointer over a dimmed sector** hides the Cursor, as over space (M2 design §11.4), and the status line names it: "Highland: click to go there".
 - **The view goes with a sprite across a door:** Track switches to the sector a tracked sprite walks into, `Tab` and the sprite list to the chosen sprite's sector, and Follow switches the active sector with the followed sprite without moving the view.
+- **With Follow on, the active sector is the followed sprite's.** A click on a dimmed tile, or `Q`, doesn't switch: it does what it does over space (M2 design §11.4): it reaches the followed sprite, or nothing while the Cursor leads it. Picking another sector on the ship plan turns Follow off.
 - **In Story mode, a sector can be gone to once a sprite has opened a door into it,** and whenever the keeper likes after that. In Lab mode, any sector, from the start (§2.2).
+- **UI tests,** as Slice 31's (M2 design §11.6): a click or `Q` on a dimmed tile switches sectors and sends no command, and `E` there sends none; with Follow on, neither switches, and both reach the followed sprite; a view left past the new sector's margin scrolls back but no further out.
 
 ### 9.3 The ship plan
 
@@ -299,10 +300,8 @@ Measured on 2026-10-12, in release builds, with 100 sprites, on a cloud machine.
 
 - **A bigger ship costs its things, not its land.** Nothing in a tick visits every tile, and a sprite only looks at the tiles around it, but every plant and berry takes a turn every tick, and the preset scales how many there are with the area. A map four times today's took 7.9 ms a tick by tick 10,000, against today's 5.1; with the same number of things, it cost the same as today's.
 - **The simulation can't see the screen,** and mustn't (round 3, Q5). The world can't run differently depending on where the player looks: replays, saves and the determinism check (M1's Slice 15) would break, and a sprite would freeze the moment the player looked away.
-- **So:**
-  - **Every open sector lives at once.**
-  - **Sealed sectors sleep** (§7.1), saving about 0.4 ms a tick on a 4× map at the start.
-  - **The engine gives each object its turn only when it has something to do,** rather than every tick: most turns today do nothing, since a berry only waits to rot. It saves 0.5 to 1.4 ms a tick, and nothing has to catch up. It changes the order the world's dice fall in, so the golden files are made again, once.
+- **So every open sector lives at once, and sealed ones sleep** (§3.1, §7.1), which saves about 0.4 ms a tick on a 4× map at the start.
+- **The engine gives each object its turn only when it has something to do,** rather than every tick: most turns today do nothing, since a berry only waits to rot. It saves 0.5 to 1.4 ms a tick, and nothing has to catch up. It changes the order the world's dice fall in, so the golden files are made again, once.
 - **Sectors with no sprites in them don't sleep.** It would save no more than sealed sectors do, and catching up exactly afterwards is fiddly.
 
 ---
@@ -310,7 +309,9 @@ Measured on 2026-10-12, in release builds, with 100 sprites, on a cloud machine.
 ## 11. Saves, replays and old worlds
 
 - **What sectors there are, which doors are sealed, and the inventory** are part of the world, in `WorldState`, so they're saved, replayed and hashed. Which sector is active, and the ship plan's state, belong to the screen, as the viewport does.
+- **So is the mode,** picked when the world is made and fixed for its life, since it changes what commands do: whether a panel answers the keeper, and whether placing takes from the inventory.
 - **Old worlds are a ship of one sector** (round 2, Q10): a preset with no plan, and every save made before the ship, is today's terrarium, with glass all round. Lab scenarios and tests carry on as they are.
+- **An old world keeps the mode it was saved in,** and one saved before Slice 27 brought the modes in loads in Story mode, the game it was. With no plan there's no Hatchery and no device to fill the inventory, so in both modes placing and new sprites work as in M2: the inventory and Story mode's eggs (§8) come with a plan.
 - **A preset names the plan it uses.** The default preset uses Terra's.
 
 ---
@@ -324,7 +325,7 @@ A first draft; the acceptance slice settles the numbers.
 | T1 | **The ship.** A new world in Story mode has Terra's plan, with the Meadow, the aft deck, Hydroponics and the Reservoir open, and the rest sealed and dark | Test |
 | T2 | **Speed.** The speed check (M1's A5: 100 sprites, at least 200 ticks a second) still passes with every sector open | Benchmark |
 | T3 | **Determinism.** The determinism check (M1's Slice 15) passes on a ship world, and a save and a replay round-trip with sprites in several sectors | CI |
-| T4 | **Crossing.** A thirsty sprite that remembers water in the next sector walks through the door to it | Test |
+| T4 | **Crossing.** A thirsty sprite that remembers water in the next sector walks through the door to it, and a sprite beside the hull senses no company or mate on its other side | Test |
 | T5 | **Opening.** Sprites open the first touch panel on their own in most seeds, and a sprite the player teaches opens a push or pull panel | Lab scenario, and played |
-| T6 | **Old worlds.** Every M1 and M2 save and preset loads as a ship of one sector, unchanged | Test |
+| T6 | **Old worlds.** Every M1 and M2 save and preset loads as a ship of one sector, in the mode it was saved in, and plays as it did | Test |
 | T7 | **The whole story.** The owner opens the ship to the Bridge in Story mode | Played |

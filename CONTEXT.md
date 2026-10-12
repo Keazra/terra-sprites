@@ -19,7 +19,7 @@ The terrarium's edge, which nothing crosses: today the map's edge. On the ship (
 _Avoid_: border, boundary
 
 **Terrain**:
-The kind of ground a tile has: grass, dirt, sand, shallow water, deep water or rock; on the ship (#181), plating and hull too.
+The kind of ground a tile has: grass, dirt, sand, shallow water, deep water or rock; on the ship (#181), plating, hull and Hydroponics' beds too.
 _Avoid_: tile type, biome (that's a kind of sector), ground
 
 **Walkable**:
@@ -463,11 +463,11 @@ How the title screen starts: in the dark, the Cursor's light finds a sleeping sp
 _Avoid_: intro, splash, cutscene
 
 **Story mode** (M2):
-The game as it's meant to be played, at 4× speed at most (M2 design, Slice 27). On the ship, a sealed door opens only when a sprite works its panel.
+The game as it's meant to be played, at 4× speed at most (M2 design, Slice 27). What it allows on the ship is in the M4 design, §2.2.
 _Avoid_: full game, play mode, campaign
 
 **Lab mode** (M2):
-The game for experiments: faster than 4× (M2 design, Slice 27), and on the ship, every sector can be visited from the start and the keeper can open any door. It isn't a lab scenario, which is a test file.
+The game for experiments, faster than 4× (M2 design, Slice 27). What it allows on the ship is in the M4 design, §2.2. It isn't a lab scenario, which is a test file.
 _Avoid_: free mode, sandbox, creative mode
 
 **Map view**:
@@ -479,7 +479,7 @@ The part of the map currently shown in the map view. It can go a quarter of the 
 _Avoid_: camera
 
 **Glass**:
-How the wall is drawn where it faces space: a line of light cyan one tile outside the map (Slice 31). It isn't a tile, so nothing on the map reaches it.
+How the wall is drawn where it faces space: a line of light cyan one tile outside the map (Slice 31). It isn't a tile, so nothing on the map reaches it. On the ship (#181), it's drawn one tile outside a sector, over a tile of space.
 _Avoid_: window, border (that's the map view's)
 
 **Track**:
@@ -636,7 +636,7 @@ What the player picked from the Place menu, waiting on the Cursor until a Grab-m
 _Avoid_: held item (that's an item picked up), brush
 
 **Place**:
-To make a new object on a tile through the Cursor, at the start of its first stage. Only the types whose data offers them can be placed, and their data says what the tile must meet; the built-in ones ask nothing, so a placed bush may wall things off. On the ship, in Story mode, placing takes the thing from the inventory instead (#181).
+To make a new object on a tile through the Cursor, at the start of its first stage. Only the types whose data offers them can be placed, and their data says what the tile must meet; the built-in ones ask nothing, so a placed bush may wall things off. On the ship, Story mode takes it from the inventory instead (#181).
 _Avoid_: put down (that's a held item), plant, build
 
 **Spawn**:
@@ -767,12 +767,16 @@ The ship's AI, which the player is. Its builders are gone and it woke with its m
 _Avoid_: captain, overseer
 
 **Inventory** (#181):
-The things the keeper has put away, out of the world, to place again later. In Story mode, placing takes from it instead of making things from nothing, and devices around the ship make the things that fill it. Lab mode places from nothing, as before.
+The things the keeper has put away, out of the world, to place again later; devices around the ship make the things that fill it. Story mode places from it (M4 design §2.2).
 _Avoid_: stock, store (that's a bay), holding (that's a sprite's)
 
 **Sector** (#181):
-One part of the ship, with walls of its own, which the map view shows on its own: a biome or a bay. Sprites cross between sectors through doors. Every open sector lives at once, on screen or not; a sealed one sleeps until its door opens.
+One part of the ship, with walls of its own, which the map view shows on its own: a biome or a bay. Every tile of the ship is in one sector, walls included, or is space. Sprites cross between sectors through doors. Every open sector lives at once, on screen or not; a sealed one sleeps until its door opens.
 _Avoid_: level, area, screen, zone, module, compartment
+
+**Active sector** (#181):
+The sector the map view shows, bright, with its neighbours dimmed past its walls. A click on a dimmed tile makes that sector the active one. It belongs to the screen, not the world.
+_Avoid_: current sector, focused sector
 
 **Biome** (#181):
 A large sector generated from the seed, to a recipe in the game's data that says its size and its mix of terrain, plants and set pieces, such as the Meadow or the Marsh. Its staging area is part of it.
@@ -791,15 +795,15 @@ The part of a biome that the ship built to make it work: plating and hull juttin
 _Avoid_: annex, outpost
 
 **Door** (#181):
-A way through the wall between two sectors: an open doorway, or a sealed door that stays shut until it's opened, and never closes again. In Story mode only a sprite can open one, by working its panel; in Lab mode the keeper can too.
+A way through the wall between two sectors: an open doorway, or a sealed door that stays shut until it's opened, and never closes again.
 _Avoid_: portal, gate
 
 **Panel** (#181):
-The device beside a sealed door that opens it: a plate to touch, a button to push or a lever to pull, as its data says. One sprite working it once opens the door for good. In Story mode only a sprite can work one.
+The device on each side of a sealed door that opens it: a plate to touch, a button to push or a lever to pull, as its data says. One sprite working it once opens the door for good.
 _Avoid_: lock, keypad
 
 **Ship plan** (#181):
-The ship's outline, shown over the map view, with each open sector's name and how many sprites are in it; picking a sector takes the view there. In Story mode it's the keeper's memory, so a sealed sector is dark on it until its door opens.
+The ship's outline, shown over the map view, with each open sector's name and how many sprites are in it; picking a sector takes the view there.
 _Avoid_: minimap, map (the map is the world's tiles)
 
 **Builders' log** (#181):
@@ -826,5 +830,5 @@ An object of the ship's that does a job, such as an incubator, a pump, or one wh
 _Avoid_: machine, machinery, building
 
 **Space** (#180):
-What lies outside the ship: stars going by. It's scenery, not part of the map, so sprites can't sense it and the Cursor can't reach into it.
+What lies outside the ship: stars going by. It's scenery, so sprites can't sense it and the Cursor can't reach into it. Today it's past the map; on the ship (#181), where the map is the rectangle around the whole ship, it's also the map's tiles in no sector.
 _Avoid_: void, sky

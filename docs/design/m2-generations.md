@@ -110,7 +110,6 @@ Each slice is a GitHub issue and its own PR, worked as in `docs/agents/how-we-wo
 
 - **20, 21 and 22 can start at once.** 21 touches only the front end. 20 and 22 both touch the brain and the body, so running them side by side means merging carefully.
 - **24, 25, 26 and 27 can run side by side** once 23 is in.
-- **31 touches only the front end,** so it can run beside any of them (§1.3).
 
 ---
 
@@ -264,7 +263,7 @@ A small box over the menu, with:
 - **Seed:** a random one filled in. Typing a digit replaces it, then more digits add to it, as a save's name is typed (M1 design §6.7); `Backspace` rubs out, and `Tab` offers another random seed. A seed is a whole number from 0 to 18446744073709551615.
 - **Preset:** `↑` `↓` pick one from a list: `default` first (the built-in preset, or `--data`'s own `presets/default.ron`), then each `.ron` file in the `presets` folder of the game's folder (`%APPDATA%\terra-sprites\presets` on Windows), by name. A preset is checked against the data pack in use when the world is made.
 - `Enter` starts the world; `Esc` goes back to the menu.
-- Once Slice 27 builds Lab mode, the choice between Story mode and Lab mode goes in this box (2026-10-12).
+- Once Slice 27 builds Lab mode, the choice between Story mode and Lab mode goes in this box, and the world keeps it (2026-10-12; M4 design §11).
 
 ### 8.4 Leaving a world
 
@@ -365,7 +364,7 @@ The terrarium is a ship flying through space (#181, a milestone of its own after
 
 - **The viewport scrolls past the wall by a quarter of the map view** on each side, the same however it moves: at 140×40, about 23 tiles sideways and 7 up or down (round 1, Q3). Half the view would let Track centre a sprite at the wall, but leave half the screen empty at the far edge.
 - **Track** keeps the selected sprite in the middle of the map view as far as that margin allows, and `Tab`'s centring stops there too (M1 design §6.1, §6.5).
-- **A map smaller than the map view** is drawn in the middle of it, with space around it, rather than in a map view shrunk to fit (M1 design §6.1). It doesn't scroll in a direction it fits.
+- **A map that fits in the map view with its glass,** so at least two tiles narrower or shorter than it, is drawn in the middle of it, with space around it, rather than in a map view shrunk to fit (M1 design §6.1). It doesn't scroll in a direction it fits.
 
 ### 11.2 The glass
 
@@ -384,7 +383,7 @@ Past the glass is space: black, with stars drifting right to left, since the shi
 
 - **The stars move with the game:** still while it's paused, quicker at higher speeds, and no quicker than at 4×, so 16× doesn't blur. A step while paused doesn't move them.
 - **Scrolling shifts them a little** against the view, the far ones least: the share in the table sideways, and half of it up and down. That gives depth.
-- **They belong to the screen, like the theme.** They're fixed to the map view and wrap around it, from a pattern of the front end's own, not the world's dice, so they're never part of the world, its saves, its replays or its state hash. A star is drawn only on space, never over the map or the glass.
+- **They belong to the screen, like the theme.** They're fixed to the map view and wrap around it, from a pattern of the front end's own, not the world's dice, so they're never part of the world, its saves, its replays or its state hash. A star is drawn only on space, never over the glass or anything inside it.
 - The numbers are those of the preview the owner tried in round 1, and the theme sets the glyphs and colours.
 
 ### 11.4 The pointer over space
@@ -398,7 +397,7 @@ Both built-in themes gain the glass's six glyphs and the stars' three depths, as
 
 ### 11.6 How we know it worked
 
-- **UI tests** (ratatui's `TestBackend`): scrolling stops at the margin on every side; the glass runs all round the map, one tile out; the border is single-lined; stars appear only on space; stars stand still while paused and drift as far at 16× as at 4× in the same time; a small map is centred; with the pointer moved over space after the Cursor was on a sprite, the Cursor isn't drawn and a click, `Q` or `E` sends no command (`docs/agents/how-we-work.md`: test every input that reaches a rule); with Follow on, a click over space and `Q` still reach the followed sprite.
+- **UI tests** (ratatui's `TestBackend`): scrolling stops at the margin on every side; the glass runs all round the map, one tile out; the border is single-lined; stars appear only on space; stars stand still while paused and drift as far at 16× as at 4× in the same time; a small map is centred, and one as wide as the map view, or a tile narrower, scrolls to show its glass; with the pointer moved over space after the Cursor was on a sprite, the Cursor isn't drawn and a click, `Q` or `E` sends no command (`docs/agents/how-we-work.md`: test every input that reaches a rule); with Follow on, a click over space and `Q` still reach the followed sprite.
 - **The simulation is untouched:** its tests and golden files pass unchanged.
 - **Played** in Windows Terminal at 140×40 and at the smallest size the game allows.
 
