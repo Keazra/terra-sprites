@@ -725,6 +725,17 @@ impl World {
         Ok(())
     }
 
+    /// Has every sprite grow old at `age` ticks, whatever its genes say,
+    /// for a lab scenario that watches the same sprites for longer than a
+    /// life (M2 design §2).
+    pub(crate) fn set_grows_old(&mut self, age: f32) {
+        let data = &self.data;
+        let tick = self.state.tick;
+        for (_, sprite) in self.state.sprites.iter_mut() {
+            sprite.set_grows_old(age, tick, data);
+        }
+    }
+
     /// Stops every sprite learning from here on, for a lab scenario's
     /// control run (design §7.1).
     pub(crate) fn switch_off_learning(&mut self) {

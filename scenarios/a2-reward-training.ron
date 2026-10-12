@@ -20,6 +20,9 @@
         ],
         key: {'S': Sprite, 'o': Object("ball"), 'B': Object("berry_bush")},
     ),
+    // The same sprites are watched for longer than a 4-hour life, so they
+    // grow old at 60,000 ticks, as before M2 (M2 design §2).
+    grows_old: 60000.0,
     ticks: 20000,
     trainer: (on: (Play, "ball"), give: Pet, until: 9900),
     control: NoTrainer,

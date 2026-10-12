@@ -176,7 +176,7 @@ fn a_sprite_that_never_hungers_or_thirsts_dies_of_old_age_once_its_genes_give_ou
             ("per_sense_tile: 0.0000067,", "per_sense_tile: 0.0,"),
             ("hydration_loss: 0.00033", "hydration_loss: 0.0"),
             ("growth: 0.3,", "growth: 0.0,"),
-            ("ticks: 46500,", "ticks: 1000,"),
+            ("ticks: 3600,", "ticks: 1000,"),
         ],
     );
     let genome = r#"(format: 1, genes: [

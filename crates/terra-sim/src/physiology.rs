@@ -375,7 +375,7 @@ impl Default for Ageing {
             wear_speedup: 3.0,
             sooner: 0.33,
             decay: Decay {
-                ticks: 46_500,
+                ticks: 3_600,
                 hit: 0.01,
                 gives_out: 0.5,
             },

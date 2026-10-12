@@ -58,11 +58,38 @@ impl Links {
         }
     }
 
+    /// Widens every row to `columns` with links at 0: a save's decision
+    /// instincts from before a verb was added (M2 design §5).
+    pub(crate) fn widen(&mut self, columns: usize) {
+        for row in &mut self.w {
+            if row.len() < columns {
+                row.resize(columns, 0.0);
+            }
+        }
+    }
+
     /// Sets the weight in `row` and `column`, unchecked.
     #[cfg(test)]
     pub(crate) fn set(&mut self, row: usize, column: usize, w: f32) {
         self.w[row][column] = w;
     }
+}
+
+/// Reads a value for each verb, in `VERBS` order. A save from before Mate
+/// has one fewer, and Mate's is 0 (M2 design §5).
+pub(crate) fn per_verb<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<[f32; VERBS.len()], D::Error> {
+    let values = Vec::<f32>::deserialize(deserializer)?;
+    let mut row = [0.0; VERBS.len()];
+    if !(VERBS.len() - 1..=VERBS.len()).contains(&values.len()) {
+        return Err(serde::de::Error::invalid_length(
+            values.len(),
+            &"a value for each verb",
+        ));
+    }
+    row[..values.len()].copy_from_slice(&values);
+    Ok(row)
 }
 
 /// What a sprite learns about a thing as (design v19 §5.6): its object type,
@@ -114,6 +141,7 @@ pub(crate) struct TypeMemory {
     /// Bad, from `punishment` (−1 to 0).
     pub(crate) bad: f32,
     /// Habits: doing each verb to it, in `VERBS` order.
+    #[serde(deserialize_with = "per_verb")]
     pub(crate) habits: [f32; VERBS.len()],
     /// How familiar it is, from attending to it (0 to 1).
     pub(crate) familiarity: f32,

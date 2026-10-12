@@ -13,8 +13,8 @@ use crate::data::DataPack;
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, LocusRef};
 use crate::learning::{
-    Experience, Links, Signals, SpriteMemory, Subject, TRACE_CAP, Touch, TraceEntry, still_counts,
-    weight,
+    Experience, Links, Signals, SpriteMemory, Subject, TRACE_CAP, Touch, TraceEntry, per_verb,
+    still_counts, weight,
 };
 use crate::map::Pos;
 use crate::objects::EntityId;
@@ -23,8 +23,9 @@ use crate::random::unit;
 use crate::registry::{BrainParam, CategoryId, Verb};
 
 /// The verbs the brain scores, in verb ID order: every verb but the reserved
-/// ones. A verb's place here is its column in the decision links.
-pub(crate) const VERBS: [Verb; 8] = [
+/// ones. A verb's place here is its column in the decision links. A save
+/// from before Mate has a column fewer, which it gains at 0 (M2 design §5).
+pub(crate) const VERBS: [Verb; 9] = [
     Verb::Approach,
     Verb::Eat,
     Verb::Drink,
@@ -33,6 +34,7 @@ pub(crate) const VERBS: [Verb; 8] = [
     Verb::Retreat,
     Verb::Rest,
     Verb::Wander,
+    Verb::Mate,
 ];
 
 /// Which way a thing's worth pushes a verb aimed at it (design v18 §5.5):
@@ -47,13 +49,13 @@ fn side(verb: Verb) -> f32 {
 }
 
 /// How fear pushes a verb aimed at a frightening thing (design v18 §5.5):
-/// `flight` towards Retreat, `value_gain` away from Approach, Eat, Drink
-/// and Play, and never towards or away from Hit, since fear that pushed
-/// Hit started feuds (#62).
+/// `flight` towards Retreat, `value_gain` away from Approach, Eat, Drink,
+/// Play and Mate, and never towards or away from Hit, since fear that
+/// pushed Hit started feuds (#62).
 fn fear_push(verb: Verb, flight: f32, value_gain: f32) -> f32 {
     match verb {
         Verb::Retreat => flight,
-        Verb::Approach | Verb::Eat | Verb::Drink | Verb::Play => -value_gain,
+        Verb::Approach | Verb::Eat | Verb::Drink | Verb::Play | Verb::Mate => -value_gain,
         _ => 0.0,
     }
 }
@@ -223,6 +225,7 @@ pub(crate) struct Snapshot {
     /// What that thing is learned about as (design v19 §5.6).
     pub(crate) subject: Option<Subject>,
     /// Each verb's score, in `VERBS` order.
+    #[serde(deserialize_with = "per_verb")]
     pub(crate) scores: [f32; VERBS.len()],
     /// The verb it's doing, if any.
     pub(crate) verb: Option<Verb>,
@@ -943,6 +946,12 @@ impl Brain {
         summary
     }
 
+    /// Gives a brain from a save from before Mate its decision instincts'
+    /// column for it, at 0 (M2 design §5).
+    pub(crate) fn widen_verbs(&mut self) {
+        self.decision.widen(VERBS.len());
+    }
+
     /// Whether a loaded brain fits `genome` and `data` at the tick `now`
     /// (design §2.8): its parameters, concepts and instincts are the ones
     /// the genome gives, at `stage` and with its genes' `health`; whatever it attends to, has learned or remembers
@@ -1489,14 +1498,17 @@ impl Brain {
 /// anything (v16), but Approach only while it isn't already `beside` the
 /// target, on one of its goal tiles, where Approach would do nothing, and
 /// Retreat only from a thing in sight, not one `remembered` out of sight
-/// (M2 design §7).
-pub(crate) fn available(target: bool, beside: bool, remembered: bool) -> Vec<Verb> {
+/// (M2 design §7). Mate is offered only when the sprite and its target are
+/// both adults, which the caller says in `adults`: the content-safety rule
+/// the engine enforces for every genome and data pack (M2 design §5).
+pub(crate) fn available(target: bool, beside: bool, remembered: bool, adults: bool) -> Vec<Verb> {
     VERBS
         .into_iter()
         .filter(|&verb| match verb {
             Verb::Rest | Verb::Wander => true,
             Verb::Approach => target && !beside,
             Verb::Retreat => target && !remembered,
+            Verb::Mate => target && adults,
             _ => target,
         })
         .collect()
@@ -1855,22 +1867,34 @@ mod tests {
     fn with_a_target_every_verb_can_be_tried_whatever_its_verb_table_says() {
         use Verb::*;
         assert_eq!(
-            available(false, false, false),
+            available(false, false, false, false),
             [Rest, Wander],
             "no target: targetless only"
         );
         // Design v16 §5.2: a verb table says what a try does, not what's allowed.
         assert_eq!(
-            available(true, false, false),
+            available(true, false, false, false),
             [Approach, Eat, Drink, Hit, Play, Retreat, Rest, Wander]
         );
+    }
+
+    #[test]
+    fn mate_is_offered_only_when_both_are_adults() {
+        // M2 design §5: the engine's one content-safety rule.
+        use Verb::*;
+        assert!(!available(true, false, false, false).contains(&Mate));
+        assert_eq!(
+            available(true, false, false, true),
+            [Approach, Eat, Drink, Hit, Play, Retreat, Rest, Wander, Mate]
+        );
+        assert_eq!(available(false, false, false, true), [Rest, Wander]);
     }
 
     #[test]
     fn approach_is_not_offered_to_a_sprite_already_beside_its_target() {
         use Verb::*;
         assert_eq!(
-            available(true, true, false),
+            available(true, true, false, false),
             [Eat, Drink, Hit, Play, Retreat, Rest, Wander]
         );
     }
@@ -1943,7 +1967,7 @@ mod tests {
             let mut verbs = [0.0; VERBS.len()];
             verbs[column(Verb::Eat)] = 0.5;
             verbs[column(Verb::Rest)] = 0.2;
-            let available = available(true, false, false);
+            let available = available(true, false, false, false);
             (0..200)
                 .map(|_| {
                     let attended = brain.attend(&scores, false, exploration, &mut rng);
@@ -1961,7 +1985,7 @@ mod tests {
         let mut brain = brain(&[]);
         let scores = BTreeMap::from([(WATER, 0.3), (TOY, 0.5)]);
         let verbs = [0.1; VERBS.len()];
-        let available = available(true, false, false);
+        let available = available(true, false, false, false);
         let mut rng = ChaCha8Rng::seed_from_u64(7);
         let untouched = rng.clone();
         // An action running: attention and switching draw nothing.
@@ -2404,7 +2428,7 @@ mod tests {
         // M2 design §7: there's nothing in sight to back away from.
         use Verb::*;
         assert_eq!(
-            available(true, false, true),
+            available(true, false, true, false),
             [Approach, Eat, Drink, Hit, Play, Rest, Wander]
         );
     }

@@ -22,6 +22,7 @@ use crate::world::{Scenario, ScenarioError, World};
 #[derive(Debug, Clone)]
 pub struct LabScenario {
     world: LabWorld,
+    grows_old: Option<f32>,
     ticks: u64,
     windows: Vec<(u64, u64)>,
     control: Control,
@@ -88,6 +89,11 @@ struct TrainerFile {
 #[serde(deny_unknown_fields)]
 struct LabFile {
     world: LabWorld,
+    /// The age its drawn sprites grow old at, in place of what their genes
+    /// say: for a scenario that watches the same sprites for longer than a
+    /// life (M2 design §2), so they don't die of old age partway.
+    #[serde(default)]
+    grows_old: Option<f32>,
     ticks: u64,
     /// A control run of each seed, if any.
     #[serde(default)]
@@ -250,6 +256,7 @@ impl LabScenario {
         }
         let lab = LabScenario {
             world: file.world,
+            grows_old: file.grows_old,
             ticks: file.ticks,
             windows: file.windows,
             control: file.control,
@@ -398,7 +405,11 @@ impl LabScenario {
             scripted: &[],
             newborns: &[],
         };
-        World::from_scenario(scenario, data, seed).map_err(LabError::Scenario)
+        let mut world = World::from_scenario(scenario, data, seed).map_err(LabError::Scenario)?;
+        if let Some(age) = self.grows_old {
+            world.set_grows_old(age);
+        }
+        Ok(world)
     }
 }
 

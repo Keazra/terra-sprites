@@ -58,12 +58,12 @@ The owner's times, as playtime at 1× (1.25 ticks a second, M1 design §6.6):
 |---|---|---|---|
 | Grows up | about 1 hour | about 4,500 | about 15 minutes |
 | Grows old | about 3 hours | about 13,500 | about 45 minutes |
-| Dies of old age | about 4 hours (about 13 until Slice 23) | about 18,000 | about 1 hour |
+| Dies of old age | about 4 hours | about 18,000 | about 1 hour |
 
 - **These are the starter genome's times.** The genome brings them about (§3), so they vary from sprite to sprite and can evolve.
 - **Growing old is where M1's lifespan went** (#140). The `grows_old` gene sets when a sprite grows old, and its genes then weaken until its body gives out and old age kills it (§9.4). How long that takes depends on the life it has had, not on a second gene. A save or genome that says `lifespan` reads it as `grows_old`, whose range is about **6,000–60,000**.
 - **A generation takes about 15–20 minutes at 4×,** the full game's top speed (Slice 27), so an evening sees several. Long runs of evolution belong to the fast-forward mode.
-- **Lives get shorter in Slice 23, with breeding.** Until sprites have young, nothing replaces the dead: with 4-hour lives, the default world would be empty after about 4 hours of play. So in Slice 22 sprites grow up and grow old at their times above, but old age lasts about 10 hours (§9.4), and Slice 23 shortens it to about 1.
+- **Lives got shorter in Slice 23, with breeding.** Until sprites had young, nothing replaced the dead: with 4-hour lives, the default world would have been empty after about 4 hours of play. So in Slice 22 sprites grew up and grew old at their times above, but old age lasted about 10 hours, and Slice 23 shortened it to about 1 (§9.4).
 - **Childhood ends at growing up.** M1's viability run counts ticks 0–10,000 as childhood because sprites had no stages (M1 design §7.4, A4). From Slice 22, childhood is a stage, and the harsher world's goal (§6, G5) is counted at growing up.
 
 ---
@@ -115,7 +115,7 @@ Each slice is a GitHub issue and its own PR, worked as in `docs/agents/how-we-wo
 The owner's one content-safety rule ([#69](https://github.com/Keazra/terra-sprites/issues/69), `docs/agents/how-we-work.md`): **attraction and mating attempts towards a sprite that isn't an adult are impossible,** for every genome and every data pack. Data can be edited and genes evolve, so the engine enforces it, the one exception to "the engine enforces physics only".
 
 Slice 23 builds it:
-- `Mate` is never offered unless both sprites are adults. It's a hard check in verb availability, not a learned or genetic lean.
+- `Mate` is never offered unless both sprites are adults (an old sprite counts as one, §9.1). It's a hard check in verb availability, not a learned or genetic lean.
 - Attraction, whatever form it takes, never targets a non-adult.
 - `check_invariants` checks it every tick, and property tests with random genomes pin it.
 - Genes that switch on at adulthood (§3, reading A) are the natural home for mating instincts; the engine's check holds regardless.
@@ -307,7 +307,7 @@ The owner (2026-10-11): old age is the genome wearing out, and a hard life damag
 
 - **Every gene has a health,** from 1 (whole) to 0. It only ever falls, and it scales the gene's effect: a feeling's gain, a receptor's gain, a reaction's rate, an instinct's weight, and how far a speed or sense radius gene reaches above the least its trait can be. A gene that's a setting, not a strength, doesn't weaken: half-lives, starting levels, brain parameters, and the timing genes.
 - **Before old age, repair keeps up.** Once old, damage lands on random genes, a `hit` (0.01 of health) at a time, so health falls in small, frequent steps (the owner, 2026-10-11). **An instinct takes half,** so the mind outlasts the body.
-- **The pace:** an unworn sprite's genes fall to `gives_out` (0.5 on average) in about `decay.ticks` (46,500, about 10 hours at 1×; Slice 23 shortens it to about 1 hour).
+- **The pace:** an unworn sprite's genes fall to `gives_out` (0.5 on average) in about `decay.ticks` (3,600), and old age then kills it in about 900 more, so old age lasts about an hour at 1× (about 4,000 ticks, the median of six sprites with no needs) (Slice 23; it was 46,500, about 10 hours, until sprites had young). When that takes more than one hit a tick, as it does for a worn sprite, the whole hits land each tick and the odds are of one more.
 - **A hard life wears the body for good,** and wear never heals: `wear.starving` (0.0002) a tick while energy is under `wear.low` (.25), `wear.parched` (0.0002) while hydration is, and `wear.injured` (0.001) a tick for each unit of injury, so a hit or a prick wears the body through the injury it does, for as long as it takes to heal. It reads the body, not feelings, which genes could switch off.
 - **Wear brings old age sooner and speeds the decay.** The most worn sprite grows old at (1 − `sooner`) of its `grows_old` (`sooner` is .33), and its genes decay `wear_speedup` (3) times as fast; less worn, in proportion.
 - **A bad injury can scar a gene at any age:** while injury is above `scar.above` (.5), each tick has a `scar.chance` (0.002) that a random gene loses `scar.hit` (0.05; half that on an instinct).

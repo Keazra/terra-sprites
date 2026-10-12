@@ -23,6 +23,12 @@ pub enum LifeStage {
 }
 
 impl LifeStage {
+    /// Whether a sprite at this stage is grown up: an adult, or old, which
+    /// still counts as one for mating (M2 design §5, §9.1).
+    pub fn is_grown(self) -> bool {
+        matches!(self, LifeStage::Adult | LifeStage::Old)
+    }
+
     /// The stage's name, as genome files and the player see it.
     pub fn name(self) -> &'static str {
         match self {

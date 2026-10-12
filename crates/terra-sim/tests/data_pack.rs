@@ -908,7 +908,7 @@ fn ageing_shares_are_fractions_and_its_rates_are_numbers() {
     assert_invalid_physiology("young_speed: 0.67", "young_speed: 0.0", "young_speed");
     assert_invalid_physiology("sooner: 0.33", "sooner: 1.5", "sooner");
     assert_invalid_physiology("growth: 0.3", "growth: -0.3", "growth");
-    assert_invalid_physiology("ticks: 46500", "ticks: 0", "decay.ticks");
+    assert_invalid_physiology("ticks: 3600", "ticks: 0", "decay.ticks");
     assert_invalid_physiology("hit: 0.01,", "hit: 0.0,", "decay");
     assert_invalid_physiology("gives_out: 0.5", "gives_out: 1.0", "decay");
     assert_invalid_physiology("chance: 0.002", "chance: 2.0", "scar.chance");

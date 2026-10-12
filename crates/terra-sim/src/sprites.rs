@@ -6,7 +6,7 @@ use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::action::{Action, Did, ScriptedAction, Walk, chebyshev};
-use crate::ageing::{LifeStage, frailty};
+use crate::ageing::{LifeStage, Switch, frailty};
 use crate::biochem::{Body, Program};
 use crate::brain::Brain;
 use crate::data::DataPack;
@@ -14,9 +14,10 @@ use crate::genome::{Gene, Genome};
 use crate::map::{Dir, Map, Pos};
 use crate::objects::{EntityId, Objects};
 use crate::occupancy::Occupancy;
-use crate::perception::Flood;
+use crate::perception::{Flood, Target};
 use crate::physiology::RememberedPlaces;
 use crate::random::{chance, uniform};
+use crate::registry::{Trait, Verb};
 use crate::sliding::Slide;
 
 /// One sprite.
@@ -137,21 +138,26 @@ impl Sprite {
             return false;
         }
         let scarred = (injured && chance(rng, scar.chance)).then_some(scar.hit);
-        let decayed = old && {
+        let decayed = if old {
             // A hit takes `hit` times the frailty of the gene it lands
             // on, so `hit` × the average frailty on average, which
             // brings the average health of `n` genes down by that over
-            // `n`. The odds are of enough hits to bring it to
-            // `gives_out` in `ticks`.
+            // `n`. Enough hits land, on average, to bring it to
+            // `gives_out` in `ticks`: when that's more than one a tick,
+            // the whole hits land, and the odds are of one more.
             let n = n as f32;
             let needed = (1.0 - decay.gives_out) * n * n / (decay.hit * frailty_sum);
             let pace = 1.0 + (ageing.wear_speedup - 1.0) * self.body.wear;
-            chance(rng, (pace * needed / decay.ticks as f32).min(1.0))
+            let per_tick = pace * needed / decay.ticks as f32;
+            let whole = libm::floorf(per_tick);
+            whole as usize + usize::from(chance(rng, per_tick - whole))
+        } else {
+            0
         };
-        let decayed = decayed.then_some(decay.hit);
+        let decayed = std::iter::repeat_n(decay.hit, decayed);
         let mut weakened = false;
         let mut mind = false;
-        for hit in [scarred, decayed].into_iter().flatten() {
+        for hit in scarred.into_iter().chain(decayed) {
             let nth = uniform(rng, n as u64) as usize;
             let (index, gene) = self
                 .genome
@@ -173,6 +179,41 @@ impl Sprite {
             self.express_body(data);
         }
         weakened
+    }
+
+    /// Sets its `grows_old` gene to `age`, so it grows old then, whatever
+    /// its genes said (M2 design §9.3): for a lab scenario that watches it
+    /// for longer than a life. Its genes are expressed afresh for its life
+    /// stage on the tick `tick`. A genome with no such gene gets one.
+    pub(crate) fn set_grows_old(&mut self, age: f32, tick: u64, data: &DataPack) {
+        let gene = self.genome.genes.iter_mut().find_map(|gene| match gene {
+            Gene::Trait {
+                which: Trait::GrowsOld,
+                value,
+            } => Some(value),
+            _ => None,
+        });
+        match gene {
+            Some(value) => *value = age,
+            None => {
+                self.genome.genes.push(Gene::Trait {
+                    which: Trait::GrowsOld,
+                    value: age,
+                });
+                // An empty list of switches means none switch.
+                if !self.genome.switches.is_empty() {
+                    self.genome.switches.push(Switch::default());
+                }
+                self.health.push(1.0);
+            }
+        }
+        self.express_body(data);
+        self.stage = Some(
+            self.program
+                .traits
+                .life_stage(self.age(tick), self.sooner(data)),
+        );
+        self.express(data);
     }
 
     /// Grows the sprite to its life stage on the tick `tick` (M2 design
@@ -381,6 +422,7 @@ impl Sprites {
             };
             sprite.stage = Some(stage);
             sprite.brain.params.catch_up(&sprite.genome, data, stage);
+            sprite.brain.widen_verbs();
             // Places remembered under other limits, in a save from before
             // they were added, are brought within its pack's (M2 design §7.2).
             sprite
@@ -408,9 +450,10 @@ impl Sprites {
 
     /// Checks the sprites' invariants (design §7.1), or says which is broken:
     /// the tile index matches where the sprites are, so no two share a tile;
-    /// none stands on a solid object; every chemical is within 0 to 1; and
-    /// each remembers no more places than it may, all on the map (M2 design
-    /// §7).
+    /// none stands on a solid object; every chemical is within 0 to 1; a
+    /// Mate action is only ever an adult's, aimed at an adult (M2 design
+    /// §5); and each remembers no more places than it may, all on the map
+    /// (M2 design §7).
     pub(crate) fn check(
         &self,
         map: &Map,
@@ -465,6 +508,18 @@ impl Sprites {
                 return Err(format!(
                     "{id:?} has a locus at {value}, which isn't a number"
                 ));
+            }
+            // Mating only ever between adults, whatever its genes or the
+            // data pack say (M2 design §5).
+            if let Some(action) = sprite.action.as_ref().filter(|a| a.verb == Verb::Mate) {
+                let partner = action.target.and_then(Target::sprite);
+                let grown = |other: EntityId| self.get(other).is_none_or(|o| o.stage().is_grown());
+                if !sprite.stage().is_grown() || partner.is_none_or(|other| !grown(other)) {
+                    return Err(format!(
+                        "{id:?} has a Mate action aimed at {:?}, but mating is only between adults",
+                        action.target
+                    ));
+                }
             }
             sprite
                 .brain
@@ -595,22 +650,22 @@ mod tests {
 
     #[test]
     fn an_old_sprite_s_genes_decay_until_its_body_gives_out_in_about_the_ticks_set() {
-        // M2 design §9.4: 46,500 ticks for an unworn body, a third of that
-        // for the most worn.
+        // M2 design §9.4: 3,600 ticks for an unworn body, a third of that
+        // for the most worn, when more than one gene weakens a tick.
         let data = DataPack::builtin().expect("built-in data pack is valid");
         let mut easy = starter(20_000, &data);
         assert_eq!(easy.stage(), LifeStage::Old);
         let genome = easy.genome.clone();
         let ticks = until_it_gives_out(&mut easy, &data, 100_000);
         assert!(
-            (37_000..56_000).contains(&ticks),
+            (3_100..4_100).contains(&ticks),
             "an unworn body gave out after {ticks} ticks"
         );
         let mut hard = starter(20_000, &data);
         hard.body.wear = 1.0;
         let ticks = until_it_gives_out(&mut hard, &data, 100_000);
         assert!(
-            (12_000..19_000).contains(&ticks),
+            (1_000..1_400).contains(&ticks),
             "the most worn body gave out after {ticks} ticks"
         );
         // Settings don't weaken, instincts weaken at half the pace of the

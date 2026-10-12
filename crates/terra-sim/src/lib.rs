@@ -10,6 +10,7 @@ pub mod bench;
 mod biochem;
 mod brain;
 mod brain_io;
+mod breeding;
 mod categories;
 mod command;
 mod config;

@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::action::{Outcome, ScriptedAction, end, is_acting, penalty, set_off, start, trip};
 use crate::brain::{Aim, Seen, Snapshot, SpriteScoring, available, best_above};
+use crate::breeding;
 use crate::data::DataPack;
 use crate::events::Event;
 use crate::learning::Subject;
@@ -228,6 +229,10 @@ pub(crate) fn decide(
         in_sight.insert(aim.category, seen(&aim));
     }
 
+    // Mate is offered only when the sprite and the one it would aim at are
+    // both adults (M2 design §5).
+    let partner = candidate_sprite.filter(|&other| breeding::adults(state, id, other));
+
     let sprite = state.sprites.get_mut(id).expect("the same sprite");
     let rng = &mut state.rng;
     let brain = &mut sprite.brain;
@@ -274,7 +279,8 @@ pub(crate) fn decide(
     );
     let beside = candidate.is_some_and(|c| c.aim.adjacent);
     let remembered = candidate.is_some_and(|c| c.goal.is_none());
-    let offered = available(candidate.is_some(), beside, remembered);
+    let adults = partner.is_some() && candidate.and_then(|c| c.target.sprite()) == partner;
+    let offered = available(candidate.is_some(), beside, remembered, adults);
     let current = sprite.action.as_ref().filter(|_| running).map(|a| a.verb);
     let chosen = match current {
         Some(verb) => brain.switch(verb, &scores, &offered),

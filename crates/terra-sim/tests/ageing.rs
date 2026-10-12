@@ -200,7 +200,7 @@ fn an_old_sprite_s_weakened_genes_are_saved_and_hashed() {
     let mut world = carefree_changing(
         r#"Trait(trait: "grows_up", value: 1500.0),
            Trait(trait: "grows_old", value: 6000.0),"#,
-        &[("ticks: 46500,", "ticks: 500,")],
+        &[("ticks: 3600,", "ticks: 500,")],
     );
     run_to(&mut world, 6_400);
     let sprite = world.sprites().next().expect("the sprite");

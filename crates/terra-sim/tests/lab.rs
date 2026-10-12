@@ -377,3 +377,23 @@ ticks 0 to 5,000              seed 1    median
 "
     );
 }
+
+#[test]
+fn a_scenario_can_have_its_sprites_grow_old_at_another_age() {
+    // M2 design §2: a scenario watching the same sprites for longer than a
+    // life gives them a later old age; here, a sooner one. Starting just
+    // grown up at 4,500 ticks, a starter sprite would grow old at tick
+    // 9,000; at 6,000 it grows old at tick 1,500 and dies of it within 7,000.
+    let data = builtin();
+    let whole = ARENA
+        .replace("ticks: 3000", "ticks: 7000")
+        .replace("windows: [(0, 1000), (2000, 3000)]", "windows: [(0, 7000)]");
+    let old_age = |text: &str| {
+        let lab = LabScenario::from_ron(text, &data).expect("a valid scenario");
+        let run = lab.run(data.clone(), 1);
+        run.windows[0].deaths.get(&DeathCause::OldAge).copied()
+    };
+    assert_eq!(old_age(&whole), None);
+    let sooner = whole.replace("ticks: 7000", "grows_old: 6000.0,\n    ticks: 7000");
+    assert_eq!(old_age(&sooner), Some(1));
+}

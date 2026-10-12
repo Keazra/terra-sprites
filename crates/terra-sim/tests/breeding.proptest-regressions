@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 1ace650bd9708d7470b0e6a9b7390e90b911ab38e9389537a52aae08bd19e48c # shrinks to genes = "Trait(trait: \"grows_up\", value: 1500.0),\n                   Trait(trait: \"grows_old\", value: 6000.0),\n                   Instinct(inputs: [(\"always\", false), (\"attended_sprite\", false)], verb: Mate, weight: 1.0, from: Young),\n                   \n                   Instinct(inputs: [(\"always\", false)], verb: Hit, weight: 0.70129824),", young = [false, false, false, false], seed = 0

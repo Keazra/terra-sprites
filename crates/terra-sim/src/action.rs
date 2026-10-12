@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
+use crate::breeding;
 use crate::data::DataPack;
 use crate::decide::decide;
 use crate::events::{Event, EventKind};
@@ -654,7 +655,8 @@ pub(crate) fn resolve(
 }
 
 /// Sprite `id`, on a goal tile of `target`, ends its aimed action: an
-/// Approach has arrived, and Eat or Drink makes its one attempt (design §5.5).
+/// Approach has arrived, and Eat, Drink or Mate makes its one attempt
+/// (design §5.5, M2 design §5).
 fn act(
     state: &mut WorldState,
     data: &DataPack,
@@ -668,6 +670,7 @@ fn act(
     let subject = state.subject_of(data, target);
     let (outcome, hurt) = match verb {
         Verb::Approach => (Outcome::Applied, Hurt::default()),
+        Verb::Mate => breeding::mate(state, data, id),
         verb => verbs::attempt(state, data, id, verb, target, events),
     };
     let gone = state.whereabouts(data, target).is_none();
@@ -682,7 +685,7 @@ fn act(
     action.target_gone = gone;
     action.hurt = hurt;
     end(action, id, outcome, state.tick, events);
-    if verb.is_interaction() {
+    if verb.is_contact() {
         touched(state, data, id, target, subject, Some(verb));
     }
 }

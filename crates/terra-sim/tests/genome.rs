@@ -417,8 +417,8 @@ fn an_instinct_combines_one_to_three_different_inputs() {
 #[test]
 fn an_instinct_may_not_lead_to_a_reserved_verb() {
     assert_invalid(
-        &[r#"Instinct(inputs: [("loneliness", false)], verb: Mate, weight: 1.0)"#],
-        "Mate",
+        &[r#"Instinct(inputs: [("loneliness", false)], verb: Speak, weight: 1.0)"#],
+        "Speak",
     );
 }
 
