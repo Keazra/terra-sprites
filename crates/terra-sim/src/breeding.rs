@@ -59,14 +59,16 @@ pub(crate) fn room(state: &WorldState) -> bool {
     state.sprites.len() < usize::from(state.most_sprites)
 }
 
-/// Whether `sprite` is fertile now (M2 design §10): grown up, fed and
-/// watered, rested long enough since its last egg, in a world with `room`
-/// for another sprite.
+/// Whether `sprite` is fertile now (M2 design §10): in a pack with
+/// breeding, grown up, fed and watered, rested long enough since its last
+/// egg, in a world with `room` for another sprite. A save from before
+/// breeding keeps its pack, which has none.
 pub(crate) fn fertile(state: &WorldState, sprite: &Sprite, data: &DataPack) -> bool {
     let physiology = data.physiology();
     let (breeding, indices) = (&physiology.breeding, physiology.indices);
     let chems = &sprite.body.chems;
-    room(state)
+    indices.breeding.is_some()
+        && room(state)
         && sprite.stage().is_grown()
         && chems[indices.energy] > breeding.fed
         && chems[indices.hydration] > breeding.fed

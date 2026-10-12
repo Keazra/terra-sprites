@@ -684,10 +684,9 @@ fn a_young_sprite_s_arousal_moves_it_to_nothing() {
     assert_eq!(by_young, 0, "the young sprite went after the adult");
 }
 
-#[test]
-fn the_drive_works_only_between_adults_in_a_pack_that_doesnt_breed_too() {
-    // M2 design §5, whether or not the pack breeds: this one has no sense
-    // of a male in sight, so no breeding, but its drive is still a need.
+/// A pack with no breeding: it has no sense of a male in sight, and with
+/// it go the starter's genes that read one. Its drive is still a need.
+fn without_breeding() -> DataPack {
     let male_near = r#"(id: 9,  name: "male_near",         kind: BodySensor),"#;
     let longing = |line: &str| {
         let starter = include_str!("../../../data/genomes/starter.ron");
@@ -698,19 +697,34 @@ fn the_drive_works_only_between_adults_in_a_pack_that_doesnt_breed_too() {
         longing("invert: true, threshold: 0.5, gain: 0.001"),
         longing("gain: -0.01, chem: \"longing\""),
     );
-    let data = || {
-        builtin_changing_files(&[
-            ("loci.ron", &[(male_near, "")]),
-            ("genomes/starter.ron", &[(&raise, ""), (&drop, "")]),
-        ])
-    };
-    let world = family_in(data(), &[(at(1, 1), AROUSED)], &[], 1);
+    builtin_changing_files(&[
+        ("loci.ron", &[(male_near, "")]),
+        ("genomes/starter.ron", &[(&raise, ""), (&drop, "")]),
+    ])
+}
+
+#[test]
+fn the_drive_works_only_between_adults_in_a_pack_that_doesnt_breed_too() {
+    // M2 design §5, whether or not the pack breeds.
+    let world = family_in(without_breeding(), &[(at(1, 1), AROUSED)], &[], 1);
     let male = world.sprites().next().expect("a sprite");
     assert_eq!(male.turning(), None, "the pack has no breeding");
-    let (to_adult, by_adult) = goes_after_in(data(), AROUSED, AROUSED, false);
+    let (to_adult, by_adult) = goes_after_in(without_breeding(), AROUSED, AROUSED, false);
     assert!(to_adult > 0 && by_adult > 0, "{to_adult} and {by_adult}");
-    let (to_young, by_young) = goes_after_in(data(), AROUSED, AROUSED, true);
+    let (to_young, by_young) = goes_after_in(without_breeding(), AROUSED, AROUSED, true);
     assert_eq!((to_young, by_young), (0, 0));
+}
+
+#[test]
+fn a_sprite_in_a_pack_without_breeding_is_never_fertile() {
+    // M2 design §10: a save from before breeding keeps its pack, which has
+    // none, so the Body tab mustn't call its sprites fertile.
+    let fertile = |data| {
+        let world = family_in(data, &[(at(1, 1), REST)], &[], 1);
+        world.sprites().next().expect("a sprite").is_fertile()
+    };
+    assert!(fertile(builtin()), "a fed adult in a pack that breeds");
+    assert!(!fertile(without_breeding()), "an adult in a pack without");
 }
 
 #[test]
@@ -722,6 +736,30 @@ fn a_young_sprite_shows_no_arousal() {
     assert!(to_adult > 0, "it went after the aroused adult");
     let (to_young, _) = goes_after(WATCHING, shows, true);
     assert_eq!(to_young, 0, "it went after the aroused young sprite");
+}
+
+#[test]
+fn a_young_sprite_s_arousal_never_shows_on_screen() {
+    // M2 design §5: whatever its genes, a sprite not grown up shows no
+    // arousal, to the player as to other sprites. The front end reads its
+    // chemicals through the view, which reads the drive as 0.
+    let shows = r#"InitialConcentration(chem: "arousal", value: 1.0),"#;
+    let world = family(&[(at(1, 1), shows), (at(3, 1), shows)], &[at(3, 1)], 1);
+    for sprite in world.sprites() {
+        let listed = sprite.chemicals().find(|c| c.name == "arousal");
+        let listed = listed.map(|c| (c.level, c.change));
+        let expected = if sprite.life_stage().is_grown() {
+            1.0
+        } else {
+            0.0
+        };
+        assert_eq!(
+            (sprite.chemical("arousal"), listed),
+            (Some(expected), Some((expected, 0.0))),
+            "a {:?} sprite",
+            sprite.life_stage()
+        );
+    }
 }
 
 /// A state input a random gene may read.

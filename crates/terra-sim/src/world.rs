@@ -9,7 +9,7 @@ use xxhash_rust::xxh3::xxh3_64_with_seed;
 use crate::action::{self, ActionView, ScriptedAction, chebyshev};
 use crate::ageing::{LifeStage, Switch};
 use crate::biochem::{self, Senses, Traits};
-use crate::brain::{Explanation, Memory, RememberedPlace};
+use crate::brain::{self, Explanation, Memory, RememberedPlace};
 use crate::breeding::{self, Sex};
 use crate::command::{self, Command};
 use crate::config::{MOST_SPRITES, WorldConfig};
@@ -494,23 +494,36 @@ impl<'a> SpriteView<'a> {
         &self.sprite.health
     }
 
-    /// Every chemical in the sprite, in the data pack's order.
+    /// Every chemical in the sprite, in the data pack's order. The breeding
+    /// drive reads 0 in a sprite not grown up, whatever its genes, as it
+    /// does to other sprites (M2 design §5).
     pub fn chemicals(&self) -> impl Iterator<Item = ChemicalLevel<'a>> + use<'a> {
         let body = &self.sprite.body;
+        let hidden = self.hidden_drive();
         self.world
             .data
             .chemicals()
             .iter()
             .zip(body.chems.iter().zip(&body.chems_before_tick))
-            .map(|(chemical, (&level, &before))| ChemicalLevel {
-                name: &chemical.name,
-                kind: chemical.kind(),
-                level,
-                change: level - before,
+            .enumerate()
+            .map(move |(index, (chemical, (&level, &before)))| {
+                let (level, before) = if Some(index) == hidden {
+                    (0.0, 0.0)
+                } else {
+                    (level, before)
+                };
+                ChemicalLevel {
+                    name: &chemical.name,
+                    kind: chemical.kind(),
+                    level,
+                    change: level - before,
+                }
             })
     }
 
-    /// The level of the chemical called `name`, or `None` if the pack has no such chemical.
+    /// The level of the chemical called `name`, or `None` if the pack has no
+    /// such chemical. The breeding drive reads 0 in a sprite not grown up
+    /// (M2 design §5).
     pub fn chemical(&self, name: &str) -> Option<f32> {
         let index = self
             .world
@@ -518,7 +531,23 @@ impl<'a> SpriteView<'a> {
             .chemicals()
             .iter()
             .position(|c| c.name == name)?;
-        Some(self.sprite.body.chems[index])
+        let hidden = self.hidden_drive() == Some(index);
+        Some(if hidden {
+            0.0
+        } else {
+            self.sprite.body.chems[index]
+        })
+    }
+
+    /// The chemical the breeding drive reads, if this sprite isn't grown up:
+    /// the one its views show as 0 (M2 design §5).
+    fn hidden_drive(&self) -> Option<usize> {
+        let grown = self.sprite.stage().is_grown();
+        if grown {
+            None
+        } else {
+            brain::drive_chemical(&self.world.data)
+        }
     }
 }
 

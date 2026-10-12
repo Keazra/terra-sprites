@@ -1583,6 +1583,17 @@ fn drive_inputs(data: &DataPack) -> Vec<usize> {
         .collect()
 }
 
+/// The chemical the breeding drive reads, by index, if it reads one (M2
+/// design §5): what the front end must show as 0 in a sprite not grown up.
+pub(crate) fn drive_chemical(data: &DataPack) -> Option<usize> {
+    let need = data.physiology().indices.drive?;
+    let inputs = data.brain_inputs_in_order();
+    match inputs[data.need_places()[need]].source {
+        Source::State(LocusRef::Chem(id)) => data.chemical_index(id),
+        _ => None,
+    }
+}
+
 /// The breeding drive works only between adults (M2 design §5): in a
 /// sprite not grown up, and in a choice about one, every input that reads
 /// it, in the sprite or in the one it attends to, reads 0 in `inputs`,
