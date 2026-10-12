@@ -759,6 +759,18 @@ fn physiology_rates_are_not_negative() {
 }
 
 #[test]
+fn breeding_s_drive_must_be_a_need() {
+    // M2 design §5: the engine keeps the drive between adults, so it must
+    // know which need it is.
+    assert_invalid_physiology(r#"drive: "arousal""#, r#"drive: "glee""#, "breeding.drive");
+    assert_invalid_physiology(
+        r#"drive: "arousal""#,
+        r#"drive: "feminiser""#,
+        "breeding.drive",
+    );
+}
+
+#[test]
 fn the_cursor_s_touch_raises_levels_by_fractions_and_reaches_back_at_least_the_touch_window() {
     // Design v21 §4.6, §2.5.
     assert_invalid_physiology("pet: 0.5", "pet: 1.5", "cursor.pet");

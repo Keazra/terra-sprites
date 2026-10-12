@@ -59,26 +59,26 @@ pub(crate) fn room(state: &WorldState) -> bool {
     state.sprites.len() < usize::from(state.most_sprites)
 }
 
-/// Whether `sprite`'s body is fertile on the tick `tick` (M2 design §10):
-/// grown up, fed and watered, and rested long enough since its last egg.
-/// It's fertile if the world has `room` too.
-pub(crate) fn fertile(sprite: &Sprite, tick: u64, data: &DataPack) -> bool {
+/// Whether `sprite` is fertile now (M2 design §10): grown up, fed and
+/// watered, rested long enough since its last egg, in a world with `room`
+/// for another sprite.
+pub(crate) fn fertile(state: &WorldState, sprite: &Sprite, data: &DataPack) -> bool {
     let physiology = data.physiology();
-    let (breeding, indices) = (physiology.breeding, physiology.indices);
+    let (breeding, indices) = (&physiology.breeding, physiology.indices);
     let chems = &sprite.body.chems;
-    sprite.stage().is_grown()
+    room(state)
+        && sprite.stage().is_grown()
         && chems[indices.energy] > breeding.fed
         && chems[indices.hydration] > breeding.fed
         && sprite
             .last_bred
-            .is_none_or(|last| tick >= last + breeding.rest)
+            .is_none_or(|last| state.tick >= last.saturating_add(breeding.rest))
 }
 
 /// Sprite `actor`, beside `target`, tries to mate with it, once (M2 design
 /// §10). It works if both are adults, fertile, one male and one female,
-/// the world has room for one more sprite, and the female has a free tile
-/// beside her: she lays an egg there, its genes mixed from both. Otherwise
-/// it's a fruitless try.
+/// and the female has a free tile beside her: she lays an egg there, its
+/// genes mixed from both. Otherwise it's a fruitless try.
 pub(crate) fn mate(
     state: &mut WorldState,
     data: &DataPack,
@@ -90,9 +90,8 @@ pub(crate) fn mate(
         .sprite()
         .filter(|&partner| adults(state, actor, partner))
         .and_then(|partner| {
-            let (tick, sprites) = (state.tick, &state.sprites);
-            let (a, b) = (sprites.get(actor)?, sprites.get(partner)?);
-            let both = fertile(a, tick, data) && fertile(b, tick, data);
+            let (a, b) = (state.sprites.get(actor)?, state.sprites.get(partner)?);
+            let both = fertile(state, a, data) && fertile(state, b, data);
             let (mother, father) = match (a.sex, b.sex) {
                 (Sex::Female, Sex::Male) => (actor, partner),
                 (Sex::Male, Sex::Female) => (partner, actor),
@@ -111,9 +110,8 @@ pub(crate) fn mate(
 }
 
 /// Sprite `actor` tries to breed alone, once (M2 design §10). It works if
-/// it's a fertile adult female, the world has room for one more sprite,
-/// and she has a free tile beside her: she lays an egg there, its genes
-/// hers. Otherwise it's a fruitless try.
+/// it's a fertile adult female with a free tile beside her: she lays an egg
+/// there, its genes hers. Otherwise it's a fruitless try.
 pub(crate) fn breed_alone(
     state: &mut WorldState,
     data: &DataPack,
@@ -121,7 +119,7 @@ pub(crate) fn breed_alone(
     events: &mut Vec<Event>,
 ) -> Outcome {
     let sprite = state.sprites.get(actor).expect("the actor");
-    let able = sprite.sex == Sex::Female && fertile(sprite, state.tick, data);
+    let able = sprite.sex == Sex::Female && fertile(state, sprite, data);
     let laid = able
         .then(|| lay(state, data, actor, None, events))
         .flatten();
@@ -144,10 +142,10 @@ fn outcome(
     (Outcome::Failed, Hurt::default())
 }
 
-/// `mother` lays an egg on a free tile beside her, by `father` or alone (M2
-/// design §10), if the world has room for another sprite and she has a free
-/// tile. The parents split the egg's cost, or she pays it all alone, and
-/// each fires its `bred` pulse. Returns the egg.
+/// `mother`, fertile, lays an egg on a free tile beside her, by `father` or
+/// alone (M2 design §10), if she has a free tile. The parents split the
+/// egg's cost, or she pays it all alone, and each fires its `bred` pulse.
+/// Returns the egg.
 fn lay(
     state: &mut WorldState,
     data: &DataPack,
@@ -155,9 +153,6 @@ fn lay(
     father: Option<EntityId>,
     events: &mut Vec<Event>,
 ) -> Option<EntityId> {
-    if !room(state) {
-        return None;
-    }
     let pos = state.sprites.get(mother).expect("the mother").pos;
     let free: Vec<_> = Dir::ALL
         .into_iter()
@@ -178,7 +173,7 @@ fn lay(
     };
     let parents: Vec<EntityId> = std::iter::once(mother).chain(father).collect();
     let physiology = data.physiology();
-    let (breeding, indices) = (physiology.breeding, physiology.indices);
+    let (breeding, indices) = (&physiology.breeding, physiology.indices);
     let share = breeding.cost / parents.len() as f32;
     for &parent in &parents {
         let sprite = state.sprites.get_mut(parent).expect("a parent");

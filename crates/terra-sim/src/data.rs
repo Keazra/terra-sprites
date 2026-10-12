@@ -229,17 +229,25 @@ impl DataPack {
             &chemicals,
             &loci,
         )?;
-        let indices =
-            Indices::find(&chemicals, &loci).map_err(|(file, message)| DataError::Invalid {
+        let physiology = parse::<PhysiologyEntry>(sources, PHYSIOLOGY)?;
+        let needs: Vec<&str> = brain_io
+            .needs
+            .iter()
+            .map(|&place| brain_io.inputs[place].name.as_str())
+            .collect();
+        let indices = Indices::find(&chemicals, &loci, &needs, physiology.drive()).map_err(
+            |(file, message)| DataError::Invalid {
                 file: file.into(),
                 message,
-            })?;
-        let physiology = parse::<PhysiologyEntry>(sources, PHYSIOLOGY)?
-            .validate(indices, &loci)
-            .map_err(|message| DataError::Invalid {
-                file: PHYSIOLOGY.into(),
-                message,
-            })?;
+            },
+        )?;
+        let physiology =
+            physiology
+                .validate(indices, &loci)
+                .map_err(|message| DataError::Invalid {
+                    file: PHYSIOLOGY.into(),
+                    message,
+                })?;
         let syllables = parse::<Syllables>(sources, NAMES)?
             .validate()
             .map_err(|message| DataError::Invalid {

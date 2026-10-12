@@ -6,7 +6,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::action::{Outcome, ScriptedAction, end, is_acting, penalty, set_off, start, trip};
-use crate::brain::{self, Aim, Seen, Snapshot, SpriteScoring, available, best_above};
+use crate::brain::{self, Aim, Seen, Situation, Snapshot, SpriteScoring, available, best_above};
 use crate::breeding;
 use crate::data::DataPack;
 use crate::events::Event;
@@ -106,10 +106,23 @@ pub(crate) fn decide(
         let category = place.subject.category(data);
         offered.entry(category).or_default().push(offer);
     }
+    // The breeding drive works only between adults (M2 design §5): it reads
+    // 0 in a sprite not grown up, and in a choice about one. Breeding alone
+    // is offered only to a grown sprite too (§10).
+    let grown = sprite.stage().is_grown();
+    let not_grown = |target: Target| {
+        target
+            .sprite()
+            .and_then(|other| state.sprites.get(other))
+            .is_some_and(|other| !other.stage().is_grown())
+    };
     // Each category's candidate is the thing that draws the eye most (design
     // v19 §3.6); ties go to the lower ID, which comes first, and then to
     // what's in sight.
-    let state_only = sprite.brain.inputs(&sprite.body, None, None, data);
+    let mut state_only = sprite.brain.inputs(&sprite.body, None, None, data);
+    if !grown {
+        brain::without_drive(&mut state_only, data);
+    }
     let curiosity_mod = sprite.body.loci[data.physiology().indices.curiosity_mod];
     let found: BTreeMap<CategoryId, Offer> = offered
         .into_iter()
@@ -119,6 +132,7 @@ pub(crate) fn decide(
                     subject: state.subject_of(data, offer.target),
                     distance: offer.cost.map_or(1.0, |cost| normalized(cost, reach)),
                     recall: offer.recall,
+                    not_grown: not_grown(offer.target),
                 };
                 let draw = sprite.brain.draw(
                     seen,
@@ -151,6 +165,7 @@ pub(crate) fn decide(
                 distance: offer.cost.map_or(1.0, |cost| normalized(cost, reach)),
                 adjacent: state.on_goal_tile(data, sprite.pos, target),
                 recall: offer.recall,
+                not_grown: not_grown(target),
             };
             let candidate = Candidate {
                 type_id,
@@ -193,11 +208,13 @@ pub(crate) fn decide(
                 distance: normalized(cost, reach),
                 adjacent,
                 recall,
+                not_grown: not_grown(target),
             }
         });
     let exploration = sprite.body.loci[data.physiology().indices.exploration_mod];
     // The sprite that stands for sprites while attention scores: a running
-    // action's target, or else the candidate (design v18 §5.3).
+    // action's target, or else the candidate (design v18 §5.3). An egg is
+    // seen as an egg, not a sprite (M2 design §10), so it never does.
     let candidate_sprite = candidates
         .get(&data.sprite_category())
         .and_then(|c| c.target.sprite());
@@ -206,6 +223,7 @@ pub(crate) fn decide(
     let scoring = SpriteScoring {
         sprite: action
             .and_then(|a| a.target)
+            .filter(|&target| state.category_of(data, target) == data.sprite_category())
             .and_then(Target::sprite)
             .or(candidate_sprite),
         quiet: false,
@@ -220,6 +238,7 @@ pub(crate) fn decide(
         subject: aim.subject,
         distance: aim.distance,
         recall: aim.recall,
+        not_grown: aim.not_grown,
     };
     let mut in_sight: BTreeMap<CategoryId, Seen> = candidates
         .iter()
@@ -232,13 +251,6 @@ pub(crate) fn decide(
     // Mate is offered only when the sprite and the one it would aim at are
     // both adults (M2 design §5).
     let partner = candidate_sprite.filter(|&other| breeding::adults(state, id, other));
-    // And breeding alone only to an adult (§10).
-    let grown = state
-        .sprites
-        .get(id)
-        .expect("the sprite")
-        .stage()
-        .is_grown();
 
     // What each sprite it may attend to shows it (M2 design §10): an egg
     // shows nothing.
@@ -284,7 +296,10 @@ pub(crate) fn decide(
         .and_then(Target::sprite)
         .and_then(|other| shown.get(&other))
         .map(Vec::as_slice);
-    let inputs = brain.inputs(&sprite.body, aim, seen, data);
+    let mut inputs = brain.inputs(&sprite.body, aim, seen, data);
+    if !grown || aim.is_some_and(|aim| aim.not_grown) {
+        brain::without_drive(&mut inputs, data);
+    }
     let activations = brain.activations(&inputs);
     // The sprite the decision is about, as `aim` is: a running action's
     // target, or else the candidate (design v18 §5.5).
@@ -306,7 +321,13 @@ pub(crate) fn decide(
     let beside = candidate.is_some_and(|c| c.aim.adjacent);
     let remembered = candidate.is_some_and(|c| c.goal.is_none());
     let adults = partner.is_some() && candidate.and_then(|c| c.target.sprite()) == partner;
-    let offered = available(candidate.is_some(), beside, remembered, adults, grown);
+    let offered = available(Situation {
+        target: candidate.is_some(),
+        beside,
+        remembered,
+        adults,
+        grown,
+    });
     let current = sprite.action.as_ref().filter(|_| running).map(|a| a.verb);
     let chosen = match current {
         Some(verb) => brain.switch(verb, &scores, &offered),

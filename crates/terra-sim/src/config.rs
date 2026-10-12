@@ -20,6 +20,11 @@ const SPRITES: std::ops::RangeInclusive<u16> = 20..=100;
 /// eggs included (M2 design §10): the size the speed check measures (A5).
 pub(crate) const MOST_SPRITES: u16 = 100;
 
+/// `MOST_SPRITES`, for a save from before breeding.
+pub(crate) fn most_sprites() -> u16 {
+    MOST_SPRITES
+}
+
 /// The allowed range for `most_sprites` (M2 design §10).
 const MOST: std::ops::RangeInclusive<u16> = 1..=1000;
 

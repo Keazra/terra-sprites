@@ -8,7 +8,7 @@ What a sprite's brain can feel (design §5.2). The file has three parts.
 |---|---|
 | `id` | Permanent, never reused. 1 to 35, then from 64: IDs 36 to 63 are kept for the Target inputs. |
 | `name` | What genomes call it. |
-| `reads` | `Chem("name")` for a drive or a hormone, or `Locus("name")` for a body sensor or a pulse. Wrapped in `Target(...)`, such as `Target(Chem("arousal"))`, it reads the same in the body of the sprite it's looking at: its body language (M2 design §10). Wrapped in `Differs(...)`, such as `Differs(Locus("female"))`, it reads how far that sprite's level differs from its own. Both are 0 while it looks at anything else, or at an egg. |
+| `reads` | `Chem("name")` for a drive or a hormone, or `Locus("name")` for a body sensor or a pulse. Wrapped in `Target(...)`, such as `Target(Chem("arousal"))`, it reads the same in the body of the sprite it's looking at: its body language (M2 design §10). Wrapped in `Differs(...)`, such as `Differs(Locus("female"))`, it reads how far that sprite's level differs from its own. Both are 0 while it looks at anything else, or at an egg. Any input that reads breeding's drive ([physiology](physiology.md)'s `breeding.drive`), in the sprite or the one it looks at, is 0 unless both are grown up (M2 design §5). |
 
 The brain can't read physical chemicals (it feels the body only through drives), `reward` and `punishment` (learning uses them), `moving` and `resting` (they'd feed an action back into itself) or receptor targets. Reading one is an error.
 

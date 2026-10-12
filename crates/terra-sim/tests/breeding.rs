@@ -4,18 +4,22 @@
 //! turns female; and births are world state, saved, hashed and replayed.
 
 mod common;
-use common::{WorldBuilder, at, builtin, close, endings, genome};
+use common::{WorldBuilder, at, builtin, builtin_changing_files, close, endings, genome};
 
 use proptest::prelude::*;
 use terra_sim::{
-    Command, EntityId, Event, EventKind, LifeStage, Outcome, Playback, Pos, Rejection, Sex, Target,
-    Verb, World,
+    Command, DataPack, EntityId, Event, EventKind, LifeStage, Outcome, Part, Playback, Pos,
+    Rejection, Sex, Target, Thing, Verb, World,
 };
 
 /// A small field of grass with a sprite of `genes` on each tile of
 /// `sprites`, those on `young` as newborns and the rest just grown up.
 fn field(genes: &str, sprites: &[Pos], young: &[Pos], seed: u64) -> World {
-    let data = builtin();
+    field_in(builtin(), genes, sprites, young, seed)
+}
+
+/// `field`, with the data pack `data`.
+fn field_in(data: DataPack, genes: &str, sprites: &[Pos], young: &[Pos], seed: u64) -> World {
     let genome = genome(genes, &data);
     let placed = sprites
         .iter()
@@ -541,6 +545,84 @@ fn a_male_leaves_a_female_alone_while_she_shows_no_arousal() {
     );
 }
 
+/// Goes after the sprite it watches while it's aroused, and it's aroused
+/// from the start. Otherwise it wanders, and it hardly ever tries anything
+/// at random.
+const AROUSED: &str = r#"
+    InitialConcentration(chem: "arousal", value: 1.0),
+    AttentionInstinct(input: "arousal", category: "sprite", weight: 1.0),
+    Instinct(inputs: [("arousal", false)], verb: Approach, weight: 2.0),
+    Instinct(inputs: [("always", false)], verb: Wander, weight: 1.0),
+    BrainParam(param: "tau_base", value: 0.05),
+"#;
+
+/// Goes after the sprite it watches while that one shows arousal. Otherwise
+/// it wanders, and it hardly ever tries anything at random.
+const WATCHING: &str = r#"
+    AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
+    Instinct(inputs: [("target_arousal", false)], verb: Approach, weight: 2.0),
+    Instinct(inputs: [("always", false)], verb: Wander, weight: 1.0),
+    BrainParam(param: "tau_base", value: 0.05),
+"#;
+
+/// How many actions, in 200 ticks, the sprite on the left starts aimed at
+/// the sprite on the right, and the one on the right at the one on the
+/// left, each of its own genes, the one on the right young if `young`.
+fn goes_after(left: &str, right: &str, young: bool) -> (usize, usize) {
+    let (a, b) = (at(1, 1), at(6, 2));
+    let newborns: &[Pos] = if young { &[b] } else { &[] };
+    let mut world = family(&[(a, left), (b, right)], newborns, 1);
+    let ids = [a, b].map(|pos| world.sprite_at(pos).expect("a sprite").id());
+    let mut counts = (0, 0);
+    for _ in 0..200 {
+        for event in world.step() {
+            let EventKind::ActionStarted { id, .. } = event.kind else {
+                continue;
+            };
+            let target = world
+                .sprite(id)
+                .and_then(|sprite| sprite.action())
+                .and_then(|action| action.target);
+            if (id, target) == (ids[0], Some(Target::Sprite(ids[1]))) {
+                counts.0 += 1;
+            } else if (id, target) == (ids[1], Some(Target::Sprite(ids[0]))) {
+                counts.1 += 1;
+            }
+        }
+    }
+    counts
+}
+
+#[test]
+fn an_aroused_adult_goes_after_an_adult_but_never_a_young_sprite() {
+    // M2 design §5: the breeding drive works only between adults, whatever
+    // the genes, so it reads 0 in a choice about a young sprite.
+    let (to_adult, _) = goes_after(AROUSED, AROUSED, false);
+    assert!(to_adult > 0, "it went after the adult");
+    let (to_young, _) = goes_after(AROUSED, AROUSED, true);
+    assert_eq!(to_young, 0, "it went after the young sprite");
+}
+
+#[test]
+fn a_young_sprite_s_arousal_moves_it_to_nothing() {
+    // M2 design §5: the drive reads 0 in a sprite not grown up.
+    let (_, by_adult) = goes_after(AROUSED, AROUSED, false);
+    assert!(by_adult > 0, "the adult went after the other");
+    let (_, by_young) = goes_after(AROUSED, AROUSED, true);
+    assert_eq!(by_young, 0, "the young sprite went after the adult");
+}
+
+#[test]
+fn a_young_sprite_shows_no_arousal() {
+    // M2 design §5, §10: body language reads the drive's level in an
+    // adult, and 0 in a young sprite, whatever its genes do with it.
+    let shows = r#"InitialConcentration(chem: "arousal", value: 1.0),"#;
+    let (to_adult, _) = goes_after(WATCHING, shows, false);
+    assert!(to_adult > 0, "it went after the aroused adult");
+    let (to_young, _) = goes_after(WATCHING, shows, true);
+    assert_eq!(to_young, 0, "it went after the aroused young sprite");
+}
+
 /// A state input a random gene may read.
 fn state_input() -> impl Strategy<Value = &'static str> {
     prop::sample::select(vec![
@@ -554,6 +636,8 @@ fn state_input() -> impl Strategy<Value = &'static str> {
         "age",
         "nearby_sprites",
         "h3",
+        "arousal",
+        "arousal",
     ])
 }
 
@@ -576,7 +660,12 @@ fn instinct() -> impl Strategy<Value = String> {
         "Wander",
         "Rest",
     ]);
-    let attended = prop::sample::select(vec!["", r#", ("attended_sprite", false)"#]);
+    let attended = prop::sample::select(vec![
+        "",
+        r#", ("attended_sprite", false)"#,
+        r#", ("target_arousal", false)"#,
+        r#", ("target_other_sex", false)"#,
+    ]);
     (state_input(), any::<bool>(), attended, verb, -1.0f32..1.0, switch()).prop_map(
         |(input, negated, attended, verb, weight, switch)| {
             format!(
@@ -599,29 +688,90 @@ fn attention() -> impl Strategy<Value = String> {
 }
 
 /// A random genome of brain genes: each sprite grows up and old at random
-/// ages, so some cross a life stage mid-run, and some have a full
-/// feminiser, so they turn female if grown.
+/// ages, early enough, in `quick`'s world, that some cross a life stage
+/// mid-run; some have a full feminiser, so they turn female if grown; and
+/// some are aroused, whatever their age.
 fn random_genes() -> impl Strategy<Value = String> {
+    let aroused = prop::sample::select(vec![
+        "",
+        r#"InitialConcentration(chem: "arousal", value: 1.0),"#,
+        r#"Emitter(locus: Locus("always"), mode: Level, gain: 0.01, chem: "arousal"),"#,
+    ]);
     (
         prop::collection::vec(instinct(), 1..8),
         prop::collection::vec(attention(), 0..4),
-        1500.0f32..2500.0,
-        6000.0f32..7000.0,
+        50.0f32..300.0,
+        200.0f32..900.0,
         prop::sample::select(vec!["", FEMALE]),
+        aroused,
     )
-        .prop_map(|(instincts, attention, grows_up, grows_old, female)| {
+        .prop_map(|(instincts, attention, grows_up, grows_old, female, aroused)| {
             format!(
                 r#"Trait(trait: "grows_up", value: {grows_up:?}),
                    Trait(trait: "grows_old", value: {grows_old:?}),
                    Instinct(inputs: [("always", false), ("attended_sprite", false)], verb: Mate, weight: 1.0, from: Young),
                    Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 0.5, from: Young),
                    {female}
+                   {aroused}
                    {}
                    {}"#,
                 attention.join("\n"),
                 instincts.join("\n")
             )
         })
+}
+
+/// The built-in pack, but with sprites that may grow up and old within a
+/// few hundred ticks and eggs that hatch in 100.
+fn quick() -> DataPack {
+    builtin_changing_files(&[(
+        "physiology.ron",
+        &[
+            (
+                "grows_old: (6000.0, 60000.0),",
+                "grows_old: (100.0, 60000.0),",
+            ),
+            ("grows_up: (1500.0, 13500.0),", "grows_up: (10.0, 13500.0),"),
+            ("hatches: 750,", "hatches: 100,"),
+        ],
+    )])
+}
+
+/// Whether, in its latest choice, the breeding drive moved a sprite not
+/// grown up, or one attending to a sprite not grown up (M2 design §5): its
+/// arousal, or the arousal it reads in another, adds nothing then. Says
+/// which sprite and how, if it did.
+fn drive_moved_a_child(world: &World) -> Option<String> {
+    for sprite in world.sprites() {
+        let Some(explanation) = sprite.explain() else {
+            continue;
+        };
+        let attended = &explanation.attended;
+        let on_a_child = match attended {
+            Some(Thing::Sprite(other)) => world
+                .sprite(*other)
+                .is_some_and(|other| !other.life_stage().is_grown()),
+            Some(Thing::ObjectType(name)) => name == "egg",
+            _ => false,
+        };
+        if sprite.life_stage().is_grown() && !on_a_child {
+            continue;
+        }
+        for c in &explanation.contributions {
+            if let Part::Concept(inputs) = &c.part
+                && inputs.iter().any(|&(input, negated)| {
+                    !negated && (input == "arousal" || input == "target_arousal")
+                })
+            {
+                return Some(format!(
+                    "a {:?} sprite attending to {attended:?}: {inputs:?} added {}",
+                    sprite.life_stage(),
+                    c.amount
+                ));
+            }
+        }
+    }
+    None
 }
 
 proptest! {
@@ -633,8 +783,9 @@ proptest! {
         young in prop::collection::vec(any::<bool>(), 4),
         seed: u64,
     ) {
-        // M2 design §5, G7. Every tick also runs the self-check, which
-        // fails on a Mate action that isn't between adults.
+        // M2 design §5, G7: Mate and the breeding drive only between
+        // adults. Every tick also runs the self-check, which fails on a
+        // Mate action that isn't between adults.
         let tiles = [at(2, 1), at(3, 1), at(2, 2), at(3, 2)];
         let newborns: Vec<Pos> = tiles
             .iter()
@@ -642,13 +793,16 @@ proptest! {
             .filter(|&(_, &young)| young)
             .map(|(&pos, _)| pos)
             .collect();
-        let mut world = field(&genes, &tiles, &newborns, seed);
-        for (stage, partner) in matings(&mut world, 300) {
-            prop_assert!(stage.is_grown(), "a {stage:?} sprite mated");
-            prop_assert!(
-                partner.is_some_and(LifeStage::is_grown),
-                "a sprite mated with {partner:?}"
-            );
+        let mut world = field_in(quick(), &genes, &tiles, &newborns, seed);
+        for _ in 0..600 {
+            for (stage, partner) in matings(&mut world, 1) {
+                prop_assert!(stage.is_grown(), "a {stage:?} sprite mated");
+                prop_assert!(
+                    partner.is_some_and(LifeStage::is_grown),
+                    "a sprite mated with {partner:?}"
+                );
+            }
+            prop_assert_eq!(drive_moved_a_child(&world), None);
         }
     }
 }

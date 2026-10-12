@@ -116,7 +116,7 @@ The owner's one content-safety rule ([#69](https://github.com/Keazra/terra-sprit
 
 Slice 23 builds it:
 - `Mate` is never offered unless both sprites are adults (an old sprite counts as one, §9.1). It's a hard check in verb availability, not a learned or genetic lean. Nor is `BreedAlone`, unless the sprite is grown (§10.3).
-- Attraction, whatever form it takes, never targets a non-adult.
+- Attraction, whatever form it takes, never targets a non-adult. **The breeding drive works only between adults** (Slice 23): `physiology.ron` names it (`breeding.drive`, the starter's `arousal`), and whatever the genes, it reads 0 in a sprite not grown up, and in an adult's choices about one: it draws no eye to it, moves the sprite to do nothing to it, and its body language shows none. Its fall teaches worth only after a Mate, and only about that partner, never sprites in general or new things (§10.2).
 - `check_invariants` checks it every tick, and property tests with random genomes pin it.
 - Genes that switch on at adulthood (§3, reading A) are the natural home for mating instincts; the engine's check holds regardless.
 
@@ -307,7 +307,7 @@ The owner (2026-10-11): old age is the genome wearing out, and a hard life damag
 
 - **Every gene has a health,** from 1 (whole) to 0. It only ever falls, and it scales the gene's effect: a feeling's gain, a receptor's gain, a reaction's rate, an instinct's weight, and how far a speed or sense radius gene reaches above the least its trait can be. A gene that's a setting, not a strength, doesn't weaken: half-lives, starting levels, brain parameters, and the timing genes.
 - **Before old age, repair keeps up.** Once old, damage lands on random genes, a `hit` (0.01 of health) at a time, so health falls in small, frequent steps (the owner, 2026-10-11). **An instinct takes half,** so the mind outlasts the body.
-- **The pace:** an unworn sprite's genes fall to `gives_out` (0.5 on average) in about `decay.ticks` (3,600), and old age then kills it in about 900 more, so old age lasts about an hour at 1× (about 4,000 ticks, the median of six sprites with no needs) (Slice 23; it was 46,500, about 10 hours, until sprites had young). When that takes more than one hit a tick, as it does for a worn sprite, the whole hits land each tick and the odds are of one more.
+- **The pace:** an unworn sprite's genes fall to `gives_out` (0.5 on average) in about `decay.ticks` (3,600; a unit test, `an_old_sprite_s_genes_decay_until_its_body_gives_out_in_about_the_ticks_set`, holds it to 3,100–4,100), and old age kills it soon after, so old age lasts about an hour at 1× (Slice 23; it was 46,500, about 10 hours, until sprites had young). When that takes more than one hit a tick, as it does for a worn sprite, the whole hits land each tick and the odds are of one more.
 - **A hard life wears the body for good,** and wear never heals: `wear.starving` (0.0002) a tick while energy is under `wear.low` (.25), `wear.parched` (0.0002) while hydration is, and `wear.injured` (0.001) a tick for each unit of injury, so a hit or a prick wears the body through the injury it does, for as long as it takes to heal. It reads the body, not feelings, which genes could switch off.
 - **Wear brings old age sooner and speeds the decay.** The most worn sprite grows old at (1 − `sooner`) of its `grows_old` (`sooner` is .33), and its genes decay `wear_speedup` (3) times as fast; less worn, in proportion.
 - **A bad injury can scar a gene at any age:** while injury is above `scar.above` (.5), each tick has a `scar.chance` (0.002) that a random gene loses `scar.hit` (0.05; half that on an instinct).
@@ -355,14 +355,14 @@ cargo run --release -p terra-sim --example speed
 
 ## 10. Breeding (Slice 23)
 
-Settled with the owner on 2026-10-12 ([#141](https://github.com/Keazra/terra-sprites/issues/141)), in a round of ten questions and two decision cards. Grown sprites have young, alone or with a partner as their genes lean, and only ever between adults (§5). The numbers are data, the `breeding` section of `physiology.ron` and the starter genome: first guesses, tuned against §10.8.
+Settled with the owner on 2026-10-12 ([#141](https://github.com/Keazra/terra-sprites/issues/141)), in a round of ten questions and two decision cards. Grown sprites have young, alone or with a partner as their genes lean, and only ever between adults (§5). The numbers are data, the `breeding` section of `physiology.ron` and the starter genome: first guesses, tuned against §10.8. A save from before this slice keeps the pack it was made with (M1 design §2.8), which has no breeding, so its sprites never have young.
 
 ### 10.1 Sexes, by neighbours
 
 The owner chose sex by neighbours, as in clownfish and gobies, over hermaphrodites, two fixed sexes and mating types.
 
 - **Every sprite hatches male,** and no young sprite changes.
-- **A body sensor, `female_near`,** is 1 while a female adult is within the sprite's sense radius, and 0 otherwise. `female` is 1 for a female.
+- **A body sensor, `female_near`,** is 1 while a female adult is within the sprite's sense radius, and 0 otherwise. `female` is 1 for a female. The round had it count how many females are near; one is enough to keep a male male, so it's on or off.
 - **A hormone, the `feminiser`, decides when a male turns.** The starter genes raise it while the sprite, grown up, sees no female adult and lower it fast while it sees one: a male long without females (about 800 ticks) turns. The genes set the pace, so evolution can tune it.
 - **Past `turns_female` (0.8), an adult male turns female for good,** at the start of step 3 (M1 design §2.4), as its life stage changes. It's the engine's rule, like growing up: the genes move the hormone, the body does the rest.
 - **Only a female lays eggs.** A pair needs a male and a female; a female can breed alone (§10.3).
@@ -371,9 +371,9 @@ The owner chose sex by neighbours, as in clownfish and gobies, over hermaphrodit
 
 The game's rule, "the world decides what happens to the body, the genes decide how it feels":
 
-- **The body says whether a sprite can breed.** It's **fertile** while it's grown (old counts), its energy and hydration are both above `fed` (0.5), it's at least `rest` (1,500) ticks since its last egg, laid or fathered, and the world has room for another sprite (§10.6). The `fertile` body sensor reads it. `fed` was 0.6 in the round; at 0.6 a pair was almost never fertile at once (§10.8).
+- **The body says whether a sprite can breed.** It's **fertile** while it's grown (old counts), its energy and hydration are both above `fed` (0.5), it's at least `rest` (1,500) ticks since its last egg, laid or fathered, and the world has room for another sprite (§10.6). The `fertile` body sensor reads it. `fed` was 0.6 in the round; in tuning, at 0.6 a pair was seldom fertile at the same time, so it's 0.5.
 - **The genes say whether it wants to.** **Arousal** is a drive and a need, second-order like loneliness (#50). The starter genes raise it fast while the sprite is fertile, drop it at once when it breeds (the `bred` pulse), and drop it within a few ticks of its no longer being fertile, so it reads as fertility (§10.3). It draws the eye to sprites.
-- **Only mating relieves it, in what a sprite learns.** Arousal's fall teaches worth only when the sprite's latest touch was a Mate, so it learns which sprites it bred with were good for it, and never that a young sprite is: mating with one is impossible.
+- **Only mating relieves it, in what a sprite learns.** Arousal's fall teaches worth only when the sprite's latest touch was a Mate, and only about that partner: it learns which sprites it bred with were good for it, and what it learns never spreads to sprites in general or to new things, so it never learns that a young sprite is. Whatever the genes, arousal reads 0 in a young sprite and in an adult's choices about one (§5).
 - It was called **broodiness** in the round; the owner renamed it on 2026-10-12. Brooding is sitting on eggs, which may come later.
 
 ### 10.3 Mating and breeding alone
@@ -382,13 +382,13 @@ The game's rule, "the world decides what happens to the body, the genes decide h
 - **`Mate` is offered only when both are adults** (§5). It works, once, if both are fertile, one is male and the other female, and she has a free tile beside her: she lays an egg there (§10.4). The partner learns about the one that mated with it too, as if touched. Otherwise it's a fruitless try.
 - **`BreedAlone` is offered only to a grown sprite.** It works for a fertile female with a free tile beside her; for a male, or a female not fertile, it's a fruitless try.
 - **The egg costs `cost` (0.3) energy** (Q2): split between a pair, or all hers alone. Per bite of food, both pass on as much of the parents' genes, so neither wins on cost; what makes partners pay is Slice 24, when a sprite breeding alone passes on every broken gene it has.
-- **Body language** (the owner's card, 2026-10-12): a sprite sees how aroused the sprite it attends to is, `target_arousal`, and whether it's of the other sex, `target_other_sex`. Before it, most tries to mate met a partner of the same sex or not fertile, and 97% of eggs were laid alone. These are brain inputs `brain_io.ron` lists like any other: one that reads `Target(...)` reads the sprite attended to, and one that reads `Differs(...)` how far that differs from the sprite's own; both are 0 unless attention is on a sprite that has hatched. Attention can't read them, as it can't any input about what it attends to (M1 design §5.3).
+- **Body language** (the owner's card, 2026-10-12): a sprite sees how aroused the sprite it attends to is, `target_arousal`, and whether it's of the other sex, `target_other_sex`. Before it, in tuning, most tries to mate met a partner of the same sex or one not fertile, and nearly every egg was laid alone. These are brain inputs `brain_io.ron` lists like any other: one that reads `Target(...)` reads the sprite attended to, and one that reads `Differs(...)` how far that differs from the sprite's own; both are 0 unless attention is on a sprite that has hatched, and any that reads arousal is 0 unless both are grown (§5). Attention can't read them, as it can't any input about what it attends to (M1 design §5.3).
 - **The starter's instincts:** arousal draws attention to sprites; arousal with an aroused sprite of the other sex in view leads to Mate; and in a lonely female, more weakly, arousal leads to breeding alone.
 
 ### 10.4 Eggs and hatching
 
 - **An egg is the new sprite, at the first life stage, Egg** (Q5). It's laid on a random free tile beside its mother.
-- **An egg feels, learns, moves and needs nothing:** its body stays as it was laid, it decides nothing, and steps 3 to 6 pass it by.
+- **An egg feels, learns, moves and needs nothing:** its body stays as it was laid and it decides nothing. Step 3 only counts it towards hatching, and steps 4 to 6 pass it by.
 - **It hatches after `hatches` (750) ticks,** where it lies, as a young male with a newborn's body; its age counts from then.
 - **Other sprites see an egg as a thing of its own kind,** the category `egg` and the pseudo type `egg`, not as a sprite: so "crowded, so hit a neighbour" never aims at one, and `nearby_sprites` and `female_near` don't count one. Its verb table is empty, so whatever a sprite tries on it is a fruitless try: an egg can't be hurt until something in the world is meant to hurt eggs.
 - **The Cursor can't touch, lead or hold an egg;** it says it's still an egg. Whether it can move one is for an issue of its own. The player can name one.
@@ -442,4 +442,4 @@ Agreed before measuring (Q9):
 - **Keeps going: met.** Sprites are alive at the end in all 10 seeds, 8 to 10 generations deep, and no world went over its limit of 100.
 - **A5: met,** 259 ticks a second with 100 sprites (`speed`); Slice 22 measured 293–303.
 - **A1 to A3: met** (their tests pass, with `most_sprites` as §10.6 says).
-- **For information:** almost every hatchling grows up, as expected until Slice 29. Between 6% and 12% of eggs come from a pair: food keeps the world at its limit, where no sprite is fertile, and a female fertile in a moment with no aroused male in view breeds alone. With `fed` at 0.6 and arousal fading slowly, before body language, it was one in forty.
+- **For information:** almost every hatchling grows up, as expected until Slice 29. Between 6% and 12% of eggs come from a pair: food keeps the world at its limit, where no sprite is fertile, and a female fertile in a moment with no aroused male in view breeds alone. Before body language, with `fed` at 0.6 and arousal fading slowly, far fewer came from a pair.

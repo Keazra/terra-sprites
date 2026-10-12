@@ -21,7 +21,7 @@ use std::collections::BTreeMap;
 
 use xxhash_rust::xxh3::xxh3_64;
 
-use crate::config::{MOST_SPRITES, WorldConfig};
+use crate::config::WorldConfig;
 use crate::data::DataError;
 use crate::map::Pos;
 use crate::world::WorldState;
@@ -153,12 +153,8 @@ pub(crate) struct Preset {
     sprites: u16,
     /// A save from before breeding had none, so it gets the default (M2
     /// design §10).
-    #[serde(default = "most_sprites")]
+    #[serde(default = "crate::config::most_sprites")]
     most_sprites: u16,
-}
-
-fn most_sprites() -> u16 {
-    MOST_SPRITES
 }
 
 impl From<&WorldConfig> for Preset {

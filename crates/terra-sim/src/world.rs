@@ -81,12 +81,8 @@ pub(crate) struct WorldState {
     /// The most sprites the world holds, eggs included (M2 design §10):
     /// its preset's, or for a hand-made world or a save from before
     /// breeding, the default.
-    #[serde(default = "most_sprites")]
+    #[serde(default = "crate::config::most_sprites")]
     pub(crate) most_sprites: u16,
-}
-
-fn most_sprites() -> u16 {
-    MOST_SPRITES
 }
 
 impl WorldState {
@@ -200,8 +196,7 @@ impl WorldState {
         match target {
             Target::Object(id) => self.objects.get(id).map(|o| o.kind),
             Target::Water(_) => data.pseudo_type(data.water_category()),
-            Target::Sprite(id) if self.is_egg(id) => data.pseudo_type(data.egg_category()?),
-            Target::Sprite(_) => data.pseudo_type(data.sprite_category()),
+            Target::Sprite(_) => data.pseudo_type(self.category_of(data, target)),
             Target::Cursor => data.pseudo_type(data.cursor_category()),
         }
     }
@@ -460,7 +455,7 @@ impl<'a> SpriteView<'a> {
     /// rested since its last egg, in a world with room for another sprite.
     pub fn is_fertile(&self) -> bool {
         let state = &self.world.state;
-        breeding::room(state) && breeding::fertile(self.sprite, state.tick, &self.world.data)
+        breeding::fertile(state, self.sprite, &self.world.data)
     }
 
     /// The level of its `feminiser` hormone over the level at which a male
@@ -1182,7 +1177,6 @@ impl World {
                 .and_then(|id| sprites.get(id))
                 .is_some_and(|sprite| !sprite.is_egg())
         };
-        let room = breeding::room(state);
         let females: Vec<(EntityId, Pos)> = sprites
             .iter()
             .filter(|(_, sprite)| sprite.sex == Sex::Female && sprite.stage().is_grown())
@@ -1205,7 +1199,7 @@ impl World {
                     steps: sprite.did.steps,
                     resting: sprite.did.rested,
                     stage: sprite.stage(),
-                    fertile: room && breeding::fertile(sprite, tick, data),
+                    fertile: breeding::fertile(state, sprite, data),
                     female: sprite.sex == Sex::Female,
                     female_near,
                 };
@@ -1239,19 +1233,21 @@ impl World {
     }
 
     /// Step 4: reinforcement from consumed reward and punishment, for every
-    /// sprite not marked dying.
-    fn run_learning(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
-        learning::run(&mut self.state, &self.data, dying, events);
+    /// sprite not `still`.
+    fn run_learning(&mut self, still: &[EntityId], events: &mut Vec<Event>) {
+        learning::run(&mut self.state, &self.data, still, events);
     }
 
-    /// Step 5: perception, attention and decisions.
-    fn sense_and_decide(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
-        action::sense_and_decide(&mut self.state, &self.data, dying, events);
+    /// Step 5: perception, attention and decisions, for every sprite not
+    /// `still`.
+    fn sense_and_decide(&mut self, still: &[EntityId], events: &mut Vec<Event>) {
+        action::sense_and_decide(&mut self.state, &self.data, still, events);
     }
 
-    /// Step 6: movement and verb effects, then trace entries.
-    fn resolve_actions(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
-        action::resolve(&mut self.state, &self.data, dying, events);
+    /// Step 6: movement and verb effects, then trace entries, for every
+    /// sprite not `still`.
+    fn resolve_actions(&mut self, still: &[EntityId], events: &mut Vec<Event>) {
+        action::resolve(&mut self.state, &self.data, still, events);
         learning::commit(&mut self.state, &self.data);
     }
 

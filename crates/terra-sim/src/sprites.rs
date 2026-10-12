@@ -300,7 +300,7 @@ impl Sprite {
     ) -> Sprite {
         let mut egg = Sprite::newborn(genome, pos, laid, data);
         egg.stage = Some(LifeStage::Egg);
-        egg.hatches = Some(laid + data.physiology().breeding.hatches);
+        egg.hatches = Some(laid.saturating_add(data.physiology().breeding.hatches));
         egg.parents = parents;
         egg
     }

@@ -64,7 +64,7 @@ A save that can't be loaded is refused, with the reason on the status line, and 
 
 Saving can fail too, as "Couldn't save: …" or "Couldn't autosave: …", most often from a full disk or a folder the game can't write to. The world on screen carries on either way, and the last good save is left as it was.
 
-**Old saves keep loading.** A save made by an earlier version of the game loads in a later one: when the save format changes, the new version upgrades older saves as it reads them (design §2.8). The format's number only goes up when it has to.
+**Old saves keep loading.** A save made by an earlier version of the game loads in a later one: when the save format changes, the new version upgrades older saves as it reads them (design §2.8). The format's number only goes up when it has to. A world keeps its own rules here too: a save from before sprites could breed keeps the pack it was made with, which has no breeding, so its sprites never have young (M2 design §10). Start a new world to see them breed.
 
 ## The format, for the curious
 

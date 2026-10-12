@@ -280,8 +280,8 @@ When an egg becomes a young sprite, a set time after it was laid (750 ticks), wi
 _Avoid_: born (a hatchling is born as it hatches; the world's first sprites and the Cursor's are born without hatching), spawn (that's the Cursor's)
 
 **Parents** (M2):
-The sprite that laid an egg, then its partner, if it had one. A sprite the world began with, or that the Cursor made, has none.
-_Avoid_: mother and father in code (they're the screen's words for the two)
+The sprite that laid an egg, its mother, then its partner, if it had one, its father. A sprite the world began with, or that the Cursor made, has none.
+_Avoid_: sire and dam
 
 **Sex** (M2):
 Male or female. Every sprite hatches male, and an adult male turns female for good once its feminiser is high enough. Only a female lays eggs.
@@ -296,7 +296,7 @@ Able to breed: grown up, its energy and hydration above `fed` (0.5), rested sinc
 _Avoid_: ready, in season
 
 **Arousal** (M2):
-The drive to breed. The starter genes raise it fast while the sprite is fertile and drop it within a few ticks of its not being, or once it has bred, so others read it as fertility. It's a need, but only mating relieves it in what a sprite learns.
+The drive to breed, which `physiology.ron` names as breeding's drive. The starter genes raise it fast while the sprite is fertile and drop it within a few ticks of its not being, or once it has bred, so others read it as fertility. It's a need, but only mating relieves it in what a sprite learns, and only about the partner. Whatever the genes, it works only between adults.
 _Avoid_: broodiness (its first name; brooding is sitting on eggs), desire, libido
 
 **Body language** (M2):
