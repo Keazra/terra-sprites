@@ -21,10 +21,10 @@
 │ Ctrl+R     take over a replay                                                                    │
 │                                                                                                  │
 │ COLOURS: a sprite's strongest drive, once it's above half                                        │
-│ ☺ hunger  ☺ thirst  ☺ pain  ☺ tiredness  ☺ boredom  ☺ loneliness  ☺ crowdedness  ☺ none          │
+│ ☺ hunger  ☺ thirst  ☺ pain  ☺ tiredness  ☺ boredom  ☺ loneliness  ☺ crowdedness  ☺ arousal       │
+│ ☺ none                                                                                           │
 │ EMOTES   ! hurt  ‼ zapped  ? gave up  z resting  ♥ pleased                                       │
 │                                                                                                  │
 │ FILES    /home/kel/.local/share/terra-sprites                                                    │
-│                                                                                                  │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
  (12,4) grass │ SELECT       Z select  X train  C grab  WASD scroll  space pause  . step  +/- speed

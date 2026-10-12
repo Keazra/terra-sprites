@@ -128,15 +128,23 @@ fn the_legend_shows_each_drive_s_colour_and_each_emote() {
             .iter()
             .position(|row| row.contains(" hunger "))
             .expect("the colour legend") as u16;
-        let colours: Vec<(String, Color)> = (0..100)
-            .filter(|&x| screen[(x, y)].symbol() == sprite)
-            .map(|x| {
+        // The legend wraps onto as many rows as it needs, up to the emotes.
+        let emotes_at = rows
+            .iter()
+            .position(|row| row.contains(" EMOTES "))
+            .expect("the emote legend") as u16;
+        let colours: Vec<(String, Color)> = (y..emotes_at)
+            .flat_map(|y| (0..100).map(move |x| (x, y)))
+            .filter(|&(x, y)| screen[(x, y)].symbol() == sprite)
+            .map(|(x, y)| {
                 let name: String = (x + 2..100)
                     .map(|x| screen[(x, y)].symbol())
                     .collect::<String>()
                     .split("  ")
                     .next()
                     .unwrap_or("")
+                    .trim_end_matches('│')
+                    .trim_end()
                     .to_string();
                 (name, screen[(x, y)].fg)
             })
@@ -149,11 +157,12 @@ fn the_legend_shows_each_drive_s_colour_and_each_emote() {
             ("boredom", Color::DarkGray),
             ("loneliness", Color::Magenta),
             ("crowdedness", Color::LightRed),
+            ("arousal", Color::LightMagenta),
             ("none", Color::White),
         ]
         .map(|(name, colour)| (name.to_string(), colour));
         assert_eq!(colours, expected);
-        let emote_row = rows[usize::from(y) + 1]
+        let emote_row = rows[usize::from(emotes_at)]
             .trim_start_matches('│')
             .trim_end_matches('│')
             .trim_end();

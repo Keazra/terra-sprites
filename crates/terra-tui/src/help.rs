@@ -118,7 +118,7 @@ pub(crate) fn lines(app: &App, world: &World, width: usize) -> Vec<Line<'static>
     lines.push(Line::from(
         " COLOURS: a sprite's strongest drive, once it's above half",
     ));
-    lines.push(colour_legend(app, world));
+    lines.extend(colour_legend(app, world, width));
     lines.push(emote_legend(app));
     lines.push(Line::default());
     let folder = app
@@ -128,24 +128,38 @@ pub(crate) fn lines(app: &App, world: &World, width: usize) -> Vec<Line<'static>
     lines
 }
 
-/// Each drive's colour on a sprite, then a sprite with none above half.
-fn colour_legend(app: &App, world: &World) -> Line<'static> {
+/// Each drive's colour on a sprite, then a sprite with none above half,
+/// on as many lines `width` columns wide as they need.
+fn colour_legend(app: &App, world: &World, width: usize) -> Vec<Line<'static>> {
     let sprite = app.theme.glyph(SemanticTile::Sprite);
-    let mut spans = vec![Span::raw(" ")];
     let drives = world
         .data()
         .drives()
         .map(|drive| (display_name(drive), app.theme.drive_colour(drive)))
         .chain([("none".to_string(), None)]);
+    let mut lines = Vec::new();
+    let mut spans = vec![Span::raw(" ")];
+    let mut used = 1;
     for (name, colour) in drives {
+        let entry = format!(" {name}  ");
+        let needs = 1 + entry.trim_end().chars().count();
+        if used > 1 && used + needs > width {
+            lines.push(Line::from(std::mem::replace(
+                &mut spans,
+                vec![Span::raw(" ")],
+            )));
+            used = 1;
+        }
         let colour = colour.unwrap_or(sprite.fg);
         spans.push(Span::styled(
             sprite.symbol.to_string(),
             Style::default().fg(colour),
         ));
-        spans.push(Span::raw(format!(" {name}  ")));
+        used += 1 + entry.chars().count();
+        spans.push(Span::raw(entry));
     }
-    Line::from(spans)
+    lines.push(Line::from(spans));
+    lines
 }
 
 /// Each emote, in its colour, and what it means.

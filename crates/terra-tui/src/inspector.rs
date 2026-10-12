@@ -166,6 +166,16 @@ fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>>
         format!(" age {} · {}", group_thousands(sprite.age()), {
             let stage = sprite.life_stage();
             match stage {
+                LifeStage::Egg => match sprite.hatches() {
+                    Some(hatches) => format!(
+                        "egg · hatches in {}",
+                        counted(
+                            u32::try_from(hatches.saturating_sub(world.tick())).unwrap_or(u32::MAX),
+                            "tick"
+                        )
+                    ),
+                    None => stage.name().to_string(),
+                },
                 LifeStage::Young => {
                     format!("young · {}", trait_text(Trait::GrowsUp, traits.grows_up))
                 }
@@ -183,8 +193,9 @@ fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>>
             trait_text(Trait::Speed, traits.speed),
             trait_text(Trait::SenseRadius, traits.sense_radius)
         ),
-        String::new(),
     ]);
+    lines.extend(family_lines(sprite, &app.words(world)));
+    lines.push(String::new());
     let chemicals: Vec<ChemicalLevel> = sprite.chemicals().collect();
     for drive in chemicals.iter().filter(|c| c.kind == ChemicalKind::Drive) {
         let line = format!(
@@ -234,6 +245,38 @@ pub(crate) fn doing_line(sprite: &SpriteView, app: &App, world: &World) -> Optio
                 .action()
                 .map(|action| action_line(&action, app.detail(), &app.words(world)))
         })
+}
+
+/// A sprite's sex and fertility, once it has hatched, and its parents, if
+/// it has any (M2 design §10): `male · fertile · turning 40%`, `parents
+/// Pip #12 and Bo #7`.
+fn family_lines(sprite: &SpriteView, data: &Words) -> Vec<String> {
+    let mut lines = Vec::new();
+    if !sprite.is_egg() {
+        let mut line = format!(" {}", sprite.sex().name());
+        if sprite.is_fertile() {
+            line.push_str(" · fertile");
+        }
+        let turning = sprite.turning().filter(|&share| share > 0.0);
+        if let Some(share) = turning.filter(|_| sprite.life_stage().is_grown()) {
+            line.push_str(&format!(" · turning {:.0}%", share * 100.0));
+        }
+        lines.push(line);
+    }
+    if let Some(parents) = parents_text(sprite.parents(), data) {
+        lines.push(format!(" parents {parents}"));
+    }
+    lines
+}
+
+/// Parents by name, `Pip #12 and Bo #7`, or `None` for none.
+fn parents_text(parents: &[EntityId], data: &Words) -> Option<String> {
+    let names: Vec<String> = parents.iter().map(|&id| data.label(id)).collect();
+    match names.as_slice() {
+        [] => None,
+        [one] => Some(one.clone()),
+        [first, rest @ ..] => Some(format!("{first} and {}", rest.join(" and "))),
+    }
 }
 
 /// The observed list (design §6.1), newest first: how long ago each line's
@@ -335,6 +378,7 @@ fn action_line(action: &ActionView, detail: bool, data: &Words) -> String {
         _ if detail => None,
         Verb::Wander => wander_line(action.progress),
         Verb::Rest => rest_line(action.progress),
+        Verb::BreedAlone => breed_alone_line(action.progress),
         _ => aimed_line(action, data),
     };
     plain.unwrap_or_else(|| exact_line(action, data))
@@ -357,6 +401,7 @@ fn aimed_line(action: &ActionView, data: &Words) -> Option<String> {
         Verb::Approach => format!("Going over to {aim}"),
         Verb::Play => format!("Going to play with {aim}"),
         Verb::Hit => format!("Going to hit {aim}"),
+        Verb::Mate => format!("Going to mate with {aim}"),
         Verb::Retreat => format!("Backing away from {what}"),
         _ => return None,
     };
@@ -378,6 +423,7 @@ fn aimed_line(action: &ActionView, data: &Words) -> Option<String> {
                 Verb::Eat => format!("Couldn't eat from {what}"),
                 Verb::Play => format!("Couldn't play with {what}"),
                 Verb::Hit => format!("Couldn't hit {what}"),
+                Verb::Mate => format!("Couldn't mate with {what}"),
                 _ => "Couldn't drink".into(),
             };
             and_if_hurt(couldnt, action)
@@ -497,6 +543,7 @@ fn deed(action: &ActionView, what: &str, data: &Words) -> String {
         Verb::Play => format!("played with {what}"),
         Verb::Hit => format!("hit {what}"),
         Verb::Retreat => format!("backed away from {what}"),
+        Verb::Mate => format!("mated with {what}"),
         _ => format!("got to {what}"),
     }
 }
@@ -583,6 +630,17 @@ fn wander_line(progress: Progress) -> Option<String> {
     })
 }
 
+/// Breeding alone in plain words, if it has any for `progress` (M2 design
+/// §10).
+fn breed_alone_line(progress: Progress) -> Option<String> {
+    Some(match progress {
+        Progress::Ended(Outcome::Applied) => "Laid an egg alone".into(),
+        Progress::Ended(Outcome::Failed) => "Couldn't breed alone".into(),
+        Progress::Ended(outcome) => return ended_line(outcome),
+        _ => "Breeding alone".into(),
+    })
+}
+
 /// A Rest in plain words, if it has any for `progress`.
 fn rest_line(progress: Progress) -> Option<String> {
     match progress {
@@ -650,6 +708,7 @@ fn verb_name(verb: Verb) -> &'static str {
         Verb::Rest => "REST",
         Verb::Wander => "WANDER",
         Verb::Mate => "MATE",
+        Verb::BreedAlone => "BREED_ALONE",
         Verb::Speak => "SPEAK",
     }
 }
@@ -1175,6 +1234,7 @@ fn doing(verb: Verb) -> &'static str {
         Verb::Rest => "resting by",
         Verb::Wander => "wandering from",
         Verb::Mate => "mating with",
+        Verb::BreedAlone => "breeding alone by",
         Verb::Speak => "speaking to",
     }
 }
@@ -1258,18 +1318,28 @@ fn chem_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
         .collect();
     lines.push(String::new());
     lines.extend(
-        of_kinds(&[ChemicalKind::Drive, ChemicalKind::LearningSignal])
+        of_kinds(&[ChemicalKind::Drive])
             .into_iter()
+            .chain(of_kinds(&[ChemicalKind::LearningSignal]))
             .map(line),
     );
+    // The genes' own hormones, h0 to h15, four to a line; one with a
+    // meaning of its own, as the feminiser (M2 design §10), has a line.
     lines.push(" HORMONES".into());
-    for four in of_kinds(&[ChemicalKind::Hormone]).chunks(4) {
+    let (numbered, named): (Vec<&ChemicalLevel>, Vec<_>) = of_kinds(&[ChemicalKind::Hormone])
+        .into_iter()
+        .partition(|c| {
+            let number = c.name.strip_prefix('h').unwrap_or_default();
+            !number.is_empty() && number.chars().all(|c| c.is_ascii_digit())
+        });
+    for four in numbered.chunks(4) {
         let cells: Vec<String> = four
             .iter()
             .map(|c| format!("{:<4}{:>4}", display_name(c.name), level(c.level)))
             .collect();
         lines.push(format!(" {}", cells.join("   ")));
     }
+    lines.extend(named.into_iter().map(line));
     lines.into_iter().map(Line::from).collect()
 }
 
@@ -1708,6 +1778,7 @@ fn refusal_line(command: &Command, reason: Rejection, data: &Words) -> Option<St
             "the game can't show some of its letters".into()
         }
         Rejection::BadGenome => "its genome doesn't fit this world".into(),
+        Rejection::Egg => "it's still an egg".into(),
     };
     Some(format!("Couldn't {what}: {why}"))
 }
@@ -1731,6 +1802,20 @@ pub(crate) fn event_line(event: &Event, data: &Words) -> Option<String> {
         // Life stages (M2 design §9.6).
         EventKind::GrewUp { id } => Some(format!("{} grew up", data.label(*id))),
         EventKind::GrewOld { id } => Some(format!("{} grew old", data.label(*id))),
+        // Breeding (M2 design §10).
+        EventKind::Laid { by, with, .. } => Some(match with {
+            Some(with) => format!(
+                "{} laid an egg (with {})",
+                data.label(*by),
+                data.label(*with)
+            ),
+            None => format!("{} laid an egg alone", data.label(*by)),
+        }),
+        EventKind::Hatched { id, parents } => Some(match parents_text(parents, data) {
+            Some(parents) => format!("{} hatched ({parents}'s)", data.label(*id)),
+            None => format!("{} hatched", data.label(*id)),
+        }),
+        EventKind::TurnedFemale { id } => Some(format!("{} turned female", data.label(*id))),
         EventKind::LearnedMilestone { id, learned, good } => {
             Some(learned_line(*id, learned, *good, data))
         }
@@ -1817,7 +1902,15 @@ pub(crate) fn event_sprites(event: &Event) -> Vec<EntityId> {
         | EventKind::Renamed { id, .. }
         | EventKind::GrewUp { id }
         | EventKind::GrewOld { id }
+        | EventKind::TurnedFemale { id }
         | EventKind::ActionStarted { id, .. } => vec![*id],
+        EventKind::Laid { egg, by, with } => [Some(*by), *with, Some(*egg)]
+            .into_iter()
+            .flatten()
+            .collect(),
+        EventKind::Hatched { id, parents } => std::iter::once(*id)
+            .chain(parents.iter().copied())
+            .collect(),
         EventKind::ActionEnded { id, action, .. } => match action.target {
             Some(Target::Sprite(target)) => vec![*id, target],
             _ => vec![*id],

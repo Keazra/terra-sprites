@@ -227,15 +227,18 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
                 let emote = app
                     .emote(sprite.id())
                     .filter(|_| app.can_view(Panel::Emotes, Subject::Sprite(sprite.id())));
-                // The young are drawn small (M2 design §9.6).
-                let young = sprite.life_stage() == LifeStage::Young;
+                // The young are drawn small (M2 design §9.6), and eggs as
+                // eggs (§10).
+                let stage = sprite.life_stage();
                 let selected = app.selection() == Some(Selection::Living(sprite.id()));
-                let tile = match (emote, selected, young) {
+                let tile = match (emote, selected, stage) {
                     (Some(emote), _, _) => SemanticTile::Emote(emote),
-                    (None, true, true) => SemanticTile::SelectedYoungSprite,
-                    (None, true, false) => SemanticTile::SelectedSprite,
-                    (None, false, true) => SemanticTile::YoungSprite,
-                    (None, false, false) => SemanticTile::Sprite,
+                    (None, true, LifeStage::Egg) => SemanticTile::SelectedEgg,
+                    (None, false, LifeStage::Egg) => SemanticTile::Egg,
+                    (None, true, LifeStage::Young) => SemanticTile::SelectedYoungSprite,
+                    (None, false, LifeStage::Young) => SemanticTile::YoungSprite,
+                    (None, true, _) => SemanticTile::SelectedSprite,
+                    (None, false, _) => SemanticTile::Sprite,
                 };
                 app.theme.glyph(tile)
             } else if let Some((_, (name, state))) = thrown.filter(|&(from, _)| from == pos) {

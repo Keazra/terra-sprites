@@ -22,6 +22,10 @@ pub enum SemanticTile {
     YoungSprite,
     /// The selected sprite, while it's young.
     SelectedYoungSprite,
+    /// A sprite that's still an egg (M2 design §10).
+    Egg,
+    /// The selected sprite, while it's an egg.
+    SelectedEgg,
     /// The Decision marker: where the selected sprite is heading (design
     /// §6.1). It flashes.
     DecisionMarker,
@@ -66,14 +70,17 @@ impl SemanticTile {
     ];
 
     /// The tiles a theme may leave out, each with the tile drawn in its
-    /// place: a theme from before the young had a look of their own draws
-    /// them as grown (M2 design §9.6).
-    pub const OPTIONAL: [(SemanticTile, SemanticTile); 2] = [
+    /// place, in the order they're filled in: a theme from before the young
+    /// had a look of their own draws them as grown (M2 design §9.6), and one
+    /// from before eggs draws them as the young (§10).
+    pub const OPTIONAL: [(SemanticTile, SemanticTile); 4] = [
         (SemanticTile::YoungSprite, SemanticTile::Sprite),
         (
             SemanticTile::SelectedYoungSprite,
             SemanticTile::SelectedSprite,
         ),
+        (SemanticTile::Egg, SemanticTile::YoungSprite),
+        (SemanticTile::SelectedEgg, SemanticTile::SelectedYoungSprite),
     ];
 }
 

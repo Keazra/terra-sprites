@@ -1157,7 +1157,12 @@ fn open(app: &mut App, world: &World, tab: Tab) {
 /// The inspector's rows on a 100×30 screen: its title, then the text inside
 /// its border, trimmed.
 fn inspector(app: &App, world: &World) -> (String, Vec<String>) {
-    let rows = right_part(&render(app, world, 100, 30), 46);
+    inspector_on(app, world, 30)
+}
+
+/// `inspector`, on a screen `height` rows tall.
+fn inspector_on(app: &App, world: &World, height: u16) -> (String, Vec<String>) {
+    let rows = right_part(&render(app, world, 100, height), 46);
     let text = rows[2..rows.len() - 7]
         .iter()
         .map(|row| inside(row).to_string())
@@ -1319,13 +1324,15 @@ const WORKED_GENOME: &str = r#"(format: 1, genes: [
 #[test]
 fn the_body_tab_shows_age_life_stage_traits_drives_physical_levels_and_wear() {
     let (world, app) = one_sprite_doing(WORKED_GENOME, &[ScriptedAction::Rest], 1);
-    let (_, text) = inspector(&app, &world);
+    let (_, text) = inspector_on(&app, &world, 32);
     assert_eq!(
-        text[..15],
+        text[..17],
         [
             "Resting · 9 ticks left",
             "age 7,501 · adult · grows old 13,500",
             "speed 7.25 · sense 9.5",
+            // Its sex, and fed and watered, fertile (M2 design §10).
+            "male · fertile",
             "",
             "hunger      ████░░░░░░ .40 ▼",
             "thirst      ██░░░░░░░░ .18",
@@ -1334,6 +1341,7 @@ fn the_body_tab_shows_age_life_stage_traits_drives_physical_levels_and_wear() {
             "boredom     ███░░░░░░░ .30 ▲",
             "loneliness  ░░░░░░░░░░ .00",
             "crowdedness ░░░░░░░░░░ .00",
+            "arousal     ░░░░░░░░░░ .00",
             "",
             // A newborn's are full, and one tick at rest takes them only to .9998 or so.
             "energy 1.00 · hydration 1.00 · stamina 1.00",
@@ -1341,8 +1349,8 @@ fn the_body_tab_shows_age_life_stage_traits_drives_physical_levels_and_wear() {
             "wear .00",
         ]
     );
-    assert_eq!(text[15..18], ["", "Observed", "nothing yet"]);
-    assert!(text[18..].iter().all(String::is_empty), "{text:?}");
+    assert_eq!(text[17..20], ["", "Observed", "nothing yet"]);
+    assert!(text[20..].iter().all(String::is_empty), "{text:?}");
 }
 
 /// A genome that walks a grass step a tick.
@@ -2086,7 +2094,7 @@ fn the_brain_tab_says_when_nothing_has_been_decided_or_is_in_sight() {
 fn the_chem_tab_lists_every_chemical_with_its_level_and_change_per_tick() {
     let (world, mut app) = one_sprite(WORKED_GENOME, 1);
     open(&mut app, &world, Tab::Chem);
-    let (top, text) = inspector(&app, &world);
+    let (top, text) = inspector_on(&app, &world, 32);
     assert!(top.contains("[Chem]"), "{top:?}");
     assert_eq!(
         text,
@@ -2107,6 +2115,7 @@ fn the_chem_tab_lists_every_chemical_with_its_level_and_change_per_tick() {
             "boredom       .30  +.1000",
             "loneliness    .00",
             "crowdedness   .00",
+            "arousal       .00",
             // Nothing felt: learning used up no reward or punishment.
             "reward        .00  felt +.00",
             "punishment    .00",
@@ -2115,8 +2124,9 @@ fn the_chem_tab_lists_every_chemical_with_its_level_and_change_per_tick() {
             "h4   .00   h5   .00   h6   .00   h7   .00",
             "h8   .00   h9   .00   h10  .00   h11  .00",
             "h12  .00   h13  .00   h14  .00   h15  .00",
+            "feminiser     .00",
         ],
-        "all of it fits at 100×30"
+        "all of it fits at 100×32"
     );
 }
 
@@ -2494,8 +2504,9 @@ fn a_change_too_small_to_show_leaves_no_number_and_no_arrow() {
     ])"#;
     let (world, mut app) = one_sprite(genome, 1);
     let (_, body) = inspector(&app, &world);
-    // After the action line, age, traits, a blank line and four drives.
-    assert_eq!(body[8], "boredom     ░░░░░░░░░░ .00", "the Body tab");
+    // After the action line, age, traits, sex, a blank line and four
+    // drives.
+    assert_eq!(body[9], "boredom     ░░░░░░░░░░ .00", "the Body tab");
     open(&mut app, &world, Tab::Chem);
     let (_, chem) = inspector(&app, &world);
     assert_eq!(chem[11], "boredom       .00", "the Chem tab");
@@ -2678,7 +2689,7 @@ fn chemical_names_show_with_spaces_for_underscores() {
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
     let (_, body) = inspector(&app, &world);
-    assert!(body[7].starts_with("bored ness  "), "{:?}", body[7]);
+    assert!(body[8].starts_with("bored ness  "), "{:?}", body[8]);
     open(&mut app, &world, Tab::Chem);
     let (_, chem) = inspector(&app, &world);
     assert!(chem[11].starts_with("bored ness  "), "{:?}", chem[11]);
@@ -3561,4 +3572,104 @@ fn the_event_log_says_when_a_sprite_grows_up_and_grows_old() {
         rows[..2],
         ["13,500  Sprite #12 grew old", "4,500  Sprite #12 grew up"]
     );
+}
+
+#[test]
+fn the_event_log_says_who_laid_an_egg_hatched_and_turned_female() {
+    // M2 design §10.
+    let world = garden(pack());
+    let (mother, father) = (EntityId(12), EntityId(13));
+    let (egg, other_egg) = (EntityId(20), EntityId(21));
+    let first = on_ticks(vec![
+        EventKind::TurnedFemale { id: mother },
+        EventKind::Laid {
+            egg,
+            by: mother,
+            with: Some(father),
+        },
+        EventKind::Laid {
+            egg: other_egg,
+            by: mother,
+            with: None,
+        },
+    ]);
+    assert_eq!(
+        logged(&world, &first),
+        [
+            "3  Sprite #12 laid an egg alone",
+            "2  Sprite #12 laid an egg (with Sprite #13)",
+            "1  Sprite #12 turned female",
+        ]
+    );
+    let then = on_ticks(vec![
+        EventKind::Hatched {
+            id: egg,
+            parents: vec![mother, father],
+        },
+        EventKind::Hatched {
+            id: other_egg,
+            parents: vec![mother],
+        },
+        EventKind::CommandRejected {
+            command: Command::TakeHold { sprite: egg },
+            reason: Rejection::Egg,
+        },
+    ]);
+    assert_eq!(
+        logged(&world, &then),
+        [
+            "3  Couldn't take hold of Sprite #20: it's still an egg",
+            "2  Sprite #21 hatched (Sprite #12's)",
+            "1  Sprite #20 hatched (Sprite #12 and Sprite #13's)",
+        ]
+    );
+}
+
+#[test]
+fn an_egg_is_drawn_as_an_egg_and_the_body_tab_says_when_it_hatches() {
+    // M2 design §10: `o` in CP437, `0` in ASCII, where `o` is the ball.
+    let pack = pack();
+    let genome = terra_sim::Genome::from_ron(
+        r#"(format: 1, genes: [
+            InitialConcentration(chem: "feminiser", value: 1.0),
+            Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
+        ])"#,
+        &pack,
+    )
+    .expect("a valid genome");
+    // In a corner, clear of the Cursor in the middle.
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let sprites = [(Pos { x: 1, y: 4 }, Some(genome))];
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: &[],
+        newborns: &[],
+    };
+    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let egg = (0..50)
+        .flat_map(|_| world.step())
+        .find_map(|event| match event.kind {
+            EventKind::Laid { egg, .. } => Some(egg),
+            _ => None,
+        })
+        .expect("she laid an egg");
+    let at = world.sprite(egg).expect("the egg").pos();
+    for (theme, glyph) in [(Theme::cp437(), 'o'), (Theme::ascii(), '0')] {
+        let mut app = app_for(&world, theme, 100, 30);
+        let screen = lines(&render(&app, &world, 100, 30));
+        let row: Vec<char> = screen[usize::from(at.y) + 2].chars().collect();
+        assert_eq!(row[usize::from(at.x) + 1], glyph);
+        while app.selection() != Some(terra_tui::app::Selection::Living(egg)) {
+            app.apply(Action::SelectNext, &world);
+        }
+        let screen = lines(&render(&app, &world, 100, 30)).join("\n");
+        let hatches = world.sprite(egg).unwrap().hatches().unwrap() - world.tick();
+        assert!(
+            screen.contains(&format!("egg · hatches in {hatches} ticks")),
+            "{screen}"
+        );
+        assert!(screen.contains("parents Sprite #1"), "{screen}");
+    }
 }

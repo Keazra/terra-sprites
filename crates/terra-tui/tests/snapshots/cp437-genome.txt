@@ -2,13 +2,15 @@
 ╔═ Map ══════════════════╗                            ┌─ #5 ── Body Brain Chem [Genome] World ─────┐
 ║..............,,,,::~~≈≈║                            │ TRAITS                                     │
 ║.'..........♠.,,,,::~~≈≈║                            │ speed 6.5 · sense 9.32 · grows up 4,214 ·  │
-║..•.##.☺......,,,,::~~≈≈║                            │   grows old 12,604                         │
-║....##..............~~≈≈║                            │ HALF-LIVES                                 │
-║.......♦↓·.....☺....~~≈≈║                            │ hunger halves every 1,828 ticks            │
-║....☻..→.←........::~~≈≈║                            │ thirst halves every 1,833 ticks            │
-║.......·↑♦.X......::~~≈≈║                            │ pain halves every 18 ticks                 │
-║..................::~~≈≈║                            │ h0 halves every 299 ticks                  │
-╚════════════════════════╝                            │ EMITTERS                                   │
+║..•.##........,,,,::~~≈≈║                            │   grows old 12,604                         │
+║....##...X..........~~≈≈║                            │ HALF-LIVES                                 │
+║.......♦↓·..........~~≈≈║                            │ hunger halves every 1,828 ticks            │
+║...☻...→.←........::~~≈≈║                            │ thirst halves every 1,833 ticks            │
+║.......·↑♦......☺.::~~≈≈║                            │ arousal halves every 479 ticks             │
+║..................::~~≈≈║                            │ feminiser halves every 543 ticks           │
+╚════════════════════════╝                            │ pain halves every 20 ticks                 │
+                                                      │ h0 halves every 296 ticks                  │
+                                                      │ EMITTERS                                   │
                                                       │ low energy → hunger +.00416 past .477      │
                                                       │ ate → hunger -.523                         │
                                                       │ low hydration → thirst +.00425 past .51    │
@@ -19,8 +21,6 @@
                                                       │ played → boredom -.47                      │
                                                       │ played social → boredom -.147              │
                                                       │ low nearby sprites → loneliness +.000502   │
-                                                      │   past .504                                │
-                                                      │ nearby sprites → loneliness -.0951         │
                                                       └────────────────────────────────────────────┘
 ┌─ Events ────────────────────────────────────────────────────────────────── [all] selected major ─┐
 │                                                                                                  │
