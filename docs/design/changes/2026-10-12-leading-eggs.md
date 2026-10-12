@@ -1,6 +1,6 @@
 # The Cursor leads an egg, but never shoves one
 
-Three small calls Slice 23 made on its own, put to the owner in [#190](https://github.com/Keazra/terra-sprites/issues/190) on 2026-10-12. They kept two as built: the doing line "Going to mate with Bo #7" stays until Slice 32 ([#186](https://github.com/Keazra/terra-sprites/issues/186), courtship) rewords it, and the Cursor may still place a sprite in a full world. For the third they chose: "refusing correcting/petting an egg, but allow it to be picked up. But not thrown."
+Three small calls Slice 23 made on its own, put to the owner in [#190](https://github.com/Keazra/terra-sprites/issues/190) on 2026-10-12, in [PR #192](https://github.com/Keazra/terra-sprites/pull/192). They kept two as built: the doing line "Going to mate with Bo #7" stays until Slice 32 ([#186](https://github.com/Keazra/terra-sprites/issues/186), courtship) rewords it, and the Cursor may still place a sprite in a full world. For the third they chose: "refusing correcting/petting an egg, but allow it to be picked up. But not thrown."
 
 ## M2 "Generations"
 
