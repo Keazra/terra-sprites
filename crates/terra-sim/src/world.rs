@@ -1399,11 +1399,12 @@ mod tests {
     use crate::action::{Action, Outcome, Walk};
     use crate::brain::Brain;
     use crate::cursor::Grip;
+    use crate::genome::Gene;
     use crate::learning::{Signals, Touch, TraceEntry, TypeMemory};
     use crate::map::Dir;
     use crate::mutation::{Copied, CopyingError};
     use crate::objects::Roll;
-    use crate::registry::Verb;
+    use crate::registry::{ChemId, Verb};
 
     /// A 7×5 field of grass, with a pool of shallow water at (5, 3), and a
     /// berry bush at (2, 2), before any step.
@@ -1426,7 +1427,7 @@ mod tests {
     /// next tick (design §2.8).
     #[test]
     fn a_save_that_doesnt_fit_its_pack_is_refused() {
-        let damage: [fn(&mut WorldState, &DataPack); 9] = [
+        let damage: [fn(&mut WorldState, &DataPack); 10] = [
             |state, _| {
                 let id = state.objects.at(Pos { x: 2, y: 2 }).expect("the bush");
                 state.objects.get_mut(id).expect("the bush").kind = 127;
@@ -1455,6 +1456,26 @@ mod tests {
             |state, _| {
                 let trace = &mut the_sprite(state).brain.trace;
                 trace.back_mut().expect("a trace entry").motive = Some(999);
+            },
+            // A gene copying changed that was of a chemical the pack
+            // doesn't have, which the Genome tab would name.
+            |state, _| {
+                let sprite = the_sprite(state);
+                let (gene, ticks) = sprite
+                    .genome
+                    .genes
+                    .iter()
+                    .enumerate()
+                    .find_map(|(index, gene)| match *gene {
+                        Gene::HalfLife { ticks, .. } => Some((index, ticks)),
+                        _ => None,
+                    })
+                    .expect("a half-life gene");
+                let was = Gene::HalfLife {
+                    chem: ChemId(999),
+                    ticks: ticks * 2,
+                };
+                sprite.copying_errors = vec![CopyingError { gene, was }];
             },
             // A sprite born, or a trace entry made, after the save.
             |state, _| {
@@ -1682,6 +1703,24 @@ mod tests {
         assert_eq!(world.check_invariants(), Ok(()), "its last gene");
         let sprite = world.state.sprites.get_mut(first).expect("a sprite");
         sprite.copying_errors[0].gene += 1;
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_copying_error_that_changed_what_a_gene_does_breaks_an_invariant() {
+        // M2 design §12.1: copying changes only a gene's values.
+        let (mut world, first, _) = field_with_sprites();
+        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        let gene = sprite.genome.genes.len() - 1;
+        let was = sprite.genome.genes[gene].clone();
+        let other = sprite
+            .genome
+            .genes
+            .iter()
+            .find(|other| std::mem::discriminant(*other) != std::mem::discriminant(&was))
+            .expect("a gene of another kind")
+            .clone();
+        sprite.copying_errors = vec![CopyingError { gene, was: other }];
         assert!(world.check_invariants().is_err());
     }
 

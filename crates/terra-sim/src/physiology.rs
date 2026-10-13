@@ -475,8 +475,8 @@ impl Default for Breeding {
     }
 }
 
-/// The copying errors in an egg's genes (M2 design §12): each gene value
-/// may change, mostly a little, now and then a lot.
+/// The copying errors in an egg's genes (M2 design §12): now and then a
+/// gene value changes, mostly by a lot.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Mutation {

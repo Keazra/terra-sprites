@@ -22,6 +22,7 @@ use crate::physiology::RememberedPlaces;
 use crate::random::{chance, uniform};
 use crate::registry::{Trait, Verb};
 use crate::sliding::Slide;
+use crate::variation::each_value;
 
 /// One sprite.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -599,8 +600,9 @@ impl Sprites {
     /// the tile index matches where the sprites are, so no two share a tile;
     /// none stands on a solid object; every chemical is within 0 to 1; a
     /// Mate action is only ever an adult's, aimed at an adult (M2 design
-    /// §5); and each remembers no more places than it may, all on the map
-    /// (M2 design §7).
+    /// §5); each remembers no more places than it may, all on the map
+    /// (M2 design §7); and its flaws and copying errors fit its genome, with
+    /// copying having changed only values (M2 design §12).
     pub(crate) fn check(
         &self,
         map: &Map,
@@ -683,6 +685,20 @@ impl Sprites {
                     "{id:?} has a copying error in gene {}, of {} genes",
                     error.gene,
                     sprite.genome.genes.len()
+                ));
+            }
+            // Copying changes only a gene's values (M2 design §12.1), so
+            // what a gene was does what it does now, and refers only to
+            // what the pack has.
+            let does = |gene: &Gene| each_value(gene, data, |_, _| 0.0);
+            if let Some(error) = sprite
+                .copying_errors
+                .iter()
+                .find(|error| does(&error.was) != does(&sprite.genome.genes[error.gene]))
+            {
+                return Err(format!(
+                    "{id:?} has a copying error that changed what gene {} does",
+                    error.gene
                 ));
             }
             if sprite.body.chems_before_tick.len() != sprite.body.chems.len() {

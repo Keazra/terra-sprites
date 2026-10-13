@@ -546,7 +546,7 @@ Settled with the owner on 2026-10-13 ([#142](https://github.com/Keazra/terra-spr
 - **A copying error changes only a number,** never what a gene refers to, how it works or when it works: how fast hunger rises, how strong an instinct is, when a sprite grows old. Each value is then held within its range, as spawn variation's are (M1 design §4.9). A gene that would change the body directly stays flagged and does nothing, whatever an error does to it (M1 design §4.3); property tests with random genomes pin both.
 - **The world's dice decide** (M1 design §2.3), so saves and replays agree.
 - **How often is a rule of the world,** the same for every sprite (Q2): if it were a gene, nothing would make careful copying cost anything, and evolution would turn it down until the species stopped changing. It may become a gene once it can have a cost ([#194](https://github.com/Keazra/terra-sprites/issues/194)).
-- **A sprite remembers which of its genes copying changed, and what each was,** for the Genome tab (§12.6): world state, saved and in the state hash.
+- **A sprite remembers which of its genes copying changed, and what each was,** for the Genome tab (§12.6): world state, saved, in the state hash, and checked every tick (M1 design §7.1): what each gene was does what it does now.
 
 ### 12.2 Lining up and mixing
 
@@ -594,8 +594,8 @@ What poor genes do (Q6): they're weaker, and they bring old age sooner.
 │ low energy → hunger +.00512 past .515, was │
 │   +.00428                                  │
 │ broken: thirst → drink                     │
-│ carries flaws: hunger → eat, pain →        │
-│   retreat                                  │
+│ carries flaws: hunger → eat ·              │
+│   pain → retreat                           │
 │                                            │
 │ TRAITS                                     │
 ```
