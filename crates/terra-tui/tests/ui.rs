@@ -3836,7 +3836,8 @@ fn a_lone_egg(changes: &[(&str, &str)]) -> (World, EntityId) {
 }
 
 /// The built-in physiology's copy and change, as its file begins it.
-const COPY_AND_CHANGE: &str = "copy_and_change: (doubled: 0.0011, lost: 0.0011, changed: 0.0011,";
+const COPY_AND_CHANGE: &str =
+    "copy_and_change: (doubled: 0.00052, lost: 0.00052, changed: 0.00052,";
 
 #[test]
 fn the_genome_tab_of_a_sprite_with_parents_says_first_what_s_new_in_it() {

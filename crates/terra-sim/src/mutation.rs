@@ -498,7 +498,7 @@ mod tests {
     const MUTATION: &str =
         "    mutation: (chance: 0.01, small: 0.2, large: (share: 0.75, most: 2.0)),\n";
     const FLAWS: &str = "    flaws: (arise: 0.007, founders: 0.06, health: 0.5, wear: 0.05),\n";
-    const COPY_AND_CHANGE: &str = "    copy_and_change: (doubled: 0.0011, lost: 0.0011, changed: 0.0011, on_copy: 0.75, longest: 2.0),\n";
+    const COPY_AND_CHANGE: &str = "    copy_and_change: (doubled: 0.00052, lost: 0.00052, changed: 0.00052, on_copy: 0.75, longest: 2.0),\n";
 
     /// The built-in pack without copy and change, so copying keeps each gene
     /// where it is and changes only values.
@@ -906,14 +906,14 @@ mod tests {
     }
 
     #[test]
-    fn about_one_hatchling_of_the_starter_s_in_five_has_a_whole_gene_doubled_lost_or_changed() {
-        // M2 design §13: each with the chance 0.0011 a gene, so about one
-        // hatchling in five, each kind as likely as the others, but that a
+    fn about_one_hatchling_of_the_starter_s_in_ten_has_a_whole_gene_doubled_lost_or_changed() {
+        // M2 design §13: each with the chance 0.00052 a gene, so about one
+        // hatchling in ten, each kind as likely as the others, but that a
         // trait has nothing to change.
         let data = builtin();
         let starter = data.starter();
         let (mut eggs, mut kinds) = (0, [0; 3]);
-        for seed in 0..5_000 {
+        for seed in 0..10_000 {
             let copy = copy(starter, &data, &mut ChaCha8Rng::seed_from_u64(seed));
             assert_eq!(check_changes(&copy.genome, &copy.changes, &data), Ok(()));
             eggs += usize::from(!copy.changes.is_empty());
@@ -925,8 +925,8 @@ mod tests {
                 }] += 1;
             }
         }
-        // 975 expected.
-        assert!((880..1_070).contains(&eggs), "{eggs} of 5,000");
+        // About 975 expected.
+        assert!((880..1_070).contains(&eggs), "{eggs} of 10,000");
         let all: usize = kinds.iter().sum();
         for (kind, n) in ["doubled", "lost", "changed"].iter().zip(kinds) {
             let share = n as f32 / all as f32;

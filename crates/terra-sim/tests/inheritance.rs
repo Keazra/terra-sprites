@@ -17,7 +17,8 @@ use terra_sim::{
 const EVERY_VALUE_WRONG: (&str, &str) = ("mutation: (chance: 0.01,", "mutation: (chance: 1.0,");
 
 /// The built-in physiology's copy and change, as its file begins it.
-const COPY_AND_CHANGE: &str = "copy_and_change: (doubled: 0.0011, lost: 0.0011, changed: 0.0011,";
+const COPY_AND_CHANGE: &str =
+    "copy_and_change: (doubled: 0.00052, lost: 0.00052, changed: 0.00052,";
 
 /// The change to the built-in physiology that copies whole genes as
 /// `rules` say.
