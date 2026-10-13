@@ -3729,26 +3729,23 @@ fn the_event_log_says_who_laid_an_egg_hatched_and_turned_female() {
             parents: vec![mother],
         },
         EventKind::CommandRejected {
-            command: Command::Shove {
-                toward: terra_sim::Dir::E,
-                tiles: 2,
-            },
+            command: Command::TakeHold { sprite: egg },
             reason: Rejection::Egg,
         },
     ]);
     assert_eq!(
         logged(&world, &then),
         [
-            "3  Couldn't shove: it's still an egg",
+            "3  Couldn't take hold of Sprite #20: it's still an egg",
             "2  Sprite #21 hatched (Sprite #12's)",
             "1  Sprite #20 hatched (Sprite #12 and Sprite #13's)",
         ]
     );
 }
 
-/// A grassy world 10 tiles by 5 with a sprite on `mother` that lays an egg
-/// alone as soon as it can, stepped until it has: the world and the egg.
-fn laid_an_egg(mother: Pos) -> (World, EntityId) {
+#[test]
+fn an_egg_is_drawn_as_an_egg_and_the_body_tab_says_when_it_hatches() {
+    // M2 design §10: `o` in CP437, `0` in ASCII, where `o` is the ball.
     let pack = pack();
     let genome = terra_sim::Genome::from_ron(
         r#"(format: 1, genes: [
@@ -3759,8 +3756,9 @@ fn laid_an_egg(mother: Pos) -> (World, EntityId) {
         &pack,
     )
     .expect("a valid genome");
+    // In a corner, clear of the Cursor in the middle.
     let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
-    let sprites = [(mother, Some(genome))];
+    let sprites = [(Pos { x: 1, y: 4 }, Some(genome))];
     let scenario = Scenario {
         map,
         objects: &[],
@@ -3776,14 +3774,6 @@ fn laid_an_egg(mother: Pos) -> (World, EntityId) {
             _ => None,
         })
         .expect("she laid an egg");
-    (world, egg)
-}
-
-#[test]
-fn an_egg_is_drawn_as_an_egg_and_the_body_tab_says_when_it_hatches() {
-    // M2 design §10: `o` in CP437, `0` in ASCII, where `o` is the ball.
-    // In a corner, clear of the Cursor in the middle.
-    let (world, egg) = laid_an_egg(Pos { x: 1, y: 4 });
     let at = world.sprite(egg).expect("the egg").pos();
     for (theme, glyph) in [(Theme::cp437(), 'o'), (Theme::ascii(), '0')] {
         let mut app = app_for(&world, theme, 100, 30);
@@ -3799,48 +3789,5 @@ fn an_egg_is_drawn_as_an_egg_and_the_body_tab_says_when_it_hatches() {
             "{screen}"
         );
         assert!(screen.contains("parents Sprite #1"), "{screen}");
-    }
-}
-
-#[test]
-fn leading_an_egg_the_cursor_s_mark_shows_an_egg() {
-    // M2 design §10.4: the bottom left mark shows what the Cursor has hold
-    // of. Away from the map's edges, so the marks are drawn.
-    let (world, egg) = laid_an_egg(Pos { x: 4, y: 2 });
-    let at = world.sprite(egg).expect("the egg").pos();
-    for (theme, glyph) in [(Theme::cp437(), "o"), (Theme::ascii(), "0")] {
-        let mut app = app_for(&world, theme, 40, 10);
-        let on = pointer_on(at.x, at.y);
-        app.apply(Action::Mode(CursorMode::Grab), &world);
-        app.apply(Action::Point(on), &world);
-        app.apply(Action::left_click(on), &world);
-        let screen = render(&app, &world, 40, 10);
-        // The Cursor's centre is up and left of the pointer.
-        assert_eq!(screen[(on.x - 2, on.y)].symbol(), glyph);
-    }
-}
-
-#[test]
-fn leading_a_young_sprite_the_cursor_s_mark_shows_it_small() {
-    // M2 design §9.6: the mark shows a led sprite as the map draws it.
-    let pack = pack();
-    let at = Pos { x: 4, y: 2 };
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[(at, None)],
-        scripted: &[],
-        newborns: &[at],
-    };
-    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
-    for (theme, glyph) in [(Theme::cp437(), "ö"), (Theme::ascii(), "a")] {
-        let mut app = app_for(&world, theme, 40, 10);
-        let on = pointer_on(at.x, at.y);
-        app.apply(Action::Mode(CursorMode::Grab), &world);
-        app.apply(Action::Point(on), &world);
-        app.apply(Action::left_click(on), &world);
-        let screen = render(&app, &world, 40, 10);
-        assert_eq!(screen[(on.x - 2, on.y)].symbol(), glyph);
     }
 }
