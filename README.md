@@ -74,7 +74,7 @@ The same key in capitals or lower case does the same thing.
 | `--theme <file>` | Start with a theme of your own, such as an edited copy of [`themes/cp437.ron`](themes/cp437.ron), rather than picking it with `Ctrl+T` each time |
 | `--version` | Print the game's version and the commit it was built from, and stop |
 
-To run the checks CI runs: `.\scripts\check.ps1` in PowerShell, or `scripts/check.sh` (formatting, lints and every test). To try a pull request's build: `.\scripts\try-pr.ps1 <number>`.
+To run the checks CI runs: `.\scripts\check.ps1` in PowerShell, or `scripts/check.sh` (formatting, lints and every test). To try a pull request's build: `.\scripts\try-pr.ps1 <number>`. To have Gemini review one, through the Antigravity CLI: `.\scripts\review-pr.ps1`.
 
 ## Same seed, same world
 
