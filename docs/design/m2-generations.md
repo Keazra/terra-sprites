@@ -611,6 +611,40 @@ Agreed before measuring (Q10), without the bar on life length (Q7):
 
 `cargo run --release -p terra-sim --example generations -- --ticks 200000` runs the first two and reports the rest. **Before this slice** (`main` at `dc9466e`, with this slice's `generations.rs` and the `Genome::genes` it reads added, seeds 1–10), no number moved a tenth the same way in all 10 seeds: `grows_old` rose about 30% in 9 of 10, since a longer life leaves more young (§12.5), and the median hatchling old age killed in the second half lived 5 to 7 hours in only 2 of 10 seeds, most 7 to 7.8.
 
+**Measured (2026-10-13)** in release builds of this slice at `fc4f72f`, in the cloud, on seeds 1–10 (A3 on 1–30), with:
+
+```
+cargo run --release -p terra-sim --example generations -- --ticks 200000
+cargo run --release -p terra-sim --example lab -- scenarios/viability.ron --seeds 10
+cargo run --release -p terra-sim --example lab -- scenarios/a3-correct-training.ron --seeds 30
+cargo run --release -p terra-sim --example speed
+```
+
+The default world left alone for 200,000 ticks; flaws are the average among the hatched sprites alive at the end, and lives the median of those old age killed, in hours at 1×:
+
+| Seed | Alive at the end (and eggs) | Eggs alone | Hatched | Generations | Flaws carried | Broken genes | Lone eggs' young lived | Pairs' young lived |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 100 (0) | 73 | 665 | 19 | 7.2 | 0.99 | 6.3 | 6.7 |
+| 2 | 97 (3) | 130 | 686 | 19 | 7.3 | 1.81 | 6.1 | 6.8 |
+| 3 | 100 (0) | 69 | 622 | 20 | 7.4 | 1.04 | 6.4 | 7.1 |
+| 4 | 96 (3) | 80 | 655 | 19 | 8.1 | 1.04 | 6.1 | 6.9 |
+| 5 | 100 (0) | 95 | 665 | 19 | 8.6 | 1.02 | 5.9 | 6.8 |
+| 6 | 98 (2) | 185 | 747 | 19 | 7.2 | 2.53 | 5.5 | 5.4 |
+| 7 | 95 (4) | 73 | 693 | 20 | 7.5 | 2.05 | 5.8 | 6.6 |
+| 8 | 98 (2) | 153 | 644 | 20 | 5.2 | 1.68 | 6.8 | 7.3 |
+| 9 | 98 (1) | 131 | 653 | 20 | 6.8 | 0.98 | 6.2 | 6.8 |
+| 10 | 98 (2) | 135 | 659 | 20 | 5.6 | 2.73 | 6.3 | 7.0 |
+
+- **The species changes (G4): not met.** 1 of the 83 numbers moved a tenth the same way in all 10 seeds: `grows_old`, up 11% to 36%, 24% in the median seed, about as much as on `main` without copying errors. A few others moved in some seeds only: the "always → wander" instinct weakened in 5 (to a third, in one), thirst's threshold fell in 3, and how fast fertility raises arousal grew in 4. Most moved less than a tenth in every seed. Our reading, not yet tested: in today's easy world almost nothing but a long life is favoured, so copying errors scatter numbers both ways and few take over a population. What to do about it is the owner's call, asked on 2026-10-13.
+- **Keeps going: met.** Sprites are alive at the end in all 10 seeds, 19 or 20 generations deep, and no world went over its limit of 100.
+- **A4: met.** Of 1,021 deaths in ticks 10,000–50,000 of the viability run over all seeds, 6 were of thirst and none of hunger (0.6%, under 25%). Over the long run's 200,000 ticks, 37 of 5,898 deaths after tick 10,000 were of hunger or thirst.
+- **A3: met.** Over seeds 1–30, trained sprites hit a median of once in ticks 10,000–20,000, against 42.5 times untrained, and all of 100 random sets of 10 of those seeds pass.
+- **A5: met,** 245–260 ticks a second with 100 sprites (`speed`, four runs) in the cloud, where Slice 23 measured 257–266.
+- **A1 and A2: met** (their tests pass).
+- **For information, flaws build up:** the hatched sprites alive halfway through carried 4.2 to 6.4 hidden flaws each and had 0.37 to 0.94 broken genes; at the end, the table's 5.2 to 8.6 and 0.98 to 2.73.
+- **Lone eggs' young live a little less long:** shorter than pairs' young in 9 of 10 seeds, by about 40 minutes in the median seed.
+- **Lives:** the 5,650 hatchlings old age killed lived a median 6.7 hours, a tenth of them under 4.9 and nine tenths under 7.6 (on `main`, 7.0, 5.4 and 7.8), and the longest 7.8 to 13.2 hours a seed. In the second half the median was 6.0 to 7.5 hours a seed. Broken genes pull lives in a little even as `grows_old` rises (§12.5).
+
 ### 12.8 Later
 
 - **24b, copy and change** (Q4): now and then a gene is doubled, lost or changed in what it does, an instinct's need or action, what draws the eye to what, the life stage it works in, usually on a fresh copy, so the original still works. That's how the species can come to be born knowing what its ancestors had to learn, as the M1 design promised. Every changed gene is checked again, and one that would change the body directly is flagged; a genome can't grow past twice the starter's length. Lining up by what genes do (§12.2) is ready for genomes that differ. It gets bars of its own, measured on its own, so a number that moves in 24b can only be 24b's doing.
