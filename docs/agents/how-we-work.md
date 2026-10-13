@@ -85,8 +85,9 @@ Each time `main` moves, a baseline run (design v24 §7.6) measures what's too sl
 
 ## Outside reviews
 
-The owner runs Gemini, and sometimes Codex, on each PR. They post Gemini's findings as inline PR threads headed "[Review from Gemini]", with a summary review.
+The owner runs Gemini, and sometimes Codex, on each PR. Gemini's review is one review, posted as the owner: a summary, and inline threads headed "[Review from Gemini]". `scripts/review-pr.ps1` runs it through the Antigravity CLI, with `scripts/review-pr.md` as Gemini's instructions. Gemini only reads: a checkout of the PR's newest commit, and what the script fetched from GitHub. It can't run the code, so it reads to check its claims rather than testing them.
 
+- **Each finding has a grade.** Grade 1 (Critical) and Grade 2 (Medium) are to be fixed, or answered with why not; Grade 3 (Minor) is optional. Earlier reviews wrote "**Criticality:** 3/3 (Minor)".
 - Check each claim against the code before acting on it, and fix what holds up, test-first.
 - Reply on every thread, saying what changed (with the commit) or why not, then resolve it. With `gh`: GraphQL `addPullRequestReviewThreadReply` (pass the body with `-F body=@file`), then `resolveReviewThread`.
 - Update the PR description to match.
