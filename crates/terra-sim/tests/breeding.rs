@@ -188,7 +188,7 @@ fn two_males_or_two_females_lay_nothing_together() {
 fn a_female_breeds_alone_and_pays_it_all_but_a_male_cannot() {
     let female = format!("{ALONE}{FEMALE}");
     // Without copying errors (M2 design §12), the egg's genes are hers.
-    let exact = builtin_changing("physiology.ron", &[NO_COPYING_ERRORS]);
+    let exact = builtin_changing("physiology.ron", &NO_COPYING_ERRORS);
     let mut world = family_in(exact, &[(at(2, 1), &female), (at(5, 2), ALONE)], &[], 1);
     let (mother, male) = (
         world.sprite_at(at(2, 1)).unwrap().id(),

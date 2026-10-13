@@ -23,6 +23,7 @@ mod events;
 mod expression;
 mod generate;
 mod genome;
+mod inheritance;
 mod lab;
 mod learning;
 mod listed;

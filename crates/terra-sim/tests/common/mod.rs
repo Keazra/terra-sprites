@@ -261,9 +261,9 @@ pub fn laid(world: &mut World, ticks: u64) -> Option<Laying> {
     })
 }
 
-/// The change to `physiology.ron` that turns copying errors off, so an
-/// egg's genes are its parents' exactly (M2 design §12).
-pub const NO_COPYING_ERRORS: (&str, &str) = (
-    "mutation: (chance: 0.04, small: 0.2, large: (share: 0.1, most: 2.0)),",
-    "mutation: (chance: 0.0, small: 0.2, large: (share: 0.1, most: 2.0)),",
-);
+/// The changes to `physiology.ron` that turn copying errors off, so an
+/// egg's genes are its parents' exactly, with no new flaws (M2 design §12).
+pub const NO_COPYING_ERRORS: [(&str, &str); 2] = [
+    ("mutation: (chance: 0.01,", "mutation: (chance: 0.0,"),
+    ("flaws: (arise: 0.007,", "flaws: (arise: 0.0,"),
+];

@@ -13,6 +13,7 @@ A sprite's genes, as text (design §2.8, §4.3, §5.7). The pack's `data/genomes
 - **A gene can switch with life stage** (M2 design §9.2): `from: Adult` and `until: Adult` after its fields, with `Young`, `Adult` or `Old`. It works from `from` (young if left out) until `until` (never if left out), and is **dormant** outside them. A `Trait` or `InitialConcentration` can't switch: one that does is flagged, as is one that switches off before it switches on.
 - **Genes are written by type name,** with chemicals, loci, traits and categories by name. A field at its default can be left out: `invert: false`, `threshold: 0`.
 - **The genes decide how things feel, not what they do to the body.** A gene that would change a physical chemical directly is kept but **flagged**, and does nothing. The genome tab of the inspector marks it.
+- **A file holds genes, not their flaws** (M2 design §12.3): a sprite placed from one carries no hidden flaws and has no broken genes, and its genes are whole. One placed from the starter carries a few hidden flaws, as the world's first sprites do.
 
 ## Gene types
 

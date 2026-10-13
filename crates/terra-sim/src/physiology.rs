@@ -30,6 +30,9 @@ pub(crate) struct Physiology {
     pub(crate) breeding: Breeding,
     /// The copying errors in an egg's genes (M2 design §12).
     pub(crate) mutation: Mutation,
+    /// The hidden flaws genes carry, and what a broken gene does (M2 design
+    /// §12).
+    pub(crate) flaws: Flaws,
     /// What each cause-of-death tally is multiplied by every tick: the file's
     /// `cause_fade` is how many ticks it takes to halve.
     pub(crate) tally_fade: f32,
@@ -85,6 +88,9 @@ pub(crate) struct PhysiologyEntry {
     /// carries its own pack, and keeps its rules).
     #[serde(default)]
     mutation: Mutation,
+    /// A pack from before hidden flaws has none (design §2.8).
+    #[serde(default)]
+    flaws: Flaws,
     cause_fade: u32,
     traits: TraitRanges,
     brain: BTreeMap<String, ParamRange>,
@@ -437,6 +443,19 @@ pub(crate) struct Breeding {
     /// The need that drives breeding, one of `brain_io.ron`'s: the engine
     /// has it work only between adults (M2 design §5).
     pub(crate) drive: String,
+    /// The chance, at each gene, that a pair's egg switches to taking its
+    /// genes from the other parent (M2 design §12), so that neighbouring
+    /// genes come from one parent in stretches, as chromosomes cross over.
+    /// A pack from before took each gene from either parent, as a coin
+    /// toss: a chance of a half.
+    #[serde(default = "gene_by_gene")]
+    pub(crate) crossover: f32,
+}
+
+/// The `crossover` of a pack from before stretches: each gene from either
+/// parent, as a coin toss.
+fn gene_by_gene() -> f32 {
+    0.5
 }
 
 /// What a saved world's pack from before breeding gets: the built-in
@@ -451,6 +470,7 @@ impl Default for Breeding {
             turns_female: 0.8,
             breeds_alone: 0.5,
             drive: "arousal".into(),
+            crossover: 0.1,
         }
     }
 }
@@ -467,6 +487,37 @@ pub(crate) struct Mutation {
     pub(crate) small: f32,
     /// The changes that are large instead.
     pub(crate) large: Large,
+}
+
+/// Hidden flaws in genes (M2 design §12). A sprite has two copies of each
+/// gene that can weaken, one from each parent, and either may carry a flaw.
+/// One sound copy is enough; with both flawed, the gene is broken.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Flaws {
+    /// The chance that a sound copy of a gene gets a flaw as an egg's genes
+    /// are copied.
+    pub(crate) arise: f32,
+    /// The chance that a sprite made from the starter genome carries a flaw
+    /// in one copy of a gene, as wild animals do.
+    pub(crate) founders: f32,
+    /// The health a broken gene is born with (M2 design §9.4).
+    pub(crate) health: f32,
+    /// The wear each broken gene counts as (M2 design §9.4), bringing old
+    /// age sooner and speeding its decay.
+    pub(crate) wear: f32,
+}
+
+/// What a pack from before hidden flaws gets: none.
+impl Default for Flaws {
+    fn default() -> Flaws {
+        Flaws {
+            arise: 0.0,
+            founders: 0.0,
+            health: 1.0,
+            wear: 0.0,
+        }
+    }
 }
 
 /// The large copying errors (M2 design §12).
@@ -628,6 +679,7 @@ impl PhysiologyEntry {
         if breeding.rest == 0 {
             return Err("`breeding.rest` must be at least 1 tick".into());
         }
+        fraction("breeding.crossover", breeding.crossover)?;
         let mutation = self.mutation;
         fraction("mutation.chance", mutation.chance)?;
         fraction("mutation.large.share", mutation.large.share)?;
@@ -641,6 +693,16 @@ impl PhysiologyEntry {
             return Err(format!(
                 "`mutation.large.most` is {}, but must be a number, at least 1",
                 mutation.large.most
+            ));
+        }
+        let flaws = self.flaws;
+        fraction("flaws.arise", flaws.arise)?;
+        fraction("flaws.founders", flaws.founders)?;
+        fraction("flaws.health", flaws.health)?;
+        if !(flaws.wear.is_finite() && flaws.wear >= 0.0) {
+            return Err(format!(
+                "`flaws.wear` is {}, but must be a number, and can't be negative",
+                flaws.wear
             ));
         }
         if self.cause_fade == 0 {
@@ -793,6 +855,7 @@ impl PhysiologyEntry {
             ageing,
             breeding: self.breeding,
             mutation,
+            flaws,
             tally_fade: halving_factor(self.cause_fade as f32),
             traits,
             brain: BrainRanges(brain),

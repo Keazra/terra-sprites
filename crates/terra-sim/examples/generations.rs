@@ -3,10 +3,13 @@
 //! reports for each seed the sprites alive at the end, the most at once,
 //! the eggs laid with a partner and alone, the hatchings, the sprites that
 //! turned female, the deepest generation reached and how many hatchlings
-//! grew up; then how long its sprites lived and what they died of; then how
-//! far the species' genes moved from the starter genome's (M2 design §12,
-//! G4). The bar: sprites alive at the end in at least 8 of 10 seeds, and
-//! never more than the world's limit.
+//! grew up; then how long its sprites lived and what they died of; then the
+//! hidden flaws its sprites carried (M2 design §12), and how long young
+//! from lone eggs lived against young from pairs; then how far the species'
+//! genes moved from the starter genome's (§12, G4). The bars: sprites alive
+//! at the end in at least 8 of 10 seeds, and never more than the world's
+//! limit; and at least 3 gene numbers moved by a tenth the same way in
+//! every seed (§12.7).
 //!
 //! `cargo run --release -p terra-sim --example generations`
 //!
@@ -17,7 +20,7 @@
 #[path = "common/args.rs"]
 mod args;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::process::ExitCode;
 use std::sync::Mutex;
 
@@ -61,6 +64,13 @@ struct Run {
     /// The ages at which hatchlings died of old age in the run's second
     /// half, once lives have had generations to move (M2 design §12).
     late_lives: Vec<u64>,
+    /// The ages at which young from lone eggs and from pairs died of old
+    /// age (M2 design §12).
+    lone_lives: Vec<u64>,
+    pair_lives: Vec<u64>,
+    /// The hidden flaws carried and the genes broken, on average, among the
+    /// hatched sprites alive halfway through and at the end (M2 design §12).
+    flaws: [Option<(f32, f32)>; 2],
     /// Each gene number's middle value among the sprites alive at the end
     /// whose genes line up with the starter's, in the starter's order; empty
     /// if none do.
@@ -132,6 +142,7 @@ fn main() -> ExitCode {
     let seeds = last - first + 1;
     println!("\nStill going in {going} of {seeds} seeds; over the limit in {over}.");
     lives(&runs);
+    flaws(&runs);
     evolution(&starter, &runs);
     ExitCode::SUCCESS
 }
@@ -385,12 +396,12 @@ fn lives(runs: &[(u64, Run)]) {
     );
     let hours = |ticks: u64| ticks as f64 / HOUR;
     let (mut all, mut needs, mut deaths) = (Vec::new(), 0, 0);
-    let mut late_within = 0;
+    let mut lates = Vec::new();
     for (seed, run) in runs {
         let mut late = run.late_lives.clone();
         late.sort_unstable();
         let late = late.get(late.len().saturating_sub(1) / 2).copied();
-        late_within += usize::from(late.is_some_and(|age| (5.0..=7.0).contains(&hours(age))));
+        lates.extend(late);
         let mut lives = run.lives.clone();
         lives.sort_unstable();
         all.extend(&lives);
@@ -438,10 +449,73 @@ fn lives(runs: &[(u64, Run)]) {
         "Hunger and thirst: {needs} of {deaths} deaths after tick 10,000 ({:.1}%).",
         100.0 * needs as f64 / deaths.max(1) as f64
     );
+    lates.sort_unstable();
+    if let (Some(&shortest), Some(&longest)) = (lates.first(), lates.last()) {
+        println!(
+            "Second half's median life: {:.1} to {:.1} hours a seed.",
+            hours(shortest),
+            hours(longest)
+        );
+    }
+}
+
+/// The hidden flaws the sprites carried (M2 design §12), and how long young
+/// from lone eggs lived against young from pairs.
+fn flaws(runs: &[(u64, Run)]) {
     println!(
-        "Second half's median life between 5 and 7 hours in {late_within} of {} seeds.",
-        runs.len()
+        "\nHidden flaws: genes with one flawed copy (carried) and with two (broken), on average \
+         among the hatched sprites alive halfway and at the end; then the median life, in hours, \
+         of young from lone eggs and from pairs, of those old age killed, and how many from lone \
+         eggs it killed."
     );
+    println!(
+        "\n{:>5} {:>8} {:>7} {:>8} {:>7} {:>6} {:>6} {:>5}",
+        "Seed", "Carried", "Broken", "Carried", "Broken", "Lone", "Pair", "Lone"
+    );
+    println!("{:>5} {:>16} {:>16}", "", "halfway", "at the end");
+    let hours = |ticks: u64| ticks as f64 / HOUR;
+    let median = |ages: &[u64]| {
+        let mut ages = ages.to_vec();
+        ages.sort_unstable();
+        ages.get(ages.len().saturating_sub(1) / 2)
+            .map_or("-".to_string(), |&age| format!("{:.1}", hours(age)))
+    };
+    for (seed, run) in runs {
+        let load = |at: Option<(f32, f32)>| {
+            at.map_or(("-".to_string(), "-".to_string()), |(carried, broken)| {
+                (format!("{carried:.1}"), format!("{broken:.2}"))
+            })
+        };
+        let ((carried_half, broken_half), (carried, broken)) =
+            (load(run.flaws[0]), load(run.flaws[1]));
+        println!(
+            "{seed:>5} {carried_half:>8} {broken_half:>7} {carried:>8} {broken:>7} {:>6} {:>6} {:>5}",
+            median(&run.lone_lives),
+            median(&run.pair_lives),
+            run.lone_lives.len()
+        );
+    }
+}
+
+/// The hidden flaws carried and the genes broken, on average, among the
+/// hatched sprites alive in `world` (M2 design §12); `None` if there are
+/// none.
+fn flaw_load(world: &World) -> Option<(f32, f32)> {
+    let (mut carried, mut broken, mut sprites) = (0, 0, 0);
+    for sprite in world
+        .sprites()
+        .filter(|sprite| !sprite.is_egg() && !sprite.parents().is_empty())
+    {
+        sprites += 1;
+        for flawed in sprite.flaws() {
+            carried += usize::from(flawed == 1);
+            broken += usize::from(flawed == 2);
+        }
+    }
+    (sprites > 0).then(|| {
+        let each = |count: usize| count as f32 / sprites as f32;
+        (each(carried), each(broken))
+    })
 }
 
 /// Runs the default world from `seed` for `ticks` ticks.
@@ -457,10 +531,14 @@ fn run(
     let mut generation: BTreeMap<EntityId, u32> =
         world.sprites().map(|sprite| (sprite.id(), 0)).collect();
     let mut hatchlings = Vec::new();
+    let mut lone_eggs = BTreeSet::new();
     for _ in 0..ticks {
         for event in world.step() {
             match event.kind {
                 EventKind::Laid { egg, by, with } => {
+                    if with.is_none() {
+                        lone_eggs.insert(egg);
+                    }
                     let parents = [Some(by), with];
                     let deepest = parents
                         .iter()
@@ -486,6 +564,11 @@ fn run(
                     if cause == DeathCause::OldAge {
                         if hatchlings.contains(&id) {
                             run.lives.push(age);
+                            if lone_eggs.contains(&id) {
+                                run.lone_lives.push(age);
+                            } else {
+                                run.pair_lives.push(age);
+                            }
                             if world.tick() > ticks / 2 {
                                 run.late_lives.push(age);
                             }
@@ -511,6 +594,9 @@ fn run(
                 _ => {}
             }
         }
+        if world.tick() == ticks / 2 {
+            run.flaws[0] = flaw_load(&world);
+        }
         let count = world.sprites().count();
         run.most = run.most.max(count);
         if count == 0 && run.died_out.is_none() {
@@ -520,6 +606,7 @@ fn run(
     run.eggs = world.sprites().filter(|sprite| sprite.is_egg()).count();
     run.alive = world.sprites().count() - run.eggs;
     run.numbers = middles(&world, starter);
+    run.flaws[1] = flaw_load(&world);
     run
 }
 

@@ -4,7 +4,7 @@
 - **Date:** 2026-10-12
 - **History:** edited in place since v5; each change is a file in [`changes/`](changes/), whose README says where v1 to v5 are
 - **Builds on:** [M1 design](m1-a-sprite-lives.md), which stays the rulebook for everything M2 doesn't change
-- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), breeding (Slice 23), and the view past the wall (Slice 31)
+- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), breeding (Slice 23), the view past the wall (Slice 31), and mixing and mutating genes (Slice 24)
 
 ---
 
@@ -62,8 +62,8 @@ The owner's times, as playtime at 1× (1.25 ticks a second, M1 design §6.6):
 | Grows old | about 5 hours (3 to 7) | about 22,500 | about 1¼ hours |
 | Dies of old age | about 6 hours (4 to 8) | about 27,000 | about 1½ hours |
 
-- **These are the starter genome's times.** The genome brings them about (§3), so they vary from sprite to sprite and can evolve.
-- **Lives differ by up to 2 hours either way.** The owner (2026-10-12): "4 hours should be the shortest, and eight at the longest, for an average of 6 hours." A new sprite's `grows_old` varies by up to 40% at spawn where its other genes vary by 10% (§9.3), and a hatchling takes one parent's (§10.5). Old age still lasts about an hour, and a hard life can still bring it sooner (§9.4).
+- **These are the starter genome's times.** The genome brings them about (§3), so they vary from sprite to sprite and can evolve: a later old age costs nothing, so lives may grow longer over the generations, up to old age at about 13 hours (§12.5).
+- **Lives differ by up to 2 hours either way.** The owner (2026-10-12): "4 hours should be the shortest, and eight at the longest, for an average of 6 hours." A new sprite's `grows_old` varies by up to 40% at spawn where its other genes vary by 10% (§9.3), and a hatchling takes one parent's, now and then changed in copying (§12). Old age still lasts about an hour, and a hard life can still bring it sooner (§9.4).
 - **Growing old is where M1's lifespan went** (#140). The `grows_old` gene sets when a sprite grows old, and its genes then weaken until its body gives out and old age kills it (§9.4). How long that takes depends on the life it has had, not on a second gene. A save or genome that says `lifespan` reads it as `grows_old`, whose range is about **6,000–60,000**.
 - **A generation takes about 15–20 minutes at 4×,** Story mode's top speed (Slice 27), so an evening sees several. Long runs of evolution belong to the fast-forward mode.
 - **Lives got shorter in Slice 23, with breeding.** Until sprites had young, nothing replaced the dead: with 4-hour lives, the default world would have been empty after about 4 hours of play. So in Slice 22 sprites grew up and grew old at 1 and 3 hours, but old age lasted about 10 hours, and Slice 23 shortened it to about 1 (§9.4), for lives of about 4 hours. Later in Slice 23 the owner set them at 4 to 8 (2026-10-12), by growing old later.
@@ -86,7 +86,9 @@ The owner (round 2): the body stops growing at around 1 hour, and at around 3 ho
 
 **Settled in Slice 22 (#140): A, B and D.** Genes switch with life stage (§9.2), and old age is the genome wearing out: each gene has a health that weakens its effect, damage lands on random genes once a sprite is old, and a hard life brings that sooner and speeds it up (§9.4). Rather than failing outright, genes weaken a little at a time, so a sprite slows and dulls as it ages.
 
-**A long life costs something.** Anything the genome controls about ageing needs a cost, or evolution breeds sprites that never grow old (M1 design §4.1). In M1, lifespan costs nothing, so with inheritance it would creep up to the most allowed. Real animals pay for long life: repair takes energy, so the long-lived spend more on upkeep and breed more slowly. **A later old age costs a little energy every tick,** as a bigger sense radius does (M1 design §4.8): how much, and when, is in §9.3.
+**A long life costs something,** this section said: anything the genome controls about ageing needs a cost, or evolution breeds sprites that never grow old (M1 design §4.1), and real animals pay for long life in upkeep. Slice 22 built the cost, a little energy every tick for a later old age (§9.3), and held it at 0.
+
+**Settled in Slice 24 (#142): no cost.** The owner (2026-10-13) prefers sprites to die as the body and brain fail, not by an energy charge, and lives may grow long (§12.5). C joins as hidden flaws: broken genes bring old age sooner and speed its decay, as wear does (§12.4).
 
 ---
 
@@ -135,7 +137,7 @@ M2 is done when these hold, as well as M1's A1–A9. Each slice sets its criteri
 | G1 | **Generations.** Left alone, the sprites keep their population going for several generations in most seeds: it doesn't die out, and it doesn't grow past the world's limit. | 23 |
 | G2 | **Family.** Any sprite's parents, grandparents and children can be seen, living or dead. | 25 |
 | G3 | **Population.** A graph shows the population rising and falling over time. | 26 |
-| G4 | **Evolution.** After enough generations, the species has measurably changed from the starter genome, beyond what noise explains. | 24 |
+| G4 | **Evolution.** After enough generations, the species has measurably changed from the starter genome, beyond what noise explains: at least 3 gene numbers moved a tenth the same way in 10 seeds of 200,000 ticks (§12.7). | 24 |
 | G5 | **A harsh childhood.** About 20% of unattended newborns grow up, and grown sprites rarely die of hunger or thirst. | 29 |
 | G6 | **Fast-forward.** A world can run for many generations with no screen, and be opened afterwards. | 27 |
 | G7 | **Content safety.** A child is never a mating target, for any genome or data pack (§5). | 23 |
@@ -304,7 +306,7 @@ Settled with the owner on 2026-10-11 ([#140](https://github.com/Keazra/terra-spr
 - **`grows_old` varies more at spawn** (2026-10-12): by up to 40%, physiology's `trait_variation`, where every other gene varies by `spawn_variation`'s 10% (M1 design §4.9). So the world's first sprites, and those the Cursor places from the starter genome, grow old at 3 to 7 hours and die of it at 4 to 8 (§2).
 - **`grows_old` is M1's lifespan,** which it replaces (§2). A genome or save that says `lifespan` reads as `grows_old`. The `age` body sensor is age as a share of it, so it reaches 1 as a sprite grows old, at about 22,500 ticks rather than M1's 60,000.
 - **Growing up costs food.** Growing takes `growth` energy (0.3) whenever it happens, spread evenly over childhood, so a sprite that grows up sooner is a hungrier child.
-- **A later old age will cost a little,** all its life: `upkeep` energy a tick for every 10,000 ticks of `grows_old` (§3). **It's 0 until genes evolve** (Slice 24, noted on [#142](https://github.com/Keazra/terra-sprites/issues/142)), the owner's call on 2026-10-11: until then nothing can push old age later, so the cost only made every sprite hungrier, and even 0.00001 undid A3's training (median hits after training 45 against 81 untrained; 1.5 against 70 without it).
+- **A later old age can cost a little,** all its life: `upkeep` energy a tick for every 10,000 ticks of `grows_old`. **It's 0,** the owner's call: on 2026-10-11 until genes evolved, since the cost only made every sprite hungrier and even 0.00001 undid A3's training (median hits after training 45 against 81 untrained; 1.5 against 70 without it); and for good on 2026-10-13, so lives end as the body and brain fail (§12.5). A pack can set it.
 
 ### 9.4 Old age: genes weaken
 
@@ -318,7 +320,7 @@ The owner (2026-10-11): old age is the genome wearing out, and a hard life damag
 - **A bad injury can scar a gene at any age:** while injury is above `scar.above` (.5), each tick has a `scar.chance` (0.002) that a random gene loses `scar.hit` (0.05; half that on an instinct).
 - **Healing slows** in proportion to its genes' average health, since repair is what fails.
 - **The body gives out** once that average is at `gives_out`: old age then injures it (`injury.old_age`), and it dies of old age. An old sprite whose thirst feeling has weakened may die of thirst first.
-- **It isn't inherited.** The damage is in the body, not in its eggs. Inherited gene damage is Slice 24's; stress chemicals such as adrenaline damaging genes join then (noted on [#142](https://github.com/Keazra/terra-sprites/issues/142)). Mild stress lengthening life (hormesis) is a later idea, and botched repairs leading to cancer is [#178](https://github.com/Keazra/terra-sprites/issues/178).
+- **It isn't inherited.** The damage is in the body, not in its eggs. Inherited gene damage is Slice 24's hidden flaws (§12.3), and broken genes bring old age sooner as wear does (§12.4); stress chemicals damaging genes are [#195](https://github.com/Keazra/terra-sprites/issues/195). Mild stress lengthening life (hormesis) is a later idea, and botched repairs leading to cancer is [#178](https://github.com/Keazra/terra-sprites/issues/178).
 - **Gene health, wear and life stage are world state:** saved, in the state hash, and checked every tick (M1 design §7.1): one health per gene, each from 0 to 1, and wear from 0 to 1.
 
 ### 9.5 The young
@@ -387,7 +389,7 @@ The game's rule, "the world decides what happens to the body, the genes decide h
 - **`Mate` is offered only when both are adults** (§5): the sprite, and the one the verb would be aimed at, a running action's target or else the candidate (M1 design §5.5, #173). It works, once, if both are fertile, one is male and the other female, and she has a free tile beside her: she lays an egg there (§10.4). The partner learns about the one that mated with it too, as if touched. Otherwise it's a fruitless try.
 - **`BreedAlone` is offered only to a grown sprite.** It works for a fertile female whose **longing** has reached `breeds_alone` (0.5), with a free tile beside her; for a male, or a female not fertile or not longing enough, it's a fruitless try.
 - **Longing** is a hormone the starter genes raise while a grown sprite sees no male adult and lower fast while it sees one: about 1,100 ticks with no male in sight takes it to 0.5. It came after the owner saw that 9 eggs in 10 were laid alone. Most of those came from chance: a sprite now and then tries what it isn't drawn to (M1 design §5.5), and for a fertile female, breeding alone always worked. The body's rule stops that; the genes set how fast longing builds, so evolution can still tune it.
-- **The egg costs `cost` (0.3) energy** (Q2): split between a pair, or all hers alone. Per bite of food, both pass on as much of the parents' genes, so neither wins on cost; what makes partners pay is Slice 24, when a sprite breeding alone passes on every broken gene it has.
+- **The egg costs `cost` (0.3) energy** (Q2): split between a pair, or all hers alone. Per bite of food, both pass on as much of the parents' genes, so neither wins on cost; what makes partners pay is that a lone egg doubles its mother's genes, so each hidden flaw she carries is broken in about half her lone young (§12.3).
 - **Body language** (the owner's card, 2026-10-12): a sprite sees how aroused the sprite it attends to is, `target_arousal`, and whether it's of the other sex, `target_other_sex`. Before it, in tuning, most tries to mate met a partner of the same sex or one not fertile, and nearly every egg was laid alone. These are brain inputs `brain_io.ron` lists like any other: one that reads `Target(...)` reads the sprite attended to, and one that reads `Differs(...)` how far that differs from the sprite's own; both are 0 unless attention is on a sprite that has hatched, and any that reads arousal is 0 unless both are grown (§5). Attention can't read them, as it can't any input about what it attends to (M1 design §5.3).
 - **The starter's instincts:** arousal draws attention to sprites; arousal with an aroused sprite of the other sex in view leads to Mate; and in a female longing for a male, arousal leads to breeding alone.
 
@@ -402,8 +404,8 @@ The game's rule, "the world decides what happens to the body, the genes decide h
 
 ### 10.5 The child's genes
 
-- **Mixed** (Q6): each gene, with its switch, comes from one parent or the other at random, where the two genomes line up gene for gene, as the starter's do. Where they don't, as with one placed from a genome file, the child takes its mother's.
-- **The damage old age did to a parent's genes isn't passed on** (§9.4); a child's genes are whole. Mutation is Slice 24's.
+- **Mixed** (Q6): each gene, with its switch, came from one parent or the other at random, where the two genomes lined up gene for gene, as the starter's do; where they didn't, the child took its mother's. Since Slice 24 the genes line up by what each does and mix in stretches (§12.2), and copying errors change them now and then (§12.1).
+- **The damage old age did to a parent's genes isn't passed on** (§9.4); a child's genes are whole, but for broken ones (§12.4).
 
 ### 10.6 What stops the world filling up
 
@@ -475,7 +477,7 @@ How long hatchlings lived, in hours at 1×, of those old age killed (`generation
 - **A3: met, and no longer by luck.** Before the fix for #187, this slice's longing genes left A3 failing in most sets of seeds: one shock wore off. With it and slow fades, over seeds 1–30, trained sprites hit a median of once in ticks 10,000–20,000 against 42 times untrained, and every random set of 10 of those seeds passes.
 - **A5: met,** 418–440 ticks a second with 100 sprites (`speed`, three runs) on the owner's PC. Measured in the cloud at `05a8c67`, it was 257–266, against 302–308 for `main` with the A3 fix.
 - **A1 and A2: met** (their tests pass, with `most_sprites` as §10.6 says).
-- **Lives: about as the owner set them, a little long.** The median hatchling lived 5.9 to 7.6 hours a seed, 6.5 in the median seed; a tenth died by 4.3 to 5.6 hours, and nine tenths by 6.6 to 7.9. The few lives under 4 hours are sprites a hard life wore into old age sooner (§9.4). Lives run long because a sprite that lives longer has more young, who take its `grows_old` (§10.5): nothing pulls the other way until Slice 24 gives a later old age its cost (§9.3). Before, with lives of about 4 hours, a tenth died by 3.7 hours and nine tenths by 4.3 (all seeds together).
+- **Lives: about as the owner set them, a little long.** The median hatchling lived 5.9 to 7.6 hours a seed, 6.5 in the median seed; a tenth died by 4.3 to 5.6 hours, and nine tenths by 6.6 to 7.9. The few lives under 4 hours are sprites a hard life wore into old age sooner (§9.4). Lives run long because a sprite that lives longer has more young, who take its `grows_old` (§10.5): nothing pulls the other way, and since Slice 24 nothing is meant to: a later old age costs nothing (§12.5). Before, with lives of about 4 hours, a tenth died by 3.7 hours and nine tenths by 4.3 (all seeds together).
 - **For information:** almost every hatchling grows up, as expected until Slice 29: in ticks 0–50,000 over all ten seeds, 15 sprites of any age died of something other than old age (13 hurt by another, 2 of thirst). Between 69% and 85% of eggs come from a pair, 78% in the median seed: a female lays alone only once she has longed for a male a while (§10.3). Most tries to mate come to nothing (513 to 696 a seed, against 226 to 295 that lay an egg): Mate is offered between any two adults, but lays an egg only when both are fertile and of different sexes.
 
 ---
@@ -526,3 +528,91 @@ Both built-in themes gain the glass's six glyphs and the stars' three depths, as
 - **Played** in Windows Terminal at 140×40 and at the smallest size the game allows.
 
 The ship's own walls come later: its prow is iron, and walls between sectors are hull (#181). Until then, every wall of the terrarium faces space.
+
+---
+
+## 12. Mixing and mutating genes (Slice 24)
+
+Settled with the owner on 2026-10-13 ([#142](https://github.com/Keazra/terra-sprites/issues/142)), in a round of ten questions. Children now differ from their parents: copying errors change a gene's numbers now and then, a pair's genes line up by what each gene does and mix in stretches, and hidden flaws passed down families make the quality of a sprite's genes part of how it ages (§3, reading C). The slice comes in two parts: 24a, this section, and 24b, copy and change (§12.8). The numbers are data, the `mutation` and `flaws` sections of `physiology.ron` and `breeding.crossover`: first guesses, tuned against §12.7. A save from before this slice keeps its pack (M1 design §2.8), which has neither section, so its eggs copy their parents' genes exactly and carry no flaws, and its pairs' young mix gene by gene, as before.
+
+### 12.1 Copying errors
+
+- **When an egg is laid, each gene value has a 1 in 100 chance of being copied wrongly** (`mutation.chance`, 0.01). The starter has 83 values, so a little over half of hatchlings have a change, most of them one. The owner (Q1): "these are creatures that only live for a few hours", and mutations should be "fun and visible-ish": rare and large, with a few small.
+- **Three changes in four are large,** a factor from half to double, as likely to halve as to double (`large.share` 0.75, `large.most` 2). The rest are small, within a fifth either way (`small` 0.2).
+- **A copying error changes only a number,** never what a gene refers to, how it works or when it works: how fast hunger rises, how strong an instinct is, when a sprite grows old. Each value is then held within its range, as spawn variation's are (M1 design §4.9). A gene that would change the body directly stays flagged and does nothing, whatever an error does to it (M1 design §4.3); property tests with random genomes pin both.
+- **The world's dice decide** (M1 design §2.3), so saves and replays agree.
+- **How often is a rule of the world,** the same for every sprite (Q2): if it were a gene, nothing would make careful copying cost anything, and evolution would turn it down until the species stopped changing. It may become a gene once it can have a cost ([#194](https://github.com/Keazra/terra-sprites/issues/194)).
+- **A sprite remembers which of its genes copying changed, and what each was,** for the Genome tab (§12.6): world state, saved and in the state hash.
+
+### 12.2 Lining up and mixing
+
+This replaces §10.5's first rule.
+
+- **A pair's genes line up by what each gene does** (Q3), as real chromosomes pair matching genes: a gene of the father's pairs with one of the mother's that refers to the same things, works the same way and works in the same life stages, whatever its numbers, the first such with the first such. So "low energy → hunger" pairs with "low energy → hunger" wherever each sits. The child has its mother's genes in her order, and a gene only the father has after the one it follows in his genome.
+- **The child's genes come from one parent in stretches:** it starts with either at random, and at each gene switches to the other with `breeding.crossover`'s chance (0.1), so about every 10 genes, as chromosomes cross over. Genes that sit together and work together, like hunger's rise and its fall, tend to be inherited together. A pack whose `breeding` has no `crossover` mixes gene by gene (0.5), as Slice 23 did.
+- **A gene only one parent has goes to the child when its stretch is from that parent,** so to about half the young.
+- **A lone egg's genes are its mother's** (§10.3), copied as any egg's are.
+- **What age did to a parent's genes still isn't passed on** (§9.4): a child's genes are whole, but for broken ones (§12.4).
+
+### 12.3 Hidden flaws
+
+Gene quality, as carriers (Q5), as in real animals.
+
+- **Each gene that can weaken (§9.4) has two copies, one from each parent,** and either may carry a **flaw**. One sound copy is enough, so a sprite with one flawed copy, a **carrier**, shows nothing. A setting that doesn't weaken, such as a half-life or a starting level, can't be flawed.
+- **A parent passes on one of its two copies of each gene,** at random, so a carrier passes its flaw to about half its young. A gene only one parent has gets a sound copy from the other.
+- **A gene with both copies flawed is broken** (§12.4). Close kin often carry the same flaw from a shared ancestor, so their young are likelier to get it twice, as inbred animals do, with no rule of its own.
+- **A lone egg gets one of its mother's copies of each gene, doubled,** as a Komodo dragon's or a shark's does. So each flaw she carries is broken in about half her lone young, where a pair's egg would need both parents to carry it. That's the cost of breeding alone §10.3 promised.
+- **Flaws arise in copying:** as an egg's genes are copied, each sound copy of a gene that can weaken gets a flaw with the chance `flaws.arise` (0.007), so about one egg in two has a new one.
+- **The world's first sprites carry a few,** as wild animals do, so family matters from the first generations: one copy of each gene that can weaken is flawed with the chance `flaws.founders` (0.06), about three each, all hidden. So does a sprite the Cursor places from the starter genome. One placed from a genome file carries none, since the file holds genes, not flaws (`docs/reference/genomes.md`), and nor does a scenario's.
+- **Flaws are world state:** saved, in the state hash, and checked every tick (M1 design §7.1): at most two flawed copies of each gene.
+
+### 12.4 Broken genes
+
+What poor genes do (Q6): they're weaker, and they bring old age sooner.
+
+- **A broken gene works at half strength:** it's born with a health of `flaws.health` (0.5), as if old age had weakened it (§9.4), and its health only falls from there. A broken "thirst → drink" leaves a sprite slow to drink when thirsty.
+- **Broken genes bring old age sooner and speed its decay,** as a hard life's wear does (§9.4): each counts as `flaws.wear` (0.05) of wear towards when the sprite grows old and how fast its genes decay, up to the most worn. It isn't wear: the Body tab's `wear` doesn't count it. One broken gene takes about 10 minutes off a life at 1×, and five about 45.
+- **The owner's words for it** (M2 planning): the genome's decay is "amplified or damaged by stress throughout their lives, and the 'quality' of their genes". Wear is the stress (§9.4); broken genes are the quality. Stress chemicals damaging genes are [#195](https://github.com/Keazra/terra-sprites/issues/195).
+
+### 12.5 No cost for a long life
+
+- **A later old age costs nothing** (the owner, Q7, 2026-10-13): "I prefer to let Sprites die due to failure of the body/brain as opposed to an artificial energy cost", and it could be interesting to see sprites make their lives last long, as humans have. `ageing.upkeep` stays 0 in the built-in pack, for a pack that wants the cost (§9.3).
+- **So lives may grow longer over the generations,** up to `grows_old`'s ceiling of 60,000 ticks, old age at about 13 hours at 1×. A sprite that lives longer has more young, who take its `grows_old`; what holds that back is the body: broken genes and wear bring old age sooner (§12.4), and every life still needs the world's food and water.
+- This settles §3's "a long life costs something" the other way. §12.7 reports how long lives were, with no bar on their length.
+
+### 12.6 What the player sees
+
+- **The Genome tab opens with what's new in the sprite** (Q9, B), then goes on as before after a blank line:
+
+```
+│ FROM PIP #12 AND BO #7                     │
+│ grows old 25,104, was 23,880               │
+│ low energy → hunger +.00512 past .515, was │
+│   +.00428                                  │
+│ broken: thirst → drink                     │
+│ carries flaws: hunger → eat, pain →        │
+│   retreat                                  │
+│                                            │
+│ TRAITS                                     │
+```
+
+  Where its genes came from, `FROM PIP #12 ALONE` for a lone egg; each gene copying changed, as the tab writes it now, with the numbers it had; then the genes it has broken and those it carries a flaw in. A sprite with no parents, from the world's beginning or placed by the Cursor, has no list, though it may carry flaws.
+- **A broken gene shows its health where it sits,** `· health .5`, as one old age weakened does (§9.6), and the Body tab's `genes .97` counts it.
+- **No new log lines:** copying errors come in every other egg and would bury the rest.
+
+### 12.7 How we know it worked
+
+Agreed before measuring (Q10), without the bar on life length (Q7):
+
+- **The species changes (M2's G4):** in the default world left alone for **200,000 ticks** (about 45 hours at 1×), seeds 1–10, at least **3 gene numbers** whose middle value among the living moved **by at least 10%** from the starter's, **the same way in all 10 worlds**. Chance moves a number the same way in all ten about 1 time in 500, so with 83 numbers, 3 is well past chance.
+- **Keeps going:** sprites alive at the end in **at least 8 of 10 seeds**, never more than the limit.
+- **Nothing else got worse:** A1–A4 still met (A3 on seeds 1–30), and A5 at the limit, 100 sprites, at least 200 ticks a second.
+- **For information:** how many flaws sprites carry and how many genes are broken, over time; how long lone eggs' young live against pairs' young; which numbers moved most; how long lives were.
+
+`cargo run --release -p terra-sim --example generations -- --ticks 200000` runs the first two and reports the rest. **Before this slice** (`main` at `dc9466e`, seeds 1–10), no number moved a tenth the same way in all 10 seeds: `grows_old` rose about 30% in 9 of 10, since a longer life leaves more young (§12.5), and the median hatchling old age killed in the second half lived 5 to 7 hours in only 2 of 10 seeds, most 7 to 7.8.
+
+### 12.8 Later
+
+- **24b, copy and change** (Q4): now and then a gene is doubled, lost or changed in what it does, an instinct's need or action, what draws the eye to what, the life stage it works in, usually on a fresh copy, so the original still works. That's how the species can come to be born knowing what its ancestors had to learn, as the M1 design promised. Every changed gene is checked again, and one that would change the body directly is flagged; a genome can't grow past twice the starter's length. Lining up by what genes do (§12.2) is ready for genomes that differ. It gets bars of its own, measured on its own, so a number that moves in 24b can only be 24b's doing.
+- **The error rate as a gene:** [#194](https://github.com/Keazra/terra-sprites/issues/194).
+- **Stress damaging genes:** [#195](https://github.com/Keazra/terra-sprites/issues/195), with temperament ([#53](https://github.com/Keazra/terra-sprites/issues/53)): a stress chemical that helps in the moment and harms when it lasts.

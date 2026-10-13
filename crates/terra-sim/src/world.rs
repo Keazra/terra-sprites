@@ -20,6 +20,7 @@ use crate::events::{DeathCause, Emptied, Event, EventKind};
 use crate::expression::{Expression, expressions};
 use crate::generate::{generate, place_objects, place_sprites};
 use crate::genome::{GeneView, Genome};
+use crate::inheritance;
 use crate::learning::{self, Subject};
 use crate::map::{Dir, Map, MapError, Pos};
 use crate::objects::{EntityId, Object, Objects};
@@ -492,6 +493,27 @@ impl<'a> SpriteView<'a> {
     /// 0 (M2 design §9.4).
     pub fn gene_health(&self) -> &'a [f32] {
         &self.sprite.health
+    }
+
+    /// How many of its two copies of each gene carry a hidden flaw, from 0
+    /// to 2, in genome order (M2 design §12). With one it carries the flaw
+    /// unharmed; with both, the gene is broken.
+    pub fn flaws(&self) -> Vec<u8> {
+        (0..self.sprite.genome.genes.len())
+            .map(|index| inheritance::flaws_of(&self.sprite.flaws, index))
+            .collect()
+    }
+
+    /// The genes copying changed as it was laid (M2 design §12), in genome
+    /// order: each one's place in its genome, and what it was as the egg
+    /// inherited it. None for a sprite with no parents.
+    pub fn copying_errors(&self) -> Vec<(usize, GeneView<'a>)> {
+        let data = &self.world.data;
+        self.sprite
+            .copying_errors
+            .iter()
+            .map(|error| (error.gene, error.was.view(data)))
+            .collect()
     }
 
     /// Every chemical in the sprite, in the data pack's order. The breeding
@@ -1613,6 +1635,17 @@ mod tests {
         world.submit(Command::TakeHold { sprite: first });
         world.step();
         world.state.sprites.remove(first);
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn more_than_two_flawed_copies_of_a_gene_break_an_invariant() {
+        let (mut world, first, _) = field_with_sprites();
+        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        sprite.flaws = vec![1, 2];
+        assert_eq!(world.check_invariants(), Ok(()), "two at most");
+        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        sprite.flaws = vec![3];
         assert!(world.check_invariants().is_err());
     }
 

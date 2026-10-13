@@ -7,6 +7,7 @@ use crate::config::WorldConfig;
 use crate::data::DataPack;
 use crate::ecology::aged_object;
 use crate::map::{Map, Pos};
+use crate::mutation;
 use crate::random::{uniform, unit};
 use crate::regions;
 use crate::sprites::Sprite;
@@ -139,10 +140,13 @@ pub(crate) fn place_sprites(config: &WorldConfig, data: &DataPack, state: &mut W
         let choice = uniform(&mut state.rng, candidates.len() as u64) as usize;
         let pos = candidates.swap_remove(choice);
         let genome = varied(data.starter(), data, &mut state.rng);
+        // Wild sprites carry a few hidden flaws (M2 design §12).
+        let flaws = mutation::founders(&genome, data, &mut state.rng);
         // The first sprites are adults, of all ages (M2 design §9.1).
         let (grows_up, grows_old) = Sprite::adulthood(&genome, data);
         let age = grows_up + uniform(&mut state.rng, grows_old.saturating_sub(grows_up).max(1));
         let mut sprite = Sprite::aged(genome, pos, state.tick, age, data);
+        sprite.flaws = flaws;
         for index in [physiology.indices.energy, physiology.indices.hydration] {
             let level = sprite.body.chems[index] * (low + (high - low) * unit(&mut state.rng));
             sprite.body.start_at(index, level);

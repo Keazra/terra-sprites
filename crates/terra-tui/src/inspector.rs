@@ -148,7 +148,7 @@ fn sprite_tab(
             .map(|(text, open)| (Line::from(text), open))
             .collect(),
         Tab::Chem => bare(chem_tab(sprite)),
-        Tab::Genome => bare(genome_tab(sprite)),
+        Tab::Genome => bare(genome_tab(sprite, app)),
         Tab::World => Vec::new(),
     }
 }
@@ -745,11 +745,25 @@ fn trend(amount: f32) -> &'static str {
 
 /// A trait and its value: `speed 7.25`, `sense 9.5`, `grows old 13,500`.
 fn trait_text(which: Trait, value: f32) -> String {
+    format!("{} {}", trait_name(which), trait_value(which, value))
+}
+
+/// A trait's name on the screen: `speed`, `grows old`.
+fn trait_name(which: Trait) -> &'static str {
     match which {
-        Trait::Speed => format!("speed {}", significant(value)),
-        Trait::SenseRadius => format!("sense {}", significant(value)),
-        Trait::GrowsOld => format!("grows old {}", whole(f64::from(value))),
-        Trait::GrowsUp => format!("grows up {}", whole(f64::from(value))),
+        Trait::Speed => "speed",
+        Trait::SenseRadius => "sense",
+        Trait::GrowsOld => "grows old",
+        Trait::GrowsUp => "grows up",
+    }
+}
+
+/// A trait's value as the screen writes it: `7.25`, or an age in whole
+/// ticks, `13,500`.
+fn trait_value(which: Trait, value: f32) -> String {
+    match which {
+        Trait::Speed | Trait::SenseRadius => significant(value),
+        Trait::GrowsOld | Trait::GrowsUp => whole(f64::from(value)),
     }
 }
 
@@ -1386,10 +1400,11 @@ impl GeneGroup {
     }
 }
 
-/// The Genome tab (design §6.1): the genes grouped under headings, each
-/// group in genome order, as plain lines. The expressed traits share one
-/// line. A gene with no effect is dimmed, with the reason below it.
-fn genome_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
+/// The Genome tab (design §6.1): what's new in a sprite with parents (M2
+/// design §12), then the genes grouped under headings, each group in genome
+/// order, as plain lines. The expressed traits share one line. A gene with
+/// no effect is dimmed, with the reason below it.
+fn genome_tab(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
     let genes: Vec<(GeneView, Expression, Switch, f32)> = sprite
         .genes()
         .into_iter()
@@ -1397,7 +1412,7 @@ fn genome_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
         .zip(sprite.gene_health().iter().copied())
         .map(|(((gene, how), switch), health)| (gene, how, switch, health))
         .collect();
-    let mut lines = Vec::new();
+    let mut lines = whats_new(sprite, app);
     for group in GeneGroup::ALL {
         let members: Vec<&(GeneView, Expression, Switch, f32)> = genes
             .iter()
@@ -1444,6 +1459,135 @@ fn genome_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
         }
     }
     lines
+}
+
+/// What's new in a sprite with parents (M2 design §12), at the top of its
+/// Genome tab: who it's from, each gene copying changed with what it was,
+/// its broken genes and the flaws it carries hidden, then a blank line.
+/// Nothing for a sprite with no parents.
+fn whats_new(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
+    let parents: Vec<String> = sprite
+        .parents()
+        .iter()
+        .map(|&id| unbroken(&app.names().label(id).to_uppercase()))
+        .collect();
+    let from = match parents.as_slice() {
+        [] => return Vec::new(),
+        [mother] => format!("FROM {mother} ALONE"),
+        parents => format!("FROM {}", parents.join(" AND ")),
+    };
+    let mut lines = wrapped(&from, 1, Style::default());
+    let genes = sprite.genes();
+    for (index, was) in sprite.copying_errors() {
+        let now = &genes[index].0;
+        let text = format!("{}, was {}", gene_text(now), was_text(now, &was));
+        lines.extend(wrapped(&text, 1, Style::default()));
+    }
+    let flaws = sprite.flaws();
+    for (flawed, label) in [(2, "broken"), (1, "carries flaws")] {
+        let names: Vec<String> = genes
+            .iter()
+            .zip(&flaws)
+            .filter(|&(_, &its)| its == flawed)
+            .map(|((gene, _), _)| gene_name(gene))
+            .collect();
+        if !names.is_empty() {
+            let text = format!("{label}: {}", listed(&names));
+            lines.extend(wrapped(&text, 1, Style::default()));
+        }
+    }
+    lines.push(Line::from(""));
+    lines
+}
+
+/// The numbers `was` had that `now` doesn't, as the Genome tab writes
+/// them: `+.00428`, `past .5`. All of them, if none reads differently.
+fn was_text(now: &GeneView, was: &GeneView) -> String {
+    let (now, was) = (numbers(now), numbers(was));
+    let differ: Vec<&str> = was
+        .iter()
+        .zip(&now)
+        .filter(|(was, now)| was != now)
+        .map(|(was, _)| was.as_str())
+        .collect();
+    if differ.is_empty() {
+        was.join(" ")
+    } else {
+        differ.join(" ")
+    }
+}
+
+/// A gene's numbers, as the Genome tab writes them, in the order it does:
+/// `+.00428`, `past .5`.
+fn numbers(gene: &GeneView) -> Vec<String> {
+    let past = |threshold: f32| format!("past{BOUND}{}", significant(threshold));
+    match *gene {
+        GeneView::Trait { which, value } => vec![trait_value(which, value)],
+        GeneView::HalfLife { ticks: 1, .. } => vec![format!("every{BOUND}tick")],
+        GeneView::HalfLife { ticks, .. } => vec![format!(
+            "every{BOUND}{}{BOUND}ticks",
+            group_thousands(u64::from(ticks))
+        )],
+        GeneView::Reaction { rate, .. } => vec![format!("rate{BOUND}{}", significant(rate))],
+        GeneView::Emitter {
+            threshold, gain, ..
+        } => vec![signed(gain), past(threshold)],
+        GeneView::Receptor {
+            threshold, gain, ..
+        } => vec![past(threshold), signed(gain)],
+        GeneView::BrainParam { value, .. } | GeneView::InitialConcentration { value, .. } => {
+            vec![significant(value)]
+        }
+        GeneView::Instinct { weight, .. } | GeneView::AttentionInstinct { weight, .. } => {
+            vec![signed(weight)]
+        }
+        GeneView::Unknown { .. } => Vec::new(),
+    }
+}
+
+/// What a gene does, without its numbers: `low energy → hunger`, `thirst →
+/// drink`, `speed`.
+fn gene_name(gene: &GeneView) -> String {
+    match *gene {
+        GeneView::Trait { which, .. } => trait_name(which).into(),
+        GeneView::HalfLife { chem, .. } => format!("{} halves", display_name(chem)),
+        GeneView::Reaction {
+            ref reactants,
+            ref products,
+            ..
+        } => reaction_sides(reactants, products),
+        GeneView::Emitter {
+            locus,
+            mode,
+            invert,
+            chem,
+            ..
+        } => format!(
+            "{} → {}",
+            emitter_source(locus, mode, invert),
+            display_name(chem)
+        ),
+        GeneView::Receptor { chem, target, .. } => {
+            format!("{} → {}", display_name(chem), display_name(target))
+        }
+        GeneView::BrainParam { param, .. } => display_name(param),
+        GeneView::Instinct {
+            ref inputs, verb, ..
+        } => format!(
+            "{} → {}",
+            concept_name(inputs),
+            verb_name(verb).to_lowercase()
+        ),
+        GeneView::AttentionInstinct {
+            input, category, ..
+        } => format!(
+            "{} → attends to {}",
+            display_name(input),
+            display_name(category)
+        ),
+        GeneView::InitialConcentration { chem, .. } => format!("{}'s start", display_name(chem)),
+        GeneView::Unknown { .. } => gene_text(gene),
+    }
 }
 
 /// How weakened a gene is (M2 design §9.4), after the gene: ` · health .62`.
@@ -1496,27 +1640,11 @@ fn gene_text(gene: &GeneView) -> String {
             ref reactants,
             ref products,
             rate,
-        } => {
-            let side = |terms: &[(&str, u8)]| {
-                if terms.is_empty() {
-                    return "nothing".to_string();
-                }
-                let terms: Vec<String> = terms
-                    .iter()
-                    .map(|&(chem, n)| match n {
-                        1 => display_name(chem),
-                        n => format!("{n} {}", display_name(chem)),
-                    })
-                    .collect();
-                terms.join(" + ")
-            };
-            format!(
-                "{} → {}, rate{BOUND}{}",
-                side(reactants),
-                side(products),
-                significant(rate)
-            )
-        }
+        } => format!(
+            "{}, rate{BOUND}{}",
+            reaction_sides(reactants, products),
+            significant(rate)
+        ),
         GeneView::Emitter {
             locus,
             mode,
@@ -1524,21 +1652,13 @@ fn gene_text(gene: &GeneView) -> String {
             threshold,
             gain,
             chem,
-        } => {
-            let locus = display_name(locus);
-            let source = match mode {
-                EmitterMode::Level if invert => format!("low {locus}"),
-                EmitterMode::Level => locus,
-                EmitterMode::Rise => format!("{locus} rises"),
-                EmitterMode::Fall => format!("{locus} falls"),
-            };
-            format!(
-                "{source} → {} {}{}",
-                display_name(chem),
-                signed(gain),
-                past(threshold)
-            )
-        }
+        } => format!(
+            "{} → {} {}{}",
+            emitter_source(locus, mode, invert),
+            display_name(chem),
+            signed(gain),
+            past(threshold)
+        ),
         GeneView::Receptor {
             chem,
             threshold,
@@ -1591,6 +1711,36 @@ fn gene_text(gene: &GeneView) -> String {
             version,
             bytes,
         } => format!("type {type_id}, version {version}, {bytes} bytes"),
+    }
+}
+
+/// A reaction's two sides: `2 h0 → h1 + h2`.
+fn reaction_sides(reactants: &[(&str, u8)], products: &[(&str, u8)]) -> String {
+    let side = |terms: &[(&str, u8)]| {
+        if terms.is_empty() {
+            return "nothing".to_string();
+        }
+        let terms: Vec<String> = terms
+            .iter()
+            .map(|&(chem, n)| match n {
+                1 => display_name(chem),
+                n => format!("{n} {}", display_name(chem)),
+            })
+            .collect();
+        terms.join(" + ")
+    };
+    format!("{} → {}", side(reactants), side(products))
+}
+
+/// What an emitter reads, as the Genome tab says it: `low energy`,
+/// `injury rises`.
+fn emitter_source(locus: &str, mode: EmitterMode, invert: bool) -> String {
+    let locus = display_name(locus);
+    match mode {
+        EmitterMode::Level if invert => format!("low {locus}"),
+        EmitterMode::Level => locus,
+        EmitterMode::Rise => format!("{locus} rises"),
+        EmitterMode::Fall => format!("{locus} falls"),
     }
 }
 

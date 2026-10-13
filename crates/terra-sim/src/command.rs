@@ -10,6 +10,7 @@ use crate::ecology::{holds_without_drawing, new_object};
 use crate::events::{Event, EventKind};
 use crate::genome::Genome;
 use crate::map::{Dir, Pos};
+use crate::mutation;
 use crate::names::{self, NameProblem};
 use crate::object_types::{Condition, Size};
 use crate::objects::{EntityId, Roll};
@@ -582,12 +583,20 @@ fn spawn_sprite(
     if !state.map.is_walkable(tile) {
         return Err(no_room(Blocker::Terrain(state.map.terrain(tile))));
     }
-    let genome = match genome {
+    // One made from the starter genome carries a few hidden flaws, as wild
+    // sprites do; one from a genome file has the genes it was given (M2
+    // design §12).
+    let (genome, flaws) = match genome {
         Some(genome) if !genome.fits(data) => return Err(Rejection::BadGenome),
-        Some(genome) => genome,
-        None => varied(data.starter(), data, &mut state.rng),
+        Some(genome) => (genome, Vec::new()),
+        None => {
+            let genome = varied(data.starter(), data, &mut state.rng);
+            let flaws = mutation::founders(&genome, data, &mut state.rng);
+            (genome, flaws)
+        }
     };
-    let sprite = Sprite::newborn(genome, tile, state.tick, data);
+    let mut sprite = Sprite::newborn(genome, tile, state.tick, data);
+    sprite.flaws = flaws;
     let id = state.add_sprite(sprite);
     Ok(EventKind::Spawned { id, pos: tile })
 }
