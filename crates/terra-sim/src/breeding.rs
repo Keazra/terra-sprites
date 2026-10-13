@@ -62,8 +62,7 @@ pub(crate) struct Unhatched {
     pub(crate) parents: Vec<EntityId>,
     /// The tick it was laid on.
     pub(crate) laid: u64,
-    /// The name the player gave it, which the sprite keeps (design v28
-    /// §2.5).
+    /// The name the player gave it, which the sprite keeps (design §2.5).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) name: Option<String>,
 }
@@ -217,7 +216,7 @@ fn lay(
     let free: Vec<_> = Dir::ALL
         .into_iter()
         .filter_map(|dir| state.map.neighbour(pos, dir))
-        .filter(|&tile| state.can_stand(data, tile) && state.can_place(data, kind, tile))
+        .filter(|&tile| state.can_lie(data, kind, tile))
         .collect();
     if free.is_empty() {
         return None;
@@ -276,6 +275,7 @@ fn lay(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command::Command;
     use crate::map::Map;
     use crate::test_util::at;
     use crate::world::{Scenario, World};
@@ -319,6 +319,12 @@ mod tests {
         assert!(laid(&mut world), "no egg once there was room");
         assert_eq!((world.sprites().count(), world.eggs().count()), (2, 1));
         assert!(!laid(&mut world), "a second egg over the limit");
+        // Held by the Cursor, the egg still counts.
+        let egg = world.eggs().next().expect("the egg").id();
+        world.submit(Command::PickUp { item: egg });
+        world.step();
+        assert!(world.cursor().holds().is_some_and(|held| held.id() == egg));
+        assert!(!laid(&mut world), "a second egg while the first is held");
     }
 
     #[test]

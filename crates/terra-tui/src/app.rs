@@ -664,16 +664,37 @@ fn whence(world: &World, preposition: &str) -> String {
     }
 }
 
-/// The type name of the item `item` if its type says the Cursor never
-/// throws it, as an egg's does (M2 design §10.4): held, or still on the map
-/// while a pick-up waits in the queue.
-fn never_thrown(world: &World, item: EntityId) -> Option<&str> {
-    let cursor = world.cursor();
-    if let Some(held) = cursor.holds().filter(|held| held.id() == item) {
-        return (!held.is_throwable()).then(|| held.type_name());
+/// How the item `id` looks, and whether its type lets the Cursor throw it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ItemLook<'w> {
+    pub(crate) type_name: &'w str,
+    pub(crate) visual_state: &'w str,
+    /// False for an egg (M2 design §10.4).
+    pub(crate) throwable: bool,
+}
+
+/// The item `id`, held by the Cursor or, while a pick-up waits in the queue,
+/// still on the map (design §6.5).
+pub(crate) fn item_look(world: &World, id: EntityId) -> Option<ItemLook<'_>> {
+    if let Some(held) = world.cursor().holds().filter(|held| held.id() == id) {
+        return Some(ItemLook {
+            type_name: held.type_name(),
+            visual_state: held.visual_state(),
+            throwable: held.is_throwable(),
+        });
     }
-    let object = world.objects().find(|object| object.id() == item)?;
-    (!object.is_throwable()).then(|| object.type_name())
+    let object = world.objects().find(|object| object.id() == id)?;
+    Some(ItemLook {
+        type_name: object.type_name(),
+        visual_state: object.visual_state(),
+        throwable: object.is_throwable(),
+    })
+}
+
+/// What a grab with the Cursor empty takes (design §6.5).
+enum Reach<'w> {
+    Sprite(EntityId),
+    Object(ObjectView<'w>),
 }
 
 /// What a sliding sprite crashed into, and whether that hurt it (design v25
@@ -1914,21 +1935,21 @@ impl App {
         world: &World,
         refused: Refused,
     ) -> bool {
-        let command = match (self.grab_target(sprite), world.object_at(tile)) {
-            (Some(sprite), _) => {
+        let command = match self.reach(tile, sprite, world) {
+            Some(Reach::Sprite(sprite)) => {
                 // Taking hold puts the Cursor, as the world knows it, on the
                 // sprite.
                 self.told_tile = world.sprite(sprite).map(|s| s.pos());
                 Command::TakeHold { sprite }
             }
             // In M1 every solid object is a fixture (design §3.3).
-            (None, Some(object)) if object.is_solid() => {
+            Some(Reach::Object(object)) if object.is_solid() => {
                 let (cant, name) = (refused.cant, display_name(object.type_name()));
                 self.refuse(format!("Can't {cant} the {name}: {ROOTED}"));
                 return false;
             }
-            (None, Some(object)) => Command::PickUp { item: object.id() },
-            (None, None) => {
+            Some(Reach::Object(object)) => Command::PickUp { item: object.id() },
+            None => {
                 self.refuse(format!("Nothing here to {}", refused.nothing_to));
                 return false;
             }
@@ -1937,11 +1958,19 @@ impl App {
         true
     }
 
-    /// The sprite a grab with the Cursor empty takes hold of, with `sprite`
-    /// under the pointer: the followed sprite, or else that one (design v23
-    /// §6.5). With neither, it picks up the item there.
-    fn grab_target(&self, sprite: Option<EntityId>) -> Option<EntityId> {
-        self.followed().or(sprite)
+    /// What a grab with the Cursor empty takes on `tile`, with `sprite` on
+    /// it (design §6.5): the followed sprite, or else that one, or else the
+    /// item there.
+    fn reach<'w>(
+        &self,
+        tile: Pos,
+        sprite: Option<EntityId>,
+        world: &'w World,
+    ) -> Option<Reach<'w>> {
+        match self.followed().or(sprite) {
+            Some(sprite) => Some(Reach::Sprite(sprite)),
+            None => world.object_at(tile).map(Reach::Object),
+        }
     }
 
     /// Sends a Grab-mode command, queued, so the marks and the next click
@@ -1969,11 +1998,14 @@ impl App {
         let thrown = match self.grip(world) {
             Some(Grip::Holds(item)) => Some(item),
             Some(Grip::Leads(_)) => None,
-            None if self.grab_target(sprite).is_some() => None,
-            None => world.object_at(tile).map(|object| object.id()),
+            None => match self.reach(tile, sprite, world) {
+                Some(Reach::Object(object)) => Some(object.id()),
+                Some(Reach::Sprite(_)) | None => None,
+            },
         };
-        if let Some(name) = thrown.and_then(|item| never_thrown(world, item)) {
-            let name = inspector::with_article(&display_name(name));
+        let look = thrown.and_then(|item| item_look(world, item));
+        if let Some(look) = look.filter(|look| !look.throwable) {
+            let name = inspector::with_article(&display_name(look.type_name));
             self.refuse(format!("Can't throw {name}"));
             return;
         }

@@ -24,7 +24,6 @@ use crate::inheritance;
 use crate::learning::{self, Subject};
 use crate::map::{Dir, Map, MapError, Pos};
 use crate::mutation::CopyChangeView;
-use crate::object_types::Next;
 use crate::objects::{EntityId, Object, Objects};
 use crate::perception::{Flood, Target, goal_tiles};
 use crate::regions::Regions;
@@ -92,7 +91,9 @@ impl WorldState {
     /// Rebuilds what a save leaves out because it's derived from the rest
     /// (design §2.8): which entity stands on each tile, each sprite's
     /// compiled genome, and its levels before the tick, taken as its levels
-    /// now, so each change on the Chem tab reads blank for one tick.
+    /// now, so each change on the Chem tab reads blank for one tick. A save
+    /// from when eggs were sprites has them turned into egg items first (M2
+    /// design §10.4).
     fn rebuild(&mut self, data: &DataPack) -> Result<(), String> {
         self.map.check_shape(data)?;
         self.objects.rebuild(&self.map, data)?;
@@ -123,11 +124,7 @@ impl WorldState {
             }
             let egg = data.egg_type().and_then(|kind| {
                 let tile = self.nearest_free(data, kind, pos)?;
-                let object_type = &data.object_types()[kind];
-                let stage = object_type
-                    .stages
-                    .iter()
-                    .position(|stage| stage.next == Next::Hatch)?;
+                let stage = data.object_types()[kind].hatching_stage()?;
                 let mut egg = new_object(data, kind, tile);
                 (egg.fresh, egg.stage, egg.stage_ends) = (false, Some(stage), hatches);
                 Some(egg)
@@ -145,15 +142,14 @@ impl WorldState {
         }
     }
 
-    /// The nearest tile to `pos` that an object of type `kind` may go on and
-    /// a sprite may stand on, searching outwards a ring at a time, each row
-    /// by row.
+    /// The nearest tile to `pos` that an egg of the type `kind` may lie on,
+    /// searching outwards a ring at a time, each row by row.
     fn nearest_free(&self, data: &DataPack, kind: usize, pos: Pos) -> Option<Pos> {
         let rings = self.map.width().max(self.map.height());
         (0..rings).find_map(|radius| {
             square(&self.map, pos, radius)
                 .filter(|&tile| chebyshev(tile, pos) == radius)
-                .find(|&tile| self.can_stand(data, tile) && self.can_place(data, kind, tile))
+                .find(|&tile| self.can_lie(data, kind, tile))
         })
     }
 
@@ -179,6 +175,13 @@ impl WorldState {
     pub(crate) fn can_place(&self, data: &DataPack, kind: usize, pos: Pos) -> bool {
         self.objects.can_place(&self.map, data, kind, pos)
             && !(data.object_types()[kind].solid && self.sprites.at(pos).is_some())
+    }
+
+    /// Whether an egg of the type `kind` may lie on the tile at `pos`, as
+    /// it's laid (M2 design §10.4): an item may go there, and a sprite may
+    /// stand there, so it can hatch.
+    pub(crate) fn can_lie(&self, data: &DataPack, kind: usize, pos: Pos) -> bool {
+        self.can_stand(data, pos) && self.can_place(data, kind, pos)
     }
 
     /// Whether a sprite may stand on the tile at `pos` (design §3.4): a
@@ -650,8 +653,8 @@ impl<'a> ObjectView<'a> {
         self.world.data.object_types()[self.object.kind].solid
     }
 
-    /// Whether the Cursor may throw it, once it holds it (design v25
-    /// §3.5.4): not an egg (M2 design §10.4).
+    /// Whether the Cursor may throw it, once it holds it (design §3.5.4):
+    /// not an egg (M2 design §10.4).
     pub fn is_throwable(&self) -> bool {
         self.world.data.object_types()[self.object.kind].throwable
     }
@@ -758,8 +761,8 @@ impl<'a> HeldView<'a> {
         &self.world.data.object_types()[self.object.kind].name
     }
 
-    /// Whether the Cursor may throw it (design v25 §3.5.4): not an egg,
-    /// which it can only put down (M2 design §10.4).
+    /// Whether the Cursor may throw it (design §3.5.4): not an egg, which
+    /// it can only put down (M2 design §10.4).
     pub fn is_throwable(&self) -> bool {
         self.world.data.object_types()[self.object.kind].throwable
     }
@@ -823,23 +826,12 @@ impl<'a> EggView<'a> {
     /// each as short as it can be after the one it's in. Held, or with a
     /// sprite on it, it hatches once it can after that.
     pub fn hatches(&self) -> u64 {
-        let stages = &self.world.data.object_types()[self.object.kind].stages;
-        let mut tick = self.object.stage_ends;
-        let mut stage = self
+        let object_type = &self.world.data.object_types()[self.object.kind];
+        let stage = self
             .object
             .stage
             .expect("an egg has a stage that ends in hatching");
-        // The stages after this one, as short as each can be.
-        for _ in 0..stages.len() {
-            match stages[stage].next {
-                Next::Stage(next) => {
-                    stage = next;
-                    tick += u64::from(stages[next].ticks.0);
-                }
-                Next::Expire | Next::Hatch => break,
-            }
-        }
-        tick
+        self.object.stage_ends + object_type.least_ticks_after(stage)
     }
 
     /// The name the player gave it, which the sprite keeps, if any.
@@ -1212,14 +1204,7 @@ impl World {
     /// Every egg, on the map or in the Cursor, in ascending ID order (M2
     /// design §10.4).
     pub fn eggs(&self) -> impl Iterator<Item = EggView<'_>> {
-        self.state.objects.iter().filter_map(|(id, object)| {
-            Some(EggView {
-                id,
-                object,
-                unhatched: object.unhatched.as_deref()?,
-                world: self,
-            })
-        })
+        self.state.objects.iter().filter_map(|(id, _)| self.egg(id))
     }
 
     /// The egg `id`, if it's in the world and hasn't hatched (M2 design
@@ -1494,6 +1479,17 @@ impl World {
             )));
         }
         self.checked_next_id.set(state.next_id);
+        // An egg hands its ID on to the sprite it hatches into (M2 design
+        // §10.4), so an ID is an object's or a sprite's, never both.
+        if let Some((id, _)) = state
+            .sprites
+            .iter()
+            .find(|&(id, _)| state.objects.get(id).is_some())
+        {
+            return Err(InvariantViolation(format!(
+                "{id:?} is both a sprite and an object"
+            )));
+        }
         let mut ids = state
             .objects
             .iter()
@@ -1828,6 +1824,18 @@ mod tests {
             (ticks - expected).abs() <= 2.0,
             "{ticks} ticks, not {expected}"
         );
+    }
+
+    #[test]
+    fn an_id_both_a_sprite_and_an_object_breaks_an_invariant() {
+        // M2 design §10.4: a hatchling takes its egg's ID, and the egg is
+        // gone.
+        let (mut world, first, _) = field_with_sprites();
+        let berry = world.data.real_object_type("berry").expect("berries");
+        let object = new_object(&world.data, berry, Pos { x: 0, y: 0 });
+        world.state.objects.place(first, object);
+        let broken = world.check_invariants().expect_err("one ID, two things");
+        assert!(broken.0.contains("both"), "{broken:?}");
     }
 
     #[test]

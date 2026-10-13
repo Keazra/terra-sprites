@@ -10,7 +10,7 @@ use ratatui::{
 use terra_sim::{EntityId, Grip, LifeStage, ObjectView, Pos, Progress, SpriteView, World};
 
 use crate::app::{
-    App, Areas, ColourMode, CursorMode, PlaceItem, Screen, Selection, spoken_duration,
+    App, Areas, ColourMode, CursorMode, PlaceItem, Screen, Selection, item_look, spoken_duration,
     strongest_drive,
 };
 use crate::clock::Speed;
@@ -229,8 +229,8 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
                     None => sprite_tile(sprite.life_stage(), selected),
                 };
                 app.theme.glyph(tile)
-            } else if let Some((_, (name, state))) = thrown.filter(|&(from, _)| from == pos) {
-                app.theme.object_glyph(name, state)
+            } else if let Some((_, look)) = thrown.filter(|&(from, _)| from == pos) {
+                app.theme.object_glyph(look.type_name, look.visual_state)
             } else if destination == Some(pos) {
                 app.theme.glyph(SemanticTile::DecisionMarker)
             } else if let Some(object) = world.object_at(pos) {
@@ -605,7 +605,7 @@ fn held_glyph(app: &App, world: &World) -> char {
     }
     let glyph = match app.grip(world) {
         Some(Grip::Holds(id)) => {
-            item_look(world, id).map(|(name, state)| theme.object_glyph(name, state))
+            item_look(world, id).map(|look| theme.object_glyph(look.type_name, look.visual_state))
         }
         // A led sprite as the map draws it: the young small (M2 design
         // §9.6).
@@ -627,17 +627,6 @@ fn sprite_tile(stage: LifeStage, selected: bool) -> SemanticTile {
         (true, _) => SemanticTile::SelectedSprite,
         (false, _) => SemanticTile::Sprite,
     }
-}
-
-/// The type and visual state of the item `id`, held by the Cursor or, while
-/// a pick-up waits in the queue, still on the map.
-fn item_look(world: &World, id: EntityId) -> Option<(&str, &str)> {
-    let held = world.cursor().holds().filter(|held| held.id() == id);
-    let look = held.map(|held| (held.type_name(), held.visual_state()));
-    look.or_else(|| {
-        let object = world.objects().find(|object| object.id() == id)?;
-        Some((object.type_name(), object.visual_state()))
-    })
 }
 
 /// Draws a single-lined box around `area` with `title` in its top edge.
@@ -774,7 +763,7 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
             format!(" │ leading: {}", app.names().label(id))
         }),
         Some(Grip::Holds(id)) => cursor_part(app, Subject::World, || {
-            let name = item_look(world, id).map_or("?", |(name, _)| name);
+            let name = item_look(world, id).map_or("?", |look| look.type_name);
             format!(" │ holding: {}", display_name(name))
         }),
         None => String::new(),

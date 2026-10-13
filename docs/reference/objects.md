@@ -68,7 +68,7 @@ Loading stops, naming the type and the problem, for:
 - a pseudo type with anything but verbs (and `size`, `hardness`), or with a verb that does anything but `Inject` and `Signal`;
 - a verb table for anything but `Eat`, `Drink`, `Hit` and `Play`;
 - two types that hatch, since a mother lays one kind of egg; one that hatches and is solid or in the Place menu; or a rule, preset or scenario that makes one, since only a sprite lays an egg (a `DensityBelow` may count them);
-- `throwable` on a solid or pseudo type, which the Cursor never holds.
+- `throwable: false` on a solid or pseudo type, which the Cursor never holds.
 
 ## Working example
 

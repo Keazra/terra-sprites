@@ -45,16 +45,41 @@ pub(crate) struct ObjectType {
     pub(crate) visual: Vec<Visual>,
     /// Whether, and how, the Cursor's Place menu offers it (design v28 §3.5.1).
     pub(crate) place: Option<Placement>,
-    /// Whether the Cursor may throw it, once it holds it (design v25
-    /// §3.5.4). An egg can only be put down (M2 design §10.4, #196).
+    /// Whether the Cursor may throw it, once it holds it (design §3.5.4).
+    /// An egg can only be put down (M2 design §10.4, #196).
     pub(crate) throwable: bool,
 }
 
 impl ObjectType {
-    /// Whether a stage of its life ends in hatching (M2 design §10.4): then
-    /// an object of it is an egg, which only a sprite can lay.
+    /// The stage of its life that ends in hatching, if one does (M2 design
+    /// §10.4): then an object of it is an egg, which only a sprite can lay.
+    pub(crate) fn hatching_stage(&self) -> Option<usize> {
+        self.stages
+            .iter()
+            .position(|stage| stage.next == Next::Hatch)
+    }
+
+    /// Whether a stage of its life ends in hatching: see `hatching_stage`.
     pub(crate) fn hatches(&self) -> bool {
-        self.stages.iter().any(|stage| stage.next == Next::Hatch)
+        self.hatching_stage().is_some()
+    }
+
+    /// The fewest ticks the stages after `stage` can take, up to the one
+    /// that ends in hatching or expiring: 0 if `stage` is that one.
+    pub(crate) fn least_ticks_after(&self, stage: usize) -> u64 {
+        let mut ticks = 0;
+        let mut stage = stage;
+        // Each stage once at most, so a cycle of stages ends.
+        for _ in 0..self.stages.len() {
+            match self.stages[stage].next {
+                Next::Stage(next) => {
+                    stage = next;
+                    ticks += u64::from(self.stages[next].ticks.0);
+                }
+                Next::Expire | Next::Hatch => break,
+            }
+        }
+        ticks
     }
 }
 
@@ -221,7 +246,14 @@ pub(crate) fn object_types(
         types: entries
             .iter()
             .enumerate()
-            .map(|(index, t)| (t.name.clone(), (index, t.pseudo, t.hatches())))
+            .map(|(index, t)| {
+                let name = TypeName {
+                    index,
+                    pseudo: t.pseudo,
+                    hatches: t.hatches(),
+                };
+                (t.name.clone(), name)
+            })
             .collect(),
         categories,
         tags,
@@ -240,11 +272,20 @@ pub(crate) fn object_types(
         .collect()
 }
 
+/// What a name in `objects.ron` says about the object type it names.
+#[derive(Clone, Copy)]
+struct TypeName {
+    /// Its index in the sorted list.
+    index: usize,
+    pseudo: bool,
+    /// Whether a stage of its life ends in hatching (M2 design §10.4).
+    hatches: bool,
+}
+
 /// Everything a name in `objects.ron` can refer to outside its own type.
 struct Names<'a> {
-    /// Object type name → (index in the sorted list, whether it's a pseudo
-    /// type, whether it hatches).
-    types: BTreeMap<String, (usize, bool, bool)>,
+    /// By object type name.
+    types: BTreeMap<String, TypeName>,
     categories: &'a [Category],
     tags: &'a [Tag],
     chemicals: &'a [Chemical],
@@ -272,25 +313,29 @@ impl Names<'_> {
     /// The index of the object type called `name`, which must be a real
     /// (not pseudo) type.
     fn real_type(&self, name: &str) -> Result<usize, String> {
-        match self.types.get(name) {
-            None => Err(format!("names the unknown object type `{name}`")),
-            Some(&(_, true, _)) => Err(format!(
-                "names `{name}`, a pseudo type, which has no objects"
-            )),
-            Some(&(index, false, _)) => Ok(index),
-        }
+        self.real(name).map(|named| named.index)
     }
 
     /// The index of the object type called `name`, which a rule may make: a
     /// real type that doesn't hatch, since an egg holds a sprite, so only a
     /// sprite can lay one (M2 design §10.4).
     fn made_type(&self, name: &str) -> Result<usize, String> {
-        let index = self.real_type(name)?;
-        match self.types.get(name) {
-            Some(&(_, _, true)) => Err(format!(
+        match self.real(name)? {
+            TypeName { hatches: true, .. } => Err(format!(
                 "names `{name}`, which hatches, so only a sprite can lay one"
             )),
-            _ => Ok(index),
+            TypeName { index, .. } => Ok(index),
+        }
+    }
+
+    /// The real (not pseudo) object type called `name`.
+    fn real(&self, name: &str) -> Result<TypeName, String> {
+        match self.types.get(name) {
+            None => Err(format!("names the unknown object type `{name}`")),
+            Some(TypeName { pseudo: true, .. }) => Err(format!(
+                "names `{name}`, a pseudo type, which has no objects"
+            )),
+            Some(&named) => Ok(named),
         }
     }
 }
@@ -473,6 +518,7 @@ pub(crate) enum EffectEntry {
 impl TypeEntry {
     /// The validated type, or what's wrong with the entry.
     fn resolve(self, names: &Names) -> Result<ObjectType, String> {
+        let hatches = self.hatches();
         // Spaces at either end would put stray gaps in the screen's sentences.
         let plural = match self.plural.as_deref().map(str::trim) {
             Some("") => {
@@ -561,7 +607,7 @@ impl TypeEntry {
             .collect::<Result<_, _>>()?;
         // An egg is laid beside its mother and hatches where it lies (M2
         // design §10.4), so it's an item a sprite can stand on.
-        if stages.iter().any(|stage| stage.next == Next::Hatch) {
+        if hatches {
             if solid {
                 return Err("hatches, so it can't be solid: a sprite hatches on its tile".into());
             }

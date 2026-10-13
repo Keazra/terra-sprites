@@ -559,7 +559,7 @@ How the wall is drawn where it faces space: a line of light cyan one tile outsid
 _Avoid_: window, border (that's the map view's)
 
 **Track**:
-The viewport following the selected sprite, so it stays in the middle of the map view. `T` turns it on or off; scrolling by hand turns it off. It follows whichever sprite is selected, and does nothing while none is.
+The viewport following the selected sprite, or egg, so it stays in the middle of the map view. `T` turns it on or off; scrolling by hand turns it off. It follows whichever is selected, and does nothing while nothing is, or while the Cursor holds the selected egg.
 _Avoid_: follow (that's the Cursor fixed on a sprite, with `F`), lock on
 
 **Cursor**:
@@ -583,7 +583,7 @@ What a click on the map does: Select, Train or Grab. `Q` and `E` do what the lef
 _Avoid_: tool
 
 **Selection**:
-The sprite the inspector shows, chosen by clicking it or with `Tab`. It's the inspector's: the Cursor can follow another sprite.
+The sprite the inspector shows, chosen by clicking it or with `Tab`, or an egg, chosen by clicking it; when the egg hatches, the hatchling is selected. It's the inspector's: the Cursor can follow another sprite.
 _Avoid_: focus, target
 
 **Follow**:
@@ -599,7 +599,7 @@ The two corners of the Cursor, top right and bottom left, that report on it: in 
 _Avoid_: indicators, lights, flash (on its own)
 
 **Inspector**:
-The side panel of tabs about the selected sprite (Body, Brain, Chem, Genome) or the world (World).
+The side panel of tabs about the selected sprite (Body, Brain, Chem, Genome) or the world (World). With an egg selected, the sprite tabs show its card: when it hatches and its parents.
 _Avoid_: sidebar, details
 
 **Observed list**:
