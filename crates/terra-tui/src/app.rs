@@ -19,6 +19,7 @@ use crate::inspector;
 use crate::listed::listed_enum;
 use crate::policy::{InfoPolicy, Omniscient, Panel, Subject};
 use crate::saves::{self, MAX_SAVE_NAME_CHARS, QUICKSAVE, SaveFile};
+use crate::space::Place;
 use crate::sprite_list::{self, SortBy};
 use crate::text::{Names, ROOTED, Words, display_name, group_thousands};
 use crate::theme::{Emote, Theme};
@@ -314,7 +315,8 @@ fn along<T: Copy + PartialEq>(all: &[T], here: T, steps: i32) -> T {
 /// Where on screen the panels the app works with are drawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Areas {
-    /// The screen cells where the map view draws its tiles.
+    /// The screen cells inside the map view's border, where it draws the
+    /// map's tiles and what's past its wall.
     pub tiles: Rect,
     /// The inspector, border included, if the screen has room for it.
     pub inspector: Option<Rect>,
@@ -323,6 +325,15 @@ pub struct Areas {
     /// Where the help screen and the sprite list are drawn: between the top
     /// bar and the status line, if the screen has room for the game.
     pub overlay: Option<Rect>,
+}
+
+/// Where the viewport starts: the tile at its top-left, counted from the
+/// map's top-left corner. It can be past the wall, so negative on the left
+/// or the top (M2 design §11.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Origin {
+    pub x: i32,
+    pub y: i32,
 }
 
 /// How many lines a notch of the mouse wheel scrolls an inspector tab.
@@ -393,16 +404,23 @@ pub struct App {
     pointed: Pos,
     /// The sprite the Cursor follows, selected or not (design v26 §6.5).
     follow: Option<EntityId>,
-    /// The top-left tile of the viewport.
-    viewport: Pos,
+    /// Where the viewport starts, which can be past the wall.
+    viewport: Origin,
     /// The map's size, in tiles.
     map_size: Size,
-    /// The screen cells where the map view draws its tiles.
+    /// The screen cells inside the map view's border, where it draws the
+    /// map and what's past its wall.
     tile_area: Rect,
     /// The inspector, border included, if the screen has room for it.
     inspector: Option<Rect>,
-    /// The screen cell under the mouse pointer, while it points at a tile.
+    /// The screen cell under the mouse pointer, while it's over the map
+    /// view.
     pointer: Option<Position>,
+    /// Whether the pointer points past the wall, at the glass or space,
+    /// rather than at a tile or off the map view (M2 design §11.4).
+    pointer_past_wall: bool,
+    /// How far the stars have drifted, as time at 1× (M2 design §11.3).
+    drift: Duration,
     /// The latest events the event log shows, newest first, each with how
     /// many times in a row it came (design v21 §6.1).
     event_log: VecDeque<(Event, u32)>,
@@ -655,6 +673,10 @@ struct Aim {
     /// Where the Cursor was when the right button was pressed, and stays,
     /// unless a led sprite slides on: a throw starts here.
     from: Pos,
+    /// Where the pointer pulls to, in the map's tile coordinates, which
+    /// run on past the wall: the pull goes on over the glass and space
+    /// (M2 design §11.4).
+    to: (i32, i32),
 }
 
 /// How long the Decision marker shows, and then doesn't: once a second in
@@ -715,11 +737,13 @@ impl App {
             cursor,
             pointed: cursor,
             follow: None,
-            viewport: Pos { x: 0, y: 0 },
+            viewport: Origin { x: 0, y: 0 },
             map_size: Size::new(map.width(), map.height()),
             tile_area: areas.tiles,
             inspector: areas.inspector,
             pointer: None,
+            pointer_past_wall: false,
+            drift: Duration::ZERO,
             event_log: VecDeque::new(),
             observed: VecDeque::new(),
             selection: None,
@@ -1040,7 +1064,9 @@ impl App {
         } else {
             match self.followed().and_then(|id| world.sprite(id)) {
                 Some(sprite) => Some(sprite.pos()),
-                None if self.led.is_some() => Some(self.pointed),
+                // Out of reach past the wall, it stays where it is, so the
+                // sprite it leads isn't led on (M2 design §11.4).
+                None if self.led.is_some() && !self.out_of_reach() => Some(self.pointed),
                 None => None,
             }
         };
@@ -1361,9 +1387,11 @@ impl App {
         crate::ui::top_right(area, self.event_filter.labels().chars().count() as u16)
     }
 
-    /// Moves the app's real-time clock on by `elapsed`, for what flashes.
+    /// Moves the app's real-time clock on by `elapsed`, for what flashes,
+    /// and the stars with the game's speed (M2 design §11.3).
     pub fn animate(&mut self, elapsed: Duration) {
         self.running_for += elapsed;
+        self.drift += self.clock.drift(elapsed);
         if !self.clock.is_paused() {
             self.unsaved_run += elapsed;
             self.since_autosave += elapsed;
@@ -1406,9 +1434,30 @@ impl App {
         self.cursor
     }
 
-    /// The top-left tile of the viewport: the part of the map the map view shows.
-    pub fn viewport(&self) -> Pos {
+    /// Whether the Cursor is out of reach past the wall (M2 design §11.4):
+    /// it follows the pointer, and the pointer points at the glass or
+    /// space. It stays on its last tile but isn't drawn, and a click, `Q`
+    /// or `E` does nothing. A Cursor that follows a sprite, or sits on what
+    /// the player aims, carries on as before.
+    pub fn out_of_reach(&self) -> bool {
+        self.pointer_past_wall && self.followed().is_none() && self.aim.is_none()
+    }
+
+    /// The tile the Cursor is drawn on, unless it's out of reach past the
+    /// wall, where it isn't drawn at all (M2 design §11.4).
+    pub fn shown_cursor(&self) -> Option<Pos> {
+        (!self.out_of_reach()).then_some(self.cursor)
+    }
+
+    /// Where the viewport starts: the part of the map, and of what's past
+    /// its wall, the map view shows.
+    pub fn viewport(&self) -> Origin {
         self.viewport
+    }
+
+    /// How far the stars have drifted, as time at 1× (M2 design §11.3).
+    pub fn drift(&self) -> Duration {
+        self.drift
     }
 
     pub fn screen(&self) -> Screen {
@@ -1434,13 +1483,28 @@ impl App {
         self.tab_scroll
     }
 
+    /// What the map view draws at screen cell `cell`: a tile, the glass or
+    /// space; or `None` off the map view's tiles.
+    pub fn place_at(&self, cell: Position) -> Option<Place> {
+        let area = self.tile_area;
+        area.contains(cell)
+            .then(|| self.place_from(area.as_position(), cell))
+    }
+
+    /// What the map view, drawing from screen cell `corner`, draws at
+    /// screen cell `cell`, which may be past the cells the app has fitted
+    /// its view to, as in a frame drawn just after the terminal grew.
+    pub(crate) fn place_from(&self, corner: Position, cell: Position) -> Place {
+        Place::at(
+            self.viewport.x + i32::from(cell.x - corner.x),
+            self.viewport.y + i32::from(cell.y - corner.y),
+            self.map_size,
+        )
+    }
+
     /// The tile drawn at screen cell `cell`, if the map view draws one there.
     pub fn tile_at(&self, cell: Position) -> Option<Pos> {
-        let area = self.tile_area;
-        area.contains(cell).then(|| Pos {
-            x: (self.viewport.x + (cell.x - area.x)).min(self.map_size.width - 1),
-            y: (self.viewport.y + (cell.y - area.y)).min(self.map_size.height - 1),
-        })
+        self.place_at(cell)?.tile()
     }
 
     /// The tile the pointer on screen cell `cell` points at (design v27 §6.5):
@@ -1448,8 +1512,24 @@ impl App {
     /// arrow rests on the Cursor's corner rather than hiding it. On the map
     /// view's top row it stays in that row, and on its left column in that
     /// column; and the border just right of or below the tiles points at the
-    /// last column or row, so every tile in view can be pointed at.
+    /// last column or row, so every tile in view can be pointed at. Past
+    /// the wall, at the glass or space, it points at no tile (M2 design
+    /// §11.4).
     pub fn pointed_at(&self, cell: Position) -> Option<Pos> {
+        self.pointed_place(cell)?.tile()
+    }
+
+    /// What the pointer on screen cell `cell` points at, as `pointed_at`
+    /// says, if it's over the map view: a tile, the glass or space.
+    fn pointed_place(&self, cell: Position) -> Option<Place> {
+        let (x, y) = self.pointed_spot(cell)?;
+        Some(Place::at(x, y, self.map_size))
+    }
+
+    /// Where the pointer on screen cell `cell` points, as `pointed_at`
+    /// says, in the map's tile coordinates, which run on past the wall, if
+    /// it's over the map view.
+    fn pointed_spot(&self, cell: Position) -> Option<(i32, i32)> {
         let area = self.tile_area;
         let reach = Rect::new(
             area.x,
@@ -1460,18 +1540,22 @@ impl App {
         if area.is_empty() || !reach.contains(cell) {
             return None;
         }
-        self.tile_at(Position::new(
-            cell.x.saturating_sub(1).max(area.x),
-            cell.y.saturating_sub(1).max(area.y),
+        let (col, row) = (
+            cell.x.saturating_sub(1).max(area.x) - area.x,
+            cell.y.saturating_sub(1).max(area.y) - area.y,
+        );
+        Some((
+            self.viewport.x + i32::from(col),
+            self.viewport.y + i32::from(row),
         ))
     }
 
     /// The screen cell where `tile` is drawn, if it is in view.
     pub fn cell_of(&self, tile: Pos) -> Option<Position> {
         let (area, origin) = (self.tile_area, self.viewport);
-        let in_view = (origin.x..origin.x + area.width).contains(&tile.x)
-            && (origin.y..origin.y + area.height).contains(&tile.y);
-        in_view.then(|| Position::new(area.x + (tile.x - origin.x), area.y + (tile.y - origin.y)))
+        let col = u16::try_from(i32::from(tile.x) - origin.x).ok()?;
+        let row = u16::try_from(i32::from(tile.y) - origin.y).ok()?;
+        (col < area.width && row < area.height).then(|| Position::new(area.x + col, area.y + row))
     }
 
     /// Refits the app to where its panels are now drawn, as after a resize.
@@ -1561,23 +1645,35 @@ impl App {
                 if button == Button::Left {
                     self.toggle_lesson(at, world);
                 }
-                if let Some(tile) = self.pointed_at(at) {
+                match self.pointed_place(at) {
                     // A click lands where the Cursor is: not past the leash
                     // (design v23 §6.5).
-                    self.act(self.within_leash(tile), button, amplified, world);
+                    Some(Place::Tile(tile)) => {
+                        self.act(self.within_leash(tile), button, amplified, world);
+                    }
+                    // Past the wall, it reaches the sprite the Cursor
+                    // follows, or what the player aims, as `Q` and `E` do,
+                    // and nothing otherwise (M2 design §11.4).
+                    Some(Place::Glass(_) | Place::Space) if !self.out_of_reach() => {
+                        self.act(self.cursor, button, amplified, world);
+                    }
+                    _ => {}
                 }
             }
-            Action::Press { button, amplified } => {
+            Action::Press { button, amplified } if !self.out_of_reach() => {
                 self.act(self.cursor, button, amplified, world);
             }
+            Action::Press { .. } => {}
             // A middle click points, then acts where the Cursor is, as `F`
-            // does (design v26 §6.5).
+            // does (design v26 §6.5); past the wall, on no tile (M2 design
+            // §11.4).
             Action::Follow { at } => {
                 if let Some(at) = at {
                     self.point(at);
                 }
-                if at.is_none_or(|at| self.pointed_at(at).is_some()) {
-                    self.toggle_follow(self.cursor, world);
+                if at.is_none_or(|at| self.pointed_place(at).is_some()) {
+                    let tile = self.shown_cursor();
+                    self.toggle_follow(tile, world);
                 }
             }
             Action::Release { button, at } => {
@@ -1616,7 +1712,7 @@ impl App {
                 self.point(at);
                 if self.inspector.is_some_and(|area| area.contains(at)) {
                     self.scroll_tab(notches * WHEEL_LINES, world);
-                } else if self.pointed_at(at).is_some() {
+                } else if self.pointed_place(at).is_some() {
                     self.mode = self.mode.along(notches);
                 }
             }
@@ -1776,7 +1872,7 @@ impl App {
         world: &World,
         refused: Refused,
     ) -> bool {
-        let command = match (self.followed().or(sprite), world.object_at(tile)) {
+        let command = match (self.grab_target(sprite), world.object_at(tile)) {
             (Some(sprite), _) => {
                 // Taking hold puts the Cursor, as the world knows it, on the
                 // sprite.
@@ -1799,6 +1895,13 @@ impl App {
         true
     }
 
+    /// The sprite a grab with the Cursor empty takes hold of, with `sprite`
+    /// under the pointer: the followed sprite, or else that one (design v23
+    /// §6.5).
+    fn grab_target(&self, sprite: Option<EntityId>) -> Option<EntityId> {
+        self.followed().or(sprite)
+    }
+
     /// Sends a Grab-mode command, queued, so the marks and the next click
     /// follow it (design v23 §6.5).
     fn send(&mut self, command: Command, world: &World) {
@@ -1813,10 +1916,23 @@ impl App {
     /// from the Cursor to the pointer. With the Cursor empty, it grabs what's
     /// there first, as a left click would. Aiming already, it sends the aim,
     /// as `E` pressed again does in a terminal that doesn't report a key let
-    /// go.
+    /// go. An egg, led or about to be grabbed, is never shoved, so it aims
+    /// nothing and grabs nothing (M2 design §10.4).
     fn aim_click(&mut self, tile: Pos, sprite: Option<EntityId>, world: &World) {
         if self.aim.is_some() {
             self.send_aimed(world);
+            return;
+        }
+        let shoved = match self.grip(world) {
+            Some(Grip::Leads(id)) => Some(id),
+            Some(Grip::Holds(_)) => None,
+            None => self.grab_target(sprite),
+        };
+        let shoving_an_egg = shoved
+            .and_then(|id| world.sprite(id))
+            .is_some_and(|sprite| sprite.is_egg());
+        if shoving_an_egg {
+            self.refuse("Can't shove an egg".into());
             return;
         }
         if self.grip(world).is_none() && !self.grab(tile, sprite, world, TO_SEND) {
@@ -1829,7 +1945,12 @@ impl App {
         {
             self.cursor = led.pos();
         }
-        self.aim = Some(Aim { from: self.cursor });
+        let pointed = (i32::from(self.pointed.x), i32::from(self.pointed.y));
+        let to = self.pointer.and_then(|cell| self.pointed_spot(cell));
+        self.aim = Some(Aim {
+            from: self.cursor,
+            to: to.unwrap_or(pointed),
+        });
     }
 
     /// Sends what the player aimed (design v25 §6.5): the thing goes the
@@ -1858,22 +1979,22 @@ impl App {
     /// the pull says (design v25 §6.5): the opposite way to the pull, from
     /// the Cursor to the pointer, snapped to the nearest of the 8
     /// directions, as far as the pull, in the game's own measure. `None` for
-    /// a pull of nothing.
+    /// a pull of nothing. Past the wall, it pulls on as if the map did (M2
+    /// design §11.4).
     fn aimed(&self) -> Option<(Dir, u16)> {
-        self.aim?;
-        let (dx, dy) = (
-            i32::from(self.cursor.x) - i32::from(self.pointed.x),
-            i32::from(self.cursor.y) - i32::from(self.pointed.y),
-        );
+        let (x, y) = self.aim?.to;
+        let (dx, dy) = (i32::from(self.cursor.x) - x, i32::from(self.cursor.y) - y);
         let toward = Dir::nearest(dx, dy)?;
         let tiles = dx.unsigned_abs().max(dy.unsigned_abs());
         Some((toward, u16::try_from(tiles).unwrap_or(u16::MAX)))
     }
 
     /// Ends the aim, sent or not: the Cursor follows the pointer again, as
-    /// far as Follow and the leash let it (design v25 §6.5).
+    /// far as Follow and the leash let it (design v25 §6.5). With the
+    /// pointer past the wall, it stays where it is, out of reach, so a
+    /// sprite it leads stands still (M2 design §11.4).
     fn end_aim(&mut self) {
-        if self.aim.take().is_some() && self.followed().is_none() {
+        if self.aim.take().is_some() && self.followed().is_none() && !self.pointer_past_wall {
             self.cursor = self.within_leash(self.pointed);
         }
     }
@@ -1888,7 +2009,7 @@ impl App {
     /// v25 §6.5).
     pub fn thrown_from(&self, world: &World) -> Option<(EntityId, Pos)> {
         match (self.aim, self.grip(world)) {
-            (Some(Aim { from }), Some(Grip::Holds(item))) => Some((item, from)),
+            (Some(Aim { from, .. }), Some(Grip::Holds(item))) => Some((item, from)),
             _ => None,
         }
     }
@@ -2631,12 +2752,16 @@ impl App {
     }
 
     /// `world`'s save, with the tile at the middle of the view, so a load
-    /// shows what the player saw (design §6.7).
+    /// shows what the player saw (design §6.7): with the middle past the
+    /// wall, the tile nearest it.
     fn save_of(&self, world: &World) -> Vec<u8> {
-        let area = self.tile_area;
+        let (area, map) = (self.tile_area, self.map_size);
+        let nearest = |origin: i32, view: u16, len: u16| {
+            (origin + i32::from(view / 2)).clamp(0, i32::from(len) - 1) as u16
+        };
         let middle = Pos {
-            x: (self.viewport.x + area.width / 2).min(self.map_size.width - 1),
-            y: (self.viewport.y + area.height / 2).min(self.map_size.height - 1),
+            x: nearest(self.viewport.x, area.width, map.width),
+            y: nearest(self.viewport.y, area.height, map.height),
         };
         world.save_with_view(middle)
     }
@@ -2746,12 +2871,12 @@ impl App {
         Flow::Continue
     }
 
-    /// Whether `action` would point at a tile of the map, for the wheel,
-    /// which changes the cursor mode there.
+    /// Whether `action` is the wheel over the map view, its glass and space
+    /// included, which changes the cursor mode there (M2 design §11.4).
     fn pointed_at_map(&self, action: &Action) -> bool {
         match *action {
             Action::Wheel { at, .. } => {
-                self.pointed_at(at).is_some() && !self.inspector.is_some_and(|i| i.contains(at))
+                self.pointed_place(at).is_some() && !self.inspector.is_some_and(|i| i.contains(at))
             }
             _ => false,
         }
@@ -2949,7 +3074,7 @@ impl App {
     }
 
     /// While tracking, centres the view on the selected sprite, as far as
-    /// the wall allows.
+    /// the margin past the wall allows (M2 design §11.1).
     fn track_selected(&mut self, world: &World) {
         let tracked = match self.selection {
             Some(Selection::Living(id)) if self.tracking => world.sprite(id),
@@ -2960,11 +3085,12 @@ impl App {
         }
     }
 
-    /// `F`, or a middle click, on `tile`, in every mode (design v26 §6.5).
-    /// Following, it stops, wherever `tile` is. Otherwise the Cursor follows
-    /// the sprite on `tile`, or else the selected sprite, leaving the
-    /// selection as it is; with neither, it's refused.
-    fn toggle_follow(&mut self, tile: Pos, world: &World) {
+    /// `F`, or a middle click, on `tile`, in every mode (design v26 §6.5),
+    /// or on no tile, past the wall (M2 design §11.4). Following, it stops,
+    /// wherever `tile` is. Otherwise the Cursor follows the sprite on
+    /// `tile`, or else the selected sprite, leaving the selection as it is;
+    /// with neither, it's refused.
+    fn toggle_follow(&mut self, tile: Option<Pos>, world: &World) {
         if self.follow.is_some() {
             self.follow = None;
             // It follows the pointer again, unless the player is aiming:
@@ -2979,7 +3105,8 @@ impl App {
             Some(Selection::Living(id)) => Some(id),
             _ => None,
         };
-        match world.sprite_at(tile).map(|sprite| sprite.id()).or(selected) {
+        let there = tile.and_then(|tile| world.sprite_at(tile));
+        match there.map(|sprite| sprite.id()).or(selected) {
             Some(id) => self.follow = Some(id),
             None => self.refuse("No sprite here to follow".into()),
         }
@@ -3047,42 +3174,32 @@ impl App {
         }
     }
 
-    /// Scrolls the viewport so that `tile` is at its centre, as far as the wall allows.
+    /// Scrolls the viewport so that `tile` is at its centre, as far as the
+    /// margin past the wall allows (M2 design §11.1).
     fn centre_on(&mut self, tile: Pos) {
         let area = self.tile_area;
-        self.viewport = Pos {
-            x: clamp_origin(
-                i32::from(tile.x) - i32::from(area.width / 2),
-                area.width,
-                self.map_size.width,
-            ),
-            y: clamp_origin(
-                i32::from(tile.y) - i32::from(area.height / 2),
-                area.height,
-                self.map_size.height,
-            ),
+        self.viewport = Origin {
+            x: i32::from(tile.x) - i32::from(area.width / 2),
+            y: i32::from(tile.y) - i32::from(area.height / 2),
         };
         self.settle();
     }
 
     fn scroll(&mut self, dx: i32, dy: i32) {
-        let shifted = |origin: u16, delta: i32| {
-            (i32::from(origin) + delta).clamp(0, i32::from(u16::MAX)) as u16
-        };
-        self.viewport = Pos {
-            x: shifted(self.viewport.x, dx),
-            y: shifted(self.viewport.y, dy),
+        self.viewport = Origin {
+            x: self.viewport.x.saturating_add(dx),
+            y: self.viewport.y.saturating_add(dy),
         };
         self.settle();
     }
 
-    /// Keeps the viewport within the wall, and the cursor on whatever tile a
-    /// still pointer points at.
+    /// Keeps the viewport within its margin past the wall, and the cursor on
+    /// whatever tile a still pointer points at.
     fn settle(&mut self) {
         let (map, area) = (self.map_size, self.tile_area);
-        self.viewport = Pos {
-            x: clamp_origin(i32::from(self.viewport.x), area.width, map.width),
-            y: clamp_origin(i32::from(self.viewport.y), area.height, map.height),
+        self.viewport = Origin {
+            x: clamp_origin(self.viewport.x, area.width, map.width),
+            y: clamp_origin(self.viewport.y, area.height, map.height),
         };
         if let Some(cell) = self.pointer {
             self.point(cell);
@@ -3114,20 +3231,30 @@ impl App {
     /// Notes the tile the pointer on screen cell `cell` points at as the
     /// pointer's, and puts the Cursor there, within the leash, unless it
     /// follows a sprite. Where it points at no tile, both stay on their last
-    /// tile.
+    /// tile: past the wall, where the Cursor can't reach and isn't drawn,
+    /// or off the map view, where it's drawn there again (M2 design
+    /// §11.4).
     fn point(&mut self, cell: Position) {
         self.mouse = Some(cell);
-        match self.pointed_at(cell) {
-            Some(tile) => {
-                self.pointer = Some(cell);
+        let spot = self.pointed_spot(cell);
+        self.pointer = spot.map(|_| cell);
+        // While the player aims, the pointer pulls, past the wall too (M2
+        // design §11.4).
+        if let (Some(aim), Some(spot)) = (self.aim.as_mut(), spot) {
+            aim.to = spot;
+        }
+        match spot.map(|(x, y)| Place::at(x, y, self.map_size)) {
+            Some(Place::Tile(tile)) => {
                 self.pointed = tile;
+                self.pointer_past_wall = false;
                 // While the player aims, the Cursor stays on what it aims,
                 // and the pointer pulls (design v25 §6.5).
                 if self.followed().is_none() && self.aim.is_none() {
                     self.cursor = self.within_leash(tile);
                 }
             }
-            None => self.pointer = None,
+            Some(Place::Glass(_) | Place::Space) => self.pointer_past_wall = true,
+            None => self.pointer_past_wall = false,
         }
     }
 }
@@ -3139,11 +3266,17 @@ enum Direction {
     Previous,
 }
 
-/// A viewport origin kept within the map, so the view never shows past the wall.
-/// A map no bigger than the view is shown from its start.
-fn clamp_origin(origin: i32, view: u16, len: u16) -> u16 {
-    let furthest = (i32::from(len) - i32::from(view)).max(0);
-    origin.clamp(0, furthest) as u16
+/// A viewport origin kept within a quarter of the view, `view` tiles long,
+/// past the wall at either end of a map `len` tiles long. A map that fits in
+/// the view with its glass, a tile at either end, is shown in the middle
+/// of it instead, and doesn't scroll (M2 design §11.1).
+fn clamp_origin(origin: i32, view: u16, len: u16) -> i32 {
+    let (view, len) = (i32::from(view), i32::from(len));
+    if len + 2 <= view {
+        return -((view - len) / 2);
+    }
+    let margin = view / 4;
+    origin.clamp(-margin, (len - view + margin).max(-margin))
 }
 
 /// A length of real time as the player reads it: "under a minute", "3m",
@@ -3160,7 +3293,7 @@ pub(crate) fn spoken_duration(time: Duration) -> String {
 
 /// Whether `action` would change the world, or lead to changing it, which a
 /// replay refuses (design §2.7): the cursor modes that touch it (Select
-/// only points and selects), the wheel over the map, which changes mode,
+/// only points and selects), the wheel over the map view, which changes mode,
 /// naming a sprite, showing the Cursor to sprites, and loading a save.
 /// Saving, and exporting a genome, only read it.
 fn changes_the_world(action: &Action, wheel_on_map: bool) -> bool {

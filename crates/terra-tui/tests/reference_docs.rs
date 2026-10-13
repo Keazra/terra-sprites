@@ -2,7 +2,9 @@
 //! (design §7.4, A9): the theme example in `docs/reference/` loads as
 //! `--theme` would load it. `terra-sim`'s own test covers the data pack's.
 
+use ratatui::style::Color;
 use terra_sim::DataPack;
+use terra_tui::space::{Depth, Pane};
 use terra_tui::theme::{SemanticTile, Theme};
 
 /// The example `name` from a reference page: the fenced block after its
@@ -31,4 +33,8 @@ fn the_theme_example_loads() {
     let theme = Theme::from_ron(&example(page, "theme"), &pack).unwrap();
     assert_eq!(theme.glyph(SemanticTile::Sprite).symbol, '☺');
     assert_eq!(theme.drive_colour("boredom"), None);
+    assert_eq!(theme.star(Depth::Far).fg, Color::Gray);
+    let default = Theme::cp437();
+    assert_eq!(theme.star(Depth::Near), default.star(Depth::Near));
+    assert_eq!(theme.glass(Pane::TopLeft), default.glass(Pane::TopLeft));
 }

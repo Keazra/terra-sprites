@@ -91,16 +91,38 @@ fn event_log_text(buffer: &Buffer) -> String {
         .join("\n")
 }
 
-/// The sprite at (2, 3), on the screen cell (3, 5).
-const WANDERER: Position = Position::new(3, 5);
+/// The screen cell tile `tile` of a 10×5 field is drawn on, on a 100×30
+/// screen: the field is small, so it's in the middle of the map view (M2
+/// design §11.1).
+fn cell(tile: Pos) -> Position {
+    let map = Map::from_ascii(&[".........."; 5], &pack()).expect("valid drawing");
+    let app = App::new(&map, Theme::cp437(), 7, ui::areas(Size::new(100, 30)));
+    app.cell_of(tile).expect("in view")
+}
+
+/// The screen cell the pointer is on to point at `tile`: one down and right
+/// of it (design v27 §6.5).
+fn pointer_on(tile: Pos) -> Position {
+    let at = cell(tile);
+    Position::new(at.x + 1, at.y + 1)
+}
+
+/// Row `y` of a 10×5 field's tiles, as drawn.
+fn map_row(buffer: &Buffer, y: u16) -> String {
+    let start = cell(Pos { x: 0, y });
+    row(buffer, start.y, start.x..start.x + 10)
+}
+
+/// The sprite at (2, 3).
+const WANDERER: Pos = Pos { x: 2, y: 3 };
 
 /// An app on `world` with the wanderer selected, hurt, a death and a hurt
 /// in the event log, and the Cursor on the wanderer.
 fn busy_app(world: &World) -> App {
-    let areas = ui::areas(Size::new(100, 30), world.map());
+    let areas = ui::areas(Size::new(100, 30));
     let mut app = App::new(world.map(), Theme::cp437(), 7, areas);
     let wanderer = world.sprite_at(Pos { x: 2, y: 3 }).unwrap().id();
-    app.apply(Action::left_click(Position::new(4, 6)), world);
+    app.apply(Action::left_click(pointer_on(WANDERER)), world);
     let hurt = ActionView {
         verb: Verb::Hit,
         destination: None,
@@ -147,8 +169,8 @@ fn every_display_asks_the_policy_and_shows_everything_in_m1() {
     assert!(row(&screen, 0, 0..100).contains("sprites 2"));
     assert!(event_log_text(&screen).contains("died"));
     assert!(row(&screen, 29, 0..100).starts_with(" (2,3) grass · Sprite #"));
-    assert_eq!(screen[WANDERER].symbol(), "!", "the hurt emote");
-    assert!(row(&screen, 5, 1..11).contains('X'), "the Decision marker");
+    assert_eq!(screen[cell(WANDERER)].symbol(), "!", "the hurt emote");
+    assert!(map_row(&screen, 3).contains('X'), "the Decision marker");
     for tab in Tab::ALL {
         while app.tab() != tab {
             app.apply(Action::NextTab, &world);
@@ -181,18 +203,19 @@ fn a_policy_that_denies_everything_blanks_every_display() {
         status.starts_with(" SELECT"),
         "no tile under the Cursor: {status}"
     );
-    assert_eq!(screen[WANDERER].symbol(), "☻", "no emote");
+    assert_eq!(screen[cell(WANDERER)].symbol(), "☻", "no emote");
     let title = row(&screen, 1, 54..100);
     assert!(
         !title.contains('#'),
         "the inspector's title names no sprite: {title}"
     );
-    let map = (2..7)
-        .map(|y| row(&screen, y, 1..11))
+    let map = (0..5)
+        .map(|y| map_row(&screen, y))
         .collect::<Vec<_>>()
         .join("\n");
     assert!(!map.contains('X'), "no Decision marker:\n{map}");
-    let shaded = (2..7).any(|y| (1..11).any(|x| screen[(x, y)].bg == app.theme.attention_marker()));
+    let shaded = (0..5)
+        .any(|y| (0..10).any(|x| screen[cell(Pos { x, y })].bg == app.theme.attention_marker()));
     assert!(!shaded, "no Attention marker");
     for tab in Tab::ALL {
         while app.tab() != tab {
@@ -230,12 +253,12 @@ fn a_policy_that_hides_map_colours_draws_sprites_in_their_own_colour() {
         newborns: &[],
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
-    let areas = ui::areas(Size::new(100, 30), world.map());
+    let areas = ui::areas(Size::new(100, 30));
     let mut app = App::new(world.map(), Theme::cp437(), 7, areas);
-    app.apply(Action::Point(Position::new(11, 7)), &world);
-    assert_eq!(render(&app, &world)[WANDERER].fg, Color::Yellow);
+    app.apply(Action::Point(pointer_on(Pos { x: 9, y: 4 })), &world);
+    assert_eq!(render(&app, &world)[cell(WANDERER)].fg, Color::Yellow);
     app.set_policy(Blind);
-    assert_eq!(render(&app, &world)[WANDERER].fg, Color::White);
+    assert_eq!(render(&app, &world)[cell(WANDERER)].fg, Color::White);
 }
 
 #[test]
@@ -249,9 +272,9 @@ fn the_cursors_own_lines_ask_the_policy_about_the_sprite_they_name() {
     let other = world.sprites().map(|s| s.id()).find(|&id| id != wanderer);
     let other = other.expect("a second sprite");
     let hide = |id| HideCursorLinesAbout(Subject::Sprite(id));
-    let on_wanderer = Position::new(4, 6);
+    let on_wanderer = pointer_on(WANDERER);
     let status = |app: &App| row(&render(app, &world), 29, 0..100);
-    let areas = ui::areas(Size::new(100, 30), world.map());
+    let areas = ui::areas(Size::new(100, 30));
 
     let mut following = App::new(world.map(), Theme::cp437(), 7, areas);
     following.apply(Action::left_click(on_wanderer), &world);
@@ -286,7 +309,10 @@ fn the_cursors_own_lines_ask_the_policy_about_the_sprite_they_name() {
     let holding_line = |app: &App| row(&render(app, &ball_field), 29, 0..100);
     let mut holding = App::new(ball_field.map(), Theme::cp437(), 7, areas);
     holding.apply(Action::Mode(CursorMode::Grab), &ball_field);
-    holding.apply(Action::left_click(Position::new(6, 4)), &ball_field);
+    holding.apply(
+        Action::left_click(pointer_on(Pos { x: 4, y: 1 })),
+        &ball_field,
+    );
     let line = holding_line(&holding);
     assert!(line.contains("│ holding: ball"), "{line}");
     holding.set_policy(hide(wanderer));

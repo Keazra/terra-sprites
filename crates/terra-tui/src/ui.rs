@@ -7,7 +7,7 @@ use ratatui::{
     style::{Color, Modifier, Style},
     text::Line,
 };
-use terra_sim::{EntityId, Grip, LifeStage, Map, ObjectView, Pos, Progress, SpriteView, World};
+use terra_sim::{EntityId, Grip, LifeStage, ObjectView, Pos, Progress, SpriteView, World};
 
 use crate::app::{
     App, Areas, ColourMode, CursorMode, PlaceItem, Screen, Selection, spoken_duration,
@@ -16,6 +16,7 @@ use crate::app::{
 use crate::clock::Speed;
 use crate::inspector::{self, INSPECTOR_WIDTH, first_shown};
 use crate::policy::{Panel, Subject};
+use crate::space::{self, Place};
 use crate::text::{display_name, group_thousands, terrain_name};
 use crate::theme::SemanticTile;
 
@@ -40,12 +41,7 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
     ])
     .areas(area);
     frame.render_widget(top_bar_line(app, world, top_bar.width), top_bar);
-    render_map_view(
-        frame.buffer_mut(),
-        map_view_area(area, world.map()),
-        app,
-        world,
-    );
+    render_map_view(frame.buffer_mut(), map_view_area(area), app, world);
     if let Some(inspector) = inspector_area(area) {
         render_inspector(frame.buffer_mut(), inspector, app, world);
     }
@@ -107,9 +103,9 @@ pub(crate) fn render_too_small_with(buf: &mut Buffer, area: Rect, questions: Vec
 }
 
 /// Where the app's panels are drawn on a screen of `screen` cells. The map
-/// view draws its tiles inside its border, between the top bar and the
-/// status line, no bigger than the map itself.
-pub fn areas(screen: Size, map: &Map) -> Areas {
+/// view draws the map inside its border, between the top bar and the status
+/// line, with space past its wall (M2 design §11).
+pub fn areas(screen: Size) -> Areas {
     // A screen too small for the game draws no panels, so nothing can be
     // clicked on it.
     if too_small(screen) {
@@ -121,23 +117,22 @@ pub fn areas(screen: Size, map: &Map) -> Areas {
         };
     }
     Areas {
-        tiles: map_view_area(screen.into(), map).inner(Margin::new(1, 1)),
+        tiles: map_view_area(screen.into()).inner(Margin::new(1, 1)),
         inspector: inspector_area(screen.into()),
         event_log: event_log_area(screen.into()),
         overlay: Some(overlay_area(screen.into())),
     }
 }
 
-/// The map view, border included: below the top bar, at the left, shrunk to
-/// fit a small map, and leaving room for the inspector and the event log when
-/// there is some.
-fn map_view_area(screen: Rect, map: &Map) -> Rect {
-    let room = match inspector_area(screen) {
+/// The map view, border included: below the top bar, at the left, leaving
+/// room for the inspector and the event log when there is some. A small map
+/// is drawn in the middle of it, with space round it (M2 design §11.1).
+fn map_view_area(screen: Rect) -> Rect {
+    let width = match inspector_area(screen) {
         Some(inspector) => inspector.x - screen.x,
         None => screen.width,
     };
-    let width = (map.width().saturating_add(2)).min(room);
-    let height = (map.height().saturating_add(2)).min(panels_height(screen));
+    let height = panels_height(screen);
     Rect::new(screen.x, screen.y + 1.min(screen.height), width, height)
 }
 
@@ -194,21 +189,10 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     if area.width < 2 || area.height < 2 {
         return;
     }
+    // Single-lined all round: the glass shows where the wall is (M2 design
+    // §11.2).
+    draw_border(buf, area, " Map ");
     let inner = area.inner(Margin::new(1, 1));
-    let origin = app.viewport();
-    // The wall is in view on any side where the viewport reaches the map's edge.
-    let walls = Sides {
-        left: origin.x == 0,
-        right: origin.x + inner.width >= map.width(),
-        top: origin.y == 0,
-        bottom: origin.y + inner.height >= map.height(),
-    };
-    draw_border(buf, area, " Map ", walls);
-
-    // Normally the view fits the map, but if the terminal grew since the app
-    // last fitted its view, stop at the wall rather than read past it.
-    let cols = inner.width.min(map.width() - origin.x);
-    let rows = inner.height.min(map.height() - origin.y);
     let destination = heading_for(app, world).filter(|_| app.flash_on());
     let attended = attended_by(app, world);
     // A held item being aimed, where it will be thrown from (design v25
@@ -216,29 +200,33 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     let thrown = app
         .thrown_from(world)
         .and_then(|(item, from)| Some((from, item_look(world, item)?)));
-    for row in 0..rows {
-        for col in 0..cols {
-            let pos = Pos {
-                x: origin.x + col,
-                y: origin.y + row,
+    // Out of reach in space, the Cursor isn't drawn (M2 design §11.4).
+    let cursor = app.shown_cursor();
+    for y in inner.top()..inner.bottom() {
+        for x in inner.left()..inner.right() {
+            let pos = match app.place_from(inner.as_position(), Position::new(x, y)) {
+                Place::Tile(pos) => pos,
+                Place::Glass(pane) => {
+                    let glass = app.theme.glass(pane);
+                    buf[(x, y)]
+                        .set_char(glass.symbol)
+                        .set_style(Style::default().fg(glass.fg));
+                    continue;
+                }
+                Place::Space => {
+                    buf[(x, y)].set_char(' ').set_style(Style::default());
+                    continue;
+                }
             };
             // A sprite is drawn over any item on its tile.
             let glyph = if let Some(sprite) = world.sprite_at(pos) {
                 let emote = app
                     .emote(sprite.id())
                     .filter(|_| app.can_view(Panel::Emotes, Subject::Sprite(sprite.id())));
-                // The young are drawn small (M2 design §9.6), and eggs as
-                // eggs (§10).
-                let stage = sprite.life_stage();
                 let selected = app.selection() == Some(Selection::Living(sprite.id()));
-                let tile = match (emote, selected, stage) {
-                    (Some(emote), _, _) => SemanticTile::Emote(emote),
-                    (None, true, LifeStage::Egg) => SemanticTile::SelectedEgg,
-                    (None, false, LifeStage::Egg) => SemanticTile::Egg,
-                    (None, true, LifeStage::Young) => SemanticTile::SelectedYoungSprite,
-                    (None, false, LifeStage::Young) => SemanticTile::YoungSprite,
-                    (None, true, _) => SemanticTile::SelectedSprite,
-                    (None, false, _) => SemanticTile::Sprite,
+                let tile = match emote {
+                    Some(emote) => SemanticTile::Emote(emote),
+                    None => sprite_tile(sprite.life_stage(), selected),
                 };
                 app.theme.glyph(tile)
             } else if let Some((_, (name, state))) = thrown.filter(|&(from, _)| from == pos) {
@@ -261,23 +249,36 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
             if glyph.bold {
                 style = style.add_modifier(Modifier::BOLD);
             }
-            if glyph.reversed || pos == app.cursor() {
+            if glyph.reversed || cursor == Some(pos) {
                 style = style.add_modifier(Modifier::REVERSED);
             }
             if attended == Some(pos) {
                 style = style.bg(app.theme.attention_marker());
             }
-            buf[(inner.x + col, inner.y + row)]
-                .set_char(glyph.symbol)
-                .set_style(style);
+            buf[(x, y)].set_char(glyph.symbol).set_style(style);
         }
     }
+    draw_stars(buf, inner, app);
     if app.flash_on() {
         draw_leash(buf, app, world);
     }
     draw_aim_line(buf, app, world);
-    draw_cursor(buf, inner, app, world);
+    draw_cursor(buf, app, world);
     draw_aim_end(buf, app, world);
+}
+
+/// Draws the stars on space, far ones first, so a nearer star hides a
+/// farther one, and never over the map or its glass (M2 design §11.3).
+fn draw_stars(buf: &mut Buffer, inner: Rect, app: &App) {
+    for (depth, at) in space::stars(inner.as_size(), app.viewport(), app.drift()) {
+        let cell = Position::new(inner.x + at.x, inner.y + at.y);
+        if app.place_from(inner.as_position(), cell) == Place::Space {
+            let star = app.theme.star(depth);
+            buf[cell]
+                .set_char(star.symbol)
+                .set_style(Style::default().fg(star.fg));
+        }
+    }
 }
 
 /// Whether `sprite` is drawn as an emote just now.
@@ -331,15 +332,17 @@ fn marked(app: &App) -> Option<EntityId> {
 /// drawn in reverse video. The arrows, solid while following, or while
 /// sprites can see the Cursor a frame of light (design v29 §6.5), and the
 /// marks take the mode mark's colour. The cursor is drawn only while its target is
-/// in view, and pieces outside the map view's tiles are left off.
+/// in view, and not out of reach in space (M2 design §11.4); pieces off the
+/// map's tiles in view, over its glass or past the map view's edge, are
+/// left off.
 ///
 /// ```text
 /// M ↓ Y      M: the mode mark
 /// → ☺ ←      Y, N: the status marks
 /// N ↑ M
 /// ```
-fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App, world: &World) {
-    let Some(centre) = app.cell_of(app.cursor()) else {
+fn draw_cursor(buf: &mut Buffer, app: &App, world: &World) {
+    let Some(centre) = app.shown_cursor().and_then(|cursor| app.cell_of(cursor)) else {
         return;
     };
     let arrows = if app.visible() {
@@ -370,7 +373,7 @@ fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App, world: &World) {
         let x = centre.x.checked_add_signed(dx);
         let y = centre.y.checked_add_signed(dy);
         if let Some((x, y)) = x.zip(y)
-            && tiles.contains(Position::new(x, y))
+            && app.tile_at(Position::new(x, y)).is_some()
         {
             buf[(x, y)]
                 .set_char(glyph)
@@ -381,9 +384,11 @@ fn draw_cursor(buf: &mut Buffer, tiles: Rect, app: &App, world: &World) {
 
 /// Draws the leash, while the Cursor leads a sprite: a dotted line from the
 /// Cursor to the sprite, over empty ground only, so sprites and objects stay
-/// visible, and stopping at the Cursor's 3×3 (design v23 §6.5).
+/// visible, and stopping at the Cursor's 3×3 (design v23 §6.5). Like the
+/// Cursor, it isn't drawn while the Cursor is out of reach in space (M2
+/// design §11.4).
 fn draw_leash(buf: &mut Buffer, app: &App, world: &World) {
-    let Some(led) = app.leash() else {
+    let Some(led) = app.leash().filter(|_| app.shown_cursor().is_some()) else {
         return;
     };
     let cursor = app.cursor();
@@ -489,13 +494,7 @@ fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) {
             buf[(x, y)].set_char(' ');
         }
     }
-    let walls = Sides {
-        left: false,
-        right: false,
-        top: false,
-        bottom: false,
-    };
-    draw_border(buf, area, title, walls);
+    draw_border(buf, area, title);
     let items = app.menu_items(world);
     let room = usize::from(area.width - 2);
     if items.is_empty() {
@@ -574,13 +573,7 @@ pub(crate) fn clear_box(buf: &mut Buffer, area: Rect, title: &str, corner: &str)
             buf[(x, y)].set_char(' ');
         }
     }
-    let walls = Sides {
-        left: false,
-        right: false,
-        top: false,
-        bottom: false,
-    };
-    draw_border(buf, area, title, walls);
+    draw_border(buf, area, title);
     if let Some(at) = top_right(area, corner.chars().count() as u16) {
         buf.set_stringn(at.x, at.y, corner, usize::from(at.width), Style::default());
     }
@@ -606,10 +599,28 @@ fn held_glyph(app: &App, world: &World) -> char {
         Some(Grip::Holds(id)) => {
             item_look(world, id).map(|(name, state)| theme.object_glyph(name, state))
         }
-        Some(Grip::Leads(_)) => Some(theme.glyph(SemanticTile::Sprite)),
+        // A led sprite as the map draws it, an egg as an egg (M2 design
+        // §10.4).
+        Some(Grip::Leads(id)) => {
+            let stage = world.sprite(id).map(|sprite| sprite.life_stage());
+            Some(theme.glyph(stage.map_or(SemanticTile::Sprite, |s| sprite_tile(s, false))))
+        }
         None => None,
     };
     glyph.map_or('?', |glyph| glyph.symbol)
+}
+
+/// How a sprite in `stage` is drawn, `selected` or not: the young small (M2
+/// design §9.6), and eggs as eggs (§10.7).
+fn sprite_tile(stage: LifeStage, selected: bool) -> SemanticTile {
+    match (selected, stage) {
+        (true, LifeStage::Egg) => SemanticTile::SelectedEgg,
+        (false, LifeStage::Egg) => SemanticTile::Egg,
+        (true, LifeStage::Young) => SemanticTile::SelectedYoungSprite,
+        (false, LifeStage::Young) => SemanticTile::YoungSprite,
+        (true, _) => SemanticTile::SelectedSprite,
+        (false, _) => SemanticTile::Sprite,
+    }
 }
 
 /// The type and visual state of the item `id`, held by the Cursor or, while
@@ -623,40 +634,22 @@ fn item_look(world: &World, id: EntityId) -> Option<(&str, &str)> {
     })
 }
 
-/// Which sides of the map view's border are the terrarium's wall.
-struct Sides {
-    left: bool,
-    right: bool,
-    top: bool,
-    bottom: bool,
-}
-
-/// Draws a box around `area` with `title` in its top edge. Sides that are the
-/// wall use double lines; the others single lines.
-fn draw_border(buf: &mut Buffer, area: Rect, title: &str, walls: Sides) {
-    let horizontal = |wall| if wall { "═" } else { "─" };
-    let vertical = |wall| if wall { "║" } else { "│" };
-    // Corners by (horizontal side is the wall, vertical side is the wall).
-    let corner = |h, v, [both, h_only, v_only, neither]: [&'static str; 4]| match (h, v) {
-        (true, true) => both,
-        (true, false) => h_only,
-        (false, true) => v_only,
-        (false, false) => neither,
-    };
+/// Draws a single-lined box around `area` with `title` in its top edge.
+fn draw_border(buf: &mut Buffer, area: Rect, title: &str) {
     let (left, right) = (area.left(), area.right() - 1);
     let (top, bottom) = (area.top(), area.bottom() - 1);
     for x in left + 1..right {
-        buf[(x, top)].set_symbol(horizontal(walls.top));
-        buf[(x, bottom)].set_symbol(horizontal(walls.bottom));
+        buf[(x, top)].set_symbol("─");
+        buf[(x, bottom)].set_symbol("─");
     }
     for y in top + 1..bottom {
-        buf[(left, y)].set_symbol(vertical(walls.left));
-        buf[(right, y)].set_symbol(vertical(walls.right));
+        buf[(left, y)].set_symbol("│");
+        buf[(right, y)].set_symbol("│");
     }
-    buf[(left, top)].set_symbol(corner(walls.top, walls.left, ["╔", "╒", "╓", "┌"]));
-    buf[(right, top)].set_symbol(corner(walls.top, walls.right, ["╗", "╕", "╖", "┐"]));
-    buf[(left, bottom)].set_symbol(corner(walls.bottom, walls.left, ["╚", "╘", "╙", "└"]));
-    buf[(right, bottom)].set_symbol(corner(walls.bottom, walls.right, ["╝", "╛", "╜", "┘"]));
+    buf[(left, top)].set_symbol("┌");
+    buf[(right, top)].set_symbol("┐");
+    buf[(left, bottom)].set_symbol("└");
+    buf[(right, bottom)].set_symbol("┘");
     // The title sits one cell in from the corner, as in "┌─ Map ──".
     let room = usize::from(area.width.saturating_sub(3));
     buf.set_stringn(left + 2, top, title, room, Style::default());
@@ -786,8 +779,11 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         .map(|label| format!(" │ placing: {label}"))
         .unwrap_or_default();
     // The tile under the Cursor is information the policy may hide (design
-    // §6.4).
-    let under = if app.can_view(Panel::TileInfo, Subject::Tile(cursor)) {
+    // §6.4). Out of reach past the wall, there's only space (M2 design
+    // §11.4).
+    let under = if app.out_of_reach() {
+        " space │".to_string()
+    } else if app.can_view(Panel::TileInfo, Subject::Tile(cursor)) {
         format!(" ({},{}) {terrain}{sprite}{object} │", cursor.x, cursor.y)
     } else {
         String::new()
@@ -875,13 +871,7 @@ fn object_label(object: &ObjectView) -> String {
 
 /// Draws the inspector (design §6.1): its title, and the open tab inside its border.
 fn render_inspector(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
-    let no_walls = Sides {
-        left: false,
-        right: false,
-        top: false,
-        bottom: false,
-    };
-    draw_border(buf, area, &inspector::title(app), no_walls);
+    draw_border(buf, area, &inspector::title(app));
     let inner = area.inner(Margin::new(1, 1));
     let lines = inspector::lines(app, world);
     let first = first_shown(app.tab_scroll(), lines.len(), usize::from(inner.height));
@@ -893,13 +883,7 @@ fn render_inspector(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
 
 /// Draws the event log (design §6.1): the latest events, newest first.
 fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
-    let no_walls = Sides {
-        left: false,
-        right: false,
-        top: false,
-        bottom: false,
-    };
-    draw_border(buf, area, " Events ", no_walls);
+    draw_border(buf, area, " Events ");
     // The filters, at the right of its top border, where a click on them
     // lands (design §6.1).
     let labels = app.event_filter().labels();

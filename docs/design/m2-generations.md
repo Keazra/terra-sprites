@@ -396,10 +396,10 @@ The game's rule, "the world decides what happens to the body, the genes decide h
 ### 10.4 Eggs and hatching
 
 - **An egg is the new sprite, at the first life stage, Egg** (Q5). It's laid on a random free tile beside its mother.
-- **An egg feels, learns, moves and needs nothing:** its body stays as it was laid and it decides nothing. Step 3 only counts it towards hatching, and steps 4 to 6 pass it by.
+- **An egg feels, learns and needs nothing, and moves only when the Cursor leads it:** its body stays as it was laid and it decides nothing. Step 3 only counts it towards hatching, and steps 4 to 6 pass it by, but for an egg the Cursor leads, which goes after the Cursor at steps 5 and 6 as a led sprite does (#190).
 - **It hatches after `hatches` (750) ticks,** where it lies, as a young male with a newborn's body; its age counts from then.
 - **Other sprites see an egg as a thing of its own kind,** the category `egg` and the pseudo type `egg`, not as a sprite: so "crowded, so hit a neighbour" never aims at one, and `nearby_sprites`, `female_near` and `male_near` don't count one. Its verb table is empty, so whatever a sprite tries on it is a fruitless try: an egg can't be hurt until something in the world is meant to hurt eggs.
-- **The Cursor can't touch, lead or hold an egg;** it says it's still an egg. Whether it can move one is for an issue of its own. The player can name one.
+- **The Cursor can't touch an egg or shove one;** it says it's still an egg, and Grab mode won't start aiming one: "Can't shove an egg". **It can lead one,** as it leads a sprite (M1 design §6.5): the egg goes after the Cursor at a newborn's pace, choosing nothing, and lies where it's let go. One that hatches while led is led on as a young sprite (#190). The player can name one.
 - **A sprite remembers its parents:** the one that laid it, then its partner.
 
 ### 10.5 The child's genes
@@ -416,7 +416,7 @@ The game's rule, "the world decides what happens to the body, the genes decide h
 ### 10.7 What the player sees
 
 - **The log:** `Pip #12 laid an egg (with Bo #7)`, `Pip #12 laid an egg alone`, `Sprite #31 hatched (Pip #12 and Bo #7's)`, `Pip #12 turned female`.
-- **The map:** an egg is `o` in CP437 and `0` in ASCII, where `o` is the ball; the theme keys `egg` and `selected_egg`. A theme without them draws eggs as the young.
+- **The map:** an egg is `o` in CP437 and `0` in ASCII, where `o` is the ball; the theme keys `egg` and `selected_egg`. A theme without them draws eggs as the young. The Cursor's mark for what it has hold of draws what it leads as the map does: `egg` while it leads one, and a young sprite small (#190).
 - **The Body tab:** after the traits, the sex, `· fertile` while it is, and for a male, how near it is to turning, `male · fertile · turning 40%`; then `parents Pip #12 and Bo #7`. An egg shows `egg · hatches in 750 ticks` for its life stage.
 - **The sprite list** shows `egg` as the life stage; **the doing line** says `Going to mate with Bo #7`, `Mated with Bo #7`, `Breeding alone`, `Laid an egg alone`.
 - **Arousal** colours a sprite light magenta when it's its strongest drive above half.
@@ -516,6 +516,10 @@ Past the glass is space: black, with stars drifting right to left, since the shi
 
 - **The Cursor can't reach past the wall** (round 2, Q11). While it follows the pointer and the tile pointed at (M1 design §6.5) is glass or space, the Cursor stays on its last tile on the map, as when the pointer leaves the map view, but isn't drawn there. A click, `Q` or `E` does nothing, rather than act on that last tile, and the status line says "space". A sprite it leads stands still and an item it holds stays held. It shows again when the pointer comes back over the map.
 - **A Cursor that follows a sprite carries on as before** (M1 design §6.5): it stays on its sprite and is drawn wherever the pointer is, and a click, over space too, or `Q` and `E` reach the sprite. While it leads the followed sprite, Follow steps aside and the Cursor follows the pointer, so the rule above applies.
+- **While the player aims a throw or a shove, the pointer pulls on past the wall** (#184). The Cursor sits on what it aims (M1 design §6.5), so it isn't out of reach: a click over space reaches it, as `Q` and `E` do, so a right click there sends the aim. The pull runs from the Cursor to the pointer, counted in tiles as if the map went on, so a thing against the wall can be pulled back over the glass and sent across the map. An aim that ends over space, sent or not, leaves the Cursor where it was, out of reach, so a sprite it still leads stands still.
+- **`F`, or a middle click, over space reaches no tile** (#184): following, the Cursor stops, as anywhere; otherwise, out of reach, it follows the selected sprite, if there is one, rather than the sprite on its last tile (M1 design §6.5). The wheel over space cycles the modes, as anywhere over the map view.
+- **Out of sight, the Cursor draws no leash either** (#184). Wherever it's drawn, its arrows and marks show only over the map's tiles, never over the glass, as they stopped at the map view's border before.
+- **Off the map view, the pointer is past nothing** (#184): moved on from space to the inspector, say, the Cursor shows again on its last tile, as when the pointer leaves the map view from a tile, and `Q` and `E` reach it.
 
 ### 11.5 Themes
 

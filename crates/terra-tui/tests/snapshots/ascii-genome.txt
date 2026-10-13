@@ -1,27 +1,27 @@
  Terra Sprites │ tick 3 │ ► 1x │ seed 7 │ sprites 3 │ not saved                              ? help
-╔═ Map ══════════════════╗                            ┌─ #5 ── Body Brain Chem [Genome] World ─────┐
-║.....X........,,,,::~~==║                            │ TRAITS                                     │
-║.'..........*.,,,,::~~==║                            │ speed 6.5 · sense 9.32 · grows up 4,214 ·  │
-║..%.##....@...,,,,::~~==║                            │   grows old 16,524                         │
-║....##..............~~==║                            │ HALF-LIVES                                 │
-║...@...Sv-..........~~==║                            │ hunger halves every 1,828 ticks            │
-║.......>.<........::~~==║                            │ thirst halves every 1,833 ticks            │
-║.......-^S....@...::~~==║                            │ arousal halves every 479 ticks             │
-║..................::~~==║                            │ feminiser halves every 543 ticks           │
-╚════════════════════════╝                            │ longing halves every 3,026 ticks           │
-                                                      │ pain halves every 18 ticks                 │
-                                                      │ h0 halves every 280 ticks                  │
-                                                      │ EMITTERS                                   │
-                                                      │ low energy → hunger +.00416 past .477      │
-                                                      │ ate → hunger -.523                         │
-                                                      │ low hydration → thirst +.00425 past .51    │
-                                                      │ drank → thirst -.474                       │
-                                                      │ low stamina → tiredness +.00428 past .476  │
-                                                      │ stamina → tiredness -.0973 past .583       │
-                                                      │ always → boredom +.00022                   │
-                                                      │ played → boredom -.47                      │
-                                                      │ played social → boredom -.147              │
-                                                      └────────────────────────────────────────────┘
+┌─ Map ──────────────────────────────────────────────┐┌─ #5 ── Body Brain Chem [Genome] World ─────┐
+│                                   +        *       ││ TRAITS                                     │
+│          .                          .      .       ││ speed 6.5 · sense 9.32 · grows up 4,214 ·  │
+│   .     *              .   .   .              +  + ││   grows old 16,524                         │
+│.            +         .  .     .                   ││ HALF-LIVES                                 │
+│   +                      .                +        ││ hunger halves every 1,828 ticks            │
+│ *  *        +------------------------+        +  . ││ thirst halves every 1,833 ticks            │
+│             |.....X........,,,,::~~==| .           ││ arousal halves every 479 ticks             │
+│           + |.'..........*.,,,,::~~==|   +   .     ││ feminiser halves every 543 ticks           │
+│  +*   . +   |..%.##....@...,,,,::~~==|             ││ longing halves every 3,026 ticks           │
+│         + . |....##..............~~==|            +││ pain halves every 18 ticks                 │
+│    *      . |...@...Sv-..........~~==|             ││ h0 halves every 280 ticks                  │
+│             |.......>.<........::~~==|             ││ EMITTERS                                   │
+│           + |.......-^S....@...::~~==|.  .      +  ││ low energy → hunger +.00416 past .477      │
+│         +   |..................::~~==|    .     .  ││ ate → hunger -.523                         │
+│           . +------------------------+             ││ low hydration → thirst +.00425 past .51    │
+│             .        .                   +      .  ││ drank → thirst -.474                       │
+│                  *      .     .      .        .  + ││ low stamina → tiredness +.00428 past .476  │
+│     .            .                          .      ││ stamina → tiredness -.0973 past .583       │
+│       +                                            ││ always → boredom +.00022                   │
+│      .                       + *      .            ││ played → boredom -.47                      │
+│ . .      .                            .            ││ played social → boredom -.147              │
+└────────────────────────────────────────────────────┘└────────────────────────────────────────────┘
 ┌─ Events ────────────────────────────────────────────────────────────────── [all] selected major ─┐
 │                                                                                                  │
 │                                                                                                  │

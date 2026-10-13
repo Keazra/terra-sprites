@@ -64,7 +64,7 @@ fn field() -> World {
 /// An app in `theme` on `world` with the wanderer selected, with a fixed
 /// folder for its files.
 fn app_for(world: &World, theme: Theme) -> App {
-    let areas = ui::areas(Size::new(100, 30), world.map());
+    let areas = ui::areas(Size::new(100, 30));
     let mut app = App::new(world.map(), theme, 7, areas);
     app.set_data_folder(PathBuf::from("/home/kel/.local/share/terra-sprites"));
     app.apply(Action::SelectNext, world);
@@ -133,8 +133,10 @@ fn every_inspector_tab_matches_its_snapshot() {
     let world = field();
     for (theme_name, theme) in themes() {
         let mut app = app_for(&world, theme);
-        // The Cursor in the field, for the status line.
-        app.apply(Action::Point(Position::new(10, 8)), &world);
+        // The Cursor in the field, on (8, 5), for the status line: the
+        // pointer rests a cell down and right of it (design v27 §6.5).
+        let at = app.cell_of(Pos { x: 8, y: 5 }).expect("in view");
+        app.apply(Action::Point(Position::new(at.x + 1, at.y + 1)), &world);
         for tab in Tab::ALL {
             while app.tab() != tab {
                 app.apply(Action::NextTab, &world);
