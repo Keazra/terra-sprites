@@ -98,6 +98,14 @@ fn on(tile: Pos) -> Position {
     Position::new(at.x + 1, at.y + 1)
 }
 
+/// Where the pointer rests to point at (`x`, `y`) round the small field,
+/// counted on past its wall: (-1, `y`) is the glass, and further out is
+/// space.
+fn past(x: i32, y: i32) -> Position {
+    let at = |offset: i32| u16::try_from(offset).expect("on screen");
+    Position::new(at(23 + x), at(10 + y))
+}
+
 /// A cell over space, well clear of the small field and its glass.
 const SPACE: Position = Position::new(6, 5);
 
@@ -401,37 +409,40 @@ fn leading_a_sprite_over_space_the_cursor_stays_and_the_sprite_is_not_led_on() {
 }
 
 #[test]
-fn aiming_over_space_a_right_click_or_e_still_sends_the_aim() {
+fn aiming_the_pull_goes_on_past_the_wall_and_a_right_click_or_e_over_space_sends_it() {
     // M2 design §11.4: the Cursor sits on what the player aims, so it isn't
-    // out of reach. Pulled back from the ball on (5, 3) to (1, 3), then over
+    // out of reach, and the pointer pulls on past the wall. The ball is on
+    // (0, 3), against the wall: pulled back over the glass to (-4, 3), in
     // space, it's thrown 4 tiles east. A right click sends an aim where the
     // terminal doesn't say when the button's let go (design v25 §6.5).
     let throw = Command::Throw {
-        from: Pos { x: 5, y: 3 },
+        from: Pos { x: 0, y: 3 },
         toward: Dir::E,
         tiles: 4,
     };
     let sends = [
-        Action::right_click(SPACE),
+        Action::right_click(past(-4, 3)),
         Action::Press {
             button: Button::Right,
             amplified: false,
         },
     ];
     for send in sends {
-        let mut world = field_with(10, 6, &[(Pos { x: 5, y: 3 }, "ball")], &[]);
+        let mut world = field_with(10, 6, &[(Pos { x: 0, y: 3 }, "ball")], &[]);
         let mut app = app(&world);
         apply(&mut app, &world, Action::Mode(CursorMode::Grab));
-        apply(&mut app, &world, Action::left_click(on(Pos { x: 5, y: 3 })));
+        apply(&mut app, &world, Action::left_click(on(Pos { x: 0, y: 3 })));
         tick(&mut app, &mut world);
         apply(
             &mut app,
             &world,
-            Action::right_click(on(Pos { x: 5, y: 3 })),
+            Action::right_click(on(Pos { x: 0, y: 3 })),
         );
-        apply(&mut app, &world, Action::Point(on(Pos { x: 1, y: 3 })));
-        apply(&mut app, &world, Action::Point(SPACE));
+        apply(&mut app, &world, Action::Point(past(-1, 3)));
+        assert_eq!(app.aim_line(&world).len(), 1, "over the glass");
+        apply(&mut app, &world, Action::Point(past(-4, 3)));
         assert!(!app.out_of_reach(), "{send:?}");
+        assert_eq!(app.aim_line(&world).len(), 4, "over space");
         apply(&mut app, &world, send);
         assert_eq!(
             app.take_commands(),
@@ -510,8 +521,9 @@ fn off_the_map_view_after_space_the_cursor_shows_on_its_last_tile_again() {
 #[test]
 fn over_space_esc_still_ends_an_aim_then_puts_the_held_item_down() {
     // M2 design §11.4 leaves `Esc` as it is (design v25, v33 §6.5): first
-    // it ends the aim, then it puts the ball down on the Cursor's last
-    // tile, (2, 3), where the pointer pulled from.
+    // it ends the aim, then it puts the ball down where the Cursor stayed,
+    // on (5, 3), where it was aimed from, not on (2, 3), the last tile the
+    // pull crossed: once the aim ends past the wall, the Cursor can't move.
     let mut world = field_with(10, 6, &[(Pos { x: 5, y: 3 }, "ball")], &[]);
     let mut app = app(&world);
     apply(&mut app, &world, Action::Mode(CursorMode::Grab));
@@ -528,9 +540,43 @@ fn over_space_esc_still_ends_an_aim_then_puts_the_held_item_down() {
     assert!(!app.aiming());
     assert_eq!(app.take_commands(), [], "nothing thrown");
     assert!(app.out_of_reach());
+    assert_eq!(app.cursor(), Pos { x: 5, y: 3 });
     apply(&mut app, &world, Action::Back);
     let put_down = Command::PutDown {
-        tile: Pos { x: 2, y: 3 },
+        tile: Pos { x: 5, y: 3 },
     };
     assert_eq!(app.take_commands(), [put_down]);
+}
+
+#[test]
+fn over_space_esc_ends_a_shove_s_aim_and_the_led_sprite_stands_still() {
+    // M2 design §11.4: a shove aimed and then called off with the pointer
+    // over space leaves the Cursor on the sprite, out of reach, so the
+    // sprite isn't led after (6, 3), the last tile the pull crossed.
+    let mut world = field(10, 6, &[Pos { x: 4, y: 3 }]);
+    let id = world
+        .sprite_at(Pos { x: 4, y: 3 })
+        .expect("the sprite")
+        .id();
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+    apply(&mut app, &world, Action::left_click(on(Pos { x: 4, y: 3 })));
+    tick(&mut app, &mut world);
+    apply(
+        &mut app,
+        &world,
+        Action::right_click(on(Pos { x: 4, y: 3 })),
+    );
+    apply(&mut app, &world, Action::Point(on(Pos { x: 6, y: 3 })));
+    apply(&mut app, &world, Action::Point(SPACE));
+    apply(&mut app, &world, Action::Back);
+    assert!(!app.aiming());
+    assert!(app.out_of_reach());
+    for _ in 0..20 {
+        tick(&mut app, &mut world);
+        assert_eq!(app.cursor(), Pos { x: 4, y: 3 }, "it stays");
+    }
+    assert!(matches!(app.grip(&world), Some(Grip::Leads(_))));
+    let led = world.sprite(id).expect("the sprite").pos();
+    assert_eq!(led, Pos { x: 4, y: 3 }, "it stands still");
 }

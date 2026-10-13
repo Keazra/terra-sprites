@@ -673,6 +673,10 @@ struct Aim {
     /// Where the Cursor was when the right button was pressed, and stays,
     /// unless a led sprite slides on: a throw starts here.
     from: Pos,
+    /// Where the pointer pulls to, in the map's tile coordinates, which
+    /// run on past the wall: the pull goes on over the glass and space
+    /// (M2 design §11.4).
+    to: (i32, i32),
 }
 
 /// How long the Decision marker shows, and then doesn't: once a second in
@@ -1518,6 +1522,14 @@ impl App {
     /// What the pointer on screen cell `cell` points at, as `pointed_at`
     /// says, if it's over the map view: a tile, the glass or space.
     fn pointed_place(&self, cell: Position) -> Option<Place> {
+        let (x, y) = self.pointed_spot(cell)?;
+        Some(Place::at(x, y, self.map_size))
+    }
+
+    /// Where the pointer on screen cell `cell` points, as `pointed_at`
+    /// says, in the map's tile coordinates, which run on past the wall, if
+    /// it's over the map view.
+    fn pointed_spot(&self, cell: Position) -> Option<(i32, i32)> {
         let area = self.tile_area;
         let reach = Rect::new(
             area.x,
@@ -1528,9 +1540,13 @@ impl App {
         if area.is_empty() || !reach.contains(cell) {
             return None;
         }
-        self.place_at(Position::new(
-            cell.x.saturating_sub(1).max(area.x),
-            cell.y.saturating_sub(1).max(area.y),
+        let (col, row) = (
+            cell.x.saturating_sub(1).max(area.x) - area.x,
+            cell.y.saturating_sub(1).max(area.y) - area.y,
+        );
+        Some((
+            self.viewport.x + i32::from(col),
+            self.viewport.y + i32::from(row),
         ))
     }
 
@@ -1909,7 +1925,12 @@ impl App {
         {
             self.cursor = led.pos();
         }
-        self.aim = Some(Aim { from: self.cursor });
+        let pointed = (i32::from(self.pointed.x), i32::from(self.pointed.y));
+        let to = self.pointer.and_then(|cell| self.pointed_spot(cell));
+        self.aim = Some(Aim {
+            from: self.cursor,
+            to: to.unwrap_or(pointed),
+        });
     }
 
     /// Sends what the player aimed (design v25 §6.5): the thing goes the
@@ -1938,22 +1959,22 @@ impl App {
     /// the pull says (design v25 §6.5): the opposite way to the pull, from
     /// the Cursor to the pointer, snapped to the nearest of the 8
     /// directions, as far as the pull, in the game's own measure. `None` for
-    /// a pull of nothing.
+    /// a pull of nothing. Past the wall, it pulls on as if the map did (M2
+    /// design §11.4).
     fn aimed(&self) -> Option<(Dir, u16)> {
-        self.aim?;
-        let (dx, dy) = (
-            i32::from(self.cursor.x) - i32::from(self.pointed.x),
-            i32::from(self.cursor.y) - i32::from(self.pointed.y),
-        );
+        let (x, y) = self.aim?.to;
+        let (dx, dy) = (i32::from(self.cursor.x) - x, i32::from(self.cursor.y) - y);
         let toward = Dir::nearest(dx, dy)?;
         let tiles = dx.unsigned_abs().max(dy.unsigned_abs());
         Some((toward, u16::try_from(tiles).unwrap_or(u16::MAX)))
     }
 
     /// Ends the aim, sent or not: the Cursor follows the pointer again, as
-    /// far as Follow and the leash let it (design v25 §6.5).
+    /// far as Follow and the leash let it (design v25 §6.5). With the
+    /// pointer past the wall, it stays where it is, out of reach, so a
+    /// sprite it leads stands still (M2 design §11.4).
     fn end_aim(&mut self) {
-        if self.aim.take().is_some() && self.followed().is_none() {
+        if self.aim.take().is_some() && self.followed().is_none() && !self.pointer_past_wall {
             self.cursor = self.within_leash(self.pointed);
         }
     }
@@ -1968,7 +1989,7 @@ impl App {
     /// v25 §6.5).
     pub fn thrown_from(&self, world: &World) -> Option<(EntityId, Pos)> {
         match (self.aim, self.grip(world)) {
-            (Some(Aim { from }), Some(Grip::Holds(item))) => Some((item, from)),
+            (Some(Aim { from, .. }), Some(Grip::Holds(item))) => Some((item, from)),
             _ => None,
         }
     }
@@ -3195,9 +3216,14 @@ impl App {
     /// §11.4).
     fn point(&mut self, cell: Position) {
         self.mouse = Some(cell);
-        let place = self.pointed_place(cell);
-        self.pointer = place.map(|_| cell);
-        match place {
+        let spot = self.pointed_spot(cell);
+        self.pointer = spot.map(|_| cell);
+        // While the player aims, the pointer pulls, past the wall too (M2
+        // design §11.4).
+        if let (Some(aim), Some(spot)) = (self.aim.as_mut(), spot) {
+            aim.to = spot;
+        }
+        match spot.map(|(x, y)| Place::at(x, y, self.map_size)) {
             Some(Place::Tile(tile)) => {
                 self.pointed = tile;
                 self.pointer_past_wall = false;
