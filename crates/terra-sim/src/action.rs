@@ -322,8 +322,8 @@ pub(crate) fn is_acting(sprite: &Sprite) -> bool {
     sprite.action.as_ref().is_some_and(|a| a.ended.is_none())
 }
 
-/// Step 5 for every sprite not `still`, dying or an egg (design §2.4, M2
-/// design §10): refresh its flood
+/// Step 5 for every sprite not `still`, dying or an egg the Cursor doesn't
+/// lead (design §2.4, M2 design §10.4): refresh its flood
 /// if it moved or the flood is due; end its action if that has timed out, or
 /// lost its target or destination (5.0); then attention and the decision
 /// (5a, 5b).
@@ -567,7 +567,7 @@ pub(crate) fn end(
 }
 
 /// Step 6 (design §2.4, §3.7): every sprite not `still`, dying or an egg
-/// (M2 design §10), carries out its action, in an order shuffled each tick by the world RNG. Moving sprites
+/// the Cursor doesn't lead (M2 design §10.4), carries out its action, in an order shuffled each tick by the world RNG. Moving sprites
 /// all gain their move points first, in tenths; then each, on its turn,
 /// steps along its path while its points last. The first to claim a tile
 /// gets it: a sprite can't enter a tile another sprite stands on, except by

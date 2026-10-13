@@ -4,11 +4,11 @@
 //! turns female; and births are world state, saved, hashed and replayed.
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_changing_files, close, endings, genome};
+use common::{WorldBuilder, at, builtin, builtin_changing_files, close, endings, genome, refusals};
 
 use proptest::prelude::*;
 use terra_sim::{
-    Command, DataPack, EntityId, Event, EventKind, LifeStage, Outcome, Part, Playback, Pos,
+    Command, DataPack, Dir, EntityId, Event, EventKind, LifeStage, Outcome, Part, Playback, Pos,
     Rejection, Sex, Target, Thing, Verb, World,
 };
 
@@ -334,7 +334,7 @@ fn an_egg_body_stays_as_it_was_laid() {
 }
 
 #[test]
-fn the_cursor_can_neither_touch_nor_hold_an_egg() {
+fn the_cursor_cant_touch_an_egg() {
     let female = format!("{ALONE}{FEMALE}");
     let mut world = family(&[(at(2, 1), &female)], &[], 1);
     let egg = laid(&mut world, 50).expect("an egg").egg;
@@ -348,25 +348,80 @@ fn the_cursor_can_neither_touch_nor_hold_an_egg() {
             sprite: egg,
             amplified: true,
         },
-        Command::TakeHold { sprite: egg },
     ];
     for command in &commands {
         world.submit(command.clone());
     }
-    let refused: Vec<_> = world
-        .step()
-        .into_iter()
-        .filter_map(|event| match event.kind {
-            EventKind::CommandRejected { command, reason } => Some((command, reason)),
-            _ => None,
-        })
-        .collect();
     let expected: Vec<_> = commands
         .iter()
         .map(|c| (c.clone(), Rejection::Egg))
         .collect();
-    assert_eq!(refused, expected);
+    assert_eq!(refusals(world.step()), expected);
+}
+
+#[test]
+fn the_cursor_leads_an_egg_where_it_goes_but_cant_shove_it() {
+    // M2 design §10.4 (#190): the Cursor takes hold of an egg as it does a
+    // sprite, and the egg goes where the Cursor goes, needing and doing
+    // nothing on the way; but it's never shoved.
+    let female = format!("{ALONE}{FEMALE}");
+    let mut world = family(&[(at(2, 1), &female)], &[], 1);
+    let egg = laid(&mut world, 50).expect("an egg").egg;
+    let body = |world: &World| -> Vec<f32> {
+        let egg = world.sprite(egg).unwrap();
+        egg.chemicals().map(|c| c.level).collect()
+    };
+    let laid_with = body(&world);
+    world.submit(Command::TakeHold { sprite: egg });
+    world.submit(Command::MoveCursor { tile: at(7, 3) });
+    let mut took_hold = false;
+    for _ in 0..100 {
+        let events = world.step();
+        took_hold |= events
+            .iter()
+            .any(|e| e.kind == EventKind::TookHold { sprite: egg });
+        let led = world.sprite(egg).unwrap();
+        assert!(led.is_egg());
+        assert!(led.action().is_none(), "an egg does nothing");
+        assert_eq!(body(&world), laid_with, "an egg needs nothing");
+    }
+    assert!(took_hold);
+    assert_eq!(world.sprite(egg).unwrap().pos(), at(7, 3));
+    let shove = Command::Shove {
+        toward: Dir::W,
+        tiles: 3,
+    };
+    world.submit(shove.clone());
+    assert_eq!(refusals(world.step()), [(shove, Rejection::Egg)]);
+    assert_eq!(world.cursor().leads(), Some(egg), "still led");
+    world.submit(Command::LetGo);
+    for _ in 0..50 {
+        world.step();
+    }
     assert_eq!(world.cursor().leads(), None);
+    assert_eq!(world.sprite(egg).unwrap().pos(), at(7, 3), "it lies still");
+}
+
+#[test]
+fn an_egg_that_hatches_while_led_is_led_still() {
+    let female = format!("{ALONE}{FEMALE}");
+    let mut world = family(&[(at(2, 1), &female)], &[], 1);
+    let egg = laid(&mut world, 50).expect("an egg").egg;
+    world.submit(Command::TakeHold { sprite: egg });
+    world.submit(Command::MoveCursor { tile: at(7, 0) });
+    let hatched = until(&mut world, 800, |event| match event.kind {
+        EventKind::Hatched { id, .. } if id == egg => Some(()),
+        _ => None,
+    });
+    assert!(hatched.is_some(), "it hatched");
+    world.submit(Command::MoveCursor { tile: at(7, 3) });
+    for _ in 0..100 {
+        world.step();
+    }
+    assert_eq!(world.cursor().leads(), Some(egg));
+    let young = world.sprite(egg).unwrap();
+    assert_eq!(young.pos(), at(7, 3), "the hatchling follows the Cursor");
+    assert!(young.action().is_none(), "and chooses nothing while led");
 }
 
 /// Hits whatever egg it sees, and nothing else.

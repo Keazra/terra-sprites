@@ -6,7 +6,8 @@
 #![allow(dead_code)]
 
 use terra_sim::{
-    DataPack, Event, EventKind, Genome, Map, Outcome, Pos, Scenario, ScriptedAction, Verb, World,
+    Command, DataPack, Event, EventKind, Genome, Map, Outcome, Pos, Rejection, Scenario,
+    ScriptedAction, Verb, World,
 };
 
 /// The built-in data pack.
@@ -69,6 +70,17 @@ pub fn endings(events: &[Event]) -> Vec<(Verb, Outcome)> {
         .iter()
         .filter_map(|e| match e.kind {
             EventKind::ActionEnded { verb, outcome, .. } => Some((verb, outcome)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The commands a tick's `events` refused, and why.
+pub fn refusals(events: Vec<Event>) -> Vec<(Command, Rejection)> {
+    events
+        .into_iter()
+        .filter_map(|event| match event.kind {
+            EventKind::CommandRejected { command, reason } => Some((command, reason)),
             _ => None,
         })
         .collect()

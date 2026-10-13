@@ -394,10 +394,10 @@ The game's rule, "the world decides what happens to the body, the genes decide h
 ### 10.4 Eggs and hatching
 
 - **An egg is the new sprite, at the first life stage, Egg** (Q5). It's laid on a random free tile beside its mother.
-- **An egg feels, learns, moves and needs nothing:** its body stays as it was laid and it decides nothing. Step 3 only counts it towards hatching, and steps 4 to 6 pass it by.
+- **An egg feels, learns and needs nothing, and moves only when the Cursor leads it:** its body stays as it was laid and it decides nothing. Step 3 only counts it towards hatching, and steps 4 to 6 pass it by, but for an egg the Cursor leads, which goes after the Cursor at steps 5 and 6 as a led sprite does (#190).
 - **It hatches after `hatches` (750) ticks,** where it lies, as a young male with a newborn's body; its age counts from then.
 - **Other sprites see an egg as a thing of its own kind,** the category `egg` and the pseudo type `egg`, not as a sprite: so "crowded, so hit a neighbour" never aims at one, and `nearby_sprites`, `female_near` and `male_near` don't count one. Its verb table is empty, so whatever a sprite tries on it is a fruitless try: an egg can't be hurt until something in the world is meant to hurt eggs.
-- **The Cursor can't touch, lead or hold an egg;** it says it's still an egg. Whether it can move one is for an issue of its own. The player can name one.
+- **The Cursor can't touch an egg or shove one;** it says it's still an egg, and Grab mode won't start aiming one: "Can't shove an egg". **It can lead one,** as it leads a sprite (M1 design §6.5): the egg goes after the Cursor at a newborn's pace, choosing nothing, and lies where it's let go. One that hatches while led is led on as a young sprite (#190). The player can name one.
 - **A sprite remembers its parents:** the one that laid it, then its partner.
 
 ### 10.5 The child's genes
@@ -414,7 +414,7 @@ The game's rule, "the world decides what happens to the body, the genes decide h
 ### 10.7 What the player sees
 
 - **The log:** `Pip #12 laid an egg (with Bo #7)`, `Pip #12 laid an egg alone`, `Sprite #31 hatched (Pip #12 and Bo #7's)`, `Pip #12 turned female`.
-- **The map:** an egg is `o` in CP437 and `0` in ASCII, where `o` is the ball; the theme keys `egg` and `selected_egg`. A theme without them draws eggs as the young.
+- **The map:** an egg is `o` in CP437 and `0` in ASCII, where `o` is the ball; the theme keys `egg` and `selected_egg`. A theme without them draws eggs as the young. The Cursor's mark for what it has hold of draws what it leads as the map does: `egg` while it leads one, and a young sprite small (#190).
 - **The Body tab:** after the traits, the sex, `· fertile` while it is, and for a male, how near it is to turning, `male · fertile · turning 40%`; then `parents Pip #12 and Bo #7`. An egg shows `egg · hatches in 750 ticks` for its life stage.
 - **The sprite list** shows `egg` as the life stage; **the doing line** says `Going to mate with Bo #7`, `Mated with Bo #7`, `Breeding alone`, `Laid an egg alone`.
 - **Arousal** colours a sprite light magenta when it's its strongest drive above half.
