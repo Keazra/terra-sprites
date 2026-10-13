@@ -6,7 +6,7 @@
 //! saved and replayed.
 
 mod common;
-use common::{ALONE, FEMALE, Laying, at, builtin, builtin_changing, family_in, laid};
+use common::{ALONE, FEMALE, Laying, at, builtin, builtin_changing, family_in, hatch, laid};
 
 use terra_sim::{
     Command, CopyChangeView, DataPack, EventKind, GeneView, Playback, World, WorldConfig,
@@ -67,6 +67,7 @@ fn a_lone_egg_s_genes_are_its_mother_s_with_copying_errors_in_their_values() {
     let female = format!("{ALONE}{FEMALE}");
     let mut world = family_in(always_wrong(), &[(at(2, 1), &female)], &[], 1);
     let Laying { egg, by, .. } = laid(&mut world, 50).expect("she laid an egg");
+    hatch(&mut world, egg);
     let (egg, mother) = (world.sprite(egg).unwrap(), world.sprite(by).unwrap());
     assert_ne!(
         egg.genome(),
@@ -87,6 +88,7 @@ fn an_egg_knows_which_genes_copying_changed_and_what_each_was() {
     let female = format!("{ALONE}{FEMALE}");
     let mut world = family_in(always_wrong(), &[(at(2, 1), &female)], &[], 1);
     let Laying { egg, by, .. } = laid(&mut world, 50).expect("she laid an egg");
+    hatch(&mut world, egg);
     let (egg, mother) = (world.sprite(egg).unwrap(), world.sprite(by).unwrap());
     let (genes, hers) = (egg.genes(), mother.genes());
     let errors = egg.copying_errors();
@@ -111,6 +113,7 @@ fn a_gene_flawed_in_both_copies_is_born_broken_at_half_health_and_brings_old_age
     let data = with_flaws("arise: 1.0, founders: 0.06,");
     let mut world = family_in(data, &[(at(2, 1), &female)], &[], 1);
     let Laying { egg, by, .. } = laid(&mut world, 50).expect("she laid an egg");
+    hatch(&mut world, egg);
     let (egg, mother) = (world.sprite(egg).unwrap(), world.sprite(by).unwrap());
     let (flaws, health) = (egg.flaws(), egg.gene_health());
     let broken = flaws.iter().filter(|&&flawed| flawed == 2).count();
@@ -181,6 +184,7 @@ fn a_lone_egg_s_genes_are_now_and_then_doubled_lost_or_changed() {
     let data = builtin_changing("physiology.ron", &[(from, &to)]);
     let mut world = family_in(data, &[(at(2, 1), &female)], &[], 1);
     let Laying { egg, by, .. } = laid(&mut world, 50).expect("she laid an egg");
+    hatch(&mut world, egg);
     let (egg, mother) = (world.sprite(egg).unwrap(), world.sprite(by).unwrap());
     let (child, hers) = (egg.genes(), mother.genes());
     let changes = egg.copy_changes();

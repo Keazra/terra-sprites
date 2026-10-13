@@ -261,6 +261,16 @@ pub fn laid(world: &mut World, ticks: u64) -> Option<Laying> {
     })
 }
 
+/// Steps `world` until the egg `egg` hatches (M2 design §10.4), so the
+/// young sprite it held, with its ID, can be looked at.
+pub fn hatch(world: &mut World, egg: EntityId) {
+    let hatched = until(world, 1_000, |event| match event.kind {
+        EventKind::Hatched { id, .. } if id == egg => Some(()),
+        _ => None,
+    });
+    hatched.expect("the egg hatched");
+}
+
 /// The changes to `physiology.ron` that turn copying errors off, so an
 /// egg's genes are its parents' exactly, with no new flaws (M2 design §12).
 pub const NO_COPYING_ERRORS: [(&str, &str); 2] = [

@@ -16,7 +16,7 @@ use crate::object_types::{Condition, Size};
 use crate::objects::{EntityId, Roll};
 use crate::perception::Target;
 use crate::sliding::Slide;
-use crate::sprites::{Sprite, Sprites};
+use crate::sprites::Sprite;
 use crate::terrain::Terrain;
 use crate::world::WorldState;
 
@@ -54,7 +54,8 @@ pub enum Command {
     /// Shows the Cursor to sprites, or hides it from them (design v29 §6.5).
     ShowCursor { visible: bool },
     /// Throws the item the Cursor holds (design v25 §3.5.4): puts it down on
-    /// `from`, where aiming began, rolling `tiles` tiles `toward`.
+    /// `from`, where aiming began, rolling `tiles` tiles `toward`. Refused
+    /// for an item its type says can't be thrown: an egg (M2 design §10.4).
     Throw { from: Pos, toward: Dir, tiles: u16 },
     /// Shoves the sprite the Cursor leads (design v25 §3.5.4): lets go of
     /// it, and it slides `tiles` tiles `toward`.
@@ -67,7 +68,8 @@ pub enum Command {
     /// the genome it carries in full, or with `None`, from the starter
     /// genome with spawn variation (design §4.9).
     SpawnSprite { tile: Pos, genome: Option<Genome> },
-    /// Names a sprite (design v28 §2.5, §6.5).
+    /// Names a sprite (design v28 §2.5, §6.5), or an egg, for the sprite
+    /// it hatches into (M2 design §10.4).
     Rename { sprite: EntityId, name: String },
 }
 
@@ -164,9 +166,6 @@ impl CursorTouch {
 pub enum Rejection {
     /// The sprite isn't in the world: it never was, or it has died.
     Gone,
-    /// The sprite is still an egg, which feels nothing and the Cursor
-    /// can't move yet (M2 design §10).
-    Egg,
     /// The Cursor already has hold of something (design v23 §6.5).
     Busy(Grip),
     /// The Cursor leads no sprite to let go of.
@@ -176,6 +175,10 @@ pub enum Rejection {
     Rooted,
     /// The Cursor holds no item to put down.
     NotHolding,
+    /// The item the Cursor holds can only be put down, never thrown, as
+    /// its type's data says: an egg (M2 design §10.4). The stable ID of
+    /// its type.
+    NotThrowable { item_type: u16 },
     /// The tile isn't on the map.
     OffTheMap,
     /// Something on the tile stops the item going there (design §3.4).
@@ -292,7 +295,7 @@ fn reward(
 ) -> Result<EventKind, Rejection> {
     let physiology = data.physiology();
     let (cursor, indices) = (&physiology.cursor, &physiology.indices);
-    let touched = hatched(&mut state.sprites, sprite)?;
+    let touched = state.sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
     let reach_back = reach_back.clamp(physiology.touch_window, cursor.max_reach_back);
     let brain = &mut touched.brain;
     brain.reach_back = brain.reach_back.max(Some(reach_back));
@@ -318,7 +321,7 @@ fn correct(
 ) -> Result<EventKind, Rejection> {
     let physiology = data.physiology();
     let (cursor, indices) = (&physiology.cursor, &physiology.indices);
-    let touched = hatched(&mut state.sprites, sprite)?;
+    let touched = state.sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
     touched.brain.seen_cursor |= state.cursor.visible;
     let body = &mut touched.body;
     let correction = if amplified { cursor.shock } else { cursor.zap };
@@ -331,16 +334,6 @@ fn correct(
     })
 }
 
-/// The sprite `sprite`, to touch or lead: refused if it's gone, or still
-/// an egg (M2 design §10).
-fn hatched(sprites: &mut Sprites, sprite: EntityId) -> Result<&mut Sprite, Rejection> {
-    let sprite = sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
-    if sprite.is_egg() {
-        return Err(Rejection::Egg);
-    }
-    Ok(sprite)
-}
-
 /// The Cursor takes hold of `sprite`, and leads it (design v23 §6.5):
 /// whatever it was doing ends, pulled away.
 fn take_hold(
@@ -349,7 +342,7 @@ fn take_hold(
     events: &mut Vec<Event>,
 ) -> Result<EventKind, Rejection> {
     state.cursor.free()?;
-    let led = hatched(&mut state.sprites, sprite)?;
+    let led = state.sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
     if let Some(doing) = led.action.as_mut().filter(|a| a.ended.is_none()) {
         action::end(doing, sprite, Outcome::PulledAway, state.tick, events);
     }
@@ -411,6 +404,15 @@ fn throw(
     toward: Dir,
     tiles: u16,
 ) -> Result<EventKind, Rejection> {
+    // An egg can only be put down (M2 design §10.4): its type says.
+    if let Some(held) = state.cursor.holds().and_then(|id| state.objects.get(id)) {
+        let object_type = &data.object_types()[held.kind];
+        if !object_type.throwable {
+            return Err(Rejection::NotThrowable {
+                item_type: object_type.id,
+            });
+        }
+    }
     let (item, object_type) = let_go_of_held(state, data, from)?;
     let left = sent(state, data, Target::Object(item), tiles);
     let thrown = state.objects.get_mut(item).expect("the thrown item");
@@ -596,12 +598,23 @@ fn spawn_sprite(
     Ok(EventKind::Spawned { id, pos: tile })
 }
 
-/// The player names `sprite` (design v28 §2.5): 1 to 16 CP437 characters,
-/// trimmed of spaces at either end.
+/// The player names `sprite`, or the egg it hatches from (design v28 §2.5,
+/// M2 design §10.4): 1 to 16 CP437 characters, trimmed of spaces at either
+/// end.
 fn rename(state: &mut WorldState, sprite: EntityId, name: &str) -> Result<EventKind, Rejection> {
-    let named = state.sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
+    // An egg is named for the sprite it hatches into (M2 design §10.4).
+    let named = match state.sprites.get_mut(sprite) {
+        Some(named) => &mut named.name,
+        None => {
+            let egg = state
+                .objects
+                .get_mut(sprite)
+                .and_then(|o| o.unhatched.as_mut());
+            &mut egg.ok_or(Rejection::Gone)?.name
+        }
+    };
     let name = names::checked(name).map_err(Rejection::BadName)?;
-    named.name = Some(name.to_string());
+    *named = Some(name.to_string());
     Ok(EventKind::Renamed {
         id: sprite,
         name: name.to_string(),

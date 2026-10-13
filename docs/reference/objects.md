@@ -6,7 +6,7 @@ Every kind of plant, item and toy, and what it does (design §3.5). Each entry i
 
 | Field | Meaning |
 |---|---|
-| `id` | Permanent, never reused. The built-in types are 1–4, and 100–102 for the pseudo types. |
+| `id` | Permanent, never reused. The built-in types are 1–4 and 103, the egg, and 100–102 for the pseudo types. |
 | `name` | What rules, presets and themes call it. |
 | `plural` | How the screen says the kind in general: `"berry bushes"`. Left out for a thing you don't count, which reads with "is" ("water is good for thirst"). |
 | `category` | What sprites perceive it as: a name from [`categories.ron`](categories.md). |
@@ -14,11 +14,12 @@ Every kind of plant, item and toy, and what it does (design §3.5). Each entry i
 | `size` | `Small`, `Medium` or `Large`. Required on every type with objects. |
 | `hardness` | From 0 to 1, given with `size`. A rolling item bounces off something bigger, knocks on something its size, and crushes something smaller and softer (design §3.5.4). |
 | `counters` | Named whole numbers with maximums, from 0: `{"fruit": 6}`. |
-| `stages` | `[(name: "seedling", ticks: (min, max), next: Stage("mature") or Expire)]`. Each stage lasts a random time between `min` and `max` ticks. A type with no stages is permanent. |
+| `stages` | `[(name: "seedling", ticks: (min, max), next: Stage("mature"), Expire or Hatch)]`. Each stage lasts a random time between `min` and `max` ticks. A type with no stages is permanent. A stage that ends in `Hatch` makes the type the egg sprites lay (M2 design §10.4): when it ends, the young sprite the egg holds hatches on its tile, and the egg is gone. One the Cursor holds waits until it's put down, and one a sprite stands on until the sprite steps off. |
 | `rules` | `[(trigger: ..., if: [conditions], do: [effects])]`: what it does by itself, in order. |
 | `verbs` | `{Verb: [effects]}`: what happens when a sprite does that verb to it. The verbs are `Eat`, `Drink`, `Hit` and `Play`. |
 | `visual` | `[(if: [conditions], state: "name")]`: the first that holds names the look the themes draw; if none does, the look is `"default"`. |
 | `place` | `(label: "berry bush seedling", if: [conditions])` if the Cursor's Place menu offers it, under that label. `if` is optional: what the tile must be like, such as `[KeepsPathsOpen]`. |
+| `throwable` | `false` for an item the Cursor may pick up and put down but never throw, such as the egg (M2 design §10.4). Left out, it's `true`. |
 | `pseudo` | `true` for `water`, `sprite` and `cursor`: things that aren't objects but can be tried on, so they have a verb table and nothing else. |
 
 ## The vocabulary
@@ -65,7 +66,9 @@ Loading stops, naming the type and the problem, for:
 - a stage whose `min` is below 1 or above its `max`, a counter maximum of 0, `Every(0)`, or a chance outside 0 to 1;
 - tags other than both `Solid` and `Fixture` or neither, or a `Push` on anything but an item;
 - a pseudo type with anything but verbs (and `size`, `hardness`), or with a verb that does anything but `Inject` and `Signal`;
-- a verb table for anything but `Eat`, `Drink`, `Hit` and `Play`.
+- a verb table for anything but `Eat`, `Drink`, `Hit` and `Play`;
+- two types that hatch, since a mother lays one kind of egg; one that hatches and is solid or in the Place menu; or a rule, preset or scenario that makes one, since only a sprite lays an egg (a `DensityBelow` may count them);
+- `throwable: false` on a solid or pseudo type, which the Cursor never holds.
 
 ## Working example
 
@@ -92,4 +95,4 @@ A mushroom: a small item that sprites perceive as fruit. It grows from a button 
 ),
 ```
 
-The built-in types in `data/objects.ron` are working examples of everything else: the berry bush's fruit counter, the thornbush's spreading and its `Thorny` tag, the ball's `Push`, and the pseudo types.
+The built-in types in `data/objects.ron` are working examples of everything else: the berry bush's fruit counter, the thornbush's spreading and its `Thorny` tag, the ball's `Push`, the egg's `Hatch` and `throwable`, and the pseudo types.

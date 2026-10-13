@@ -525,14 +525,13 @@ pub(crate) struct TraceEntry {
     pub(crate) motive: Option<usize>,
 }
 
-/// Step 4 for every sprite not `still`, dying or an egg (design §2.4, M2
-/// design §10): reads each need's relief, reward and punishment, resets the
-/// last two to 0, keeps what the sprite felt, and learns from them,
-/// reporting each lesson.
+/// Step 4 for every sprite not `dying` (design §2.4): reads each need's
+/// relief, reward and punishment, resets the last two to 0, keeps what the
+/// sprite felt, and learns from them, reporting each lesson.
 pub(crate) fn run(
     state: &mut WorldState,
     data: &DataPack,
-    still: &[EntityId],
+    dying: &[EntityId],
     events: &mut Vec<Event>,
 ) {
     let indices = &data.physiology().indices;
@@ -540,13 +539,12 @@ pub(crate) fn run(
     let learning = state.learning;
     let window = data.physiology().touch_window;
     let drive = indices.drive;
-    // A sprite that has died is forgotten (design v18 §5.6); an egg is
-    // alive.
+    // A sprite that has died is forgotten (design v18 §5.6).
     let alive: BTreeSet<EntityId> = state
         .sprites
         .iter()
-        .filter(|(id, sprite)| sprite.is_egg() || !still.contains(id))
         .map(|(id, _)| id)
+        .filter(|id| !dying.contains(id))
         .collect();
     // How far each sprite that knows the Cursor sees it, by its flood's
     // reach, if its flood reaches it (design v29 §3.6, §5.6): only those can
@@ -566,7 +564,7 @@ pub(crate) fn run(
     let living = state
         .sprites
         .minds_mut()
-        .filter(|(id, ..)| !still.contains(id));
+        .filter(|(id, ..)| !dying.contains(id));
     for (id, body, brain) in living {
         let cursor_distance = cursor_distances.get(&id).copied();
         let (reward, punishment) = (body.chems[indices.reward], body.chems[indices.punishment]);

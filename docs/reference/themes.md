@@ -48,7 +48,7 @@ A **glyph** is `(glyph: '♣', fg: green)`, with two optional flags: `bold: true
 | `sprite` | A sprite. Its colour shows when no drive colours it, and always with `b`'s plain colours. |
 | `selected_sprite` | The selected sprite. |
 | `young_sprite`, `selected_young_sprite` | A young sprite, and one selected (M2 design §9.6). Optional: a theme without them draws the young as grown. |
-| `egg`, `selected_egg` | An egg, and one selected (M2 design §10). Optional: a theme without them draws eggs as the young. |
+| `egg`, `selected_egg` | Retired: an egg is an item until it hatches, drawn from `objects` (M2 design §10.7). A theme that still has them loads, and draws the egg with its `egg` glyph if its `objects` have no `"egg"`. |
 | `decision_marker` | Where the selected sprite is heading. It flashes. |
 | `emote(hurt)`, `emote(pleased)`, `emote(shocked)`, `emote(failed)`, `emote(resting)` | What takes turns with a sprite's glyph when it's hurt, petted, zapped, gives up, or rests (design §6.3). |
 
@@ -123,6 +123,7 @@ A bright theme, for a terminal whose dark colours are hard to see: light colours
         "berry":     { "default": (glyph: '•', fg: light_red) },
         "thornbush": { "default": (glyph: '♠', fg: light_magenta) },
         "ball":      { "default": (glyph: '○', fg: white, bold: true) },
+        "egg":       { "default": (glyph: 'o', fg: light_yellow, bold: true) },
     },
     attention_marker: gray,
     cursor: (

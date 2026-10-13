@@ -341,6 +341,75 @@ fn golden_the_first_save_still_loads_and_carries_on() {
     }
 }
 
+/// A save of schema 1 from before eggs were items (#196), written by the
+/// build that merged PR #199: on an 8 by 8 field, two females laid an egg
+/// each on tick 0, as sprites that hatch on tick 750. The sprite 9, at
+/// (1, 1) with a berry on every tile around her, laid hers, 11, on the
+/// berry at (0, 0); the sprite 10's, 12, lies at (5, 6), and the player
+/// named it "Pebble". Saved on tick 2.
+const GOLDEN_V1_EGGS: &[u8] = include_bytes!("golden/save-v1-eggs.tspr");
+
+#[test]
+fn golden_a_save_with_eggs_from_before_they_were_items_loads_them_as_items() {
+    // #196: each egg becomes an egg item with its ID, on its tile, or if an
+    // item lies there, the nearest tile with no item and no sprite, and
+    // hatches when it would have, into the sprite it was.
+    let mut world = World::load(GOLDEN_V1_EGGS).expect("the save loads");
+    assert_eq!(world.tick(), 2);
+    let sprites: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
+    assert_eq!(sprites, [EntityId(9), EntityId(10)], "an egg is no sprite");
+    let eggs: Vec<_> = world
+        .eggs()
+        .map(|egg| {
+            let name = egg.name().map(String::from);
+            (
+                egg.id(),
+                egg.pos(),
+                egg.parents().to_vec(),
+                egg.laid(),
+                egg.hatches(),
+                name,
+            )
+        })
+        .collect();
+    let (pebble, other) = (EntityId(12), EntityId(11));
+    assert_eq!(
+        eggs,
+        [
+            // The tiles around (0, 0) out to two away hold berries or a
+            // sprite, so it moves three.
+            (other, Some(at(3, 0)), vec![EntityId(9)], 0, 750, None),
+            (
+                pebble,
+                Some(at(5, 6)),
+                vec![EntityId(10)],
+                0,
+                750,
+                Some("Pebble".into())
+            ),
+        ]
+    );
+    assert_eq!(world.object_at(at(0, 0)).unwrap().type_name(), "berry");
+    assert_eq!(world.object_at(at(3, 0)).unwrap().type_name(), "egg");
+    let mut hatched = Vec::new();
+    while world.tick() < 800 {
+        for event in world.step() {
+            if let EventKind::Hatched { id, parents } = event.kind {
+                hatched.push((id, event.tick, parents));
+            }
+        }
+    }
+    assert_eq!(
+        hatched,
+        [
+            (other, 750, vec![EntityId(9)]),
+            (pebble, 750, vec![EntityId(10)])
+        ]
+    );
+    assert_eq!(world.sprite(pebble).unwrap().name(), Some("Pebble"));
+    assert_eq!(world.sprite(other).unwrap().parents(), [EntityId(9)]);
+}
+
 /// Writes the golden save. Run it by hand, once, when a new schema is
 /// released: `cargo test -p terra-sim --test save -- --ignored write_the_golden_save`.
 #[test]

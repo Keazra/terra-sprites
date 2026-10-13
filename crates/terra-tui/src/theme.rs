@@ -23,9 +23,13 @@ pub enum SemanticTile {
     YoungSprite,
     /// The selected sprite, while it's young.
     SelectedYoungSprite,
-    /// A sprite that's still an egg (M2 design §10).
+    /// Retired: a sprite that was still an egg. An egg is an item until it
+    /// hatches (M2 design §10.4), drawn as the theme's `objects` say, so a
+    /// theme file from before still loads, and draws the egg item with this
+    /// glyph if its `objects` have no "egg".
     Egg,
-    /// The selected sprite, while it's an egg.
+    /// Retired with `Egg`: read, and not drawn. A selected egg is drawn in
+    /// reverse video.
     SelectedEgg,
     /// The Decision marker: where the selected sprite is heading (design
     /// §6.1). It flashes.
@@ -71,17 +75,14 @@ impl SemanticTile {
     ];
 
     /// The tiles a theme may leave out, each with the tile drawn in its
-    /// place, in the order they're filled in: a theme from before the young
-    /// had a look of their own draws them as grown (M2 design §9.6), and one
-    /// from before eggs draws them as the young (§10).
-    pub const OPTIONAL: [(SemanticTile, SemanticTile); 4] = [
+    /// place: a theme from before the young had a look of their own draws
+    /// them as grown (M2 design §9.6).
+    pub const OPTIONAL: [(SemanticTile, SemanticTile); 2] = [
         (SemanticTile::YoungSprite, SemanticTile::Sprite),
         (
             SemanticTile::SelectedYoungSprite,
             SemanticTile::SelectedSprite,
         ),
-        (SemanticTile::Egg, SemanticTile::YoungSprite),
-        (SemanticTile::SelectedEgg, SemanticTile::SelectedYoungSprite),
     ];
 }
 
@@ -97,6 +98,10 @@ pub struct Glyph {
 
 /// The default theme's file.
 const CP437: &str = include_str!("../../../themes/cp437.ron");
+
+/// The egg's object type in the built-in data pack (M2 design §10.4), which
+/// a theme from before eggs were items drew with its `egg` tile.
+const EGG: &str = "egg";
 
 /// What a theme draws for an object it has no glyph for, so a data pack's new
 /// object types still show.
@@ -162,6 +167,9 @@ pub struct Theme {
     tiles: BTreeMap<SemanticTile, Glyph>,
     /// By object type name, then visual state.
     objects: BTreeMap<String, BTreeMap<String, Glyph>>,
+    /// A theme from before eggs were items: its `egg` tile, which draws the
+    /// egg item if `objects` has no "egg" (M2 design §10.4).
+    old_egg: Option<Glyph>,
     arrows: Arrows,
     followed_arrows: Arrows,
     visible_frame: Arrows,
@@ -197,10 +205,12 @@ impl Theme {
 
     /// How this theme draws an object of type `object` in visual state `state`
     /// (design §6.2). With no glyph for that state, it uses the object's
-    /// `"default"` look, and failing that a `?`.
+    /// `"default"` look; for an egg, a theme from before eggs were items
+    /// uses its `egg` tile (M2 design §10.4); and failing that, a `?`.
     pub fn object_glyph(&self, object: &str, state: &str) -> Glyph {
         self.object_entry(object, state)
             .or_else(|| self.object_entry(object, "default"))
+            .or(self.old_egg.filter(|_| object == EGG))
             .unwrap_or(UNKNOWN_OBJECT)
     }
 
@@ -337,6 +347,9 @@ impl Theme {
     fn parse(text: &str) -> Result<Theme, String> {
         let file: ThemeFile = ron::from_str(text).map_err(|e| e.to_string())?;
         let mut tiles = glyphs(file.tiles);
+        // Eggs are items now (M2 design §10.4).
+        let old_egg = tiles.remove(&SemanticTile::Egg);
+        tiles.remove(&SemanticTile::SelectedEgg);
         if let Some(&tile) = SemanticTile::ALL
             .iter()
             .find(|tile| !tiles.contains_key(tile))
@@ -370,6 +383,7 @@ impl Theme {
         let theme = Theme {
             tiles,
             objects,
+            old_egg,
             arrows: file.cursor.arrows,
             followed_arrows: file.cursor.followed_arrows,
             visible_frame: file.cursor.visible_frame,
@@ -405,7 +419,11 @@ impl Theme {
         let tiles = self
             .tiles
             .iter()
-            .map(|(&tile, glyph)| (tile_name(tile), glyph.symbol));
+            .map(|(&tile, glyph)| (tile_name(tile), glyph.symbol))
+            .chain(
+                self.old_egg
+                    .map(|glyph| (tile_name(SemanticTile::Egg), glyph.symbol)),
+            );
         let objects = self.objects.iter().flat_map(|(object, states)| {
             states
                 .iter()
