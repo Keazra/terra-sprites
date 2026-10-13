@@ -4,7 +4,7 @@
 - **Date:** 2026-10-12
 - **History:** edited in place since v5; each change is a file in [`changes/`](changes/), whose README says where v1 to v5 are
 - **Builds on:** [M1 design](m1-a-sprite-lives.md), which stays the rulebook for everything M2 doesn't change
-- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), breeding (Slice 23), the view past the wall (Slice 31), and mixing and mutating genes (Slice 24)
+- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), breeding (Slice 23), the view past the wall (Slice 31), and mixing and mutating genes (Slice 24), with copy and change (24b)
 
 ---
 
@@ -102,7 +102,7 @@ Each slice is a GitHub issue and its own PR, worked as in `docs/agents/how-we-wo
 | **21. Title screen** | A screen at launch, before any world; flags that make or load a world skip it. Opens with a design pass: mock-ups to pick from, then a rough prototype played in Windows Terminal | — |
 | **22. Life stages and ageing** | The young look and act young; sprites grow old and decline (§3) | — |
 | **23. Breeding** | Adults have young, alone or with a partner as their genes decide; only between adults (§5); lives of 4 to 8 hours (§2) | 22 |
-| **24. Mixing and mutating genes** | Children differ from their parents; gene quality joins ageing | 23 |
+| **24. Mixing and mutating genes** | Children differ from their parents; gene quality joins ageing; now and then a gene is doubled, lost or changed in what it does | 23 |
 | **25. Family tree** | A sprite's parents, grandparents and children, living or dead | 23 |
 | **26. Population graph** | The population over time | 23 |
 | **27. Fast-forward and the speed cap** | A world run for many generations with no screen; 4× in Story mode, faster in Lab mode | 23 (and 21, if Lab mode is chosen there) |
@@ -537,7 +537,7 @@ The ship's own walls come later: its prow is iron, and walls between sectors are
 
 ## 12. Mixing and mutating genes (Slice 24)
 
-Settled with the owner on 2026-10-13 ([#142](https://github.com/Keazra/terra-sprites/issues/142)), in a round of ten questions. Children now differ from their parents: copying errors change a gene's numbers now and then, a pair's genes line up by what each gene does and mix in stretches, and hidden flaws passed down families make the quality of a sprite's genes part of how it ages (§3, reading C). The slice comes in two parts: 24a, this section, and 24b, copy and change (§12.8). The numbers are data, the `mutation` and `flaws` sections of `physiology.ron` and `breeding.crossover`: first guesses, tuned against §12.7. A save from before this slice keeps its pack (M1 design §2.8), which has neither section, so its eggs copy their parents' genes exactly and carry no flaws; its pairs' genes line up by what each does (§12.2), but mix gene by gene, as in Slice 23.
+Settled with the owner on 2026-10-13 ([#142](https://github.com/Keazra/terra-sprites/issues/142)), in a round of ten questions. Children now differ from their parents: copying errors change a gene's numbers now and then, a pair's genes line up by what each gene does and mix in stretches, and hidden flaws passed down families make the quality of a sprite's genes part of how it ages (§3, reading C). The slice comes in two parts: 24a, this section, and 24b, copy and change (§13). The numbers are data, the `mutation` and `flaws` sections of `physiology.ron` and `breeding.crossover`: first guesses, tuned against §12.7. A save from before this slice keeps its pack (M1 design §2.8), which has neither section, so its eggs copy their parents' genes exactly and carry no flaws; its pairs' genes line up by what each does (§12.2), but mix gene by gene, as in Slice 23.
 
 ### 12.1 Copying errors
 
@@ -652,6 +652,65 @@ The default world left alone for 200,000 ticks; flaws are the average among the 
 
 ### 12.8 Later
 
-- **24b, copy and change** (Q4): now and then a gene is doubled, lost or changed in what it does, an instinct's need or action, what draws the eye to what, the life stage it works in, usually on a fresh copy, so the original still works. That's how the species can come to be born knowing what its ancestors had to learn, as the M1 design promised. Every changed gene is checked again, and one that would change the body directly is flagged; a genome can't grow past twice the starter's length. Lining up by what genes do (§12.2) is ready for genomes that differ. It gets bars of its own, measured on its own, so a number that moves in 24b can only be 24b's doing.
+- **24b, copy and change** (Q4): §13.
 - **The error rate as a gene:** [#194](https://github.com/Keazra/terra-sprites/issues/194).
 - **Stress damaging genes:** [#195](https://github.com/Keazra/terra-sprites/issues/195), with temperament ([#53](https://github.com/Keazra/terra-sprites/issues/53)): a stress chemical that helps in the moment and harms when it lasts.
+
+---
+
+## 13. Copy and change (Slice 24b)
+
+Settled with the owner on 2026-10-13 ([#142](https://github.com/Keazra/terra-sprites/issues/142)): what a change can change in Slice 24's first round (Q4), and the rest in a second round of four questions, where the owner left each recommendation standing. Now and then, as an egg's genes are copied, a whole gene is doubled, lost, or changed in what it does. That's how the species can grow instincts the starter genome never had, and in time come to be born knowing what its ancestors had to learn, as the M1 design promised. The numbers are data, the `copy_and_change` section of `physiology.ron`: first guesses, tuned against §13.3. A save from before this part keeps its pack (M1 design §2.8), which has no such section, so its eggs never have a gene doubled, lost or changed.
+
+### 13.1 Doubled, lost and changed
+
+- **As an egg's genes are copied, each gene is now and then doubled** (`copy_and_change.doubled`, 0.0011), **lost** (`lost`, 0.0011) **or changed in what it does** (`changed`, 0.0011). One roll of the world's dice for each gene decides which, if any, so at most one happens to it. About one hatchling of the starter's in five has one (Q1, "now and then"), each kind about as often as the others, so about one in fifteen has a changed gene. Then copying errors and flaws come as before (§12.1, §12.3), on the genes as they now are.
+- **A doubled gene's copy sits right after it,** with its switch and its flaws, so the two tend to be inherited together (§12.2). What a double does follows from how genes already work (M1 design §4.3): a doubled feeling, such as "low energy → hunger", or a reaction or receptor, works twice as strongly, since those add up; a doubled instinct or setting is a spare that does nothing while the first works, but a later change can turn it into something new.
+- **Any gene can be lost,** vital ones too (Q2). Now and then a hatchling is born without its urge to eat, drink or rest: it has to learn it, from the player or by chance, or it dies young. Nature keeps no list of genes that can't be lost, and the engine enforces physics only. The last gene a genome has is never lost.
+- **A changed gene changes one thing it does,** each as likely as the others: an instinct's need (one of its inputs, negated or not as it was) or its action ("hunger → eat" becoming "hunger → play"); an attention instinct's need or what it draws the eye to ("loneliness → attends to sprite" becoming "thirst → attends to sprite"); or, for any gene, the life stages it works in, one of the six ways of switching that ever work (§9.2). A trait works all its life, and a level at birth only at birth, so neither has life stages to change. Each choice is one the pack has, other than what the gene had. Attention takes only State inputs, since it feels nothing else (M1 design §4.3).
+- **Three changes in four are made on a fresh copy** (`on_copy`, 0.75), right after the original, so the original still works; the rest change the gene in its place.
+- **Every changed gene is checked again,** as a genome file's genes are, and one the world can't have, such as an action reserved for a later milestone, isn't made. No change makes a gene that worked change the body directly: a gene that would is flagged and does nothing, as ever (M1 design §4.3). Property tests with random genomes pin both, and that a flagged gene carries no flaws.
+- **Mating stays between adults,** whatever a changed gene says: the engine enforces it for any genome (§5).
+- **A genome never grows past twice the starter's length** (`longest`, 2, so 134 genes): a copy is made only while it fits. A pair's child whose parents' genes together would be longer drops genes only one parent has, the last first, until it fits. A genome already longer, as a genome file's may be, doesn't grow.
+- **A gene this build can't read, or one that names a category the world lacks, is kept exactly as it is** (M1 design §2.8, v19 §5.7): never doubled, lost or changed, and it takes no roll, so a sprite with one lives exactly as it would without it.
+- **A sprite remembers what copying doubled, lost and changed,** with what each lost or changed gene was and when it worked, for the Genome tab and the log (§13.2): world state, saved, in the state hash, and checked every tick (M1 design §7.1): a doubled gene does what the gene before it does; a changed gene differs from what it was, and one changed on a copy follows its original.
+
+### 13.2 What the player sees
+
+- **The Genome tab's list of what's new** (§12.6) gains three kinds of line, after where the genes came from: each gene changed, with what it was (in its place) or what it's a copy of (on a copy); then the genes doubled; then those lost.
+
+```
+│ FROM PIP #12 AND BO #7                     │
+│ new: thirst → attends to sprite, from      │
+│   loneliness → attends to sprite           │
+│ doubled: low energy → hunger               │
+│ lost: pain → retreat                       │
+│ grows old 25,104, was 23,880               │
+│                                            │
+│ TRAITS                                     │
+```
+
+- **A line in the log when a hatchling has a changed gene** (Q3, B), not for doubles or losses, so it won't bury the log:
+
+```
+Ann #31 hatched (Pip #12 and Bo #7's), with something new: thirst → attends to sprite
+```
+
+### 13.3 How we know it worked
+
+Agreed before measuring (Q4). The setup is §12.7's: the default world left alone for **200,000 ticks** (about 45 hours at 1×, about 20 generations), seeds 1–10.
+
+- **New genes take hold:** in **at least 5 of 10 seeds**, a gene the starter doesn't have (a changed one, not a plain double), by what it does and when it works, is carried by **at least a tenth** of the hatched sprites alive at the end.
+- **Safe:** tests with random genomes show that no change makes a gene that worked change the body directly, and no genome grows past twice the starter's length.
+- **Keeps going:** sprites alive at the end in **at least 8 of 10 seeds**, never more than the limit.
+- **Nothing else got worse:** A1–A4 still met (A3 on seeds 1–30), and A5 at least 200 ticks a second.
+- **For information:** which new genes spread and how far, how many genes the living have lost and doubled, and genome lengths.
+
+"Born knowing what its ancestors learned", such as "thirst draws the eye to water", needs two changes in a row on one line of descent, so it isn't expected within these 45 hours: it belongs to Slice 27's fast-forward and Slice 29's harsher world, where §12.7's G4 is measured again too.
+
+`cargo run --release -p terra-sim --example generations -- --ticks 200000` runs the first and third and reports the rest. G4's numbers now line up with the starter's by name, the nth of a name with the starter's nth, so a sprite with a gene doubled or lost still counts.
+
+### 13.4 Later
+
+- **The error rate as a gene:** the owner wants it pinned (round 1, Q2); [#194](https://github.com/Keazra/terra-sprites/issues/194).
+- **Born knowing what its ancestors learned:** measured with Slice 27's fast-forward and Slice 29's harsher world (§13.3).
