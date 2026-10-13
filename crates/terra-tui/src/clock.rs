@@ -128,6 +128,22 @@ impl Clock {
         self.paused
     }
 
+    /// How far the stars drift in `elapsed` real time, as time at 1× (M2
+    /// design §11.3): with the game's speed, none while paused, a step
+    /// included, and no quicker than at 4×, so 16× and Max don't blur.
+    pub fn drift(&self, elapsed: Duration) -> Duration {
+        if self.paused {
+            return Duration::ZERO;
+        }
+        let most = Speed::X4.parts_per_second().unwrap_or(1);
+        let rate = self
+            .speed
+            .parts_per_second()
+            .map_or(most, |rate| rate.min(most));
+        let at_1x = Speed::X1.parts_per_second().unwrap_or(1);
+        elapsed * rate / at_1x
+    }
+
     /// Pauses or resumes. Time spent paused is never made up afterwards, and
     /// what's left of a step when time resumes is dropped.
     pub fn toggle_pause(&mut self) {

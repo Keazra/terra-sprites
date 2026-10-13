@@ -1,6 +1,6 @@
 # Themes
 
-A **theme** says how the map is drawn: the character and colour of each kind of ground, each plant and toy, sprites, their emotes, and the Cursor (design §6.2). The game has two built in, `themes/cp437.ron` (the default) and `themes/ascii.ron` (`--ascii`). To draw it your own way, copy one, edit it, and put it in the `themes` folder of the game's folder (design §6.7). The help screen (`?`) shows where the game's folder is:
+A **theme** says how the map is drawn: the character and colour of each kind of ground, each plant and toy, sprites, their emotes, the Cursor, and the glass round the map and the stars in space past it (design §6.2, M2 design §11). The game has two built in, `themes/cp437.ron` (the default) and `themes/ascii.ron` (`--ascii`). To draw it your own way, copy one, edit it, and put it in the `themes` folder of the game's folder (design §6.7). The help screen (`?`) shows where the game's folder is:
 
 | System | The themes folder |
 |---|---|
@@ -27,7 +27,7 @@ cargo run --release -- --theme my-theme.ron --seed 7
 
 ## Fields
 
-A theme is one record with five fields, all needed.
+A theme is one record with six fields. The first five are needed; `space` may be left out.
 
 | Field | Meaning |
 |---|---|
@@ -36,6 +36,7 @@ A theme is one record with five fields, all needed.
 | `objects` | A map from an object type's name, from [objects](objects.md), to a map from each of its visual states to its glyph. It may leave things out (below). |
 | `attention_marker` | A colour: the background of the tile the selected sprite is paying attention to. |
 | `cursor` | How the Cursor is drawn (below). |
+| `space` | The glass round the map and the stars past it (below). Optional: whatever a theme leaves out of it, it draws as the default theme does. |
 
 A **glyph** is `(glyph: '♣', fg: green)`, with two optional flags: `bold: true`, and `reversed: true`, which swaps the colour and the background. Characters go in single quotes; a quote itself is `'\''`.
 
@@ -69,6 +70,19 @@ Each object type's visual states come from its `visual` rules in `objects.ron`, 
 | `mode_marks` | A glyph for each cursor mode, `select`, `train` and `grab`. Its colour is the mode's colour, which the arrows and marks take too. All three must be there. |
 | `leash` | A dot of the line from the Cursor to a sprite it leads. |
 | `aim` | The aim line while throwing or shoving: `(path: <glyph>, end: <glyph>)`, a dot of its path and where it would stop. |
+
+### `space`
+
+The map view can scroll past the map's wall, into space (M2 design §11). `space` is a record of two maps, `glass` and `stars`, each from the keys below to a glyph. Either map, and any key in it, may be left out, and is then drawn as the default theme draws it, so a theme made before there was space still works. A key the game doesn't know is refused, naming it.
+
+| `glass` key | What it is |
+|---|---|
+| `horizontal`, `vertical` | The glass along the top and bottom of the map, and down its sides, one tile outside it. |
+| `top_left`, `top_right`, `bottom_left`, `bottom_right` | The glass's four corners. |
+
+| `stars` key | What it is |
+|---|---|
+| `far`, `near`, `nearest` | The stars at each of three depths, drifting right to left past the glass, the nearer the quicker. A nearer star is drawn over a farther one. |
 
 ## Working example
 
@@ -127,7 +141,12 @@ A bright theme, for a terminal whose dark colours are hard to see: light colours
         leash: (glyph: '·', fg: light_yellow),
         aim: (path: (glyph: '·', fg: light_yellow), end: (glyph: '°', fg: light_yellow)),
     ),
+    space: (
+        stars: {
+            far: (glyph: '·', fg: gray),
+        },
+    ),
 )
 ```
 
-Save it as `bright.ron` in the themes folder and pick it with `Ctrl+T`. Boredom, crowdedness and arousal are left out of `drives`, so a sprite bored, crowded or aroused above all else draws in white.
+Save it as `bright.ron` in the themes folder and pick it with `Ctrl+T`. Boredom, crowdedness and arousal are left out of `drives`, so a sprite bored, crowded or aroused above all else draws in white. `space` gives only the far stars, in gray rather than dark gray, so the glass and the nearer stars are drawn as the default theme draws them.

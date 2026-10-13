@@ -336,7 +336,7 @@ fn run_world(
         loaded,
     } = opening;
     let session_log = setup.session_log;
-    let areas = ui::areas(terminal.size()?, session.world().map());
+    let areas = ui::areas(terminal.size()?);
     let world = session.world();
     let mut app = App::new(world.map(), setup.theme.clone(), world.seed(), areas);
     // A save loaded on the title screen starts as a load in a world does
@@ -412,7 +412,7 @@ fn run(
 
     loop {
         // The terminal may have been resized since the last frame.
-        app.fit(ui::areas(terminal.size()?, session.world().map()));
+        app.fit(ui::areas(terminal.size()?));
         terminal.draw(|frame| ui::render(frame, app, session.world()))?;
         if setup.force_panic {
             panic!("forced panic (--force-panic): the terminal should now be restored");

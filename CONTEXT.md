@@ -527,7 +527,7 @@ The panel that shows the map.
 _Avoid_: map (for the panel)
 
 **Viewport**:
-The part of the map currently shown in the map view. It can go a quarter of the map view past the wall, where the glass and space show (Slice 31, #180).
+The part of the map currently shown in the map view. It can go a quarter of the map view past the wall, where the glass and space show; a map small enough to fit with its glass sits in the middle of it, with space all round (Slice 31, #180).
 _Avoid_: camera
 
 **Glass**:

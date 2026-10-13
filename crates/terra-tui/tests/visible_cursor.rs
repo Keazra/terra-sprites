@@ -188,7 +188,7 @@ fn status_line(app: &App, world: &World) -> String {
 #[test]
 fn the_status_line_says_when_sprites_can_see_the_cursor() {
     let world = field(&[]);
-    let areas = ui::areas(ratatui::layout::Size::new(100, 30), world.map());
+    let areas = ui::areas(ratatui::layout::Size::new(100, 30));
     let mut app = App::new(world.map(), Theme::cp437(), 1, areas);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
     assert!(!status_line(&app, &world).contains("seen"));
@@ -310,7 +310,7 @@ fn a_visible_cursor_draws_as_a_frame_of_light_following_or_not() {
     // Design v29 §6.5: hidden, the arrows (solid while following); visible,
     // a frame of light in their place.
     let world = field(&[at(2, 2)]);
-    let areas = ui::areas(ratatui::layout::Size::new(100, 30), world.map());
+    let areas = ui::areas(ratatui::layout::Size::new(100, 30));
     let mut app = App::new(world.map(), Theme::cp437(), 1, areas);
     apply(&mut app, &world, Action::SelectNext);
     apply(&mut app, &world, Action::Follow { at: None });

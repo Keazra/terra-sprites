@@ -3,7 +3,7 @@ use terra_sim::{
     ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Map, Outcome, Pos,
     Progress, Scenario, Target, Verb, World,
 };
-use terra_tui::app::{App, Areas, Flow, Screen, Selection, Tab};
+use terra_tui::app::{App, Areas, Flow, Origin, Screen, Selection, Tab};
 use terra_tui::clock::Speed;
 use terra_tui::input::{Action, Button};
 use terra_tui::theme::Theme;
@@ -56,6 +56,11 @@ fn at(x: u16, y: u16) -> Pos {
     Pos { x, y }
 }
 
+/// A viewport starting at (`x`, `y`), which past the wall is negative.
+fn origin(x: i32, y: i32) -> Origin {
+    Origin { x, y }
+}
+
 fn scroll(app: &mut App, world: &World, dx: i32, dy: i32) {
     assert_eq!(app.apply(Action::Scroll { dx, dy }, world), Flow::Continue);
 }
@@ -90,28 +95,62 @@ fn the_viewport_starts_centred_on_the_cursor() {
     // The cursor starts at (80, 48); a 60×20 view centred on it starts at (50, 38).
     assert_eq!(
         app(&grass(160, 96), tile_area(60, 20)).viewport(),
-        at(50, 38)
+        origin(50, 38)
     );
 }
 
 #[test]
-fn a_map_that_fits_in_the_view_is_shown_from_its_top_left_corner() {
-    assert_eq!(app(&grass(20, 10), tile_area(20, 10)).viewport(), at(0, 0));
+fn a_map_that_fits_in_the_view_with_its_glass_is_in_its_middle_and_doesnt_scroll() {
+    // M2 design §11.1: two tiles narrower and shorter than the view, or
+    // more, leaves room for the glass, a tile out on each side.
+    let world = grass(16, 8);
+    let mut app = app(&world, tile_area(20, 10));
+    assert_eq!(app.viewport(), origin(-2, -1));
+    for (dx, dy) in [(-100, -100), (100, 100), (1, 0), (0, -1)] {
+        scroll(&mut app, &world, dx, dy);
+        assert_eq!(app.viewport(), origin(-2, -1), "scrolled ({dx}, {dy})");
+    }
+    // A map as narrow as that, but taller than the view, scrolls only up
+    // and down.
+    let world = grass(16, 30);
+    let mut app = self::app(&world, tile_area(20, 10));
+    scroll(&mut app, &world, -100, -100);
+    assert_eq!(app.viewport(), origin(-2, -2));
 }
 
 #[test]
-fn scrolling_moves_the_viewport_and_stops_at_the_wall() {
+fn a_map_as_wide_as_the_view_or_a_tile_narrower_scrolls_to_show_its_glass() {
+    // M2 design §11.1: it doesn't fit with its glass, so it scrolls a
+    // quarter of the view past the wall, 5 tiles sideways and 2 up or down.
+    for (width, height, furthest) in [(20, 10, origin(5, 2)), (19, 9, origin(4, 1))] {
+        let world = grass(width, height);
+        let mut app = app(&world, tile_area(20, 10));
+        scroll(&mut app, &world, -100, -100);
+        assert_eq!(app.viewport(), origin(-5, -2), "{width}×{height}");
+        scroll(&mut app, &world, 100, 100);
+        assert_eq!(app.viewport(), furthest, "{width}×{height}");
+    }
+}
+
+#[test]
+fn scrolling_moves_the_viewport_and_stops_a_quarter_of_the_view_past_the_wall() {
+    // M2 design §11.1: the 20×10 view goes 5 tiles past the wall sideways
+    // and 2 up or down, on every side.
     let world = grass(160, 96);
     let mut app = app(&world, tile_area(20, 10));
-    assert_eq!(app.viewport(), at(70, 43));
+    assert_eq!(app.viewport(), origin(70, 43));
     scroll(&mut app, &world, 1, 0);
-    assert_eq!(app.viewport(), at(71, 43));
+    assert_eq!(app.viewport(), origin(71, 43));
     scroll(&mut app, &world, -5, 2);
-    assert_eq!(app.viewport(), at(66, 45));
+    assert_eq!(app.viewport(), origin(66, 45));
     scroll(&mut app, &world, -1000, -1000);
-    assert_eq!(app.viewport(), at(0, 0));
+    assert_eq!(app.viewport(), origin(-5, -2));
     scroll(&mut app, &world, 1000, 1000);
-    assert_eq!(app.viewport(), at(140, 86));
+    assert_eq!(app.viewport(), origin(145, 88));
+    scroll(&mut app, &world, -1000, 0);
+    assert_eq!(app.viewport(), origin(-5, 88));
+    scroll(&mut app, &world, 1000, -1000);
+    assert_eq!(app.viewport(), origin(145, -2));
 }
 
 #[test]
@@ -196,17 +235,18 @@ fn a_click_puts_the_cursor_on_a_tile_without_scrolling() {
         Flow::Continue
     );
     assert_eq!(app.cursor(), at(70, 43));
-    assert_eq!(app.viewport(), at(70, 43));
+    assert_eq!(app.viewport(), origin(70, 43));
 }
 
 #[test]
-fn a_bigger_view_after_a_resize_still_stops_at_the_wall() {
+fn a_bigger_view_after_a_resize_stops_at_its_own_margin() {
     let world = grass(160, 96);
     let mut app = app(&world, tile_area(20, 10));
     scroll(&mut app, &world, 1000, 1000);
-    assert_eq!(app.viewport(), at(140, 86));
+    assert_eq!(app.viewport(), origin(145, 88));
+    // A 40×20 view goes 10 tiles past the wall sideways and 5 up or down.
     app.fit(no_inspector(tile_area(40, 20)));
-    assert_eq!(app.viewport(), at(120, 76));
+    assert_eq!(app.viewport(), origin(130, 81));
 }
 
 #[test]
@@ -284,7 +324,7 @@ fn any_other_key_cancels_the_quit_prompt_and_does_nothing_else() {
     assert!(!app.clock.is_paused(), "space only cancelled the prompt");
     assert_eq!(
         app.viewport(),
-        at(70, 43),
+        origin(70, 43),
         "the scroll key only cancelled the prompt"
     );
     assert_eq!(
@@ -409,13 +449,18 @@ fn tab_with_no_sprites_selects_nothing() {
 #[test]
 fn tab_centres_the_view_on_a_sprite_out_of_view_and_leaves_it_alone_otherwise() {
     // The 20×10 view starts at (70, 43), showing tiles (70, 43) to (89, 52).
-    let world = grass_with(160, 96, &[at(75, 45), at(150, 5)]);
+    let world = grass_with(160, 96, &[at(75, 45), at(150, 5), at(158, 1)]);
     let mut app = app(&world, tile_area(20, 10));
     app.apply(Action::SelectNext, &world);
-    assert_eq!(app.viewport(), at(70, 43), "(75, 45) is in view");
+    assert_eq!(app.viewport(), origin(70, 43), "(75, 45) is in view");
     app.apply(Action::SelectNext, &world);
-    // Centred on (150, 5): x from 140, and y from 0, stopped at the wall.
-    assert_eq!(app.viewport(), at(140, 0));
+    // Centred on (150, 5): from (140, 0).
+    assert_eq!(app.viewport(), origin(140, 0));
+    // Out of view again, (158, 1) is as near the middle as the margin past
+    // the wall allows (M2 design §11.1): 5 tiles past it sideways and 2 up.
+    app.apply(Action::Scroll { dx: -60, dy: 0 }, &world);
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(app.viewport(), origin(145, -2));
 }
 
 #[test]

@@ -64,7 +64,7 @@ fn ids(world: &World) -> Vec<EntityId> {
 
 /// An app on `world` a tick on, which has seen #1 named Zed and #3 Abel.
 fn named(world: &mut World) -> App {
-    let areas = ui::areas(Size::new(100, 30), world.map());
+    let areas = ui::areas(Size::new(100, 30));
     let mut app = App::new(world.map(), Theme::cp437(), 7, areas);
     let ids = ids(world);
     for (sprite, name) in [(ids[0], "Zed"), (ids[2], "Abel")] {
@@ -283,7 +283,7 @@ fn a_selected_sprite_the_list_leaves_out_isnt_highlighted() {
 fn enter_selects_the_highlighted_sprite_centres_the_view_on_it_and_closes_the_list() {
     let mut world = field();
     let mut app = named(&mut world);
-    let tiles = ui::areas(Size::new(100, 30), world.map()).tiles;
+    let tiles = ui::areas(Size::new(100, 30)).tiles;
     let before = app.viewport();
     app.apply(Action::SpriteList, &world);
     app.apply(Action::Scroll { dx: 0, dy: 1 }, &world);
@@ -293,12 +293,14 @@ fn enter_selects_the_highlighted_sprite_centres_the_view_on_it_and_closes_the_li
     assert_eq!(app.selection().map(|s| s.id()), Some(hungry));
     let pos = world.sprite(hungry).unwrap().pos();
     let view = app.viewport();
-    let centre = at(view.x + tiles.width / 2, view.y + tiles.height / 2);
-    // As near the middle as the map's edge allows.
-    let wall_x = view.x + tiles.width == 120;
-    let wall_y = view.y + tiles.height == 60;
+    let (width, height) = (i32::from(tiles.width), i32::from(tiles.height));
+    let centre = (view.x + width / 2, view.y + height / 2);
+    // As near the middle as the margin past the wall allows (M2 design
+    // §11.1).
+    let margin_x = view.x == -(width / 4) || view.x == 120 - width + width / 4;
+    let margin_y = view.y == -(height / 4) || view.y == 60 - height + height / 4;
     assert!(
-        (wall_x || centre.x == pos.x) && (wall_y || centre.y == pos.y),
+        (margin_x || centre.0 == i32::from(pos.x)) && (margin_y || centre.1 == i32::from(pos.y)),
         "{view:?} for {pos:?} in {tiles:?}"
     );
     assert!(
@@ -339,7 +341,7 @@ fn with_no_sprites_the_list_says_so() {
         newborns: &[],
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
-    let areas = ui::areas(Size::new(100, 30), world.map());
+    let areas = ui::areas(Size::new(100, 30));
     let mut app = App::new(world.map(), Theme::cp437(), 7, areas);
     app.apply(Action::SpriteList, &world);
     let screen = render(&app, &world);
@@ -363,7 +365,7 @@ fn a_long_list_scrolls_to_keep_the_highlight_in_view() {
         newborns: &[],
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
-    let areas = ui::areas(Size::new(100, 30), world.map());
+    let areas = ui::areas(Size::new(100, 30));
     let mut app = App::new(world.map(), Theme::cp437(), 7, areas);
     app.apply(Action::SpriteList, &world);
     assert_eq!(app.list_rows(), 25);
