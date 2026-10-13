@@ -851,7 +851,7 @@ Agreed before building (Q4):
 - **The sprites live exactly as before:** the `generations` run, seeds 1–4 for 30,000 ticks, prints the same, byte for byte, on `main` and on this slice.
 - **No slower:** the speed check (A5) at least 200 ticks a second, and within 5% of `main` measured the same way.
 
-**Measured (2026-10-13)** in release builds of this slice at `0a2aebf`, beside `main` at `82fad3f`, in the cloud, with:
+**Measured (2026-10-13)** in release builds of this slice at `6b4bd45`, beside `main` at `82fad3f`, in the cloud, with:
 
 ```
 cargo run --release -p terra-sim --example generations -- --seeds 1-4 --ticks 30000
@@ -859,7 +859,7 @@ cargo run --release -p terra-sim --example speed
 ```
 
 - **The sprites live exactly as before: met.** The `generations` report is the same, byte for byte, on both. The state hash differs, as it should, since the record is world state.
-- **No slower: met.** The speed check ran 279 and 281 ticks a second on `main`, and 297 and 282 on this slice, run in turn.
+- **No slower: met.** The speed check ran 292 and 291 ticks a second on `main`, and 286 and 299 on this slice, run in turn.
 - **The UI tests and snapshots pass,** as do the simulation's tests of the record.
 
 ### 14.8 Later
