@@ -1070,21 +1070,47 @@ impl App {
     /// In a replay the Cursor is the player's own, which holds nothing: the
     /// recorded one isn't drawn (design §2.7).
     pub fn grip(&self, world: &World) -> Option<Grip> {
+        self.queue_leaves(world).0
+    }
+
+    /// Where the commands queued since leave the items they move, as the map
+    /// shows them before the world applies them (design §6.5, #203): `None`
+    /// for one the Cursor will hold, or the tile one is put down on. If the
+    /// world refuses one, the map goes back to the world's word.
+    pub fn moved_items(&self, world: &World) -> BTreeMap<EntityId, Option<Pos>> {
+        self.queue_leaves(world).1
+    }
+
+    /// What the Cursor will have hold of, and where the items it moves will
+    /// be, once the world applies the commands queued since: `grip` and
+    /// `moved_items`. Nothing, in a replay.
+    fn queue_leaves(&self, world: &World) -> (Option<Grip>, BTreeMap<EntityId, Option<Pos>>) {
+        let mut moved = BTreeMap::new();
         if self.replay.is_some() {
-            return None;
+            return (None, moved);
         }
         let now = world.cursor();
         let held = now.holds().map(|item| Grip::Holds(item.id()));
         let start = now.leads().map(Grip::Leads).or(held);
-        self.queued
+        let grip = self
+            .queued
             .iter()
             .fold(start, |grip, (_, command)| match *command {
                 Command::TakeHold { sprite } => grip.or(Some(Grip::Leads(sprite))),
-                Command::PickUp { item } => grip.or(Some(Grip::Holds(item))),
-                Command::LetGo
-                | Command::PutDown { .. }
-                | Command::Throw { .. }
-                | Command::Shove { .. } => None,
+                Command::PickUp { item } if grip.is_none() => {
+                    moved.insert(item, None);
+                    Some(Grip::Holds(item))
+                }
+                Command::PickUp { .. } => grip,
+                // A thrown item is put down where it's thrown from, and rolls on
+                // from there in the tick (design v25 §3.5.4).
+                Command::PutDown { tile } | Command::Throw { from: tile, .. } => {
+                    if let Some(Grip::Holds(item)) = grip {
+                        moved.insert(item, Some(tile));
+                    }
+                    None
+                }
+                Command::LetGo | Command::Shove { .. } => None,
                 Command::Reward { .. }
                 | Command::Correct { .. }
                 | Command::MoveCursor { .. }
@@ -1092,7 +1118,8 @@ impl App {
                 | Command::Place { .. }
                 | Command::SpawnSprite { .. }
                 | Command::Rename { .. } => grip,
-            })
+            });
+        (grip, moved)
     }
 
     /// The sprite the Cursor follows, if any (design v26 §6.5). While the

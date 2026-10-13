@@ -3845,6 +3845,35 @@ fn an_egg_held_past_its_time_waits_and_its_hatchling_stays_selected() {
 }
 
 #[test]
+fn paused_an_item_picked_up_leaves_the_map_and_one_put_down_shows_where_it_lands() {
+    // Design §6.5, #203: a click waits for the next tick, and the map, as
+    // the Cursor's marks do, shows what it will do.
+    let (world, egg) = a_lone_egg(&[]);
+    let at = egg_tile(&world, egg);
+    let to = (0..10)
+        .map(|x| Pos { x, y: 0 })
+        .find(|&pos| pos != at && world.sprite_at(pos).is_none() && world.object_at(pos).is_none())
+        .expect("a free tile");
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::Mode(CursorMode::Grab), &world);
+    app.apply(Action::left_click(pointer_on(&world, at.x, at.y)), &world);
+    let screen = render(&app, &world, 100, 30);
+    assert_ne!(screen[cell(&world, at.x, at.y)].symbol(), "o", "picked up");
+    let status = status_line(&app, &world);
+    assert!(!before_hints(&status).contains("· egg"), "{status}");
+    app.apply(Action::left_click(pointer_on(&world, to.x, to.y)), &world);
+    let screen = render(&app, &world, 100, 30);
+    assert_eq!(screen[cell(&world, to.x, to.y)].symbol(), "o", "put down");
+    let status = status_line(&app, &world);
+    assert!(before_hints(&status).contains("· egg"), "{status}");
+    assert_ne!(screen[cell(&world, at.x, at.y)].symbol(), "o", "moved");
+    assert!(
+        world.cursor().holds().is_none(),
+        "the world hasn't moved yet"
+    );
+}
+
+#[test]
 fn leading_a_young_sprite_the_cursor_s_mark_shows_it_small() {
     // M2 design §9.6: the bottom left mark shows what the Cursor has hold
     // of, as the map draws it. Away from the map's edges, so the marks are
