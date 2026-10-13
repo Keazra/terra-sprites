@@ -3974,6 +3974,48 @@ fn the_genome_tab_lists_the_genes_copying_changed_doubled_and_lost() {
 }
 
 #[test]
+fn the_event_log_says_what_s_new_in_a_hatchling_with_a_gene_changed() {
+    // M2 design §13.2: the genes copying changed in what they do, not
+    // those doubled or lost.
+    for (changed, new) in [("0.0", false), ("1.0", true)] {
+        let rules = format!("copy_and_change: (doubled: 0.0, lost: 0.0, changed: {changed},");
+        let (mut world, egg) = a_lone_egg(&[
+            ("mutation: (chance: 0.01,", "mutation: (chance: 0.0,"),
+            ("flaws: (arise: 0.007,", "flaws: (arise: 0.0,"),
+            (COPY_AND_CHANGE, rules.as_str()),
+        ]);
+        let mut app = app_for(&world, Theme::cp437(), 100, 30);
+        loop {
+            let events = world.step();
+            app.record(&events, &world);
+            let hatched =
+                |event: &Event| matches!(event.kind, EventKind::Hatched { id, .. } if id == egg);
+            if events.iter().any(hatched) {
+                break;
+            }
+            assert!(world.tick() < 2_000, "it hatched");
+        }
+        let screen = lines(&render(&app, &world, 100, 30));
+        let line = screen[25..28]
+            .iter()
+            .map(|row| inside(row).to_string())
+            .find(|row| row.contains("hatched"))
+            .expect("its hatching in the log");
+        let hatched = format!("Sprite #{} hatched (Sprite #1's)", egg.0);
+        if new {
+            let changes = world.sprite(egg).expect("the hatchling").copy_changes();
+            assert!(!changes.is_empty());
+            let said = format!("{hatched}, with something new: ");
+            let (_, rest) = line.split_once(&said).expect(&line);
+            let named = ["low energy", "low hydration", "always"];
+            assert!(named.iter().any(|name| rest.starts_with(name)), "{line}");
+        } else {
+            assert!(line.ends_with(&hatched), "{line}");
+        }
+    }
+}
+
+#[test]
 fn leading_an_egg_the_cursor_s_mark_shows_an_egg() {
     // M2 design §10.4: the bottom left mark shows what the Cursor has hold
     // of. Away from the map's edges, so the marks are drawn.

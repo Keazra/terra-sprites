@@ -1532,6 +1532,26 @@ fn whats_new(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
     lines
 }
 
+/// The genes copying changed in what they do in `sprite` (M2 design §13),
+/// as its hatching line in the log names them: `thirst → attends to
+/// sprite`. None if it has none.
+pub(crate) fn something_new(sprite: &SpriteView) -> Option<String> {
+    let (genes, switches) = (sprite.genes(), sprite.switches());
+    let new: Vec<String> = sprite
+        .copy_changes()
+        .into_iter()
+        .filter_map(|change| match change {
+            CopyChangeView::Changed { gene, .. } => Some(format!(
+                "{}{}",
+                gene_name(&genes[gene].0),
+                switch_text(switches[gene])
+            )),
+            _ => None,
+        })
+        .collect();
+    (!new.is_empty()).then(|| new.join(", "))
+}
+
 /// The numbers `was` had that `now` doesn't, as the Genome tab writes
 /// them: `+.00428`, `past .5`. All of them, if none reads differently.
 fn was_text(now: &GeneView, was: &GeneView) -> String {
@@ -1979,10 +1999,17 @@ pub(crate) fn event_line(event: &Event, data: &Words) -> Option<String> {
             ),
             None => format!("{} laid an egg alone", data.label(*by)),
         }),
-        EventKind::Hatched { id, parents } => Some(match parents_text(parents, data) {
-            Some(parents) => format!("{} hatched ({parents}'s)", data.label(*id)),
-            None => format!("{} hatched", data.label(*id)),
-        }),
+        // With the genes copying changed in what they do (M2 design §13.2).
+        EventKind::Hatched { id, parents } => {
+            let new = data
+                .news
+                .get(id)
+                .map_or(String::new(), |new| format!(", with something new: {new}"));
+            Some(match parents_text(parents, data) {
+                Some(parents) => format!("{} hatched ({parents}'s){new}", data.label(*id)),
+                None => format!("{} hatched{new}", data.label(*id)),
+            })
+        }
         EventKind::TurnedFemale { id } => Some(format!("{} turned female", data.label(*id))),
         EventKind::LearnedMilestone { id, learned, good } => {
             Some(learned_line(*id, learned, *good, data))
@@ -2264,7 +2291,8 @@ mod tests {
             terra_sim::DataPack::builtin().expect("built-in data pack is valid"),
         ));
         let names = Box::leak(Box::new(crate::text::Names::default()));
-        Words { data, names }
+        let news = Box::leak(Box::new(std::collections::BTreeMap::new()));
+        Words { data, names, news }
     }
 
     /// An aimed action, `verb`, at `target` of the type `target_type`.
