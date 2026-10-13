@@ -489,7 +489,7 @@ mod tests {
     use crate::ageing::LifeStage;
     use crate::expression::expressions;
     use crate::genome::Gene;
-    use crate::test_util::{builtin, builtin_changing};
+    use crate::test_util::{builtin, builtin_changing, every_kind};
 
     /// The built-in pack's copying errors, flaws, and copy and change, as
     /// `physiology.ron` writes them.
@@ -519,25 +519,6 @@ mod tests {
                 (FLAWS, ""),
             ],
         )
-    }
-
-    /// One gene of every type the build knows, and an unknown one, each
-    /// value well inside its range.
-    const EVERY_KIND: &str = r#"(format: 1, genes: [
-        HalfLife(chem: "pain", ticks: 300),
-        Reaction(reactants: [("hunger", 1), ("food", 1)], products: [("food", 1)], rate: 0.5),
-        Emitter(locus: Chem("energy"), mode: Level, invert: true, threshold: 0.5, gain: -0.02, chem: "hunger"),
-        Receptor(chem: "reward", threshold: 0.2, gain: 0.5, target: "learning_rate_mod"),
-        InitialConcentration(chem: "boredom", value: 0.2),
-        Trait(trait: "speed", value: 7.0),
-        BrainParam(param: "tau_base", value: 0.5),
-        Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
-        AttentionInstinct(input: "thirst", category: "water", weight: 0.8),
-        Gene(type: 900, version: 1, payload: "c0ffee"),
-    ])"#;
-
-    fn every_kind(data: &DataPack) -> Genome {
-        Genome::from_ron(EVERY_KIND, data).expect("a valid genome")
     }
 
     /// `genome`, inherited without flaws, as copied into an egg.
@@ -951,7 +932,7 @@ mod tests {
         }
     }
 
-    /// Every gene of `EVERY_KIND` but the unknown one, the instinct working
+    /// Every gene of `every_kind` but the unknown one, the instinct working
     /// from adulthood on.
     fn readable(data: &DataPack) -> Genome {
         let mut genes = every_kind(data).genes;

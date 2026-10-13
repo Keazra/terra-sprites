@@ -109,28 +109,7 @@ mod tests {
     use crate::genome::{EmitterMode, Gene, LocusRef};
     use crate::random::unit;
     use crate::registry::{BrainParam, ChemId, LocusId, Trait};
-
-    fn builtin() -> DataPack {
-        DataPack::builtin().expect("built-in data pack is valid")
-    }
-
-    /// One gene of every type the build knows, and an unknown one.
-    const EVERY_KIND: &str = r#"(format: 1, genes: [
-        HalfLife(chem: "pain", ticks: 30),
-        Reaction(reactants: [("hunger", 1), ("food", 1)], products: [("food", 1)], rate: 0.5),
-        Emitter(locus: Chem("energy"), mode: Level, invert: true, threshold: 0.5, gain: -0.02, chem: "hunger"),
-        Receptor(chem: "reward", threshold: 0.2, gain: 0.5, target: "learning_rate_mod"),
-        InitialConcentration(chem: "boredom", value: 0.2),
-        Trait(trait: "speed", value: 7.0),
-        BrainParam(param: "tau_base", value: 0.5),
-        Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
-        AttentionInstinct(input: "thirst", category: "water", weight: 0.8),
-        Gene(type: 900, version: 1, payload: "c0ffee"),
-    ])"#;
-
-    fn every_kind(data: &DataPack) -> Genome {
-        Genome::from_ron(EVERY_KIND, data).expect("a valid genome")
-    }
+    use crate::test_util::{builtin, every_kind};
 
     /// Whether `varied` is `original` times a factor within ±10%.
     fn within_ten_percent(original: f32, varied: f32) -> bool {
@@ -150,14 +129,14 @@ mod tests {
                     (
                         Gene::HalfLife {
                             chem: ChemId(18),
-                            ticks: 30,
+                            ticks: 300,
                         },
                         &Gene::HalfLife {
                             chem: ChemId(18),
                             ticks,
                         },
                     ) => {
-                        assert!((27..=33).contains(&ticks), "{ticks}");
+                        assert!((270..=330).contains(&ticks), "{ticks}");
                     }
                     (
                         Gene::Reaction {
