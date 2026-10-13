@@ -28,6 +28,8 @@ pub(crate) struct Physiology {
     pub(crate) ageing: Ageing,
     /// How sprites have young (M2 design §10).
     pub(crate) breeding: Breeding,
+    /// The copying errors in an egg's genes (M2 design §12).
+    pub(crate) mutation: Mutation,
     /// What each cause-of-death tally is multiplied by every tick: the file's
     /// `cause_fade` is how many ticks it takes to halve.
     pub(crate) tally_fade: f32,
@@ -79,6 +81,10 @@ pub(crate) struct PhysiologyEntry {
     /// §2.8).
     #[serde(default)]
     breeding: Breeding,
+    /// A pack from before copying errors has none (design §2.8: a save
+    /// carries its own pack, and keeps its rules).
+    #[serde(default)]
+    mutation: Mutation,
     cause_fade: u32,
     traits: TraitRanges,
     brain: BTreeMap<String, ParamRange>,
@@ -449,6 +455,46 @@ impl Default for Breeding {
     }
 }
 
+/// The copying errors in an egg's genes (M2 design §12): each gene value
+/// may change, mostly a little, now and then a lot.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Mutation {
+    /// The chance that a gene value changes in an egg.
+    pub(crate) chance: f32,
+    /// How far a small change goes: the value is multiplied by a factor
+    /// drawn evenly within this share of 1.
+    pub(crate) small: f32,
+    /// The changes that are large instead.
+    pub(crate) large: Large,
+}
+
+/// The large copying errors (M2 design §12).
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Large {
+    /// The share of changes that are large.
+    pub(crate) share: f32,
+    /// How far a large change goes: the value is multiplied by a factor
+    /// from 1 / `most` to `most`, as likely to halve as to double.
+    pub(crate) most: f32,
+}
+
+/// What a pack from before copying errors gets: none, so its eggs are
+/// copied exactly, as they were.
+impl Default for Mutation {
+    fn default() -> Mutation {
+        Mutation {
+            chance: 0.0,
+            small: 0.0,
+            large: Large {
+                share: 0.0,
+                most: 1.0,
+            },
+        }
+    }
+}
+
 /// The range each trait is clamped to.
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -581,6 +627,21 @@ impl PhysiologyEntry {
         // tick (M2 design §10).
         if breeding.rest == 0 {
             return Err("`breeding.rest` must be at least 1 tick".into());
+        }
+        let mutation = self.mutation;
+        fraction("mutation.chance", mutation.chance)?;
+        fraction("mutation.large.share", mutation.large.share)?;
+        if !(0.0..1.0).contains(&mutation.small) {
+            return Err(format!(
+                "`mutation.small` is {}, but must be at least 0 and below 1",
+                mutation.small
+            ));
+        }
+        if !(mutation.large.most.is_finite() && mutation.large.most >= 1.0) {
+            return Err(format!(
+                "`mutation.large.most` is {}, but must be a number, at least 1",
+                mutation.large.most
+            ));
         }
         if self.cause_fade == 0 {
             return Err("`cause_fade` must be at least 1 tick".into());
@@ -731,6 +792,7 @@ impl PhysiologyEntry {
             injury,
             ageing,
             breeding: self.breeding,
+            mutation,
             tally_fade: halving_factor(self.cause_fade as f32),
             traits,
             brain: BrainRanges(brain),

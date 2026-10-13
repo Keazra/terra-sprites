@@ -21,6 +21,7 @@ The body's fixed rules, which genes can't change (design §4.4, Appendix B): how
 | `nearby_sprites` | `(radius, full)`: the `nearby_sprites` sensor counts other sprites within `radius` tiles, reading 1 at `full` of them. |
 | `spawn_variation` | Each gene value of a new sprite is multiplied by a random factor between 1 − this and 1 + this, so no two are quite alike. |
 | `trait_variation` | Optional. Traits that vary by their own share instead, as `{ "grows_old": 0.4 }`: each from 0 to below 1, named as in `traits`. A pack without it varies every trait by `spawn_variation`. |
+| `mutation` | Optional. Copying errors when an egg is laid (M2 design §12), as `(chance: 0.04, small: 0.2, large: (share: 0.1, most: 2.0))`: each gene value has `chance` of changing, by a factor between 1 − `small` and 1 + `small`, or for a `large.share` of the changes, a factor from 1 ÷ `large.most` to `large.most`. `chance` and `share` are from 0 to 1, `small` from 0 to below 1, and `most` at least 1. A pack without it has no copying errors: its eggs' genes are their parents' exactly. |
 | `lesson_threshold` | How far from 0 a learned value must get before the event log announces the lesson. |
 | `relief_deadband`, `touch_window` | The smallest fall in a need that counts as relief, and how many ticks after a try the thing tried is still what a feeling is about. |
 | `forget_below` | A remembered sprite is forgotten once everything learned about it is nearer 0 than this, and a remembered place once it has faded below this. |

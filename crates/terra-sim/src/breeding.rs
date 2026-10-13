@@ -11,6 +11,7 @@ use crate::data::DataPack;
 use crate::events::{Event, EventKind};
 use crate::genome::Genome;
 use crate::map::Dir;
+use crate::mutation;
 use crate::objects::EntityId;
 use crate::perception::Target;
 use crate::random::{chance, uniform};
@@ -153,9 +154,9 @@ fn outcome(
 }
 
 /// `mother`, fertile, lays an egg on a free tile beside her, by `father` or
-/// alone (M2 design §10), if she has a free tile. The parents split the
-/// egg's cost, or she pays it all alone, and each fires its `bred` pulse.
-/// Returns the egg.
+/// alone (M2 design §10), if she has a free tile: its genes theirs mixed, or
+/// hers, copied with errors (§12). The parents split the egg's cost, or she
+/// pays it all alone, and each fires its `bred` pulse. Returns the egg.
 fn lay(
     state: &mut WorldState,
     data: &DataPack,
@@ -176,10 +177,12 @@ fn lay(
     let genome = {
         let sprites = &state.sprites;
         let mine = &sprites.get(mother).expect("the mother").genome;
-        match father.and_then(|father| sprites.get(father)) {
+        let inherited = match father.and_then(|father| sprites.get(father)) {
             Some(theirs) => mixed(mine, &theirs.genome, &mut state.rng),
             None => mine.clone(),
-        }
+        };
+        // Copied with errors (M2 design §12).
+        mutation::copied(&inherited, data, &mut state.rng)
     };
     let parents: Vec<EntityId> = std::iter::once(mother).chain(father).collect();
     let physiology = data.physiology();

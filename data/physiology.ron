@@ -172,6 +172,11 @@
     // the age a sprite grows old at, by up to 40%, so that lives last from
     // about 4 hours to about 8 at 1x (M2 design §2).
     trait_variation: { "grows_old": 0.4 },
+    // Copying errors (M2 design §12): when an egg is laid, each gene value
+    // has `chance` of changing. Most changes are small, a factor drawn
+    // between 1 − `small` and 1 + `small`; a `large.share` of them are
+    // large, a factor from 1 / `large.most` to `large.most`. First guesses.
+    mutation: (chance: 0.04, small: 0.2, large: (share: 0.1, most: 2.0)),
 
     // A learned value this far from 0 is a lesson, which the event log
     // announces once (design v16 §5.6).
