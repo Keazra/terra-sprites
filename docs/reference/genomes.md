@@ -35,7 +35,7 @@ A sprite's genes, as text (design §2.8, §4.3, §5.7). The pack's `data/genomes
 
 **Gene health.** As a sprite ages, each of its genes has a health that can fall (M2 design §9.4), shown on the genome tab. It belongs to the sprite, not the genome: an exported genome is whole.
 
-**In an egg.** As an egg's genes are copied, now and then a gene value changes (M2 design §12), and now and then a whole gene is doubled, lost, or changed in what it does: an instinct's need or action, what draws the eye to what, or the life stages it works in (§13). So a genome a sprite exports may have genes the starter genome never had. An unknown or unmatched gene is always copied as it is. The genome tab lists what's new in a sprite with parents.
+**In an egg.** As an egg's genes are copied, now and then a gene value changes (M2 design §12), and now and then a whole gene is doubled, lost, or changed in what it does: what an instinct reacts to or the action it leads to, what draws the eye to what, or the life stages it works in (§13). So a genome a sprite exports may have genes the starter genome never had. An unknown or unmatched gene is always copied as it is. The genome tab lists what's new in a sprite with parents.
 
 **The starter genome must be clean:** a flagged, unknown or unmatched gene in it stops the pack loading, since it would silently do nothing.
 

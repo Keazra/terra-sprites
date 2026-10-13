@@ -108,7 +108,7 @@ pub(crate) fn expressions(genome: &Genome, data: &DataPack, stage: LifeStage) ->
 /// works all life, since traits set when a sprite grows up and grows old,
 /// and a level at birth applies only at birth; and a gene must switch on
 /// before it switches off.
-fn breaks_switching(gene: &Gene, switch: Switch) -> Option<String> {
+pub(crate) fn breaks_switching(gene: &Gene, switch: Switch) -> Option<String> {
     if switch.is_always() {
         return None;
     }
@@ -130,7 +130,7 @@ fn breaks_switching(gene: &Gene, switch: Switch) -> Option<String> {
 
 /// Why `gene` breaks the restrictions (design §4.3), if it does. Genes may
 /// read physical chemicals, but never change them.
-fn breaks_restrictions(gene: &Gene, data: &DataPack) -> Option<String> {
+pub(crate) fn breaks_restrictions(gene: &Gene, data: &DataPack) -> Option<String> {
     let chemical = |id: ChemId| data.chemical(id).expect("a checked gene");
     let physical = |id: ChemId| chemical(id).class == ChemicalClass::Physical;
     match *gene {

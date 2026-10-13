@@ -9,7 +9,6 @@ use rand_chacha::ChaCha8Rng;
 use crate::ageing::Switch;
 use crate::data::DataPack;
 use crate::genome::{Gene, Genome};
-use crate::mutation::longest;
 use crate::random::chance;
 use crate::variation::each_value;
 
@@ -47,11 +46,69 @@ pub(crate) fn tidied(flaws: Vec<u8>) -> Vec<u8> {
     }
 }
 
-/// What a gene does, whatever its values: what it refers to and how it
-/// works, and the life stages it works in.
-fn what_it_does(genome: &Genome, index: usize, data: &DataPack) -> (Gene, Switch) {
-    let gene = each_value(&genome.genes[index], data, |_, _| 0.0);
-    (gene, genome.switch(index))
+/// What `gene`, working as `switch`, does, whatever its values: what it
+/// refers to and how it works, and the life stages it works in.
+pub(crate) fn what_it_does(gene: &Gene, switch: Switch, data: &DataPack) -> (Gene, Switch) {
+    (each_value(gene, data, |_, _| 0.0), switch)
+}
+
+/// What the gene at `index` of `genome` does, whatever its values.
+fn what_nth_does(genome: &Genome, index: usize, data: &DataPack) -> (Gene, Switch) {
+    what_it_does(&genome.genes[index], genome.switch(index), data)
+}
+
+/// The most genes a genome copying makes may have (M2 design §13):
+/// `copy_and_change.longest` times the starter's length. A genome already
+/// longer, as a genome file's may be, doesn't grow.
+pub(crate) fn longest(data: &DataPack) -> usize {
+    let longest = data.physiology().copy_and_change.longest;
+    if longest.is_finite() {
+        (longest * data.starter().genes.len() as f32) as usize
+    } else {
+        usize::MAX
+    }
+}
+
+/// Genes as an egg's are put together, each with when it works and how many
+/// of its copies are flawed.
+#[derive(Debug, Default)]
+pub(crate) struct Built {
+    genes: Vec<Gene>,
+    switches: Vec<Switch>,
+    flaws: Vec<u8>,
+}
+
+impl Built {
+    /// How many genes it has so far.
+    pub(crate) fn len(&self) -> usize {
+        self.genes.len()
+    }
+
+    pub(crate) fn push(&mut self, gene: Gene, switch: Switch, flawed: u8) {
+        self.genes.push(gene);
+        self.switches.push(switch);
+        self.flaws.push(flawed);
+    }
+
+    pub(crate) fn pop(&mut self) {
+        self.genes.pop();
+        self.switches.pop();
+        self.flaws.pop();
+    }
+
+    fn remove(&mut self, index: usize) {
+        self.genes.remove(index);
+        self.switches.remove(index);
+        self.flaws.remove(index);
+    }
+
+    /// The genes put together, as an egg inherits them.
+    pub(crate) fn inherited(self) -> Inherited {
+        Inherited {
+            genome: Genome::switched(self.genes, self.switches),
+            flaws: tidied(self.flaws),
+        }
+    }
 }
 
 /// Where a child's gene comes from.
@@ -73,14 +130,14 @@ enum Slot {
 /// his.
 fn slots(mother: &Genome, father: &Genome, data: &DataPack) -> Vec<Slot> {
     let hers: Vec<_> = (0..mother.genes.len())
-        .map(|index| what_it_does(mother, index, data))
+        .map(|index| what_nth_does(mother, index, data))
         .collect();
     let mut partner = vec![None; hers.len()];
     // Each gene only the father has, with the mother's gene it follows.
     let mut his_own: Vec<(Option<usize>, usize)> = Vec::new();
     let mut follows = None;
     for index in 0..father.genes.len() {
-        let does = what_it_does(father, index, data);
+        let does = what_nth_does(father, index, data);
         let lined_up = (0..hers.len()).find(|&at| partner[at].is_none() && hers[at] == does);
         match lined_up {
             Some(at) => {
@@ -132,7 +189,7 @@ pub(crate) fn of_pair(
     rng: &mut ChaCha8Rng,
 ) -> Inherited {
     let crossover = data.physiology().breeding.crossover;
-    let (mut genes, mut switches, mut flaws) = (Vec::new(), Vec::new(), Vec::new());
+    let mut built = Built::default();
     // Whether each of the child's genes is one only one parent has.
     let mut one_has = Vec::new();
     let mut from_mother = chance(rng, 0.5);
@@ -158,30 +215,24 @@ pub(crate) fn of_pair(
         let Some((genome, index)) = from else {
             continue;
         };
-        genes.push(genome.genes[index].clone());
-        switches.push(genome.switch(index));
         let copy = |parent: Parent, at: Option<usize>, rng: &mut ChaCha8Rng| {
             at.map_or(0, |at| passed(flaws_of(parent.flaws, at), rng))
         };
-        flaws.push(copy(mother, hers, rng) + copy(father, his, rng));
+        let flawed = copy(mother, hers, rng) + copy(father, his, rng);
+        built.push(genome.genes[index].clone(), genome.switch(index), flawed);
         one_has.push(hers.is_none() || his.is_none());
     }
-    let mut over = genes.len().saturating_sub(longest(data));
-    for index in (0..genes.len()).rev() {
+    let mut over = built.len().saturating_sub(longest(data));
+    for index in (0..built.len()).rev() {
         if over == 0 {
             break;
         }
         if one_has[index] {
-            genes.remove(index);
-            switches.remove(index);
-            flaws.remove(index);
+            built.remove(index);
             over -= 1;
         }
     }
-    Inherited {
-        genome: Genome::switched(genes, switches),
-        flaws: tidied(flaws),
-    }
+    built.inherited()
 }
 
 /// A lone egg's genes (M2 design §12): its mother's, with one of her two
@@ -287,10 +338,10 @@ mod tests {
             let child = of_pair(sound(&mine), sound(&theirs), &data, &mut rng).genome;
             assert_eq!(child.genes.len(), mine.genes.len());
             for (index, gene) in child.genes.iter().enumerate() {
-                let does = what_it_does(&child, index, &data);
-                assert_eq!(does, what_it_does(&mine, index, &data), "gene {index}");
+                let does = what_nth_does(&child, index, &data);
+                assert_eq!(does, what_nth_does(&mine, index, &data), "gene {index}");
                 let his = (0..theirs.genes.len()).any(|at| {
-                    theirs.genes[at] == *gene && what_it_does(&theirs, at, &data) == does
+                    theirs.genes[at] == *gene && what_nth_does(&theirs, at, &data) == does
                 });
                 assert!(
                     *gene == mine.genes[index] || his,

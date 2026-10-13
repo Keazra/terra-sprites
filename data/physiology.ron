@@ -192,9 +192,9 @@
     // wear, bringing old age sooner (M2 design §9.4). First guesses.
     flaws: (arise: 0.007, founders: 0.06, health: 0.5, wear: 0.05),
     // Copy and change (M2 design §13): as an egg's genes are copied, each
-    // gene is now and then doubled, lost, or changed in what it does: an
-    // instinct's need or action, what draws the eye to what, or the life
-    // stages it works in. So about one hatchling in five has a gene doubled,
+    // gene is now and then doubled, lost, or changed in what it does: what
+    // an instinct reacts to or its action, what draws the eye to what, or
+    // the life stages it works in. So about one hatchling in five has a gene doubled,
     // lost or changed. `on_copy` of the changes are made on a fresh copy, so
     // the original still works. A genome never grows past `longest` times the
     // starter's length. First guesses.

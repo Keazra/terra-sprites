@@ -10,11 +10,10 @@ use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::ageing::{LifeStage, Switch, frailty};
-use crate::brain_io::Source;
 use crate::data::DataPack;
-use crate::expression::{Expression, expressions};
+use crate::expression::{Expression, breaks_restrictions, breaks_switching, expressions};
 use crate::genome::{Gene, GeneView, Genome};
-use crate::inheritance::{Inherited, flaws_of, tidied};
+use crate::inheritance::{Built, Inherited, flaws_of, longest, tidied, what_it_does};
 use crate::random::{chance, uniform, unit};
 use crate::registry::Verb;
 use crate::variation::{each_value, varied};
@@ -126,40 +125,6 @@ pub(crate) fn copied(inherited: Inherited, data: &DataPack, rng: &mut ChaCha8Rng
     }
 }
 
-/// The most genes a genome copying makes may have (M2 design §13):
-/// `copy_and_change.longest` times the starter's length. A genome already
-/// longer, as a genome file's may be, doesn't grow.
-pub(crate) fn longest(data: &DataPack) -> usize {
-    let longest = data.physiology().copy_and_change.longest;
-    if longest.is_finite() {
-        (longest * data.starter().genes.len() as f32) as usize
-    } else {
-        usize::MAX
-    }
-}
-
-/// Genes as copying puts them together, with when each works and its flaws.
-#[derive(Default)]
-struct Built {
-    genes: Vec<Gene>,
-    switches: Vec<Switch>,
-    flaws: Vec<u8>,
-}
-
-impl Built {
-    fn push(&mut self, gene: Gene, switch: Switch, flawed: u8) {
-        self.genes.push(gene);
-        self.switches.push(switch);
-        self.flaws.push(flawed);
-    }
-
-    fn pop(&mut self) {
-        self.genes.pop();
-        self.switches.pop();
-        self.flaws.pop();
-    }
-}
-
 /// `inherited`'s genes with whole ones doubled, lost or changed in what
 /// they do (M2 design §13), and the changes. One draw for each gene decides
 /// which, if any, happens to it, with `copy_and_change`'s chances, so at
@@ -167,11 +132,10 @@ impl Built {
 /// and its flaws, so the two tend to be inherited together. A changed gene
 /// is changed on a fresh copy next to it, with the chance `on_copy`, so the
 /// original still works, or else in its place. A copy is made only while
-/// the genome stays within `longest`, and the last gene left is never lost.
-/// A gene this build can't read, or one that names a category the world
-/// lacks, is kept exactly as it is (M1 design §2.8, v19 §5.7), drawing
-/// nothing, so a sprite with one lives exactly as it would without it. A
-/// pack without copy and change draws nothing.
+/// the genome stays within `longest`, and a genome never loses the last
+/// gene it can read. A gene this build can't read, or one that names a
+/// category the world lacks, is kept exactly as it is (M1 design §2.8, v19
+/// §5.7), drawing nothing. A pack without copy and change draws nothing.
 fn whole_genes_copied(
     inherited: Inherited,
     data: &DataPack,
@@ -181,35 +145,42 @@ fn whole_genes_copied(
     if rules.doubled + rules.lost + rules.changed == 0.0 {
         return (inherited, Vec::new());
     }
-    let (lost, doubled) = (rules.lost, rules.lost + rules.doubled);
-    let changed_below = doubled + rules.changed;
+    // Where each kind's share of a draw ends.
+    let lost_below = rules.lost;
+    let doubled_below = lost_below + rules.doubled;
+    let changed_below = doubled_below + rules.changed;
     let longest = longest(data);
     let Inherited { genome, flaws } = inherited;
     let count = genome.genes.len();
+    let readable = |gene: &Gene| !matches!(gene, Gene::Unknown { .. } | Gene::Unmatched(_));
+    let last_readable = genome.genes.iter().rposition(readable);
     let (mut built, mut changes) = (Built::default(), Vec::new());
+    let mut kept_readable = false;
     for (index, gene) in genome.genes.iter().enumerate() {
         let (switch, flawed) = (genome.switch(index), flaws_of(&flaws, index));
-        if matches!(gene, Gene::Unknown { .. } | Gene::Unmatched(_)) {
+        if !readable(gene) {
             built.push(gene.clone(), switch, flawed);
             continue;
         }
         let roll = unit(rng);
-        if roll < lost && !(built.genes.is_empty() && index + 1 == count) {
+        let last = !kept_readable && Some(index) == last_readable;
+        if roll < lost_below && !last {
             changes.push(CopyChange::Lost {
                 was: gene.clone(),
                 switch,
             });
             continue;
         }
+        kept_readable = true;
         built.push(gene.clone(), switch, flawed);
         // Room for a copy, with each gene still to come kept.
-        let room = built.genes.len() + 1 + (count - index - 1) <= longest;
-        if (lost..doubled).contains(&roll) && room {
+        let room = built.len() + 1 + (count - index - 1) <= longest;
+        if (lost_below..doubled_below).contains(&roll) && room {
             built.push(gene.clone(), switch, flawed);
             changes.push(CopyChange::Doubled {
-                gene: built.genes.len() - 1,
+                gene: built.len() - 1,
             });
-        } else if (doubled..changed_below).contains(&roll)
+        } else if (doubled_below..changed_below).contains(&roll)
             && let Some((new, new_switch)) = changed(gene, switch, data, rng)
         {
             let on_copy = room && chance(rng, rules.on_copy);
@@ -218,26 +189,38 @@ fn whole_genes_copied(
             }
             built.push(new, new_switch, flawed);
             changes.push(CopyChange::Changed {
-                gene: built.genes.len() - 1,
+                gene: built.len() - 1,
                 was: gene.clone(),
                 switch,
                 on_copy,
             });
         }
     }
-    let inherited = Inherited {
-        genome: Genome::switched(built.genes, built.switches),
-        flaws: tidied(built.flaws),
-    };
-    (inherited, changes)
+    (built.inherited(), changes)
+}
+
+/// One thing a gene does that copying can change (M2 design §13).
+#[derive(Debug, Clone, Copy)]
+enum Aspect {
+    /// One of an instinct's inputs.
+    Input,
+    /// An instinct's verb.
+    Verb,
+    /// The input that draws an attention instinct's eye.
+    AttentionInput,
+    /// What an attention instinct draws the eye to.
+    Category,
+    /// The life stages it works in.
+    Switch,
 }
 
 /// `gene`, working as `switch`, changed in one thing it does (M2 design
-/// §13), with when it then works: an instinct's need or its action, what
-/// draws an attention instinct's eye or what to, or the life stages a gene
-/// works in, each as likely as the others. A trait or a level at birth works
-/// all life, so it has no life stages to change. Each choice is one the
-/// pack has, other than the one the gene had. None for a gene with nothing
+/// §13), with when it then works: one of an instinct's inputs or its verb,
+/// what draws an attention instinct's eye or what to, or the life stages a
+/// gene works in, each as likely as the others. A gene that may not switch,
+/// such as a trait (§9.2), has no life stages to change. Each choice is one
+/// the pack has, other than the one the gene had, and none makes a gene
+/// change the body directly (M1 design §4.3). None for a gene with nothing
 /// to change, or a change the pack can't have, which isn't made.
 fn changed(
     gene: &Gene,
@@ -245,19 +228,23 @@ fn changed(
     data: &DataPack,
     rng: &mut ChaCha8Rng,
 ) -> Option<(Gene, Switch)> {
-    let switches = !matches!(gene, Gene::Trait { .. } | Gene::InitialConcentration { .. });
-    let what = match gene {
-        Gene::Instinct { .. } | Gene::AttentionInstinct { .. } => 2,
-        _ => 0,
+    let mut aspects = match gene {
+        Gene::Instinct { .. } => vec![Aspect::Input, Aspect::Verb],
+        Gene::AttentionInstinct { .. } => vec![Aspect::AttentionInput, Aspect::Category],
+        _ => Vec::new(),
     };
-    let aspects = what + usize::from(switches);
-    if aspects == 0 {
-        return None;
+    let switched = Switch {
+        from: LifeStage::Adult,
+        until: None,
+    };
+    if breaks_switching(gene, switched).is_none() {
+        aspects.push(Aspect::Switch);
     }
+    let aspect = *pick(&aspects, rng)?;
     let inputs = data.brain_inputs_in_order();
     let (mut gene, mut switch) = (gene.clone(), switch);
-    match (&mut gene, uniform(rng, aspects as u64)) {
-        (Gene::Instinct { inputs: its, .. }, 0) => {
+    match (aspect, &mut gene) {
+        (Aspect::Input, Gene::Instinct { inputs: its, .. }) => {
             // One of its inputs, its negation kept.
             let which = uniform(rng, its.len() as u64) as usize;
             let others: Vec<_> = inputs
@@ -267,23 +254,37 @@ fn changed(
                 .collect();
             its[which].0 = *pick(&others, rng)?;
         }
-        (Gene::Instinct { verb, .. }, 1) => {
+        (Aspect::Verb, Gene::Instinct { verb, .. }) => {
             let others: Vec<Verb> = Verb::ALL
                 .into_iter()
                 .filter(|other| !other.is_reserved() && other != verb)
                 .collect();
             *verb = *pick(&others, rng)?;
         }
-        (Gene::AttentionInstinct { input, .. }, 0) => {
-            // Attention feels only State inputs (design §4.3).
+        (
+            Aspect::AttentionInput,
+            Gene::AttentionInstinct {
+                input,
+                category,
+                weight,
+            },
+        ) => {
+            // Only inputs it may read (M1 design §4.3).
             let others: Vec<_> = inputs
                 .iter()
-                .filter(|other| matches!(other.source, Source::State(_)) && other.id != *input)
                 .map(|other| other.id)
+                .filter(|&other| {
+                    let reading = Gene::AttentionInstinct {
+                        input: other,
+                        category: *category,
+                        weight: *weight,
+                    };
+                    other != *input && breaks_restrictions(&reading, data).is_none()
+                })
                 .collect();
             *input = *pick(&others, rng)?;
         }
-        (Gene::AttentionInstinct { category, .. }, 1) => {
+        (Aspect::Category, Gene::AttentionInstinct { category, .. }) => {
             let others: Vec<_> = data
                 .categories()
                 .iter()
@@ -292,7 +293,7 @@ fn changed(
                 .collect();
             *category = *pick(&others, rng)?;
         }
-        _ => {
+        (Aspect::Switch, _) => {
             let stages = [LifeStage::Young, LifeStage::Adult, LifeStage::Old];
             let others: Vec<Switch> = stages
                 .into_iter()
@@ -305,6 +306,7 @@ fn changed(
                 .collect();
             switch = *pick(&others, rng)?;
         }
+        _ => unreachable!("each gene's aspects are its own"),
     }
     gene.check(data).ok()?;
     Some((gene, switch))
@@ -329,8 +331,7 @@ pub(crate) fn check_changes(
     data: &DataPack,
 ) -> Result<(), String> {
     let count = genome.genes.len();
-    let does = |gene: &Gene, switch: Switch| (each_value(gene, data, |_, _| 0.0), switch);
-    let its = |index: usize| does(&genome.genes[index], genome.switch(index));
+    let its = |index: usize| what_it_does(&genome.genes[index], genome.switch(index), data);
     let fits = |was: &Gene| {
         was.check(data)
             .map_err(|problem| format!("has a copy change whose gene was one that {problem}"))
@@ -359,7 +360,7 @@ pub(crate) fn check_changes(
                     return Err(format!("has gene {gene} changed, of {count} genes"));
                 }
                 fits(was)?;
-                let was = does(was, switch);
+                let was = what_it_does(was, switch, data);
                 if its(gene) == was {
                     return Err(format!("has gene {gene} changed, but it does what it did"));
                 }
@@ -487,6 +488,7 @@ mod tests {
 
     use super::*;
     use crate::ageing::LifeStage;
+    use crate::brain_io::Source;
     use crate::expression::expressions;
     use crate::genome::Gene;
     use crate::test_util::{builtin, builtin_changing, every_kind};
@@ -718,7 +720,7 @@ mod tests {
     }
 
     /// A genome with a gene flagged for each way a gene may not change the
-    /// body (design §4.3), among genes that work.
+    /// body (M1 design §4.3), among genes that work.
     const FLAGGED: &str = r#"(format: 2, genes: [
         HalfLife(chem: "energy", ticks: 300),
         Emitter(locus: Locus("ate"), mode: Level, gain: 0.3, chem: "food"),
@@ -798,7 +800,7 @@ mod tests {
         )
     }
 
-    /// Whether `gene`, working as `switch`, is flagged (design §4.3).
+    /// Whether `gene`, working as `switch`, is flagged (M1 design §4.3).
     fn flagged(gene: &Gene, switch: Switch, data: &DataPack) -> bool {
         let alone = Genome::switched(vec![gene.clone()], vec![switch]);
         matches!(
@@ -951,15 +953,22 @@ mod tests {
                 Gene(type: 900, version: 1, payload: "c0ffee"),
                 AttentionInstinct(input: "hunger", category: "tree", weight: 1.0),
                 Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
+                Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
             ])"#;
             Genome::from_ron(text, data).expect("a valid genome")
         };
-        for rules in [(1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)] {
+        // Each of the instincts changed, but one lost: a genome keeps the
+        // last gene it can read.
+        for (rules, changes) in [
+            ((1.0, 0.0, 0.0), 2),
+            ((0.0, 1.0, 0.0), 1),
+            ((0.0, 0.0, 1.0), 2),
+        ] {
             let data = whole_genes_only(rules.0, rules.1, rules.2, 1.0);
             let original = genome(&data);
             let copy = copy(&original, &data, &mut ChaCha8Rng::seed_from_u64(1));
             assert_eq!(copy.genome.genes[..2], original.genes[..2], "{rules:?}");
-            assert_eq!(copy.changes.len(), 1, "only the instinct changed");
+            assert_eq!(copy.changes.len(), changes, "only the instincts changed");
         }
     }
 
@@ -1035,6 +1044,14 @@ mod tests {
             .collect();
         assert_eq!(copy.changes, lost);
         assert_eq!(check_changes(&copy.genome, &copy.changes, &data), Ok(()));
+        // The last it can read, though a gene it can't comes after.
+        let text = r#"(format: 1, genes: [
+            Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
+            Gene(type: 900, version: 1, payload: "c0ffee"),
+        ])"#;
+        let original = Genome::from_ron(text, &data).expect("a valid genome");
+        let kept = super::tests::copy(&original, &data, &mut ChaCha8Rng::seed_from_u64(1));
+        assert_eq!(kept.genome, original);
     }
 
     /// What differs between a gene and its switch as they were and as they
@@ -1105,10 +1122,11 @@ mod tests {
     }
 
     #[test]
-    fn a_changed_gene_changes_one_need_action_category_or_when_it_works() {
-        // M2 design §13: an instinct's need or action, what draws the eye
-        // to what, or the life stages a gene works in, each a choice the
-        // pack has; a trait and a level at birth have none to change.
+    fn a_changed_gene_changes_one_input_action_category_or_when_it_works() {
+        // M2 design §13: what an instinct reacts to or its action, what
+        // draws the eye to what, or the life stages a gene works in, each a
+        // choice the pack has; a trait and a starting level have none to
+        // change.
         let data = whole_genes_only(0.0, 0.0, 1.0, 0.0);
         let original = Genome::from_ron(
             r#"(format: 2, genes: [

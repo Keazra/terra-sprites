@@ -1482,8 +1482,6 @@ fn whats_new(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
     let mut lines = wrapped(&from, 1, Style::default());
     let genes = sprite.genes();
     let switches = sprite.switches();
-    let named =
-        |gene: &GeneView, switch: Switch| format!("{}{}", gene_name(gene), switch_text(switch));
     let (mut doubled, mut lost) = (Vec::new(), Vec::new());
     for change in sprite.copy_changes() {
         match change {
@@ -1500,7 +1498,9 @@ fn whats_new(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
                 let text = format!("new: {now}, {how} {}", named(&was, switch));
                 lines.extend(wrapped(&text, 1, Style::default()));
             }
-            CopyChangeView::Doubled { gene } => doubled.push(named(&genes[gene].0, switches[gene])),
+            CopyChangeView::Doubled { gene } => {
+                doubled.push(named(&genes[gene].0, switches[gene]));
+            }
             CopyChangeView::Lost { was, switch } => lost.push(named(&was, switch)),
         }
     }
@@ -1541,15 +1541,17 @@ pub(crate) fn something_new(sprite: &SpriteView) -> Option<String> {
         .copy_changes()
         .into_iter()
         .filter_map(|change| match change {
-            CopyChangeView::Changed { gene, .. } => Some(format!(
-                "{}{}",
-                gene_name(&genes[gene].0),
-                switch_text(switches[gene])
-            )),
+            CopyChangeView::Changed { gene, .. } => Some(named(&genes[gene].0, switches[gene])),
             _ => None,
         })
         .collect();
     (!new.is_empty()).then(|| new.join(", "))
+}
+
+/// A gene's name and when it works, as the Genome tab's list at the top and
+/// the log name a gene copying changed: `hunger → eat from Adult`.
+fn named(gene: &GeneView, switch: Switch) -> String {
+    format!("{}{}", gene_name(gene), switch_text(switch))
 }
 
 /// The numbers `was` had that `now` doesn't, as the Genome tab writes

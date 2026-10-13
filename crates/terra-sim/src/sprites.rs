@@ -12,7 +12,7 @@ use crate::brain::Brain;
 use crate::breeding::Sex;
 use crate::data::DataPack;
 use crate::genome::{Gene, Genome};
-use crate::inheritance::{Parent, flaws_of};
+use crate::inheritance::{Parent, flaws_of, what_it_does};
 use crate::map::{Dir, Map, Pos};
 use crate::mutation::{self, Copied, CopyChange, CopyingError};
 use crate::objects::{EntityId, Objects};
@@ -22,7 +22,6 @@ use crate::physiology::RememberedPlaces;
 use crate::random::{chance, uniform};
 use crate::registry::{Trait, Verb};
 use crate::sliding::Slide;
-use crate::variation::each_value;
 
 /// One sprite.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -698,12 +697,11 @@ impl Sprites {
             // Copying changes only a gene's values (M2 design §12.1), so
             // what a gene was does what it does now, and refers only to
             // what the pack has.
-            let does = |gene: &Gene| each_value(gene, data, |_, _| 0.0);
-            if let Some(error) = sprite
-                .copying_errors
-                .iter()
-                .find(|error| does(&error.was) != does(&sprite.genome.genes[error.gene]))
-            {
+            let switch = |error: &CopyingError| sprite.genome.switch(error.gene);
+            let does = |gene: &Gene, error| what_it_does(gene, switch(error), data);
+            if let Some(error) = sprite.copying_errors.iter().find(|error| {
+                does(&error.was, *error) != does(&sprite.genome.genes[error.gene], *error)
+            }) {
                 return Err(format!(
                     "{id:?} has a copying error that changed what gene {} does",
                     error.gene

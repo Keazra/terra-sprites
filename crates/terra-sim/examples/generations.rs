@@ -7,8 +7,8 @@
 //! hidden flaws its sprites carried (M2 design §12), and how long young
 //! from lone eggs lived against young from pairs; then how far the species'
 //! genes moved from the starter genome's (§12, G4); then the genes the
-//! starter lacks that the living carry, and the genes they lost and
-//! doubled (§13). The bars: sprites alive at the end in at least 8 of 10
+//! starter lacks that the living carry, and in how many each works, and
+//! the genes they lost and doubled (§13). The bars: sprites alive at the end in at least 8 of 10
 //! seeds, and never more than the world's limit; at least 3 gene numbers
 //! moved by a tenth the same way in every seed (§12.7); and in at least 5
 //! of 10 seeds, a gene the starter lacks carried by at least a tenth of the
@@ -28,8 +28,8 @@ use std::process::ExitCode;
 use std::sync::Mutex;
 
 use terra_sim::{
-    DataPack, DeathCause, EntityId, EventKind, GeneView, Genome, LifeStage, Outcome, Switch, Verb,
-    World, WorldConfig,
+    DataPack, DeathCause, EntityId, EventKind, Expression, GeneView, Genome, LifeStage, Outcome,
+    Switch, Verb, World, WorldConfig,
 };
 
 /// Ticks in an hour at 1×, 1.25 ticks a second (design §6.6).
@@ -217,8 +217,21 @@ fn starter_genes(data: &DataPack) -> BTreeMap<String, usize> {
 /// works, `switches` saying when: `thirst → Drink`, `always → Wander from
 /// Adult`. Genes this build can't read aren't counted.
 fn counted(genes: &[GeneView], switches: &[Switch]) -> BTreeMap<String, usize> {
+    counted_where(genes, switches, |_| true)
+}
+
+/// How many of `genes` there are of each, as `counted` says, of those at
+/// the indices `keep` keeps.
+fn counted_where(
+    genes: &[GeneView],
+    switches: &[Switch],
+    keep: impl Fn(usize) -> bool,
+) -> BTreeMap<String, usize> {
     let mut counts = BTreeMap::new();
-    for (gene, switch) in genes.iter().zip(switches) {
+    for (index, (gene, switch)) in genes.iter().zip(switches).enumerate() {
+        if !keep(index) {
+            continue;
+        }
         if let Some((name, _)) = named(gene) {
             *counts
                 .entry(format!("{name}{}", when(*switch)))
@@ -705,16 +718,24 @@ fn gene_pool(world: &World, starter: &BTreeMap<String, usize>) -> Option<GenePoo
         .sprites()
         .filter(|sprite| !sprite.is_egg() && !sprite.parents().is_empty())
     {
-        let genes: Vec<GeneView> = sprite.genes().into_iter().map(|(gene, _)| gene).collect();
+        let (genes, how): (Vec<GeneView>, Vec<Expression>) = sprite.genes().into_iter().unzip();
         lengths.push(genes.len());
-        let has = counted(&genes, &sprite.switches());
+        let switches = sprite.switches();
+        let has = counted(&genes, &switches);
         for (gene, &count) in starter {
             let its = has.get(gene).copied().unwrap_or(0);
             pool.lost += count.saturating_sub(its);
             pool.doubled += its.saturating_sub(count);
         }
+        // A new gene works in a sprite if a copy of it is expressed now, at
+        // its life stage: a spare that an earlier gene overrides doesn't.
+        let working = counted_where(&genes, &switches, |index| {
+            how[index] == Expression::Expressed
+        });
         for gene in has.keys().filter(|gene| !starter.contains_key(*gene)) {
-            *pool.new.entry(gene.clone()).or_insert(0) += 1;
+            let carried = pool.new.entry(gene.clone()).or_default();
+            carried.0 += 1;
+            carried.1 += usize::from(working.contains_key(gene));
         }
     }
     lengths.sort_unstable();
@@ -734,8 +755,8 @@ struct GenePool {
     /// The sprites counted.
     sprites: usize,
     /// Each gene the starter lacks, by what it does and when, with how
-    /// many of them carry it.
-    new: BTreeMap<String, usize>,
+    /// many of them carry it, and in how many it works.
+    new: BTreeMap<String, (usize, usize)>,
     /// The starter's genes they lack, and their copies of its genes beyond
     /// the starter's, all told.
     lost: usize,
@@ -746,13 +767,15 @@ struct GenePool {
 
 impl GenePool {
     /// The genes the starter lacks carried by at least a tenth of them,
-    /// most widely carried first, each with the share that carries it.
-    fn taken_hold(&self) -> Vec<(&str, f32)> {
-        let mut held: Vec<(&str, f32)> = self
+    /// most widely carried first, each with the shares that carry it and
+    /// in which it works.
+    fn taken_hold(&self) -> Vec<(&str, f32, f32)> {
+        let share = |count: usize| count as f32 / self.sprites as f32;
+        let mut held: Vec<(&str, f32, f32)> = self
             .new
             .iter()
-            .map(|(gene, &carriers)| (gene.as_str(), carriers as f32 / self.sprites as f32))
-            .filter(|&(_, share)| share >= 0.1)
+            .map(|(gene, &(carriers, working))| (gene.as_str(), share(carriers), share(working)))
+            .filter(|&(_, carried, _)| carried >= 0.1)
             .collect();
         held.sort_by(|a, b| b.1.total_cmp(&a.1));
         held
@@ -762,43 +785,51 @@ impl GenePool {
 /// The genes the starter lacks that the living carry, and the genes they
 /// lost and doubled (M2 design §13); the bar is a gene the starter lacks
 /// carried by at least a tenth of the living in at least 5 of 10 seeds.
+/// Whether the gene works in them is reported beside it: a spare copy
+/// changed to work only at another life stage is carried but may do
+/// nothing yet.
 fn copy_and_change(runs: &[(u64, Run)]) {
     println!(
         "\nCopy and change: among the hatched sprites alive at the end, the genes the starter \
-         lacks (by what they do and when) carried by at least a tenth, and the most widely \
-         carried; starter genes lost and extra copies, on average; and genome lengths."
+         lacks (by what they do and when) carried by at least a tenth, and of those how many \
+         work in at least a tenth; the most widely carried, with the shares that carry it and \
+         in which it works; starter genes lost and extra copies, on average; and genome lengths."
     );
     println!(
-        "\n{:>5} {:>7} {:>6} {:>5} {:>5} {:>5} {:>6} {:>5}  Most widely carried new gene",
-        "Seed", "Sprites", "New10%", "Lost", "Extra", "Short", "Median", "Long",
+        "\n{:>5} {:>7} {:>6} {:>7} {:>5} {:>5} {:>5} {:>6} {:>5}  Most widely carried new gene",
+        "Seed", "Sprites", "New10%", "Works10", "Lost", "Extra", "Short", "Median", "Long",
     );
     let mut took_hold = 0;
-    let mut spread: BTreeMap<&str, (usize, f32)> = BTreeMap::new();
+    let mut working = 0;
+    let mut spread: BTreeMap<&str, (usize, f32, f32)> = BTreeMap::new();
     for (seed, run) in runs {
         let Some(pool) = &run.genes else {
             println!("{seed:>5} {:>7}", 0);
             continue;
         };
         let held = pool.taken_hold();
+        let works = held.iter().filter(|&&(_, _, works)| works >= 0.1).count();
         took_hold += usize::from(!held.is_empty());
-        for &(gene, share) in &held {
-            let seen = spread.entry(gene).or_insert((0, 0.0));
-            *seen = (seen.0 + 1, seen.1.max(share));
+        working += usize::from(works > 0);
+        for &(gene, carried, works) in &held {
+            let seen = spread.entry(gene).or_insert((0, 0.0, 0.0));
+            *seen = (seen.0 + 1, seen.1.max(carried), seen.2.max(works));
         }
+        let each = |count: usize| count as f32 / pool.sprites as f32;
         let widest = pool
             .new
             .iter()
-            .max_by_key(|&(_, &carriers)| carriers)
-            .map_or("-".to_string(), |(gene, &carriers)| {
+            .max_by_key(|&(_, &(carriers, _))| carriers)
+            .map_or("-".to_string(), |(gene, &(carriers, works))| {
                 format!(
-                    "{gene} ({:.0}%)",
-                    100.0 * carriers as f32 / pool.sprites as f32
+                    "{gene} ({:.0}%, works in {:.0}%)",
+                    100.0 * each(carriers),
+                    100.0 * each(works)
                 )
             });
-        let each = |count: usize| count as f32 / pool.sprites as f32;
         let (short, median, long) = pool.lengths;
         println!(
-            "{seed:>5} {:>7} {:>6} {:>5.2} {:>5.2} {short:>5} {median:>6} {long:>5}  {widest}",
+            "{seed:>5} {:>7} {:>6} {works:>7} {:>5.2} {:>5.2} {short:>5} {median:>6} {long:>5}  {widest}",
             pool.sprites,
             held.len(),
             each(pool.lost),
@@ -806,18 +837,23 @@ fn copy_and_change(runs: &[(u64, Run)]) {
         );
     }
     println!(
-        "\nA gene the starter lacks was carried by a tenth or more of the living in {took_hold} of {} seeds.",
+        "\nA gene the starter lacks was carried by a tenth or more of the living in {took_hold} of \
+         {} seeds, and worked in a tenth or more in {working}.",
         runs.len()
     );
     if !spread.is_empty() {
         println!(
-            "\n{:<60} {:>5} {:>8}",
-            "New gene carried by a tenth or more", "Seeds", "Widest"
+            "\n{:<60} {:>5} {:>8} {:>8}",
+            "New gene carried by a tenth or more", "Seeds", "Widest", "Works"
         );
         let mut spread: Vec<_> = spread.into_iter().collect();
         spread.sort_by(|a, b| b.1.0.cmp(&a.1.0).then(b.1.1.total_cmp(&a.1.1)));
-        for (gene, (seeds, widest)) in spread {
-            println!("{gene:<60} {seeds:>5} {:>7.0}%", 100.0 * widest);
+        for (gene, (seeds, widest, works)) in spread {
+            println!(
+                "{gene:<60} {seeds:>5} {:>7.0}% {:>7.0}%",
+                100.0 * widest,
+                100.0 * works
+            );
         }
     }
 }
