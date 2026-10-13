@@ -726,6 +726,9 @@ fn gene_pool(world: &World, starter: &BTreeMap<String, usize>) -> Option<GenePoo
             let its = has.get(gene).copied().unwrap_or(0);
             pool.lost += count.saturating_sub(its);
             pool.doubled += its.saturating_sub(count);
+            if its < count {
+                *pool.lacking.entry(gene.clone()).or_default() += 1;
+            }
         }
         // A new gene works in a sprite if a copy of it is expressed now, at
         // its life stage: a spare that an earlier gene overrides doesn't.
@@ -757,6 +760,10 @@ struct GenePool {
     /// Each gene the starter lacks, by what it does and when, with how
     /// many of them carry it, and in how many it works.
     new: BTreeMap<String, (usize, usize)>,
+    /// Each of the starter's genes, by what it does and when, with how
+    /// many of them have fewer copies of it than the starter: lost, or
+    /// changed in its place.
+    lacking: BTreeMap<String, usize>,
     /// The starter's genes they lack, and their copies of its genes beyond
     /// the starter's, all told.
     lost: usize,
@@ -787,7 +794,8 @@ impl GenePool {
 /// carried by at least a tenth of the living in at least 5 of 10 seeds.
 /// Whether the gene works in them is reported beside it: a spare copy
 /// changed to work only at another life stage is carried but may do
-/// nothing yet.
+/// nothing yet. Then the starter's genes a tenth or more of the living
+/// lack.
 fn copy_and_change(runs: &[(u64, Run)]) {
     println!(
         "\nCopy and change: among the hatched sprites alive at the end, the genes the starter \
@@ -802,6 +810,7 @@ fn copy_and_change(runs: &[(u64, Run)]) {
     let mut took_hold = 0;
     let mut working = 0;
     let mut spread: BTreeMap<&str, (usize, f32, f32)> = BTreeMap::new();
+    let mut lacked: BTreeMap<&str, (usize, f32)> = BTreeMap::new();
     for (seed, run) in runs {
         let Some(pool) = &run.genes else {
             println!("{seed:>5} {:>7}", 0);
@@ -816,6 +825,12 @@ fn copy_and_change(runs: &[(u64, Run)]) {
             *seen = (seen.0 + 1, seen.1.max(carried), seen.2.max(works));
         }
         let each = |count: usize| count as f32 / pool.sprites as f32;
+        for (gene, &lacking) in &pool.lacking {
+            if each(lacking) >= 0.1 {
+                let seen = lacked.entry(gene).or_insert((0, 0.0));
+                *seen = (seen.0 + 1, seen.1.max(each(lacking)));
+            }
+        }
         let widest = pool
             .new
             .iter()
@@ -854,6 +869,17 @@ fn copy_and_change(runs: &[(u64, Run)]) {
                 100.0 * widest,
                 100.0 * works
             );
+        }
+    }
+    if !lacked.is_empty() {
+        println!(
+            "\n{:<60} {:>5} {:>8}",
+            "Starter gene lacked by a tenth or more (lost or changed)", "Seeds", "Widest"
+        );
+        let mut lacked: Vec<_> = lacked.into_iter().collect();
+        lacked.sort_by(|a, b| b.1.0.cmp(&a.1.0).then(b.1.1.total_cmp(&a.1.1)));
+        for (gene, (seeds, widest)) in lacked {
+            println!("{gene:<60} {seeds:>5} {:>7.0}%", 100.0 * widest);
         }
     }
 }
