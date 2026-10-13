@@ -480,3 +480,57 @@ fn the_wheel_over_space_cycles_the_modes() {
     apply(&mut app, &world, wheel);
     assert_eq!(app.mode(), CursorMode::Train);
 }
+
+#[test]
+fn off_the_map_view_after_space_the_cursor_shows_on_its_last_tile_again() {
+    // M2 design §11.4: out of reach only while the pointer is over the
+    // glass or space. Off the map view, over the inspector, the Cursor stays
+    // on its last tile, drawn, as it always has, and `Q` reaches it.
+    let (world, id) = small_field();
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Train));
+    apply(&mut app, &world, Action::Point(on(Pos { x: 4, y: 3 })));
+    apply(&mut app, &world, Action::Point(SPACE));
+    assert!(app.out_of_reach());
+    let inspector = Position::new(70, 10);
+    assert!(!TILES.contains(inspector));
+    apply(&mut app, &world, Action::Point(inspector));
+    assert!(!app.out_of_reach());
+    let status = status_line(&render(&app, &world));
+    assert!(status.starts_with(" (4,3) grass · Sprite #"), "{status}");
+    let q = Action::Press {
+        button: Button::Left,
+        amplified: false,
+    };
+    apply(&mut app, &world, q);
+    let pet = CursorTouch::Pet.command(id, app.clock.reach_back());
+    assert_eq!(app.take_commands(), [pet]);
+}
+
+#[test]
+fn over_space_esc_still_ends_an_aim_then_puts_the_held_item_down() {
+    // M2 design §11.4 leaves `Esc` as it is (design v25, v33 §6.5): first
+    // it ends the aim, then it puts the ball down on the Cursor's last
+    // tile, (2, 3), where the pointer pulled from.
+    let mut world = field_with(10, 6, &[(Pos { x: 5, y: 3 }, "ball")], &[]);
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+    apply(&mut app, &world, Action::left_click(on(Pos { x: 5, y: 3 })));
+    tick(&mut app, &mut world);
+    apply(
+        &mut app,
+        &world,
+        Action::right_click(on(Pos { x: 5, y: 3 })),
+    );
+    apply(&mut app, &world, Action::Point(on(Pos { x: 2, y: 3 })));
+    apply(&mut app, &world, Action::Point(SPACE));
+    apply(&mut app, &world, Action::Back);
+    assert!(!app.aiming());
+    assert_eq!(app.take_commands(), [], "nothing thrown");
+    assert!(app.out_of_reach());
+    apply(&mut app, &world, Action::Back);
+    let put_down = Command::PutDown {
+        tile: Pos { x: 2, y: 3 },
+    };
+    assert_eq!(app.take_commands(), [put_down]);
+}

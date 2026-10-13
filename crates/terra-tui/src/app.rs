@@ -416,9 +416,8 @@ pub struct App {
     /// The screen cell under the mouse pointer, while it's over the map
     /// view.
     pointer: Option<Position>,
-    /// Whether the pointer last pointed past the wall, at the glass or
-    /// space, rather than at a tile (M2 design §11.4). It stays so when the
-    /// pointer leaves the map view, until it points at a tile again.
+    /// Whether the pointer points past the wall, at the glass or space,
+    /// rather than at a tile or off the map view (M2 design §11.4).
     pointer_past_wall: bool,
     /// How far the stars have drifted, as time at 1× (M2 design §11.3).
     drift: Duration,
@@ -1432,7 +1431,7 @@ impl App {
     }
 
     /// Whether the Cursor is out of reach past the wall (M2 design §11.4):
-    /// it follows the pointer, and the pointer last pointed at the glass or
+    /// it follows the pointer, and the pointer points at the glass or
     /// space. It stays on its last tile but isn't drawn, and a click, `Q`
     /// or `E` does nothing. A Cursor that follows a sprite, or sits on what
     /// the player aims, carries on as before.
@@ -3191,8 +3190,9 @@ impl App {
     /// Notes the tile the pointer on screen cell `cell` points at as the
     /// pointer's, and puts the Cursor there, within the leash, unless it
     /// follows a sprite. Where it points at no tile, both stay on their last
-    /// tile: off the map view, or past the wall, where the Cursor can't
-    /// reach (M2 design §11.4).
+    /// tile: past the wall, where the Cursor can't reach and isn't drawn,
+    /// or off the map view, where it's drawn there again (M2 design
+    /// §11.4).
     fn point(&mut self, cell: Position) {
         self.mouse = Some(cell);
         let place = self.pointed_place(cell);
@@ -3208,7 +3208,7 @@ impl App {
                 }
             }
             Some(Place::Glass(_) | Place::Space) => self.pointer_past_wall = true,
-            None => {}
+            None => self.pointer_past_wall = false,
         }
     }
 }
