@@ -4,12 +4,12 @@
 │ space      pause / resume       Z X C      select/train/grab    Tab        next sprite           │
 │ .          step                 Q E        left / right click   Shift+Tab  previous sprite       │
 │ + -        faster / slower      Shift+Q E  hug / shock          l          sprite list           │
-│ VIEW                            Ctrl+click hug / shock          r          name it               │
-│ WASD       scroll (Shift: 5)    H          show to sprites      g          save its genome       │
-│ T          track the selected   F          follow a sprite      INSPECTOR                        │
-│ b          sprite colours       middle     follow a sprite      [ ]        switch tabs           │
-│ m          event filter         wheel      change mode          PgUp PgDn  scroll a tab          │
-│ v          exact detail         C again    the Place menu                                        │
+│ VIEW                            Ctrl+click hug / shock          p          population graph      │
+│ WASD       scroll (Shift: 5)    H          show to sprites      r          name it               │
+│ T          track the selected   F          follow a sprite      g          save its genome       │
+│ b          sprite colours       middle     follow a sprite      INSPECTOR                        │
+│ m          event filter         wheel      change mode          [ ]        switch tabs           │
+│ v          exact detail         C again    the Place menu       PgUp PgDn  scroll a tab          │
 │ ?          this help            hold E     aim, let go to send                                   │
 │ Esc        let go, back, quit?                                                                   │
 │ Ctrl+C     quit at once                                                                          │

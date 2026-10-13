@@ -53,6 +53,7 @@ The same key in capitals or lower case does the same thing.
 | Place menu | `1`–`9`, or the arrows and `Enter`, or a click picks: a berry bush seedling, a berry, a ball, a new sprite, or a sprite from a genome file. The next Grab-mode click places it; a right click puts it away |
 | `Tab` / `Shift+Tab` | Select the next / previous sprite |
 | `l` | Sprite list: every sprite, with its age, strongest drive and what it's doing. The arrows choose, `Tab` changes the order, `Enter` goes to it |
+| `p` | Population graph: how many sprites there have been over the whole run, by life stage, with the world's limit. `←` `→` or the mouse pick a moment, and the lines under the graph say how many there were then and what hatched, was placed or died since the column before |
 | `r` | Name the selected sprite: type a name, or `Tab` for another random one, then `Enter` |
 | `g` | Save the selected sprite's genome to the genomes folder (the status line says where); the Place menu reads it back |
 | `[` / `]` | Previous / next inspector tab |

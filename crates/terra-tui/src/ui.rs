@@ -52,6 +52,7 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
     match app.screen() {
         Screen::Help => render_help(frame.buffer_mut(), app, world),
         Screen::SpriteList => render_sprite_list(frame.buffer_mut(), app, world),
+        Screen::Population => render_population(frame.buffer_mut(), app, world),
         _ => {}
     }
     frame.render_widget(status_line(app, world, status.width), status);
@@ -564,6 +565,38 @@ fn render_sprite_list(buf: &mut Buffer, app: &App, world: &World) {
     }
 }
 
+/// Draws the population graph over everything between the top bar and the
+/// status line (M2 design §14), or an empty box if the policy hides it.
+fn render_population(buf: &mut Buffer, app: &App, world: &World) {
+    let Some(area) = app.overlay() else {
+        return;
+    };
+    let shown = app.can_view(Panel::Graph, Subject::World);
+    let title = if shown {
+        let first = world.population().first().map_or(world.tick(), |c| c.tick);
+        format!(
+            " Population ── ticks {} to {} ",
+            group_thousands(first),
+            group_thousands(world.tick())
+        )
+    } else {
+        " Population ".to_string()
+    };
+    let inner = clear_box(buf, area, &title, " esc close ");
+    if !shown {
+        return;
+    }
+    let lines = crate::graph::lines(
+        app,
+        world,
+        usize::from(inner.width),
+        usize::from(inner.height),
+    );
+    for (row, line) in (inner.y..inner.bottom()).zip(&lines) {
+        buf.set_line(inner.x, row, line, inner.width);
+    }
+}
+
 /// Where text `width` cells wide sits at the right of `area`'s top border:
 /// before the corner and the line beside it, as a title sits after them.
 pub(crate) fn top_right(area: Rect, width: u16) -> Option<Rect> {
@@ -801,6 +834,10 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
                 // While the sprite list is open, how to use it (design §6.1).
                 _ if app.screen() == Screen::SpriteList => {
                     hint_if_fits(room, "↑↓ choose  enter go to it  tab sort  esc close")
+                }
+                // And the population graph (M2 design §14).
+                _ if app.screen() == Screen::Population => {
+                    hint_if_fits(room, "←→ pick a moment  space pause  +/- speed  esc close")
                 }
                 _ => hints_within(room),
             };

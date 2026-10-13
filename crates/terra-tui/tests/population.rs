@@ -1,0 +1,411 @@
+//! The population graph (M2 design §14): `p` opens it over the panels, with
+//! the world's population over its whole run stacked by life stage, and a
+//! moment picked with `←` `→` or the pointer read under it; a small copy
+//! heads the World tab.
+
+use ratatui::buffer::Buffer;
+use ratatui::layout::{Position, Size};
+use ratatui::style::Color;
+use ratatui::{Terminal, backend::TestBackend};
+use terra_sim::{DataPack, Genome, Map, Pos, Scenario, World};
+use terra_tui::app::{App, Screen};
+use terra_tui::input::Action;
+use terra_tui::policy::{InfoPolicy, Panel, Subject};
+use terra_tui::theme::Theme;
+use terra_tui::ui;
+
+fn pack() -> DataPack {
+    DataPack::builtin().expect("built-in data pack is valid")
+}
+
+/// A field of grass with `young` newborn starter sprites along the top row
+/// and `adults` grown ones along the next.
+fn field(young: u16, adults: u16) -> World {
+    let pack = pack();
+    let map = Map::from_ascii(&["............"; 4], &pack).expect("valid drawing");
+    let young_at: Vec<Pos> = (0..young).map(|x| Pos { x, y: 0 }).collect();
+    let sprites: Vec<(Pos, Option<Genome>)> = young_at
+        .iter()
+        .copied()
+        .chain((0..adults).map(|x| Pos { x, y: 1 }))
+        .map(|pos| (pos, None))
+        .collect();
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: &[],
+        newborns: &young_at,
+    };
+    World::from_scenario(scenario, pack, 7).expect("valid scenario")
+}
+
+/// A single tile of grass with one newborn starter sprite, which dies of
+/// thirst at about tick 4,000.
+fn doomed() -> World {
+    let pack = pack();
+    let map = Map::from_ascii(&["."], &pack).expect("valid drawing");
+    let at = Pos { x: 0, y: 0 };
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &[(at, None)],
+        scripted: &[],
+        newborns: &[at],
+    };
+    World::from_scenario(scenario, pack, 1).expect("valid scenario")
+}
+
+fn run(world: &mut World, ticks: u64) {
+    for _ in 0..ticks {
+        world.step();
+    }
+}
+
+/// An app on `world` at 100×30, in the default theme.
+fn app_on(world: &World) -> App {
+    App::new(
+        world.map(),
+        Theme::cp437(),
+        7,
+        ui::areas(Size::new(100, 30)),
+    )
+}
+
+fn render(app: &App, world: &World) -> Buffer {
+    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+    terminal
+        .draw(|frame| ui::render(frame, app, world))
+        .unwrap();
+    terminal.backend().buffer().clone()
+}
+
+fn row(buffer: &Buffer, y: u16) -> String {
+    let text: String = (0..buffer.area.width)
+        .map(|x| buffer[(x, y)].symbol())
+        .collect();
+    text.trim_end().to_string()
+}
+
+// At 100×30 the graph's box is rows 1 to 28, its inside rows 2 to 27 from
+// column 1; with a limit of 100 the labels take 6 columns, so the graph's
+// first column is 7. Its 20 rows are 2 to 21, the axis 22, its ticks 23,
+// the legend 25 and the two lines that read a moment 26 and 27.
+const FIRST_COLUMN: u16 = 7;
+const BOTTOM: u16 = 21;
+const AXIS: u16 = 22;
+
+/// What the two lines under the graph say.
+fn reading(buffer: &Buffer) -> [String; 2] {
+    [26, 27].map(|y| {
+        let line = row(buffer, y);
+        line.trim_start_matches('│')
+            .trim_end_matches('│')
+            .trim()
+            .to_string()
+    })
+}
+
+#[test]
+fn p_opens_the_population_graph_over_the_panels_and_p_or_esc_closes_it() {
+    let mut world = field(2, 4);
+    run(&mut world, 250);
+    let mut app = app_on(&world);
+    app.apply(Action::Population, &world);
+    assert_eq!(app.screen(), Screen::Population);
+    let screen = render(&app, &world);
+    assert!(
+        row(&screen, 0).starts_with(" Terra Sprites"),
+        "the top bar stays"
+    );
+    let title = row(&screen, 1);
+    assert!(
+        title.starts_with("┌─ Population ── ticks 0 to 250 ─"),
+        "{title}"
+    );
+    assert!(title.ends_with(" esc close ─┐"), "{title}");
+    assert!(
+        row(&screen, 2).starts_with("│ 100 ┤"),
+        "{}",
+        row(&screen, 2)
+    );
+    assert!(
+        row(&screen, 12).starts_with("│  50 ┤"),
+        "{}",
+        row(&screen, 12)
+    );
+    assert!(
+        row(&screen, AXIS).starts_with("│   0 └"),
+        "{}",
+        row(&screen, AXIS)
+    );
+    let legend = row(&screen, 25);
+    assert!(
+        legend.starts_with("│ █ young  █ adults  █ old  █ eggs  ··· most sprites, 100"),
+        "{legend}"
+    );
+    assert_eq!(
+        reading(&screen),
+        [
+            "now, tick 250: 6 sprites · 2 young · 4 adults · 0 old · 0 eggs",
+            "since tick 200: none hatched or died",
+        ]
+    );
+    let status = row(&screen, 29);
+    assert!(
+        status.ends_with("←→ pick a moment  space pause  +/- speed  esc close"),
+        "{status}"
+    );
+    app.apply(Action::Population, &world);
+    assert_eq!(app.screen(), Screen::Normal, "p closes it");
+    app.apply(Action::Population, &world);
+    app.apply(Action::Back, &world);
+    assert_eq!(app.screen(), Screen::Normal, "and so does Esc");
+}
+
+#[test]
+fn the_life_stages_stack_from_the_bottom_in_the_theme_s_colours() {
+    // M2 design §14: young, then adults, old and eggs. Each row is two half
+    // tiles of 2.5 sprites: the 2 young fill the first, the 4 adults the
+    // next two.
+    let mut world = field(2, 4);
+    run(&mut world, 250);
+    let mut app = app_on(&world);
+    app.apply(Action::Population, &world);
+    let screen = render(&app, &world);
+    let look = Theme::cp437().population();
+    let bottom = &screen[(FIRST_COLUMN, BOTTOM)];
+    assert_eq!(bottom.symbol(), "▄");
+    assert_eq!((bottom.fg, bottom.bg), (look.young, look.adult));
+    assert_eq!((look.young, look.adult), (Color::LightGreen, Color::Cyan));
+    let above = &screen[(FIRST_COLUMN, BOTTOM - 1)];
+    assert_eq!(above.symbol(), "▄");
+    assert_eq!((above.fg, above.bg), (look.adult, Color::Reset));
+    assert_eq!(screen[(FIRST_COLUMN, BOTTOM - 2)].symbol(), " ");
+    // The world's limit, 100, is the top row: dotted where nothing is.
+    let limit = &screen[(FIRST_COLUMN, 2)];
+    assert_eq!((limit.symbol(), limit.fg), ("·", Color::DarkGray));
+}
+
+#[test]
+fn the_graph_grows_from_the_left_then_squeezes_the_whole_run_in() {
+    // A column is 100 ticks until the run is longer than the graph is wide.
+    // The lone adult has no food or water, so it dies within the run.
+    let mut world = field(0, 1);
+    run(&mut world, 2_000);
+    let mut app = app_on(&world);
+    app.apply(Action::Population, &world);
+    let screen = render(&app, &world);
+    let columns = |screen: &Buffer, y: u16| -> String {
+        (FIRST_COLUMN..99)
+            .map(|x| screen[(x, y)].symbol())
+            .collect()
+    };
+    let one = columns(&screen, BOTTOM);
+    assert_eq!(one.trim_end().chars().count(), 20, "{one}");
+    let ticks = row(&screen, 23);
+    assert!(ticks.starts_with("│     0 "), "{ticks}");
+    assert!(
+        ticks.ends_with(" 9,200│"),
+        "92 columns of 100 ticks: {ticks}"
+    );
+    run(&mut world, 58_000);
+    let screen = render(&app, &world);
+    let ticks = row(&screen, 23);
+    assert!(ticks.starts_with("│     0 "), "the whole run: {ticks}");
+    assert!(ticks.ends_with(" 60,000│"), "{ticks}");
+    let one = columns(&screen, BOTTOM);
+    assert!(one.starts_with('▄'), "its life is at the start: {one}");
+    assert!(one.ends_with(' '), "and its death before the end: {one}");
+    assert!(
+        reading(&screen)[0].starts_with("now, tick 60,000: 0 sprites"),
+        "{:?}",
+        reading(&screen)
+    );
+    // Every column is reached, so `←` picks the one before now.
+    app.apply(Action::Scroll { dx: -1, dy: 0 }, &world);
+    let screen = render(&app, &world);
+    assert_eq!(screen[(98 - 1, AXIS)].symbol(), "▲");
+}
+
+#[test]
+fn arrows_or_the_pointer_pick_a_moment_and_the_lines_under_the_graph_read_it() {
+    // Counts at 0, 100 and 200; the columns show the counts at 100 and 200
+    // and now.
+    let mut world = field(2, 4);
+    run(&mut world, 250);
+    let mut app = app_on(&world);
+    app.apply(Action::Population, &world);
+    let left = Action::Scroll { dx: -1, dy: 0 };
+    let right = Action::Scroll { dx: 1, dy: 0 };
+    app.apply(left, &world);
+    let screen = render(&app, &world);
+    assert_eq!(screen[(FIRST_COLUMN + 1, AXIS)].symbol(), "▲");
+    assert_eq!(
+        reading(&screen),
+        [
+            "tick 200: 6 sprites · 2 young · 4 adults · 0 old · 0 eggs",
+            "since tick 100: none hatched or died",
+        ]
+    );
+    app.apply(left, &world);
+    app.apply(left, &world);
+    let screen = render(&app, &world);
+    assert_eq!(
+        screen[(FIRST_COLUMN, AXIS)].symbol(),
+        "▲",
+        "it stops at the first"
+    );
+    assert_eq!(reading(&screen)[1], "since tick 0: none hatched or died");
+    app.apply(right, &world);
+    app.apply(right, &world);
+    app.apply(right, &world);
+    let screen = render(&app, &world);
+    assert_eq!(screen[(FIRST_COLUMN + 2, AXIS)].symbol(), "▲", "and at now");
+    assert!(reading(&screen)[0].starts_with("now, tick 250:"));
+    // The pointer over a column picks it; over one the run hasn't reached,
+    // or the labels, it leaves the pick as it is.
+    app.apply(Action::Point(Position::new(FIRST_COLUMN + 1, 9)), &world);
+    assert_eq!(app.graph_pick(), Some(1));
+    app.apply(Action::Point(Position::new(FIRST_COLUMN + 40, 9)), &world);
+    app.apply(Action::Point(Position::new(3, 9)), &world);
+    assert_eq!(app.graph_pick(), Some(1));
+    let screen = render(&app, &world);
+    assert!(reading(&screen)[0].starts_with("tick 200:"));
+    // Closed and opened again, it reads now.
+    app.apply(Action::Back, &world);
+    app.apply(Action::Population, &world);
+    assert_eq!(app.graph_pick(), None);
+}
+
+#[test]
+fn a_death_is_read_in_the_moment_it_happened() {
+    let mut world = doomed();
+    run(&mut world, 4_500);
+    assert_eq!(world.sprites().count(), 0, "it died of thirst");
+    let died = world
+        .population()
+        .iter()
+        .position(|count| count.since.deaths() > 0)
+        .expect("a count with the death");
+    let count = &world.population()[died];
+    // A column is 100 ticks, so the count at tick T is column T/100 - 1.
+    let column = (count.tick / 100 - 1) as u16;
+    let mut app = app_on(&world);
+    app.apply(Action::Population, &world);
+    app.apply(
+        Action::Click {
+            at: Position::new(FIRST_COLUMN + column, 15),
+            button: terra_tui::input::Button::Left,
+            amplified: false,
+        },
+        &world,
+    );
+    let screen = render(&app, &world);
+    let tick = count.tick;
+    assert_eq!(
+        reading(&screen),
+        [
+            format!(
+                "tick {}: 0 sprites · 0 young · 0 adults · 0 old · 0 eggs",
+                group(tick)
+            ),
+            format!("since tick {}: 1 died (dehydration 1)", group(tick - 100)),
+        ]
+    );
+}
+
+/// `n` with its thousands grouped, as the screen writes it.
+fn group(n: u64) -> String {
+    let digits = n.to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
+#[test]
+fn time_runs_as_usual_while_the_graph_is_open() {
+    let world = field(2, 4);
+    let mut app = app_on(&world);
+    app.apply(Action::Population, &world);
+    let speed = app.clock.speed();
+    app.apply(Action::TogglePause, &world);
+    assert!(app.clock.is_paused());
+    app.apply(Action::Faster { held: false }, &world);
+    assert_ne!(app.clock.speed(), speed);
+    app.apply(Action::TogglePause, &world);
+    assert!(!app.clock.is_paused());
+    assert_eq!(app.screen(), Screen::Population, "and it stays open");
+}
+
+#[test]
+fn the_world_tab_starts_with_a_small_graph() {
+    let mut world = field(2, 4);
+    run(&mut world, 250);
+    let app = app_on(&world);
+    let screen = render(&app, &world);
+    // The inspector is the right-hand 46 columns, its inside from column 55.
+    let inspector = |y: u16| -> String {
+        (55..99)
+            .map(|x| screen[(x, y)].symbol())
+            .collect::<String>()
+            .trim_end()
+            .to_string()
+    };
+    assert_eq!(inspector(2), " population, ticks 0 to 250");
+    assert!(inspector(3).starts_with(" 100 ┤··"), "{}", inspector(3));
+    assert!(inspector(6).starts_with("  50 ┤"), "{}", inspector(6));
+    assert!(inspector(9).starts_with("   0 └──"), "{}", inspector(9));
+    assert_eq!(inspector(10), "");
+    assert!(inspector(11).starts_with(" data pack"), "{}", inspector(11));
+}
+
+#[test]
+fn a_loaded_world_shows_its_whole_graph() {
+    let mut world = field(2, 4);
+    run(&mut world, 1_250);
+    let loaded = World::load(&world.save()).expect("the save loads");
+    let mut app = app_on(&world);
+    app.apply(Action::Population, &world);
+    let (before, after) = (render(&app, &world), render(&app, &loaded));
+    for y in 1..28 {
+        assert_eq!(row(&after, y), row(&before, y), "row {y}");
+    }
+    assert!(row(&after, 1).starts_with("┌─ Population ── ticks 0 to 1,250 ─"));
+}
+
+/// A policy that shows everything but the population graph.
+struct NoGraph;
+
+impl InfoPolicy for NoGraph {
+    fn can_view(&self, panel: Panel, _subject: Subject) -> bool {
+        panel != Panel::Graph
+    }
+}
+
+#[test]
+fn the_policy_may_hide_the_graph() {
+    // Design §6.4: the box stays, empty, and the World tab leaves it out.
+    let mut world = field(2, 4);
+    run(&mut world, 250);
+    let mut app = app_on(&world);
+    app.set_policy(NoGraph);
+    let screen = render(&app, &world);
+    let first: String = (55..99).map(|x| screen[(x, 2)].symbol()).collect();
+    assert!(first.starts_with(" data pack"), "{first}");
+    app.apply(Action::Population, &world);
+    let screen = render(&app, &world);
+    assert!(
+        row(&screen, 1).starts_with("┌─ Population ───"),
+        "{}",
+        row(&screen, 1)
+    );
+    for y in 2..28 {
+        assert_eq!(row(&screen, y).trim_matches(['│', ' ']), "", "row {y}");
+    }
+}

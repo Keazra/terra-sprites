@@ -100,7 +100,7 @@ fn shown(app: &App, world: &World) -> Vec<(Line<'static>, Option<MemoryOpen>)> {
         return Vec::new();
     }
     match (app.tab(), app.selection()) {
-        (Tab::World, _) => bare(world_tab(world)),
+        (Tab::World, _) => bare(world_tab(app, world)),
         (_, None) => bare(vec![Line::from(NOTHING_SELECTED)]),
         (tab, Some(Selection::Living(id))) => match world.sprite(id) {
             Some(sprite) => sprite_tab(tab, &sprite, app, world),
@@ -1821,10 +1821,11 @@ fn wrapped(text: &str, indent: usize, style: Style) -> Vec<Line<'static>> {
         .collect()
 }
 
-/// The World tab (design §6.1): the data pack; the population, and the
-/// deaths by cause; then each object type with its count, the count in each
-/// stage (for a type with more than one) and the total of each counter.
-fn world_tab(world: &World) -> Vec<Line<'static>> {
+/// The World tab (design §6.1): a small population graph (M2 design §14),
+/// if the policy shows it; the data pack; the population, and the deaths by
+/// cause; then each object type with its count, the count in each stage
+/// (for a type with more than one) and the total of each counter.
+fn world_tab(app: &App, world: &World) -> Vec<Line<'static>> {
     let data = world.data();
     // Physiology's causes always; an object only once it has killed.
     let hurt = world
@@ -1841,7 +1842,12 @@ fn world_tab(world: &World) -> Vec<Line<'static>> {
         .collect();
     let total: u64 = world.deaths_by_cause().map(|(_, n)| n).sum();
     let plain = Style::default();
-    let mut lines: Vec<Line<'static>> = vec![
+    let mut lines = Vec::new();
+    if app.can_view(Panel::Graph, Subject::World) {
+        lines.extend(crate::graph::small(app, world, WIDTH));
+        lines.push(Line::default());
+    }
+    lines.extend([
         Line::from(format!(
             " {:<12}{} v{}",
             "data pack",
@@ -1854,7 +1860,7 @@ fn world_tab(world: &World) -> Vec<Line<'static>> {
             group_thousands(world.sprites().count() as u64)
         )),
         Line::from(format!(" {:<12}{:>7}", "deaths", group_thousands(total))),
-    ];
+    ]);
     lines.extend(wrapped(&listed(&deaths), 3, plain));
     for object_type in data.object_type_names() {
         let objects: Vec<ObjectView> = world

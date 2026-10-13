@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use ratatui::style::Color;
 use serde::Deserialize;
-use terra_sim::{DataPack, Terrain};
+use terra_sim::{DataPack, LifeStage, Terrain};
 
 use crate::app::{CursorMode, StatusMark};
 use crate::space::{Depth, Pane};
@@ -95,6 +95,36 @@ pub struct Glyph {
     pub reversed: bool,
 }
 
+/// How a theme draws the population graph (M2 design §14): each life
+/// stage's colour, the blocks the stages are stacked in, and the dotted
+/// line of the world's limit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PopulationLook {
+    pub young: Color,
+    pub adult: Color,
+    pub old: Color,
+    pub egg: Color,
+    /// A whole tile of one stage.
+    pub full: char,
+    /// The lower half of a tile: drawn in the stage below, over the stage
+    /// above, or over nothing at the top of the stack.
+    pub half: char,
+    /// A dot of the line at the world's limit.
+    pub limit: Glyph,
+}
+
+impl PopulationLook {
+    /// The colour the graph draws `stage` in.
+    pub fn colour(&self, stage: LifeStage) -> Color {
+        match stage {
+            LifeStage::Egg => self.egg,
+            LifeStage::Young => self.young,
+            LifeStage::Adult => self.adult,
+            LifeStage::Old => self.old,
+        }
+    }
+}
+
 /// The default theme's file.
 const CP437: &str = include_str!("../../../themes/cp437.ron");
 
@@ -177,6 +207,8 @@ pub struct Theme {
     glass: BTreeMap<Pane, Glyph>,
     /// The stars past it, by depth (M2 design §11.3).
     stars: BTreeMap<Depth, Glyph>,
+    /// The population graph (M2 design §14).
+    population: PopulationLook,
 }
 
 impl Theme {
@@ -276,6 +308,11 @@ impl Theme {
         self.stars[&depth]
     }
 
+    /// How the population graph is drawn (M2 design §14).
+    pub fn population(&self) -> PopulationLook {
+        self.population
+    }
+
     /// A theme from the text of a theme file, as `--theme <file>` loads it
     /// (design v34 §6.7), checked against the data pack it will draw.
     ///
@@ -333,6 +370,36 @@ impl Theme {
         space
     }
 
+    /// The default theme's population graph, for a theme without its own
+    /// (M2 design §14), such as one made before there was a graph.
+    fn default_population() -> PopulationLook {
+        let file = ron::from_str::<ThemeFile>(CP437)
+            .unwrap_or_else(|e| panic!("the built-in cp437 theme is invalid: {e}"))
+            .population
+            .expect("the built-in cp437 theme draws the population graph");
+        let stages = &file.stages;
+        let (Some(young), Some(adult), Some(old), Some(egg), Some(full), Some(half), Some(limit)) = (
+            stages.young,
+            stages.adult,
+            stages.old,
+            stages.egg,
+            file.full,
+            file.half,
+            file.limit,
+        ) else {
+            panic!("the built-in cp437 theme draws every part of the population graph");
+        };
+        PopulationLook {
+            young: young.into(),
+            adult: adult.into(),
+            old: old.into(),
+            egg: egg.into(),
+            full,
+            half,
+            limit: glyph(limit),
+        }
+    }
+
     /// A theme from a theme file's text, complete and within CP437.
     fn parse(text: &str) -> Result<Theme, String> {
         let file: ThemeFile = ron::from_str(text).map_err(|e| e.to_string())?;
@@ -367,6 +434,21 @@ impl Theme {
             glass.extend(glyphs(space.glass));
             stars.extend(glyphs(space.stars));
         }
+        // And any part of the population graph (M2 design §14).
+        let mut population = Theme::default_population();
+        if let Some(graph) = file.population {
+            let colour =
+                |colour: Option<Colour>, default: Color| colour.map_or(default, Color::from);
+            population = PopulationLook {
+                young: colour(graph.stages.young, population.young),
+                adult: colour(graph.stages.adult, population.adult),
+                old: colour(graph.stages.old, population.old),
+                egg: colour(graph.stages.egg, population.egg),
+                full: graph.full.unwrap_or(population.full),
+                half: graph.half.unwrap_or(population.half),
+                limit: graph.limit.map_or(population.limit, glyph),
+            };
+        }
         let theme = Theme {
             tiles,
             objects,
@@ -386,6 +468,7 @@ impl Theme {
                 .collect(),
             glass,
             stars,
+            population,
         };
         if let Some((what, symbol)) = theme
             .symbols()
@@ -455,6 +538,12 @@ impl Theme {
             .stars
             .iter()
             .map(|(depth, glyph)| (format!("the {} stars", snake_case(depth)), glyph.symbol));
+        let graph = [
+            ("the population graph's full", self.population.full),
+            ("the population graph's half", self.population.half),
+            ("the population graph's limit", self.population.limit.symbol),
+        ]
+        .map(|(what, symbol)| (what.to_string(), symbol));
         tiles
             .chain(objects)
             .chain(arrows)
@@ -463,6 +552,7 @@ impl Theme {
             .chain(lines)
             .chain(glass)
             .chain(stars)
+            .chain(graph)
             .collect()
     }
 }
@@ -539,6 +629,10 @@ struct ThemeFile {
     /// was space, draws the default theme's.
     #[serde(default, deserialize_with = "implicit_some")]
     space: Option<SpaceFile>,
+    /// The population graph (M2 design §14). A theme without it, or
+    /// without some of it, draws the default theme's.
+    #[serde(default, deserialize_with = "implicit_some")]
+    population: Option<PopulationFile>,
 }
 
 /// A section a theme file may leave out, written without `Some(…)` when
@@ -560,6 +654,39 @@ struct SpaceFile {
     /// The stars past it, by depth.
     #[serde(default)]
     stars: BTreeMap<Depth, GlyphEntry>,
+}
+
+/// A theme file's `population` section: how the population graph is
+/// drawn (M2 design §14).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PopulationFile {
+    /// Each life stage's colour.
+    #[serde(default)]
+    stages: StagesFile,
+    /// A whole tile of one stage.
+    #[serde(default, deserialize_with = "implicit_some")]
+    full: Option<char>,
+    /// The lower half of a tile.
+    #[serde(default, deserialize_with = "implicit_some")]
+    half: Option<char>,
+    /// A dot of the line at the world's limit.
+    #[serde(default, deserialize_with = "implicit_some")]
+    limit: Option<GlyphEntry>,
+}
+
+/// The colour of each life stage on the population graph.
+#[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StagesFile {
+    #[serde(default, deserialize_with = "implicit_some")]
+    young: Option<Colour>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    adult: Option<Colour>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    old: Option<Colour>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    egg: Option<Colour>,
 }
 
 /// A theme file's `cursor` section.

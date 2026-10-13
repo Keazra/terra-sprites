@@ -512,3 +512,66 @@ fn a_theme_draws_what_it_leaves_out_of_space_as_the_default_theme_does() {
     let error = Theme::from_ron(&misspelt, &pack).expect_err("refused");
     assert!(error.contains("top_lft"), "{error}");
 }
+
+/// A theme's population graph: each stage's colour, young to eggs, then its
+/// full and half blocks and the limit's dot and colour.
+fn graph(theme: &Theme) -> ([Color; 4], char, char, (char, Color)) {
+    let look = theme.population();
+    (
+        [look.young, look.adult, look.old, look.egg],
+        look.full,
+        look.half,
+        (look.limit.symbol, look.limit.fg),
+    )
+}
+
+#[test]
+fn the_themes_draw_the_population_graph_as_the_design_table_says() {
+    // M2 design §14.
+    let stages = [
+        Color::LightGreen,
+        Color::Cyan,
+        Color::Gray,
+        Color::LightYellow,
+    ];
+    assert_eq!(
+        graph(&Theme::cp437()),
+        (stages, '█', '▄', ('·', Color::DarkGray))
+    );
+    assert_eq!(
+        graph(&Theme::ascii()),
+        (stages, '#', '_', ('.', Color::DarkGray))
+    );
+}
+
+#[test]
+fn a_theme_from_before_the_population_graph_draws_the_default_theme_s() {
+    // M2 design §14.
+    let pack = pack();
+    let start = ASCII_THEME
+        .find("    // The population graph")
+        .expect("a population section");
+    let end = ASCII_THEME.rfind(')').expect("the theme's end");
+    let edited = format!("{}{}", &ASCII_THEME[..start], &ASCII_THEME[end..]);
+    assert!(!edited.contains("population:"), "{edited}");
+    let theme = Theme::from_ron(&edited, &pack).expect("loads");
+    assert_eq!(theme.population(), Theme::cp437().population());
+}
+
+#[test]
+fn a_theme_draws_what_it_leaves_out_of_the_graph_as_the_default_theme_does() {
+    // M2 design §14: a stage's colour or a block at a time.
+    let pack = pack();
+    let edited = ascii_with(", egg: light_yellow)", ")");
+    let edited = edited.replacen("        half: '_',\n", "", 1);
+    let edited = edited.replacen("adult: cyan", "adult: magenta", 1);
+    let theme = Theme::from_ron(&edited, &pack).expect("loads");
+    let (default, ascii) = (Theme::cp437().population(), Theme::ascii().population());
+    let look = theme.population();
+    assert_eq!((look.adult, look.egg), (Color::Magenta, default.egg));
+    assert_eq!((look.full, look.half), (ascii.full, default.half));
+    // A misspelt key is refused, rather than quietly drawn as the default.
+    let misspelt = ascii_with("half: '_'", "halve: '_'");
+    let error = Theme::from_ron(&misspelt, &pack).expect_err("refused");
+    assert!(error.contains("halve"), "{error}");
+}

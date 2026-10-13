@@ -187,6 +187,14 @@ fn every_display_asks_the_policy_and_shows_everything_in_m1() {
         "a row per sprite"
     );
     assert!(row(&list, 4, 0..100).starts_with("│ Sprite #"));
+    app.apply(Action::Back, &world);
+    app.apply(Action::Population, &world);
+    let graph = render(&app, &world);
+    assert!(
+        row(&graph, 2, 0..100).starts_with("│ 100 ┤"),
+        "the population graph: {}",
+        row(&graph, 2, 0..100)
+    );
 }
 
 #[test]
@@ -233,6 +241,13 @@ fn a_policy_that_denies_everything_blanks_every_display() {
         row(&list, 2, 0..100).starts_with("│ No sprites "),
         "no rows in the sprite list"
     );
+    app.apply(Action::Back, &world);
+    app.apply(Action::Population, &world);
+    let graph = render(&app, &world);
+    for y in 2..28 {
+        let inside = row(&graph, y, 0..100);
+        assert_eq!(inside.trim_matches(['│', ' ']), "", "no population graph");
+    }
 }
 
 #[test]
