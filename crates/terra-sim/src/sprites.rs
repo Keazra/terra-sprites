@@ -112,14 +112,12 @@ impl Sprite {
 
     /// How fast it walks on the tick `tick`, in move points (M2 design
     /// §9.5): its speed trait, less while it's young, rising steadily to all
-    /// of it as it grows up. A led egg goes at a newborn's pace, its age
-    /// counting from hatching (§10.4).
+    /// of it as it grows up.
     pub(crate) fn speed(&self, tick: u64, data: &DataPack) -> f32 {
         let ageing = data.physiology().ageing;
         let traits = self.program.traits;
         let growing = if self.stage() <= LifeStage::Young {
-            let age = if self.is_egg() { 0 } else { self.age(tick) };
-            let grown = (age as f32 / traits.grows_up).min(1.0);
+            let grown = (self.age(tick) as f32 / traits.grows_up).min(1.0);
             ageing.young_speed + (1.0 - ageing.young_speed) * grown
         } else {
             1.0
@@ -309,8 +307,8 @@ impl Sprite {
     /// Grows the sprite to its life stage on the tick `tick` (M2 design
     /// §9.2): if that's a new one, its genes are expressed afresh for it,
     /// leaving what it has learned as it was. An egg hatches on its tick,
-    /// and is born then, owing nothing for a walk it was led on (§10, §10.4).
-    /// Returns the stage it was in and the new one, if it has one.
+    /// and is born then (§10). Returns the stage it was in and the new one,
+    /// if it has one.
     pub(crate) fn grow(&mut self, tick: u64, data: &DataPack) -> Option<(LifeStage, LifeStage)> {
         let was = self.stage();
         let stage = match self.hatches {
@@ -318,10 +316,6 @@ impl Sprite {
             Some(_) => {
                 self.hatches = None;
                 self.born = tick as i64;
-                // The steps and points of a walk the Cursor led it on are
-                // the egg's: the hatchling pays nothing for them (§10.4).
-                self.did = Did::default();
-                self.move_points = 0;
                 self.program.traits.life_stage(0, self.sooner(data))
             }
             None => self
@@ -627,7 +621,8 @@ impl Sprites {
             if sprite.stage.is_none() {
                 return Err(format!("{id:?} has no life stage"));
             }
-            // An egg is laid, and hatches on its tick (M2 design §10).
+            // An egg is laid, and lies still until it hatches (M2 design
+            // §10).
             if sprite.is_egg() != (sprite.stage() == LifeStage::Egg) {
                 return Err(format!(
                     "{id:?} is at the life stage {:?}, but hatches at {:?}",
@@ -635,10 +630,9 @@ impl Sprites {
                     sprite.hatches
                 ));
             }
-            // It lies still until it hatches, unless the Cursor leads it
-            // (M2 design §10.4).
             if sprite.is_egg()
                 && (sprite.action.is_some()
+                    || sprite.lead.is_some()
                     || sprite.slide.is_some()
                     || !sprite.scripted.is_empty())
             {
@@ -829,20 +823,6 @@ mod tests {
             9.0 * (0.67 + 0.33 * 0.5),
         );
         assert_close(sprite(3_000, &data).speed(10_000, &data), 9.0);
-    }
-
-    #[test]
-    fn a_led_egg_goes_at_a_newborn_s_pace_however_long_ago_it_was_laid() {
-        // M2 design §10.4: its age counts from hatching.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
-        let genes = Copied {
-            genome: sprite(0, &data).genome,
-            flaws: Vec::new(),
-            errors: Vec::new(),
-        };
-        let egg = Sprite::egg(genes, at(0, 0), 10_000, Vec::new(), &data);
-        assert_close(egg.speed(10_000, &data), 9.0 * 0.67);
-        assert_close(egg.speed(10_700, &data), 9.0 * 0.67);
     }
 
     /// The starter, `age` ticks old on tick 100,000: it grows old at

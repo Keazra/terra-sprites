@@ -292,7 +292,7 @@ Lasting harm a hard life leaves on a sprite's body, from starving, going without
 _Avoid_: stress (that's what causes it), damage, injury (injury heals)
 
 **Egg** (M2):
-A sprite's first life stage, laid on a free tile beside its mother. It feels, learns and needs nothing, and moves only when the Cursor leads it; the Cursor can't touch or shove it, and nothing a sprite does to it does anything. It hatches where it lies. Other sprites see it as a thing of its own kind, not as a sprite.
+A sprite's first life stage, laid on a free tile beside its mother. It feels, learns, moves and needs nothing, the Cursor can't touch it, and nothing a sprite does to it does anything. It hatches where it lies. Other sprites see it as a thing of its own kind, not as a sprite.
 _Avoid_: unborn sprite, larva
 
 **Hatch** (M2):
@@ -664,7 +664,7 @@ To take hold of what's under the Cursor: a sprite is led, an item picked up. A s
 _Avoid_: lift, pick up (for a sprite)
 
 **Lead**:
-To hold a sprite through the Cursor without lifting it: it stays on the map and walks after the Cursor at its own pace, choosing nothing for itself, until the player **lets go**. Sprites are led, never lifted, and an egg is led the same way.
+To hold a sprite through the Cursor without lifting it: it stays on the map and walks after the Cursor at its own pace, choosing nothing for itself, until the player **lets go**. Sprites are led, never lifted.
 _Avoid_: drag, carry (for the Cursor), pick up
 
 **Leash**:
@@ -680,7 +680,7 @@ To let go of a held item with a push, so it rolls away like a kicked ball, as fa
 _Avoid_: toss, fling
 
 **Shove**:
-To let go of a led sprite with a push, so it **slides** as far and in the direction the player **aims**. It doesn't hurt, unless the sprite crashes into something that does. An egg is never shoved.
+To let go of a led sprite with a push, so it **slides** as far and in the direction the player **aims**. It doesn't hurt, unless the sprite crashes into something that does.
 _Avoid_: throw (for a sprite), push (a sprite's push rolls an item)
 
 **Slide**:
