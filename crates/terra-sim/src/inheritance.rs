@@ -9,6 +9,7 @@ use rand_chacha::ChaCha8Rng;
 use crate::ageing::Switch;
 use crate::data::DataPack;
 use crate::genome::{Gene, Genome};
+use crate::mutation::longest;
 use crate::random::chance;
 use crate::variation::each_value;
 
@@ -122,7 +123,8 @@ fn passed(flawed: u8, rng: &mut ChaCha8Rng) -> u8 {
 /// chance. A gene only one parent has goes to the child when its stretch is
 /// from that parent, so to about half the young. Each gene gets one copy
 /// from each parent, either flawed or not; a gene only one parent has gets
-/// a sound copy from the other.
+/// a sound copy from the other. A genome never grows past `longest` (M2
+/// design §13): genes only one parent has go, the last first, until it fits.
 pub(crate) fn of_pair(
     mother: Parent,
     father: Parent,
@@ -131,6 +133,8 @@ pub(crate) fn of_pair(
 ) -> Inherited {
     let crossover = data.physiology().breeding.crossover;
     let (mut genes, mut switches, mut flaws) = (Vec::new(), Vec::new(), Vec::new());
+    // Whether each of the child's genes is one only one parent has.
+    let mut one_has = Vec::new();
     let mut from_mother = chance(rng, 0.5);
     for (nth, slot) in slots(mother.genome, father.genome, data)
         .into_iter()
@@ -160,6 +164,19 @@ pub(crate) fn of_pair(
             at.map_or(0, |at| passed(flaws_of(parent.flaws, at), rng))
         };
         flaws.push(copy(mother, hers, rng) + copy(father, his, rng));
+        one_has.push(hers.is_none() || his.is_none());
+    }
+    let mut over = genes.len().saturating_sub(longest(data));
+    for index in (0..genes.len()).rev() {
+        if over == 0 {
+            break;
+        }
+        if one_has[index] {
+            genes.remove(index);
+            switches.remove(index);
+            flaws.remove(index);
+            over -= 1;
+        }
     }
     Inherited {
         genome: Genome::switched(genes, switches),
@@ -398,6 +415,23 @@ mod tests {
         }
         // Four genes she carries, in 500 eggs.
         assert!((900..1_100).contains(&broken), "{broken} of 2,000 broken");
+    }
+
+    #[test]
+    fn a_pair_s_child_never_has_more_genes_than_twice_the_starter_s() {
+        // M2 design §13: genes only one parent has go, the last first.
+        let data = builtin();
+        let longest = 2 * data.starter().genes.len();
+        let mine = genome(&vec![instinct("Eat", 0.25); longest], &data);
+        let theirs = genome(&vec![instinct("Drink", 0.75); longest], &data);
+        let mut trimmed = 0;
+        for seed in 0..100 {
+            let mut rng = ChaCha8Rng::seed_from_u64(seed);
+            let child = of_pair(sound(&mine), sound(&theirs), &data, &mut rng).genome;
+            assert!(child.genes.len() <= longest, "{}", child.genes.len());
+            trimmed += usize::from(child.genes.len() == longest);
+        }
+        assert!(trimmed > 0, "no child would have grown past it");
     }
 
     #[test]

@@ -5,9 +5,9 @@ use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
-    ActionView, Blocker, Command, DataPack, DeathCause, Emptied, EntityId, Event, EventKind, Grip,
-    Hurt, Learned, Map, Outcome, Pos, Progress, Rejection, Removal, Scenario, ScriptedAction,
-    Target, Terrain, Thing, Verb, World, WorldConfig,
+    ActionView, Blocker, Command, CopyChangeView, DataPack, DeathCause, Emptied, EntityId, Event,
+    EventKind, Grip, Hurt, Learned, Map, Outcome, Pos, Progress, Rejection, Removal, Scenario,
+    ScriptedAction, Target, Terrain, Thing, Verb, World, WorldConfig,
 };
 use terra_tui::app::{App, CursorMode, Flow, Tab};
 use terra_tui::input::{Action, Button};
@@ -3802,14 +3802,14 @@ fn an_egg_is_drawn_as_an_egg_and_the_body_tab_says_when_it_hatches() {
     }
 }
 
-#[test]
-fn the_genome_tab_of_a_sprite_with_parents_says_first_what_s_new_in_it() {
-    // M2 design §12: a lone egg, every gene value copied wrongly and each
-    // copy of a gene flawed half the time. Its mother, whom the world
-    // began with, has no such list.
-    let physiology = include_str!("../../../data/physiology.ron")
-        .replace("mutation: (chance: 0.01,", "mutation: (chance: 1.0,")
-        .replace("flaws: (arise: 0.007,", "flaws: (arise: 0.5,");
+/// A world whose one sprite, by `physiology`'s rules, the built-in one's
+/// changed as `changes` say, has laid an egg alone, and the egg.
+fn a_lone_egg(changes: &[(&str, &str)]) -> (World, EntityId) {
+    let mut physiology = include_str!("../../../data/physiology.ron").to_string();
+    for &(from, to) in changes {
+        assert!(physiology.contains(from), "{from:?}");
+        physiology = physiology.replace(from, to);
+    }
     let pack =
         DataPack::from_sources(&builtin_with("physiology.ron", &physiology)).expect("valid pack");
     let genome = terra_sim::Genome::from_ron(
@@ -3842,6 +3842,25 @@ fn the_genome_tab_of_a_sprite_with_parents_says_first_what_s_new_in_it() {
             _ => None,
         })
         .expect("she laid an egg");
+    (world, egg)
+}
+
+/// The built-in physiology's copy and change, as its file begins it.
+const COPY_AND_CHANGE: &str = "copy_and_change: (doubled: 0.0011, lost: 0.0011, changed: 0.0011,";
+
+#[test]
+fn the_genome_tab_of_a_sprite_with_parents_says_first_what_s_new_in_it() {
+    // M2 design §12: a lone egg, every gene value copied wrongly and each
+    // copy of a gene flawed half the time. Its mother, whom the world
+    // began with, has no such list.
+    let (world, egg) = a_lone_egg(&[
+        ("mutation: (chance: 0.01,", "mutation: (chance: 1.0,"),
+        ("flaws: (arise: 0.007,", "flaws: (arise: 0.5,"),
+        (
+            COPY_AND_CHANGE,
+            "copy_and_change: (doubled: 0.0, lost: 0.0, changed: 0.0,",
+        ),
+    ]);
     let mut app = app_for(&world, Theme::cp437(), 100, 40);
     app.apply(Action::SelectNext, &world);
     open(&mut app, &world, Tab::Genome);
@@ -3897,6 +3916,61 @@ fn the_genome_tab_of_a_sprite_with_parents_says_first_what_s_new_in_it() {
     // weakened does.
     let genes = rows[list + 1..].join(" ");
     assert_eq!(genes.matches("health .5").count(), broken, "{genes}");
+}
+
+#[test]
+fn the_genome_tab_lists_the_genes_copying_changed_doubled_and_lost() {
+    // M2 design §13: each changed gene with what it was, or what it's a
+    // copy of; then the genes doubled, and those lost.
+    let (world, egg) = a_lone_egg(&[
+        ("mutation: (chance: 0.01,", "mutation: (chance: 0.0,"),
+        ("flaws: (arise: 0.007,", "flaws: (arise: 0.0,"),
+        (
+            COPY_AND_CHANGE,
+            "copy_and_change: (doubled: 0.3, lost: 0.3, changed: 0.3,",
+        ),
+    ]);
+    let mut app = app_for(&world, Theme::cp437(), 100, 40);
+    while app.selection() != Some(terra_tui::app::Selection::Living(egg)) {
+        app.apply(Action::SelectNext, &world);
+    }
+    open(&mut app, &world, Tab::Genome);
+    let rows: Vec<String> = right_part(&render(&app, &world, 100, 40), 46)[2..38]
+        .iter()
+        .map(|row| inside(row).to_string())
+        .collect();
+    let list = rows
+        .iter()
+        .position(|row| row.is_empty())
+        .expect("a blank line");
+    let listed = rows[1..list].join(" ");
+    let changes = world.sprite(egg).expect("the egg").copy_changes();
+    let count = |kind: fn(&CopyChangeView) -> bool| changes.iter().filter(|c| kind(c)).count();
+    let changed = count(|c| matches!(c, CopyChangeView::Changed { .. }));
+    let copies = count(|c| matches!(c, CopyChangeView::Changed { on_copy: true, .. }));
+    let doubled = count(|c| matches!(c, CopyChangeView::Doubled { .. }));
+    let lost = count(|c| matches!(c, CopyChangeView::Lost { .. }));
+    assert!(changed > 0 && doubled > 0 && lost > 0, "{changes:?}");
+    assert_eq!(listed.matches("new: ").count(), changed, "{listed}");
+    assert_eq!(listed.matches(", from ").count(), copies, "{listed}");
+    assert_eq!(
+        listed.matches(", was ").count(),
+        changed - copies,
+        "{listed}"
+    );
+    let after = |label: &str| {
+        listed
+            .split(label)
+            .nth(1)
+            .map(|rest| rest.split(':').next().unwrap_or(rest).to_string())
+            .unwrap_or_default()
+    };
+    assert_eq!(
+        after("doubled: ").matches('·').count() + 1,
+        doubled,
+        "{listed}"
+    );
+    assert_eq!(after("lost: ").matches('·').count() + 1, lost, "{listed}");
 }
 
 #[test]

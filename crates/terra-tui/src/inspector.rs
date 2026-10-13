@@ -7,10 +7,11 @@ use ratatui::layout::{Margin, Position};
 use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
-    ActionView, Blocker, ChemicalKind, ChemicalLevel, Command, CursorTouch, DeathCause, Dir,
-    EmitterMode, Emptied, EntityId, Event, EventKind, Explanation, Expression, GeneView, Grip,
-    Learned, LifeStage, MAX_NAME_CHARS, NameProblem, ObjectView, Outcome, Part, PlaceRule, Pos,
-    Progress, Rejection, Removal, SpriteView, Switch, Target, Terrain, Thing, Trait, Verb, World,
+    ActionView, Blocker, ChemicalKind, ChemicalLevel, Command, CopyChangeView, CursorTouch,
+    DeathCause, Dir, EmitterMode, Emptied, EntityId, Event, EventKind, Explanation, Expression,
+    GeneView, Grip, Learned, LifeStage, MAX_NAME_CHARS, NameProblem, ObjectView, Outcome, Part,
+    PlaceRule, Pos, Progress, Rejection, Removal, SpriteView, Switch, Target, Terrain, Thing,
+    Trait, Verb, World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -1461,10 +1462,12 @@ fn genome_tab(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
     lines
 }
 
-/// What's new in a sprite with parents (M2 design §12), at the top of its
-/// Genome tab: who it's from, each gene copying changed with what it was,
-/// its broken genes and the flaws it carries hidden, then a blank line.
-/// Nothing for a sprite with no parents.
+/// What's new in a sprite with parents (M2 design §12, §13), at the top of
+/// its Genome tab: who it's from; each gene copying changed in what it
+/// does, with what it was, or what it's a copy of; the genes copying
+/// doubled and lost; each gene copying changed a number of, with what it
+/// was; its broken genes and the flaws it carries hidden; then a blank
+/// line. Nothing for a sprite with no parents.
 fn whats_new(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
     let parents: Vec<String> = sprite
         .parents()
@@ -1478,6 +1481,35 @@ fn whats_new(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
     };
     let mut lines = wrapped(&from, 1, Style::default());
     let genes = sprite.genes();
+    let switches = sprite.switches();
+    let named =
+        |gene: &GeneView, switch: Switch| format!("{}{}", gene_name(gene), switch_text(switch));
+    let (mut doubled, mut lost) = (Vec::new(), Vec::new());
+    for change in sprite.copy_changes() {
+        match change {
+            CopyChangeView::Changed {
+                gene,
+                was,
+                switch,
+                on_copy,
+            } => {
+                // A copy's original still works; a gene changed in its
+                // place doesn't.
+                let how = if on_copy { "from" } else { "was" };
+                let now = named(&genes[gene].0, switches[gene]);
+                let text = format!("new: {now}, {how} {}", named(&was, switch));
+                lines.extend(wrapped(&text, 1, Style::default()));
+            }
+            CopyChangeView::Doubled { gene } => doubled.push(named(&genes[gene].0, switches[gene])),
+            CopyChangeView::Lost { was, switch } => lost.push(named(&was, switch)),
+        }
+    }
+    for (label, names) in [("doubled", doubled), ("lost", lost)] {
+        if !names.is_empty() {
+            let text = format!("{label}: {}", listed(&names));
+            lines.extend(wrapped(&text, 1, Style::default()));
+        }
+    }
     for (index, was) in sprite.copying_errors() {
         let now = &genes[index].0;
         let text = format!("{}, was {}", gene_text(now), was_text(now, &was));

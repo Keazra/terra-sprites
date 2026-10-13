@@ -14,7 +14,7 @@ use crate::data::DataPack;
 use crate::genome::{Gene, Genome};
 use crate::inheritance::{Parent, flaws_of};
 use crate::map::{Dir, Map, Pos};
-use crate::mutation::{Copied, CopyingError};
+use crate::mutation::{self, Copied, CopyChange, CopyingError};
 use crate::objects::{EntityId, Objects};
 use crate::occupancy::Occupancy;
 use crate::perception::{Flood, Target};
@@ -72,6 +72,10 @@ pub(crate) struct Sprite {
     /// each was as it inherited it. Empty for a sprite with no parents.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) copying_errors: Vec<CopyingError>,
+    /// The whole genes copying doubled, lost or changed as it was laid (M2
+    /// design §13). Empty for a sprite with no parents.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) copy_changes: Vec<CopyChange>,
     pub(crate) body: Body,
     pub(crate) brain: Brain,
     /// What it's doing, or the action that last ended until the next starts.
@@ -357,12 +361,14 @@ impl Sprite {
             genome,
             flaws,
             errors,
+            changes,
         } = genes;
         let mut egg = Sprite::newborn(genome, pos, laid, data);
         egg.stage = Some(LifeStage::Egg);
         egg.hatches = Some(laid.saturating_add(data.physiology().breeding.hatches));
         egg.parents = parents;
         egg.copying_errors = errors;
+        egg.copy_changes = changes;
         egg.flaws = flaws;
         if egg.broken() > 0 {
             let born_with = data.physiology().flaws.health;
@@ -416,6 +422,7 @@ impl Sprite {
             health: vec![1.0; genome_len],
             flaws: Vec::new(),
             copying_errors: Vec::new(),
+            copy_changes: Vec::new(),
             body,
             brain,
             action: None,
@@ -601,8 +608,9 @@ impl Sprites {
     /// none stands on a solid object; every chemical is within 0 to 1; a
     /// Mate action is only ever an adult's, aimed at an adult (M2 design
     /// §5); each remembers no more places than it may, all on the map
-    /// (M2 design §7); and its flaws and copying errors fit its genome, with
-    /// copying having changed only values (M2 design §12).
+    /// (M2 design §7); and its flaws, copying errors and copy changes fit
+    /// its genome, with copying errors having changed only values (M2
+    /// design §12, §13).
     pub(crate) fn check(
         &self,
         map: &Map,
@@ -701,6 +709,8 @@ impl Sprites {
                     error.gene
                 ));
             }
+            mutation::check_changes(&sprite.genome, &sprite.copy_changes, data)
+                .map_err(|problem| format!("{id:?} {problem}"))?;
             if sprite.body.chems_before_tick.len() != sprite.body.chems.len() {
                 return Err(format!(
                     "{id:?} has {} levels from a tick ago, but {} chemicals",
@@ -839,6 +849,7 @@ mod tests {
             genome: sprite(0, &data).genome,
             flaws: Vec::new(),
             errors: Vec::new(),
+            changes: Vec::new(),
         };
         let egg = Sprite::egg(genes, at(0, 0), 10_000, Vec::new(), &data);
         assert_close(egg.speed(10_000, &data), 9.0 * 0.67);

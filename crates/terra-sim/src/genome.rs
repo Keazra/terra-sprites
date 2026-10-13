@@ -435,7 +435,7 @@ impl Gene {
     }
 
     /// Checks the gene's references and values, or says what's wrong.
-    fn check(&self, data: &DataPack) -> Result<(), String> {
+    pub(crate) fn check(&self, data: &DataPack) -> Result<(), String> {
         let chemical = |id: ChemId| {
             data.chemical(id)
                 .map(|_| ())
