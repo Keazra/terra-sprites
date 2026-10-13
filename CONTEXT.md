@@ -316,7 +316,7 @@ The hormone that turns a male adult female. The starter genes raise it while the
 _Avoid_: sex hormone
 
 **Longing** (M2):
-The hormone a female needs to breed alone. The starter genes raise it while the sprite sees no male adult and lower it fast while it sees one, and a female can breed alone only once it has reached physiology's `breeds_alone`. A stopgap until courtship and families make lone eggs very rare.
+The hormone that makes a female want to breed alone. The starter genes raise it while the sprite sees no male adult and lower it fast while it sees one. Whether she can is the body's say: only after an hour with no male adult seen or heard (Slice 32), which replaced a gate on longing itself.
 _Avoid_: loneliness (the drive for any sprite's company)
 
 **Fertile** (M2):
@@ -328,16 +328,48 @@ The drive to breed, which `physiology.ron` names as breeding's drive. The starte
 _Avoid_: broodiness (its first name; brooding is sitting on eggs), desire, libido
 
 **Body language** (M2):
-What a sprite sees of the sprite it attends to: its arousal (`target_arousal`) and whether it's of the other sex (`target_other_sex`). Brain inputs that read another's body are listed in `brain_io.ron` as `Target(...)` or `Differs(...)`.
+What a sprite sees of the sprite it attends to: its arousal (`target_arousal`), whether it's of the other sex (`target_other_sex`), how healthy it looks (`target_health`), and whether it's familiar, its partner or kin. Brain inputs that read another's body are listed in `brain_io.ron` as `Target(...)` or `Differs(...)`. A heard caller is read as if it were in sight.
 _Avoid_: signals, display
 
 **Mate** (M2):
-The action of breeding with a partner beside it. It works only between two fertile adults, a male and a female: she lays an egg, its genes mixed from both, and they split its cost. Mate is never offered toward a sprite that isn't an adult.
-_Avoid_: courtship (nothing comes before it yet), copulate
+The action of breeding with a partner beside it. It works only between two fertile adults, a male and a female, once her receptivity is high enough: she lays an egg, its genes mixed from both, and they split its cost. Mate is never offered toward a sprite that isn't an adult. The screen says "pair with".
+_Avoid_: courtship (that's what comes before it), copulate
 
 **Breed alone** (M2):
 The action of a female laying an egg with no partner, its genes hers with one of her two copies of each doubled, its whole cost hers. Offered only to a grown sprite.
 _Avoid_: parthenogenesis in what the player reads, cloning, self-mating
+
+**Call** (M2):
+An action with no target: the sprite calls once, at a little cost in energy. A call travels like a wave, round rock and walls and through doorways, about 30 tiles over open ground, three times as far as a sprite sees, and each terrain says how much sound it soaks up. A hearer knows who called and where from, and can go there as on a trip. Sprites call to find a mate and to keep their family in touch.
+_Avoid_: cry, song, speech (that's M6's Speak)
+
+**Courtship** (M2):
+What comes before mating: two sprites get to know each other, then one dances for the other with the action **Court**, and the other, if it likes what it sees, dances back. Each dance raises receptivity. Court is never offered toward a sprite that isn't an adult.
+_Avoid_: flirting, wooing, display (alone)
+
+**Receptivity** (M2):
+The hormone a female's body needs for Mate to lay an egg: at least physiology's `breeding.receptive`. The starter genes raise it when she's danced for, more when she dances back, and it fades within a few minutes.
+_Avoid_: readiness (fertile is the body's ready), heat, oestrus
+
+**Partner** (M2):
+The sprite it had its latest egg with. Partners keep near each other and, in the starter genes, court only each other. A partner is freed when the other dies, or after an hour neither seeing nor hearing the other, and may pair again.
+_Avoid_: mate (that's the action), spouse, bond
+
+**Kin** (M2):
+A sprite's parents, its young, and its brothers and sisters, the sprites with a parent in common. The starter genes weigh strongly against courting kin, but nothing forbids it.
+_Avoid_: relatives, family (family is the household)
+
+**Family** (M2):
+A sprite's partner, parents, young and eggs: those anxiety draws it back to. An attention instinct can name its family, and then draws the eye to them and not to others of their kind.
+_Avoid_: clan, herd, kin (kin is by blood)
+
+**Anxiety** (M2):
+A drive and second-order need that rises while a sprite's family is out of sight: fast for an egg it left alone, slowly for one it left with its partner, and in a young sprite while no parent is in sight. Finding them eases it. It's care, so it never reads the breeding drive.
+_Avoid_: fear (fear is of someone), worry, loneliness (that's for any company)
+
+**Grief** (M2):
+The starter genes' hormone for losing a partner, which holds arousal down for a while before the sprite may pair again.
+_Avoid_: sadness, mourning (as a name for the hormone)
 
 **Most sprites** (M2):
 The most sprites a world holds, eggs included: the preset's `most_sprites` (100 in the default world). A full world has no fertile sprite. The Cursor may still place one past it.
@@ -501,8 +533,8 @@ The need whose instinct did most to make a sprite choose a verb. A fruitless try
 _Avoid_: reason, goal
 
 **Familiarity**:
-How well a sprite knows an object type, or sprites, from having attended to it. Its opposite is **novelty**: how new the thing still is to the sprite. An apple is new to a sprite that knows only berries.
-_Avoid_: knowledge
+How well a sprite knows an object type, or sprites, from having attended to it. Its opposite is **novelty**: how new the thing still is to the sprite. An apple is new to a sprite that knows only berries. Since Slice 32 a sprite also has a familiarity with each individual it remembers, from time in each other's sight and from playing together, which fades slowly; strangers are those it hardly knows.
+_Avoid_: knowledge, acquaintance
 
 **Curiosity**:
 A sprite's pull towards things that are new to it. Being hurt when it investigates teaches it that new things are bad.
