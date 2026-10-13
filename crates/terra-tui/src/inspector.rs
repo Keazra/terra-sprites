@@ -7,10 +7,11 @@ use ratatui::layout::{Margin, Position};
 use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
-    ActionView, Blocker, ChemicalKind, ChemicalLevel, Command, CursorTouch, DeathCause, Dir,
-    EmitterMode, Emptied, EntityId, Event, EventKind, Explanation, Expression, GeneView, Grip,
-    Learned, LifeStage, MAX_NAME_CHARS, NameProblem, ObjectView, Outcome, Part, PlaceRule, Pos,
-    Progress, Rejection, Removal, SpriteView, Switch, Target, Terrain, Thing, Trait, Verb, World,
+    ActionView, Blocker, ChemicalKind, ChemicalLevel, Command, CopyChangeView, CursorTouch,
+    DeathCause, Dir, EmitterMode, Emptied, EntityId, Event, EventKind, Explanation, Expression,
+    GeneView, Grip, Learned, LifeStage, MAX_NAME_CHARS, NameProblem, ObjectView, Outcome, Part,
+    PlaceRule, Pos, Progress, Rejection, Removal, SpriteView, Switch, Target, Terrain, Thing,
+    Trait, Verb, World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -1461,10 +1462,12 @@ fn genome_tab(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
     lines
 }
 
-/// What's new in a sprite with parents (M2 design §12), at the top of its
-/// Genome tab: who it's from, each gene copying changed with what it was,
-/// its broken genes and the flaws it carries hidden, then a blank line.
-/// Nothing for a sprite with no parents.
+/// What's new in a sprite with parents (M2 design §12, §13), at the top of
+/// its Genome tab: who it's from; each gene copying changed in what it
+/// does, with what it was, or what it's a copy of; the genes copying
+/// doubled and lost; each gene copying changed a number of, with what it
+/// was; its broken genes and the flaws it carries hidden; then a blank
+/// line. Nothing for a sprite with no parents.
 fn whats_new(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
     let parents: Vec<String> = sprite
         .parents()
@@ -1478,6 +1481,35 @@ fn whats_new(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
     };
     let mut lines = wrapped(&from, 1, Style::default());
     let genes = sprite.genes();
+    let switches = sprite.switches();
+    let (mut doubled, mut lost) = (Vec::new(), Vec::new());
+    for change in sprite.copy_changes() {
+        match change {
+            CopyChangeView::Changed {
+                gene,
+                was,
+                switch,
+                on_copy,
+            } => {
+                // A copy's original still works; a gene changed in its
+                // place doesn't.
+                let how = if on_copy { "from" } else { "was" };
+                let now = named(&genes[gene].0, switches[gene]);
+                let text = format!("new: {now}, {how} {}", named(&was, switch));
+                lines.extend(wrapped(&text, 1, Style::default()));
+            }
+            CopyChangeView::Doubled { gene } => {
+                doubled.push(named(&genes[gene].0, switches[gene]));
+            }
+            CopyChangeView::Lost { was, switch } => lost.push(named(&was, switch)),
+        }
+    }
+    for (label, names) in [("doubled", doubled), ("lost", lost)] {
+        if !names.is_empty() {
+            let text = format!("{label}: {}", listed(&names));
+            lines.extend(wrapped(&text, 1, Style::default()));
+        }
+    }
     for (index, was) in sprite.copying_errors() {
         let now = &genes[index].0;
         let text = format!("{}, was {}", gene_text(now), was_text(now, &was));
@@ -1498,6 +1530,28 @@ fn whats_new(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
     }
     lines.push(Line::from(""));
     lines
+}
+
+/// The genes copying changed in what they do in `sprite` (M2 design §13),
+/// as its hatching line in the log names them: `thirst → attends to
+/// sprite`. None if it has none.
+pub(crate) fn something_new(sprite: &SpriteView) -> Option<String> {
+    let (genes, switches) = (sprite.genes(), sprite.switches());
+    let new: Vec<String> = sprite
+        .copy_changes()
+        .into_iter()
+        .filter_map(|change| match change {
+            CopyChangeView::Changed { gene, .. } => Some(named(&genes[gene].0, switches[gene])),
+            _ => None,
+        })
+        .collect();
+    (!new.is_empty()).then(|| new.join(", "))
+}
+
+/// A gene's name and when it works, as the Genome tab's list at the top and
+/// the log name a gene copying changed: `hunger → eat from Adult`.
+fn named(gene: &GeneView, switch: Switch) -> String {
+    format!("{}{}", gene_name(gene), switch_text(switch))
 }
 
 /// The numbers `was` had that `now` doesn't, as the Genome tab writes
@@ -1947,10 +2001,17 @@ pub(crate) fn event_line(event: &Event, data: &Words) -> Option<String> {
             ),
             None => format!("{} laid an egg alone", data.label(*by)),
         }),
-        EventKind::Hatched { id, parents } => Some(match parents_text(parents, data) {
-            Some(parents) => format!("{} hatched ({parents}'s)", data.label(*id)),
-            None => format!("{} hatched", data.label(*id)),
-        }),
+        // With the genes copying changed in what they do (M2 design §13.2).
+        EventKind::Hatched { id, parents } => {
+            let new = data
+                .news
+                .get(id)
+                .map_or(String::new(), |new| format!(", with something new: {new}"));
+            Some(match parents_text(parents, data) {
+                Some(parents) => format!("{} hatched ({parents}'s){new}", data.label(*id)),
+                None => format!("{} hatched{new}", data.label(*id)),
+            })
+        }
         EventKind::TurnedFemale { id } => Some(format!("{} turned female", data.label(*id))),
         EventKind::LearnedMilestone { id, learned, good } => {
             Some(learned_line(*id, learned, *good, data))
@@ -2232,7 +2293,8 @@ mod tests {
             terra_sim::DataPack::builtin().expect("built-in data pack is valid"),
         ));
         let names = Box::leak(Box::new(crate::text::Names::default()));
-        Words { data, names }
+        let news = Box::leak(Box::new(std::collections::BTreeMap::new()));
+        Words { data, names, news }
     }
 
     /// An aimed action, `verb`, at `target` of the type `target_type`.

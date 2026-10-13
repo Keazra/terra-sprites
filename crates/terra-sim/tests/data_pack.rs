@@ -902,6 +902,41 @@ fn copying_errors_flaws_and_crossover_are_shares_and_large_changes_at_least_none
 }
 
 #[test]
+fn copy_and_change_s_chances_are_shares_that_add_up_to_at_most_one() {
+    // M2 design §13: one draw a gene decides which, if any, happens to it,
+    // and a genome may grow at least as long as the starter.
+    let line = "copy_and_change: (doubled: 0.00052, lost: 0.00052, changed: 0.00052, on_copy: 0.75, longest: 2.0),";
+    for (to, word) in [
+        (
+            "doubled: 1.5, lost: 0.00052, changed: 0.00052, on_copy: 0.75, longest: 2.0",
+            "copy_and_change.doubled",
+        ),
+        (
+            "doubled: 0.00052, lost: -0.1, changed: 0.00052, on_copy: 0.75, longest: 2.0",
+            "copy_and_change.lost",
+        ),
+        (
+            "doubled: 0.00052, lost: 0.00052, changed: 2.0, on_copy: 0.75, longest: 2.0",
+            "copy_and_change.changed",
+        ),
+        (
+            "doubled: 0.00052, lost: 0.00052, changed: 0.00052, on_copy: 1.5, longest: 2.0",
+            "copy_and_change.on_copy",
+        ),
+        (
+            "doubled: 0.5, lost: 0.3, changed: 0.3, on_copy: 0.75, longest: 2.0",
+            "add up to more than 1",
+        ),
+        (
+            "doubled: 0.00052, lost: 0.00052, changed: 0.00052, on_copy: 0.75, longest: 0.5",
+            "copy_and_change.longest",
+        ),
+    ] {
+        assert_invalid_physiology(line, &format!("copy_and_change: ({to}),"), word);
+    }
+}
+
+#[test]
 fn every_receptor_target_has_a_range_and_nothing_else_does() {
     assert_invalid_physiology("\"exploration_mod\": (0.25, 4.0),", "", "exploration_mod");
     assert_invalid_physiology(

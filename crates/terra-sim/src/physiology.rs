@@ -33,6 +33,9 @@ pub(crate) struct Physiology {
     /// The hidden flaws genes carry, and what a broken gene does (M2 design
     /// §12).
     pub(crate) flaws: Flaws,
+    /// The whole genes copying doubles, loses or changes in an egg (M2
+    /// design §13).
+    pub(crate) copy_and_change: CopyAndChange,
     /// What each cause-of-death tally is multiplied by every tick: the file's
     /// `cause_fade` is how many ticks it takes to halve.
     pub(crate) tally_fade: f32,
@@ -91,6 +94,9 @@ pub(crate) struct PhysiologyEntry {
     /// A pack from before hidden flaws has none (design §2.8).
     #[serde(default)]
     flaws: Flaws,
+    /// A pack from before copy and change has none (design §2.8).
+    #[serde(default)]
+    copy_and_change: CopyAndChange,
     cause_fade: u32,
     traits: TraitRanges,
     brain: BTreeMap<String, ParamRange>,
@@ -520,6 +526,38 @@ impl Default for Flaws {
     }
 }
 
+/// Copy and change (M2 design §13): as an egg's genes are copied, now and
+/// then a whole gene is doubled, lost, or changed in what it does.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CopyAndChange {
+    /// The chance that a gene is doubled, the copy next to it.
+    pub(crate) doubled: f32,
+    /// The chance that a gene is lost.
+    pub(crate) lost: f32,
+    /// The chance that a gene is changed in what it does.
+    pub(crate) changed: f32,
+    /// The share of changes made on a fresh copy, so the original still
+    /// works.
+    pub(crate) on_copy: f32,
+    /// The longest a genome may grow, as a multiple of the starter's length.
+    pub(crate) longest: f32,
+}
+
+/// What a pack from before copy and change gets: none, and no limit on a
+/// genome's length.
+impl Default for CopyAndChange {
+    fn default() -> CopyAndChange {
+        CopyAndChange {
+            doubled: 0.0,
+            lost: 0.0,
+            changed: 0.0,
+            on_copy: 0.0,
+            longest: f32::INFINITY,
+        }
+    }
+}
+
 /// The large copying errors (M2 design §12).
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -705,6 +743,23 @@ impl PhysiologyEntry {
                 flaws.wear
             ));
         }
+        let copy = self.copy_and_change;
+        fraction("copy_and_change.doubled", copy.doubled)?;
+        fraction("copy_and_change.lost", copy.lost)?;
+        fraction("copy_and_change.changed", copy.changed)?;
+        fraction("copy_and_change.on_copy", copy.on_copy)?;
+        // One draw a gene decides which, if any, happens to it.
+        if copy.doubled + copy.lost + copy.changed > 1.0 {
+            return Err(
+                "`copy_and_change`'s `doubled`, `lost` and `changed` add up to more than 1".into(),
+            );
+        }
+        if copy.longest.is_nan() || copy.longest < 1.0 {
+            return Err(format!(
+                "`copy_and_change.longest` is {}, but must be a number, at least 1",
+                copy.longest
+            ));
+        }
         if self.cause_fade == 0 {
             return Err("`cause_fade` must be at least 1 tick".into());
         }
@@ -856,6 +911,7 @@ impl PhysiologyEntry {
             breeding: self.breeding,
             mutation,
             flaws,
+            copy_and_change: self.copy_and_change,
             tally_fade: halving_factor(self.cause_fade as f32),
             traits,
             brain: BrainRanges(brain),

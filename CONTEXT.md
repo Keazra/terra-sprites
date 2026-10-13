@@ -139,7 +139,7 @@ A living creature of the terrarium, with a genome, a body and a brain. Sprites d
 _Avoid_: agent, critter, pet
 
 **Genome**:
-A sprite's ordered list of genes, fixed for its whole life. It decides how the body feels, never what happens to it. Its genes' health can fall as it ages, but the genome itself doesn't change. Its eggs get it mixed in stretches with their father's, now and then with a copying error.
+A sprite's ordered list of genes, fixed for its whole life. It decides how the body feels, never what happens to it. Its genes' health can fall as it ages, but the genome itself doesn't change. Its eggs get it mixed in stretches with their father's, now and then with a copying error, or with a gene doubled, lost or changed.
 _Avoid_: DNA
 
 **Gene**:
@@ -163,6 +163,10 @@ _Avoid_: mutation, copying error (that's an egg's)
 **Copying error** (M2):
 A gene value changed as an egg's genes are copied: rare, and usually large, from half to double. It never changes what a gene does, so a flagged gene stays flagged. The egg remembers what the gene was.
 _Avoid_: mutation in what the player reads (the data's `mutation` section and the code may say it), typo
+
+**Copy and change** (M2):
+Now and then, as an egg's genes are copied, a whole gene is doubled, lost, or changed in what it does: what an instinct reacts to or the action it leads to, what draws the eye to what, or the life stages it works in. Most changes are made on a fresh copy, so the original still works. It's how the species grows genes the starter genome never had. The egg remembers each, and the Genome tab lists them as new, doubled and lost.
+_Avoid_: mutation in what the player reads, copy change (one of them is a doubled, lost or changed gene), duplication, deletion, rearrangement
 
 **Stretch** (M2):
 A run of neighbouring genes a pair's egg takes from one parent before it switches to the other, about every 10 genes, as chromosomes cross over. The parents' genes line up by what each does, not where it sits.

@@ -1,30 +1,51 @@
-//! Inheritance (M2 design §12): a child's genes are its parents', copied
-//! with now and then an error in a gene value, never in what a gene does,
-//! and now and then a hidden flaw; a gene flawed in both copies is broken.
-//! Copying errors and flaws are world state, saved and replayed.
+//! Inheritance (M2 design §12, §13): a child's genes are its parents',
+//! copied with now and then an error in a gene value, never in what a gene
+//! does, and now and then a hidden flaw; a gene flawed in both copies is
+//! broken. Now and then too a whole gene is doubled, lost or changed in
+//! what it does. Copying errors, flaws and copy changes are world state,
+//! saved and replayed.
 
 mod common;
 use common::{ALONE, FEMALE, Laying, at, builtin, builtin_changing, family_in, laid};
 
-use terra_sim::{Command, DataPack, EventKind, GeneView, Playback, World, WorldConfig};
+use terra_sim::{
+    Command, CopyChangeView, DataPack, EventKind, GeneView, Playback, World, WorldConfig,
+};
 
 /// The change to the built-in physiology that copies every gene value
 /// wrongly.
 const EVERY_VALUE_WRONG: (&str, &str) = ("mutation: (chance: 0.01,", "mutation: (chance: 1.0,");
 
-/// The built-in pack, with every gene value copied wrongly.
-fn always_wrong() -> DataPack {
-    builtin_changing("physiology.ron", &[EVERY_VALUE_WRONG])
+/// The built-in physiology's copy and change, as its file begins it.
+const COPY_AND_CHANGE: &str =
+    "copy_and_change: (doubled: 0.00052, lost: 0.00052, changed: 0.00052,";
+
+/// The change to the built-in physiology that copies whole genes as
+/// `rules` say.
+fn whole_genes(rules: &str) -> (&'static str, String) {
+    (COPY_AND_CHANGE, format!("copy_and_change: ({rules},"))
 }
 
-/// The built-in pack, with `changes` to its hidden flaws' line.
+/// The built-in pack, with every gene value copied wrongly, and every
+/// whole gene kept where it is.
+fn always_wrong() -> DataPack {
+    let (from, to) = whole_genes("doubled: 0.0, lost: 0.0, changed: 0.0");
+    builtin_changing("physiology.ron", &[EVERY_VALUE_WRONG, (from, &to)])
+}
+
+/// The built-in pack, with `changes` to its hidden flaws' line, and every
+/// whole gene kept where it is.
 fn with_flaws(changes: &str) -> DataPack {
+    let (from, to) = whole_genes("doubled: 0.0, lost: 0.0, changed: 0.0");
     builtin_changing(
         "physiology.ron",
-        &[(
-            "flaws: (arise: 0.007, founders: 0.06,",
-            &format!("flaws: ({changes}"),
-        )],
+        &[
+            (
+                "flaws: (arise: 0.007, founders: 0.06,",
+                &format!("flaws: ({changes}"),
+            ),
+            (from, &to),
+        ],
     )
 }
 
@@ -151,13 +172,67 @@ fn a_sprite_placed_from_the_starter_carries_hidden_flaws_and_one_from_a_file_non
 }
 
 #[test]
-fn copying_errors_and_flaws_load_and_replay_the_same() {
+fn a_lone_egg_s_genes_are_now_and_then_doubled_lost_or_changed() {
+    // M2 design §13: a doubled gene or a changed copy sits next to its
+    // original, and the egg remembers what it lost and what a changed gene
+    // was.
     let female = format!("{ALONE}{FEMALE}");
+    let (from, to) = whole_genes("doubled: 0.1, lost: 0.1, changed: 0.1");
+    let data = builtin_changing("physiology.ron", &[(from, &to)]);
+    let mut world = family_in(data, &[(at(2, 1), &female)], &[], 1);
+    let Laying { egg, by, .. } = laid(&mut world, 50).expect("she laid an egg");
+    let (egg, mother) = (world.sprite(egg).unwrap(), world.sprite(by).unwrap());
+    let (child, hers) = (egg.genes(), mother.genes());
+    let changes = egg.copy_changes();
+    let count = |kind: fn(&CopyChangeView) -> bool| changes.iter().filter(|c| kind(c)).count();
+    let doubled = count(|c| matches!(c, CopyChangeView::Doubled { .. }));
+    let lost = count(|c| matches!(c, CopyChangeView::Lost { .. }));
+    let copies = count(|c| matches!(c, CopyChangeView::Changed { on_copy: true, .. }));
+    assert!(doubled > 0 && lost > 0 && copies > 0, "{changes:?}");
+    assert_eq!(child.len(), hers.len() + doubled + copies - lost);
+    for change in &changes {
+        match *change {
+            CopyChangeView::Doubled { gene } => {
+                assert_eq!(
+                    what_it_does(&child[gene].0),
+                    what_it_does(&child[gene - 1].0)
+                );
+            }
+            CopyChangeView::Lost { ref was, .. } => {
+                assert!(
+                    hers.iter()
+                        .any(|(gene, _)| what_it_does(gene) == what_it_does(was))
+                );
+            }
+            CopyChangeView::Changed {
+                gene,
+                ref was,
+                on_copy,
+                ..
+            } => {
+                assert!(
+                    hers.iter()
+                        .any(|(gene, _)| what_it_does(gene) == what_it_does(was))
+                );
+                if on_copy {
+                    assert_eq!(what_it_does(&child[gene - 1].0), what_it_does(was));
+                }
+            }
+        }
+    }
+    assert!(mother.copy_changes().is_empty(), "she has no parents");
+}
+
+#[test]
+fn copying_errors_flaws_and_copy_changes_load_and_replay_the_same() {
+    let female = format!("{ALONE}{FEMALE}");
+    let (from, to) = whole_genes("doubled: 0.1, lost: 0.1, changed: 0.1");
     let data = builtin_changing(
         "physiology.ron",
         &[
             EVERY_VALUE_WRONG,
             ("flaws: (arise: 0.007,", "flaws: (arise: 0.5,"),
+            (from, &to),
         ],
     );
     let mut world = family_in(data, &[(at(2, 1), &female)], &[], 3);

@@ -68,6 +68,7 @@ pub use expression::Expression;
 pub use genome::{EmitterMode, GeneView, Genome, GenomeError};
 pub use lab::{LabError, LabRun, LabScenario, Window, Without, median, report};
 pub use map::{Dir, Map, MapError, Pos};
+pub use mutation::CopyChangeView;
 pub use names::{MAX_NAME_CHARS, NameProblem};
 pub use objects::EntityId;
 pub use perception::Target;

@@ -23,6 +23,7 @@ use crate::genome::{GeneView, Genome};
 use crate::inheritance;
 use crate::learning::{self, Subject};
 use crate::map::{Dir, Map, MapError, Pos};
+use crate::mutation::CopyChangeView;
 use crate::objects::{EntityId, Object, Objects};
 use crate::perception::{Flood, Target, goal_tiles};
 use crate::regions::Regions;
@@ -419,10 +420,7 @@ impl<'a> SpriteView<'a> {
 
     /// When each gene in its genome works, in genome order (M2 design §9.2).
     pub fn switches(&self) -> Vec<Switch> {
-        let genome = &self.sprite.genome;
-        (0..genome.genes.len())
-            .map(|index| genome.switch(index))
-            .collect()
+        self.sprite.genome.switches()
     }
 
     /// Its life stage (M2 design §9.1), as of the latest tick.
@@ -513,6 +511,18 @@ impl<'a> SpriteView<'a> {
             .copying_errors
             .iter()
             .map(|error| (error.gene, error.was.view(data)))
+            .collect()
+    }
+
+    /// The whole genes copying doubled, lost or changed in what they do as
+    /// it was laid (M2 design §13), in the order copying came to them. None
+    /// for a sprite with no parents.
+    pub fn copy_changes(&self) -> Vec<CopyChangeView<'a>> {
+        let data = &self.world.data;
+        self.sprite
+            .copy_changes
+            .iter()
+            .map(|change| change.view(data))
             .collect()
     }
 
@@ -1390,7 +1400,7 @@ mod tests {
     use crate::genome::Gene;
     use crate::learning::{Signals, Touch, TraceEntry, TypeMemory};
     use crate::map::Dir;
-    use crate::mutation::CopyingError;
+    use crate::mutation::{CopyChange, CopyingError};
     use crate::objects::Roll;
     use crate::registry::{ChemId, Verb};
 
@@ -1415,7 +1425,7 @@ mod tests {
     /// next tick (design §2.8).
     #[test]
     fn a_save_that_doesnt_fit_its_pack_is_refused() {
-        let damage: [fn(&mut WorldState, &DataPack); 10] = [
+        let damage: [fn(&mut WorldState, &DataPack); 11] = [
             |state, _| {
                 let id = state.objects.at(Pos { x: 2, y: 2 }).expect("the bush");
                 state.objects.get_mut(id).expect("the bush").kind = 127;
@@ -1464,6 +1474,18 @@ mod tests {
                     ticks: ticks * 2,
                 };
                 sprite.copying_errors = vec![CopyingError { gene, was }];
+            },
+            // A gene lost in copying that was of a chemical the pack doesn't
+            // have.
+            |state, _| {
+                let was = Gene::HalfLife {
+                    chem: ChemId(999),
+                    ticks: 100,
+                };
+                the_sprite(state).copy_changes = vec![CopyChange::Lost {
+                    was,
+                    switch: Switch::default(),
+                }];
             },
             // A sprite born, or a trace entry made, after the save.
             |state, _| {
@@ -1710,6 +1732,57 @@ mod tests {
             .clone();
         sprite.copying_errors = vec![CopyingError { gene, was: other }];
         assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_copy_change_that_doesnt_fit_the_genome_breaks_an_invariant() {
+        // M2 design §13: a doubled gene does what the gene before it does;
+        // a changed one differs from what it was.
+        let (mut world, first, _) = field_with_sprites();
+        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        let last = sprite.genome.genes.len() - 1;
+        let gene = sprite.genome.genes[last].clone();
+        let switch = sprite.genome.switch(last);
+        let other = sprite
+            .genome
+            .genes
+            .iter()
+            .find(|other| std::mem::discriminant(*other) != std::mem::discriminant(&gene))
+            .expect("a gene of another kind")
+            .clone();
+        let fits = [CopyChange::Changed {
+            gene: last,
+            was: other,
+            switch,
+            on_copy: false,
+        }];
+        let not = [
+            CopyChange::Doubled { gene: 0 },
+            CopyChange::Doubled { gene: last + 1 },
+            CopyChange::Doubled { gene: 1 },
+            CopyChange::Changed {
+                gene: last,
+                was: gene.clone(),
+                switch,
+                on_copy: false,
+            },
+            CopyChange::Changed {
+                gene: last,
+                was: gene,
+                switch: Switch {
+                    from: LifeStage::Old,
+                    until: None,
+                },
+                on_copy: true,
+            },
+        ];
+        sprite.copy_changes = fits.to_vec();
+        assert_eq!(world.check_invariants(), Ok(()));
+        for change in not {
+            let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+            sprite.copy_changes = vec![change.clone()];
+            assert!(world.check_invariants().is_err(), "{change:?}");
+        }
     }
 
     #[test]

@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 95ce0ba5ad39f502ea004f0017912212af91cc11aa7956e6537da6eff453554e # shrinks to seed = 0
+cc 65d9f42a662c442d0672c8d46da1ae38241223939d8032fe02b5405721c374bc # shrinks to genes = ["AttentionInstinct(input: \"always\", category: \"water\", weight: 0.0)"], seed = 33604966

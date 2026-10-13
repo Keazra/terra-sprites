@@ -12,9 +12,9 @@ use crate::brain::Brain;
 use crate::breeding::Sex;
 use crate::data::DataPack;
 use crate::genome::{Gene, Genome};
-use crate::inheritance::{Parent, flaws_of};
+use crate::inheritance::{Parent, flaws_of, what_it_does};
 use crate::map::{Dir, Map, Pos};
-use crate::mutation::{Copied, CopyingError};
+use crate::mutation::{self, Copied, CopyChange, CopyingError};
 use crate::objects::{EntityId, Objects};
 use crate::occupancy::Occupancy;
 use crate::perception::{Flood, Target};
@@ -22,7 +22,6 @@ use crate::physiology::RememberedPlaces;
 use crate::random::{chance, uniform};
 use crate::registry::{Trait, Verb};
 use crate::sliding::Slide;
-use crate::variation::each_value;
 
 /// One sprite.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,6 +71,10 @@ pub(crate) struct Sprite {
     /// each was as it inherited it. Empty for a sprite with no parents.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) copying_errors: Vec<CopyingError>,
+    /// The whole genes copying doubled, lost or changed as it was laid (M2
+    /// design §13). Empty for a sprite with no parents.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) copy_changes: Vec<CopyChange>,
     pub(crate) body: Body,
     pub(crate) brain: Brain,
     /// What it's doing, or the action that last ended until the next starts.
@@ -351,12 +354,14 @@ impl Sprite {
             genome,
             flaws,
             errors,
+            changes,
         } = genes;
         let mut egg = Sprite::newborn(genome, pos, laid, data);
         egg.stage = Some(LifeStage::Egg);
         egg.hatches = Some(laid.saturating_add(data.physiology().breeding.hatches));
         egg.parents = parents;
         egg.copying_errors = errors;
+        egg.copy_changes = changes;
         egg.flaws = flaws;
         if egg.broken() > 0 {
             let born_with = data.physiology().flaws.health;
@@ -410,6 +415,7 @@ impl Sprite {
             health: vec![1.0; genome_len],
             flaws: Vec::new(),
             copying_errors: Vec::new(),
+            copy_changes: Vec::new(),
             body,
             brain,
             action: None,
@@ -595,8 +601,9 @@ impl Sprites {
     /// none stands on a solid object; every chemical is within 0 to 1; a
     /// Mate action is only ever an adult's, aimed at an adult (M2 design
     /// §5); each remembers no more places than it may, all on the map
-    /// (M2 design §7); and its flaws and copying errors fit its genome, with
-    /// copying having changed only values (M2 design §12).
+    /// (M2 design §7); and its flaws, copying errors and copy changes fit
+    /// its genome, with copying errors having changed only values (M2
+    /// design §12, §13).
     pub(crate) fn check(
         &self,
         map: &Map,
@@ -684,17 +691,18 @@ impl Sprites {
             // Copying changes only a gene's values (M2 design §12.1), so
             // what a gene was does what it does now, and refers only to
             // what the pack has.
-            let does = |gene: &Gene| each_value(gene, data, |_, _| 0.0);
-            if let Some(error) = sprite
-                .copying_errors
-                .iter()
-                .find(|error| does(&error.was) != does(&sprite.genome.genes[error.gene]))
-            {
+            let switch = |error: &CopyingError| sprite.genome.switch(error.gene);
+            let does = |gene: &Gene, error| what_it_does(gene, switch(error), data);
+            if let Some(error) = sprite.copying_errors.iter().find(|error| {
+                does(&error.was, *error) != does(&sprite.genome.genes[error.gene], *error)
+            }) {
                 return Err(format!(
                     "{id:?} has a copying error that changed what gene {} does",
                     error.gene
                 ));
             }
+            mutation::check_changes(&sprite.genome, &sprite.copy_changes, data)
+                .map_err(|problem| format!("{id:?} {problem}"))?;
             if sprite.body.chems_before_tick.len() != sprite.body.chems.len() {
                 return Err(format!(
                     "{id:?} has {} levels from a tick ago, but {} chemicals",

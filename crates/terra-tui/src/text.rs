@@ -65,6 +65,8 @@ impl Names {
 pub(crate) struct Words<'a> {
     pub(crate) data: &'a DataPack,
     pub(crate) names: &'a Names,
+    /// What's new in each hatchling the log tells of (M2 design §13.2).
+    pub(crate) news: &'a BTreeMap<EntityId, String>,
 }
 
 impl Words<'_> {

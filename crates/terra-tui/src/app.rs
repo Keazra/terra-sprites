@@ -479,6 +479,10 @@ pub struct App {
     /// The names the player has given sprites, as last seen, so the log
     /// keeps naming a sprite after it dies (design §6.5).
     names: Names,
+    /// The genes copying changed in what they do in each hatchling the log
+    /// tells of, as its hatching line names them (M2 design §13.2), kept
+    /// while the line is in the log.
+    news: BTreeMap<EntityId, String>,
     /// The Place menu item waiting on the Cursor (design v28 §6.5).
     placing: Option<Placing>,
     /// The highlighted item of the open menu, from 0.
@@ -767,6 +771,7 @@ impl App {
             report: None,
             refusal: None,
             names: Names::default(),
+            news: BTreeMap::new(),
             placing: None,
             menu_choice: 0,
             genome_folder: None,
@@ -896,9 +901,17 @@ impl App {
             // What the log says of it, if it's logged at all; a line that
             // reads as the one before merges into it with a count (design v21
             // §6.1).
+            if let EventKind::Hatched { id, .. } = event.kind
+                && let Some(new) = world
+                    .sprite(id)
+                    .and_then(|it| inspector::something_new(&it))
+            {
+                self.news.insert(id, new);
+            }
             let words = Words {
                 data: world.data(),
                 names: &self.names,
+                news: &self.news,
             };
             let Some(line) = inspector::event_line(event, &words) else {
                 continue;
@@ -912,6 +925,12 @@ impl App {
             }
         }
         self.event_log.truncate(EVENT_LOG_LENGTH);
+        let log = &self.event_log;
+        self.news.retain(|&id, _| {
+            log.iter().any(
+                |(event, _)| matches!(event.kind, EventKind::Hatched { id: its, .. } if its == id),
+            )
+        });
         self.note_slide_ended(world);
         // The world has applied what was queued for the ticks it has run.
         self.queued.retain(|&(tick, _)| tick >= world.tick());
@@ -943,6 +962,7 @@ impl App {
         Words {
             data: world.data(),
             names: &self.names,
+            news: &self.news,
         }
     }
 
