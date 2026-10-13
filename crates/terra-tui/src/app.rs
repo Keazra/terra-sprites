@@ -2851,8 +2851,8 @@ impl App {
         Flow::Continue
     }
 
-    /// Whether `action` would point at a tile of the map, for the wheel,
-    /// which changes the cursor mode there.
+    /// Whether `action` is the wheel over the map view, its glass and space
+    /// included, which changes the cursor mode there (M2 design §11.4).
     fn pointed_at_map(&self, action: &Action) -> bool {
         match *action {
             Action::Wheel { at, .. } => {
@@ -3273,7 +3273,7 @@ pub(crate) fn spoken_duration(time: Duration) -> String {
 
 /// Whether `action` would change the world, or lead to changing it, which a
 /// replay refuses (design §2.7): the cursor modes that touch it (Select
-/// only points and selects), the wheel over the map, which changes mode,
+/// only points and selects), the wheel over the map view, which changes mode,
 /// naming a sprite, showing the Cursor to sprites, and loading a save.
 /// Saving, and exporting a genome, only read it.
 fn changes_the_world(action: &Action, wheel_on_map: bool) -> bool {

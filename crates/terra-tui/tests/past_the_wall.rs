@@ -453,6 +453,28 @@ fn aiming_the_pull_goes_on_past_the_wall_and_a_right_click_or_e_over_space_sends
 }
 
 #[test]
+fn aiming_a_click_over_space_reaches_what_is_aimed() {
+    // M2 design §11.4: while the player aims, the Cursor isn't out of
+    // reach, so a left click over space reaches what it aims, as `Q` does:
+    // it puts the ball down where it's aimed from.
+    let mut world = field_with(10, 6, &[(Pos { x: 5, y: 3 }, "ball")], &[]);
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+    apply(&mut app, &world, Action::left_click(on(Pos { x: 5, y: 3 })));
+    tick(&mut app, &mut world);
+    apply(
+        &mut app,
+        &world,
+        Action::right_click(on(Pos { x: 5, y: 3 })),
+    );
+    apply(&mut app, &world, Action::left_click(SPACE));
+    let put_down = Command::PutDown {
+        tile: Pos { x: 5, y: 3 },
+    };
+    assert_eq!(app.take_commands(), [put_down]);
+}
+
+#[test]
 fn leading_the_followed_sprite_over_space_q_does_nothing() {
     // M2 design §11.4: Follow steps aside while the Cursor leads its sprite,
     // so the Cursor follows the pointer, and over space it's out of reach.
