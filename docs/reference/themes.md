@@ -92,8 +92,8 @@ The population graph (`p`, and small at the top of the World tab) stacks the spr
 | Field | Meaning |
 |---|---|
 | `stages` | A colour for each life stage: `(young: light_green, adult: cyan, old: gray, egg: light_yellow)`, any of them left out as you like. |
-| `full` | A character for a whole tile of one stage: `'█'` in the default theme, `'#'` in the ASCII one. |
-| `half` | A character for a tile's lower half, `'▄'` or `'_'`: it's drawn in the stage below, on the stage above as its background, or on nothing at the top of the stack. |
+| `full` | A character wholly of one stage: `'█'` in the default theme, `'#'` in the ASCII one. |
+| `half` | A character's lower half, `'▄'` or `'_'`: it's drawn in the stage below, on the stage above as its background, or on nothing at the top of the stack. |
 | `limit` | A glyph, a dot of the line at the most sprites the world holds, drawn where nothing else is. |
 
 ## Working example

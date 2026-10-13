@@ -118,10 +118,11 @@
         },
     ),
     // The population graph (M2 design §14): each life stage's colour, stacked
-    // from the bottom as young, adults, old and eggs; a whole tile of one stage,
-    // and its lower half, which shows the stage below over the stage above, or
-    // over nothing at the top; and the dotted line at the world's limit. What a
-    // theme leaves out of this section, it draws as the default theme does.
+    // from the bottom as young, adults, old and eggs; a whole character of one
+    // stage, and its lower half, which shows the stage below over the stage
+    // above, or over nothing at the top; and the dotted line at the world's
+    // limit. What a theme leaves out of this section, it draws as the default
+    // theme does.
     population: (
         stages: (young: light_green, adult: cyan, old: gray, egg: light_yellow),
         full: '█',

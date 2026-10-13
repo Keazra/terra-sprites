@@ -6,7 +6,7 @@
 
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use terra_sim::{Changes, DataPack, LifeStage, PopulationCount, World};
+use terra_sim::{DataPack, LifeStage, PopulationChanges, PopulationCount, World};
 
 use crate::app::App;
 use crate::text::{cause_name, group_thousands};
@@ -14,7 +14,7 @@ use crate::theme::PopulationLook;
 
 /// The ticks a column stands for while the run is too short to fill the
 /// graph: as often as the world counts at first (M2 design §14).
-const TICKS_PER_COLUMN: u64 = 100;
+const TICKS_PER_COLUMN: u64 = terra_sim::FIRST_COUNT_EVERY;
 
 /// The life stages, stacked from the bottom (M2 design §14).
 const STACK: [LifeStage; 4] = [
@@ -99,6 +99,23 @@ impl Plot {
             .count()
     }
 
+    /// The column that reads `moment`, a picked tick: the first the run
+    /// has reached whose stretch takes it in, or with none picked, the
+    /// last, which reads now.
+    pub(crate) fn column_of(&self, moment: Option<u64>) -> usize {
+        let last = self.reached().saturating_sub(1);
+        moment
+            .and_then(|tick| (0..last).find(|&j| self.boundary(j + 1) >= tick))
+            .unwrap_or(last)
+    }
+
+    /// The moment to pick for column `j`: the end of its stretch of time,
+    /// or none for the last, so a pick there goes on reading now.
+    pub(crate) fn moment(&self, j: usize) -> Option<u64> {
+        let last = self.reached().saturating_sub(1);
+        (j < last).then(|| self.boundary(j + 1))
+    }
+
     /// The width of the labels left of the graph, with the axis: where its
     /// first column is.
     pub(crate) fn gutter(&self) -> usize {
@@ -110,7 +127,7 @@ impl Plot {
         let rows = rows.max(1);
         let digits = self.top.to_string().len();
         let middle = rows / 2;
-        // Each row is two half tiles, each `step` sprites high.
+        // Each row of characters is two halves, each `step` sprites high.
         let step = f64::from(self.top) / (2 * rows) as f64;
         // The row the limit falls in.
         let limit_row =
@@ -130,7 +147,7 @@ impl Plot {
                 for column in &self.columns {
                     let count = column.map(|i| &self.points[i]);
                     let at = |half: usize| count.and_then(|c| stage_at(c, half, step));
-                    spans.push(cell(at(lower), at(lower + 1), row == limit_row, look));
+                    spans.push(block(at(lower), at(lower + 1), row == limit_row, look));
                 }
                 Line::from(spans)
             })
@@ -141,13 +158,12 @@ impl Plot {
     /// picked column, if any.
     fn axis(&self, picked: Option<usize>) -> Line<'static> {
         let digits = self.top.to_string().len();
-        let width = self.columns.len();
-        let quarter = width / 4;
-        let line: String = (0..width)
+        let marks = self.marks();
+        let line: String = (0..self.columns.len())
             .map(|j| {
                 if Some(j) == picked {
                     '▲'
-                } else if quarter >= 2 && (j + 1) % quarter == 0 {
+                } else if marks.contains(&j) {
                     '┬'
                 } else {
                     '─'
@@ -162,8 +178,6 @@ impl Plot {
     /// would run into the one before.
     fn ticks(&self) -> Line<'static> {
         let gutter = self.gutter();
-        let width = self.columns.len();
-        let quarter = width / 4;
         let mut text = String::new();
         let mut put = |at: usize, label: String| {
             let from = (at + 1).saturating_sub(label.chars().count());
@@ -174,13 +188,22 @@ impl Plot {
             }
         };
         put(gutter - 1, group_thousands(self.start));
-        if quarter >= 2 {
-            for j in (quarter - 1..width).step_by(quarter) {
-                let tick = self.boundary(j + 1);
-                put(gutter + j, group_thousands((tick + 50) / 100 * 100));
-            }
+        for j in self.marks() {
+            let tick = self.boundary(j + 1);
+            put(gutter + j, group_thousands((tick + 50) / 100 * 100));
         }
         Line::from(text)
+    }
+
+    /// The columns marked on the axis: the last of each quarter, if a
+    /// quarter is at least 2 columns.
+    fn marks(&self) -> Vec<usize> {
+        let width = self.columns.len();
+        let quarter = width / 4;
+        if quarter < 2 {
+            return Vec::new();
+        }
+        (quarter - 1..width).step_by(quarter).collect()
     }
 
     /// The legend: each stage's swatch and name, then the limit's line.
@@ -191,7 +214,7 @@ impl Plot {
                 look.full.to_string(),
                 Style::default().fg(look.colour(stage)),
             ));
-            spans.push(Span::raw(format!(" {}  ", stage_name(stage, 0))));
+            spans.push(Span::raw(format!(" {}  ", stage.plural())));
         }
         spans.push(Span::styled(
             look.limit.symbol.to_string().repeat(3),
@@ -204,10 +227,8 @@ impl Plot {
     /// The two lines that read column `j`, or the last the run has
     /// reached: the count it shows, and what happened since the column
     /// before's.
-    pub(crate) fn reading(&self, j: Option<usize>, data: &DataPack) -> [String; 2] {
-        let last = self.reached().saturating_sub(1);
-        let j = j.unwrap_or(last).min(last);
-        let Some(shown) = self.columns[j] else {
+    pub(crate) fn reading(&self, j: usize, data: &DataPack) -> [String; 2] {
+        let Some(shown) = self.columns.get(j).copied().flatten() else {
             return [String::new(), String::new()];
         };
         let count = &self.points[shown];
@@ -223,25 +244,30 @@ impl Plot {
         )];
         stages.extend(STACK.map(|stage| {
             let n = count.at(stage);
-            format!("{n} {}", stage_name(stage, n))
+            let name = if n == 1 { stage.name() } else { stage.plural() };
+            format!("{n} {name}")
         }));
         let first = format!(" {when}: {}", stages.join(" · "));
-        // The first column reads on from the first count.
-        let before = match j {
-            0 => Some(0),
-            _ => self.columns[j - 1],
-        };
-        let second = match before {
-            Some(before) if before < shown => {
-                let mut changes = Changes::default();
-                for point in &self.points[before + 1..=shown] {
-                    changes.add(&point.since);
-                }
-                let since = group_thousands(self.points[before].tick);
-                format!(" since tick {since}: {}", changed(&changes, data))
+        // Since the count the nearest column before shows, if it's an
+        // earlier one: columns narrower than the time between counts show
+        // the same count again. The first column reads on from the first
+        // count.
+        let before = self.columns[..j]
+            .iter()
+            .rev()
+            .flatten()
+            .copied()
+            .find(|&before| before < shown)
+            .unwrap_or(0);
+        let second = if before < shown {
+            let mut changes = PopulationChanges::default();
+            for point in &self.points[before + 1..=shown] {
+                changes.add(&point.since);
             }
-            _ if shown == 0 => " the first count".to_string(),
-            _ => String::new(),
+            let since = group_thousands(self.points[before].tick);
+            format!(" since tick {since}: {}", changed(&changes, data))
+        } else {
+            " the first count".to_string()
         };
         [first, second]
     }
@@ -252,10 +278,10 @@ fn gutter(top: u32) -> usize {
     top.to_string().len() + 3
 }
 
-/// The stage drawn in half tile `half`, from 0 at the bottom, of a column
-/// showing `count`, each half tile `step` sprites high: the stage at its
-/// middle, or at the top of the stack if that's lower. A half tile the
-/// stack doesn't reach is empty.
+/// The stage drawn in half `half` of a column's characters, from 0 at the
+/// bottom, showing `count`, each half `step` sprites high: the stage at its
+/// middle, or at the top of the stack if that's lower. A half the stack
+/// doesn't reach is empty.
 fn stage_at(count: &PopulationCount, half: usize, step: f64) -> Option<LifeStage> {
     let total = f64::from(count.sprites());
     let bottom = half as f64 * step;
@@ -270,9 +296,9 @@ fn stage_at(count: &PopulationCount, half: usize, step: f64) -> Option<LifeStage
     })
 }
 
-/// One tile of the graph: its lower half's stage and its upper half's, in
-/// `look`; an empty tile on the limit's row is a dot of its line.
-fn cell(
+/// One character of the graph: its lower half's stage and its upper
+/// half's, in `look`; an empty one on the limit's row is a dot of its line.
+fn block(
     lower: Option<LifeStage>,
     upper: Option<LifeStage>,
     on_limit: bool,
@@ -298,28 +324,18 @@ fn cell(
     }
 }
 
-/// A stage's name for `n` sprites at it: `young`, `adults`, `old`, `eggs`,
-/// or for 1, `adult` and `egg`.
-fn stage_name(stage: LifeStage, n: u32) -> &'static str {
-    match (stage, n == 1) {
-        (LifeStage::Young, _) => "young",
-        (LifeStage::Adult, true) => "adult",
-        (LifeStage::Adult, false) => "adults",
-        (LifeStage::Old, _) => "old",
-        (LifeStage::Egg, true) => "egg",
-        (LifeStage::Egg, false) => "eggs",
-    }
-}
-
-/// What `changes` did, in words: `4 hatched · 1 placed · 3 died (old age
-/// 2 · dehydration 1)`, leaving out what didn't happen.
-fn changed(changes: &Changes, data: &DataPack) -> String {
+/// What `changes` did, in words: `2 laid · 4 hatched · 1 spawned · 3 died
+/// (old age 2 · dehydration 1)`, leaving out what didn't happen.
+fn changed(changes: &PopulationChanges, data: &DataPack) -> String {
     let mut parts = Vec::new();
+    if changes.laid > 0 {
+        parts.push(format!("{} laid", changes.laid));
+    }
     if changes.hatched > 0 {
         parts.push(format!("{} hatched", changes.hatched));
     }
-    if changes.placed > 0 {
-        parts.push(format!("{} placed", changes.placed));
+    if changes.spawned > 0 {
+        parts.push(format!("{} spawned", changes.spawned));
     }
     if changes.deaths() > 0 {
         let causes: Vec<String> = changes
@@ -334,7 +350,7 @@ fn changed(changes: &Changes, data: &DataPack) -> String {
         ));
     }
     if parts.is_empty() {
-        "none hatched or died".to_string()
+        "none laid, hatched or died".to_string()
     } else {
         parts.join(" · ")
     }
@@ -351,11 +367,12 @@ pub(crate) fn lines(app: &App, world: &World, width: usize, rows: usize) -> Vec<
     let look = app.theme.population();
     let plot = Plot::new(world, width);
     let mut lines = plot.rows(rows_above_axis(rows), &look);
-    lines.push(plot.axis(app.graph_pick()));
+    let column = plot.column_of(app.graph_pick());
+    lines.push(plot.axis(Some(column)));
     lines.push(plot.ticks());
     lines.push(Line::default());
     lines.push(plot.legend(&look));
-    lines.extend(plot.reading(app.graph_pick(), world.data()).map(Line::from));
+    lines.extend(plot.reading(column, world.data()).map(Line::from));
     lines
 }
 
@@ -364,10 +381,21 @@ pub(crate) fn lines(app: &App, world: &World, width: usize, rows: usize) -> Vec<
 pub(crate) fn small(app: &App, world: &World, width: usize) -> Vec<Line<'static>> {
     let look = app.theme.population();
     let plot = Plot::new(world, width);
-    let from = group_thousands(plot.points[0].tick);
-    let to = group_thousands(world.tick());
-    let mut lines = vec![Line::from(format!(" population, ticks {from} to {to}"))];
+    let mut lines = vec![Line::from(format!(" population, {}", covers(world)))];
     lines.extend(plot.rows(SMALL_ROWS, &look));
     lines.push(plot.axis(None));
     lines
+}
+
+/// The ticks the graph covers, as its headings say: `ticks 0 to 48,000`.
+pub(crate) fn covers(world: &World) -> String {
+    let first = world
+        .population()
+        .first()
+        .map_or(world.tick(), |count| count.tick);
+    format!(
+        "ticks {} to {}",
+        group_thousands(first),
+        group_thousands(world.tick())
+    )
 }

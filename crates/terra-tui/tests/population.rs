@@ -3,6 +3,8 @@
 //! moment picked with `←` `→` or the pointer read under it; a small copy
 //! heads the World tab.
 
+use std::time::Duration;
+
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Size};
 use ratatui::style::Color;
@@ -148,7 +150,7 @@ fn p_opens_the_population_graph_over_the_panels_and_p_or_esc_closes_it() {
         reading(&screen),
         [
             "now, tick 250: 6 sprites · 2 young · 4 adults · 0 old · 0 eggs",
-            "since tick 200: none hatched or died",
+            "since tick 200: none laid, hatched or died",
         ]
     );
     let status = row(&screen, 29);
@@ -209,6 +211,9 @@ fn the_graph_grows_from_the_left_then_squeezes_the_whole_run_in() {
         ticks.ends_with(" 9,200│"),
         "92 columns of 100 ticks: {ticks}"
     );
+    // The moment at tick 1,000, in the tenth column.
+    app.apply(Action::Point(Position::new(FIRST_COLUMN + 9, 9)), &world);
+    assert_eq!(app.graph_pick(), Some(1_000));
     run(&mut world, 58_000);
     let screen = render(&app, &world);
     let ticks = row(&screen, 23);
@@ -217,12 +222,19 @@ fn the_graph_grows_from_the_left_then_squeezes_the_whole_run_in() {
     let one = columns(&screen, BOTTOM);
     assert!(one.starts_with('▄'), "its life is at the start: {one}");
     assert!(one.ends_with(' '), "and its death before the end: {one}");
+    // Squeezed, the picked moment is in the second column, of 652 ticks.
+    assert_eq!(screen[(FIRST_COLUMN + 1, AXIS)].symbol(), "▲");
+    // Opened afresh, it reads now, in the last column; every column is
+    // reached, so `←` picks the one before.
+    app.apply(Action::Back, &world);
+    app.apply(Action::Population, &world);
+    let screen = render(&app, &world);
+    assert_eq!(screen[(98, AXIS)].symbol(), "▲");
     assert!(
         reading(&screen)[0].starts_with("now, tick 60,000: 0 sprites"),
         "{:?}",
         reading(&screen)
     );
-    // Every column is reached, so `←` picks the one before now.
     app.apply(Action::Scroll { dx: -1, dy: 0 }, &world);
     let screen = render(&app, &world);
     assert_eq!(screen[(98 - 1, AXIS)].symbol(), "▲");
@@ -245,7 +257,7 @@ fn arrows_or_the_pointer_pick_a_moment_and_the_lines_under_the_graph_read_it() {
         reading(&screen),
         [
             "tick 200: 6 sprites · 2 young · 4 adults · 0 old · 0 eggs",
-            "since tick 100: none hatched or died",
+            "since tick 100: none laid, hatched or died",
         ]
     );
     app.apply(left, &world);
@@ -256,26 +268,87 @@ fn arrows_or_the_pointer_pick_a_moment_and_the_lines_under_the_graph_read_it() {
         "▲",
         "it stops at the first"
     );
-    assert_eq!(reading(&screen)[1], "since tick 0: none hatched or died");
+    assert_eq!(
+        reading(&screen)[1],
+        "since tick 0: none laid, hatched or died"
+    );
     app.apply(right, &world);
     app.apply(right, &world);
     app.apply(right, &world);
     let screen = render(&app, &world);
     assert_eq!(screen[(FIRST_COLUMN + 2, AXIS)].symbol(), "▲", "and at now");
     assert!(reading(&screen)[0].starts_with("now, tick 250:"));
-    // The pointer over a column picks it; over one the run hasn't reached,
-    // or the labels, it leaves the pick as it is.
+    assert_eq!(app.graph_pick(), None, "which reads now as time runs");
+    // The pointer over a column picks its moment; over one the run hasn't
+    // reached, or the labels, it leaves the pick as it is.
     app.apply(Action::Point(Position::new(FIRST_COLUMN + 1, 9)), &world);
-    assert_eq!(app.graph_pick(), Some(1));
+    assert_eq!(app.graph_pick(), Some(200));
     app.apply(Action::Point(Position::new(FIRST_COLUMN + 40, 9)), &world);
     app.apply(Action::Point(Position::new(3, 9)), &world);
-    assert_eq!(app.graph_pick(), Some(1));
+    assert_eq!(app.graph_pick(), Some(200));
     let screen = render(&app, &world);
     assert!(reading(&screen)[0].starts_with("tick 200:"));
     // Closed and opened again, it reads now.
     app.apply(Action::Back, &world);
     app.apply(Action::Population, &world);
     assert_eq!(app.graph_pick(), None);
+}
+
+#[test]
+fn a_picked_moment_stays_picked_as_time_runs_and_now_moves_on() {
+    let mut world = field(2, 4);
+    run(&mut world, 250);
+    let mut app = app_on(&world);
+    app.apply(Action::Population, &world);
+    let mut now = app_on(&world);
+    now.apply(Action::Population, &world);
+    app.apply(Action::Scroll { dx: -1, dy: 0 }, &world);
+    run(&mut world, 1_000);
+    let screen = render(&app, &world);
+    assert_eq!(screen[(FIRST_COLUMN + 1, AXIS)].symbol(), "▲");
+    assert!(reading(&screen)[0].starts_with("tick 200:"));
+    let screen = render(&now, &world);
+    assert_eq!(screen[(FIRST_COLUMN + 12, AXIS)].symbol(), "▲");
+    assert!(reading(&screen)[0].starts_with("now, tick 1,250:"));
+}
+
+#[test]
+fn the_graph_reaches_past_the_limit_when_the_cursor_spawned_past_it() {
+    // M2 design §14.2: 101 sprites in a world that holds 100.
+    let pack = pack();
+    let map = Map::from_ascii(&["............"; 9], &pack).expect("valid drawing");
+    let sprites: Vec<(Pos, Option<Genome>)> = (0..101)
+        .map(|i| {
+            (
+                Pos {
+                    x: i % 12,
+                    y: i / 12,
+                },
+                None,
+            )
+        })
+        .collect();
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: &[],
+        newborns: &[],
+    };
+    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut app = app_on(&world);
+    app.apply(Action::Population, &world);
+    let screen = render(&app, &world);
+    assert!(
+        row(&screen, 2).starts_with("│ 101 ┤"),
+        "{}",
+        row(&screen, 2)
+    );
+    assert!(
+        row(&screen, 25).contains("··· most sprites, 100"),
+        "{}",
+        row(&screen, 25)
+    );
 }
 
 #[test]
@@ -336,8 +409,13 @@ fn time_runs_as_usual_while_the_graph_is_open() {
     let speed = app.clock.speed();
     app.apply(Action::TogglePause, &world);
     assert!(app.clock.is_paused());
+    app.apply(Action::StepOnce, &world);
+    let stepped = app.clock.advance(Duration::ZERO, || {}, || false);
+    assert!(stepped > 0, "`.` steps while paused");
     app.apply(Action::Faster { held: false }, &world);
     assert_ne!(app.clock.speed(), speed);
+    app.apply(Action::Slower { held: false }, &world);
+    assert_eq!(app.clock.speed(), speed, "and `-` slows it again");
     app.apply(Action::TogglePause, &world);
     assert!(!app.clock.is_paused());
     assert_eq!(app.screen(), Screen::Population, "and it stays open");
@@ -408,4 +486,28 @@ fn the_policy_may_hide_the_graph() {
     for y in 2..28 {
         assert_eq!(row(&screen, y).trim_matches(['│', ' ']), "", "row {y}");
     }
+}
+
+#[test]
+fn a_column_narrower_than_the_time_between_counts_reads_the_count_it_shows() {
+    // M2 design §14.3: squeezed, the record counts every 200 ticks, but
+    // 700 columns wide, a column is still 100 ticks, so every other one
+    // shows the same count as the one before.
+    let mut world = field(0, 1);
+    run(&mut world, 52_000);
+    assert_eq!(world.population_every(), 200);
+    let size = Size::new(700, 30);
+    let mut app = App::new(world.map(), Theme::cp437(), 7, ui::areas(size));
+    app.apply(Action::Population, &world);
+    app.apply(Action::Point(Position::new(FIRST_COLUMN + 2, 9)), &world);
+    assert_eq!(app.graph_pick(), Some(300));
+    let mut terminal = Terminal::new(TestBackend::new(700, 30)).unwrap();
+    terminal
+        .draw(|frame| ui::render(frame, &app, &world))
+        .unwrap();
+    let screen = terminal.backend().buffer().clone();
+    assert_eq!(screen[(FIRST_COLUMN + 2, AXIS)].symbol(), "▲");
+    let [first, second] = reading(&screen);
+    assert!(first.starts_with("tick 200: "), "{first}");
+    assert_eq!(second, "since tick 0: none laid, hatched or died");
 }

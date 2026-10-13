@@ -49,6 +49,16 @@ impl LifeStage {
             LifeStage::Old => "old",
         }
     }
+
+    /// The stage's name for more than one, as the player sees it.
+    pub fn plural(self) -> &'static str {
+        match self {
+            LifeStage::Egg => "eggs",
+            LifeStage::Young => "young",
+            LifeStage::Adult => "adults",
+            LifeStage::Old => "old",
+        }
+    }
 }
 
 /// When a gene works (M2 design §9.2): from the life stage `from` on, until

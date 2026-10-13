@@ -104,9 +104,9 @@ pub struct PopulationLook {
     pub adult: Color,
     pub old: Color,
     pub egg: Color,
-    /// A whole tile of one stage.
+    /// A whole character of one stage.
     pub full: char,
-    /// The lower half of a tile: drawn in the stage below, over the stage
+    /// The lower half of a character: drawn in the stage below, over the stage
     /// above, or over nothing at the top of the stack.
     pub half: char,
     /// A dot of the line at the world's limit.
@@ -664,10 +664,10 @@ struct PopulationFile {
     /// Each life stage's colour.
     #[serde(default)]
     stages: StagesFile,
-    /// A whole tile of one stage.
+    /// A whole character of one stage.
     #[serde(default, deserialize_with = "implicit_some")]
     full: Option<char>,
-    /// The lower half of a tile.
+    /// The lower half of a character.
     #[serde(default, deserialize_with = "implicit_some")]
     half: Option<char>,
     /// A dot of the line at the world's limit.

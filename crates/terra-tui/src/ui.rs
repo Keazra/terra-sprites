@@ -573,12 +573,7 @@ fn render_population(buf: &mut Buffer, app: &App, world: &World) {
     };
     let shown = app.can_view(Panel::Graph, Subject::World);
     let title = if shown {
-        let first = world.population().first().map_or(world.tick(), |c| c.tick);
-        format!(
-            " Population ── ticks {} to {} ",
-            group_thousands(first),
-            group_thousands(world.tick())
-        )
+        format!(" Population ── {} ", crate::graph::covers(world))
     } else {
         " Population ".to_string()
     };

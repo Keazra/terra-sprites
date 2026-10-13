@@ -755,21 +755,21 @@ The default world left alone for 200,000 ticks; the genes are those of the hatch
 
 ## 14. The population graph (Slice 26)
 
-Settled with the owner on 2026-10-13 ([#144](https://github.com/Keazra/terra-sprites/issues/144)), in a round of four questions whose recommendations they kept. A graph shows how many sprites the world has had over its whole run, so the player can watch the population rise and fall (G3). Today the default world breeds up to its limit of 100 in about 27,000 ticks and stays there, so the total climbs and then runs flat until Slice 29's harsher world. What keeps moving is the mix: waves of young growing up, and adults growing old. So the graph stacks the life stages (Q1, B).
+Settled with the owner on 2026-10-13 ([#144](https://github.com/Keazra/terra-sprites/issues/144)), in a round of four questions whose recommendations they kept. A graph shows how many sprites the world has had over its whole run, so the player can watch the population rise and fall (G3). Today the default world breeds up to its limit of 100 and stays there, by about tick 27,000 on seed 7 (§14.2's graph), so the total climbs and then runs flat until Slice 29's harsher world. What keeps moving is the mix: waves of young growing up, and adults growing old. So the graph stacks the life stages (Q1, B).
 
 ### 14.1 The population record
 
-- **The world counts its sprites by life stage,** eggs, young, adults and old, at the first tick it runs and then every 100 ticks, with what changed the population since the count before: the eggs that hatched, the sprites the Cursor placed, and the deaths by cause.
+- **The world counts its sprites by life stage,** eggs, young, adults and old, at the first tick it runs and then every 100 ticks, with what happened since the count before: the eggs laid and hatched, the sprites the Cursor spawned, and the deaths by cause.
 - **It's world state:** saved (M1 design §2.8), in the state hash, the same in a replay (M1 design §2.7), and checked every tick (M1 design §7.1): its counts go forward in time and never reach 512. Nothing in the world reads it, so the sprites live exactly as they did before it (§14.7).
-- **It always covers the whole run, and a save stays small.** Once it holds 512 counts, it keeps the first and every other one after it, folds what happened in the dropped ones' stretches into the next one kept, and counts half as often: every 200 ticks from about tick 51,000, every 400 from about 102,000, and so on. It never holds more than 511 counts: in the default world at 200,000 ticks it held 501, every 400 ticks, 36 KB of a 2 MB save.
+- **It always covers the whole run, and a save stays small.** Once it holds 512 counts, it keeps the first and every other one after it, folds what happened in the dropped ones' stretches into the next one kept, and counts half as often: every 200 ticks from about tick 51,000, every 400 from about 102,000, and so on. It never holds more than 511 counts.
 - **A save from before this slice** has no counts, so its record begins at the first tick it runs after loading. The save format stays 1: the record is new, with a default (M1 design §2.8).
 - **The world keeps it, not the screen,** so a loaded world and a replay show the whole graph, and a world fast-forwarded in Slice 27 will open with it.
 
 ### 14.2 The graph
 
-- **`p` opens it over the panels,** as `l` opens the sprite list (M1 design §6.1), and `p` or `Esc` closes it. Time runs on behind it, and `space`, `.`, `+` and `-` work as ever (Q2), so the player can watch it at 4×. Other keys do nothing while it's open, except those below. Its title says the ticks it covers.
+- **`p` opens it over the panels,** as `l` opens the sprite list (M1 design §6.1), and `p` or `Esc` closes it. Time runs on behind it, and `space`, `.`, `+` and `-` work as ever (Q2), so the player can watch it at 4×. Other keys do nothing while it's open, except those below, and the pointer picks moments rather than moving the Cursor on the map beneath. Its title says the ticks it covers.
 - **The life stages stack from the bottom,** young, adults, old, then eggs on top, each in its theme colour (Q1, B): young light green, adults cyan, old gray, and eggs light yellow, as an egg is on the map. A legend under the graph names them.
-- **The height runs from 0 to the world's limit,** most sprites (§10.6), drawn as a dotted dark gray line where nothing else is, or to the most there have ever been, if the Cursor placed sprites past it. It's labelled at the top, the middle and 0. Each row is two halves of a tile: a tile of one stage is `█`, and a tile of two is `▄` in the lower stage's colour on the upper's, or on nothing at the top of the stack. Each half shows the stage at its middle, and the top of the stack shows if it reaches into a half at all, so a lone egg or sprite is never lost.
+- **The height runs from 0 to the world's limit,** most sprites (§10.6), drawn as a dotted dark gray line where nothing else is (the round said gray, but old sprites are gray), or to the most there have ever been, if the Cursor spawned sprites past it. It's labelled at the top, the middle and 0. Each row of characters is two halves: a character of one stage is `█`, and one of two stages is `▄` in the lower stage's colour on the upper's, or on nothing at the top of the stack. Each half shows the stage at its middle, and the top of the stack shows if it reaches into a half at all, so a lone egg or sprite is never lost.
 - **Each column is a stretch of time,** showing the count at its end. Until the run is as long as the graph is wide at 100 ticks a column, the graph grows from the left; after that the whole run is squeezed in, its columns standing for equal stretches. The time axis is marked at each quarter, labelled with its tick, rounded to the hundred.
 - **It fills the screen,** at any size the game allows.
 
@@ -810,8 +810,9 @@ At 100×30, the default world (seed 7) at tick 48,000, with a moment at tick 32,
 
 ### 14.3 Reading a moment
 
-- **`←` and `→`, or `A` and `D`, or the pointer over the graph pick a column,** marked `▲` under it (Q3, B); a click picks too. The two lines under the graph read it: the tick and the count in each stage, then what hatched, was placed and died since the column before, with the causes, or "none hatched or died". The first column reads from the first count. With nothing picked, they read now, as `now, tick 48,000: …`.
-- **The arrows stop at the first column and at now,** and closing the graph forgets the pick.
+- **`←` and `→`, or `A` and `D`, or the pointer over the graph pick a column** (Q3, B); a click picks too. `▲` under the graph marks the column read: with nothing picked, the last, which reads now, as `now, tick 48,000: …`.
+- **The two lines under the graph read it:** the tick and the count in each stage, then what was laid, hatched, spawned and died since the column before, with the causes, or "none laid, hatched or died". The first column reads from the first count, and the first count itself says so. A column narrower than the time between counts, on a wide screen once the record has squeezed, shows the count before it again, and reads it.
+- **A pick is a moment,** the end of the column's stretch of time, so as time runs and the graph squeezes, `▲` stays on the column that takes it in. Picking the last column goes back to reading now, which moves on with time. The arrows stop at the first column and at now, and closing the graph forgets the pick.
 - **The status line's key hints** read `←→ pick a moment  space pause  +/- speed  esc close`.
 
 ### 14.4 The World tab
@@ -846,7 +847,7 @@ The graph and its small copy are a panel of their own, `Graph`, about the world 
 
 Agreed before building (Q4):
 
-- **UI tests** (ratatui's `TestBackend`) of the full graph and the small one, the stages stacked in the theme's colours, the graph growing from the left and then squeezing, a picked moment, a death read in its moment, time running while it's open, the graph after a save and a load, and the policy hiding it; snapshots of the graph in both themes. The simulation's own tests cover the record: counts at the right ticks, hatchings, placings and deaths counted in their stretch, squeezing over 110,000 ticks, saving, and a save from before it.
+- **UI tests** (ratatui's `TestBackend`) of the full graph and the small one, the stages stacked in the theme's colours, the graph growing from the left and then squeezing, a picked moment, which stays picked as time runs, a death read in its moment, a column narrower than the time between counts, the height past the limit, time running while it's open, the graph after a save and a load, and the policy hiding it; snapshots of the graph in both themes. The simulation's own tests cover the record: counts at the right ticks, layings, hatchings, spawns and deaths counted in their stretch, squeezing over 110,000 ticks, saving, and a save from before it.
 - **The sprites live exactly as before:** the `generations` run, seeds 1–4 for 30,000 ticks, prints the same, byte for byte, on `main` and on this slice.
 - **No slower:** the speed check (A5) at least 200 ticks a second, and within 5% of `main` measured the same way.
 
@@ -860,7 +861,6 @@ cargo run --release -p terra-sim --example speed
 - **The sprites live exactly as before: met.** The `generations` report is the same, byte for byte, on both. The state hash differs, as it should, since the record is world state.
 - **No slower: met.** The speed check ran 279 and 281 ticks a second on `main`, and 297 and 282 on this slice, run in turn.
 - **The UI tests and snapshots pass,** as do the simulation's tests of the record.
-- **For information, a save's size:** at 200,000 ticks the default world's record held 501 counts, every 400 ticks: 36 KB of a 2 MB save. At 30,000 ticks it was 20 KB.
 
 ### 14.8 Later
 

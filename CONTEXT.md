@@ -344,7 +344,7 @@ The most sprites a world holds, eggs included: the preset's `most_sprites` (100 
 _Avoid_: population cap, carrying capacity (food sets that)
 
 **Population record** (M2):
-The counts the world keeps of its sprites by life stage over its whole run, for the population graph: one every 100 ticks from the first tick it runs, each with what hatched, was placed and died since the one before. It's world state, so it's saved and replayed. Past 512 counts it keeps every other one and counts half as often, so it always covers the whole run (M2 design §14.1).
+The counts the world keeps of its sprites by life stage over its whole run, for the population graph: one every 100 ticks from the first tick it runs, each with the eggs laid and hatched, the sprites spawned and the deaths since the one before. It's world state, so it's saved and replayed. Past 512 counts it keeps every other one and counts half as often, so it always covers the whole run (M2 design §14.1).
 _Avoid_: history, statistics, census
 
 **Cause of death**:
@@ -643,7 +643,7 @@ The overlay `l` opens: every sprite, one to a row, with its age, its strongest d
 _Avoid_: roster, census
 
 **Population graph** (M2):
-The overlay `p` opens: how many sprites the world has had over its whole run, stacked by life stage, with a dotted line at most sprites. A moment picked with the arrows or the pointer is read under it: the count in each stage, and what hatched, was placed and died since the column before. A small copy heads the World tab (M2 design §14).
+The overlay `p` opens: how many sprites the world has had over its whole run, stacked by life stage, with a dotted line at most sprites. A moment picked with the arrows or the pointer is read under it: the count in each stage, and what was laid, hatched, spawned and died since the column before. A small copy heads the World tab (M2 design §14).
 _Avoid_: population chart, history graph, census
 
 **Information policy**:

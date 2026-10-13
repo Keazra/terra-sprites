@@ -17,7 +17,7 @@ use crate::events::{DeathCause, Event, EventKind};
 use crate::sprites::Sprites;
 
 /// Ticks between counts, until the record first squeezes (M2 design §14).
-pub(crate) const FIRST_EVERY: u64 = 100;
+pub const FIRST_COUNT_EVERY: u64 = 100;
 
 /// The most counts the record holds; at this many, it squeezes them.
 pub(crate) const MOST_COUNTS: usize = 512;
@@ -33,7 +33,7 @@ pub struct PopulationCount {
     pub adults: u32,
     pub old: u32,
     /// What happened since the count before; for the first count, nothing.
-    pub since: Changes,
+    pub since: PopulationChanges,
 }
 
 impl PopulationCount {
@@ -74,25 +74,28 @@ impl PopulationCount {
 
 /// What changed the population over a stretch of time (M2 design §14).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Changes {
+pub struct PopulationChanges {
+    /// Eggs laid.
+    pub laid: u32,
     /// Eggs that hatched.
     pub hatched: u32,
-    /// Sprites the Cursor placed (design v28 §6.5).
-    pub placed: u32,
+    /// Sprites the Cursor spawned (design §6.5).
+    pub spawned: u32,
     /// Sprites that died, by cause.
     pub died: BTreeMap<DeathCause, u32>,
 }
 
-impl Changes {
+impl PopulationChanges {
     /// How many died, of every cause.
     pub fn deaths(&self) -> u32 {
         self.died.values().sum()
     }
 
     /// Adds what happened in `other`, a stretch of time next to this one.
-    pub fn add(&mut self, other: &Changes) {
+    pub fn add(&mut self, other: &PopulationChanges) {
+        self.laid += other.laid;
         self.hatched += other.hatched;
-        self.placed += other.placed;
+        self.spawned += other.spawned;
         for (&cause, &n) in &other.died {
             *self.died.entry(cause).or_insert(0) += n;
         }
@@ -102,8 +105,9 @@ impl Changes {
     fn note(&mut self, events: &[Event]) {
         for event in events {
             match event.kind {
+                EventKind::Laid { .. } => self.laid += 1,
                 EventKind::Hatched { .. } => self.hatched += 1,
-                EventKind::Spawned { .. } => self.placed += 1,
+                EventKind::Spawned { .. } => self.spawned += 1,
                 EventKind::Died { cause, .. } => *self.died.entry(cause).or_insert(0) += 1,
                 _ => {}
             }
@@ -119,15 +123,15 @@ pub(crate) struct PopulationRecord {
     /// The counts, oldest first.
     counts: Vec<PopulationCount>,
     /// What has happened since the last count.
-    since: Changes,
+    since: PopulationChanges,
 }
 
 impl Default for PopulationRecord {
     fn default() -> PopulationRecord {
         PopulationRecord {
-            every: FIRST_EVERY,
+            every: FIRST_COUNT_EVERY,
             counts: Vec::new(),
-            since: Changes::default(),
+            since: PopulationChanges::default(),
         }
     }
 }
@@ -184,7 +188,7 @@ impl PopulationRecord {
         self.every *= 2;
         let every = self.every;
         let mut kept: Vec<PopulationCount> = Vec::with_capacity(self.counts.len() / 2 + 1);
-        let mut dropped = Changes::default();
+        let mut dropped = PopulationChanges::default();
         for (i, mut count) in std::mem::take(&mut self.counts).into_iter().enumerate() {
             if i == 0 || count.tick.is_multiple_of(every) {
                 let mut since = std::mem::take(&mut dropped);
@@ -236,9 +240,9 @@ mod tests {
             .map(|(i, &tick)| PopulationCount {
                 tick,
                 adults: tick as u32,
-                since: Changes {
+                since: PopulationChanges {
                     hatched: u32::from(i > 0),
-                    ..Changes::default()
+                    ..PopulationChanges::default()
                 },
                 ..PopulationCount::default()
             })
@@ -246,7 +250,7 @@ mod tests {
         PopulationRecord {
             every,
             counts,
-            since: Changes::default(),
+            since: PopulationChanges::default(),
         }
     }
 

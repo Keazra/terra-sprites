@@ -1,6 +1,6 @@
 //! The population record (M2 design §14): the world counts its sprites by
 //! life stage every 100 ticks over its whole run, with the hatchings, the
-//! sprites the Cursor placed and the deaths between counts; it's world
+//! sprites the Cursor spawned and the deaths between counts; it's world
 //! state, so a save keeps it, and it squeezes its counts to stay small.
 
 mod common;
@@ -8,7 +8,9 @@ use common::{ALONE, FEMALE, WorldBuilder, at, builtin, family, until};
 
 use std::collections::BTreeMap;
 
-use terra_sim::{Changes, Command, EventKind, LifeStage, PopulationCount, World, WorldConfig};
+use terra_sim::{
+    Command, EventKind, LifeStage, PopulationChanges, PopulationCount, World, WorldConfig,
+};
 
 /// The sprites in `world` now, by life stage, in the order a count keeps
 /// them: eggs, young, adults, old.
@@ -35,8 +37,8 @@ fn ticks(world: &World) -> Vec<u64> {
 
 /// Everything that happened in the record's stretches, and since its last
 /// count.
-fn all_changes(world: &World) -> Changes {
-    let mut all = Changes::default();
+fn all_changes(world: &World) -> PopulationChanges {
+    let mut all = PopulationChanges::default();
     for count in world.population() {
         all.add(&count.since);
     }
@@ -84,7 +86,11 @@ fn a_new_world_counts_its_first_sprites_then_every_100_ticks() {
     }
     let first = &world.population()[0];
     assert_eq!(first.sprites(), 30, "the default world's first sprites");
-    assert_eq!(first.since, Changes::default(), "nothing before the first");
+    assert_eq!(
+        first.since,
+        PopulationChanges::default(),
+        "nothing before the first"
+    );
     let now = world.population_now();
     assert_eq!(now.tick, 250);
     assert_eq!(stages_of(&now), stages(&world));
@@ -115,24 +121,26 @@ fn a_death_is_counted_in_the_stretch_it_happened_in() {
 }
 
 #[test]
-fn an_egg_is_counted_as_an_egg_and_its_hatching_as_one() {
+fn an_egg_is_counted_as_an_egg_and_its_laying_and_hatching_once_each() {
     let mut world = family(&[(at(0, 0), &format!("{FEMALE}{ALONE}"))], &[], 3);
     until(&mut world, 3_000, |event| {
         matches!(event.kind, EventKind::Laid { .. }).then_some(())
     })
     .expect("she lays alone");
     assert_eq!(world.population_now().eggs, 1);
+    assert_eq!(all_changes(&world).laid, 1);
     until(&mut world, 1_000, |event| {
         matches!(event.kind, EventKind::Hatched { .. }).then_some(())
     })
     .expect("it hatches");
     let now = world.population_now();
     assert_eq!((now.eggs, now.young), (0, 1));
-    assert_eq!(all_changes(&world).hatched, 1);
+    let all = all_changes(&world);
+    assert_eq!((all.laid, all.hatched), (1, 1));
 }
 
 #[test]
-fn a_sprite_the_cursor_placed_is_counted_as_placed() {
+fn a_sprite_the_cursor_spawned_is_counted_as_spawned() {
     let mut world = empty_world();
     world.submit(Command::SpawnSprite {
         tile: at(1, 1),
@@ -140,7 +148,7 @@ fn a_sprite_the_cursor_placed_is_counted_as_placed() {
     });
     world.step();
     let now = world.population_now();
-    assert_eq!(now.since.placed, 1);
+    assert_eq!(now.since.spawned, 1);
     assert_eq!(now.sprites(), 1);
 }
 
@@ -181,7 +189,7 @@ fn a_save_from_before_the_record_begins_it_where_it_was_loaded() {
 #[test]
 fn a_long_run_squeezes_the_record_and_keeps_the_whole_run() {
     // 512 counts take it to tick 51,100, where it keeps every other one and
-    // counts every 200 ticks; at 512 again, near tick 102,300, every 400.
+    // counts every 200 ticks; at 512 again, at tick 102,200, every 400.
     let mut world = empty_world();
     for _ in 0..110_000 {
         world.step();
