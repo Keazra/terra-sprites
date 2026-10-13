@@ -4,7 +4,7 @@
 //! turns female; and births are world state, saved, hashed and replayed.
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_changing_files, close, endings, genome};
+use common::{WorldBuilder, at, builtin, builtin_changing_files, close, endings, genome, refusals};
 
 use proptest::prelude::*;
 use terra_sim::{
@@ -331,17 +331,6 @@ fn an_egg_body_stays_as_it_was_laid() {
         assert!(egg_now.action().is_none(), "an egg does nothing");
         assert_eq!(body(&world), laid_with, "an egg needs nothing");
     }
-}
-
-/// The commands a tick's `events` refused, and why.
-fn refusals(events: Vec<Event>) -> Vec<(Command, Rejection)> {
-    events
-        .into_iter()
-        .filter_map(|event| match event.kind {
-            EventKind::CommandRejected { command, reason } => Some((command, reason)),
-            _ => None,
-        })
-        .collect()
 }
 
 #[test]

@@ -3717,3 +3717,28 @@ fn leading_an_egg_the_cursor_s_mark_shows_an_egg() {
         assert_eq!(screen[(on.x - 2, on.y)].symbol(), glyph);
     }
 }
+
+#[test]
+fn leading_a_young_sprite_the_cursor_s_mark_shows_it_small() {
+    // M2 design §9.6: the mark shows a led sprite as the map draws it.
+    let pack = pack();
+    let at = Pos { x: 4, y: 2 };
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &[(at, None)],
+        scripted: &[],
+        newborns: &[at],
+    };
+    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    for (theme, glyph) in [(Theme::cp437(), "ö"), (Theme::ascii(), "a")] {
+        let mut app = app_for(&world, theme, 40, 10);
+        let on = pointer_on(at.x, at.y);
+        app.apply(Action::Mode(CursorMode::Grab), &world);
+        app.apply(Action::Point(on), &world);
+        app.apply(Action::left_click(on), &world);
+        let screen = render(&app, &world, 40, 10);
+        assert_eq!(screen[(on.x - 2, on.y)].symbol(), glyph);
+    }
+}

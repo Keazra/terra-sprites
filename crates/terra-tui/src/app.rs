@@ -1776,7 +1776,7 @@ impl App {
         world: &World,
         refused: Refused,
     ) -> bool {
-        let command = match (self.followed().or(sprite), world.object_at(tile)) {
+        let command = match (self.grab_target(sprite), world.object_at(tile)) {
             (Some(sprite), _) => {
                 // Taking hold puts the Cursor, as the world knows it, on the
                 // sprite.
@@ -1797,6 +1797,13 @@ impl App {
         };
         self.send(command, world);
         true
+    }
+
+    /// The sprite a grab with the Cursor empty takes hold of, with `sprite`
+    /// under the pointer: the followed sprite, or else that one (design v23
+    /// §6.5).
+    fn grab_target(&self, sprite: Option<EntityId>) -> Option<EntityId> {
+        self.followed().or(sprite)
     }
 
     /// Sends a Grab-mode command, queued, so the marks and the next click
@@ -1823,7 +1830,7 @@ impl App {
         let shoved = match self.grip(world) {
             Some(Grip::Leads(id)) => Some(id),
             Some(Grip::Holds(_)) => None,
-            None => self.followed().or(sprite),
+            None => self.grab_target(sprite),
         };
         let shoving_an_egg = shoved
             .and_then(|id| world.sprite(id))

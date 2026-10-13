@@ -414,7 +414,7 @@ The game's rule, "the world decides what happens to the body, the genes decide h
 ### 10.7 What the player sees
 
 - **The log:** `Pip #12 laid an egg (with Bo #7)`, `Pip #12 laid an egg alone`, `Sprite #31 hatched (Pip #12 and Bo #7's)`, `Pip #12 turned female`.
-- **The map:** an egg is `o` in CP437 and `0` in ASCII, where `o` is the ball; the theme keys `egg` and `selected_egg`. A theme without them draws eggs as the young. The Cursor's mark for what it has hold of shows `egg` while it leads one (#190).
+- **The map:** an egg is `o` in CP437 and `0` in ASCII, where `o` is the ball; the theme keys `egg` and `selected_egg`. A theme without them draws eggs as the young. The Cursor's mark for what it has hold of draws what it leads as the map does: `egg` while it leads one, and a young sprite small (#190).
 - **The Body tab:** after the traits, the sex, `· fertile` while it is, and for a male, how near it is to turning, `male · fertile · turning 40%`; then `parents Pip #12 and Bo #7`. An egg shows `egg · hatches in 750 ticks` for its life stage.
 - **The sprite list** shows `egg` as the life stage; **the doing line** says `Going to mate with Bo #7`, `Mated with Bo #7`, `Breeding alone`, `Laid an egg alone`.
 - **Arousal** colours a sprite light magenta when it's its strongest drive above half.

@@ -276,8 +276,8 @@ impl Sprite {
     /// Grows the sprite to its life stage on the tick `tick` (M2 design
     /// §9.2): if that's a new one, its genes are expressed afresh for it,
     /// leaving what it has learned as it was. An egg hatches on its tick,
-    /// and is born then (§10). Returns the stage it was in and the new one,
-    /// if it has one.
+    /// and is born then, owing nothing for a walk it was led on (§10, §10.4).
+    /// Returns the stage it was in and the new one, if it has one.
     pub(crate) fn grow(&mut self, tick: u64, data: &DataPack) -> Option<(LifeStage, LifeStage)> {
         let was = self.stage();
         let stage = match self.hatches {
@@ -285,6 +285,10 @@ impl Sprite {
             Some(_) => {
                 self.hatches = None;
                 self.born = tick as i64;
+                // The steps and points of a walk the Cursor led it on are
+                // the egg's: the hatchling pays nothing for them (§10.4).
+                self.did = Did::default();
+                self.move_points = 0;
                 self.program.traits.life_stage(0, self.sooner(data))
             }
             None => self
