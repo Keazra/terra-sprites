@@ -6,10 +6,13 @@
 //! grew up; then how long its sprites lived and what they died of; then the
 //! hidden flaws its sprites carried (M2 design §12), and how long young
 //! from lone eggs lived against young from pairs; then how far the species'
-//! genes moved from the starter genome's (§12, G4). The bars: sprites alive
-//! at the end in at least 8 of 10 seeds, and never more than the world's
-//! limit; and at least 3 gene numbers moved by a tenth the same way in
-//! every seed (§12.7).
+//! genes moved from the starter genome's (§12, G4); then the genes the
+//! starter lacks that the living carry, and the genes they lost and
+//! doubled (§13). The bars: sprites alive at the end in at least 8 of 10
+//! seeds, and never more than the world's limit; at least 3 gene numbers
+//! moved by a tenth the same way in every seed (§12.7); and in at least 5
+//! of 10 seeds, a gene the starter lacks carried by at least a tenth of the
+//! living (§13).
 //!
 //! `cargo run --release -p terra-sim --example generations`
 //!
@@ -25,7 +28,8 @@ use std::process::ExitCode;
 use std::sync::Mutex;
 
 use terra_sim::{
-    DataPack, DeathCause, EntityId, EventKind, GeneView, Genome, Outcome, Verb, World, WorldConfig,
+    DataPack, DeathCause, EntityId, EventKind, GeneView, Genome, LifeStage, Outcome, Switch, Verb,
+    World, WorldConfig,
 };
 
 /// Ticks in an hour at 1×, 1.25 ticks a second (design §6.6).
@@ -72,10 +76,12 @@ struct Run {
     /// the end (M2 design §12).
     flaws_halfway: Option<FlawLoad>,
     flaws_at_end: Option<FlawLoad>,
-    /// Each gene number's middle value among the sprites alive at the end
-    /// whose genes line up with the starter's, in the starter's order; empty
-    /// if none do.
+    /// Each gene number's middle value among the sprites alive at the end,
+    /// lined up with the starter's, in the starter's order; empty if none
+    /// is alive, and not a number where none has the gene.
     numbers: Vec<f32>,
+    /// The genes of the hatched sprites alive at the end (M2 design §13).
+    genes: Option<GenePool>,
     /// Deaths after tick 10,000, once the first sprites' ages have spread
     /// out (A4's window starts there): of old age, hunger, thirst, and hurt.
     old_age: u64,
@@ -117,9 +123,9 @@ fn main() -> ExitCode {
         "Died out"
     );
     let (mut going, mut over) = (0, 0);
-    let starter = starter(&data);
+    let (starter, genes) = (starter(&data), starter_genes(&data));
     let mut runs = Vec::new();
-    for (seed, run) in in_parallel(&data, &config, &starter, &options) {
+    for (seed, run) in in_parallel(&data, &config, &starter, &genes, &options) {
         going += usize::from(run.alive + run.eggs > 0);
         over += usize::from(run.most > limit);
         let died_out = run
@@ -145,6 +151,7 @@ fn main() -> ExitCode {
     lives(&runs);
     flaws(&runs);
     evolution(&starter, &runs);
+    copy_and_change(&runs);
     ExitCode::SUCCESS
 }
 
@@ -154,6 +161,7 @@ fn in_parallel(
     data: &DataPack,
     config: &WorldConfig,
     starter: &[(String, f32)],
+    genes: &BTreeMap<String, usize>,
     options: &Options,
 ) -> Vec<(u64, Run)> {
     let (first, last) = options.seeds;
@@ -172,7 +180,7 @@ fn in_parallel(
                     if seed > last {
                         break;
                     }
-                    let run = run(data, config, starter, seed, options.ticks);
+                    let run = run(data, config, starter, genes, seed, options.ticks);
                     done.lock().expect("no thread panicked").push((seed, run));
                 }
             });
@@ -183,105 +191,146 @@ fn in_parallel(
     done
 }
 
-/// The starter genome's numbers, named, in genome order.
-fn starter(data: &DataPack) -> Vec<(String, f32)> {
+/// The starter genome.
+fn starter_genome(data: &DataPack) -> Genome {
     let text = DataPack::builtin_sources()
         .iter()
         .find(|(path, _)| *path == "genomes/starter.ron")
         .map(|(_, text)| text)
         .expect("the built-in pack has a starter genome");
-    let genome = Genome::from_ron(text, data).expect("the starter genome is valid");
-    numbers(&genome.genes(data))
+    Genome::from_ron(text, data).expect("the starter genome is valid")
+}
+
+/// The starter genome's numbers, named, in genome order.
+fn starter(data: &DataPack) -> Vec<(String, f32)> {
+    numbers(&starter_genome(data).genes(data))
+}
+
+/// The starter's genes, by what each does and when, with how many it has
+/// of each (M2 design §13).
+fn starter_genes(data: &DataPack) -> BTreeMap<String, usize> {
+    let genome = starter_genome(data);
+    counted(&genome.genes(data), &genome.switches())
+}
+
+/// How many of `genes` there are of each, by what each does and when it
+/// works, `switches` saying when: `thirst → Drink`, `always → Wander from
+/// Adult`. Genes this build can't read aren't counted.
+fn counted(genes: &[GeneView], switches: &[Switch]) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for (gene, switch) in genes.iter().zip(switches) {
+        if let Some((name, _)) = named(gene) {
+            *counts
+                .entry(format!("{name}{}", when(*switch)))
+                .or_insert(0) += 1;
+        }
+    }
+    counts
+}
+
+/// When a gene works, after what it does: nothing for all its life.
+fn when(switch: Switch) -> String {
+    let mut text = String::new();
+    if switch.from != LifeStage::Young {
+        text += &format!(" from {:?}", switch.from);
+    }
+    if let Some(until) = switch.until {
+        text += &format!(" until {until:?}");
+    }
+    text
 }
 
 /// Each number in `genes`, named, in order (design §4.3's value fields).
 fn numbers(genes: &[GeneView]) -> Vec<(String, f32)> {
     let mut numbers = Vec::new();
-    for gene in genes {
-        let mut push = |field: &str, name: String, value: f32| {
+    for (name, fields) in genes.iter().filter_map(named) {
+        for (field, value) in fields {
             numbers.push((format!("{name}: {field}"), value));
-        };
-        match gene {
-            GeneView::HalfLife { chem, ticks } => {
-                push("half-life", chem.to_string(), *ticks as f32)
-            }
-            GeneView::Reaction {
-                reactants,
-                products,
-                rate,
-            } => {
-                let side = |terms: &[(&str, u8)]| {
-                    let names: Vec<&str> = terms.iter().map(|(chem, _)| *chem).collect();
-                    names.join(" + ")
-                };
-                push(
-                    "rate",
-                    format!("{} → {}", side(reactants), side(products)),
-                    *rate,
-                );
-            }
-            GeneView::Emitter {
-                locus,
-                mode,
-                invert,
-                threshold,
-                gain,
-                chem,
-            } => {
-                let low = if *invert { "low " } else { "" };
-                let name = format!("{low}{locus} {mode:?} → {chem}");
-                push("threshold", name.clone(), *threshold);
-                push("gain", name, *gain);
-            }
-            GeneView::Receptor {
-                chem,
-                threshold,
-                gain,
-                target,
-            } => {
-                let name = format!("{chem} → {target}");
-                push("threshold", name.clone(), *threshold);
-                push("gain", name, *gain);
-            }
-            GeneView::InitialConcentration { chem, value } => {
-                push("at birth", chem.to_string(), *value)
-            }
-            GeneView::Trait { which, value } => push("trait", format!("{which:?}"), *value),
-            GeneView::BrainParam { param, value } => push("brain", param.to_string(), *value),
-            GeneView::Instinct {
-                inputs,
-                verb,
-                weight,
-            } => {
-                let inputs: Vec<String> = inputs
-                    .iter()
-                    .map(|(input, negated)| {
-                        if *negated {
-                            format!("not {input}")
-                        } else {
-                            input.to_string()
-                        }
-                    })
-                    .collect();
-                push(
-                    "weight",
-                    format!("{} → {verb:?}", inputs.join(" & ")),
-                    *weight,
-                );
-            }
-            GeneView::AttentionInstinct {
-                input,
-                category,
-                weight,
-            } => push(
-                "weight",
-                format!("{input} → attends to {category}"),
-                *weight,
-            ),
-            GeneView::Unknown { .. } => {}
         }
     }
     numbers
+}
+
+/// What `gene` does, named, and its numbers, each with its field's name;
+/// none for a gene this build can't read.
+fn named(gene: &GeneView) -> Option<(String, Vec<(&'static str, f32)>)> {
+    let named = match gene {
+        GeneView::HalfLife { chem, ticks } => {
+            (chem.to_string(), vec![("half-life", *ticks as f32)])
+        }
+        GeneView::Reaction {
+            reactants,
+            products,
+            rate,
+        } => {
+            let side = |terms: &[(&str, u8)]| {
+                let names: Vec<&str> = terms.iter().map(|(chem, _)| *chem).collect();
+                names.join(" + ")
+            };
+            (
+                format!("{} → {}", side(reactants), side(products)),
+                vec![("rate", *rate)],
+            )
+        }
+        GeneView::Emitter {
+            locus,
+            mode,
+            invert,
+            threshold,
+            gain,
+            chem,
+        } => {
+            let low = if *invert { "low " } else { "" };
+            (
+                format!("{low}{locus} {mode:?} → {chem}"),
+                vec![("threshold", *threshold), ("gain", *gain)],
+            )
+        }
+        GeneView::Receptor {
+            chem,
+            threshold,
+            gain,
+            target,
+        } => (
+            format!("{chem} → {target}"),
+            vec![("threshold", *threshold), ("gain", *gain)],
+        ),
+        GeneView::InitialConcentration { chem, value } => {
+            (chem.to_string(), vec![("at birth", *value)])
+        }
+        GeneView::Trait { which, value } => (format!("{which:?}"), vec![("trait", *value)]),
+        GeneView::BrainParam { param, value } => (param.to_string(), vec![("brain", *value)]),
+        GeneView::Instinct {
+            inputs,
+            verb,
+            weight,
+        } => {
+            let inputs: Vec<String> = inputs
+                .iter()
+                .map(|(input, negated)| {
+                    if *negated {
+                        format!("not {input}")
+                    } else {
+                        input.to_string()
+                    }
+                })
+                .collect();
+            (
+                format!("{} → {verb:?}", inputs.join(" & ")),
+                vec![("weight", *weight)],
+            )
+        }
+        GeneView::AttentionInstinct {
+            input,
+            category,
+            weight,
+        } => (
+            format!("{input} → attends to {category}"),
+            vec![("weight", *weight)],
+        ),
+        GeneView::Unknown { .. } => return None,
+    };
+    Some(named)
 }
 
 /// How far the species' genes moved from the starter's (M2 design §12,
@@ -558,6 +607,7 @@ fn run(
     data: &DataPack,
     config: &WorldConfig,
     starter: &[(String, f32)],
+    starter_genes: &BTreeMap<String, usize>,
     seed: u64,
     ticks: u64,
 ) -> Run {
@@ -642,34 +692,167 @@ fn run(
     run.alive = world.sprites().count() - run.eggs;
     run.numbers = middles(&world, starter);
     run.flaws_at_end = flaw_load(&world);
+    run.genes = gene_pool(&world, starter_genes);
     run
 }
 
-/// Each of the starter's numbers' middle value among the sprites alive in
-/// `world`, eggs aside, whose genes line up with the starter's; empty if
-/// none do. By the end of a long run, all were hatched.
-fn middles(world: &World, starter: &[(String, f32)]) -> Vec<f32> {
-    let mut columns: Vec<Vec<f32>> = vec![Vec::new(); starter.len()];
-    for sprite in world.sprites().filter(|sprite| !sprite.is_egg()) {
+/// The genes of the hatched sprites alive in `world`, against the
+/// starter's (M2 design §13); `None` if none is alive.
+fn gene_pool(world: &World, starter: &BTreeMap<String, usize>) -> Option<GenePool> {
+    let mut pool = GenePool::default();
+    let mut lengths = Vec::new();
+    for sprite in world
+        .sprites()
+        .filter(|sprite| !sprite.is_egg() && !sprite.parents().is_empty())
+    {
         let genes: Vec<GeneView> = sprite.genes().into_iter().map(|(gene, _)| gene).collect();
-        let numbers = numbers(&genes);
-        let lined_up = numbers.len() == starter.len()
-            && numbers.iter().zip(starter).all(|((a, _), (b, _))| a == b);
-        if !lined_up {
-            continue;
+        lengths.push(genes.len());
+        let has = counted(&genes, &sprite.switches());
+        for (gene, &count) in starter {
+            let its = has.get(gene).copied().unwrap_or(0);
+            pool.lost += count.saturating_sub(its);
+            pool.doubled += its.saturating_sub(count);
         }
-        for (column, (_, value)) in columns.iter_mut().zip(numbers) {
-            column.push(value);
+        for gene in has.keys().filter(|gene| !starter.contains_key(*gene)) {
+            *pool.new.entry(gene.clone()).or_insert(0) += 1;
         }
     }
-    if columns.first().is_none_or(Vec::is_empty) {
+    lengths.sort_unstable();
+    pool.sprites = lengths.len();
+    pool.lengths = (
+        *lengths.first()?,
+        lengths[(lengths.len() - 1) / 2],
+        *lengths.last()?,
+    );
+    Some(pool)
+}
+
+/// The genes of the hatched sprites alive at a moment, against the
+/// starter's (M2 design §13).
+#[derive(Debug, Default)]
+struct GenePool {
+    /// The sprites counted.
+    sprites: usize,
+    /// Each gene the starter lacks, by what it does and when, with how
+    /// many of them carry it.
+    new: BTreeMap<String, usize>,
+    /// The starter's genes they lack, and their copies of its genes beyond
+    /// the starter's, all told.
+    lost: usize,
+    doubled: usize,
+    /// Their genomes' shortest, median and longest length.
+    lengths: (usize, usize, usize),
+}
+
+impl GenePool {
+    /// The genes the starter lacks carried by at least a tenth of them,
+    /// most widely carried first, each with the share that carries it.
+    fn taken_hold(&self) -> Vec<(&str, f32)> {
+        let mut held: Vec<(&str, f32)> = self
+            .new
+            .iter()
+            .map(|(gene, &carriers)| (gene.as_str(), carriers as f32 / self.sprites as f32))
+            .filter(|&(_, share)| share >= 0.1)
+            .collect();
+        held.sort_by(|a, b| b.1.total_cmp(&a.1));
+        held
+    }
+}
+
+/// The genes the starter lacks that the living carry, and the genes they
+/// lost and doubled (M2 design §13); the bar is a gene the starter lacks
+/// carried by at least a tenth of the living in at least 5 of 10 seeds.
+fn copy_and_change(runs: &[(u64, Run)]) {
+    println!(
+        "\nCopy and change: among the hatched sprites alive at the end, the genes the starter \
+         lacks (by what they do and when) carried by at least a tenth, and the most widely \
+         carried; starter genes lost and extra copies, on average; and genome lengths."
+    );
+    println!(
+        "\n{:>5} {:>7} {:>6} {:>5} {:>5} {:>5} {:>6} {:>5}  Most widely carried new gene",
+        "Seed", "Sprites", "New10%", "Lost", "Extra", "Short", "Median", "Long",
+    );
+    let mut took_hold = 0;
+    let mut spread: BTreeMap<&str, (usize, f32)> = BTreeMap::new();
+    for (seed, run) in runs {
+        let Some(pool) = &run.genes else {
+            println!("{seed:>5} {:>7}", 0);
+            continue;
+        };
+        let held = pool.taken_hold();
+        took_hold += usize::from(!held.is_empty());
+        for &(gene, share) in &held {
+            let seen = spread.entry(gene).or_insert((0, 0.0));
+            *seen = (seen.0 + 1, seen.1.max(share));
+        }
+        let widest = pool
+            .new
+            .iter()
+            .max_by_key(|&(_, &carriers)| carriers)
+            .map_or("-".to_string(), |(gene, &carriers)| {
+                format!(
+                    "{gene} ({:.0}%)",
+                    100.0 * carriers as f32 / pool.sprites as f32
+                )
+            });
+        let each = |count: usize| count as f32 / pool.sprites as f32;
+        let (short, median, long) = pool.lengths;
+        println!(
+            "{seed:>5} {:>7} {:>6} {:>5.2} {:>5.2} {short:>5} {median:>6} {long:>5}  {widest}",
+            pool.sprites,
+            held.len(),
+            each(pool.lost),
+            each(pool.doubled)
+        );
+    }
+    println!(
+        "\nA gene the starter lacks was carried by a tenth or more of the living in {took_hold} of {} seeds.",
+        runs.len()
+    );
+    if !spread.is_empty() {
+        println!(
+            "\n{:<60} {:>5} {:>8}",
+            "New gene carried by a tenth or more", "Seeds", "Widest"
+        );
+        let mut spread: Vec<_> = spread.into_iter().collect();
+        spread.sort_by(|a, b| b.1.0.cmp(&a.1.0).then(b.1.1.total_cmp(&a.1.1)));
+        for (gene, (seeds, widest)) in spread {
+            println!("{gene:<60} {seeds:>5} {:>7.0}%", 100.0 * widest);
+        }
+    }
+}
+
+/// Each of the starter's numbers' middle value among the sprites alive in
+/// `world`, eggs aside; empty if none is alive. A sprite's numbers line up
+/// with the starter's by name, the nth of a name with the starter's nth of
+/// it, wherever it sits, since genes may be doubled, lost or changed (M2
+/// design §13); a number no sprite has is not a number. By the end of a
+/// long run, all were hatched.
+fn middles(world: &World, starter: &[(String, f32)]) -> Vec<f32> {
+    let mut columns: Vec<Vec<f32>> = vec![Vec::new(); starter.len()];
+    let mut sprites = 0;
+    for sprite in world.sprites().filter(|sprite| !sprite.is_egg()) {
+        sprites += 1;
+        let genes: Vec<GeneView> = sprite.genes().into_iter().map(|(gene, _)| gene).collect();
+        let numbers = numbers(&genes);
+        let mut nth: BTreeMap<&str, usize> = BTreeMap::new();
+        for (column, (name, _)) in columns.iter_mut().zip(starter) {
+            let nth = nth.entry(name).or_insert(0);
+            let value = numbers.iter().filter(|(its, _)| its == name).nth(*nth);
+            if let Some(&(_, value)) = value {
+                column.push(value);
+            }
+            *nth += 1;
+        }
+    }
+    if sprites == 0 {
         return Vec::new();
     }
     columns
         .into_iter()
         .map(|mut column| {
             column.sort_by(f32::total_cmp);
-            column[column.len() / 2]
+            column.get(column.len() / 2).copied().unwrap_or(f32::NAN)
         })
         .collect()
 }

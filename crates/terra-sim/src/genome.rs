@@ -279,6 +279,13 @@ impl Genome {
         self.switches.get(index).copied().unwrap_or_default()
     }
 
+    /// When each gene works, in genome order (M2 design §9.2).
+    pub fn switches(&self) -> Vec<Switch> {
+        (0..self.genes.len())
+            .map(|index| self.switch(index))
+            .collect()
+    }
+
     /// Whether every gene fits `data`: what each refers to is in the pack,
     /// and its values are in range. A genome read with the pack always does;
     /// one a spawn carries is checked, since a replay may bring it from

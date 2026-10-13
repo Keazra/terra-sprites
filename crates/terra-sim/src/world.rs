@@ -420,10 +420,7 @@ impl<'a> SpriteView<'a> {
 
     /// When each gene in its genome works, in genome order (M2 design §9.2).
     pub fn switches(&self) -> Vec<Switch> {
-        let genome = &self.sprite.genome;
-        (0..genome.genes.len())
-            .map(|index| genome.switch(index))
-            .collect()
+        self.sprite.genome.switches()
     }
 
     /// Its life stage (M2 design §9.1), as of the latest tick.
