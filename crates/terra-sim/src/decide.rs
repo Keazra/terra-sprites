@@ -110,14 +110,20 @@ pub(crate) fn decide(
         offered.entry(category).or_default().push(offer);
     }
     // The breeding drive works only between adults (M2 design §5): it reads
-    // 0 in a sprite not grown up, and in a choice about one. Breeding alone
-    // is offered only to a grown sprite too (§10).
+    // 0 in a sprite not grown up, and in a choice about one, or about an
+    // egg, which holds a sprite not yet hatched (§10.4). Breeding alone is
+    // offered only to a grown sprite too (§10).
     let grown = sprite.stage().is_grown();
-    let not_grown = |target: Target| {
-        target
-            .sprite()
-            .and_then(|other| state.sprites.get(other))
-            .is_some_and(|other| !other.stage().is_grown())
+    let not_grown = |target: Target| match target {
+        Target::Sprite(other) => state
+            .sprites
+            .get(other)
+            .is_some_and(|other| !other.stage().is_grown()),
+        Target::Object(id) => state
+            .objects
+            .get(id)
+            .is_some_and(|object| object.unhatched.is_some()),
+        Target::Water(_) | Target::Cursor => false,
     };
     // Each category's candidate is the thing that draws the eye most (design
     // v19 §3.6); ties go to the lower ID, which comes first, and then to
@@ -224,8 +230,7 @@ pub(crate) fn decide(
         });
     let exploration = sprite.body.loci[data.physiology().indices.exploration_mod];
     // The sprite that stands for sprites while attention scores: a running
-    // action's target, or else the candidate (design v18 §5.3). An egg is
-    // seen as an egg, not a sprite (M2 design §10), so it never does.
+    // action's target, or else the candidate (design v18 §5.3).
     let candidate_sprite = candidates
         .get(&data.sprite_category())
         .and_then(|c| c.target.sprite());
@@ -268,15 +273,14 @@ pub(crate) fn decide(
         .filter(|&other| breeding::adults(state, id, other))
         .collect();
 
-    // What each sprite it may attend to shows it (M2 design §10): an egg
-    // shows nothing.
+    // What each sprite it may attend to shows it (M2 design §10).
     let shown: BTreeMap<EntityId, Vec<f32>> = candidates
         .values()
         .map(|c| c.target)
         .chain(action.and_then(|a| a.target))
         .filter_map(Target::sprite)
         .filter_map(|other| {
-            let other_sprite = state.sprites.get(other).filter(|s| !s.is_egg())?;
+            let other_sprite = state.sprites.get(other)?;
             Some((other, brain::shown(&other_sprite.body, data)))
         })
         .collect();

@@ -402,9 +402,8 @@ impl Flood {
     }
 
     /// Every other sprite the flood reaches, with the path cost to its
-    /// nearest goal tile, in ID order (design v18 §3.6): the eggs among
-    /// them if `eggs`, or else the rest (M2 design §10).
-    fn sprites(&self, ground: Ground, me: EntityId, eggs: bool) -> Vec<(EntityId, u32)> {
+    /// nearest goal tile, in ID order (design v18 §3.6).
+    fn sprites(&self, ground: Ground, me: EntityId) -> Vec<(EntityId, u32)> {
         let map = ground.map;
         let (top_left, bottom_right) = self.near(map);
         let near = |pos: Pos| {
@@ -416,7 +415,7 @@ impl Flood {
         ground
             .sprites
             .iter()
-            .filter(|&(id, sprite)| id != me && near(sprite.pos) && sprite.is_egg() == eggs)
+            .filter(|&(id, sprite)| id != me && near(sprite.pos))
             .filter(|&(id, sprite)| ground.sprites.at(sprite.pos) == Some(id))
             .filter_map(|(id, sprite)| Some((id, self.goal_cost(sprite.pos, false)?)))
             .collect()
@@ -478,14 +477,6 @@ impl Flood {
                 cost,
             );
         }
-        // Eggs are things of their own, offered as objects are, the nearest
-        // first, in a pack that has them (M2 design §10).
-        if let Some(egg) = ground.data.egg_category() {
-            let kind = ground.data.pseudo_type(egg);
-            for (id, cost) in self.sprites(ground, me, true) {
-                offer((egg, kind), Target::Sprite(id), id.0, cost);
-            }
-        }
         let mut offered: BTreeMap<CategoryId, Vec<(u64, Target, u32)>> = BTreeMap::new();
         for ((category, _), (cost, id, target)) in best {
             offered
@@ -510,7 +501,7 @@ impl Flood {
         let sprites: Vec<(Target, u32)> = match attacker {
             Some(attacker) => vec![attacker],
             None => self
-                .sprites(ground, me, false)
+                .sprites(ground, me)
                 .into_iter()
                 .map(|(id, cost)| (Target::Sprite(id), cost))
                 .collect(),
@@ -1031,7 +1022,6 @@ mod tests {
         let tiles: Vec<Pos> = (top_left.y..=bottom_right.y)
             .flat_map(|y| (top_left.x..=bottom_right.x).map(move |x| Pos { x, y }))
             .collect();
-        let is_egg = |id: EntityId| ground.sprites.get(id).is_some_and(Sprite::is_egg);
         let mut best: BTreeMap<(CategoryId, Option<usize>), (u32, u64, Target)> = BTreeMap::new();
         let mut offer = |key, target, id, cost| {
             let better = best.get(&key).is_none_or(|&(c, i, _)| (cost, id) < (c, i));
@@ -1058,13 +1048,6 @@ mod tests {
                 let key = (ground.data.water_category(), None);
                 offer(key, Target::Water(pos), map.index(pos) as u64, cost);
             }
-            if let Some(egg) = ground.data.egg_category()
-                && let Some(id) = ground.sprites.at(pos).filter(|&id| id != me && is_egg(id))
-                && let Some(cost) = goal_cost(pos, false)
-            {
-                let key = (egg, ground.data.pseudo_type(egg));
-                offer(key, Target::Sprite(id), id.0, cost);
-            }
         }
         let mut found: BTreeMap<CategoryId, Vec<(u64, Target, u32)>> = BTreeMap::new();
         for ((category, _), (cost, id, target)) in best {
@@ -1087,10 +1070,7 @@ mod tests {
         let mut sprites: Vec<(EntityId, u32)> = tiles
             .iter()
             .filter_map(|&pos| {
-                let id = ground
-                    .sprites
-                    .at(pos)
-                    .filter(|&id| id != me && !is_egg(id))?;
+                let id = ground.sprites.at(pos).filter(|&id| id != me)?;
                 Some((id, goal_cost(pos, false)?))
             })
             .collect();

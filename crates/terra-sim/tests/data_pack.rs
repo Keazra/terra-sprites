@@ -296,6 +296,62 @@ fn bush(id: u16, name: &str, fields: &str) -> String {
     )
 }
 
+/// An item that hatches, as the built-in egg does (M2 design §10.4), with
+/// `fields` added.
+fn egg(id: u16, name: &str, fields: &str) -> String {
+    format!(
+        r#"(id: {id}, name: "{name}", category: "egg", size: Small, hardness: 1.0,
+            stages: [(name: "laid", ticks: (10, 10), next: Hatch)],
+            {fields})"#
+    )
+}
+
+#[test]
+fn only_one_type_hatches_and_only_a_sprite_lays_one() {
+    // M2 design §10.4: a mother lays one kind of egg, and an egg holds the
+    // sprite she lays in it, so no rule and no Place menu makes one, and a
+    // sprite hatches on its tile.
+    assert_invalid_objects(
+        &[&egg(1, "egg", ""), &egg(2, "roe", "")],
+        &["egg", "roe", "one kind of egg"],
+    );
+    let spawns_eggs = r#"rules: [(trigger: Every(5), do: [SpawnNearby("egg", 1)])]"#;
+    assert_invalid_objects(
+        &[&egg(1, "egg", ""), &bush(2, "bush", spawns_eggs)],
+        &["bush", "egg", "only a sprite can lay one"],
+    );
+    assert_invalid_objects(
+        &[&egg(1, "egg", r#"place: (label: "egg")"#)],
+        &["egg", "Place menu"],
+    );
+    assert_invalid_objects(
+        &[&egg(1, "egg", "tags: [Solid, Fixture]")],
+        &["egg", "solid"],
+    );
+    // Counting eggs makes none, so a rule may.
+    let counts_eggs =
+        r#"rules: [(trigger: Every(5), if: [DensityBelow("egg", 2, 1)], do: [DestroySelf])]"#;
+    let objects = format!("[{}, {}]", egg(1, "egg", ""), bush(2, "bush", counts_eggs));
+    let data = builtin_with("objects.ron", &objects);
+    assert!(data.is_ok(), "{data:?}");
+}
+
+#[test]
+fn only_an_item_says_the_cursor_cannot_throw_it() {
+    // M2 design §10.4: the Cursor never holds a fixture or a pseudo type,
+    // so it can't throw them anyway.
+    assert_invalid_objects(
+        &[&bush(1, "bush", "throwable: false")],
+        &["bush", "throwable"],
+    );
+    let water = r#"(id: 100, name: "water", category: "water", pseudo: true, throwable: false)"#;
+    assert_invalid_objects(&[water], &["water", "throwable"]);
+    let pebble = r#"(id: 5, name: "pebble", category: "toy", size: Small, hardness: 1.0,
+        throwable: false)"#;
+    let data = builtin_with("objects.ron", &format!("[{pebble}]"));
+    assert!(data.is_ok(), "{data:?}");
+}
+
 #[test]
 fn object_type_ids_and_names_are_unique() {
     assert_invalid_objects(&[&bush(1, "bush", ""), &bush(1, "tree", "")], &["1"]);
@@ -529,7 +585,7 @@ fn the_built_in_pack_describes_its_object_types_for_display() {
     let names: Vec<&str> = pack.object_type_names().collect();
     assert_eq!(
         names,
-        ["berry_bush", "berry", "thornbush", "ball"],
+        ["berry_bush", "berry", "thornbush", "ball", "egg"],
         "ID order, no pseudo types"
     );
     assert_eq!(pack.stage_names("berry_bush"), ["seedling", "mature"]);
@@ -771,11 +827,21 @@ fn breeding_s_drive_must_be_a_need() {
 }
 
 #[test]
-fn an_egg_hatches_and_a_sprite_rests_for_at_least_a_tick() {
+fn a_sprite_rests_for_at_least_a_tick_after_an_egg() {
     // M2 design §10: with no rest, a female mated in a tick could lay again
     // in the same tick.
-    assert_invalid_physiology("hatches: 750", "hatches: 0", "breeding.hatches");
     assert_invalid_physiology("rest: 1500", "rest: 0", "breeding.rest");
+}
+
+#[test]
+fn a_pack_with_egg_items_says_when_they_hatch_only_in_objects_ron() {
+    // #196: `breeding.hatches` is only a pack's from before eggs were
+    // items, which has no egg type of its own.
+    assert_invalid_physiology(
+        "breeding: (\n        cost: 0.3,",
+        "breeding: (\n        hatches: 750,\n        cost: 0.3,",
+        "breeding.hatches",
+    );
 }
 
 #[test]

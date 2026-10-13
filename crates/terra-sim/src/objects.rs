@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::breeding::Unhatched;
 use crate::data::DataPack;
 use crate::map::{Dir, Map, Pos};
 use crate::occupancy::Occupancy;
@@ -32,6 +33,11 @@ pub(crate) struct Object {
     /// Whether the Cursor holds it, off the map (design v23 §6.5). Its
     /// `pos` is then where it was picked up, and means nothing.
     pub(crate) held: bool,
+    /// The sprite it holds, if it's an egg (M2 design §10.4, #196), which
+    /// hatches as its type's stage says. Every object of a type that
+    /// hatches holds one, and no other object does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) unhatched: Option<Box<Unhatched>>,
 }
 
 /// A rolling item's way on (design §3.5.4).
@@ -52,6 +58,10 @@ pub(crate) struct Objects {
     /// The object on each tile. It's derived from `by_id`, so it isn't hashed.
     #[serde(skip)]
     on_tile: Occupancy,
+    /// How many objects hold a sprite: the eggs (M2 design §10.4). It's
+    /// derived from `by_id`, so it isn't hashed.
+    #[serde(skip)]
+    eggs: usize,
 }
 
 impl Objects {
@@ -60,7 +70,14 @@ impl Objects {
         Objects {
             by_id: BTreeMap::new(),
             on_tile: Occupancy::new(map),
+            eggs: 0,
         }
+    }
+
+    /// How many eggs there are, held or on the map (M2 design §10.4): the
+    /// objects that hold a sprite.
+    pub(crate) fn eggs(&self) -> usize {
+        self.eggs
     }
 
     /// The object on the tile at `pos`, if any.
@@ -150,6 +167,7 @@ impl Objects {
     /// Puts a new object on its tile. The caller has checked `can_place`.
     pub(crate) fn place(&mut self, id: EntityId, object: Object) {
         self.on_tile.put(object.pos, id);
+        self.eggs += usize::from(object.unhatched.is_some());
         self.by_id.insert(id, object);
     }
 
@@ -159,6 +177,11 @@ impl Objects {
     /// tile.
     pub(crate) fn rebuild(&mut self, map: &Map, data: &DataPack) -> Result<(), String> {
         self.on_tile = Occupancy::new(map);
+        self.eggs = self
+            .by_id
+            .values()
+            .filter(|o| o.unhatched.is_some())
+            .count();
         for (&id, object) in &self.by_id {
             if object.kind >= data.object_types().len() {
                 return Err(format!(
@@ -198,6 +221,7 @@ impl Objects {
         if !object.held {
             self.on_tile.clear(object.pos);
         }
+        self.eggs -= usize::from(object.unhatched.is_some());
         object
     }
 
@@ -234,6 +258,17 @@ impl Objects {
         if indexed != on_map {
             return Err(format!(
                 "{indexed} tiles hold objects, but there are {on_map} objects on the map"
+            ));
+        }
+        let eggs = self
+            .by_id
+            .values()
+            .filter(|o| o.unhatched.is_some())
+            .count();
+        if eggs != self.eggs {
+            return Err(format!(
+                "{eggs} objects hold a sprite, but the count of eggs is {}",
+                self.eggs
             ));
         }
         for (&id, object) in &self.by_id {
@@ -277,6 +312,17 @@ impl Objects {
                 "is solid, yet rolling"
             } else if object.roll.is_some_and(|roll| roll.left == 0) {
                 "is rolling with no tiles to go"
+            } else if object.unhatched.is_some() != object_type.hatches() {
+                "holds a sprite unless it hatches, or hatches without one"
+            } else if let Some(Err(problem)) = object
+                .unhatched
+                .as_ref()
+                .map(|unhatched| unhatched.check(id, data))
+            {
+                return Err(format!(
+                    "{} {id:?} at {:?} {problem}",
+                    object_type.name, object.pos
+                ));
             } else {
                 continue;
             };
@@ -351,6 +397,7 @@ mod tests {
                 fresh: false,
                 roll: None,
                 held: false,
+                unhatched: None,
             };
             self.objects.place(id, object);
             id

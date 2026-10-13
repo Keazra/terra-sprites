@@ -14,8 +14,14 @@
 //             on something its size, and crushes something smaller and softer.
 //             Every type with objects gives both; a pseudo type gives both or neither
 //   counters  named whole numbers with maximums: {"fruit": 6}
-//   stages    [(name, ticks: (min, max), next: Stage(name) or Expire)]; a type
-//             with no stages is permanent
+//   stages    [(name, ticks: (min, max), next: Stage(name), Expire or Hatch)];
+//             a type with no stages is permanent. A type with a stage that
+//             ends in Hatch is the egg sprites lay (M2 design §10.4): when
+//             the stage ends, the young sprite it holds hatches on its tile,
+//             and the egg is gone. Only one type may hatch, and nothing but
+//             a sprite makes one
+//   throwable false for an item the Cursor may pick up and put down, but
+//             never throw (M2 design §10.4); items are throwable otherwise
 //   rules     [(trigger, if: [conditions], do: [effects])], run in order
 //   verbs     {Verb: [effects]}: what happens when a sprite does that verb to it
 //   visual    [(if: [conditions], state: name)]: the first match names the state
@@ -99,6 +105,19 @@
      place: (label: "ball"),
     ),
 
+    // An egg (M2 design §10.4): an item a mother lays beside her, holding
+    // the young sprite it hatches into where it lies, 750 ticks (10 minutes
+    // at 1x) after it was laid. While the Cursor holds it, or a sprite stands
+    // on it, it waits. Only a sprite lays one, so it has no place in the
+    // Place menu. The Cursor can pick it up and put it down, but not throw
+    // it. Nothing a sprite tries on one does anything yet: an egg can't be
+    // hurt until something in the world is meant to. Hard, so a rolling
+    // item never crushes it, though one knocks it on.
+    (id: 103, name: "egg", plural: "eggs", category: "egg", size: Small, hardness: 1.0,
+     stages: [(name: "laid", ticks: (750, 750), next: Hatch)],
+     throwable: false,
+     verbs: {}),
+
     // Pseudo types: a verb table only, with no instances or lifecycle.
     // Water has no plural: it isn't counted, so it reads "water is".
     (id: 100, name: "water", category: "water", pseudo: true,
@@ -118,7 +137,4 @@
     // verbs, such as Play for chasing the light.
     (id: 102, name: "cursor", category: "cursor", pseudo: true, verbs: {}),
 
-    // An egg (M2 design §10). Nothing a sprite tries on one does anything
-    // yet: an egg can't be hurt until something in the world is meant to.
-    (id: 103, name: "egg", plural: "eggs", category: "egg", pseudo: true, verbs: {}),
 ]

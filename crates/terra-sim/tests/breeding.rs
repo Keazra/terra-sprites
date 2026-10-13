@@ -1,7 +1,8 @@
 //! Breeding (M2 design §5, §10): mating happens only between adults,
 //! enforced by the engine for any genome and data pack; a male and a female
-//! lay an egg, or a female alone; it hatches into a young male; a lone adult
-//! turns female; and births are world state, saved, hashed and replayed.
+//! lay an egg, or a female alone; it's an item until it hatches into a young
+//! male (§10.4); a lone adult turns female; and births are world state,
+//! saved, hashed and replayed.
 
 mod common;
 use common::{
@@ -143,12 +144,16 @@ fn a_male_and_a_female_lay_an_egg_beside_her_and_split_its_cost() {
     }
     let (egg, by, with) = found.expect("an egg was laid");
     assert_eq!((by, with), (mother, Some(father)));
-    let egg = world.sprite(egg).expect("the egg");
-    assert!(egg.is_egg());
-    assert_eq!(egg.life_stage(), LifeStage::Egg);
+    // An egg is an item, not a sprite (M2 design §10.4).
+    assert!(world.sprite(egg).is_none(), "an egg isn't a sprite");
+    let egg = world.egg(egg).expect("the egg");
     assert_eq!(egg.parents(), [mother, father]);
+    let pos = egg.pos().expect("on the map");
+    let item = world.object_at(pos).expect("an item on its tile");
+    assert_eq!((item.id(), item.type_name()), (egg.id(), "egg"));
+    assert!(item.is_egg() && !item.is_throwable());
     let her = world.sprite(mother).unwrap().pos();
-    let (dx, dy) = (egg.pos().x.abs_diff(her.x), egg.pos().y.abs_diff(her.y));
+    let (dx, dy) = (pos.x.abs_diff(her.x), pos.y.abs_diff(her.y));
     assert_eq!(dx.max(dy), 1, "the egg is beside her");
     // An egg costs 0.3 of a full belly, half each (M2 design §10), give or
     // take a tick's metabolism.
@@ -196,7 +201,7 @@ fn a_female_breeds_alone_and_pays_it_all_but_a_male_cannot() {
     );
     let Laying { egg, by, with, .. } = laid(&mut world, 50).expect("she laid an egg");
     assert_eq!((by, with), (mother, None));
-    let egg = world.sprite(egg).unwrap();
+    let egg = world.egg(egg).unwrap();
     assert_eq!(egg.parents(), [mother]);
     assert_eq!(egg.genome(), world.sprite(mother).unwrap().genome());
     assert!(energy(&world, mother) < 0.72, "she paid the whole 0.3");
@@ -221,7 +226,9 @@ fn a_female_breeds_alone_and_pays_it_all_but_a_male_cannot() {
 }
 
 #[test]
-fn an_egg_needs_nothing_and_hatches_after_750_ticks_as_a_young_male() {
+fn an_egg_hatches_after_750_ticks_as_a_young_male_where_it_lies() {
+    // M2 design §10.4: the item is gone, and the young sprite it held
+    // stands on its tile, with its ID, born as it hatched.
     let female = format!("{ALONE}{FEMALE}");
     let mut world = family(&[(at(2, 1), &female)], &[], 1);
     let Laying {
@@ -230,9 +237,9 @@ fn an_egg_needs_nothing_and_hatches_after_750_ticks_as_a_young_male() {
         tick: laid_on,
         ..
     } = laid(&mut world, 50).expect("an egg");
-    let view = world.sprite(egg).unwrap();
-    assert_eq!(view.hatches(), Some(laid_on + 750));
-    let pos = view.pos();
+    let view = world.egg(egg).unwrap();
+    assert_eq!((view.laid(), view.hatches()), (laid_on, laid_on + 750));
+    let pos = view.pos().expect("on the map");
     let hatched = until(&mut world, 800, |event| match &event.kind {
         EventKind::Hatched { id, parents } if *id == egg => Some((event.tick, parents.clone())),
         _ => None,
@@ -240,39 +247,55 @@ fn an_egg_needs_nothing_and_hatches_after_750_ticks_as_a_young_male() {
     let (tick, parents) = hatched.expect("it hatched");
     assert_eq!(tick, laid_on + 750);
     assert_eq!(parents, [mother]);
+    assert!(world.egg(egg).is_none(), "the egg is gone");
+    assert!(world.object_at(pos).is_none(), "and its item with it");
     let young = world.sprite(egg).expect("the hatchling");
-    assert!(!young.is_egg());
     assert_eq!(young.life_stage(), LifeStage::Young);
     assert_eq!(young.sex(), Sex::Male);
+    assert_eq!(young.parents(), [mother]);
     assert_eq!(world.tick() - young.age(), tick, "born as it hatched");
     assert_eq!(young.pos(), pos, "it hatched where it lay");
 }
 
 #[test]
-fn an_egg_body_stays_as_it_was_laid() {
+fn an_egg_lies_still_as_an_item_until_it_hatches() {
+    // M2 design §10.4: an egg is no sprite, so it does nothing and needs
+    // nothing, and a sprite's mother walks off it, as over any item.
     let female = format!("{ALONE}{FEMALE}");
     let mut world = family(&[(at(2, 1), &female)], &[], 1);
     let egg = laid(&mut world, 50).expect("an egg").egg;
-    let body = |world: &World| -> Vec<f32> {
-        let egg = world.sprite(egg).unwrap();
-        egg.chemicals().map(|c| c.level).collect()
-    };
-    let laid_with = body(&world);
+    let pos = world.egg(egg).unwrap().pos();
     for _ in 0..700 {
         world.step();
-        let egg_now = world.sprite(egg).unwrap();
-        assert!(egg_now.is_egg());
-        assert!(egg_now.action().is_none(), "an egg does nothing");
-        assert_eq!(body(&world), laid_with, "an egg needs nothing");
+        assert!(world.sprite(egg).is_none(), "an egg isn't a sprite");
+        assert_eq!(world.egg(egg).expect("the egg").pos(), pos);
+        assert_eq!(world.sprites().count(), 1);
     }
 }
 
 #[test]
-fn the_cursor_can_neither_touch_nor_hold_an_egg() {
+fn the_cursor_picks_up_and_puts_down_an_egg_but_never_throws_pets_or_zaps_it() {
+    // M2 design §10.4, #196: an egg is an item, which the Cursor's Grab
+    // mode holds as it does a berry; its type's data says it can't be
+    // thrown; and pets and zaps are for sprites.
     let female = format!("{ALONE}{FEMALE}");
     let mut world = family(&[(at(2, 1), &female)], &[], 1);
     let egg = laid(&mut world, 50).expect("an egg").egg;
-    let commands = [
+    let pos = world.egg(egg).unwrap().pos().unwrap();
+    let refused = |world: &mut World, commands: &[Command]| -> Vec<(Command, Rejection)> {
+        for command in commands {
+            world.submit(command.clone());
+        }
+        world
+            .step()
+            .into_iter()
+            .filter_map(|event| match event.kind {
+                EventKind::CommandRejected { command, reason } => Some((command, reason)),
+                _ => None,
+            })
+            .collect()
+    };
+    let touches = [
         Command::Reward {
             sprite: egg,
             amplified: false,
@@ -284,23 +307,103 @@ fn the_cursor_can_neither_touch_nor_hold_an_egg() {
         },
         Command::TakeHold { sprite: egg },
     ];
-    for command in &commands {
-        world.submit(command.clone());
-    }
-    let refused: Vec<_> = world
-        .step()
-        .into_iter()
-        .filter_map(|event| match event.kind {
-            EventKind::CommandRejected { command, reason } => Some((command, reason)),
-            _ => None,
-        })
-        .collect();
-    let expected: Vec<_> = commands
+    let expected: Vec<_> = touches
         .iter()
-        .map(|c| (c.clone(), Rejection::Egg))
+        .map(|c| (c.clone(), Rejection::Gone))
         .collect();
-    assert_eq!(refused, expected);
+    assert_eq!(refused(&mut world, &touches), expected);
     assert_eq!(world.cursor().leads(), None);
+
+    assert_eq!(refused(&mut world, &[Command::PickUp { item: egg }]), []);
+    let held = world.cursor().holds().expect("it holds the egg");
+    assert!(held.is_egg() && !held.is_throwable());
+    assert_eq!(world.egg(egg).unwrap().pos(), None, "off the map");
+    let throw = Command::Throw {
+        from: pos,
+        toward: terra_sim::Dir::E,
+        tiles: 3,
+    };
+    let egg_type = world.data().object_type_id("egg").unwrap();
+    assert_eq!(
+        refused(&mut world, std::slice::from_ref(&throw)),
+        [(
+            throw,
+            Rejection::NotThrowable {
+                item_type: egg_type
+            }
+        )]
+    );
+    assert_eq!(world.cursor().holds().map(|h| h.id()), Some(egg));
+    let down = at(6, 3);
+    assert_eq!(refused(&mut world, &[Command::PutDown { tile: down }]), []);
+    assert_eq!(world.egg(egg).unwrap().pos(), Some(down));
+}
+
+#[test]
+fn an_egg_held_when_it_is_due_hatches_on_the_tick_it_is_put_down() {
+    // #196: while the Cursor holds it, an egg waits.
+    let female = format!("{ALONE}{FEMALE}");
+    let mut world = family(&[(at(2, 1), &female)], &[], 1);
+    let egg = laid(&mut world, 50).expect("an egg").egg;
+    world.submit(Command::PickUp { item: egg });
+    let due = world.egg(egg).unwrap().hatches();
+    while world.tick() < due + 20 {
+        let events = world.step();
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event.kind, EventKind::Hatched { .. })),
+            "it hatched in the Cursor"
+        );
+    }
+    assert!(world.egg(egg).is_some());
+    let free =
+        |world: &World, tile| world.sprite_at(tile).is_none() && world.object_at(tile).is_none();
+    let down = (0..8)
+        .map(|x| at(x, 3))
+        .find(|&tile| free(&world, tile))
+        .unwrap();
+    world.submit(Command::PutDown { tile: down });
+    let put_down = world.tick();
+    let events = world.step();
+    assert!(
+        events.iter().any(|event| event.tick == put_down
+            && matches!(event.kind, EventKind::Hatched { id, .. } if id == egg)),
+        "{events:?}"
+    );
+    assert_eq!(world.sprite(egg).unwrap().pos(), down);
+    assert_eq!(world.cursor().holds().map(|h| h.id()), None);
+}
+
+#[test]
+fn an_egg_with_a_sprite_on_it_waits_until_the_sprite_steps_off() {
+    // #196: a sprite hatches on its egg's tile, so not under another. The
+    // Cursor leads one onto the egg, keeps it there past the egg's time,
+    // then leads it off.
+    let female = format!("{ALONE}{FEMALE}");
+    let mut world = family(&[(at(2, 1), &female), (at(6, 3), REST)], &[], 1);
+    let egg = laid(&mut world, 50).expect("an egg").egg;
+    let resting = world.sprite_at(at(6, 3)).unwrap().id();
+    let under = world.egg(egg).unwrap().pos().unwrap();
+    world.submit(Command::TakeHold { sprite: resting });
+    world.submit(Command::MoveCursor { tile: under });
+    let due = world.egg(egg).unwrap().hatches();
+    while world.tick() < due + 20 {
+        world.step();
+        assert!(world.egg(egg).is_some(), "it hatched under a sprite");
+    }
+    assert_eq!(world.sprite(resting).unwrap().pos(), under, "led onto it");
+    let off = (0..8)
+        .map(|x| at(x, 3))
+        .find(|&tile| tile != under && world.sprite_at(tile).is_none())
+        .unwrap();
+    world.submit(Command::MoveCursor { tile: off });
+    let hatched = until(&mut world, 100, |event| match event.kind {
+        EventKind::Hatched { id, .. } if id == egg => Some(event.tick),
+        _ => None,
+    });
+    assert!(hatched.is_some(), "it never hatched");
+    assert_eq!(world.sprite(egg).unwrap().pos(), under);
 }
 
 /// Hits whatever egg it sees, and nothing else.
@@ -312,16 +415,13 @@ const EGG_HITTER: &str = r#"
 
 #[test]
 fn hitting_an_egg_does_nothing() {
-    // M2 design §10: an egg can't be hurt until something in the world is
-    // meant to hurt eggs, so it's a fruitless try.
+    // M2 design §10.4: an egg can't be hurt until something in the world is
+    // meant to hurt eggs, so it's a fruitless try, and it hatches as it
+    // would have.
     let female = format!("{ALONE}{FEMALE}");
     let mut world = family(&[(at(2, 1), &female), (at(6, 3), EGG_HITTER)], &[], 1);
     let egg = laid(&mut world, 50).expect("an egg").egg;
-    let body = |world: &World| -> Vec<f32> {
-        let egg = world.sprite(egg).unwrap();
-        egg.chemicals().map(|c| c.level).collect()
-    };
-    let laid_with = body(&world);
+    let due = world.egg(egg).unwrap().hatches();
     let mut hits = Vec::new();
     for _ in 0..300 {
         hits.extend(
@@ -332,7 +432,7 @@ fn hitting_an_egg_does_nothing() {
     }
     assert!(!hits.is_empty(), "it hit the egg");
     assert!(hits.iter().all(|&(_, o)| o == Outcome::Failed), "{hits:?}");
-    assert_eq!(body(&world), laid_with);
+    assert_eq!(world.egg(egg).expect("the egg").hatches(), due);
 }
 
 #[test]
@@ -434,21 +534,60 @@ fn the_starter_s_female_breeds_alone_only_after_long_without_a_male() {
 }
 
 #[test]
+fn a_pack_from_before_eggs_were_items_lays_egg_items_that_hatch_when_it_says() {
+    // #196: such a pack, which a save embeds, had eggs as sprites, its
+    // `egg` a pseudo type, and said when they hatched in physiology.ron.
+    // Its eggs are items now, which hatch as it said.
+    let old = builtin_changing_files(&[
+        (
+            "objects.ron",
+            &[(
+                r#"(id: 103, name: "egg", plural: "eggs", category: "egg", size: Small, hardness: 1.0,
+     stages: [(name: "laid", ticks: (750, 750), next: Hatch)],
+     throwable: false,
+     verbs: {}),"#,
+                r#"(id: 103, name: "egg", plural: "eggs", category: "egg", pseudo: true, verbs: {}),"#,
+            )],
+        ),
+        (
+            "physiology.ron",
+            &[("breeding: (\n", "breeding: (\n        hatches: 300,\n")],
+        ),
+    ]);
+    let female = format!("{ALONE}{FEMALE}");
+    let mut world = family_in(old, &[(at(2, 1), &female)], &[], 1);
+    let laying = laid(&mut world, 50).expect("an egg");
+    let egg = world.egg(laying.egg).expect("an egg item");
+    assert_eq!(egg.type_name(), "egg");
+    assert_eq!(egg.hatches(), laying.tick + 300);
+    let item = world.object_at(egg.pos().unwrap()).unwrap();
+    assert!(!item.is_throwable());
+}
+
+#[test]
 fn an_egg_saved_and_loaded_hatches_the_same() {
     let female = format!("{ALONE}{FEMALE}");
     let mut world = family(&[(at(2, 1), &female), (at(5, 2), KEEN)], &[], 4);
     let egg = laid(&mut world, 50).expect("an egg").egg;
     world.step();
+    world.submit(Command::Rename {
+        sprite: egg,
+        name: "Pebble".into(),
+    });
+    world.step();
     let mut loaded = World::load(&world.save()).expect("the save loads");
     assert_eq!(loaded.state_hash(), world.state_hash());
-    let loaded_egg = loaded.sprite(egg).expect("the egg was saved");
-    assert!(loaded_egg.is_egg());
-    assert_eq!(loaded_egg.hatches(), world.sprite(egg).unwrap().hatches());
+    let loaded_egg = loaded.egg(egg).expect("the egg was saved");
+    let saved_egg = world.egg(egg).unwrap();
+    assert_eq!(loaded_egg.hatches(), saved_egg.hatches());
+    assert_eq!(loaded_egg.genome(), saved_egg.genome());
+    assert_eq!(loaded_egg.name(), Some("Pebble"));
     for _ in 0..800 {
         assert_eq!(world.step(), loaded.step());
         assert_eq!(loaded.state_hash(), world.state_hash());
     }
-    assert!(!loaded.sprite(egg).unwrap().is_egg(), "it hatched");
+    assert!(loaded.egg(egg).is_none(), "it hatched");
+    assert_eq!(loaded.sprite(egg).unwrap().name(), Some("Pebble"));
 }
 
 #[test]
@@ -799,17 +938,25 @@ fn random_genes() -> impl Strategy<Value = String> {
 /// The built-in pack, but with sprites that may grow up and old within a
 /// few hundred ticks and eggs that hatch in 100.
 fn quick() -> DataPack {
-    builtin_changing_files(&[(
-        "physiology.ron",
-        &[
-            (
-                "grows_old: (6000.0, 60000.0),",
-                "grows_old: (100.0, 60000.0),",
-            ),
-            ("grows_up: (1500.0, 13500.0),", "grows_up: (10.0, 13500.0),"),
-            ("hatches: 750,", "hatches: 100,"),
-        ],
-    )])
+    builtin_changing_files(&[
+        (
+            "physiology.ron",
+            &[
+                (
+                    "grows_old: (6000.0, 60000.0),",
+                    "grows_old: (100.0, 60000.0),",
+                ),
+                ("grows_up: (1500.0, 13500.0),", "grows_up: (10.0, 13500.0),"),
+            ],
+        ),
+        (
+            "objects.ron",
+            &[(
+                "ticks: (750, 750), next: Hatch",
+                "ticks: (100, 100), next: Hatch",
+            )],
+        ),
+    ])
 }
 
 /// Whether, in its latest choice, the breeding drive moved a sprite not

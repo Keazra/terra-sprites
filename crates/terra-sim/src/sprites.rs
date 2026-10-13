@@ -9,12 +9,12 @@ use crate::action::{Action, Did, ScriptedAction, Walk, chebyshev};
 use crate::ageing::{LifeStage, Switch, frailty};
 use crate::biochem::{Body, Program};
 use crate::brain::Brain;
-use crate::breeding::Sex;
+use crate::breeding::{Sex, Unhatched};
 use crate::data::DataPack;
 use crate::genome::{Gene, Genome};
 use crate::inheritance::{Parent, flaws_of, what_it_does};
 use crate::map::{Dir, Map, Pos};
-use crate::mutation::{self, Copied, CopyChange, CopyingError};
+use crate::mutation::{self, CopyChange, CopyingError};
 use crate::objects::{EntityId, Objects};
 use crate::occupancy::Occupancy;
 use crate::perception::{Flood, Target};
@@ -28,11 +28,14 @@ use crate::sliding::Slide;
 pub(crate) struct Sprite {
     pub(crate) pos: Pos,
     /// The tick it was born on: before the world began for a sprite that
-    /// starts it grown (M2 design §9.1). For an egg, the tick it was laid
-    /// on, until it hatches, which is its birth (M2 design §10).
+    /// starts it grown (M2 design §9.1). A hatchling is born as it hatches
+    /// (M2 design §10.4). In a save from before eggs were items, an egg's
+    /// is the tick it was laid on.
     pub(crate) born: i64,
-    /// The tick it hatches on, while it's an egg (M2 design §10).
-    #[serde(default)]
+    /// Only in a save from before eggs were items (#196): the tick a sprite
+    /// that's still an egg hatches on. Loading turns it into an egg item,
+    /// so no sprite in a world has one.
+    #[serde(default, skip_serializing)]
     pub(crate) hatches: Option<u64>,
     /// Its parents (M2 design §10): the one that laid it, then its partner,
     /// if it had one. None for a sprite the world began with or the Cursor
@@ -102,15 +105,9 @@ impl Sprite {
         u64::try_from(tick as i64 - self.born).expect("a sprite is born by now")
     }
 
-    /// Its life stage (M2 design §9.1): an egg's genes are expressed as a
-    /// young sprite's.
+    /// Its life stage (M2 design §9.1).
     pub(crate) fn stage(&self) -> LifeStage {
         self.stage.expect("a loaded sprite has a life stage")
-    }
-
-    /// Whether it's still an egg (M2 design §10).
-    pub(crate) fn is_egg(&self) -> bool {
-        self.hatches.is_some()
     }
 
     /// How fast it walks on the tick `tick`, in move points (M2 design
@@ -309,23 +306,14 @@ impl Sprite {
 
     /// Grows the sprite to its life stage on the tick `tick` (M2 design
     /// §9.2): if that's a new one, its genes are expressed afresh for it,
-    /// leaving what it has learned as it was. An egg hatches on its tick,
-    /// and is born then (§10). Returns the stage it was in and the new one,
-    /// if it has one.
+    /// leaving what it has learned as it was. Returns the stage it was in
+    /// and the new one, if it has one.
     pub(crate) fn grow(&mut self, tick: u64, data: &DataPack) -> Option<(LifeStage, LifeStage)> {
         let was = self.stage();
-        let stage = match self.hatches {
-            Some(hatches) if tick < hatches => return None,
-            Some(_) => {
-                self.hatches = None;
-                self.born = tick as i64;
-                self.program.traits.life_stage(0, self.sooner(data))
-            }
-            None => self
-                .program
-                .traits
-                .life_stage(self.age(tick), self.sooner(data)),
-        };
+        let stage = self
+            .program
+            .traits
+            .life_stage(self.age(tick), self.sooner(data));
         if stage == was {
             return None;
         }
@@ -339,40 +327,54 @@ impl Sprite {
         Sprite::aged(genome, pos, born, 0, data)
     }
 
-    /// An egg with `genes` on `pos`, laid on the tick `laid` by `parents`
-    /// (M2 design §10): it hatches `breeding.hatches` ticks later, with a
-    /// newborn's body (design §4.7). A broken gene is born with
-    /// `flaws.health` (§12).
-    pub(crate) fn egg(
-        genes: Copied,
-        pos: Pos,
-        laid: u64,
-        parents: Vec<EntityId>,
-        data: &DataPack,
-    ) -> Sprite {
-        let Copied {
+    /// The young sprite the egg `unhatched` hatches into on `pos` on the
+    /// tick `tick` (M2 design §10.4): born then, with a newborn's body
+    /// (design §4.7), its genes as copying left them, a broken gene born
+    /// with `flaws.health` (§12), its parents, and the name the player gave
+    /// the egg, if any.
+    pub(crate) fn hatchling(unhatched: Unhatched, pos: Pos, tick: u64, data: &DataPack) -> Sprite {
+        let Unhatched {
             genome,
             flaws,
-            errors,
-            changes,
-        } = genes;
-        let mut egg = Sprite::newborn(genome, pos, laid, data);
-        egg.stage = Some(LifeStage::Egg);
-        egg.hatches = Some(laid.saturating_add(data.physiology().breeding.hatches));
-        egg.parents = parents;
-        egg.copying_errors = errors;
-        egg.copy_changes = changes;
-        egg.flaws = flaws;
-        if egg.broken() > 0 {
+            copying_errors,
+            copy_changes,
+            parents,
+            name,
+            laid: _,
+        } = unhatched;
+        let mut hatchling = Sprite::newborn(genome, pos, tick, data);
+        hatchling.parents = parents;
+        hatchling.name = name;
+        hatchling.copying_errors = copying_errors;
+        hatchling.copy_changes = copy_changes;
+        hatchling.flaws = flaws;
+        if hatchling.broken() > 0 {
             let born_with = data.physiology().flaws.health;
-            for (index, health) in egg.health.iter_mut().enumerate() {
-                if flaws_of(&egg.flaws, index) >= 2 {
+            for (index, health) in hatchling.health.iter_mut().enumerate() {
+                if flaws_of(&hatchling.flaws, index) >= 2 {
                     *health = health.min(born_with);
                 }
             }
-            egg.express(data);
+            hatchling.express(data);
         }
-        egg
+        hatchling
+    }
+
+    /// The egg this sprite was, in a save from before eggs were items
+    /// (#196): the sprite it holds, and the tick it hatches on. `None` if
+    /// it was no egg.
+    pub(crate) fn unhatched(self) -> Option<(Unhatched, u64)> {
+        let hatches = self.hatches?;
+        let unhatched = Unhatched {
+            laid: u64::try_from(self.born).unwrap_or(0),
+            genome: self.genome,
+            flaws: self.flaws,
+            copying_errors: self.copying_errors,
+            copy_changes: self.copy_changes,
+            parents: self.parents,
+            name: self.name,
+        };
+        Some((unhatched, hatches))
     }
 
     /// A sprite with `genome` on `pos` that has just grown up on the tick
@@ -628,28 +630,9 @@ impl Sprites {
             if sprite.stage.is_none() {
                 return Err(format!("{id:?} has no life stage"));
             }
-            // An egg is laid, and lies still until it hatches (M2 design
-            // §10).
-            if sprite.is_egg() != (sprite.stage() == LifeStage::Egg) {
-                return Err(format!(
-                    "{id:?} is at the life stage {:?}, but hatches at {:?}",
-                    sprite.stage(),
-                    sprite.hatches
-                ));
-            }
-            if sprite.is_egg()
-                && (sprite.action.is_some()
-                    || sprite.lead.is_some()
-                    || sprite.slide.is_some()
-                    || !sprite.scripted.is_empty())
-            {
-                return Err(format!("{id:?} is an egg, but has something to do"));
-            }
-            if sprite.parents.len() > 2 || sprite.parents.contains(&id) {
-                return Err(format!(
-                    "{id:?} has the parents {:?}: at most two, never itself",
-                    sprite.parents
-                ));
+            // An egg is an item until it hatches (M2 design §10.4).
+            if sprite.hatches.is_some() {
+                return Err(format!("{id:?} is a sprite that's still an egg"));
             }
             let wear = sprite.body.wear;
             if !(0.0..=1.0).contains(&wear) {
@@ -667,42 +650,18 @@ impl Sprites {
                     "{id:?} has a gene of health {health}, outside 0 to 1"
                 ));
             }
-            // Two copies of each gene, either flawed (M2 design §12.3).
-            if sprite.flaws.len() > sprite.genome.genes.len()
-                || sprite.flaws.iter().any(|&flawed| flawed > 2)
-            {
-                return Err(format!(
-                    "{id:?} has the flaws {:?}: at most two a gene, of {} genes",
-                    sprite.flaws,
-                    sprite.genome.genes.len()
-                ));
-            }
-            if let Some(error) = sprite
-                .copying_errors
-                .iter()
-                .find(|error| error.gene >= sprite.genome.genes.len())
-            {
-                return Err(format!(
-                    "{id:?} has a copying error in gene {}, of {} genes",
-                    error.gene,
-                    sprite.genome.genes.len()
-                ));
-            }
-            // Copying changes only a gene's values (M2 design §12.1), so
-            // what a gene was does what it does now, and refers only to
-            // what the pack has.
-            let switch = |error: &CopyingError| sprite.genome.switch(error.gene);
-            let does = |gene: &Gene, error| what_it_does(gene, switch(error), data);
-            if let Some(error) = sprite.copying_errors.iter().find(|error| {
-                does(&error.was, *error) != does(&sprite.genome.genes[error.gene], *error)
-            }) {
-                return Err(format!(
-                    "{id:?} has a copying error that changed what gene {} does",
-                    error.gene
-                ));
-            }
-            mutation::check_changes(&sprite.genome, &sprite.copy_changes, data)
-                .map_err(|problem| format!("{id:?} {problem}"))?;
+            check_genes(
+                id,
+                Genes {
+                    genome: &sprite.genome,
+                    flaws: &sprite.flaws,
+                    copying_errors: &sprite.copying_errors,
+                    copy_changes: &sprite.copy_changes,
+                    parents: &sprite.parents,
+                },
+                data,
+            )
+            .map_err(|problem| format!("{id:?} {problem}"))?;
             if sprite.body.chems_before_tick.len() != sprite.body.chems.len() {
                 return Err(format!(
                     "{id:?} has {} levels from a tick ago, but {} chemicals",
@@ -789,6 +748,66 @@ impl Sprites {
         }
         Ok(())
     }
+}
+
+/// What a sprite, or the egg it hatches from, has from its parents (M2
+/// design §10, §12, §13): checked the same way in both.
+pub(crate) struct Genes<'a> {
+    pub(crate) genome: &'a Genome,
+    pub(crate) flaws: &'a [u8],
+    pub(crate) copying_errors: &'a [CopyingError],
+    pub(crate) copy_changes: &'a [CopyChange],
+    pub(crate) parents: &'a [EntityId],
+}
+
+/// Checks that the genes of `id` fit together (design §7.1), or says how
+/// they don't: at most two parents, never itself; at most two flaws a gene
+/// (M2 design §12.3); copying errors only in its genes, having changed only
+/// their values (§12.1); and copy changes that fit its genome (§13).
+pub(crate) fn check_genes(id: EntityId, genes: Genes, data: &DataPack) -> Result<(), String> {
+    let Genes {
+        genome,
+        flaws,
+        copying_errors,
+        copy_changes,
+        parents,
+    } = genes;
+    if parents.len() > 2 || parents.contains(&id) {
+        return Err(format!(
+            "has the parents {parents:?}: at most two, never itself"
+        ));
+    }
+    // Two copies of each gene, either flawed (M2 design §12.3).
+    if flaws.len() > genome.genes.len() || flaws.iter().any(|&flawed| flawed > 2) {
+        return Err(format!(
+            "has the flaws {flaws:?}: at most two a gene, of {} genes",
+            genome.genes.len()
+        ));
+    }
+    if let Some(error) = copying_errors
+        .iter()
+        .find(|error| error.gene >= genome.genes.len())
+    {
+        return Err(format!(
+            "has a copying error in gene {}, of {} genes",
+            error.gene,
+            genome.genes.len()
+        ));
+    }
+    // Copying changes only a gene's values (M2 design §12.1), so what a gene
+    // was does what it does now, and refers only to what the pack has.
+    let switch = |error: &CopyingError| genome.switch(error.gene);
+    let does = |gene: &Gene, error| what_it_does(gene, switch(error), data);
+    if let Some(error) = copying_errors
+        .iter()
+        .find(|error| does(&error.was, *error) != does(&genome.genes[error.gene], *error))
+    {
+        return Err(format!(
+            "has a copying error that changed what gene {} does",
+            error.gene
+        ));
+    }
+    mutation::check_changes(genome, copy_changes, data)
 }
 
 #[cfg(test)]

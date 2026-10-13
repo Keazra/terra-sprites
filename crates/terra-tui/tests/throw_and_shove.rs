@@ -612,3 +612,59 @@ fn the_aim_is_cancelled_when_the_led_sprite_dies() {
     let_go(&mut app, &world, at(3, 5));
     assert_eq!(sent(&mut app), Vec::new());
 }
+
+/// A field whose one sprite, on `mother`, lays an egg alone as soon as it
+/// can (M2 design §10.4), stepped until it has: the world and the egg.
+fn laid_an_egg(mother: Pos) -> (World, EntityId) {
+    let pack = pack();
+    let genome = terra_sim::Genome::from_ron(
+        r#"(format: 1, genes: [
+            InitialConcentration(chem: "feminiser", value: 1.0),
+            InitialConcentration(chem: "longing", value: 1.0),
+            Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
+        ])"#,
+        &pack,
+    )
+    .expect("a valid genome");
+    let map = Map::from_ascii(&["...................."; 12], &pack).expect("valid drawing");
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &[(mother, Some(genome))],
+        scripted: &[],
+        newborns: &[],
+    };
+    let mut world = World::from_scenario(scenario, pack, 1).expect("valid scenario");
+    let egg = (0..50)
+        .flat_map(|_| world.step())
+        .find_map(|event| match event.kind {
+            terra_sim::EventKind::Laid { egg, .. } => Some(egg),
+            _ => None,
+        })
+        .expect("she laid an egg");
+    (world, egg)
+}
+
+#[test]
+fn an_egg_held_or_about_to_be_picked_up_is_never_aimed() {
+    // M2 design §10.4: its type says the Cursor never throws it, so a
+    // right press refuses at once, and grabs nothing.
+    let (mut world, egg) = laid_an_egg(at(5, 5));
+    let tile = world
+        .egg(egg)
+        .and_then(|egg| egg.pos())
+        .expect("the egg on the map");
+    let mut app = grab_app(&world);
+    for held in [false, true] {
+        click(&mut app, &world, tile, Button::Right);
+        assert!(!app.aiming());
+        assert_eq!(app.take_commands(), Vec::new());
+        assert_eq!(app.status_mark(), StatusMark::Rejected);
+        assert_eq!(app.refusal(), Some("Can't throw an egg"));
+        if !held {
+            assert_eq!(hold(&mut app, &mut world, tile), egg);
+        }
+    }
+    let held = world.cursor().holds().map(|held| held.id());
+    assert_eq!(held, Some(egg), "still held");
+}
