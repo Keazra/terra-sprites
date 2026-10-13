@@ -878,6 +878,28 @@ mod tests {
     }
 
     #[test]
+    fn broken_genes_speed_the_decay_as_wear_does() {
+        // M2 design §12.4: each broken gene counts as `flaws.wear` (0.05)
+        // of wear, so twenty make the most worn body, a third of the ticks.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let mut broken = starter(30_000, &data);
+        let frail: Vec<usize> = (0..broken.genome.genes.len())
+            .filter(|&i| frailty(&broken.genome.genes[i]) > 0.0)
+            .collect();
+        broken.flaws = vec![0; broken.genome.genes.len()];
+        for &i in &frail[..20] {
+            broken.flaws[i] = 2;
+        }
+        assert_eq!(broken.body.wear, 0.0);
+        assert_close(broken.worn(&data), 1.0);
+        let ticks = until_it_gives_out(&mut broken, &data, 100_000);
+        assert!(
+            (1_000..1_400).contains(&ticks),
+            "a body with 20 broken genes gave out after {ticks} ticks"
+        );
+    }
+
+    #[test]
     fn a_tiny_hit_lands_in_rounds_and_still_wears_the_body_out_in_the_ticks_set() {
         // A billion hits a tick would stall the world if each landed alone.
         let data = builtin_changing(

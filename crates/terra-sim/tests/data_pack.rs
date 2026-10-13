@@ -854,6 +854,54 @@ fn a_trait_varies_by_a_fraction_below_1_and_only_a_trait_does() {
 }
 
 #[test]
+fn copying_errors_flaws_and_crossover_are_shares_and_large_changes_at_least_none() {
+    // M2 design §12.
+    let mutation = "mutation: (chance: 0.01, small: 0.2, large: (share: 0.75, most: 2.0)),";
+    for (to, word) in [
+        (
+            "chance: 1.5, small: 0.2, large: (share: 0.75, most: 2.0)",
+            "mutation.chance",
+        ),
+        (
+            "chance: 0.01, small: 1.0, large: (share: 0.75, most: 2.0)",
+            "mutation.small",
+        ),
+        (
+            "chance: 0.01, small: 0.2, large: (share: -0.1, most: 2.0)",
+            "mutation.large.share",
+        ),
+        (
+            "chance: 0.01, small: 0.2, large: (share: 0.75, most: 0.5)",
+            "mutation.large.most",
+        ),
+    ] {
+        assert_invalid_physiology(mutation, &format!("mutation: ({to}),"), word);
+    }
+    let flaws = "flaws: (arise: 0.007, founders: 0.06, health: 0.5, wear: 0.05),";
+    for (to, word) in [
+        (
+            "arise: 1.5, founders: 0.06, health: 0.5, wear: 0.05",
+            "flaws.arise",
+        ),
+        (
+            "arise: 0.007, founders: -0.1, health: 0.5, wear: 0.05",
+            "flaws.founders",
+        ),
+        (
+            "arise: 0.007, founders: 0.06, health: 2.0, wear: 0.05",
+            "flaws.health",
+        ),
+        (
+            "arise: 0.007, founders: 0.06, health: 0.5, wear: -0.05",
+            "flaws.wear",
+        ),
+    ] {
+        assert_invalid_physiology(flaws, &format!("flaws: ({to}),"), word);
+    }
+    assert_invalid_physiology("crossover: 0.1,", "crossover: 1.5,", "breeding.crossover");
+}
+
+#[test]
 fn every_receptor_target_has_a_range_and_nothing_else_does() {
     assert_invalid_physiology("\"exploration_mod\": (0.25, 4.0),", "", "exploration_mod");
     assert_invalid_physiology(

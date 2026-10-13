@@ -491,6 +491,9 @@ pub(crate) struct Senses {
     pub(crate) resting: bool,
     /// Its life stage (M2 design §9.1).
     pub(crate) stage: LifeStage,
+    /// The share of the age its genes say that wear and broken genes have
+    /// brought its old age sooner by (M2 design §9.4, §12.4).
+    pub(crate) sooner: f32,
     /// Whether it's fertile, female, and sees a female adult or a male one
     /// (M2 design §10).
     pub(crate) fertile: bool,
@@ -640,7 +643,7 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
     // A hard life wears the body for good (M2 design §9.4), which brings
     // old age sooner and speeds the decay of its genes then. It reads the
     // body, not feelings, which genes could switch off.
-    let grows_old_at = traits.grows_old_at(ageing.sooner * body.wear);
+    let grows_old_at = traits.grows_old_at(senses.sooner);
     let wear = ageing.wear;
     let mut worn = wear.injured * chems[indices.injury].clamp(0.0, 1.0);
     if chems[indices.energy] < wear.low {
@@ -1190,8 +1193,11 @@ mod tests {
         // M2 design §9.3, §9.4: the most worn sprite grows old at (1 −
         // `sooner`) of its `grows_old`, here .67 of 20,000 ticks.
         let mut sprite = physical(&[]);
-        sprite.body.wear = 1.0;
-        sprite.step_at(6_700);
+        sprite.step_with(Senses {
+            age: 6_700,
+            sooner: 0.33,
+            ..adult()
+        });
         assert_close(sprite.locus("age"), 0.5);
     }
 

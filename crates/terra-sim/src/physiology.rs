@@ -1097,6 +1097,7 @@ impl Indices {
 mod tests {
     use super::*;
     use crate::data::DataPack;
+    use crate::test_util::builtin_changing;
 
     #[test]
     fn what_a_save_from_before_a_setting_gets_is_what_the_built_in_pack_says() {
@@ -1122,5 +1123,31 @@ mod tests {
         assert_eq!(Ageing::default(), physiology.ageing);
         assert_eq!(Breeding::default(), physiology.breeding);
         assert_eq!(grows_up_range(), physiology.traits.grows_up);
+    }
+
+    #[test]
+    fn a_pack_from_before_genes_mixed_in_stretches_mixes_them_gene_by_gene() {
+        // M2 design §12.2: its `breeding` has no `crossover`, and a switch
+        // at every gene with even odds is a coin toss for each, as Slice 23
+        // mixed them. And it has no copying errors or flaws.
+        let data = builtin_changing(
+            "physiology.ron",
+            &[
+                ("crossover: 0.1,", ""),
+                (
+                    "mutation: (chance: 0.01, small: 0.2, large: (share: 0.75, most: 2.0)),",
+                    "",
+                ),
+                (
+                    "flaws: (arise: 0.007, founders: 0.06, health: 0.5, wear: 0.05),",
+                    "",
+                ),
+            ],
+        );
+        let physiology = data.physiology();
+        assert_eq!(physiology.breeding.crossover, 0.5);
+        assert_eq!(physiology.mutation.chance, 0.0);
+        assert_eq!(physiology.flaws.arise, 0.0);
+        assert_eq!(physiology.flaws.founders, 0.0);
     }
 }

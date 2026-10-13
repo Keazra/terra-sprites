@@ -1510,17 +1510,26 @@ fn was_text(now: &GeneView, was: &GeneView) -> String {
         .filter(|(was, now)| was != now)
         .map(|(was, _)| was.as_str())
         .collect();
-    if differ.is_empty() {
-        was.join(" ")
+    let shown = if differ.is_empty() {
+        was.iter().map(String::as_str).collect()
     } else {
-        differ.join(" ")
-    }
+        differ
+    };
+    let shown: Vec<&str> = shown.into_iter().filter(|n| !n.is_empty()).collect();
+    shown.join(" ")
 }
 
 /// A gene's numbers, as the Genome tab writes them, in the order it does:
-/// `+.00428`, `past .5`.
+/// `+.00428`, `past .5`. A threshold of 0 isn't written, so it's empty.
+/// `gene_text` writes a gene's numbers from these, so the two agree.
 fn numbers(gene: &GeneView) -> Vec<String> {
-    let past = |threshold: f32| format!("past{BOUND}{}", significant(threshold));
+    let past = |threshold: f32| {
+        if threshold == 0.0 {
+            String::new()
+        } else {
+            format!("past{BOUND}{}", significant(threshold))
+        }
+    };
     match *gene {
         GeneView::Trait { which, value } => vec![trait_value(which, value)],
         GeneView::HalfLife { ticks: 1, .. } => vec![format!("every{BOUND}tick")],
@@ -1619,87 +1628,63 @@ const BOUND: char = '\u{a0}';
 
 /// A gene as a plain line: `low energy → hunger +.00428 past .5`.
 fn gene_text(gene: &GeneView) -> String {
-    let past = |threshold: f32| {
-        if threshold == 0.0 {
+    let numbers = numbers(gene);
+    let n = |at: usize| numbers[at].as_str();
+    // A number that may be empty, with a space before it if it isn't.
+    let then = |at: usize| {
+        if numbers[at].is_empty() {
             String::new()
         } else {
-            format!(" past{BOUND}{}", significant(threshold))
+            format!(" {}", numbers[at])
         }
     };
     match *gene {
-        GeneView::Trait { which, value } => trait_text(which, value),
-        GeneView::HalfLife { chem, ticks: 1 } => {
-            format!("{} halves every tick", display_name(chem))
-        }
-        GeneView::HalfLife { chem, ticks } => format!(
-            "{} halves every {} ticks",
-            display_name(chem),
-            group_thousands(u64::from(ticks))
-        ),
+        GeneView::Trait { which, .. } => format!("{} {}", trait_name(which), n(0)),
+        GeneView::HalfLife { chem, .. } => format!("{} halves {}", display_name(chem), n(0)),
         GeneView::Reaction {
             ref reactants,
             ref products,
-            rate,
-        } => format!(
-            "{}, rate{BOUND}{}",
-            reaction_sides(reactants, products),
-            significant(rate)
-        ),
+            ..
+        } => format!("{}, {}", reaction_sides(reactants, products), n(0)),
         GeneView::Emitter {
             locus,
             mode,
             invert,
-            threshold,
-            gain,
             chem,
+            ..
         } => format!(
             "{} → {} {}{}",
             emitter_source(locus, mode, invert),
             display_name(chem),
-            signed(gain),
-            past(threshold)
+            n(0),
+            then(1)
         ),
-        GeneView::Receptor {
-            chem,
-            threshold,
-            gain,
-            target,
-        } => format!(
+        GeneView::Receptor { chem, target, .. } => format!(
             "{}{} → {} {}",
             display_name(chem),
-            past(threshold),
+            then(0),
             display_name(target),
-            signed(gain)
+            n(1)
         ),
-        GeneView::BrainParam { param, value } => {
-            format!("{} {}", display_name(param), significant(value))
-        }
+        GeneView::BrainParam { param, .. } => format!("{} {}", display_name(param), n(0)),
         GeneView::Instinct {
-            ref inputs,
-            verb,
-            weight,
+            ref inputs, verb, ..
         } => format!(
             "{} → {} {}",
             concept_name(inputs),
             verb_name(verb).to_lowercase(),
-            signed(weight)
+            n(0)
         ),
         GeneView::AttentionInstinct {
-            input,
-            category,
-            weight,
+            input, category, ..
         } => format!(
             "{} → attends to {} {}",
             display_name(input),
             display_name(category),
-            signed(weight)
+            n(0)
         ),
-        GeneView::InitialConcentration { chem, value } => {
-            format!(
-                "{} starts at{BOUND}{}",
-                display_name(chem),
-                significant(value)
-            )
+        GeneView::InitialConcentration { chem, .. } => {
+            format!("{} starts at{BOUND}{}", display_name(chem), n(0))
         }
         GeneView::Unknown {
             type_id,

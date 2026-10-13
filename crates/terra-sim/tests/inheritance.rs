@@ -8,16 +8,17 @@ use common::{ALONE, FEMALE, Laying, at, builtin, builtin_changing, family_in, la
 
 use terra_sim::{Command, DataPack, EventKind, GeneView, Playback, World, WorldConfig};
 
+/// The change to the built-in physiology that copies every gene value
+/// wrongly.
+const EVERY_VALUE_WRONG: (&str, &str) = ("mutation: (chance: 0.01,", "mutation: (chance: 1.0,");
+
 /// The built-in pack, with every gene value copied wrongly.
 fn always_wrong() -> DataPack {
-    builtin_changing(
-        "physiology.ron",
-        &[("mutation: (chance: 0.01,", "mutation: (chance: 1.0,")],
-    )
+    builtin_changing("physiology.ron", &[EVERY_VALUE_WRONG])
 }
 
 /// The built-in pack, with `changes` to its hidden flaws' line.
-fn flaws(changes: &str) -> DataPack {
+fn with_flaws(changes: &str) -> DataPack {
     builtin_changing(
         "physiology.ron",
         &[(
@@ -28,10 +29,15 @@ fn flaws(changes: &str) -> DataPack {
 }
 
 /// What `gene` does, without its values: its kind and what it refers to.
+/// Its numbers are dropped, but not digits in a quoted name, such as `h3`.
 fn what_it_does(gene: &GeneView) -> String {
+    let mut quoted = false;
     format!("{gene:?}")
         .chars()
-        .filter(|c| !(c.is_ascii_digit() || *c == '.' || *c == '-'))
+        .filter(|&c| {
+            quoted ^= c == '"';
+            quoted || !(c.is_ascii_digit() || c == '.' || c == '-')
+        })
         .collect()
 }
 
@@ -81,7 +87,7 @@ fn a_gene_flawed_in_both_copies_is_born_broken_at_half_health_and_brings_old_age
     // M2 design §12: with every copy flawed as it's copied, each of the
     // egg's genes that can weaken is broken.
     let female = format!("{ALONE}{FEMALE}");
-    let data = flaws("arise: 1.0, founders: 0.06,");
+    let data = with_flaws("arise: 1.0, founders: 0.06,");
     let mut world = family_in(data, &[(at(2, 1), &female)], &[], 1);
     let Laying { egg, by, .. } = laid(&mut world, 50).expect("she laid an egg");
     let (egg, mother) = (world.sprite(egg).unwrap(), world.sprite(by).unwrap());
@@ -129,7 +135,7 @@ fn the_first_sprites_carry_a_few_hidden_flaws_and_none_broken() {
 #[test]
 fn a_sprite_placed_from_the_starter_carries_hidden_flaws_and_one_from_a_file_none() {
     // M2 design §12: one from a genome file has the genes it was given.
-    let data = flaws("arise: 0.007, founders: 1.0,");
+    let data = with_flaws("arise: 0.007, founders: 1.0,");
     let mut world = family_in(data, &[(at(0, 0), "")], &[], 1);
     let file = world.sprite_at(at(0, 0)).unwrap().genome().clone();
     for (tile, genome) in [(at(3, 2), None), (at(5, 2), Some(file))] {
@@ -150,7 +156,7 @@ fn copying_errors_and_flaws_load_and_replay_the_same() {
     let data = builtin_changing(
         "physiology.ron",
         &[
-            ("mutation: (chance: 0.01,", "mutation: (chance: 1.0,"),
+            EVERY_VALUE_WRONG,
             ("flaws: (arise: 0.007,", "flaws: (arise: 0.5,"),
         ],
     );

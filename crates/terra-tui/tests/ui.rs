@@ -3781,4 +3781,8 @@ fn the_genome_tab_of_a_sprite_with_parents_says_first_what_s_new_in_it() {
     for name in ["speed", "low energy → hunger", "always → breed_alone"] {
         assert!(listed.contains(name), "{name:?} in {listed:?}");
     }
+    // Each broken gene shows its health where it sits, as one old age
+    // weakened does.
+    let genes = rows[list + 1..].join(" ");
+    assert_eq!(genes.matches("health .5").count(), broken, "{genes}");
 }

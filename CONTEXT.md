@@ -169,7 +169,7 @@ A run of neighbouring genes a pair's egg takes from one parent before it switche
 _Avoid_: block, chunk, crossover alone (that's the chance of a switch)
 
 **Flaw** (M2):
-A hidden fault in one of the two copies of a gene, one from each parent. One sound copy is enough, so a flaw shows only in a broken gene. It arises now and then in copying, and the world's first sprites carry a few. Only a gene that can weaken has copies to flaw.
+A hidden fault in one of the two copies of a gene, one from each parent. One sound copy is enough, so a flaw shows only in a broken gene. It arises now and then in copying, and the world's first sprites carry a few. Only a gene that can weaken, and isn't flagged, has copies to flaw.
 _Avoid_: defect, recessive, bad allele
 
 **Carrier** (M2):

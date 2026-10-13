@@ -6,12 +6,13 @@
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
-use crate::ageing::frailty;
+use crate::ageing::{LifeStage, frailty};
 use crate::data::DataPack;
+use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome};
 use crate::inheritance::{Inherited, flaws_of, tidied};
 use crate::random::{chance, unit};
-use crate::variation::each_value;
+use crate::variation::{each_value, varied};
 
 /// A gene that copying changed in an egg (M2 design §12): where it is in
 /// the egg's genome, and what it was as the egg inherited it.
@@ -94,21 +95,34 @@ fn values_copied(
     (genome, errors)
 }
 
+/// Whether each of `genome`'s genes can carry a flaw (M2 design §12.3):
+/// one that can weaken, unless it's flagged, since a flagged gene does
+/// nothing whatever its copies are.
+fn can_be_flawed(genome: &Genome, data: &DataPack) -> Vec<bool> {
+    // Whether a gene is flagged doesn't depend on the life stage.
+    expressions(genome, data, LifeStage::Adult)
+        .iter()
+        .zip(&genome.genes)
+        .map(|(expression, gene)| {
+            frailty(gene) > 0.0 && !matches!(expression, Expression::Flagged(_))
+        })
+        .collect()
+}
+
 /// `flaws` with the new ones copying left (M2 design §12): each sound copy
-/// of each gene of `genome` that can weaken gets a flaw with `flaws.arise`'s
-/// chance.
+/// of each gene of `genome` that can be flawed gets a flaw with
+/// `flaws.arise`'s chance.
 fn flawed(genome: &Genome, flaws: Vec<u8>, data: &DataPack, rng: &mut ChaCha8Rng) -> Vec<u8> {
     let arise = data.physiology().flaws.arise;
     if arise == 0.0 {
         return flaws;
     }
-    let flaws = genome
-        .genes
-        .iter()
+    let flaws = can_be_flawed(genome, data)
+        .into_iter()
         .enumerate()
-        .map(|(index, gene)| {
+        .map(|(index, can)| {
             let flawed = flaws_of(&flaws, index);
-            if frailty(gene) == 0.0 {
+            if !can {
                 return flawed;
             }
             // One draw for each sound copy.
@@ -119,19 +133,26 @@ fn flawed(genome: &Genome, flaws: Vec<u8>, data: &DataPack, rng: &mut ChaCha8Rng
     tidied(flaws)
 }
 
+/// A new sprite's genes from the starter genome, varied (design §4.9),
+/// with the hidden flaws it carries, as wild animals do (M2 design §12.3).
+pub(crate) fn wild(data: &DataPack, rng: &mut ChaCha8Rng) -> (Genome, Vec<u8>) {
+    let genome = varied(data.starter(), data, rng);
+    let flaws = founders(&genome, data, rng);
+    (genome, flaws)
+}
+
 /// The flaws a sprite made from the starter genome carries (M2 design
-/// §12), as wild animals do: each gene of `genome` that can weaken has a
+/// §12), as wild animals do: each gene of `genome` that can be flawed has a
 /// flaw in one copy with `flaws.founders`' chance. One sound copy is
 /// enough, so they're hidden: only its young may suffer them.
-pub(crate) fn founders(genome: &Genome, data: &DataPack, rng: &mut ChaCha8Rng) -> Vec<u8> {
+fn founders(genome: &Genome, data: &DataPack, rng: &mut ChaCha8Rng) -> Vec<u8> {
     let founders = data.physiology().flaws.founders;
     if founders == 0.0 {
         return Vec::new();
     }
-    let flaws = genome
-        .genes
-        .iter()
-        .map(|gene| u8::from(frailty(gene) > 0.0 && chance(rng, founders)))
+    let flaws = can_be_flawed(genome, data)
+        .into_iter()
+        .map(|can| u8::from(can && chance(rng, founders)))
         .collect();
     tidied(flaws)
 }
@@ -146,11 +167,7 @@ mod tests {
     use crate::ageing::LifeStage;
     use crate::expression::expressions;
     use crate::genome::Gene;
-    use crate::test_util::builtin_changing;
-
-    fn builtin() -> DataPack {
-        DataPack::builtin().expect("built-in data pack is valid")
-    }
+    use crate::test_util::{builtin, builtin_changing};
 
     /// One gene of every type the build knows, and an unknown one, each
     /// value well inside its range.
@@ -387,6 +404,73 @@ mod tests {
         Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0, from: Adult),
     ])"#;
 
+    /// A random gene of any type, as a genome file writes it, with random
+    /// values and a random switch: some change the body directly, or switch
+    /// when they can't, so they're flagged.
+    fn random_gene() -> impl Strategy<Value = String> {
+        let chem = || {
+            prop::sample::select(vec![
+                "hunger",
+                "pain",
+                "boredom",
+                "reward",
+                "energy",
+                "food",
+                "hydration",
+            ])
+        };
+        let input = || prop::sample::select(vec!["always", "hunger", "thirst", "pain", "age"]);
+        let gene = prop_oneof![
+            (chem(), 1u32..5_000).prop_map(|(c, t)| format!(r#"HalfLife(chem: "{c}", ticks: {t}"#)),
+            (chem(), chem(), 0.0f32..1.0).prop_map(|(a, b, rate)| format!(
+                r#"Reaction(reactants: [("{a}", 1)], products: [("{b}", 1)], rate: {rate:?}"#
+            )),
+            (chem(), 0.0f32..1.0, -1.0f32..1.0, chem()).prop_map(|(from, threshold, gain, to)| {
+                format!(
+                    r#"Emitter(locus: Chem("{from}"), mode: Level, threshold: {threshold:?}, gain: {gain:?}, chem: "{to}""#
+                )
+            }),
+            (chem(), 0.0f32..1.0, -1.0f32..1.0).prop_map(|(c, threshold, gain)| format!(
+                r#"Receptor(chem: "{c}", threshold: {threshold:?}, gain: {gain:?}, target: "learning_rate_mod""#
+            )),
+            (chem(), 0.0f32..1.0)
+                .prop_map(|(c, value)| format!(r#"InitialConcentration(chem: "{c}", value: {value:?}"#)),
+            (2.0f32..12.0).prop_map(|value| format!(r#"Trait(trait: "speed", value: {value:?}"#)),
+            (6_000.0f32..60_000.0)
+                .prop_map(|value| format!(r#"Trait(trait: "grows_old", value: {value:?}"#)),
+            (0.0f32..1.0)
+                .prop_map(|value| format!(r#"BrainParam(param: "tau_base", value: {value:?}"#)),
+            (input(), -1.0f32..1.0).prop_map(|(i, weight)| format!(
+                r#"Instinct(inputs: [("{i}", false)], verb: Eat, weight: {weight:?}"#
+            )),
+            (input(), -1.0f32..1.0).prop_map(|(i, weight)| format!(
+                r#"AttentionInstinct(input: "{i}", category: "water", weight: {weight:?}"#
+            )),
+        ];
+        let switch = prop::sample::select(vec![
+            "",
+            ", from: Adult",
+            ", until: Adult",
+            ", from: Old, until: Adult",
+        ]);
+        (gene, switch).prop_map(|(gene, switch)| format!("{gene}{switch})"))
+    }
+
+    /// The built-in pack, with every gene value copied wrongly and every
+    /// copy that can be flawed flawed.
+    fn every_copy_wrong() -> DataPack {
+        builtin_changing(
+            "physiology.ron",
+            &[
+                ("mutation: (chance: 0.01,", "mutation: (chance: 1.0,"),
+                (
+                    "flaws: (arise: 0.007, founders: 0.06,",
+                    "flaws: (arise: 1.0, founders: 1.0,",
+                ),
+            ],
+        )
+    }
+
     proptest! {
         #[test]
         fn copying_errors_never_change_how_a_gene_is_expressed(seed: u64) {
@@ -402,6 +486,35 @@ mod tests {
                         expressions(&genome, &data, stage)
                     );
                 }
+            }
+        }
+
+        #[test]
+        fn whatever_the_genome_copying_keeps_how_each_gene_works_and_flaws_no_flagged_one(
+            genes in prop::collection::vec(random_gene(), 1..12),
+            seed: u64,
+        ) {
+            // M2 design §12.1, §12.3, with every value changed and every
+            // copy flawed: a flagged gene stays flagged and does nothing,
+            // whatever its copies, and no gene comes to change the body.
+            let data = every_copy_wrong();
+            let file = format!("(format: 2, genes: [{}])", genes.join(",\n"));
+            let genome = Genome::from_ron(&file, &data).expect("a valid genome");
+            let rng = &mut ChaCha8Rng::seed_from_u64(seed);
+            let copy = copy(&genome, &data, rng);
+            for stage in [LifeStage::Young, LifeStage::Adult, LifeStage::Old] {
+                prop_assert_eq!(
+                    expressions(&copy.genome, &data, stage),
+                    expressions(&genome, &data, stage)
+                );
+            }
+            let founders = founders(&genome, &data, rng);
+            let expressed = expressions(&genome, &data, LifeStage::Adult);
+            for (index, gene) in genome.genes.iter().enumerate() {
+                let flagged = matches!(expressed[index], Expression::Flagged(_));
+                let can = frailty(gene) > 0.0 && !flagged;
+                prop_assert_eq!(flaws_of(&copy.flaws, index), if can { 2 } else { 0 });
+                prop_assert_eq!(flaws_of(&founders, index), u8::from(can));
             }
         }
     }

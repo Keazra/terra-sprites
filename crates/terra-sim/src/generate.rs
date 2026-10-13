@@ -12,7 +12,6 @@ use crate::random::{uniform, unit};
 use crate::regions;
 use crate::sprites::Sprite;
 use crate::terrain::Terrain;
-use crate::variation::varied;
 use crate::world::WorldState;
 
 /// Regions smaller than this become rock; larger ones are joined to the mainland.
@@ -139,9 +138,8 @@ pub(crate) fn place_sprites(config: &WorldConfig, data: &DataPack, state: &mut W
         }
         let choice = uniform(&mut state.rng, candidates.len() as u64) as usize;
         let pos = candidates.swap_remove(choice);
-        let genome = varied(data.starter(), data, &mut state.rng);
         // Wild sprites carry a few hidden flaws (M2 design §12).
-        let flaws = mutation::founders(&genome, data, &mut state.rng);
+        let (genome, flaws) = mutation::wild(data, &mut state.rng);
         // The first sprites are adults, of all ages (M2 design §9.1).
         let (grows_up, grows_old) = Sprite::adulthood(&genome, data);
         let age = grows_up + uniform(&mut state.rng, grows_old.saturating_sub(grows_up).max(1));

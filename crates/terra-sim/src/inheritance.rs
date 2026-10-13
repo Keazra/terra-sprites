@@ -185,10 +185,7 @@ mod tests {
     use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
-
-    fn builtin() -> DataPack {
-        DataPack::builtin().expect("built-in data pack is valid")
-    }
+    use crate::test_util::builtin;
 
     /// A genome of `genes`, written as a genome file's.
     fn genome(genes: &[String], data: &DataPack) -> Genome {

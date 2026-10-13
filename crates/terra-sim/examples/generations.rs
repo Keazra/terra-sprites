@@ -68,9 +68,10 @@ struct Run {
     /// age (M2 design §12).
     lone_lives: Vec<u64>,
     pair_lives: Vec<u64>,
-    /// The hidden flaws carried and the genes broken, on average, among the
-    /// hatched sprites alive halfway through and at the end (M2 design §12).
-    flaws: [Option<(f32, f32)>; 2],
+    /// The flaws among the hatched sprites alive halfway through and at
+    /// the end (M2 design §12).
+    flaws_halfway: Option<FlawLoad>,
+    flaws_at_end: Option<FlawLoad>,
     /// Each gene number's middle value among the sprites alive at the end
     /// whose genes line up with the starter's, in the starter's order; empty
     /// if none do.
@@ -316,24 +317,30 @@ fn evolution(starter: &[(String, f32)], runs: &[(u64, Run)]) {
         let down = ratios.iter().filter(|&&r| r <= 0.9).count();
         let mut sorted = ratios.clone();
         sorted.sort_by(f32::total_cmp);
-        let middle = sorted[sorted.len() / 2];
-        moved.push((
+        moved.push(Moved {
             name,
-            *value,
-            sorted[0],
-            middle,
-            sorted[sorted.len() - 1],
+            starter: *value,
+            least: sorted[0],
+            middle: sorted[sorted.len() / 2],
+            most: sorted[sorted.len() - 1],
             up,
             down,
-        ));
+        });
     }
     let seeds = measured.len();
-    let all_way: Vec<_> = moved
-        .iter()
-        .filter(|m| m.5 == seeds || m.6 == seeds)
-        .collect();
+    let all_way: Vec<_> = moved.iter().filter(|m| m.every_seed(seeds)).collect();
+    // G4 asks for every seed, so a world that died out fails it.
+    let died_out = runs.len() - seeds;
+    let of_all = if died_out == 0 {
+        String::new()
+    } else {
+        format!(
+            " alive at the end, but {died_out} of {} died out",
+            runs.len()
+        )
+    };
     println!(
-        "\n{} of {} numbers moved by at least a tenth the same way in all {seeds} seeds.",
+        "\n{} of {} numbers moved by at least a tenth the same way in all {seeds} seeds{of_all}.",
         all_way.len(),
         moved.len()
     );
@@ -342,23 +349,38 @@ fn evolution(starter: &[(String, f32)], runs: &[(u64, Run)]) {
         "Number", "Starter", "Least", "Middle", "Most", "Up", "Down"
     );
     let mut by_size = moved.clone();
-    by_size.sort_by(|a, b| {
-        let size = |m: &(&String, f32, f32, f32, f32, usize, usize)| (distance(m.3)).abs();
-        size(b).total_cmp(&size(a))
-    });
-    for (name, value, least, middle, most, up, down) in by_size.iter().take(25) {
-        let mark = if *up == seeds || *down == seeds {
-            "*"
-        } else {
-            " "
-        };
+    by_size.sort_by(|a, b| distance(b.middle).total_cmp(&distance(a.middle)));
+    for m in by_size.iter().take(25) {
+        let mark = if m.every_seed(seeds) { "*" } else { " " };
         println!(
-            "{mark}{name:<51} {value:>10.4} {least:>6.2} {middle:>6.2} {most:>6.2} {up:>4} {down:>4}"
+            "{mark}{:<51} {:>10.4} {:>6.2} {:>6.2} {:>6.2} {:>4} {:>4}",
+            m.name, m.starter, m.least, m.middle, m.most, m.up, m.down
         );
     }
     println!(
         "\n* moved the same way in every seed. Least, middle and most are seeds' ratios to the starter."
     );
+}
+
+/// How far one gene number moved from the starter's, across seeds: its
+/// least, middle and most ratio to the starter's value, and in how many
+/// seeds it moved a tenth up and a tenth down.
+#[derive(Debug, Clone)]
+struct Moved<'a> {
+    name: &'a str,
+    starter: f32,
+    least: f32,
+    middle: f32,
+    most: f32,
+    up: usize,
+    down: usize,
+}
+
+impl Moved<'_> {
+    /// Whether it moved a tenth the same way in every one of `seeds`.
+    fn every_seed(&self, seeds: usize) -> bool {
+        self.up == seeds || self.down == seeds
+    }
 }
 
 /// How far a ratio is from 1, either way: halving and doubling come out
@@ -481,13 +503,16 @@ fn flaws(runs: &[(u64, Run)]) {
             .map_or("-".to_string(), |&age| format!("{:.1}", hours(age)))
     };
     for (seed, run) in runs {
-        let load = |at: Option<(f32, f32)>| {
-            at.map_or(("-".to_string(), "-".to_string()), |(carried, broken)| {
-                (format!("{carried:.1}"), format!("{broken:.2}"))
+        let load = |at: Option<FlawLoad>| {
+            at.map_or(("-".to_string(), "-".to_string()), |load| {
+                (
+                    format!("{:.1}", load.carried),
+                    format!("{:.2}", load.broken),
+                )
             })
         };
         let ((carried_half, broken_half), (carried, broken)) =
-            (load(run.flaws[0]), load(run.flaws[1]));
+            (load(run.flaws_halfway), load(run.flaws_at_end));
         println!(
             "{seed:>5} {carried_half:>8} {broken_half:>7} {carried:>8} {broken:>7} {:>6} {:>6} {:>5}",
             median(&run.lone_lives),
@@ -497,10 +522,17 @@ fn flaws(runs: &[(u64, Run)]) {
     }
 }
 
-/// The hidden flaws carried and the genes broken, on average, among the
-/// hatched sprites alive in `world` (M2 design §12); `None` if there are
-/// none.
-fn flaw_load(world: &World) -> Option<(f32, f32)> {
+/// The hidden flaws carried and the genes broken, each on average, among
+/// the hatched sprites alive at a moment (M2 design §12).
+#[derive(Debug, Clone, Copy)]
+struct FlawLoad {
+    carried: f32,
+    broken: f32,
+}
+
+/// The flaws among the hatched sprites alive in `world`; `None` if there
+/// are none.
+fn flaw_load(world: &World) -> Option<FlawLoad> {
     let (mut carried, mut broken, mut sprites) = (0, 0, 0);
     for sprite in world
         .sprites()
@@ -514,7 +546,10 @@ fn flaw_load(world: &World) -> Option<(f32, f32)> {
     }
     (sprites > 0).then(|| {
         let each = |count: usize| count as f32 / sprites as f32;
-        (each(carried), each(broken))
+        FlawLoad {
+            carried: each(carried),
+            broken: each(broken),
+        }
     })
 }
 
@@ -595,7 +630,7 @@ fn run(
             }
         }
         if world.tick() == ticks / 2 {
-            run.flaws[0] = flaw_load(&world);
+            run.flaws_halfway = flaw_load(&world);
         }
         let count = world.sprites().count();
         run.most = run.most.max(count);
@@ -606,13 +641,13 @@ fn run(
     run.eggs = world.sprites().filter(|sprite| sprite.is_egg()).count();
     run.alive = world.sprites().count() - run.eggs;
     run.numbers = middles(&world, starter);
-    run.flaws[1] = flaw_load(&world);
+    run.flaws_at_end = flaw_load(&world);
     run
 }
 
-/// Each of the starter's numbers' middle value among the hatched sprites
-/// alive in `world` whose genes line up with the starter's; empty if none
-/// do.
+/// Each of the starter's numbers' middle value among the sprites alive in
+/// `world`, eggs aside, whose genes line up with the starter's; empty if
+/// none do. By the end of a long run, all were hatched.
 fn middles(world: &World, starter: &[(String, f32)]) -> Vec<f32> {
     let mut columns: Vec<Vec<f32>> = vec![Vec::new(); starter.len()];
     for sprite in world.sprites().filter(|sprite| !sprite.is_egg()) {

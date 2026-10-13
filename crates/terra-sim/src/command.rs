@@ -18,7 +18,6 @@ use crate::perception::Target;
 use crate::sliding::Slide;
 use crate::sprites::{Sprite, Sprites};
 use crate::terrain::Terrain;
-use crate::variation::varied;
 use crate::world::WorldState;
 
 /// Something the player does to the world through the Cursor. It carries
@@ -589,11 +588,7 @@ fn spawn_sprite(
     let (genome, flaws) = match genome {
         Some(genome) if !genome.fits(data) => return Err(Rejection::BadGenome),
         Some(genome) => (genome, Vec::new()),
-        None => {
-            let genome = varied(data.starter(), data, &mut state.rng);
-            let flaws = mutation::founders(&genome, data, &mut state.rng);
-            (genome, flaws)
-        }
+        None => mutation::wild(data, &mut state.rng),
     };
     let mut sprite = Sprite::newborn(genome, tile, state.tick, data);
     sprite.flaws = flaws;

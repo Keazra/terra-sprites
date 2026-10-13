@@ -533,7 +533,7 @@ The ship's own walls come later: its prow is iron, and walls between sectors are
 
 ## 12. Mixing and mutating genes (Slice 24)
 
-Settled with the owner on 2026-10-13 ([#142](https://github.com/Keazra/terra-sprites/issues/142)), in a round of ten questions. Children now differ from their parents: copying errors change a gene's numbers now and then, a pair's genes line up by what each gene does and mix in stretches, and hidden flaws passed down families make the quality of a sprite's genes part of how it ages (§3, reading C). The slice comes in two parts: 24a, this section, and 24b, copy and change (§12.8). The numbers are data, the `mutation` and `flaws` sections of `physiology.ron` and `breeding.crossover`: first guesses, tuned against §12.7. A save from before this slice keeps its pack (M1 design §2.8), which has neither section, so its eggs copy their parents' genes exactly and carry no flaws, and its pairs' young mix gene by gene, as before.
+Settled with the owner on 2026-10-13 ([#142](https://github.com/Keazra/terra-sprites/issues/142)), in a round of ten questions. Children now differ from their parents: copying errors change a gene's numbers now and then, a pair's genes line up by what each gene does and mix in stretches, and hidden flaws passed down families make the quality of a sprite's genes part of how it ages (§3, reading C). The slice comes in two parts: 24a, this section, and 24b, copy and change (§12.8). The numbers are data, the `mutation` and `flaws` sections of `physiology.ron` and `breeding.crossover`: first guesses, tuned against §12.7. A save from before this slice keeps its pack (M1 design §2.8), which has neither section, so its eggs copy their parents' genes exactly and carry no flaws; its pairs' genes line up by what each does (§12.2), but mix gene by gene, as in Slice 23.
 
 ### 12.1 Copying errors
 
@@ -558,7 +558,7 @@ This replaces §10.5's first rule.
 
 Gene quality, as carriers (Q5), as in real animals.
 
-- **Each gene that can weaken (§9.4) has two copies, one from each parent,** and either may carry a **flaw**. One sound copy is enough, so a sprite with one flawed copy, a **carrier**, shows nothing. A setting that doesn't weaken, such as a half-life or a starting level, can't be flawed.
+- **Each gene that can weaken (§9.4) has two copies, one from each parent,** and either may carry a **flaw**. One sound copy is enough, so a sprite with one flawed copy, a **carrier**, shows nothing. A setting that doesn't weaken, such as a half-life or a starting level, can't be flawed, nor can a flagged gene, which does nothing whatever its copies are (M1 design §4.3).
 - **A parent passes on one of its two copies of each gene,** at random, so a carrier passes its flaw to about half its young. A gene only one parent has gets a sound copy from the other.
 - **A gene with both copies flawed is broken** (§12.4). Close kin often carry the same flaw from a shared ancestor, so their young are likelier to get it twice, as inbred animals do, with no rule of its own.
 - **A lone egg gets one of its mother's copies of each gene, doubled,** as a Komodo dragon's or a shark's does. So each flaw she carries is broken in about half her lone young, where a pair's egg would need both parents to carry it. That's the cost of breeding alone §10.3 promised.
@@ -571,7 +571,7 @@ Gene quality, as carriers (Q5), as in real animals.
 What poor genes do (Q6): they're weaker, and they bring old age sooner.
 
 - **A broken gene works at half strength:** it's born with a health of `flaws.health` (0.5), as if old age had weakened it (§9.4), and its health only falls from there. A broken "thirst → drink" leaves a sprite slow to drink when thirsty.
-- **Broken genes bring old age sooner and speed its decay,** as a hard life's wear does (§9.4): each counts as `flaws.wear` (0.05) of wear towards when the sprite grows old and how fast its genes decay, up to the most worn. It isn't wear: the Body tab's `wear` doesn't count it. One broken gene takes about 10 minutes off a life at 1×, and five about 45.
+- **Broken genes bring old age sooner and speed its decay,** as a hard life's wear does (§9.4): each counts as `flaws.wear` (0.05) of wear towards when the sprite grows old and how fast its genes decay, up to the most worn. It isn't wear: the Body tab's `wear` doesn't count it. By `physiology.ron`'s numbers, for a sprite that would grow old at 22,500 ticks, one broken gene takes about 10 minutes off its life at 1×, and five about 45.
 - **The owner's words for it** (M2 planning): the genome's decay is "amplified or damaged by stress throughout their lives, and the 'quality' of their genes". Wear is the stress (§9.4); broken genes are the quality. Stress chemicals damaging genes are [#195](https://github.com/Keazra/terra-sprites/issues/195).
 
 ### 12.5 No cost for a long life
@@ -609,7 +609,7 @@ Agreed before measuring (Q10), without the bar on life length (Q7):
 - **Nothing else got worse:** A1–A4 still met (A3 on seeds 1–30), and A5 at the limit, 100 sprites, at least 200 ticks a second.
 - **For information:** how many flaws sprites carry and how many genes are broken, over time; how long lone eggs' young live against pairs' young; which numbers moved most; how long lives were.
 
-`cargo run --release -p terra-sim --example generations -- --ticks 200000` runs the first two and reports the rest. **Before this slice** (`main` at `dc9466e`, seeds 1–10), no number moved a tenth the same way in all 10 seeds: `grows_old` rose about 30% in 9 of 10, since a longer life leaves more young (§12.5), and the median hatchling old age killed in the second half lived 5 to 7 hours in only 2 of 10 seeds, most 7 to 7.8.
+`cargo run --release -p terra-sim --example generations -- --ticks 200000` runs the first two and reports the rest. **Before this slice** (`main` at `dc9466e`, with this slice's `generations.rs` and the `Genome::genes` it reads added, seeds 1–10), no number moved a tenth the same way in all 10 seeds: `grows_old` rose about 30% in 9 of 10, since a longer life leaves more young (§12.5), and the median hatchling old age killed in the second half lived 5 to 7 hours in only 2 of 10 seeds, most 7 to 7.8.
 
 ### 12.8 Later
 

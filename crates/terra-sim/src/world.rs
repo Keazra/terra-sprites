@@ -1255,6 +1255,7 @@ impl World {
                     steps: sprite.did.steps,
                     resting: sprite.did.rested,
                     stage: sprite.stage(),
+                    sooner: sprite.sooner(data),
                     fertile: breeding::fertile(state, sprite, data),
                     female: sprite.sex == Sex::Female,
                     female_near: near(&females),
@@ -1388,6 +1389,7 @@ mod tests {
     use crate::cursor::Grip;
     use crate::learning::{Signals, Touch, TraceEntry, TypeMemory};
     use crate::map::Dir;
+    use crate::mutation::CopyingError;
     use crate::objects::Roll;
     use crate::registry::Verb;
 
@@ -1639,7 +1641,40 @@ mod tests {
     }
 
     #[test]
-    fn more_than_two_flawed_copies_of_a_gene_break_an_invariant() {
+    fn a_sprite_s_age_sensor_reaches_1_as_broken_genes_bring_its_old_age_sooner() {
+        // M2 design §9.3, §12.4: the sensor and the life stage agree on
+        // when it grows old.
+        let (mut world, first, _) = field_with_sprites();
+        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        sprite.flaws = vec![2; sprite.genome.genes.len()];
+        world.step();
+        let view = world.sprite(first).expect("a sprite");
+        assert!(view.grows_old_at() < view.traits().grows_old * 0.7);
+        let sprite = world.state.sprites.get(first).expect("a sprite");
+        let age = sprite.body.loci[world.data.physiology().indices.age];
+        let ticks = age * view.grows_old_at();
+        let expected = sprite.age(world.state.tick) as f32;
+        assert!(
+            (ticks - expected).abs() <= 2.0,
+            "{ticks} ticks, not {expected}"
+        );
+    }
+
+    #[test]
+    fn a_copying_error_in_a_gene_the_genome_lacks_breaks_an_invariant() {
+        let (mut world, first, _) = field_with_sprites();
+        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        let gene = sprite.genome.genes.len() - 1;
+        let was = sprite.genome.genes[gene].clone();
+        sprite.copying_errors = vec![CopyingError { gene, was }];
+        assert_eq!(world.check_invariants(), Ok(()), "its last gene");
+        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        sprite.copying_errors[0].gene += 1;
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn more_than_two_flawed_copies_of_a_gene_or_flaws_of_genes_it_lacks_break_an_invariant() {
         let (mut world, first, _) = field_with_sprites();
         let sprite = world.state.sprites.get_mut(first).expect("a sprite");
         sprite.flaws = vec![1, 2];
@@ -1647,6 +1682,9 @@ mod tests {
         let sprite = world.state.sprites.get_mut(first).expect("a sprite");
         sprite.flaws = vec![3];
         assert!(world.check_invariants().is_err());
+        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        sprite.flaws = vec![0; sprite.genome.genes.len() + 1];
+        assert!(world.check_invariants().is_err(), "a gene too many");
     }
 
     #[test]
