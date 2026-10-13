@@ -1,6 +1,6 @@
 # The population graph
 
-Slice 26 ([#144](https://github.com/Keazra/terra-sprites/issues/144)): a graph of the world's population over its whole run, stacked by life stage, full screen on `p` and small at the top of the World tab, with a moment picked and read under it. Settled in a round of four questions on 2026-10-13, whose recommendations the owner kept ("No disagreements").
+Slice 26 ([#144](https://github.com/Keazra/terra-sprites/issues/144), [PR #201](https://github.com/Keazra/terra-sprites/pull/201)): a graph of the world's population over its whole run, stacked by life stage, full screen on `p` and small at the top of the World tab, with a moment picked and read under it. Settled in a round of four questions on 2026-10-13, whose recommendations the owner kept ("No disagreements").
 
 ## M2 "Generations"
 
