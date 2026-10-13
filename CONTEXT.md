@@ -343,6 +343,10 @@ _Avoid_: parthenogenesis in what the player reads, cloning, self-mating
 The most sprites a world holds, eggs included: the preset's `most_sprites` (100 in the default world). A full world has no fertile sprite. The Cursor may still place one past it.
 _Avoid_: population cap, carrying capacity (food sets that)
 
+**Population record** (M2):
+The counts the world keeps of its sprites by life stage over its whole run, for the population graph: one every 100 ticks from the first tick it runs, each with what hatched, was placed and died since the one before. It's world state, so it's saved and replayed. Past 512 counts it keeps every other one and counts half as often, so it always covers the whole run (M2 design §14.1).
+_Avoid_: history, statistics, census
+
 **Cause of death**:
 What caused most of a sprite's recent injury, with the most recent counting most: starvation, dehydration, old age, or being hurt by an object type, such as a thornbush, or by another sprite.
 
@@ -637,6 +641,10 @@ _Avoid_: manual, cheat sheet
 **Sprite list**:
 The overlay `l` opens: every sprite, one to a row, with its age, its strongest drive and what it's doing, sorted by number, name, age or drive. Choosing one selects it and centres the viewport on it.
 _Avoid_: roster, census
+
+**Population graph** (M2):
+The overlay `p` opens: how many sprites the world has had over its whole run, stacked by life stage, with a dotted line at most sprites. A moment picked with the arrows or the pointer is read under it: the count in each stage, and what hatched, was placed and died since the column before. A small copy heads the World tab (M2 design §14).
+_Avoid_: population chart, history graph, census
 
 **Information policy**:
 What decides what the screen may show: every display asks it first, about a panel and a subject (the world, a sprite or a tile). In M1 it shows everything; a later mode that hides information is a new policy, and never changes the world.

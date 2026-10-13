@@ -4,7 +4,7 @@
 - **Date:** 2026-10-12
 - **History:** edited in place since v5; each change is a file in [`changes/`](changes/), whose README says where v1 to v5 are
 - **Builds on:** [M1 design](m1-a-sprite-lives.md), which stays the rulebook for everything M2 doesn't change
-- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), breeding (Slice 23), the view past the wall (Slice 31), and mixing and mutating genes (Slice 24), with copy and change (24b)
+- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), breeding (Slice 23), the view past the wall (Slice 31), mixing and mutating genes (Slice 24), with copy and change (24b), and the population graph (Slice 26)
 
 ---
 
@@ -136,7 +136,7 @@ M2 is done when these hold, as well as M1's A1–A9. Each slice sets its criteri
 |---|---|---|
 | G1 | **Generations.** Left alone, the sprites keep their population going for several generations in most seeds: it doesn't die out, and it doesn't grow past the world's limit. | 23 |
 | G2 | **Family.** Any sprite's parents, grandparents and children can be seen, living or dead. | 25 |
-| G3 | **Population.** A graph shows the population rising and falling over time. | 26 |
+| G3 | **Population.** A graph shows the population rising and falling over time (§14). | 26 |
 | G4 | **Evolution.** After enough generations, the species has measurably changed from the starter genome, beyond what noise explains: at least 3 gene numbers moved a tenth the same way in 10 seeds of 200,000 ticks (§12.7). | 24; not met there, so measured again with 27 and 29 |
 | G5 | **A harsh childhood.** About 20% of unattended newborns grow up, and grown sprites rarely die of hunger or thirst. | 29 |
 | G6 | **Fast-forward.** A world can run for many generations with no screen, and be opened afterwards. | 27 |
@@ -750,3 +750,119 @@ The default world left alone for 200,000 ticks; the genes are those of the hatch
 - **The error rate as a gene:** the owner wants it pinned (round 1, Q2); [#194](https://github.com/Keazra/terra-sprites/issues/194).
 - **Born knowing what its ancestors learned:** measured with Slice 27's fast-forward and Slice 29's harsher world (§13.3).
 - **Breeding alone can take over:** in one of seeds 8 and 9 every sprite alive at the end had lost the gene by which a male near lowers a female's longing, and in the other at least a tenth had (§13.3); seed 8 laid four times as many lone eggs as in §12.7's run. Courtship and families, Slice 32 ([#186](https://github.com/Keazra/terra-sprites/issues/186)), should check pairs still pay.
+
+---
+
+## 14. The population graph (Slice 26)
+
+Settled with the owner on 2026-10-13 ([#144](https://github.com/Keazra/terra-sprites/issues/144)), in a round of four questions whose recommendations they kept. A graph shows how many sprites the world has had over its whole run, so the player can watch the population rise and fall (G3). Today the default world breeds up to its limit of 100 in about 27,000 ticks and stays there, so the total climbs and then runs flat until Slice 29's harsher world. What keeps moving is the mix: waves of young growing up, and adults growing old. So the graph stacks the life stages (Q1, B).
+
+### 14.1 The population record
+
+- **The world counts its sprites by life stage,** eggs, young, adults and old, at the first tick it runs and then every 100 ticks, with what changed the population since the count before: the eggs that hatched, the sprites the Cursor placed, and the deaths by cause.
+- **It's world state:** saved (M1 design §2.8), in the state hash, the same in a replay (M1 design §2.7), and checked every tick (M1 design §7.1): its counts go forward in time and never reach 512. Nothing in the world reads it, so the sprites live exactly as they did before it (§14.7).
+- **It always covers the whole run, and a save stays small.** Once it holds 512 counts, it keeps the first and every other one after it, folds what happened in the dropped ones' stretches into the next one kept, and counts half as often: every 200 ticks from about tick 51,000, every 400 from about 102,000, and so on. It never holds more than 511 counts: in the default world at 200,000 ticks it held 501, every 400 ticks, 36 KB of a 2 MB save.
+- **A save from before this slice** has no counts, so its record begins at the first tick it runs after loading. The save format stays 1: the record is new, with a default (M1 design §2.8).
+- **The world keeps it, not the screen,** so a loaded world and a replay show the whole graph, and a world fast-forwarded in Slice 27 will open with it.
+
+### 14.2 The graph
+
+- **`p` opens it over the panels,** as `l` opens the sprite list (M1 design §6.1), and `p` or `Esc` closes it. Time runs on behind it, and `space`, `.`, `+` and `-` work as ever (Q2), so the player can watch it at 4×. Other keys do nothing while it's open, except those below. Its title says the ticks it covers.
+- **The life stages stack from the bottom,** young, adults, old, then eggs on top, each in its theme colour (Q1, B): young light green, adults cyan, old gray, and eggs light yellow, as an egg is on the map. A legend under the graph names them.
+- **The height runs from 0 to the world's limit,** most sprites (§10.6), drawn as a dotted dark gray line where nothing else is, or to the most there have ever been, if the Cursor placed sprites past it. It's labelled at the top, the middle and 0. Each row is two halves of a tile: a tile of one stage is `█`, and a tile of two is `▄` in the lower stage's colour on the upper's, or on nothing at the top of the stack. Each half shows the stage at its middle, and the top of the stack shows if it reaches into a half at all, so a lone egg or sprite is never lost.
+- **Each column is a stretch of time,** showing the count at its end. Until the run is as long as the graph is wide at 100 ticks a column, the graph grows from the left; after that the whole run is squeezed in, its columns standing for equal stretches. The time axis is marked at each quarter, labelled with its tick, rounded to the hundred.
+- **It fills the screen,** at any size the game allows.
+
+At 100×30, the default world (seed 7) at tick 48,000, with a moment at tick 32,300 picked. Each column is about 520 ticks. The page has no colour, so the stages are shades here, as in the round: `▓` young, `█` adults, `▒` old and `░` eggs.
+
+```
+ Terra Sprites │ tick 48,000 │ ► 1x │ seed 7 │ sprites 100 │ not saved                       ? help
+┌─ Population ── ticks 0 to 48,000 ──────────────────────────────────────────────────── esc close ─┐
+│ 100 ┤················································▄░▒▒▒▒▒▒▒▒▒░▒▒▒▒▒▒░▒▒▒▒░▒▒▒▒▒▄░░▒▒░░░░░░░▒▒▒│
+│     │                                              ▄░░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒│
+│     │                                         ▄▄ ▄░▒▒▒██████▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒│
+│     │                                   ▄  ▄░░▒▒▒▒▒██████████████████████▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒│
+│     │                               ▄  ░▒▒▄▒▒▒█████████████████████████████████▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒█▒▒│
+│     │                             ▄░░▄▒▒▒▒▒▒▒██████████████████████████████████████▒█████████████│
+│     │                        ▄▄▄░▒▒▒▒▒▒▒█████████████████████████████████████████████████████████│
+│     │                      ▄░░▒▒▒▒▒▒▒████████████████████████████████████████████████████████████│
+│     │                   ▄▄░▒▒▒▒██████████████████████████████████████████████████████████████████│
+│     │                 ▄▒▒▒▒▒█████████████████████████████████████████████████████████████████████│
+│  50 ┤             ▄░░▒▒▒█████████████████████████████████████████████████████████████████████████│
+│     │        ░▒░░▒▒▒▒████████████████████████████████████████████████████████████████████████████│
+│     │     ░░▒▒▒▒▒████████████████████████████████████████████████████████████████████████████████│
+│     │ ░░▒▒▒▒▒▒███████████████████████████████████████████████████████████████████████████████████│
+│     │█▒██▒▒██████████████████████████████████████████████████████████████████████████████████████│
+│     │█████████████████████████▓▓█████▓███▓███▓██▓█████████▓████████████████████████████████▓▓▓▓▓▓│
+│     │███████████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█▓▓▓▓▓▓▓▓▓██▓▓▓▓▓▓▓▓▓█████████████████████████▓▓█▓▓▓▓▓▓▓▓▓│
+│     │█████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██████▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│
+│     │███████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│
+│     │███▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│
+│   0 └──────────────────────┬──────────────────────┬───────────────▲──────┬──────────────────────┬│
+│     0                 12,000                 24,000                 36,000                 48,000│
+│                                                                                                  │
+│ ▓ young  █ adults  ▒ old  ░ eggs  ··· most sprites, 100                                          │
+│ tick 32,300: 100 sprites · 11 young · 75 adults · 14 old · 0 eggs                                │
+│ since tick 31,800: 3 hatched                                                                     │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+ (128,80) dirt · Sprite #48330 │ SELECT         ←→ pick a moment  space pause  +/- speed  esc close
+```
+
+### 14.3 Reading a moment
+
+- **`←` and `→`, or `A` and `D`, or the pointer over the graph pick a column,** marked `▲` under it (Q3, B); a click picks too. The two lines under the graph read it: the tick and the count in each stage, then what hatched, was placed and died since the column before, with the causes, or "none hatched or died". The first column reads from the first count. With nothing picked, they read now, as `now, tick 48,000: …`.
+- **The arrows stop at the first column and at now,** and closing the graph forgets the pick.
+- **The status line's key hints** read `←→ pick a moment  space pause  +/- speed  esc close`.
+
+### 14.4 The World tab
+
+- **A small copy heads the World tab** (Q2, C), the tab the game starts on: a heading with the ticks it covers, six rows and the axis, as wide as the tab, then the tab as before. It has no lines that read a moment; `p` opens the full graph for that.
+
+```
+┌─ Body Brain Chem Genome [World] ───────────┐
+│ population, ticks 0 to 48,000              │
+│ 100 ┤················▄·▄▒█▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒│
+│     │           ▄░▄▒███████████████████████│
+│     │       ▄▒▒████████████████████████████│
+│  50 ┤ ▄▄▒▒▒████████████████████████████████│
+│     │█████████▓▓█▓███▓▓██▓██████████████▓▓▓│
+│     │██▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│
+│   0 └────────┬────────┬────────┬────────┬──│
+│                                            │
+│ data pack   core v1                        │
+│ sprites         100                        │
+│ …                                          │
+```
+
+### 14.5 Themes
+
+Both built-in themes gain a `population` section (`docs/reference/themes.md`): each stage's colour, the whole and half blocks, `█` and `▄`, or `#` and `_` in ASCII, and the dot of the limit's line, `·` or `.`, in dark gray. A theme without the section, or without some of it, draws what it leaves out as the default theme does, as with space (§11.5).
+
+### 14.6 The information policy
+
+The graph and its small copy are a panel of their own, `Graph`, about the world (M1 design §6.4). Denied, the full graph's box stays, empty and titled ` Population `, and the World tab leaves the small graph out.
+
+### 14.7 How we know it worked
+
+Agreed before building (Q4):
+
+- **UI tests** (ratatui's `TestBackend`) of the full graph and the small one, the stages stacked in the theme's colours, the graph growing from the left and then squeezing, a picked moment, a death read in its moment, time running while it's open, the graph after a save and a load, and the policy hiding it; snapshots of the graph in both themes. The simulation's own tests cover the record: counts at the right ticks, hatchings, placings and deaths counted in their stretch, squeezing over 110,000 ticks, saving, and a save from before it.
+- **The sprites live exactly as before:** the `generations` run, seeds 1–4 for 30,000 ticks, prints the same, byte for byte, on `main` and on this slice.
+- **No slower:** the speed check (A5) at least 200 ticks a second, and within 5% of `main` measured the same way.
+
+**Measured (2026-10-13)** in release builds of this slice at `0a2aebf`, beside `main` at `82fad3f`, in the cloud, with:
+
+```
+cargo run --release -p terra-sim --example generations -- --seeds 1-4 --ticks 30000
+cargo run --release -p terra-sim --example speed
+```
+
+- **The sprites live exactly as before: met.** The `generations` report is the same, byte for byte, on both. The state hash differs, as it should, since the record is world state.
+- **No slower: met.** The speed check ran 279 and 281 ticks a second on `main`, and 297 and 282 on this slice, run in turn.
+- **The UI tests and snapshots pass,** as do the simulation's tests of the record.
+- **For information, a save's size:** at 200,000 ticks the default world's record held 501 counts, every 400 ticks: 36 KB of a 2 MB save. At 30,000 ticks it was 20 KB.
+
+### 14.8 Later
+
+- **Generations on the graph** need the family tree (Slice 25).
+- **A gene's average over time** belongs to the lab (Slice 27), which can also decide whether a fast-forward writes the counts to a file.
