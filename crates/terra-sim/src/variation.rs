@@ -6,6 +6,7 @@ use rand_chacha::ChaCha8Rng;
 use crate::data::DataPack;
 use crate::genome::{Gene, Genome};
 use crate::random::unit;
+use crate::registry::Trait;
 
 /// `genome` with each gene value multiplied by a factor drawn uniformly
 /// within physiology's `spawn_variation` of 1, or a trait's own share from
@@ -16,63 +17,17 @@ use crate::random::unit;
 pub(crate) fn varied(genome: &Genome, data: &DataPack, rng: &mut ChaCha8Rng) -> Genome {
     let physiology = data.physiology();
     let spread = physiology.spawn_variation;
-    let mut vary = |value: f32, spread: f32| value * (1.0 - spread + 2.0 * spread * unit(rng));
-    let level = |value: f32| value.clamp(0.0, 1.0);
     let genes = genome
         .genes
         .iter()
         .map(|gene| {
-            let mut gene = gene.clone();
-            match gene {
-                Gene::HalfLife { ref mut ticks, .. } => {
-                    *ticks = (vary(*ticks as f32, spread).round() as u32).max(1);
-                }
-                Gene::Reaction { ref mut rate, .. } => *rate = level(vary(*rate, spread)),
-                Gene::Emitter {
-                    ref mut threshold,
-                    ref mut gain,
-                    ..
-                }
-                | Gene::Receptor {
-                    ref mut threshold,
-                    ref mut gain,
-                    ..
-                } => {
-                    *threshold = vary(*threshold, spread).max(0.0);
-                    *gain = vary(*gain, spread);
-                }
-                Gene::InitialConcentration { ref mut value, .. } => {
-                    *value = level(vary(*value, spread))
-                }
-                Gene::Trait {
-                    which,
-                    ref mut value,
-                } => {
-                    let (low, high) = physiology.traits.range(which);
-                    let spread = physiology
-                        .trait_variation
-                        .get(&which)
-                        .copied()
-                        .unwrap_or(spread);
-                    *value = vary(*value, spread).clamp(low, high);
-                }
-                Gene::BrainParam {
-                    param,
-                    ref mut value,
-                } => {
-                    let (low, high) = physiology.brain.of(param).range;
-                    let varied = vary(*value, spread).clamp(low, high);
-                    *value = if param.is_whole() {
-                        varied.round()
-                    } else {
-                        varied
-                    };
-                }
-                Gene::Instinct { ref mut weight, .. }
-                | Gene::AttentionInstinct { ref mut weight, .. } => *weight = vary(*weight, spread),
-                Gene::Unknown { .. } | Gene::Unmatched(_) => {}
-            }
-            gene
+            each_value(gene, data, |value, which| {
+                let spread = which
+                    .and_then(|which| physiology.trait_variation.get(&which))
+                    .copied()
+                    .unwrap_or(spread);
+                value * (1.0 - spread + 2.0 * spread * unit(rng))
+            })
         })
         .collect();
     // Only values vary: when each gene works is structural (M2 design §9.2).
@@ -80,6 +35,67 @@ pub(crate) fn varied(genome: &Genome, data: &DataPack, rng: &mut ChaCha8Rng) -> 
         genes,
         switches: genome.switches.clone(),
     }
+}
+
+/// `gene` with each of its values (design §4.3) put through `change`, in
+/// the order of its fields, then held within its range and, for a whole
+/// number, rounded. `change` is told which trait a value is, if it's a
+/// trait's. Structural fields, such as what a gene refers to, never change,
+/// so a valid gene stays valid and an expressed one stays expressed; nor
+/// does an unknown or unmatched gene, which has no values this build reads.
+pub(crate) fn each_value(
+    gene: &Gene,
+    data: &DataPack,
+    mut change: impl FnMut(f32, Option<Trait>) -> f32,
+) -> Gene {
+    let physiology = data.physiology();
+    let mut vary = |value: f32| change(value, None);
+    let level = |value: f32| value.clamp(0.0, 1.0);
+    let mut gene = gene.clone();
+    match gene {
+        Gene::HalfLife { ref mut ticks, .. } => {
+            *ticks = (vary(*ticks as f32).round() as u32).max(1);
+        }
+        Gene::Reaction { ref mut rate, .. } => *rate = level(vary(*rate)),
+        Gene::Emitter {
+            ref mut threshold,
+            ref mut gain,
+            ..
+        }
+        | Gene::Receptor {
+            ref mut threshold,
+            ref mut gain,
+            ..
+        } => {
+            *threshold = vary(*threshold).max(0.0);
+            *gain = vary(*gain);
+        }
+        Gene::InitialConcentration { ref mut value, .. } => *value = level(vary(*value)),
+        Gene::Trait {
+            which,
+            ref mut value,
+        } => {
+            let (low, high) = physiology.traits.range(which);
+            *value = change(*value, Some(which)).clamp(low, high);
+        }
+        Gene::BrainParam {
+            param,
+            ref mut value,
+        } => {
+            let (low, high) = physiology.brain.of(param).range;
+            let varied = vary(*value).clamp(low, high);
+            *value = if param.is_whole() {
+                varied.round()
+            } else {
+                varied
+            };
+        }
+        Gene::Instinct { ref mut weight, .. } | Gene::AttentionInstinct { ref mut weight, .. } => {
+            *weight = vary(*weight)
+        }
+        Gene::Unknown { .. } | Gene::Unmatched(_) => {}
+    }
+    gene
 }
 
 #[cfg(test)]

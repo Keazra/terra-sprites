@@ -139,7 +139,7 @@ A living creature of the terrarium, with a genome, a body and a brain. Sprites d
 _Avoid_: agent, critter, pet
 
 **Genome**:
-A sprite's ordered list of genes, fixed for its whole life. It decides how the body feels, never what happens to it. Its genes' health can fall as it ages, but the genome itself, which its eggs get, doesn't change.
+A sprite's ordered list of genes, fixed for its whole life. It decides how the body feels, never what happens to it. Its genes' health can fall as it ages, but the genome itself doesn't change. Its eggs get it mixed in stretches with their father's, now and then with a copying error.
 _Avoid_: DNA
 
 **Gene**:
@@ -154,11 +154,31 @@ _Avoid_: label
 The genome in the data pack that sprites are made from when they have no parents.
 
 **Gene value**:
-A number in a gene that variation may change, such as a strength or a threshold. The rest of a gene, such as which chemical it touches, never varies.
+A number in a gene that spawn variation or a copying error may change, such as a strength or a threshold. The rest of a gene, such as which chemical it touches, never varies.
 
 **Spawn variation**:
 The small random change to the gene values of a sprite made from the starter genome, larger for `grows_old` so that lives differ.
-_Avoid_: mutation (that comes with inheritance)
+_Avoid_: mutation, copying error (that's an egg's)
+
+**Copying error** (M2):
+A gene value changed as an egg's genes are copied: rare, and usually large, from half to double. It never changes what a gene does, so a flagged gene stays flagged. The egg remembers what the gene was.
+_Avoid_: mutation in what the player reads (the data's `mutation` section and the code may say it), typo
+
+**Stretch** (M2):
+A run of neighbouring genes a pair's egg takes from one parent before it switches to the other, about every 10 genes, as chromosomes cross over. The parents' genes line up by what each does, not where it sits.
+_Avoid_: block, chunk, crossover alone (that's the chance of a switch)
+
+**Flaw** (M2):
+A hidden fault in one of the two copies of a gene, one from each parent. One sound copy is enough, so a flaw shows only in a broken gene. It arises now and then in copying, and the world's first sprites carry a few. Only a gene that can weaken, and isn't flagged, has copies to flaw.
+_Avoid_: defect, recessive, bad allele
+
+**Carrier** (M2):
+A sprite with a flaw in one copy of a gene. It shows nothing, but passes the flaw to about half its young.
+_Avoid_: heterozygote
+
+**Broken gene** (M2):
+A gene with both copies flawed: born at half health, it works at half strength, and it brings old age sooner and speeds decay as wear does. A lone egg breaks each flaw its mother carries about half the time, and close kin share flaws.
+_Avoid_: dead gene, failed gene, knockout
 
 **Flagged gene**:
 A gene that would change the body directly, which no gene may do. It stays in the genome but has no effect.
@@ -252,8 +272,8 @@ The age at which a sprite becomes old: its `grows_old` trait, brought sooner by 
 _Avoid_: lifespan (the M1 word for it), dies of old age (that comes later)
 
 **Gene health** (M2):
-How whole one of a sprite's genes is, from 1 down to 0. It only falls, and the gene works in proportion to it. Not inherited. A sprite has no health of its own: how hurt it is, is its injury.
-_Avoid_: gene damage (that's what lowers it), mutation (that's inherited, from Slice 24), gene quality (Slice 24)
+How whole one of a sprite's genes is, from 1 down to 0. It only falls, and the gene works in proportion to it. Not inherited, though a broken gene is born at half. A sprite has no health of its own: how hurt it is, is its injury.
+_Avoid_: gene damage (that's what lowers it), copying error (that's inherited), gene quality (that's its flaws)
 
 **Decay** (M2):
 Old age's harm to the genome: once a sprite is old, its repair stops keeping up, and damage lands on random genes, lowering their health. An instinct takes half.
@@ -312,7 +332,7 @@ The action of breeding with a partner beside it. It works only between two ferti
 _Avoid_: courtship (nothing comes before it yet), copulate
 
 **Breed alone** (M2):
-The action of a female laying an egg with no partner, its genes a copy of hers, its whole cost hers. Offered only to a grown sprite.
+The action of a female laying an egg with no partner, its genes hers with one of her two copies of each doubled, its whole cost hers. Offered only to a grown sprite.
 _Avoid_: parthenogenesis in what the player reads, cloning, self-mating
 
 **Most sprites** (M2):

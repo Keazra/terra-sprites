@@ -20,6 +20,7 @@ use crate::events::{DeathCause, Emptied, Event, EventKind};
 use crate::expression::{Expression, expressions};
 use crate::generate::{generate, place_objects, place_sprites};
 use crate::genome::{GeneView, Genome};
+use crate::inheritance;
 use crate::learning::{self, Subject};
 use crate::map::{Dir, Map, MapError, Pos};
 use crate::objects::{EntityId, Object, Objects};
@@ -492,6 +493,27 @@ impl<'a> SpriteView<'a> {
     /// 0 (M2 design §9.4).
     pub fn gene_health(&self) -> &'a [f32] {
         &self.sprite.health
+    }
+
+    /// How many of its two copies of each gene carry a hidden flaw, from 0
+    /// to 2, in genome order (M2 design §12). With one it carries the flaw
+    /// unharmed; with both, the gene is broken.
+    pub fn flaws(&self) -> Vec<u8> {
+        (0..self.sprite.genome.genes.len())
+            .map(|index| inheritance::flaws_of(&self.sprite.flaws, index))
+            .collect()
+    }
+
+    /// The genes copying changed as it was laid (M2 design §12), in genome
+    /// order: each one's place in its genome, and what it was as the egg
+    /// inherited it. None for a sprite with no parents.
+    pub fn copying_errors(&self) -> Vec<(usize, GeneView<'a>)> {
+        let data = &self.world.data;
+        self.sprite
+            .copying_errors
+            .iter()
+            .map(|error| (error.gene, error.was.view(data)))
+            .collect()
     }
 
     /// Every chemical in the sprite, in the data pack's order. The breeding
@@ -1233,6 +1255,7 @@ impl World {
                     steps: sprite.did.steps,
                     resting: sprite.did.rested,
                     stage: sprite.stage(),
+                    sooner: sprite.sooner(data),
                     fertile: breeding::fertile(state, sprite, data),
                     female: sprite.sex == Sex::Female,
                     female_near: near(&females),
@@ -1364,10 +1387,12 @@ mod tests {
     use crate::action::{Action, Outcome, Walk};
     use crate::brain::Brain;
     use crate::cursor::Grip;
+    use crate::genome::Gene;
     use crate::learning::{Signals, Touch, TraceEntry, TypeMemory};
     use crate::map::Dir;
+    use crate::mutation::CopyingError;
     use crate::objects::Roll;
-    use crate::registry::Verb;
+    use crate::registry::{ChemId, Verb};
 
     /// A 7×5 field of grass, with a pool of shallow water at (5, 3), and a
     /// berry bush at (2, 2), before any step.
@@ -1390,7 +1415,7 @@ mod tests {
     /// next tick (design §2.8).
     #[test]
     fn a_save_that_doesnt_fit_its_pack_is_refused() {
-        let damage: [fn(&mut WorldState, &DataPack); 9] = [
+        let damage: [fn(&mut WorldState, &DataPack); 10] = [
             |state, _| {
                 let id = state.objects.at(Pos { x: 2, y: 2 }).expect("the bush");
                 state.objects.get_mut(id).expect("the bush").kind = 127;
@@ -1419,6 +1444,26 @@ mod tests {
             |state, _| {
                 let trace = &mut the_sprite(state).brain.trace;
                 trace.back_mut().expect("a trace entry").motive = Some(999);
+            },
+            // A gene copying changed that was of a chemical the pack
+            // doesn't have, which the Genome tab would name.
+            |state, _| {
+                let sprite = the_sprite(state);
+                let (gene, ticks) = sprite
+                    .genome
+                    .genes
+                    .iter()
+                    .enumerate()
+                    .find_map(|(index, gene)| match *gene {
+                        Gene::HalfLife { ticks, .. } => Some((index, ticks)),
+                        _ => None,
+                    })
+                    .expect("a half-life gene");
+                let was = Gene::HalfLife {
+                    chem: ChemId(999),
+                    ticks: ticks * 2,
+                };
+                sprite.copying_errors = vec![CopyingError { gene, was }];
             },
             // A sprite born, or a trace entry made, after the save.
             |state, _| {
@@ -1614,6 +1659,71 @@ mod tests {
         world.step();
         world.state.sprites.remove(first);
         assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_sprite_s_age_sensor_reaches_1_as_broken_genes_bring_its_old_age_sooner() {
+        // M2 design §9.3, §12.4: the sensor and the life stage agree on
+        // when it grows old.
+        let (mut world, first, _) = field_with_sprites();
+        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        sprite.flaws = vec![2; sprite.genome.genes.len()];
+        world.step();
+        let view = world.sprite(first).expect("a sprite");
+        assert!(view.grows_old_at() < view.traits().grows_old * 0.7);
+        let sprite = world.state.sprites.get(first).expect("a sprite");
+        let age = sprite.body.loci[world.data.physiology().indices.age];
+        let ticks = age * view.grows_old_at();
+        let expected = sprite.age(world.state.tick) as f32;
+        assert!(
+            (ticks - expected).abs() <= 2.0,
+            "{ticks} ticks, not {expected}"
+        );
+    }
+
+    #[test]
+    fn a_copying_error_in_a_gene_the_genome_lacks_breaks_an_invariant() {
+        let (mut world, first, _) = field_with_sprites();
+        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        let gene = sprite.genome.genes.len() - 1;
+        let was = sprite.genome.genes[gene].clone();
+        sprite.copying_errors = vec![CopyingError { gene, was }];
+        assert_eq!(world.check_invariants(), Ok(()), "its last gene");
+        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        sprite.copying_errors[0].gene += 1;
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn a_copying_error_that_changed_what_a_gene_does_breaks_an_invariant() {
+        // M2 design §12.1: copying changes only a gene's values.
+        let (mut world, first, _) = field_with_sprites();
+        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        let gene = sprite.genome.genes.len() - 1;
+        let was = sprite.genome.genes[gene].clone();
+        let other = sprite
+            .genome
+            .genes
+            .iter()
+            .find(|other| std::mem::discriminant(*other) != std::mem::discriminant(&was))
+            .expect("a gene of another kind")
+            .clone();
+        sprite.copying_errors = vec![CopyingError { gene, was: other }];
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn more_than_two_flawed_copies_of_a_gene_or_flaws_of_genes_it_lacks_break_an_invariant() {
+        let (mut world, first, _) = field_with_sprites();
+        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        sprite.flaws = vec![1, 2];
+        assert_eq!(world.check_invariants(), Ok(()), "two at most");
+        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        sprite.flaws = vec![3];
+        assert!(world.check_invariants().is_err());
+        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        sprite.flaws = vec![0; sprite.genome.genes.len() + 1];
+        assert!(world.check_invariants().is_err(), "a gene too many");
     }
 
     #[test]

@@ -12,7 +12,9 @@ use crate::brain::Brain;
 use crate::breeding::Sex;
 use crate::data::DataPack;
 use crate::genome::{Gene, Genome};
+use crate::inheritance::{Parent, flaws_of};
 use crate::map::{Dir, Map, Pos};
+use crate::mutation::{Copied, CopyingError};
 use crate::objects::{EntityId, Objects};
 use crate::occupancy::Occupancy;
 use crate::perception::{Flood, Target};
@@ -20,6 +22,7 @@ use crate::physiology::RememberedPlaces;
 use crate::random::{chance, uniform};
 use crate::registry::{Trait, Verb};
 use crate::sliding::Slide;
+use crate::variation::each_value;
 
 /// One sprite.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,6 +63,15 @@ pub(crate) struct Sprite {
     /// in a save from before ageing, until it's loaded.
     #[serde(default)]
     pub(crate) health: Vec<f32>,
+    /// How many of its two copies of each gene are flawed, from 0 to 2, in
+    /// genome order (M2 design §12): with both, the gene is broken. Empty
+    /// when none are, as in a sprite from before flaws.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) flaws: Vec<u8>,
+    /// The genes copying changed as it was laid (M2 design §12), with what
+    /// each was as it inherited it. Empty for a sprite with no parents.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) copying_errors: Vec<CopyingError>,
     pub(crate) body: Body,
     pub(crate) brain: Brain,
     /// What it's doing, or the action that last ended until the next starts.
@@ -113,10 +125,31 @@ impl Sprite {
         traits.speed * growing
     }
 
-    /// The share of the age its genes say that a hard life has brought its
-    /// old age sooner by (M2 design §9.4).
+    /// Its genes as an egg inherits them (M2 design §12).
+    pub(crate) fn as_parent(&self) -> Parent<'_> {
+        Parent {
+            genome: &self.genome,
+            flaws: &self.flaws,
+        }
+    }
+
+    /// How many of its genes are broken (M2 design §12): both copies flawed.
+    pub(crate) fn broken(&self) -> usize {
+        self.flaws.iter().filter(|&&flawed| flawed >= 2).count()
+    }
+
+    /// The wear that brings its old age sooner and speeds the decay of its
+    /// genes (M2 design §9.4): what a hard life left on its body, and
+    /// `flaws.wear` for each broken gene (§12), at most 1.
+    pub(crate) fn worn(&self, data: &DataPack) -> f32 {
+        let broken = self.broken() as f32 * data.physiology().flaws.wear;
+        (self.body.wear + broken).min(1.0)
+    }
+
+    /// The share of the age its genes say that a hard life and broken genes
+    /// have brought its old age sooner by (M2 design §9.4, §12).
     pub(crate) fn sooner(&self, data: &DataPack) -> f32 {
-        data.physiology().ageing.sooner * self.body.wear
+        data.physiology().ageing.sooner * self.worn(data)
     }
 
     /// Expresses its genes afresh, for its life stage and as weakened as
@@ -169,7 +202,7 @@ impl Sprite {
             // the whole hits land, and the odds are of one more.
             let n = n as f32;
             let needed = (1.0 - decay.gives_out) * n * n / (decay.hit * frailty_sum);
-            let pace = 1.0 + (ageing.wear_speedup - 1.0) * self.body.wear;
+            let pace = 1.0 + (ageing.wear_speedup - 1.0) * self.worn(data);
             let per_tick = pace * needed / decay.ticks as f32;
             let whole = libm::floorf(per_tick);
             whole as usize + usize::from(chance(rng, per_tick - whole))
@@ -303,20 +336,37 @@ impl Sprite {
         Sprite::aged(genome, pos, born, 0, data)
     }
 
-    /// An egg with `genome` on `pos`, laid on the tick `laid` by `parents`
+    /// An egg with `genes` on `pos`, laid on the tick `laid` by `parents`
     /// (M2 design §10): it hatches `breeding.hatches` ticks later, with a
-    /// newborn's body (design §4.7).
+    /// newborn's body (design §4.7). A broken gene is born with
+    /// `flaws.health` (§12).
     pub(crate) fn egg(
-        genome: Genome,
+        genes: Copied,
         pos: Pos,
         laid: u64,
         parents: Vec<EntityId>,
         data: &DataPack,
     ) -> Sprite {
+        let Copied {
+            genome,
+            flaws,
+            errors,
+        } = genes;
         let mut egg = Sprite::newborn(genome, pos, laid, data);
         egg.stage = Some(LifeStage::Egg);
         egg.hatches = Some(laid.saturating_add(data.physiology().breeding.hatches));
         egg.parents = parents;
+        egg.copying_errors = errors;
+        egg.flaws = flaws;
+        if egg.broken() > 0 {
+            let born_with = data.physiology().flaws.health;
+            for (index, health) in egg.health.iter_mut().enumerate() {
+                if flaws_of(&egg.flaws, index) >= 2 {
+                    *health = health.min(born_with);
+                }
+            }
+            egg.express(data);
+        }
         egg
     }
 
@@ -358,6 +408,8 @@ impl Sprite {
             program,
             stage: Some(stage),
             health: vec![1.0; genome_len],
+            flaws: Vec::new(),
+            copying_errors: Vec::new(),
             body,
             brain,
             action: None,
@@ -542,8 +594,9 @@ impl Sprites {
     /// the tile index matches where the sprites are, so no two share a tile;
     /// none stands on a solid object; every chemical is within 0 to 1; a
     /// Mate action is only ever an adult's, aimed at an adult (M2 design
-    /// §5); and each remembers no more places than it may, all on the map
-    /// (M2 design §7).
+    /// §5); each remembers no more places than it may, all on the map
+    /// (M2 design §7); and its flaws and copying errors fit its genome, with
+    /// copying having changed only values (M2 design §12).
     pub(crate) fn check(
         &self,
         map: &Map,
@@ -605,6 +658,41 @@ impl Sprites {
             if let Some(health) = sprite.health.iter().find(|h| !(0.0..=1.0).contains(*h)) {
                 return Err(format!(
                     "{id:?} has a gene of health {health}, outside 0 to 1"
+                ));
+            }
+            // Two copies of each gene, either flawed (M2 design §12.3).
+            if sprite.flaws.len() > sprite.genome.genes.len()
+                || sprite.flaws.iter().any(|&flawed| flawed > 2)
+            {
+                return Err(format!(
+                    "{id:?} has the flaws {:?}: at most two a gene, of {} genes",
+                    sprite.flaws,
+                    sprite.genome.genes.len()
+                ));
+            }
+            if let Some(error) = sprite
+                .copying_errors
+                .iter()
+                .find(|error| error.gene >= sprite.genome.genes.len())
+            {
+                return Err(format!(
+                    "{id:?} has a copying error in gene {}, of {} genes",
+                    error.gene,
+                    sprite.genome.genes.len()
+                ));
+            }
+            // Copying changes only a gene's values (M2 design §12.1), so
+            // what a gene was does what it does now, and refers only to
+            // what the pack has.
+            let does = |gene: &Gene| each_value(gene, data, |_, _| 0.0);
+            if let Some(error) = sprite
+                .copying_errors
+                .iter()
+                .find(|error| does(&error.was) != does(&sprite.genome.genes[error.gene]))
+            {
+                return Err(format!(
+                    "{id:?} has a copying error that changed what gene {} does",
+                    error.gene
                 ));
             }
             if sprite.body.chems_before_tick.len() != sprite.body.chems.len() {
@@ -803,6 +891,28 @@ mod tests {
         let mind = 1.0 - mean_health(&easy, |f| f == 0.5);
         assert!(mind < body * 0.75, "the mind lost {mind}, the body {body}");
         assert_eq!(easy.genome, genome);
+    }
+
+    #[test]
+    fn broken_genes_speed_the_decay_as_wear_does() {
+        // M2 design §12.4: each broken gene counts as `flaws.wear` (0.05)
+        // of wear, so twenty make the most worn body, a third of the ticks.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let mut broken = starter(30_000, &data);
+        let frail: Vec<usize> = (0..broken.genome.genes.len())
+            .filter(|&i| frailty(&broken.genome.genes[i]) > 0.0)
+            .collect();
+        broken.flaws = vec![0; broken.genome.genes.len()];
+        for &i in &frail[..20] {
+            broken.flaws[i] = 2;
+        }
+        assert_eq!(broken.body.wear, 0.0);
+        assert_close(broken.worn(&data), 1.0);
+        let ticks = until_it_gives_out(&mut broken, &data, 100_000);
+        assert!(
+            (1_000..1_400).contains(&ticks),
+            "a body with 20 broken genes gave out after {ticks} ticks"
+        );
     }
 
     #[test]

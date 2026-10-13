@@ -3791,3 +3791,100 @@ fn an_egg_is_drawn_as_an_egg_and_the_body_tab_says_when_it_hatches() {
         assert!(screen.contains("parents Sprite #1"), "{screen}");
     }
 }
+
+#[test]
+fn the_genome_tab_of_a_sprite_with_parents_says_first_what_s_new_in_it() {
+    // M2 design §12: a lone egg, every gene value copied wrongly and each
+    // copy of a gene flawed half the time. Its mother, whom the world
+    // began with, has no such list.
+    let physiology = include_str!("../../../data/physiology.ron")
+        .replace("mutation: (chance: 0.01,", "mutation: (chance: 1.0,")
+        .replace("flaws: (arise: 0.007,", "flaws: (arise: 0.5,");
+    let pack =
+        DataPack::from_sources(&builtin_with("physiology.ron", &physiology)).expect("valid pack");
+    let genome = terra_sim::Genome::from_ron(
+        r#"(format: 1, genes: [
+            Trait(trait: "speed", value: 7.0),
+            Trait(trait: "sense_radius", value: 9.0),
+            Emitter(locus: Chem("energy"), mode: Level, invert: true, threshold: 0.5, gain: 0.004, chem: "hunger"),
+            Emitter(locus: Chem("hydration"), mode: Level, invert: true, threshold: 0.5, gain: 0.004, chem: "thirst"),
+            InitialConcentration(chem: "feminiser", value: 1.0),
+            InitialConcentration(chem: "longing", value: 1.0),
+            Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
+        ])"#,
+        &pack,
+    )
+    .expect("a valid genome");
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let sprites = [(Pos { x: 1, y: 4 }, Some(genome))];
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: &[],
+        newborns: &[],
+    };
+    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let egg = (0..50)
+        .flat_map(|_| world.step())
+        .find_map(|event| match event.kind {
+            EventKind::Laid { egg, .. } => Some(egg),
+            _ => None,
+        })
+        .expect("she laid an egg");
+    let mut app = app_for(&world, Theme::cp437(), 100, 40);
+    app.apply(Action::SelectNext, &world);
+    open(&mut app, &world, Tab::Genome);
+    let text = |app: &App| -> Vec<String> {
+        right_part(&render(app, &world, 100, 40), 46)[2..38]
+            .iter()
+            .map(|row| inside(row).to_string())
+            .collect()
+    };
+    assert_eq!(text(&app)[0], "TRAITS", "the mother has no list");
+    while app.selection() != Some(terra_tui::app::Selection::Living(egg)) {
+        app.apply(Action::SelectNext, &world);
+    }
+    let rows = text(&app);
+    assert_eq!(rows[0], "FROM SPRITE #1 ALONE");
+    let view = world.sprite(egg).expect("the egg");
+    let changed = view.copying_errors().len();
+    assert!(changed >= 3, "{changed} genes changed");
+    let list = rows
+        .iter()
+        .position(|row| row.is_empty())
+        .expect("a blank line");
+    assert_eq!(rows[list + 1], "TRAITS");
+    let listed = rows[1..list].join(" ");
+    assert_eq!(listed.matches(", was ").count(), changed, "{listed}");
+    let flaws = view.flaws();
+    // A lone egg's copies are its mother's doubled, but copying flaws each
+    // on its own, so it has broken genes and hidden flaws.
+    let broken = flaws.iter().filter(|&&flawed| flawed == 2).count();
+    let carried = flaws.iter().filter(|&&flawed| flawed == 1).count();
+    assert!(broken > 0 && carried > 0, "{flaws:?}");
+    let after = |label: &str| {
+        listed
+            .split(label)
+            .nth(1)
+            .map(|rest| rest.split(':').next().unwrap_or(rest).to_string())
+            .unwrap_or_default()
+    };
+    assert_eq!(
+        after("broken: ").matches('·').count() + 1,
+        broken,
+        "{listed}"
+    );
+    assert_eq!(
+        after("carries flaws: ").matches('·').count() + 1,
+        carried,
+        "{listed}"
+    );
+    for name in ["speed", "low energy → hunger", "always → breed_alone"] {
+        assert!(listed.contains(name), "{name:?} in {listed:?}");
+    }
+    // Each broken gene shows its health where it sits, as one old age
+    // weakened does.
+    let genes = rows[list + 1..].join(" ");
+    assert_eq!(genes.matches("health .5").count(), broken, "{genes}");
+}

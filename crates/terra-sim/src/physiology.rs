@@ -28,6 +28,11 @@ pub(crate) struct Physiology {
     pub(crate) ageing: Ageing,
     /// How sprites have young (M2 design §10).
     pub(crate) breeding: Breeding,
+    /// The copying errors in an egg's genes (M2 design §12).
+    pub(crate) mutation: Mutation,
+    /// The hidden flaws genes carry, and what a broken gene does (M2 design
+    /// §12).
+    pub(crate) flaws: Flaws,
     /// What each cause-of-death tally is multiplied by every tick: the file's
     /// `cause_fade` is how many ticks it takes to halve.
     pub(crate) tally_fade: f32,
@@ -79,6 +84,13 @@ pub(crate) struct PhysiologyEntry {
     /// §2.8).
     #[serde(default)]
     breeding: Breeding,
+    /// A pack from before copying errors has none (design §2.8: a save
+    /// carries its own pack, and keeps its rules).
+    #[serde(default)]
+    mutation: Mutation,
+    /// A pack from before hidden flaws has none (design §2.8).
+    #[serde(default)]
+    flaws: Flaws,
     cause_fade: u32,
     traits: TraitRanges,
     brain: BTreeMap<String, ParamRange>,
@@ -431,6 +443,19 @@ pub(crate) struct Breeding {
     /// The need that drives breeding, one of `brain_io.ron`'s: the engine
     /// has it work only between adults (M2 design §5).
     pub(crate) drive: String,
+    /// The chance, at each gene, that a pair's egg switches to taking its
+    /// genes from the other parent (M2 design §12), so that neighbouring
+    /// genes come from one parent in stretches, as chromosomes cross over.
+    /// A pack from before took each gene from either parent, as a coin
+    /// toss: a chance of a half.
+    #[serde(default = "gene_by_gene")]
+    pub(crate) crossover: f32,
+}
+
+/// The `crossover` of a pack from before stretches: each gene from either
+/// parent, as a coin toss.
+fn gene_by_gene() -> f32 {
+    0.5
 }
 
 /// What a saved world's pack from before breeding gets: the built-in
@@ -445,6 +470,78 @@ impl Default for Breeding {
             turns_female: 0.8,
             breeds_alone: 0.5,
             drive: "arousal".into(),
+            crossover: 0.1,
+        }
+    }
+}
+
+/// The copying errors in an egg's genes (M2 design §12): now and then a
+/// gene value changes, mostly by a lot.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Mutation {
+    /// The chance that a gene value changes in an egg.
+    pub(crate) chance: f32,
+    /// How far a small change goes: the value is multiplied by a factor
+    /// drawn evenly within this share of 1.
+    pub(crate) small: f32,
+    /// The changes that are large instead.
+    pub(crate) large: Large,
+}
+
+/// Hidden flaws in genes (M2 design §12). A sprite has two copies of each
+/// gene that can weaken, one from each parent, and either may carry a flaw.
+/// One sound copy is enough; with both flawed, the gene is broken.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Flaws {
+    /// The chance that a sound copy of a gene gets a flaw as an egg's genes
+    /// are copied.
+    pub(crate) arise: f32,
+    /// The chance that a sprite made from the starter genome carries a flaw
+    /// in one copy of a gene, as wild animals do.
+    pub(crate) founders: f32,
+    /// The health a broken gene is born with (M2 design §9.4).
+    pub(crate) health: f32,
+    /// The wear each broken gene counts as (M2 design §9.4), bringing old
+    /// age sooner and speeding its decay.
+    pub(crate) wear: f32,
+}
+
+/// What a pack from before hidden flaws gets: none.
+impl Default for Flaws {
+    fn default() -> Flaws {
+        Flaws {
+            arise: 0.0,
+            founders: 0.0,
+            health: 1.0,
+            wear: 0.0,
+        }
+    }
+}
+
+/// The large copying errors (M2 design §12).
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Large {
+    /// The share of changes that are large.
+    pub(crate) share: f32,
+    /// How far a large change goes: the value is multiplied by a factor
+    /// from 1 / `most` to `most`, as likely to halve as to double.
+    pub(crate) most: f32,
+}
+
+/// What a pack from before copying errors gets: none, so its eggs are
+/// copied exactly, as they were.
+impl Default for Mutation {
+    fn default() -> Mutation {
+        Mutation {
+            chance: 0.0,
+            small: 0.0,
+            large: Large {
+                share: 0.0,
+                most: 1.0,
+            },
         }
     }
 }
@@ -581,6 +678,32 @@ impl PhysiologyEntry {
         // tick (M2 design §10).
         if breeding.rest == 0 {
             return Err("`breeding.rest` must be at least 1 tick".into());
+        }
+        fraction("breeding.crossover", breeding.crossover)?;
+        let mutation = self.mutation;
+        fraction("mutation.chance", mutation.chance)?;
+        fraction("mutation.large.share", mutation.large.share)?;
+        if !(0.0..1.0).contains(&mutation.small) {
+            return Err(format!(
+                "`mutation.small` is {}, but must be at least 0 and below 1",
+                mutation.small
+            ));
+        }
+        if !(mutation.large.most.is_finite() && mutation.large.most >= 1.0) {
+            return Err(format!(
+                "`mutation.large.most` is {}, but must be a number, at least 1",
+                mutation.large.most
+            ));
+        }
+        let flaws = self.flaws;
+        fraction("flaws.arise", flaws.arise)?;
+        fraction("flaws.founders", flaws.founders)?;
+        fraction("flaws.health", flaws.health)?;
+        if !(flaws.wear.is_finite() && flaws.wear >= 0.0) {
+            return Err(format!(
+                "`flaws.wear` is {}, but must be a number, and can't be negative",
+                flaws.wear
+            ));
         }
         if self.cause_fade == 0 {
             return Err("`cause_fade` must be at least 1 tick".into());
@@ -731,6 +854,8 @@ impl PhysiologyEntry {
             injury,
             ageing,
             breeding: self.breeding,
+            mutation,
+            flaws,
             tally_fade: halving_factor(self.cause_fade as f32),
             traits,
             brain: BrainRanges(brain),
@@ -972,6 +1097,7 @@ impl Indices {
 mod tests {
     use super::*;
     use crate::data::DataPack;
+    use crate::test_util::builtin_changing;
 
     #[test]
     fn what_a_save_from_before_a_setting_gets_is_what_the_built_in_pack_says() {
@@ -997,5 +1123,31 @@ mod tests {
         assert_eq!(Ageing::default(), physiology.ageing);
         assert_eq!(Breeding::default(), physiology.breeding);
         assert_eq!(grows_up_range(), physiology.traits.grows_up);
+    }
+
+    #[test]
+    fn a_pack_from_before_genes_mixed_in_stretches_mixes_them_gene_by_gene() {
+        // M2 design §12.2: its `breeding` has no `crossover`, and a switch
+        // at every gene with even odds is a coin toss for each, as Slice 23
+        // mixed them. And it has no copying errors or flaws.
+        let data = builtin_changing(
+            "physiology.ron",
+            &[
+                ("crossover: 0.1,", ""),
+                (
+                    "mutation: (chance: 0.01, small: 0.2, large: (share: 0.75, most: 2.0)),",
+                    "",
+                ),
+                (
+                    "flaws: (arise: 0.007, founders: 0.06, health: 0.5, wear: 0.05),",
+                    "",
+                ),
+            ],
+        );
+        let physiology = data.physiology();
+        assert_eq!(physiology.breeding.crossover, 0.5);
+        assert_eq!(physiology.mutation.chance, 0.0);
+        assert_eq!(physiology.flaws.arise, 0.0);
+        assert_eq!(physiology.flaws.founders, 0.0);
     }
 }

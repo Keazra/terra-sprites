@@ -4,12 +4,15 @@
 //! turns female; and births are world state, saved, hashed and replayed.
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_changing_files, close, endings, genome};
+use common::{
+    ALONE, FEMALE, KEEN, Laying, NO_COPYING_ERRORS, WorldBuilder, at, builtin, builtin_changing,
+    builtin_changing_files, close, endings, family, family_in, genome, laid, until,
+};
 
 use proptest::prelude::*;
 use terra_sim::{
-    Command, DataPack, EntityId, Event, EventKind, LifeStage, Outcome, Part, Playback, Pos,
-    Rejection, Sex, Target, Thing, Verb, World,
+    Command, DataPack, EntityId, EventKind, LifeStage, Outcome, Part, Playback, Pos, Rejection,
+    Sex, Target, Thing, Verb, World,
 };
 
 /// A small field of grass with a sprite of `genes` on each tile of
@@ -32,12 +35,6 @@ fn field_in(data: DataPack, genes: &str, sprites: &[Pos], young: &[Pos], seed: u
         .seed(seed)
         .build()
 }
-
-/// An instinct to mate with whatever sprite it sees, and nothing else.
-const KEEN: &str = r#"
-    AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
-    Instinct(inputs: [("always", false), ("attended_sprite", false)], verb: Mate, weight: 1.0),
-"#;
 
 /// A Mate action as it started: the life stage of the sprite mating, and
 /// of the sprite it's aimed at, or `None` if it's aimed at no sprite.
@@ -106,15 +103,6 @@ fn an_adult_never_mates_with_a_young_sprite_nor_a_young_one_at_all() {
     assert_eq!(matings(&mut world, 200), []);
 }
 
-/// A body that turns female at once, as an adult (M2 design §10).
-const FEMALE: &str = r#"InitialConcentration(chem: "feminiser", value: 1.0),"#;
-
-/// An instinct to breed alone whenever it can, and the longing it takes.
-const ALONE: &str = r#"
-    Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
-    InitialConcentration(chem: "longing", value: 1.0),
-"#;
-
 /// An instinct to rest, so the sprites watched don't come to blows.
 const REST: &str = r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),"#;
 
@@ -125,62 +113,6 @@ const TURNING: &str = r#"
     Emitter(locus: Locus("female_near"), mode: Level, invert: true, threshold: 0.5, gain: 0.003, chem: "feminiser", from: Adult),
     HalfLife(chem: "feminiser", ticks: 600),
 "#;
-
-/// A small field of grass with a sprite of its own genes on each tile, the
-/// ones on `young` as newborns and the rest just grown up.
-fn family(sprites: &[(Pos, &str)], young: &[Pos], seed: u64) -> World {
-    family_in(builtin(), sprites, young, seed)
-}
-
-/// The same, with `data`.
-fn family_in(data: DataPack, sprites: &[(Pos, &str)], young: &[Pos], seed: u64) -> World {
-    let placed = sprites
-        .iter()
-        .map(|&(pos, genes)| (pos, Some(genome(genes, &data))))
-        .collect();
-    WorldBuilder::new(&["........", "........", "........", "........"])
-        .data(data)
-        .sprites_with(placed)
-        .newborns(young)
-        .seed(seed)
-        .build()
-}
-
-/// Steps `world` until `found` picks something out of a tick's events, or
-/// `ticks` ticks have passed.
-fn until<T>(
-    world: &mut World,
-    ticks: u64,
-    mut found: impl FnMut(&Event) -> Option<T>,
-) -> Option<T> {
-    for _ in 0..ticks {
-        if let Some(found) = world.step().iter().find_map(&mut found) {
-            return Some(found);
-        }
-    }
-    None
-}
-
-/// An egg laid: the egg, who laid it, with whom, and on which tick.
-struct Laying {
-    egg: EntityId,
-    by: EntityId,
-    with: Option<EntityId>,
-    tick: u64,
-}
-
-/// Steps `world` until an egg is laid.
-fn laid(world: &mut World, ticks: u64) -> Option<Laying> {
-    until(world, ticks, |event| match event.kind {
-        EventKind::Laid { egg, by, with } => Some(Laying {
-            egg,
-            by,
-            with,
-            tick: event.tick,
-        }),
-        _ => None,
-    })
-}
 
 /// A sprite's energy.
 fn energy(world: &World, id: EntityId) -> f32 {
@@ -255,7 +187,9 @@ fn two_males_or_two_females_lay_nothing_together() {
 #[test]
 fn a_female_breeds_alone_and_pays_it_all_but_a_male_cannot() {
     let female = format!("{ALONE}{FEMALE}");
-    let mut world = family(&[(at(2, 1), &female), (at(5, 2), ALONE)], &[], 1);
+    // Without copying errors (M2 design §12), the egg's genes are hers.
+    let exact = builtin_changing("physiology.ron", &NO_COPYING_ERRORS);
+    let mut world = family_in(exact, &[(at(2, 1), &female), (at(5, 2), ALONE)], &[], 1);
     let (mother, male) = (
         world.sprite_at(at(2, 1)).unwrap().id(),
         world.sprite_at(at(5, 2)).unwrap().id(),

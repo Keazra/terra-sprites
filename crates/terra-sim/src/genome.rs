@@ -290,6 +290,12 @@ impl Genome {
         switched && self.genes.iter().all(|gene| gene.check(data).is_ok())
     }
 
+    /// Every gene in the genome, in order, with what it refers to named from
+    /// `data`, the pack it was read with.
+    pub fn genes<'a>(&'a self, data: &'a DataPack) -> Vec<GeneView<'a>> {
+        self.genes.iter().map(|gene| gene.view(data)).collect()
+    }
+
     /// The genome as a genome file: genes this build knows by name, the rest by number.
     pub fn to_ron(&self, data: &DataPack) -> String {
         let format = if self.switches.is_empty() { 1 } else { FORMAT };
