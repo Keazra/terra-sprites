@@ -223,10 +223,18 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
                 let emote = app
                     .emote(sprite.id())
                     .filter(|_| app.can_view(Panel::Emotes, Subject::Sprite(sprite.id())));
+                // The young are drawn small (M2 design §9.6), and eggs as
+                // eggs (§10).
+                let stage = sprite.life_stage();
                 let selected = app.selection() == Some(Selection::Living(sprite.id()));
-                let tile = match emote {
-                    Some(emote) => SemanticTile::Emote(emote),
-                    None => sprite_tile(sprite.life_stage(), selected),
+                let tile = match (emote, selected, stage) {
+                    (Some(emote), _, _) => SemanticTile::Emote(emote),
+                    (None, true, LifeStage::Egg) => SemanticTile::SelectedEgg,
+                    (None, false, LifeStage::Egg) => SemanticTile::Egg,
+                    (None, true, LifeStage::Young) => SemanticTile::SelectedYoungSprite,
+                    (None, false, LifeStage::Young) => SemanticTile::YoungSprite,
+                    (None, true, _) => SemanticTile::SelectedSprite,
+                    (None, false, _) => SemanticTile::Sprite,
                 };
                 app.theme.glyph(tile)
             } else if let Some((_, (name, state))) = thrown.filter(|&(from, _)| from == pos) {
@@ -599,28 +607,10 @@ fn held_glyph(app: &App, world: &World) -> char {
         Some(Grip::Holds(id)) => {
             item_look(world, id).map(|(name, state)| theme.object_glyph(name, state))
         }
-        // A led sprite as the map draws it, an egg as an egg (M2 design
-        // §10.4).
-        Some(Grip::Leads(id)) => {
-            let stage = world.sprite(id).map(|sprite| sprite.life_stage());
-            Some(theme.glyph(stage.map_or(SemanticTile::Sprite, |s| sprite_tile(s, false))))
-        }
+        Some(Grip::Leads(_)) => Some(theme.glyph(SemanticTile::Sprite)),
         None => None,
     };
     glyph.map_or('?', |glyph| glyph.symbol)
-}
-
-/// How a sprite in `stage` is drawn, `selected` or not: the young small (M2
-/// design §9.6), and eggs as eggs (§10.7).
-fn sprite_tile(stage: LifeStage, selected: bool) -> SemanticTile {
-    match (selected, stage) {
-        (true, LifeStage::Egg) => SemanticTile::SelectedEgg,
-        (false, LifeStage::Egg) => SemanticTile::Egg,
-        (true, LifeStage::Young) => SemanticTile::SelectedYoungSprite,
-        (false, LifeStage::Young) => SemanticTile::YoungSprite,
-        (true, _) => SemanticTile::SelectedSprite,
-        (false, _) => SemanticTile::Sprite,
-    }
 }
 
 /// The type and visual state of the item `id`, held by the Cursor or, while

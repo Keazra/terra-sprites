@@ -1892,7 +1892,7 @@ impl App {
         world: &World,
         refused: Refused,
     ) -> bool {
-        let command = match (self.grab_target(sprite), world.object_at(tile)) {
+        let command = match (self.followed().or(sprite), world.object_at(tile)) {
             (Some(sprite), _) => {
                 // Taking hold puts the Cursor, as the world knows it, on the
                 // sprite.
@@ -1915,13 +1915,6 @@ impl App {
         true
     }
 
-    /// The sprite a grab with the Cursor empty takes hold of, with `sprite`
-    /// under the pointer: the followed sprite, or else that one (design v23
-    /// §6.5).
-    fn grab_target(&self, sprite: Option<EntityId>) -> Option<EntityId> {
-        self.followed().or(sprite)
-    }
-
     /// Sends a Grab-mode command, queued, so the marks and the next click
     /// follow it (design v23 §6.5).
     fn send(&mut self, command: Command, world: &World) {
@@ -1936,23 +1929,10 @@ impl App {
     /// from the Cursor to the pointer. With the Cursor empty, it grabs what's
     /// there first, as a left click would. Aiming already, it sends the aim,
     /// as `E` pressed again does in a terminal that doesn't report a key let
-    /// go. An egg, led or about to be grabbed, is never shoved, so it aims
-    /// nothing and grabs nothing (M2 design §10.4).
+    /// go.
     fn aim_click(&mut self, tile: Pos, sprite: Option<EntityId>, world: &World) {
         if self.aim.is_some() {
             self.send_aimed(world);
-            return;
-        }
-        let shoved = match self.grip(world) {
-            Some(Grip::Leads(id)) => Some(id),
-            Some(Grip::Holds(_)) => None,
-            None => self.grab_target(sprite),
-        };
-        let shoving_an_egg = shoved
-            .and_then(|id| world.sprite(id))
-            .is_some_and(|sprite| sprite.is_egg());
-        if shoving_an_egg {
-            self.refuse("Can't shove an egg".into());
             return;
         }
         if self.grip(world).is_none() && !self.grab(tile, sprite, world, TO_SEND) {

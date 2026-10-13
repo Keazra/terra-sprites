@@ -37,8 +37,7 @@ pub enum Command {
     /// touch window, whatever the speed, so a late shock can't land on the
     /// wrong thing (design v21 §5.6).
     Correct { sprite: EntityId, amplified: bool },
-    /// Takes hold of a sprite, which the Cursor then leads (design v23 §6.5),
-    /// an egg too (M2 design §10.4).
+    /// Takes hold of a sprite, which the Cursor then leads (design v23 §6.5).
     TakeHold { sprite: EntityId },
     /// Picks up an item, which the Cursor then holds, off the map (design
     /// v23 §6.5).
@@ -58,8 +57,7 @@ pub enum Command {
     /// `from`, where aiming began, rolling `tiles` tiles `toward`.
     Throw { from: Pos, toward: Dir, tiles: u16 },
     /// Shoves the sprite the Cursor leads (design v25 §3.5.4): lets go of
-    /// it, and it slides `tiles` tiles `toward`. Never an egg (M2 design
-    /// §10.4).
+    /// it, and it slides `tiles` tiles `toward`.
     Shove { toward: Dir, tiles: u16 },
     /// Places a new object of the type with this stable ID on a tile, from
     /// the Place menu (design v28 §2.5). It starts at the beginning of its first
@@ -166,8 +164,8 @@ impl CursorTouch {
 pub enum Rejection {
     /// The sprite isn't in the world: it never was, or it has died.
     Gone,
-    /// The sprite is still an egg, which feels nothing and is never
-    /// shoved (M2 design §10.4).
+    /// The sprite is still an egg, which feels nothing and the Cursor
+    /// can't move yet (M2 design §10).
     Egg,
     /// The Cursor already has hold of something (design v23 §6.5).
     Busy(Grip),
@@ -333,8 +331,8 @@ fn correct(
     })
 }
 
-/// The sprite `sprite`, to touch: refused if it's gone, or still an egg
-/// (M2 design §10.4).
+/// The sprite `sprite`, to touch or lead: refused if it's gone, or still
+/// an egg (M2 design §10).
 fn hatched(sprites: &mut Sprites, sprite: EntityId) -> Result<&mut Sprite, Rejection> {
     let sprite = sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
     if sprite.is_egg() {
@@ -344,15 +342,14 @@ fn hatched(sprites: &mut Sprites, sprite: EntityId) -> Result<&mut Sprite, Rejec
 }
 
 /// The Cursor takes hold of `sprite`, and leads it (design v23 §6.5):
-/// whatever it was doing ends, pulled away. An egg is led too (M2 design
-/// §10.4, #190).
+/// whatever it was doing ends, pulled away.
 fn take_hold(
     state: &mut WorldState,
     sprite: EntityId,
     events: &mut Vec<Event>,
 ) -> Result<EventKind, Rejection> {
     state.cursor.free()?;
-    let led = state.sprites.get_mut(sprite).ok_or(Rejection::Gone)?;
+    let led = hatched(&mut state.sprites, sprite)?;
     if let Some(doing) = led.action.as_mut().filter(|a| a.ended.is_none()) {
         action::end(doing, sprite, Outcome::PulledAway, state.tick, events);
     }
@@ -423,8 +420,7 @@ fn throw(
 
 /// The Cursor shoves the sprite it leads (design v25 §3.5.4): lets go of
 /// it, and it slides `tiles` tiles `toward`, from this tick's step 2: at
-/// least 1, and at most the furthest for its size. Sprites are large. An
-/// egg is never shoved (M2 design §10.4, #190).
+/// least 1, and at most the furthest for its size. Sprites are large.
 fn shove(
     state: &mut WorldState,
     data: &DataPack,
@@ -432,9 +428,6 @@ fn shove(
     tiles: u16,
 ) -> Result<EventKind, Rejection> {
     let sprite = state.cursor.leads().ok_or(Rejection::NotLeading)?;
-    if state.is_egg(sprite) {
-        return Err(Rejection::Egg);
-    }
     let left = sent(state, data, Target::Sprite(sprite), tiles);
     state.cursor.release();
     let shoved = state.sprites.get_mut(sprite).expect("the led sprite");
