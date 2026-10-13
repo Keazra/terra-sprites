@@ -978,7 +978,6 @@ impl World {
         let dying = self.run_biochemistry(); // 3
         let still = self.still(&dying);
         self.run_learning(&still, &mut events); // 4
-        let still = self.without_led_egg(still);
         self.sense_and_decide(&still, &mut events); // 5
         self.resolve_actions(&still, &mut events); // 6
         self.finish_tick(&dying, &mut events); // 7
@@ -1258,8 +1257,7 @@ impl World {
 
     /// The sprites that take no part in steps 4 to 6, in ascending ID
     /// order: the `dying` (design §2.4), and eggs, which don't learn, sense
-    /// or act (M2 design §10), but for walking after the Cursor
-    /// (`without_led_egg`).
+    /// or act (M2 design §10).
     fn still(&self, dying: &[EntityId]) -> Vec<EntityId> {
         self.state
             .sprites
@@ -1267,16 +1265,6 @@ impl World {
             .filter(|(id, sprite)| sprite.is_egg() || dying.contains(id))
             .map(|(id, _)| id)
             .collect()
-    }
-
-    /// `still` without the egg the Cursor leads, if it does: it learns
-    /// nothing at step 4, but walks after the Cursor at steps 5 and 6, as a
-    /// led sprite does (M2 design §10.4, #190).
-    fn without_led_egg(&self, mut still: Vec<EntityId>) -> Vec<EntityId> {
-        let led = self.state.cursor.leads();
-        let egg = led.filter(|&id| self.state.is_egg(id));
-        still.retain(|&id| Some(id) != egg);
-        still
     }
 
     /// Step 4: reinforcement from consumed reward and punishment, for every
@@ -2161,59 +2149,6 @@ mod tests {
         let walker = world.state.sprites.get(id).expect("the walker");
         assert_eq!(walker.pos, Pos { x: 1, y: 0 });
         assert_eq!(walker.move_points, 100, "one grass step's worth");
-    }
-
-    /// An egg the Cursor led along a row of grass and let go of just after
-    /// a step, so it lies with that step and its leftover points, a tick
-    /// before it hatches.
-    fn an_egg_let_go_after_a_step() -> (World, EntityId) {
-        let data = DataPack::builtin().expect("built-in data pack is valid");
-        let map = Map::from_ascii(&[".........."], &data).expect("valid drawing");
-        let genes = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
-        let genome = Genome::from_ron(genes, &data).expect("a valid genome");
-        let egg = Sprite::egg(genome, Pos { x: 0, y: 0 }, 0, Vec::new(), &data);
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &[],
-            scripted: &[],
-            newborns: &[],
-        };
-        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
-        let egg = world.state.add_sprite(egg);
-        world.submit(Command::TakeHold { sprite: egg });
-        world.submit(Command::MoveCursor {
-            tile: Pos { x: 9, y: 0 },
-        });
-        let stepped = |world: &World| world.state.sprites.get(egg).expect("the egg").did.steps > 0;
-        for _ in 0..10 {
-            if stepped(&world) {
-                break;
-            }
-            world.step();
-        }
-        assert!(stepped(&world), "the led egg took a step");
-        world.submit(Command::LetGo);
-        world.step();
-        let lying = world.state.sprites.get_mut(egg).expect("the egg");
-        assert!(lying.did.steps > 0 && lying.lead.is_none());
-        lying.hatches = Some(world.state.tick);
-        (world, egg)
-    }
-
-    #[test]
-    fn an_egg_hatches_owing_nothing_for_the_steps_it_was_led() {
-        // M2 design §10.4 (#190): a hatchling has a newborn's body, so it
-        // pays nothing for the walk it was led on as an egg.
-        let (mut led, egg) = an_egg_let_go_after_a_step();
-        let (mut never_walked, _) = an_egg_let_go_after_a_step();
-        let lying = never_walked.state.sprites.get_mut(egg).expect("the egg");
-        lying.did = Default::default();
-        lying.move_points = 0;
-        led.step();
-        never_walked.step();
-        assert!(!led.state.is_egg(egg), "it hatched");
-        assert_eq!(led.state_hash(), never_walked.state_hash());
     }
 
     #[test]
