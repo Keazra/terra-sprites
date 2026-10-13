@@ -710,7 +710,43 @@ Agreed before measuring (Q4). The setup is §12.7's: the default world left alon
 
 `cargo run --release -p terra-sim --example generations -- --ticks 200000` runs the first and third and reports the rest. G4's numbers now line up with the starter's by name, the nth of a name with the starter's nth, so a sprite with a gene doubled or lost still counts.
 
+**Measured (2026-10-13)** in release builds of this part at `d8a33c8`, in the cloud, on seeds 1–10 (A3 on 1–30), with:
+
+```
+cargo run --release -p terra-sim --example generations -- --ticks 200000
+cargo run --release -p terra-sim --example lab -- scenarios/viability.ron --seeds 10
+cargo run --release -p terra-sim --example lab -- scenarios/a3-correct-training.ron --seeds 30
+cargo run --release -p terra-sim --example speed
+```
+
+The default world left alone for 200,000 ticks; the genes are those of the hatched sprites alive at the end. "Carried" is the share with the gene, and "works" the share in which a copy of it is expressed at the sprite's life stage now:
+
+| Seed | Alive at the end (and eggs) | Eggs alone | Generations | New genes carried by a tenth | Of those, working in a tenth | Most widely carried new gene (carried, works) | Starter genes lacked, each | Extra copies, each |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 98 (1) | 105 | 21 | 1 | 0 | was_hit → attends to sprite from Adult (10%, 0%) | 1.15 | 0.18 |
+| 2 | 94 (5) | 479 | 18 | 2 | 1 | female_near → Wander (85%, 85%) | 2.14 | 0.82 |
+| 3 | 98 (2) | 153 | 22 | 3 | 2 | pricked → pain until Old (24%, 20%) | 1.17 | 0.37 |
+| 4 | 97 (3) | 162 | 18 | 1 | 0 | h0's half-life from Old (12%, 0%) | 1.72 | 0.08 |
+| 5 | 99 (1) | 180 | 19 | 0 | 0 | low fertile → arousal from Adult (2%, 2%) | 0.77 | 0.18 |
+| 6 | 97 (2) | 209 | 18 | 1 | 0 | drank → thirst until Adult (25%, 6%) | 1.01 | 0.02 |
+| 7 | 99 (1) | 277 | 18 | 3 | 3 | low hydration → thirst from Adult (42%, 36%) | 0.45 | 0.16 |
+| 8 | 95 (5) | 627 | 18 | 1 | 0 | arousal's half-life from Old (14%, 0%) | 2.05 | 1.15 |
+| 9 | 94 (6) | 293 | 19 | 0 | 0 | plasticity (2%, 1%) | 1.96 | 0.51 |
+| 10 | 97 (3) | 120 | 22 | 1 | 0 | hunger → exploration_mod from Adult until Old (12%, 7%) | 0.31 | 0.10 |
+
+- **New genes take hold: met,** in 8 of 10 seeds. In 5 of those 8, though, the gene that spread works in under a tenth of the living: a copy changed to work only at another life stage, either a spare that the original still overrides, such as a half-life or an attention instinct, or a feeling that works only in the young. A copy that does nothing costs nothing, so it drifts. A new gene that works was carried by a tenth or more in 3 seeds: "always → wander" changed in its place to "a female near → wander", in 85% of the living in seed 2; a second thirst feeling for adults, "low hydration → thirst from Adult", in 42% in seed 7; and "pricked → pain until Old", "low female_near → feminiser", "played_social → boredom from Adult until Old" and "always → approach", each working in 11% to 20%.
+- **Safe: met.** The property tests with random genomes pass: no change makes a gene that worked change the body directly, and no genome grows past twice the starter's length, a pair's child's included. The living's genomes were 63 to 70 genes long.
+- **Keeps going: met.** Sprites are alive at the end in all 10 seeds, 18 to 22 generations deep, and no world went over its limit of 100.
+- **A4: met.** Of 1,032 deaths in ticks 10,000–50,000 of the viability run over all seeds, 3 were of thirst and none of hunger (0.3%, under 25%).
+- **A3: met.** Over seeds 1–30, trained sprites hit a median of once in ticks 10,000–20,000, against 48.5 times untrained, and all of 100 random sets of 10 of those seeds pass.
+- **A5: met,** 207–239 ticks a second with 100 sprites (`speed`, four runs). `main` at `b39b719`, timed alongside, ran 225–238 and this part 208–242, so it costs no speed; the cloud machine was slower than when §12.7 measured 245–260.
+- **A1 and A2: met** (their tests pass).
+- **For information, what copy and change cost.** Against §12.7's run, which had copying errors and flaws but no copy and change: hunger and thirst killed 322 of 6,325 sprites that died after tick 10,000 (5.1%, against 0.6%), and 7% to 16% of them in seeds 3, 6, 8 and 9; 105 to 627 eggs a seed were laid alone (69 to 185), tries to mate that came to nothing rose to 1,984–8,442 a seed (1,169–3,428), and the living had 2.05 to 7.51 broken genes each (0.98 to 2.73). Seeds 8 and 9, run again with the report's list of the starter's genes the living lack, show why: the only starter genes a tenth or more of the living lacked were "always → wander" and "male_near → longing", the gene by which a male near lowers the longing that makes a female breed alone. Each was lacked by every sprite alive at the end in at least one of the two seeds, and the living lacked about two of the starter's genes each. Our reading: without the first, a sprite doesn't roam for food it can't see, and selection was already weakening it (§12.7); copy and change lets it go in one step. Without the second, a female's longing builds with males around, so she breeds alone more often; a lone egg's young have each flaw their mother carries broken in about half of them (§12.3), hence more broken genes.
+- **For information, lives:** the 5,777 hatchlings old age killed lived a median 6.4 hours, a tenth of them under 4.7 and nine tenths under 7.5 (§12.7: 6.7, 4.9 and 7.6). In the second half the median was 5.1 to 7.2 hours a seed.
+- **For information, G4:** 0 of the 83 numbers moved a tenth the same way in all 10 seeds (§12.7: 1, `grows_old`, which now rose in 8, by 33% in the median seed).
+
 ### 13.4 Later
 
 - **The error rate as a gene:** the owner wants it pinned (round 1, Q2); [#194](https://github.com/Keazra/terra-sprites/issues/194).
 - **Born knowing what its ancestors learned:** measured with Slice 27's fast-forward and Slice 29's harsher world (§13.3).
+- **Breeding alone can take over:** in one of seeds 8 and 9 every sprite alive at the end had lost the gene by which a male near lowers a female's longing, and in the other at least a tenth had (§13.3); seed 8 laid four times as many lone eggs as in §12.7's run. Courtship and families, Slice 32 ([#186](https://github.com/Keazra/terra-sprites/issues/186)), should check pairs still pay.
