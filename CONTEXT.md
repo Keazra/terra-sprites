@@ -264,7 +264,7 @@ The physical chemical that measures harm. A sprite dies when its injury reaches 
 _Avoid_: damage, health
 
 **Life stage** (M2):
-Where a sprite is in its life: egg, young, adult or old. Its genes set when it grows up and when it grows old, and some genes switch with it. Code may call it `stage` where only a sprite's is meant.
+Where a sprite is in its life: young, adult or old. Before it hatches it's an egg, which has none. Its genes set when it grows up and when it grows old, and some genes switch with it. Code may call it `stage` where only a sprite's is meant.
 _Avoid_: stage alone in what the player reads (that's an object's), age group
 
 **Grows up** (M2):
@@ -296,11 +296,11 @@ Lasting harm a hard life leaves on a sprite's body, from starving, going without
 _Avoid_: stress (that's what causes it), damage, injury (injury heals)
 
 **Egg** (M2):
-A sprite's first life stage, laid on a free tile beside its mother. It feels, learns, moves and needs nothing, the Cursor can't touch it, and nothing a sprite does to it does anything. It hatches where it lies. Other sprites see it as a thing of its own kind, not as a sprite.
-_Avoid_: unborn sprite, larva
+An item a mother lays on a free tile beside her, holding the sprite it hatches into: its genes, parents and name. It's an object, not a sprite: it feels, learns and needs nothing, and nothing a sprite does to it does anything. The Cursor picks it up and puts it down, but never throws, pets or zaps it. Other sprites see it as a thing of its own kind.
+_Avoid_: unborn sprite, larva, egg stage (an egg was a life stage until #196)
 
 **Hatch** (M2):
-When an egg becomes a young sprite, a set time after it was laid (750 ticks), with a newborn's body. Its age counts from then.
+When an egg becomes a young sprite where it lies, as its type's stage ends (750 ticks after it was laid), with a newborn's body and the egg's ID; the item is gone. Its age counts from then. One that's due waits while the Cursor holds it or a sprite stands on it.
 _Avoid_: born (a hatchling is born as it hatches; the world's first sprites and the Cursor's are born without hatching), spawn (that's the Cursor's)
 
 **Parents** (M2):
