@@ -35,9 +35,10 @@
         // sprite that grows up sooner is a hungrier child.
         growth: 0.3,
         // Energy per tick, all its life, for every 10,000 ticks of
-        // `grows_old`: a later old age costs a little. 0 until genes evolve
-        // (Slice 24): until then it only makes every sprite hungrier, and
-        // even that undid A3's training.
+        // `grows_old`, for a pack that wants a later old age to cost
+        // something. 0 here, the owner's call (M2 design §12): lives end as
+        // the body and brain fail, not by an energy charge, so they may
+        // grow long.
         upkeep: 0.0,
         // Wear from a hard life, which never heals: per tick while energy
         // is below `low` (starving) or hydration is (parched), and per tick
@@ -66,7 +67,9 @@
     // `turns_female`. A female can breed alone only once her `longing`
     // hormone has reached `breeds_alone`. The need `drive` drives breeding:
     // whatever the genes, it works only between adults, and what easing it
-    // teaches is only about the partner (M2 design §5).
+    // teaches is only about the partner (M2 design §5). A pair's egg takes
+    // its genes from one parent in stretches: at each gene it switches to
+    // the other with the chance `crossover` (M2 design §12).
     breeding: (
         hatches: 750,
         cost: 0.3,
@@ -75,6 +78,7 @@
         turns_female: 0.8,
         breeds_alone: 0.5,
         drive: "arousal",
+        crossover: 0.1,
     ),
     // Each cause-of-death tally halves every this many ticks (design §4.10).
     cause_fade: 350,
@@ -172,6 +176,21 @@
     // the age a sprite grows old at, by up to 40%, so that lives last from
     // about 4 hours to about 8 at 1x (M2 design §2).
     trait_variation: { "grows_old": 0.4 },
+    // Copying errors (M2 design §12): when an egg is laid, each gene value
+    // has `chance` of changing, so about one hatchling in two has a change.
+    // Rare and mostly large, so they show: a `large.share` of the changes
+    // are a factor from 1 / `large.most` to `large.most`, the rest small, a
+    // factor between 1 − `small` and 1 + `small`. First guesses.
+    mutation: (chance: 0.01, small: 0.2, large: (share: 0.75, most: 2.0)),
+    // Hidden flaws (M2 design §12): a sprite has two copies of each gene
+    // that can weaken, one from each parent, and one sound copy is enough.
+    // As an egg's genes are copied, each sound copy gets a flaw with the
+    // chance `arise`, so about one egg in two has a new one. A sprite made
+    // from the starter genome carries a flaw in one copy of each such gene
+    // with the chance `founders`: about three each. A gene with both copies
+    // flawed is broken: it's born with `health`, and counts as `wear` of
+    // wear, bringing old age sooner (M2 design §9.4). First guesses.
+    flaws: (arise: 0.007, founders: 0.06, health: 0.5, wear: 0.05),
 
     // A learned value this far from 0 is a lesson, which the event log
     // announces once (design v16 §5.6).

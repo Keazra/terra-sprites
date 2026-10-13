@@ -6,7 +6,7 @@
 #![allow(dead_code)]
 
 use terra_sim::{
-    Command, DataPack, Event, EventKind, Genome, Map, Outcome, Pos, Rejection, Scenario,
+    Command, DataPack, EntityId, Event, EventKind, Genome, Map, Outcome, Pos, Rejection, Scenario,
     ScriptedAction, Verb, World,
 };
 
@@ -199,3 +199,82 @@ impl<'a> WorldBuilder<'a> {
         World::from_scenario(scenario, data, self.seed).expect("a valid scenario")
     }
 }
+
+/// An instinct to mate with whatever sprite it sees, and nothing else (M2
+/// design §10).
+pub const KEEN: &str = r#"
+    AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
+    Instinct(inputs: [("always", false), ("attended_sprite", false)], verb: Mate, weight: 1.0),
+"#;
+
+/// A body that turns female at once, as an adult (M2 design §10).
+pub const FEMALE: &str = r#"InitialConcentration(chem: "feminiser", value: 1.0),"#;
+
+/// An instinct to breed alone whenever it can, and the longing it takes.
+pub const ALONE: &str = r#"
+    Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
+    InitialConcentration(chem: "longing", value: 1.0),
+"#;
+
+/// A small field of grass with a sprite of its own genes on each tile, the
+/// ones on `young` as newborns and the rest just grown up.
+pub fn family(sprites: &[(Pos, &str)], young: &[Pos], seed: u64) -> World {
+    family_in(builtin(), sprites, young, seed)
+}
+
+/// The same, with `data`.
+pub fn family_in(data: DataPack, sprites: &[(Pos, &str)], young: &[Pos], seed: u64) -> World {
+    let placed = sprites
+        .iter()
+        .map(|&(pos, genes)| (pos, Some(genome(genes, &data))))
+        .collect();
+    WorldBuilder::new(&["........", "........", "........", "........"])
+        .data(data)
+        .sprites_with(placed)
+        .newborns(young)
+        .seed(seed)
+        .build()
+}
+
+/// Steps `world` until `found` picks something out of a tick's events, or
+/// `ticks` ticks have passed.
+pub fn until<T>(
+    world: &mut World,
+    ticks: u64,
+    mut found: impl FnMut(&Event) -> Option<T>,
+) -> Option<T> {
+    for _ in 0..ticks {
+        if let Some(found) = world.step().iter().find_map(&mut found) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+/// An egg laid: the egg, who laid it, with whom, and on which tick.
+pub struct Laying {
+    pub egg: EntityId,
+    pub by: EntityId,
+    pub with: Option<EntityId>,
+    pub tick: u64,
+}
+
+/// Steps `world` until an egg is laid.
+pub fn laid(world: &mut World, ticks: u64) -> Option<Laying> {
+    until(world, ticks, |event| match event.kind {
+        EventKind::Laid { egg, by, with } => Some(Laying {
+            egg,
+            by,
+            with,
+            tick: event.tick,
+        }),
+        _ => None,
+    })
+}
+
+/// The changes to `physiology.ron` that turn copying errors off, so an
+/// egg's genes are its parents' exactly, with no new flaws (M2 design §12).
+pub const NO_COPYING_ERRORS: [(&str, &str); 2] = [
+    ("mutation: (chance: 0.01,", "mutation: (chance: 0.0,"),
+    ("flaws: (arise: 0.007,", "flaws: (arise: 0.0,"),
+];

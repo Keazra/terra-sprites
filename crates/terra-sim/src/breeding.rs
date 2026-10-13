@@ -2,18 +2,17 @@
 //! partner or alone, and the content-safety rule the engine enforces for
 //! every genome and data pack, that mating happens only between adults.
 
-use std::mem::discriminant;
-
 use serde::{Deserialize, Serialize};
 
 use crate::action::{self, Hurt, Outcome};
 use crate::data::DataPack;
 use crate::events::{Event, EventKind};
-use crate::genome::Genome;
+use crate::inheritance;
 use crate::map::Dir;
+use crate::mutation;
 use crate::objects::EntityId;
 use crate::perception::Target;
-use crate::random::{chance, uniform};
+use crate::random::uniform;
 use crate::registry::Verb;
 use crate::sprites::Sprite;
 use crate::world::WorldState;
@@ -153,9 +152,10 @@ fn outcome(
 }
 
 /// `mother`, fertile, lays an egg on a free tile beside her, by `father` or
-/// alone (M2 design §10), if she has a free tile. The parents split the
-/// egg's cost, or she pays it all alone, and each fires its `bred` pulse.
-/// Returns the egg.
+/// alone (M2 design §10), if she has a free tile: its genes theirs mixed, or
+/// hers doubled, copied with errors (§12). The parents split the egg's
+/// cost, or she pays it all alone, and each fires its `bred` pulse. Returns
+/// the egg.
 fn lay(
     state: &mut WorldState,
     data: &DataPack,
@@ -173,13 +173,15 @@ fn lay(
         return None;
     }
     let tile = free[uniform(&mut state.rng, free.len() as u64) as usize];
-    let genome = {
+    let genes = {
         let sprites = &state.sprites;
-        let mine = &sprites.get(mother).expect("the mother").genome;
-        match father.and_then(|father| sprites.get(father)) {
-            Some(theirs) => mixed(mine, &theirs.genome, &mut state.rng),
-            None => mine.clone(),
-        }
+        let hers = sprites.get(mother).expect("the mother").as_parent();
+        let inherited = match father.and_then(|father| sprites.get(father)) {
+            Some(him) => inheritance::of_pair(hers, him.as_parent(), data, &mut state.rng),
+            None => inheritance::alone(hers, &mut state.rng),
+        };
+        // Copied with errors (M2 design §12).
+        mutation::copied(inherited, data, &mut state.rng)
     };
     let parents: Vec<EntityId> = std::iter::once(mother).chain(father).collect();
     let physiology = data.physiology();
@@ -194,7 +196,7 @@ fn lay(
             sprite.body.pulse(breeding.bred, None);
         }
     }
-    let egg = Sprite::egg(genome, tile, state.tick, parents, data);
+    let egg = Sprite::egg(genes, tile, state.tick, parents, data);
     let egg = state.add_sprite(egg);
     events.push(Event {
         tick: state.tick,
@@ -207,94 +209,13 @@ fn lay(
     Some(egg)
 }
 
-/// A child's genome from its parents', `mine` and `theirs` (M2 design §10):
-/// each gene, with its switch, from one or the other at random, where the
-/// two line up gene for gene, as genomes from the starter do; or else a
-/// copy of `mine`, the mother's. The damage old age did to a parent's genes
-/// isn't passed on, as it's in the body, not the genome.
-pub(crate) fn mixed(mine: &Genome, theirs: &Genome, rng: &mut rand_chacha::ChaCha8Rng) -> Genome {
-    let lined_up = mine.genes.len() == theirs.genes.len()
-        && mine
-            .genes
-            .iter()
-            .zip(&theirs.genes)
-            .all(|(a, b)| discriminant(a) == discriminant(b));
-    if !lined_up {
-        return mine.clone();
-    }
-    let switch =
-        |genome: &Genome, index: usize| genome.switches.get(index).copied().unwrap_or_default();
-    let (mut genes, mut switches) = (Vec::new(), Vec::new());
-    for index in 0..mine.genes.len() {
-        let from = if chance(rng, 0.5) { mine } else { theirs };
-        genes.push(from.genes[index].clone());
-        switches.push(switch(from, index));
-    }
-    // An empty list of switches means none switch.
-    if switches.iter().all(|switch| switch.is_always()) {
-        switches.clear();
-    }
-    Genome { genes, switches }
-}
-
 #[cfg(test)]
 mod tests {
-    use rand_chacha::ChaCha8Rng;
-    use rand_chacha::rand_core::SeedableRng;
-
     use super::*;
+    use crate::genome::Genome;
     use crate::map::Map;
     use crate::test_util::at;
     use crate::world::{Scenario, World};
-
-    /// A genome whose instincts all have `weight`, one per verb listed.
-    fn weighted(weight: f32, data: &DataPack) -> Genome {
-        let genes: String = [
-            "Eat", "Drink", "Play", "Hit", "Rest", "Wander", "Mate", "Approach",
-        ]
-        .iter()
-        .map(|verb| {
-            format!(r#"Instinct(inputs: [("always", false)], verb: {verb}, weight: {weight:?}),"#)
-        })
-        .collect();
-        Genome::from_ron(&format!("(format: 1, genes: [{genes}])"), data).expect("a valid genome")
-    }
-
-    #[test]
-    fn a_child_takes_each_gene_from_one_parent_or_the_other() {
-        let data = DataPack::builtin().expect("built-in data pack is valid");
-        let (mine, theirs) = (weighted(0.25, &data), weighted(0.75, &data));
-        let mut rng = ChaCha8Rng::seed_from_u64(3);
-        let child = mixed(&mine, &theirs, &mut rng);
-        assert_eq!(child.genes.len(), mine.genes.len());
-        let from_mine = child
-            .genes
-            .iter()
-            .zip(&mine.genes)
-            .filter(|(gene, mine)| gene == mine)
-            .count();
-        let from_theirs = child
-            .genes
-            .iter()
-            .zip(&theirs.genes)
-            .filter(|(gene, theirs)| gene == theirs)
-            .count();
-        assert_eq!(from_mine + from_theirs, child.genes.len());
-        assert!(
-            from_mine > 0 && from_theirs > 0,
-            "{from_mine} and {from_theirs}"
-        );
-    }
-
-    #[test]
-    fn genomes_that_dont_line_up_give_a_copy_of_the_mothers() {
-        let data = DataPack::builtin().expect("built-in data pack is valid");
-        let mine = weighted(0.25, &data);
-        let mut theirs = weighted(0.75, &data);
-        theirs.genes.pop();
-        let mut rng = ChaCha8Rng::seed_from_u64(3);
-        assert_eq!(mixed(&mine, &theirs, &mut rng), mine);
-    }
 
     #[test]
     fn a_full_world_is_infertile_and_lays_nothing() {

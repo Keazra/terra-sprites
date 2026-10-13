@@ -3,6 +3,11 @@
 use crate::data::DataPack;
 use crate::map::Pos;
 
+/// The built-in data pack.
+pub fn builtin() -> DataPack {
+    DataPack::builtin().expect("built-in data pack is valid")
+}
+
 /// The built-in data pack, with `changes` made to `file`'s text, as
 /// `tests/common`'s does.
 pub fn builtin_changing(file: &str, changes: &[(&str, &str)]) -> DataPack {
