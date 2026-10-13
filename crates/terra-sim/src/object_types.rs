@@ -45,6 +45,42 @@ pub(crate) struct ObjectType {
     pub(crate) visual: Vec<Visual>,
     /// Whether, and how, the Cursor's Place menu offers it (design v28 §3.5.1).
     pub(crate) place: Option<Placement>,
+    /// Whether the Cursor may throw it, once it holds it (design §3.5.4).
+    /// An egg can only be put down (M2 design §10.4, #196).
+    pub(crate) throwable: bool,
+}
+
+impl ObjectType {
+    /// The stage of its life that ends in hatching, if one does (M2 design
+    /// §10.4): then an object of it is an egg, which only a sprite can lay.
+    pub(crate) fn hatching_stage(&self) -> Option<usize> {
+        self.stages
+            .iter()
+            .position(|stage| stage.next == Next::Hatch)
+    }
+
+    /// Whether a stage of its life ends in hatching: see `hatching_stage`.
+    pub(crate) fn hatches(&self) -> bool {
+        self.hatching_stage().is_some()
+    }
+
+    /// The fewest ticks the stages after `stage` can take, up to the one
+    /// that ends in hatching or expiring: 0 if `stage` is that one.
+    pub(crate) fn least_ticks_after(&self, stage: usize) -> u64 {
+        let mut ticks = 0;
+        let mut stage = stage;
+        // Each stage once at most, so a cycle of stages ends.
+        for _ in 0..self.stages.len() {
+            match self.stages[stage].next {
+                Next::Stage(next) => {
+                    stage = next;
+                    ticks += u64::from(self.stages[next].ticks.0);
+                }
+                Next::Expire | Next::Hatch => break,
+            }
+        }
+        ticks
+    }
 }
 
 /// How the Cursor places an object type (design v28 §3.5.1): under what label the
@@ -84,8 +120,21 @@ pub(crate) struct Stage {
     pub(crate) name: String,
     /// The shortest and longest the stage lasts, in ticks.
     pub(crate) ticks: (u32, u32),
-    /// The stage that follows, or `None` if the object expires.
-    pub(crate) next: Option<usize>,
+    /// What follows it.
+    pub(crate) next: Next,
+}
+
+/// What follows the end of a stage (design §3.5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Next {
+    /// The stage at this index.
+    Stage(usize),
+    /// Nothing: the object expires.
+    Expire,
+    /// The sprite the object holds hatches on its tile, and the object is
+    /// gone (M2 design §10.4, #196). Held, or with a sprite on its tile, it
+    /// waits until it can.
+    Hatch,
 }
 
 #[derive(Debug, Clone)]
@@ -179,11 +228,32 @@ pub(crate) fn object_types(
     )?;
     let mut entries = text_entries;
     entries.sort_by_key(|t| t.id);
+    // A mother lays one kind of egg (M2 design §10.4).
+    let hatching: Vec<&str> = entries
+        .iter()
+        .filter(|t| t.hatches())
+        .map(|t| t.name.as_str())
+        .collect();
+    if let [first, second, ..] = hatching[..] {
+        return Err(DataError::Invalid {
+            file: OBJECTS.into(),
+            message: format!(
+                "`{first}` and `{second}` both hatch, but a mother lays one kind of egg"
+            ),
+        });
+    }
     let names = Names {
         types: entries
             .iter()
             .enumerate()
-            .map(|(index, t)| (t.name.clone(), (index, t.pseudo)))
+            .map(|(index, t)| {
+                let name = TypeName {
+                    index,
+                    pseudo: t.pseudo,
+                    hatches: t.hatches(),
+                };
+                (t.name.clone(), name)
+            })
             .collect(),
         categories,
         tags,
@@ -202,10 +272,20 @@ pub(crate) fn object_types(
         .collect()
 }
 
+/// What a name in `objects.ron` says about the object type it names.
+#[derive(Clone, Copy)]
+struct TypeName {
+    /// Its index in the sorted list.
+    index: usize,
+    pseudo: bool,
+    /// Whether a stage of its life ends in hatching (M2 design §10.4).
+    hatches: bool,
+}
+
 /// Everything a name in `objects.ron` can refer to outside its own type.
 struct Names<'a> {
-    /// Object type name → (index in the sorted list, whether it's a pseudo type).
-    types: BTreeMap<String, (usize, bool)>,
+    /// By object type name.
+    types: BTreeMap<String, TypeName>,
     categories: &'a [Category],
     tags: &'a [Tag],
     chemicals: &'a [Chemical],
@@ -230,14 +310,32 @@ impl Names<'_> {
             .ok_or_else(|| format!("names the unknown tag `{name}`"))
     }
 
-    /// The index of the object type called `name`, which must be a real (not pseudo) type.
+    /// The index of the object type called `name`, which must be a real
+    /// (not pseudo) type.
     fn real_type(&self, name: &str) -> Result<usize, String> {
+        self.real(name).map(|named| named.index)
+    }
+
+    /// The index of the object type called `name`, which a rule may make: a
+    /// real type that doesn't hatch, since an egg holds a sprite, so only a
+    /// sprite can lay one (M2 design §10.4).
+    fn made_type(&self, name: &str) -> Result<usize, String> {
+        match self.real(name)? {
+            TypeName { hatches: true, .. } => Err(format!(
+                "names `{name}`, which hatches, so only a sprite can lay one"
+            )),
+            TypeName { index, .. } => Ok(index),
+        }
+    }
+
+    /// The real (not pseudo) object type called `name`.
+    fn real(&self, name: &str) -> Result<TypeName, String> {
         match self.types.get(name) {
             None => Err(format!("names the unknown object type `{name}`")),
-            Some(&(_, true)) => Err(format!(
+            Some(TypeName { pseudo: true, .. }) => Err(format!(
                 "names `{name}`, a pseudo type, which has no objects"
             )),
-            Some(&(index, false)) => Ok(index),
+            Some(&named) => Ok(named),
         }
     }
 }
@@ -276,6 +374,52 @@ pub(crate) struct TypeEntry {
     #[serde(default)]
     visual: Vec<VisualEntry>,
     place: Option<PlaceEntry>,
+    #[serde(default = "throwable")]
+    throwable: bool,
+}
+
+/// An item is throwable unless its type says otherwise.
+fn throwable() -> bool {
+    true
+}
+
+/// The egg a pack from before eggs were items (#196) gets in place of its
+/// pseudo type `egg`, frozen as the built-in pack had it then: `{ticks}`
+/// is how long the pack's eggs took to hatch.
+const OLD_PACK_EGG: &str = r#"(id: 103, name: "egg", plural: "eggs", category: "egg",
+    size: Small, hardness: 1.0, throwable: false,
+    stages: [(name: "laid", ticks: ({ticks}, {ticks}), next: Hatch)], verbs: {})"#;
+
+impl TypeEntry {
+    /// Whether a stage of its life ends in hatching.
+    fn hatches(&self) -> bool {
+        self.stages
+            .iter()
+            .any(|stage| matches!(stage.next, NextEntry::Hatch))
+    }
+}
+
+/// Whether a type among `entries` hatches: the pack has an egg (M2 design
+/// §10.4).
+pub(crate) fn has_egg(entries: &[TypeEntry]) -> bool {
+    entries.iter().any(TypeEntry::hatches)
+}
+
+/// Gives a pack from before eggs were items (#196), whose eggs were
+/// sprites that hatched after `hatches` ticks, an egg type: its pseudo type
+/// `egg` becomes an item that hatches after as long, so a world saved with
+/// eggs loads with them as items. A pack with no such pseudo type is left
+/// as it is.
+pub(crate) fn upgrade_old_egg(entries: &mut [TypeEntry], hatches: u64) {
+    let Some(old) = entries.iter_mut().find(|t| t.pseudo && t.name == "egg") else {
+        return;
+    };
+    let ticks = u32::try_from(hatches).unwrap_or(u32::MAX).to_string();
+    let text = OLD_PACK_EGG.replace("{ticks}", &ticks);
+    *old = ron::Options::default()
+        .with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME)
+        .from_str(&text)
+        .expect("the old pack's egg is a valid entry");
 }
 
 #[derive(Debug, Deserialize)]
@@ -320,6 +464,7 @@ struct StageEntry {
 enum NextEntry {
     Stage(String),
     Expire,
+    Hatch,
 }
 
 #[derive(Debug, Deserialize)]
@@ -373,6 +518,7 @@ pub(crate) enum EffectEntry {
 impl TypeEntry {
     /// The validated type, or what's wrong with the entry.
     fn resolve(self, names: &Names) -> Result<ObjectType, String> {
+        let hatches = self.hatches();
         // Spaces at either end would put stray gaps in the screen's sentences.
         let plural = match self.plural.as_deref().map(str::trim) {
             Some("") => {
@@ -422,6 +568,7 @@ impl TypeEntry {
                 ("rules", !self.rules.is_empty()),
                 ("visual rules", !self.visual.is_empty()),
                 ("a place in the Place menu", self.place.is_some()),
+                ("`throwable`, since it's never held", !self.throwable),
             ];
             if let Some((what, _)) = lifecycle.iter().find(|(_, present)| *present) {
                 return Err(format!(
@@ -453,11 +600,26 @@ impl TypeEntry {
             stages: &stage_names,
         };
 
-        let stages = self
+        let stages: Vec<Stage> = self
             .stages
             .iter()
             .map(|stage| scope.stage(stage))
             .collect::<Result<_, _>>()?;
+        // An egg is laid beside its mother and hatches where it lies (M2
+        // design §10.4), so it's an item a sprite can stand on.
+        if hatches {
+            if solid {
+                return Err("hatches, so it can't be solid: a sprite hatches on its tile".into());
+            }
+            if self.place.is_some() {
+                return Err(
+                    "hatches, so only a sprite can lay one: it can't be in the Place menu".into(),
+                );
+            }
+        }
+        if solid && !self.throwable {
+            return Err("is solid, so the Cursor never holds it: leave out `throwable`".into());
+        }
         let rules = self
             .rules
             .iter()
@@ -542,6 +704,7 @@ impl TypeEntry {
             verbs,
             visual,
             place,
+            throwable: self.throwable,
         })
     }
 }
@@ -577,8 +740,9 @@ impl Scope<'_> {
             ));
         }
         let next = match &stage.next {
-            NextEntry::Stage(name) => Some(self.stage_index(name)?),
-            NextEntry::Expire => None,
+            NextEntry::Stage(name) => Next::Stage(self.stage_index(name)?),
+            NextEntry::Expire => Next::Expire,
+            NextEntry::Hatch => Next::Hatch,
         };
         Ok(Stage {
             name: stage.name.clone(),
@@ -664,14 +828,14 @@ impl Scope<'_> {
                 Effect::RequireCounter(self.counter(name)?, n)
             }
             &EffectEntry::SpawnNearby(ref name, radius) => {
-                Effect::SpawnNearby(self.names.real_type(name)?, radius)
+                Effect::SpawnNearby(self.names.made_type(name)?, radius)
             }
             &EffectEntry::SpreadTo(ref name, radius, ref conditions) => Effect::SpreadTo(
-                self.names.real_type(name)?,
+                self.names.made_type(name)?,
                 radius,
                 self.conditions(conditions, section)?,
             ),
-            EffectEntry::ReplaceWith(name) => Effect::ReplaceWith(self.names.real_type(name)?),
+            EffectEntry::ReplaceWith(name) => Effect::ReplaceWith(self.names.made_type(name)?),
             EffectEntry::DestroySelf => Effect::DestroySelf,
             &EffectEntry::Inject(party, ref name, amount) => {
                 Effect::Inject(party, injectable(self.names.chemicals, name)?, amount)

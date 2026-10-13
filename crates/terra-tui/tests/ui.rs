@@ -9,7 +9,7 @@ use terra_sim::{
     EventKind, Grip, Hurt, Learned, Map, Outcome, Pos, Progress, Rejection, Removal, Scenario,
     ScriptedAction, Target, Terrain, Thing, Verb, World, WorldConfig,
 };
-use terra_tui::app::{App, CursorMode, Flow, Tab};
+use terra_tui::app::{App, CursorMode, Flow, Selection, Tab};
 use terra_tui::input::{Action, Button};
 use terra_tui::theme::Theme;
 use terra_tui::ui;
@@ -3728,67 +3728,148 @@ fn the_event_log_says_who_laid_an_egg_hatched_and_turned_female() {
             id: other_egg,
             parents: vec![mother],
         },
+        // An egg is never thrown (§10.4): 103 is its type.
         EventKind::CommandRejected {
-            command: Command::TakeHold { sprite: egg },
-            reason: Rejection::Egg,
+            command: Command::Throw {
+                from: Pos { x: 1, y: 1 },
+                toward: terra_sim::Dir::E,
+                tiles: 3,
+            },
+            reason: Rejection::NotThrowable { item_type: 103 },
         },
     ]);
     assert_eq!(
         logged(&world, &then),
         [
-            "3  Couldn't take hold of Sprite #20: it's still an egg",
+            "3  Couldn't throw the egg: it can only be put down",
             "2  Sprite #21 hatched (Sprite #12's)",
             "1  Sprite #20 hatched (Sprite #12 and Sprite #13's)",
         ]
     );
 }
 
+/// Where the egg `egg` lies.
+fn egg_tile(world: &World, egg: EntityId) -> Pos {
+    world
+        .egg(egg)
+        .and_then(|egg| egg.pos())
+        .expect("the egg on the map")
+}
+
+/// Runs `world` until the egg `egg` has hatched (M2 design §10.4).
+fn hatch(world: &mut World, egg: EntityId) {
+    while world.sprite(egg).is_none() {
+        assert!(world.tick() < 2_000, "the egg hatches");
+        world.step();
+    }
+}
+
 #[test]
-fn an_egg_is_drawn_as_an_egg_and_the_body_tab_says_when_it_hatches() {
-    // M2 design §10: `o` in CP437, `0` in ASCII, where `o` is the ball.
+fn an_egg_is_drawn_as_its_theme_says_and_selected_its_card_says_when_it_hatches() {
+    // M2 design §10.7: `o` in CP437, `0` in ASCII, where `o` is the ball;
+    // selected, in reverse video. In a corner, clear of the Cursor in the
+    // middle.
+    let (mut world, egg) = a_lone_egg(&[]);
+    let at = egg_tile(&world, egg);
+    for (theme, glyph) in [(Theme::cp437(), 'o'), (Theme::ascii(), '0')] {
+        let mut app = app_for(&world, theme, 100, 30);
+        let screen = render(&app, &world, 100, 30);
+        let drawn = &screen[cell(&world, at.x, at.y)];
+        assert_eq!(drawn.symbol(), glyph.to_string());
+        assert!(!drawn.modifier.contains(Modifier::REVERSED));
+        // A click selects it; then the Cursor moves away.
+        app.apply(Action::left_click(pointer_on(&world, at.x, at.y)), &world);
+        assert_eq!(app.selection(), Some(Selection::Living(egg)));
+        app.apply(Action::Point(pointer_on(&world, 8, 0)), &world);
+        let screen = render(&app, &world, 100, 30);
+        let drawn = &screen[cell(&world, at.x, at.y)];
+        assert_eq!(drawn.symbol(), glyph.to_string());
+        assert!(drawn.modifier.contains(Modifier::REVERSED));
+        // Every sprite tab shows the card, just after it's laid.
+        for tab in [Tab::Body, Tab::Brain, Tab::Chem, Tab::Genome] {
+            open(&mut app, &world, tab);
+            let text = lines(&render(&app, &world, 100, 30)).join("\n");
+            assert!(text.contains("egg · hatches in 750 ticks"), "{text}");
+            assert!(text.contains("parents Sprite #1"), "{text}");
+        }
+    }
+    world.step();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::left_click(pointer_on(&world, at.x, at.y)), &world);
+    let text = lines(&render(&app, &world, 100, 30)).join("\n");
+    assert!(text.contains("egg · hatches in 749 ticks"), "{text}");
+}
+
+#[test]
+fn an_egg_held_past_its_time_waits_and_its_hatchling_stays_selected() {
+    // M2 design §10.4, §10.7: held when it's due, it hatches on the tick
+    // it's put down, and the selection goes on to the hatchling.
+    let (mut world, egg) = a_lone_egg(&[]);
+    let at = egg_tile(&world, egg);
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    let frame = |app: &mut App, world: &mut World| {
+        for command in app.take_commands() {
+            world.submit(command);
+        }
+        let events = world.step();
+        app.record(&events, world);
+    };
+    app.apply(Action::left_click(pointer_on(&world, at.x, at.y)), &world);
+    app.apply(Action::Mode(CursorMode::Grab), &world);
+    app.apply(Action::left_click(pointer_on(&world, at.x, at.y)), &world);
+    frame(&mut app, &mut world);
+    let held = world.cursor().holds().map(|held| held.id());
+    assert_eq!(held, Some(egg), "picked up");
+    let due = world.egg(egg).expect("the egg").hatches();
+    while world.tick() <= due {
+        frame(&mut app, &mut world);
+    }
+    assert!(world.egg(egg).is_some(), "it waits");
+    let text = lines(&render(&app, &world, 100, 30)).join("\n");
+    assert!(text.contains("egg · hatches once it's put down"), "{text}");
+    // Put down where no sprite stands, it hatches at once.
+    let free = (0..10)
+        .map(|x| Pos { x, y: 0 })
+        .find(|&pos| world.sprite_at(pos).is_none())
+        .expect("a free tile");
+    app.apply(
+        Action::left_click(pointer_on(&world, free.x, free.y)),
+        &world,
+    );
+    frame(&mut app, &mut world);
+    let hatchling = world.sprite(egg).expect("it hatched");
+    assert_eq!(hatchling.pos(), free);
+    assert_eq!(app.selection(), Some(Selection::Living(egg)));
+    let text = lines(&render(&app, &world, 100, 30)).join("\n");
+    assert!(text.contains("young ·"), "{text}");
+}
+
+#[test]
+fn leading_a_young_sprite_the_cursor_s_mark_shows_it_small() {
+    // M2 design §9.6: the bottom left mark shows what the Cursor has hold
+    // of, as the map draws it. Away from the map's edges, so the marks are
+    // drawn.
     let pack = pack();
-    let genome = terra_sim::Genome::from_ron(
-        r#"(format: 1, genes: [
-            InitialConcentration(chem: "feminiser", value: 1.0),
-            InitialConcentration(chem: "longing", value: 1.0),
-            Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
-        ])"#,
-        &pack,
-    )
-    .expect("a valid genome");
-    // In a corner, clear of the Cursor in the middle.
     let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
-    let sprites = [(Pos { x: 1, y: 4 }, Some(genome))];
+    let at = Pos { x: 4, y: 2 };
+    let sprites = [(at, None)];
     let scenario = Scenario {
         map,
         objects: &[],
         sprites: &sprites,
         scripted: &[],
-        newborns: &[],
+        newborns: &[at],
     };
-    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
-    let egg = (0..50)
-        .flat_map(|_| world.step())
-        .find_map(|event| match event.kind {
-            EventKind::Laid { egg, .. } => Some(egg),
-            _ => None,
-        })
-        .expect("she laid an egg");
-    let at = world.sprite(egg).expect("the egg").pos();
-    for (theme, glyph) in [(Theme::cp437(), 'o'), (Theme::ascii(), '0')] {
+    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    for (theme, glyph) in [(Theme::cp437(), "ö"), (Theme::ascii(), "a")] {
         let mut app = app_for(&world, theme, 100, 30);
+        let on = pointer_on(&world, at.x, at.y);
+        app.apply(Action::Mode(CursorMode::Grab), &world);
+        app.apply(Action::Point(on), &world);
+        app.apply(Action::left_click(on), &world);
         let screen = render(&app, &world, 100, 30);
-        assert_eq!(screen[cell(&world, at.x, at.y)].symbol(), glyph.to_string());
-        while app.selection() != Some(terra_tui::app::Selection::Living(egg)) {
-            app.apply(Action::SelectNext, &world);
-        }
-        let screen = lines(&render(&app, &world, 100, 30)).join("\n");
-        let hatches = world.sprite(egg).unwrap().hatches().unwrap() - world.tick();
-        assert!(
-            screen.contains(&format!("egg · hatches in {hatches} ticks")),
-            "{screen}"
-        );
-        assert!(screen.contains("parents Sprite #1"), "{screen}");
+        // The Cursor's centre is up and left of the pointer.
+        assert_eq!(screen[(on.x - 2, on.y)].symbol(), glyph);
     }
 }
 
@@ -3844,7 +3925,7 @@ fn the_genome_tab_of_a_sprite_with_parents_says_first_what_s_new_in_it() {
     // M2 design §12: a lone egg, every gene value copied wrongly and each
     // copy of a gene flawed half the time. Its mother, whom the world
     // began with, has no such list.
-    let (world, egg) = a_lone_egg(&[
+    let (mut world, egg) = a_lone_egg(&[
         ("mutation: (chance: 0.01,", "mutation: (chance: 1.0,"),
         ("flaws: (arise: 0.007,", "flaws: (arise: 0.5,"),
         (
@@ -3852,6 +3933,7 @@ fn the_genome_tab_of_a_sprite_with_parents_says_first_what_s_new_in_it() {
             "copy_and_change: (doubled: 0.0, lost: 0.0, changed: 0.0,",
         ),
     ]);
+    hatch(&mut world, egg);
     let mut app = app_for(&world, Theme::cp437(), 100, 40);
     app.apply(Action::SelectNext, &world);
     open(&mut app, &world, Tab::Genome);
@@ -3867,7 +3949,7 @@ fn the_genome_tab_of_a_sprite_with_parents_says_first_what_s_new_in_it() {
     }
     let rows = text(&app);
     assert_eq!(rows[0], "FROM SPRITE #1 ALONE");
-    let view = world.sprite(egg).expect("the egg");
+    let view = world.sprite(egg).expect("the hatchling");
     let changed = view.copying_errors().len();
     assert!(changed >= 3, "{changed} genes changed");
     let list = rows
@@ -3913,7 +3995,7 @@ fn the_genome_tab_of_a_sprite_with_parents_says_first_what_s_new_in_it() {
 fn the_genome_tab_lists_the_genes_copying_changed_doubled_and_lost() {
     // M2 design §13: each changed gene with what it was, or what it's a
     // copy of; then the genes doubled, and those lost.
-    let (world, egg) = a_lone_egg(&[
+    let (mut world, egg) = a_lone_egg(&[
         ("mutation: (chance: 0.01,", "mutation: (chance: 0.0,"),
         ("flaws: (arise: 0.007,", "flaws: (arise: 0.0,"),
         (
@@ -3921,6 +4003,7 @@ fn the_genome_tab_lists_the_genes_copying_changed_doubled_and_lost() {
             "copy_and_change: (doubled: 0.3, lost: 0.3, changed: 0.3,",
         ),
     ]);
+    hatch(&mut world, egg);
     let mut app = app_for(&world, Theme::cp437(), 100, 40);
     while app.selection() != Some(terra_tui::app::Selection::Living(egg)) {
         app.apply(Action::SelectNext, &world);
@@ -3935,7 +4018,7 @@ fn the_genome_tab_lists_the_genes_copying_changed_doubled_and_lost() {
         .position(|row| row.is_empty())
         .expect("a blank line");
     let listed = rows[1..list].join(" ");
-    let changes = world.sprite(egg).expect("the egg").copy_changes();
+    let changes = world.sprite(egg).expect("the hatchling").copy_changes();
     let count = |kind: fn(&CopyChangeView) -> bool| changes.iter().filter(|c| kind(c)).count();
     let changed = count(|c| matches!(c, CopyChangeView::Changed { .. }));
     let copies = count(|c| matches!(c, CopyChangeView::Changed { on_copy: true, .. }));

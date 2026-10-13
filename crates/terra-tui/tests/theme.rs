@@ -34,12 +34,11 @@ fn pack() -> DataPack {
 fn map_glyphs(theme: &Theme) -> Vec<(char, String)> {
     let pack = pack();
     // The selected sprite, and a young one, are still sprites, so they may
-    // share the sprite's glyph; and a selected egg is still an egg.
+    // share the sprite's glyph.
     let kind = |tile: SemanticTile| match tile {
         SemanticTile::SelectedSprite
         | SemanticTile::YoungSprite
         | SemanticTile::SelectedYoungSprite => format!("{:?}", SemanticTile::Sprite),
-        SemanticTile::SelectedEgg => format!("{:?}", SemanticTile::Egg),
         tile => format!("{tile:?}"),
     };
     let optional = SemanticTile::OPTIONAL.map(|(tile, _)| tile);
@@ -91,6 +90,8 @@ fn the_themes_draw_objects_as_the_design_table_says() {
         ("thornbush", "default", '♠', '*', Color::Magenta, false),
         ("berry", "default", '•', '%', Color::Red, false),
         ("ball", "default", '○', 'o', Color::White, false),
+        // M2 design §10.7.
+        ("egg", "default", 'o', '0', Color::LightYellow, false),
     ];
     let (cp437_theme, ascii_theme) = (Theme::cp437(), Theme::ascii());
     for (object, state, cp437_glyph, ascii_glyph, colour, bold) in expected {
@@ -449,6 +450,31 @@ fn a_theme_from_before_the_young_draws_them_as_grown() {
             .glyph(SemanticTile::YoungSprite),
         "the edit took the young sprite out"
     );
+}
+
+#[test]
+fn a_theme_from_before_eggs_were_items_draws_them_with_its_egg_tile() {
+    // M2 design §10.7: a theme with the retired `egg` tiles still loads,
+    // and draws the egg item with its `egg` glyph while its objects have
+    // none of their own.
+    let pack = pack();
+    let without = ascii_with(
+        "        \"egg\":       { \"default\": (glyph: '0', fg: light_yellow) },\n",
+        "",
+    );
+    let old = without.replacen(
+        "        young_sprite:",
+        "        egg: (glyph: 'e', fg: yellow),\n        \
+         selected_egg: (glyph: 'e', fg: yellow, reversed: true),\n        \
+         young_sprite:",
+        1,
+    );
+    let theme = Theme::from_ron(&old, &pack).expect("loads");
+    let egg = theme.object_glyph("egg", "default");
+    assert_eq!((egg.symbol, egg.fg), ('e', Color::Yellow));
+    // With neither, an egg is a `?`, as any object a theme leaves out.
+    let theme = Theme::from_ron(&without, &pack).expect("loads");
+    assert_eq!(theme.object_glyph("egg", "default").symbol, '?');
 }
 
 /// A theme's glass, by piece, then its stars, far to nearest: glyph and

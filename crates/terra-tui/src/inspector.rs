@@ -8,10 +8,10 @@ use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use terra_sim::{
     ActionView, Blocker, ChemicalKind, ChemicalLevel, Command, CopyChangeView, CursorTouch,
-    DeathCause, Dir, EmitterMode, Emptied, EntityId, Event, EventKind, Explanation, Expression,
-    GeneView, Grip, Learned, LifeStage, MAX_NAME_CHARS, NameProblem, ObjectView, Outcome, Part,
-    PlaceRule, Pos, Progress, Rejection, Removal, SpriteView, Switch, Target, Terrain, Thing,
-    Trait, Verb, World,
+    DeathCause, Dir, EggView, EmitterMode, Emptied, EntityId, Event, EventKind, Explanation,
+    Expression, GeneView, Grip, Learned, LifeStage, MAX_NAME_CHARS, NameProblem, ObjectView,
+    Outcome, Part, PlaceRule, Pos, Progress, Rejection, Removal, SpriteView, Switch, Target,
+    Terrain, Thing, Trait, Verb, World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -102,9 +102,11 @@ fn shown(app: &App, world: &World) -> Vec<(Line<'static>, Option<MemoryOpen>)> {
     match (app.tab(), app.selection()) {
         (Tab::World, _) => bare(world_tab(world)),
         (_, None) => bare(vec![Line::from(NOTHING_SELECTED)]),
-        (tab, Some(Selection::Living(id))) => match world.sprite(id) {
-            Some(sprite) => sprite_tab(tab, &sprite, app, world),
-            None => Vec::new(),
+        (tab, Some(Selection::Living(id))) => match (world.sprite(id), world.egg(id)) {
+            (Some(sprite), _) => sprite_tab(tab, &sprite, app, world),
+            // An egg has no body, brain or chemistry yet (M2 design §10.7).
+            (None, Some(egg)) => bare(egg_card(&egg, world, &app.words(world))),
+            (None, None) => Vec::new(),
         },
         (_, Some(Selection::Dead { id, cause, age })) => {
             let how = match cause {
@@ -167,16 +169,6 @@ fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>>
         format!(" age {} · {}", group_thousands(sprite.age()), {
             let stage = sprite.life_stage();
             match stage {
-                LifeStage::Egg => match sprite.hatches() {
-                    Some(hatches) => format!(
-                        "egg · hatches in {}",
-                        counted(
-                            u32::try_from(hatches.saturating_sub(world.tick())).unwrap_or(u32::MAX),
-                            "tick"
-                        )
-                    ),
-                    None => stage.name().to_string(),
-                },
                 LifeStage::Young => {
                     format!("young · {}", trait_text(Trait::GrowsUp, traits.grows_up))
                 }
@@ -248,26 +240,44 @@ pub(crate) fn doing_line(sprite: &SpriteView, app: &App, world: &World) -> Optio
         })
 }
 
-/// A sprite's sex and fertility, once it has hatched, and its parents, if
-/// it has any (M2 design §10): `male · fertile · turning 40%`, `parents
-/// Pip #12 and Bo #7`.
+/// A sprite's sex and fertility, and its parents, if it has any (M2 design
+/// §10): `male · fertile · turning 40%`, `parents Pip #12 and Bo #7`.
 fn family_lines(sprite: &SpriteView, data: &Words) -> Vec<String> {
-    let mut lines = Vec::new();
-    if !sprite.is_egg() {
-        let mut line = format!(" {}", sprite.sex().name());
-        if sprite.is_fertile() {
-            line.push_str(" · fertile");
-        }
-        let turning = sprite.turning().filter(|&share| share > 0.0);
-        if let Some(share) = turning.filter(|_| sprite.life_stage().is_grown()) {
-            line.push_str(&format!(" · turning {:.0}%", share * 100.0));
-        }
-        lines.push(line);
+    let mut line = format!(" {}", sprite.sex().name());
+    if sprite.is_fertile() {
+        line.push_str(" · fertile");
     }
+    let turning = sprite.turning().filter(|&share| share > 0.0);
+    if let Some(share) = turning.filter(|_| sprite.life_stage().is_grown()) {
+        line.push_str(&format!(" · turning {:.0}%", share * 100.0));
+    }
+    let mut lines = vec![line];
     if let Some(parents) = parents_text(sprite.parents(), data) {
         lines.push(format!(" parents {parents}"));
     }
     lines
+}
+
+/// What every sprite tab shows for an egg (M2 design §10.7): when it
+/// hatches, and who laid it, `egg · hatches in 750 ticks`, `parents Pip #12
+/// and Bo #7`. One that's due waits while the Cursor holds it or a sprite
+/// stands on it (§10.4).
+fn egg_card(egg: &EggView, world: &World, data: &Words) -> Vec<Line<'static>> {
+    // The ticks still to run, the one it hatches on included.
+    let left = (egg.hatches() + 1).saturating_sub(world.tick());
+    let when = match (left, egg.pos()) {
+        (0, None) => "hatches once it's put down".to_string(),
+        (0, Some(_)) => "hatches once nothing stands on it".to_string(),
+        (left, _) => format!(
+            "hatches in {}",
+            counted(u32::try_from(left).unwrap_or(u32::MAX), "tick")
+        ),
+    };
+    let mut lines = vec![format!(" {} · {when}", display_name(egg.type_name()))];
+    if let Some(parents) = parents_text(egg.parents(), data) {
+        lines.push(format!(" parents {parents}"));
+    }
+    lines.into_iter().map(Line::from).collect()
 }
 
 /// Parents by name, `Pip #12 and Bo #7`, or `None` for none.
@@ -552,7 +562,7 @@ fn deed(action: &ActionView, what: &str, data: &Words) -> String {
 
 /// `name` after "a", or "an" before a vowel, whatever its case: "a ball",
 /// "an Apple".
-fn with_article(name: &str) -> String {
+pub(crate) fn with_article(name: &str) -> String {
     let vowel = name
         .chars()
         .next()
@@ -1918,7 +1928,9 @@ fn refusal_line(command: &Command, reason: Rejection, data: &Words) -> Option<St
         Command::MoveCursor { .. } | Command::ShowCursor { .. } => return None,
         // Refused as putting it down would be (design v25 §2.5).
         Command::Throw { .. } => match reason {
-            Rejection::InTheWay { item_type, .. } => format!("throw the {}", name(item_type)),
+            Rejection::InTheWay { item_type, .. } | Rejection::NotThrowable { item_type } => {
+                format!("throw the {}", name(item_type))
+            }
             _ => "throw it".into(),
         },
         Command::Shove { .. } => "shove".into(),
@@ -1935,6 +1947,8 @@ fn refusal_line(command: &Command, reason: Rejection, data: &Words) -> Option<St
         Rejection::NotLeading => "you're not leading a sprite".into(),
         Rejection::Rooted => ROOTED.into(),
         Rejection::NotHolding => "you're not holding anything".into(),
+        // An egg (M2 design §10.4).
+        Rejection::NotThrowable { .. } => "it can only be put down".into(),
         Rejection::OffTheMap => "that's off the map".into(),
         Rejection::InTheWay { blocker, .. } | Rejection::NoRoom(blocker) => match blocker {
             Blocker::Object(there) => format!("{} is there", with_article(&name(there))),
@@ -1968,7 +1982,6 @@ fn refusal_line(command: &Command, reason: Rejection, data: &Words) -> Option<St
             "the game can't show some of its letters".into()
         }
         Rejection::BadGenome => "its genome doesn't fit this world".into(),
-        Rejection::Egg => "it's still an egg".into(),
     };
     Some(format!("Couldn't {what}: {why}"))
 }

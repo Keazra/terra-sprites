@@ -8,8 +8,8 @@ use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
 use terra_sim::{
     ActionView, ChemicalKind, ChemicalLevel, Command, CursorTouch, DeathCause, Dir, Divergence,
-    EntityId, Event, EventKind, Genome, Grip, MAX_NAME_CHARS, Map, Outcome, Playback, Pos,
-    Progress, SpriteView, Target, Thing, Verb, World,
+    EntityId, Event, EventKind, Genome, Grip, MAX_NAME_CHARS, Map, ObjectView, Outcome, Playback,
+    Pos, Progress, SpriteView, Target, Thing, Verb, World,
 };
 
 use crate::clock::Clock;
@@ -259,7 +259,8 @@ pub struct Observed {
 /// The sprite the inspector shows (design §6.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Selection {
-    /// A sprite in the world.
+    /// A sprite in the world, or an egg, which the sprite it hatches into
+    /// goes on being (M2 design §10.7).
     Living(EntityId),
     /// A sprite that died while selected: of what, and at what age.
     Dead {
@@ -663,6 +664,39 @@ fn whence(world: &World, preposition: &str) -> String {
     }
 }
 
+/// How the item `id` looks, and whether its type lets the Cursor throw it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ItemLook<'w> {
+    pub(crate) type_name: &'w str,
+    pub(crate) visual_state: &'w str,
+    /// False for an egg (M2 design §10.4).
+    pub(crate) throwable: bool,
+}
+
+/// The item `id`, held by the Cursor or, while a pick-up waits in the queue,
+/// still on the map (design §6.5).
+pub(crate) fn item_look(world: &World, id: EntityId) -> Option<ItemLook<'_>> {
+    if let Some(held) = world.cursor().holds().filter(|held| held.id() == id) {
+        return Some(ItemLook {
+            type_name: held.type_name(),
+            visual_state: held.visual_state(),
+            throwable: held.is_throwable(),
+        });
+    }
+    let object = world.objects().find(|object| object.id() == id)?;
+    Some(ItemLook {
+        type_name: object.type_name(),
+        visual_state: object.visual_state(),
+        throwable: object.is_throwable(),
+    })
+}
+
+/// What a grab with the Cursor empty takes (design §6.5).
+enum Reach<'w> {
+    Sprite(EntityId),
+    Object(ObjectView<'w>),
+}
+
 /// What a sliding sprite crashed into, and whether that hurt it (design v25
 /// §3.5.4).
 #[derive(Debug, Clone)]
@@ -942,12 +976,17 @@ impl App {
         self.settle_cursor(world);
     }
 
-    /// Notes the names the world's sprites have now, so a sprite named and
-    /// then dead keeps its name in the log.
+    /// Notes the names the world's sprites and eggs have now, so a sprite
+    /// named and then dead keeps its name in the log.
     fn note_names(&mut self, world: &World) {
         for sprite in world.sprites() {
             if let Some(name) = sprite.name() {
                 self.names.note(sprite.id(), name);
+            }
+        }
+        for egg in world.eggs() {
+            if let Some(name) = egg.name() {
+                self.names.note(egg.id(), name);
             }
         }
     }
@@ -1789,8 +1828,9 @@ impl App {
     /// What a click with `button` on `tile` does, in the cursor mode (design
     /// v21 §6.5).
     ///
-    /// In Select, a left click selects the sprite there; on empty ground it
-    /// clears the selection, which leaves Follow as it is. A right
+    /// In Select, a left click selects the sprite there, or else the egg
+    /// (M2 design §10.7); on empty ground it clears the selection, which
+    /// leaves Follow as it is. A right
     /// click activates what's there, and nothing can be activated yet
     /// (design v26 §6.5).
     ///
@@ -1800,10 +1840,13 @@ impl App {
     fn act(&mut self, tile: Pos, button: Button, amplified: bool, world: &World) {
         let sprite = world.sprite_at(tile).map(|sprite| sprite.id());
         match (self.mode, button) {
-            (CursorMode::Select, Button::Left) => match sprite {
-                Some(id) => self.select(id),
-                None => self.selection = None,
-            },
+            (CursorMode::Select, Button::Left) => {
+                let egg = || world.object_at(tile).filter(ObjectView::is_egg);
+                match sprite.or_else(|| egg().map(|egg| egg.id())) {
+                    Some(id) => self.select(id),
+                    None => self.selection = None,
+                }
+            }
             // Until there are devices, nothing can be activated (design v26
             // §6.5).
             (CursorMode::Select, Button::Right) => {
@@ -1892,27 +1935,42 @@ impl App {
         world: &World,
         refused: Refused,
     ) -> bool {
-        let command = match (self.followed().or(sprite), world.object_at(tile)) {
-            (Some(sprite), _) => {
+        let command = match self.reach(tile, sprite, world) {
+            Some(Reach::Sprite(sprite)) => {
                 // Taking hold puts the Cursor, as the world knows it, on the
                 // sprite.
                 self.told_tile = world.sprite(sprite).map(|s| s.pos());
                 Command::TakeHold { sprite }
             }
             // In M1 every solid object is a fixture (design §3.3).
-            (None, Some(object)) if object.is_solid() => {
+            Some(Reach::Object(object)) if object.is_solid() => {
                 let (cant, name) = (refused.cant, display_name(object.type_name()));
                 self.refuse(format!("Can't {cant} the {name}: {ROOTED}"));
                 return false;
             }
-            (None, Some(object)) => Command::PickUp { item: object.id() },
-            (None, None) => {
+            Some(Reach::Object(object)) => Command::PickUp { item: object.id() },
+            None => {
                 self.refuse(format!("Nothing here to {}", refused.nothing_to));
                 return false;
             }
         };
         self.send(command, world);
         true
+    }
+
+    /// What a grab with the Cursor empty takes on `tile`, with `sprite` on
+    /// it (design §6.5): the followed sprite, or else that one, or else the
+    /// item there.
+    fn reach<'w>(
+        &self,
+        tile: Pos,
+        sprite: Option<EntityId>,
+        world: &'w World,
+    ) -> Option<Reach<'w>> {
+        match self.followed().or(sprite) {
+            Some(sprite) => Some(Reach::Sprite(sprite)),
+            None => world.object_at(tile).map(Reach::Object),
+        }
     }
 
     /// Sends a Grab-mode command, queued, so the marks and the next click
@@ -1929,10 +1987,26 @@ impl App {
     /// from the Cursor to the pointer. With the Cursor empty, it grabs what's
     /// there first, as a left click would. Aiming already, it sends the aim,
     /// as `E` pressed again does in a terminal that doesn't report a key let
-    /// go.
+    /// go. An item its type says is never thrown, such as an egg, held or
+    /// about to be picked up, aims nothing and is picked up by nothing (M2
+    /// design §10.4).
     fn aim_click(&mut self, tile: Pos, sprite: Option<EntityId>, world: &World) {
         if self.aim.is_some() {
             self.send_aimed(world);
+            return;
+        }
+        let thrown = match self.grip(world) {
+            Some(Grip::Holds(item)) => Some(item),
+            Some(Grip::Leads(_)) => None,
+            None => match self.reach(tile, sprite, world) {
+                Some(Reach::Object(object)) => Some(object.id()),
+                Some(Reach::Sprite(_)) | None => None,
+            },
+        };
+        let look = thrown.and_then(|item| item_look(world, item));
+        if let Some(look) = look.filter(|look| !look.throwable) {
+            let name = inspector::with_article(&display_name(look.type_name));
+            self.refuse(format!("Can't throw {name}"));
             return;
         }
         if self.grip(world).is_none() && !self.grab(tile, sprite, world, TO_SEND) {
@@ -2564,12 +2638,16 @@ impl App {
         Flow::Continue
     }
 
-    /// Saves the selected sprite's genome to a file in the genome folder
-    /// (design §6.1, §6.7), named for the sprite and the tick, and says
-    /// where.
+    /// Saves the selected sprite's genome, or the selected egg's, to a file
+    /// in the genome folder (design §6.1, §6.7), named for the sprite and
+    /// the tick, and says where.
     fn export_genome(&mut self, world: &World) {
-        let Some(sprite) = self.selection.and_then(|s| match s {
-            Selection::Living(id) => world.sprite(id),
+        let genome = |id| match world.sprite(id) {
+            Some(sprite) => Some(sprite.genome().to_ron(world.data())),
+            None => Some(world.egg(id)?.genome().to_ron(world.data())),
+        };
+        let Some((id, text)) = self.selection.and_then(|s| match s {
+            Selection::Living(id) => Some((id, genome(id)?)),
             Selection::Dead { .. } => None,
         }) else {
             return self.refuse("Select a sprite to save its genome".into());
@@ -2577,7 +2655,7 @@ impl App {
         let Some(folder) = self.genome_folder.clone() else {
             return self.refuse("There's no folder to save genomes in".into());
         };
-        let label = self.names.label(sprite.id());
+        let label = self.names.label(id);
         let slug: String = label
             .chars()
             .filter_map(|c| match c {
@@ -2587,7 +2665,6 @@ impl App {
             })
             .collect();
         let file = format!("{slug}-tick-{}.ron", world.tick());
-        let text = sprite.genome().to_ron(world.data());
         let saved = std::fs::create_dir_all(&folder)
             .and_then(|()| std::fs::write(folder.join(&file), text));
         match saved {
@@ -3077,11 +3154,15 @@ impl App {
     /// the margin past the wall allows (M2 design §11.1).
     fn track_selected(&mut self, world: &World) {
         let tracked = match self.selection {
-            Some(Selection::Living(id)) if self.tracking => world.sprite(id),
+            // An egg, where it lies (M2 design §10.7).
+            Some(Selection::Living(id)) if self.tracking => match world.sprite(id) {
+                Some(sprite) => Some(sprite.pos()),
+                None => world.egg(id).and_then(|egg| egg.pos()),
+            },
             _ => None,
         };
-        if let Some(sprite) = tracked {
-            self.centre_on(sprite.pos());
+        if let Some(pos) = tracked {
+            self.centre_on(pos);
         }
     }
 
@@ -3089,7 +3170,7 @@ impl App {
     /// or on no tile, past the wall (M2 design §11.4). Following, it stops,
     /// wherever `tile` is. Otherwise the Cursor follows the sprite on
     /// `tile`, or else the selected sprite, leaving the selection as it is;
-    /// with neither, it's refused.
+    /// with neither, it's refused. An egg isn't followed.
     fn toggle_follow(&mut self, tile: Option<Pos>, world: &World) {
         if self.follow.is_some() {
             self.follow = None;
@@ -3102,7 +3183,7 @@ impl App {
             return;
         }
         let selected = match self.selection {
-            Some(Selection::Living(id)) => Some(id),
+            Some(Selection::Living(id)) => world.sprite(id).map(|sprite| sprite.id()),
             _ => None,
         };
         let there = tile.and_then(|tile| world.sprite_at(tile));
