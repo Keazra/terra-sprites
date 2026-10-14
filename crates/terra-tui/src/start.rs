@@ -4,25 +4,74 @@
 
 use std::path::{Path, PathBuf};
 
-use terra_sim::{DataError, DataPack, World, WorldConfig};
+use terra_sim::{DataError, DataPack, Mode, World, WorldConfig};
 
 use crate::args::Args;
 use crate::files;
+use crate::saves;
 use crate::theme::Theme;
 
 /// A new world, as the flags ask: from `seed`, with `--preset`, or the data
 /// folder's default preset, or the built-in one; and the data pack
-/// `--data` gives, or the built-in one.
+/// `--data` gives, or the built-in one. It's a Lab world for `--lab` and
+/// `--fast-forward`, and otherwise a Story world (M2 design §16).
 pub fn new_world(args: &Args, seed: u64) -> Result<World, String> {
     let (config, data) = config(args)?;
-    Ok(World::new(config, data, seed))
+    let mode = if args.fast_forward.is_some() {
+        Mode::Lab
+    } else {
+        args.mode
+    };
+    Ok(World::new_in(config, data, seed, mode))
 }
 
 /// Whether the flags make or load a world, and so skip the title screen
-/// (M2 design §8.5): `--seed`, `--preset` and `--replay` do; the others only
-/// change how the game's worlds are made or drawn.
+/// (M2 design §8.5, §16): `--seed`, `--preset`, `--lab`, `--load` and
+/// `--replay` do; the others only change how the game's worlds are made or
+/// drawn.
 pub fn skips_title(args: &Args) -> bool {
-    args.seed.is_some() || args.preset.is_some() || args.replay.is_some()
+    args.seed.is_some()
+        || args.preset.is_some()
+        || args.mode == Mode::Lab
+        || args.load.is_some()
+        || args.replay.is_some()
+}
+
+/// The name of the preset a new world is made from, as fast-forward's
+/// report gives it (M2 design §16.3): `--preset`'s file name without
+/// `.ron`, or `default`.
+pub fn preset_name(args: &Args) -> String {
+    args.preset
+        .as_ref()
+        .and_then(|path| path.file_stem())
+        .map_or_else(
+            || "default".to_string(),
+            |stem| stem.to_string_lossy().into_owned(),
+        )
+}
+
+/// The world `--fast-forward` runs (M2 design §16), and what its save is
+/// named after: the save `--load` names, which must be a Lab world, or a
+/// new Lab world from `seed`, named after it.
+pub fn fast_forward_world(
+    args: &Args,
+    seed: u64,
+    folder: Option<&Path>,
+) -> Result<(World, String), String> {
+    match &args.load {
+        Some(name) => {
+            let file = saves::named(name, folder)?;
+            let world = saves::load(&file)?;
+            if world.mode() != Mode::Lab {
+                return Err(format!(
+                    "{} is a Story world: only Lab worlds fast-forward",
+                    file.name
+                ));
+            }
+            Ok((world, file.name))
+        }
+        None => Ok((new_world(args, seed)?, format!("seed-{seed}"))),
+    }
 }
 
 /// The world the title screen wakes (M2 design §8.1): a new one from

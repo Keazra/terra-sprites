@@ -4,7 +4,7 @@
 - **Date:** 2026-10-12
 - **History:** edited in place since v5; each change is a file in [`changes/`](changes/), whose README says where v1 to v5 are
 - **Builds on:** [M1 design](m1-a-sprite-lives.md), which stays the rulebook for everything M2 doesn't change
-- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), breeding (Slice 23), the view past the wall (Slice 31), mixing and mutating genes (Slice 24), with copy and change (24b), the population graph (Slice 26), and courtship and families (Slice 32)
+- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), breeding (Slice 23), the view past the wall (Slice 31), mixing and mutating genes (Slice 24), with copy and change (24b), the population graph (Slice 26), courtship and families (Slice 32), and fast-forward and the speed cap (Slice 27)
 
 ---
 
@@ -66,7 +66,7 @@ The owner's times, as playtime at 1× (1.25 ticks a second, M1 design §6.6):
 - **These are the starter genome's times.** The genome brings them about (§3), so they vary from sprite to sprite and can evolve: a later old age costs nothing, so lives may grow longer over the generations, up to old age at about 13 hours (§12.5).
 - **Lives differ by up to 2 hours either way.** The owner (2026-10-12): "4 hours should be the shortest, and eight at the longest, for an average of 6 hours." A new sprite's `grows_old` varies by up to 40% at spawn where its other genes vary by 10% (§9.3), and a hatchling takes one parent's, now and then changed in copying (§12). Old age still lasts about an hour, and a hard life can still bring it sooner (§9.4).
 - **Growing old is where M1's lifespan went** (#140). The `grows_old` gene sets when a sprite grows old, and its genes then weaken until its body gives out and old age kills it (§9.4). How long that takes depends on the life it has had, not on a second gene. A save or genome that says `lifespan` reads it as `grows_old`, whose range is about **6,000–60,000**.
-- **A generation takes about 15–20 minutes at 4×,** Story mode's top speed (Slice 27), so an evening sees several. Long runs of evolution belong to the fast-forward mode.
+- **A generation takes about 15–20 minutes at 4×,** Story mode's top speed (§16.2), so an evening sees several. Long runs of evolution belong to fast-forward (§16.3).
 - **Lives got shorter in Slice 23, with breeding.** Until sprites had young, nothing replaced the dead: with 4-hour lives, the default world would have been empty after about 4 hours of play. So in Slice 22 sprites grew up and grew old at 1 and 3 hours, but old age lasted about 10 hours, and Slice 23 shortened it to about 1 (§9.4), for lives of about 4 hours. Later in Slice 23 the owner set them at 4 to 8 (2026-10-12), by growing old later.
 - **Childhood ends at growing up.** M1's viability run counts ticks 0–10,000 as childhood because sprites had no stages (M1 design §7.4, A4). From Slice 22, childhood is a stage, and the harsher world's goal (§6, G5) is counted at growing up.
 
@@ -106,7 +106,7 @@ Each slice is a GitHub issue and its own PR, worked as in `docs/agents/how-we-wo
 | **24. Mixing and mutating genes** | Children differ from their parents; gene quality joins ageing; now and then a gene is doubled, lost or changed in what it does | 23 |
 | **25. Family tree** | A sprite's parents, grandparents and children, living or dead | 23 |
 | **26. Population graph** | The population over time | 23 |
-| **27. Fast-forward and the speed cap** | A world run for many generations with no screen; 4× in Story mode, faster in Lab mode | 23 (and 21, if Lab mode is chosen there) |
+| **27. Fast-forward and the speed cap** | A world run for many generations with no screen; 4× in Story mode, faster in Lab mode (§16) | 21, 23 |
 | **28. Learning by watching** | The young copy what adults do, their parents most | 22, 25 |
 | **29. A harsher world** | About 20% of unattended newborns grow up | 20, 28 |
 | **30. M2 acceptance** | The criteria of §6, measured and played | all |
@@ -143,7 +143,7 @@ M2 is done when these hold, as well as M1's A1–A9. Each slice sets its criteri
 | G3 | **Population.** A graph shows the population rising and falling over time (§14). | 26 |
 | G4 | **Evolution.** After enough generations, the species has measurably changed from the starter genome, beyond what noise explains: at least 3 gene numbers moved a tenth the same way in 10 seeds of 200,000 ticks (§12.7). | 24; not met there, so measured again with 27 and 29 |
 | G5 | **A harsh childhood.** About 20% of unattended newborns grow up, and grown sprites rarely die of hunger or thirst. | 29 |
-| G6 | **Fast-forward.** A world can run for many generations with no screen, and be opened afterwards. | 27 |
+| G6 | **Fast-forward.** A world can run for many generations with no screen, and be opened afterwards (§16). | 27 |
 | G7 | **Content safety.** A child is never a mating target, for any genome or data pack (§5). | 23 |
 
 Slice 30 gathers the evidence in `docs/acceptance/m2.md`, as `docs/acceptance/m1.md` did for M1, with a play-through checklist for the owner. Slices without a row of their own are checked there: the title screen (Slice 21) and how each slice feels in play, as M1's A8 checked the game in Windows Terminal. Memory of places (Slice 20) shows in G5, which can't be met without it.
@@ -269,8 +269,8 @@ A box in the middle of the screen, over the moving world, holds the title letter
 A small box over the menu, with:
 - **Seed:** a random one filled in. Typing a digit replaces it, then more digits add to it, as a save's name is typed (M1 design §6.7); `Backspace` rubs out, and `Tab` offers another random seed. A seed is a whole number from 0 to 18446744073709551615.
 - **Preset:** `↑` `↓` pick one from a list: `default` first (the built-in preset, or `--data`'s own `presets/default.ron`), then each `.ron` file in the `presets` folder of the game's folder (`%APPDATA%\terra-sprites\presets` on Windows), by name. A preset is checked against the data pack in use when the world is made.
+- **Mode:** Story or Lab, `←` `→` picking, Story unless changed; holding `?` explains the one picked. The world keeps it (§16.1; M4 design §11).
 - `Enter` starts the world; `Esc` goes back to the menu.
-- Once Slice 27 builds Lab mode, the choice between Story mode and Lab mode goes in this box, and the world keeps it (2026-10-12; M4 design §11).
 
 ### 8.4 Leaving a world
 
@@ -280,7 +280,8 @@ A small box over the menu, with:
 
 ### 8.5 Flags
 
-- **`--seed`, `--preset` and `--replay` make or load a world,** so they skip the title screen and go straight in, as before. Their world can still leave for the title screen with `t`.
+- **`--seed`, `--preset`, `--lab`, `--load` and `--replay` make or load a world,** so they skip the title screen and go straight in, as before (`--lab` and `--load` from §16). Their world can still leave for the title screen with `t`.
+- **`--fast-forward` runs a world with no screen at all,** and never shows the title screen (§16.3).
 - **`--data`, `--ascii` and `--theme`** change what the game's worlds are made of or how they're drawn, not which world it opens on, so the title screen still shows, drawn with them, and a new world made from it uses `--data`'s pack.
 
 ---
@@ -873,7 +874,7 @@ cargo run --release -p terra-sim --example speed
 ### 14.8 Later
 
 - **Generations on the graph** need the family tree (Slice 25).
-- **A gene's average over time** belongs to the lab (Slice 27), which can also decide whether a fast-forward writes the counts to a file.
+- **A gene's middle value over time, and the counts in a file,** are fast-forward's tables (Slice 27, §16.4).
 
 ---
 
@@ -995,3 +996,119 @@ Agreed before measuring (round 1, Q11; round 2, Q5). The default world left alon
 - **Eggs that need warmth:** an egg grows only while a parent is beside it, for Slice 29's harsher world ([#147](https://github.com/Keazra/terra-sprites/issues/147)).
 - **Sharing food** as part of getting along, once sprites can carry ([#135](https://github.com/Keazra/terra-sprites/issues/135)).
 - **A dance's vigour** as a gene females can choose on, as a peacock's tail.
+
+---
+
+## 16. Fast-forward and the speed cap (Slice 27)
+
+Settled with the owner on 2026-10-14 ([#145](https://github.com/Keazra/terra-sprites/issues/145), with [#121](https://github.com/Keazra/terra-sprites/issues/121)), in a round of seven questions. They chose both for the first, Lab mode from the start and an end-game unlock in Story mode (Q1, C); asked for holding `?` to explain a mode (Q2); and kept the other recommendations. Two sides of how time runs: Story mode, the game as it's meant to be played, tops out at 4×, so a life never feels rushed; and a Lab world can be run for many generations with no screen, then opened in the game (G6).
+
+### 16.1 Story mode and Lab mode
+
+- **New world has a Mode row** under the seed: Story first and picked unless `←` `→` pick Lab. The picked one shows in brackets, with what it means in a few words beside it: "4x at most" for Story, "every speed, for experiments" for Lab. The box's hints take two lines: `tab another seed  ←→ mode  ↑↓ preset` and `hold ? what the mode means  enter start  esc back`.
+
+```
+╔═ New world ══════════════════════════════════════════╗
+║ Seed    8261934477120934                             ║
+║ Mode    [Story]  Lab   4x at most                    ║
+║                                                      ║
+║ Preset  ► default                                    ║
+║           big-lake                                   ║
+║                                                      ║
+║                                                      ║
+║ tab another seed  ←→ mode  ↑↓ preset                 ║
+║ hold ? what the mode means  enter start  esc back    ║
+╚══════════════════════════════════════════════════════╝
+```
+
+- **Holding `?` explains the mode picked** (the owner, Q2), in the presets' place, and `←` `→` switch it while it's held:
+
+```
+║ Mode     Story  [Lab]  every speed, for experiments  ║
+║                                                      ║
+║ Lab mode: a world for experiments.                   ║
+║ · Every speed, up to Max; it can be fast-forwarded.  ║
+║ · A world keeps its mode for its whole life.         ║
+```
+
+  Story's reads "Story mode: the game as it's meant to be played.", "· Speeds up to 4x, so a life never feels rushed." and the same last line. Letting go of `?` puts it away; a terminal that never says a key was let go of (M1 design §6.6) puts it away at the next key other than `←` `→`, which does its own job too. The box is tall enough for it, so it doesn't jump. The owner's example also named the inventory, Story's alone (M4 design §2.2): its line, and the ship's other differences, join the explanation when M4 builds them, as M2 has no inventory yet.
+- **A world keeps its mode for its whole life** (M4 design §11): it's world state, saved (M1 design §2.8), in the state hash, and carried by a replay that starts from a new world (M1 design §2.7). A save or replay from before this slice is a Story world, the game it was, and the save format stays 1.
+- **From the command line, a new world is a Story world unless `--lab` is given** (Q2, A). The try-a-PR script passes it on: `.\scripts\try-pr.ps1 201 -Seed 7 --lab`.
+- **The top bar says "lab"** after the speed in a Lab world, as `► 16x lab` or `|| paused 4x lab`; a Story world's is as before.
+- **In M2 the modes differ only in speed and fast-forward.** Nothing in the simulation reads the mode yet: the same seed makes the same world in both, and the sprites live exactly as they did (§16.5). The ship's differences come with M4 (M4 design §2.2).
+
+### 16.2 The speed cap
+
+- **In a Story world, `+` stops at 4×,** pressed or held, and the status line says "4x is Story mode's fastest". The slow speeds, ⅛× to ½×, are in both modes. A Lab world's speeds are M1's, up to Max (M1 design §6.6).
+- **The cap holds wherever time runs:** the map, the population graph (§14.2), and a replay, which plays at its world's speeds. Loading a Story world over a clock running faster slows it to 4×. The title screen's world runs at 4×, as before (§8.1).
+- **The training aids still fit** (#121 asked): a pet's reach back is two seconds of the player's time, 10 ticks at 4× (M1 design §6.5), and a step while paused a second's worth, 5 ticks at 4× (M1 design §6.6). Both were built for every speed, and the cap only takes away their faster ends.
+- **The end-game unlock** (the owner, Q1): once the whole ship is reactivated, a Story world offers to lift the cap, and if the player accepts, it runs at every speed from then on, staying a Story world otherwise. It needs the ship, so M4 builds it (M4 design §2.3).
+
+### 16.3 Fast-forward
+
+A command, run with no screen at all (Q3, A): `cargo run --release -- --fast-forward 200 --seed 7`.
+
+- **It runs for hours of play at 1×** (Q4, A), 4,500 ticks an hour, a whole number from 1: 200 hours is 900,000 ticks, about 90 generations.
+- **It makes a new world, from `--seed`, `--preset` and `--data` as the game does, or carries on a save with `--load mira`.** Fast-forward is faster than 4×, so it's a Lab tool (Q5, A): the world it makes is a Lab world, and a Story save is refused: "mira is a Story world: only Lab worlds fast-forward". An evolved species still reaches a Story world as genome files: `g` saves one from a sprite, and the Place menu's "sprite from a genome file" works in both modes in M2.
+- **`--load <save>` also works on its own,** to open a save in the game from the command line as Load does: a save's name in the saves folder, or a path to a `.tspr` file. It goes straight in, as `--seed` does (§8.5).
+- **What it shows while it runs** (Q6):
+
+```
+PS> cargo run --release -- --fast-forward 20 --seed 7
+Fast-forwarding a new Lab world, seed 7, default preset, for 20 hours (90,000 ticks).
+Ctrl+C stops it early and saves what has run.
+
+ Hours  Sprites  Young  Adults  Old  Eggs  Generation   Died  Old age  Hunger  Thirst  Hurt
+     2       43     16      19    8     3           1      8        8       0       0     0
+     4       57     13      35    9     2           3     13       11       0       1     1
+   ...
+    20       95     16      62   17     3          11     24       24       0       0     0
+
+Done: 20 hours in 5 minutes, 258 ticks a second.
+Saved as seed-7-20h in your saves folder (…): the title screen's Continue opens it.
+The tables are beside it: seed-7-20h-population.csv and seed-7-20h-genes.csv.
+
+Moved most from the starter's, as the middle value among the living:
+  GrowsOld: trait             22500 → 29425     up 31%
+  always → Wander: weight       0.3 → 0.2498    down 17%
+```
+
+  - **A row each tenth of the run,** so always ten. "Sprites" counts the sprites at every life stage, and "Eggs" the eggs beside them, as the population graph does (§14): an egg isn't a sprite until it hatches. "Generation" is how many generations the longest line of descent has run since the run started: the world's sprites then are the 0th, its eggs then the 1st, an egg is one on from the deeper of its parents, and a sprite the Cursor spawns is the 0th. "Died" and the causes after it count since the row before: hunger is starvation, thirst dehydration, and hurt anything an object did.
+  - **A last line, redrawn in place between rows,** reads like `► 143 hours · generation 64 · 95 sprites · 3 eggs · 312 ticks a second · about 13 minutes left`. It shows only on a terminal, so a report sent to a file has the rows alone.
+  - **At the end** it says how long the run took and how fast it ran, where it saved, and the gene values that moved most (§16.4).
+- **It saves in the saves folder and keeps the world it came from:** `seed-7-200h` for a new world, `mira-200h` for mira, or the name `--save <name>` gives, stored as any save by name is (M1 design §6.7). A name a save already has gets `-2`, `-3` and so on, so nothing is saved over, and the report and the tables give the name it was saved by.
+- **`Ctrl+C` stops it early and saves what has run,** with a last row where it stopped, under the whole hours it reached: `seed-7-143h` for a run stopped at 143.5 hours. A second `Ctrl+C` stops at once, without saving. A long run is never lost by stopping it.
+- **It runs exactly the world the game would:** the same seed fast-forwarded is, tick for tick, the world the game has after running as long.
+- **Flags that can't go together** are refused before anything runs: `--replay` with any flag that makes or loads a world, `--load` with `--seed`, `--preset`, `--data` or `--lab`, and `--save` without `--fast-forward`.
+
+### 16.4 The tables
+
+Both are beside the save, named after it, and open in Excel or Google Sheets. Each starts with the mark that tells a spreadsheet it's UTF-8, for the arrows in the genes' names.
+
+- **The population table,** `seed-7-200h-population.csv`, has a row for each count the world keeps for its graph (§14.1): every 100 ticks at first, further apart as the run grows, never more than 511 rows, and one more for the end when it falls between counts. Its columns are the hours of play, the tick, the eggs and each life stage, then what happened since the row before: eggs laid and hatched, sprites spawned, deaths, and deaths by cause, a column for each cause any sprite has died of, named as the screen names it ("Hurt by thornbush"), physiology's three always.
+- **The genes table,** `seed-7-200h-genes.csv`, has a column for each of the starter genome's gene values, from the save's own data pack, named as the generations run names its gene numbers (§12.7): `always → Wander: weight`. Its first row is the starter's own values; then a row at the start, every hour of play, and where it stopped if that fell between hours, each with how many sprites were alive and each value's middle among them, blank where none carries it. A gene that's doubled lines up, the nth of a name with the starter's nth of it (§13).
+- **The gene values that moved most** end the report: up to five whose middle value at the end moved a tenth or more from the starter's, furthest first, with how far up or down. Halving counts as far as doubling, and crossing 0 furthest of all. With none, it says "No gene value has moved a tenth from the starter's yet", and with no sprite alive, "No sprite is left alive to measure the genes of".
+- **The generations run and fast-forward read gene values with the same code,** which moved from the run into the simulation's library for it; the run's report is byte for byte as before (§16.5).
+
+### 16.5 How we know it worked
+
+Agreed before building (Q7):
+
+1. **The cap.** Story mode never passes 4×, by any key, held or pressed, with the graph open or not, and Lab mode reaches Max. Tests.
+2. **The same world.** A world fast-forwarded is exactly the world the game would have after running the same seed as long: the same tick and state hash. A test, over an hour of play.
+3. **It opens.** The save is the newest, so Continue loads it; it loads in Lab mode, with its whole population record, and its clock goes past 4×. A test, and the owner trying it.
+4. **No slower than the game.** Fast-forward runs within a tenth of the speed check's ticks a second, so the report and the tables cost next to nothing.
+5. **For information, not a bar:** seeds 1 to 10 run for 220 hours each (about 100 generations), and how many gene values moved a tenth the same way in all ten. G4 is judged for real once Slice 29's harsher world gives selection something to work on (Slice 24's call, §12.7).
+
+**Measured (2026-10-14)** in release builds in the cloud:
+
+- **1, 2 and 3: met.** The tests pass, among them New world's Mode row and its explanation, the flags, the tables, and the report's rows and lines. Played in the cloud: a 2-hour and a 20-hour run, a run stopped with `Ctrl+C`, and a saved run carried on with `--load`.
+- **4: met, by the owner's call (2026-10-14), though not as written.** Against the speed check it falls short: the speed check ran 285 and 284 ticks a second (22,500 ticks), and fast-forward 212 and 214, a quarter slower, on seed 7 after 20 hours at 100 sprites. The bar was there to show that the report and the tables cost next to nothing, and they do: that same world ran 216 and 217 ticks a second fast-forwarded and 215 and 219 stepped plainly, in turn. A world that has run 20 hours is slower to step than the speed check's freshly crowded one, fast-forwarded or not. The plain stepping was timed with a throwaway example, not kept.
+- **The sprites live exactly as before:** the `generations` run, seeds 1–2 for 20,000 ticks, prints the same, byte for byte, on `main` at `27927d7` and on this slice. The state hash differs, as it should, since the mode is world state.
+- **5: to come.** Ten seeds of 990,000 ticks take most of a day in the cloud. The result is posted on [#145](https://github.com/Keazra/terra-sprites/issues/145) when it ends, and joins this section with Slice 29 (§12.7), which measures G4 again.
+
+### 16.6 Later
+
+- **A key in a Lab world that blanks the map and runs flat out,** with `Esc` to stop and look (Q3, B), if fast-forward from the command line ever isn't enough. Max already runs at about three quarters of what the computer can do.
+- **Runs measured in generations** (Q4, B), once a generation has a definition worth stopping on.
+- **The uncapped population** ([#205](https://github.com/Keazra/terra-sprites/issues/205)) runs with this: a preset with the limit at 1,000 sprites, fast-forwarded overnight, then its population table read and the world opened.

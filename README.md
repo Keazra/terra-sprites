@@ -20,10 +20,10 @@ You need [Rust](https://rustup.rs) 1.97.1 or newer (`rustup update stable`) and 
 cargo run --release
 ```
 
-The first build takes a minute or two. The game opens on its title screen: a light finds a sleeping sprite in the dark, and a terrarium wakes around it (any key skips this). Pick **New world** and press `Enter` for a new terrarium with time running at 1×, or **Continue** to carry on from your last save. To go straight into a world instead, give it a seed: `cargo run --release -- --seed 7`. Some things to try first:
+The first build takes a minute or two. The game opens on its title screen: a light finds a sleeping sprite in the dark, and a terrarium wakes around it (any key skips this). Pick **New world** and press `Enter` for a new terrarium with time running at 1×, or **Continue** to carry on from your last save. A new world is a Story world, the game as it's meant to be played, which runs at 4× at most; `→` in New world picks a Lab world instead, for experiments, with every speed up to Max. Hold `?` there to see what each mode means. To go straight into a world instead, give it a seed: `cargo run --release -- --seed 7`. Some things to try first:
 
 1. **Watch one sprite.** Click a sprite (`☺`) to select it. The panel beside the map shows its body; `]` moves to its Brain tab, which says what it's paying attention to and why. `T` makes the view follow it.
-2. **Control time.** `space` pauses, `.` steps a little while paused, and `+` speeds up. A sprite's life is long at 1×, so try 8× or 16×.
+2. **Control time.** `space` pauses, `.` steps a little while paused, and `+` speeds up. A sprite's life is long at 1×, so try 4×.
 3. **Teach it something.** Press `X` for Train mode. When the sprite does something you like, click it to pet it; right-click to zap it for something you don't. It learns from both.
 4. **Move things.** Press `C` for Grab mode. Click a berry (`•`) to pick it up, and click again beside a hungry sprite to put it down. Press `C` once more for the Place menu, to add berries, balls, bushes and new sprites.
 5. **Keep the world.** `F5` saves and `F9` loads it back; the game also saves itself every 10 minutes. `?` shows every key, the colour legend, and where your saves are.
@@ -38,7 +38,7 @@ The same key in capitals or lower case does the same thing.
 |---|---|
 | `space` | Pause / resume |
 | `.` | Step while paused: a second's worth of ticks at the current speed, one at 1× and slower, up to 20 at 16× and Max (hold to keep stepping) |
-| `+` / `-` | Faster / slower: each step doubles or halves the speed, from ⅛× up to 16×, then Max. The game starts at 1× (1.25 ticks per second, slow enough to watch sprites walk). Holding `+` stops at 1× and at 16×, and holding `-` at 1×; press again to go past |
+| `+` / `-` | Faster / slower: each step doubles or halves the speed, from ⅛× up to 4× in a Story world, or on to 16× and then Max in a Lab world (the top bar says `lab` after the speed). The game starts at 1× (1.25 ticks per second, slow enough to watch sprites walk). Holding `+` stops at 1× and at 16×, and holding `-` at 1×; press again to go past |
 | `W` `A` `S` `D` or arrows | Scroll the map (hold Shift to scroll 5 tiles) |
 | Mouse | Point at a tile: the status line says what's there. Click a sprite to select it |
 | `T` | Track: the view follows the selected sprite; again to stop |
@@ -68,14 +68,30 @@ The same key in capitals or lower case does the same thing.
 | Flag | Effect |
 |---|---|
 | `--seed <n>` | Make the world from seed `n` (the top bar shows the seed of every world) |
+| `--lab` | Make a Lab world rather than a Story world: every speed, up to Max |
+| `--load <save>` | Open a save straight away, as Load does: a save's name in your saves folder, such as `--load quicksave`, or a path to a `.tspr` file |
 | `--preset <file>` | Use a world config from a RON file, such as a copy of [`data/presets/default.ron`](data/presets/default.ron) |
 | `--data <dir>` | Use the data pack files in a folder, such as a changed copy of [`data/objects.ron`](data/objects.ron), in place of the built-in ones; any file the folder lacks stays built in. A `presets/default.ron` in the folder is the default preset |
 | `--replay <file>` | Play a replay back, such as `last_session.replay`, which every session writes to the game's folder (the help screen shows where). Time, the view and the inspector work, but nothing can change the world until you take it over with `Ctrl+R`. It pauses at the end, and if the replay ever drifts from what was recorded, it pauses and says between which ticks. See [replays](docs/reference/saves.md#replays) |
 | `--ascii` | Draw the map in plain ASCII instead of CP437 |
 | `--theme <file>` | Start with a theme of your own, such as an edited copy of [`themes/cp437.ron`](themes/cp437.ron), rather than picking it with `Ctrl+T` each time |
+| `--fast-forward <hours>` | Run a Lab world with no screen for that many hours of play at 1×, then save it; see [fast-forward](#fast-forward) |
+| `--save <name>` | With `--fast-forward`, the name to save under |
 | `--version` | Print the game's version and the commit it was built from, and stop |
 
 To run the checks CI runs: `.\scripts\check.ps1` in PowerShell, or `scripts/check.sh` (formatting, lints and every test). To try a pull request's build: `.\scripts\try-pr.ps1 <number>`. To have Gemini review one, through the Antigravity CLI: `.\scripts\review-pr.ps1`.
+
+## Fast-forward
+
+A Lab world can run for many generations with no screen, as fast as your computer allows, and then be opened in the game:
+
+```powershell
+cargo run --release -- --fast-forward 200 --seed 7
+```
+
+That runs a new world from seed 7 for 200 hours of play at 1× (900,000 ticks, about 90 generations), printing a row every tenth of the way: the sprites at each life stage, the eggs, the deepest generation reached, and the deaths since the row before, by cause. A line under the rows says how far it has got and how long it has left. `--preset` and `--data` work as they do for a new world; `--load mira` carries on the Lab save `mira` instead (a Story save can't be fast-forwarded).
+
+At the end it saves the world in your saves folder as `seed-7-200h` (or `mira-200h`; `--save <name>` picks another name), so the title screen's Continue opens it. `Ctrl+C` stops it early and saves what has run. Beside the save it writes two tables that open in Excel or Google Sheets: `seed-7-200h-population.csv`, the population over the whole run, and `seed-7-200h-genes.csv`, the middle value of each of the starter genome's gene values among the living, an hour apart. The report ends with the ones that moved most.
 
 ## Same seed, same world
 
@@ -96,7 +112,7 @@ The ground, the plants and toys, a sprite's body and its instincts, the size of 
 
 ## Design
 
-- [M2 "Generations" design](docs/design/m2-generations.md) (the plan for milestone 2: its slices, the time scale of a sprite's life, and what "M2 is done" means; and what its slices have settled so far: memory of places, the title screen, and where places sit on the Brain tab).
+- [M2 "Generations" design](docs/design/m2-generations.md) (the plan for milestone 2: its slices, the time scale of a sprite's life, and what "M2 is done" means; and what its slices have settled so far: memory of places, the title screen, and where places sit on the Brain tab, life stages, breeding, genes, the population graph, and fast-forward and the speed cap).
 - [M1 "A Sprite Lives" design](docs/design/m1-a-sprite-lives.md), the rulebook for everything M2 doesn't change.
 - [M4 "Terra" design](docs/design/m4-terra.md) (the plan for the ship, a later milestone: its sectors, devices and sealed doors, and what "M4 is done" means).
 - [Design changes](docs/design/changes/): each change to a design, one file per PR; its README says where the earlier numbered revisions are. The evaluations of v1 are in [`docs/design/reviews/`](docs/design/reviews/).

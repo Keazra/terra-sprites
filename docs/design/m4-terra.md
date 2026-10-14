@@ -66,7 +66,7 @@ The mode is picked in the new world box (M2 design §8.3) and kept for the world
 
 | | **Story mode** | **Lab mode** |
 |---|---|---|
-| Speed | 4× at most (M2 design, Slice 27) | faster |
+| Speed | 4× at most (M2 design §16.2), until the end-game unlock (§2.3) | every speed, up to Max, and fast-forward (M2 design §16) |
 | Sealed doors | only a sprite opens one, by working its panel (§7.2) | the keeper can open any, by activating it; none ever shuts (round 4, Q2) |
 | Sealed sectors | dark, and the view can't go there | the view can go there and look in, but the sector stands still and the Cursor can't reach in until its door is open |
 | The ship plan | the keeper's memory: a sealed sector is dark on it (§9.3) | every sector shows |
@@ -78,6 +78,7 @@ The mode is picked in the new world box (M2 design §8.3) and kept for the world
 - **The Bridge is the last door to open,** behind the prow at the ship's front.
 - **Opening it ends the story, and play goes on** (round 5, Q3). The keeper gets its whole memory back: the builders' last entry in the log, and where the ship is going. A short closing scene plays, a counterpart to the title screen's opening scene (M2 design §8.1), and then the game carries on with the whole ship open.
 - **What the scene shows, and where the ship is going,** are written when the Bridge is built.
+- **The end-game unlock** (the owner, 2026-10-14, Slice 27's round, Q1): once the entire ship is reactivated, the game offers to lift Story mode's speed cap, and if the player accepts, that world runs at every speed, up to Max, from then on. It stays a Story world in everything else, and declining keeps the cap. Whether the offer comes with the Bridge or once every sector is awake is settled when the Bridge is built (M2 design §16.2).
 
 ---
 
@@ -309,7 +310,7 @@ Measured on 2026-10-12, in release builds, with 100 sprites, on a cloud machine.
 ## 11. Saves, replays and old worlds
 
 - **What sectors there are, which doors are sealed, and the inventory** are part of the world, in `WorldState`, so they're saved, replayed and hashed. Which sector is active, and the ship plan's state, belong to the screen, as the viewport does.
-- **So is the mode,** picked when the world is made and fixed for its life, since it changes what commands do: whether a panel answers the keeper, and whether placing takes from the inventory.
+- **So is the mode,** picked when the world is made and fixed for its life, since it changes what commands do: whether a panel answers the keeper, and whether placing takes from the inventory. It has been world state since Slice 27 (M2 design §16.1), and so will be whether a Story world has lifted its cap (§2.3).
 - **Old worlds are a ship of one sector** (round 2, Q10): a preset with no plan, and every save made before the ship, is today's terrarium, with glass all round. Lab scenarios and tests carry on as they are.
 - **An old world keeps the mode it was saved in,** and one saved before Slice 27 brought the modes in loads in Story mode, the game it was. With no plan there's no Hatchery and no device to fill the inventory, so in both modes placing and new sprites work as in M2: the inventory and Story mode's eggs (§8) come with a plan.
 - **A preset names the plan it uses.** The default preset uses Terra's.

@@ -28,8 +28,8 @@ use std::process::ExitCode;
 use std::sync::Mutex;
 
 use terra_sim::{
-    DataPack, DeathCause, EntityId, EventKind, Expression, GeneView, Genome, LifeStage, Outcome,
-    Switch, Verb, World, WorldConfig,
+    DataPack, DeathCause, Drift, EntityId, EventKind, Expression, GeneView, Genome, LifeStage,
+    Outcome, Switch, Verb, World, WorldConfig, drift, gene_values, middle_values,
 };
 
 /// Ticks in an hour at 1×, 1.25 ticks a second (design §6.6).
@@ -203,7 +203,7 @@ fn starter_genome(data: &DataPack) -> Genome {
 
 /// The starter genome's numbers, named, in genome order.
 fn starter(data: &DataPack) -> Vec<(String, f32)> {
-    numbers(&starter_genome(data).genes(data))
+    gene_values(&starter_genome(data).genes(data))
 }
 
 /// The starter's genes, by what each does and when, with how many it has
@@ -232,7 +232,7 @@ fn counted_where(
         if !keep(index) {
             continue;
         }
-        if let Some((name, _)) = named(gene) {
+        if let Some((name, _)) = gene.named() {
             *counts
                 .entry(format!("{name}{}", when(*switch)))
                 .or_insert(0) += 1;
@@ -251,99 +251,6 @@ fn when(switch: Switch) -> String {
         text += &format!(" until {until:?}");
     }
     text
-}
-
-/// Each number in `genes`, named, in order (design §4.3's value fields).
-fn numbers(genes: &[GeneView]) -> Vec<(String, f32)> {
-    let mut numbers = Vec::new();
-    for (name, fields) in genes.iter().filter_map(named) {
-        for (field, value) in fields {
-            numbers.push((format!("{name}: {field}"), value));
-        }
-    }
-    numbers
-}
-
-/// What `gene` does, named, and its numbers, each with its field's name;
-/// none for a gene this build can't read.
-fn named(gene: &GeneView) -> Option<(String, Vec<(&'static str, f32)>)> {
-    let named = match gene {
-        GeneView::HalfLife { chem, ticks } => {
-            (chem.to_string(), vec![("half-life", *ticks as f32)])
-        }
-        GeneView::Reaction {
-            reactants,
-            products,
-            rate,
-        } => {
-            let side = |terms: &[(&str, u8)]| {
-                let names: Vec<&str> = terms.iter().map(|(chem, _)| *chem).collect();
-                names.join(" + ")
-            };
-            (
-                format!("{} → {}", side(reactants), side(products)),
-                vec![("rate", *rate)],
-            )
-        }
-        GeneView::Emitter {
-            locus,
-            mode,
-            invert,
-            threshold,
-            gain,
-            chem,
-        } => {
-            let low = if *invert { "low " } else { "" };
-            (
-                format!("{low}{locus} {mode:?} → {chem}"),
-                vec![("threshold", *threshold), ("gain", *gain)],
-            )
-        }
-        GeneView::Receptor {
-            chem,
-            threshold,
-            gain,
-            target,
-        } => (
-            format!("{chem} → {target}"),
-            vec![("threshold", *threshold), ("gain", *gain)],
-        ),
-        GeneView::InitialConcentration { chem, value } => {
-            (chem.to_string(), vec![("at birth", *value)])
-        }
-        GeneView::Trait { which, value } => (format!("{which:?}"), vec![("trait", *value)]),
-        GeneView::BrainParam { param, value } => (param.to_string(), vec![("brain", *value)]),
-        GeneView::Instinct {
-            inputs,
-            verb,
-            weight,
-        } => {
-            let inputs: Vec<String> = inputs
-                .iter()
-                .map(|(input, negated)| {
-                    if *negated {
-                        format!("not {input}")
-                    } else {
-                        input.to_string()
-                    }
-                })
-                .collect();
-            (
-                format!("{} → {verb:?}", inputs.join(" & ")),
-                vec![("weight", *weight)],
-            )
-        }
-        GeneView::AttentionInstinct {
-            input,
-            category,
-            weight,
-        } => (
-            format!("{input} → attends to {category}"),
-            vec![("weight", *weight)],
-        ),
-        GeneView::Unknown { .. } => return None,
-    };
-    Some(named)
 }
 
 /// How far the species' genes moved from the starter's (M2 design §12,
@@ -375,8 +282,8 @@ fn evolution(starter: &[(String, f32)], runs: &[(u64, Run)]) {
             .iter()
             .map(|(_, run)| run.numbers[index] / value)
             .collect();
-        let up = ratios.iter().filter(|&&r| r >= 1.1).count();
-        let down = ratios.iter().filter(|&&r| r <= 0.9).count();
+        let drifted = |way| ratios.iter().filter(|&&r| drift(r) == Some(way)).count();
+        let (up, down) = (drifted(Drift::Up), drifted(Drift::Down));
         let mut sorted = ratios.clone();
         sorted.sort_by(f32::total_cmp);
         moved.push(Moved {
@@ -886,38 +793,17 @@ fn copy_and_change(runs: &[(u64, Run)]) {
 }
 
 /// Each of the starter's numbers' middle value among the sprites alive in
-/// `world`, eggs aside; empty if none is alive. A sprite's numbers line up
-/// with the starter's by name, the nth of a name with the starter's nth of
-/// it, wherever it sits, since genes may be doubled, lost or changed (M2
-/// design §13); a number no sprite has is not a number. By the end of a
-/// long run, all were hatched.
+/// `world`, eggs aside; empty if none is alive, and not a number where none
+/// has it (M2 design §13). By the end of a long run, all were hatched.
 fn middles(world: &World, starter: &[(String, f32)]) -> Vec<f32> {
-    let mut columns: Vec<Vec<f32>> = vec![Vec::new(); starter.len()];
-    let mut sprites = 0;
-    for sprite in world.sprites() {
-        sprites += 1;
-        let genes: Vec<GeneView> = sprite.genes().into_iter().map(|(gene, _)| gene).collect();
-        let numbers = numbers(&genes);
-        let mut nth: BTreeMap<&str, usize> = BTreeMap::new();
-        for (column, (name, _)) in columns.iter_mut().zip(starter) {
-            let nth = nth.entry(name).or_insert(0);
-            let value = numbers.iter().filter(|(its, _)| its == name).nth(*nth);
-            if let Some(&(_, value)) = value {
-                column.push(value);
-            }
-            *nth += 1;
-        }
-    }
-    if sprites == 0 {
-        return Vec::new();
-    }
-    columns
-        .into_iter()
-        .map(|mut column| {
-            column.sort_by(f32::total_cmp);
-            column.get(column.len() / 2).copied().unwrap_or(f32::NAN)
+    middle_values(world, starter)
+        .map(|middles| {
+            middles
+                .into_iter()
+                .map(|middle| middle.unwrap_or(f32::NAN))
+                .collect()
         })
-        .collect()
+        .unwrap_or_default()
 }
 
 fn parse(args: &[String]) -> Result<Options, String> {

@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use terra_sim::Mode;
 use terra_tui::clock::{Clock, Speed};
 
 /// Advances `clock` through `total` time in 40 ms frames, never running out of
@@ -341,4 +342,53 @@ fn holding_slower_from_max_passes_16x_and_stops_at_1x() {
     }
     use Speed::*;
     assert_eq!(seen, [X16, X8, X4, X2, X1, X1]);
+}
+
+#[test]
+fn story_mode_tops_out_at_4x_and_lab_mode_at_max() {
+    // M2 design §16.
+    assert_eq!(Speed::fastest_in(Mode::Story), Speed::X4);
+    assert_eq!(Speed::fastest_in(Mode::Lab), Speed::Max);
+}
+
+#[test]
+fn a_clock_capped_at_4x_goes_no_faster_pressed_or_held() {
+    let mut clock = Clock::new();
+    clock.set_fastest(Speed::X4);
+    let mut seen = vec![];
+    for _ in 0..4 {
+        clock.faster();
+        seen.push(clock.speed());
+    }
+    use Speed::*;
+    assert_eq!(seen, [X2, X4, X4, X4]);
+    clock.faster_held();
+    assert_eq!(clock.speed(), X4);
+}
+
+#[test]
+fn faster_says_when_it_was_already_as_fast_as_it_may_go() {
+    let mut clock = Clock::new();
+    clock.set_fastest(Speed::X4);
+    assert!(!clock.faster(), "1× to 2×");
+    assert!(!clock.faster(), "2× to 4×");
+    assert!(clock.faster(), "4× is the most");
+    assert!(clock.faster_held(), "held too");
+}
+
+#[test]
+fn capping_a_faster_clock_slows_it_to_the_cap() {
+    let mut clock = Clock::new();
+    for _ in 0..4 {
+        clock.faster();
+    }
+    assert_eq!(clock.speed(), Speed::X16);
+    clock.set_fastest(Speed::X4);
+    assert_eq!(clock.speed(), Speed::X4);
+    // A slower clock keeps its speed.
+    clock.slower();
+    clock.set_fastest(Speed::Max);
+    assert_eq!(clock.speed(), Speed::X2);
+    clock.set_fastest(Speed::X4);
+    assert_eq!(clock.speed(), Speed::X2);
 }
