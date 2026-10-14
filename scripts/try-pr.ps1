@@ -62,9 +62,13 @@ if ($Pr -eq "main") {
     $Pr = $Pr.TrimStart('#')
     if ($Pr -notmatch '^\d+$') { Fail "Give a PR number, such as 170, or 'main'." }
     Write-Host "Fetching PR #$Pr from GitHub..."
-    git fetch -q origin "pull/$Pr/head"
+    # Into a ref of its own, not FETCH_HEAD: any other fetch in this folder
+    # at the same moment, such as an editor's or an agent's, overwrites
+    # FETCH_HEAD, and the PR would be built from whatever that fetched.
+    $fetched = "refs/try-pr/$Pr"
+    git fetch -q origin "+pull/$Pr/head:$fetched"
     if ($LASTEXITCODE -ne 0) { Fail "Couldn't fetch PR #$Pr. Is the number right?" }
-    Switch-To "try-pr-$Pr" (git rev-parse FETCH_HEAD)
+    Switch-To "try-pr-$Pr" (git rev-parse $fetched)
     $label = "PR #$Pr"
 }
 
