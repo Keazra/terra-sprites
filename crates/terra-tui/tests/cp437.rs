@@ -1,10 +1,12 @@
 //! Every screen's text stays within CP437, so any CP437 font or tileset can
 //! draw every panel (design §6.2).
 
+mod common;
+
 use ratatui::buffer::Buffer;
 use ratatui::layout::Size;
 use ratatui::{Terminal, backend::TestBackend};
-use terra_sim::{DataPack, World, WorldConfig};
+use terra_sim::{DataPack, EntityId, World, WorldConfig};
 use terra_tui::app::{App, CursorMode, Ticks};
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
@@ -81,6 +83,8 @@ fn every_screen_s_text_is_within_cp437() {
         let left = Action::Scroll { dx: -1, dy: 0 };
         check(&mut app, Some(left), "a moment picked");
         check(&mut app, Some(Action::Population), "the graph closed");
+        check(&mut app, Some(Action::FamilyTree), "the family tree");
+        check(&mut app, Some(Action::FamilyTree), "the tree closed");
         check(&mut app, Some(Action::Rename), "naming");
         check(&mut app, Some(Action::Back), "naming given up");
         check(&mut app, Some(Action::Mode(CursorMode::Grab)), "Grab mode");
@@ -93,5 +97,17 @@ fn every_screen_s_text_is_within_cp437() {
         check(&mut app, Some(Action::Back), "back to Select");
         check(&mut app, Some(Action::Back), "the quit prompt");
         assert_cp437(&render(&app, &world, 80, 20), "a screen too small");
+    }
+}
+
+#[test]
+fn the_family_tree_s_lines_and_arrows_are_within_cp437() {
+    // M2 design §17.2: the lines joining the generations, `◄` and `►` past
+    // the edge of a row that scrolls, and ` · ` between a card's parts.
+    let world = common::pairs(230);
+    for theme in [Theme::cp437(), Theme::ascii()] {
+        let mut app = App::new(world.map(), theme, 7, ui::areas(Size::new(100, 30)));
+        common::tree_of(&mut app, &world, EntityId(16));
+        assert_cp437(&render(&app, &world, 100, 30), "the family tree");
     }
 }

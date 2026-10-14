@@ -13,11 +13,11 @@ To carry a single sprite from one world to another, export its genome with `g` i
 | `Ctrl+S` | Saves under a name you type, up to 40 characters. It offers the seed and tick, such as `seed 7 tick 48210`; typing replaces it. The same name saves over the old one. |
 | `Ctrl+O` | Lists every save, newest first, the quicksave and autosaves included, to pick one to load. |
 
-The title screen loads them too: **Continue** loads the newest save, whichever kind it is, and **Load** lists them all as `Ctrl+O` does.
+The title screen loads them too: **Continue** loads the newest save, whichever kind it is, and **Load** lists them all as `Ctrl+O` does. From the command line, `--load <name>` opens one straight away, by its name or by the path to its file.
 
 - **Autosaves.** The game saves itself every 10 minutes of running time, and when you quit or go back to the title screen. Paused time doesn't count, and quitting doesn't save again if the world hasn't run since it was last saved. It keeps the last 3: `autosave-1` is the newest.
 - **Loading asks first** if the world on screen has run since it was last saved, since loading would lose that: "Load quicksave? The world has run 4m since it was last saved (y/n)". `y` loads; so does `F9` again, when it's the quicksave asked about. Any other key keeps the world.
-- **A loaded world starts paused,** with the view and the Cursor where they were when it was saved. Your settings, such as the speed, the theme and the open inspector tab, stay as they were.
+- **A loaded world starts paused,** with the view and the Cursor where they were when it was saved. Your settings, such as the speed, the theme and the open inspector tab, stay as they were, except that a Story world's speed comes down to 4× if it was faster (M2 design §16.2).
 - The top bar says how long ago the world was last saved, autosaved or loaded: `not saved`, `saved just now` for the first 3 seconds, then `saved 4s ago`, `saved 20s ago`, `saved 3m ago`.
 
 ## Where saves go
@@ -30,7 +30,7 @@ Saves are files in the `saves` folder of the game's folder. The help screen (`?`
 | macOS | `~/Library/Application Support/terra-sprites` |
 | Linux and others | `$XDG_DATA_HOME/terra-sprites`, or `~/.local/share/terra-sprites` |
 
-Each save is one file ending in `.tspr`: `quicksave.tspr`, `autosave-1.tspr` to `autosave-3.tspr`, and each named save as its name, such as `seed 7 tick 48210.tspr`.
+Each save is one file ending in `.tspr`: `quicksave.tspr`, `autosave-1.tspr` to `autosave-3.tspr`, and each named save as its name, such as `seed 7 tick 48210.tspr`. A fast-forward's save, such as `seed-7-200h.tspr`, has its two tables beside it, `seed-7-200h-population.csv` and `seed-7-200h-genes.csv` ([README](../../README.md#fast-forward)); the load list shows only the saves.
 
 - **Names are made safe for any system.** A character some system can't have in a file name (`/ \ : * ? " < > |`) becomes `-`, dots and spaces at the end are left off, and a name Windows keeps for a device, such as `con` or `lpt1`, gets a `-` after it. The game always says a save's name as it's stored, which is the name the load list shows.
 - **A save is never half written.** The game writes the new file beside the old one, then puts it in its place, so a save cut short, by a crash or a full disk, leaves the old save as it was.
@@ -44,6 +44,7 @@ Everything that decides what happens next, so a loaded world carries on exactly 
 - every plant, item and toy, with its stage and timers;
 - the map, the tick, and the world's random numbers, so the same clicks give the same future;
 - what the Cursor holds or leads, and clicks made while paused that haven't happened yet;
+- whether it's a Story world or a Lab world, which it stays for good (a save from before the modes is a Story world);
 - **the data pack the world was made with**, as the text of each of its files.
 
 That last point means a world keeps its own rules. Editing `data/` and rebuilding changes new worlds, never one already saved: loading a save always uses the pack inside it (design §2.8). It also keeps the seed and preset the world was made from, which the top bar shows, and where the view was.

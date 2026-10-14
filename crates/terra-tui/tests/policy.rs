@@ -9,7 +9,7 @@ use terra_sim::{
     ActionView, Command, DataPack, DeathCause, EntityId, Event, EventKind, Grip, Hurt, Map,
     Outcome, Pos, Progress, Rejection, Scenario, ScriptedAction, Target, Verb, World,
 };
-use terra_tui::app::{App, CursorMode, Tab};
+use terra_tui::app::{App, ColourMode, CursorMode, Tab};
 use terra_tui::input::Action;
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
 use terra_tui::theme::Theme;
@@ -196,6 +196,19 @@ fn every_display_asks_the_policy_and_shows_everything_in_m1() {
         "the population graph: {}",
         row(&graph, 2, 0..100)
     );
+    app.apply(Action::Population, &world);
+    app.apply(Action::FamilyTree, &world);
+    let tree = render(&app, &world);
+    assert!(
+        row(&tree, 1, 0..100).starts_with("┌─ Family tree ── Sprite #"),
+        "the family tree, named: {}",
+        row(&tree, 1, 0..100)
+    );
+    assert!(
+        row(&tree, 7, 0..100).contains("one of the first sprites"),
+        "where it came from: {}",
+        row(&tree, 7, 0..100)
+    );
 }
 
 #[test]
@@ -249,6 +262,18 @@ fn a_policy_that_denies_everything_blanks_every_display() {
         let inside = row(&graph, y, 0..100);
         assert_eq!(inside.trim_matches(['│', ' ']), "", "no population graph");
     }
+    app.apply(Action::Population, &world);
+    app.apply(Action::FamilyTree, &world);
+    let tree = render(&app, &world);
+    let top = row(&tree, 1, 0..100);
+    assert!(
+        top.starts_with("┌─ Family tree ─") && !top.contains('#'),
+        "the tree's title names no sprite: {top}"
+    );
+    for y in 2..28 {
+        let inside = row(&tree, y, 0..100);
+        assert_eq!(inside.trim_matches(['│', ' ']), "", "no family tree");
+    }
 }
 
 #[test]
@@ -275,6 +300,33 @@ fn a_policy_that_hides_map_colours_draws_sprites_in_their_own_colour() {
     assert_eq!(render(&app, &world)[cell(WANDERER)].fg, Color::Yellow);
     app.set_policy(Blind);
     assert_eq!(render(&app, &world)[cell(WANDERER)].fg, Color::White);
+}
+
+/// A policy that shows everything but the family tree.
+struct HideTheFamilyTree;
+
+impl InfoPolicy for HideTheFamilyTree {
+    fn can_view(&self, panel: Panel, _subject: Subject) -> bool {
+        panel != Panel::FamilyTree
+    }
+}
+
+#[test]
+fn a_policy_that_hides_the_family_tree_hides_the_lineage_colours_too() {
+    // M2 design §17.6: both show the same sprites' lineage.
+    let world = field();
+    let mut app = busy_app(&world);
+    while app.colour_mode() != ColourMode::Lineage {
+        app.apply(Action::CycleColours, &world);
+    }
+    let other = Pos { x: 6, y: 1 };
+    assert_eq!(
+        render(&app, &world)[cell(other)].fg,
+        Color::DarkGray,
+        "not of its lineage"
+    );
+    app.set_policy(HideTheFamilyTree);
+    assert_eq!(render(&app, &world)[cell(other)].fg, Color::White);
 }
 
 #[test]

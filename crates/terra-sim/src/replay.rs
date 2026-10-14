@@ -15,6 +15,7 @@ use crate::command::Command;
 use crate::config::WorldConfig;
 use crate::data::{DataError, DataPack};
 use crate::events::Event;
+use crate::mode::Mode;
 use crate::save::{self, LoadError, Preset, SCHEMA_VERSION, SIM_VERSION};
 use crate::world::World;
 
@@ -71,9 +72,15 @@ impl fmt::Display for ReplayError {
 /// Where a replay starts (design §2.7).
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) enum Start {
-    /// A world generated from the preset and the seed, before anything
-    /// happened to it.
-    Fresh { seed: u64, config: Preset },
+    /// A world generated from the preset and the seed, in its mode,
+    /// before anything happened to it. A replay from before the modes
+    /// was of a Story world (M2 design §16).
+    Fresh {
+        seed: u64,
+        config: Preset,
+        #[serde(default)]
+        mode: Mode,
+    },
     /// A world's save, as of the tick the recording began.
     Snapshot(#[serde(serialize_with = "bytes", deserialize_with = "save::read_bytes")] Vec<u8>),
 }
@@ -238,14 +245,14 @@ impl Playback {
         }
         let fresh = matches!(read.start, Start::Fresh { .. });
         let world = match read.start {
-            Start::Fresh { seed, config } => {
+            Start::Fresh { seed, config, mode } => {
                 let sources: Vec<(&str, &str)> = read
                     .sources
                     .iter()
                     .map(|(path, text)| (path.as_str(), text.as_str()))
                     .collect();
                 let data = DataPack::from_sources(&sources).map_err(ReplayError::Pack)?;
-                World::new(WorldConfig::from(config), data, seed)
+                World::new_in(WorldConfig::from(config), data, seed, mode)
             }
             Start::Snapshot(save) => World::load(&save).map_err(ReplayError::Start)?,
         };

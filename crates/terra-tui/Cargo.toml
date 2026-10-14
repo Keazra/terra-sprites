@@ -10,6 +10,8 @@ name = "terra-sprites"
 path = "src/main.rs"
 
 [dependencies]
+# Lets `Ctrl+C` stop a fast-forward and save what has run (M2 design §16).
+ctrlc = "3.5"
 ratatui = "0.30.2"
 ron = "0.12.2"
 serde = { version = "1.0.229", features = ["derive"] }

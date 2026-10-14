@@ -3,9 +3,10 @@
 //! All logic worth testing lives in the `terra_tui` library.
 
 use std::cell::Cell;
-use std::io::{self, stdout};
+use std::io::{self, IsTerminal, Write, stdout};
 use std::path::Path;
 use std::process::ExitCode;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -19,6 +20,7 @@ use ratatui::crossterm::terminal::{self, supports_keyboard_enhancement};
 use terra_sim::{Playback, World};
 use terra_tui::app::{App, Flow, Ticks};
 use terra_tui::args::{Args, USAGE, VERSION};
+use terra_tui::fast_forward::{self, FastForward};
 use terra_tui::files;
 use terra_tui::input::{self, Keys};
 use terra_tui::saves;
@@ -45,13 +47,20 @@ fn main() -> ExitCode {
         println!("terra-sprites {VERSION}");
         return ExitCode::SUCCESS;
     }
+    // Fast-forward runs with no screen at all (M2 design §16).
+    if let Some(hours) = args.fast_forward {
+        return fast_forward(&args, hours);
+    }
     // Flags that make or load a world go straight in (M2 design §8.5);
     // otherwise the game opens on the title screen. What the flags get
     // wrong stops the game here, before the terminal is taken.
     let first = if start::skips_title(&args) {
-        let opening = match &args.replay {
-            Some(path) => replay_from(path),
-            None => start::new_world(&args, args.seed.unwrap_or_else(time_seed)).map(Opening::live),
+        let opening = match (&args.replay, &args.load) {
+            (Some(path), _) => replay_from(path),
+            (None, Some(name)) => load_from(name),
+            (None, None) => {
+                start::new_world(&args, args.seed.unwrap_or_else(time_seed)).map(Opening::live)
+            }
         };
         match opening {
             Ok(opening) => Next::World(opening),
@@ -266,10 +275,11 @@ fn run_title(
             match title.apply(action) {
                 TitleFlow::Stay => {}
                 TitleFlow::Quit => return Ok(None),
-                TitleFlow::New { seed, preset } => {
+                TitleFlow::New { seed, preset, mode } => {
                     let asked = Args {
                         seed: Some(seed),
                         preset,
+                        mode,
                         ..args.clone()
                     };
                     match start::new_world(&asked, seed) {
@@ -309,6 +319,175 @@ fn replay_from(path: &Path) -> Result<Opening, String> {
         replay: Some(name),
         loaded: None,
     })
+}
+
+/// The save `--load` names, to open as Load does on the title screen (M2
+/// design §16).
+fn load_from(name: &str) -> Result<Opening, String> {
+    let file = saves::named(name, files::save_folder().as_deref())
+        .map_err(|why| format!("can't load {name}: {why}"))?;
+    let world = saves::load(&file)?;
+    Ok(Opening {
+        session: Session::live(world),
+        replay: None,
+        loaded: Some(file.name),
+    })
+}
+
+/// How many ticks a fast-forward runs between looks at `Ctrl+C` and the
+/// progress line: a fraction of a second even in a full world.
+const FAST_FORWARD_CHUNK: u64 = 100;
+
+/// How often a fast-forward's progress line is redrawn.
+const PROGRESS_EVERY: Duration = Duration::from_millis(500);
+
+/// `--fast-forward`: runs a Lab world `hours` of play at 1× with no screen,
+/// a row of the report each tenth of the way and a progress line in
+/// between, then saves it in the saves folder, under a name no save has
+/// yet (M2 design §16). `Ctrl+C` stops it early and saves what has run; a
+/// second one stops at once.
+fn fast_forward(args: &Args, hours: u64) -> ExitCode {
+    let fail = |why: String| {
+        eprintln!("terra-sprites: {why}");
+        ExitCode::FAILURE
+    };
+    let Some(folder) = files::save_folder() else {
+        return fail("can't tell where the saves folder is, so there's nowhere to save".into());
+    };
+    let seed = args.seed.unwrap_or_else(time_seed);
+    let (world, from) = match start::fast_forward_world(args, seed, Some(&folder)) {
+        Ok(found) => found,
+        Err(why) => return fail(why),
+    };
+    let preset = start::preset_name(args);
+    let loaded = args.load.is_some().then_some(from.as_str());
+    println!(
+        "{}",
+        fast_forward::opening_line(&world, loaded, &preset, hours)
+    );
+    let stopping = Arc::new(AtomicBool::new(false));
+    let stop = Arc::clone(&stopping);
+    let handled = ctrlc::set_handler(move || {
+        if stop.swap(true, Ordering::SeqCst) {
+            std::process::exit(130);
+        }
+    });
+    if handled.is_ok() {
+        println!("Ctrl+C stops it early and saves what has run.");
+    }
+    println!("\n{}", fast_forward::HEADER);
+
+    let mut run = FastForward::new(world, hours);
+    let started = Instant::now();
+    let mut progress = Progress::new(stdout().is_terminal());
+    while !run.done() && !stopping.load(Ordering::SeqCst) {
+        match run.advance(FAST_FORWARD_CHUNK) {
+            Some(row) => {
+                progress.clear();
+                println!("{}", row.line());
+            }
+            None => progress
+                .show(|| fast_forward::progress_line(&run, per_second(run.ticks_run(), started))),
+        }
+    }
+    progress.clear();
+
+    let stopped = !run.done();
+    if stopped {
+        // Where it stopped, as a last row.
+        println!("{}", run.take_row().line());
+    }
+    run.finish();
+    let ticks_run = run.ticks_run();
+    let rate = per_second(ticks_run, started);
+    let genes = run.genes().clone();
+    let world = run.into_world();
+    let name = args
+        .save
+        .clone()
+        .unwrap_or_else(|| fast_forward::save_name(&from, ticks_run));
+    let name = saves::unused_name(&folder, &name);
+    if let Err(err) = saves::write(&folder, &name, &world.save()) {
+        return fail(format!("couldn't save the world as {name}: {err}"));
+    }
+    println!(
+        "\n{}",
+        fast_forward::closing_line(stopped, ticks_run, started.elapsed(), rate)
+    );
+    println!(
+        "Saved as {name} in your saves folder ({}): the title screen's Continue opens it.",
+        folder.display()
+    );
+    let tables = fast_forward::tables(&name, &world, &genes);
+    let mut written = Vec::new();
+    for (file, table) in &tables {
+        match std::fs::write(folder.join(file), table) {
+            Ok(()) => written.push(file.as_str()),
+            Err(err) => eprintln!("terra-sprites: couldn't write {file}: {err}"),
+        }
+    }
+    if !written.is_empty() {
+        println!("The tables are beside it: {}.", written.join(" and "));
+    }
+    println!();
+    for line in genes.ending() {
+        println!("{line}");
+    }
+    ExitCode::SUCCESS
+}
+
+/// Ticks a second, for `ticks` run since `started`.
+fn per_second(ticks: u64, started: Instant) -> f64 {
+    let seconds = started.elapsed().as_secs_f64();
+    if seconds > 0.0 {
+        ticks as f64 / seconds
+    } else {
+        0.0
+    }
+}
+
+/// A fast-forward's progress line, redrawn in place on a terminal, and
+/// never shown where the report goes to a file.
+struct Progress {
+    shown: bool,
+    on_terminal: bool,
+    /// How wide the line on screen is, to rub out.
+    width: usize,
+    last: Instant,
+}
+
+impl Progress {
+    fn new(on_terminal: bool) -> Progress {
+        Progress {
+            shown: false,
+            on_terminal,
+            width: 0,
+            last: Instant::now(),
+        }
+    }
+
+    /// Redraws the line from `line`, at most every `PROGRESS_EVERY`.
+    fn show(&mut self, line: impl FnOnce() -> String) {
+        if !self.on_terminal || self.last.elapsed() < PROGRESS_EVERY {
+            return;
+        }
+        let line = line();
+        let width = line.chars().count();
+        let rub_out = " ".repeat(self.width.saturating_sub(width));
+        print!("\r{line}{rub_out}");
+        let _ = stdout().flush();
+        (self.shown, self.width, self.last) = (true, width, Instant::now());
+    }
+
+    /// Rubs the line out, for a row of the report or the end to take its
+    /// place.
+    fn clear(&mut self) {
+        if self.shown {
+            print!("\r{}\r", " ".repeat(self.width));
+            let _ = stdout().flush();
+            (self.shown, self.width) = (false, 0);
+        }
+    }
 }
 
 /// What the frame loop runs with, besides the terminal and the world.

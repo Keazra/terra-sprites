@@ -22,13 +22,16 @@ mod decide;
 mod ecology;
 mod events;
 mod expression;
+mod gene_values;
 mod generate;
 mod genome;
 mod inheritance;
 mod lab;
 mod learning;
+mod lineage;
 mod listed;
 mod map;
+mod mode;
 mod mutation;
 mod names;
 mod object_types;
@@ -67,9 +70,12 @@ pub use cursor::Grip;
 pub use data::{DataError, DataPack};
 pub use events::{DeathCause, Emptied, Event, EventKind, Removal};
 pub use expression::Expression;
+pub use gene_values::{Drift, drift, gene_values, middle_values};
 pub use genome::{EmitterMode, GeneView, Genome, GenomeError};
 pub use lab::{LabError, LabRun, LabScenario, Window, Without, median, report};
+pub use lineage::Origin;
 pub use map::{Dir, Map, MapError, Pos};
+pub use mode::Mode;
 pub use mutation::CopyChangeView;
 pub use names::{MAX_NAME_CHARS, NameProblem};
 pub use objects::EntityId;
@@ -81,6 +87,6 @@ pub use save::{LoadError, SCHEMA_VERSION};
 pub use soak::{Soak, SoakRun};
 pub use terrain::{Terrain, TerrainProps};
 pub use world::{
-    ChemicalLevel, CursorView, EggView, HeldView, InvariantViolation, ObjectView, Scenario,
-    ScenarioError, SpriteView, World,
+    ChemicalLevel, CursorView, DeadView, EggView, HeldView, InvariantViolation, ObjectView,
+    Scenario, ScenarioError, SpriteView, World,
 };

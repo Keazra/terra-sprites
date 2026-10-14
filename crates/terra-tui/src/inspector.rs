@@ -15,6 +15,7 @@ use terra_sim::{
 };
 
 use crate::app::{App, Selection, Tab};
+use crate::family_tree;
 use crate::listed::listed_enum;
 use crate::policy::{Panel, Subject};
 use crate::text;
@@ -30,7 +31,7 @@ pub(crate) const INSPECTOR_WIDTH: u16 = 46;
 const WIDTH: usize = INSPECTOR_WIDTH as usize - 2;
 
 /// What a sprite tab says with no sprite selected.
-const NOTHING_SELECTED: &str = " No sprite selected: click one, or press Tab";
+pub(crate) const NOTHING_SELECTED: &str = " No sprite selected: click one, or press Tab";
 
 /// The inspector's title: the selected sprite, if any, then the tabs, with
 /// the open one in brackets.
@@ -240,10 +241,11 @@ pub(crate) fn doing_line(sprite: &SpriteView, app: &App, world: &World) -> Optio
         })
 }
 
-/// A sprite's sex and fertility, and its parents and partner, if it has
-/// any (M2 design §10, §15.8): `male · fertile · turning 40%`, `parents Pip
-/// #12 and Bo #7`, `partner Kit #20`, or once its partner has died, until it
-/// pairs again, `partner Kit #20 · died`.
+/// A sprite's sex and fertility, its parents, or where it came from
+/// without, and its generation (M2 design §10, §17.5), and its partner, if it
+/// has one (§15.8): `male · fertile · turning 40%`, `parents Pip #12 and Bo
+/// #7 · generation 4`, `partner Kit #20`, or once its partner has died, until
+/// it pairs again, `partner Kit #20 · died`.
 fn family_lines(sprite: &SpriteView, data: &Words) -> Vec<String> {
     let mut line = format!(" {}", sprite.sex().name());
     if sprite.is_fertile() {
@@ -254,9 +256,13 @@ fn family_lines(sprite: &SpriteView, data: &Words) -> Vec<String> {
         line.push_str(&format!(" · turning {:.0}%", share * 100.0));
     }
     let mut lines = vec![line];
-    if let Some(parents) = parents_text(sprite.parents(), data) {
-        lines.push(format!(" parents {parents}"));
-    }
+    let whence = match parents_text(sprite.parents(), data) {
+        Some(parents) => format!("parents {parents}"),
+        None => family_tree::origin_text(sprite.origin())
+            .unwrap_or_default()
+            .to_string(),
+    };
+    lines.extend(generation_lines(&whence, sprite.generation()));
     if let Some((partner, died)) = sprite.partner() {
         let died = if died { " · died" } else { "" };
         lines.push(format!(" partner {}{died}", data.label(partner)));
@@ -264,26 +270,58 @@ fn family_lines(sprite: &SpriteView, data: &Words) -> Vec<String> {
     lines
 }
 
+/// Where a sprite or egg came from, `whence`, and its generation (M2
+/// design §17.5): `parents Pip #12 and Bo #7 · generation 4`, on two lines if
+/// that's too long for one.
+fn generation_lines(whence: &str, generation: u32) -> Vec<String> {
+    let line = format!(" {whence} · generation {generation}");
+    if line.chars().count() <= WIDTH {
+        vec![line]
+    } else {
+        vec![format!(" {whence}"), format!(" generation {generation}")]
+    }
+}
+
 /// What every sprite tab shows for an egg (M2 design §10.7): when it
 /// hatches, and who laid it, `egg · hatches in 750 ticks`, `parents Pip #12
 /// and Bo #7`. One that's due waits while the Cursor holds it or a sprite
 /// stands on it (§10.4).
 fn egg_card(egg: &EggView, world: &World, data: &Words) -> Vec<Line<'static>> {
-    // The ticks still to run, the one it hatches on included.
-    let left = (egg.hatches() + 1).saturating_sub(world.tick());
-    let when = match (left, egg.pos()) {
-        (0, None) => "hatches once it's put down".to_string(),
-        (0, Some(_)) => "hatches once nothing stands on it".to_string(),
-        (left, _) => format!(
+    let when = match hatching(egg, world) {
+        Hatching::OncePutDown => "hatches once it's put down".to_string(),
+        Hatching::OnceClear => "hatches once nothing stands on it".to_string(),
+        Hatching::In(left) => format!(
             "hatches in {}",
             counted(u32::try_from(left).unwrap_or(u32::MAX), "tick")
         ),
     };
     let mut lines = vec![format!(" {} · {when}", display_name(egg.type_name()))];
     if let Some(parents) = parents_text(egg.parents(), data) {
-        lines.push(format!(" parents {parents}"));
+        lines.extend(generation_lines(
+            &format!("parents {parents}"),
+            egg.generation(),
+        ));
     }
     lines.into_iter().map(Line::from).collect()
+}
+
+/// When an egg hatches (M2 design §10.4).
+pub(crate) enum Hatching {
+    /// In this many ticks, the one it hatches on included.
+    In(u64),
+    /// Once the Cursor puts it down: it's due, but held.
+    OncePutDown,
+    /// Once nothing stands on it: it's due, but a sprite does.
+    OnceClear,
+}
+
+/// When `egg` hatches.
+pub(crate) fn hatching(egg: &EggView, world: &World) -> Hatching {
+    match ((egg.hatches() + 1).saturating_sub(world.tick()), egg.pos()) {
+        (0, None) => Hatching::OncePutDown,
+        (0, Some(_)) => Hatching::OnceClear,
+        (left, _) => Hatching::In(left),
+    }
 }
 
 /// Parents by name, `Pip #12 and Bo #7`, or `None` for none.
@@ -1896,6 +1934,23 @@ fn wrapped(text: &str, indent: usize, style: Style) -> Vec<Line<'static>> {
         .collect()
 }
 
+/// The generations of the sprites alive (M2 design §17.5), from the oldest
+/// to the newest, `generations 1 to 6`, or none with no sprites.
+fn generations_line(world: &World) -> Option<Line<'static>> {
+    let generations = || world.sprites().map(|sprite| sprite.generation());
+    let (oldest, newest) = generations().min().zip(generations().max())?;
+    let line = if oldest == newest {
+        format!(" {:<12}{:>7}", "generation", oldest)
+    } else {
+        format!(
+            " {:<12}{:>7}",
+            "generations",
+            format!("{oldest} to {newest}")
+        )
+    };
+    Some(Line::from(line))
+}
+
 /// The World tab (design §6.1): a small population graph (M2 design §14),
 /// if the policy shows it; the data pack; the population, and the deaths by
 /// cause; then each object type with its count, the count in each stage
@@ -1934,8 +1989,13 @@ fn world_tab(app: &App, world: &World) -> Vec<Line<'static>> {
             "sprites",
             group_thousands(world.sprites().count() as u64)
         )),
-        Line::from(format!(" {:<12}{:>7}", "deaths", group_thousands(total))),
     ]);
+    lines.extend(generations_line(world));
+    lines.push(Line::from(format!(
+        " {:<12}{:>7}",
+        "deaths",
+        group_thousands(total)
+    )));
     lines.extend(wrapped(&listed(&deaths), 3, plain));
     for object_type in data.object_type_names() {
         let objects: Vec<ObjectView> = world
