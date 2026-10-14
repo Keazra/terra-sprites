@@ -77,6 +77,10 @@ fn every_screen_s_text_is_within_cp437() {
             check(&mut app, Some(Action::SelectNext), sort);
         }
         check(&mut app, Some(Action::Back), "the sprite list closed");
+        check(&mut app, Some(Action::Population), "the population graph");
+        let left = Action::Scroll { dx: -1, dy: 0 };
+        check(&mut app, Some(left), "a moment picked");
+        check(&mut app, Some(Action::Population), "the graph closed");
         check(&mut app, Some(Action::Rename), "naming");
         check(&mut app, Some(Action::Back), "naming given up");
         check(&mut app, Some(Action::Mode(CursorMode::Grab)), "Grab mode");

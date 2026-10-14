@@ -37,4 +37,7 @@ fn the_theme_example_loads() {
     let default = Theme::cp437();
     assert_eq!(theme.star(Depth::Near), default.star(Depth::Near));
     assert_eq!(theme.glass(Pane::TopLeft), default.glass(Pane::TopLeft));
+    let (graph, default) = (theme.population(), default.population());
+    assert_eq!((graph.old, graph.limit.fg), (Color::White, Color::Gray));
+    assert_eq!((graph.young, graph.half), (default.young, default.half));
 }
