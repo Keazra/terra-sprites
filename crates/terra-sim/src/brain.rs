@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ageing::{LifeStage, health_of};
 use crate::biochem::Body;
-use crate::brain_io::Source;
+use crate::brain_io::{InputId, Source};
 use crate::data::DataPack;
 use crate::expression::{Expression, expressions};
 use crate::family::Relation;
@@ -67,6 +67,17 @@ fn fear_push(verb: Verb, flight: f32, value_gain: f32) -> f32 {
     }
 }
 
+/// The signature of the concept an instinct on `inputs` links from (design
+/// §5.4): each input by its place in the pack, in order.
+fn signature_of(inputs: &[(InputId, bool)], data: &DataPack) -> Signature {
+    let mut signature: Signature = inputs
+        .iter()
+        .map(|&(id, negated)| (data.brain_input_index(id).expect("a checked gene"), negated))
+        .collect();
+    signature.sort();
+    signature
+}
+
 /// Where `verb` is in `VERBS`.
 fn column(verb: Verb) -> usize {
     VERBS
@@ -87,12 +98,17 @@ pub(crate) struct BrainParams {
 
 impl BrainParams {
     pub(crate) fn express(genome: &Genome, data: &DataPack, stage: LifeStage) -> BrainParams {
+        BrainParams::express_as(genome, data, &expressions(genome, data, stage))
+    }
+
+    /// The same, from how each gene is expressed, in genome order (#210).
+    fn express_as(genome: &Genome, data: &DataPack, expressed: &[Expression]) -> BrainParams {
         let ranges = &data.physiology().brain;
         let mut values: Vec<f32> = BrainParam::ALL
             .iter()
             .map(|&param| ranges.of(param).default)
             .collect();
-        for (gene, expression) in genome.genes.iter().zip(expressions(genome, data, stage)) {
+        for (gene, expression) in genome.genes.iter().zip(expressed) {
             if let (&Gene::BrainParam { param, value }, Expression::Expressed) = (gene, expression)
             {
                 let (low, high) = ranges.of(param).range;
@@ -400,24 +416,24 @@ impl Brain {
         stage: LifeStage,
         health: &[f32],
     ) -> Brain {
+        Brain::weakened_as(genome, data, &expressions(genome, data, stage), health)
+    }
+
+    /// The same, from how each gene is expressed, in genome order (#210).
+    fn weakened_as(
+        genome: &Genome,
+        data: &DataPack,
+        expressed: &[Expression],
+        health: &[f32],
+    ) -> Brain {
         let inputs = data.brain_inputs_in_order();
-        let place = |id| {
-            inputs
-                .iter()
-                .position(|input| input.id == id)
-                .expect("a checked gene")
-        };
+        let place = |id| data.brain_input_index(id).expect("a checked gene");
         let mut concepts: Vec<Signature> = (0..inputs.len()).map(|i| vec![(i, false)]).collect();
         let mut decision = vec![vec![0.0; VERBS.len()]; inputs.len()];
         let mut attention = vec![vec![0.0; data.categories().len()]; inputs.len()];
         let mut whom = Vec::new();
-        for (index, (gene, expression)) in genome
-            .genes
-            .iter()
-            .zip(expressions(genome, data, stage))
-            .enumerate()
-        {
-            if expression != Expression::Expressed {
+        for (index, (gene, expression)) in genome.genes.iter().zip(expressed).enumerate() {
+            if *expression != Expression::Expressed {
                 continue;
             }
             let strength = health_of(health, index);
@@ -427,11 +443,7 @@ impl Brain {
                     verb,
                     weight,
                 } => {
-                    let mut signature: Signature = inputs
-                        .iter()
-                        .map(|&(id, negated)| (place(id), negated))
-                        .collect();
-                    signature.sort();
+                    let signature = signature_of(inputs, data);
                     let concept = match concepts.iter().position(|c| *c == signature) {
                         Some(concept) => concept,
                         None => {
@@ -463,7 +475,7 @@ impl Brain {
             }
         }
         Brain {
-            params: BrainParams::express(genome, data, stage),
+            params: BrainParams::express_as(genome, data, expressed),
             concepts,
             decision: Links::new(decision),
             attention: Links::new(attention),
@@ -479,19 +491,92 @@ impl Brain {
         }
     }
 
-    /// Expresses `genome` afresh for `stage` (M2 design §9.2): its
-    /// parameters, concepts and instinct links become those of its genes
-    /// working at `stage`, as weakened as their `health` says (§9.4). What it has learned, attends to and remembers
-    /// doing stays as it was; the snapshot, whose concepts may be gone, is
-    /// taken again at step 5.
+    /// Sets the instinct links of `genes`, each given with how it's
+    /// expressed and its health now, to their weakened weights (M2 design
+    /// §9.4), as `weakened` would. Only for genes that have weakened since
+    /// the brain was expressed, at the same stage: weakening changes no
+    /// parameter or concept, so the rest of the brain stays as it is (#210).
+    /// As after `reach`, the snapshot is taken again at step 5.
+    pub(crate) fn reweaken<'a>(
+        &mut self,
+        genes: impl IntoIterator<Item = (&'a Gene, &'a Expression, f32)>,
+        data: &DataPack,
+    ) {
+        let place = |id| data.brain_input_index(id).expect("a checked gene");
+        for (gene, expression, strength) in genes {
+            if *expression != Expression::Expressed {
+                continue;
+            }
+            // Each link is one expressed gene's: a gene that would set it
+            // again isn't expressed (design §4.3).
+            match *gene {
+                Gene::Instinct {
+                    ref inputs,
+                    verb,
+                    weight,
+                } => {
+                    let signature = signature_of(inputs, data);
+                    let concept = self
+                        .concepts
+                        .iter()
+                        .position(|c| *c == signature)
+                        .expect("an expressed instinct's concept");
+                    self.decision
+                        .set_clamped(concept, column(verb), weight * strength);
+                }
+                Gene::AttentionInstinct {
+                    input,
+                    category,
+                    whom: Whom::Any,
+                    weight,
+                } => self.attention.set_clamped(
+                    place(input),
+                    data.category_index(category),
+                    weight * strength,
+                ),
+                Gene::AttentionInstinct {
+                    input,
+                    category,
+                    whom: about,
+                    weight,
+                } => {
+                    let (input, category) = (place(input), data.category_index(category));
+                    let link = self
+                        .whom
+                        .iter_mut()
+                        .find(|l| l.input == input && l.category == category && l.whom == about)
+                        .expect("an expressed attention instinct's link");
+                    link.weight = (weight * strength).clamp(-1.0, 1.0);
+                }
+                _ => {}
+            }
+        }
+        self.snapshot = None;
+    }
+
+    /// Whether its parameters, concepts and instinct links are `other`'s.
+    pub(crate) fn instincts_match(&self, other: &Brain) -> bool {
+        self.params == other.params
+            && self.concepts == other.concepts
+            && self.decision == other.decision
+            && self.attention == other.attention
+            && self.whom == other.whom
+    }
+
+    /// Expresses `genome` afresh for a life stage (M2 design §9.2), each
+    /// gene as `expressed` at that stage, in genome order: its parameters,
+    /// concepts and instinct links become those of its genes working then,
+    /// as weakened as their `health` says (§9.4). What it has learned,
+    /// attends to and remembers doing stays as it was; the snapshot, whose
+    /// concepts may be gone, is taken again at step 5.
     pub(crate) fn reach(
         &mut self,
         genome: &Genome,
         data: &DataPack,
-        stage: LifeStage,
+        expressed: &[Expression],
         health: &[f32],
     ) {
-        let grown = Brain::weakened(genome, data, stage, health);
+        let grown = Brain::weakened_as(genome, data, expressed, health);
         self.params = grown.params;
         self.concepts = grown.concepts;
         self.decision = grown.decision;
@@ -1071,11 +1156,7 @@ impl Brain {
             entry.tick <= now && entry.subject.is_none_or(subject) && motive(entry.motive)
         };
         let touched = |touch: Touch| touch.tick <= now && subject(touch.subject);
-        self.params == born.params
-            && self.concepts == born.concepts
-            && self.decision == born.decision
-            && self.attention == born.attention
-            && self.whom == born.whom
+        self.instincts_match(&born)
             && self.attended.is_none_or(category)
             && self.snapshot.as_ref().is_none_or(snapshot)
             && self.trace.iter().all(traced)

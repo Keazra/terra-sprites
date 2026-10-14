@@ -69,6 +69,12 @@ impl Links {
         }
     }
 
+    /// Sets the weight in `row` and `column` to `w`, clamped to [−1, 1] as
+    /// `new` clamps it.
+    pub(crate) fn set_clamped(&mut self, row: usize, column: usize, w: f32) {
+        self.w[row][column] = w.clamp(-1.0, 1.0);
+    }
+
     /// Sets the weight in `row` and `column`, unchecked.
     #[cfg(test)]
     pub(crate) fn set(&mut self, row: usize, column: usize, w: f32) {
