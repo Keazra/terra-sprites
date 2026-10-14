@@ -1,9 +1,10 @@
 //! The population graph (M2 design §14): the world's population over its
-//! whole run, stacked by life stage and eggs in the theme's colours, full
-//! screen on
-//! `p` and small at the top of the World tab. Each column is a stretch of
-//! time, showing the count at its end; until the run fills the graph, a
-//! column is 100 ticks and the graph grows from the left.
+//! whole run, stacked by life stage with the eggs on top in the theme's
+//! colours, full screen on `p` and small at the top of the World tab. Each
+//! column is a stretch of time, showing the count at its end: in the full
+//! graph, as shares, the column full height; in the small one, how many.
+//! Until the run fills the graph, a column is 100 ticks and the graph grows
+//! from the left.
 
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
@@ -83,12 +84,27 @@ pub(crate) struct Plot {
     /// it ever held more.
     top: u32,
     limit: u32,
+    /// Whether each column shows its count as shares, full height, as the
+    /// full graph does, rather than how many (M2 design §14.2).
+    shares: bool,
 }
 
 impl Plot {
+    /// The full graph: the population of `world` over its whole run as
+    /// shares, `width` columns wide with the labels left of it.
+    pub(crate) fn full(world: &World, width: usize) -> Plot {
+        Plot::new(world, width, true)
+    }
+
+    /// The small graph: the population of `world` over its whole run, how
+    /// many, `width` columns wide with the labels left of it.
+    fn small(world: &World, width: usize) -> Plot {
+        Plot::new(world, width, false)
+    }
+
     /// The population of `world` over its whole run, `width` columns wide
-    /// with the labels left of it.
-    pub(crate) fn new(world: &World, width: usize) -> Plot {
+    /// with the labels left of it, as shares if `shares`.
+    fn new(world: &World, width: usize, shares: bool) -> Plot {
         let mut points = world.population().to_vec();
         let now = world.population_now();
         if points.last().is_none_or(|last| last.tick < now.tick) {
@@ -97,19 +113,20 @@ impl Plot {
         let limit = u32::from(world.most_sprites());
         let most = points
             .iter()
-            .map(PopulationCount::sprites)
+            .map(PopulationCount::with_eggs)
             .max()
             .unwrap_or(0);
         let top = limit.max(most).max(1);
         let start = points[0].tick;
         let end = points.last().map_or(start, |last| last.tick);
-        let width = width.saturating_sub(gutter(top)).max(1);
+        let width = width.saturating_sub(label_width(top, shares) + 3).max(1);
         let mut plot = Plot {
             columns: vec![None; width],
             start,
             span: (end - start).max(width as u64 * TICKS_PER_COLUMN),
             top,
             limit,
+            shares,
             points: Vec::new(),
         };
         for j in 0..width {
@@ -156,35 +173,53 @@ impl Plot {
     /// The width of the labels left of the graph, with the axis: where its
     /// first column is.
     pub(crate) fn gutter(&self) -> usize {
-        gutter(self.top)
+        label_width(self.top, self.shares) + 3
     }
 
     /// The graph's `rows` rows, each with its label, in `look`.
     fn rows(&self, rows: usize, look: &PopulationLook) -> Vec<Line<'static>> {
         let rows = rows.max(1);
-        let digits = self.top.to_string().len();
+        let halves = 2 * rows;
+        let width = label_width(self.top, self.shares);
         let middle = rows / 2;
         // Each row of characters is two halves, each `step` sprites high.
-        let step = f64::from(self.top) / (2 * rows) as f64;
-        // The row the limit falls in.
-        let limit_row =
-            rows - ((f64::from(self.limit) / step / 2.0).ceil() as usize).clamp(1, rows);
+        let step = f64::from(self.top) / halves as f64;
+        // The row the limit falls in, when the graph shows how many.
+        let limit_row = (!self.shares)
+            .then(|| rows - ((f64::from(self.limit) / step / 2.0).ceil() as usize).clamp(1, rows));
+        // Each column's band in each half, from the bottom.
+        let stacks: Vec<Vec<Option<Band>>> = self
+            .columns
+            .iter()
+            .map(|column| match column.map(|i| &self.points[i]) {
+                None => vec![None; halves],
+                Some(count) if self.shares => share_stack(count, halves),
+                Some(count) => (0..halves).map(|half| band_at(count, half, step)).collect(),
+            })
+            .collect();
+        // The label of the height `part` rows of `rows` up.
+        let height = |part: usize| {
+            if self.shares {
+                format!("{}%", part * 100 / rows)
+            } else {
+                (part as u32 * self.top / rows as u32).to_string()
+            }
+        };
         (0..rows)
             .map(|row| {
                 let label = if row == 0 {
-                    self.top.to_string()
+                    height(rows)
                 } else if row == middle && rows > 2 {
-                    ((rows - row) as u32 * self.top / rows as u32).to_string()
+                    height(rows - row)
                 } else {
                     String::new()
                 };
                 let axis = if label.is_empty() { '│' } else { '┤' };
-                let mut spans = vec![Span::raw(format!(" {label:>digits$} {axis}"))];
+                let mut spans = vec![Span::raw(format!(" {label:>width$} {axis}"))];
                 let lower = 2 * (rows - 1 - row);
-                for column in &self.columns {
-                    let count = column.map(|i| &self.points[i]);
-                    let at = |half: usize| count.and_then(|c| band_at(c, half, step));
-                    spans.push(block(at(lower), at(lower + 1), row == limit_row, look));
+                for stack in &stacks {
+                    let on_limit = limit_row == Some(row);
+                    spans.push(block(stack[lower], stack[lower + 1], on_limit, look));
                 }
                 Line::from(spans)
             })
@@ -194,7 +229,8 @@ impl Plot {
     /// The horizontal axis, with a mark at each quarter and `▲` under the
     /// picked column, if any.
     fn axis(&self, picked: Option<usize>) -> Line<'static> {
-        let digits = self.top.to_string().len();
+        let width = label_width(self.top, self.shares);
+        let zero = if self.shares { "0%" } else { "0" };
         let marks = self.marks();
         let line: String = (0..self.columns.len())
             .map(|j| {
@@ -207,7 +243,7 @@ impl Plot {
                 }
             })
             .collect();
-        Line::from(format!(" {:>digits$} └{line}", 0))
+        Line::from(format!(" {zero:>width$} └{line}"))
     }
 
     /// The ticks under the axis's marks: the first count's at the corner,
@@ -243,7 +279,8 @@ impl Plot {
         (quarter - 1..width).step_by(quarter).collect()
     }
 
-    /// The legend: each stage's swatch and name, then the limit's line.
+    /// The legend: each band's swatch and name, then the limit's line, or
+    /// with shares, that they're shares.
     fn legend(&self, look: &PopulationLook) -> Line<'static> {
         let mut spans = vec![Span::raw(" ")];
         for band in STACK {
@@ -252,6 +289,10 @@ impl Plot {
                 Style::default().fg(look.colour(band)),
             ));
             spans.push(Span::raw(format!(" {}  ", band.plural())));
+        }
+        if self.shares {
+            spans.push(Span::raw("as shares of each column"));
+            return Line::from(spans);
         }
         spans.push(Span::styled(
             look.limit.symbol.to_string().repeat(3),
@@ -279,9 +320,16 @@ impl Plot {
             "{sprites} sprite{}",
             if sprites == 1 { "" } else { "s" }
         )];
+        // With shares, each band's share of the column, eggs included.
+        let column = count.with_eggs();
         stages.extend(STACK.map(|band| {
             let n = band.of(count);
-            format!("{n} {}", band.name(n))
+            if self.shares && column > 0 {
+                let percent = (200 * n + column) / (2 * column);
+                format!("{n} {} ({percent}%)", band.name(n))
+            } else {
+                format!("{n} {}", band.name(n))
+            }
         }));
         let first = format!(" {when}: {}", stages.join(" · "));
         // Since the count the nearest column before shows, if it's an
@@ -309,9 +357,60 @@ impl Plot {
     }
 }
 
-/// The width of the labels left of a graph reaching `top`, with the axis.
-fn gutter(top: u32) -> usize {
-    top.to_string().len() + 3
+/// The width of the labels on the vertical axis of a graph reaching `top`,
+/// or showing shares: `100%`.
+fn label_width(top: u32, shares: bool) -> usize {
+    if shares { 4 } else { top.to_string().len() }
+}
+
+/// The band in each of `halves` halves of a column showing `count` as
+/// shares, from the bottom: each band's share of the halves, by largest
+/// remainder, and at least one for each band with any in it, room allowing,
+/// so a small one is never lost (M2 design §14.2).
+fn share_stack(count: &PopulationCount, halves: usize) -> Vec<Option<Band>> {
+    let n = STACK.map(|band| i64::from(band.of(count)));
+    let total: i64 = n.iter().sum();
+    if total == 0 {
+        return vec![None; halves];
+    }
+    let room = halves as i64;
+    let present = n.iter().filter(|&&n| n > 0).count();
+    let mut given = n.map(|n| n * room / total);
+    if present <= halves {
+        for (given, &n) in given.iter_mut().zip(&n) {
+            if n > 0 {
+                *given = (*given).max(1);
+            }
+        }
+    }
+    // How far each band is short of its share, in 1/total of a half.
+    let short = |i: usize, given: &[i64; 4]| n[i] * room - given[i] * total;
+    loop {
+        let sum: i64 = given.iter().sum();
+        if sum < room {
+            // The band furthest short, the lowest if several are.
+            let i = (0..4)
+                .filter(|&i| n[i] > 0)
+                .max_by_key(|&i| (short(i, &given), std::cmp::Reverse(i)))
+                .expect("a band with sprites in it");
+            given[i] += 1;
+        } else if sum > room {
+            // The band furthest over that can spare one, the lowest if
+            // several are.
+            let i = (0..4)
+                .filter(|&i| given[i] > 1)
+                .min_by_key(|&i| (short(i, &given), i))
+                .expect("a band given more than one");
+            given[i] -= 1;
+        } else {
+            break;
+        }
+    }
+    STACK
+        .iter()
+        .zip(given)
+        .flat_map(|(&band, given)| std::iter::repeat_n(Some(band), given as usize))
+        .collect()
 }
 
 /// The band drawn in half `half` of a column's characters, from 0 at the
@@ -319,7 +418,7 @@ fn gutter(top: u32) -> usize {
 /// middle, or at the top of the stack if that's lower. A half the stack
 /// doesn't reach is empty.
 fn band_at(count: &PopulationCount, half: usize, step: f64) -> Option<Band> {
-    let total = f64::from(count.sprites());
+    let total = f64::from(count.with_eggs());
     let bottom = half as f64 * step;
     if total <= bottom {
         return None;
@@ -401,7 +500,7 @@ pub(crate) fn rows_above_axis(rows: usize) -> usize {
 /// border, with the picked column marked and read.
 pub(crate) fn lines(app: &App, world: &World, width: usize, rows: usize) -> Vec<Line<'static>> {
     let look = app.theme.population();
-    let plot = Plot::new(world, width);
+    let plot = Plot::full(world, width);
     let mut lines = plot.rows(rows_above_axis(rows), &look);
     let column = plot.column_of(app.graph_pick());
     lines.push(plot.axis(Some(column)));
@@ -416,7 +515,7 @@ pub(crate) fn lines(app: &App, world: &World, width: usize, rows: usize) -> Vec<
 /// heading, the graph and its axis.
 pub(crate) fn small(app: &App, world: &World, width: usize) -> Vec<Line<'static>> {
     let look = app.theme.population();
-    let plot = Plot::new(world, width);
+    let plot = Plot::small(world, width);
     let mut lines = vec![Line::from(format!(" population, {}", covers(world)))];
     lines.extend(plot.rows(SMALL_ROWS, &look));
     lines.push(plot.axis(None));
@@ -434,4 +533,45 @@ pub(crate) fn covers(world: &World) -> String {
         group_thousands(first),
         group_thousands(world.tick())
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn count(young: u32, adults: u32, old: u32, eggs: u32) -> PopulationCount {
+        PopulationCount {
+            young,
+            adults,
+            old,
+            eggs,
+            ..PopulationCount::default()
+        }
+    }
+
+    /// How many halves each band takes in `stack`.
+    fn halves_of(stack: &[Option<Band>]) -> [usize; 4] {
+        STACK.map(|band| stack.iter().filter(|&&b| b == Some(band)).count())
+    }
+
+    #[test]
+    fn shares_fill_the_column_in_proportion() {
+        let stack = share_stack(&count(11, 75, 14, 0), 40);
+        assert_eq!(stack.len(), 40);
+        assert_eq!(halves_of(&stack), [4, 30, 6, 0]);
+        assert_eq!(stack[0], Some(Band::Young), "from the bottom");
+        assert_eq!(stack[39], Some(Band::Old));
+    }
+
+    #[test]
+    fn a_band_too_small_for_a_half_still_gets_one() {
+        // 1 in 100 is 0.4 of a half: rounded down, it would be lost.
+        let stack = share_stack(&count(1, 97, 1, 1), 40);
+        assert_eq!(halves_of(&stack), [1, 37, 1, 1]);
+    }
+
+    #[test]
+    fn a_column_with_no_sprites_is_empty() {
+        assert_eq!(share_stack(&count(0, 0, 0, 0), 4), vec![None; 4]);
+    }
 }

@@ -127,7 +127,8 @@ fn an_egg_is_counted_as_an_egg_and_its_laying_and_hatching_once_each() {
         matches!(event.kind, EventKind::Laid { .. }).then_some(())
     })
     .expect("she lays alone");
-    assert_eq!(world.population_now().eggs, 1);
+    let now = world.population_now();
+    assert_eq!((now.eggs, now.sprites(), now.with_eggs()), (1, 1, 2));
     assert_eq!(all_changes(&world).laid, 1);
     until(&mut world, 1_000, |event| {
         matches!(event.kind, EventKind::Hatched { .. }).then_some(())

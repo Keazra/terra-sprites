@@ -1421,7 +1421,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
     - It opens sorted as it was last, starting by number, with the selected sprite highlighted, or else the first. `Tab` sorts by number, name (named sprites first, by name, then the rest by number), age (oldest first) or drive (in the data pack's order, strongest first within each, those with none last); `Shift+Tab` goes back. The title says the order.
     - The arrows, `W` and `S`, or the wheel move the highlight (v38: the scroll keys too), a row in reverse video, which stays on its sprite when the list is re-sorted. A list too long for the screen scrolls to keep it in view.
     - `Enter`, or a click on a row, selects that sprite, centres the view on it and closes the list. `l` or `Esc` closes it without choosing; other keys do nothing while it's open. With no sprites, it reads "No sprites".
-  - **The population graph** (`p`, from Slice 26): the world's population over its whole run, stacked by life stage, with a moment picked and read under it (M2 design §14).
+  - **The population graph** (`p`, from Slice 26): the world's population over its whole run, each column split by the share of each life stage and of eggs, with a moment picked and read under it (M2 design §14).
 
 ### 6.2 Semantic tiles and themes
 

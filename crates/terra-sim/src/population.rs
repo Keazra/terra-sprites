@@ -41,10 +41,15 @@ pub struct PopulationCount {
 }
 
 impl PopulationCount {
-    /// Every sprite counted, eggs included, as the world's limit counts
-    /// them (M2 design §10.6).
+    /// The sprites counted, at every life stage.
     pub fn sprites(&self) -> u32 {
-        self.eggs + self.young + self.adults + self.old
+        self.young + self.adults + self.old
+    }
+
+    /// The sprites and the eggs, as the world's limit counts them (M2
+    /// design §10.6).
+    pub fn with_eggs(&self) -> u32 {
+        self.sprites() + self.eggs
     }
 
     /// The sprites in `sprites`, by life stage, and the eggs in `objects`,

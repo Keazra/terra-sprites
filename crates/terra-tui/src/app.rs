@@ -2313,7 +2313,7 @@ impl App {
             return None;
         }
         let inner = self.overlay?.inner(Margin::new(1, 1));
-        Some(graph::Plot::new(world, usize::from(inner.width)))
+        Some(graph::Plot::full(world, usize::from(inner.width)))
     }
 
     /// The population graph and which of its columns `at` is over, if it's

@@ -87,14 +87,14 @@ The map view can scroll past the map's wall, into space (M2 design §11). `space
 
 ### `population`
 
-The population graph (`p`, and small at the top of the World tab) stacks the sprites by life stage, from the bottom young, adults and old, then the eggs, each in its colour, with a dotted line at the most sprites the world holds (M2 design §14). `population` is a record of four fields, each of which may be left out and is then drawn as the default theme draws it. A field the game doesn't know is refused, naming it.
+The population graph (`p`, and small at the top of the World tab) stacks the sprites by life stage, from the bottom young, adults and old, then the eggs, each in its colour: full screen as shares of each column, and small as how many, with a dotted line at the most sprites the world holds (M2 design §14). `population` is a record of four fields, each of which may be left out and is then drawn as the default theme draws it. A field the game doesn't know is refused, naming it.
 
 | Field | Meaning |
 |---|---|
 | `stages` | A colour for each life stage and for eggs: `(young: light_green, adult: cyan, old: gray, egg: light_yellow)`, any of them left out as you like. |
 | `full` | A character wholly of one stage: `'█'` in the default theme, `'#'` in the ASCII one. |
 | `half` | A character's lower half, `'▄'` or `'_'`: it's drawn in the stage below, on the stage above as its background, or on nothing at the top of the stack. |
-| `limit` | A glyph, a dot of the line at the most sprites the world holds, drawn where nothing else is. |
+| `limit` | A glyph, a dot of the small graph's line at the most sprites the world holds, drawn where nothing else is. |
 
 ## Working example
 

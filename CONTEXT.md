@@ -675,7 +675,7 @@ The overlay `l` opens: every sprite, one to a row, with its age, its strongest d
 _Avoid_: roster, census
 
 **Population graph** (M2):
-The overlay `p` opens: how many sprites the world has had over its whole run, stacked by life stage with the eggs on top, with a dotted line at most sprites. A moment picked with the arrows or the pointer is read under it: the count in each stage, and what was laid, hatched, spawned and died since the column before. A small copy heads the World tab (M2 design §14).
+The overlay `p` opens: the world's population over its whole run, each column split by the share of each life stage and of eggs. A moment picked with the arrows or the pointer is read under it: how many sprites, each stage and the eggs with their shares, and what was laid, hatched, spawned and died since the column before. A small copy heads the World tab, showing how many, with a dotted line at most sprites (M2 design §14).
 _Avoid_: population chart, history graph, census
 
 **Information policy**:

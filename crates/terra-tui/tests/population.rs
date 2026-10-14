@@ -90,10 +90,10 @@ fn row(buffer: &Buffer, y: u16) -> String {
 }
 
 // At 100×30 the graph's box is rows 1 to 28, its inside rows 2 to 27 from
-// column 1; with a limit of 100 the labels take 6 columns, so the graph's
-// first column is 7. Its 20 rows are 2 to 21, the axis 22, its ticks 23,
-// the legend 25 and the two lines that read a moment 26 and 27.
-const FIRST_COLUMN: u16 = 7;
+// column 1; the labels, up to "100%", take 7 columns, so the graph's first
+// column is 8. Its 20 rows are 2 to 21, the axis 22, its ticks 23, the
+// legend 25 and the two lines that read a moment 26 and 27.
+const FIRST_COLUMN: u16 = 8;
 const BOTTOM: u16 = 21;
 const AXIS: u16 = 22;
 
@@ -127,29 +127,29 @@ fn p_opens_the_population_graph_over_the_panels_and_p_or_esc_closes_it() {
     );
     assert!(title.ends_with(" esc close ─┐"), "{title}");
     assert!(
-        row(&screen, 2).starts_with("│ 100 ┤"),
+        row(&screen, 2).starts_with("│ 100% ┤"),
         "{}",
         row(&screen, 2)
     );
     assert!(
-        row(&screen, 12).starts_with("│  50 ┤"),
+        row(&screen, 12).starts_with("│  50% ┤"),
         "{}",
         row(&screen, 12)
     );
     assert!(
-        row(&screen, AXIS).starts_with("│   0 └"),
+        row(&screen, AXIS).starts_with("│   0% └"),
         "{}",
         row(&screen, AXIS)
     );
     let legend = row(&screen, 25);
     assert!(
-        legend.starts_with("│ █ young  █ adults  █ old  █ eggs  ··· most sprites, 100"),
+        legend.starts_with("│ █ young  █ adults  █ old  █ eggs  as shares of each column"),
         "{legend}"
     );
     assert_eq!(
         reading(&screen),
         [
-            "now, tick 250: 6 sprites · 2 young · 4 adults · 0 old · 0 eggs",
+            "now, tick 250: 6 sprites · 2 young (33%) · 4 adults (67%) · 0 old (0%) · 0 eggs (0%)",
             "since tick 200: none laid, hatched or died",
         ]
     );
@@ -194,27 +194,28 @@ fn nothing_drawn_beneath_shows_through_the_graph() {
 }
 
 #[test]
-fn the_life_stages_stack_from_the_bottom_in_the_theme_s_colours() {
-    // M2 design §14: young, then adults, old and eggs. Each row is two half
-    // tiles of 2.5 sprites: the 2 young fill the first, the 4 adults the
-    // next two.
+fn each_column_is_split_by_share_from_the_bottom_in_the_theme_s_colours() {
+    // M2 design §14.2: young, then adults, old and eggs, each column full
+    // height. The 2 young are a third of the column's 40 halves, 13 of
+    // them, the 4 adults the 27 above, up to the top.
     let mut world = field(2, 4);
     run(&mut world, 250);
     let mut app = app_on(&world);
     app.apply(Action::Population, &world);
     let screen = render(&app, &world);
     let look = Theme::cp437().population();
-    let bottom = &screen[(FIRST_COLUMN, BOTTOM)];
-    assert_eq!(bottom.symbol(), "▄");
-    assert_eq!((bottom.fg, bottom.bg), (look.young, look.adult));
     assert_eq!((look.young, look.adult), (Color::LightGreen, Color::Cyan));
-    let above = &screen[(FIRST_COLUMN, BOTTOM - 1)];
-    assert_eq!(above.symbol(), "▄");
-    assert_eq!((above.fg, above.bg), (look.adult, Color::Reset));
-    assert_eq!(screen[(FIRST_COLUMN, BOTTOM - 2)].symbol(), " ");
-    // The world's limit, 100, is the top row: dotted where nothing is.
-    let limit = &screen[(FIRST_COLUMN, 2)];
-    assert_eq!((limit.symbol(), limit.fg), ("·", Color::DarkGray));
+    let at = |y: u16| {
+        let cell = &screen[(FIRST_COLUMN, y)];
+        (cell.symbol().to_string(), cell.fg, cell.bg)
+    };
+    assert_eq!(at(BOTTOM), ("█".into(), look.young, Color::Reset));
+    assert_eq!(at(BOTTOM - 6), ("▄".into(), look.young, look.adult));
+    assert_eq!(at(BOTTOM - 7), ("█".into(), look.adult, Color::Reset));
+    assert_eq!(at(2), ("█".into(), look.adult, Color::Reset));
+    // The pointer picks the column under it, past the labels.
+    app.apply(Action::Point(Position::new(FIRST_COLUMN, 9)), &world);
+    assert_eq!(app.graph_pick(), Some(100));
 }
 
 #[test]
@@ -234,10 +235,10 @@ fn the_graph_grows_from_the_left_then_squeezes_the_whole_run_in() {
     let one = columns(&screen, BOTTOM);
     assert_eq!(one.trim_end().chars().count(), 20, "{one}");
     let ticks = row(&screen, 23);
-    assert!(ticks.starts_with("│     0 "), "{ticks}");
+    assert!(ticks.starts_with("│      0 "), "{ticks}");
     assert!(
-        ticks.ends_with(" 9,200│"),
-        "92 columns of 100 ticks: {ticks}"
+        ticks.ends_with(" 8,800   │"),
+        "91 columns of 100 ticks, the last quarter marked at 8,800: {ticks}"
     );
     // The moment at tick 1,000, in the tenth column.
     app.apply(Action::Point(Position::new(FIRST_COLUMN + 9, 9)), &world);
@@ -245,12 +246,12 @@ fn the_graph_grows_from_the_left_then_squeezes_the_whole_run_in() {
     run(&mut world, 58_000);
     let screen = render(&app, &world);
     let ticks = row(&screen, 23);
-    assert!(ticks.starts_with("│     0 "), "the whole run: {ticks}");
-    assert!(ticks.ends_with(" 60,000│"), "{ticks}");
+    assert!(ticks.starts_with("│      0 "), "the whole run: {ticks}");
+    assert!(ticks.ends_with(" 58,000   │"), "{ticks}");
     let one = columns(&screen, BOTTOM);
-    assert!(one.starts_with('▄'), "its life is at the start: {one}");
+    assert!(one.starts_with('█'), "its life is at the start: {one}");
     assert!(one.ends_with(' '), "and its death before the end: {one}");
-    // Squeezed, the picked moment is in the second column, of 652 ticks.
+    // Squeezed, the picked moment is in the second column, of 659 ticks.
     assert_eq!(screen[(FIRST_COLUMN + 1, AXIS)].symbol(), "▲");
     // Opened afresh, it reads now, in the last column; every column is
     // reached, so `←` picks the one before.
@@ -284,7 +285,7 @@ fn arrows_or_the_pointer_pick_a_moment_and_the_lines_under_the_graph_read_it() {
     assert_eq!(
         reading(&screen),
         [
-            "tick 200: 6 sprites · 2 young · 4 adults · 0 old · 0 eggs",
+            "tick 200: 6 sprites · 2 young (33%) · 4 adults (67%) · 0 old (0%) · 0 eggs (0%)",
             "since tick 100: none laid, hatched or died",
         ]
     );
@@ -341,8 +342,9 @@ fn a_picked_moment_stays_picked_as_time_runs_and_now_moves_on() {
 }
 
 #[test]
-fn the_graph_reaches_past_the_limit_when_the_cursor_spawned_past_it() {
-    // M2 design §14.2: 101 sprites in a world that holds 100.
+fn the_small_graph_reaches_past_the_limit_when_the_cursor_spawned_past_it() {
+    // M2 design §14.2: 101 sprites in a world that holds 100. The full
+    // graph shows shares, so only the small one has a height in sprites.
     let pack = pack();
     let map = Map::from_ascii(&["............"; 9], &pack).expect("valid drawing");
     let sprites: Vec<(Pos, Option<Genome>)> = (0..101)
@@ -364,19 +366,11 @@ fn the_graph_reaches_past_the_limit_when_the_cursor_spawned_past_it() {
         newborns: &[],
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
-    let mut app = app_on(&world);
-    app.apply(Action::Population, &world);
+    let app = app_on(&world);
     let screen = render(&app, &world);
-    assert!(
-        row(&screen, 2).starts_with("│ 101 ┤"),
-        "{}",
-        row(&screen, 2)
-    );
-    assert!(
-        row(&screen, 25).contains("··· most sprites, 100"),
-        "{}",
-        row(&screen, 25)
-    );
+    // The inspector is the right-hand 46 columns, its inside from column 55.
+    let top: String = (55..99).map(|x| screen[(x, 3)].symbol()).collect();
+    assert!(top.starts_with(" 101 ┤"), "{top}");
 }
 
 #[test]

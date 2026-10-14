@@ -191,7 +191,7 @@ fn every_display_asks_the_policy_and_shows_everything_in_m1() {
     app.apply(Action::Population, &world);
     let graph = render(&app, &world);
     assert!(
-        row(&graph, 2, 0..100).starts_with("│ 100 ┤"),
+        row(&graph, 2, 0..100).starts_with("│ 100% ┤"),
         "the population graph: {}",
         row(&graph, 2, 0..100)
     );
