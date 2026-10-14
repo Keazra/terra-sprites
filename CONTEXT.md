@@ -388,7 +388,7 @@ The most sprites a world holds, eggs included: the preset's `most_sprites` (100 
 _Avoid_: population cap, carrying capacity (food sets that)
 
 **Population record** (M2):
-The counts the world keeps of its sprites by life stage, and of its eggs, over its whole run, for the population graph: one every 100 ticks from the first tick it runs, each with the eggs laid and hatched, the sprites spawned and the deaths since the one before. It's world state, so it's saved and replayed. Past 512 counts it keeps every other one and counts half as often, so it always covers the whole run (M2 design §14.1).
+The counts the world keeps of its sprites by life stage, and of its eggs, over its whole run, for the population graph: one every 100 ticks from the first tick it runs, each with the oldest and newest generations among its sprites, and the eggs laid and hatched, the sprites spawned and the deaths since the one before. It's world state, so it's saved and replayed. Past 512 counts it keeps every other one and counts half as often, so it always covers the whole run (M2 design §14.1).
 _Avoid_: history, statistics, census
 
 **Record of the dead** (M2):
