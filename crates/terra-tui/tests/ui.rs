@@ -3848,12 +3848,8 @@ fn an_egg_held_past_its_time_waits_and_its_hatchling_stays_selected() {
 fn paused_an_item_picked_up_leaves_the_map_and_one_put_down_shows_where_it_lands() {
     // Design §6.5, #203: a click waits for the next tick, and the map, as
     // the Cursor's marks do, shows what it will do.
-    let (world, egg) = a_lone_egg(&[]);
-    let at = egg_tile(&world, egg);
-    let to = (0..10)
-        .map(|x| Pos { x, y: 0 })
-        .find(|&pos| pos != at && world.sprite_at(pos).is_none() && world.object_at(pos).is_none())
-        .expect("a free tile");
+    let (mut world, egg) = a_lone_egg(&[]);
+    let (at, to) = paused_egg_moves(&world);
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::Mode(CursorMode::Grab), &world);
     app.apply(Action::left_click(pointer_on(&world, at.x, at.y)), &world);
@@ -3864,13 +3860,105 @@ fn paused_an_item_picked_up_leaves_the_map_and_one_put_down_shows_where_it_lands
     app.apply(Action::left_click(pointer_on(&world, to.x, to.y)), &world);
     let screen = render(&app, &world, 100, 30);
     assert_eq!(screen[cell(&world, to.x, to.y)].symbol(), "o", "put down");
-    let status = status_line(&app, &world);
-    assert!(before_hints(&status).contains("· egg"), "{status}");
     assert_ne!(screen[cell(&world, at.x, at.y)].symbol(), "o", "moved");
-    assert!(
-        world.cursor().holds().is_none(),
-        "the world hasn't moved yet"
+    let status = status_line(&app, &world);
+    assert!(before_hints(&status).contains("· egg (laid)"), "{status}");
+    // When time moves, the world does what the map showed.
+    for command in app.take_commands() {
+        world.submit(command);
+    }
+    let events = world.step();
+    app.record(&events, &world);
+    assert_eq!(world.egg(egg).and_then(|egg| egg.pos()), Some(to));
+    let screen = render(&app, &world, 100, 30);
+    assert_eq!(screen[cell(&world, to.x, to.y)].symbol(), "o");
+}
+
+/// Where a lone egg lies, and a free tile to put it down on.
+fn paused_egg_moves(world: &World) -> (Pos, Pos) {
+    let egg = world.eggs().next().expect("an egg").id();
+    let at = egg_tile(world, egg);
+    let to = (0..10)
+        .map(|x| Pos { x, y: 0 })
+        .find(|&pos| pos != at && world.sprite_at(pos).is_none() && world.object_at(pos).is_none())
+        .expect("a free tile");
+    (at, to)
+}
+
+#[test]
+fn paused_a_click_acts_on_an_item_where_the_map_shows_it() {
+    // Design §6.5, #203: with a pick-up and a put-down waiting, the egg is
+    // where it was put down, for Grab and Select alike.
+    let (world, egg) = a_lone_egg(&[]);
+    let (at, to) = paused_egg_moves(&world);
+    let moved = || {
+        let mut app = app_for(&world, Theme::cp437(), 100, 30);
+        app.apply(Action::Mode(CursorMode::Grab), &world);
+        app.apply(Action::left_click(pointer_on(&world, at.x, at.y)), &world);
+        app.apply(Action::left_click(pointer_on(&world, to.x, to.y)), &world);
+        app
+    };
+    let mut app = moved();
+    app.apply(Action::left_click(pointer_on(&world, at.x, at.y)), &world);
+    assert_eq!(
+        app.refusal(),
+        Some("Nothing here to grab"),
+        "it's gone from here"
     );
+    app.apply(Action::left_click(pointer_on(&world, to.x, to.y)), &world);
+    assert_eq!(app.grip(&world), Some(Grip::Holds(egg)), "picked up again");
+    let mut app = moved();
+    app.apply(Action::Mode(CursorMode::Select), &world);
+    app.apply(Action::left_click(pointer_on(&world, to.x, to.y)), &world);
+    assert_eq!(app.selection(), Some(Selection::Living(egg)));
+}
+
+#[test]
+fn paused_a_thrown_item_shows_where_it_s_thrown_from() {
+    // Design §2.5, §6.5: a throw puts the item down where it's thrown from,
+    // and it rolls on from there when time moves.
+    let (world, mut app) = holding_world(&[(Pos { x: 12, y: 2 }, "ball")], Pos { x: 12, y: 2 });
+    app.apply(Action::right_click(pointer_on(&world, 12, 2)), &world);
+    app.apply(Action::Point(pointer_on(&world, 15, 2)), &world);
+    app.apply(
+        Action::Release {
+            button: Button::Right,
+            at: Some(pointer_on(&world, 15, 2)),
+        },
+        &world,
+    );
+    assert!(app.grip(&world).is_none(), "the throw is queued");
+    let screen = render(&app, &world, 100, 30);
+    assert_eq!(screen[cell(&world, 12, 2)].symbol(), "○");
+}
+
+#[test]
+fn paused_the_leash_runs_over_ground_as_the_map_shows_it() {
+    // Design §6.5, #203: the berry picked up from (3, 2) and put down on
+    // (4, 2), both waiting, then the sprite on (1, 2) taken hold of. The
+    // leash's dots run over (3, 2) and stop at the berry on (4, 2).
+    let pack = pack();
+    let map = Map::from_ascii(&["............"; 5], &pack).expect("valid drawing");
+    let scenario = Scenario {
+        map,
+        objects: &[(Pos { x: 3, y: 2 }, "berry")],
+        sprites: &[(Pos { x: 1, y: 2 }, None)],
+        scripted: &[(Pos { x: 1, y: 2 }, ScriptedAction::Rest)],
+        newborns: &[],
+    };
+    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::Mode(CursorMode::Grab), &world);
+    for x in [3, 4, 1] {
+        app.apply(Action::left_click(pointer_on(&world, x, 2)), &world);
+    }
+    app.apply(Action::Point(pointer_on(&world, 6, 2)), &world);
+    let row: String = map_rows(&render(&app, &world, 100, 30), &world)[1 + 2]
+        .chars()
+        .skip(1)
+        .take(12)
+        .collect();
+    assert_eq!(row, ".☺··•→.←....");
 }
 
 #[test]

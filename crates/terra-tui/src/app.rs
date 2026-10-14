@@ -8,8 +8,8 @@ use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
 use terra_sim::{
     ActionView, ChemicalKind, ChemicalLevel, Command, CursorTouch, DeathCause, Dir, Divergence,
-    EntityId, Event, EventKind, Genome, Grip, MAX_NAME_CHARS, Map, ObjectView, Outcome, Playback,
-    Pos, Progress, SpriteView, Target, Thing, Verb, World,
+    EntityId, Event, EventKind, Genome, Grip, HeldView, MAX_NAME_CHARS, Map, ObjectView, Outcome,
+    Playback, Pos, Progress, SpriteView, Target, Thing, Verb, World,
 };
 
 use crate::clock::Clock;
@@ -664,37 +664,101 @@ fn whence(world: &World, preposition: &str) -> String {
     }
 }
 
-/// How the item `id` looks, and whether its type lets the Cursor throw it.
+/// An item as the screen shows it, on the map or held by the Cursor.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ItemLook<'w> {
+    pub(crate) id: EntityId,
     pub(crate) type_name: &'w str,
     pub(crate) visual_state: &'w str,
+    /// Its stage, if its type has stages.
+    pub(crate) stage: Option<&'w str>,
+    /// A fixture, rooted to the ground (design §3.3).
+    pub(crate) solid: bool,
+    pub(crate) egg: bool,
     /// False for an egg (M2 design §10.4).
     pub(crate) throwable: bool,
+}
+
+impl<'w> ItemLook<'w> {
+    fn on_map(object: &ObjectView<'w>) -> ItemLook<'w> {
+        ItemLook {
+            id: object.id(),
+            type_name: object.type_name(),
+            visual_state: object.visual_state(),
+            stage: object.stage(),
+            solid: object.is_solid(),
+            egg: object.is_egg(),
+            throwable: object.is_throwable(),
+        }
+    }
+
+    fn held(held: &HeldView<'w>) -> ItemLook<'w> {
+        ItemLook {
+            id: held.id(),
+            type_name: held.type_name(),
+            visual_state: held.visual_state(),
+            stage: held.stage(),
+            solid: false,
+            egg: held.is_egg(),
+            throwable: held.is_throwable(),
+        }
+    }
 }
 
 /// The item `id`, held by the Cursor or, while a pick-up waits in the queue,
 /// still on the map (design §6.5).
 pub(crate) fn item_look(world: &World, id: EntityId) -> Option<ItemLook<'_>> {
     if let Some(held) = world.cursor().holds().filter(|held| held.id() == id) {
-        return Some(ItemLook {
-            type_name: held.type_name(),
-            visual_state: held.visual_state(),
-            throwable: held.is_throwable(),
-        });
+        return Some(ItemLook::held(&held));
     }
     let object = world.objects().find(|object| object.id() == id)?;
-    Some(ItemLook {
-        type_name: object.type_name(),
-        visual_state: object.visual_state(),
-        throwable: object.is_throwable(),
-    })
+    Some(ItemLook::on_map(&object))
+}
+
+/// Where a Grab-mode command waiting for the next tick leaves an item it
+/// moves (design §6.5, #203).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Moved {
+    PickedUp,
+    PutDown(Pos),
+}
+
+/// The items on the map as the screen shows them, with the Grab-mode
+/// commands waiting for the next tick done, as the Cursor's marks show them
+/// (design §6.5, #203): an item a pick-up takes is gone from its tile, and
+/// one put down or thrown shows where it lands. If the world refuses one of
+/// them, they go back to the world's word.
+pub(crate) struct ShownItems<'w> {
+    world: &'w World,
+    moved: BTreeMap<EntityId, Moved>,
+    /// Each item put down, and the tile it's put down on.
+    put_down: Vec<(Pos, ItemLook<'w>)>,
+}
+
+impl<'w> ShownItems<'w> {
+    /// The item shown on `tile`, if any.
+    pub(crate) fn at(&self, tile: Pos) -> Option<ItemLook<'w>> {
+        let on_map = self.world.object_at(tile);
+        let stays = on_map.filter(|object| !self.moved.contains_key(&object.id()));
+        stays.map(|object| ItemLook::on_map(&object)).or_else(|| {
+            let (_, look) = self.put_down.iter().find(|&&(at, _)| at == tile)?;
+            Some(*look)
+        })
+    }
+}
+
+/// What the Cursor will have hold of, and where the items it moves will
+/// be, once the world applies the Grab-mode commands waiting for the next
+/// tick (design §6.5).
+struct AfterQueue {
+    grip: Option<Grip>,
+    moved: BTreeMap<EntityId, Moved>,
 }
 
 /// What a grab with the Cursor empty takes (design §6.5).
 enum Reach<'w> {
     Sprite(EntityId),
-    Object(ObjectView<'w>),
+    Item(ItemLook<'w>),
 }
 
 /// What a sliding sprite crashed into, and whether that hurt it (design v25
@@ -1070,24 +1134,34 @@ impl App {
     /// In a replay the Cursor is the player's own, which holds nothing: the
     /// recorded one isn't drawn (design §2.7).
     pub fn grip(&self, world: &World) -> Option<Grip> {
-        self.queue_leaves(world).0
+        self.after_queue(world).grip
     }
 
-    /// Where the commands queued since leave the items they move, as the map
-    /// shows them before the world applies them (design §6.5, #203): `None`
-    /// for one the Cursor will hold, or the tile one is put down on. If the
-    /// world refuses one, the map goes back to the world's word.
-    pub fn moved_items(&self, world: &World) -> BTreeMap<EntityId, Option<Pos>> {
-        self.queue_leaves(world).1
+    /// The items on the map as the screen shows them, with the commands
+    /// queued since done (design §6.5, #203).
+    pub(crate) fn shown_items<'w>(&self, world: &'w World) -> ShownItems<'w> {
+        let moved = self.after_queue(world).moved;
+        let put_down = moved
+            .iter()
+            .filter_map(|(&id, &moved)| match moved {
+                Moved::PutDown(tile) => Some((tile, item_look(world, id)?)),
+                Moved::PickedUp => None,
+            })
+            .collect();
+        ShownItems {
+            world,
+            moved,
+            put_down,
+        }
     }
 
     /// What the Cursor will have hold of, and where the items it moves will
-    /// be, once the world applies the commands queued since: `grip` and
-    /// `moved_items`. Nothing, in a replay.
-    fn queue_leaves(&self, world: &World) -> (Option<Grip>, BTreeMap<EntityId, Option<Pos>>) {
+    /// be, once the world applies the commands queued since. Nothing, in a
+    /// replay.
+    fn after_queue(&self, world: &World) -> AfterQueue {
         let mut moved = BTreeMap::new();
         if self.replay.is_some() {
-            return (None, moved);
+            return AfterQueue { grip: None, moved };
         }
         let now = world.cursor();
         let held = now.holds().map(|item| Grip::Holds(item.id()));
@@ -1098,15 +1172,15 @@ impl App {
             .fold(start, |grip, (_, command)| match *command {
                 Command::TakeHold { sprite } => grip.or(Some(Grip::Leads(sprite))),
                 Command::PickUp { item } if grip.is_none() => {
-                    moved.insert(item, None);
+                    moved.insert(item, Moved::PickedUp);
                     Some(Grip::Holds(item))
                 }
                 Command::PickUp { .. } => grip,
-                // A thrown item is put down where it's thrown from, and rolls on
-                // from there in the tick (design v25 §3.5.4).
+                // A thrown item is put down where it's thrown from, and
+                // rolls on from there in the tick (design §2.5).
                 Command::PutDown { tile } | Command::Throw { from: tile, .. } => {
                     if let Some(Grip::Holds(item)) = grip {
-                        moved.insert(item, Some(tile));
+                        moved.insert(item, Moved::PutDown(tile));
                     }
                     None
                 }
@@ -1119,7 +1193,7 @@ impl App {
                 | Command::SpawnSprite { .. }
                 | Command::Rename { .. } => grip,
             });
-        (grip, moved)
+        AfterQueue { grip, moved }
     }
 
     /// The sprite the Cursor follows, if any (design v26 §6.5). While the
@@ -1868,8 +1942,9 @@ impl App {
         let sprite = world.sprite_at(tile).map(|sprite| sprite.id());
         match (self.mode, button) {
             (CursorMode::Select, Button::Left) => {
-                let egg = || world.object_at(tile).filter(ObjectView::is_egg);
-                match sprite.or_else(|| egg().map(|egg| egg.id())) {
+                // As the map shows it, a queued put-down done (#203).
+                let egg = || self.shown_items(world).at(tile).filter(|item| item.egg);
+                match sprite.or_else(|| egg().map(|egg| egg.id)) {
                     Some(id) => self.select(id),
                     None => self.selection = None,
                 }
@@ -1970,12 +2045,12 @@ impl App {
                 Command::TakeHold { sprite }
             }
             // In M1 every solid object is a fixture (design §3.3).
-            Some(Reach::Object(object)) if object.is_solid() => {
-                let (cant, name) = (refused.cant, display_name(object.type_name()));
+            Some(Reach::Item(item)) if item.solid => {
+                let (cant, name) = (refused.cant, display_name(item.type_name));
                 self.refuse(format!("Can't {cant} the {name}: {ROOTED}"));
                 return false;
             }
-            Some(Reach::Object(object)) => Command::PickUp { item: object.id() },
+            Some(Reach::Item(item)) => Command::PickUp { item: item.id },
             None => {
                 self.refuse(format!("Nothing here to {}", refused.nothing_to));
                 return false;
@@ -1996,7 +2071,8 @@ impl App {
     ) -> Option<Reach<'w>> {
         match self.followed().or(sprite) {
             Some(sprite) => Some(Reach::Sprite(sprite)),
-            None => world.object_at(tile).map(Reach::Object),
+            // As the map shows it, a queued put-down done (#203).
+            None => self.shown_items(world).at(tile).map(Reach::Item),
         }
     }
 
@@ -2023,16 +2099,15 @@ impl App {
             return;
         }
         let thrown = match self.grip(world) {
-            Some(Grip::Holds(item)) => Some(item),
+            Some(Grip::Holds(item)) => item_look(world, item),
             Some(Grip::Leads(_)) => None,
             None => match self.reach(tile, sprite, world) {
-                Some(Reach::Object(object)) => Some(object.id()),
+                Some(Reach::Item(item)) => Some(item),
                 Some(Reach::Sprite(_)) | None => None,
             },
         };
-        let look = thrown.and_then(|item| item_look(world, item));
-        if let Some(look) = look.filter(|look| !look.throwable) {
-            let name = inspector::with_article(&display_name(look.type_name));
+        if let Some(item) = thrown.filter(|item| !item.throwable) {
+            let name = inspector::with_article(&display_name(item.type_name));
             self.refuse(format!("Can't throw {name}"));
             return;
         }

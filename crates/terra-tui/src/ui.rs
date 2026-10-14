@@ -1,7 +1,5 @@
 //! Draws the screen. Rendering is a pure function of the app state (design §6.8).
 
-use std::collections::BTreeMap;
-
 use ratatui::{
     Frame,
     buffer::Buffer,
@@ -9,11 +7,11 @@ use ratatui::{
     style::{Color, Modifier, Style},
     text::Line,
 };
-use terra_sim::{EntityId, Grip, LifeStage, ObjectView, Pos, Progress, SpriteView, World};
+use terra_sim::{EntityId, Grip, LifeStage, Pos, Progress, SpriteView, World};
 
 use crate::app::{
-    App, Areas, ColourMode, CursorMode, ItemLook, PlaceItem, Screen, Selection, item_look,
-    spoken_duration, strongest_drive,
+    App, Areas, ColourMode, CursorMode, ItemLook, PlaceItem, Screen, Selection, ShownItems,
+    item_look, spoken_duration, strongest_drive,
 };
 use crate::clock::Speed;
 use crate::inspector::{self, INSPECTOR_WIDTH, first_shown};
@@ -202,19 +200,8 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     let thrown = app
         .thrown_from(world)
         .and_then(|(item, from)| Some((from, item_look(world, item)?)));
-    // Items a queued pick-up or put-down moves, where it leaves them
-    // (design §6.5, #203).
-    let moved = app.moved_items(world);
-    let object_glyph = |id, type_name: &str, visual_state: &str| {
-        let glyph = app.theme.object_glyph(type_name, visual_state);
-        // Only an egg can be selected, and it's drawn in reverse video (M2
-        // design §10.7).
-        let selected = app.selection() == Some(Selection::Living(id));
-        Glyph {
-            reversed: glyph.reversed || selected,
-            ..glyph
-        }
-    };
+    // With a queued pick-up or put-down done (design §6.5, #203).
+    let items = app.shown_items(world);
     // Out of reach in space, the Cursor isn't drawn (M2 design §11.4).
     let cursor = app.shown_cursor();
     for y in inner.top()..inner.bottom() {
@@ -248,13 +235,15 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
                 app.theme.object_glyph(look.type_name, look.visual_state)
             } else if destination == Some(pos) {
                 app.theme.glyph(SemanticTile::DecisionMarker)
-            } else if let Some(object) = world
-                .object_at(pos)
-                .filter(|object| !moved.contains_key(&object.id()))
-            {
-                object_glyph(object.id(), object.type_name(), object.visual_state())
-            } else if let Some((id, look)) = put_down_on(&moved, world, pos) {
-                object_glyph(id, look.type_name, look.visual_state)
+            } else if let Some(item) = items.at(pos) {
+                let glyph = app.theme.object_glyph(item.type_name, item.visual_state);
+                // Only an egg can be selected, and it's drawn in reverse
+                // video (M2 design §10.7).
+                let selected = app.selection() == Some(Selection::Living(item.id));
+                Glyph {
+                    reversed: glyph.reversed || selected,
+                    ..glyph
+                }
             } else {
                 app.theme.glyph(SemanticTile::Terrain(map.terrain(pos)))
             };
@@ -412,9 +401,10 @@ fn draw_leash(buf: &mut Buffer, app: &App, world: &World) {
     };
     let cursor = app.cursor();
     let dot = app.theme.leash();
+    let items = app.shown_items(world);
     for tile in line_between(led, cursor) {
         let by_the_cursor = tile.x.abs_diff(cursor.x) <= 1 && tile.y.abs_diff(cursor.y) <= 1;
-        let empty = world.sprite_at(tile).is_none() && world.object_at(tile).is_none();
+        let empty = empty(world, &items, tile);
         if let Some(cell) = app.cell_of(tile).filter(|_| empty && !by_the_cursor) {
             buf[(cell.x, cell.y)]
                 .set_char(dot.symbol)
@@ -430,11 +420,12 @@ fn draw_aim_line(buf: &mut Buffer, app: &App, world: &World) {
     let line = app.aim_line(world);
     let cursor = app.cursor();
     let dot = app.theme.aim();
+    let items = app.shown_items(world);
     for &tile in line.iter().rev().skip(1) {
         let by_the_cursor = tile.x.abs_diff(cursor.x) <= 1 && tile.y.abs_diff(cursor.y) <= 1;
         if let Some(cell) = app
             .cell_of(tile)
-            .filter(|_| empty(world, tile) && !by_the_cursor)
+            .filter(|_| empty(world, &items, tile) && !by_the_cursor)
         {
             buf[(cell.x, cell.y)]
                 .set_char(dot.symbol)
@@ -452,9 +443,10 @@ fn draw_aim_end(buf: &mut Buffer, app: &App, world: &World) {
         return;
     };
     let mark = app.theme.aim_end();
+    let items = app.shown_items(world);
     if let Some(cell) = app
         .cell_of(end)
-        .filter(|_| empty(world, end) && end != app.cursor())
+        .filter(|_| empty(world, &items, end) && end != app.cursor())
     {
         buf[(cell.x, cell.y)]
             .set_char(mark.symbol)
@@ -462,9 +454,9 @@ fn draw_aim_end(buf: &mut Buffer, app: &App, world: &World) {
     }
 }
 
-/// Whether `tile` holds no sprite and no object.
-fn empty(world: &World, tile: Pos) -> bool {
-    world.sprite_at(tile).is_none() && world.object_at(tile).is_none()
+/// Whether `tile` holds no sprite and, as the map shows them, no item.
+fn empty(world: &World, items: &ShownItems, tile: Pos) -> bool {
+    world.sprite_at(tile).is_none() && items.at(tile).is_none()
 }
 
 /// The tiles of a straight line from `from` to `to`, leaving both ends out:
@@ -755,15 +747,10 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         .unwrap_or_default();
     // As the map shows it, with a queued pick-up or put-down done (design
     // §6.5, #203).
-    let moved = app.moved_items(world);
-    let object = world
-        .object_at(cursor)
-        .filter(|object| !moved.contains_key(&object.id()))
-        .map(|object| object_label(&object))
-        .or_else(|| {
-            put_down_on(&moved, world, cursor).map(|(_, look)| display_name(look.type_name))
-        })
-        .map(|label| format!(" · {label}"))
+    let object = app
+        .shown_items(world)
+        .at(cursor)
+        .map(|item| format!(" · {}", item_label(&item)))
         .unwrap_or_default();
     // Whether sprites can see the Cursor in this mode (design v29 §6.1).
     let seen = if app.visible() { " · seen" } else { "" };
@@ -874,21 +861,10 @@ fn hints_within(room: usize) -> String {
     hints
 }
 
-/// An object's display name, with its stage if its type has stages: `berry bush (mature)`.
-/// The item a queued put-down leaves on `tile`, of those `moved` (design
-/// §6.5): see `App::moved_items`.
-fn put_down_on<'w>(
-    moved: &BTreeMap<EntityId, Option<Pos>>,
-    world: &'w World,
-    tile: Pos,
-) -> Option<(EntityId, ItemLook<'w>)> {
-    let (&id, _) = moved.iter().find(|&(_, &to)| to == Some(tile))?;
-    Some((id, item_look(world, id)?))
-}
-
-fn object_label(object: &ObjectView) -> String {
-    let name = display_name(object.type_name());
-    match object.stage() {
+/// An item's display name, with its stage if its type has stages: `berry bush (mature)`.
+fn item_label(item: &ItemLook) -> String {
+    let name = display_name(item.type_name);
+    match item.stage {
         Some(stage) => format!("{name} ({stage})"),
         None => name,
     }
