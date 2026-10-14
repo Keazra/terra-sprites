@@ -7,13 +7,12 @@ use ratatui::{
     style::{Color, Modifier, Style},
     text::Line,
 };
-use terra_sim::{EntityId, Grip, LifeStage, Pos, Progress, SpriteView, World};
+use terra_sim::{EntityId, Grip, LifeStage, Mode, Pos, Progress, SpriteView, World};
 
 use crate::app::{
     App, Areas, ColourMode, CursorMode, ItemLook, PlaceItem, Screen, Selection, ShownItems,
     item_look, spoken_duration, strongest_drive,
 };
-use crate::clock::Speed;
 use crate::inspector::{self, INSPECTOR_WIDTH, first_shown};
 use crate::policy::{Panel, Subject};
 use crate::space::{self, Place};
@@ -658,11 +657,17 @@ fn draw_border(buf: &mut Buffer, area: Rect, title: &str) {
 fn top_bar_line(app: &App, world: &World, width: u16) -> Line<'static> {
     let clock = &app.clock;
     // Paused, it still shows the speed: `+` and `-` change it, and it sets
-    // how far `.` steps (design v27 §6.6).
-    let time = if clock.is_paused() {
-        format!("|| paused {}", speed_label(clock.speed()))
+    // how far `.` steps (design v27 §6.6). A Lab world says so after it
+    // (M2 design §16).
+    let lab = if world.mode() == Mode::Lab {
+        " lab"
     } else {
-        format!("► {}", speed_label(clock.speed()))
+        ""
+    };
+    let time = if clock.is_paused() {
+        format!("|| paused {}{lab}", clock.speed().label())
+    } else {
+        format!("► {}{lab}", clock.speed().label())
     };
     // The population is a count the policy may hide (design §6.4).
     let population = if app.can_view(Panel::Counts, Subject::World) {
@@ -918,19 +923,5 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
             usize::from(inner.width),
             Style::default(),
         );
-    }
-}
-
-fn speed_label(speed: Speed) -> &'static str {
-    match speed {
-        Speed::Eighth => "1/8x",
-        Speed::Quarter => "1/4x",
-        Speed::Half => "1/2x",
-        Speed::X1 => "1x",
-        Speed::X2 => "2x",
-        Speed::X4 => "4x",
-        Speed::X8 => "8x",
-        Speed::X16 => "16x",
-        Speed::Max => "Max",
     }
 }

@@ -8,11 +8,11 @@ use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
 use terra_sim::{
     ActionView, ChemicalKind, ChemicalLevel, Command, CursorTouch, DeathCause, Dir, Divergence,
-    EntityId, Event, EventKind, Genome, Grip, HeldView, MAX_NAME_CHARS, Map, ObjectView, Outcome,
-    Playback, Pos, Progress, SpriteView, Target, Thing, Verb, World,
+    EntityId, Event, EventKind, Genome, Grip, HeldView, MAX_NAME_CHARS, Map, Mode, ObjectView,
+    Outcome, Playback, Pos, Progress, SpriteView, Target, Thing, Verb, World,
 };
 
-use crate::clock::Clock;
+use crate::clock::{Clock, Speed};
 use crate::cp437;
 use crate::input::{Action, Button};
 use crate::inspector;
@@ -1774,8 +1774,7 @@ impl App {
         match action {
             Action::TogglePause => self.clock.toggle_pause(),
             Action::StepOnce => self.clock.step_once(),
-            Action::Faster { held: false } => self.clock.faster(),
-            Action::Faster { held: true } => self.clock.faster_held(),
+            Action::Faster { held } => self.faster(held, world),
             Action::Slower { held: false } => self.clock.slower(),
             Action::Slower { held: true } => self.clock.slower_held(),
             // Scrolling by hand takes the view back from Track.
@@ -2225,6 +2224,23 @@ impl App {
         self.report = Some((StatusMark::Rejected, self.running_for));
         self.refusal = Some((why, Vec::new(), self.running_for));
         self.notice = None;
+    }
+
+    /// `+`: one step faster, as fast as the world's mode allows (M2 design
+    /// §16). Pressed at 4× in a Story world, it says that's the fastest.
+    fn faster(&mut self, held: bool, world: &World) {
+        self.clock.set_fastest(Speed::fastest_in(world.mode()));
+        let at_most = if held {
+            self.clock.faster_held()
+        } else {
+            self.clock.faster()
+        };
+        if at_most && world.mode() == Mode::Story {
+            self.tell_player(format!(
+                "{} is Story mode's fastest",
+                self.clock.fastest().label()
+            ));
+        }
     }
 
     /// Says what the player's action did on the status line, for a while.
@@ -3184,6 +3200,9 @@ impl App {
         let mut fresh = App::new(world.map(), self.theme.clone(), world.seed(), areas);
         fresh.clock = std::mem::take(&mut self.clock);
         fresh.clock.pause();
+        // A Story world loaded from a Lab one runs at 4× at most (M2
+        // design §16).
+        fresh.clock.set_fastest(Speed::fastest_in(world.mode()));
         fresh.policy = std::mem::replace(&mut self.policy, Box::new(Omniscient));
         fresh.colour_mode = self.colour_mode;
         fresh.event_filter = self.event_filter;

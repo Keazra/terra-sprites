@@ -2,6 +2,8 @@
 
 use std::time::Duration;
 
+use terra_sim::Mode;
+
 /// Rates are counted in 32nds of a tick per second, so ⅛× (5/32 of a tick a
 /// second) stays exact.
 const PARTS: u128 = 32;
@@ -13,8 +15,8 @@ const REACH_BACK_SECONDS: u32 = 2;
 
 /// Simulation speed. 1× is 1.25 ticks per second, slow enough to watch a
 /// sprite walk; each step halves or doubles it. Max runs as fast as the frame
-/// budget allows.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// budget allows. Slower speeds come first, so they compare as less.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Speed {
     Eighth,
     Quarter,
@@ -28,6 +30,30 @@ pub enum Speed {
 }
 
 impl Speed {
+    /// The fastest a world in `mode` runs (M2 design §16): 4× in Story mode,
+    /// so a life doesn't feel rushed, and Max in Lab mode.
+    pub fn fastest_in(mode: Mode) -> Speed {
+        match mode {
+            Mode::Story => Speed::X4,
+            Mode::Lab => Speed::Max,
+        }
+    }
+
+    /// How the top bar shows it (design §6.6): `1/8x` to `16x`, and `Max`.
+    pub fn label(self) -> &'static str {
+        match self {
+            Speed::Eighth => "1/8x",
+            Speed::Quarter => "1/4x",
+            Speed::Half => "1/2x",
+            Speed::X1 => "1x",
+            Speed::X2 => "2x",
+            Speed::X4 => "4x",
+            Speed::X8 => "8x",
+            Speed::X16 => "16x",
+            Speed::Max => "Max",
+        }
+    }
+
     /// 32nds of a tick per second, or `None` for Max.
     fn parts_per_second(self) -> Option<u32> {
         match self {
@@ -79,6 +105,8 @@ impl Speed {
 /// Paces the simulation against real time.
 pub struct Clock {
     speed: Speed,
+    /// The fastest it may go, as the world's mode allows (M2 design §16).
+    fastest: Speed,
     paused: bool,
     /// Ticks still to run of a step requested while paused. A step the frame
     /// budget cuts short finishes on the next frames.
@@ -88,10 +116,11 @@ pub struct Clock {
 }
 
 impl Clock {
-    /// A clock running at 1×.
+    /// A clock running at 1×, which may go up to Max.
     pub fn new() -> Clock {
         Clock {
             speed: Speed::X1,
+            fastest: Speed::Max,
             paused: false,
             step_ticks: 0,
             owed: 0,
@@ -102,17 +131,34 @@ impl Clock {
         self.speed
     }
 
-    /// One step faster, stopping at Max.
-    pub fn faster(&mut self) {
-        self.speed = self.speed.faster();
+    /// The fastest it may go.
+    pub fn fastest(&self) -> Speed {
+        self.fastest
+    }
+
+    /// Lets it go no faster than `fastest`, as the world's mode allows (M2
+    /// design §16): a faster speed drops to it.
+    pub fn set_fastest(&mut self, fastest: Speed) {
+        self.fastest = fastest;
+        self.speed = self.speed.min(fastest);
+    }
+
+    /// One step faster, stopping at the fastest it may go. Whether it was
+    /// already there.
+    pub fn faster(&mut self) -> bool {
+        let at_most = self.speed == self.fastest;
+        self.speed = self.speed.faster().min(self.fastest);
+        at_most
     }
 
     /// One step faster from a held key: stops at 1×, and at 16× so Max is always
-    /// a deliberate choice, until the key is pressed again.
-    pub fn faster_held(&mut self) {
-        if !matches!(self.speed, Speed::X1 | Speed::X16) {
-            self.faster();
+    /// a deliberate choice, until the key is pressed again. Whether it was
+    /// already at the fastest it may go.
+    pub fn faster_held(&mut self) -> bool {
+        if matches!(self.speed, Speed::X1 | Speed::X16) {
+            return self.speed == self.fastest;
         }
+        self.faster()
     }
 
     /// How many ticks a Reward given now reaches back (design v21 §6.5):

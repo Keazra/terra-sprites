@@ -23,6 +23,7 @@ use crate::genome::{GeneView, Genome};
 use crate::inheritance;
 use crate::learning::{self, Subject};
 use crate::map::{Dir, Map, MapError, Pos};
+use crate::mode::Mode;
 use crate::mutation::CopyChangeView;
 use crate::objects::{EntityId, Object, Objects};
 use crate::perception::{Flood, Target, goal_tiles};
@@ -85,6 +86,10 @@ pub(crate) struct WorldState {
     /// breeding, the default.
     #[serde(default = "crate::config::most_sprites")]
     pub(crate) most_sprites: u16,
+    /// Story or Lab (M2 design §16), kept for the world's life. A save
+    /// from before the modes is a Story world.
+    #[serde(default)]
+    pub(crate) mode: Mode,
 }
 
 impl WorldState {
@@ -848,12 +853,19 @@ impl<'a> EggView<'a> {
 }
 
 impl World {
-    /// A new world, generated from `config` and `seed`.
+    /// A new world, generated from `config` and `seed`, in Story mode.
     pub fn new(config: WorldConfig, data: DataPack, seed: u64) -> World {
+        World::new_in(config, data, seed, Mode::Story)
+    }
+
+    /// A new world, generated from `config` and `seed`, in `mode`, which
+    /// it keeps for its whole life (M2 design §16).
+    pub fn new_in(config: WorldConfig, data: DataPack, seed: u64, mode: Mode) -> World {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let map = generate(&config, &data, &mut rng);
         let mut world = World::with(map, data, rng, seed);
         world.state.most_sprites = config.most_sprites() as u16;
+        world.state.mode = mode;
         place_objects(&config, &world.data, &mut world.state);
         place_sprites(&config, &world.data, &mut world.state);
         world.config = Some(config);
@@ -1014,6 +1026,7 @@ impl World {
                 commands: Vec::new(),
                 cursor: Cursor::default(),
                 most_sprites: MOST_SPRITES,
+                mode: Mode::Story,
             },
             data,
             checked_next_id: Cell::new(1),
@@ -1091,6 +1104,7 @@ impl World {
             Some(config) if self.is_as_generated(config) => Start::Fresh {
                 seed: self.seed,
                 config: save::Preset::from(config),
+                mode: self.state.mode,
             },
             _ => Start::Snapshot(self.save()),
         };
@@ -1105,7 +1119,13 @@ impl World {
     /// and its seed: generating it again gives the same state.
     fn is_as_generated(&self, config: &WorldConfig) -> bool {
         self.state.tick == 0
-            && World::new(config.clone(), self.data.clone(), self.seed).state_hash()
+            && World::new_in(
+                config.clone(),
+                self.data.clone(),
+                self.seed,
+                self.state.mode,
+            )
+            .state_hash()
                 == self.state_hash()
     }
 
@@ -1119,6 +1139,11 @@ impl World {
     /// The seed the world was made from.
     pub fn seed(&self) -> u64 {
         self.seed
+    }
+
+    /// Whether it's a Story world or a Lab world (M2 design §16).
+    pub fn mode(&self) -> Mode {
+        self.state.mode
     }
 
     /// The tile at the middle of the screen when the world was saved, if

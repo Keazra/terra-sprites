@@ -215,7 +215,9 @@ fn a_pet_reaches_back_two_seconds_of_the_player_s_time() {
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
     let mut reach = Vec::new();
     for _ in 0..4 {
-        apply(&mut app, &world, Action::Faster { held: false });
+        // A hand-made world is a Story world, which `+` takes no faster
+        // than 4× (M2 design §16), so the clock is sped up directly.
+        app.clock.faster();
         click(&mut app, &world, at(4, 2), Button::Left);
         let [Command::Reward { reach_back, .. }] = app.take_commands()[..] else {
             panic!("one pet");
