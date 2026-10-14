@@ -1,7 +1,7 @@
 //! The population graph (M2 design §14): `p` opens it over the panels, with
 //! the world's population over its whole run stacked by life stage, and a
-//! moment picked with `←` `→` or the pointer read under it; a small copy
-//! heads the World tab.
+//! moment picked with `←` `→` or the pointer read under it, with the
+//! generations alive then (#208); a small copy heads the World tab.
 
 use std::time::Duration;
 
@@ -110,15 +110,17 @@ fn row(buffer: &Buffer, y: u16) -> String {
 
 // At 100×30 the graph's box is rows 1 to 28, its inside rows 2 to 27 from
 // column 1; the labels, up to "100%", take 7 columns, so the graph's first
-// column is 8. Its 20 rows are 2 to 21, the axis 22, its ticks 23, the
-// legend 25 and the two lines that read a moment 26 and 27.
+// column is 8. Its 19 rows are 2 to 20, the axis 21, its ticks 22, the
+// legend 24 and the three lines that read a moment 25 to 27.
 const FIRST_COLUMN: u16 = 8;
-const BOTTOM: u16 = 21;
-const AXIS: u16 = 22;
+const BOTTOM: u16 = 20;
+const AXIS: u16 = 21;
+const TICKS: u16 = 22;
+const LEGEND: u16 = 24;
 
-/// What the two lines under the graph say.
-fn reading(buffer: &Buffer) -> [String; 2] {
-    [26, 27].map(|y| {
+/// What the three lines under the graph say.
+fn reading(buffer: &Buffer) -> [String; 3] {
+    [25, 26, 27].map(|y| {
         let line = row(buffer, y);
         line.trim_start_matches('│')
             .trim_end_matches('│')
@@ -151,16 +153,16 @@ fn p_opens_the_population_graph_over_the_panels_and_p_or_esc_closes_it() {
         row(&screen, 2)
     );
     assert!(
-        row(&screen, 12).starts_with("│  50% ┤"),
-        "{}",
-        row(&screen, 12)
+        row(&screen, 11).starts_with("│  50% ┤"),
+        "half way, in the middle of the middle row of 19: {}",
+        row(&screen, 11)
     );
     assert!(
         row(&screen, AXIS).starts_with("│   0% └"),
         "{}",
         row(&screen, AXIS)
     );
-    let legend = row(&screen, 25);
+    let legend = row(&screen, LEGEND);
     assert!(
         legend.starts_with("│ █ eggs  █ young  █ adults  █ old  as shares of each column"),
         "{legend}"
@@ -168,7 +170,8 @@ fn p_opens_the_population_graph_over_the_panels_and_p_or_esc_closes_it() {
     assert_eq!(
         reading(&screen),
         [
-            "now, tick 250: 6 sprites · 0 eggs (0%) · 2 young (33%) · 4 adults (67%) · 0 old (0%)",
+            "now, tick 250: 6 sprites · generation 1",
+            "0 eggs (0%) · 2 young (33%) · 4 adults (67%) · 0 old (0%)",
             "since tick 200: none laid, hatched or died",
         ]
     );
@@ -184,11 +187,9 @@ fn p_opens_the_population_graph_over_the_panels_and_p_or_esc_closes_it() {
     assert_eq!(app.screen(), Screen::Normal, "and so does Esc");
 }
 
-#[test]
-fn the_eggs_are_at_the_bottom_of_each_column() {
-    // M2 design §14.2: an egg is the youngest a sprite can be, so the eggs
-    // are stacked under the young. A mother laying alone (§10.4) and her
-    // egg are a column half egg, half adult.
+/// A grown female of the first generation alone on a field of grass, who
+/// lays alone at once (M2 design §10.4).
+fn mother() -> World {
     let pack = lone();
     let mother = Genome::from_ron(
         r#"(format: 1, genes: [
@@ -207,7 +208,15 @@ fn the_eggs_are_at_the_bottom_of_each_column() {
         scripted: &[],
         newborns: &[],
     };
-    let mut world = World::from_scenario(scenario, pack, 1).expect("valid scenario");
+    World::from_scenario(scenario, pack, 1).expect("valid scenario")
+}
+
+#[test]
+fn the_eggs_are_at_the_bottom_of_each_column() {
+    // M2 design §14.2: an egg is the youngest a sprite can be, so the eggs
+    // are stacked under the young. A mother laying alone (§10.4) and her
+    // egg are a column half egg, half adult.
+    let mut world = mother();
     run(&mut world, 150);
     assert_eq!(world.eggs().count(), 1, "she laid one, not yet hatched");
     let mut app = app_on(&world);
@@ -216,14 +225,20 @@ fn the_eggs_are_at_the_bottom_of_each_column() {
     let look = Theme::cp437().population();
     let at = |y: u16| {
         let cell = &screen[(FIRST_COLUMN, y)];
-        (cell.symbol().to_string(), cell.fg)
+        (cell.symbol().to_string(), cell.fg, cell.bg)
     };
-    assert_eq!(at(BOTTOM), ("█".into(), look.egg));
-    assert_eq!(at(BOTTOM - 9), ("█".into(), look.egg));
-    assert_eq!(at(BOTTOM - 10), ("█".into(), look.adult));
+    // Half of 38 halves each: 9 rows of egg, a row half egg and half
+    // adult, then 9 of adult.
+    assert_eq!(at(BOTTOM), ("█".into(), look.egg, Color::Reset));
+    assert_eq!(at(BOTTOM - 8), ("█".into(), look.egg, Color::Reset));
+    assert_eq!(at(BOTTOM - 9), ("▄".into(), look.egg, look.adult));
+    assert_eq!(at(BOTTOM - 10), ("█".into(), look.adult, Color::Reset));
     assert_eq!(
-        reading(&screen)[0],
-        "now, tick 150: 1 sprite · 1 egg (50%) · 0 young (0%) · 1 adult (50%) · 0 old (0%)"
+        reading(&screen)[..2],
+        [
+            "now, tick 150: 1 sprite · generation 1",
+            "1 egg (50%) · 0 young (0%) · 1 adult (50%) · 0 old (0%)",
+        ]
     );
 }
 
@@ -259,8 +274,8 @@ fn nothing_drawn_beneath_shows_through_the_graph() {
 fn each_column_is_split_by_share_from_the_bottom_in_the_theme_s_colours() {
     // M2 design §14.2: youngest to oldest from the bottom, eggs, young,
     // adults and old, each column full height. With no eggs, the 2 young
-    // are a third of the column's 40 halves, 13 of them, the 4 adults the
-    // 27 above, up to the top.
+    // are a third of the column's 38 halves, 13 of them, the 4 adults the
+    // 25 above, up to the top.
     let mut world = field(2, 4);
     run(&mut world, 250);
     let mut app = app_on(&world);
@@ -297,7 +312,7 @@ fn the_graph_grows_from_the_left_then_squeezes_the_whole_run_in() {
     };
     let one = columns(&screen, BOTTOM);
     assert_eq!(one.trim_end().chars().count(), 20, "{one}");
-    let ticks = row(&screen, 23);
+    let ticks = row(&screen, TICKS);
     assert!(ticks.starts_with("│      0 "), "{ticks}");
     assert!(
         ticks.ends_with(" 8,800   │"),
@@ -308,7 +323,7 @@ fn the_graph_grows_from_the_left_then_squeezes_the_whole_run_in() {
     assert_eq!(app.graph_pick(), Some(1_000));
     run(&mut world, 58_000);
     let screen = render(&app, &world);
-    let ticks = row(&screen, 23);
+    let ticks = row(&screen, TICKS);
     assert!(ticks.starts_with("│      0 "), "the whole run: {ticks}");
     assert!(ticks.ends_with(" 58,000   │"), "{ticks}");
     let one = columns(&screen, BOTTOM);
@@ -348,7 +363,8 @@ fn arrows_or_the_pointer_pick_a_moment_and_the_lines_under_the_graph_read_it() {
     assert_eq!(
         reading(&screen),
         [
-            "tick 200: 6 sprites · 0 eggs (0%) · 2 young (33%) · 4 adults (67%) · 0 old (0%)",
+            "tick 200: 6 sprites · generation 1",
+            "0 eggs (0%) · 2 young (33%) · 4 adults (67%) · 0 old (0%)",
             "since tick 100: none laid, hatched or died",
         ]
     );
@@ -361,7 +377,7 @@ fn arrows_or_the_pointer_pick_a_moment_and_the_lines_under_the_graph_read_it() {
         "it stops at the first"
     );
     assert_eq!(
-        reading(&screen)[1],
+        reading(&screen)[2],
         "since tick 0: none laid, hatched or died"
     );
     app.apply(right, &world);
@@ -402,6 +418,64 @@ fn a_picked_moment_stays_picked_as_time_runs_and_now_moves_on() {
     let screen = render(&now, &world);
     assert_eq!(screen[(FIRST_COLUMN + 12, AXIS)].symbol(), "▲");
     assert!(reading(&screen)[0].starts_with("now, tick 1,250:"));
+}
+
+#[test]
+fn the_reading_says_which_generations_were_alive_then() {
+    // #208: the mother is of the first generation, and her egg of the
+    // second, but an egg isn't a sprite until it hatches (M2 design §10.4).
+    let mut world = mother();
+    run(&mut world, 150);
+    let mut app = app_on(&world);
+    app.apply(Action::Population, &world);
+    assert_eq!(
+        reading(&render(&app, &world))[0],
+        "now, tick 150: 1 sprite · generation 1"
+    );
+    for _ in 0..2_000 {
+        if world.sprites().count() == 2 {
+            break;
+        }
+        world.step();
+    }
+    assert_eq!(world.sprites().count(), 2, "her egg hatched");
+    let hatched = world.tick();
+    run(&mut world, 100);
+    assert_eq!(
+        reading(&render(&app, &world))[0],
+        format!(
+            "now, tick {}: 2 sprites · generations 1 to 2",
+            group(hatched + 100)
+        )
+    );
+    // The first column reads the count at tick 100, before the hatching.
+    app.apply(Action::Point(Position::new(FIRST_COLUMN, 9)), &world);
+    assert_eq!(
+        reading(&render(&app, &world))[0],
+        "tick 100: 1 sprite · generation 1"
+    );
+}
+
+/// A save of schema 1 from before the population record kept generations
+/// (the golden save `terra-sim`'s `lineage.rs` describes), written by the
+/// build that merged PR #201 on tick 105, with counts at ticks 0 and 100.
+const GOLDEN_V1_BEFORE_LINEAGE: &[u8] =
+    include_bytes!("../../terra-sim/tests/golden/save-v1-before-lineage.tspr");
+
+#[test]
+fn a_save_from_before_generations_reads_none_for_its_earlier_moments() {
+    // #208: its counts have none, so their moments read no generations;
+    // now, its sprites have theirs, numbered when it loaded (M2 design
+    // §17.1).
+    let world = World::load(GOLDEN_V1_BEFORE_LINEAGE).expect("the save loads");
+    let mut app = app_on(&world);
+    app.apply(Action::Population, &world);
+    let now = reading(&render(&app, &world));
+    assert_eq!(now[0], "now, tick 105: 4 sprites · generations 2 to 3");
+    app.apply(Action::Scroll { dx: -1, dy: 0 }, &world);
+    let then = reading(&render(&app, &world));
+    assert!(then[0].starts_with("tick 100: "), "{then:?}");
+    assert!(!then[0].contains("generation"), "{then:?}");
 }
 
 #[test]
@@ -464,10 +538,8 @@ fn a_death_is_read_in_the_moment_it_happened() {
     assert_eq!(
         reading(&screen),
         [
-            format!(
-                "tick {}: 0 sprites · 0 eggs · 0 young · 0 adults · 0 old",
-                group(tick)
-            ),
+            format!("tick {}: 0 sprites", group(tick)),
+            "0 eggs · 0 young · 0 adults · 0 old".to_string(),
             format!("since tick {}: 1 died (dehydration 1)", group(tick - 100)),
         ]
     );
@@ -592,7 +664,7 @@ fn a_column_narrower_than_the_time_between_counts_reads_the_count_it_shows() {
         .unwrap();
     let screen = terminal.backend().buffer().clone();
     assert_eq!(screen[(FIRST_COLUMN + 2, AXIS)].symbol(), "▲");
-    let [first, second] = reading(&screen);
+    let [first, _, since] = reading(&screen);
     assert!(first.starts_with("tick 200: "), "{first}");
-    assert_eq!(second, "since tick 0: none laid, hatched or died");
+    assert_eq!(since, "since tick 0: none laid, hatched or died");
 }

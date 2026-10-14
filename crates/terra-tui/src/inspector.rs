@@ -1968,20 +1968,11 @@ fn wrapped(text: &str, indent: usize, style: Style) -> Vec<Line<'static>> {
 }
 
 /// The generations of the sprites alive (M2 design §17.5), from the oldest
-/// to the newest, `generations 1 to 6`, or none with no sprites.
+/// to the newest, `generations 1 to 6`, or none with no sprites: the same
+/// as the population graph reads now (§14.3).
 fn generations_line(world: &World) -> Option<Line<'static>> {
-    let generations = || world.sprites().map(|sprite| sprite.generation());
-    let (oldest, newest) = generations().min().zip(generations().max())?;
-    let line = if oldest == newest {
-        format!(" {:<12}{:>7}", "generation", oldest)
-    } else {
-        format!(
-            " {:<12}{:>7}",
-            "generations",
-            format!("{oldest} to {newest}")
-        )
-    };
-    Some(Line::from(line))
+    let (label, value) = text::generations_words(world.population_now().generations?);
+    Some(Line::from(format!(" {label:<12}{value:>7}")))
 }
 
 /// The World tab (design §6.1): a small population graph (M2 design §14),

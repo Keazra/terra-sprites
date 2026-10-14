@@ -767,10 +767,11 @@ Settled with the owner on 2026-10-13 ([#144](https://github.com/Keazra/terra-spr
 
 ### 14.1 The population record
 
-- **The world counts its sprites by life stage,** young, adults and old, **and its eggs,** which are items until they hatch (§10.4), on the map or in the Cursor, at the first tick it runs and then every 100 ticks, with what happened since the count before: the eggs laid and hatched, the sprites the Cursor spawned, and the deaths by cause.
-- **It's world state:** saved (M1 design §2.8), in the state hash, the same in a replay (M1 design §2.7), and checked every tick (M1 design §7.1): its counts go forward in time and never reach 512. Nothing in the world reads it, so the sprites live exactly as they did before it (§14.7).
+- **The world counts its sprites by life stage,** young, adults and old, **and its eggs,** which are items until they hatch (§10.4), on the map or in the Cursor, at the first tick it runs and then every 100 ticks, with **the oldest and newest generations among its sprites** (§17.1, [#208](https://github.com/Keazra/terra-sprites/issues/208)), not its eggs, and what happened since the count before: the eggs laid and hatched, the sprites the Cursor spawned, and the deaths by cause. A count keeps its generations when the record squeezes (below); they're two small numbers, a few bytes a count in a save.
+- **It's world state:** saved (M1 design §2.8), in the state hash, the same in a replay (M1 design §2.7), and checked every tick (M1 design §7.1): its counts go forward in time and never reach 512, and a count's generations run from the oldest to the newest, with none in a count of no sprites (#208). Nothing in the world reads it, so the sprites live exactly as they did before it (§14.7).
 - **It always covers the whole run, and a save stays small.** Once it holds 512 counts, it keeps the first and every other one after it, folds what happened in the dropped ones' stretches into the next one kept, and counts half as often: every 200 ticks from about tick 51,000, every 400 from about 102,000, and so on. It never holds more than 511 counts.
 - **A save from before this slice** has no counts, so its record begins at the first tick it runs after loading. The save format stays 1: the record is new, with a default (M1 design §2.8).
+- **A save from before the record kept generations** has counts without them, so their moments read no generations (§14.3), and the counts after the load have them (#208). The save format stays 1, with a default. A replay recorded before parts from its recording, as one does between builds that share a version number.
 - **The world keeps it, not the screen,** so a loaded world and a replay show the whole graph, and a world fast-forwarded in Slice 27 will open with it.
 
 ### 14.2 The graph
@@ -796,7 +797,6 @@ At 100×30, the default world (seed 7) at tick 48,000, with a moment at tick 32,
 │      │███████████████████████████████████████████████████████████████████████████████████████████│
 │      │███████████████████████████████████████████████████████████████████████████████████████████│
 │      │███████████████████████████████████████████████████████████████████████████████████████████│
-│      │███████████████████████████████████████████████████████████████████████████████████████████│
 │  50% ┤███████████████████████████████████████████████████████████████████████████████████████████│
 │      │███████████████████████████████████████████████████████████████████████████████████████████│
 │      │██████████████▓▓▓▓█████████████████████████████████████████████████████████████████████████│
@@ -811,7 +811,8 @@ At 100×30, the default world (seed 7) at tick 48,000, with a moment at tick 32,
 │      0                11,600                23,200                34,800                46,400   │
 │                                                                                                  │
 │ ░ eggs  ▓ young  █ adults  ▒ old  as shares of each column                                       │
-│ tick 32,700: 84 sprites · 3 eggs (3%) · 20 young (23%) · 53 adults (61%) · 11 old (13%)          │
+│ tick 32,700: 84 sprites · generations 3 to 6                                                     │
+│ 3 eggs (3%) · 20 young (23%) · 53 adults (61%) · 11 old (13%)                                    │
 │ since tick 32,100: 1 laid · 2 hatched · 2 died (old age 2)                                       │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
  (128,80) dirt · berry (fresh) │ SELECT         ←→ pick a moment  space pause  +/- speed  esc close
@@ -820,7 +821,8 @@ At 100×30, the default world (seed 7) at tick 48,000, with a moment at tick 32,
 ### 14.3 Reading a moment
 
 - **`←` and `→`, or `A` and `D`, or the pointer over the graph pick a column** (Q3, B); a click picks too. `▲` under the graph marks the column read: with nothing picked, the last, which reads now, as `now, tick 48,000: …`.
-- **The two lines under the graph read it:** the tick, how many sprites, then the eggs, which aren't sprites until they hatch (§10.4), and the count in each stage, each with its share of the column, then what was laid, hatched, spawned and died since the column before, with the causes, or "none laid, hatched or died". The first column reads from the first count, and the first count itself says so. A column narrower than the time between counts, on a wide screen once the record has squeezed, shows the count before it again, and reads it.
+- **The three lines under the graph read it:** the tick, how many sprites and **the generations alive then** (#208), `generations 3 to 6`, or `generation 1` when there's one, as the World tab says them (§17.5), or no generations with no sprites or in a count from before the record kept them (§14.1); then the eggs, which aren't sprites until they hatch (§10.4), and the count in each stage, each with its share of the column; then what was laid, hatched, spawned and died since the column before, with the causes, or "none laid, hatched or died". The first column reads from the first count, and the first count itself says so. A column narrower than the time between counts, on a wide screen once the record has squeezed, shows the count before it again, and reads it.
+- **Three lines, not two** (the owner's pick, 2026-10-14): #208 put the generations on the first line, after the count of sprites, but that line then ran to about 110 characters, past the box at the game's smallest screen, 100 columns, cutting off the old. So the eggs and the stages have a line of their own, and the graph gives up a row for it.
 - **A pick is a moment,** the end of the column's stretch of time, so as time runs and the graph squeezes, `▲` stays on the column that takes it in. Picking the last column goes back to reading now, which moves on with time. The arrows stop at the first column and at now, and closing the graph forgets the pick.
 - **The status line's key hints** read `←→ pick a moment  space pause  +/- speed  esc close`.
 
@@ -871,9 +873,15 @@ cargo run --release -p terra-sim --example speed
 - **No slower: met.** The speed check ran 292 and 291 ticks a second on `main`, and 286 and 299 on this slice, run in turn.
 - **The UI tests and snapshots pass,** as do the simulation's tests of the record.
 
+**Generations on the graph** ([#208](https://github.com/Keazra/terra-sprites/issues/208)) were checked the same way, measured on 2026-10-14 in release builds of its branch at `28eed2d` beside `main` at `97c1175`, in the cloud, with the same two commands:
+
+- **The sprites live exactly as before: met.** The `generations` report is the same, byte for byte, on both.
+- **No slower: met.** The speed check ran 190 and 174 ticks a second on `main`, and 188 and 178 on the branch, run in turn: the same, within the noise. As for Slice 25 (§17.7), this container was too slow for 200 on either.
+- **UI tests** read the generations at a moment and now, none at a moment from a save made before them, and the three lines in both themes' snapshots; **the simulation's tests** cover the generations in each count, a squeeze keeping them, a replay playing them back, and a save from before them.
+
 ### 14.8 Later
 
-- **Generations on the graph,** now that the family tree (§17) gives each sprite one ([#208](https://github.com/Keazra/terra-sprites/issues/208), §17.8).
+- **Generations on the graph** are built ([#208](https://github.com/Keazra/terra-sprites/issues/208), §14.1, §14.3).
 - **A gene's middle value over time, and the counts in a file,** are fast-forward's tables (Slice 27, §16.4).
 
 ---
@@ -1273,7 +1281,7 @@ Sprite #24222 is both the father of her second young and her brother, through Sp
 ### 17.5 The inspector
 
 - **The Body tab** says where a sprite came from, and its generation, after its sex: `parents Mira #10386 and Sprite #4072 · generation 4`, on two lines when it's too long for one, or `one of the first sprites · generation 1`, or `placed by the Cursor · generation 1`. An egg's card says its parents and generation the same way.
-- **The World tab** says the generations alive after the number of sprites, `generations  3 to 6`, or `generation  1` when there's one. With no sprites, it leaves the line out.
+- **The World tab** says the generations alive after the number of sprites, `generations  3 to 6`, or `generation  1` when there's one. With no sprites, it leaves the line out. The population graph reads them the same way, now and at each moment it counted (§14.3, #208).
 
 ### 17.6 The information policy
 
@@ -1301,7 +1309,7 @@ cargo run --release -p terra-sim --example speed
 
 ### 17.8 Later
 
-- **Generations on the population graph** (Q6, A, [#208](https://github.com/Keazra/terra-sprites/issues/208)): `generations 3 to 6` in the lines that read a moment, now that both are in.
+- **Generations on the population graph** (Q6, A, [#208](https://github.com/Keazra/terra-sprites/issues/208)): built once both were in, as `generations 3 to 6` in the lines that read a moment, which became three lines to fit (§14.3).
 - **Grieving for and remembering the dead,** recent or long ago ([#206](https://github.com/Keazra/terra-sprites/issues/206), the owner, Q8).
 - **Further back or down:** great-grandparents or grandchildren drawn on the tree (Q2, B and C), if walking it turns out too slow.
 
