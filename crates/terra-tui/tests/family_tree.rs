@@ -1,4 +1,4 @@
-//! The family tree (M2 design §16): `k` opens it over the panels, on the
+//! The family tree (M2 design §17): `k` opens it over the panels, on the
 //! selected sprite or egg, with its grandparents, parents, young and
 //! brothers and sisters, living or dead; the arrows or the pointer choose
 //! one, and `Enter` or a click walks the tree to it and selects it. The
@@ -274,7 +274,7 @@ impl InfoPolicy for Hiding {
 
 #[test]
 fn a_sprite_the_policy_hides_is_a_blank_card_that_leads_nowhere() {
-    // M2 design §16.6: #9's young #14, and #10, the other parent of #12
+    // M2 design §17.6: #9's young #14, and #10, the other parent of #12
     // and #14, are hidden.
     let world = pairs(200);
     let mut app = app_on(&world);

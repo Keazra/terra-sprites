@@ -242,7 +242,7 @@ pub(crate) fn doing_line(sprite: &SpriteView, app: &App, world: &World) -> Optio
 }
 
 /// A sprite's sex and fertility, and its parents (M2 design §10), or where
-/// it came from without, and its generation (M2 design §16.5): `male ·
+/// it came from without, and its generation (M2 design §17.5): `male ·
 /// fertile · turning 40%`, `parents Pip #12 and Bo #7 · generation 4`.
 fn family_lines(sprite: &SpriteView, data: &Words) -> Vec<String> {
     let mut line = format!(" {}", sprite.sex().name());
@@ -265,7 +265,7 @@ fn family_lines(sprite: &SpriteView, data: &Words) -> Vec<String> {
 }
 
 /// Where a sprite or egg came from, `whence`, and its generation (M2
-/// design §16.5): `parents Pip #12 and Bo #7 · generation 4`, on two lines if
+/// design §17.5): `parents Pip #12 and Bo #7 · generation 4`, on two lines if
 /// that's too long for one.
 fn generation_lines(whence: &str, generation: u32) -> Vec<String> {
     let line = format!(" {whence} · generation {generation}");
@@ -1869,7 +1869,7 @@ fn wrapped(text: &str, indent: usize, style: Style) -> Vec<Line<'static>> {
         .collect()
 }
 
-/// The generations of the sprites alive (M2 design §16.5), from the oldest
+/// The generations of the sprites alive (M2 design §17.5), from the oldest
 /// to the newest, `generations 1 to 6`, or none with no sprites.
 fn generations_line(world: &World) -> Option<Line<'static>> {
     let generations = || world.sprites().map(|sprite| sprite.generation());

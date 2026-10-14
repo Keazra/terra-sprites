@@ -392,7 +392,7 @@ The counts the world keeps of its sprites by life stage, and of its eggs, over i
 _Avoid_: history, statistics, census
 
 **Record of the dead** (M2):
-What the world keeps of each sprite that dies: its name, parents, generation, origin, when it was born and died, how, at what life stage and as which sex. It's world state, but nothing in the world reads it. It keeps the newest 10,000, forgetting the longest dead first, but never one the player named (M2 design §16.1).
+What the world keeps of each sprite that dies: its name, parents, generation, origin, when it was born and died, how, at what life stage and as which sex. It's world state, but nothing in the world reads it. It keeps the newest 10,000, forgetting the longest dead first, but never one the player named (M2 design §17.1).
 _Avoid_: graveyard, obituary, history
 
 **Lived long ago** (M2):
@@ -703,7 +703,7 @@ The overlay `p` opens: the world's population over its whole run, each column sp
 _Avoid_: population chart, history graph, census
 
 **Family tree** (M2):
-The overlay `k` opens: the selected sprite's grandparents, parents, young, and brothers and sisters, living or dead, with lines joining the generations. The arrows or the pointer choose a sprite on it, which blinks, and `Enter` or a click walks the tree to it (M2 design §16).
+The overlay `k` opens: the selected sprite's grandparents, parents, young, and brothers and sisters, living or dead, with lines joining the generations. The arrows or the pointer choose a sprite on it, which blinks, and `Enter` or a click walks the tree to it (M2 design §17).
 _Avoid_: pedigree, genealogy, lineage view
 
 **Information policy**:

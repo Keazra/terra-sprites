@@ -102,7 +102,7 @@
         half: '_',
         limit: (glyph: '.', fg: dark_gray),
     ),
-    // The lineage colours (`b`, M2 design §16): the selected sprite's parents
+    // The lineage colours (`b`, M2 design §17): the selected sprite's parents
     // and grandparents, its brothers and sisters, its young and theirs, and
     // every other sprite. The selected sprite keeps its own colour. Picked to
     // stand out on grass, dirt, sand and water alike. What a theme leaves out

@@ -102,7 +102,7 @@ fn every_screen_s_text_is_within_cp437() {
 
 #[test]
 fn the_family_tree_s_lines_and_arrows_are_within_cp437() {
-    // M2 design §16.2: the lines joining the generations, `◄` and `►` past
+    // M2 design §17.2: the lines joining the generations, `◄` and `►` past
     // the edge of a row that scrolls, and ` · ` between a card's parts.
     let world = common::pairs(200);
     for theme in [Theme::cp437(), Theme::ascii()] {

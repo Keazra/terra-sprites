@@ -611,7 +611,7 @@ fn lineage(theme: &Theme) -> [Color; 4] {
 
 #[test]
 fn the_themes_draw_the_lineage_colours_as_the_design_table_says() {
-    // M2 design §16.4.
+    // M2 design §17.4.
     let colours = [
         Color::LightBlue,
         Color::LightRed,
@@ -624,7 +624,7 @@ fn the_themes_draw_the_lineage_colours_as_the_design_table_says() {
 
 #[test]
 fn a_theme_from_before_the_lineage_colours_draws_the_default_theme_s() {
-    // M2 design §16.4.
+    // M2 design §17.4.
     let pack = pack();
     let start = ASCII_THEME
         .find("    // The lineage colours")
@@ -638,7 +638,7 @@ fn a_theme_from_before_the_lineage_colours_draws_the_default_theme_s() {
 
 #[test]
 fn a_theme_draws_the_lineage_colours_it_leaves_out_as_the_default_theme_does() {
-    // M2 design §16.4: a colour at a time.
+    // M2 design §17.4: a colour at a time.
     let pack = pack();
     let edited = ascii_with(
         "lineage: (elders: light_blue, siblings: light_red, young: light_magenta, others: dark_gray)",

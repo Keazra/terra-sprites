@@ -1,6 +1,6 @@
 # Themes
 
-A **theme** says how the map is drawn: the character and colour of each kind of ground, each plant and toy, sprites, their emotes, the Cursor, the glass round the map and the stars in space past it (design §6.2, M2 design §11), the colours and blocks of the population graph (M2 design §14), and the lineage colours (§16). The game has two built in, `themes/cp437.ron` (the default) and `themes/ascii.ron` (`--ascii`). To draw it your own way, copy one, edit it, and put it in the `themes` folder of the game's folder (design §6.7). The help screen (`?`) shows where the game's folder is:
+A **theme** says how the map is drawn: the character and colour of each kind of ground, each plant and toy, sprites, their emotes, the Cursor, the glass round the map and the stars in space past it (design §6.2, M2 design §11), the colours and blocks of the population graph (M2 design §14), and the lineage colours (§17). The game has two built in, `themes/cp437.ron` (the default) and `themes/ascii.ron` (`--ascii`). To draw it your own way, copy one, edit it, and put it in the `themes` folder of the game's folder (design §6.7). The help screen (`?`) shows where the game's folder is:
 
 | System | The themes folder |
 |---|---|
@@ -99,7 +99,7 @@ The population graph (`p`, and small at the top of the World tab) stacks the egg
 
 ### `lineage`
 
-`b`'s lineage colours draw each sprite on the map by where it stands in the selected one's lineage, as the family tree (`k`) shows it; the selected sprite keeps its own colour, and with none selected, every sprite does (M2 design §16). `lineage` is a record of four colours, each of which may be left out and is then drawn as the default theme draws it. A field the game doesn't know is refused, naming it.
+`b`'s lineage colours draw each sprite on the map by where it stands in the selected one's lineage, as the family tree (`k`) shows it; the selected sprite keeps its own colour, and with none selected, every sprite does (M2 design §17). `lineage` is a record of four colours, each of which may be left out and is then drawn as the default theme draws it. A field the game doesn't know is refused, naming it.
 
 | Field | Meaning |
 |---|---|

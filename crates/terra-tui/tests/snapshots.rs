@@ -1,5 +1,5 @@
 //! Snapshots of whole screens (design §6.1): the help screen, the sprite
-//! list, the population graph (M2 design §14), the family tree (§16) and
+//! list, the population graph (M2 design §14), the family tree (§17) and
 //! each inspector tab, in both themes, drawn on a hand-made field
 //! and compared with the text files in `snapshots/`. A screen that changes
 //! on purpose is written afresh with `UPDATE_SNAPSHOTS=1 cargo test -p

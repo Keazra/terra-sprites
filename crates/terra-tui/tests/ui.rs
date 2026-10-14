@@ -1454,7 +1454,7 @@ fn the_body_tab_shows_age_life_stage_traits_drives_physical_levels_and_wear() {
             "speed 7.25 · sense 9.5",
             // Its sex, and fed and watered, fertile (M2 design §10).
             "male · fertile",
-            // Where it came from, and its generation (M2 design §16.5).
+            // Where it came from, and its generation (M2 design §17.5).
             "one of the first sprites · generation 1",
             "",
             "hunger      ████░░░░░░ .40 ▼",
@@ -2703,7 +2703,7 @@ fn the_world_tab_shows_the_population_and_the_deaths_by_cause() {
         text[1..5],
         [
             "sprites           3",
-            // The generations of the living (M2 design §16.5).
+            // The generations of the living (M2 design §17.5).
             "generation        1",
             "deaths            0",
             "starvation 0 · dehydration 0 · old age 0",

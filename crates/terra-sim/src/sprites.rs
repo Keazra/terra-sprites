@@ -43,12 +43,12 @@ pub(crate) struct Sprite {
     /// placed.
     #[serde(default)]
     pub(crate) parents: Vec<EntityId>,
-    /// Its generation (M2 design §16.1): the first for a sprite with no
+    /// Its generation (M2 design §17.1): the first for a sprite with no
     /// parents, else one after its newer parent's. 0 only in a save from
     /// before generations, until it's loaded.
     #[serde(default)]
     pub(crate) generation: u32,
-    /// Whether the Cursor placed it (M2 design §16.1).
+    /// Whether the Cursor placed it (M2 design §17.1).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub(crate) placed: bool,
     /// The tick it last had young on, if it has (M2 design §10).

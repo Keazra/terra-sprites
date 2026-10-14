@@ -1,5 +1,5 @@
 //! Shared helpers for terra-tui integration tests: worlds where
-//! generations come quickly, for the family tree (M2 design §16).
+//! generations come quickly, for the family tree (M2 design §17).
 //!
 //! Each test file is its own crate, so it `mod common;` and uses only the
 //! pieces it needs. Helpers a given file never calls are allowed here so the
@@ -186,7 +186,7 @@ pub fn pairs(ticks: u64) -> World {
     grow(&QUICK, (16, 8), &sprites, ticks)
 }
 
-/// Selects `id` and opens its family tree (M2 design §16.2).
+/// Selects `id` and opens its family tree (M2 design §17.2).
 pub fn tree_of(app: &mut App, world: &World, id: EntityId) {
     for _ in 0..world.sprites().count() {
         if app.selection().map(Selection::id) == Some(id) {

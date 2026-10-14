@@ -312,7 +312,7 @@ impl InfoPolicy for HideTheFamilyTree {
 
 #[test]
 fn a_policy_that_hides_the_family_tree_hides_the_lineage_colours_too() {
-    // M2 design §16.6: both show the same sprites' lineage.
+    // M2 design §17.6: both show the same sprites' lineage.
     let world = field();
     let mut app = busy_app(&world);
     while app.colour_mode() != ColourMode::Lineage {

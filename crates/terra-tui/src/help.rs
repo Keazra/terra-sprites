@@ -164,7 +164,7 @@ fn colour_legend(app: &App, world: &World, width: usize) -> Vec<Line<'static>> {
     lines
 }
 
-/// The lineage colours (M2 design §16.4): who's drawn in each, of the
+/// The lineage colours (M2 design §17.4): who's drawn in each, of the
 /// selected sprite's lineage.
 fn lineage_legend(app: &App) -> Line<'static> {
     let sprite = app.theme.glyph(SemanticTile::Sprite).symbol.to_string();

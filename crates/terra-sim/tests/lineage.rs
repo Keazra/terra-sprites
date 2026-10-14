@@ -1,4 +1,4 @@
-//! Lineage (M2 design §16): each sprite and egg knows its generation and
+//! Lineage (M2 design §17): each sprite and egg knows its generation and
 //! where it came from, the world remembers each sprite that dies, with its
 //! parents and how it died, and finds anyone's young, living or dead. The
 //! record is world state, saved, hashed and replayed, but nothing in the
@@ -152,7 +152,7 @@ fn the_dead_are_saved_and_loaded() {
 
 #[test]
 fn the_record_of_the_dead_is_hashed() {
-    // The record is world state (M2 design §16.1). Two worlds alike but for
+    // The record is world state (M2 design §17.1). Two worlds alike but for
     // the name of a sprite that has died differ only in what they remember
     // of it.
     let named = |name: &str| {

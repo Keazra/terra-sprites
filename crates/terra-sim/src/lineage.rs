@@ -1,4 +1,4 @@
-//! Lineage (M2 design §16): who descends from whom. Each sprite and egg
+//! Lineage (M2 design §17): who descends from whom. Each sprite and egg
 //! knows its parents and its generation, and once a sprite dies the world
 //! keeps a short record of it, so the family tree can show the dead.
 //! Nothing in the world reads the record: it's the player's, like a
@@ -14,15 +14,15 @@ use crate::events::DeathCause;
 use crate::objects::{EntityId, Objects};
 use crate::sprites::{Sprite, Sprites};
 
-/// How many dead sprites the world remembers (M2 design §16.1): past it, the
+/// How many dead sprites the world remembers (M2 design §17.1): past it, the
 /// longest dead are forgotten first, but never one the player named.
 pub(crate) const REMEMBERED: usize = 10_000;
 
 /// The generation of a sprite with no parents: one the world began with,
-/// or the Cursor placed (M2 design §16.1).
+/// or the Cursor placed (M2 design §17.1).
 pub(crate) const FIRST_GENERATION: u32 = 1;
 
-/// Where a sprite came from (M2 design §16.1).
+/// Where a sprite came from (M2 design §17.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Origin {
     /// One the world began with.
@@ -47,7 +47,7 @@ impl Origin {
 
 /// The generation of a sprite whose parents are of `parents` generations:
 /// one more than the newer parent's, or the first, with none (M2 design
-/// §16.1).
+/// §17.1).
 pub(crate) fn generation_after(parents: impl IntoIterator<Item = u32>) -> u32 {
     parents
         .into_iter()
@@ -55,7 +55,7 @@ pub(crate) fn generation_after(parents: impl IntoIterator<Item = u32>) -> u32 {
         .map_or(FIRST_GENERATION, |newest| newest + 1)
 }
 
-/// What the world keeps of a sprite once it dies (M2 design §16.1).
+/// What the world keeps of a sprite once it dies (M2 design §17.1).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Record {
     /// Its parents: the one that laid it, then its partner, if it had one.
@@ -101,7 +101,7 @@ impl Record {
     }
 }
 
-/// The world's record of the dead (M2 design §16.1), by ID: the newest
+/// The world's record of the dead (M2 design §17.1), by ID: the newest
 /// `REMEMBERED`, and every one the player named.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct RecordOfTheDead {

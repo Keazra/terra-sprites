@@ -1,4 +1,4 @@
-//! The family tree (M2 design §16): `k` opens it over the panels, on the
+//! The family tree (M2 design §17): `k` opens it over the panels, on the
 //! selected sprite or egg. Its grandparents and parents are drawn above it,
 //! its young below, grouped by their other parent, and its brothers and
 //! sisters at the foot, living or dead. The arrows or the pointer choose
@@ -22,7 +22,7 @@ pub(crate) enum Known<'a> {
     Living(SpriteView<'a>),
     Egg(EggView<'a>),
     Dead(DeadView<'a>),
-    /// One the world no longer remembers, dead long ago (M2 design §16.1).
+    /// One the world no longer remembers, dead long ago (M2 design §17.1).
     Forgotten,
 }
 
@@ -77,7 +77,7 @@ impl<'a> Known<'a> {
 }
 
 /// Where a sprite with no parents came from, as the screen says it (M2
-/// design §16.2), or nothing for one that hatched.
+/// design §17.2), or nothing for one that hatched.
 pub(crate) fn origin_text(origin: Origin) -> Option<&'static str> {
     match origin {
         Origin::First => Some("one of the first sprites"),
@@ -91,7 +91,7 @@ const BOUND: char = '\u{a0}';
 
 /// How a death reads: `died of old age`, `died young of dehydration`,
 /// `died hurt by thornbush`. Young is said only of a sprite that died
-/// before it grew up (M2 design §16.2).
+/// before it grew up (M2 design §17.2).
 fn death_text(dead: &DeadView, world: &World) -> String {
     let young = dead.life_stage() == LifeStage::Young;
     let cause = cause_name(dead.cause(), world.data());
@@ -144,7 +144,7 @@ pub(crate) enum Band {
 
 /// A sprite on the tree: how it's named, what's said of it, in parts the
 /// tree joins with ` · `, and whether it's dead, so drawn dark gray. One the
-/// policy hides says nothing, but keeps its place (M2 design §16.6).
+/// policy hides says nothing, but keeps its place (M2 design §17.6).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Card {
     pub(crate) id: EntityId,
@@ -154,7 +154,7 @@ pub(crate) struct Card {
 }
 
 impl Card {
-    /// The card of a sprite of the middle one's lineage (M2 design §16.2):
+    /// The card of a sprite of the middle one's lineage (M2 design §17.2):
     /// living, its life stage and how many young it has; an egg, when it
     /// hatches; dead, how it died; forgotten, that it lived long ago. Then
     /// `more`, if any.
@@ -260,7 +260,7 @@ pub(crate) struct Brood {
     pub(crate) young: Vec<Card>,
 }
 
-/// A sprite's family tree, as the screen says it (M2 design §16.2): the
+/// A sprite's family tree, as the screen says it (M2 design §17.2): the
 /// sprite in the middle, its parents and theirs above it, its young below,
 /// and its brothers and sisters.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -322,7 +322,7 @@ impl FamilyTree {
                                 .map(|&other| name_of(app, world, other))
                                 .collect();
                             // A parent the policy hides goes unnamed (M2
-                            // design §16.6).
+                            // design §17.6).
                             if names.iter().any(String::is_empty) {
                                 String::new()
                             } else {
@@ -534,7 +534,7 @@ fn find_again(places: &[Place], spot: Option<Spot>) -> Spot {
 /// Draws `family_tree` `width` columns wide, its rows that scroll as far along
 /// as `scroll` says, with the card `chosen`, or the one in the middle,
 /// blinking: its label in reverse video while `blink` is on (M2 design
-/// §16.3).
+/// §17.3).
 pub(crate) fn draw(
     family_tree: &FamilyTree,
     width: usize,
@@ -895,7 +895,7 @@ fn joint(up: bool, down: bool, left: bool, right: bool) -> char {
 }
 
 /// The brothers and sisters of the sprite `id`: the young of either of its
-/// parents, in ascending ID order (M2 design §16.2).
+/// parents, in ascending ID order (M2 design §17.2).
 fn siblings(world: &World, id: EntityId) -> Vec<EntityId> {
     let mut siblings: Vec<EntityId> = Known::of(world, id)
         .parents()
@@ -909,7 +909,7 @@ fn siblings(world: &World, id: EntityId) -> Vec<EntityId> {
 }
 
 /// Where a sprite on the map stands in the selected one's lineage, for the
-/// lineage colours (M2 design §16.4).
+/// lineage colours (M2 design §17.4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Lineage {
     /// A parent or grandparent.
@@ -921,7 +921,7 @@ pub(crate) enum Lineage {
 }
 
 /// The sprites of sprite `id`'s lineage the lineage colours mark (M2
-/// design §16.4): its parents and grandparents, its brothers and sisters, and
+/// design §17.4): its parents and grandparents, its brothers and sisters, and
 /// its young and theirs, living or dead or eggs. One that's there twice
 /// over, as in an inbred line, takes the first of these that it is.
 pub(crate) fn lineage(world: &World, id: EntityId) -> BTreeMap<EntityId, Lineage> {

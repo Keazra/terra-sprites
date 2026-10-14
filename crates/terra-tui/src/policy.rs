@@ -24,7 +24,7 @@ pub enum Panel {
     Counts,
     /// The population graph (M2 design §14).
     Graph,
-    /// A sprite on the family tree (M2 design §16.6).
+    /// A sprite on the family tree (M2 design §17.6).
     FamilyTree,
     /// A row of the sprite list.
     SpriteList,

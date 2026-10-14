@@ -50,7 +50,7 @@ pub struct World {
     checked_next_id: Cell<u64>,
     /// How many sprites had died when `check_invariants` last checked the
     /// record of the dead, which changes only when one dies (M2 design
-    /// §16.1), so it's checked again only then.
+    /// §17.1), so it's checked again only then.
     checked_deaths: Cell<u64>,
     /// The seed the world was made from, which the top bar shows. The RNG's
     /// state carries on from it, so nothing in the sim reads it.
@@ -102,7 +102,7 @@ pub(crate) struct WorldState {
     #[serde(default)]
     pub(crate) population: PopulationRecord,
     /// The world's record of the dead, for the family tree (M2 design
-    /// §16.1). Nothing in the world reads it. A save from before it has none,
+    /// §17.1). Nothing in the world reads it. A save from before it has none,
     /// so it remembers only the sprites that die after it's loaded.
     #[serde(default)]
     pub(crate) dead: RecordOfTheDead,
@@ -125,7 +125,7 @@ impl WorldState {
     }
 
     /// Gives each sprite and egg in a save from before generations its
-    /// generation (M2 design §16.1), in ascending ID order, so a parent has
+    /// generation (M2 design §17.1), in ascending ID order, so a parent has
     /// its own before its young: one after its newer parent's, where the
     /// world knows that parent, and the first for one with no parents. A
     /// parent the world doesn't know, which died before generations, counts
@@ -562,13 +562,13 @@ impl<'a> SpriteView<'a> {
         &self.sprite.parents
     }
 
-    /// Its generation (M2 design §16.1): the first for a sprite with no
+    /// Its generation (M2 design §17.1): the first for a sprite with no
     /// parents, else one after its newer parent's.
     pub fn generation(&self) -> u32 {
         self.sprite.generation
     }
 
-    /// Where it came from (M2 design §16.1): the world began with it, the
+    /// Where it came from (M2 design §17.1): the world began with it, the
     /// Cursor placed it, or it hatched.
     pub fn origin(&self) -> Origin {
         Origin::of(&self.sprite.parents, self.sprite.placed)
@@ -933,14 +933,14 @@ impl<'a> EggView<'a> {
         self.unhatched.name.as_deref()
     }
 
-    /// The generation the sprite it holds hatches into (M2 design §16.1).
+    /// The generation the sprite it holds hatches into (M2 design §17.1).
     pub fn generation(&self) -> u32 {
         self.unhatched.generation
     }
 }
 
 /// A read-only view of a sprite that died, as the world remembers it for
-/// the family tree (M2 design §16.1).
+/// the family tree (M2 design §17.1).
 pub struct DeadView<'a> {
     id: EntityId,
     record: &'a Record,
@@ -1410,14 +1410,14 @@ impl World {
         })
     }
 
-    /// The dead sprite `id`, if the world remembers it (M2 design §16.1).
+    /// The dead sprite `id`, if the world remembers it (M2 design §17.1).
     pub fn dead(&self, id: EntityId) -> Option<DeadView<'_>> {
         let record = self.state.dead.get(id)?;
         Some(DeadView { id, record })
     }
 
     /// Every dead sprite the world remembers, in ascending ID order (M2
-    /// design §16.1): the newest 10,000, and every one the player named.
+    /// design §17.1): the newest 10,000, and every one the player named.
     pub fn dead_sprites(&self) -> impl Iterator<Item = DeadView<'_>> {
         self.state
             .dead
@@ -1425,7 +1425,7 @@ impl World {
             .map(|(id, record)| DeadView { id, record })
     }
 
-    /// The young of the sprite `id` (M2 design §16.1): every sprite, egg and
+    /// The young of the sprite `id` (M2 design §17.1): every sprite, egg and
     /// remembered dead sprite with `id` among its parents, in ascending ID
     /// order.
     pub fn young(&self, id: EntityId) -> Vec<EntityId> {
@@ -1919,7 +1919,7 @@ mod tests {
     }
 
     /// A save whose record of the dead doesn't hold together (M2 design
-    /// §16.1) is refused, as a build with a bug might write it.
+    /// §17.1) is refused, as a build with a bug might write it.
     #[test]
     fn a_save_whose_record_of_the_dead_is_damaged_is_refused() {
         let damage: [fn(&mut WorldState); 4] = [
