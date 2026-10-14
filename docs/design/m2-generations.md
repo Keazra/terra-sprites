@@ -990,6 +990,41 @@ Agreed before measuring (round 1, Q11; round 2, Q5). The default world left alon
 
 `cargo run --release -p terra-sim --example generations -- --ticks 200000` runs the first three and reports the rest; its courtship table counts a pair's egg as courted when each danced for the other since the pair's last egg.
 
+**Measured for 32a (2026-10-14)** in release builds of this part at `1d55383`, in the cloud, on seeds 1–10 (A3 on 1–30), with:
+
+```
+cargo run --release -p terra-sim --example generations -- --ticks 200000
+cargo run --release -p terra-sim --example lab -- scenarios/viability.ron --seeds 10
+cargo run --release -p terra-sim --example lab -- scenarios/a3-correct-training.ron --seeds 30
+cargo run --release -p terra-sim --example speed
+```
+
+The default world left alone for 200,000 ticks. "Courted" is the share of a pair's eggs laid after the two danced for each other; "again" counts pairings by a sprite that had had a partner:
+
+| Seed | Alive at the end (and eggs) | Eggs alone | Courted | Partners made (again) | Calls an hour | Adults at the end, male and female | Generations |
+|---|---|---|---|---|---|---|---|
+| 1 | 95 (5) | 18 (2.7%) | 91.3% | 502 (446) | 980 | 41, 32 | 23 |
+| 2 | 100 (0) | 10 (1.6%) | 92.4% | 455 (384) | 978 | 47, 34 | 22 |
+| 3 | 98 (2) | 8 (1.3%) | 92.5% | 466 (389) | 978 | 50, 30 | 22 |
+| 4 | 99 (1) | 7 (1.1%) | 95.9% | 489 (413) | 706 | 41, 42 | 24 |
+| 5 | 95 (4) | 3 (0.5%) | 94.7% | 492 (439) | 742 | 46, 39 | 23 |
+| 6 | 94 (6) | 11 (2.0%) | 91.5% | 433 (383) | 876 | 39, 45 | 22 |
+| 7 | 96 (3) | 5 (0.8%) | 91.0% | 513 (455) | 797 | 48, 39 | 21 |
+| 8 | 98 (2) | 17 (2.8%) | 93.0% | 481 (432) | 800 | 43, 35 | 23 |
+| 9 | 99 (1) | 19 (2.8%) | 88.9% | 510 (440) | 816 | 44, 46 | 23 |
+| 10 | 95 (5) | 10 (1.6%) | 91.3% | 518 (485) | 831 | 50, 32 | 22 |
+
+- **Keeps going: met.** Sprites are alive at the end in all 10 seeds, 21 to 24 generations deep, and no world went over its limit of 100.
+- **Lone eggs very rare: met.** 108 of 6,232 eggs were laid alone (1.7%, at most 2%), and no seed laid more than 2.8% alone (at most 5%). `main` at `861d157`, run the same way, laid 1,921 of 6,744 alone (28%), 14% to 56% a seed.
+- **Courted first: met.** 92.2% of the 6,124 eggs laid by pairs came after the two danced for each other (at least 90%). One egg in all ten seeds was laid by kin.
+- **Safe: met.** The property test with random genomes passes, now with one sprite out of the others' sight but within a call's reach: courting and mating happen only between adults, and the self-check finds no Mate or Court that isn't.
+- **A4: met.** Of 730 deaths in ticks 10,000–50,000 of the viability run over all seeds, 2 were of hunger and 2 of thirst (0.5%, under 25%).
+- **A3: met.** Over seeds 1–30, trained sprites hit a median of 2 times in ticks 10,000–20,000, against 57.5 untrained, and all of 100 random sets of 10 of those seeds pass.
+- **A5: met,** 236–246 ticks a second with 100 sprites (`speed`, three runs), against 309–321 for `main` at `27927d7` timed alongside, about a quarter slower. A world 60,000 ticks old or more steps about 200 a second, against `main`'s 255–300: its sprites remember about 45 others each, and the number levels off there ([#210](https://github.com/Keazra/terra-sprites/issues/210)).
+- **A1 and A2: met** (their tests pass).
+- **For information, partners:** a seed made 433 to 518 pairs, of which 383 to 485 were by a sprite that had had a partner; 241 to 312 parted, after an hour apart or as one paired again, and 157 to 203 lost a partner to death. Partners staying together is 32b's to measure.
+- **For information, the rest:** hunger and thirst killed 62 of 5,393 sprites that died after tick 10,000 (1.1%; `main` 1.0%, §13.3 5.1%). The living had 0.46 to 1.18 broken genes each at the end (`main` 0.67 to 6.56): with few lone eggs, few young have their mother's flaws doubled (§12.3). The 4,955 hatchlings old age killed lived a median 6.6 hours, a tenth under 4.8 and nine tenths under 7.7 (`main` 6.5, 4.8 and 7.6). How far calls bring mates wasn't measured. G4: 1 of the 111 numbers moved a tenth the same way in all 10 seeds, `grows_old` again, which rose in all 10.
+
 ### 15.10 Later
 
 - **True echoes:** a call heard twice, or from the wrong side, in a hall.
