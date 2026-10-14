@@ -823,6 +823,10 @@ fn the_top_bar_shows_the_population_after_the_seed() {
     );
 }
 
+/// The lines the World tab starts with: the small population graph's title,
+/// its six rows and axis, and a blank line (M2 design §14).
+const GRAPH_LINES: usize = 9;
+
 /// The right-hand `width` columns of each screen row, trimmed.
 fn right_part(buffer: &Buffer, width: u16) -> Vec<String> {
     (0..buffer.area.height)
@@ -844,7 +848,7 @@ fn with_room_the_world_tab_shows_the_pack_and_every_object_types_numbers() {
         inspector[1], "┌─ Body Brain Chem Genome [World] ───────────┐",
         "with nothing selected, the title is just the tabs"
     );
-    let body: Vec<&str> = inspector[2..12]
+    let body: Vec<&str> = inspector[2 + GRAPH_LINES..12 + GRAPH_LINES]
         .iter()
         .map(|line| {
             line.trim_start_matches('│')
@@ -2692,6 +2696,7 @@ fn the_world_tab_shows_the_population_and_the_deaths_by_cause() {
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let app = app_for(&world, Theme::cp437(), 100, 30);
     let (_, text) = inspector(&app, &world);
+    let text = &text[GRAPH_LINES..];
     assert_eq!(
         text[1..4],
         [
@@ -2704,6 +2709,7 @@ fn the_world_tab_shows_the_population_and_the_deaths_by_cause() {
         world.step();
     }
     let (_, text) = inspector(&app, &world);
+    let text = &text[GRAPH_LINES..];
     assert_eq!(
         text[1..4],
         [
@@ -2745,7 +2751,7 @@ fn a_world_tab_list_too_long_for_one_line_wraps_after_a_dot() {
         garden(DataPack::from_sources(&builtin_with("objects.ron", &objects)).expect("valid pack"));
     let app = app_for(&world, Theme::cp437(), 100, 30);
     let rows = right_part(&render(&app, &world, 100, 30), 46);
-    let text: Vec<&str> = rows[2..10]
+    let text: Vec<&str> = rows[2 + GRAPH_LINES..10 + GRAPH_LINES]
         .iter()
         .map(|row| row.trim_start_matches('│').trim_end_matches('│').trim_end())
         .collect();
@@ -2761,7 +2767,7 @@ fn a_world_tab_list_too_long_for_one_line_wraps_after_a_dot() {
 
 #[test]
 fn selecting_the_selected_sprite_from_a_scrolled_world_tab_opens_body_at_the_top() {
-    // At 100×12 the inspector has 8 rows: too few for the World tab's 10
+    // At 100×12 the inspector has 8 rows: too few for the World tab's 19
     // lines, or the Body tab's 13.
     let world = garden_with_sprites();
     let mut app = app_for(&world, Theme::cp437(), 100, 12);

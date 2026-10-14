@@ -69,6 +69,7 @@ const COLUMNS: [&[Group]; 3] = [
                 ("Tab", "next sprite"),
                 ("Shift+Tab", "previous sprite"),
                 ("l", "sprite list"),
+                ("p", "population graph"),
                 ("r", "name it"),
                 ("g", "save its genome"),
             ],

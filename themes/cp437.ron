@@ -116,4 +116,16 @@
             nearest: (glyph: '*', fg: white),
         },
     ),
+    // The population graph (M2 design §14): the colour of each life stage
+    // and of eggs, stacked from the bottom as eggs, young, adults and old; a
+    // whole character of one, and its lower half, which shows the one below
+    // over the one above, or over nothing at the top; and the dotted line at
+    // the world's limit. What a theme leaves out of this section, it draws as
+    // the default theme does.
+    population: (
+        stages: (young: light_green, adult: cyan, old: gray, egg: light_yellow),
+        full: '█',
+        half: '▄',
+        limit: (glyph: '·', fg: dark_gray),
+    ),
 )

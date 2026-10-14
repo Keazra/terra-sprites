@@ -1293,7 +1293,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 | **Brain** | What it attended to and decided, then its memory grouped under each thing (v40), then its places |
 | **Chem** | One list: each chemical on its own line with its level and its change per tick (`-.0002`, blank when it rounds to 0), the physical chemicals, then a blank line and the signal chemicals. From slice 8 the reward line also shows `last_r` as "felt": `reward  .00  felt -.42`. The 16 hormones sit in a 4×4 grid of levels below, so all of it fits at 100×30. Reward and punishment are consumed every tick, so their levels always read 0 between ticks. |
 | **Genome** | Genes grouped under headings: traits first, on one line (`speed 7.21 · sense 9.87 · lifespan 61,204`), then half-lives, reactions, emitters, receptors, starting levels, brain settings (`tau base .2`), instincts (`thirst & not target adjacent → drink -.5`) and attention instincts (`hunger → attends to bush +.8`, naming the category as the gene does, v19), and unknown genes last, each group in genome order. Each gene is a plain line with 3 significant figures, so spawn variation shows: `low energy → hunger +.00428 past .515`, `hunger falls → reward +1.02 past .0198`, `hunger halves every 2,041 ticks`. A line too long for the tab wraps, indented. A flagged, unexpressed, unknown or unmatched (v19) gene is dimmed, with its reason on the line below (§4.3); an unmatched gene written by number shows as its number, as an unknown gene does. `g` exports to RON. |
-| **World** | The data pack's identity; population and deaths by cause (counted by the sim, so they're saved); each object type in ID order with its count, the count in each stage (left out for a type with only one stage), and the total of each counter (such as the fruit on all bushes). It's drawn from the data, so a pack's new object types appear with no new code. |
+| **World** | The data pack's identity; population and deaths by cause (counted by the sim, so they're saved); each object type in ID order with its count, the count in each stage (left out for a type with only one stage), and the total of each counter (such as the fruit on all bushes). It's drawn from the data, so a pack's new object types appear with no new code. From Slice 26 it starts with a small population graph (M2 design §14.4). |
 
 - **The Body tab's action line** describes what the sprite is doing, in the present tense, naming its target, with no coordinates. It never speaks as the sprite: the Brain tab shows *why*, and a line in the sprite's own voice could contradict it. When an action ends, its ending stays until the next one starts.
 
@@ -1376,7 +1376,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
   - **Lines that read the same in a row merge** into one with a count, "You petted Sprite #12 x10", as the observed list's do; its tick is the latest one's. Spam-clicking would otherwise fill the log.
 - **Status line:** the tile under the Cursor, the cursor mode, followed by `· seen` while sprites can see the Cursor in it (v29, `TRAIN · seen`), the sprite the Cursor follows (`following Mira #12`, v26), what the Cursor holds or leads (`holding: berry`, `leading: Mira #12`, v23, in every mode), and hints for the active keys. A prompt such as "Quit? (y/n)" takes its place while open.
   - **The key hints** (v22) sit at the right and lead with the mode keys, `Z select  X train  C grab`, then `WASD scroll  space pause  . step  +/- speed  esc quit`. Short of room, whole hints drop from the end, so the mode keys are the last to go, together.
-  - **While aiming** (v25), the key hints read `let go to throw  esc cancel`, or `let go to shove  esc cancel`. **While the sprite list is open** (v30), they read `↑↓ choose  enter go to it  tab sort  esc close`.
+  - **While aiming** (v25), the key hints read `let go to throw  esc cancel`, or `let go to shove  esc cancel`. **While the sprite list is open** (v30), they read `↑↓ choose  enter go to it  tab sort  esc close`, and while the population graph is (Slice 26), `←→ pick a moment  space pause  +/- speed  esc close` (M2 design §14.3).
   - **A refused click's reason** (v22) takes the key hints' place for about 3 seconds of real time, worded as the event log words it: "Couldn't pet Sprite #12: it's gone". A Train click with nothing to act on says so the same way: "No sprite here to pet" (or hug, zap, shock). So do an `F` or a middle click with nothing to follow (v26), "No sprite here to follow", and a right click in Select mode while there's nothing to activate, "Nothing here to activate". So does a Grab click (v23): "Nothing here to grab", or on a fixture, "Can't grab the berry bush: it's rooted to the ground"; and a Grab right click with nothing held, led or under the Cursor (v25): "Nothing here to throw or shove", or on a fixture, "Can't throw the thornbush: it's rooted to the ground". On a line too full for it, such as when the Cursor follows a sprite standing on a berry, the reason still shows, and the tile's part of the line is cut short to make room.
   - The tile names its terrain and any object on it, with the object's stage if it has stages: `(61,40) grass · berry bush (mature)`.
   - **Display names** are the data's names with `_` shown as a space (`berry_bush` → "berry bush"), so `objects.ron` needs no separate display name. Its `plural` is the one other form the screen needs (§3.5.1).
@@ -1389,12 +1389,12 @@ The species is dropped into a world it doesn't know and has to learn about it. I
     │ space      pause / resume       Z X C      select/train/grab    Tab        next sprite           │
     │ .          step                 Q E        left / right click   Shift+Tab  previous sprite       │
     │ + -        faster / slower      Shift+Q E  hug / shock          l          sprite list           │
-    │ VIEW                            Ctrl+click hug / shock          r          name it               │
-    │ WASD       scroll (Shift: 5)    H          show to sprites      g          save its genome       │
-    │ T          track the selected   F          follow a sprite      INSPECTOR                        │
-    │ b          sprite colours       middle     follow a sprite      [ ]        switch tabs           │
-    │ m          event filter         wheel      change mode          PgUp PgDn  scroll a tab          │
-    │ v          exact detail         C again    the Place menu                                        │
+    │ VIEW                            Ctrl+click hug / shock          p          population graph      │
+    │ WASD       scroll (Shift: 5)    H          show to sprites      r          name it               │
+    │ T          track the selected   F          follow a sprite      g          save its genome       │
+    │ b          sprite colours       middle     follow a sprite      INSPECTOR                        │
+    │ m          event filter         wheel      change mode          [ ]        switch tabs           │
+    │ v          exact detail         C again    the Place menu       PgUp PgDn  scroll a tab          │
     │ ?          this help            hold E     aim, let go to send                                   │
     │ Esc        let go, back, quit?                                                                   │
     │ Ctrl+C     quit at once                                                                          │
@@ -1421,6 +1421,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
     - It opens sorted as it was last, starting by number, with the selected sprite highlighted, or else the first. `Tab` sorts by number, name (named sprites first, by name, then the rest by number), age (oldest first) or drive (in the data pack's order, strongest first within each, those with none last); `Shift+Tab` goes back. The title says the order.
     - The arrows, `W` and `S`, or the wheel move the highlight (v38: the scroll keys too), a row in reverse video, which stays on its sprite when the list is re-sorted. A list too long for the screen scrolls to keep it in view.
     - `Enter`, or a click on a row, selects that sprite, centres the view on it and closes the list. `l` or `Esc` closes it without choosing; other keys do nothing while it's open. With no sprites, it reads "No sprites".
+  - **The population graph** (`p`, from Slice 26): the world's population over its whole run, each column split by the share of each life stage and of eggs, with a moment picked and read under it (M2 design §14).
 
 ### 6.2 Semantic tiles and themes
 
@@ -1493,7 +1494,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 ### 6.4 `InfoPolicy`
 
 - **Every** information display asks `InfoPolicy::can_view(panel, subject)` before showing anything. That includes map colours, emotes, the event log, counts in the top bar, the sprite list, the tile-info line and every inspector tab.
-- **Panels** (v30): `MapColours`, `Emotes`, `Markers` (the selected sprite's Decision and Attention markers), `EventLog` (a line), `Counts` (the top bar's population), `SpriteList` (a row), `TileInfo` (the status line's part about the tile under the Cursor), `CursorLines` (#174: the Cursor's own lines, the status line's parts about the sprite it follows and what it leads or holds, the prompt for naming a sprite, and why a click was refused) and `Tab(tab)`. **Subjects:** `World`, `Sprite(id)` or `Tile(pos)`. An event log line asks about its first sprite, or the world; so does one of the Cursor's own lines, an item it holds being about the world, and a refusal asks about every sprite it names, such as the one it leads in "Couldn't take hold of Pip: you're already leading Bo". A display denied shows nothing in its place: a sprite in its own colour, no emote, a blank tab, the inspector's title without the sprite's name, the naming prompt without it, "Name: Pip_", and the key hints in place of a refusal. A denied event log line is left out, so the lines after it close up rather than leave a gap that would show something happened.
+- **Panels** (v30): `MapColours`, `Emotes`, `Markers` (the selected sprite's Decision and Attention markers), `EventLog` (a line), `Counts` (the top bar's population), `SpriteList` (a row), `TileInfo` (the status line's part about the tile under the Cursor), `Graph` (the population graph and the World tab's small copy, about the world: M2 design §14.6), `CursorLines` (#174: the Cursor's own lines, the status line's parts about the sprite it follows and what it leads or holds, the prompt for naming a sprite, and why a click was refused) and `Tab(tab)`. **Subjects:** `World`, `Sprite(id)` or `Tile(pos)`. An event log line asks about its first sprite, or the world; so does one of the Cursor's own lines, an item it holds being about the world, and a refusal asks about every sprite it names, such as the one it leads in "Couldn't take hold of Pip: you're already leading Bo". A display denied shows nothing in its place: a sprite in its own colour, no emote, a blank tab, the inspector's title without the sprite's name, the naming prompt without it, "Name: Pip_", and the key hints in place of a refusal. A denied event log line is left out, so the lines after it close up rather than leave a gap that would show something happened.
 - In M1 the answer is always yes (`Omniscient`).
 - A future diegetic Play mode is a new policy. The policy only controls what the UI **reveals**. A physical in-world scanner would be a separate sim feature with its own state and commands.
 
@@ -1603,6 +1604,7 @@ N ═ M
 | `g` | Save the selected sprite's genome to the genomes folder (§6.7), as `mira-530-tick-5310.ron`; the status line says where (v28) |
 | `r` | Name the selected sprite: a name you type, or one generated at random |
 | `l` | Open or close the sprite list |
+| `p` | Open or close the population graph (M2 design §14) |
 | `v` | Switch the detail view on or off: the exact action line (§6.1) |
 | `F5` / `F9` | Quicksave / quickload (§6.7, v32) |
 | `Ctrl+S` / `Ctrl+O` | Save by name / load a save from a list (§6.7, v32) |
@@ -1733,7 +1735,7 @@ Implementation is **test-first, one vertical slice at a time.** Everything in `t
 5. **Behaviour scenarios** (§7.3).
 6. **UI tests:**
    - Keybindings map to the right `Action`s and `Command`s.
-   - ratatui `TestBackend` snapshots cover each inspector tab, the help screen and the sprite list in both themes (v30): text files in `crates/terra-tui/tests/snapshots/`, written afresh with `UPDATE_SNAPSHOTS=1` and reviewed like code.
+   - ratatui `TestBackend` snapshots cover each inspector tab, the help screen and the sprite list in both themes (v30), and the population graph (M2 design §14): text files in `crates/terra-tui/tests/snapshots/`, written afresh with `UPDATE_SNAPSHOTS=1` and reviewed like code.
    - A deny-all `InfoPolicy` blanks **every** display.
    - Emote timers work from events.
    - The too-small-terminal message appears.

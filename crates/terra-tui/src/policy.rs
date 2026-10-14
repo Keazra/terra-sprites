@@ -22,6 +22,8 @@ pub enum Panel {
     EventLog,
     /// The top bar's counts: the population.
     Counts,
+    /// The population graph (M2 design §14).
+    Graph,
     /// A row of the sprite list.
     SpriteList,
     /// The status line's part about the tile under the Cursor.
