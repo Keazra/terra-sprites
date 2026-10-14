@@ -15,6 +15,7 @@ use crate::config::WorldConfig;
 use crate::data::DataPack;
 use crate::events::{DeathCause, EventKind};
 use crate::map::{Map, MapError, Pos};
+use crate::objects::EntityId;
 use crate::registry::Verb;
 use crate::world::{Scenario, ScenarioError, World};
 
@@ -28,6 +29,15 @@ pub struct LabScenario {
     windows: Vec<(u64, u64)>,
     control: Control,
     trainer: Option<Trainer>,
+    young: Option<Young>,
+}
+
+/// Young for a scenario's sprites (M2 design §18.7): on the tick `at`, each
+/// sprite in the world gets a newborn of its own beside it.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Young {
+    at: u64,
 }
 
 /// A second run of each seed to compare with, if any (design §7.1).
@@ -41,6 +51,9 @@ enum Control {
     /// The same world without the trainer, learning still on (design v21
     /// §7.3).
     NoTrainer,
+    /// The same world with the grown-ups taken away as their young appear,
+    /// so the young are orphans (M2 design §18.7).
+    Orphans,
 }
 
 /// What a control run is without (design §7.1).
@@ -50,6 +63,8 @@ pub enum Without {
     Learning,
     /// The trainer.
     Trainer,
+    /// The young's parents (M2 design §18.7).
+    Parents,
 }
 
 /// A lab scenario's trainer (design v21 §7.1), checked: it answers each
@@ -107,6 +122,9 @@ struct LabFile {
     /// A trainer, if any (design v21 §7.1).
     #[serde(default)]
     trainer: Option<TrainerFile>,
+    /// Young for its sprites, if any (M2 design §18.7).
+    #[serde(default)]
+    young: Option<Young>,
     /// Tick ranges, each from its first tick up to but not including its last.
     windows: Vec<(u64, u64)>,
 }
@@ -151,6 +169,11 @@ pub enum LabError {
     /// A trainer that zaps or shocks, given a reach back: a Correct always
     /// looks back the touch window (design v21 §5.6).
     ReachBackOnCorrect,
+    /// A control run of orphans, in a scenario that gives its sprites no
+    /// young.
+    NoYoung,
+    /// Young that appear after the run ends.
+    LateYoung(u64),
 }
 
 impl std::fmt::Display for LabError {
@@ -175,6 +198,12 @@ impl std::fmt::Display for LabError {
             LabError::ReachBackOnCorrect => f.write_str(
                 "a trainer that zaps or shocks takes no reach_back: a zap or shock always looks back the touch window",
             ),
+            LabError::NoYoung => {
+                f.write_str("the control run is of orphans, but the sprites are given no young")
+            }
+            LabError::LateYoung(at) => {
+                write!(f, "the young appear at tick {at}, after the run ends")
+            }
         }
     }
 }
@@ -206,6 +235,33 @@ pub struct Window {
     /// Lessons learned (design §5.6), each as what was learned and whether
     /// it rose.
     pub lessons: BTreeMap<(Learned, bool), u64>,
+    /// What the young the scenario gives its sprites did and learned, once
+    /// they've appeared (M2 design §18.7), if it gives them any.
+    pub young: Option<YoungCounts>,
+}
+
+/// What a window counted of the young a scenario gives its sprites (M2
+/// design §18.7).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct YoungCounts {
+    /// How many there are.
+    pub young: u64,
+    /// Their actions that ended `applied`, as `Window::applied` counts
+    /// everyone's.
+    pub applied: BTreeMap<(Verb, Option<u16>), u64>,
+    /// Their deaths, by cause.
+    pub deaths: BTreeMap<DeathCause, u64>,
+    /// How many of them had learned each lesson by the window's end: about
+    /// things and sprites in general, not particular sprites.
+    pub learned: BTreeMap<(Learned, bool), u64>,
+    /// For each of those lessons, the median of the ticks each took to
+    /// learn it from when it appeared: one that hadn't by the window's end
+    /// counts the ticks to then, so a lesson most never learn shows as long
+    /// as the window allows.
+    pub learned_after: BTreeMap<(Learned, bool), u64>,
+    /// The ticks from when they appeared to the window's end: what a lesson
+    /// none of them learned counts.
+    pub ticks: u64,
 }
 
 impl Window {
@@ -260,6 +316,12 @@ impl LabScenario {
         if file.control == Control::NoTrainer && trainer.is_none() {
             return Err(LabError::NoTrainer);
         }
+        if file.control == Control::Orphans && file.young.is_none() {
+            return Err(LabError::NoYoung);
+        }
+        if let Some(young) = file.young.filter(|young| young.at >= file.ticks) {
+            return Err(LabError::LateYoung(young.at));
+        }
         let lab = LabScenario {
             world: file.world,
             grows_old: file.grows_old,
@@ -268,6 +330,7 @@ impl LabScenario {
             windows: file.windows,
             control: file.control,
             trainer,
+            young: file.young,
         };
         // Building it once finds anything that can't go where it's drawn.
         lab.world(data.clone(), 0)?;
@@ -288,6 +351,11 @@ impl LabScenario {
                 let world = self.world(data.clone(), seed).expect("checked when read");
                 (Some(self.count(world, None)), Some(Without::Trainer))
             }
+            Control::Orphans => {
+                let world = self.world(data.clone(), seed).expect("checked when read");
+                let windows = self.counting(world, self.trainer, true);
+                (Some(windows), Some(Without::Parents))
+            }
         };
         let world = self.world(data, seed).expect("checked when read");
         LabRun {
@@ -299,7 +367,14 @@ impl LabScenario {
 
     /// Runs `world` for the scenario's ticks with `trainer`, if any,
     /// counting each window.
-    fn count(&self, mut world: World, trainer: Option<Trainer>) -> Vec<Window> {
+    fn count(&self, world: World, trainer: Option<Trainer>) -> Vec<Window> {
+        self.counting(world, trainer, false)
+    }
+
+    /// Runs `world` for the scenario's ticks with `trainer`, if any,
+    /// counting each window; with the scenario's young, if it gives any,
+    /// and their parents taken away as they appear if `orphans`.
+    fn counting(&self, mut world: World, trainer: Option<Trainer>, orphans: bool) -> Vec<Window> {
         let mut windows: Vec<Window> = self
             .windows
             .iter()
@@ -310,8 +385,13 @@ impl LabScenario {
                 deaths: BTreeMap::new(),
                 touches: BTreeMap::new(),
                 lessons: BTreeMap::new(),
+                young: None,
             })
             .collect();
+        // The young, by when each appeared, and when each learned each
+        // lesson (M2 design §18.7).
+        let mut young: BTreeMap<EntityId, u64> = BTreeMap::new();
+        let mut learned: BTreeMap<(EntityId, (Learned, bool)), u64> = BTreeMap::new();
         // The trainer's commands, each with the tick it's submitted before.
         let mut due: Vec<(u64, Command)> = Vec::new();
         for _ in 0..self.ticks {
@@ -319,7 +399,26 @@ impl LabScenario {
             for (_, command) in due.extract_if(.., |(at, _)| *at == tick) {
                 world.submit(command);
             }
+            if self.young.is_some_and(|young| young.at == tick) {
+                let grown: Vec<EntityId> = world.sprites().map(|sprite| sprite.id()).collect();
+                young.extend(world.give_young().into_iter().map(|id| (id, tick)));
+                if orphans {
+                    world.take_away(&grown);
+                }
+            }
             let events = world.step();
+            for event in &events {
+                if let EventKind::LearnedMilestone {
+                    id,
+                    learned: l,
+                    good,
+                } = &event.kind
+                    && young.contains_key(id)
+                    && !about_a_sprite(l)
+                {
+                    learned.entry((*id, (l.clone(), *good))).or_insert(tick);
+                }
+            }
             if let Some(trainer) = trainer.filter(|t| tick < t.until) {
                 for event in &events {
                     if let EventKind::ActionEnded {
@@ -366,6 +465,33 @@ impl LabScenario {
                         }
                     }
                 }
+                if !young.is_empty() {
+                    let counts = window.young.get_or_insert_with(YoungCounts::default);
+                    for event in &events {
+                        match &event.kind {
+                            EventKind::ActionEnded {
+                                id,
+                                verb,
+                                outcome: Outcome::Applied,
+                                action,
+                            } if young.contains_key(id) => {
+                                *counts
+                                    .applied
+                                    .entry((*verb, action.target_type))
+                                    .or_insert(0) += 1
+                            }
+                            EventKind::Died { id, cause, .. } if young.contains_key(id) => {
+                                *counts.deaths.entry(*cause).or_insert(0) += 1;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+        for window in &mut windows {
+            if let Some(counts) = window.young.as_mut() {
+                young_lessons(counts, &young, &learned, window.to);
             }
         }
         windows
@@ -388,6 +514,56 @@ impl LabScenario {
             world.set_most_sprites(most);
         }
         Ok(world)
+    }
+}
+
+/// Fills in `counts` with how many of `young`, each by the tick it
+/// appeared, had learned each lesson by the tick `to`, by when each learned
+/// it in `learned`, and the median ticks each took (M2 design §18.7).
+fn young_lessons(
+    counts: &mut YoungCounts,
+    young: &BTreeMap<EntityId, u64>,
+    learned: &BTreeMap<(EntityId, (Learned, bool)), u64>,
+    to: u64,
+) {
+    counts.young = young.len() as u64;
+    let appeared = young.values().copied().min().unwrap_or(to);
+    counts.ticks = to.saturating_sub(appeared);
+    let lessons: BTreeSet<&(Learned, bool)> = learned
+        .iter()
+        .filter(|&(_, &tick)| tick < to)
+        .map(|((_, lesson), _)| lesson)
+        .collect();
+    for lesson in lessons {
+        let took: Vec<u64> = young
+            .iter()
+            .map(|(&id, &appeared)| {
+                let by = learned
+                    .get(&(id, lesson.clone()))
+                    .copied()
+                    .filter(|&tick| tick < to);
+                by.unwrap_or(to).saturating_sub(appeared)
+            })
+            .collect();
+        let knew = learned
+            .iter()
+            .filter(|&((_, l), &tick)| l == lesson && tick < to)
+            .count();
+        counts.learned.insert(lesson.clone(), knew as u64);
+        counts
+            .learned_after
+            .insert(lesson.clone(), median(&took) as u64);
+    }
+}
+
+/// Whether `learned` is about a particular sprite.
+fn about_a_sprite(learned: &Learned) -> bool {
+    match learned {
+        Learned::Worth { thing, .. }
+        | Learned::Bad { thing }
+        | Learned::Fear { thing }
+        | Learned::Habit { thing, .. } => matches!(thing, Thing::Sprite(_)),
+        Learned::NewThings => false,
     }
 }
 
@@ -451,6 +627,9 @@ pub fn report(runs: &[(u64, LabRun)], data: &DataPack) -> String {
         out.push_str(match without {
             Without::Learning => "\ncontrol, without learning\n",
             Without::Trainer => "\ncontrol, without the trainer\n",
+            Without::Parents => {
+                "\ncontrol, orphans: the grown-ups taken away as their young appear\n"
+            }
         });
         out.push_str(&windows_report(&controls, data));
     }
@@ -495,15 +674,59 @@ fn windows_report(runs: &[(u64, &[Window])], data: &DataPack) -> String {
             |w| &w.lessons,
             |lesson| format!("lesson: {}", lesson_name(lesson)),
         ));
+        out.push_str(&young_rows(&windows, data));
+    }
+    out
+}
+
+/// The rows for the young a scenario gives its sprites (M2 design §18.7),
+/// if any of `windows` counted them: how many, what they did, how they
+/// died, how many learned each lesson, and the median ticks they took.
+fn young_rows(windows: &[&Window], data: &DataPack) -> String {
+    if windows.iter().all(|w| w.young.is_none()) {
+        return String::new();
+    }
+    let none = YoungCounts::default();
+    let young: Vec<&YoungCounts> = windows
+        .iter()
+        .map(|w| w.young.as_ref().unwrap_or(&none))
+        .collect();
+    let mut out = row("young", young.iter().map(|y| y.young));
+    out.push_str(&rows(
+        &young,
+        |y| &y.applied,
+        |&key| format!("young: {}", applied_name(key, data)),
+    ));
+    out.push_str(&rows(
+        &young,
+        |y| &y.deaths,
+        |&cause| format!("young died: {}", cause_name(cause, data)),
+    ));
+    out.push_str(&rows(
+        &young,
+        |y| &y.learned,
+        |lesson| format!("young learned: {}", lesson_name(lesson)),
+    ));
+    // A seed none of whose young learned a lesson took the whole window.
+    let lessons: BTreeSet<&(Learned, bool)> =
+        young.iter().flat_map(|y| y.learned_after.keys()).collect();
+    for lesson in lessons {
+        let took = young
+            .iter()
+            .map(|y| y.learned_after.get(lesson).copied().unwrap_or(y.ticks));
+        out.push_str(&row(
+            &format!("ticks to learn: {}", lesson_name(lesson)),
+            took,
+        ));
     }
     out
 }
 
 /// A report row, named by `name`, for each key any of `windows` counts in
 /// the counts `of` picks out, in key order.
-fn rows<K: Ord>(
-    windows: &[&Window],
-    of: impl Fn(&Window) -> &BTreeMap<K, u64>,
+fn rows<T, K: Ord>(
+    windows: &[&T],
+    of: impl Fn(&T) -> &BTreeMap<K, u64>,
     name: impl Fn(&K) -> String,
 ) -> String {
     let keys: BTreeSet<&K> = windows.iter().flat_map(|w| of(w).keys()).collect();

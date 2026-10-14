@@ -73,7 +73,7 @@ pub use events::{DeathCause, Emptied, Event, EventKind, Removal};
 pub use expression::Expression;
 pub use gene_values::{Drift, drift, gene_values, middle_values};
 pub use genome::{EmitterMode, GeneView, Genome, GenomeError, Whom};
-pub use lab::{LabError, LabRun, LabScenario, Window, Without, median, report};
+pub use lab::{LabError, LabRun, LabScenario, Window, Without, YoungCounts, median, report};
 pub use lineage::Origin;
 pub use map::{Dir, Map, MapError, Pos};
 pub use mode::Mode;

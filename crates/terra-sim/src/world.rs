@@ -1197,6 +1197,45 @@ impl World {
         }
     }
 
+    /// For a lab scenario (M2 design §18.7): gives each sprite in the world,
+    /// in ascending ID order, a newborn of its own, of the starter genome
+    /// with spawn variation, on the nearest tile a sprite can stand on.
+    /// Returns the young, in the same order.
+    pub(crate) fn give_young(&mut self) -> Vec<EntityId> {
+        let (state, data) = (&mut self.state, &self.data);
+        let parents: Vec<EntityId> = state.sprites.iter().map(|(id, _)| id).collect();
+        let mut young = Vec::new();
+        for parent in parents {
+            let sprite = state.sprites.get(parent).expect("a sprite in the world");
+            let (pos, generation) = (sprite.pos, sprite.generation);
+            let rings = state.map.width().max(state.map.height());
+            let Some(tile) = (1..rings).find_map(|radius| {
+                square(&state.map, pos, radius)
+                    .filter(|&tile| chebyshev(tile, pos) == radius)
+                    .find(|&tile| state.can_stand(data, tile))
+            }) else {
+                continue;
+            };
+            let genome = varied(data.starter(), data, &mut state.rng);
+            let mut child = Sprite::newborn(genome, tile, state.tick, data);
+            child.parents = vec![parent];
+            child.generation = generation + 1;
+            young.push(state.add_sprite(child));
+        }
+        young
+    }
+
+    /// For a lab scenario (M2 design §18.7): takes the sprites `ids` out of
+    /// the world, as if they had never been there: no death, and no record
+    /// of the dead. Their young are left orphans.
+    pub(crate) fn take_away(&mut self, ids: &[EntityId]) {
+        for &id in ids {
+            if self.state.sprites.get(id).is_some() {
+                self.state.sprites.remove(id);
+            }
+        }
+    }
+
     /// Stops every sprite learning from here on, for a lab scenario's
     /// control run (design §7.1).
     pub(crate) fn switch_off_learning(&mut self) {
