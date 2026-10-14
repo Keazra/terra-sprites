@@ -872,7 +872,7 @@ cargo run --release -p terra-sim --example speed
 
 ### 14.8 Later
 
-- **Generations on the graph,** now that the family tree (§16) gives each sprite one (§16.8).
+- **Generations on the graph,** now that the family tree (§16) gives each sprite one ([#208](https://github.com/Keazra/terra-sprites/issues/208), §16.8).
 - **A gene's average over time** belongs to the lab (Slice 27), which can also decide whether a fast-forward writes the counts to a file.
 
 ---
@@ -1119,7 +1119,7 @@ cargo run --release -p terra-sim --example speed
 
 ### 16.8 Later
 
-- **Generations on the population graph** (Q6, A): `generations 3 to 6` in the lines that read a moment, now that both are in.
-- **The partner,** once Slice 32 is in: the tree marks a sprite's partner `· partner`. Whichever of the two merges second does it.
+- **Generations on the population graph** (Q6, A, [#208](https://github.com/Keazra/terra-sprites/issues/208)): `generations 3 to 6` in the lines that read a moment, now that both are in.
+- **The partner,** once Slice 32 is in: the tree marks a sprite's partner `· partner`. Whichever of the two merges second does it (noted on [#186](https://github.com/Keazra/terra-sprites/issues/186)).
 - **Grieving for and remembering the dead,** recent or long ago ([#206](https://github.com/Keazra/terra-sprites/issues/206), the owner, Q8).
 - **Further back or down:** great-grandparents or grandchildren drawn on the tree (Q2, B and C), if walking it turns out too slow.
