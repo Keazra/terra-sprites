@@ -23,6 +23,10 @@
         emote(shocked):         (glyph: '/', fg: yellow), // bolt-shaped; `!` is hurt's
         emote(failed):          (glyph: '?', fg: light_yellow),
         emote(resting):         (glyph: 'z', fg: light_blue),
+        // A dance and a call (M2 design §15.8), in arousal's colour. `~` is
+        // shallow water, so a dance is a hop.
+        emote(dancing):         (glyph: '^', fg: light_magenta),
+        emote(calling):         (glyph: '"', fg: light_magenta),
     },
     // A sprite's colour, by its strongest drive above .5, keyed by the
     // drive's name in the data pack (design §6.3). A drive with no colour

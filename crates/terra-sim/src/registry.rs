@@ -31,6 +31,10 @@ listed_enum! {
         Speak = 10,
         /// Laying an egg alone, as a female can (M2 design §10).
         BreedAlone = 11,
+        /// Dancing for another adult, to court it (M2 design §15.3).
+        Court = 12,
+        /// Calling, for whoever hears to come (M2 design §15.1).
+        Call = 13,
     }
 
     pub(crate) const ALL;
@@ -62,10 +66,10 @@ impl Verb {
 
     /// Whether the verb walks to its target and makes one attempt on it,
     /// which the sprite learns from as a touch (design §5.5, §5.6): an
-    /// interaction, or mating, which the engine itself resolves (M2 design
-    /// §5).
+    /// interaction, or mating or courting, which the engine itself resolves
+    /// (M2 design §5, §15.3).
     pub(crate) fn is_contact(self) -> bool {
-        self.is_interaction() || self == Verb::Mate
+        self.is_interaction() || matches!(self, Verb::Mate | Verb::Court)
     }
 }
 
@@ -143,6 +147,14 @@ listed_enum! {
         TaughtRate = 39 => "taught_rate",
         /// How much a taught habit fades each tick (design §5.6, #187).
         TaughtFade = 40 => "taught_fade",
+        /// How much familiarity with a sprite grows each tick it's in sight
+        /// (M2 design §15.2).
+        BefriendRate = 41 => "befriend_rate",
+        /// How much a social play adds to familiarity (M2 design §15.2).
+        BefriendPlay = 42 => "befriend_play",
+        /// How much familiarity with a sprite fades each tick (M2 design
+        /// §15.2).
+        BefriendFade = 43 => "befriend_fade",
     }
 
     pub(crate) const ALL;
@@ -323,7 +335,7 @@ mod tests {
         // `ALL`'s order is the ID order, from 1. Renaming a parameter still
         // round-trips here. Loading `physiology.ron` is what rejects a name
         // the data doesn't list, and a missing range for one it does.
-        assert_eq!(BrainParam::ALL.len(), 40);
+        assert_eq!(BrainParam::ALL.len(), 43);
         for (i, param) in BrainParam::ALL.into_iter().enumerate() {
             assert_eq!(param as u16, (i + 1) as u16);
             assert_eq!(BrainParam::named(param.name()), Some(param));
@@ -340,6 +352,10 @@ mod tests {
         assert_eq!(
             BrainParam::named("taught_fade"),
             Some(BrainParam::TaughtFade)
+        );
+        assert_eq!(
+            BrainParam::named("befriend_fade"),
+            Some(BrainParam::BefriendFade)
         );
         assert_eq!(BrainParam::named(""), None);
     }

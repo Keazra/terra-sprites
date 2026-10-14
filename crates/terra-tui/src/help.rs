@@ -120,7 +120,7 @@ pub(crate) fn lines(app: &App, world: &World, width: usize) -> Vec<Line<'static>
         " COLOURS: a sprite's strongest drive, once it's above half",
     ));
     lines.extend(colour_legend(app, world, width));
-    lines.push(emote_legend(app));
+    lines.extend(emote_legend(app, width));
     lines.push(Line::default());
     let folder = app
         .data_folder()
@@ -164,22 +164,37 @@ fn colour_legend(app: &App, world: &World, width: usize) -> Vec<Line<'static>> {
 }
 
 /// Each emote, in its colour, and what it means.
-fn emote_legend(app: &App) -> Line<'static> {
+fn emote_legend(app: &App, width: usize) -> Vec<Line<'static>> {
     let emotes = [
         (Emote::Hurt, "hurt"),
         (Emote::Shocked, "zapped"),
         (Emote::Failed, "gave up"),
         (Emote::Resting, "resting"),
         (Emote::Pleased, "pleased"),
+        // Courtship (M2 design §15.8).
+        (Emote::Dancing, "danced"),
+        (Emote::Calling, "called"),
     ];
-    let mut spans = vec![Span::raw(" EMOTES   ")];
+    const HEAD: &str = " EMOTES   ";
+    let indent = || vec![Span::raw(" ".repeat(HEAD.len()))];
+    let mut lines = Vec::new();
+    let mut spans = vec![Span::raw(HEAD)];
+    let mut used = HEAD.len();
     for (emote, meaning) in emotes {
+        let entry = format!(" {meaning}  ");
+        let needs = 1 + entry.trim_end().chars().count();
+        if used > HEAD.len() && used + needs > width {
+            lines.push(Line::from(std::mem::replace(&mut spans, indent())));
+            used = HEAD.len();
+        }
         let glyph = app.theme.glyph(SemanticTile::Emote(emote));
         spans.push(Span::styled(
             glyph.symbol.to_string(),
             Style::default().fg(glyph.fg),
         ));
-        spans.push(Span::raw(format!(" {meaning}  ")));
+        used += 1 + entry.chars().count();
+        spans.push(Span::raw(entry));
     }
-    Line::from(spans)
+    lines.push(Line::from(spans));
+    lines
 }

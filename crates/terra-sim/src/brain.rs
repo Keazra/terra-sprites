@@ -24,9 +24,9 @@ use crate::registry::{BrainParam, CategoryId, Verb};
 
 /// The verbs the brain scores, in verb ID order: every verb but the reserved
 /// ones. A verb's place here is its column in the decision links. A save
-/// from before Mate and BreedAlone has columns fewer, which it gains at 0
-/// (M2 design §5, §10).
-pub(crate) const VERBS: [Verb; 10] = [
+/// from before Mate and BreedAlone, or Court and Call, has columns fewer,
+/// which it gains at 0 (M2 design §5, §10, §15).
+pub(crate) const VERBS: [Verb; 12] = [
     Verb::Approach,
     Verb::Eat,
     Verb::Drink,
@@ -37,6 +37,8 @@ pub(crate) const VERBS: [Verb; 10] = [
     Verb::Wander,
     Verb::Mate,
     Verb::BreedAlone,
+    Verb::Court,
+    Verb::Call,
 ];
 
 /// Which way a thing's worth pushes a verb aimed at it (design v18 §5.5):
@@ -45,19 +47,21 @@ pub(crate) const VERBS: [Verb; 10] = [
 /// from), or the targetless verbs.
 fn side(verb: Verb) -> f32 {
     match verb {
-        Verb::Retreat | Verb::Rest | Verb::Wander | Verb::BreedAlone => 0.0,
+        Verb::Retreat | Verb::Rest | Verb::Wander | Verb::BreedAlone | Verb::Call => 0.0,
         _ => 1.0,
     }
 }
 
 /// How fear pushes a verb aimed at a frightening thing (design v18 §5.5):
 /// `flight` towards Retreat, `value_gain` away from Approach, Eat, Drink,
-/// Play and Mate, and never towards or away from Hit, since fear that
-/// pushed Hit started feuds (#62).
+/// Play, Mate and Court, and never towards or away from Hit, since fear
+/// that pushed Hit started feuds (#62).
 fn fear_push(verb: Verb, flight: f32, value_gain: f32) -> f32 {
     match verb {
         Verb::Retreat => flight,
-        Verb::Approach | Verb::Eat | Verb::Drink | Verb::Play | Verb::Mate => -value_gain,
+        Verb::Approach | Verb::Eat | Verb::Drink | Verb::Play | Verb::Mate | Verb::Court => {
+            -value_gain
+        }
         _ => 0.0,
     }
 }
@@ -691,8 +695,8 @@ impl Brain {
         found
     }
 
-    /// One tick of fading (design §5.6): good and bad, fear, habits and
-    /// taught habits (#187) each by their own rate. A remembered
+    /// One tick of fading (design §5.6): good and bad, fear, familiarity,
+    /// habits and taught habits (#187) each by their own rate. A remembered
     /// sprite faded until everything about it is nearer 0 than
     /// `forget_below` is forgotten (design v18 §5.6), and so is a remembered
     /// place (M2 design §7).
@@ -721,7 +725,7 @@ impl Brain {
             }
         }
         experience.new_things *= good;
-        let fear = keep(BrainParam::FearFade);
+        let (fear, familiar) = (keep(BrainParam::FearFade), keep(BrainParam::BefriendFade));
         let individuals = experience.individuals.values_mut();
         for individual in individuals.chain(&mut experience.cursor) {
             for value in &mut individual.worth {
@@ -730,6 +734,8 @@ impl Brain {
             individual.good *= good;
             individual.bad *= bad;
             individual.fear *= fear;
+            // Familiarity too (M2 design §15.2).
+            individual.familiarity *= familiar;
         }
         experience.forget_faded(forget_below);
         // Remembered places fade too, and are forgotten once faint (M2
@@ -891,8 +897,11 @@ impl Brain {
             }
         }
         visit(LearnedKey::NewThings, self.experience.new_things);
-        // The sprites it remembers (design v18 §5.9), in ID order.
-        for (&id, individual) in &self.experience.individuals {
+        // The sprites it remembers (design v18 §5.9), in ID order: not
+        // those it knows only by sight (M2 design §15.2).
+        let below = data.physiology().forget_below;
+        let taught = self.experience.individuals.iter();
+        for (&id, individual) in taught.filter(|(_, known)| known.taught(below)) {
             let thing = ThingKey::Sprite(id);
             for (&value, &place) in individual.worth.iter().zip(data.need_places()) {
                 visit(
@@ -918,19 +927,26 @@ impl Brain {
     }
 
     /// Sprites in general (design v18 §5.6): each value's mean over the
-    /// sprites it remembers, at no strength while it knows one, and in full
-    /// once it knows `generalise`. What a partner is worth for the breeding
-    /// drive stays with that partner, so no sprite it doesn't know, young
-    /// or grown, is worth anything for it (M2 design §5).
+    /// sprites it has learned something of, not those it knows only by
+    /// sight (M2 design §15.2), at no strength while it knows one, and in
+    /// full once it knows `generalise`. What a partner is worth for the
+    /// breeding drive stays with that partner, so no sprite it doesn't
+    /// know, young or grown, is worth anything for it (M2 design §5).
     pub(crate) fn sprites_in_general(&self, data: &DataPack) -> SpriteMemory {
-        let known = &self.experience.individuals;
+        let below = data.physiology().forget_below;
+        let known: Vec<&SpriteMemory> = self
+            .experience
+            .individuals
+            .values()
+            .filter(|known| known.taught(below))
+            .collect();
         let share = summary_share(known.len(), self.params.get(BrainParam::Generalise));
         let mut summary = SpriteMemory::new(data.need_places().len());
         if share == 0.0 {
             return summary;
         }
         let drive = data.physiology().indices.drive;
-        for individual in known.values() {
+        for individual in known {
             for (need, (summary, worth)) in
                 summary.worth.iter_mut().zip(&individual.worth).enumerate()
             {
@@ -1157,7 +1173,8 @@ impl Brain {
         };
         if let (Some((verb, _)), Some(subject)) = (decision, snapshot.subject) {
             let scoring = snapshot.scoring;
-            let parts = self.aimed_parts(subject, scoring, &snapshot.inputs, data);
+            let general = self.sprites_in_general(data);
+            let parts = self.aimed_parts(subject, scoring, &snapshot.inputs, &general, data);
             let [worth, fear, habit] = parts[column(verb)];
             let thing = thing_named(subject, scoring.sprite, data);
             contributions.extend([
@@ -1189,17 +1206,17 @@ impl Brain {
 
     /// Every input's value (design §5.2), in the pack's input order: State
     /// inputs from `body`, Target inputs from `aim`, and what the sprite it
-    /// attends to shows from `shown`, that sprite's [`shown`] (M2 design
-    /// §10), or 0 if it attends to none.
+    /// attends to shows, and what it knows of that sprite, from `looks` (M2
+    /// design §10, §15), or 0 if it attends to none.
     pub(crate) fn inputs(
         &self,
         body: &Body,
         aim: Option<Aim>,
-        shown: Option<&[f32]>,
+        looks: Option<&Looks>,
         data: &DataPack,
     ) -> Vec<f32> {
         let flag = |on: bool| if on { 1.0 } else { 0.0 };
-        let mut shown = shown.unwrap_or_default().iter();
+        let mut shown = looks.map_or(&[][..], |looks| &looks.body).iter();
         data.brain_inputs_in_order()
             .iter()
             .map(|input| match input.source {
@@ -1208,6 +1225,9 @@ impl Brain {
                 Source::Differs(locus) => shown
                     .next()
                     .map_or(0.0, |&theirs| (theirs - read(body, locus, data)).abs()),
+                Source::Familiar => looks.map_or(0.0, |looks| looks.familiar),
+                Source::Partner => flag(looks.is_some_and(|looks| looks.partner)),
+                Source::Kin => flag(looks.is_some_and(|looks| looks.kin)),
                 Source::Attended(category) => flag(aim.is_some_and(|a| a.category == category)),
                 Source::TargetDistance => aim.map_or(0.0, |a| a.distance),
                 Source::TargetAdjacent => flag(aim.is_some_and(|a| a.adjacent)),
@@ -1229,18 +1249,34 @@ impl Brain {
             .collect()
     }
 
-    /// Each candidate category's attention score (design §5.3): the State
-    /// inputs through the attention links, plus salience for nearness.
-    /// `candidates` gives what each category's candidate is learned about as,
-    /// its normalized distance, and how much of its worth counts: a
-    /// remembered place's, as much as it's remembered (M2 design §7). Target
-    /// inputs never count, whatever `inputs` holds for them.
+    /// `attention_scores_with`, working out sprites in general itself.
+    #[cfg(test)]
     pub(crate) fn attention_scores(
         &self,
         inputs: &[f32],
         candidates: &BTreeMap<CategoryId, Seen>,
         curiosity_mod: f32,
         scoring: SpriteScoring,
+        data: &DataPack,
+    ) -> BTreeMap<CategoryId, f32> {
+        let general = self.sprites_in_general(data);
+        self.attention_scores_with(inputs, candidates, curiosity_mod, scoring, &general, data)
+    }
+
+    /// Each candidate category's attention score (design §5.3): the State
+    /// inputs through the attention links, plus salience for nearness.
+    /// `candidates` gives what each category's candidate is learned about as,
+    /// its normalized distance, and how much of its worth counts: a
+    /// remembered place's, as much as it's remembered (M2 design §7). Target
+    /// inputs never count, whatever `inputs` holds for them. `general` is
+    /// its sprites in general (`sprites_in_general`), worked out once a tick.
+    pub(crate) fn attention_scores_with(
+        &self,
+        inputs: &[f32],
+        candidates: &BTreeMap<CategoryId, Seen>,
+        curiosity_mod: f32,
+        scoring: SpriteScoring,
+        general: &SpriteMemory,
         data: &DataPack,
     ) -> BTreeMap<CategoryId, f32> {
         let state: Vec<usize> = data
@@ -1273,11 +1309,12 @@ impl Brain {
                     .filter(|i| !(not_grown && drive.contains(i)))
                     .map(|&i| inputs[i] * self.attention.get(i, c))
                     .sum();
-                let worth =
-                    recall * value_gain * self.worth_of(subject, scoring.sprite, inputs, data);
+                let worth = recall
+                    * value_gain
+                    * self.worth_of(subject, scoring.sprite, inputs, general, data);
                 let curious = curiosity * self.novelty(subject) * boldness;
                 // Fear catches the eye (design v18 §5.3).
-                let watchful = vigilance * self.fright(category, scoring, distance, data);
+                let watchful = vigilance * self.fright(category, scoring, distance, general, data);
                 (
                     category,
                     instinct + salience * (1.0 - distance) + worth + curious + watchful,
@@ -1290,14 +1327,16 @@ impl Brain {
     /// the eye beyond the instincts about its category (design v19 §3.6,
     /// §5.3): its nearness, what it's worth, as much as it's recalled (M2
     /// design §7), how new it is, and, for a sprite, how frightening it is
-    /// while near. `inputs` gives the State inputs, and `curiosity_mod` the
-    /// receptor target wariness lowers.
+    /// while near. `inputs` gives the State inputs, `curiosity_mod` the
+    /// receptor target wariness lowers, and `general` its sprites in general
+    /// (`sprites_in_general`), worked out once for all it sees.
     pub(crate) fn draw(
         &self,
         seen: Seen,
         sprite: Option<EntityId>,
         inputs: &[f32],
         curiosity_mod: f32,
+        general: &SpriteMemory,
         data: &DataPack,
     ) -> f32 {
         let scoring = SpriteScoring {
@@ -1311,12 +1350,12 @@ impl Brain {
             ..
         } = seen;
         let boldness = self.boldness(curiosity_mod);
-        let worth = self.worth_of(subject, sprite, inputs, data);
+        let worth = self.worth_of(subject, sprite, inputs, general, data);
         self.params.get(BrainParam::SalienceGain) * (1.0 - distance)
             + self.params.get(BrainParam::ValueGain) * recall * worth
             + self.params.get(BrainParam::Curiosity) * self.novelty(subject) * boldness
             + self.params.get(BrainParam::Vigilance)
-                * self.fright(subject.category(data), scoring, distance, data)
+                * self.fright(subject.category(data), scoring, distance, general, data)
     }
 
     /// How boldly the unfamiliar draws the eye (design §5.3): the worth of
@@ -1335,13 +1374,14 @@ impl Brain {
         category: CategoryId,
         scoring: SpriteScoring,
         distance: f32,
+        general: &SpriteMemory,
         data: &DataPack,
     ) -> f32 {
         if scoring.quiet {
             return 0.0;
         }
         let fear = if category == data.sprite_category() {
-            self.memory_of(scoring.sprite, data).fear
+            self.memory_of(scoring.sprite, general, data).fear
         } else if category == data.cursor_category() {
             self.experience.cursor.as_ref().map_or(0.0, |c| c.fear)
         } else {
@@ -1351,13 +1391,21 @@ impl Brain {
         -fear * (1.0 - distance / reach).max(0.0)
     }
 
-    /// What the brain knows of `sprite` (design v18 §5.6): what it remembers
-    /// of it, or sprites in general for one it doesn't remember, or none.
-    fn memory_of(&self, sprite: Option<EntityId>, data: &DataPack) -> SpriteMemory {
+    /// What the brain knows of `sprite` (design v18 §5.6): what it has
+    /// learned of it, or `general`, its sprites in general, for one it
+    /// hasn't, knowing it only by sight (M2 design §15.2) or not at all, or
+    /// none.
+    fn memory_of<'a>(
+        &'a self,
+        sprite: Option<EntityId>,
+        general: &'a SpriteMemory,
+        data: &DataPack,
+    ) -> &'a SpriteMemory {
+        let below = data.physiology().forget_below;
         sprite
             .and_then(|sprite| self.experience.individuals.get(&sprite))
-            .cloned()
-            .unwrap_or_else(|| self.sprites_in_general(data))
+            .filter(|known| known.taught(below))
+            .unwrap_or(general)
     }
 
     /// Where attention goes (design §5.3). Choosing afresh, with no action
@@ -1393,16 +1441,32 @@ impl Brain {
         self.attended
     }
 
-    /// Each verb's score (design §5.5), in `VERBS` order: the concepts'
-    /// activations through the instinct links, and for the thing `aimed`
-    /// at, learned about as that subject, its worth, which draws the sprite
-    /// to it or makes it back away.
+    /// `scores_with`, working out sprites in general itself.
+    #[cfg(test)]
     pub(crate) fn scores(
         &self,
         activations: &[f32],
         inputs: &[f32],
         aimed: Option<Subject>,
         scoring: SpriteScoring,
+        data: &DataPack,
+    ) -> [f32; VERBS.len()] {
+        let general = self.sprites_in_general(data);
+        self.scores_with(activations, inputs, aimed, scoring, &general, data)
+    }
+
+    /// Each verb's score (design §5.5), in `VERBS` order: the concepts'
+    /// activations through the instinct links, and for the thing `aimed`
+    /// at, learned about as that subject, its worth, which draws the sprite
+    /// to it or makes it back away. `general` is its sprites in general
+    /// (`sprites_in_general`), worked out once a tick.
+    pub(crate) fn scores_with(
+        &self,
+        activations: &[f32],
+        inputs: &[f32],
+        aimed: Option<Subject>,
+        scoring: SpriteScoring,
+        general: &SpriteMemory,
         data: &DataPack,
     ) -> [f32; VERBS.len()] {
         let mut scores = [0.0; VERBS.len()];
@@ -1412,7 +1476,7 @@ impl Brain {
             }
         }
         if let Some(subject) = aimed {
-            let parts = self.aimed_parts(subject, scoring, inputs, data);
+            let parts = self.aimed_parts(subject, scoring, inputs, general, data);
             for (score, parts) in scores.iter_mut().zip(parts) {
                 *score += parts.iter().sum::<f32>();
             }
@@ -1429,13 +1493,15 @@ impl Brain {
         subject: Subject,
         scoring: SpriteScoring,
         inputs: &[f32],
+        general: &SpriteMemory,
         data: &DataPack,
     ) -> [[f32; 3]; VERBS.len()] {
         let value_gain = self.params.get(BrainParam::ValueGain);
         let flight = self.params.get(BrainParam::Flight);
         let category = subject.category(data);
-        let worth = value_gain * self.worth_of(subject, scoring.sprite, inputs, data);
-        let fear = self.fright(category, scoring, target_distance(inputs, data), data);
+        let worth = value_gain * self.worth_of(subject, scoring.sprite, inputs, general, data);
+        let distance = target_distance(inputs, data);
+        let fear = self.fright(category, scoring, distance, general, data);
         let habits = self
             .experience
             .types
@@ -1461,12 +1527,13 @@ impl Brain {
     /// (design §5.6): each need's level, from `inputs`, times its worth for
     /// that need, plus its general good and its bad. For an object type it
     /// doesn't know, its category's summary (design v19 §5.6); for sprites,
-    /// `sprite`'s, or sprites in general's (design v18 §5.6).
+    /// `sprite`'s, or `general`, sprites in general's (design v18 §5.6).
     fn worth_of(
         &self,
         subject: Subject,
         sprite: Option<EntityId>,
         inputs: &[f32],
+        general: &SpriteMemory,
         data: &DataPack,
     ) -> f32 {
         let for_needs = |worth: &[f32]| -> f32 {
@@ -1479,7 +1546,7 @@ impl Brain {
         let quiet = self.quiet(inputs, data);
         let now = |worth: &[f32], good: f32, bad: f32| for_needs(worth) + quiet * good + bad;
         if subject.category(data) == data.sprite_category() {
-            let known = self.memory_of(sprite, data);
+            let known = self.memory_of(sprite, general, data);
             return now(&known.worth, known.good, known.bad);
         }
         // The Cursor is one individual (design v29 §5.6).
@@ -1546,6 +1613,21 @@ fn read(body: &Body, locus: LocusRef, data: &DataPack) -> f32 {
         LocusRef::Chem(id) => body.chems[data.chemical_index(id).expect("a checked input")],
         LocusRef::Locus(id) => body.loci[data.locus_index(id).expect("a checked input")],
     }
+}
+
+/// What a sprite sees of the hatched sprite it attends to (M2 design §10,
+/// §15): its body language, and what it knows of it.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct Looks {
+    /// For each brain input that reads the attended sprite's body, in input
+    /// order, the level it reads there: what its body shows.
+    pub(crate) body: Vec<f32>,
+    /// How well it knows it, from 0 to 1 (M2 design §15.2).
+    pub(crate) familiar: f32,
+    /// Whether it's its partner (M2 design §15.4).
+    pub(crate) partner: bool,
+    /// Whether it's its kin (M2 design §15.5).
+    pub(crate) kin: bool,
 }
 
 /// What a hatched sprite's `body` shows a sprite attending to it (M2 design
@@ -1618,6 +1700,9 @@ pub(crate) struct Situation {
     pub(crate) adults: bool,
     /// It's grown up.
     pub(crate) grown: bool,
+    /// Its pack has calls and courtship (M2 design §15): a save from
+    /// before them keeps its pack, which has neither.
+    pub(crate) courts: bool,
 }
 
 /// The verbs a sprite may choose (design §5.2): Rest and Wander always;
@@ -1625,10 +1710,11 @@ pub(crate) struct Situation {
 /// anything (v16), but Approach only while it isn't already `beside` the
 /// target, on one of its goal tiles, where Approach would do nothing, and
 /// Retreat only from a thing in sight, not one `remembered` out of sight
-/// (M2 design §7). Mate is offered only when the sprite and its target are
-/// both `adults`, and BreedAlone only when the sprite is `grown`: the
-/// content-safety rule the engine enforces for every genome and data pack
-/// (M2 design §5, §10).
+/// (M2 design §7). Mate and Court are offered only when the sprite and its
+/// target are both `adults`, and BreedAlone only when the sprite is
+/// `grown`: the content-safety rule the engine enforces for every genome
+/// and data pack (M2 design §5, §10, §15.3). Court and Call only in a pack
+/// that `courts`.
 pub(crate) fn available(situation: Situation) -> Vec<Verb> {
     let Situation {
         target,
@@ -1636,6 +1722,7 @@ pub(crate) fn available(situation: Situation) -> Vec<Verb> {
         remembered,
         adults,
         grown,
+        courts,
     } = situation;
     VERBS
         .into_iter()
@@ -1645,6 +1732,8 @@ pub(crate) fn available(situation: Situation) -> Vec<Verb> {
             Verb::Retreat => target && !remembered,
             Verb::Mate => target && adults,
             Verb::BreedAlone => grown,
+            Verb::Court => courts && target && adults,
+            Verb::Call => courts,
             _ => target,
         })
         .collect()
@@ -1924,8 +2013,8 @@ mod tests {
         ]);
         let n = builtin().brain_inputs().count();
         assert_eq!(
-            n, 54,
-            "43 State inputs, 2 of body language and 9 Target inputs"
+            n, 68,
+            "52 State inputs, 4 of body language, 3 of whom it knows and 9 Target inputs"
         );
         // One singleton per input, and one conjunction for both genes naming it.
         assert_eq!(brain.concepts.len(), n + 1);
@@ -1966,6 +2055,36 @@ mod tests {
         assert_eq!(scores[column(Verb::Eat)], 0.6);
         assert_eq!(scores[column(Verb::Wander)], 0.3);
         assert_eq!(scores[column(Verb::Drink)], 0.0);
+    }
+
+    #[test]
+    fn what_a_sprite_knows_of_the_one_it_attends_to_is_read_from_its_own_mind() {
+        // M2 design §15.2, §15.4, §15.5: none of it with no sprite attended.
+        let data = builtin();
+        let brain = brain(&[]);
+        let genome = Genome::from_ron("(format: 1, genes: [])", &data).expect("a genome");
+        let program = crate::biochem::Program::new(&genome, &data, LifeStage::Adult);
+        let body = Body::newborn(&program, &data);
+        let names = ["target_familiar", "target_partner", "target_kin"];
+        let read = |looks: Option<&Looks>| {
+            let all = brain.inputs(&body, None, looks, &data);
+            names.map(|name| all[input(name)])
+        };
+        let known = Looks {
+            body: Vec::new(),
+            familiar: 0.6,
+            partner: true,
+            kin: true,
+        };
+        assert_eq!(read(Some(&known)), [0.6, 1.0, 1.0]);
+        let stranger = Looks {
+            body: Vec::new(),
+            familiar: 0.0,
+            partner: false,
+            kin: false,
+        };
+        assert_eq!(read(Some(&stranger)), [0.0; 3]);
+        assert_eq!(read(None), [0.0; 3]);
     }
 
     #[test]
@@ -2607,6 +2726,7 @@ mod tests {
             None,
             &inputs(&[("thirst", 0.8)]),
             0.0,
+            &brain.sprites_in_general(&data),
             &data,
         );
         assert!(close(draw, 0.8 * 0.5 * 0.5), "{draw}");
@@ -2889,8 +3009,8 @@ mod tests {
         // partner what it learned.
         let aroused = inputs(&[("arousal", 1.0)]);
         let sprite = types::SPRITE;
-        assert_eq!(brain.worth_of(sprite, None, &aroused, &data), 0.0);
-        let partner = brain.worth_of(sprite, Some(EntityId(7)), &aroused, &data);
+        assert_eq!(brain.worth_of(sprite, None, &aroused, &general, &data), 0.0);
+        let partner = brain.worth_of(sprite, Some(EntityId(7)), &aroused, &general, &data);
         assert!(close(partner, 0.8), "{partner}");
     }
 

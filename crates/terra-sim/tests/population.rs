@@ -5,7 +5,7 @@
 //! its counts to stay small.
 
 mod common;
-use common::{ALONE, FEMALE, WorldBuilder, at, builtin, family, until};
+use common::{ALONE, FEMALE, WorldBuilder, at, builtin, family_in, lone, until};
 
 use std::collections::BTreeMap;
 
@@ -122,7 +122,9 @@ fn a_death_is_counted_in_the_stretch_it_happened_in() {
 
 #[test]
 fn an_egg_is_counted_as_an_egg_and_its_laying_and_hatching_once_each() {
-    let mut world = family(&[(at(0, 0), &format!("{FEMALE}{ALONE}"))], &[], 3);
+    // A pack in which she may lay alone at once (M2 design §15.7).
+    let female = format!("{FEMALE}{ALONE}");
+    let mut world = family_in(lone(), &[(at(0, 0), &female)], &[], 3);
     until(&mut world, 3_000, |event| {
         matches!(event.kind, EventKind::Laid { .. }).then_some(())
     })

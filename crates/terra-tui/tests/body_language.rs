@@ -14,7 +14,7 @@ use terra_sim::{
 use terra_tui::app::{App, ColourMode, PLEASED_AT, Ticks};
 use terra_tui::clock::Speed;
 use terra_tui::input::Action;
-use terra_tui::theme::Theme;
+use terra_tui::theme::{SemanticTile, Theme};
 use terra_tui::ui;
 
 fn pack() -> DataPack {
@@ -209,6 +209,7 @@ fn ended(tick: u64, id: EntityId, verb: Verb, outcome: Outcome, target: Option<T
         hurt: Hurt::default(),
         progress: Progress::Ended(outcome),
         remembered: false,
+        heard: None,
     };
     Event {
         tick,
@@ -254,6 +255,42 @@ fn a_sprite_that_gives_up_shows_a_question_mark_for_a_second() {
         let (world, id, mut app) = one_sprite();
         app.record(&[ended(1, id, Verb::Wander, outcome, None)], &world);
         assert_eq!(glyph(&app, &world), "☺", "{outcome:?}");
+    }
+}
+
+#[test]
+fn a_sprite_that_dances_or_calls_shows_a_note_for_a_second() {
+    // M2 design §15.8: a dance `♫` once it's danced, a call `♪` as it
+    // calls, in arousal's light magenta; `^` and `"` in ASCII. A dance
+    // that didn't happen shows the question mark instead.
+    for (theme, dance, call) in [(Theme::cp437(), "♫", "♪"), (Theme::ascii(), "^", "\"")] {
+        let other = Some(Target::Sprite(EntityId(99)));
+        let world = field(&[(at(2, 3), feeling(&[]))]);
+        let id = world.sprites().next().expect("a sprite").id();
+        let sprite = theme.glyph(SemanticTile::Sprite).symbol.to_string();
+        let shows = |events: &[Event]| {
+            let mut app = app_for(&world, theme.clone());
+            app.record(events, &world);
+            let screen = render(&app, &world);
+            let drawn = &screen[cell(at(2, 3))];
+            let first = (drawn.symbol().to_string(), drawn.fg);
+            app.animate(QUARTER);
+            let then = glyph(&app, &world);
+            app.animate(QUARTER * 3);
+            (first, then, glyph(&app, &world))
+        };
+        let danced = ended(1, id, Verb::Court, Outcome::Applied, other);
+        let magenta = Color::LightMagenta;
+        assert_eq!(
+            shows(&[danced]),
+            ((dance.into(), magenta), sprite.clone(), sprite.clone())
+        );
+        assert_eq!(
+            shows(&[started(1, id, Verb::Call)]),
+            ((call.into(), magenta), sprite.clone(), sprite.clone())
+        );
+        let gave_up = ended(1, id, Verb::Court, Outcome::Failed, other);
+        assert_eq!(shows(&[gave_up]).0.0, "?");
     }
 }
 
@@ -436,7 +473,13 @@ fn the_resting_emote_shows_for_a_second_at_16x_and_at_max_through_the_frame_loop
     for speed in [Speed::X16, Speed::Max] {
         let pack = pack();
         let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
-        let sprites = [(at(2, 3), Some(feeling(&[])))];
+        // It never calls, whose emote would take the rest's place (M2
+        // design §15.8).
+        let quiet = r#"(format: 1, genes: [
+            Instinct(inputs: [("always", false)], verb: Call, weight: -5.0),
+        ])"#;
+        let quiet = Genome::from_ron(quiet, &pack).expect("a valid genome");
+        let sprites = [(at(2, 3), Some(quiet))];
         let scripted = [(at(2, 3), ScriptedAction::Rest)];
         // Young, so it can't try breeding alone, fail and show that instead
         // (M2 design §10).

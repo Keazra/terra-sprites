@@ -28,6 +28,8 @@ pub(crate) struct Physiology {
     pub(crate) ageing: Ageing,
     /// How sprites have young (M2 design §10).
     pub(crate) breeding: Breeding,
+    /// How calls carry and what they cost (M2 design §15.1).
+    pub(crate) calls: Calls,
     /// The copying errors in an egg's genes (M2 design §12).
     pub(crate) mutation: Mutation,
     /// The hidden flaws genes carry, and what a broken gene does (M2 design
@@ -87,6 +89,11 @@ pub(crate) struct PhysiologyEntry {
     /// §2.8).
     #[serde(default)]
     breeding: Breeding,
+    /// A pack from before calls takes the built-in calls, which do nothing
+    /// in it: it has no courtship's loci, so no sprite calls (M2 design
+    /// §15).
+    #[serde(default)]
+    calls: Calls,
     /// A pack from before copying errors has none (design §2.8: a save
     /// carries its own pack, and keeps its rules).
     #[serde(default)]
@@ -196,6 +203,18 @@ fn added_since_saves(param: BrainParam) -> Option<ParamRange> {
         BrainParam::TaughtFade => Some(ParamRange {
             range: (0.0, 0.01),
             default: 0.00000625,
+        }),
+        BrainParam::BefriendRate => Some(ParamRange {
+            range: (0.0, 0.01),
+            default: 0.0013,
+        }),
+        BrainParam::BefriendPlay => Some(ParamRange {
+            range: (0.0, 1.0),
+            default: 0.1,
+        }),
+        BrainParam::BefriendFade => Some(ParamRange {
+            range: (0.0, 0.01),
+            default: 0.000025,
         }),
         _ => None,
     }
@@ -447,9 +466,25 @@ pub(crate) struct Breeding {
     /// The level of the hormone `feminiser` at which a male adult turns
     /// female, for good.
     pub(crate) turns_female: f32,
-    /// The level of the hormone `longing` a female must have reached to
-    /// breed alone.
-    pub(crate) breeds_alone: f32,
+    /// Only in a pack from before Slice 32: the level of the hormone
+    /// `longing` a female must have reached to breed alone. Now it's the
+    /// body's rule, `alone_after` (M2 design §15.7).
+    #[serde(default)]
+    pub(crate) breeds_alone: Option<f32>,
+    /// How many ticks a female must go with no male adult seen or heard
+    /// before she can breed alone (M2 design §15.7). A pack from before
+    /// Slice 32 has none, and gates it on `breeds_alone`.
+    #[serde(default)]
+    pub(crate) alone_after: Option<u64>,
+    /// The level of the hormone `receptivity` a female must have for a pair
+    /// to mate (M2 design §15.3). A pack from before courtship has none: 0.
+    #[serde(default)]
+    pub(crate) receptive: f32,
+    /// How many ticks partners go with neither seeing nor hearing the other
+    /// before they're freed (M2 design §15.4). A pack from before partners
+    /// has none.
+    #[serde(default)]
+    pub(crate) apart: Option<u64>,
     /// The need that drives breeding, one of `brain_io.ron`'s: the engine
     /// has it work only between adults (M2 design §5).
     pub(crate) drive: String,
@@ -475,12 +510,44 @@ impl Default for Breeding {
         Breeding {
             hatches: None,
             cost: 0.3,
-            fed: 0.5,
+            fed: 0.4,
             rest: 1_500,
             turns_female: 0.8,
-            breeds_alone: 0.5,
+            breeds_alone: None,
+            alone_after: Some(4_500),
+            receptive: 0.5,
+            apart: Some(4_500),
             drive: "arousal".into(),
             crossover: 0.1,
+        }
+    }
+}
+
+/// How calls carry and what they cost (M2 design §15.1).
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Calls {
+    /// The energy a call costs.
+    pub(crate) cost: f32,
+    /// The most a call's way may cost, by each terrain's `sound`, for it to
+    /// be heard.
+    pub(crate) reach: u32,
+    /// How many ticks a hearer goes on knowing who called and where from.
+    pub(crate) heard_for: u64,
+    /// How many ticks a caller stands listening after it calls, which is
+    /// how long a call lasts.
+    pub(crate) listen: u32,
+}
+
+/// What a saved world's pack from before calls gets: the built-in pack's,
+/// which a test checks they match.
+impl Default for Calls {
+    fn default() -> Calls {
+        Calls {
+            cost: 0.002,
+            reach: 300,
+            heard_for: 150,
+            listen: 10,
         }
     }
 }
@@ -718,7 +785,18 @@ impl PhysiologyEntry {
         fraction("breeding.cost", breeding.cost)?;
         fraction("breeding.fed", breeding.fed)?;
         fraction("breeding.turns_female", breeding.turns_female)?;
-        fraction("breeding.breeds_alone", breeding.breeds_alone)?;
+        if let Some(level) = breeding.breeds_alone {
+            fraction("breeding.breeds_alone", level)?;
+        }
+        fraction("breeding.receptive", breeding.receptive)?;
+        if breeding.apart == Some(0) {
+            return Err("`breeding.apart` must be at least 1 tick".into());
+        }
+        let calls = self.calls;
+        fraction("calls.cost", calls.cost)?;
+        if calls.heard_for == 0 || calls.listen == 0 {
+            return Err("`calls.heard_for` and `calls.listen` must be at least 1 tick".into());
+        }
         if breeding.hatches == Some(0) {
             return Err("`breeding.hatches` must be at least 1 tick".into());
         }
@@ -919,6 +997,7 @@ impl PhysiologyEntry {
             injury,
             ageing,
             breeding: self.breeding,
+            calls: self.calls,
             mutation,
             flaws,
             copy_and_change: self.copy_and_change,
@@ -1006,6 +1085,9 @@ pub(crate) struct Indices {
     /// What breeding reads and writes (M2 design §10), if the pack has it
     /// all: a pack from before breeding doesn't.
     pub(crate) breeding: Option<BreedingIndices>,
+    /// What calls and courtship read and write (M2 design §15), if the pack
+    /// breeds and has them all: a pack from before them doesn't.
+    pub(crate) courtship: Option<CourtshipIndices>,
     /// The need that drives breeding, `breeding.drive`, by its place among
     /// the needs, if it's one: it works only between adults, whether or not
     /// the pack breeds (M2 design §5).
@@ -1028,6 +1110,25 @@ pub(crate) struct BreedingIndices {
     /// The hormone a female must have past `breeding.breeds_alone` to
     /// breed alone.
     pub(crate) longing: usize,
+}
+
+/// The loci and chemicals calls and courtship read and write (M2 design
+/// §15).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct CourtshipIndices {
+    /// The pulses: it heard a call, another danced for it, it danced, and
+    /// its partner died.
+    pub(crate) heard: usize,
+    pub(crate) courted: usize,
+    pub(crate) danced: usize,
+    pub(crate) lost_partner: usize,
+    /// The body sensors: 1 while its partner is near, 1 while it has one,
+    /// and how healthy it looks.
+    pub(crate) partner_near: usize,
+    pub(crate) paired: usize,
+    pub(crate) condition: usize,
+    /// The hormone a female must have past `breeding.receptive` to mate.
+    pub(crate) receptivity: usize,
 }
 
 impl Indices {
@@ -1130,6 +1231,39 @@ impl Indices {
             }
             _ => None,
         };
+        let courtship = match (
+            breeding,
+            locus("heard", LocusKind::Pulse),
+            locus("courted", LocusKind::Pulse),
+            locus("danced", LocusKind::Pulse),
+            locus("lost_partner", LocusKind::Pulse),
+            locus("partner_near", LocusKind::BodySensor),
+            locus("paired", LocusKind::BodySensor),
+            locus("condition", LocusKind::BodySensor),
+            chemicals.iter().position(|c| c.name == "receptivity"),
+        ) {
+            (
+                Some(_),
+                Some(heard),
+                Some(courted),
+                Some(danced),
+                Some(lost_partner),
+                Some(partner_near),
+                Some(paired),
+                Some(condition),
+                Some(receptivity),
+            ) => Some(CourtshipIndices {
+                heard,
+                courted,
+                danced,
+                lost_partner,
+                partner_near,
+                paired,
+                condition,
+                receptivity,
+            }),
+            _ => None,
+        };
         Ok(Indices {
             energy: chem("energy")?,
             hydration: chem("hydration")?,
@@ -1154,6 +1288,7 @@ impl Indices {
             petted: pulse("petted")?,
             shocked: pulse("shocked")?,
             breeding,
+            courtship,
             drive: drive_place,
         })
     }
@@ -1188,6 +1323,7 @@ mod tests {
         );
         assert_eq!(Ageing::default(), physiology.ageing);
         assert_eq!(Breeding::default(), physiology.breeding);
+        assert_eq!(Calls::default(), physiology.calls);
         assert_eq!(grows_up_range(), physiology.traits.grows_up);
     }
 
@@ -1205,7 +1341,7 @@ mod tests {
                     "",
                 ),
                 (
-                    "flaws: (arise: 0.007, founders: 0.06, health: 0.5, wear: 0.05),",
+                    "flaws: (arise: 0.005, founders: 0.043, health: 0.5, wear: 0.05),",
                     "",
                 ),
             ],

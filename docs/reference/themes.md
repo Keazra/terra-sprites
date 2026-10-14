@@ -52,6 +52,7 @@ A **glyph** is `(glyph: '♣', fg: green)`, with two optional flags: `bold: true
 | `egg`, `selected_egg` | Retired: an egg is an item until it hatches, drawn from `objects` (M2 design §10.7). A theme that still has them loads, and draws the egg with its `egg` glyph if its `objects` have no `"egg"`. |
 | `decision_marker` | Where the selected sprite is heading. It flashes. |
 | `emote(hurt)`, `emote(pleased)`, `emote(shocked)`, `emote(failed)`, `emote(resting)` | What takes turns with a sprite's glyph when it's hurt, petted, zapped, gives up, or rests (design §6.3). |
+| `emote(dancing)`, `emote(calling)` | What takes turns with a sprite's glyph while it dances for another, or calls and listens (M2 design §15.8). Optional: a theme without them draws both as `emote(pleased)`. |
 
 ### `objects`
 

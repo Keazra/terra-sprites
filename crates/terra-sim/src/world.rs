@@ -13,6 +13,7 @@ use crate::brain::{self, Explanation, Memory, RememberedPlace};
 use crate::breeding::{self, Sex, Unhatched};
 use crate::command::{self, Command};
 use crate::config::{MOST_SPRITES, WorldConfig};
+use crate::courtship::{self, Company};
 use crate::cursor::{Cursor, Grip};
 use crate::data::DataPack;
 use crate::ecology::{self, holds_without_drawing, new_object, square};
@@ -496,6 +497,45 @@ impl<'a> SpriteView<'a> {
     /// Its sex (M2 design §10).
     pub fn sex(&self) -> Sex {
         self.sprite.sex
+    }
+
+    /// Its partner, the sprite it last had an egg with, and whether the
+    /// partner has died since (M2 design §15.4). A sprite whose partner died
+    /// keeps its name until it pairs again.
+    pub fn partner(&self) -> Option<(EntityId, bool)> {
+        self.sprite
+            .partner
+            .map(|partner| (partner.id, partner.died))
+    }
+
+    /// How well it knows `other`, from 0 to 1 (M2 design §15.2): 0 for a
+    /// sprite it doesn't remember.
+    pub fn familiarity(&self, other: EntityId) -> f32 {
+        let known = self.sprite.brain.experience.individuals.get(&other);
+        known.map_or(0.0, |known| known.familiarity)
+    }
+
+    /// Each sprite it remembers, in ID order, with how well it knows it
+    /// (M2 design §15.2).
+    pub fn known_sprites(&self) -> Vec<(EntityId, f32)> {
+        let known = &self.sprite.brain.experience.individuals;
+        known
+            .iter()
+            .map(|(&id, known)| (id, known.familiarity))
+            .collect()
+    }
+
+    /// The calls it remembers hearing, each sprite's latest: who called,
+    /// and the tile it called from (M2 design §15.1).
+    pub fn heard(&self) -> Vec<(EntityId, Pos)> {
+        let heard = self.sprite.heard.iter();
+        heard.map(|heard| (heard.caller, heard.from)).collect()
+    }
+
+    /// Whether `other` is its close kin: a parent, a child, or a brother
+    /// or sister (M2 design §15.5).
+    pub fn is_kin(&self, other: EntityId) -> bool {
+        courtship::kin(&self.world.state, self.id, other)
     }
 
     /// Whether it's fertile now (M2 design §10): grown up, fed, watered and
@@ -1150,8 +1190,9 @@ impl World {
         self.apply_commands(&mut events); // 1
         self.run_environment(&mut events); // 2
         self.grow(&mut events); // 3, first
-        let dying = self.run_biochemistry(); // 3
-        self.run_learning(&dying, &mut events); // 4
+        let company = courtship::look_round(&mut self.state, &self.data, &mut events); // 3
+        let dying = self.run_biochemistry(&company); // 3
+        self.run_learning(&dying, &company, &mut events); // 4
         self.sense_and_decide(&dying, &mut events); // 5
         self.resolve_actions(&dying, &mut events); // 6
         self.finish_tick(&dying, &mut events); // 7
@@ -1404,33 +1445,21 @@ impl World {
     }
 
     /// Step 3: every sprite's chemistry (design §4.4), then death check #1.
-    /// A sprite sees a female or male adult within its sense radius.
-    /// Returns the sprites marked dying, in ascending ID order.
-    fn run_biochemistry(&mut self) -> Vec<EntityId> {
+    /// Its `company` says whether it sees or has lately heard a female or
+    /// male adult, or its partner (M2 design §10.1, §15). Returns the
+    /// sprites marked dying, in ascending ID order.
+    fn run_biochemistry(&mut self, company: &BTreeMap<EntityId, Company>) -> Vec<EntityId> {
         let state = &mut self.state;
         let data = &self.data;
         let nearby = data.physiology().nearby_sprites;
         let (tick, sprites) = (state.tick, &state.sprites);
-        let adults = |sex| -> Vec<(EntityId, Pos)> {
-            sprites
-                .iter()
-                .filter(|(_, sprite)| sprite.sex == sex && sprite.stage().is_grown())
-                .map(|(id, sprite)| (id, sprite.pos))
-                .collect()
-        };
-        let (females, males) = (adults(Sex::Female), adults(Sex::Male));
         let senses: Vec<(EntityId, Senses)> = sprites
             .iter()
             .map(|(id, sprite)| {
                 let others = square(&state.map, sprite.pos, nearby.radius)
                     .filter(|&tile| tile != sprite.pos && sprites.at(tile).is_some())
                     .count();
-                let sight = sprite.program.traits.sense_radius.round() as u16;
-                let near = |adults: &[(EntityId, Pos)]| {
-                    adults
-                        .iter()
-                        .any(|&(other, at)| other != id && chebyshev(at, sprite.pos) <= sight)
-                };
+                let company = &company[&id];
                 let senses = Senses {
                     age: sprite.age(tick),
                     nearby_sprites: (others as f32 / f32::from(nearby.full)).min(1.0),
@@ -1440,8 +1469,10 @@ impl World {
                     sooner: sprite.sooner(data),
                     fertile: breeding::fertile(state, sprite, data),
                     female: sprite.sex == Sex::Female,
-                    female_near: near(&females),
-                    male_near: near(&males),
+                    female_near: company.female_near,
+                    male_near: company.male_near,
+                    partner_near: company.partner_near,
+                    paired: sprite.partner().is_some(),
                 };
                 (id, senses)
             })
@@ -1461,9 +1492,15 @@ impl World {
     }
 
     /// Step 4: reinforcement from consumed reward and punishment, for every
-    /// sprite not marked dying.
-    fn run_learning(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
-        learning::run(&mut self.state, &self.data, dying, events);
+    /// sprite not marked dying, and getting to know the sprites in its
+    /// `company` (M2 design §15.2).
+    fn run_learning(
+        &mut self,
+        dying: &[EntityId],
+        company: &BTreeMap<EntityId, Company>,
+        events: &mut Vec<Event>,
+    ) {
+        learning::run(&mut self.state, &self.data, dying, company, events);
     }
 
     /// Step 5: perception, attention and decisions, for every sprite not
@@ -1491,7 +1528,7 @@ impl World {
             .filter(|(id, sprite)| dying.contains(id) || sprite.body.chems[injury] >= 1.0)
             .map(|(id, _)| id)
             .collect();
-        for id in dying {
+        for &id in &dying {
             let sprite = state.sprites.remove(id);
             let cause = sprite.body.cause_of_death();
             *state.deaths.entry(cause).or_insert(0) += 1;
@@ -1513,6 +1550,7 @@ impl World {
                 });
             }
         }
+        courtship::mourn(state, &self.data, &dying, events);
         state.tick += 1;
     }
 
@@ -2604,7 +2642,13 @@ mod tests {
         }
         world.state.tick = 1;
         let mut events = Vec::new();
-        learning::run(&mut world.state, &world.data, &[second], &mut events);
+        learning::run(
+            &mut world.state,
+            &world.data,
+            &[second],
+            &BTreeMap::new(),
+            &mut events,
+        );
         let sprite = |id| world.state.sprites.get(id).expect("a sprite");
         assert_eq!(sprite(first).brain.felt, 0.5, "the living one learns");
         assert_eq!(sprite(first).body.chems[reward], 0.0);
@@ -2635,7 +2679,13 @@ mod tests {
         });
         sprite.body.chems[indices.reward] = 0.5;
         let mut events = Vec::new();
-        learning::run(&mut world.state, &world.data, &[], &mut events);
+        learning::run(
+            &mut world.state,
+            &world.data,
+            &[],
+            &BTreeMap::new(),
+            &mut events,
+        );
         let sprite = world.state.sprites.get(first).expect("a sprite");
         assert_eq!(sprite.brain.felt, 0.5, "felt, and used up");
         assert_eq!(sprite.body.chems[indices.reward], 0.0);
@@ -2671,7 +2721,13 @@ mod tests {
         });
         let mut events = Vec::new();
         world.apply_commands(&mut events);
-        learning::run(&mut world.state, &world.data, &[], &mut events);
+        learning::run(
+            &mut world.state,
+            &world.data,
+            &[],
+            &BTreeMap::new(),
+            &mut events,
+        );
         let sprite = world.state.sprites.get(first).expect("a sprite");
         assert_eq!(sprite.brain.felt, 0.5, "felt, and used up");
         assert_eq!(sprite.brain.reach_back, None, "used up");
@@ -2980,5 +3036,126 @@ mod tests {
             .brain
             .felt = f32::NAN;
         assert!(world.check_invariants().is_err());
+    }
+
+    /// Sprites that rest and do nothing else, on `tiles` of a row of grass
+    /// `length` long, made with `data`, before any step.
+    fn resters(data: DataPack, length: usize, tiles: &[u16]) -> (World, Vec<EntityId>) {
+        let row = ".".repeat(length);
+        let map = Map::from_ascii(&[row.as_str()], &data).expect("valid drawing");
+        let genes = r#"(format: 2, genes: [
+            Trait(trait: "speed", value: 10.0),
+            Trait(trait: "sense_radius", value: 10.0),
+            Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),
+            BrainParam(param: "tau_base", value: 0.02),
+        ])"#;
+        let genome = Genome::from_ron(genes, &data).expect("a valid genome");
+        let sprites: Vec<(Pos, Option<Genome>)> = tiles
+            .iter()
+            .map(|&x| (Pos { x, y: 0 }, Some(genome.clone())))
+            .collect();
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &sprites,
+            scripted: &[],
+            newborns: &[],
+        };
+        let world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let ids = tiles
+            .iter()
+            .map(|&x| world.sprite_at(Pos { x, y: 0 }).expect("a sprite").id())
+            .collect();
+        (world, ids)
+    }
+
+    /// Makes `a` and `b` partners, as an egg of theirs would.
+    fn make_partners(world: &mut World, a: EntityId, b: EntityId) -> Vec<Event> {
+        let mut events = Vec::new();
+        courtship::pair(&mut world.state, &world.data, a, b, &mut events);
+        events
+    }
+
+    #[test]
+    fn partners_who_go_long_enough_neither_seeing_nor_hearing_the_other_part() {
+        // M2 design §15.4, with `breeding.apart` 50 ticks: 50 tiles apart,
+        // out of sight, resting and never calling, they part, told once.
+        let data =
+            crate::test_util::builtin_changing("physiology.ron", &[("apart: 4500,", "apart: 50,")]);
+        let (mut world, ids) = resters(data, 51, &[0, 50]);
+        let (a, b) = (ids[0], ids[1]);
+        let paired = make_partners(&mut world, a, b);
+        assert!(matches!(
+            paired[..],
+            [Event {
+                kind: EventKind::Paired { .. },
+                ..
+            }]
+        ));
+        let mut parted = Vec::new();
+        for _ in 0..60 {
+            for event in world.step() {
+                if let EventKind::Parted { a, b } = event.kind {
+                    parted.push((event.tick, a, b));
+                }
+            }
+        }
+        assert_eq!(parted, [(50, a, b)]);
+        for id in [a, b] {
+            assert_eq!(world.sprite(id).unwrap().partner(), None);
+        }
+        // Side by side, they never part.
+        let data =
+            crate::test_util::builtin_changing("physiology.ron", &[("apart: 4500,", "apart: 50,")]);
+        let (mut world, ids) = resters(data, 5, &[0, 1]);
+        make_partners(&mut world, ids[0], ids[1]);
+        for _ in 0..60 {
+            let events = world.step();
+            assert!(
+                !events
+                    .iter()
+                    .any(|e| matches!(e.kind, EventKind::Parted { .. }))
+            );
+        }
+        assert_eq!(
+            world.sprite(ids[0]).unwrap().partner(),
+            Some((ids[1], false))
+        );
+    }
+
+    #[test]
+    fn a_sprite_whose_partner_dies_is_told_and_names_it_until_it_pairs_again() {
+        // M2 design §15.4, §15.8.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let (mut world, ids) = resters(data, 5, &[0, 1, 3]);
+        let (a, b, c) = (ids[0], ids[1], ids[2]);
+        make_partners(&mut world, a, b);
+        let injury = world.data.physiology().indices.injury;
+        world.state.sprites.get_mut(b).expect("b").body.chems[injury] = 1.0;
+        let events = world.step();
+        let lost: Vec<_> = events
+            .iter()
+            .filter_map(|e| match e.kind {
+                EventKind::LostPartner { id, partner } => Some((id, partner)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(lost, [(a, b)]);
+        assert_eq!(world.sprite(a).unwrap().partner(), Some((b, true)));
+        let lost_partner = world
+            .data
+            .physiology()
+            .indices
+            .courtship
+            .expect("the built-in pack courts")
+            .lost_partner;
+        world.step();
+        let felt = world.state.sprites.get(a).expect("a").body.loci[lost_partner];
+        assert!(felt > 0.0, "it felt the loss");
+        // A new partner frees the name, with no parting from the dead.
+        let events = make_partners(&mut world, a, c);
+        let kinds: Vec<_> = events.into_iter().map(|e| e.kind).collect();
+        assert_eq!(kinds, [EventKind::Paired { a, b: c }]);
+        assert_eq!(world.sprite(a).unwrap().partner(), Some((c, false)));
     }
 }

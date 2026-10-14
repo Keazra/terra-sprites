@@ -116,8 +116,8 @@ fn while_help_is_open_other_keys_do_nothing() {
 #[test]
 fn the_legend_shows_each_drive_s_colour_and_each_emote() {
     for (theme, sprite, emotes) in [
-        (Theme::cp437(), "☺", ["!", "‼", "?", "z", "♥"]),
-        (Theme::ascii(), "@", ["!", "/", "?", "z", "+"]),
+        (Theme::cp437(), "☺", ["!", "‼", "?", "z", "♥", "♫", "♪"]),
+        (Theme::ascii(), "@", ["!", "/", "?", "z", "+", "^", "\""]),
     ] {
         let world = field();
         let mut app = app_for(&world, theme);
@@ -166,9 +166,10 @@ fn the_legend_shows_each_drive_s_colour_and_each_emote() {
             .trim_start_matches('│')
             .trim_end_matches('│')
             .trim_end();
+        // A dance and a call too (M2 design §15.8).
         let expected = format!(
-            " EMOTES   {} hurt  {} zapped  {} gave up  {} resting  {} pleased",
-            emotes[0], emotes[1], emotes[2], emotes[3], emotes[4]
+            " EMOTES   {} hurt  {} zapped  {} gave up  {} resting  {} pleased  {} danced  {} called",
+            emotes[0], emotes[1], emotes[2], emotes[3], emotes[4], emotes[5], emotes[6]
         );
         assert_eq!(emote_row, expected);
     }

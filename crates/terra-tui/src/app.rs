@@ -942,6 +942,7 @@ impl App {
             }
             self.note_crash(&event.kind);
             self.note_rest(&event.kind);
+            self.note_courtship(&event.kind);
             if let (EventKind::Rewarded { id, .. } | EventKind::Corrected { id, .. }, Some(touch)) =
                 (&event.kind, CursorTouch::reported(&event.kind))
             {
@@ -1333,6 +1334,24 @@ impl App {
                     rest.ended.get_or_insert(now);
                 }
             }
+            _ => {}
+        }
+    }
+
+    /// Starts the Dancing emote on a sprite that danced for another, and
+    /// the Calling emote on one that calls (M2 design §15.8).
+    fn note_courtship(&mut self, event: &EventKind) {
+        match *event {
+            EventKind::ActionStarted {
+                id,
+                verb: Verb::Call,
+            } => self.start_emote(id, Emote::Calling),
+            EventKind::ActionEnded {
+                id,
+                verb: Verb::Court,
+                outcome: Outcome::Applied,
+                ..
+            } => self.start_emote(id, Emote::Dancing),
             _ => {}
         }
     }

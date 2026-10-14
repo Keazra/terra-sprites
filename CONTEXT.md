@@ -316,11 +316,11 @@ The hormone that turns a male adult female. The starter genes raise it while the
 _Avoid_: sex hormone
 
 **Longing** (M2):
-The hormone a female needs to breed alone. The starter genes raise it while the sprite sees no male adult and lower it fast while it sees one, and a female can breed alone only once it has reached physiology's `breeds_alone`. A stopgap: Slice 32 plans to replace that gate with the body's own rule, an hour with no male adult seen or heard, and leave longing to decide only whether she wants to.
+The starter genes' hormone for whether a female wants to breed alone. They raise it over about an hour while the sprite sees or hears no male adult, and lower it fast while it does. Since Slice 32 her body allows it only after physiology's `breeding.alone_after`, an hour with no male adult seen or heard; a pack from before then gates it on longing reaching `breeds_alone` instead.
 _Avoid_: loneliness (the drive for any sprite's company)
 
 **Fertile** (M2):
-Able to breed: grown up, its energy and hydration above `fed` (0.5), rested since its last egg (1,500 ticks), in a world with room for another sprite. It's the body's say, not the genes'.
+Able to breed: grown up, its energy and hydration above `fed` (0.4), rested since its last egg (1,500 ticks), in a world with room for another sprite. It's the body's say, not the genes'.
 _Avoid_: ready, in season
 
 **Arousal** (M2):
@@ -328,34 +328,34 @@ The drive to breed, which `physiology.ron` names as breeding's drive. The starte
 _Avoid_: broodiness (its first name; brooding is sitting on eggs), desire, libido
 
 **Body language** (M2):
-What a sprite sees of the sprite it attends to: its arousal (`target_arousal`) and whether it's of the other sex (`target_other_sex`). Brain inputs that read another's body are listed in `brain_io.ron` as `Target(...)` or `Differs(...)`. Slice 32 plans more: how healthy it looks (`target_health`), and whether it's familiar, its partner or kin, read of a heard caller too.
+What a sprite sees of the sprite it attends to: its arousal (`target_arousal`) and whether it's of the other sex (`target_other_sex`). Brain inputs that read another's body are listed in `brain_io.ron` as `Target(...)` or `Differs(...)`. Slice 32 adds how healthy it looks (`target_condition`), how receptive it is (`target_receptivity`), and whether it's familiar, its partner or kin, read of a heard caller too.
 _Avoid_: signals, display
 
 **Mate** (M2):
-The action of breeding with a partner beside it. It works only between two fertile adults, a male and a female: she lays an egg, its genes mixed from both, and they split its cost. Mate is never offered toward a sprite that isn't an adult. Slice 32 plans courtship before it: it will work only once her receptivity is high enough, and the screen will say "pair with" where it now says "mate with".
-_Avoid_: courtship (what Slice 32 puts before it), copulate
+The action of breeding with the sprite beside it. It works only between two fertile adults, a male and a female, once her receptivity is high enough: she lays an egg, its genes mixed from both, they split its cost, and they're partners. Mate is never offered toward a sprite that isn't an adult. The screen says "pair with".
+_Avoid_: courtship (what comes before it), copulate
 
 **Breed alone** (M2):
 The action of a female laying an egg with no partner, its genes hers with one of her two copies of each doubled, its whole cost hers. Offered only to a grown sprite.
 _Avoid_: parthenogenesis in what the player reads, cloning, self-mating
 
-**Call** (M2, Slice 32, planned):
-An action with no target: the sprite calls once, at a little cost in energy. A call travels like a wave, round rock and walls and through doorways, about 30 tiles over open ground, three times as far as a sprite sees, and each terrain says how much sound it soaks up. A hearer knows who called and where from, and can go there as on a trip. Sprites call to find a mate and to keep their family in touch.
+**Call** (M2, Slice 32):
+An action with no target: the sprite calls once, at a little cost in energy, then stands a moment listening. A call travels like a wave, round rock and walls and through doorways, about 30 tiles over open ground, three times as far as a sprite sees, and each terrain says how much sound it soaks up. A hearer knows who called and where from, and can go there as on a trip. Sprites call to find a mate and to keep their family in touch.
 _Avoid_: cry, song, speech (that's M6's Speak)
 
-**Courtship** (M2, Slice 32, planned):
+**Courtship** (M2, Slice 32):
 What comes before mating: two sprites get to know each other, then one dances for the other with the action **Court**, and the other, if it likes what it sees, dances back. Each dance raises receptivity. Court is never offered toward a sprite that isn't an adult.
 _Avoid_: flirting, wooing, display (alone)
 
-**Receptivity** (M2, Slice 32, planned):
-The hormone a female's body needs for Mate to lay an egg: at least physiology's `breeding.receptive`. The starter genes raise it when she's danced for, more when she dances back, and it fades within a few minutes.
+**Receptivity** (M2, Slice 32):
+The hormone a female's body needs for Mate to lay an egg: at least physiology's `breeding.receptive`. The starter genes raise it a little when she's danced for, much more when she dances back, and it fades within about ten minutes.
 _Avoid_: readiness (fertile is the body's ready), heat, oestrus
 
-**Partner** (M2, Slice 32, planned):
-The sprite it had its latest egg with. Partners keep near each other and, in the starter genes, court only each other. A partner is freed when the other dies, or after an hour neither seeing nor hearing the other, and may pair again.
+**Partner** (M2, Slice 32):
+The sprite it had its latest egg with. In the starter genes partners court and mate only each other, and an aroused one goes to the other; keeping near each other the rest of the time is planned for Slice 32's families. A partner is freed when the other dies, or after an hour neither seeing nor hearing the other, and may pair again; one that died is still named until the sprite pairs again.
 _Avoid_: mate (that's the action), spouse, bond
 
-**Kin** (M2, Slice 32, planned):
+**Kin** (M2, Slice 32):
 A sprite's parents, its young, and its brothers and sisters, the sprites with a parent in common. The starter genes weigh strongly against courting kin, but nothing forbids it.
 _Avoid_: relatives, family (family is the household)
 
@@ -367,7 +367,7 @@ _Avoid_: clan, herd, kin (kin is by blood)
 A drive and second-order need that rises while a sprite's family is out of sight: fast for an egg it left alone, slowly for one it left with its partner, and in a young sprite while no parent is in sight. Finding them eases it. It's care, so it never reads the breeding drive.
 _Avoid_: fear (fear is of someone), worry, loneliness (that's for any company)
 
-**Grief** (M2, Slice 32, planned):
+**Grief** (M2, Slice 32):
 The starter genes' hormone for losing a partner, which holds arousal down for a while before the sprite may pair again.
 _Avoid_: sadness, mourning (as a name for the hormone)
 
@@ -397,7 +397,7 @@ What a sprite is doing, such as wandering to a spot or resting, from when it sta
 _Avoid_: task, behaviour, activity
 
 **Verb**:
-A kind of action a sprite can take: Approach, Eat, Drink, Hit, Play, Retreat, Rest or Wander. Mate and BreedAlone join in M2 (Slice 23), and Call and Court are planned for Slice 32. Under #164 (M3), Play stops being a verb — it is boredom's relief, and the `played` pulse, that other verbs' effects can cause — and Touch, Grab, Push, Pull, Throw and Drop join. Speak is reserved for M6 (Words).
+A kind of action a sprite can take: Approach, Eat, Drink, Hit, Play, Retreat, Rest or Wander. Mate and BreedAlone join in M2 (Slice 23), and Call and Court in Slice 32. Under #164 (M3), Play stops being a verb — it is boredom's relief, and the `played` pulse, that other verbs' effects can cause — and Touch, Grab, Push, Pull, Throw and Drop join. Speak is reserved for M6 (Words).
 _Avoid_: command (the player's commands are different), move
 
 **Holding** (#164 / M3):
@@ -505,7 +505,7 @@ What a sprite learns about someone that hurt it by its own doing, such as a spri
 _Avoid_: bad (bad is about touching), wariness (a passing mood), threat
 
 **Individual**:
-A particular sprite that another remembers, with what it has learned about it: its worth and how frightening it is. Individuals are learned fast, fade, and are forgotten once faded or dead. On the Brain tab each one is nested under Sprites, by the name the player gave it, or by its number.
+A particular sprite that another remembers, with what it has learned about it: its worth, how frightening it is, and how familiar it is. Seeing a sprite is enough to remember it (Slice 32), but one known only by sight is judged as sprites in general are. Individuals are learned fast, fade, and are forgotten once faded or dead. On the Brain tab each one is nested under Sprites, by the name the player gave it, or by its number.
 _Avoid_: acquaintance, contact, relationship
 
 **Category summary**:
@@ -537,7 +537,7 @@ The need whose instinct did most to make a sprite choose a verb. A fruitless try
 _Avoid_: reason, goal
 
 **Familiarity**:
-How well a sprite knows an object type, or sprites, from having attended to it. Its opposite is **novelty**: how new the thing still is to the sprite. An apple is new to a sprite that knows only berries. Slice 32 plans to give a sprite a familiarity with each individual it remembers too, from time spent seeing it and from playing together, which fades slowly; strangers will be those it hardly knows.
+How well a sprite knows an object type, or sprites, from having attended to it. Its opposite is **novelty**: how new the thing still is to the sprite. An apple is new to a sprite that knows only berries. Since Slice 32 a sprite has a familiarity with each individual it remembers too, from time spent seeing it and from playing together, which fades slowly; strangers are those it hardly knows. The brain reads it of the sprite it attends to as `target_familiar`.
 _Avoid_: knowledge, acquaintance
 
 **Curiosity**:

@@ -20,6 +20,25 @@ fn pack() -> DataPack {
     DataPack::builtin().expect("built-in data pack is valid")
 }
 
+/// The built-in pack, in which a female may lay alone at once (M2 design
+/// §15.7).
+fn lone() -> DataPack {
+    let physiology = include_str!("../../../data/physiology.ron")
+        .replace("alone_after: 4500,", "alone_after: 0,");
+    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, text)| {
+            let text = if path == "physiology.ron" {
+                &physiology[..]
+            } else {
+                text
+            };
+            (path, text)
+        })
+        .collect();
+    DataPack::from_sources(&sources).expect("valid pack")
+}
+
 /// A field of grass with `young` newborn starter sprites along the top row
 /// and `adults` grown ones along the next.
 fn field(young: u16, adults: u16) -> World {
@@ -170,7 +189,7 @@ fn the_eggs_are_at_the_bottom_of_each_column() {
     // M2 design §14.2: an egg is the youngest a sprite can be, so the eggs
     // are stacked under the young. A mother laying alone (§10.4) and her
     // egg are a column half egg, half adult.
-    let pack = pack();
+    let pack = lone();
     let mother = Genome::from_ron(
         r#"(format: 1, genes: [
             InitialConcentration(chem: "feminiser", value: 1.0),

@@ -2,8 +2,8 @@
 ┌─ Sprites ── sorted by number ──────────────────────────────────────────────────────── esc close ─┐
 │ Sprite       Age  Life stage  Drive        Doing                                                 │
 │ Sprite #5  4,217  adult       -            Wandering off · 5 tiles to go                         │
-│ Sprite #6  4,798  adult       -            Wandering off · 9 tiles to go                         │
-│ Sprite #7  4,139  adult       -            Wandering off · 6 tiles to go                         │
+│ Sprite #6  4,767  adult       -            Wandering off · 7 tiles to go                         │
+│ Sprite #7  4,779  adult       -            Wandering off · 5 tiles to go                         │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │

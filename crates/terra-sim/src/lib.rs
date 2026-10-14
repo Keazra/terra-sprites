@@ -14,6 +14,7 @@ mod breeding;
 mod categories;
 mod command;
 mod config;
+mod courtship;
 mod cp437;
 mod cursor;
 mod data;

@@ -8,11 +8,15 @@
 //! from lone eggs lived against young from pairs; then how far the species'
 //! genes moved from the starter genome's (§12, G4); then the genes the
 //! starter lacks that the living carry, and in how many each works, and
-//! the genes they lost and doubled (§13). The bars: sprites alive at the end in at least 8 of 10
-//! seeds, and never more than the world's limit; at least 3 gene numbers
-//! moved by a tenth the same way in every seed (§12.7); and in at least 5
-//! of 10 seeds, a gene the starter lacks carried by at least a tenth of the
-//! living (§13).
+//! the genes they lost and doubled (§13); then courtship (§15.9): the
+//! share of eggs laid alone, of eggs from pairs that danced for each other
+//! first, partners, and the sexes of the adults. The bars: sprites alive at
+//! the end in at least 8 of 10 seeds, and never more than the world's
+//! limit; at least 3 gene numbers moved by a tenth the same way in every
+//! seed (§12.7); in at least 5 of 10 seeds, a gene the starter lacks
+//! carried by at least a tenth of the living (§13); at most 1 egg in 50
+//! laid alone over all seeds, and none above 1 in 20; and at least 9 in 10
+//! of pairs' eggs after a dance each way (§15.9).
 //!
 //! `cargo run --release -p terra-sim --example generations`
 //!
@@ -29,7 +33,7 @@ use std::sync::Mutex;
 
 use terra_sim::{
     DataPack, DeathCause, EntityId, EventKind, Expression, GeneView, Genome, LifeStage, Outcome,
-    Switch, Verb, World, WorldConfig,
+    Sex, Switch, Target, Verb, World, WorldConfig,
 };
 
 /// Ticks in an hour at 1×, 1.25 ticks a second (design §6.6).
@@ -88,6 +92,21 @@ struct Run {
     hunger: u64,
     thirst: u64,
     hurt: u64,
+    /// Courtship (M2 design §15.9): pairs' eggs laid after the two danced
+    /// for each other since their last egg together, and those laid by kin; partners made, made again by
+    /// one who'd had one, parted and lost to death; calls; and the male
+    /// and female adults alive at the end.
+    danced_first: u64,
+    kin_eggs: u64,
+    paired: u64,
+    paired_again: u64,
+    parted: u64,
+    lost: u64,
+    calls: u64,
+    males: usize,
+    females: usize,
+    /// The ticks it ran.
+    ticks: u64,
 }
 
 fn main() -> ExitCode {
@@ -152,6 +171,7 @@ fn main() -> ExitCode {
     flaws(&runs);
     evolution(&starter, &runs);
     copy_and_change(&runs);
+    courtship(&runs);
     ExitCode::SUCCESS
 }
 
@@ -625,17 +645,30 @@ fn run(
     ticks: u64,
 ) -> Run {
     let mut world = World::new(config.clone(), data.clone(), seed);
-    let mut run = Run::default();
+    let mut run = Run {
+        ticks,
+        ..Run::default()
+    };
     let mut generation: BTreeMap<EntityId, u32> =
         world.sprites().map(|sprite| (sprite.id(), 0)).collect();
     let mut hatchlings = Vec::new();
     let mut lone_eggs = BTreeSet::new();
+    // Who has danced for whom, and who has had a partner (M2 design §15).
+    let mut danced: BTreeSet<(EntityId, EntityId)> = BTreeSet::new();
+    let mut had_partner: BTreeSet<EntityId> = BTreeSet::new();
     for _ in 0..ticks {
         for event in world.step() {
             match event.kind {
                 EventKind::Laid { egg, by, with } => {
                     if with.is_none() {
                         lone_eggs.insert(egg);
+                    }
+                    if let Some(with) = with {
+                        // Danced for each other since the pair's last egg.
+                        let both = danced.remove(&(by, with)) & danced.remove(&(with, by));
+                        run.danced_first += u64::from(both);
+                        let kin = world.sprite(by).is_some_and(|she| she.is_kin(with));
+                        run.kin_eggs += u64::from(kin);
                     }
                     let parents = [Some(by), with];
                     let deepest = parents
@@ -689,6 +722,27 @@ fn run(
                     outcome: Outcome::Failed,
                     ..
                 } => run.fruitless += 1,
+                EventKind::ActionEnded {
+                    id,
+                    verb: Verb::Court,
+                    outcome: Outcome::Applied,
+                    ref action,
+                } => {
+                    if let Some(Target::Sprite(them)) = action.target {
+                        danced.insert((id, them));
+                    }
+                }
+                EventKind::ActionStarted {
+                    verb: Verb::Call, ..
+                } => run.calls += 1,
+                EventKind::Paired { a, b } => {
+                    run.paired += 1;
+                    for id in [a, b] {
+                        run.paired_again += u64::from(!had_partner.insert(id));
+                    }
+                }
+                EventKind::Parted { .. } => run.parted += 1,
+                EventKind::LostPartner { .. } => run.lost += 1,
                 _ => {}
             }
         }
@@ -704,6 +758,12 @@ fn run(
     }
     run.eggs = world.eggs().count();
     run.alive = world.sprites().count();
+    for sprite in world.sprites().filter(|s| s.life_stage().is_grown()) {
+        match sprite.sex() {
+            Sex::Male => run.males += 1,
+            Sex::Female => run.females += 1,
+        }
+    }
     run.numbers = middles(&world, starter);
     run.flaws_at_end = flaw_load(&world);
     run.genes = gene_pool(&world, starter_genes);
@@ -936,4 +996,72 @@ fn parse(args: &[String]) -> Result<Options, String> {
         }
     }
     Ok(options)
+}
+
+/// Courtship (M2 design §15.9): for each seed, the share of eggs laid
+/// alone; of the eggs laid by pairs, the share laid after the two danced
+/// for each other, and by kin; partners made, made again by a sprite that
+/// had had one, parted after too long apart and lost to death; calls an
+/// hour; and the male and female adults alive at the end. Then the bars.
+fn courtship(runs: &[(u64, Run)]) {
+    println!(
+        "\nCourtship: eggs laid alone, and of pairs' eggs those after a dance each way and those \
+         by kin; partners made, made again, parted and lost; calls an hour; adults at the end."
+    );
+    println!(
+        "\n{:>5} {:>7} {:>8} {:>5} {:>7} {:>6} {:>7} {:>5} {:>7} {:>6} {:>8}",
+        "Seed",
+        "Alone",
+        "Danced",
+        "Kin",
+        "Paired",
+        "Again",
+        "Parted",
+        "Lost",
+        "Calls/h",
+        "Males",
+        "Females"
+    );
+    let share = |part: u64, whole: u64| {
+        if whole == 0 {
+            "-".to_string()
+        } else {
+            format!("{:.1}%", 100.0 * part as f64 / whole as f64)
+        }
+    };
+    let (mut alone, mut eggs, mut danced, mut pairs) = (0, 0, 0, 0);
+    let mut worst: f64 = 0.0;
+    for (seed, run) in runs {
+        let laid = run.mated + run.alone;
+        println!(
+            "{seed:>5} {:>7} {:>8} {:>5} {:>7} {:>6} {:>7} {:>5} {:>7.0} {:>6} {:>8}",
+            share(run.alone, laid),
+            share(run.danced_first, run.mated),
+            run.kin_eggs,
+            run.paired,
+            run.paired_again,
+            run.parted,
+            run.lost,
+            run.calls as f64 / (run.ticks as f64 / HOUR),
+            run.males,
+            run.females
+        );
+        alone += run.alone;
+        eggs += laid;
+        danced += run.danced_first;
+        pairs += run.mated;
+        if laid > 0 {
+            worst = worst.max(run.alone as f64 / laid as f64);
+        }
+    }
+    println!(
+        "\nLaid alone: {} of all eggs (at most 1 in 50, 2%), and at most {:.1}% in a seed (at \
+         most 1 in 20, 5%).",
+        share(alone, eggs),
+        100.0 * worst
+    );
+    println!(
+        "After a dance each way: {} of pairs' eggs (at least 9 in 10, 90%).",
+        share(danced, pairs)
+    );
 }

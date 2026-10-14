@@ -58,6 +58,14 @@ pub(crate) enum Source {
     /// (M2 design §10): the gap between the two levels; 0 unless attention
     /// is on a sprite that has hatched.
     Differs(LocusRef),
+    /// How well it knows the sprite it attends to, from 0 to 1 (M2 design
+    /// §15.2); 0 unless attention is on a sprite.
+    Familiar,
+    /// 1 while attention is on its partner (M2 design §15.4), else 0.
+    Partner,
+    /// 1 while attention is on its kin (M2 design §15.5): a parent, a young
+    /// one of its own, or a brother or sister; else 0.
+    Kin,
     /// 1 while attention is on this category, else 0.
     Attended(CategoryId),
     /// The attended target's path cost, over the flood's reach.
@@ -106,13 +114,18 @@ pub(crate) struct InputEntry {
 
 /// What an entry reads, by name: in the sprite's own body; with `Target`,
 /// in the body of the sprite it attends to; or with `Differs`, how far that
-/// differs from its own (M2 design §10).
+/// differs from its own (M2 design §10). Or what it knows of the sprite it
+/// attends to: how well it knows it, and whether it's its partner or kin
+/// (M2 design §15).
 #[derive(Debug, Clone, Deserialize)]
 enum ReadsEntry {
     Chem(String),
     Locus(String),
     Target(Box<ReadsEntry>),
     Differs(Box<ReadsEntry>),
+    Familiar,
+    Partner,
+    Kin,
 }
 
 /// The Target inputs as `(id, name, source)`: one for each of the
@@ -224,6 +237,20 @@ fn brain_inputs(
                     entry.name
                 )));
             }
+            ReadsEntry::Target(reads) | ReadsEntry::Differs(reads)
+                if matches!(
+                    **reads,
+                    ReadsEntry::Familiar | ReadsEntry::Partner | ReadsEntry::Kin
+                ) =>
+            {
+                return Err(invalid(format!(
+                    "`{}` reads what the sprite attended to knows, but a sprite knows only its own mind",
+                    entry.name
+                )));
+            }
+            ReadsEntry::Familiar => Source::Familiar,
+            ReadsEntry::Partner => Source::Partner,
+            ReadsEntry::Kin => Source::Kin,
             ReadsEntry::Target(reads) => {
                 Source::Shown(state_source(&entry.name, reads, chemicals, loci)?)
             }
@@ -299,8 +326,12 @@ fn state_source(
             }
             Ok(LocusRef::Locus(found.id))
         }
-        ReadsEntry::Target(_) | ReadsEntry::Differs(_) => {
-            unreachable!("the caller unwraps a Target or Differs")
+        ReadsEntry::Target(_)
+        | ReadsEntry::Differs(_)
+        | ReadsEntry::Familiar
+        | ReadsEntry::Partner
+        | ReadsEntry::Kin => {
+            unreachable!("the caller unwraps a Target or Differs, and reads what's known itself")
         }
     }
 }

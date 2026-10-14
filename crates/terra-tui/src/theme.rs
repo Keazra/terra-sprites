@@ -54,6 +54,10 @@ pub enum Emote {
     Failed,
     /// It's resting.
     Resting,
+    /// It danced for another sprite (M2 design §15.8).
+    Dancing,
+    /// It called (M2 design §15.8).
+    Calling,
 }
 
 impl SemanticTile {
@@ -77,12 +81,21 @@ impl SemanticTile {
 
     /// The tiles a theme may leave out, each with the tile drawn in its
     /// place: a theme from before the young had a look of their own draws
-    /// them as grown (M2 design §9.6).
-    pub const OPTIONAL: [(SemanticTile, SemanticTile); 2] = [
+    /// them as grown (M2 design §9.6), and one from before courtship draws a
+    /// dance and a call as pleased (§15.8).
+    pub const OPTIONAL: [(SemanticTile, SemanticTile); 4] = [
         (SemanticTile::YoungSprite, SemanticTile::Sprite),
         (
             SemanticTile::SelectedYoungSprite,
             SemanticTile::SelectedSprite,
+        ),
+        (
+            SemanticTile::Emote(Emote::Dancing),
+            SemanticTile::Emote(Emote::Pleased),
+        ),
+        (
+            SemanticTile::Emote(Emote::Calling),
+            SemanticTile::Emote(Emote::Pleased),
         ),
     ];
 }

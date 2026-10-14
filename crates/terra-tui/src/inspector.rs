@@ -1,7 +1,7 @@
 //! What the inspector shows (design §6.1): its title, and the lines of the
 //! open tab, for drawing and for knowing how far a tab scrolls.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use ratatui::layout::{Margin, Position};
 use ratatui::style::{Color, Style};
@@ -240,8 +240,10 @@ pub(crate) fn doing_line(sprite: &SpriteView, app: &App, world: &World) -> Optio
         })
 }
 
-/// A sprite's sex and fertility, and its parents, if it has any (M2 design
-/// §10): `male · fertile · turning 40%`, `parents Pip #12 and Bo #7`.
+/// A sprite's sex and fertility, and its parents and partner, if it has
+/// any (M2 design §10, §15.8): `male · fertile · turning 40%`, `parents Pip
+/// #12 and Bo #7`, `partner Kit #20`, or once its partner has died, until it
+/// pairs again, `partner Kit #20 · died`.
 fn family_lines(sprite: &SpriteView, data: &Words) -> Vec<String> {
     let mut line = format!(" {}", sprite.sex().name());
     if sprite.is_fertile() {
@@ -254,6 +256,10 @@ fn family_lines(sprite: &SpriteView, data: &Words) -> Vec<String> {
     let mut lines = vec![line];
     if let Some(parents) = parents_text(sprite.parents(), data) {
         lines.push(format!(" parents {parents}"));
+    }
+    if let Some((partner, died)) = sprite.partner() {
+        let died = if died { " · died" } else { "" };
+        lines.push(format!(" partner {}{died}", data.label(partner)));
     }
     lines
 }
@@ -391,6 +397,7 @@ fn action_line(action: &ActionView, detail: bool, data: &Words) -> String {
         Verb::Wander => wander_line(action.progress),
         Verb::Rest => rest_line(action.progress),
         Verb::BreedAlone => breed_alone_line(action.progress),
+        Verb::Call => call_line(action.progress),
         _ => aimed_line(action, data),
     };
     plain.unwrap_or_else(|| exact_line(action, data))
@@ -406,14 +413,19 @@ fn aimed_line(action: &ActionView, data: &Words) -> Option<String> {
         true => format!("{what} it remembers"),
         false => what.clone(),
     };
+    // Out of sight, it goes to where the call came from (M2 design §15.8).
+    let call = action.heard.is_some() && !matches!(action.progress, Progress::Ended(_));
     let going = match action.verb {
+        _ if call => format!("Going to {what}'s call"),
         Verb::Eat => format!("Going to eat {aim}"),
         Verb::Drink if action.remembered => format!("Going to drink at {aim}"),
         Verb::Drink => "Going to drink".into(),
         Verb::Approach => format!("Going over to {aim}"),
         Verb::Play => format!("Going to play with {aim}"),
         Verb::Hit => format!("Going to hit {aim}"),
-        Verb::Mate => format!("Going to mate with {aim}"),
+        // Mating is pairing, in the player's words (M2 design §15.8).
+        Verb::Mate => format!("Going to pair with {aim}"),
+        Verb::Court => format!("Courting {aim}"),
         Verb::Retreat => format!("Backing away from {what}"),
         _ => return None,
     };
@@ -435,7 +447,8 @@ fn aimed_line(action: &ActionView, data: &Words) -> Option<String> {
                 Verb::Eat => format!("Couldn't eat from {what}"),
                 Verb::Play => format!("Couldn't play with {what}"),
                 Verb::Hit => format!("Couldn't hit {what}"),
-                Verb::Mate => format!("Couldn't mate with {what}"),
+                Verb::Mate => format!("Couldn't pair with {what}"),
+                Verb::Court => format!("Couldn't dance for {what}"),
                 _ => "Couldn't drink".into(),
             };
             and_if_hurt(couldnt, action)
@@ -476,12 +489,15 @@ pub(crate) fn observed_line(action: &ActionView, data: &Words) -> String {
         Verb::Play => format!("Went to play with {what}"),
         Verb::Hit => format!("Went to hit {what}"),
         Verb::Retreat => format!("Backed away from {what}"),
+        Verb::Mate => format!("Went to pair with {what}"),
+        Verb::Court => format!("Went to court {what}"),
+        Verb::Call => "Called".into(),
         verb => verb_name(verb).to_lowercase(),
     };
     let how = match outcome {
         Outcome::Applied => {
             return match action.verb {
-                Verb::Wander | Verb::Rest | Verb::Approach | Verb::Retreat => set_out,
+                Verb::Wander | Verb::Rest | Verb::Approach | Verb::Retreat | Verb::Call => set_out,
                 _ => done_line(action, &what, data),
             };
         }
@@ -515,6 +531,7 @@ pub(crate) fn done_to_line(actor: EntityId, action: &ActionView, data: &Words) -
     match action.verb {
         Verb::Hit => Some(format!("Was hit by {who}")),
         Verb::Play => Some(format!("{who} played with it")),
+        Verb::Court => Some(format!("{who} danced for it")),
         _ => None,
     }
 }
@@ -555,7 +572,8 @@ fn deed(action: &ActionView, what: &str, data: &Words) -> String {
         Verb::Play => format!("played with {what}"),
         Verb::Hit => format!("hit {what}"),
         Verb::Retreat => format!("backed away from {what}"),
-        Verb::Mate => format!("mated with {what}"),
+        Verb::Mate => format!("paired with {what}"),
+        Verb::Court => format!("danced for {what}"),
         _ => format!("got to {what}"),
     }
 }
@@ -653,6 +671,16 @@ fn breed_alone_line(progress: Progress) -> Option<String> {
     })
 }
 
+/// A Call in plain words (M2 design §15.8): calling while it listens.
+fn call_line(progress: Progress) -> Option<String> {
+    match progress {
+        Progress::Resting { .. } => Some("Calling".into()),
+        Progress::Ended(Outcome::Applied) => Some("Called".into()),
+        Progress::Ended(outcome) => ended_line(outcome),
+        _ => None,
+    }
+}
+
 /// A Rest in plain words, if it has any for `progress`.
 fn rest_line(progress: Progress) -> Option<String> {
     match progress {
@@ -691,10 +719,11 @@ fn exact_line(action: &ActionView, data: &Words) -> String {
         Progress::Resting { ticks, of } => format!("{ticks} of {of} ticks"),
         Progress::Ended(outcome) => outcome_name(outcome).to_string(),
     };
-    // A trip to a remembered place (M2 design §7).
-    let head = match action.remembered {
-        true => format!("{head} · from memory"),
-        false => head,
+    // A trip to a remembered place (M2 design §7), or to a call (§15.1).
+    let head = match (action.remembered, action.heard) {
+        (true, Some(_)) => format!("{head} · by ear"),
+        (true, None) => format!("{head} · from memory"),
+        (false, _) => head,
     };
     format!("{head} · {state}")
 }
@@ -722,6 +751,8 @@ fn verb_name(verb: Verb) -> &'static str {
         Verb::Mate => "MATE",
         Verb::BreedAlone => "BREED_ALONE",
         Verb::Speak => "SPEAK",
+        Verb::Court => "COURT",
+        Verb::Call => "CALL",
     }
 }
 
@@ -846,13 +877,19 @@ fn brain_rows(sprite: &SpriteView, app: &App, world: &World) -> Vec<(String, Opt
             amount: memory.amount,
         })
         .collect();
+    // How well it knows each sprite it remembers (M2 design §15.8).
+    let known: BTreeMap<EntityId, f32> = sprite
+        .known_sprites()
+        .into_iter()
+        .filter(|&(_, familiarity)| level(familiarity) != ".00")
+        .collect();
     let mut gap = true;
-    let blocks = memory_blocks(remembered);
+    let blocks = memory_blocks(remembered, &known);
     if !blocks.is_empty() {
         lines.push((String::new(), None));
         gap = false;
         for block in blocks {
-            push_block(&mut lines, block, data, app.lessons_open());
+            push_block(&mut lines, block, data, app.lessons_open(), &known);
         }
     }
     // Its remembered places, best remembered first (M2 design §7.5): what,
@@ -902,8 +939,10 @@ enum Block {
 
 /// Groups lessons under each thing. `remembered` is already loudest first,
 /// ties in listed order, so appending as they come keeps that order, and a
-/// block is placed where its loudest lesson sits. No second sort.
-fn memory_blocks(remembered: Vec<Lesson>) -> Vec<Block> {
+/// block is placed where its loudest lesson sits. No second sort. A sprite
+/// it `known`s but has learned nothing about follows those it has, best
+/// known first (M2 design §15.8).
+fn memory_blocks(remembered: Vec<Lesson>, known: &BTreeMap<EntityId, f32>) -> Vec<Block> {
     let mut blocks = Vec::new();
     for lesson in remembered {
         match lesson_home(&lesson.learned) {
@@ -922,6 +961,20 @@ fn memory_blocks(remembered: Vec<Lesson>) -> Vec<Block> {
                     None => individuals.push((id, vec![lesson])),
                 }
             }
+        }
+    }
+    let mut by_sight: Vec<(EntityId, f32)> = known
+        .iter()
+        .map(|(&id, &familiarity)| (id, familiarity))
+        .collect();
+    by_sight.sort_by(|a, b| b.1.total_cmp(&a.1));
+    for (id, _) in by_sight {
+        let listed = blocks.iter().any(|block| match block {
+            Block::Sprites { individuals, .. } => individuals.iter().any(|(got, _)| *got == id),
+            Block::Headed { .. } => false,
+        });
+        if !listed {
+            sprites(&mut blocks).1.push((id, Vec::new()));
         }
     }
     blocks
@@ -987,11 +1040,12 @@ fn push_block(
     block: Block,
     data: &Words,
     open: &BTreeSet<MemoryOpen>,
+    known: &BTreeMap<EntityId, f32>,
 ) {
     match block {
         Block::Headed { key, lessons } => {
             let name = heading_name(&key, data);
-            push_headed(lines, " ", &name, lessons, key, data, open);
+            push_headed(lines, " ", &name, None, lessons, key, data, open);
         }
         Block::Sprites {
             general,
@@ -1004,7 +1058,8 @@ fn push_block(
             for (id, lessons) in individuals {
                 let key = MemoryOpen::Sprite(id);
                 let name = sprite_heading(id, data);
-                push_headed(lines, "   ", &name, lessons, key, data, open);
+                let familiarity = known.get(&id).copied();
+                push_headed(lines, "   ", &name, familiarity, lessons, key, data, open);
             }
         }
     }
@@ -1019,11 +1074,14 @@ fn heading_name(key: &MemoryOpen, data: &Words) -> String {
     }
 }
 
-/// A heading, then its lessons: three of them, or all if `key` is open.
+/// A heading, then how well it knows a remembered sprite, if it does, and
+/// its lessons: three of them, or all if `key` is open.
+#[expect(clippy::too_many_arguments, reason = "a heading and all it holds")]
 fn push_headed(
     lines: &mut Vec<(String, Option<MemoryOpen>)>,
     head: &str,
     name: &str,
+    familiarity: Option<f32>,
     lessons: Vec<Lesson>,
     key: MemoryOpen,
     data: &Words,
@@ -1045,6 +1103,11 @@ fn push_headed(
     };
     // Lessons sit two columns in from the heading.
     let lesson_indent = format!("{head}  ");
+    if let Some(familiarity) = familiarity {
+        for row in scored(&lesson_indent, "known", &level(familiarity)) {
+            lines.push((row, None));
+        }
+    }
     for lesson in shown {
         push_lesson(lines, lesson, &lesson_indent, data);
     }
@@ -1262,6 +1325,8 @@ fn doing(verb: Verb) -> &'static str {
         Verb::Mate => "mating with",
         Verb::BreedAlone => "breeding alone by",
         Verb::Speak => "speaking to",
+        Verb::Court => "courting",
+        Verb::Call => "calling by",
     }
 }
 
@@ -2032,6 +2097,18 @@ pub(crate) fn event_line(event: &Event, data: &Words) -> Option<String> {
             })
         }
         EventKind::TurnedFemale { id } => Some(format!("{} turned female", data.label(*id))),
+        // Partners (M2 design §15.8).
+        EventKind::Paired { a, b } => Some(format!(
+            "{} and {} are now partners",
+            data.label(*a),
+            data.label(*b)
+        )),
+        EventKind::LostPartner { id, partner } => {
+            Some(format!("{} lost {}", data.label(*id), data.label(*partner)))
+        }
+        EventKind::Parted { a, b } => {
+            Some(format!("{} and {} parted", data.label(*a), data.label(*b)))
+        }
         EventKind::LearnedMilestone { id, learned, good } => {
             Some(learned_line(*id, learned, *good, data))
         }
@@ -2120,6 +2197,8 @@ pub(crate) fn event_sprites(event: &Event) -> Vec<EntityId> {
         | EventKind::GrewOld { id }
         | EventKind::TurnedFemale { id }
         | EventKind::ActionStarted { id, .. } => vec![*id],
+        EventKind::Paired { a, b } | EventKind::Parted { a, b } => vec![*a, *b],
+        EventKind::LostPartner { id, partner } => vec![*id, *partner],
         EventKind::Laid { egg, by, with } => [Some(*by), *with, Some(*egg)]
             .into_iter()
             .flatten()
@@ -2222,6 +2301,7 @@ mod tests {
             hurt: Hurt::default(),
             progress,
             remembered: false,
+            heard: None,
         }
     }
 
@@ -2236,6 +2316,7 @@ mod tests {
             hurt: Hurt::default(),
             progress,
             remembered: false,
+            heard: None,
         }
     }
 
@@ -2328,6 +2409,7 @@ mod tests {
             hurt: Hurt::default(),
             progress,
             remembered: false,
+            heard: None,
         }
     }
 
@@ -2666,6 +2748,108 @@ mod tests {
         assert_eq!(with_article("apple"), "an apple");
         assert_eq!(with_article("Apple"), "an Apple");
         assert_eq!(with_article("Egg"), "an Egg");
+    }
+
+    #[test]
+    fn the_action_line_says_a_sprite_calls_courts_goes_to_a_call_and_pairs() {
+        // M2 design §15.8.
+        use Outcome::*;
+        use Progress::*;
+        let bo = Target::Sprite(EntityId(7));
+        let call = |progress| ActionView {
+            verb: Verb::Call,
+            ..rest(progress)
+        };
+        let to_call = |verb, progress| ActionView {
+            remembered: true,
+            heard: Some(Pos { x: 30, y: 4 }),
+            ..aimed(verb, bo, 101, progress)
+        };
+        let tried = |view: ActionView| ActionView {
+            attempted: true,
+            ..view
+        };
+        let cases = [
+            (
+                call(Resting { ticks: 3, of: 10 }),
+                "Calling",
+                "CALL · 3 of 10 ticks",
+            ),
+            (call(Ended(Applied)), "Called", "CALL · applied"),
+            (
+                aimed(Verb::Court, bo, 101, Walking { steps_left: 2 }),
+                "Courting Sprite #7 · 2 tiles to go",
+                "COURT → sprite #7 · walking (2 tiles)",
+            ),
+            (
+                aimed(Verb::Court, bo, 101, Ended(Applied)),
+                "Danced for Sprite #7",
+                "COURT → sprite #7 · applied",
+            ),
+            (
+                to_call(Verb::Approach, Walking { steps_left: 24 }),
+                "Going to Sprite #7's call · 24 tiles to go",
+                "APPROACH → sprite #7 · by ear · walking (24 tiles)",
+            ),
+            (
+                to_call(Verb::Court, Waiting { blocked_ticks: 2 }),
+                "Going to Sprite #7's call · waiting to get past",
+                "COURT → sprite #7 · by ear · blocked (2 ticks)",
+            ),
+            (
+                aimed(Verb::Mate, bo, 101, Walking { steps_left: 1 }),
+                "Going to pair with Sprite #7 · 1 tile to go",
+                "MATE → sprite #7 · walking (1 tile)",
+            ),
+            (
+                aimed(Verb::Mate, bo, 101, Ended(Applied)),
+                "Paired with Sprite #7",
+                "MATE → sprite #7 · applied",
+            ),
+            (
+                tried(aimed(Verb::Mate, bo, 101, Ended(Failed))),
+                "Couldn't pair with Sprite #7",
+                "MATE → sprite #7 · failed",
+            ),
+        ];
+        for (view, plain, exact) in cases {
+            assert_eq!(action_line(&view, false, &pack()), plain, "{view:?}");
+            assert_eq!(action_line(&view, true, &pack()), exact, "{view:?}");
+        }
+        let danced = aimed(Verb::Court, bo, 101, Ended(Applied));
+        assert_eq!(
+            observed_line(&danced, &pack()),
+            "Danced for Sprite #7",
+            "observed"
+        );
+        assert_eq!(
+            done_to_line(EntityId(3), &danced, &pack()).as_deref(),
+            Some("Sprite #3 danced for it")
+        );
+        assert_eq!(observed_line(&call(Ended(Applied)), &pack()), "Called");
+    }
+
+    #[test]
+    fn the_event_log_says_who_are_partners_and_who_lost_or_parted_from_one() {
+        // M2 design §15.8.
+        let (pip, bo) = (EntityId(12), EntityId(7));
+        let line = |kind| event_line(&Event { tick: 1, kind }, &pack());
+        assert_eq!(
+            line(EventKind::Paired { a: pip, b: bo }).as_deref(),
+            Some("Sprite #12 and Sprite #7 are now partners")
+        );
+        assert_eq!(
+            line(EventKind::LostPartner {
+                id: pip,
+                partner: bo
+            })
+            .as_deref(),
+            Some("Sprite #12 lost Sprite #7")
+        );
+        assert_eq!(
+            line(EventKind::Parted { a: pip, b: bo }).as_deref(),
+            Some("Sprite #12 and Sprite #7 parted")
+        );
     }
 
     #[test]

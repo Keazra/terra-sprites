@@ -8,6 +8,7 @@ use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::breeding;
+use crate::courtship;
 use crate::data::DataPack;
 use crate::decide::decide;
 use crate::events::{Event, EventKind};
@@ -72,7 +73,8 @@ pub enum Progress {
     /// Held up: it had the points for its next step but couldn't take it,
     /// this many ticks in a row.
     Waiting { blocked_ticks: u32 },
-    /// Resting, `ticks` into a bout of `of`.
+    /// Resting, or listening after a call (M2 design §15.1), `ticks` into
+    /// a bout of `of`.
     Resting { ticks: u32, of: u32 },
     /// It ended, and how.
     Ended(Outcome),
@@ -101,8 +103,11 @@ pub struct ActionView {
     /// How far it has got, or how it ended.
     pub progress: Progress,
     /// Whether it's a trip to a remembered place still out of sight (M2
-    /// design §7).
+    /// design §7), or to a call (§15.1).
     pub remembered: bool,
+    /// The tile the call it's going to came from, while the caller is out
+    /// of sight (M2 design §15.1).
+    pub heard: Option<Pos>,
 }
 
 /// Which sprites an action's attempt hurt: the actor, biting a thornbush
@@ -151,6 +156,10 @@ pub(crate) struct Action {
     /// The ticks past the timeout a trip has, for its walk (M2 design §7).
     #[serde(default)]
     pub(crate) extra_ticks: u32,
+    /// The tile the call a trip goes to came from, while the caller is out
+    /// of sight (M2 design §15.1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) heard: Option<Pos>,
 }
 
 /// A sprite's way to where it's heading (design §3.7).
@@ -202,32 +211,40 @@ impl Action {
             scripted,
             remembered: false,
             extra_ticks: 0,
+            heard: None,
         }
     }
 }
 
-/// The way to a remembered place (M2 design §7): the goal tile it heads
-/// for, the tiles to it, and what walking them costs, in terrain units.
+/// The way to a remembered place (M2 design §7), or to a call (§15.1): the
+/// goal tile it heads for, the tiles to it, what walking them costs, in
+/// terrain units, and the tile a call came from.
 #[derive(Debug, Clone)]
 pub(crate) struct Way {
     pub(crate) goal: Pos,
     pub(crate) path: Vec<Pos>,
     pub(crate) cost: u32,
+    pub(crate) heard: Option<Pos>,
 }
 
 /// The way `sprite` takes to `target`, a remembered place out of sight (M2
 /// design §7), treating other sprites as `occupied` says: the cheapest way
 /// to its nearest goal tile, in a flood out to the place's distance plus the
-/// sprite's sense radius, since it has walked there before. `None` if
-/// there's none.
+/// sprite's sense radius, since it has walked there before. A sprite
+/// `heard` calling from a tile is looked for on that tile (§15.1). `None`
+/// if there's no way there.
 pub(crate) fn trip(
     state: &WorldState,
     data: &DataPack,
     sprite: &Sprite,
     target: Target,
+    heard: Option<Pos>,
     occupied: Occupied,
 ) -> Option<Way> {
-    let (there, _) = state.whereabouts(data, target)?;
+    let there = match heard {
+        Some(from) => from,
+        None => state.whereabouts(data, target)?.0,
+    };
     let ground = Ground {
         map: &state.map,
         objects: &state.objects,
@@ -237,11 +254,15 @@ pub(crate) fn trip(
     let reach = sprite.program.traits.sense_radius.round() as u16;
     let radius = chebyshev(sprite.pos, there).saturating_add(reach);
     let search = Flood::new(ground, sprite.pos, radius, occupied, state.tick);
-    let goal = state.goal_for(data, &search, target)?;
+    let goal = match heard {
+        Some(from) => from,
+        None => state.goal_for(data, &search, target)?,
+    };
     Some(Way {
         goal,
         path: search.path_to(goal)?,
         cost: search.cost(goal)?,
+        heard,
     })
 }
 
@@ -263,6 +284,7 @@ pub(crate) fn set_off(action: &mut Action, way: Way, speed: f32, tick: u64) {
 fn keep_to(action: &mut Action, way: Way) {
     action.walk.destination = Some(way.goal);
     action.walk.committed = Some(way.path);
+    action.heard = way.heard;
 }
 
 /// What a flood adds for a tile holding another sprite (design §3.6).
@@ -277,6 +299,13 @@ pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
         Progress::Ended(outcome)
     } else if action.verb == Verb::Rest {
         let of = data.physiology().actions.rest_bout;
+        Progress::Resting {
+            ticks: action.ticks,
+            of,
+        }
+    } else if action.verb == Verb::Call {
+        // A call is a bout of listening (M2 design §15.1).
+        let of = data.physiology().calls.listen;
         Progress::Resting {
             ticks: action.ticks,
             of,
@@ -304,6 +333,7 @@ pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
         hurt: action.hurt,
         progress,
         remembered: action.remembered,
+        heard: action.heard,
     })
 }
 
@@ -337,6 +367,7 @@ pub(crate) fn sense_and_decide(
         physiology.movement.flood_refresh,
         physiology.actions.timeout,
     );
+    let heard_for = physiology.calls.heard_for;
     let ids: Vec<EntityId> = state.sprites.iter().map(|(id, _)| id).collect();
     for id in ids.into_iter().filter(|id| !dying.contains(id)) {
         let sprite = state.sprites.get(id).expect("a sprite taking its turn");
@@ -383,25 +414,39 @@ pub(crate) fn sense_and_decide(
                     .walk
                     .destination
                     .is_some_and(|to| flood.cost(to).is_none());
+            // A trip to a call heads for where the caller last called from:
+            // calling again from elsewhere, it's heard there. Got there with
+            // the caller still out of sight, it has lost the trail, and
+            // forgets the call (M2 design §15.1).
+            let caller = action.target.and_then(Target::sprite);
+            let call = action.heard.map(|from| {
+                let latest = caller.and_then(|c| sprite.heard_from(c, state.tick, heard_for));
+                latest.map_or(from, |heard| heard.from)
+            });
+            let called_again = call != action.heard;
+            let lost_trail = aim == Some(None) && call == Some(sprite.pos);
             // A trip to a remembered place goes out of sight; once its
             // target is in reach, it carries on as any action (M2 design
             // §7). Off its way, it finds the way again, round sprites if
             // they held it up; with none, it's blocked, and tries again
             // another time.
             let trip_way = match (action.remembered, aim) {
-                (true, Some(None)) if action.walk.committed.is_none() => {
+                (true, Some(None)) if action.walk.committed.is_none() || called_again => {
                     let occupied = if action.walk.blocked_ticks > 0 {
                         Occupied::Closed
                     } else {
                         Occupied::Penalty(penalty(data))
                     };
                     let target = action.target.expect("a trip has a target");
-                    Some(trip(state, data, sprite, target, occupied))
+                    Some(trip(state, data, sprite, target, call, occupied))
                 }
                 _ => None,
             };
             let allowed = u64::from(timeout) + u64::from(action.extra_ticks);
-            let outcome = if gone || !action.remembered && action.walk.committed.is_none() && lost {
+            let outcome = if gone
+                || lost_trail
+                || !action.remembered && action.walk.committed.is_none() && lost
+            {
                 Some(Outcome::Failed)
             } else if matches!(trip_way, Some(None)) {
                 Some(Outcome::Blocked)
@@ -411,6 +456,9 @@ pub(crate) fn sense_and_decide(
                 None
             };
             let sprite = state.sprites.get_mut(id).expect("the same sprite");
+            if lost_trail && let Some(caller) = caller {
+                sprite.forget_call(caller);
+            }
             let action = sprite.action.as_mut().expect("an action");
             match outcome {
                 Some(outcome) => {
@@ -424,9 +472,10 @@ pub(crate) fn sense_and_decide(
                     if let Some(Some(_)) = aim
                         && action.remembered
                     {
-                        // In reach: no longer from memory.
+                        // In reach: no longer from memory, nor by ear.
                         action.remembered = false;
                         action.walk.committed = None;
+                        action.heard = None;
                     }
                     if let Some(Some(goal)) = aim {
                         // A committed way round leads to where the target
@@ -553,6 +602,7 @@ pub(crate) fn end(
         hurt: action.hurt,
         progress: Progress::Ended(outcome),
         remembered: action.remembered,
+        heard: action.heard,
     };
     events.push(Event {
         tick,
@@ -579,6 +629,7 @@ pub(crate) fn resolve(
     events: &mut Vec<Event>,
 ) {
     let rest_bout = data.physiology().actions.rest_bout;
+    let listen = data.physiology().calls.listen;
     let mut order: Vec<EntityId> = state
         .sprites
         .iter()
@@ -641,6 +692,17 @@ pub(crate) fn resolve(
             let action = sprite.action.as_mut().expect("an action");
             action.attempted = true;
             end(action, id, outcome, state.tick, events);
+        } else if action.verb == Verb::Call {
+            // It calls once, where it stands, then listens for `listen`
+            // ticks (M2 design §15.1).
+            let first = !action.attempted;
+            action.attempted = true;
+            if action.ticks >= listen {
+                end(action, id, Outcome::Applied, state.tick, events);
+            }
+            if first {
+                courtship::call(state, data, id);
+            }
         } else if action.verb == Verb::Retreat {
             let target = action.target.expect("a retreat has a target");
             if !moved.contains(&id) {
@@ -662,8 +724,9 @@ pub(crate) fn resolve(
 }
 
 /// Sprite `id`, on a goal tile of `target`, ends its aimed action: an
-/// Approach has arrived, and Eat, Drink or Mate makes its one attempt
-/// (design §5.5, M2 design §5).
+/// Approach has arrived, and Eat, Drink, Mate or Court makes its one
+/// attempt (design §5.5, M2 design §5, §15.3). Two sprites that play
+/// together get to know each other (§15.2).
 fn act(
     state: &mut WorldState,
     data: &DataPack,
@@ -678,8 +741,12 @@ fn act(
     let (outcome, hurt) = match verb {
         Verb::Approach => (Outcome::Applied, Hurt::default()),
         Verb::Mate => breeding::mate(state, data, id, target, events),
+        Verb::Court => courtship::court(state, data, id, target),
         verb => verbs::attempt(state, data, id, verb, target, events),
     };
+    if let (Verb::Play, Outcome::Applied, Some(other)) = (verb, outcome, target.sprite()) {
+        courtship::played(state, data, id, other);
+    }
     let gone = state.whereabouts(data, target).is_none();
     let action = state
         .sprites

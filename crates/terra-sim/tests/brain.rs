@@ -22,7 +22,18 @@ fn starter_with(extra: &[&str], data: &DataPack) -> Genome {
 /// A world drawn from `rows`, with `objects`, and a sprite on `pos` made
 /// from `genome`; each bush in it starts mature with 6 fruit.
 fn world(rows: &[&str], objects: &[(Pos, &str)], pos: Pos, genome: Genome, seed: u64) -> World {
-    let data = builtin();
+    world_in(builtin(), rows, objects, pos, genome, seed)
+}
+
+/// The same, with `data`.
+fn world_in(
+    data: DataPack,
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    pos: Pos,
+    genome: Genome,
+    seed: u64,
+) -> World {
     let map = Map::from_ascii(rows, &data).expect("valid drawing");
     let sprites = [(pos, Some(genome))];
     let scenario = Scenario {
@@ -205,10 +216,13 @@ fn eating_and_drinking_relieve_hunger_and_thirst_the_next_tick() {
 fn a_content_sprite_mostly_wanders() {
     // Design v16 §5.8: `always → Wander` wins most choices; with nothing
     // pressing, a sprite also idly tries things on what it looks at, since
-    // it may try anything (about 3 choices in 10, measured).
-    let data = builtin();
+    // it may try anything (about 3 choices in 10, measured). Never
+    // fertile, so never aroused, it never calls for a mate (M2 design
+    // §15.1).
+    let data = barren();
     let content = starter_with(&[], &data);
-    let mut world = world(&FIELD, &[(at(8, 3), "berry_bush")], at(1, 3), content, 3);
+    let bush = [(at(8, 3), "berry_bush")];
+    let mut world = world_in(data, &FIELD, &bush, at(1, 3), content, 3);
     let id = world.sprites().next().expect("the sprite").id();
     let mut verbs = Vec::new();
     for _ in 0..400 {

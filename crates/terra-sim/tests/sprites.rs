@@ -177,6 +177,7 @@ fn a_sprite_that_never_hungers_or_thirsts_dies_of_old_age_once_its_genes_give_ou
             ("hydration_loss: 0.00033", "hydration_loss: 0.0"),
             ("growth: 0.3,", "growth: 0.0,"),
             ("ticks: 3600,", "ticks: 1000,"),
+            ("calls: (cost: 0.002,", "calls: (cost: 0.0,"),
         ],
     );
     let genome = r#"(format: 1, genes: [
@@ -384,6 +385,8 @@ fn a_sprite_lists_its_chemicals_in_pack_order_with_their_kinds() {
     expected.extend((0..16).map(|n| (format!("h{n}"), Hormone)));
     expected.push(("feminiser".to_string(), Hormone));
     expected.push(("longing".to_string(), Hormone));
+    expected.push(("receptivity".to_string(), Hormone));
+    expected.push(("grief".to_string(), Hormone));
     assert_eq!(listed, expected);
 }
 

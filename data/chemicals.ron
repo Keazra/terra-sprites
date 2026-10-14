@@ -47,4 +47,11 @@
     // Longing builds while a sprite sees no male adult; in the starter
     // genome it's what leads a female to breed alone (M2 design §10).
     (id: 49, name: "longing",    class: Hormone),
+    // Receptivity: a pair can mate only once the female's is at least
+    // physiology's `breeding.receptive`; in the starter genome dances raise
+    // it (M2 design §15.3).
+    (id: 50, name: "receptivity", class: Hormone),
+    // Grief: in the starter genome losing a partner raises it, and it holds
+    // arousal down (M2 design §15.4).
+    (id: 51, name: "grief",      class: Hormone),
 ]

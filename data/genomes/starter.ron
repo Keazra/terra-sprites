@@ -74,12 +74,37 @@
         Emitter(locus: Locus("female_near"), mode: Level, gain: -0.01, chem: "feminiser"),
         HalfLife(chem: "feminiser", ticks: 600),
 
-        // Longing builds while it sees no male adult and falls fast while it
-        // sees one. A female can breed alone only once it's past physiology's
-        // level (M2 design §10): about 1,100 ticks with no male in sight.
-        Emitter(locus: Locus("male_near"), mode: Level, invert: true, threshold: 0.5, gain: 0.001, chem: "longing", from: Adult),
+        // Longing builds while it sees or hears no male adult and falls fast
+        // while it does: it's whether a female wants to breed alone, which
+        // her body allows only after about an hour with no male seen or
+        // heard (M2 design §10, §15.7). It builds over about that hour, so
+        // she calls for a mate before she tries.
+        Emitter(locus: Locus("male_near"), mode: Level, invert: true, threshold: 0.5, gain: 0.0002, chem: "longing", from: Adult),
         Emitter(locus: Locus("male_near"), mode: Level, gain: -0.01, chem: "longing"),
         HalfLife(chem: "longing", ticks: 3000),
+
+        // Receptivity rises a little when it's danced for, much more when it
+        // dances back, and fades within about ten minutes; it drops at once
+        // when it breeds. Two or three dances each make a female receptive
+        // enough to mate, but being danced for alone never does (M2 design
+        // §15.3).
+        Emitter(locus: Locus("courted"), mode: Level, gain: 0.04, chem: "receptivity"),
+        Emitter(locus: Locus("danced"), mode: Level, gain: 0.2, chem: "receptivity"),
+        Emitter(locus: Locus("bred"), mode: Level, gain: -1.0, chem: "receptivity"),
+        HalfLife(chem: "receptivity", ticks: 600),
+        // A dance leaves h1, so a male waits a little before he dances
+        // again, and being danced for leaves h2, so for a minute or so after
+        // a sprite would dance back.
+        Emitter(locus: Locus("danced"), mode: Level, gain: 1.0, chem: "h1"),
+        HalfLife(chem: "h1", ticks: 40),
+        Emitter(locus: Locus("courted"), mode: Level, gain: 1.0, chem: "h2"),
+        HalfLife(chem: "h2", ticks: 60),
+
+        // Losing a partner brings grief, which holds arousal down for about
+        // 1,500 ticks (M2 design §15.4).
+        Emitter(locus: Locus("lost_partner"), mode: Level, gain: 1.0, chem: "grief"),
+        Emitter(locus: Chem("grief"), mode: Level, threshold: 0.3, gain: -0.2, chem: "arousal"),
+        HalfLife(chem: "grief", ticks: 860),
 
         // Pain comes with new injury, thorns and blows, and fades fast.
         Emitter(locus: Locus("pricked"), mode: Level, gain: 0.3, chem: "pain"),
@@ -158,11 +183,43 @@
         Instinct(inputs: [("crowdedness", false), ("attended_sprite", false)], verb: Hit, weight: 0.6, from: Adult),
         // A cornered sprite, looking at a sprite, turns on it.
         Instinct(inputs: [("cornered", false), ("attended_sprite", false)], verb: Hit, weight: 1.0),
+        // Calling costs energy, so a sprite shies from it, unless it's
+        // aroused with no adult of the other sex seen or heard (M2 design
+        // §15.1).
+        Instinct(inputs: [("always", false)], verb: Call, weight: -0.5),
+        Instinct(inputs: [("arousal", false), ("female", true), ("female_near", true)], verb: Call, weight: 1.0),
+        Instinct(inputs: [("arousal", false), ("female", false), ("male_near", true)], verb: Call, weight: 1.0),
+        // An aroused sprite plays with a stranger of the other sex, in sight
+        // or heard calling, so they get to know each other (§15.2), and
+        // goes to its partner.
+        Instinct(inputs: [("arousal", false), ("target_other_sex", false), ("target_familiar", true)], verb: Play, weight: 1.0),
+        Instinct(inputs: [("arousal", false), ("target_partner", false)], verb: Approach, weight: 1.0),
+        // He dances, she chooses (§15.3). An aroused sprite dances for an
+        // aroused one it knows well, but a female only once she's danced
+        // for, and a male waits a little between dances and stops once she
+        // looks receptive. One lately danced for by a sprite it knows dances
+        // back, the more readily the healthier it looks. Neither dances for its own sex nor its kin, and one with a
+        // partner dances only for its partner (§15.4, §15.5). A link is at
+        // most 1 either way (M1 design §5.4), so each of these can cancel
+        // the others.
+        Instinct(inputs: [("arousal", false), ("target_arousal", false), ("target_familiar", false)], verb: Court, weight: 1.0),
+        Instinct(inputs: [("female", false), ("h2", true)], verb: Court, weight: -1.0),
+        Instinct(inputs: [("female", true), ("h1", false)], verb: Court, weight: -1.0),
+        Instinct(inputs: [("h2", false), ("target_familiar", false), ("target_condition", false)], verb: Court, weight: 1.0),
+        Instinct(inputs: [("target_other_sex", true)], verb: Court, weight: -1.0),
+        Instinct(inputs: [("target_kin", false)], verb: Court, weight: -1.0),
+        Instinct(inputs: [("female", true), ("target_receptivity", false)], verb: Court, weight: -1.0),
+        Instinct(inputs: [("paired", false), ("target_partner", true)], verb: Court, weight: -1.0),
         // Arousal leads to mating with the sprite attended to, if its body
-        // language shows it's aroused too, and of the other sex; in a female
-        // longing for a male, to laying an egg alone (M2 design §10).
-        // Mating works only between a male and a female, both fertile.
-        Instinct(inputs: [("arousal", false), ("target_arousal", false), ("target_other_sex", false)], verb: Mate, weight: 1.5),
+        // language shows it's aroused too, and of the other sex, but not
+        // while she isn't receptive, and never readily with kin (M2 design
+        // §10, §15.3, §15.5). In a female longing for a male, it leads to
+        // laying an egg alone. Mating works only between a male and a
+        // female, both fertile, and she receptive enough.
+        Instinct(inputs: [("arousal", false), ("target_arousal", false), ("target_other_sex", false)], verb: Mate, weight: 1.0),
+        Instinct(inputs: [("female", true), ("target_receptivity", true)], verb: Mate, weight: -1.0),
+        Instinct(inputs: [("female", false), ("receptivity", true)], verb: Mate, weight: -1.0),
+        Instinct(inputs: [("target_kin", false)], verb: Mate, weight: -1.0),
         Instinct(inputs: [("arousal", false), ("female", false), ("longing", false)], verb: BreedAlone, weight: 1.0),
         // A mild habit of wandering, which any drive that has grown outweighs.
         Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3),

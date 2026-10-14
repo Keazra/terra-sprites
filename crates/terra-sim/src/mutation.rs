@@ -497,8 +497,8 @@ mod tests {
     /// `physiology.ron` writes them.
     const MUTATION: &str =
         "    mutation: (chance: 0.01, small: 0.2, large: (share: 0.75, most: 2.0)),\n";
-    const FLAWS: &str = "    flaws: (arise: 0.007, founders: 0.06, health: 0.5, wear: 0.05),\n";
-    const COPY_AND_CHANGE: &str = "    copy_and_change: (doubled: 0.00052, lost: 0.00052, changed: 0.00052, on_copy: 0.75, longest: 2.0),\n";
+    const FLAWS: &str = "    flaws: (arise: 0.005, founders: 0.043, health: 0.5, wear: 0.05),\n";
+    const COPY_AND_CHANGE: &str = "    copy_and_change: (doubled: 0.00039, lost: 0.00039, changed: 0.00039, on_copy: 0.75, longest: 2.0),\n";
 
     /// The built-in pack without copy and change, so copying keeps each gene
     /// where it is and changes only values.
@@ -667,7 +667,7 @@ mod tests {
     #[test]
     fn about_one_egg_in_two_gets_a_new_flaw_only_in_genes_that_can_weaken() {
         // M2 design §12: each sound copy of a gene that can weaken gets a
-        // flaw with the chance `flaws.arise` (0.007), so about one egg of
+        // flaw with the chance `flaws.arise` (0.005), so about one egg of
         // the starter's in two has a new one.
         let data = values_only();
         let starter = data.starter();
@@ -691,7 +691,7 @@ mod tests {
     #[test]
     fn a_founder_carries_about_three_flaws_all_hidden() {
         // M2 design §12: each gene of the starter's that can weaken has a
-        // flaw in one copy with the chance `flaws.founders` (0.06).
+        // flaw in one copy with the chance `flaws.founders` (0.043).
         let data = builtin();
         let starter = data.starter();
         let can_weaken = starter
@@ -711,7 +711,7 @@ mod tests {
             }
         }
         let each = carried as f32 / 1_000.0;
-        let expected = 0.06 * can_weaken as f32;
+        let expected = 0.043 * can_weaken as f32;
         assert!(
             (2.0..4.0).contains(&expected),
             "{can_weaken} genes can weaken"
@@ -792,7 +792,7 @@ mod tests {
             &[
                 ("mutation: (chance: 0.01,", "mutation: (chance: 1.0,"),
                 (
-                    "flaws: (arise: 0.007, founders: 0.06,",
+                    "flaws: (arise: 0.005, founders: 0.043,",
                     "flaws: (arise: 1.0, founders: 1.0,",
                 ),
                 (COPY_AND_CHANGE, rules),
@@ -907,7 +907,7 @@ mod tests {
 
     #[test]
     fn about_one_hatchling_of_the_starter_s_in_ten_has_a_whole_gene_doubled_lost_or_changed() {
-        // M2 design §13: each with the chance 0.00052 a gene, so about one
+        // M2 design §13: each with the chance 0.00039 a gene, so about one
         // hatchling in ten, each kind as likely as the others, but that a
         // trait has nothing to change.
         let data = builtin();

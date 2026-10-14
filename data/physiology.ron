@@ -65,21 +65,34 @@
     // both above `fed`, and `rest` ticks or more after its last egg, in a
     // pack with an egg. Every sprite hatches male; an adult male
     // turns female for good once its `feminiser` hormone is above
-    // `turns_female`. A female can breed alone only once her `longing`
-    // hormone has reached `breeds_alone`. The need `drive` drives breeding:
-    // whatever the genes, it works only between adults, and what easing it
-    // teaches is only about the partner (M2 design §5). A pair's egg takes
-    // its genes from one parent in stretches: at each gene it switches to
-    // the other with the chance `crossover` (M2 design §12).
+    // `turns_female`. A female can breed alone only after `alone_after`
+    // ticks, an hour at 1x, with no male adult seen or heard (M2 design
+    // §15.7). A pair can mate only once the female's `receptivity` hormone
+    // is at least `receptive` (§15.3). Two sprites that have an egg
+    // together are partners, until one dies or they go `apart` ticks, an
+    // hour at 1x, with neither seeing nor hearing the other (§15.4). The
+    // need `drive` drives breeding: whatever the genes, it works only
+    // between adults, and what easing it teaches is only about the partner
+    // (M2 design §5). A pair's egg takes its genes from one parent in
+    // stretches: at each gene it switches to the other with the chance
+    // `crossover` (M2 design §12).
     breeding: (
         cost: 0.3,
-        fed: 0.5,
+        fed: 0.4,
         rest: 1500,
         turns_female: 0.8,
-        breeds_alone: 0.5,
+        alone_after: 4500,
+        receptive: 0.5,
+        apart: 4500,
         drive: "arousal",
         crossover: 0.1,
     ),
+    // Calls (M2 design §15.1): a call costs the caller `cost` energy, and is
+    // heard wherever its way there costs at most `reach`, by each terrain's
+    // `sound` in terrain.ron, about 30 tiles over grass. A hearer knows who
+    // called and where from for `heard_for` ticks. A caller stands
+    // listening for `listen` ticks after it calls.
+    calls: (cost: 0.002, reach: 300, heard_for: 150, listen: 10),
     // Each cause-of-death tally halves every this many ticks (design §4.10).
     cause_fade: 350,
 
@@ -156,6 +169,13 @@
         // (design §5.6, #187).
         "taught_rate":       (range: (0.0, 1.0),     default: 0.9),
         "taught_fade":       (range: (0.0, 0.01),    default: 0.00000625),
+        // Getting to know a sprite (M2 design §15.2): familiarity grows by
+        // `befriend_rate` each tick it's in sight, from strangers to well
+        // known in about 750 ticks, 10 minutes at 1x; a social play adds
+        // `befriend_play`; and it fades as slowly as a good lesson.
+        "befriend_rate":     (range: (0.0, 0.01),    default: 0.0013),
+        "befriend_play":     (range: (0.0, 1.0),     default: 0.1),
+        "befriend_fade":     (range: (0.0, 0.01),    default: 0.000025),
     },
     // The range of each receptor target in `loci.ron`. Each rests at 1.0 when
     // no receptor writes it.
@@ -190,7 +210,7 @@
     // with the chance `founders`: about three each. A gene with both copies
     // flawed is broken: it's born with `health`, and counts as `wear` of
     // wear, bringing old age sooner (M2 design §9.4). First guesses.
-    flaws: (arise: 0.007, founders: 0.06, health: 0.5, wear: 0.05),
+    flaws: (arise: 0.005, founders: 0.043, health: 0.5, wear: 0.05),
     // Copy and change (M2 design §13): as an egg's genes are copied, each
     // gene is now and then doubled, lost, or changed in what it does: what
     // an instinct reacts to or its action, what draws the eye to what, or
@@ -198,7 +218,7 @@
     // lost or changed. `on_copy` of the changes are made on a fresh copy, so
     // the original still works. A genome never grows past `longest` times the
     // starter's length. First guesses.
-    copy_and_change: (doubled: 0.00052, lost: 0.00052, changed: 0.00052, on_copy: 0.75, longest: 2.0),
+    copy_and_change: (doubled: 0.00039, lost: 0.00039, changed: 0.00039, on_copy: 0.75, longest: 2.0),
 
     // A learned value this far from 0 is a lesson, which the event log
     // announces once (design v16 §5.6).

@@ -206,6 +206,14 @@ fn an_unwalkable_terrain_gives_nothing_but_walkable_false() {
 }
 
 #[test]
+fn a_terrain_that_carries_sound_weakens_a_call_crossing_it() {
+    // M2 design §15.1: a `sound` of 0 would carry a call forever.
+    let grass = "(walkable: true, step_cost: 10, fertility: 1.0, drinkable: false, allows_fixtures: true, sound: 0)";
+    assert_invalid_terrain(&terrain_with("grass", grass), "grass");
+    assert_invalid_terrain(&terrain_with("rock", "(walkable: false, sound: 0)"), "rock");
+}
+
+#[test]
 fn a_pack_without_a_chemicals_file_is_rejected() {
     let result = DataPack::from_sources(&[
         ("pack.ron", r#"(name: "test", version: "1")"#),
@@ -852,11 +860,23 @@ fn breeding_s_hormone_levels_are_fractions() {
         "turns_female: 1.2",
         "breeding.turns_female",
     );
+    // A pack from before Slice 32 gates breeding alone on longing.
     assert_invalid_physiology(
-        "breeds_alone: 0.5",
-        "breeds_alone: -0.5",
+        "alone_after: 4500,",
+        "breeds_alone: -0.5, alone_after: 4500,",
         "breeding.breeds_alone",
     );
+    // M2 design §15.3.
+    assert_invalid_physiology("receptive: 0.5", "receptive: 1.5", "breeding.receptive");
+}
+
+#[test]
+fn partners_part_and_calls_are_heard_and_listened_for_a_tick_or_more() {
+    // M2 design §15.1, §15.4.
+    assert_invalid_physiology("apart: 4500", "apart: 0", "breeding.apart");
+    assert_invalid_physiology("heard_for: 150", "heard_for: 0", "calls.heard_for");
+    assert_invalid_physiology("listen: 10", "listen: 0", "calls.listen");
+    assert_invalid_physiology("calls: (cost: 0.002", "calls: (cost: 1.5", "calls.cost");
 }
 
 #[test]
@@ -943,22 +963,22 @@ fn copying_errors_flaws_and_crossover_are_shares_and_large_changes_at_least_none
     ] {
         assert_invalid_physiology(mutation, &format!("mutation: ({to}),"), word);
     }
-    let flaws = "flaws: (arise: 0.007, founders: 0.06, health: 0.5, wear: 0.05),";
+    let flaws = "flaws: (arise: 0.005, founders: 0.043, health: 0.5, wear: 0.05),";
     for (to, word) in [
         (
-            "arise: 1.5, founders: 0.06, health: 0.5, wear: 0.05",
+            "arise: 1.5, founders: 0.043, health: 0.5, wear: 0.05",
             "flaws.arise",
         ),
         (
-            "arise: 0.007, founders: -0.1, health: 0.5, wear: 0.05",
+            "arise: 0.005, founders: -0.1, health: 0.5, wear: 0.05",
             "flaws.founders",
         ),
         (
-            "arise: 0.007, founders: 0.06, health: 2.0, wear: 0.05",
+            "arise: 0.005, founders: 0.043, health: 2.0, wear: 0.05",
             "flaws.health",
         ),
         (
-            "arise: 0.007, founders: 0.06, health: 0.5, wear: -0.05",
+            "arise: 0.005, founders: 0.043, health: 0.5, wear: -0.05",
             "flaws.wear",
         ),
     ] {
@@ -971,22 +991,22 @@ fn copying_errors_flaws_and_crossover_are_shares_and_large_changes_at_least_none
 fn copy_and_change_s_chances_are_shares_that_add_up_to_at_most_one() {
     // M2 design §13: one draw a gene decides which, if any, happens to it,
     // and a genome may grow at least as long as the starter.
-    let line = "copy_and_change: (doubled: 0.00052, lost: 0.00052, changed: 0.00052, on_copy: 0.75, longest: 2.0),";
+    let line = "copy_and_change: (doubled: 0.00039, lost: 0.00039, changed: 0.00039, on_copy: 0.75, longest: 2.0),";
     for (to, word) in [
         (
-            "doubled: 1.5, lost: 0.00052, changed: 0.00052, on_copy: 0.75, longest: 2.0",
+            "doubled: 1.5, lost: 0.00039, changed: 0.00039, on_copy: 0.75, longest: 2.0",
             "copy_and_change.doubled",
         ),
         (
-            "doubled: 0.00052, lost: -0.1, changed: 0.00052, on_copy: 0.75, longest: 2.0",
+            "doubled: 0.00039, lost: -0.1, changed: 0.00039, on_copy: 0.75, longest: 2.0",
             "copy_and_change.lost",
         ),
         (
-            "doubled: 0.00052, lost: 0.00052, changed: 2.0, on_copy: 0.75, longest: 2.0",
+            "doubled: 0.00039, lost: 0.00039, changed: 2.0, on_copy: 0.75, longest: 2.0",
             "copy_and_change.changed",
         ),
         (
-            "doubled: 0.00052, lost: 0.00052, changed: 0.00052, on_copy: 1.5, longest: 2.0",
+            "doubled: 0.00039, lost: 0.00039, changed: 0.00039, on_copy: 1.5, longest: 2.0",
             "copy_and_change.on_copy",
         ),
         (
@@ -994,7 +1014,7 @@ fn copy_and_change_s_chances_are_shares_that_add_up_to_at_most_one() {
             "add up to more than 1",
         ),
         (
-            "doubled: 0.00052, lost: 0.00052, changed: 0.00052, on_copy: 0.75, longest: 0.5",
+            "doubled: 0.00039, lost: 0.00039, changed: 0.00039, on_copy: 0.75, longest: 0.5",
             "copy_and_change.longest",
         ),
     ] {
@@ -1210,7 +1230,8 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
     ]);
     // State inputs carry on from 64, past the IDs kept for Target inputs,
     // with breeding's from 66, its body language, and longing (M2 design
-    // §10).
+    // §10); then courtship's, its body language, and what a sprite knows of
+    // the one it attends to (§15).
     expected.extend([
         (64, "cornered"),
         (65, "fruitless"),
@@ -1222,6 +1243,20 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
         (71, "target_arousal"),
         (72, "target_other_sex"),
         (73, "longing"),
+        (74, "heard"),
+        (75, "courted"),
+        (76, "danced"),
+        (77, "lost_partner"),
+        (78, "partner_near"),
+        (79, "paired"),
+        (80, "male_near"),
+        (81, "receptivity"),
+        (82, "grief"),
+        (83, "target_condition"),
+        (84, "target_receptivity"),
+        (85, "target_familiar"),
+        (86, "target_partner"),
+        (87, "target_kin"),
     ]);
     assert_eq!(inputs, expected);
 }
@@ -1289,6 +1324,11 @@ fn a_brain_input_reads_a_drive_hormone_body_sensor_or_pulse_that_exists() {
         (r#"Target(Chem("energy"))"#, "energy"),
         (r#"Differs(Locus("glow"))"#, "glow"),
         (r#"Target(Differs(Locus("female")))"#, "attends to"),
+        // What a sprite knows of others is its own mind, not one it sees
+        // (M2 design §15.2).
+        ("Target(Familiar)", "own mind"),
+        ("Target(Partner)", "own mind"),
+        ("Differs(Kin)", "own mind"),
     ] {
         let text = format!(r#"(inputs: [(id: 1, name: "odd", reads: {reads})], needs: [])"#);
         assert_invalid("brain_io.ron", &text, word);

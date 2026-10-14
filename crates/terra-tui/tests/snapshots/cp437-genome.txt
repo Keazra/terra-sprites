@@ -6,21 +6,21 @@
 │·            ∙         ·  ·     ·                   ││ HALF-LIVES                                 │
 │   ∙                      ·                ∙        ││ hunger halves every 1,828 ticks            │
 │ *  *        ╔════════════════════════╗        ∙  · ││ thirst halves every 1,833 ticks            │
-│             ║.....X........,,,,::~~≈≈║ ·           ││ arousal halves every 479 ticks             │
+│             ║..............,,,,::~~≈≈║ ·           ││ arousal halves every 479 ticks             │
 │           ∙ ║.'..........♠.,,,,::~~≈≈║   ∙   ·     ││ feminiser halves every 543 ticks           │
-│  ∙*   · ∙   ║..•.##....☺...,,,,::~~≈≈║             ││ longing halves every 3,026 ticks           │
-│         ∙ · ║....##..............~~≈≈║            ∙││ pain halves every 18 ticks                 │
-│    *      · ║...☻...♦↓·..........~~≈≈║             ││ h0 halves every 280 ticks                  │
-│             ║.......→.←........::~~≈≈║             ││ EMITTERS                                   │
-│           ∙ ║.......·↑♦....☺...::~~≈≈║·  ·      ∙  ││ low energy → hunger +.00416 past .477      │
-│         ∙   ║..................::~~≈≈║    ·     ·  ││ ate → hunger -.523                         │
-│           · ╚════════════════════════╝             ││ low hydration → thirst +.00425 past .51    │
-│             ·        ·                   ∙      ·  ││ drank → thirst -.474                       │
-│                  *      ·     ·      ·        ·  ∙ ││ low stamina → tiredness +.00428 past .476  │
-│     ·            ·                          ·      ││ stamina → tiredness -.0973 past .583       │
-│       ∙                                            ││ always → boredom +.00022                   │
-│      ·                       ∙ *      ·            ││ played → boredom -.47                      │
-│ · ·      ·                            ·            ││ played social → boredom -.147              │
+│  ∙*   · ∙   ║..•.##.☺......,,,,::~~≈≈║             ││ longing halves every 3,026 ticks           │
+│         ∙ · ║....##..............~~≈≈║            ∙││ receptivity halves every 557 ticks         │
+│    *      · ║.......♦↓·..........~~≈≈║             ││ h1 halves every 37 ticks                   │
+│             ║....☻..→.←........::~~≈≈║             ││ h2 halves every 59 ticks                   │
+│           ∙ ║.......·↑♦....☺...::~~≈≈║·  ·      ∙  ││ grief halves every 801 ticks               │
+│         ∙   ║.........X........::~~≈≈║    ·     ·  ││ pain halves every 19 ticks                 │
+│           · ╚════════════════════════╝             ││ h0 halves every 276 ticks                  │
+│             ·        ·                   ∙      ·  ││ EMITTERS                                   │
+│                  *      ·     ·      ·        ·  ∙ ││ low energy → hunger +.00416 past .477      │
+│     ·            ·                          ·      ││ ate → hunger -.523                         │
+│       ∙                                            ││ low hydration → thirst +.00425 past .51    │
+│      ·                       ∙ *      ·            ││ drank → thirst -.474                       │
+│ · ·      ·                            ·            ││ low stamina → tiredness +.00428 past .476  │
 └────────────────────────────────────────────────────┘└────────────────────────────────────────────┘
 ┌─ Events ────────────────────────────────────────────────────────────────── [all] selected major ─┐
 │                                                                                                  │
