@@ -86,7 +86,7 @@ pub(crate) struct Program {
     /// genome order (design §4.3): the same until the stage or the genome
     /// changes, so genes that only weakened are compiled again without
     /// finding it afresh (#210).
-    pub(crate) expressed: Vec<Expression>,
+    expressed: Vec<Expression>,
 }
 
 /// A receptor target and the receptors aimed at it.
@@ -222,7 +222,7 @@ impl Program {
             genome,
             data,
             stage,
-            expressions(genome, data, stage),
+            &expressions(genome, data, stage),
             health,
         )
     }
@@ -235,7 +235,7 @@ impl Program {
         genome: &Genome,
         data: &DataPack,
         stage: LifeStage,
-        expressed: Vec<Expression>,
+        expressed: &[Expression],
         health: &[f32],
     ) -> Program {
         let range = |which: Trait| data.physiology().traits.range(which);
@@ -267,7 +267,7 @@ impl Program {
             })
             .collect();
         let mut weakening = (0.0, 0);
-        for (index, (gene, expression)) in genome.genes.iter().zip(&expressed).enumerate() {
+        for (index, (gene, expression)) in genome.genes.iter().zip(expressed).enumerate() {
             let strength = health_of(health, index);
             if frailty(gene) > 0.0 {
                 weakening = (weakening.0 + strength, weakening.1 + 1);
@@ -358,8 +358,14 @@ impl Program {
             change_emitters,
             targets,
             initial,
-            expressed,
+            expressed: expressed.to_vec(),
         }
+    }
+
+    /// How each gene is expressed at the life stage it was compiled for, in
+    /// genome order.
+    pub(crate) fn expressed(&self) -> &[Expression] {
+        &self.expressed
     }
 }
 

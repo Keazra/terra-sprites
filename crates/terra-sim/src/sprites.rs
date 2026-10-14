@@ -145,7 +145,13 @@ impl Sprite {
     /// Whether it sees `pos` (M2 design §10.1, §15): within its sight, in any
     /// direction.
     pub(crate) fn sees(&self, pos: Pos) -> bool {
-        chebyshev(self.pos, pos) <= self.sight()
+        self.seeing()(pos)
+    }
+
+    /// `sees`, with its sight found once, for looking at many tiles (#210).
+    pub(crate) fn seeing(&self) -> impl Fn(Pos) -> bool {
+        let (here, sight) = (self.pos, self.sight());
+        move |pos| chebyshev(here, pos) <= sight
     }
 
     /// How fast it walks on the tick `tick`, in move points (M2 design
@@ -199,7 +205,7 @@ impl Sprite {
         self.brain
             .reach(&self.genome, data, &expressed, &self.health);
         self.program =
-            Program::weakened_as(&self.genome, data, self.stage(), expressed, &self.health);
+            Program::weakened_as(&self.genome, data, self.stage(), &expressed, &self.health);
     }
 
     /// The same for its body's genes only, for when only they changed.
@@ -208,18 +214,18 @@ impl Sprite {
     }
 
     /// After genes weakened (M2 design §9.4), compiles its body's genes
-    /// again and sets the links of the instincts at `minds` to their
-    /// weakened weights. Its stage and genome are as they were, so each gene
-    /// is expressed as its program says, and the rest of the brain stays as
-    /// it is (#210).
-    fn reweaken(&mut self, data: &DataPack, minds: &[usize]) {
-        let expressed = std::mem::take(&mut self.program.expressed);
+    /// again and sets the links of the instincts at `instincts_hit` (places
+    /// in its genome) to their weakened weights. Its stage and genome are as
+    /// they were, so each gene is expressed as its program says, and the
+    /// rest of the brain stays as it is (#210).
+    fn reweaken(&mut self, data: &DataPack, instincts_hit: &[usize]) {
+        let expressed = self.program.expressed();
         debug_assert!(
             expressed == expressions(&self.genome, data, self.stage()),
             "its program was compiled for another stage"
         );
-        if !minds.is_empty() {
-            let weakened = minds.iter().map(|&index| {
+        if !instincts_hit.is_empty() {
+            let weakened = instincts_hit.iter().map(|&index| {
                 let strength = health_of(&self.health, index);
                 (&self.genome.genes[index], &expressed[index], strength)
             });
@@ -234,8 +240,13 @@ impl Sprite {
                 "the brain weakened in place isn't the one its genes make"
             );
         }
-        self.program =
-            Program::weakened_as(&self.genome, data, self.stage(), expressed, &self.health);
+        self.program = Program::weakened_as(
+            &self.genome,
+            data,
+            self.stage(),
+            self.program.expressed(),
+            &self.health,
+        );
     }
 
     /// Ages its genes for a tick (M2 design §9.4): while its injury is bad,
@@ -286,11 +297,12 @@ impl Sprite {
         // rest at random: the same damage on average, in work that doesn't
         // grow with the hits.
         let (rounds, decayed) = (decayed / n, decayed % n);
-        let mind =
+        // The brain reads only its instincts' health, so it weakens only the
+        // links of the instincts hit.
+        let instinct =
             |gene: &Gene| matches!(gene, Gene::Instinct { .. } | Gene::AttentionInstinct { .. });
         let mut weakened = false;
-        // The instincts hit, whose links the brain weakens.
-        let mut minds = Vec::new();
+        let mut instincts_hit = Vec::new();
         if rounds > 0 {
             let hit = rounds as f32 * decay.hit;
             for (index, (health, gene)) in
@@ -298,8 +310,8 @@ impl Sprite {
             {
                 if frailty(gene) > 0.0 {
                     *health = (*health - hit * frailty(gene)).max(0.0);
-                    if mind(gene) {
-                        minds.push(index);
+                    if instinct(gene) {
+                        instincts_hit.push(index);
                     }
                 }
             }
@@ -319,13 +331,12 @@ impl Sprite {
             let health = &mut self.health[index];
             *health = (*health - hit * frailty(gene)).max(0.0);
             weakened = true;
-            if mind(gene) {
-                minds.push(index);
+            if instinct(gene) {
+                instincts_hit.push(index);
             }
         }
-        // The brain reads only its instincts' health.
         if weakened {
-            self.reweaken(data, &minds);
+            self.reweaken(data, &instincts_hit);
         }
         weakened
     }

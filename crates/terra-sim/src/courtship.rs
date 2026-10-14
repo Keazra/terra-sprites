@@ -432,16 +432,15 @@ pub(crate) fn look_round(
             )
         })
         .collect();
-    let grown = |id: EntityId| {
+    let grown_sex = |id: EntityId| {
         let place = everyone.binary_search_by_key(&id, |&(id, ..)| id);
         place.ok().and_then(|place| everyone[place].2)
     };
     let company: BTreeMap<EntityId, Company> = sprites
         .iter()
         .map(|(id, sprite)| {
-            // Those it senses: those it sees, as `Sprite::sees` says, with
-            // its sight found once, and those it has heard.
-            let (here, sight) = (sprite.pos, sprite.sight());
+            // Those it senses: those it sees and those it has heard.
+            let sees = sprite.seeing();
             let mut seen = Vec::new();
             let (mut female_near, mut male_near) = (false, false);
             let mut sense = |sex: Option<Sex>| {
@@ -449,13 +448,13 @@ pub(crate) fn look_round(
                 male_near |= sex == Some(Sex::Male);
             };
             for &(other, pos, sex) in &everyone {
-                if other != id && chebyshev(here, pos) <= sight {
+                if other != id && sees(pos) {
                     seen.push(other);
                     sense(sex);
                 }
             }
             for heard in &sprite.heard {
-                sense(grown(heard.caller));
+                sense(grown_sex(heard.caller));
             }
             let partner_near = sprite.partner().is_some_and(|partner| {
                 seen.binary_search(&partner).is_ok()

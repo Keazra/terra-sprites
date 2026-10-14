@@ -98,11 +98,11 @@ pub(crate) struct BrainParams {
 
 impl BrainParams {
     pub(crate) fn express(genome: &Genome, data: &DataPack, stage: LifeStage) -> BrainParams {
-        BrainParams::expressed(genome, data, &expressions(genome, data, stage))
+        BrainParams::express_as(genome, data, &expressions(genome, data, stage))
     }
 
     /// The same, from how each gene is expressed, in genome order (#210).
-    fn expressed(genome: &Genome, data: &DataPack, expressed: &[Expression]) -> BrainParams {
+    fn express_as(genome: &Genome, data: &DataPack, expressed: &[Expression]) -> BrainParams {
         let ranges = &data.physiology().brain;
         let mut values: Vec<f32> = BrainParam::ALL
             .iter()
@@ -475,7 +475,7 @@ impl Brain {
             }
         }
         Brain {
-            params: BrainParams::expressed(genome, data, expressed),
+            params: BrainParams::express_as(genome, data, expressed),
             concepts,
             decision: Links::new(decision),
             attention: Links::new(attention),

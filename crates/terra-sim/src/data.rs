@@ -614,18 +614,18 @@ impl DataPack {
 
     /// The category with the ID `id`.
     pub(crate) fn category(&self, id: CategoryId) -> Option<&Category> {
-        self.categories
-            .binary_search_by_key(&id, |c| c.id)
-            .ok()
-            .map(|place| &self.categories[place])
+        self.category_place(id).map(|place| &self.categories[place])
     }
 
     /// Where the category `id` is in the pack's order, which must have it.
-    /// They're in ID order, so it's a binary search.
     pub(crate) fn category_index(&self, id: CategoryId) -> usize {
-        self.categories
-            .binary_search_by_key(&id, |c| c.id)
-            .expect("a category in the pack")
+        self.category_place(id).expect("a category in the pack")
+    }
+
+    /// Where the category `id` is in the pack's order. They're in ID order,
+    /// so it's a binary search (#210).
+    fn category_place(&self, id: CategoryId) -> Option<usize> {
+        self.categories.binary_search_by_key(&id, |c| c.id).ok()
     }
 
     /// The ID of the category called `name`.
