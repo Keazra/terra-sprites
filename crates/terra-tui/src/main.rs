@@ -450,7 +450,7 @@ fn fast_forward(args: &Args, hours: u64) -> ExitCode {
     if world.sprites().next().is_none() {
         println!("No sprite is left alive to measure the genes of.");
     } else if moved.is_empty() {
-        println!("No gene number has moved a tenth from the starter's yet.");
+        println!("No gene value has moved a tenth from the starter's yet.");
     } else {
         println!("Moved most from the starter's, as the middle value among the living:");
         let width = moved
@@ -465,7 +465,7 @@ fn fast_forward(args: &Args, hours: u64) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// How many gene numbers the end of a fast-forward lists as moved most.
+/// How many gene values the end of a fast-forward lists as moved most.
 const MOVED_LISTED: usize = 5;
 
 /// Ticks a second, for `ticks` run since `started`.

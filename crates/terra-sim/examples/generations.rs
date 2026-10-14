@@ -29,7 +29,7 @@ use std::sync::Mutex;
 
 use terra_sim::{
     DataPack, DeathCause, EntityId, EventKind, Expression, GeneView, Genome, LifeStage, Outcome,
-    Switch, Verb, World, WorldConfig, gene_numbers, middle_numbers,
+    Switch, Verb, World, WorldConfig, gene_values, middle_values,
 };
 
 /// Ticks in an hour at 1×, 1.25 ticks a second (design §6.6).
@@ -203,7 +203,7 @@ fn starter_genome(data: &DataPack) -> Genome {
 
 /// The starter genome's numbers, named, in genome order.
 fn starter(data: &DataPack) -> Vec<(String, f32)> {
-    gene_numbers(&starter_genome(data).genes(data))
+    gene_values(&starter_genome(data).genes(data))
 }
 
 /// The starter's genes, by what each does and when, with how many it has
@@ -796,7 +796,7 @@ fn copy_and_change(runs: &[(u64, Run)]) {
 /// `world`, eggs aside; empty if none is alive, and not a number where none
 /// has it (M2 design §13). By the end of a long run, all were hatched.
 fn middles(world: &World, starter: &[(String, f32)]) -> Vec<f32> {
-    middle_numbers(world, starter)
+    middle_values(world, starter)
         .map(|middles| {
             middles
                 .into_iter()

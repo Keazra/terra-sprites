@@ -1,8 +1,8 @@
-//! Gene numbers (M2 design §12, §16): each value a genome's genes carry,
-//! named for what its gene does and the field it fills, as `hunger → Eat:
-//! weight`. Following each one's middle value among the living is how a
-//! species is seen to drift from the starter genome, in the generations
-//! example (G4) and in fast-forward's genes table.
+//! Gene values (M2 design §12.7, §16.4), each named for what its gene does
+//! and the field it fills, as `hunger → Eat: weight`. Following each one's
+//! middle value among the living is how a species is seen to drift from
+//! the starter genome, in the generations example (G4, which calls them
+//! gene numbers) and in fast-forward's genes table.
 
 use std::collections::BTreeMap;
 
@@ -10,7 +10,7 @@ use crate::genome::GeneView;
 use crate::world::World;
 
 impl GeneView<'_> {
-    /// What the gene does, named, and its numbers, each with its field's
+    /// What the gene does, named, and its values, each with its field's
     /// name; none for a gene this build can't read.
     pub fn named(&self) -> Option<(String, Vec<(&'static str, f32)>)> {
         let named = match self {
@@ -93,33 +93,33 @@ impl GeneView<'_> {
     }
 }
 
-/// Each number in `genes`, named `what its gene does: its field`, in order
+/// Each value in `genes`, named `what its gene does: its field`, in order
 /// (design §4.3's value fields). A gene this build can't read has none.
-pub fn gene_numbers(genes: &[GeneView]) -> Vec<(String, f32)> {
-    let mut numbers = Vec::new();
+pub fn gene_values(genes: &[GeneView]) -> Vec<(String, f32)> {
+    let mut values = Vec::new();
     for (name, fields) in genes.iter().filter_map(GeneView::named) {
         for (field, value) in fields {
-            numbers.push((format!("{name}: {field}"), value));
+            values.push((format!("{name}: {field}"), value));
         }
     }
-    numbers
+    values
 }
 
-/// Each of `numbers`' middle value among the sprites alive in `world`,
-/// eggs aside, or `None` if none is alive. A sprite's numbers line up with
-/// `numbers` by name, the nth of a name with the nth of it there, wherever
+/// Each of `values`' middle among the sprites alive in `world`, eggs
+/// aside, or `None` if none is alive. A sprite's values line up with
+/// `values` by name, the nth of a name with the nth of it there, wherever
 /// it sits, since genes may be doubled, lost or changed (M2 design §13); a
-/// number no sprite has has no middle. With an even count, the middle is
+/// value no sprite has has no middle. With an even count, the middle is
 /// the higher of the two.
-pub fn middle_numbers(world: &World, numbers: &[(String, f32)]) -> Option<Vec<Option<f32>>> {
-    let mut columns: Vec<Vec<f32>> = vec![Vec::new(); numbers.len()];
+pub fn middle_values(world: &World, values: &[(String, f32)]) -> Option<Vec<Option<f32>>> {
+    let mut columns: Vec<Vec<f32>> = vec![Vec::new(); values.len()];
     let mut sprites = 0;
     for sprite in world.sprites() {
         sprites += 1;
         let genes: Vec<GeneView> = sprite.genes().into_iter().map(|(gene, _)| gene).collect();
-        let its = gene_numbers(&genes);
+        let its = gene_values(&genes);
         let mut nth: BTreeMap<&str, usize> = BTreeMap::new();
-        for (column, (name, _)) in columns.iter_mut().zip(numbers) {
+        for (column, (name, _)) in columns.iter_mut().zip(values) {
             let nth = nth.entry(name).or_insert(0);
             let value = its.iter().filter(|(its, _)| its == name).nth(*nth);
             if let Some(&(_, value)) = value {

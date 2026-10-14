@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
-use terra_sim::{DeathCause, EntityId, EventKind, LifeStage, World, gene_numbers, middle_numbers};
+use terra_sim::{DeathCause, EntityId, EventKind, LifeStage, World, gene_values, middle_values};
 
 use crate::text::{cause_name, group_thousands};
 
@@ -421,12 +421,12 @@ fn capitalised(text: &str) -> String {
     })
 }
 
-/// The genes table (M2 design §16): each of the starter genome's numbers'
-/// middle value among the living (M2 design §12), a row an hour, with the
-/// starter's own first.
+/// The genes table (M2 design §16.4): each of the starter genome's gene
+/// values' middle among the living, a row an hour, with the starter's own
+/// first.
 #[derive(Debug, Clone)]
 pub struct GeneTable {
-    /// The starter's numbers, named, in its order: the table's columns.
+    /// The starter's values, named, in its order: the table's columns.
     starter: Vec<(String, f32)>,
     rows: Vec<GeneRow>,
 }
@@ -436,17 +436,17 @@ pub struct GeneTable {
 struct GeneRow {
     tick: u64,
     sprites: usize,
-    /// Each number's middle value, or none if no sprite was alive.
+    /// Each value's middle, or none if no sprite was alive.
     middles: Option<Vec<Option<f32>>>,
 }
 
 impl GeneTable {
-    /// A table with no rows yet, of the numbers of the starter genome in
+    /// A table with no rows yet, of the values of the starter genome in
     /// `world`'s data pack.
     pub fn new(world: &World) -> GeneTable {
         let data = world.data();
         GeneTable {
-            starter: gene_numbers(&data.starter().genes(data)),
+            starter: gene_values(&data.starter().genes(data)),
             rows: Vec::new(),
         }
     }
@@ -456,7 +456,7 @@ impl GeneTable {
         self.rows.push(GeneRow {
             tick: world.tick(),
             sprites: world.sprites().count(),
-            middles: middle_numbers(world, &self.starter),
+            middles: middle_values(world, &self.starter),
         });
     }
 
@@ -465,7 +465,7 @@ impl GeneTable {
         self.rows.last().map(|row| row.tick)
     }
 
-    /// The table, for a spreadsheet: a column for each number, a row for
+    /// The table, for a spreadsheet: a column for each value, a row for
     /// the starter's, then a row for each time taken.
     pub fn table(&self) -> String {
         let headings = ["Hours", "Tick", "Sprites"]
@@ -495,7 +495,7 @@ impl GeneTable {
         table
     }
 
-    /// The `most` numbers whose middle value moved furthest from the
+    /// The `most` values whose middle moved furthest from the
     /// starter's by the last row, as `moved_most` finds them.
     pub fn moved_most(&self, most: usize) -> Vec<Moved> {
         let now = self.rows.last().and_then(|row| row.middles.clone());
@@ -503,7 +503,7 @@ impl GeneTable {
     }
 }
 
-/// A gene number that moved from the starter's.
+/// A gene value that moved from the starter's.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Moved {
     pub name: String,
@@ -543,9 +543,9 @@ impl Moved {
     }
 }
 
-/// Of the numbers in `starter`, the `most` whose value `now` moved furthest
+/// Of the values in `starter`, the `most` whose value `now` moved furthest
 /// from it, furthest first, of those that moved by a tenth or more. A
-/// number the starter has at 0, or none alive has, is left out.
+/// value the starter has at 0, or none alive has, is left out.
 pub fn moved_most(starter: &[(String, f32)], now: &[Option<f32>], most: usize) -> Vec<Moved> {
     let mut moved: Vec<Moved> = starter
         .iter()

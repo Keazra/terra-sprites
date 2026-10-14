@@ -154,7 +154,7 @@ _Avoid_: label
 The genome in the data pack that sprites are made from when they have no parents.
 
 **Gene value**:
-A number in a gene that spawn variation or a copying error may change, such as a strength or a threshold. The rest of a gene, such as which chemical it touches, never varies.
+A number in a gene that spawn variation or a copying error may change, such as a strength or a threshold. The rest of a gene, such as which chemical it touches, never varies. Followed across a species, each is named for what its gene does and its field, as `hunger → Eat: weight` (M2 design §12.7, §16.4).
 
 **Spawn variation**:
 The small random change to the gene values of a sprite made from the starter genome, larger for `grows_old` so that lives differ.
@@ -575,12 +575,16 @@ How the title screen starts: in the dark, the Cursor's light finds a sleeping sp
 _Avoid_: intro, splash, cutscene
 
 **Story mode** (M2):
-The game as it's meant to be played, at 4× speed at most (M2 design, Slice 27). What it allows on the ship is in the M4 design, §2.2.
+The game as it's meant to be played, at 4× speed at most, so a life never feels rushed. It's the mode New world picks unless the player picks Lab, and a world keeps its mode for its whole life; a save from before the modes is a Story world. Once the entire ship is reactivated, the player may accept lifting the cap for that world (M2 design §16; M4 design §2.2, §2.3).
 _Avoid_: full game, play mode, campaign
 
 **Lab mode** (M2):
-The game for experiments, faster than 4× (M2 design, Slice 27). What it allows on the ship is in the M4 design, §2.2. It isn't a lab scenario, which is a test file.
+The game for experiments: every speed, up to Max, and fast-forward. The top bar says "lab" after the speed (M2 design §16). What it allows on the ship is in the M4 design, §2.2. It isn't a lab scenario, which is a test file.
 _Avoid_: free mode, sandbox, creative mode
+
+**Fast-forward** (M2):
+Running a Lab world with no screen, from the command line, for hours of play at 1× as fast as the computer allows, then saving it for the game to open, with a population table and a genes table beside it. Its report's generation is the deepest family line reached since it started (M2 design §16.3).
+_Avoid_: headless mode, turbo, skip ahead
 
 **Map view**:
 The panel that shows the map.

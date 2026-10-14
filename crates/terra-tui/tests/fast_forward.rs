@@ -6,13 +6,20 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
+use ratatui::layout::Size;
 use terra_sim::{
     DataPack, DeathCause, EntityId, EventKind, LifeStage, Map, Mode, Pos, Scenario, World,
-    WorldConfig, gene_numbers, middle_numbers,
+    WorldConfig, gene_values, middle_values,
 };
+use terra_tui::app::App;
+use terra_tui::clock::Speed;
 use terra_tui::fast_forward::{
     self, FastForward, HEADER, HOUR, Moved, Row, Tally, hours, save_name, spoken,
 };
+use terra_tui::input::Action;
+use terra_tui::saves;
+use terra_tui::theme::Theme;
+use terra_tui::ui;
 
 /// A small generated Lab world.
 fn lab_world(seed: u64) -> World {
@@ -42,6 +49,37 @@ fn a_fast_forwarded_world_is_the_world_the_game_would_have() {
     }
     assert_eq!(run.world().tick(), HOUR);
     assert_eq!(run.world().state_hash(), played.state_hash());
+}
+
+#[test]
+fn a_fast_forwarded_world_opens_from_continue_in_lab_mode_with_its_whole_graph() {
+    let mut run = FastForward::new(lab_world(7), 1);
+    run_through(&mut run);
+    let world = run.into_world();
+    let folder = std::env::temp_dir().join(format!("terra-ff-opens-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&folder);
+    saves::write(&folder, "seed-7-1h", &world.save()).expect("saved");
+    // Continue loads the newest save (M2 design §8.2).
+    let newest = saves::list(&folder).into_iter().next().expect("listed");
+    assert_eq!(newest.name, "seed-7-1h");
+    let loaded = saves::load(&newest).expect("it loads");
+    assert_eq!(loaded.mode(), Mode::Lab);
+    assert_eq!(loaded.state_hash(), world.state_hash());
+    assert_eq!(loaded.population(), world.population());
+    // The game opens it as Load does, and its clock goes past 4×.
+    let mut app = App::new(
+        loaded.map(),
+        Theme::cp437(),
+        loaded.seed(),
+        ui::areas(Size::new(100, 30)),
+    );
+    app.load_from_title(loaded, newest.name);
+    let opened = app.take_loaded().expect("opened");
+    for _ in 0..6 {
+        app.apply(Action::Faster { held: false }, &opened);
+    }
+    assert_eq!(app.clock.speed(), Speed::Max);
+    let _ = std::fs::remove_dir_all(&folder);
 }
 
 #[test]
@@ -371,8 +409,8 @@ fn the_population_table_names_each_cause_of_death_the_world_has_seen() {
 #[test]
 fn the_genes_table_starts_with_the_starter_then_has_a_row_an_hour() {
     let world = lab_world(7);
-    let starter = gene_numbers(&world.data().starter().genes(world.data()));
-    let at_start = middle_numbers(&world, &starter).expect("sprites alive");
+    let starter = gene_values(&world.data().starter().genes(world.data()));
+    let at_start = middle_values(&world, &starter).expect("sprites alive");
     let mut run = FastForward::new(world, 2);
     run_through(&mut run);
     let table = cells(&run.genes().table());
@@ -402,7 +440,7 @@ fn a_run_stopped_between_hours_ends_its_genes_table_where_it_stopped() {
 }
 
 #[test]
-fn the_numbers_that_moved_most_come_first_halving_as_far_as_doubling() {
+fn the_values_that_moved_most_come_first_halving_as_far_as_doubling() {
     let starter = [
         ("a".to_string(), 1.0),
         ("b".to_string(), 2.0),
