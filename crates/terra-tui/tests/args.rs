@@ -106,3 +106,73 @@ fn the_version_flag_is_read_and_the_version_names_the_commit() {
         .expect("a commit in brackets");
     assert!(!commit.is_empty(), "{version}");
 }
+
+#[test]
+fn the_lab_load_fast_forward_and_save_flags_are_read() {
+    // M2 design §16.
+    assert!(parse(&["--lab", "--seed", "7"]).expect("valid").lab);
+    assert!(!parse(&["--seed", "7"]).expect("valid").lab);
+    let args = parse(&["--load", "mira"]).expect("valid");
+    assert_eq!(args.load.as_deref(), Some("mira"));
+    let args =
+        parse(&["--fast-forward", "200", "--seed", "7", "--save", "evolved"]).expect("valid");
+    assert_eq!(args.fast_forward, Some(200));
+    assert_eq!(args.save.as_deref(), Some("evolved"));
+    let args = parse(&["--fast-forward", "50", "--load", "mira"]).expect("valid");
+    assert_eq!(
+        (args.fast_forward, args.load.as_deref()),
+        (Some(50), Some("mira"))
+    );
+}
+
+#[test]
+fn fast_forward_takes_a_whole_number_of_hours_from_one() {
+    for hours in ["0", "-3", "1.5", "lots"] {
+        let error = parse(&["--fast-forward", hours]).expect_err("refused");
+        assert!(error.contains(hours) && error.contains("hours"), "{error}");
+    }
+    for flag in ["--fast-forward", "--load", "--save"] {
+        assert!(parse(&[flag]).expect_err("needs a value").contains(flag));
+    }
+}
+
+#[test]
+fn a_saved_world_refuses_the_flags_that_make_a_new_one() {
+    for flag in [
+        &["--seed", "1"][..],
+        &["--preset", "p.ron"],
+        &["--data", "mods"],
+        &["--lab"],
+    ] {
+        let flags: Vec<&str> = ["--load", "mira"].iter().chain(flag).copied().collect();
+        let error = parse(&flags).expect_err("refused");
+        assert!(
+            error.contains("--load") && error.contains(flag[0]),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn a_replay_refuses_loading_and_fast_forwarding_too() {
+    for flags in [
+        &["--replay", "a.replay", "--load", "mira"][..],
+        &["--replay", "a.replay", "--fast-forward", "5"],
+        &["--replay", "a.replay", "--lab"],
+    ] {
+        let error = parse(flags).expect_err("refused");
+        assert!(
+            error.contains("--replay") && error.contains(flags[2]),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn save_names_only_what_a_fast_forward_writes() {
+    let error = parse(&["--seed", "7", "--save", "evolved"]).expect_err("refused");
+    assert!(
+        error.contains("--save") && error.contains("--fast-forward"),
+        "{error}"
+    );
+}

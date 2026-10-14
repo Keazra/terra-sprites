@@ -96,6 +96,19 @@ pub fn write(folder: &Path, name: &str, bytes: &[u8]) -> io::Result<PathBuf> {
     Ok(path)
 }
 
+/// `name`, or if `folder` has a save called that already, the first of
+/// `name-2`, `name-3` and on that it hasn't, so a new save never writes
+/// over an old one.
+pub fn unused_name(folder: &Path, name: &str) -> String {
+    (1..)
+        .map(|n| match n {
+            1 => name.to_string(),
+            n => format!("{name}-{n}"),
+        })
+        .find(|name| !path_for(folder, name).exists())
+        .expect("a name no save has")
+}
+
 /// Writes `bytes` as the newest autosave, `autosave-1`, after moving each
 /// older one down a place; the oldest of `AUTOSAVES` drops off the end.
 pub fn autosave(folder: &Path, bytes: &[u8]) -> io::Result<PathBuf> {

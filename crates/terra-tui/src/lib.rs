@@ -5,6 +5,7 @@ pub mod app;
 pub mod args;
 pub mod clock;
 pub mod cp437;
+pub mod fast_forward;
 pub mod files;
 mod help;
 pub mod input;

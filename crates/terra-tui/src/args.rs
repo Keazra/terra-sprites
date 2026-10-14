@@ -15,6 +15,17 @@ pub struct Args {
     /// `--replay <file>`: play a replay back instead of a new world (design
     /// §2.7).
     pub replay: Option<PathBuf>,
+    /// `--lab`: make the new world a Lab world rather than a Story one (M2
+    /// design §16).
+    pub lab: bool,
+    /// `--load <save>`: open a saved world, by its name in the saves folder
+    /// or its file, as Load does on the title screen (M2 design §16).
+    pub load: Option<String>,
+    /// `--fast-forward <hours>`: run a Lab world for that many hours of
+    /// play at 1× with no screen, then save it (M2 design §16).
+    pub fast_forward: Option<u64>,
+    /// `--save <name>`: the name a fast-forward saves its world under.
+    pub save: Option<String>,
     /// `--ascii`: use the ascii theme.
     pub ascii: bool,
     /// `--theme <file>`: a theme to use instead of the built-in ones (design
@@ -32,8 +43,10 @@ pub struct Args {
 pub const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("TERRA_COMMIT"), ")");
 
 /// How to run the game, shown with any flag error.
-pub const USAGE: &str = "usage: terra-sprites [--seed <n>] [--preset <file>] [--data <dir>] [--ascii | --theme <file>]\n\
+pub const USAGE: &str = "usage: terra-sprites [--seed <n>] [--preset <file>] [--data <dir>] [--lab] [--ascii | --theme <file>]\n\
+                         \x20      terra-sprites --load <save> [--ascii | --theme <file>]\n\
                          \x20      terra-sprites --replay <file> [--ascii | --theme <file>]\n\
+                         \x20      terra-sprites --fast-forward <hours> [--seed <n>] [--preset <file>] [--data <dir> | --load <save>] [--save <name>]\n\
                          \x20      terra-sprites --version";
 
 impl Args {
@@ -56,6 +69,18 @@ impl Args {
                 "--preset" => parsed.preset = Some(value_of(&flag, args.next())?.into()),
                 "--data" => parsed.data = Some(value_of(&flag, args.next())?.into()),
                 "--replay" => parsed.replay = Some(value_of(&flag, args.next())?.into()),
+                "--lab" => parsed.lab = true,
+                "--load" => parsed.load = Some(value_of(&flag, args.next())?),
+                "--fast-forward" => {
+                    let value = value_of(&flag, args.next())?;
+                    let hours = value.parse().ok().filter(|&hours: &u64| hours > 0);
+                    parsed.fast_forward = Some(hours.ok_or_else(|| {
+                        format!(
+                            "`{value}` is not a number of hours to fast-forward: use a whole number from 1"
+                        )
+                    })?);
+                }
+                "--save" => parsed.save = Some(value_of(&flag, args.next())?),
                 "--ascii" => parsed.ascii = true,
                 "--theme" => parsed.theme = Some(value_of(&flag, args.next())?.into()),
                 "--version" => parsed.version = true,
@@ -66,19 +91,48 @@ impl Args {
         if parsed.ascii && parsed.theme.is_some() {
             return Err("`--ascii` and `--theme` both pick a theme: use one".into());
         }
-        // A replay brings its own world, so what makes a new one doesn't
-        // apply (design §2.7).
+        let new_world = [
+            ("--seed", parsed.seed.is_some()),
+            ("--preset", parsed.preset.is_some()),
+            ("--data", parsed.data.is_some()),
+            ("--lab", parsed.lab),
+        ];
+        let makes_one = new_world
+            .iter()
+            .find(|(_, given)| *given)
+            .map(|(flag, _)| flag);
+        // A replay brings its own world, so what makes or opens another
+        // doesn't apply (design §2.7).
         if parsed.replay.is_some() {
-            let new_world = [
-                ("--seed", parsed.seed.is_some()),
-                ("--preset", parsed.preset.is_some()),
-                ("--data", parsed.data.is_some()),
-            ];
-            if let Some((flag, _)) = new_world.iter().find(|(_, given)| *given) {
+            if let Some(flag) = makes_one {
                 return Err(format!(
                     "`{flag}` makes a new world, and `--replay` plays a recorded one: use one or the other"
                 ));
             }
+            for (flag, given) in [
+                ("--load", parsed.load.is_some()),
+                ("--fast-forward", parsed.fast_forward.is_some()),
+            ] {
+                if given {
+                    return Err(format!(
+                        "`--replay` plays a recorded world, and `{flag}` takes another: use one or the other"
+                    ));
+                }
+            }
+        }
+        // A save brings its own world, mode and all (M2 design §16).
+        if parsed.load.is_some()
+            && let Some(flag) = makes_one
+        {
+            return Err(format!(
+                "`{flag}` makes a new world, and `--load` opens a saved one: use one or the other"
+            ));
+        }
+        if parsed.save.is_some() && parsed.fast_forward.is_none() {
+            return Err(
+                "`--save` names the save a fast-forward writes: use it with `--fast-forward`"
+                    .into(),
+            );
         }
         Ok(parsed)
     }

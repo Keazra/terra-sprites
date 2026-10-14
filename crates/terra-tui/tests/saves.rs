@@ -603,3 +603,14 @@ fn a_save_loaded_from_the_title_screen_starts_as_a_load_in_a_world_does() {
         bars(&app, &world).1
     );
 }
+
+#[test]
+fn a_new_save_takes_a_name_no_save_has_yet() {
+    // A fast-forward's save never writes over an old one (M2 design §16).
+    let folder = scratch_folder("unused-name");
+    assert_eq!(saves::unused_name(&folder, "seed-7-200h"), "seed-7-200h");
+    saves::write(&folder, "seed-7-200h", b"TSPR").expect("written");
+    assert_eq!(saves::unused_name(&folder, "seed-7-200h"), "seed-7-200h-2");
+    saves::write(&folder, "seed-7-200h-2", b"TSPR").expect("written");
+    assert_eq!(saves::unused_name(&folder, "seed-7-200h"), "seed-7-200h-3");
+}
