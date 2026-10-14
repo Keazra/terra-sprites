@@ -1,4 +1,4 @@
-// Learning by watching (M2 design §18.7): six grown sprites live in an
+// Learning by watching (M2 design §18.6): six grown sprites live in an
 // arena with water at one end and berry bushes at the other, too far apart
 // to see both at once, for 20,000 ticks, long enough for all of them to
 // learn that water is good for thirst. Then each gets a newborn of its own

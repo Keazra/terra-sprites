@@ -372,7 +372,7 @@ A sprite's parents, its young, and its brothers and sisters, the sprites with a 
 _Avoid_: relatives, family (family is the household)
 
 **Family** (M2, Slice 32):
-A sprite's partner, its parents while it's young, its young, and its eggs: those anxiety draws it back to. An attention instinct can name whom it's about: its family, its kin, or one kind of family, its partner, its parents or its young. Then it draws the eye to them and not to others of their kind. A parent remembers where it last saw each egg of its own, and goes back there.
+A sprite's partner, its parents while it's young, its young, and its eggs: those anxiety draws it back to. An attention instinct can name whom it's about: its family, its kin, one kind of family, its partner, its parents or its young, or, since Slice 28, grown-ups. Then it draws the eye to them and not to others of their kind. A parent remembers where it last saw each egg of its own, and goes back there.
 _Avoid_: clan, herd, kin (kin is by blood)
 
 **Anxiety** (M2, Slice 32):
@@ -541,8 +541,12 @@ What a sprite has learned about doing one verb to one object type, or to sprites
 _Avoid_: skill (a later design, #48), reflex
 
 **Taught habit**:
-The part of a habit the Cursor taught: a Reward or Correct for what the sprite just tried. It is kept apart from the habit the sprite learns by itself, so what it learns afterwards doesn't wash it out, and it fades as slowly as a bad lesson, so in effect it lasts a life. A sprite acts on the two together, and the Brain tab shows them together as its habit.
+The part of a habit the Cursor taught: a Reward or Correct for what the sprite just tried. It is kept apart from the habit the sprite learns by itself, so what it learns afterwards doesn't wash it out, and it fades as slowly as a bad lesson, so in effect it lasts a life. A sprite acts on the two together, and the Brain tab shows them together as its habit. Since Slice 28 a habit learned by watching is kept the same way.
 _Avoid_: training (that's what the player does), conditioning
+
+**Watching** (M2, Slice 28):
+Learning from another sprite: when the sprite a watcher's eye is on uses something, or something is done to it, the watcher takes on a share of what that sprite knows about it, only ever up to the other's view, and remembers a place it sees the other eased at. It's about things and whom to fear, never whom to like, and never anything about mating. In the starter genes only the young watch, the grown-ups and their parents most.
+_Avoid_: imitation, copying (copying the act itself is for later), observing (the observer is the agent that reads baseline reports)
 
 **Thing touched**:
 What a feeling is about: the thing the sprite tried a verb on a moment ago, or the particular sprite. Worth is learned about it and nothing else. A sprite that hit it isn't one: that teaches fear of the sprite instead. For the Cursor's touch, "a moment ago" stretches to its reach back.
