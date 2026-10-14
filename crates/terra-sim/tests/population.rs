@@ -1,8 +1,9 @@
 //! The population record (M2 design §14): the world counts its sprites by
 //! life stage, and its eggs, every 100 ticks over its whole run, with the
 //! layings, the hatchings, the sprites the Cursor spawned and the deaths
-//! between counts; it's world state, so a save keeps it, and it squeezes
-//! its counts to stay small.
+//! between counts, and the oldest and newest generations alive (#208); it's
+//! world state, so a save keeps it, and it squeezes its counts to stay
+//! small.
 
 mod common;
 use common::{ALONE, FEMALE, WorldBuilder, at, builtin, family_in, lone, until};
@@ -10,7 +11,8 @@ use common::{ALONE, FEMALE, WorldBuilder, at, builtin, family_in, lone, until};
 use std::collections::BTreeMap;
 
 use terra_sim::{
-    Command, EventKind, LifeStage, PopulationChanges, PopulationCount, World, WorldConfig,
+    Command, EventKind, Generations, LifeStage, Playback, PopulationChanges, PopulationCount,
+    World, WorldConfig,
 };
 
 /// The eggs and sprites in `world` now, by life stage, in the order a count
@@ -44,6 +46,13 @@ fn all_changes(world: &World) -> PopulationChanges {
     }
     all.add(&world.population_now().since);
     all
+}
+
+/// A grown female of the first generation, who may lay alone at once (M2
+/// design §15.7).
+fn mother() -> World {
+    let female = format!("{FEMALE}{ALONE}");
+    family_in(lone(), &[(at(0, 0), &female)], &[], 3)
 }
 
 /// A world of grass with no sprites, which steps quickly.
@@ -91,6 +100,7 @@ fn a_new_world_counts_its_first_sprites_then_every_100_ticks() {
         PopulationChanges::default(),
         "nothing before the first"
     );
+    assert_eq!(first.generations, generations(1, 1), "all of the first");
     let now = world.population_now();
     assert_eq!(now.tick, 250);
     assert_eq!(stages_of(&now), stages(&world));
@@ -115,6 +125,7 @@ fn a_death_is_counted_in_the_stretch_it_happened_in() {
         .expect("a count after the death");
     assert_eq!(count.since.died, BTreeMap::from([(cause, 1)]));
     assert_eq!(count.sprites(), 0);
+    assert_eq!(count.generations, None, "no sprites, no generations");
     assert_eq!(all_changes(&world).deaths(), 1, "counted once");
     let all_died: u64 = world.deaths_by_cause().map(|(_, n)| n).sum();
     assert_eq!(all_died, 1);
@@ -122,9 +133,7 @@ fn a_death_is_counted_in_the_stretch_it_happened_in() {
 
 #[test]
 fn an_egg_is_counted_as_an_egg_and_its_laying_and_hatching_once_each() {
-    // A pack in which she may lay alone at once (M2 design §15.7).
-    let female = format!("{FEMALE}{ALONE}");
-    let mut world = family_in(lone(), &[(at(0, 0), &female)], &[], 3);
+    let mut world = mother();
     until(&mut world, 3_000, |event| {
         matches!(event.kind, EventKind::Laid { .. }).then_some(())
     })
@@ -140,6 +149,68 @@ fn an_egg_is_counted_as_an_egg_and_its_laying_and_hatching_once_each() {
     assert_eq!((now.eggs, now.young), (0, 1));
     let all = all_changes(&world);
     assert_eq!((all.laid, all.hatched), (1, 1));
+}
+
+/// The generations `oldest` to `newest`, as a count keeps them.
+fn generations(oldest: u32, newest: u32) -> Option<Generations> {
+    Some(Generations { oldest, newest })
+}
+
+#[test]
+fn a_count_keeps_the_oldest_and_newest_generations_of_its_sprites() {
+    // #208: a mother of the first generation, laying alone. Her egg is of
+    // the second, but an egg isn't a sprite until it hatches (M2 design
+    // §10.4).
+    let mut world = mother();
+    until(&mut world, 3_000, |event| {
+        matches!(event.kind, EventKind::Laid { .. }).then_some(())
+    })
+    .expect("she lays alone");
+    assert_eq!(world.population()[0].generations, generations(1, 1));
+    assert_eq!(
+        world.population_now().generations,
+        generations(1, 1),
+        "the egg isn't counted"
+    );
+    until(&mut world, 1_000, |event| {
+        matches!(event.kind, EventKind::Hatched { .. }).then_some(())
+    })
+    .expect("it hatches");
+    assert_eq!(world.population_now().generations, generations(1, 2));
+    while !world.tick().is_multiple_of(100) {
+        world.step();
+    }
+    let last = world.population().last().expect("a count");
+    assert_eq!(last.tick, world.tick());
+    assert_eq!(
+        last.generations,
+        generations(1, 2),
+        "and the count keeps them"
+    );
+}
+
+#[test]
+fn a_replay_plays_the_record_back_with_its_generations() {
+    // #208: the generations are in the record, which is world state, so a
+    // replay checks them with the rest of it (design §2.7).
+    let mut world = mother();
+    world.start_recording();
+    for _ in 0..3_000 {
+        world.step();
+    }
+    assert!(
+        world
+            .population()
+            .iter()
+            .any(|count| count.generations == generations(1, 2)),
+        "her hatchling was counted"
+    );
+    let mut playback = Playback::new(&world.replay().unwrap()).expect("the replay plays");
+    while playback.world().tick() < playback.end() {
+        playback.step();
+    }
+    assert_eq!(playback.divergence(), None);
+    assert_eq!(playback.world().population(), world.population());
 }
 
 #[test]
@@ -187,6 +258,34 @@ fn a_save_from_before_the_record_begins_it_where_it_was_loaded() {
         world.step();
     }
     assert_eq!(ticks(&world), [61, 100]);
+}
+
+/// A save of schema 1 from before the record kept generations (the golden
+/// save `lineage.rs` describes), written by the build that merged PR #201
+/// on tick 105: its record has counts at ticks 0 and 100, and once it's
+/// loaded, its sprites are of the second and third generations.
+const GOLDEN_V1_BEFORE_LINEAGE: &[u8] = include_bytes!("golden/save-v1-before-lineage.tspr");
+
+#[test]
+fn a_save_from_before_generations_were_counted_has_none_in_its_counts_then() {
+    let mut world = World::load(GOLDEN_V1_BEFORE_LINEAGE).expect("the save loads");
+    let counted = |world: &World| -> Vec<(u64, Option<Generations>)> {
+        world
+            .population()
+            .iter()
+            .map(|count| (count.tick, count.generations))
+            .collect()
+    };
+    assert_eq!(counted(&world), [(0, None), (100, None)]);
+    assert_eq!(world.population_now().generations, generations(2, 3));
+    while world.tick() < 200 {
+        world.step();
+    }
+    let [.., (tick, after)] = counted(&world)[..] else {
+        panic!("no counts");
+    };
+    assert_eq!(tick, 200);
+    assert!(after.is_some(), "the counts after the load have them");
 }
 
 #[test]

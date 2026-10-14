@@ -11,7 +11,7 @@ use ratatui::text::{Line, Span};
 use terra_sim::{DataPack, PopulationChanges, PopulationCount, World};
 
 use crate::app::App;
-use crate::text::{cause_name, group_thousands};
+use crate::text::{cause_name, generations_words, group_thousands};
 use crate::theme::PopulationLook;
 
 /// The ticks a column stands for while the run is too short to fill the
@@ -63,8 +63,8 @@ impl Band {
 const STACK: [Band; 4] = [Band::Eggs, Band::Young, Band::Adults, Band::Old];
 
 /// Rows the full graph keeps for what's under it: the axis, its ticks, a
-/// blank line, the legend and the two lines that read a moment.
-const UNDER: usize = 6;
+/// blank line, the legend and the three lines that read a moment.
+const UNDER: usize = 7;
 
 /// Rows of the small graph on the World tab.
 const SMALL_ROWS: usize = 6;
@@ -197,9 +197,13 @@ impl Plot {
                 Some(count) => (0..halves).map(|half| band_at(count, half, step)).collect(),
             })
             .collect();
-        // The label of the height `part` rows of `rows` up.
+        // The label of the height `part` rows of `rows` up. With shares,
+        // half way falls in the middle row, at its top or, with an odd
+        // number of rows, its middle, so it says 50% either way.
         let height = |part: usize| {
-            if self.shares {
+            if self.shares && part < rows && part == rows.div_ceil(2) {
+                "50%".to_string()
+            } else if self.shares {
                 format!("{}%", part * 100 / rows)
             } else {
                 (part as u32 * self.top / rows as u32).to_string()
@@ -302,12 +306,13 @@ impl Plot {
         Line::from(spans)
     }
 
-    /// The two lines that read column `j`, or the last the run has
-    /// reached: the count it shows, and what happened since the column
-    /// before's.
-    pub(crate) fn reading(&self, j: usize, data: &DataPack) -> [String; 2] {
+    /// The three lines that read column `j`, or the last the run has
+    /// reached (M2 design §14.3): when the count it shows was taken, with
+    /// how many sprites and of which generations; the eggs and the sprites
+    /// at each stage; and what happened since the column before's.
+    pub(crate) fn reading(&self, j: usize, data: &DataPack) -> [String; 3] {
         let Some(shown) = self.columns.get(j).copied().flatten() else {
-            return [String::new(), String::new()];
+            return [String::new(), String::new(), String::new()];
         };
         let count = &self.points[shown];
         let when = if shown + 1 == self.points.len() {
@@ -316,13 +321,19 @@ impl Plot {
             format!("tick {}", group_thousands(count.tick))
         };
         let sprites = count.sprites();
-        let mut stages = vec![format!(
-            "{sprites} sprite{}",
+        let mut first = format!(
+            " {when}: {sprites} sprite{}",
             if sprites == 1 { "" } else { "s" }
-        )];
+        );
+        // A count from a save made before the record kept them has none
+        // (#208).
+        if let Some(alive) = count.generations {
+            let (label, value) = generations_words(alive);
+            first.push_str(&format!(" · {label} {value}"));
+        }
         // With shares, each band's share of the column, eggs included.
         let column = count.with_eggs();
-        stages.extend(STACK.map(|band| {
+        let stages = STACK.map(|band| {
             let n = band.of(count);
             if self.shares && column > 0 {
                 let percent = (200 * n + column) / (2 * column);
@@ -330,8 +341,8 @@ impl Plot {
             } else {
                 format!("{n} {}", band.name(n))
             }
-        }));
-        let first = format!(" {when}: {}", stages.join(" · "));
+        });
+        let second = format!(" {}", stages.join(" · "));
         // Since the count the nearest column before shows, if it's an
         // earlier one: columns narrower than the time between counts show
         // the same count again. The first column reads on from the first
@@ -343,7 +354,7 @@ impl Plot {
             .copied()
             .find(|&before| before < shown)
             .unwrap_or(0);
-        let second = if before < shown {
+        let third = if before < shown {
             let mut changes = PopulationChanges::default();
             for point in &self.points[before + 1..=shown] {
                 changes.add(&point.since);
@@ -353,7 +364,7 @@ impl Plot {
         } else {
             " the first count".to_string()
         };
-        [first, second]
+        [first, second, third]
     }
 }
 

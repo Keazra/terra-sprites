@@ -81,7 +81,7 @@ pub use mutation::CopyChangeView;
 pub use names::{MAX_NAME_CHARS, NameProblem};
 pub use objects::EntityId;
 pub use perception::Target;
-pub use population::{FIRST_COUNT_EVERY, PopulationChanges, PopulationCount};
+pub use population::{FIRST_COUNT_EVERY, Generations, PopulationChanges, PopulationCount};
 pub use registry::{ChemicalKind, Trait, Verb};
 pub use replay::{CHECKPOINT_EVERY, Divergence, Playback, ReplayError};
 pub use save::{LoadError, SCHEMA_VERSION};
