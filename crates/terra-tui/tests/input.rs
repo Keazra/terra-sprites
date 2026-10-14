@@ -643,13 +643,14 @@ fn the_place_menu_and_naming_keys_have_their_actions() {
 }
 
 #[test]
-fn b_t_m_l_and_question_mark_act_once_per_press() {
-    // Design §6.1, §6.3: holding one doesn't flicker it.
+fn b_t_m_l_p_and_question_mark_act_once_per_press() {
+    // Design §6.1, §6.3, M2 design §14: holding one doesn't flicker it.
     let keys = [
         ('b', Action::CycleColours),
         ('t', Action::Track),
         ('m', Action::CycleEventFilter),
         ('l', Action::SpriteList),
+        ('p', Action::Population),
         ('?', Action::Help),
     ];
     for (code, action) in keys {

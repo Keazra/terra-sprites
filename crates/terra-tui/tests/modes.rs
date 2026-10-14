@@ -70,6 +70,18 @@ fn holding_plus_in_a_story_world_stops_at_4x_too() {
 }
 
 #[test]
+fn the_population_graph_keeps_a_story_world_to_4x() {
+    // Time runs as usual with the graph open (M2 design §14).
+    let world = world_in(Mode::Story);
+    let mut app = app_for(&world);
+    app.apply(Action::Population, &world);
+    faster(&mut app, &world, false, 3);
+    assert_eq!(app.clock.speed(), Speed::X4);
+    faster(&mut app, &world, true, 3);
+    assert_eq!(app.clock.speed(), Speed::X4);
+}
+
+#[test]
 fn in_a_lab_world_plus_goes_on_to_max() {
     let world = world_in(Mode::Lab);
     let mut app = app_for(&world);

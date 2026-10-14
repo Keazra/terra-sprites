@@ -1,5 +1,6 @@
 //! Snapshots of whole screens (design §6.1): the help screen, the sprite
-//! list and each inspector tab, in both themes, drawn on a hand-made field
+//! list, the population graph (M2 design §14) and each inspector tab, in
+//! both themes, drawn on a hand-made field
 //! and compared with the text files in `snapshots/`. A screen that changes
 //! on purpose is written afresh with `UPDATE_SNAPSHOTS=1 cargo test -p
 //! terra-tui --test snapshots`, and the new files reviewed like code.
@@ -164,5 +165,23 @@ fn the_sprite_list_matches_its_snapshot() {
         let mut app = app_for(&world, theme);
         app.apply(Action::SpriteList, &world);
         check(&format!("{theme_name}-sprite-list"), &screen(&app, &world));
+    }
+}
+
+#[test]
+fn the_population_graph_matches_its_snapshot() {
+    // Run on to tick 3,000 so the graph has 30 columns, with the moment at
+    // tick 1,500 picked.
+    let mut world = field();
+    while world.tick() < 3_000 {
+        world.step();
+    }
+    for (theme_name, theme) in themes() {
+        let mut app = app_for(&world, theme);
+        app.apply(Action::Population, &world);
+        for _ in 0..15 {
+            app.apply(Action::Scroll { dx: -1, dy: 0 }, &world);
+        }
+        check(&format!("{theme_name}-population"), &screen(&app, &world));
     }
 }

@@ -27,6 +27,7 @@ use crate::mode::Mode;
 use crate::mutation::CopyChangeView;
 use crate::objects::{EntityId, Object, Objects};
 use crate::perception::{Flood, Target, goal_tiles};
+use crate::population::{PopulationCount, PopulationRecord};
 use crate::regions::Regions;
 use crate::registry::{CategoryId, ChemicalKind};
 use crate::replay::{self, CHECKPOINT_EVERY, Recording, Start};
@@ -90,6 +91,11 @@ pub(crate) struct WorldState {
     /// from before the modes is a Story world.
     #[serde(default)]
     pub(crate) mode: Mode,
+    /// The population over the world's whole run, for the population graph
+    /// (M2 design §14). Nothing in the world reads it. A save from before
+    /// it has none, so its record begins where it was loaded.
+    #[serde(default)]
+    pub(crate) population: PopulationRecord,
 }
 
 impl WorldState {
@@ -1027,6 +1033,7 @@ impl World {
                 cursor: Cursor::default(),
                 most_sprites: MOST_SPRITES,
                 mode: Mode::Story,
+                population: PopulationRecord::default(),
             },
             data,
             checked_next_id: Cell::new(1),
@@ -1160,6 +1167,10 @@ impl World {
     /// §7.1), and panics naming the tick if one is broken.
     pub fn step(&mut self) -> Vec<Event> {
         let mut events = Vec::new();
+        let state = &mut self.state;
+        state
+            .population
+            .begin(&state.sprites, &state.objects, state.tick);
         self.remember_levels();
         self.apply_commands(&mut events); // 1
         self.run_environment(&mut events); // 2
@@ -1169,6 +1180,10 @@ impl World {
         self.sense_and_decide(&dying, &mut events); // 5
         self.resolve_actions(&dying, &mut events); // 6
         self.finish_tick(&dying, &mut events); // 7
+        let state = &mut self.state;
+        state
+            .population
+            .end(&state.sprites, &state.objects, state.tick, &events);
         self.checkpoint();
         #[cfg(debug_assertions)]
         if let Err(InvariantViolation(broken)) = self.check_invariants() {
@@ -1311,6 +1326,32 @@ impl World {
     /// with how many.
     pub fn deaths_by_cause(&self) -> impl Iterator<Item = (DeathCause, u64)> + '_ {
         self.state.deaths.iter().map(|(&cause, &n)| (cause, n))
+    }
+
+    /// The world's population over its whole run, oldest first (M2 design
+    /// §14): a count at the first tick it stepped from, then one every 100
+    /// ticks, or less often once the record has squeezed its counts.
+    pub fn population(&self) -> &[PopulationCount] {
+        self.state.population.counts()
+    }
+
+    /// The population now, with what has happened since the last count, as
+    /// a count taken now would have it (M2 design §14).
+    pub fn population_now(&self) -> PopulationCount {
+        let state = &self.state;
+        state
+            .population
+            .now(&state.sprites, &state.objects, state.tick)
+    }
+
+    /// Ticks between the population record's counts now (M2 design §14).
+    pub fn population_every(&self) -> u64 {
+        self.state.population.every()
+    }
+
+    /// The most sprites the world holds, eggs included (M2 design §10.6).
+    pub fn most_sprites(&self) -> u16 {
+        self.state.most_sprites
     }
 
     /// The world's state and data pack, for the benchmark hooks.
@@ -1542,6 +1583,7 @@ impl World {
                     .cursor
                     .check(&state.map, &state.objects, &state.sprites)
             })
+            .and_then(|()| state.population.check())
             .map_err(InvariantViolation)
     }
 }

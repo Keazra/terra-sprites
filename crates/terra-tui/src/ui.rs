@@ -51,6 +51,7 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
     match app.screen() {
         Screen::Help => render_help(frame.buffer_mut(), app, world),
         Screen::SpriteList => render_sprite_list(frame.buffer_mut(), app, world),
+        Screen::Population => render_population(frame.buffer_mut(), app, world),
         _ => {}
     }
     frame.render_widget(status_line(app, world, status.width), status);
@@ -498,12 +499,7 @@ fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) {
     if area.width < 3 || area.height < 3 {
         return;
     }
-    buf.set_style(area, Style::default());
-    for y in area.top() + 1..area.bottom() - 1 {
-        for x in area.left() + 1..area.right() - 1 {
-            buf[(x, y)].set_char(' ');
-        }
-    }
+    blank(buf, area);
     draw_border(buf, area, title);
     let items = app.menu_items(world);
     let room = usize::from(area.width - 2);
@@ -566,6 +562,44 @@ fn render_sprite_list(buf: &mut Buffer, app: &App, world: &World) {
     }
 }
 
+/// Draws the population graph over everything between the top bar and the
+/// status line (M2 design §14), or an empty box if the policy hides it.
+fn render_population(buf: &mut Buffer, app: &App, world: &World) {
+    let Some(area) = app.overlay() else {
+        return;
+    };
+    let shown = app.can_view(Panel::Graph, Subject::World);
+    let title = if shown {
+        format!(" Population ── {} ", crate::graph::covers(world))
+    } else {
+        " Population ".to_string()
+    };
+    let inner = clear_box(buf, area, &title, " esc close ");
+    if !shown {
+        return;
+    }
+    let lines = crate::graph::lines(
+        app,
+        world,
+        usize::from(inner.width),
+        usize::from(inner.height),
+    );
+    for (row, line) in (inner.y..inner.bottom()).zip(&lines) {
+        buf.set_line(inner.x, row, line, inner.width);
+    }
+}
+
+/// Blanks every cell of `area`, colours and all, so nothing drawn beneath
+/// an overlay shows through it: a coloured background, such as the
+/// Cursor's or a graph's, or reverse video.
+fn blank(buf: &mut Buffer, area: Rect) {
+    for y in area.top()..area.bottom() {
+        for x in area.left()..area.right() {
+            buf[(x, y)].reset();
+        }
+    }
+}
+
 /// Where text `width` cells wide sits at the right of `area`'s top border:
 /// before the corner and the line beside it, as a title sits after them.
 pub(crate) fn top_right(area: Rect, width: u16) -> Option<Rect> {
@@ -577,12 +611,7 @@ pub(crate) fn top_right(area: Rect, width: u16) -> Option<Rect> {
 /// the left of its top edge and `corner` at the right, as an overlay over
 /// the panels beneath. Gives the area inside the box.
 pub(crate) fn clear_box(buf: &mut Buffer, area: Rect, title: &str, corner: &str) -> Rect {
-    buf.set_style(area, Style::default());
-    for y in area.top()..area.bottom() {
-        for x in area.left()..area.right() {
-            buf[(x, y)].set_char(' ');
-        }
-    }
+    blank(buf, area);
     draw_border(buf, area, title);
     if let Some(at) = top_right(area, corner.chars().count() as u16) {
         buf.set_stringn(at.x, at.y, corner, usize::from(at.width), Style::default());
@@ -817,6 +846,10 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
                 // While the sprite list is open, how to use it (design §6.1).
                 _ if app.screen() == Screen::SpriteList => {
                     hint_if_fits(room, "↑↓ choose  enter go to it  tab sort  esc close")
+                }
+                // And the population graph (M2 design §14).
+                _ if app.screen() == Screen::Population => {
+                    hint_if_fits(room, "←→ pick a moment  space pause  +/- speed  esc close")
                 }
                 _ => hints_within(room),
             };

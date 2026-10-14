@@ -14,6 +14,7 @@ use terra_sim::{
 
 use crate::clock::{Clock, Speed};
 use crate::cp437;
+use crate::graph;
 use crate::input::{Action, Button};
 use crate::inspector;
 use crate::listed::listed_enum;
@@ -60,6 +61,8 @@ pub enum Screen {
     Help,
     /// The sprite list is open (design §6.1).
     SpriteList,
+    /// The population graph is open (M2 design §14).
+    Population,
 }
 
 listed_enum! {
@@ -525,6 +528,9 @@ pub struct App {
     /// The sprite the sprite list highlights, if any; the first row's if
     /// it's gone from the list.
     list_choice: Option<EntityId>,
+    /// The moment the population graph reads, the end of the stretch of
+    /// time picked, if one is; otherwise it reads now (M2 design §14.3).
+    graph_pick: Option<u64>,
     /// The game's folder for its files (design §6.7), which the help
     /// screen shows, if there is one.
     data_folder: Option<PathBuf>,
@@ -887,6 +893,7 @@ impl App {
             event_filter: EventFilter::All,
             list_sort: SortBy::Number,
             list_choice: None,
+            graph_pick: None,
             data_folder: None,
             save_folder: None,
             save_files: Vec::new(),
@@ -1738,6 +1745,7 @@ impl App {
             Screen::LoadPrompt => return self.apply_load_prompt(action),
             Screen::Help => return self.apply_in_help(action),
             Screen::SpriteList => return self.apply_in_list(action, world),
+            Screen::Population => return self.apply_in_graph(action, world),
             Screen::Normal | Screen::QuitPrompt => {}
         }
         if self.screen == Screen::QuitPrompt {
@@ -1885,6 +1893,11 @@ impl App {
             Action::SpriteList => {
                 self.end_aim();
                 self.open_list(world);
+            }
+            Action::Population => {
+                self.end_aim();
+                self.screen = Screen::Population;
+                self.graph_pick = None;
             }
             Action::CycleColours => {
                 self.colour_mode = along(&ColourMode::ALL, self.colour_mode, 1);
@@ -2267,6 +2280,78 @@ impl App {
             _ => {}
         }
         Flow::Continue
+    }
+
+    /// What an action does while the population graph is open (M2 design
+    /// §14): `←` and `→`, or the pointer over the graph, pick the moment it
+    /// reads; time runs as usual, and `p` or `Esc` closes it.
+    fn apply_in_graph(&mut self, action: Action, world: &World) -> Flow {
+        match action {
+            Action::TogglePause => self.clock.toggle_pause(),
+            Action::StepOnce => self.clock.step_once(),
+            Action::Faster { held } => self.faster(held, world),
+            Action::Slower { held: false } => self.clock.slower(),
+            Action::Slower { held: true } => self.clock.slower_held(),
+            Action::Scroll { dx, .. } if dx != 0 => {
+                if let Some(plot) = self.graph_plot(world) {
+                    let from = plot.column_of(self.graph_pick);
+                    let last = plot.reached().saturating_sub(1);
+                    let to = from.saturating_add_signed(dx.signum() as isize).min(last);
+                    self.graph_pick = plot.moment(to);
+                }
+            }
+            // The pointer picks a moment; it leaves the Cursor where it is
+            // on the map under the graph.
+            Action::Point(cell)
+            | Action::Click {
+                at: cell,
+                button: Button::Left,
+                ..
+            } => {
+                if let Some((plot, column)) = self.graph_column_at(cell, world) {
+                    self.graph_pick = plot.moment(column);
+                }
+            }
+            Action::Population | Action::Back => {
+                self.screen = Screen::Normal;
+                self.graph_pick = None;
+            }
+            Action::Quit => return Flow::Quit,
+            _ => {}
+        }
+        Flow::Continue
+    }
+
+    /// The population graph as the screen lays it out now, if there's room
+    /// for it and the policy shows it (M2 design §14.6).
+    fn graph_plot(&self, world: &World) -> Option<graph::Plot> {
+        if !self.can_view(Panel::Graph, Subject::World) {
+            return None;
+        }
+        let inner = self.overlay?.inner(Margin::new(1, 1));
+        Some(graph::Plot::full(world, usize::from(inner.width)))
+    }
+
+    /// The population graph and which of its columns `at` is over, if it's
+    /// over one the run has reached, on the graph's rows or its axis.
+    fn graph_column_at(&self, at: Position, world: &World) -> Option<(graph::Plot, usize)> {
+        let inner = self.overlay?.inner(Margin::new(1, 1));
+        let plot = self.graph_plot(world)?;
+        let rows = graph::rows_above_axis(usize::from(inner.height)) as u16 + 1;
+        let graph = Rect::new(
+            inner.x + plot.gutter() as u16,
+            inner.y,
+            inner.width.saturating_sub(plot.gutter() as u16),
+            rows,
+        );
+        let column = usize::from(at.x.checked_sub(graph.x)?);
+        (graph.contains(at) && column < plot.reached()).then_some((plot, column))
+    }
+
+    /// The moment the population graph reads, the end of the stretch of
+    /// time picked, if one is; otherwise it reads now (M2 design §14.3).
+    pub fn graph_pick(&self) -> Option<u64> {
+        self.graph_pick
     }
 
     /// Opens the sprite list, highlighting the selected sprite if it's
