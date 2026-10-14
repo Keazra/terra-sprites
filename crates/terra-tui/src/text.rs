@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::ops::Deref;
 
-use terra_sim::{DataPack, DeathCause, EntityId, Terrain};
+use terra_sim::{DataPack, DeathCause, EntityId, Generations, Terrain};
 
 /// A name from the data, as shown on screen: `berry_bush` → `berry bush`.
 pub(crate) fn display_name(name: &str) -> String {
@@ -95,6 +95,17 @@ pub(crate) fn cause_name(cause: DeathCause, data: &DataPack) -> String {
             let name = data.object_type_name(id).unwrap_or("something");
             format!("hurt by {}", display_name(name))
         }
+    }
+}
+
+/// The generations alive, as a label and its value (M2 design §17.5):
+/// `generation` and `1`, or `generations` and `3 to 6`.
+pub(crate) fn generations(generations: Generations) -> (&'static str, String) {
+    let Generations { oldest, newest } = generations;
+    if oldest == newest {
+        ("generation", oldest.to_string())
+    } else {
+        ("generations", format!("{oldest} to {newest}"))
     }
 }
 
