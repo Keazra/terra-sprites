@@ -16,6 +16,7 @@ Slice 26 ([#144](https://github.com/Keazra/terra-sprites/issues/144), [PR #201](
 | 8 | **G3 is the graph.** | #144 | §6 |
 | 9 | **Eggs are items** ([PR #200](https://github.com/Keazra/terra-sprites/pull/200)), so the record counts them apart from the sprites, and the lines under the graph read how many sprites, then each stage and the eggs. | Merging #200 | §14.1, §14.3 |
 | 10 | **The full graph shows shares:** each column full height, split by each band's share, with every band present kept at least half a character; the labels in percent, and the lines under the graph give each share. The small graph still shows how many. | The owner, on the built graph (2026-10-13), choosing "shares only" from four ways (2026-10-14) | §14.2, §14.3, §14.4 |
+| 11 | **The eggs are at the bottom,** so both graphs stack from youngest to oldest: eggs, young, adults, old. The legend and the lines under the graph read in that order too. | The owner, on the shares graph (2026-10-14): "Just reads more appropriately" | §14.2, §14.3, §14.4 |
 
 ## M1 "A Sprite Lives"
 

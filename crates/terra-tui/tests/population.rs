@@ -143,13 +143,13 @@ fn p_opens_the_population_graph_over_the_panels_and_p_or_esc_closes_it() {
     );
     let legend = row(&screen, 25);
     assert!(
-        legend.starts_with("│ █ young  █ adults  █ old  █ eggs  as shares of each column"),
+        legend.starts_with("│ █ eggs  █ young  █ adults  █ old  as shares of each column"),
         "{legend}"
     );
     assert_eq!(
         reading(&screen),
         [
-            "now, tick 250: 6 sprites · 2 young (33%) · 4 adults (67%) · 0 old (0%) · 0 eggs (0%)",
+            "now, tick 250: 6 sprites · 0 eggs (0%) · 2 young (33%) · 4 adults (67%) · 0 old (0%)",
             "since tick 200: none laid, hatched or died",
         ]
     );
@@ -163,6 +163,49 @@ fn p_opens_the_population_graph_over_the_panels_and_p_or_esc_closes_it() {
     app.apply(Action::Population, &world);
     app.apply(Action::Back, &world);
     assert_eq!(app.screen(), Screen::Normal, "and so does Esc");
+}
+
+#[test]
+fn the_eggs_are_at_the_bottom_of_each_column() {
+    // M2 design §14.2: an egg is the youngest a sprite can be, so the eggs
+    // are stacked under the young. A mother laying alone (§10.4) and her
+    // egg are a column half egg, half adult.
+    let pack = pack();
+    let mother = Genome::from_ron(
+        r#"(format: 1, genes: [
+            InitialConcentration(chem: "feminiser", value: 1.0),
+            InitialConcentration(chem: "longing", value: 1.0),
+            Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
+        ])"#,
+        &pack,
+    )
+    .expect("a valid genome");
+    let map = Map::from_ascii(&["............"; 4], &pack).expect("valid drawing");
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &[(Pos { x: 5, y: 2 }, Some(mother))],
+        scripted: &[],
+        newborns: &[],
+    };
+    let mut world = World::from_scenario(scenario, pack, 1).expect("valid scenario");
+    run(&mut world, 150);
+    assert_eq!(world.eggs().count(), 1, "she laid one, not yet hatched");
+    let mut app = app_on(&world);
+    app.apply(Action::Population, &world);
+    let screen = render(&app, &world);
+    let look = Theme::cp437().population();
+    let at = |y: u16| {
+        let cell = &screen[(FIRST_COLUMN, y)];
+        (cell.symbol().to_string(), cell.fg)
+    };
+    assert_eq!(at(BOTTOM), ("█".into(), look.egg));
+    assert_eq!(at(BOTTOM - 9), ("█".into(), look.egg));
+    assert_eq!(at(BOTTOM - 10), ("█".into(), look.adult));
+    assert_eq!(
+        reading(&screen)[0],
+        "now, tick 150: 1 sprite · 1 egg (50%) · 0 young (0%) · 1 adult (50%) · 0 old (0%)"
+    );
 }
 
 #[test]
@@ -195,9 +238,10 @@ fn nothing_drawn_beneath_shows_through_the_graph() {
 
 #[test]
 fn each_column_is_split_by_share_from_the_bottom_in_the_theme_s_colours() {
-    // M2 design §14.2: young, then adults, old and eggs, each column full
-    // height. The 2 young are a third of the column's 40 halves, 13 of
-    // them, the 4 adults the 27 above, up to the top.
+    // M2 design §14.2: youngest to oldest from the bottom, eggs, young,
+    // adults and old, each column full height. With no eggs, the 2 young
+    // are a third of the column's 40 halves, 13 of them, the 4 adults the
+    // 27 above, up to the top.
     let mut world = field(2, 4);
     run(&mut world, 250);
     let mut app = app_on(&world);
@@ -285,7 +329,7 @@ fn arrows_or_the_pointer_pick_a_moment_and_the_lines_under_the_graph_read_it() {
     assert_eq!(
         reading(&screen),
         [
-            "tick 200: 6 sprites · 2 young (33%) · 4 adults (67%) · 0 old (0%) · 0 eggs (0%)",
+            "tick 200: 6 sprites · 0 eggs (0%) · 2 young (33%) · 4 adults (67%) · 0 old (0%)",
             "since tick 100: none laid, hatched or died",
         ]
     );
@@ -402,7 +446,7 @@ fn a_death_is_read_in_the_moment_it_happened() {
         reading(&screen),
         [
             format!(
-                "tick {}: 0 sprites · 0 young · 0 adults · 0 old · 0 eggs",
+                "tick {}: 0 sprites · 0 eggs · 0 young · 0 adults · 0 old",
                 group(tick)
             ),
             format!("since tick {}: 1 died (dehydration 1)", group(tick - 100)),

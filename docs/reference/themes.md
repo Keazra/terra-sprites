@@ -87,7 +87,7 @@ The map view can scroll past the map's wall, into space (M2 design §11). `space
 
 ### `population`
 
-The population graph (`p`, and small at the top of the World tab) stacks the sprites by life stage, from the bottom young, adults and old, then the eggs, each in its colour: full screen as shares of each column, and small as how many, with a dotted line at the most sprites the world holds (M2 design §14). `population` is a record of four fields, each of which may be left out and is then drawn as the default theme draws it. A field the game doesn't know is refused, naming it.
+The population graph (`p`, and small at the top of the World tab) stacks the eggs and the sprites by life stage, youngest to oldest from the bottom, eggs, young, adults and old, each in its colour: full screen as shares of each column, and small as how many, with a dotted line at the most sprites the world holds (M2 design §14). `population` is a record of four fields, each of which may be left out and is then drawn as the default theme draws it. A field the game doesn't know is refused, naming it.
 
 | Field | Meaning |
 |---|---|

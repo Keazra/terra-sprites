@@ -775,42 +775,42 @@ Settled with the owner on 2026-10-13 ([#144](https://github.com/Keazra/terra-spr
 ### 14.2 The graph
 
 - **`p` opens it over the panels,** as `l` opens the sprite list (M1 design §6.1), and `p` or `Esc` closes it. Time runs on behind it, and `space`, `.`, `+` and `-` work as ever (Q2), so the player can watch it at 4×. Other keys do nothing while it's open, except those below, and the pointer picks moments rather than moving the Cursor on the map beneath. Its title says the ticks it covers.
-- **The life stages stack from the bottom,** young, adults and old, then the eggs on top, each in its theme colour (Q1, B): young light green, adults cyan, old gray, and eggs light yellow, as an egg is on the map. A legend under the graph names them.
+- **The bands stack from the bottom, youngest to oldest:** the eggs, then the young, adults and old (Q1, B; the eggs at the bottom are the owner's call, 2026-10-14, as it reads more aptly). Each is in its theme colour: eggs light yellow, as an egg is on the map, young light green, adults cyan and old gray. A legend under the graph names them in the same order.
 - **Each column is split by share** (the owner's pick, 2026-10-14, after trying the built graph: near the limit, a stack of how many was a flat block whose thin bands were hard to read). It fills the height, split by each band's share of it, eggs included, and the vertical axis is labelled `100%`, `50%` and `0%`. Every band with any in it gets at least half a character, room allowing, so a small one is never lost, and the rest go by largest remainder. The legend ends `as shares of each column`. How many there were is in the lines under it (§14.3) and in the small graph (§14.4).
 - **Each row of characters is two halves:** a character of one band is `█`, and one of two bands is `▄` in the lower band's colour on the upper's, or on nothing at the top of the stack.
 - **Each column is a stretch of time,** showing the count at its end. Until the run is as long as the graph is wide at 100 ticks a column, the graph grows from the left; after that the whole run is squeezed in, its columns standing for equal stretches. The time axis is marked at each quarter, labelled with its tick, rounded to the hundred.
 - **It fills the screen,** at any size the game allows.
 
-At 100×30, the default world (seed 7) at tick 48,000, with a moment at tick 32,300 picked, which reads the count at 32,700, the end of its column. Each column is about 530 ticks. The page has no colour, so the bands are shades here, as in the round: `▓` young, `█` adults, `▒` old and `░` eggs; a character of two bands shows the lower.
+At 100×30, the default world (seed 7) at tick 48,000, with a moment at tick 32,300 picked, which reads the count at 32,700, the end of its column. Each column is about 530 ticks. The page has no colour, so the bands are shades here, as in the round: `░` eggs, `▓` young, `█` adults and `▒` old; a character of two bands shows the lower.
 
 ```
  Terra Sprites │ tick 48,000 │ ► 1x │ seed 7 │ sprites 99 │ not saved                        ? help
 ┌─ Population ── ticks 0 to 48,000 ──────────────────────────────────────────────────── esc close ─┐
-│ 100% ┤▒░░▒▒▒░░░▒░░▒▒░░▒░░▒░▒░░░▒▒░▒░░▒░▒░░▒▒▒░░░▒▒░▒░░░▒░▒▒▒▒▒▒▒░▒░░▒░▒░▒░▒░▒▒▒▒▒▒▒▒▒░▒▒▒▒▒▒▒▒▒░▒│
-│      │█░▒▒▒▒▒░░▒▒▒▒▒▒▒▒░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒█▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒│
-│      │█▒▒▒▒▒▒░░▒▒▒██▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒███▒█▒█████▒▒█▒█▒▒███▒██▒▒▒▒▒▒█████████▒▒▒▒▒▒▒▒▒▒█▒██▒█│
-│      │█▒██▒▒▒▒▒▒▒▒██▒▒▒▒▒█▒█████████▒█▒██████████████████████████████████████████████▒███████████│
-│      │█████▒▒▒▒▒▒██████▒▒████████████████████████████████████████████████████████████████████████│
-│      │███████▒▒██████████████████████████████████████████████████████████████████████████████████│
-│      │███████▒▒██████████████████████████████████████████████████████████████████████████████████│
+│ 100% ┤▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒│
+│      │█▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒█▒█▒▒██████▒▒▒▒▒▒▒▒▒█▒▒▒▒▒▒▒▒█▒███▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒│
+│      │███▒▒▒▒▒▒▒▒▒███▒▒▒▒▒▒█████████▒▒█████████████████████████████████████████████▒▒▒███████████│
+│      │████▒▒▒▒▒▒█████████████████████████████████████████████████████████████████████████████████│
+│      │███████████████████████████████████████████████████████████████████████████████████████████│
+│      │███████████████████████████████████████████████████████████████████████████████████████████│
+│      │███████████████████████████████████████████████████████████████████████████████████████████│
 │      │███████████████████████████████████████████████████████████████████████████████████████████│
 │      │███████████████████████████████████████████████████████████████████████████████████████████│
 │      │███████████████████████████████████████████████████████████████████████████████████████████│
 │  50% ┤███████████████████████████████████████████████████████████████████████████████████████████│
 │      │███████████████████████████████████████████████████████████████████████████████████████████│
-│      │████████████████▓██████████████████████████████████████████████████████████████████████████│
-│      │████████████▓▓█▓▓██▓███████████████████████████████████████████████████████████████████████│
-│      │██████████▓▓▓▓▓▓▓▓▓▓▓▓▓██▓█████████████████████████████▓███████████████████████████████████│
-│      │█████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█████▓█▓▓▓▓██▓█▓█████▓█▓▓▓▓▓▓▓▓▓▓▓▓█▓███▓█▓▓▓▓█████████████████│
-│      │█████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓████████████▓▓██│
-│      │███████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓███████▓▓▓▓▓▓│
-│      │███▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██▓▓▓▓▓▓▓▓▓▓▓│
-│      │██▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│
+│      │██████████████▓▓▓▓█████████████████████████████████████████████████████████████████████████│
+│      │██████████▓▓▓▓▓▓▓▓▓▓▓█▓██▓█████████████████████████████▓███████████████████████████████████│
+│      │███████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓███████▓▓▓▓██▓█████▓▓██▓█▓▓▓██▓▓▓▓▓███████▓████████████████████│
+│      │███████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█████████████████│
+│      │███████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██████████▓▓▓▓▓│
+│      │█████▓▓░░▓▓▓▓▓▓▓▓░▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓███▓▓▓▓▓▓▓▓▓▓│
+│      │█░▓▓▓▓▓░░▓░░▓▓░▓▓░░▓▓▓▓▓▓▓▓▓▓▓▓▓░▓▓▓▓▓▓▓░▓▓▓▓▓▓░░▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│
+│      │█░░▓▓░░░░░░░▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░▓▓░░▓░░░░░░░░░░░░░│
 │   0% └─────────────────────┬─────────────────────┬─────────────────▲───┬─────────────────────┬───│
 │      0                11,600                23,200                34,800                46,400   │
 │                                                                                                  │
-│ ▓ young  █ adults  ▒ old  ░ eggs  as shares of each column                                       │
-│ tick 32,700: 84 sprites · 20 young (23%) · 53 adults (61%) · 11 old (13%) · 3 eggs (3%)          │
+│ ░ eggs  ▓ young  █ adults  ▒ old  as shares of each column                                       │
+│ tick 32,700: 84 sprites · 3 eggs (3%) · 20 young (23%) · 53 adults (61%) · 11 old (13%)          │
 │ since tick 32,100: 1 laid · 2 hatched · 2 died (old age 2)                                       │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
  (128,80) dirt · berry (fresh) │ SELECT         ←→ pick a moment  space pause  +/- speed  esc close
@@ -819,7 +819,7 @@ At 100×30, the default world (seed 7) at tick 48,000, with a moment at tick 32,
 ### 14.3 Reading a moment
 
 - **`←` and `→`, or `A` and `D`, or the pointer over the graph pick a column** (Q3, B); a click picks too. `▲` under the graph marks the column read: with nothing picked, the last, which reads now, as `now, tick 48,000: …`.
-- **The two lines under the graph read it:** the tick, how many sprites, the count in each stage and the eggs, which aren't sprites until they hatch (§10.4), each with its share of the column, then what was laid, hatched, spawned and died since the column before, with the causes, or "none laid, hatched or died". The first column reads from the first count, and the first count itself says so. A column narrower than the time between counts, on a wide screen once the record has squeezed, shows the count before it again, and reads it.
+- **The two lines under the graph read it:** the tick, how many sprites, then the eggs, which aren't sprites until they hatch (§10.4), and the count in each stage, each with its share of the column, then what was laid, hatched, spawned and died since the column before, with the causes, or "none laid, hatched or died". The first column reads from the first count, and the first count itself says so. A column narrower than the time between counts, on a wide screen once the record has squeezed, shows the count before it again, and reads it.
 - **A pick is a moment,** the end of the column's stretch of time, so as time runs and the graph squeezes, `▲` stays on the column that takes it in. Picking the last column goes back to reading now, which moves on with time. The arrows stop at the first column and at now, and closing the graph forgets the pick.
 - **The status line's key hints** read `←→ pick a moment  space pause  +/- speed  esc close`.
 
@@ -832,12 +832,12 @@ The same world and tick:
 ```
 ┌─ Body Brain Chem Genome [World] ───────────┐
 │ population, ticks 0 to 48,000              │
-│ 100 ┤·······················▄▄▄▒▒███▒▒▒▒▒▒█│
-│     │                  ▄▄▒▒▒▒██████████████│
-│     │        ▄▄▄▄▄▒▒▒▒█████████████████████│
-│  50 ┤  ▄▒▒▒▒███████████████████████████████│
-│     │█████████████████████████▓▓█▓▓████████│
-│     │███▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│
+│ 100 ┤·······················▄▄▄▒▒███▒▒▒▒█▒█│
+│     │                  ▄▄▒▒████████████████│
+│     │        ▄▄▄▄▄▒▒▒██████████████████████│
+│  50 ┤  ▄▒▒█▒███████████████████████████████│
+│     │██████████████████████▓▓▓▓▓▓▓▓████████│
+│     │██▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│
 │   0 └────────┬────────┬────────┬────────┬──│
 │                                            │
 │ …                                          │
@@ -855,7 +855,7 @@ The graph and its small copy are a panel of their own, `Graph`, about the world 
 
 Agreed before building (Q4):
 
-- **UI tests** (ratatui's `TestBackend`) of the full graph and the small one, each column split by share in the theme's colours, with a small band kept, the graph growing from the left and then squeezing, a picked moment, which stays picked as time runs, a death read in its moment, a column narrower than the time between counts, the small graph's height past the limit, nothing beneath showing through, time running while it's open, the graph after a save and a load, and the policy hiding it; snapshots of the graph in both themes. The simulation's own tests cover the record: counts at the right ticks, eggs apart from sprites, layings, hatchings, spawns and deaths counted in their stretch, squeezing over 110,000 ticks, saving, and a save from before it.
+- **UI tests** (ratatui's `TestBackend`) of the full graph and the small one, each column split by share in the theme's colours, the eggs at the bottom, with a small band kept, the graph growing from the left and then squeezing, a picked moment, which stays picked as time runs, a death read in its moment, a column narrower than the time between counts, the small graph's height past the limit, nothing beneath showing through, time running while it's open, the graph after a save and a load, and the policy hiding it; snapshots of the graph in both themes. The simulation's own tests cover the record: counts at the right ticks, eggs apart from sprites, layings, hatchings, spawns and deaths counted in their stretch, squeezing over 110,000 ticks, saving, and a save from before it.
 - **The sprites live exactly as before:** the `generations` run, seeds 1–4 for 30,000 ticks, prints the same, byte for byte, on `main` and on this slice.
 - **No slower:** the speed check (A5) at least 200 ticks a second, and within 5% of `main` measured the same way.
 

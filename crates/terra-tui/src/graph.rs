@@ -1,6 +1,6 @@
 //! The population graph (M2 design §14): the world's population over its
-//! whole run, stacked by life stage with the eggs on top in the theme's
-//! colours, full screen on `p` and small at the top of the World tab. Each
+//! whole run, stacked from the youngest up, eggs at the bottom, in the
+//! theme's colours, full screen on `p` and small at the top of the World tab. Each
 //! column is a stretch of time, showing the count at its end: in the full
 //! graph, as shares, the column full height; in the small one, how many.
 //! Until the run fills the graph, a column is 100 ticks and the graph grows
@@ -18,49 +18,49 @@ use crate::theme::PopulationLook;
 /// graph: as often as the world counts at first (M2 design §14).
 const TICKS_PER_COLUMN: u64 = terra_sim::FIRST_COUNT_EVERY;
 
-/// What the graph stacks (M2 design §14.2): the sprites at each life
-/// stage, then the eggs, which are items until they hatch (§10.4).
+/// What the graph stacks (M2 design §14.2): the eggs, which are items
+/// until they hatch (§10.4), then the sprites at each life stage.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Band {
+    Eggs,
     Young,
     Adults,
     Old,
-    Eggs,
 }
 
 impl Band {
     /// How many of `count` are in the band.
     fn of(self, count: &PopulationCount) -> u32 {
         match self {
+            Band::Eggs => count.eggs,
             Band::Young => count.young,
             Band::Adults => count.adults,
             Band::Old => count.old,
-            Band::Eggs => count.eggs,
         }
     }
 
     /// The band's name, as the legend says it.
     fn plural(self) -> &'static str {
         match self {
+            Band::Eggs => "eggs",
             Band::Young => "young",
             Band::Adults => "adults",
             Band::Old => "old",
-            Band::Eggs => "eggs",
         }
     }
 
     /// The band's name for `n` of them.
     fn name(self, n: u32) -> &'static str {
         match (self, n) {
-            (Band::Adults, 1) => "adult",
             (Band::Eggs, 1) => "egg",
+            (Band::Adults, 1) => "adult",
             _ => self.plural(),
         }
     }
 }
 
-/// The bands, stacked from the bottom (M2 design §14.2).
-const STACK: [Band; 4] = [Band::Young, Band::Adults, Band::Old, Band::Eggs];
+/// The bands, stacked from the bottom, youngest first (M2 design §14.2).
+const STACK: [Band; 4] = [Band::Eggs, Band::Young, Band::Adults, Band::Old];
 
 /// Rows the full graph keeps for what's under it: the axis, its ticks, a
 /// blank line, the legend and the two lines that read a moment.
@@ -539,12 +539,12 @@ pub(crate) fn covers(world: &World) -> String {
 mod tests {
     use super::*;
 
-    fn count(young: u32, adults: u32, old: u32, eggs: u32) -> PopulationCount {
+    fn count(eggs: u32, young: u32, adults: u32, old: u32) -> PopulationCount {
         PopulationCount {
+            eggs,
             young,
             adults,
             old,
-            eggs,
             ..PopulationCount::default()
         }
     }
@@ -556,9 +556,9 @@ mod tests {
 
     #[test]
     fn shares_fill_the_column_in_proportion() {
-        let stack = share_stack(&count(11, 75, 14, 0), 40);
+        let stack = share_stack(&count(0, 11, 75, 14), 40);
         assert_eq!(stack.len(), 40);
-        assert_eq!(halves_of(&stack), [4, 30, 6, 0]);
+        assert_eq!(halves_of(&stack), [0, 4, 30, 6]);
         assert_eq!(stack[0], Some(Band::Young), "from the bottom");
         assert_eq!(stack[39], Some(Band::Old));
     }
@@ -566,8 +566,9 @@ mod tests {
     #[test]
     fn a_band_too_small_for_a_half_still_gets_one() {
         // 1 in 100 is 0.4 of a half: rounded down, it would be lost.
-        let stack = share_stack(&count(1, 97, 1, 1), 40);
-        assert_eq!(halves_of(&stack), [1, 37, 1, 1]);
+        let stack = share_stack(&count(1, 1, 97, 1), 40);
+        assert_eq!(halves_of(&stack), [1, 1, 37, 1]);
+        assert_eq!(stack[0], Some(Band::Eggs), "the eggs at the bottom");
     }
 
     #[test]
