@@ -425,7 +425,7 @@ fn holding_escape_counts_once_so_it_cannot_confirm_its_own_prompt() {
 #[test]
 fn any_other_key_is_reported_so_it_can_cancel_a_prompt() {
     for code in [
-        KeyCode::Char('k'),
+        KeyCode::Char('j'),
         KeyCode::Char('n'),
         KeyCode::Char('0'),
         KeyCode::F(6),
@@ -643,14 +643,16 @@ fn the_place_menu_and_naming_keys_have_their_actions() {
 }
 
 #[test]
-fn b_t_m_l_p_and_question_mark_act_once_per_press() {
-    // Design §6.1, §6.3, M2 design §14: holding one doesn't flicker it.
+fn b_t_m_l_p_k_and_question_mark_act_once_per_press() {
+    // Design §6.1, §6.3, M2 design §14 and §16: holding one doesn't flicker
+    // it.
     let keys = [
         ('b', Action::CycleColours),
         ('t', Action::Track),
         ('m', Action::CycleEventFilter),
         ('l', Action::SpriteList),
         ('p', Action::Population),
+        ('k', Action::FamilyTree),
         ('?', Action::Help),
     ];
     for (code, action) in keys {

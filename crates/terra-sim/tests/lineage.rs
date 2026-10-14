@@ -210,3 +210,51 @@ fn a_save_from_before_generations_numbers_them_from_its_sprites() {
     hatch(&mut world, EntityId(12));
     assert_eq!(world.sprite(EntityId(12)).unwrap().generation(), 2);
 }
+
+/// A save of schema 1 from before the world remembered the dead, written
+/// by the build that merged PR #201: on a 12 by 6 field of grass with no
+/// water, a sprite the world began with, 1, who laid alone, as her young
+/// did, their eggs hatching 20 ticks after they were laid and thirst
+/// killing each sprite some 85 ticks after it hatched. Saved on tick 105,
+/// once 1 and her first young, 2, had died: 3 is 2's young, 4 is 1's, 5 is
+/// 4's and 6 is 3's, and the eggs 7 and 8, due on tick 110, are 5's and 6's.
+const GOLDEN_V1_BEFORE_LINEAGE: &[u8] = include_bytes!("golden/save-v1-before-lineage.tspr");
+
+#[test]
+fn a_save_from_before_the_dead_were_remembered_forgets_those_dead_then() {
+    let mut world = World::load(GOLDEN_V1_BEFORE_LINEAGE).expect("the save loads");
+    assert_eq!(world.tick(), 105);
+    // Generations count up from the sprites and eggs it has: a parent it
+    // doesn't know was of the first.
+    let sprites: Vec<_> = world.sprites().map(|s| (s.id(), s.generation())).collect();
+    assert_eq!(
+        sprites,
+        [
+            (EntityId(3), 2),
+            (EntityId(4), 2),
+            (EntityId(5), 3),
+            (EntityId(6), 3)
+        ]
+    );
+    let eggs: Vec<_> = world.eggs().map(|e| (e.id(), e.generation())).collect();
+    assert_eq!(eggs, [(EntityId(7), 4), (EntityId(8), 4)]);
+    assert_eq!(
+        world.sprite(EntityId(3)).unwrap().origin(),
+        Origin::Hatched,
+        "it hatched, whoever from"
+    );
+    assert!(world.dead(EntityId(2)).is_none(), "forgotten");
+    assert_eq!(
+        world.young(EntityId(2)),
+        [EntityId(3)],
+        "known by its young"
+    );
+
+    // Those that die after the load are remembered.
+    died(&mut world, EntityId(3), 40);
+    let dead = world.dead(EntityId(3)).expect("remembered");
+    assert_eq!(
+        (dead.parents(), dead.generation(), dead.cause()),
+        ([EntityId(2)].as_slice(), 2, DeathCause::Dehydration)
+    );
+}

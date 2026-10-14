@@ -601,3 +601,55 @@ fn a_theme_draws_what_it_leaves_out_of_the_graph_as_the_default_theme_does() {
     let error = Theme::from_ron(&misspelt, &pack).expect_err("refused");
     assert!(error.contains("halve"), "{error}");
 }
+
+/// A theme's lineage colours: parents and grandparents, brothers and
+/// sisters, young and theirs, and the rest.
+fn lineage(theme: &Theme) -> [Color; 4] {
+    let look = theme.lineage();
+    [look.elders, look.siblings, look.young, look.others]
+}
+
+#[test]
+fn the_themes_draw_the_lineage_colours_as_the_design_table_says() {
+    // M2 design §16.
+    let colours = [
+        Color::LightBlue,
+        Color::LightRed,
+        Color::LightMagenta,
+        Color::DarkGray,
+    ];
+    assert_eq!(lineage(&Theme::cp437()), colours);
+    assert_eq!(lineage(&Theme::ascii()), colours);
+}
+
+#[test]
+fn a_theme_from_before_the_lineage_colours_draws_the_default_theme_s() {
+    // M2 design §16.
+    let pack = pack();
+    let start = ASCII_THEME
+        .find("    // The lineage colours")
+        .expect("a lineage section");
+    let end = ASCII_THEME.rfind(')').expect("the theme's end");
+    let edited = format!("{}{}", &ASCII_THEME[..start], &ASCII_THEME[end..]);
+    assert!(!edited.contains("lineage:"), "{edited}");
+    let theme = Theme::from_ron(&edited, &pack).expect("loads");
+    assert_eq!(lineage(&theme), lineage(&Theme::cp437()));
+}
+
+#[test]
+fn a_theme_draws_the_lineage_colours_it_leaves_out_as_the_default_theme_does() {
+    // M2 design §16: a colour at a time.
+    let pack = pack();
+    let edited = ascii_with(
+        "lineage: (elders: light_blue, siblings: light_red, young: light_magenta, others: dark_gray)",
+        "lineage: (young: green)",
+    );
+    let theme = Theme::from_ron(&edited, &pack).expect("loads");
+    let [elders, siblings, _, others] = lineage(&Theme::cp437());
+    assert_eq!(lineage(&theme), [elders, siblings, Color::Green, others]);
+    // A key the game doesn't know is refused, rather than quietly drawn as
+    // the default.
+    let misspelt = ascii_with("others: dark_gray", "strangers: dark_gray");
+    let error = Theme::from_ron(&misspelt, &pack).expect_err("refused");
+    assert!(error.contains("strangers"), "{error}");
+}

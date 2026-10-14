@@ -1447,13 +1447,15 @@ fn the_body_tab_shows_age_life_stage_traits_drives_physical_levels_and_wear() {
     let (world, app) = one_sprite_doing(WORKED_GENOME, &[ScriptedAction::Rest], 1);
     let (_, text) = inspector_on(&app, &world, 32);
     assert_eq!(
-        text[..17],
+        text[..18],
         [
             "Resting · 9 ticks left",
             "age 7,501 · adult · grows old 13,500",
             "speed 7.25 · sense 9.5",
             // Its sex, and fed and watered, fertile (M2 design §10).
             "male · fertile",
+            // Where it came from, and its generation (M2 design §16).
+            "one of the first sprites · generation 1",
             "",
             "hunger      ████░░░░░░ .40 ▼",
             "thirst      ██░░░░░░░░ .18",
@@ -1470,8 +1472,8 @@ fn the_body_tab_shows_age_life_stage_traits_drives_physical_levels_and_wear() {
             "wear .00",
         ]
     );
-    assert_eq!(text[17..20], ["", "Observed", "nothing yet"]);
-    assert!(text[20..].iter().all(String::is_empty), "{text:?}");
+    assert_eq!(text[18..21], ["", "Observed", "nothing yet"]);
+    assert!(text[21..].iter().all(String::is_empty), "{text:?}");
 }
 
 /// A genome that walks a grass step a tick.
@@ -2624,9 +2626,9 @@ fn a_change_too_small_to_show_leaves_no_number_and_no_arrow() {
     ])"#;
     let (world, mut app) = one_sprite(genome, 1);
     let (_, body) = inspector(&app, &world);
-    // After the action line, age, traits, sex, a blank line and four
-    // drives.
-    assert_eq!(body[9], "boredom     ░░░░░░░░░░ .00", "the Body tab");
+    // After the action line, age, traits, sex, where it came from, a
+    // blank line and four drives.
+    assert_eq!(body[10], "boredom     ░░░░░░░░░░ .00", "the Body tab");
     open(&mut app, &world, Tab::Chem);
     let (_, chem) = inspector(&app, &world);
     assert_eq!(chem[11], "boredom       .00", "the Chem tab");
@@ -2698,9 +2700,11 @@ fn the_world_tab_shows_the_population_and_the_deaths_by_cause() {
     let (_, text) = inspector(&app, &world);
     let text = &text[GRAPH_LINES..];
     assert_eq!(
-        text[1..4],
+        text[1..5],
         [
             "sprites           3",
+            // The generations of the living (M2 design §16).
+            "generation        1",
             "deaths            0",
             "starvation 0 · dehydration 0 · old age 0",
         ]
@@ -2811,7 +2815,7 @@ fn chemical_names_show_with_spaces_for_underscores() {
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
     let (_, body) = inspector(&app, &world);
-    assert!(body[8].starts_with("bored ness  "), "{:?}", body[8]);
+    assert!(body[9].starts_with("bored ness  "), "{:?}", body[9]);
     open(&mut app, &world, Tab::Chem);
     let (_, chem) = inspector(&app, &world);
     assert!(chem[11].starts_with("bored ness  "), "{:?}", chem[11]);

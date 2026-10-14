@@ -1,0 +1,30 @@
+ Terra Sprites │ tick 200 │ ► 1x │ seed 7 │ sprites 20 │ not saved                           ? help
+┌─ Family tree ── Sprite #16 ────────────────────────────────────────────────────────── esc close ─┐
+│                                                                                                  │
+│             one of the first sprites                    Sprite #3               Sprite #4        │
+│                                                      adult · 7 young         adult · 7 young     │
+│                                                                                                  │
+│                                                             └───────────┬───────────┘            │
+│                     Sprite #3                                      Sprite #13                    │
+│                  adult · 7 young                                 adult · 1 young                 │
+│                                                                                                  │
+│                         └───────────────────────┬───────────────────────┘                        │
+│                                            Sprite #16                                            │
+│                               adult · male · age 60 · generation 3                               │
+│                                                 │                                                │
+│                                                 │                                                │
+│                                          with Sprite #3                                          │
+│                                                 │                                                │
+│                                            Sprite #21                                            │
+│                                        egg · hatches in 1                                        │
+│                                                                                                  │
+│                                                                                                  │
+│ BROTHERS AND SISTERS                                                                             │
+│         Sprite #5               Sprite #7              Sprite #10              Sprite #13       ►│
+│      adult · 1 young         adult · 2 young         adult · 3 young         adult · 1 young     │
+│     through Sprite #3       through Sprite #3       through Sprite #3       through Sprite #3    │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+ (8,4) grass │ SELECT                       ←→↑↓ choose  enter centre on it  space pause  esc close

@@ -42,7 +42,7 @@ The same key in capitals or lower case does the same thing.
 | `W` `A` `S` `D` or arrows | Scroll the map (hold Shift to scroll 5 tiles) |
 | Mouse | Point at a tile: the status line says what's there. Click a sprite to select it |
 | `T` | Track: the view follows the selected sprite; again to stop |
-| `b` | Sprite colours: what a sprite's colour shows, such as its strongest drive or nothing. The status line says which |
+| `b` | Sprite colours: what a sprite's colour shows: its strongest drive, nothing, or its lineage, which marks the selected sprite's parents and grandparents, brothers and sisters, and young and theirs each in a colour, and every other sprite dark gray. The status line says which |
 | `m` | Event log filter: all events, the selected sprite's, or only the major ones (deaths, lessons learned, refusals) |
 | `v` | Detail view: exactly what the selected sprite is doing |
 | `?` | Help: every key, the colour legend and where the game keeps its files |
@@ -53,6 +53,7 @@ The same key in capitals or lower case does the same thing.
 | Place menu | `1`–`9`, or the arrows and `Enter`, or a click picks: a berry bush seedling, a berry, a ball, a new sprite, or a sprite from a genome file. The next Grab-mode click places it; a right click puts it away |
 | `Tab` / `Shift+Tab` | Select the next / previous sprite |
 | `l` | Sprite list: every sprite, with its age, strongest drive and what it's doing. The arrows choose, `Tab` changes the order, `Enter` goes to it |
+| `k` | Family tree: the selected sprite's grandparents and parents above it, its young below, grouped by their other parent, and its brothers and sisters, living or dead (the dead in dark gray). The arrows or the mouse choose one, which blinks, and `Enter` or a click walks the tree to it and selects it |
 | `p` | Population graph: the world's population over the whole run, each column split by the share of eggs, young, adults and old, from the bottom. `←` `→` or the mouse pick a moment, and the lines under the graph say how many there were then and what was laid, hatched, spawned or died since the column before. A small copy at the top of the World tab shows how many, with the world's limit |
 | `r` | Name the selected sprite: type a name, or `Tab` for another random one, then `Enter` |
 | `g` | Save the selected sprite's genome to the genomes folder (the status line says where); the Place menu reads it back |

@@ -14,6 +14,7 @@ use terra_sim::{
 
 use crate::clock::Clock;
 use crate::cp437;
+use crate::family_tree::{self, Step};
 use crate::graph;
 use crate::input::{Action, Button};
 use crate::inspector;
@@ -63,6 +64,8 @@ pub enum Screen {
     SpriteList,
     /// The population graph is open (M2 design §14).
     Population,
+    /// The family tree is open (M2 design §16).
+    FamilyTree,
 }
 
 listed_enum! {
@@ -74,6 +77,9 @@ listed_enum! {
         Drive => "strongest drive",
         /// Its own colour.
         Plain => "plain",
+        /// The selected sprite's kin each in their colour, and the rest
+        /// dark gray (M2 design §16).
+        Lineage => "lineage",
     }
 
     /// Every colour mode, in the order `b` goes through them.
@@ -531,6 +537,11 @@ pub struct App {
     /// The moment the population graph reads, the end of the stretch of
     /// time picked, if one is; otherwise it reads now (M2 design §14.3).
     graph_pick: Option<u64>,
+    /// The card the family tree's arrows are on, if not the one in the
+    /// middle (M2 design §16).
+    tree_choice: Option<family_tree::Spot>,
+    /// How far along the family tree's rows that scroll are.
+    tree_scroll: family_tree::Scroll,
     /// The game's folder for its files (design §6.7), which the help
     /// screen shows, if there is one.
     data_folder: Option<PathBuf>,
@@ -894,6 +905,8 @@ impl App {
             list_sort: SortBy::Number,
             list_choice: None,
             graph_pick: None,
+            tree_choice: None,
+            tree_scroll: family_tree::Scroll::default(),
             data_folder: None,
             save_folder: None,
             save_files: Vec::new(),
@@ -1058,6 +1071,17 @@ impl App {
         for egg in world.eggs() {
             if let Some(name) = egg.name() {
                 self.names.note(egg.id(), name);
+            }
+        }
+    }
+
+    /// Notes the names of the dead the world remembers (M2 design §16), for
+    /// a world just loaded: those that die while the screen watches, it
+    /// notes as they die.
+    fn note_names_of_the_dead(&mut self, world: &World) {
+        for dead in world.dead_sprites() {
+            if let Some(name) = dead.name() {
+                self.names.note(dead.id(), name);
             }
         }
     }
@@ -1746,6 +1770,7 @@ impl App {
             Screen::Help => return self.apply_in_help(action),
             Screen::SpriteList => return self.apply_in_list(action, world),
             Screen::Population => return self.apply_in_graph(action, world),
+            Screen::FamilyTree => return self.apply_in_tree(action, world),
             Screen::Normal | Screen::QuitPrompt => {}
         }
         if self.screen == Screen::QuitPrompt {
@@ -1899,6 +1924,12 @@ impl App {
                 self.end_aim();
                 self.screen = Screen::Population;
                 self.graph_pick = None;
+            }
+            Action::FamilyTree => {
+                self.end_aim();
+                self.screen = Screen::FamilyTree;
+                self.tree_choice = None;
+                self.tree_scroll = family_tree::Scroll::default();
             }
             Action::CycleColours => {
                 self.colour_mode = along(&ColourMode::ALL, self.colour_mode, 1);
@@ -2336,6 +2367,137 @@ impl App {
     /// time picked, if one is; otherwise it reads now (M2 design §14.3).
     pub fn graph_pick(&self) -> Option<u64> {
         self.graph_pick
+    }
+
+    /// What an action does while the family tree is open (M2 design §16):
+    /// the arrows or the pointer choose a sprite on it, and `Enter` or a
+    /// click centres the tree on that one and selects it; `Tab` selects as
+    /// ever, time runs as usual, and `k` or `Esc` closes it.
+    fn apply_in_tree(&mut self, action: Action, world: &World) -> Flow {
+        match action {
+            Action::TogglePause => self.clock.toggle_pause(),
+            Action::StepOnce => self.clock.step_once(),
+            Action::Faster { held: false } => self.clock.faster(),
+            Action::Faster { held: true } => self.clock.faster_held(),
+            Action::Slower { held: false } => self.clock.slower(),
+            Action::Slower { held: true } => self.clock.slower_held(),
+            Action::Scroll { dx, dy } => {
+                let step = match (dx.signum(), dy.signum()) {
+                    (-1, _) => Step::Left,
+                    (1, _) => Step::Right,
+                    (_, -1) => Step::Up,
+                    (_, 1) => Step::Down,
+                    _ => return Flow::Continue,
+                };
+                if let Some(tree) = self.tree(world)
+                    && let Some(to) = tree.step(tree.chosen, step)
+                {
+                    tree.keep_in_view(&mut self.tree_scroll, to);
+                    self.tree_choice = Some(to);
+                }
+            }
+            Action::Point(cell) => {
+                self.point(cell);
+                if let Some(spot) = self.tree_card_at(cell, world) {
+                    self.tree_choice = Some(spot);
+                }
+            }
+            Action::Click {
+                at,
+                button: Button::Left,
+                ..
+            } => {
+                self.point(at);
+                if let Some(spot) = self.tree_card_at(at, world) {
+                    self.tree_choice = Some(spot);
+                    self.walk_tree(world);
+                }
+            }
+            Action::Enter => self.walk_tree(world),
+            Action::SelectNext | Action::SelectPrevious => {
+                let direction = if matches!(action, Action::SelectNext) {
+                    Direction::Next
+                } else {
+                    Direction::Previous
+                };
+                self.select_along(world, direction);
+                self.tree_choice = None;
+                self.tree_scroll = family_tree::Scroll::default();
+            }
+            Action::FamilyTree | Action::Back => self.screen = Screen::Normal,
+            Action::Quit => return Flow::Quit,
+            _ => {}
+        }
+        Flow::Continue
+    }
+
+    /// The family tree of the selected sprite or egg, living or dead, as
+    /// the screen lays it out now, if one is selected, the policy shows it,
+    /// and there's room (M2 design §16).
+    pub(crate) fn tree(&self, world: &World) -> Option<family_tree::Drawn> {
+        let centre = self.selection?.id();
+        if !family_tree::shown(self, centre) {
+            return None;
+        }
+        let inner = self.overlay?.inner(Margin::new(1, 1));
+        let family = family_tree::Family::of(self, world, centre);
+        Some(family_tree::draw(
+            &family,
+            usize::from(inner.width),
+            self.tree_scroll,
+            self.tree_choice,
+            self.flash_on(),
+        ))
+    }
+
+    /// The card on the family tree `at` is over, if any.
+    fn tree_card_at(&self, at: Position, world: &World) -> Option<family_tree::Spot> {
+        let inner = self.overlay?.inner(Margin::new(1, 1));
+        if !inner.contains(at) {
+            return None;
+        }
+        let tree = self.tree(world)?;
+        tree.at(i32::from(at.x - inner.x), usize::from(at.y - inner.y))
+    }
+
+    /// Walks the family tree to the sprite chosen on it (M2 design §16):
+    /// the tree centres on it and it's selected, and the map centres on it
+    /// if it's on the map. A dead one is selected as one that died while
+    /// selected is. One the world no longer remembers can't be.
+    fn walk_tree(&mut self, world: &World) {
+        let Some(tree) = self.tree(world) else {
+            return;
+        };
+        let to = tree.chosen.id;
+        if self.selection.map(Selection::id) == Some(to) {
+            return;
+        }
+        match family_tree::Known::of(world, to) {
+            family_tree::Known::Living(sprite) => {
+                self.select(to);
+                self.centre_on(sprite.pos());
+            }
+            family_tree::Known::Egg(egg) => {
+                self.select(to);
+                if let Some(pos) = egg.pos() {
+                    self.centre_on(pos);
+                }
+            }
+            family_tree::Known::Dead(dead) => self.select_as(Selection::Dead {
+                id: to,
+                cause: dead.cause(),
+                age: dead.age(),
+            }),
+            family_tree::Known::Forgotten => {
+                return self.refuse(format!(
+                    "{} lived long ago: the world no longer remembers it",
+                    self.names.label(to)
+                ));
+            }
+        }
+        self.tree_choice = None;
+        self.tree_scroll = family_tree::Scroll::default();
+        self.settle_cursor(world);
     }
 
     /// Opens the sprite list, highlighting the selected sprite if it's
@@ -2875,8 +3037,10 @@ impl App {
         });
         self.mode = CursorMode::Select;
         self.clock.pause();
-        // A replay from a save starts with the save's names.
+        // A replay from a save starts with the save's names, the dead's
+        // too.
         self.note_names(playback.world());
+        self.note_names_of_the_dead(playback.world());
         let from = if playback.started_fresh() {
             "a new world".to_string()
         } else {
@@ -3307,8 +3471,10 @@ impl App {
             group_thousands(world.tick())
         ));
         *self = fresh;
-        // Its names show at once, paused, before any tick is taken in.
+        // Its names show at once, paused, before any tick is taken in, and
+        // the names of the dead it remembers (M2 design §16).
         self.note_names(&world);
+        self.note_names_of_the_dead(&world);
         self.settle_cursor(&world);
         Some(world)
     }
@@ -3384,6 +3550,12 @@ impl App {
     /// Selects the sprite `id`. From the World tab, that opens Body; and
     /// another sprite than before shows its tab from the top.
     fn select(&mut self, id: EntityId) {
+        self.select_as(Selection::Living(id));
+    }
+
+    /// Selects `selection`, living or dead, as `select` does.
+    fn select_as(&mut self, selection: Selection) {
+        let id = selection.id();
         let another = self.selection.map(Selection::id) != Some(id);
         if self.tab == Tab::World {
             self.open(Tab::Body);
@@ -3394,7 +3566,7 @@ impl App {
             self.observed.clear();
             self.open_lessons.clear();
         }
-        self.selection = Some(Selection::Living(id));
+        self.selection = Some(selection);
     }
 
     /// Opens `tab`, from the top.

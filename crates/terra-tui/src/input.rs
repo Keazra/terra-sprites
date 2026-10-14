@@ -96,6 +96,8 @@ pub enum Action {
     SpriteList,
     /// Open or close the population graph (`p`, M2 design §14).
     Population,
+    /// Open or close the family tree (`k`, M2 design §16).
+    FamilyTree,
     /// Show the Cursor to sprites in the current cursor mode, or hide it
     /// from them (`h`, design v29 §6.5).
     ToggleVisible,
@@ -336,6 +338,7 @@ impl Keys {
             KeyCode::Char('?') => (!held).then_some(Action::Help),
             KeyCode::Char('l') => (!held).then_some(Action::SpriteList),
             KeyCode::Char('p') => (!held).then_some(Action::Population),
+            KeyCode::Char('k') => (!held).then_some(Action::FamilyTree),
             KeyCode::Char('g') => (!held).then_some(Action::ExportGenome),
             KeyCode::Char(digit @ '1'..='9') => (!held).then(|| Action::Pick(digit as u8 - b'0')),
             KeyCode::Enter => (!held).then_some(Action::Enter),

@@ -70,6 +70,7 @@ const COLUMNS: [&[Group]; 3] = [
                 ("Shift+Tab", "previous sprite"),
                 ("l", "sprite list"),
                 ("p", "population graph"),
+                ("k", "family tree"),
                 ("r", "name it"),
                 ("g", "save its genome"),
             ],
@@ -121,7 +122,7 @@ pub(crate) fn lines(app: &App, world: &World, width: usize) -> Vec<Line<'static>
     ));
     lines.extend(colour_legend(app, world, width));
     lines.push(emote_legend(app));
-    lines.push(Line::default());
+    lines.push(lineage_legend(app));
     let folder = app
         .data_folder()
         .map_or_else(|| "none".to_string(), |folder| folder.display().to_string());
@@ -161,6 +162,25 @@ fn colour_legend(app: &App, world: &World, width: usize) -> Vec<Line<'static>> {
     }
     lines.push(Line::from(spans));
     lines
+}
+
+/// The lineage colours (M2 design §16): who's drawn in each, kin to the
+/// selected sprite.
+fn lineage_legend(app: &App) -> Line<'static> {
+    let sprite = app.theme.glyph(SemanticTile::Sprite).symbol.to_string();
+    let lineage = app.theme.lineage();
+    let kin = [
+        (lineage.elders, "parents, grandparents"),
+        (lineage.siblings, "brothers, sisters"),
+        (lineage.young, "young, theirs"),
+        (lineage.others, "the rest"),
+    ];
+    let mut spans = vec![Span::raw(" LINEAGE  ")];
+    for (colour, who) in kin {
+        spans.push(Span::styled(sprite.clone(), Style::default().fg(colour)));
+        spans.push(Span::raw(format!(" {who}  ")));
+    }
+    Line::from(spans)
 }
 
 /// Each emote, in its colour, and what it means.
