@@ -1,14 +1,16 @@
 //! Story mode and Lab mode in the game (M2 design §16): a Story world runs
-//! at 4× at most and says so when `+` asks for more, a Lab world runs up to
-//! Max, and the top bar says when a world is a Lab world.
+//! at 4× at most and says so when `+` asks for more, in a replay too, a Lab
+//! world runs up to Max, and the top bar says when a world is a Lab world.
 
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::layout::Size;
-use terra_sim::{DataPack, Mode, World, WorldConfig};
+use terra_sim::{DataPack, Mode, Playback, World, WorldConfig};
 use terra_tui::app::App;
 use terra_tui::clock::Speed;
+use terra_tui::files;
 use terra_tui::input::Action;
+use terra_tui::session::Session;
 use terra_tui::theme::Theme;
 use terra_tui::ui;
 
@@ -79,6 +81,39 @@ fn the_population_graph_keeps_a_story_world_to_4x() {
     assert_eq!(app.clock.speed(), Speed::X4);
     faster(&mut app, &world, true, 3);
     assert_eq!(app.clock.speed(), Speed::X4);
+}
+
+/// The replay of `world`, a new world, run for 20 ticks, as `--replay`
+/// plays it.
+fn replayed(world: World, name: &str) -> (Playback, App) {
+    let mut session = Session::live(world);
+    for _ in 0..20 {
+        session.step();
+    }
+    let folder = std::env::temp_dir().join(format!("terra-modes-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&folder);
+    std::fs::create_dir_all(&folder).expect("a scratch folder");
+    let log = folder.join(files::SESSION_LOG);
+    session.write_session_log(&log).expect("the log is written");
+    let playback = Playback::new(&std::fs::read(&log).expect("the log")).expect("it plays");
+    let _ = std::fs::remove_dir_all(&folder);
+    let mut app = app_for(playback.world());
+    app.start_replay("last_session.replay", &playback);
+    (playback, app)
+}
+
+#[test]
+fn a_replay_plays_at_its_worlds_speeds() {
+    // M2 design §16.2: the cap holds in a replay of a Story world.
+    let (playback, mut app) = replayed(world_in(Mode::Story), "story");
+    assert_eq!(playback.world().mode(), Mode::Story);
+    faster(&mut app, playback.world(), false, 6);
+    assert_eq!(app.clock.speed(), Speed::X4);
+    assert_eq!(app.notice(), Some("4x is Story mode's fastest"));
+    let (playback, mut app) = replayed(world_in(Mode::Lab), "lab");
+    assert_eq!(playback.world().mode(), Mode::Lab);
+    faster(&mut app, playback.world(), false, 6);
+    assert_eq!(app.clock.speed(), Speed::Max);
 }
 
 #[test]

@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
-use terra_sim::{DeathCause, EntityId, EventKind, LifeStage, World, gene_values, middle_values};
+use terra_sim::{DeathCause, EntityId, EventKind, World, drift, gene_values, middle_values};
 
 use crate::text::{cause_name, group_thousands};
 
@@ -16,6 +16,10 @@ pub const HOUR: u64 = 4_500;
 
 /// How many rows a run reports: one each tenth of the way.
 pub const ROWS: u64 = 10;
+
+/// How many gene values the end of a run lists as moved most (M2 design
+/// §16.4).
+pub const MOVED_LISTED: usize = 5;
 
 /// A world being fast-forwarded.
 pub struct FastForward {
@@ -84,6 +88,14 @@ impl FastForward {
         (self.rows < ROWS).then(|| self.start + self.ticks() * (self.rows + 1) / ROWS)
     }
 
+    /// Runs on by up to `ticks`, but no further than the next row, and
+    /// takes that row once it's due. A run ends with its last row.
+    pub fn advance(&mut self, ticks: u64) -> Option<Row> {
+        let due = self.next_row()?;
+        self.run_to(self.world.tick().saturating_add(ticks).min(due));
+        (self.world.tick() >= due).then(|| self.take_row())
+    }
+
     /// Runs on to `tick`, but no further than its end, taking a row of the
     /// genes table each hour.
     pub fn run_to(&mut self, tick: u64) {
@@ -109,23 +121,16 @@ impl FastForward {
     /// the next row of the report.
     pub fn take_row(&mut self) -> Row {
         self.rows += 1;
-        let mut row = Row {
+        let count = self.world.population_now();
+        Row {
             ticks_run: self.ticks_run(),
-            young: 0,
-            adults: 0,
-            old: 0,
-            eggs: self.world.eggs().count(),
+            young: count.young,
+            adults: count.adults,
+            old: count.old,
+            eggs: count.eggs,
             generation: self.tally.deepest(),
             died: self.tally.take_deaths(),
-        };
-        for sprite in self.world.sprites() {
-            *match sprite.life_stage() {
-                LifeStage::Young => &mut row.young,
-                LifeStage::Adult => &mut row.adults,
-                LifeStage::Old => &mut row.old,
-            } += 1;
         }
-        row
     }
 }
 
@@ -199,10 +204,10 @@ impl Tally {
 pub struct Row {
     /// The ticks run since the start.
     pub ticks_run: u64,
-    pub young: usize,
-    pub adults: usize,
-    pub old: usize,
-    pub eggs: usize,
+    pub young: u32,
+    pub adults: u32,
+    pub old: u32,
+    pub eggs: u32,
     /// The deepest generation reached.
     pub generation: u32,
     /// Deaths since the row before, by cause.
@@ -214,10 +219,10 @@ pub const HEADER: &str =
     " Hours  Sprites  Young  Adults  Old  Eggs  Generation   Died  Old age  Hunger  Thirst  Hurt";
 
 impl Row {
-    /// The sprites, eggs included, as the world's limit counts them (M2
-    /// design §10.6).
-    pub fn sprites(&self) -> usize {
-        self.young + self.adults + self.old + self.eggs
+    /// The sprites, at every life stage: an egg isn't one until it
+    /// hatches, as on the population graph (M2 design §14).
+    pub fn sprites(&self) -> u32 {
+        self.young + self.adults + self.old
     }
 
     /// The row as the report prints it, under `HEADER`.
@@ -232,11 +237,11 @@ impl Row {
         format!(
             "{:>6}  {:>7}  {:>5}  {:>6}  {:>3}  {:>4}  {:>10}  {:>5}  {:>7}  {:>6}  {:>6}  {:>4}",
             hours(self.ticks_run),
-            group_thousands(self.sprites() as u64),
-            group_thousands(self.young as u64),
-            group_thousands(self.adults as u64),
-            group_thousands(self.old as u64),
-            group_thousands(self.eggs as u64),
+            group_thousands(self.sprites().into()),
+            group_thousands(self.young.into()),
+            group_thousands(self.adults.into()),
+            group_thousands(self.old.into()),
+            group_thousands(self.eggs.into()),
             self.generation,
             group_thousands(self.died.values().sum()),
             group_thousands(died(DeathCause::OldAge)),
@@ -287,9 +292,19 @@ pub fn closing_line(
 }
 
 /// The name a run's save gets unless `--save` names it: what it's named
-/// after, then the hours it ran, as `seed-7-200h` or `mira-50h`.
+/// after, then the whole hours it ran, as `seed-7-200h`, `mira-50h`, or
+/// `seed-7-143h` for a run stopped at 143.5 hours.
 pub fn save_name(from: &str, ticks_run: u64) -> String {
-    format!("{from}-{}h", hours(ticks_run).replace(',', ""))
+    format!("{from}-{}h", ticks_run / HOUR)
+}
+
+/// The tables a run leaves beside its save, called `name` (M2 design
+/// §16.4): each one's file name, and what's in it.
+pub fn tables(name: &str, world: &World, genes: &GeneTable) -> [(String, String); 2] {
+    [
+        (format!("{name}-population.csv"), population_table(world)),
+        (format!("{name}-genes.csv"), genes.table()),
+    ]
 }
 
 /// `ticks` as hours of play at 1×, to the nearest tenth, with no ".0".
@@ -302,16 +317,16 @@ pub fn hours(ticks: u64) -> String {
 }
 
 /// The line that shows how a run is going, updated in place: how far it
-/// has got, the generation and the sprites, its speed, and about how long
-/// it has left at that speed.
+/// has got, the generation, the sprites and the eggs, its speed, and about
+/// how long it has left at that speed.
 pub fn progress_line(run: &FastForward, ticks_per_second: f64) -> String {
-    let world = run.world();
-    let sprites = world.sprites().count() + world.eggs().count();
+    let count = run.world().population_now();
     let mut line = format!(
-        "► {} hours · generation {} · {} sprites",
+        "► {} hours · generation {} · {} sprites · {} eggs",
         hours(run.ticks_run()),
         run.generation(),
-        group_thousands(sprites as u64),
+        group_thousands(count.sprites().into()),
+        group_thousands(count.eggs.into()),
     );
     if ticks_per_second > 0.0 {
         let left = (run.ticks() - run.ticks_run()) as f64 / ticks_per_second;
@@ -495,12 +510,33 @@ impl GeneTable {
         table
     }
 
-    /// The `most` values whose middle moved furthest from the
-    /// starter's by the last row, as `moved_most` finds them.
-    pub fn moved_most(&self, most: usize) -> Vec<Moved> {
-        let now = self.rows.last().and_then(|row| row.middles.clone());
-        now.map_or_else(Vec::new, |now| moved_most(&self.starter, &now, most))
+    /// What the report ends with (M2 design §16.4): the `MOVED_LISTED`
+    /// values whose middle moved furthest from the starter's by the last
+    /// row, or why it lists none.
+    pub fn ending(&self) -> Vec<String> {
+        match self.rows.last().and_then(|row| row.middles.as_ref()) {
+            None => vec!["No sprite is left alive to measure the genes of.".into()],
+            Some(now) => moved_lines(&moved_most(&self.starter, now, MOVED_LISTED)),
+        }
     }
+}
+
+/// The lines that list the values in `moved`, under a line that says what
+/// they are, or the line that says none moved.
+pub fn moved_lines(moved: &[Moved]) -> Vec<String> {
+    if moved.is_empty() {
+        return vec!["No gene value has moved a tenth from the starter's yet.".into()];
+    }
+    let width = moved
+        .iter()
+        .map(|m| m.name.chars().count())
+        .max()
+        .unwrap_or(0)
+        .min(50);
+    let heading = "Moved most from the starter's, as the middle value among the living:";
+    std::iter::once(heading.to_string())
+        .chain(moved.iter().map(|m| m.line(width)))
+        .collect()
 }
 
 /// A gene value that moved from the starter's.
@@ -544,16 +580,16 @@ impl Moved {
 }
 
 /// Of the values in `starter`, the `most` whose value `now` moved furthest
-/// from it, furthest first, of those that moved by a tenth or more. A
-/// value the starter has at 0, or none alive has, is left out.
+/// from it, furthest first, of those that moved by a tenth or more, as G4
+/// counts it (`drift`). A value the starter has at 0, or none alive has,
+/// is left out.
 pub fn moved_most(starter: &[(String, f32)], now: &[Option<f32>], most: usize) -> Vec<Moved> {
     let mut moved: Vec<Moved> = starter
         .iter()
         .zip(now)
         .filter_map(|((name, starter), now)| {
             let now = (*now)?;
-            let ratio = now / starter;
-            (*starter != 0.0 && !(0.9..1.1).contains(&ratio)).then(|| Moved {
+            (*starter != 0.0 && drift(now / starter).is_some()).then(|| Moved {
                 name: name.clone(),
                 starter: *starter,
                 now,

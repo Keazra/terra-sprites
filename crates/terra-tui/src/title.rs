@@ -12,6 +12,7 @@ use ratatui::style::{Color, Modifier, Style};
 use terra_sim::{EntityId, Mode, Pos, World};
 
 use crate::app::{App, Draft};
+use crate::clock::Speed;
 use crate::input::Action;
 use crate::saves::SaveFile;
 use crate::start::Preset;
@@ -53,23 +54,34 @@ const CHOICES_INDENT: u16 = 6;
 const CONTINUE_SAID_AT: u16 = 17;
 /// How wide a label to the left of a field in the New world box is.
 const LABEL_WIDTH: u16 = 9;
-/// The modes New world offers, in order, and what each means in a few
-/// words beside them (M2 design §16).
-const MODES: [(Mode, &str, &str); 2] = [
-    (Mode::Story, "Story", "4x at most"),
-    (Mode::Lab, "Lab", "every speed, for experiments"),
-];
-/// What a mode means, while `?` is held in New world (M2 design §16).
-const STORY_EXPLAINED: [&str; 3] = [
-    "Story mode: the game as it's meant to be played.",
-    "· Speeds up to 4x, so a life never feels rushed.",
-    "· A world keeps its mode for its whole life.",
-];
-const LAB_EXPLAINED: [&str; 3] = [
-    "Lab mode: a world for experiments.",
-    "· Every speed, up to Max; it can be fast-forwarded.",
-    "· A world keeps its mode for its whole life.",
-];
+/// The modes New world offers, in order (M2 design §16.1).
+const MODES: [(Mode, &str); 2] = [(Mode::Story, "Story"), (Mode::Lab, "Lab")];
+
+/// What `mode` means in a few words, beside it in New world (M2 design
+/// §16.1).
+fn in_short(mode: Mode) -> String {
+    match mode {
+        Mode::Story => format!("{} at most", Speed::fastest_in(mode).label()),
+        Mode::Lab => "every speed, for experiments".into(),
+    }
+}
+
+/// What `mode` means, while `?` is held in New world (M2 design §16.1).
+fn explained(mode: Mode) -> [String; 3] {
+    let fastest = Speed::fastest_in(mode).label();
+    let [what, speeds] = match mode {
+        Mode::Story => [
+            "Story mode: the game as it's meant to be played.".to_string(),
+            format!("· Speeds up to {fastest}, so a life never feels rushed."),
+        ],
+        Mode::Lab => [
+            "Lab mode: a world for experiments.".to_string(),
+            format!("· Every speed, up to {fastest}; it can be fast-forwarded."),
+        ],
+    };
+    let kept = "· A world keeps its mode for its whole life.".to_string();
+    [what, speeds, kept]
+}
 
 /// A choice on the title screen's menu.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -691,10 +703,7 @@ const LETTERING: [&str; 2] = [
 
 /// The New world box (M2 design §8.3, §16), over the menu.
 fn draw_new_world(buf: &mut Buffer, title: &Title, new: &NewWorld) {
-    let explained = match new.mode {
-        Mode::Story => STORY_EXPLAINED,
-        Mode::Lab => LAB_EXPLAINED,
-    };
+    let explained = explained(new.mode);
     // The presets, or the explanation in their place: room for whichever
     // is longer, so the box stays put when `?` is held.
     let rows = title.presets.len().min(8).max(explained.len()) as u16;
@@ -717,7 +726,7 @@ fn draw_new_world(buf: &mut Buffer, title: &Title, new: &NewWorld) {
     let y = inner.y + 1;
     buf.set_string(inner.x, y, " Mode    ", Style::default());
     let mut x = inner.x + LABEL_WIDTH;
-    for (mode, name, in_short) in MODES {
+    for (mode, name) in MODES {
         let picked = mode == new.mode;
         let shown = if picked {
             format!("[{name}]")
@@ -729,7 +738,7 @@ fn draw_new_world(buf: &mut Buffer, title: &Title, new: &NewWorld) {
         if picked {
             let said_x = inner.x + LABEL_WIDTH + 15;
             let gray = Style::default().fg(Color::Gray);
-            buf.set_stringn(said_x, y, in_short, room(said_x), gray);
+            buf.set_stringn(said_x, y, in_short(mode), room(said_x), gray);
         }
     }
 

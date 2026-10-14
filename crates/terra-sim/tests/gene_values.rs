@@ -5,10 +5,10 @@
 mod common;
 
 use common::{WorldBuilder, at, builtin, traits_only};
-use terra_sim::{Genome, gene_values, middle_values};
+use terra_sim::{Drift, Genome, drift, gene_values, middle_values};
 
 #[test]
-fn each_number_is_named_for_what_its_gene_does_and_its_field() {
+fn each_value_is_named_for_what_its_gene_does_and_its_field() {
     let data = builtin();
     let text = r#"(format: 2, genes: [
         Trait(trait: "speed", value: 12.0),
@@ -39,7 +39,7 @@ fn the_starter_genome_has_values_to_follow() {
 }
 
 #[test]
-fn each_number_s_middle_among_the_living() {
+fn each_value_s_middle_among_the_living() {
     let data = builtin();
     let sprites = [10.0, 30.0, 20.0]
         .into_iter()
@@ -62,7 +62,7 @@ fn each_number_s_middle_among_the_living() {
     assert_eq!(
         middle_values(&world, &values),
         Some(vec![Some(20.0), Some(14.0), None]),
-        "a number no sprite has has no middle"
+        "a value no sprite has has no middle"
     );
 }
 
@@ -70,4 +70,14 @@ fn each_number_s_middle_among_the_living() {
 fn with_none_alive_there_are_no_middles() {
     let world = WorldBuilder::new(&["........"; 3]).build();
     assert_eq!(middle_values(&world, &[("Speed: trait".into(), 1.0)]), None);
+}
+
+#[test]
+fn a_value_drifts_once_it_moves_a_tenth_either_way() {
+    assert_eq!(drift(1.1), Some(Drift::Up), "a tenth up counts");
+    assert_eq!(drift(0.9), Some(Drift::Down), "a tenth down counts");
+    assert_eq!(drift(1.09), None);
+    assert_eq!(drift(0.91), None);
+    assert_eq!(drift(-0.5), Some(Drift::Down), "crossing 0 is down");
+    assert_eq!(drift(f32::NAN), None, "nothing to compare");
 }

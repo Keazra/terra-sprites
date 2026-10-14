@@ -17,7 +17,7 @@ use ratatui::crossterm::event::{
 };
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{self, supports_keyboard_enhancement};
-use terra_sim::{Mode, Playback, World};
+use terra_sim::{Playback, World};
 use terra_tui::app::{App, Flow, Ticks};
 use terra_tui::args::{Args, USAGE, VERSION};
 use terra_tui::fast_forward::{self, FastForward};
@@ -279,7 +279,7 @@ fn run_title(
                     let asked = Args {
                         seed: Some(seed),
                         preset,
-                        lab: mode == Mode::Lab,
+                        mode,
                         ..args.clone()
                     };
                     match start::new_world(&asked, seed) {
@@ -324,7 +324,7 @@ fn replay_from(path: &Path) -> Result<Opening, String> {
 /// The save `--load` names, to open as Load does on the title screen (M2
 /// design §16).
 fn load_from(name: &str) -> Result<Opening, String> {
-    let file = start::save_named(name, files::save_folder().as_deref())
+    let file = saves::named(name, files::save_folder().as_deref())
         .map_err(|why| format!("can't load {name}: {why}"))?;
     let world = saves::load(&file)?;
     Ok(Opening {
@@ -359,15 +359,7 @@ fn fast_forward(args: &Args, hours: u64) -> ExitCode {
         Ok(found) => found,
         Err(why) => return fail(why),
     };
-    let preset = args.preset.as_ref().map_or_else(
-        || "default".to_string(),
-        |path| {
-            path.file_stem()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .into_owned()
-        },
-    );
+    let preset = start::preset_name(args);
     let loaded = args.load.is_some().then_some(from.as_str());
     println!(
         "{}",
@@ -388,17 +380,15 @@ fn fast_forward(args: &Args, hours: u64) -> ExitCode {
     let mut run = FastForward::new(world, hours);
     let started = Instant::now();
     let mut progress = Progress::new(stdout().is_terminal());
-    'run: while let Some(row) = run.next_row() {
-        while run.world().tick() < row {
-            if stopping.load(Ordering::SeqCst) {
-                break 'run;
+    while !run.done() && !stopping.load(Ordering::SeqCst) {
+        match run.advance(FAST_FORWARD_CHUNK) {
+            Some(row) => {
+                progress.clear();
+                println!("{}", row.line());
             }
-            run.run_to(run.world().tick() + FAST_FORWARD_CHUNK);
-            progress
-                .show(|| fast_forward::progress_line(&run, per_second(run.ticks_run(), started)));
+            None => progress
+                .show(|| fast_forward::progress_line(&run, per_second(run.ticks_run(), started))),
         }
-        progress.clear();
-        println!("{}", run.take_row().line());
     }
     progress.clear();
 
@@ -428,13 +418,7 @@ fn fast_forward(args: &Args, hours: u64) -> ExitCode {
         "Saved as {name} in your saves folder ({}): the title screen's Continue opens it.",
         folder.display()
     );
-    let tables = [
-        (
-            format!("{name}-population.csv"),
-            fast_forward::population_table(&world),
-        ),
-        (format!("{name}-genes.csv"), genes.table()),
-    ];
+    let tables = fast_forward::tables(&name, &world, &genes);
     let mut written = Vec::new();
     for (file, table) in &tables {
         match std::fs::write(folder.join(file), table) {
@@ -446,27 +430,11 @@ fn fast_forward(args: &Args, hours: u64) -> ExitCode {
         println!("The tables are beside it: {}.", written.join(" and "));
     }
     println!();
-    let moved = genes.moved_most(MOVED_LISTED);
-    if world.sprites().next().is_none() {
-        println!("No sprite is left alive to measure the genes of.");
-    } else if moved.is_empty() {
-        println!("No gene value has moved a tenth from the starter's yet.");
-    } else {
-        println!("Moved most from the starter's, as the middle value among the living:");
-        let width = moved
-            .iter()
-            .map(|m| m.name.chars().count())
-            .max()
-            .unwrap_or(0);
-        for m in &moved {
-            println!("{}", m.line(width.min(50)));
-        }
+    for line in genes.ending() {
+        println!("{line}");
     }
     ExitCode::SUCCESS
 }
-
-/// How many gene values the end of a fast-forward lists as moved most.
-const MOVED_LISTED: usize = 5;
 
 /// Ticks a second, for `ticks` run since `started`.
 fn per_second(ticks: u64, started: Instant) -> f64 {

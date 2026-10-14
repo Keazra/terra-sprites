@@ -209,7 +209,7 @@ fn a_new_world_is_a_story_world_unless_the_flags_ask_for_the_lab() {
     assert_eq!(mode(Args::default()), Mode::Story);
     assert_eq!(
         mode(Args {
-            lab: true,
+            mode: Mode::Lab,
             ..Args::default()
         }),
         Mode::Lab
@@ -226,7 +226,7 @@ fn a_new_world_is_a_story_world_unless_the_flags_ask_for_the_lab() {
 #[test]
 fn lab_and_load_skip_the_title_screen_too() {
     assert!(start::skips_title(&Args {
-        lab: true,
+        mode: Mode::Lab,
         ..Args::default()
     }));
     assert!(start::skips_title(&Args {
@@ -239,28 +239,15 @@ fn lab_and_load_skip_the_title_screen_too() {
 /// saved as `lab`.
 fn saves_folder(name: &str) -> PathBuf {
     let dir = folder(name, &[]);
-    for (save, lab) in [("story", false), ("lab", true)] {
+    for (save, mode) in [("story", Mode::Story), ("lab", Mode::Lab)] {
         let args = Args {
-            lab,
+            mode,
             ..Args::default()
         };
         let world = start::new_world(&args, 3).expect("a world");
         saves::write(&dir, save, &world.save()).expect("saved");
     }
     dir
-}
-
-#[test]
-fn load_finds_a_save_by_its_name_or_its_file() {
-    let dir = saves_folder("load");
-    let by_name = start::save_named("lab", Some(&dir)).expect("found");
-    assert_eq!(by_name.name, "lab");
-    assert_eq!(by_name.path, saves::path_for(&dir, "lab"));
-    let file = dir.join("story.tspr");
-    let by_file = start::save_named(file.to_str().unwrap(), None).expect("found");
-    assert_eq!((by_file.name.as_str(), by_file.path), ("story", file));
-    let error = start::save_named("nobody", Some(&dir)).expect_err("none");
-    assert!(error.contains("no save called nobody"), "{error}");
 }
 
 #[test]
@@ -288,4 +275,14 @@ fn fast_forward_runs_a_lab_save_or_a_new_lab_world_and_refuses_a_story_save() {
         error,
         "story is a Story world: only Lab worlds fast-forward"
     );
+}
+
+#[test]
+fn a_preset_is_named_by_its_file() {
+    assert_eq!(start::preset_name(&Args::default()), "default");
+    let args = Args {
+        preset: Some(PathBuf::from("worlds/big-lake.ron")),
+        ..Args::default()
+    };
+    assert_eq!(start::preset_name(&args), "big-lake");
 }

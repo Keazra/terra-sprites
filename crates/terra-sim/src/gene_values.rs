@@ -93,6 +93,27 @@ impl GeneView<'_> {
     }
 }
 
+/// Which way a gene value moved from where it started, when it moved by a
+/// tenth or more (M2 design G4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Drift {
+    Up,
+    Down,
+}
+
+/// Which way a gene value moved, from `ratio`, its ratio to where it
+/// started: up at 1.1 or more, down at 0.9 or less, and neither between
+/// (M2 design G4). The generations run and fast-forward count it alike.
+pub fn drift(ratio: f32) -> Option<Drift> {
+    if ratio >= 1.1 {
+        Some(Drift::Up)
+    } else if ratio <= 0.9 {
+        Some(Drift::Down)
+    } else {
+        None
+    }
+}
+
 /// Each value in `genes`, named `what its gene does: its field`, in order
 /// (design §4.3's value fields). A gene this build can't read has none.
 pub fn gene_values(genes: &[GeneView]) -> Vec<(String, f32)> {

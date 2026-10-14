@@ -2,6 +2,8 @@
 
 use std::path::PathBuf;
 
+use terra_sim::Mode;
+
 /// What the player asked for on the command line.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Args {
@@ -15,9 +17,8 @@ pub struct Args {
     /// `--replay <file>`: play a replay back instead of a new world (design
     /// §2.7).
     pub replay: Option<PathBuf>,
-    /// `--lab`: make the new world a Lab world rather than a Story one (M2
-    /// design §16).
-    pub lab: bool,
+    /// The new world's mode: Story, or Lab for `--lab` (M2 design §16).
+    pub mode: Mode,
     /// `--load <save>`: open a saved world, by its name in the saves folder
     /// or its file, as Load does on the title screen (M2 design §16).
     pub load: Option<String>,
@@ -69,7 +70,7 @@ impl Args {
                 "--preset" => parsed.preset = Some(value_of(&flag, args.next())?.into()),
                 "--data" => parsed.data = Some(value_of(&flag, args.next())?.into()),
                 "--replay" => parsed.replay = Some(value_of(&flag, args.next())?.into()),
-                "--lab" => parsed.lab = true,
+                "--lab" => parsed.mode = Mode::Lab,
                 "--load" => parsed.load = Some(value_of(&flag, args.next())?),
                 "--fast-forward" => {
                     let value = value_of(&flag, args.next())?;
@@ -95,7 +96,7 @@ impl Args {
             ("--seed", parsed.seed.is_some()),
             ("--preset", parsed.preset.is_some()),
             ("--data", parsed.data.is_some()),
-            ("--lab", parsed.lab),
+            ("--lab", parsed.mode == Mode::Lab),
         ];
         let makes_one = new_world
             .iter()

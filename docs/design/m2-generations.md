@@ -1041,6 +1041,7 @@ Settled with the owner on 2026-10-14 ([#145](https://github.com/Keazra/terra-spr
 
 - **In a Story world, `+` stops at 4×,** pressed or held, and the status line says "4x is Story mode's fastest". The slow speeds, ⅛× to ½×, are in both modes. A Lab world's speeds are M1's, up to Max (M1 design §6.6).
 - **The cap holds wherever time runs:** the map, the population graph (§14.2), and a replay, which plays at its world's speeds. Loading a Story world over a clock running faster slows it to 4×. The title screen's world runs at 4×, as before (§8.1).
+- **The training aids still fit** (#121 asked): a pet's reach back is two seconds of the player's time, 10 ticks at 4× (M1 design §6.5), and a step while paused a second's worth, 5 ticks at 4× (M1 design §6.6). Both were built for every speed, and the cap only takes away their faster ends.
 - **The end-game unlock** (the owner, Q1): once the whole ship is reactivated, a Story world offers to lift the cap, and if the player accepts, it runs at every speed from then on, staying a Story world otherwise. It needs the ship, so M4 builds it (M4 design §2.3).
 
 ### 16.3 Fast-forward
@@ -1058,10 +1059,10 @@ Fast-forwarding a new Lab world, seed 7, default preset, for 20 hours (90,000 ti
 Ctrl+C stops it early and saves what has run.
 
  Hours  Sprites  Young  Adults  Old  Eggs  Generation   Died  Old age  Hunger  Thirst  Hurt
-     2       46     16      19    8     3           1      8        8       0       0     0
-     4       59     13      35    9     2           3     13       11       0       1     1
+     2       43     16      19    8     3           1      8        8       0       0     0
+     4       57     13      35    9     2           3     13       11       0       1     1
    ...
-    20       98     16      62   17     3          11     24       24       0       0     0
+    20       95     16      62   17     3          11     24       24       0       0     0
 
 Done: 20 hours in 5 minutes, 258 ticks a second.
 Saved as seed-7-20h in your saves folder (…): the title screen's Continue opens it.
@@ -1072,11 +1073,11 @@ Moved most from the starter's, as the middle value among the living:
   always → Wander: weight       0.3 → 0.2498    down 17%
 ```
 
-  - **A row each tenth of the run,** so always ten. "Sprites" counts the eggs, as the world's limit does (§10.6). "Generation" is the deepest family line reached since the run started: the world's sprites then are the 0th, its eggs then the 1st, an egg is one on from the deeper of its parents, and a sprite the Cursor spawns is the 0th. "Died" and the causes after it count since the row before: hunger is starvation, thirst dehydration, and hurt anything an object did.
-  - **A last line, redrawn in place between rows,** reads like `► 143 hours · generation 64 · 99 sprites · 312 ticks a second · about 13 minutes left`. It shows only on a terminal, so a report sent to a file has the rows alone.
+  - **A row each tenth of the run,** so always ten. "Sprites" counts the sprites at every life stage, and "Eggs" the eggs beside them, as the population graph does (§14): an egg isn't a sprite until it hatches. "Generation" is how many generations the longest line of descent has run since the run started: the world's sprites then are the 0th, its eggs then the 1st, an egg is one on from the deeper of its parents, and a sprite the Cursor spawns is the 0th. "Died" and the causes after it count since the row before: hunger is starvation, thirst dehydration, and hurt anything an object did.
+  - **A last line, redrawn in place between rows,** reads like `► 143 hours · generation 64 · 95 sprites · 3 eggs · 312 ticks a second · about 13 minutes left`. It shows only on a terminal, so a report sent to a file has the rows alone.
   - **At the end** it says how long the run took and how fast it ran, where it saved, and the gene values that moved most (§16.4).
-- **It saves in the saves folder and keeps the world it came from:** `seed-7-200h` for a new world, `mira-200h` for mira, or the name `--save <name>` gives. A name a save already has gets `-2`, `-3` and so on, so nothing is saved over.
-- **`Ctrl+C` stops it early and saves what has run,** with a last row where it stopped, under the hours it reached: `seed-7-143.5h`. A second `Ctrl+C` stops at once, without saving. A long run is never lost by stopping it.
+- **It saves in the saves folder and keeps the world it came from:** `seed-7-200h` for a new world, `mira-200h` for mira, or the name `--save <name>` gives, stored as any save by name is (M1 design §6.7). A name a save already has gets `-2`, `-3` and so on, so nothing is saved over, and the report and the tables give the name it was saved by.
+- **`Ctrl+C` stops it early and saves what has run,** with a last row where it stopped, under the whole hours it reached: `seed-7-143h` for a run stopped at 143.5 hours. A second `Ctrl+C` stops at once, without saving. A long run is never lost by stopping it.
 - **It runs exactly the world the game would:** the same seed fast-forwarded is, tick for tick, the world the game has after running as long.
 - **Flags that can't go together** are refused before anything runs: `--replay` with any flag that makes or loads a world, `--load` with `--seed`, `--preset`, `--data` or `--lab`, and `--save` without `--fast-forward`.
 
@@ -1102,7 +1103,7 @@ Agreed before building (Q7):
 **Measured (2026-10-14)** in release builds in the cloud:
 
 - **1, 2 and 3: met.** The tests pass, among them New world's Mode row and its explanation, the flags, the tables, and the report's rows and lines. Played in the cloud: a 2-hour and a 20-hour run, a run stopped with `Ctrl+C`, and a saved run carried on with `--load`.
-- **4: met, as the bar meant it.** Fast-forward costs nothing measurable: the same world, seed 7 after 20 hours at 100 sprites, ran 216 and 217 ticks a second fast-forwarded and 215 and 219 stepped plainly, in turn. The speed check itself ran 285 and 284 (22,500 ticks), against fast-forward's 212 and 214 on that world: a world that has run 20 hours is slower to step than the speed check's freshly crowded one, fast-forwarded or not.
+- **4: not met as written, but met in the sense it was meant.** Against the speed check it falls short: the speed check ran 285 and 284 ticks a second (22,500 ticks), and fast-forward 212 and 214, a quarter slower, on seed 7 after 20 hours at 100 sprites. The bar was there to show that the report and the tables cost next to nothing, and they do: that same world ran 216 and 217 ticks a second fast-forwarded and 215 and 219 stepped plainly, in turn. A world that has run 20 hours is slower to step than the speed check's freshly crowded one, fast-forwarded or not. The plain stepping was timed with a throwaway example, not kept.
 - **The sprites live exactly as before:** the `generations` run, seeds 1–2 for 20,000 ticks, prints the same, byte for byte, on `main` at `27927d7` and on this slice. The state hash differs, as it should, since the mode is world state.
 - **5:** see below.
 

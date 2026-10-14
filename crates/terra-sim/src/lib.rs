@@ -68,7 +68,7 @@ pub use cursor::Grip;
 pub use data::{DataError, DataPack};
 pub use events::{DeathCause, Emptied, Event, EventKind, Removal};
 pub use expression::Expression;
-pub use gene_values::{gene_values, middle_values};
+pub use gene_values::{Drift, drift, gene_values, middle_values};
 pub use genome::{EmitterMode, GeneView, Genome, GenomeError};
 pub use lab::{LabError, LabRun, LabScenario, Window, Without, median, report};
 pub use map::{Dir, Map, MapError, Pos};

@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use terra_sim::Mode;
 use terra_tui::args::Args;
 
 fn parse(args: &[&str]) -> Result<Args, String> {
@@ -110,8 +111,11 @@ fn the_version_flag_is_read_and_the_version_names_the_commit() {
 #[test]
 fn the_lab_load_fast_forward_and_save_flags_are_read() {
     // M2 design §16.
-    assert!(parse(&["--lab", "--seed", "7"]).expect("valid").lab);
-    assert!(!parse(&["--seed", "7"]).expect("valid").lab);
+    assert_eq!(
+        parse(&["--lab", "--seed", "7"]).expect("valid").mode,
+        Mode::Lab
+    );
+    assert_eq!(parse(&["--seed", "7"]).expect("valid").mode, Mode::Story);
     let args = parse(&["--load", "mira"]).expect("valid");
     assert_eq!(args.load.as_deref(), Some("mira"));
     let args =

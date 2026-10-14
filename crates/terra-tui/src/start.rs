@@ -8,7 +8,7 @@ use terra_sim::{DataError, DataPack, Mode, World, WorldConfig};
 
 use crate::args::Args;
 use crate::files;
-use crate::saves::{self, EXTENSION, SaveFile};
+use crate::saves;
 use crate::theme::Theme;
 
 /// A new world, as the flags ask: from `seed`, with `--preset`, or the data
@@ -17,10 +17,10 @@ use crate::theme::Theme;
 /// `--fast-forward`, and otherwise a Story world (M2 design §16).
 pub fn new_world(args: &Args, seed: u64) -> Result<World, String> {
     let (config, data) = config(args)?;
-    let mode = if args.lab || args.fast_forward.is_some() {
+    let mode = if args.fast_forward.is_some() {
         Mode::Lab
     } else {
-        Mode::Story
+        args.mode
     };
     Ok(World::new_in(config, data, seed, mode))
 }
@@ -32,38 +32,22 @@ pub fn new_world(args: &Args, seed: u64) -> Result<World, String> {
 pub fn skips_title(args: &Args) -> bool {
     args.seed.is_some()
         || args.preset.is_some()
-        || args.lab
+        || args.mode == Mode::Lab
         || args.load.is_some()
         || args.replay.is_some()
 }
 
-/// The save `--load` names (M2 design §16): a file, if it's named by a path
-/// ending in `.tspr`, or else the save of that name in `folder`, the saves
-/// folder, as Load lists it.
-pub fn save_named(name: &str, folder: Option<&Path>) -> Result<SaveFile, String> {
-    let as_file = Path::new(name);
-    let path = if as_file.extension().is_some_and(|ext| ext == EXTENSION) {
-        as_file.to_path_buf()
-    } else {
-        let folder = folder.ok_or("can't tell where the saves folder is")?;
-        saves::path_for(folder, name)
-    };
-    if !path.is_file() {
-        return Err(format!(
-            "there's no save called {name} ({})",
-            path.display()
-        ));
-    }
-    let name = path.file_stem().map_or_else(
-        || name.to_string(),
-        |stem| stem.to_string_lossy().into_owned(),
-    );
-    let modified = path.metadata().ok().and_then(|meta| meta.modified().ok());
-    Ok(SaveFile {
-        name,
-        path,
-        modified,
-    })
+/// The name of the preset a new world is made from, as fast-forward's
+/// report gives it (M2 design §16.3): `--preset`'s file name without
+/// `.ron`, or `default`.
+pub fn preset_name(args: &Args) -> String {
+    args.preset
+        .as_ref()
+        .and_then(|path| path.file_stem())
+        .map_or_else(
+            || "default".to_string(),
+            |stem| stem.to_string_lossy().into_owned(),
+        )
 }
 
 /// The world `--fast-forward` runs (M2 design §16), and what its save is
@@ -76,7 +60,7 @@ pub fn fast_forward_world(
 ) -> Result<(World, String), String> {
     match &args.load {
         Some(name) => {
-            let file = save_named(name, folder)?;
+            let file = saves::named(name, folder)?;
             let world = saves::load(&file)?;
             if world.mode() != Mode::Lab {
                 return Err(format!(

@@ -583,7 +583,7 @@ The game for experiments: every speed, up to Max, and fast-forward. The top bar 
 _Avoid_: free mode, sandbox, creative mode
 
 **Fast-forward** (M2):
-Running a Lab world with no screen, from the command line, for hours of play at 1× as fast as the computer allows, then saving it for the game to open, with a population table and a genes table beside it. Its report's generation is the deepest family line reached since it started (M2 design §16.3).
+Running a Lab world with no screen, from the command line, for hours of play at 1× as fast as the computer allows, then saving it for the game to open, with a population table and a genes table beside it. Its report's generation is how many generations the longest line of descent has run since it started (M2 design §16.3).
 _Avoid_: headless mode, turbo, skip ahead
 
 **Map view**:

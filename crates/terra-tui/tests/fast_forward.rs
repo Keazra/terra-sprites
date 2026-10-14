@@ -8,8 +8,8 @@ use std::time::Duration;
 
 use ratatui::layout::Size;
 use terra_sim::{
-    DataPack, DeathCause, EntityId, EventKind, LifeStage, Map, Mode, Pos, Scenario, World,
-    WorldConfig, gene_values, middle_values,
+    DataPack, DeathCause, EntityId, EventKind, Map, Mode, Pos, Scenario, World, WorldConfig,
+    gene_values, middle_values,
 };
 use terra_tui::app::App;
 use terra_tui::clock::Speed;
@@ -101,6 +101,23 @@ fn it_reports_ten_rows_each_a_tenth_of_the_way_on_from_where_it_started() {
 }
 
 #[test]
+fn run_a_little_at_a_time_its_rows_still_fall_on_the_tenths() {
+    // main.rs runs 100 ticks at a time between looks at `Ctrl+C`, and 450,
+    // a tenth of an hour, isn't a multiple of 100.
+    let mut run = FastForward::new(lab_world(3), 1);
+    let mut rows = Vec::new();
+    while !run.done() {
+        if let Some(row) = run.advance(100) {
+            assert_eq!(run.world().tick(), row.ticks_run, "taken when due");
+            rows.push(row.ticks_run);
+        }
+    }
+    let tenths: Vec<u64> = (1..=10).map(|n| n * 450).collect();
+    assert_eq!(rows, tenths);
+    assert_eq!(run.advance(100), None, "nothing after the last row");
+}
+
+#[test]
 fn it_never_runs_past_its_end() {
     let mut run = FastForward::new(lab_world(3), 1);
     run.run_to(u64::MAX);
@@ -109,23 +126,36 @@ fn it_never_runs_past_its_end() {
 }
 
 #[test]
-fn a_row_counts_each_life_stage_and_the_eggs() {
+fn a_row_counts_each_life_stage_and_the_eggs_as_the_graph_does() {
     let mut run = FastForward::new(lab_world(7), 1);
     run.run_to(450);
-    let world = run.world();
-    let stage = |stage| world.sprites().filter(|s| s.life_stage() == stage).count();
-    let (young, adults, old) = (
-        stage(LifeStage::Young),
-        stage(LifeStage::Adult),
-        stage(LifeStage::Old),
-    );
-    let eggs = world.eggs().count();
+    let count = run.world().population_now();
     let row = run.take_row();
     assert_eq!(
         (row.young, row.adults, row.old, row.eggs),
-        (young, adults, old, eggs)
+        (count.young, count.adults, count.old, count.eggs)
     );
+    assert_eq!(row.sprites(), count.sprites(), "an egg isn't a sprite yet");
     assert!(row.adults > 0, "a new world starts with grown sprites");
+}
+
+#[test]
+fn the_progress_line_says_how_far_it_has_got() {
+    let run = FastForward::new(lab_world(7), 1);
+    let count = run.world().population_now();
+    assert_eq!(
+        fast_forward::progress_line(&run, 0.0),
+        format!(
+            "► 0 hours · generation 0 · {} sprites · {} eggs",
+            count.sprites(),
+            count.eggs
+        )
+    );
+    let going = fast_forward::progress_line(&run, 450.0);
+    assert!(
+        going.ends_with(" · 450 ticks a second · about 10 seconds left"),
+        "{going}"
+    );
 }
 
 /// Two sprites on a field with no food or water: one hurts the other to
@@ -243,7 +273,7 @@ fn a_row_lines_up_under_the_header() {
         [HEADER, &row.line()],
         [
             " Hours  Sprites  Young  Adults  Old  Eggs  Generation   Died  Old age  Hunger  Thirst  Hurt",
-            "    20       97     21      61   13     2           8  1,120    1,112       3       3     2",
+            "    20       95     21      61   13     2           8  1,120    1,112       3       3     2",
         ]
     );
 }
@@ -283,10 +313,22 @@ fn the_report_ends_by_saying_how_far_it_got_and_how_fast() {
 }
 
 #[test]
-fn a_runs_save_is_named_after_its_world_and_the_hours_it_ran() {
+fn a_runs_save_is_named_after_its_world_and_the_whole_hours_it_ran() {
     assert_eq!(save_name("seed-7", 200 * HOUR), "seed-7-200h");
     assert_eq!(save_name("mira", 1_200 * HOUR), "mira-1200h");
-    assert_eq!(save_name("mira", 143 * HOUR + HOUR / 2), "mira-143.5h");
+    assert_eq!(save_name("mira", 143 * HOUR + HOUR / 2), "mira-143h");
+    assert_eq!(save_name("mira", HOUR - 1), "mira-0h");
+}
+
+#[test]
+fn the_tables_are_named_after_the_save() {
+    let run = FastForward::new(lab_world(7), 1);
+    let (world, genes) = (run.world(), run.genes());
+    let [population, genes_table] = fast_forward::tables("seed-7-20h", world, genes);
+    assert_eq!(population.0, "seed-7-20h-population.csv");
+    assert_eq!(population.1, fast_forward::population_table(world));
+    assert_eq!(genes_table.0, "seed-7-20h-genes.csv");
+    assert_eq!(genes_table.1, genes.table());
 }
 
 #[test]
@@ -448,11 +490,24 @@ fn the_values_that_moved_most_come_first_halving_as_far_as_doubling() {
         ("lost".to_string(), 4.0),
         ("c".to_string(), 1.0),
         ("still".to_string(), 3.0),
+        ("a tenth down".to_string(), 10.0),
     ];
-    let now = [Some(1.5), Some(1.0), Some(5.0), None, Some(2.0), Some(3.05)];
+    let now = [
+        Some(1.5),
+        Some(1.0),
+        Some(5.0),
+        None,
+        Some(2.0),
+        Some(3.05),
+        Some(9.0),
+    ];
     let moved = fast_forward::moved_most(&starter, &now, 5);
     let names: Vec<&str> = moved.iter().map(|m| m.name.as_str()).collect();
-    assert_eq!(names, ["b", "c", "a"], "only those a tenth or more from it");
+    assert_eq!(
+        names,
+        ["b", "c", "a", "a tenth down"],
+        "only those a tenth or more from it, as G4 counts"
+    );
     assert_eq!(
         moved[0],
         Moved {
@@ -470,4 +525,58 @@ fn the_values_that_moved_most_come_first_halving_as_far_as_doubling() {
         "  c                  1 → 2         up 100%"
     );
     assert_eq!(fast_forward::moved_most(&starter, &now, 1).len(), 1);
+}
+
+#[test]
+fn the_report_ends_with_the_values_that_moved_most() {
+    let moved = [
+        Moved {
+            name: "b".into(),
+            starter: 2.0,
+            now: 1.0,
+        },
+        Moved {
+            name: "always → Wander: weight".into(),
+            starter: 0.3,
+            now: 0.2498,
+        },
+    ];
+    assert_eq!(
+        fast_forward::moved_lines(&moved),
+        [
+            "Moved most from the starter's, as the middle value among the living:",
+            "  b                               2 → 1         down 50%",
+            "  always → Wander: weight       0.3 → 0.2498    down 17%",
+        ]
+    );
+}
+
+#[test]
+fn the_report_says_when_no_value_has_moved_yet() {
+    let run = FastForward::new(lab_world(7), 1);
+    assert_eq!(
+        run.genes().ending(),
+        ["No gene value has moved a tenth from the starter's yet."]
+    );
+}
+
+#[test]
+fn the_report_says_when_no_sprite_is_left_to_measure() {
+    let data = DataPack::builtin().expect("valid pack");
+    let map = Map::from_ascii(&[".........."; 6], &data).expect("valid drawing");
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &[],
+        scripted: &[],
+        newborns: &[],
+    };
+    let empty = World::from_scenario(scenario, data, 1).expect("valid scenario");
+    let mut run = FastForward::new(empty, 1);
+    run.run_to(HOUR / 2);
+    run.finish();
+    assert_eq!(
+        run.genes().ending(),
+        ["No sprite is left alive to measure the genes of."]
+    );
 }

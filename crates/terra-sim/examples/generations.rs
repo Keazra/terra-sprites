@@ -28,8 +28,8 @@ use std::process::ExitCode;
 use std::sync::Mutex;
 
 use terra_sim::{
-    DataPack, DeathCause, EntityId, EventKind, Expression, GeneView, Genome, LifeStage, Outcome,
-    Switch, Verb, World, WorldConfig, gene_values, middle_values,
+    DataPack, DeathCause, Drift, EntityId, EventKind, Expression, GeneView, Genome, LifeStage,
+    Outcome, Switch, Verb, World, WorldConfig, drift, gene_values, middle_values,
 };
 
 /// Ticks in an hour at 1×, 1.25 ticks a second (design §6.6).
@@ -282,8 +282,8 @@ fn evolution(starter: &[(String, f32)], runs: &[(u64, Run)]) {
             .iter()
             .map(|(_, run)| run.numbers[index] / value)
             .collect();
-        let up = ratios.iter().filter(|&&r| r >= 1.1).count();
-        let down = ratios.iter().filter(|&&r| r <= 0.9).count();
+        let drifted = |way| ratios.iter().filter(|&&r| drift(r) == Some(way)).count();
+        let (up, down) = (drifted(Drift::Up), drifted(Drift::Down));
         let mut sorted = ratios.clone();
         sorted.sort_by(f32::total_cmp);
         moved.push(Moved {

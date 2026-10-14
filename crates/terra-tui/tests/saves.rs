@@ -614,3 +614,30 @@ fn a_new_save_takes_a_name_no_save_has_yet() {
     saves::write(&folder, "seed-7-200h-2", b"TSPR").expect("written");
     assert_eq!(saves::unused_name(&folder, "seed-7-200h"), "seed-7-200h-3");
 }
+
+#[test]
+fn a_new_save_takes_the_name_it_is_stored_by() {
+    // `--save` names the save a fast-forward writes, and the tables beside
+    // it are named after the name it's stored by (M2 design §16.4).
+    let folder = scratch_folder("stored-name");
+    assert_eq!(saves::unused_name(&folder, "mira: run 2"), "mira- run 2");
+    saves::write(&folder, "mira: run 2", b"TSPR").expect("written");
+    assert_eq!(saves::unused_name(&folder, "mira: run 2"), "mira- run 2-2");
+}
+
+#[test]
+fn load_finds_a_save_by_its_name_or_its_file() {
+    // `--load` (M2 design §16).
+    let folder = scratch_folder("named");
+    saves::write(&folder, "lab", b"TSPR").expect("written");
+    let by_name = saves::named("lab", Some(&folder)).expect("found");
+    assert_eq!(by_name.name, "lab");
+    assert_eq!(by_name.path, saves::path_for(&folder, "lab"));
+    let file = folder.join("lab.tspr");
+    let by_file = saves::named(file.to_str().unwrap(), None).expect("found");
+    assert_eq!((by_file.name.as_str(), by_file.path), ("lab", file));
+    let error = saves::named("nobody", Some(&folder)).expect_err("none");
+    assert!(error.contains("no save called nobody"), "{error}");
+    let listed = saves::list(&folder);
+    assert_eq!(listed, [by_name], "found as Load lists it");
+}
