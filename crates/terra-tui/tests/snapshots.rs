@@ -1,15 +1,17 @@
 //! Snapshots of whole screens (design §6.1): the help screen, the sprite
-//! list, the population graph (M2 design §14) and each inspector tab, in
-//! both themes, drawn on a hand-made field
+//! list, the population graph (M2 design §14), the family tree (§17) and
+//! each inspector tab, in both themes, drawn on a hand-made field
 //! and compared with the text files in `snapshots/`. A screen that changes
 //! on purpose is written afresh with `UPDATE_SNAPSHOTS=1 cargo test -p
 //! terra-tui --test snapshots`, and the new files reviewed like code.
+
+mod common;
 
 use std::path::{Path, PathBuf};
 
 use ratatui::layout::{Position, Size};
 use ratatui::{Terminal, backend::TestBackend};
-use terra_sim::{DataPack, Map, Pos, Scenario, ScriptedAction, World};
+use terra_sim::{DataPack, EntityId, Map, Pos, Scenario, ScriptedAction, World};
 use terra_tui::app::{App, Tab};
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
@@ -183,5 +185,17 @@ fn the_population_graph_matches_its_snapshot() {
             app.apply(Action::Scroll { dx: -1, dy: 0 }, &world);
         }
         check(&format!("{theme_name}-population"), &screen(&app, &world));
+    }
+}
+
+#[test]
+fn the_family_tree_matches_its_snapshot() {
+    // Two pairs and their young, 200 ticks on: #16's parents are #3 and
+    // #13, who is #3's young too, so #3 is on the tree twice.
+    let world = common::pairs(200);
+    for (theme_name, theme) in themes() {
+        let mut app = App::new(world.map(), theme, 7, ui::areas(Size::new(100, 30)));
+        common::tree_of(&mut app, &world, EntityId(16));
+        check(&format!("{theme_name}-family-tree"), &screen(&app, &world));
     }
 }

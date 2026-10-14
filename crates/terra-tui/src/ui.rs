@@ -1,5 +1,7 @@
 //! Draws the screen. Rendering is a pure function of the app state (design §6.8).
 
+use std::collections::BTreeMap;
+
 use ratatui::{
     Frame,
     buffer::Buffer,
@@ -13,7 +15,8 @@ use crate::app::{
     App, Areas, ColourMode, CursorMode, ItemLook, PlaceItem, Screen, Selection, ShownItems,
     item_look, spoken_duration, strongest_drive,
 };
-use crate::inspector::{self, INSPECTOR_WIDTH, first_shown};
+use crate::family_tree::{self, Lineage};
+use crate::inspector::{self, INSPECTOR_WIDTH, NOTHING_SELECTED, first_shown};
 use crate::policy::{Panel, Subject};
 use crate::space::{self, Place};
 use crate::text::{display_name, group_thousands, terrain_name};
@@ -52,6 +55,7 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
         Screen::Help => render_help(frame.buffer_mut(), app, world),
         Screen::SpriteList => render_sprite_list(frame.buffer_mut(), app, world),
         Screen::Population => render_population(frame.buffer_mut(), app, world),
+        Screen::FamilyTree => render_family_tree(frame.buffer_mut(), app, world),
         _ => {}
     }
     frame.render_widget(status_line(app, world, status.width), status);
@@ -204,6 +208,7 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     let items = app.shown_items(world);
     // Out of reach in space, the Cursor isn't drawn (M2 design §11.4).
     let cursor = app.shown_cursor();
+    let lineage = lineage_on_map(app, world);
     for y in inner.top()..inner.bottom() {
         for x in inner.left()..inner.right() {
             let pos = match app.place_from(inner.as_position(), Position::new(x, y)) {
@@ -250,7 +255,9 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
             // A sprite takes the colour mode's colour, unless it's emoting
             // (design §6.3).
             let fg = match world.sprite_at(pos) {
-                Some(sprite) if !is_emote(app, &sprite) => sprite_colour(app, &sprite, glyph.fg),
+                Some(sprite) if !is_emote(app, &sprite) => {
+                    sprite_colour(app, &sprite, glyph.fg, lineage.as_ref())
+                }
                 _ => glyph.fg,
             };
             let mut style = Style::default().fg(fg);
@@ -295,19 +302,53 @@ fn is_emote(app: &App, sprite: &SpriteView) -> bool {
     app.emote(id).is_some() && app.can_view(Panel::Emotes, Subject::Sprite(id))
 }
 
+/// The selected sprite and those of its lineage the map marks, while it
+/// shows the lineage colours and a sprite is selected, living or dead (M2
+/// design §17.4).
+type Marked = (EntityId, BTreeMap<EntityId, Lineage>);
+
+/// The lineage the map colours, if it does: not while the policy hides
+/// the selected sprite from the family tree.
+fn lineage_on_map(app: &App, world: &World) -> Option<Marked> {
+    if app.colour_mode() != ColourMode::Lineage {
+        return None;
+    }
+    let id = app.selection()?.id();
+    if !family_tree::shown(app, id) {
+        return None;
+    }
+    Some((id, family_tree::lineage(world, id)))
+}
+
 /// The colour `sprite` is drawn in, in the colour mode (design §6.3): its
-/// strongest drive's above .5, or else `own`, its glyph's colour. A drive
-/// the theme has no colour for draws `own` too, and so does a sprite whose
-/// colour the policy hides (design §6.4).
-fn sprite_colour(app: &App, sprite: &SpriteView, own: Color) -> Color {
-    if app.colour_mode() == ColourMode::Plain
-        || !app.can_view(Panel::MapColours, Subject::Sprite(sprite.id()))
-    {
+/// strongest drive's above .5, or else `own`, its glyph's colour; or in the
+/// lineage colours, where it stands in the selected sprite's lineage. The
+/// selected sprite keeps `own`, as every sprite does with none selected (M2
+/// design §17.4). A drive the theme has no colour for draws `own` too, and so
+/// does a sprite whose colour, or place on the family tree, the policy
+/// hides (design §6.4).
+fn sprite_colour(app: &App, sprite: &SpriteView, own: Color, lineage: Option<&Marked>) -> Color {
+    if !app.can_view(Panel::MapColours, Subject::Sprite(sprite.id())) {
         return own;
     }
-    strongest_drive(sprite)
-        .and_then(|drive| app.theme.drive_colour(drive.name))
-        .unwrap_or(own)
+    match app.colour_mode() {
+        ColourMode::Plain => own,
+        ColourMode::Drive => strongest_drive(sprite)
+            .and_then(|drive| app.theme.drive_colour(drive.name))
+            .unwrap_or(own),
+        // As the family tree does, the lineage colours ask the policy
+        // about each sprite they mark.
+        ColourMode::Lineage => match lineage {
+            Some((selected, marked))
+                if *selected != sprite.id() && family_tree::shown(app, sprite.id()) =>
+            {
+                app.theme
+                    .lineage()
+                    .colour(marked.get(&sprite.id()).copied())
+            }
+            _ => own,
+        },
+    }
 }
 
 /// Where the selected sprite is heading, while its action is under way
@@ -589,6 +630,34 @@ fn render_population(buf: &mut Buffer, app: &App, world: &World) {
     }
 }
 
+/// Draws the family tree over everything between the top bar and the
+/// status line (M2 design §17.2), titled with the sprite in its middle, or
+/// says how to select one; or an empty box if the policy hides it.
+fn render_family_tree(buf: &mut Buffer, app: &App, world: &World) {
+    let Some(area) = app.overlay() else {
+        return;
+    };
+    let label = app
+        .selection()
+        .map(|selection| family_tree::name_of(app, world, selection.id()))
+        .filter(|label| !label.is_empty());
+    let title = match label {
+        Some(label) => format!(" Family tree ── {label} "),
+        None => " Family tree ".to_string(),
+    };
+    let inner = clear_box(buf, area, &title, " esc close ");
+    if app.selection().is_none() {
+        buf.set_string(inner.x, inner.y, NOTHING_SELECTED, Style::default());
+    }
+    // Nothing more if the policy hides the sprite in the middle.
+    let Some(tree) = app.tree(world) else {
+        return;
+    };
+    for (row, line) in (inner.y..inner.bottom()).zip(&tree.lines) {
+        buf.set_line(inner.x, row, line, inner.width);
+    }
+}
+
 /// Blanks every cell of `area`, colours and all, so nothing drawn beneath
 /// an overlay shows through it: a coloured background, such as the
 /// Cursor's or a graph's, or reverse video.
@@ -851,6 +920,11 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
                 _ if app.screen() == Screen::Population => {
                     hint_if_fits(room, "←→ pick a moment  space pause  +/- speed  esc close")
                 }
+                // And the family tree (M2 design §17.2).
+                _ if app.screen() == Screen::FamilyTree => hint_if_fits(
+                    room,
+                    "←→↑↓ choose  enter centre on it  space pause  esc close",
+                ),
                 _ => hints_within(room),
             };
             (tile, hints)

@@ -307,6 +307,18 @@ _Avoid_: born (a hatchling is born as it hatches; the world's first sprites and 
 The sprite that laid an egg, its mother, then its partner, if it had one, its father. A sprite the world began with, or that the Cursor made, has none.
 _Avoid_: sire and dam
 
+**Origin** (M2):
+Where a sprite came from: one of the world's first sprites, placed by the Cursor, or hatched. One with no parents says which in their place.
+_Avoid_: source, spawn kind
+
+**Generation** (M2):
+How far a sprite is from the world's first: 1 for one the world began with or the Cursor placed, and for a hatchling one more than its parents', or than the newer parent's when theirs differ. An egg has its generation from when it's laid.
+_Avoid_: gen, age (that's ticks lived)
+
+**Lineage** (M2):
+A sprite's line by blood, as the family tree and the lineage colours show it: its parents and grandparents (its elders), its brothers and sisters, and its young and theirs. Code may call brothers and sisters siblings. It's wider than kin, which is what Slice 32 plans for a sprite itself to know.
+_Avoid_: family (the household), relatives, ancestry
+
 **Sex** (M2):
 Male or female. Every sprite hatches male, and an adult male turns female for good once its feminiser is high enough. Only a female lays eggs.
 _Avoid_: gender, mating type
@@ -378,6 +390,14 @@ _Avoid_: population cap, carrying capacity (food sets that)
 **Population record** (M2):
 The counts the world keeps of its sprites by life stage, and of its eggs, over its whole run, for the population graph: one every 100 ticks from the first tick it runs, each with the eggs laid and hatched, the sprites spawned and the deaths since the one before. It's world state, so it's saved and replayed. Past 512 counts it keeps every other one and counts half as often, so it always covers the whole run (M2 design §14.1).
 _Avoid_: history, statistics, census
+
+**Record of the dead** (M2):
+What the world keeps of each sprite that dies: its name, parents, generation, origin, when it was born and died, how, at what life stage and as which sex. It's world state, but nothing in the world reads it. It keeps the newest 10,000, forgetting the longest dead first, but never one the player named (M2 design §17.1).
+_Avoid_: graveyard, obituary, history
+
+**Lived long ago** (M2):
+What the family tree says of a dead sprite the world no longer remembers: forgotten from the record of the dead, or dead before a save that had no record. The tree names it from its young and knows nothing more of it.
+_Avoid_: unknown, lost
 
 **Cause of death**:
 What caused most of a sprite's recent injury, with the most recent counting most: starvation, dehydration, old age, or being hurt by an object type, such as a thornbush, or by another sprite.
@@ -623,7 +643,7 @@ What a click on the map does: Select, Train or Grab. `Q` and `E` do what the lef
 _Avoid_: tool
 
 **Selection**:
-The sprite the inspector shows, chosen by clicking it or with `Tab`, or an egg, chosen by clicking it; when the egg hatches, the hatchling is selected. It's the inspector's: the Cursor can follow another sprite.
+The sprite the inspector shows, chosen by clicking it or with `Tab`, or an egg, chosen by clicking it; when the egg hatches, the hatchling is selected. A dead sprite can be chosen on the family tree. It's the inspector's: the Cursor can follow another sprite.
 _Avoid_: focus, target
 
 **Follow**:
@@ -667,7 +687,7 @@ Which events the event log shows: all of them, the selected sprite's (what it di
 _Avoid_: log level, view
 
 **Colour mode**:
-What colours a sprite on the map: its strongest drive once one is above half (each drive's colour is the theme's), or plain, its own colour. `b` goes to the next.
+What colours a sprite on the map: its strongest drive once one is above half (each drive's colour is the theme's), plain, its own colour, or lineage (M2), which marks the selected sprite's lineage and grays the rest. `b` goes to the next.
 _Avoid_: tint, palette
 
 **Help screen**:
@@ -681,6 +701,10 @@ _Avoid_: roster, census
 **Population graph** (M2):
 The overlay `p` opens: the world's population over its whole run, each column split by the share of each life stage and of eggs. A moment picked with the arrows or the pointer is read under it: how many sprites, each stage and the eggs with their shares, and what was laid, hatched, spawned and died since the column before. A small copy heads the World tab, showing how many, with a dotted line at most sprites (M2 design §14).
 _Avoid_: population chart, history graph, census
+
+**Family tree** (M2):
+The overlay `k` opens: the selected sprite's grandparents, parents, young, and brothers and sisters, living or dead, with lines joining the generations. The arrows or the pointer choose a sprite on it, which blinks, and `Enter` or a click walks the tree to it (M2 design §17).
+_Avoid_: pedigree, genealogy, lineage view
 
 **Information policy**:
 What decides what the screen may show: every display asks it first, about a panel and a subject (the world, a sprite or a tile). In M1 it shows everything; a later mode that hides information is a new policy, and never changes the world.

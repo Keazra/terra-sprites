@@ -9,6 +9,7 @@ use serde::Deserialize;
 use terra_sim::{DataPack, Terrain};
 
 use crate::app::{CursorMode, StatusMark};
+use crate::family_tree::Lineage;
 use crate::graph::Band;
 use crate::space::{Depth, Pane};
 
@@ -127,6 +128,30 @@ impl PopulationLook {
     }
 }
 
+/// How a theme draws the lineage colours (M2 design §17.4): the colour of
+/// the selected sprite's parents and grandparents, its brothers and
+/// sisters, its young and theirs, and every other sprite.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LineageLook {
+    pub elders: Color,
+    pub siblings: Color,
+    pub young: Color,
+    pub others: Color,
+}
+
+impl LineageLook {
+    /// The colour of a sprite that stands in the selected one's lineage as
+    /// `lineage` says, or of one outside it.
+    pub(crate) fn colour(&self, lineage: Option<Lineage>) -> Color {
+        match lineage {
+            Some(Lineage::Elder) => self.elders,
+            Some(Lineage::Sibling) => self.siblings,
+            Some(Lineage::Young) => self.young,
+            None => self.others,
+        }
+    }
+}
+
 /// The default theme's file.
 const CP437: &str = include_str!("../../../themes/cp437.ron");
 
@@ -218,6 +243,8 @@ pub struct Theme {
     stars: BTreeMap<Depth, Glyph>,
     /// The population graph (M2 design §14).
     population: PopulationLook,
+    /// The lineage colours (M2 design §17.4).
+    lineage: LineageLook,
 }
 
 impl Theme {
@@ -324,6 +351,11 @@ impl Theme {
         self.population
     }
 
+    /// The lineage colours (M2 design §17.4).
+    pub fn lineage(&self) -> LineageLook {
+        self.lineage
+    }
+
     /// A theme from the text of a theme file, as `--theme <file>` loads it
     /// (design v34 §6.7), checked against the data pack it will draw.
     ///
@@ -411,6 +443,26 @@ impl Theme {
         }
     }
 
+    /// The default theme's lineage colours, for a theme without its own
+    /// (M2 design §17.4), such as one made before there were any.
+    fn default_lineage() -> LineageLook {
+        let file = ron::from_str::<ThemeFile>(CP437)
+            .unwrap_or_else(|e| panic!("the built-in cp437 theme is invalid: {e}"))
+            .lineage
+            .expect("the built-in cp437 theme has lineage colours");
+        let (Some(elders), Some(siblings), Some(young), Some(others)) =
+            (file.elders, file.siblings, file.young, file.others)
+        else {
+            panic!("the built-in cp437 theme has every lineage colour");
+        };
+        LineageLook {
+            elders: elders.into(),
+            siblings: siblings.into(),
+            young: young.into(),
+            others: others.into(),
+        }
+    }
+
     /// A theme from a theme file's text, complete and within CP437.
     fn parse(text: &str) -> Result<Theme, String> {
         let file: ThemeFile = ron::from_str(text).map_err(|e| e.to_string())?;
@@ -463,6 +515,18 @@ impl Theme {
                 limit: graph.limit.map_or(population.limit, glyph),
             };
         }
+        // And any of the lineage colours (M2 design §17.4).
+        let mut lineage = Theme::default_lineage();
+        if let Some(colours) = file.lineage {
+            let colour =
+                |colour: Option<Colour>, default: Color| colour.map_or(default, Color::from);
+            lineage = LineageLook {
+                elders: colour(colours.elders, lineage.elders),
+                siblings: colour(colours.siblings, lineage.siblings),
+                young: colour(colours.young, lineage.young),
+                others: colour(colours.others, lineage.others),
+            };
+        }
         let theme = Theme {
             tiles,
             objects,
@@ -484,6 +548,7 @@ impl Theme {
             glass,
             stars,
             population,
+            lineage,
         };
         if let Some((what, symbol)) = theme
             .symbols()
@@ -652,6 +717,10 @@ struct ThemeFile {
     /// without some of it, draws the default theme's.
     #[serde(default, deserialize_with = "implicit_some")]
     population: Option<PopulationFile>,
+    /// The lineage colours (M2 design §17.4). A theme without them, or
+    /// without some of them, draws the default theme's.
+    #[serde(default, deserialize_with = "implicit_some")]
+    lineage: Option<LineageFile>,
 }
 
 /// A section a theme file may leave out, written without `Some(…)` when
@@ -706,6 +775,20 @@ struct StagesFile {
     old: Option<Colour>,
     #[serde(default, deserialize_with = "implicit_some")]
     egg: Option<Colour>,
+}
+
+/// A theme file's `lineage` section: the lineage colours (M2 design §17.4).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LineageFile {
+    #[serde(default, deserialize_with = "implicit_some")]
+    elders: Option<Colour>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    siblings: Option<Colour>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    young: Option<Colour>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    others: Option<Colour>,
 }
 
 /// A theme file's `cursor` section.
