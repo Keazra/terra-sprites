@@ -128,8 +128,8 @@ pub(crate) fn relation(
 
 /// Whether `parent` is doing something that would show its young `me`,
 /// `young`, a lesson it hasn't learned (M2 design §18.1): its action under
-/// way is a try at a thing or a sprite, not at mating or courting (§18.3),
-/// that `young` would learn something from by watching.
+/// way is a try at a thing or a sprite still there, not at mating or
+/// courting (§18.3), that `young` would learn something from by watching.
 fn shows(
     state: &WorldState,
     data: &DataPack,
@@ -137,10 +137,16 @@ fn shows(
     young: &Sprite,
     me: EntityId,
 ) -> bool {
-    let Some(action) = parent.action.as_ref().filter(|a| a.verb.is_contact()) else {
+    let under_way = parent.action.as_ref().filter(|a| a.ended.is_none());
+    let Some(action) = under_way.filter(|a| a.verb.is_contact()) else {
         return false;
     };
-    let Some(target) = action.target else {
+    // One it ate, or that hatched or died, is gone; one held isn't there to
+    // try either.
+    let Some(target) = action
+        .target
+        .filter(|&target| state.whereabouts(data, target).is_some())
+    else {
         return false;
     };
     let subject = state.subject_of(data, target);

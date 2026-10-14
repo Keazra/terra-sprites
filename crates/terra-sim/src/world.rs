@@ -2850,6 +2850,70 @@ mod tests {
     }
 
     #[test]
+    fn a_parent_whose_target_is_gone_shows_its_young_nothing() {
+        // M2 design §18.1: the young, first in turn, weighs its mother while
+        // her Eat, which ate the berry, is still her latest action, aimed at
+        // a berry that's gone. She knows berries, so a berry still there
+        // would show it something; one that's gone shows it nothing.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let map = Map::from_ascii(&["....", "...."], &data).expect("valid drawing");
+        let genes = |genes: &str| {
+            let genes = format!("(format: 2, genes: [{genes}])");
+            Genome::from_ron(&genes, &data).expect("a valid genome")
+        };
+        let rests = r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0)"#;
+        let looks = format!(
+            r#"{rests},
+            AttentionInstinct(input: "always", category: "sprite", whom: Showing, weight: 1.0)"#
+        );
+        let (young, mother, berry) = (Pos { x: 3, y: 1 }, Pos { x: 1, y: 0 }, Pos { x: 0, y: 0 });
+        let scenario = Scenario {
+            map,
+            objects: &[(berry, "berry")],
+            sprites: &[(young, Some(genes(&looks))), (mother, Some(genes(rests)))],
+            scripted: &[(mother, ScriptedAction::Eat { at: berry })],
+            newborns: &[young],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let id = |world: &World, pos: Pos| world.sprite_at(pos).expect("a sprite").id();
+        let (young_id, mother_id) = (id(&world, young), id(&world, mother));
+        let needs = world.data.need_places().len();
+        let berry = world.data.real_object_type("berry").expect("berries");
+        let berry_type = world.data.object_types()[berry].id;
+        let brain = &mut world
+            .state
+            .sprites
+            .get_mut(mother_id)
+            .expect("mother")
+            .brain;
+        let known = brain
+            .experience
+            .learn_about(Subject::ObjectType(berry_type), needs);
+        known.worth[0] = 0.6;
+        known.touched = true;
+        world
+            .state
+            .sprites
+            .get_mut(young_id)
+            .expect("young")
+            .parents = vec![mother_id];
+        while world.state.objects.iter().next().is_some() {
+            world.step();
+        }
+        let showing = |world: &World| {
+            crate::family::relation(
+                &world.state,
+                &world.data,
+                young_id,
+                Target::Sprite(mother_id),
+            )
+            .showing
+        };
+        assert!(!showing(&world), "the berry is gone");
+        world.step();
+    }
+
+    #[test]
     fn a_world_nobody_trains_that_doesn_t_watch_is_taught_nothing() {
         // Design §5.6, #187: only the Cursor's Reward and Correct teach a
         // taught habit, and watching passes one on (M2 design §18.2), so
