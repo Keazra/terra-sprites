@@ -22,6 +22,7 @@ use crate::generate::{generate, place_objects, place_sprites};
 use crate::genome::{GeneView, Genome};
 use crate::inheritance;
 use crate::learning::{self, Subject};
+use crate::lineage::{self, FIRST_GENERATION, Lineage, Origin, Record};
 use crate::map::{Dir, Map, MapError, Pos};
 use crate::mutation::CopyChangeView;
 use crate::objects::{EntityId, Object, Objects};
@@ -45,6 +46,10 @@ pub struct World {
     data: DataPack,
     /// The ID counter as `check_invariants` last saw it, to catch it going back.
     checked_next_id: Cell<u64>,
+    /// How many sprites had died when `check_invariants` last checked the
+    /// record of the dead, which changes only when one dies (M2 design
+    /// §16), so it's checked again only then.
+    checked_deaths: Cell<u64>,
     /// The seed the world was made from, which the top bar shows. The RNG's
     /// state carries on from it, so nothing in the sim reads it.
     seed: u64,
@@ -85,6 +90,11 @@ pub(crate) struct WorldState {
     /// breeding, the default.
     #[serde(default = "crate::config::most_sprites")]
     pub(crate) most_sprites: u16,
+    /// The world's record of the dead, for the family tree (M2 design
+    /// §16). Nothing in the world reads it. A save from before it has none,
+    /// so it remembers only the sprites that die after it's loaded.
+    #[serde(default)]
+    pub(crate) lineage: Lineage,
 }
 
 impl WorldState {
@@ -99,7 +109,61 @@ impl WorldState {
         self.objects.rebuild(&self.map, data)?;
         self.sprites.rebuild(&self.map, data, self.tick)?;
         self.old_eggs_to_items(data);
+        self.number_generations();
         Ok(())
+    }
+
+    /// Gives each sprite and egg in a save from before generations its
+    /// generation (M2 design §16), in ascending ID order, so a parent has
+    /// its own before its young: one after its newer parent's, where the
+    /// world knows that parent, and the first for one with no parents. A
+    /// parent the world doesn't know, which died before generations, counts
+    /// as the first.
+    fn number_generations(&mut self) {
+        let mut unknown: Vec<EntityId> = self
+            .sprites
+            .iter()
+            .filter(|(_, sprite)| sprite.generation == 0)
+            .map(|(id, _)| id)
+            .chain(
+                self.objects
+                    .iter()
+                    .filter(|(_, object)| {
+                        object
+                            .unhatched
+                            .as_ref()
+                            .is_some_and(|egg| egg.generation == 0)
+                    })
+                    .map(|(id, _)| id),
+            )
+            .collect();
+        unknown.sort();
+        for id in unknown {
+            let parents = match self.sprites.get(id) {
+                Some(sprite) => sprite.parents.clone(),
+                None => self
+                    .objects
+                    .get(id)
+                    .and_then(|o| o.unhatched.as_ref())
+                    .expect("an egg")
+                    .parents
+                    .clone(),
+            };
+            let generation = lineage::generation_after(parents.iter().map(|&parent| {
+                self.sprites
+                    .get(parent)
+                    .map(|sprite| sprite.generation)
+                    .or_else(|| self.lineage.get(parent).map(|record| record.generation))
+                    .unwrap_or(FIRST_GENERATION)
+            }));
+            match self.sprites.get_mut(id) {
+                Some(sprite) => sprite.generation = generation,
+                None => {
+                    let object = self.objects.get_mut(id).expect("an egg");
+                    object.unhatched.as_mut().expect("an egg").generation = generation;
+                }
+            }
+        }
     }
 
     /// Turns each sprite that's still an egg, in a save from before eggs
@@ -487,6 +551,18 @@ impl<'a> SpriteView<'a> {
         &self.sprite.parents
     }
 
+    /// Its generation (M2 design §16): the first for a sprite with no
+    /// parents, else one after its newer parent's.
+    pub fn generation(&self) -> u32 {
+        self.sprite.generation
+    }
+
+    /// Where it came from (M2 design §16): the world began with it, the
+    /// Cursor placed it, or it hatched.
+    pub fn origin(&self) -> Origin {
+        Origin::of(&self.sprite.parents, self.sprite.placed)
+    }
+
     /// Its sex (M2 design §10).
     pub fn sex(&self) -> Sex {
         self.sprite.sex
@@ -845,6 +921,70 @@ impl<'a> EggView<'a> {
     pub fn name(&self) -> Option<&'a str> {
         self.unhatched.name.as_deref()
     }
+
+    /// The generation the sprite it holds hatches into (M2 design §16).
+    pub fn generation(&self) -> u32 {
+        self.unhatched.generation
+    }
+}
+
+/// A read-only view of a sprite that died, as the world remembers it for
+/// the family tree (M2 design §16).
+pub struct DeadView<'a> {
+    id: EntityId,
+    record: &'a Record,
+}
+
+impl<'a> DeadView<'a> {
+    /// The ID it had.
+    pub fn id(&self) -> EntityId {
+        self.id
+    }
+
+    /// The name the player gave it, if any.
+    pub fn name(&self) -> Option<&'a str> {
+        self.record.name.as_deref()
+    }
+
+    /// Its parents: the one that laid it, then its partner, if it had one.
+    pub fn parents(&self) -> &'a [EntityId] {
+        &self.record.parents
+    }
+
+    /// Its generation.
+    pub fn generation(&self) -> u32 {
+        self.record.generation
+    }
+
+    /// Where it came from.
+    pub fn origin(&self) -> Origin {
+        Origin::of(&self.record.parents, self.record.placed)
+    }
+
+    /// The tick it died on.
+    pub fn died(&self) -> u64 {
+        self.record.died
+    }
+
+    /// Its age when it died, in ticks.
+    pub fn age(&self) -> u64 {
+        self.record.age()
+    }
+
+    /// What it died of.
+    pub fn cause(&self) -> DeathCause {
+        self.record.cause
+    }
+
+    /// Its life stage when it died.
+    pub fn life_stage(&self) -> LifeStage {
+        self.record.stage
+    }
+
+    /// Its sex when it died.
+    pub fn sex(&self) -> Sex {
+        self.record.sex
+    }
 }
 
 impl World {
@@ -1014,9 +1154,11 @@ impl World {
                 commands: Vec::new(),
                 cursor: Cursor::default(),
                 most_sprites: MOST_SPRITES,
+                lineage: Lineage::default(),
             },
             data,
             checked_next_id: Cell::new(1),
+            checked_deaths: Cell::new(0),
             seed,
             config: None,
             view: None,
@@ -1068,6 +1210,8 @@ impl World {
         state.rebuild(&data).map_err(LoadError::Damaged)?;
         let world = World {
             checked_next_id: Cell::new(state.next_id),
+            // Never a count of deaths, so a load checks the record.
+            checked_deaths: Cell::new(u64::MAX),
             state,
             data,
             seed,
@@ -1224,6 +1368,48 @@ impl World {
             unhatched: object.unhatched.as_deref()?,
             world: self,
         })
+    }
+
+    /// The dead sprite `id`, if the world remembers it (M2 design §16).
+    pub fn dead(&self, id: EntityId) -> Option<DeadView<'_>> {
+        let record = self.state.lineage.get(id)?;
+        Some(DeadView { id, record })
+    }
+
+    /// Every dead sprite the world remembers, in ascending ID order (M2
+    /// design §16): the newest 10,000, and every one the player named.
+    pub fn dead_sprites(&self) -> impl Iterator<Item = DeadView<'_>> {
+        self.state
+            .lineage
+            .iter()
+            .map(|(id, record)| DeadView { id, record })
+    }
+
+    /// The young of the sprite `id` (M2 design §16): every sprite, egg and
+    /// remembered dead sprite with `id` among its parents, in ascending ID
+    /// order.
+    pub fn young(&self, id: EntityId) -> Vec<EntityId> {
+        let state = &self.state;
+        let mut young: Vec<EntityId> = state
+            .sprites
+            .iter()
+            .filter(|(_, sprite)| sprite.parents.contains(&id))
+            .map(|(young, _)| young)
+            .chain(
+                self.eggs()
+                    .filter(|egg| egg.parents().contains(&id))
+                    .map(|egg| egg.id()),
+            )
+            .chain(
+                state
+                    .lineage
+                    .iter()
+                    .filter(|(_, record)| record.parents.contains(&id))
+                    .map(|(young, _)| young),
+            )
+            .collect();
+        young.sort();
+        young
     }
 
     /// The sprite `id`, if it's in the world.
@@ -1454,6 +1640,9 @@ impl World {
             let sprite = state.sprites.remove(id);
             let cause = sprite.body.cause_of_death();
             *state.deaths.entry(cause).or_insert(0) += 1;
+            state
+                .lineage
+                .remember(id, Record::of(&sprite, cause, state.tick));
             events.push(Event {
                 tick: state.tick,
                 kind: EventKind::Died {
@@ -1516,6 +1705,14 @@ impl World {
                 state
                     .cursor
                     .check(&state.map, &state.objects, &state.sprites)
+            })
+            .and_then(|()| {
+                let deaths = state.deaths.values().sum();
+                if deaths == self.checked_deaths.get() {
+                    return Ok(());
+                }
+                self.checked_deaths.set(deaths);
+                state.lineage.check(&state.sprites, &state.objects)
             })
             .map_err(InvariantViolation)
     }
@@ -1646,6 +1843,58 @@ mod tests {
             });
             assert!(World::load(&world.save()).is_ok(), "damage {n}");
             damage(&mut world.state, &world.data);
+            match World::load(&world.save()) {
+                Err(LoadError::Damaged(_)) => {}
+                Err(err) => panic!("damage {n} refused for the wrong reason: {err}"),
+                Ok(_) => panic!("damage {n} loaded"),
+            }
+        }
+    }
+
+    /// A save whose record of the dead doesn't hold together (M2 design
+    /// §16) is refused, as a build with a bug might write it.
+    #[test]
+    fn a_save_whose_record_of_the_dead_is_damaged_is_refused() {
+        let damage: [fn(&mut WorldState); 3] = [
+            // A sprite remembered as dead that's still in the world.
+            |state| {
+                let (id, sprite) = state.sprites.iter().next().expect("a sprite");
+                let record = Record::of(sprite, DeathCause::OldAge, state.tick);
+                state.lineage.remember(id, record);
+            },
+            // One whose parent is younger than itself.
+            |state| {
+                let (_, sprite) = state.sprites.iter().next().expect("a sprite");
+                let mut record = Record::of(sprite, DeathCause::OldAge, state.tick);
+                record.parents = vec![EntityId(state.next_id)];
+                record.generation = 2;
+                state.lineage.remember(EntityId(state.next_id - 1), record);
+            },
+            // One in its parent's generation.
+            |state| {
+                let (_, sprite) = state.sprites.iter().next().expect("a sprite");
+                let record = Record::of(sprite, DeathCause::OldAge, state.tick);
+                state.lineage.remember(EntityId(0), record.clone());
+                let mut young = record;
+                young.parents = vec![EntityId(0)];
+                state.lineage.remember(EntityId(state.next_id - 1), young);
+            },
+        ];
+        for (n, damage) in damage.into_iter().enumerate() {
+            let mut world = field_with_a_bush();
+            world.submit(Command::SpawnSprite {
+                tile: Pos { x: 1, y: 1 },
+                genome: None,
+            });
+            world.submit(Command::SpawnSprite {
+                tile: Pos { x: 4, y: 1 },
+                genome: None,
+            });
+            world.step();
+            let gone = world.state.sprites.iter().last().expect("a sprite").0;
+            world.state.sprites.remove(gone);
+            assert!(World::load(&world.save()).is_ok(), "damage {n}");
+            damage(&mut world.state);
             match World::load(&world.save()) {
                 Err(LoadError::Damaged(_)) => {}
                 Err(err) => panic!("damage {n} refused for the wrong reason: {err}"),

@@ -13,6 +13,7 @@ use crate::breeding::{Sex, Unhatched};
 use crate::data::DataPack;
 use crate::genome::{Gene, Genome};
 use crate::inheritance::{Parent, flaws_of, what_it_does};
+use crate::lineage::FIRST_GENERATION;
 use crate::map::{Dir, Map, Pos};
 use crate::mutation::{self, CopyChange, CopyingError};
 use crate::objects::{EntityId, Objects};
@@ -42,6 +43,14 @@ pub(crate) struct Sprite {
     /// placed.
     #[serde(default)]
     pub(crate) parents: Vec<EntityId>,
+    /// Its generation (M2 design §16): the first for a sprite with no
+    /// parents, else one after its newer parent's. 0 only in a save from
+    /// before generations, until it's loaded.
+    #[serde(default)]
+    pub(crate) generation: u32,
+    /// Whether the Cursor placed it (M2 design §16).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) placed: bool,
     /// The tick it last had young on, if it has (M2 design §10).
     #[serde(default)]
     pub(crate) last_bred: Option<u64>,
@@ -339,11 +348,13 @@ impl Sprite {
             copying_errors,
             copy_changes,
             parents,
+            generation,
             name,
             laid: _,
         } = unhatched;
         let mut hatchling = Sprite::newborn(genome, pos, tick, data);
         hatchling.parents = parents;
+        hatchling.generation = generation;
         hatchling.name = name;
         hatchling.copying_errors = copying_errors;
         hatchling.copy_changes = copy_changes;
@@ -372,6 +383,7 @@ impl Sprite {
             copying_errors: self.copying_errors,
             copy_changes: self.copy_changes,
             parents: self.parents,
+            generation: self.generation,
             name: self.name,
         };
         Some((unhatched, hatches))
@@ -408,6 +420,8 @@ impl Sprite {
             born: tick as i64 - age as i64,
             hatches: None,
             parents: Vec::new(),
+            generation: FIRST_GENERATION,
+            placed: false,
             last_bred: None,
             sex: Sex::Male,
             name: None,

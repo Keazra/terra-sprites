@@ -594,6 +594,7 @@ fn spawn_sprite(
     };
     let mut sprite = Sprite::newborn(genome, tile, state.tick, data);
     sprite.flaws = flaws;
+    sprite.placed = true;
     let id = state.add_sprite(sprite);
     Ok(EventKind::Spawned { id, pos: tile })
 }
