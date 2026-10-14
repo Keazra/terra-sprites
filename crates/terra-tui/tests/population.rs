@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Size};
-use ratatui::style::Color;
+use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{DataPack, Genome, Map, Pos, Scenario, World};
 use terra_tui::app::{App, Screen};
@@ -163,6 +163,34 @@ fn p_opens_the_population_graph_over_the_panels_and_p_or_esc_closes_it() {
     app.apply(Action::Population, &world);
     app.apply(Action::Back, &world);
     assert_eq!(app.screen(), Screen::Normal, "and so does Esc");
+}
+
+#[test]
+fn nothing_drawn_beneath_shows_through_the_graph() {
+    // The World tab's small graph has characters of two stages, drawn on a
+    // background colour, and the Cursor beneath is in reverse video; the
+    // full graph blanks them, colours and all.
+    let mut world = field(12, 12);
+    run(&mut world, 250);
+    let mut app = app_on(&world);
+    let beneath = render(&app, &world);
+    let inside = || (1..29).flat_map(|y| (0..100).map(move |x| (x, y)));
+    assert!(
+        inside().any(|(x, y)| beneath[(x, y)].bg != Color::Reset),
+        "something beneath has a background"
+    );
+    app.apply(Action::Population, &world);
+    let screen = render(&app, &world);
+    for (x, y) in inside() {
+        let cell = &screen[(x, y)];
+        if cell.symbol() == " " {
+            assert_eq!(
+                (cell.bg, cell.modifier),
+                (Color::Reset, Modifier::empty()),
+                "at ({x}, {y})"
+            );
+        }
+    }
 }
 
 #[test]

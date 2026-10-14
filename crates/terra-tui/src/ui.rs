@@ -497,12 +497,7 @@ fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) {
     if area.width < 3 || area.height < 3 {
         return;
     }
-    buf.set_style(area, Style::default());
-    for y in area.top() + 1..area.bottom() - 1 {
-        for x in area.left() + 1..area.right() - 1 {
-            buf[(x, y)].set_char(' ');
-        }
-    }
+    blank(buf, area);
     draw_border(buf, area, title);
     let items = app.menu_items(world);
     let room = usize::from(area.width - 2);
@@ -592,6 +587,17 @@ fn render_population(buf: &mut Buffer, app: &App, world: &World) {
     }
 }
 
+/// Blanks every cell of `area`, colours and all, so nothing drawn beneath
+/// an overlay shows through it: a coloured background, such as the
+/// Cursor's or a graph's, or reverse video.
+fn blank(buf: &mut Buffer, area: Rect) {
+    for y in area.top()..area.bottom() {
+        for x in area.left()..area.right() {
+            buf[(x, y)].reset();
+        }
+    }
+}
+
 /// Where text `width` cells wide sits at the right of `area`'s top border:
 /// before the corner and the line beside it, as a title sits after them.
 pub(crate) fn top_right(area: Rect, width: u16) -> Option<Rect> {
@@ -603,12 +609,7 @@ pub(crate) fn top_right(area: Rect, width: u16) -> Option<Rect> {
 /// the left of its top edge and `corner` at the right, as an overlay over
 /// the panels beneath. Gives the area inside the box.
 pub(crate) fn clear_box(buf: &mut Buffer, area: Rect, title: &str, corner: &str) -> Rect {
-    buf.set_style(area, Style::default());
-    for y in area.top()..area.bottom() {
-        for x in area.left()..area.right() {
-            buf[(x, y)].set_char(' ');
-        }
-    }
+    blank(buf, area);
     draw_border(buf, area, title);
     if let Some(at) = top_right(area, corner.chars().count() as u16) {
         buf.set_stringn(at.x, at.y, corner, usize::from(at.width), Style::default());
