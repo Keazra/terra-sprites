@@ -98,6 +98,7 @@ The owner runs Gemini, and sometimes Codex, on each PR. Gemini's review is one r
 - **The session names its own branch** (`claude/…`). The project's is `feat/slice-N-<slug>`, so ask the owner which to use before the first push.
 - **Try `gh` before saying something can't be done.** The GitHub tools cover most work: a review thread gets a reply to its comment, then is resolved by its thread ID. What they can't do, such as making a milestone, `gh api` may: in the M2 planning session it worked through the proxy, where the session had first told the owner it couldn't be done.
 - **A branch on GitHub can't be deleted from a session:** the git proxy refuses with a 403. The owner deletes a merged branch from its PR page.
+- **Especially large runs go on the owner's PC, not in the cloud** (the owner, 2026-10-14): a `generations` run of 200,000 ticks or more over ten seeds, the soak, or anything else that would keep a cloud machine busy for an hour or more. Their PC steps the world about half again as fast as a 4-core cloud machine, which runs three worlds at a time. From a project thread, start a Remote Control session on their checkout, or give them the command in the thread. Try ideas on a seed or two in the cloud first, and save the PC for the full run. Slice 28's 200,000-tick run of all ten seeds is what prompted it.
 
 ## Triage
 

@@ -1363,7 +1363,7 @@ Nothing here names an object or a species, so a new fruit, or a modded species, 
 - **About a place, the one watching remembers it** as if it had been eased there itself (Q5), under §7.2's limits.
 - **Only ever up to the other's view.** Each value moves `watch_rate` of the way towards the other's, but only when the other's is further from 0 the same way: never past it, never back towards 0, and never across it. Watching never makes a sprite forget what it found out for itself (Q2). The other's view is read once both have learned from their own step 4, and before anyone takes on anything this tick, so what one sprite takes on can't pass through another in the same tick, whatever order they're in.
 - **Not about itself:** a moment about the one watching, as when the one it watches hit it or was hit by it, teaches it nothing by watching.
-- **What's passed on is the other's knowledge, not the event.** A mother who knows water well teaches it even when she only sips; one that knows little teaches little (Q2). In the starter's world the grown-ups know water well but food poorly, since they eat before they're hungry (round 2), so for now watching passes on water far more than food.
+- **What's passed on is the other's knowledge, not the event.** A mother who knows water well teaches it even when she only sips; one that knows little teaches little (Q2). In the arena the grown-ups know water well but food poorly at tick 20,000, since they eat before they're hungry (round 2), so there watching passes on water far more than food; over generations in the default world, food passes on too (§18.6).
 
 ### 18.3 Nothing about mating
 
@@ -1389,6 +1389,51 @@ Agreed before measuring (round 1, Q9; round 2, Q10):
 - **For information, no bar:** in the arena, food and thornbush lessons and the young's deaths, with a parent and without. Food can't be a bar: by tick 20,000 only about half the grown-ups have learned that berries are good for hunger (3.5 of 6 for berries, 2.5 for bushes), so there's little to watch; Slice 29's hungrier world checks that food passes on (round 2, Q10). In the default world, how soon hatchlings learn water and food, against the table above, for those that saw a parent most of their childhood and those that didn't, and how many die in childhood, and of what.
 
 `cargo run --release -p terra-sim --example lab -- scenarios/watching.ron --seeds 10` runs the arena, its young's rows at the end of each run.
+
+**Measured (2026-10-14)** in release builds of this slice at `b9d3144`, in the cloud, on seeds 1–10 (A3 on 1–30), with:
+
+```
+cargo run --release -p terra-sim --example lab -- scenarios/watching.ron --seeds 10
+cargo run --release -p terra-sim --example generations -- --ticks 200000
+cargo run --release -p terra-sim --example lab -- scenarios/viability.ron --seeds 10
+cargo run --release -p terra-sim --example lab -- scenarios/a3-correct-training.ron --seeds 30
+cargo run --release -p terra-sim --example speed
+```
+
+The first build, which passed on a thing's worth for every need, met every bar but the lone eggs: 3.3% of all eggs were laid alone, and 17.9% in seed 10, as the bushes dwindled (§18.2). These are the numbers with only the motive's worth passed on. Merging `main`'s speed fix and the graph's generations afterwards changes no outcome.
+
+The arena: ticks from hatching until a young sprite learned that water is good for thirst, the median of each seed's young, with a parent and as orphans:
+
+| Seed | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | Median |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| With a parent | 1,403 | 1,334 | 617 | 1,027 | 745 | 848 | 815 | 844 | 1,486 | 1,657 | 938 |
+| Orphans | 3,888 | 3,007 | 3,133 | 2,961 | 3,388 | 3,083 | 3,456 | 3,488 | 3,062 | 2,822 | 3,108 |
+
+The default world left alone for 200,000 ticks, in §15.9's terms:
+
+| Seed | Alive at the end (and eggs) | Eggs alone | Courted | Partners | Eggs | Young | Generations |
+|---|---|---|---|---|---|---|---|
+| 1 | 95 (5) | 5 (0.8%) | 91.8% | 52% | 95% | 80% | 18 |
+| 2 | 89 (3) | 4 (0.6%) | 89.4% | 54% | 94% | 75% | 20 |
+| 3 | 98 (1) | 1 (0.1%) | 92.3% | 55% | 95% | 79% | 19 |
+| 4 | 94 (6) | 3 (0.4%) | 89.3% | 50% | 95% | 76% | 20 |
+| 5 | 96 (4) | 3 (0.4%) | 94.4% | 48% | 95% | 78% | 20 |
+| 6 | 100 (0) | 7 (1.1%) | 94.0% | 55% | 94% | 78% | 18 |
+| 7 | 96 (3) | 7 (1.0%) | 93.8% | 54% | 95% | 76% | 19 |
+| 8 | 99 (1) | 8 (1.2%) | 91.6% | 56% | 95% | 76% | 22 |
+| 9 | 94 (6) | 1 (0.1%) | 93.3% | 55% | 95% | 79% | 21 |
+| 10 | 97 (2) | 4 (0.6%) | 91.1% | 56% | 95% | 80% | 20 |
+
+- **Learns sooner: met.** The young with a parent learned that water is good for thirst in a median 938 ticks, against 3,108 for the orphans (at most half, 1,554). Every one of the 58 young learned it in both runs. On `main` it was 3,523 and 3,576.
+- **Safe: met.** The property test with random genomes passes, now with a random `watch_rate` and attention instincts about grown-ups and a parent showing something: no sprite that isn't grown up knows anything about mating, what anything is worth for the breeding drive or a habit of mating or courting, which it could only have learned by watching.
+- **Slice 32's families: met.** Sprites are alive at the end in all 10 seeds, 18 to 22 generations deep, and no world went over its limit. 43 of 6,732 eggs were laid alone (0.6%, at most 2%), no seed more than 1.2% (at most 5%). 92.1% of pairs' eggs came after the two danced for each other (at least 90%). Partners had each other in sight for a median 54% of the time (at least half), an egg had a parent in sight for 95% of its time (at least three quarters), and a young sprite saw a living parent for 78% of its childhood (at least half; 32b 74%).
+- **A4: met.** Of 926 deaths in ticks 10,000–50,000 of the viability run over all seeds, 4 were of hunger and 33 of thirst (4.0%, under 25%; `main` 2.3%).
+- **A3: met.** Over seeds 1–30, trained sprites hit a median of 0.5 times in ticks 10,000–20,000, against 38.5 untrained, and all of 100 random sets of 10 of those seeds pass.
+- **A1 and A2: met** (their tests pass). In the lab, A1's learner touched the thornbush a median of once, against 40.5 for its control, and A2's runs met their bar too, the late trainer's included.
+- **A5: met,** 220–232 ticks a second with 100 sprites (`speed`, three runs, after merging `main`'s speed fix), against 219–235 for `main` at `11cf11d` timed alongside: no cost that shows above the cloud's noise.
+- **For information, the arena:** 44 of the 58 young with a parent learned that berries are good for hunger, a median 2,412 ticks after hatching, against 18 orphans, most of whom didn't learn it within the 5,000 ticks. The orphans learned that thornbushes are bad sooner (837 ticks against 1,571), from pricking themselves; about as many learned it (46 and 50). Three young with a parent starved, against one orphan.
+- **For information, the default world** left alone for 60,000 ticks, counted as in the table at the top of §18: the 1,560 young that saw a parent for most of their childhood learned that water is good for thirst a median 808 ticks after hatching, and that food is good for hunger at 1,950; the 340 that didn't, at 1,131 and 2,369. 10% of all of them grew up without learning that food is good for hunger (`main` 83%). 3 of the 1,900 died in childhood, as on `main`.
+- **For information, the rest:** hunger and thirst killed 183 of 5,916 sprites that died after tick 10,000 (3.1%; 32b 2.2%), the most in seed 2, 70 of them, nearly all of thirst (10.9% of its deaths). The adults at the end were 516 males to 302 females over all ten seeds (32b 488 to 345). On seed 10, the berry bushes held at 550 to 600 throughout the 200,000 ticks, against about 240 from tick 60,000 in the first build. The living had 0.64 to 1.70 broken genes each at the end (32b 0.43 to 1.10). The 5,420 hatchlings old age killed lived a median 6.2 hours, a tenth under 4.8 and nine tenths under 7.4 (32b 6.4, 4.8 and 7.4). G4: none of the 137 numbers moved a tenth the same way in all 10 seeds; `grows_old` rose in 9.
 
 ### 18.7 Later
 
