@@ -1909,7 +1909,8 @@ impl App {
             | Action::Pick(_)
             | Action::Type(_)
             | Action::Erase
-            | Action::AnotherName => {}
+            | Action::AnotherName
+            | Action::HelpReleased => {}
             Action::Enter => {
                 if let Some(at) = self.mouse {
                     self.toggle_lesson(at, world);

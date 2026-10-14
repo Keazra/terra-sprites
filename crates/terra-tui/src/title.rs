@@ -9,7 +9,7 @@ use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
-use terra_sim::{EntityId, Pos, World};
+use terra_sim::{EntityId, Mode, Pos, World};
 
 use crate::app::{App, Draft};
 use crate::input::Action;
@@ -53,6 +53,23 @@ const CHOICES_INDENT: u16 = 6;
 const CONTINUE_SAID_AT: u16 = 17;
 /// How wide a label to the left of a field in the New world box is.
 const LABEL_WIDTH: u16 = 9;
+/// The modes New world offers, in order, and what each means in a few
+/// words beside them (M2 design §16).
+const MODES: [(Mode, &str, &str); 2] = [
+    (Mode::Story, "Story", "4x at most"),
+    (Mode::Lab, "Lab", "every speed, for experiments"),
+];
+/// What a mode means, while `?` is held in New world (M2 design §16).
+const STORY_EXPLAINED: [&str; 3] = [
+    "Story mode: the game as it's meant to be played.",
+    "· Speeds up to 4x, so a life never feels rushed.",
+    "· A world keeps its mode for its whole life.",
+];
+const LAB_EXPLAINED: [&str; 3] = [
+    "Lab mode: a world for experiments.",
+    "· Every speed, up to Max; it can be fast-forwarded.",
+    "· A world keeps its mode for its whole life.",
+];
 
 /// A choice on the title screen's menu.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -84,10 +101,11 @@ pub enum TitleFlow {
     Stay,
     Quit,
     /// Start a new world from `seed`, with the preset in the file, or the
-    /// default.
+    /// default, in `mode`.
     New {
         seed: u64,
         preset: Option<PathBuf>,
+        mode: Mode,
     },
     /// Load the world in this save.
     Load(SaveFile),
@@ -100,15 +118,22 @@ enum Screen {
     /// "Quit? (y/n)" waits for an answer.
     QuitPrompt,
     /// The New world box (M2 design §8.3).
-    NewWorld {
-        seed: Draft,
-        preset: usize,
-    },
+    NewWorld(NewWorld),
     /// The list of saves, with the one highlighted.
     Load {
         choice: usize,
     },
     Help,
+}
+
+/// What's picked in the New world box (M2 design §8.3, §16).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NewWorld {
+    seed: Draft,
+    preset: usize,
+    mode: Mode,
+    /// Whether `?` is held, explaining the mode.
+    explaining: bool,
 }
 
 /// The title screen's state.
@@ -227,7 +252,7 @@ impl Title {
 
     /// Whether keys type, as they do in the New world box.
     pub fn typing(&self) -> bool {
-        matches!(self.screen, Screen::NewWorld { .. })
+        matches!(self.screen, Screen::NewWorld(_))
     }
 
     /// Says on the status line why something the player asked for didn't
@@ -290,7 +315,7 @@ impl Title {
                 self.screen = Screen::Menu;
                 TitleFlow::Stay
             }
-            Screen::NewWorld { seed, preset } => self.apply_in_new_world(action, seed, preset),
+            Screen::NewWorld(new) => self.apply_in_new_world(action, new),
             Screen::Load { choice } => self.apply_in_load(action, choice),
             Screen::Help => {
                 if matches!(action, Action::Back | Action::Help) {
@@ -343,10 +368,12 @@ impl Title {
         match choice {
             Choice::Continue => return TitleFlow::Load(self.saves[0].0.clone()),
             Choice::NewWorld => {
-                self.screen = Screen::NewWorld {
+                self.screen = Screen::NewWorld(NewWorld {
                     seed: Draft::offered(self.seed.to_string()),
                     preset: 0,
-                }
+                    mode: Mode::Story,
+                    explaining: false,
+                })
             }
             Choice::Load => self.screen = Screen::Load { choice: 0 },
             Choice::Help => self.screen = Screen::Help,
@@ -355,25 +382,40 @@ impl Title {
         TitleFlow::Stay
     }
 
-    fn apply_in_new_world(&mut self, action: Action, mut seed: Draft, preset: usize) -> TitleFlow {
-        let mut preset = preset;
+    /// What an action does in the New world box: digits type the seed,
+    /// `↑` `↓` pick a preset and `←` `→` a mode, and holding `?` explains
+    /// the mode picked (M2 design §16). The explanation goes when `?` is
+    /// let go of, or, where the terminal never says so, when a key other
+    /// than the arrows that pick a mode is pressed.
+    fn apply_in_new_world(&mut self, action: Action, mut new: NewWorld) -> TitleFlow {
+        let picks_a_mode = matches!(action, Action::Scroll { dx, .. } if dx != 0);
+        new.explaining = match action {
+            Action::Type('?') => true,
+            _ if picks_a_mode => new.explaining,
+            _ => false,
+        };
         match action {
-            Action::Type(c) if c.is_ascii_digit() => seed.type_char(c, MAX_SEED_DIGITS),
-            Action::Erase => seed.erase(),
+            Action::Type(c) if c.is_ascii_digit() => new.seed.type_char(c, MAX_SEED_DIGITS),
+            Action::Erase => new.seed.erase(),
             Action::AnotherName => {
                 self.seed = next_seed(self.seed);
-                seed = Draft::offered(self.seed.to_string());
+                new.seed = Draft::offered(self.seed.to_string());
             }
-            Action::Scroll { dy, .. } => preset = step(preset, dy, self.presets.len()),
+            Action::Scroll { dx, .. } if dx != 0 => {
+                let picked = MODES.iter().position(|&(mode, ..)| mode == new.mode);
+                new.mode = MODES[step(picked.unwrap_or(0), dx, MODES.len())].0;
+            }
+            Action::Scroll { dy, .. } => new.preset = step(new.preset, dy, self.presets.len()),
             Action::Enter => {
-                if seed.text().is_empty() {
+                if new.seed.text().is_empty() {
                     self.refuse("Type a seed, or Tab for a random one".into());
                 } else {
-                    match seed.text().parse() {
+                    match new.seed.text().parse() {
                         Ok(seed) => {
                             return TitleFlow::New {
                                 seed,
-                                preset: self.presets[preset].path.clone(),
+                                preset: self.presets[new.preset].path.clone(),
+                                mode: new.mode,
                             };
                         }
                         Err(_) => {
@@ -388,7 +430,7 @@ impl Title {
             }
             _ => {}
         }
-        self.screen = Screen::NewWorld { seed, preset };
+        self.screen = Screen::NewWorld(new);
         TitleFlow::Stay
     }
 
@@ -488,13 +530,13 @@ pub fn render(frame: &mut Frame, title: &Title) {
         draw_scene(buf, area, title);
     }
     // New world and Load take the menu's place.
-    let in_a_box = matches!(title.screen, Screen::NewWorld { .. } | Screen::Load { .. });
+    let in_a_box = matches!(title.screen, Screen::NewWorld(_) | Screen::Load { .. });
     if title.shown_for >= LIGHT_FILLS && !in_a_box {
         draw_menu(buf, title);
     }
     if title.scene_over() {
         match &title.screen {
-            Screen::NewWorld { seed, preset } => draw_new_world(buf, title, seed, *preset),
+            Screen::NewWorld(new) => draw_new_world(buf, title, new),
             Screen::Load { choice } => draw_load(buf, title, *choice),
             Screen::Help => draw_help(buf, area, title),
             Screen::Menu | Screen::QuitPrompt => {}
@@ -647,23 +689,76 @@ const LETTERING: [&str; 2] = [
     " █  ██▄ █▀▄ █▀▄ █▀█   ▄█ █▀▀ █▀▄ █  █  ██▄ ▄█",
 ];
 
-/// The New world box (M2 design §8.3), over the menu.
-fn draw_new_world(buf: &mut Buffer, title: &Title, seed: &Draft, preset: usize) {
-    let rows = title.presets.len().min(8) as u16;
-    // The border, the seed, a blank row, the presets, a blank row, the
-    // hints and the border.
-    let area = centred_box(buf.area.as_size(), rows + 6).intersection(buf.area);
+/// The New world box (M2 design §8.3, §16), over the menu.
+fn draw_new_world(buf: &mut Buffer, title: &Title, new: &NewWorld) {
+    let explained = match new.mode {
+        Mode::Story => STORY_EXPLAINED,
+        Mode::Lab => LAB_EXPLAINED,
+    };
+    // The presets, or the explanation in their place: room for whichever
+    // is longer, so the box stays put when `?` is held.
+    let rows = title.presets.len().min(8).max(explained.len()) as u16;
+    // The border, the seed, the mode, a blank row, the presets, a blank
+    // row, two rows of hints and the border.
+    let area = centred_box(buf.area.as_size(), rows + 8).intersection(buf.area);
     let inner = double_box(buf, area, " New world ");
+    let room = |x: u16| usize::from(inner.right().saturating_sub(x));
     // The seed offered shows highlighted, as the first key replaces it;
     // one being typed shows where the next digit goes.
-    let (shown, style) = if seed.typed() {
-        (format!("{}_", seed.text()), Style::default())
+    let (shown, style) = if new.seed.typed() {
+        (format!("{}_", new.seed.text()), Style::default())
     } else {
-        (seed.text().to_string(), chosen_style(true))
+        (new.seed.text().to_string(), chosen_style(true))
     };
     buf.set_string(inner.x, inner.y, " Seed    ", Style::default());
     buf.set_string(inner.x + LABEL_WIDTH, inner.y, shown, style);
-    let first = preset.saturating_sub(usize::from(rows) - 1);
+
+    // The modes, the one picked in brackets, and what it means in short.
+    let y = inner.y + 1;
+    buf.set_string(inner.x, y, " Mode    ", Style::default());
+    let mut x = inner.x + LABEL_WIDTH;
+    for (mode, name, in_short) in MODES {
+        let picked = mode == new.mode;
+        let shown = if picked {
+            format!("[{name}]")
+        } else {
+            format!(" {name} ")
+        };
+        buf.set_string(x, y, &shown, chosen_style(picked));
+        x += shown.chars().count() as u16 + 1;
+        if picked {
+            let said_x = inner.x + LABEL_WIDTH + 15;
+            let gray = Style::default().fg(Color::Gray);
+            buf.set_stringn(said_x, y, in_short, room(said_x), gray);
+        }
+    }
+
+    let top = inner.y + 3;
+    if new.explaining {
+        for (row, line) in explained.iter().enumerate() {
+            let y = top + row as u16;
+            buf.set_stringn(inner.x + 1, y, line, room(inner.x + 1), Style::default());
+        }
+    } else {
+        draw_presets(buf, title, new.preset, inner, top, rows);
+    }
+
+    let hints = [
+        " tab another seed  ←→ mode  ↑↓ preset",
+        " hold ? what the mode means  enter start  esc back",
+    ];
+    for (row, hints) in hints.iter().enumerate() {
+        let y = inner.bottom().saturating_sub(2) + row as u16;
+        let gray = Style::default().fg(Color::Gray);
+        buf.set_stringn(inner.x, y, hints, room(inner.x), gray);
+    }
+}
+
+/// New world's presets, from row `top` of the box's `inner` area, `rows`
+/// of them at most, scrolled to keep the one `picked` in view.
+fn draw_presets(buf: &mut Buffer, title: &Title, picked: usize, inner: Rect, top: u16, rows: u16) {
+    let rows = rows.min(title.presets.len() as u16).max(1);
+    let first = picked.saturating_sub(usize::from(rows) - 1);
     for (row, (index, choice)) in title
         .presets
         .iter()
@@ -673,9 +768,9 @@ fn draw_new_world(buf: &mut Buffer, title: &Title, seed: &Draft, preset: usize) 
         .enumerate()
     {
         let label = if row == 0 { " Preset  " } else { "         " };
-        let chosen = index == preset;
+        let chosen = index == picked;
         let mark = if chosen { '►' } else { ' ' };
-        let y = inner.y + 2 + row as u16;
+        let y = top + row as u16;
         buf.set_string(inner.x, y, label, Style::default());
         let room = usize::from(inner.width.saturating_sub(LABEL_WIDTH + 1));
         buf.set_stringn(
@@ -686,14 +781,6 @@ fn draw_new_world(buf: &mut Buffer, title: &Title, seed: &Draft, preset: usize) 
             chosen_style(chosen),
         );
     }
-    let hints = " tab another seed  ↑↓ preset  enter start  esc back";
-    buf.set_stringn(
-        inner.x,
-        inner.bottom().saturating_sub(1),
-        hints,
-        usize::from(inner.width),
-        Style::default().fg(Color::Gray),
-    );
 }
 
 /// The list of saves to load, newest first, over the menu.

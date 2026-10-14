@@ -128,6 +128,9 @@ pub enum Action {
     Erase,
     /// While naming, another random name to start from (`Tab`).
     AnotherName,
+    /// While typing, `?` let go of, where the terminal says so: in the New
+    /// world box, the mode's explanation goes (M2 design §16).
+    HelpReleased,
     /// Quit at once (`Ctrl+C`).
     Quit,
 }
@@ -216,17 +219,19 @@ impl Keys {
     /// The action for a key event while the player types a name (design v28
     /// §6.5): letters are typed rather than acting, `Backspace` rubs one out,
     /// `Tab` offers another random name, `Enter` takes it and `Esc` gives up;
-    /// the up and down arrows move through a list beside it.
-    /// Only presses count, and `Ctrl+C` still quits. Releases are still
-    /// tracked, so the `r` that opened the prompt counts as let go after it,
-    /// and a key already down when the prompt opened types nothing until it's
-    /// let go: holding `r` doesn't type over the offered name.
+    /// the arrows pick from a list or a row beside it.
+    /// Only presses count, and `Ctrl+C` still quits, but letting go of `?`
+    /// says so, as New world explains a mode while it's held (M2 design
+    /// §16). Releases are still tracked, so the `r` that opened the prompt
+    /// counts as let go after it, and a key already down when the prompt
+    /// opened types nothing until it's let go: holding `r` doesn't type over
+    /// the offered name.
     pub fn typed_action(&mut self, key: KeyEvent) -> Option<Action> {
         let physical = physical_key(key.code);
         if key.kind == KeyEventKind::Release {
             self.releases_reported = true;
             self.down.remove(&physical);
-            return None;
+            return (physical == KeyCode::Char('/')).then_some(Action::HelpReleased);
         }
         if self.releases_reported && self.down.contains(&physical) {
             return None;
@@ -240,10 +245,12 @@ impl Keys {
             KeyCode::Tab => Some(Action::AnotherName),
             KeyCode::Enter => Some(Action::Enter),
             KeyCode::Esc => Some(Action::Back),
-            // New world's presets are picked while its seed is typed (M2
-            // design §8.3); naming does nothing with them.
+            // New world's presets and modes are picked while its seed is
+            // typed (M2 design §8.3, §16); naming does nothing with them.
             KeyCode::Up => Some(Action::Scroll { dx: 0, dy: -1 }),
             KeyCode::Down => Some(Action::Scroll { dx: 0, dy: 1 }),
+            KeyCode::Left => Some(Action::Scroll { dx: -1, dy: 0 }),
+            KeyCode::Right => Some(Action::Scroll { dx: 1, dy: 0 }),
             _ => None,
         }
     }

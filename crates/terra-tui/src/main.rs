@@ -17,7 +17,7 @@ use ratatui::crossterm::event::{
 };
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{self, supports_keyboard_enhancement};
-use terra_sim::{Playback, World};
+use terra_sim::{Mode, Playback, World};
 use terra_tui::app::{App, Flow, Ticks};
 use terra_tui::args::{Args, USAGE, VERSION};
 use terra_tui::fast_forward::{self, FastForward};
@@ -275,10 +275,11 @@ fn run_title(
             match title.apply(action) {
                 TitleFlow::Stay => {}
                 TitleFlow::Quit => return Ok(None),
-                TitleFlow::New { seed, preset } => {
+                TitleFlow::New { seed, preset, mode } => {
                     let asked = Args {
                         seed: Some(seed),
                         preset,
+                        lab: mode == Mode::Lab,
                         ..args.clone()
                     };
                     match start::new_world(&asked, seed) {

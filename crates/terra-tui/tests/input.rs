@@ -672,5 +672,35 @@ fn while_typing_the_up_and_down_arrows_move_through_a_list() {
         keys.typed_action(press(KeyCode::Down)),
         Some(Action::Scroll { dx: 0, dy: 1 })
     );
-    assert_eq!(keys.typed_action(press(KeyCode::Left)), None);
+}
+
+#[test]
+fn while_typing_the_left_and_right_arrows_pick_from_a_row() {
+    // New world's modes (M2 design §16).
+    let mut keys = Keys::with_release_reporting(false);
+    assert_eq!(
+        keys.typed_action(press(KeyCode::Left)),
+        Some(Action::Scroll { dx: -1, dy: 0 })
+    );
+    assert_eq!(
+        keys.typed_action(press(KeyCode::Right)),
+        Some(Action::Scroll { dx: 1, dy: 0 })
+    );
+}
+
+#[test]
+fn while_typing_letting_go_of_the_question_mark_says_so() {
+    // Holding `?` in New world explains the mode picked (M2 design §16).
+    let mut keys = Keys::kitty();
+    assert_eq!(
+        keys.typed_action(press(KeyCode::Char('?'))),
+        Some(Action::Type('?'))
+    );
+    let let_go = kind(KeyCode::Char('?'), KeyEventKind::Release);
+    assert_eq!(keys.typed_action(let_go), Some(Action::HelpReleased));
+    // Without the kitty protocol, the release comes as the unshifted key.
+    let let_go = kind(KeyCode::Char('/'), KeyEventKind::Release);
+    assert_eq!(keys.typed_action(let_go), Some(Action::HelpReleased));
+    let other = kind(KeyCode::Char('4'), KeyEventKind::Release);
+    assert_eq!(keys.typed_action(other), None, "other releases do nothing");
 }
