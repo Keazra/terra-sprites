@@ -27,6 +27,7 @@ $Instructions = Join-Path $PSScriptRoot "review-pr.md"
 $GitHubRepo = "Keazra/terra-sprites"
 $Tag = "[Review from Gemini]"
 $Grades = @{ 1 = "Critical"; 2 = "Medium"; 3 = "Minor" }
+$Confidences = "confirmed", "likely", "unconfirmed"
 $MostMinor = 5
 
 function Fail([string]$Why) {
@@ -87,7 +88,7 @@ function Find-Hunk($Ranges, [string]$Path, $Line) {
 }
 
 function Format-Finding($Finding) {
-    "**Grade $($Finding.grade) ($($Grades[$Finding.grade])):** $($Finding.headline)"
+    "**Grade $($Finding.grade) ($($Grades[$Finding.grade])), $($Finding.confidence):** $($Finding.headline)"
 }
 
 function Format-Where($Finding) {
@@ -198,8 +199,10 @@ try {
     $schema = '{"type":"object","properties":{"summary":{"type":"string"},"comments":{"type":"array","items":' +
         '{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},' +
         '"start_line":{"type":["integer","null"]},"grade":{"type":"integer","enum":[1,2,3]},' +
+        '"confidence":{"type":"string","enum":["confirmed","likely","unconfirmed"]},' +
         '"headline":{"type":"string"},"details":{"type":"string"}},' +
-        '"required":["path","line","start_line","grade","headline","details"]}}},"required":["summary","comments"]}'
+        '"required":["path","line","start_line","grade","confidence","headline","details"]}}},' +
+        '"required":["summary","comments"]}'
     Write-Text (Join-Path $inputs "schema.json") $schema
 
     # 4. The reviewer. The prompt has no double quotes, so it can go on the
@@ -238,6 +241,9 @@ try {
         $f.path = ("$($f.path)" -replace '\\', '/') -replace '^\./', ''
         if ($Grades.Keys -notcontains [int]$f.grade) { $f.grade = 3 }
         $f.grade = [int]$f.grade
+        $confidence = "$($f.confidence)".Trim().ToLowerInvariant()
+        if ($Confidences -notcontains $confidence) { $confidence = "unconfirmed" }
+        $f | Add-Member -Force -NotePropertyName confidence -NotePropertyValue $confidence
         $hunk = Find-Hunk $ranges $f.path $f.line
         if ($f.start_line -and ($f.start_line -ge $f.line -or (Find-Hunk $ranges $f.path $f.start_line) -ne $hunk)) {
             $f.start_line = $null
@@ -265,6 +271,8 @@ try {
         "$(@($inline | Where-Object { $_.grade -eq $g }).Count) $($Grades[$g])"
     }
     $body = "$Tag`n## Summary of #$Pr at $short`n`n$($result.summary.Trim())`n`n**Findings inline:** $($counts -join ', ')"
+    $unconfirmed = @($inline | Where-Object { $_.confidence -eq "unconfirmed" }).Count
+    if ($unconfirmed -gt 0) { $body += " ($unconfirmed of them unconfirmed)" }
     foreach ($f in $inline) { $body += "`n- $(Format-Finding $f) $(Format-Where $f)" }
     if ($elsewhere.Count -gt 0) {
         $body += "`n`n**Not on a line of the diff, or past the first $MostMinor Minor notes:**"

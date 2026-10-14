@@ -25,7 +25,7 @@ In `.review/`:
 
 ## 3. Review
 
-Go through the diff against this list. Spend your effort on what CI can't catch.
+Go through the diff against this list, spending your effort on what CI can't catch. The list is where to start, not where to stop: the PR's author has usually checked it already, so most of what's left to find is on no list.
 
 1. **Spec.** Does it do everything its issue and design section ask? Does it build anything that wasn't asked for? Do the design, its change file and `CONTEXT.md` describe what the code does now, and no more?
 2. **Correctness.** Logic errors, edge cases, off-by-one, overflow. An `unwrap`, `expect` or index that a damaged save, data pack or genome file could reach must be an error, not a panic.
@@ -37,9 +37,16 @@ Go through the diff against this list. Spend your effort on what CI can't catch.
 8. **Performance.** New allocations or extra passes inside per-tick or per-sprite loops. The speed bar (A5) is 100 sprites.
 9. **The PR description.** The template is filled in, including working "Try it on your PC" steps, and it says "Closes #…" only if this PR finishes the issue ("Part of #…" otherwise).
 
-## 4. Check each finding before you report it
+Then go through the diff a second time without the list, as the person who will have to change this code next: what would surprise you, which case did the author not think of, and what can a player do that the tests don't try? Look hardest at the files with the most new logic. A large PR with nothing to report is rare, so before you answer "no findings" on one, take that second look again.
 
-- Trace a realistic path from a real input (a key, a click, a save, a data file, a tick) to the failure, citing `file:line` along the way. If you can't trace one, it isn't a finding: at most, mention it in the summary as an unconfirmed lead.
+## 4. Say how sure you are of each finding
+
+- Try to trace a realistic path from a real input (a key, a click, a save, a data file, a tick) to the failure, citing `file:line` along the way.
+- Then mark the finding:
+  - **confirmed:** you traced the whole path.
+  - **likely:** the path looks real, but you couldn't follow every step.
+  - **unconfirmed:** a suspicion you couldn't check. Report it anyway when it would matter if it's real, and say what you checked and what's left to check.
+- Report what you suspect rather than keeping it back. The agents that answer reviews check every finding themselves, so a false alarm costs them a few minutes, and a missed bug costs far more. Don't invent findings to fill the review, though: each one needs a reason in the code.
 - Name the rule it breaks and where that rule is written, when there is one.
 - Leave out praise, restating the diff, and anything formatting or clippy enforces.
 
@@ -49,7 +56,7 @@ Go through the diff against this list. Spend your effort on what CI can't catch.
 - **2, Medium:** should be fixed in this PR. A logic error in an edge case, a new rule without a test, docs that contradict the code, a duplicated rule.
 - **3, Minor:** optional. Naming, stale comments, a test that could be sturdier, style the tools don't enforce. Five at most; mention any others in the summary, one line each.
 
-Grade what you checked, not what might be.
+Grade by how much it would matter if it's real, and show your doubt with the confidence word, not with a lower grade: a crash you couldn't confirm is grade 1, unconfirmed.
 
 ## 6. Your answer
 
@@ -60,19 +67,20 @@ Two fields.
 - `path`: the file, from the repository's root, with forward slashes.
 - `line`: the last line it's about. `start_line`: the first, when it spans several lines, or null.
 - `grade`: 1, 2 or 3.
+- `confidence`: `confirmed`, `likely` or `unconfirmed`.
 - `headline`: one sentence, what goes wrong.
-- `details`: Markdown, in three short parts: **How it happens:** the path from a real input to the failure, with `file:line`. **Rule:** the document and rule it breaks, if any. **Suggested fix:** a sentence or two, or a short snippet.
+- `details`: Markdown, in three short parts: **How it happens:** the path from a real input to the failure, with `file:line`; if it's likely or unconfirmed, where you stopped being sure and what would settle it. **Rule:** the document and rule it breaks, if any. **Suggested fix:** a sentence or two, or a short snippet.
 
-The script puts "[Review from Gemini]" and the grade above each comment, so don't write them.
+The script puts "[Review from Gemini]", the grade and the confidence above each comment, so don't write them.
 
 `summary`: Markdown, in plain words for the owner, who reads it before the code:
 
 ```
-**Verdict:** Ready to merge / Ready once the Medium findings are fixed / Not ready: Critical findings
+**Verdict:** Ready to merge / Ready once the Medium findings are fixed / Not ready: Critical findings. Add "Check the unconfirmed findings first" when there are any.
 **What it does:** two or three sentences: what a player sees, or what changes.
 **Matches its issue and design:** yes, or what's missing or extra.
 **CI:** passed / failed (which job, and why) / still running.
-**Not inline:** findings outside the diff, further Minor notes, unconfirmed leads, questions about intent. Leave this line out when there are none.
+**Not inline:** findings outside the diff (with grade and confidence), further Minor notes, questions about intent. Leave this line out when there are none.
 **Checked and fine:** what you looked at that held up (for example determinism, saves, tests).
 ```
 
