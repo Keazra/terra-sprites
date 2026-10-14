@@ -56,18 +56,17 @@ pub struct Generations {
 impl Generations {
     /// The oldest and newest of `generations`, or none if there are none.
     fn of(generations: impl IntoIterator<Item = u32>) -> Option<Generations> {
-        generations.into_iter().fold(None, |seen, generation| {
-            Some(seen.map_or(
-                Generations {
-                    oldest: generation,
-                    newest: generation,
-                },
-                |seen| Generations {
-                    oldest: seen.oldest.min(generation),
-                    newest: seen.newest.max(generation),
-                },
-            ))
-        })
+        let mut generations = generations.into_iter();
+        let first = generations.next()?;
+        let mut seen = Generations {
+            oldest: first,
+            newest: first,
+        };
+        for generation in generations {
+            seen.oldest = seen.oldest.min(generation);
+            seen.newest = seen.newest.max(generation);
+        }
+        Some(seen)
     }
 }
 

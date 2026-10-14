@@ -11,7 +11,7 @@ use ratatui::text::{Line, Span};
 use terra_sim::{DataPack, PopulationChanges, PopulationCount, World};
 
 use crate::app::App;
-use crate::text::{cause_name, generations, group_thousands};
+use crate::text::{cause_name, generations_words, group_thousands};
 use crate::theme::PopulationLook;
 
 /// The ticks a column stands for while the run is too short to fill the
@@ -197,9 +197,13 @@ impl Plot {
                 Some(count) => (0..halves).map(|half| band_at(count, half, step)).collect(),
             })
             .collect();
-        // The label of the height `part` rows of `rows` up.
+        // The label of the height `part` rows of `rows` up. With shares,
+        // half way falls in the middle row, at its top or, with an odd
+        // number of rows, its middle, so it says 50% either way.
         let height = |part: usize| {
-            if self.shares {
+            if self.shares && part < rows && part == rows.div_ceil(2) {
+                "50%".to_string()
+            } else if self.shares {
                 format!("{}%", part * 100 / rows)
             } else {
                 (part as u32 * self.top / rows as u32).to_string()
@@ -210,13 +214,7 @@ impl Plot {
                 let label = if row == 0 {
                     height(rows)
                 } else if row == middle && rows > 2 {
-                    // Half way falls in the middle row, at its top or, with
-                    // an odd number of rows, its middle.
-                    if self.shares {
-                        "50%".to_string()
-                    } else {
-                        height(rows - row)
-                    }
+                    height(rows - row)
                 } else {
                     String::new()
                 };
@@ -330,7 +328,7 @@ impl Plot {
         // A count from a save made before the record kept them has none
         // (#208).
         if let Some(alive) = count.generations {
-            let (label, value) = generations(alive);
+            let (label, value) = generations_words(alive);
             first.push_str(&format!(" · {label} {value}"));
         }
         // With shares, each band's share of the column, eggs included.

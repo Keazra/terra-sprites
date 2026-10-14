@@ -100,7 +100,7 @@ pub(crate) fn cause_name(cause: DeathCause, data: &DataPack) -> String {
 
 /// The generations alive, as a label and its value (M2 design §17.5):
 /// `generation` and `1`, or `generations` and `3 to 6`.
-pub(crate) fn generations(generations: Generations) -> (&'static str, String) {
+pub(crate) fn generations_words(generations: Generations) -> (&'static str, String) {
     let Generations { oldest, newest } = generations;
     if oldest == newest {
         ("generation", oldest.to_string())

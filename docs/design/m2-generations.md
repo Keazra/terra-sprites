@@ -768,10 +768,10 @@ Settled with the owner on 2026-10-13 ([#144](https://github.com/Keazra/terra-spr
 ### 14.1 The population record
 
 - **The world counts its sprites by life stage,** young, adults and old, **and its eggs,** which are items until they hatch (§10.4), on the map or in the Cursor, at the first tick it runs and then every 100 ticks, with **the oldest and newest generations among its sprites** (§17.1, [#208](https://github.com/Keazra/terra-sprites/issues/208)), not its eggs, and what happened since the count before: the eggs laid and hatched, the sprites the Cursor spawned, and the deaths by cause. A count keeps its generations when the record squeezes (below); they're two small numbers, a few bytes a count in a save.
-- **It's world state:** saved (M1 design §2.8), in the state hash, the same in a replay (M1 design §2.7), and checked every tick (M1 design §7.1): its counts go forward in time and never reach 512. Nothing in the world reads it, so the sprites live exactly as they did before it (§14.7).
+- **It's world state:** saved (M1 design §2.8), in the state hash, the same in a replay (M1 design §2.7), and checked every tick (M1 design §7.1): its counts go forward in time and never reach 512, and a count's generations run from the oldest to the newest, with none in a count of no sprites (#208). Nothing in the world reads it, so the sprites live exactly as they did before it (§14.7).
 - **It always covers the whole run, and a save stays small.** Once it holds 512 counts, it keeps the first and every other one after it, folds what happened in the dropped ones' stretches into the next one kept, and counts half as often: every 200 ticks from about tick 51,000, every 400 from about 102,000, and so on. It never holds more than 511 counts.
 - **A save from before this slice** has no counts, so its record begins at the first tick it runs after loading. The save format stays 1: the record is new, with a default (M1 design §2.8).
-- **A save from before the record kept generations** has counts without them, so their moments read no generations (§14.3), and the counts after the load have them (#208). The save format stays 1, with a default.
+- **A save from before the record kept generations** has counts without them, so their moments read no generations (§14.3), and the counts after the load have them (#208). The save format stays 1, with a default. A replay recorded before parts from its recording, as one does between builds that share a version number.
 - **The world keeps it, not the screen,** so a loaded world and a replay show the whole graph, and a world fast-forwarded in Slice 27 will open with it.
 
 ### 14.2 The graph
@@ -873,7 +873,7 @@ cargo run --release -p terra-sim --example speed
 - **No slower: met.** The speed check ran 292 and 291 ticks a second on `main`, and 286 and 299 on this slice, run in turn.
 - **The UI tests and snapshots pass,** as do the simulation's tests of the record.
 
-**Generations on the graph** ([#208](https://github.com/Keazra/terra-sprites/issues/208)) were checked the same way, measured on 2026-10-14 in release builds of its branch beside `main` at `97c1175`, in the cloud, with the same two commands:
+**Generations on the graph** ([#208](https://github.com/Keazra/terra-sprites/issues/208)) were checked the same way, measured on 2026-10-14 in release builds of its branch at `28eed2d` beside `main` at `97c1175`, in the cloud, with the same two commands:
 
 - **The sprites live exactly as before: met.** The `generations` report is the same, byte for byte, on both.
 - **No slower: met.** The speed check ran 190 and 174 ticks a second on `main`, and 188 and 178 on the branch, run in turn: the same, within the noise. As for Slice 25 (§17.7), this container was too slow for 200 on either.

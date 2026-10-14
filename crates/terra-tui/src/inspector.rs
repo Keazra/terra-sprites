@@ -1955,7 +1955,7 @@ fn wrapped(text: &str, indent: usize, style: Style) -> Vec<Line<'static>> {
 /// to the newest, `generations 1 to 6`, or none with no sprites: the same
 /// as the population graph reads now (§14.3).
 fn generations_line(world: &World) -> Option<Line<'static>> {
-    let (label, value) = text::generations(world.population_now().generations?);
+    let (label, value) = text::generations_words(world.population_now().generations?);
     Some(Line::from(format!(" {label:<12}{value:>7}")))
 }
 

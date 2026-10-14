@@ -48,6 +48,13 @@ fn all_changes(world: &World) -> PopulationChanges {
     all
 }
 
+/// A grown female of the first generation, who may lay alone at once (M2
+/// design §15.7).
+fn mother() -> World {
+    let female = format!("{FEMALE}{ALONE}");
+    family_in(lone(), &[(at(0, 0), &female)], &[], 3)
+}
+
 /// A world of grass with no sprites, which steps quickly.
 fn empty_world() -> World {
     WorldBuilder::new(&["....", "...."]).build()
@@ -126,9 +133,7 @@ fn a_death_is_counted_in_the_stretch_it_happened_in() {
 
 #[test]
 fn an_egg_is_counted_as_an_egg_and_its_laying_and_hatching_once_each() {
-    // A pack in which she may lay alone at once (M2 design §15.7).
-    let female = format!("{FEMALE}{ALONE}");
-    let mut world = family_in(lone(), &[(at(0, 0), &female)], &[], 3);
+    let mut world = mother();
     until(&mut world, 3_000, |event| {
         matches!(event.kind, EventKind::Laid { .. }).then_some(())
     })
@@ -156,8 +161,7 @@ fn a_count_keeps_the_oldest_and_newest_generations_of_its_sprites() {
     // #208: a mother of the first generation, laying alone. Her egg is of
     // the second, but an egg isn't a sprite until it hatches (M2 design
     // §10.4).
-    let female = format!("{FEMALE}{ALONE}");
-    let mut world = family_in(lone(), &[(at(0, 0), &female)], &[], 3);
+    let mut world = mother();
     until(&mut world, 3_000, |event| {
         matches!(event.kind, EventKind::Laid { .. }).then_some(())
     })
@@ -189,8 +193,7 @@ fn a_count_keeps_the_oldest_and_newest_generations_of_its_sprites() {
 fn a_replay_plays_the_record_back_with_its_generations() {
     // #208: the generations are in the record, which is world state, so a
     // replay checks them with the rest of it (design §2.7).
-    let female = format!("{FEMALE}{ALONE}");
-    let mut world = family_in(lone(), &[(at(0, 0), &female)], &[], 3);
+    let mut world = mother();
     world.start_recording();
     for _ in 0..3_000 {
         world.step();
