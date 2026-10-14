@@ -9,13 +9,12 @@ use ratatui::{
     style::{Color, Modifier, Style},
     text::Line,
 };
-use terra_sim::{EntityId, Grip, LifeStage, Pos, Progress, SpriteView, World};
+use terra_sim::{EntityId, Grip, LifeStage, Mode, Pos, Progress, SpriteView, World};
 
 use crate::app::{
     App, Areas, ColourMode, CursorMode, ItemLook, PlaceItem, Screen, Selection, ShownItems,
     item_look, spoken_duration, strongest_drive,
 };
-use crate::clock::Speed;
 use crate::family_tree::{self, Lineage};
 use crate::inspector::{self, INSPECTOR_WIDTH, NOTHING_SELECTED, first_shown};
 use crate::policy::{Panel, Subject};
@@ -305,7 +304,7 @@ fn is_emote(app: &App, sprite: &SpriteView) -> bool {
 
 /// The selected sprite and those of its lineage the map marks, while it
 /// shows the lineage colours and a sprite is selected, living or dead (M2
-/// design §16.4).
+/// design §17.4).
 type Marked = (EntityId, BTreeMap<EntityId, Lineage>);
 
 /// The lineage the map colours, if it does: not while the policy hides
@@ -325,7 +324,7 @@ fn lineage_on_map(app: &App, world: &World) -> Option<Marked> {
 /// strongest drive's above .5, or else `own`, its glyph's colour; or in the
 /// lineage colours, where it stands in the selected sprite's lineage. The
 /// selected sprite keeps `own`, as every sprite does with none selected (M2
-/// design §16.4). A drive the theme has no colour for draws `own` too, and so
+/// design §17.4). A drive the theme has no colour for draws `own` too, and so
 /// does a sprite whose colour, or place on the family tree, the policy
 /// hides (design §6.4).
 fn sprite_colour(app: &App, sprite: &SpriteView, own: Color, lineage: Option<&Marked>) -> Color {
@@ -632,7 +631,7 @@ fn render_population(buf: &mut Buffer, app: &App, world: &World) {
 }
 
 /// Draws the family tree over everything between the top bar and the
-/// status line (M2 design §16.2), titled with the sprite in its middle, or
+/// status line (M2 design §17.2), titled with the sprite in its middle, or
 /// says how to select one; or an empty box if the policy hides it.
 fn render_family_tree(buf: &mut Buffer, app: &App, world: &World) {
     let Some(area) = app.overlay() else {
@@ -756,11 +755,17 @@ fn draw_border(buf: &mut Buffer, area: Rect, title: &str) {
 fn top_bar_line(app: &App, world: &World, width: u16) -> Line<'static> {
     let clock = &app.clock;
     // Paused, it still shows the speed: `+` and `-` change it, and it sets
-    // how far `.` steps (design v27 §6.6).
-    let time = if clock.is_paused() {
-        format!("|| paused {}", speed_label(clock.speed()))
+    // how far `.` steps (design v27 §6.6). A Lab world says so after it
+    // (M2 design §16).
+    let lab = if world.mode() == Mode::Lab {
+        " lab"
     } else {
-        format!("► {}", speed_label(clock.speed()))
+        ""
+    };
+    let time = if clock.is_paused() {
+        format!("|| paused {}{lab}", clock.speed().label())
+    } else {
+        format!("► {}{lab}", clock.speed().label())
     };
     // The population is a count the policy may hide (design §6.4).
     let population = if app.can_view(Panel::Counts, Subject::World) {
@@ -915,7 +920,7 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
                 _ if app.screen() == Screen::Population => {
                     hint_if_fits(room, "←→ pick a moment  space pause  +/- speed  esc close")
                 }
-                // And the family tree (M2 design §16.2).
+                // And the family tree (M2 design §17.2).
                 _ if app.screen() == Screen::FamilyTree => hint_if_fits(
                     room,
                     "←→↑↓ choose  enter centre on it  space pause  esc close",
@@ -1025,19 +1030,5 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
             usize::from(inner.width),
             Style::default(),
         );
-    }
-}
-
-fn speed_label(speed: Speed) -> &'static str {
-    match speed {
-        Speed::Eighth => "1/8x",
-        Speed::Quarter => "1/4x",
-        Speed::Half => "1/2x",
-        Speed::X1 => "1x",
-        Speed::X2 => "2x",
-        Speed::X4 => "4x",
-        Speed::X8 => "8x",
-        Speed::X16 => "16x",
-        Speed::Max => "Max",
     }
 }

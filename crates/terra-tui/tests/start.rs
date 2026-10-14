@@ -3,8 +3,9 @@
 
 use std::path::PathBuf;
 
-use terra_sim::DataPack;
+use terra_sim::{DataPack, Mode};
 use terra_tui::args::Args;
+use terra_tui::saves;
 use terra_tui::start;
 use terra_tui::theme::{SemanticTile, Theme};
 
@@ -198,4 +199,90 @@ fn new_world_offers_the_default_preset_then_each_in_the_presets_folder() {
     assert_eq!(offered[2].path, Some(presets.join("small.ron")));
     let none = start::presets(Some(&presets.join("missing")));
     assert_eq!(none.len(), 1, "no folder, only the default");
+}
+
+#[test]
+fn a_new_world_is_a_story_world_unless_the_flags_ask_for_the_lab() {
+    // M2 design §16: `--lab` makes a Lab world, and a fast-forward makes
+    // one too, since only Lab worlds fast-forward.
+    let mode = |args: Args| start::new_world(&args, 1).expect("a world").mode();
+    assert_eq!(mode(Args::default()), Mode::Story);
+    assert_eq!(
+        mode(Args {
+            mode: Mode::Lab,
+            ..Args::default()
+        }),
+        Mode::Lab
+    );
+    assert_eq!(
+        mode(Args {
+            fast_forward: Some(5),
+            ..Args::default()
+        }),
+        Mode::Lab
+    );
+}
+
+#[test]
+fn lab_and_load_skip_the_title_screen_too() {
+    assert!(start::skips_title(&Args {
+        mode: Mode::Lab,
+        ..Args::default()
+    }));
+    assert!(start::skips_title(&Args {
+        load: Some("mira".into()),
+        ..Args::default()
+    }));
+}
+
+/// A saves folder holding a Story world saved as `story` and a Lab world
+/// saved as `lab`.
+fn saves_folder(name: &str) -> PathBuf {
+    let dir = folder(name, &[]);
+    for (save, mode) in [("story", Mode::Story), ("lab", Mode::Lab)] {
+        let args = Args {
+            mode,
+            ..Args::default()
+        };
+        let world = start::new_world(&args, 3).expect("a world");
+        saves::write(&dir, save, &world.save()).expect("saved");
+    }
+    dir
+}
+
+#[test]
+fn fast_forward_runs_a_lab_save_or_a_new_lab_world_and_refuses_a_story_save() {
+    let dir = saves_folder("fast-forward");
+    let args = |load: Option<&str>| Args {
+        load: load.map(str::to_string),
+        fast_forward: Some(5),
+        ..Args::default()
+    };
+    let (world, from) = start::fast_forward_world(&args(None), 7, Some(&dir)).expect("new");
+    assert_eq!(
+        (world.mode(), world.seed(), from.as_str()),
+        (Mode::Lab, 7, "seed-7")
+    );
+    let (world, from) = start::fast_forward_world(&args(Some("lab")), 7, Some(&dir)).expect("lab");
+    assert_eq!(
+        (world.mode(), world.seed(), from.as_str()),
+        (Mode::Lab, 3, "lab")
+    );
+    let error = start::fast_forward_world(&args(Some("story")), 7, Some(&dir))
+        .err()
+        .expect("refused");
+    assert_eq!(
+        error,
+        "story is a Story world: only Lab worlds fast-forward"
+    );
+}
+
+#[test]
+fn a_preset_is_named_by_its_file() {
+    assert_eq!(start::preset_name(&Args::default()), "default");
+    let args = Args {
+        preset: Some(PathBuf::from("worlds/big-lake.ron")),
+        ..Args::default()
+    };
+    assert_eq!(start::preset_name(&args), "big-lake");
 }

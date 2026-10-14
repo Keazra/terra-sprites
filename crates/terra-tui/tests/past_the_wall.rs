@@ -195,8 +195,10 @@ fn the_stars_drift_with_the_speed_and_as_far_at_16x_as_at_4x() {
     let (world, _) = small_field();
     let after = |faster: usize| {
         let mut app = app(&world);
+        // A hand-made world is a Story world, which `+` takes no faster
+        // than 4× (M2 design §16), so the clock is sped up directly.
         for _ in 0..faster {
-            apply(&mut app, &world, Action::Faster { held: false });
+            app.clock.faster();
         }
         app.animate(Duration::from_secs(3));
         map_view(&render(&app, &world))

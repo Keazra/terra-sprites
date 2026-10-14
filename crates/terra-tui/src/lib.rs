@@ -6,6 +6,7 @@ pub mod args;
 pub mod clock;
 pub mod cp437;
 mod family_tree;
+pub mod fast_forward;
 pub mod files;
 mod graph;
 mod help;

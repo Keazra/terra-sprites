@@ -29,6 +29,22 @@ pub struct SaveFile {
     pub modified: Option<SystemTime>,
 }
 
+impl SaveFile {
+    /// The save in the file at `path`, named after it.
+    fn at(path: PathBuf) -> SaveFile {
+        let name = path.file_stem().map_or_else(
+            || path.display().to_string(),
+            |stem| stem.to_string_lossy().into_owned(),
+        );
+        let modified = path.metadata().ok().and_then(|meta| meta.modified().ok());
+        SaveFile {
+            name,
+            path,
+            modified,
+        }
+    }
+}
+
 /// Reads `file` and loads the world in it (design §2.9), or says why it
 /// couldn't: "Couldn't load mira: …". A world's `Ctrl+O` and `F9` and the
 /// title screen's Continue and Load (M2 design §8.2) all load so.
@@ -96,6 +112,20 @@ pub fn write(folder: &Path, name: &str, bytes: &[u8]) -> io::Result<PathBuf> {
     Ok(path)
 }
 
+/// The name a save called `name` is stored by (`name_for`), or if `folder`
+/// has a save called that already, the first of `name-2`, `name-3` and on
+/// that it hasn't, so a new save never writes over an old one.
+pub fn unused_name(folder: &Path, name: &str) -> String {
+    let name = name_for(name);
+    (1..)
+        .map(|n| match n {
+            1 => name.clone(),
+            n => format!("{name}-{n}"),
+        })
+        .find(|name| !path_for(folder, name).exists())
+        .expect("a name no save has")
+}
+
 /// Writes `bytes` as the newest autosave, `autosave-1`, after moving each
 /// older one down a place; the oldest of `AUTOSAVES` drops off the end.
 pub fn autosave(folder: &Path, bytes: &[u8]) -> io::Result<PathBuf> {
@@ -114,6 +144,26 @@ pub fn autosave_name(n: usize) -> String {
     format!("autosave-{n}")
 }
 
+/// The save `name` names (M2 design §16): a file, if it's named by a path
+/// ending in `.tspr`, or else the save of that name in `folder`, the saves
+/// folder, as `list` lists it. `--load` opens it.
+pub fn named(name: &str, folder: Option<&Path>) -> Result<SaveFile, String> {
+    let as_file = Path::new(name);
+    let path = if as_file.extension().is_some_and(|ext| ext == EXTENSION) {
+        as_file.to_path_buf()
+    } else {
+        let folder = folder.ok_or("can't tell where the saves folder is")?;
+        path_for(folder, name)
+    };
+    if !path.is_file() {
+        return Err(format!(
+            "there's no save called {name} ({})",
+            path.display()
+        ));
+    }
+    Ok(SaveFile::at(path))
+}
+
 /// Every save in `folder`, newest first, then by name. A folder that isn't
 /// there has none.
 pub fn list(folder: &Path) -> Vec<SaveFile> {
@@ -125,13 +175,7 @@ pub fn list(folder: &Path) -> Vec<SaveFile> {
             let path = entry.path();
             let is_file = entry.file_type().is_ok_and(|kind| kind.is_file());
             let is_save = path.extension().is_some_and(|ext| ext == EXTENSION);
-            let name = path.file_stem()?.to_string_lossy().into_owned();
-            let modified = entry.metadata().ok().and_then(|m| m.modified().ok());
-            (is_file && is_save).then_some(SaveFile {
-                name,
-                path,
-                modified,
-            })
+            (is_file && is_save).then(|| SaveFile::at(path))
         })
         .collect();
     saves.sort_by(|a, b| {

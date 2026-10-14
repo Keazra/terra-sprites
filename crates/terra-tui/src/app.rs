@@ -8,11 +8,11 @@ use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
 use terra_sim::{
     ActionView, ChemicalKind, ChemicalLevel, Command, CursorTouch, DeathCause, Dir, Divergence,
-    EntityId, Event, EventKind, Genome, Grip, HeldView, MAX_NAME_CHARS, Map, ObjectView, Outcome,
-    Playback, Pos, Progress, SpriteView, Target, Thing, Verb, World,
+    EntityId, Event, EventKind, Genome, Grip, HeldView, MAX_NAME_CHARS, Map, Mode, ObjectView,
+    Outcome, Playback, Pos, Progress, SpriteView, Target, Thing, Verb, World,
 };
 
-use crate::clock::Clock;
+use crate::clock::{Clock, Speed};
 use crate::cp437;
 use crate::family_tree::{self, Step};
 use crate::graph;
@@ -64,7 +64,7 @@ pub enum Screen {
     SpriteList,
     /// The population graph is open (M2 design §14).
     Population,
-    /// The family tree is open (M2 design §16.2).
+    /// The family tree is open (M2 design §17.2).
     FamilyTree,
 }
 
@@ -79,7 +79,7 @@ listed_enum! {
         Plain => "plain",
         /// The selected sprite's parents and grandparents, brothers and
         /// sisters, and young and theirs each in their colour, and the rest
-        /// dark gray (M2 design §16.4).
+        /// dark gray (M2 design §17.4).
         Lineage => "lineage",
     }
 
@@ -539,7 +539,7 @@ pub struct App {
     /// time picked, if one is; otherwise it reads now (M2 design §14.3).
     graph_pick: Option<u64>,
     /// The card the family tree's arrows are on, if not the one in the
-    /// middle (M2 design §16.3).
+    /// middle (M2 design §17.3).
     tree_choice: Option<family_tree::Spot>,
     /// How far along the family tree's rows that scroll are.
     tree_scroll: family_tree::Scroll,
@@ -1076,7 +1076,7 @@ impl App {
         }
     }
 
-    /// Notes the names of the dead the world remembers (M2 design §16.3), for
+    /// Notes the names of the dead the world remembers (M2 design §17.3), for
     /// a world just loaded: those that die while the screen watches, it
     /// notes as they die.
     fn note_names_of_the_dead(&mut self, world: &World) {
@@ -1810,7 +1810,7 @@ impl App {
             | Action::StepOnce
             | Action::Faster { .. }
             | Action::Slower { .. } => {
-                self.apply_time(&action);
+                self.apply_time(&action, world);
             }
             // Scrolling by hand takes the view back from Track.
             Action::Scroll { dx, dy } => {
@@ -1955,7 +1955,8 @@ impl App {
             | Action::Pick(_)
             | Action::Type(_)
             | Action::Erase
-            | Action::AnotherName => {}
+            | Action::AnotherName
+            | Action::HelpReleased => {}
             Action::Enter => {
                 if let Some(at) = self.mouse {
                     self.toggle_lesson(at, world);
@@ -2272,6 +2273,23 @@ impl App {
         self.notice = None;
     }
 
+    /// `+`: one step faster, as fast as the world's mode allows (M2 design
+    /// §16). Pressed at 4× in a Story world, it says that's the fastest.
+    fn faster(&mut self, held: bool, world: &World) {
+        self.clock.set_fastest(Speed::fastest_in(world.mode()));
+        let at_most = if held {
+            self.clock.faster_held()
+        } else {
+            self.clock.faster()
+        };
+        if at_most && world.mode() == Mode::Story {
+            self.tell_player(format!(
+                "{} is Story mode's fastest",
+                self.clock.fastest().label()
+            ));
+        }
+    }
+
     /// Says what the player's action did on the status line, for a while.
     fn tell_player(&mut self, what: String) {
         self.notice = Some((what, self.running_for));
@@ -2299,12 +2317,11 @@ impl App {
 
     /// What the keys for time do, whatever's open: pause, step, faster and
     /// slower (design §6.6). Returns whether `action` was one of them.
-    fn apply_time(&mut self, action: &Action) -> bool {
+    fn apply_time(&mut self, action: &Action, world: &World) -> bool {
         match action {
             Action::TogglePause => self.clock.toggle_pause(),
             Action::StepOnce => self.clock.step_once(),
-            Action::Faster { held: false } => self.clock.faster(),
-            Action::Faster { held: true } => self.clock.faster_held(),
+            Action::Faster { held } => self.faster(*held, world),
             Action::Slower { held: false } => self.clock.slower(),
             Action::Slower { held: true } => self.clock.slower_held(),
             _ => return false,
@@ -2316,7 +2333,7 @@ impl App {
     /// §14): `←` and `→`, or the pointer over the graph, pick the moment it
     /// reads; time runs as usual, and `p` or `Esc` closes it.
     fn apply_in_graph(&mut self, action: Action, world: &World) -> Flow {
-        if self.apply_time(&action) {
+        if self.apply_time(&action, world) {
             return Flow::Continue;
         }
         match action {
@@ -2382,12 +2399,12 @@ impl App {
         self.graph_pick
     }
 
-    /// What an action does while the family tree is open (M2 design §16.3):
+    /// What an action does while the family tree is open (M2 design §17.3):
     /// the arrows or the pointer choose a sprite on it, and `Enter` or a
     /// click centres the tree on that one and selects it; `Tab` selects as
     /// ever, time runs as usual, and `k` or `Esc` closes it.
     fn apply_in_tree(&mut self, action: Action, world: &World) -> Flow {
-        if self.apply_time(&action) {
+        if self.apply_time(&action, world) {
             return Flow::Continue;
         }
         match action {
@@ -2434,7 +2451,7 @@ impl App {
     }
 
     /// Selects the next or previous sprite, as `Tab` does, and redraws the
-    /// family tree around it, from the middle (M2 design §16.2).
+    /// family tree around it, from the middle (M2 design §17.2).
     fn redraw_tree_along(&mut self, world: &World, direction: Direction) {
         self.select_along(world, direction);
         self.tree_choice = None;
@@ -2443,7 +2460,7 @@ impl App {
 
     /// The family tree of the selected sprite or egg, living or dead, as
     /// the screen lays it out now, if one is selected, the policy shows it,
-    /// and there's room (M2 design §16.2).
+    /// and there's room (M2 design §17.2).
     pub(crate) fn tree(&self, world: &World) -> Option<family_tree::Drawn> {
         let centre = self.selection?.id();
         if !family_tree::shown(self, centre) {
@@ -2469,7 +2486,7 @@ impl App {
         tree.at(i32::from(at.x - inner.x), usize::from(at.y - inner.y))
     }
 
-    /// Walks the family tree to the sprite chosen on it (M2 design §16.3):
+    /// Walks the family tree to the sprite chosen on it (M2 design §17.3):
     /// the tree centres on it and it's selected, and the map centres on it
     /// if it's on the map. A dead one is selected as one that died while
     /// selected is. One the world no longer remembers can't be, nor one
@@ -2480,7 +2497,7 @@ impl App {
         };
         let to = tree.chosen.id;
         // A card the policy hides is blank, and leads nowhere (M2 design
-        // §16.6).
+        // §17.6).
         if self.selection.map(Selection::id) == Some(to) || !family_tree::shown(self, to) {
             return;
         }
@@ -3446,6 +3463,9 @@ impl App {
         let mut fresh = App::new(world.map(), self.theme.clone(), world.seed(), areas);
         fresh.clock = std::mem::take(&mut self.clock);
         fresh.clock.pause();
+        // A Story world loaded from a Lab one runs at 4× at most (M2
+        // design §16).
+        fresh.clock.set_fastest(Speed::fastest_in(world.mode()));
         fresh.policy = std::mem::replace(&mut self.policy, Box::new(Omniscient));
         fresh.colour_mode = self.colour_mode;
         fresh.event_filter = self.event_filter;
@@ -3484,7 +3504,7 @@ impl App {
         ));
         *self = fresh;
         // Its names show at once, paused, before any tick is taken in, and
-        // the names of the dead it remembers (M2 design §16.3).
+        // the names of the dead it remembers (M2 design §17.3).
         self.note_names(&world);
         self.note_names_of_the_dead(&world);
         self.settle_cursor(&world);

@@ -7,6 +7,7 @@ use std::time::{Duration, SystemTime};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Size};
 use ratatui::{Terminal, backend::TestBackend};
+use terra_sim::Mode;
 use terra_tui::args::Args;
 use terra_tui::cp437;
 use terra_tui::input::{Action, Button};
@@ -310,7 +311,8 @@ fn new_world_offers_the_default_when_told_of_no_presets() {
         title.apply(Action::Enter),
         TitleFlow::New {
             seed: OFFERED,
-            preset: None
+            preset: None,
+            mode: Mode::Story,
         }
     );
 }
@@ -342,7 +344,8 @@ fn new_world_starts_from_the_seed_typed_and_the_preset_picked() {
         title.apply(Action::Enter),
         TitleFlow::New {
             seed: 42,
-            preset: Some("small.ron".into())
+            preset: Some("small.ron".into()),
+            mode: Mode::Story,
         }
     );
 }
@@ -354,7 +357,8 @@ fn new_world_starts_from_the_seed_offered_with_the_default_preset() {
         title.apply(Action::Enter),
         TitleFlow::New {
             seed: OFFERED,
-            preset: None
+            preset: None,
+            mode: Mode::Story,
         }
     );
 }
@@ -388,6 +392,84 @@ fn a_new_world_needs_a_seed_that_fits() {
     assert_eq!(title.apply(Action::Enter), TitleFlow::Stay);
     let shown = text(&render(&title));
     assert!(shown.contains("A seed is a whole number"), "{shown}");
+}
+
+#[test]
+fn new_world_makes_a_story_world_unless_the_arrows_pick_lab() {
+    let mut title = new_world(presets());
+    let shown = text(&render(&title));
+    assert!(shown.contains("Mode    [Story]  Lab "), "{shown}");
+    assert!(shown.contains("4x at most"), "{shown}");
+    title.apply(Action::Scroll { dx: 1, dy: 0 });
+    title.apply(Action::Scroll { dx: 1, dy: 0 });
+    let shown = text(&render(&title));
+    assert!(shown.contains("Mode     Story  [Lab]"), "{shown}");
+    assert!(shown.contains("every speed, for experiments"), "{shown}");
+    assert_eq!(
+        title.apply(Action::Enter),
+        TitleFlow::New {
+            seed: OFFERED,
+            preset: None,
+            mode: Mode::Lab,
+        }
+    );
+    let mut title = new_world(presets());
+    title.apply(Action::Scroll { dx: 1, dy: 0 });
+    title.apply(Action::Scroll { dx: -1, dy: 0 });
+    let TitleFlow::New { mode, .. } = title.apply(Action::Enter) else {
+        panic!("a new world");
+    };
+    assert_eq!(mode, Mode::Story);
+}
+
+/// The lines New world shows while `?` is held, explaining a mode.
+const STORY_EXPLAINED: [&str; 3] = [
+    "Story mode: the game as it's meant to be played.",
+    "· Speeds up to 4x, so a life never feels rushed.",
+    "· A world keeps its mode for its whole life.",
+];
+const LAB_EXPLAINED: [&str; 3] = [
+    "Lab mode: a world for experiments.",
+    "· Every speed, up to Max; it can be fast-forwarded.",
+    "· A world keeps its mode for its whole life.",
+];
+
+#[test]
+fn holding_the_question_mark_explains_the_mode_picked() {
+    let mut title = new_world(presets());
+    assert!(text(&render(&title)).contains("hold ? what the mode means"));
+    title.apply(Action::Type('?'));
+    let shown = text(&render(&title));
+    for line in STORY_EXPLAINED {
+        assert!(shown.contains(line), "{line:?} in\n{shown}");
+    }
+    assert!(!shown.contains("small"), "it takes the presets' place");
+    // The arrows switch the mode while it's held, and it follows.
+    title.apply(Action::Scroll { dx: 1, dy: 0 });
+    let shown = text(&render(&title));
+    for line in LAB_EXPLAINED {
+        assert!(shown.contains(line), "{line:?} in\n{shown}");
+    }
+    assert!(!shown.contains(STORY_EXPLAINED[0]), "{shown}");
+    title.apply(Action::HelpReleased);
+    let shown = text(&render(&title));
+    assert!(
+        !shown.contains(LAB_EXPLAINED[0]),
+        "gone once let go:\n{shown}"
+    );
+    assert!(shown.contains("small"), "{shown}");
+    assert!(shown.contains("12345"), "the seed is as it was:\n{shown}");
+}
+
+#[test]
+fn another_key_puts_the_explanation_away_and_does_its_job() {
+    // Where the terminal never says `?` was let go of.
+    let mut title = new_world(presets());
+    title.apply(Action::Type('?'));
+    title.apply(Action::Type('7'));
+    let shown = text(&render(&title));
+    assert!(!shown.contains(STORY_EXPLAINED[0]), "{shown}");
+    assert!(shown.contains("7_"), "the 7 is typed:\n{shown}");
 }
 
 #[test]
@@ -467,6 +549,10 @@ fn everything_drawn_is_cp437() {
     }
     screens.push(render(&title));
     title.apply(Action::Pick(2));
+    screens.push(render(&title));
+    title.apply(Action::Type('?'));
+    screens.push(render(&title));
+    title.apply(Action::Scroll { dx: 1, dy: 0 });
     screens.push(render(&title));
     title.apply(Action::Back);
     title.apply(Action::Pick(3));
