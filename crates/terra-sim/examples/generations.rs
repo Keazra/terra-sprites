@@ -598,7 +598,7 @@ fn flaw_load(world: &World) -> Option<FlawLoad> {
     let (mut carried, mut broken, mut sprites) = (0, 0, 0);
     for sprite in world
         .sprites()
-        .filter(|sprite| !sprite.is_egg() && !sprite.parents().is_empty())
+        .filter(|sprite| !sprite.parents().is_empty())
     {
         sprites += 1;
         for flawed in sprite.flaws() {
@@ -695,14 +695,15 @@ fn run(
         if world.tick() == ticks / 2 {
             run.flaws_halfway = flaw_load(&world);
         }
-        let count = world.sprites().count();
+        // Eggs count, as the world's limit counts them (M2 design §10.4).
+        let count = world.sprites().count() + world.eggs().count();
         run.most = run.most.max(count);
         if count == 0 && run.died_out.is_none() {
             run.died_out = Some(world.tick());
         }
     }
-    run.eggs = world.sprites().filter(|sprite| sprite.is_egg()).count();
-    run.alive = world.sprites().count() - run.eggs;
+    run.eggs = world.eggs().count();
+    run.alive = world.sprites().count();
     run.numbers = middles(&world, starter);
     run.flaws_at_end = flaw_load(&world);
     run.genes = gene_pool(&world, starter_genes);
@@ -716,7 +717,7 @@ fn gene_pool(world: &World, starter: &BTreeMap<String, usize>) -> Option<GenePoo
     let mut lengths = Vec::new();
     for sprite in world
         .sprites()
-        .filter(|sprite| !sprite.is_egg() && !sprite.parents().is_empty())
+        .filter(|sprite| !sprite.parents().is_empty())
     {
         let (genes, how): (Vec<GeneView>, Vec<Expression>) = sprite.genes().into_iter().unzip();
         lengths.push(genes.len());
@@ -893,7 +894,7 @@ fn copy_and_change(runs: &[(u64, Run)]) {
 fn middles(world: &World, starter: &[(String, f32)]) -> Vec<f32> {
     let mut columns: Vec<Vec<f32>> = vec![Vec::new(); starter.len()];
     let mut sprites = 0;
-    for sprite in world.sprites().filter(|sprite| !sprite.is_egg()) {
+    for sprite in world.sprites() {
         sprites += 1;
         let genes: Vec<GeneView> = sprite.genes().into_iter().map(|(gene, _)| gene).collect();
         let numbers = numbers(&genes);

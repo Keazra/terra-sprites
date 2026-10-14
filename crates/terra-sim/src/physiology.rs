@@ -431,8 +431,12 @@ impl Default for Ageing {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Breeding {
-    /// How many ticks an egg takes to hatch.
-    pub(crate) hatches: u64,
+    /// Only in a pack from before eggs were items (#196): how many ticks an
+    /// egg took to hatch. Now an egg hatches as its type's stages say, in
+    /// `objects.ron` (M2 design §10.4), and loading gives such a pack an
+    /// egg type that takes as long.
+    #[serde(default)]
+    pub(crate) hatches: Option<u64>,
     /// The energy an egg costs, in all: its parents split it.
     pub(crate) cost: f32,
     /// The level an adult's energy and hydration must both be above for it
@@ -469,7 +473,7 @@ fn gene_by_gene() -> f32 {
 impl Default for Breeding {
     fn default() -> Breeding {
         Breeding {
-            hatches: 750,
+            hatches: None,
             cost: 0.3,
             fed: 0.5,
             rest: 1_500,
@@ -621,6 +625,12 @@ impl PhysiologyEntry {
         &self.breeding.drive
     }
 
+    /// How many ticks an egg took to hatch, in a pack from before eggs were
+    /// items (#196), which says.
+    pub(crate) fn old_hatches(&self) -> Option<u64> {
+        self.breeding.hatches
+    }
+
     /// The validated physiology, or what's wrong with it. Receptor targets are
     /// checked against the pack's `loci`.
     pub(crate) fn validate(self, indices: Indices, loci: &[Locus]) -> Result<Physiology, String> {
@@ -709,7 +719,7 @@ impl PhysiologyEntry {
         fraction("breeding.fed", breeding.fed)?;
         fraction("breeding.turns_female", breeding.turns_female)?;
         fraction("breeding.breeds_alone", breeding.breeds_alone)?;
-        if breeding.hatches == 0 {
+        if breeding.hatches == Some(0) {
             return Err("`breeding.hatches` must be at least 1 tick".into());
         }
         // With no rest, a female mated in a tick could lay again in the same

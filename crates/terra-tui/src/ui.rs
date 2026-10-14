@@ -10,7 +10,7 @@ use ratatui::{
 use terra_sim::{EntityId, Grip, LifeStage, ObjectView, Pos, Progress, SpriteView, World};
 
 use crate::app::{
-    App, Areas, ColourMode, CursorMode, PlaceItem, Screen, Selection, spoken_duration,
+    App, Areas, ColourMode, CursorMode, PlaceItem, Screen, Selection, item_look, spoken_duration,
     strongest_drive,
 };
 use crate::clock::Speed;
@@ -18,7 +18,7 @@ use crate::inspector::{self, INSPECTOR_WIDTH, first_shown};
 use crate::policy::{Panel, Subject};
 use crate::space::{self, Place};
 use crate::text::{display_name, group_thousands, terrain_name};
-use crate::theme::SemanticTile;
+use crate::theme::{Glyph, SemanticTile};
 
 /// The narrowest terminal that has room for the inspector beside the map view.
 const MIN_WIDTH_FOR_INSPECTOR: u16 = 100;
@@ -224,27 +224,27 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
                 let emote = app
                     .emote(sprite.id())
                     .filter(|_| app.can_view(Panel::Emotes, Subject::Sprite(sprite.id())));
-                // The young are drawn small (M2 design §9.6), and eggs as
-                // eggs (§10).
-                let stage = sprite.life_stage();
                 let selected = app.selection() == Some(Selection::Living(sprite.id()));
-                let tile = match (emote, selected, stage) {
-                    (Some(emote), _, _) => SemanticTile::Emote(emote),
-                    (None, true, LifeStage::Egg) => SemanticTile::SelectedEgg,
-                    (None, false, LifeStage::Egg) => SemanticTile::Egg,
-                    (None, true, LifeStage::Young) => SemanticTile::SelectedYoungSprite,
-                    (None, false, LifeStage::Young) => SemanticTile::YoungSprite,
-                    (None, true, _) => SemanticTile::SelectedSprite,
-                    (None, false, _) => SemanticTile::Sprite,
+                let tile = match emote {
+                    Some(emote) => SemanticTile::Emote(emote),
+                    None => sprite_tile(sprite.life_stage(), selected),
                 };
                 app.theme.glyph(tile)
-            } else if let Some((_, (name, state))) = thrown.filter(|&(from, _)| from == pos) {
-                app.theme.object_glyph(name, state)
+            } else if let Some((_, look)) = thrown.filter(|&(from, _)| from == pos) {
+                app.theme.object_glyph(look.type_name, look.visual_state)
             } else if destination == Some(pos) {
                 app.theme.glyph(SemanticTile::DecisionMarker)
             } else if let Some(object) = world.object_at(pos) {
-                app.theme
-                    .object_glyph(object.type_name(), object.visual_state())
+                let glyph = app
+                    .theme
+                    .object_glyph(object.type_name(), object.visual_state());
+                // Only an egg can be selected, and it's drawn in reverse
+                // video (M2 design §10.7).
+                let selected = app.selection() == Some(Selection::Living(object.id()));
+                Glyph {
+                    reversed: glyph.reversed || selected,
+                    ..glyph
+                }
             } else {
                 app.theme.glyph(SemanticTile::Terrain(map.terrain(pos)))
             };
@@ -633,23 +633,28 @@ fn held_glyph(app: &App, world: &World) -> char {
     }
     let glyph = match app.grip(world) {
         Some(Grip::Holds(id)) => {
-            item_look(world, id).map(|(name, state)| theme.object_glyph(name, state))
+            item_look(world, id).map(|look| theme.object_glyph(look.type_name, look.visual_state))
         }
-        Some(Grip::Leads(_)) => Some(theme.glyph(SemanticTile::Sprite)),
+        // A led sprite as the map draws it: the young small (M2 design
+        // §9.6).
+        Some(Grip::Leads(id)) => {
+            let stage = world.sprite(id).map(|sprite| sprite.life_stage());
+            Some(theme.glyph(stage.map_or(SemanticTile::Sprite, |s| sprite_tile(s, false))))
+        }
         None => None,
     };
     glyph.map_or('?', |glyph| glyph.symbol)
 }
 
-/// The type and visual state of the item `id`, held by the Cursor or, while
-/// a pick-up waits in the queue, still on the map.
-fn item_look(world: &World, id: EntityId) -> Option<(&str, &str)> {
-    let held = world.cursor().holds().filter(|held| held.id() == id);
-    let look = held.map(|held| (held.type_name(), held.visual_state()));
-    look.or_else(|| {
-        let object = world.objects().find(|object| object.id() == id)?;
-        Some((object.type_name(), object.visual_state()))
-    })
+/// How a sprite in `stage` is drawn, `selected` or not: the young small (M2
+/// design §9.6).
+fn sprite_tile(stage: LifeStage, selected: bool) -> SemanticTile {
+    match (selected, stage) {
+        (true, LifeStage::Young) => SemanticTile::SelectedYoungSprite,
+        (false, LifeStage::Young) => SemanticTile::YoungSprite,
+        (true, _) => SemanticTile::SelectedSprite,
+        (false, _) => SemanticTile::Sprite,
+    }
 }
 
 /// Draws a single-lined box around `area` with `title` in its top edge.
@@ -786,7 +791,7 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
             format!(" │ leading: {}", app.names().label(id))
         }),
         Some(Grip::Holds(id)) => cursor_part(app, Subject::World, || {
-            let name = item_look(world, id).map_or("?", |(name, _)| name);
+            let name = item_look(world, id).map_or("?", |look| look.type_name);
             format!(" │ holding: {}", display_name(name))
         }),
         None => String::new(),

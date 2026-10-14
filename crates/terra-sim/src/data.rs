@@ -5,11 +5,13 @@ use serde::Deserialize;
 
 use crate::ageing::LifeStage;
 use crate::brain_io::{BRAIN_IO, BrainInput, BrainIoFile, InputId, brain_io};
-use crate::categories::{CATEGORIES, CURSOR, Category, EGG, SPRITE, WATER, categories};
+use crate::categories::{CATEGORIES, CURSOR, Category, SPRITE, WATER, categories};
 use crate::expression::{Expression, expressions};
 use crate::genome::{Gene, Genome, GenomeError};
 use crate::names::{NAMES, Syllables};
-use crate::object_types::{Condition, Effect, OBJECTS, ObjectType, TypeEntry, object_types};
+use crate::object_types::{
+    Condition, Effect, OBJECTS, ObjectType, TypeEntry, has_egg, object_types, upgrade_old_egg,
+};
 use crate::physiology::{Indices, PHYSIOLOGY, Physiology, PhysiologyEntry};
 use crate::registry::{CategoryId, ChemId, Chemical, ChemicalKind, Locus, LocusId, Verb};
 use crate::tags::{TAGS, Tag, TagEntry, tags};
@@ -35,6 +37,9 @@ pub struct DataPack {
     tags: Vec<Tag>,
     /// In ascending ID order.
     object_types: Vec<ObjectType>,
+    /// The index of the type whose objects hatch, the egg a mother lays
+    /// (M2 design §10.4), if the pack has one.
+    egg_type: Option<usize>,
     physiology: Physiology,
     /// What sprites without parents are made from. Every gene in it is expressed or unexpressed.
     starter: Genome,
@@ -222,14 +227,23 @@ impl DataPack {
             &loci,
         )?;
         let tags = tags(parse::<Vec<TagEntry>>(sources, TAGS)?, &chemicals, &loci)?;
-        let object_types = object_types(
-            parse::<Vec<TypeEntry>>(sources, OBJECTS)?,
-            &categories,
-            &tags,
-            &chemicals,
-            &loci,
-        )?;
         let physiology = parse::<PhysiologyEntry>(sources, PHYSIOLOGY)?;
+        let mut entries = parse::<Vec<TypeEntry>>(sources, OBJECTS)?;
+        // A pack from before eggs were items says how long they took to
+        // hatch, and gets an egg type that takes as long (#196).
+        if let Some(hatches) = physiology.old_hatches() {
+            if has_egg(&entries) {
+                return Err(DataError::Invalid {
+                    file: PHYSIOLOGY.into(),
+                    message: "`breeding.hatches` is from before eggs were items: \
+                              an egg hatches as its type's stages in objects.ron say"
+                        .into(),
+                });
+            }
+            upgrade_old_egg(&mut entries, hatches);
+        }
+        let object_types = object_types(entries, &categories, &tags, &chemicals, &loci)?;
+        let egg_type = object_types.iter().position(ObjectType::hatches);
         let needs: Vec<&str> = brain_io
             .needs
             .iter()
@@ -265,6 +279,7 @@ impl DataPack {
             categories,
             tags,
             object_types,
+            egg_type,
             physiology,
             starter: Genome::switched(Vec::new(), Vec::new()),
             syllables,
@@ -599,10 +614,11 @@ impl DataPack {
             .expect("a checked pack has sprites")
     }
 
-    /// The category eggs are perceived as, if the pack has one (M2 design
-    /// §10).
-    pub(crate) fn egg_category(&self) -> Option<CategoryId> {
-        self.category_named(EGG)
+    /// The index of the type whose objects hatch, the egg a mother lays
+    /// (M2 design §10.4), if the pack has one. A pack without one has no
+    /// fertile sprites.
+    pub(crate) fn egg_type(&self) -> Option<usize> {
+        self.egg_type
     }
 
     /// The category the Cursor is perceived as, while sprites can see it
@@ -620,11 +636,14 @@ impl DataPack {
             .position(|t| t.pseudo && t.category == category)
     }
 
-    /// The index of the object type called `name`, if it can have objects: it
-    /// exists and isn't a pseudo type.
+    /// The index of the object type called `name`, if it can have objects
+    /// made of nothing: it exists, isn't a pseudo type, and doesn't hatch,
+    /// since only a sprite can lay an egg (M2 design §10.4).
     pub(crate) fn real_object_type(&self, name: &str) -> Option<usize> {
-        self.object_type_named(name)
-            .filter(|&index| !self.object_types[index].pseudo)
+        self.object_type_named(name).filter(|&index| {
+            let object_type = &self.object_types[index];
+            !object_type.pseudo && !object_type.hatches()
+        })
     }
 }
 

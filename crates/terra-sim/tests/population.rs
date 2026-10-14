@@ -1,7 +1,8 @@
 //! The population record (M2 design §14): the world counts its sprites by
-//! life stage every 100 ticks over its whole run, with the hatchings, the
-//! sprites the Cursor spawned and the deaths between counts; it's world
-//! state, so a save keeps it, and it squeezes its counts to stay small.
+//! life stage, and its eggs, every 100 ticks over its whole run, with the
+//! layings, the hatchings, the sprites the Cursor spawned and the deaths
+//! between counts; it's world state, so a save keeps it, and it squeezes
+//! its counts to stay small.
 
 mod common;
 use common::{ALONE, FEMALE, WorldBuilder, at, builtin, family, until};
@@ -12,13 +13,12 @@ use terra_sim::{
     Command, EventKind, LifeStage, PopulationChanges, PopulationCount, World, WorldConfig,
 };
 
-/// The sprites in `world` now, by life stage, in the order a count keeps
-/// them: eggs, young, adults, old.
+/// The eggs and sprites in `world` now, by life stage, in the order a count
+/// keeps them: eggs, young, adults, old.
 fn stages(world: &World) -> [u32; 4] {
-    let mut n = [0; 4];
+    let mut n = [world.eggs().count() as u32, 0, 0, 0];
     for sprite in world.sprites() {
         n[match sprite.life_stage() {
-            LifeStage::Egg => 0,
             LifeStage::Young => 1,
             LifeStage::Adult => 2,
             LifeStage::Old => 3,

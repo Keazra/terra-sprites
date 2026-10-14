@@ -6,9 +6,10 @@ use crate::cursor::Grip;
 use crate::data::DataPack;
 use crate::events::{Emptied, Event, EventKind, Removal};
 use crate::map::{Map, Pos};
-use crate::object_types::{Condition, Effect, Stage, Trigger};
+use crate::object_types::{Condition, Effect, Next, Stage, Trigger};
 use crate::objects::{EntityId, Object, Objects};
 use crate::random::{chance, uniform};
+use crate::sprites::Sprite;
 use crate::world::WorldState;
 
 /// A new object of type `kind` on `pos`, in its first stage. It enters that
@@ -24,7 +25,27 @@ pub(crate) fn new_object(data: &DataPack, kind: usize, pos: Pos) -> Object {
         fresh: true,
         roll: None,
         held: false,
+        unhatched: None,
     }
+}
+
+/// A new object of type `kind` on `pos` that starts its first stage on the
+/// tick `tick`, as it's made, rather than on its first turn: so an egg
+/// laid at step 6 hatches its stage's length later to the tick (M2 design
+/// §10.4). No `OnStageEnter` fires for that stage.
+pub(crate) fn started_object(
+    data: &DataPack,
+    rng: &mut ChaCha8Rng,
+    kind: usize,
+    pos: Pos,
+    tick: u64,
+) -> Object {
+    let mut object = new_object(data, kind, pos);
+    object.fresh = false;
+    if let Some(first) = object.stage {
+        object.stage_ends = tick + duration(rng, &data.object_types()[kind].stages[first]);
+    }
+    object
 }
 
 /// A new object of type `kind` on `pos` at a random point in its life, for
@@ -39,12 +60,16 @@ pub(crate) fn aged_object(data: &DataPack, rng: &mut ChaCha8Rng, kind: usize, po
     if object_type.stages.is_empty() {
         return object;
     }
-    // The stages it lives through: from the first, until it expires or a stage repeats.
+    // The stages it lives through: from the first, until it expires or a
+    // stage repeats. No type that hatches is made at random.
     let mut life: Vec<(usize, u64)> = Vec::new();
     let mut stage = Some(0);
     while let Some(index) = stage.filter(|&s| life.iter().all(|&(seen, _)| seen != s)) {
         life.push((index, duration(rng, &object_type.stages[index])));
-        stage = object_type.stages[index].next;
+        stage = match object_type.stages[index].next {
+            Next::Stage(next) => Some(next),
+            Next::Expire | Next::Hatch => None,
+        };
     }
     let total: u64 = life.iter().map(|&(_, ticks)| ticks).sum();
     let mut age = uniform(rng, total);
@@ -81,7 +106,8 @@ pub(crate) enum Turn {
     Ends,
 }
 
-/// One object's turn: the stage clock, then its rules (design §3.5.2).
+/// One object's turn: the stage clock, then its rules (design §3.5.2). An
+/// egg whose stage is over hatches instead (M2 design §10.4).
 fn turn(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec<Event>) {
     let tick = state.tick;
     let Some(object) = state.objects.get_mut(id) else {
@@ -101,12 +127,15 @@ fn turn(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec<
         && tick >= object.stage_ends
     {
         match object_type.stages[stage].next {
-            Some(next) => {
+            Next::Stage(next) => {
                 object.stage = Some(next);
                 object.stage_ends = tick + duration(&mut state.rng, &object_type.stages[next]);
                 entered = Some(next);
             }
-            None => expiring = true,
+            Next::Expire => expiring = true,
+            // It hatches where it lies, once it can; its rules run until then.
+            Next::Hatch if hatch(state, data, id, events) => return,
+            Next::Hatch => {}
         }
     }
 
@@ -135,6 +164,27 @@ fn turn(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec<
         let old = state.objects.remove(id);
         removed(state, data, id, old.kind, Removal::Expired, events);
     }
+}
+
+/// The egg `id` hatches, if it can (M2 design §10.4): on the map, not in
+/// the Cursor, on a tile with no sprite on it. The item is gone, and the
+/// young sprite it held stands on its tile with its ID. Returns whether it
+/// hatched.
+fn hatch(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec<Event>) -> bool {
+    let object = state.objects.get(id).expect("the egg taking its turn");
+    if object.held || !state.can_stand(data, object.pos) {
+        return false;
+    }
+    let mut egg = state.objects.remove(id);
+    let unhatched = *egg.unhatched.take().expect("an egg holds a sprite");
+    let parents = unhatched.parents.clone();
+    let hatchling = Sprite::hatchling(unhatched, egg.pos, state.tick, data);
+    state.sprites.place(id, hatchling);
+    events.push(Event {
+        tick: state.tick,
+        kind: EventKind::Hatched { id, parents },
+    });
+    true
 }
 
 /// Whether every condition holds for the object `id`, with location conditions

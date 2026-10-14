@@ -1,20 +1,23 @@
 //! Having young (M2 design §5, §10): sexes, fertility, laying an egg with a
-//! partner or alone, and the content-safety rule the engine enforces for
-//! every genome and data pack, that mating happens only between adults.
+//! partner or alone, the sprite an egg holds until it hatches, and the
+//! content-safety rule the engine enforces for every genome and data pack,
+//! that mating happens only between adults.
 
 use serde::{Deserialize, Serialize};
 
 use crate::action::{self, Hurt, Outcome};
 use crate::data::DataPack;
+use crate::ecology;
 use crate::events::{Event, EventKind};
+use crate::genome::Genome;
 use crate::inheritance;
 use crate::map::Dir;
-use crate::mutation;
+use crate::mutation::{self, Copied, CopyChange, CopyingError};
 use crate::objects::EntityId;
 use crate::perception::Target;
 use crate::random::uniform;
 use crate::registry::Verb;
-use crate::sprites::Sprite;
+use crate::sprites::{Genes, Sprite, check_genes};
 use crate::world::WorldState;
 
 /// A sprite's sex (M2 design §10). Every sprite hatches male; an adult male
@@ -39,6 +42,49 @@ impl Sex {
     }
 }
 
+/// The sprite an egg holds until it hatches (M2 design §10.4, #196): its
+/// genes as copying left them, who laid it, when, and the name the player
+/// gave it, if any. The egg is an item; the sprite is born as it hatches.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct Unhatched {
+    pub(crate) genome: Genome,
+    /// How many of its two copies of each gene are flawed (M2 design §12):
+    /// empty when none are.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) flaws: Vec<u8>,
+    /// The genes copying changed (M2 design §12).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) copying_errors: Vec<CopyingError>,
+    /// The whole genes copying doubled, lost or changed (M2 design §13).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) copy_changes: Vec<CopyChange>,
+    /// The one that laid it, then its partner, if it had one.
+    pub(crate) parents: Vec<EntityId>,
+    /// The tick it was laid on.
+    pub(crate) laid: u64,
+    /// The name the player gave it, which the sprite keeps (design §2.5).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) name: Option<String>,
+}
+
+impl Unhatched {
+    /// Checks that the egg `id`'s genes fit together, as a sprite's must
+    /// (design §7.1), or says how they don't.
+    pub(crate) fn check(&self, id: EntityId, data: &DataPack) -> Result<(), String> {
+        check_genes(
+            id,
+            Genes {
+                genome: &self.genome,
+                flaws: &self.flaws,
+                copying_errors: &self.copying_errors,
+                copy_changes: &self.copy_changes,
+                parents: &self.parents,
+            },
+            data,
+        )
+    }
+}
+
 /// Whether sprites `a` and `b` may mate (M2 design §5): two different
 /// sprites, both grown up. Old sprites still count as adults.
 pub(crate) fn adults(state: &WorldState, a: EntityId, b: EntityId) -> bool {
@@ -51,22 +97,23 @@ pub(crate) fn adults(state: &WorldState, a: EntityId, b: EntityId) -> bool {
     a != b && grown(a) && grown(b)
 }
 
-/// Whether the world has room for another sprite, egg or not (M2 design
-/// §10). In a full world no sprite is fertile, so none is aroused: the
-/// glass of the terrarium.
+/// Whether the world has room for another sprite, counting each egg as
+/// the sprite it holds (M2 design §10.4). In a full world no sprite is
+/// fertile, so none is aroused: the glass of the terrarium.
 pub(crate) fn room(state: &WorldState) -> bool {
-    state.sprites.len() < usize::from(state.most_sprites)
+    state.sprites.len() + state.objects.eggs() < usize::from(state.most_sprites)
 }
 
 /// Whether `sprite` is fertile now (M2 design §10): in a pack with
-/// breeding, grown up, fed and watered, rested long enough since its last
-/// egg, in a world with `room` for another sprite. A save from before
-/// breeding keeps its pack, which has none.
+/// breeding and an egg type, grown up, fed and watered, rested long enough
+/// since its last egg, in a world with `room` for another sprite. A save
+/// from before breeding keeps its pack, which has none.
 pub(crate) fn fertile(state: &WorldState, sprite: &Sprite, data: &DataPack) -> bool {
     let physiology = data.physiology();
     let (breeding, indices) = (&physiology.breeding, physiology.indices);
     let chems = &sprite.body.chems;
     indices.breeding.is_some()
+        && data.egg_type().is_some()
         && room(state)
         && sprite.stage().is_grown()
         && chems[indices.energy] > breeding.fed
@@ -152,10 +199,11 @@ fn outcome(
 }
 
 /// `mother`, fertile, lays an egg on a free tile beside her, by `father` or
-/// alone (M2 design §10), if she has a free tile: its genes theirs mixed, or
-/// hers doubled, copied with errors (§12). The parents split the egg's
-/// cost, or she pays it all alone, and each fires its `bred` pulse. Returns
-/// the egg.
+/// alone (M2 design §10), if she has one: a tile a sprite could stand on,
+/// with no item on it, for the egg is an item until it hatches (§10.4). Its
+/// genes are theirs mixed, or hers doubled, copied with errors (§12). The
+/// parents split the egg's cost, or she pays it all alone, and each fires
+/// its `bred` pulse. Returns the egg.
 fn lay(
     state: &mut WorldState,
     data: &DataPack,
@@ -163,17 +211,23 @@ fn lay(
     father: Option<EntityId>,
     events: &mut Vec<Event>,
 ) -> Option<EntityId> {
+    let kind = data.egg_type()?;
     let pos = state.sprites.get(mother).expect("the mother").pos;
     let free: Vec<_> = Dir::ALL
         .into_iter()
         .filter_map(|dir| state.map.neighbour(pos, dir))
-        .filter(|&tile| state.can_stand(data, tile))
+        .filter(|&tile| state.can_lie(data, kind, tile))
         .collect();
     if free.is_empty() {
         return None;
     }
     let tile = free[uniform(&mut state.rng, free.len() as u64) as usize];
-    let genes = {
+    let Copied {
+        genome,
+        flaws,
+        errors,
+        changes,
+    } = {
         let sprites = &state.sprites;
         let hers = sprites.get(mother).expect("the mother").as_parent();
         let inherited = match father.and_then(|father| sprites.get(father)) {
@@ -196,8 +250,17 @@ fn lay(
             sprite.body.pulse(breeding.bred, None);
         }
     }
-    let egg = Sprite::egg(genes, tile, state.tick, parents, data);
-    let egg = state.add_sprite(egg);
+    let mut egg = ecology::started_object(data, &mut state.rng, kind, tile, state.tick);
+    egg.unhatched = Some(Box::new(Unhatched {
+        genome,
+        flaws,
+        copying_errors: errors,
+        copy_changes: changes,
+        parents,
+        laid: state.tick,
+        name: None,
+    }));
+    let egg = state.add_object(egg);
     events.push(Event {
         tick: state.tick,
         kind: EventKind::Laid {
@@ -212,15 +275,15 @@ fn lay(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::genome::Genome;
+    use crate::command::Command;
     use crate::map::Map;
     use crate::test_util::at;
     use crate::world::{Scenario, World};
 
     #[test]
     fn a_full_world_is_infertile_and_lays_nothing() {
-        // M2 design §10: the limit counts eggs, and a sprite in a full world
-        // isn't fertile.
+        // M2 design §10.4: the limit counts eggs, and a sprite in a full
+        // world isn't fertile.
         let data = DataPack::builtin().expect("built-in data pack is valid");
         let genome = Genome::from_ron(
             r#"(format: 1, genes: [
@@ -254,8 +317,14 @@ mod tests {
         assert!(world.sprites().all(|sprite| !sprite.is_fertile()));
         world.set_most_sprites(3);
         assert!(laid(&mut world), "no egg once there was room");
-        assert_eq!(world.sprites().count(), 3);
+        assert_eq!((world.sprites().count(), world.eggs().count()), (2, 1));
         assert!(!laid(&mut world), "a second egg over the limit");
+        // Held by the Cursor, the egg still counts.
+        let egg = world.eggs().next().expect("the egg").id();
+        world.submit(Command::PickUp { item: egg });
+        world.step();
+        assert!(world.cursor().holds().is_some_and(|held| held.id() == egg));
+        assert!(!laid(&mut world), "a second egg while the first is held");
     }
 
     #[test]

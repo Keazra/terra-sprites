@@ -17,9 +17,6 @@
         // The young are drawn small (M2 design §9.6). `•` is the berry.
         young_sprite:           (glyph: 'ö', fg: white),
         selected_young_sprite:  (glyph: 'ö', fg: white, reversed: true),
-        // An egg (M2 design §10). `○` is the ball.
-        egg:                    (glyph: 'o', fg: light_yellow),
-        selected_egg:           (glyph: 'o', fg: light_yellow, reversed: true),
         // The Decision marker: where the selected sprite is heading. It flashes. CP437 has no `×`.
         decision_marker:        (glyph: 'X', fg: white),
         // Emotes take turns with a sprite's glyph (design §6.3): hurt by something.
@@ -59,6 +56,8 @@
         "berry":     { "default": (glyph: '•', fg: red) },
         "thornbush": { "default": (glyph: '♠', fg: magenta) },
         "ball":      { "default": (glyph: '○', fg: white) },
+        // An egg (M2 design §10.4). `○` is the ball.
+        "egg":       { "default": (glyph: 'o', fg: light_yellow) },
     },
     // The 3×3 cursor (design §6.5). The arrows are named by the way they point.
     // Each mode's mark gives the cursor its colour: the arrows and status marks
@@ -117,12 +116,12 @@
             nearest: (glyph: '*', fg: white),
         },
     ),
-    // The population graph (M2 design §14): each life stage's colour, stacked
-    // from the bottom as young, adults, old and eggs; a whole character of one
-    // stage, and its lower half, which shows the stage below over the stage
-    // above, or over nothing at the top; and the dotted line at the world's
-    // limit. What a theme leaves out of this section, it draws as the default
-    // theme does.
+    // The population graph (M2 design §14): the colour of each life stage
+    // and of eggs, stacked from the bottom as young, adults, old and eggs; a
+    // whole character of one, and its lower half, which shows the one below
+    // over the one above, or over nothing at the top; and the dotted line at
+    // the world's limit. What a theme leaves out of this section, it draws as
+    // the default theme does.
     population: (
         stages: (young: light_green, adult: cyan, old: gray, egg: light_yellow),
         full: '█',

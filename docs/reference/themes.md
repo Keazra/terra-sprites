@@ -49,7 +49,7 @@ A **glyph** is `(glyph: '♣', fg: green)`, with two optional flags: `bold: true
 | `sprite` | A sprite. Its colour shows when no drive colours it, and always with `b`'s plain colours. |
 | `selected_sprite` | The selected sprite. |
 | `young_sprite`, `selected_young_sprite` | A young sprite, and one selected (M2 design §9.6). Optional: a theme without them draws the young as grown. |
-| `egg`, `selected_egg` | An egg, and one selected (M2 design §10). Optional: a theme without them draws eggs as the young. |
+| `egg`, `selected_egg` | Retired: an egg is an item until it hatches, drawn from `objects` (M2 design §10.7). A theme that still has them loads, and draws the egg with its `egg` glyph if its `objects` have no `"egg"`. |
 | `decision_marker` | Where the selected sprite is heading. It flashes. |
 | `emote(hurt)`, `emote(pleased)`, `emote(shocked)`, `emote(failed)`, `emote(resting)` | What takes turns with a sprite's glyph when it's hurt, petted, zapped, gives up, or rests (design §6.3). |
 
@@ -87,11 +87,11 @@ The map view can scroll past the map's wall, into space (M2 design §11). `space
 
 ### `population`
 
-The population graph (`p`, and small at the top of the World tab) stacks the sprites by life stage, from the bottom young, adults, old and eggs, each in its colour, with a dotted line at the most sprites the world holds (M2 design §14). `population` is a record of four fields, each of which may be left out and is then drawn as the default theme draws it. A field the game doesn't know is refused, naming it.
+The population graph (`p`, and small at the top of the World tab) stacks the sprites by life stage, from the bottom young, adults and old, then the eggs, each in its colour, with a dotted line at the most sprites the world holds (M2 design §14). `population` is a record of four fields, each of which may be left out and is then drawn as the default theme draws it. A field the game doesn't know is refused, naming it.
 
 | Field | Meaning |
 |---|---|
-| `stages` | A colour for each life stage: `(young: light_green, adult: cyan, old: gray, egg: light_yellow)`, any of them left out as you like. |
+| `stages` | A colour for each life stage and for eggs: `(young: light_green, adult: cyan, old: gray, egg: light_yellow)`, any of them left out as you like. |
 | `full` | A character wholly of one stage: `'█'` in the default theme, `'#'` in the ASCII one. |
 | `half` | A character's lower half, `'▄'` or `'_'`: it's drawn in the stage below, on the stage above as its background, or on nothing at the top of the stack. |
 | `limit` | A glyph, a dot of the line at the most sprites the world holds, drawn where nothing else is. |
@@ -135,6 +135,7 @@ A bright theme, for a terminal whose dark colours are hard to see: light colours
         "berry":     { "default": (glyph: '•', fg: light_red) },
         "thornbush": { "default": (glyph: '♠', fg: light_magenta) },
         "ball":      { "default": (glyph: '○', fg: white, bold: true) },
+        "egg":       { "default": (glyph: 'o', fg: light_yellow, bold: true) },
     },
     attention_marker: gray,
     cursor: (

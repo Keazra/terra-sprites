@@ -1,12 +1,13 @@
 //! The population graph (M2 design §14): the world's population over its
-//! whole run, stacked by life stage in the theme's colours, full screen on
+//! whole run, stacked by life stage and eggs in the theme's colours, full
+//! screen on
 //! `p` and small at the top of the World tab. Each column is a stretch of
 //! time, showing the count at its end; until the run fills the graph, a
 //! column is 100 ticks and the graph grows from the left.
 
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use terra_sim::{DataPack, LifeStage, PopulationChanges, PopulationCount, World};
+use terra_sim::{DataPack, PopulationChanges, PopulationCount, World};
 
 use crate::app::App;
 use crate::text::{cause_name, group_thousands};
@@ -16,13 +17,49 @@ use crate::theme::PopulationLook;
 /// graph: as often as the world counts at first (M2 design §14).
 const TICKS_PER_COLUMN: u64 = terra_sim::FIRST_COUNT_EVERY;
 
-/// The life stages, stacked from the bottom (M2 design §14).
-const STACK: [LifeStage; 4] = [
-    LifeStage::Young,
-    LifeStage::Adult,
-    LifeStage::Old,
-    LifeStage::Egg,
-];
+/// What the graph stacks (M2 design §14.2): the sprites at each life
+/// stage, then the eggs, which are items until they hatch (§10.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Band {
+    Young,
+    Adults,
+    Old,
+    Eggs,
+}
+
+impl Band {
+    /// How many of `count` are in the band.
+    fn of(self, count: &PopulationCount) -> u32 {
+        match self {
+            Band::Young => count.young,
+            Band::Adults => count.adults,
+            Band::Old => count.old,
+            Band::Eggs => count.eggs,
+        }
+    }
+
+    /// The band's name, as the legend says it.
+    fn plural(self) -> &'static str {
+        match self {
+            Band::Young => "young",
+            Band::Adults => "adults",
+            Band::Old => "old",
+            Band::Eggs => "eggs",
+        }
+    }
+
+    /// The band's name for `n` of them.
+    fn name(self, n: u32) -> &'static str {
+        match (self, n) {
+            (Band::Adults, 1) => "adult",
+            (Band::Eggs, 1) => "egg",
+            _ => self.plural(),
+        }
+    }
+}
+
+/// The bands, stacked from the bottom (M2 design §14.2).
+const STACK: [Band; 4] = [Band::Young, Band::Adults, Band::Old, Band::Eggs];
 
 /// Rows the full graph keeps for what's under it: the axis, its ticks, a
 /// blank line, the legend and the two lines that read a moment.
@@ -146,7 +183,7 @@ impl Plot {
                 let lower = 2 * (rows - 1 - row);
                 for column in &self.columns {
                     let count = column.map(|i| &self.points[i]);
-                    let at = |half: usize| count.and_then(|c| stage_at(c, half, step));
+                    let at = |half: usize| count.and_then(|c| band_at(c, half, step));
                     spans.push(block(at(lower), at(lower + 1), row == limit_row, look));
                 }
                 Line::from(spans)
@@ -209,12 +246,12 @@ impl Plot {
     /// The legend: each stage's swatch and name, then the limit's line.
     fn legend(&self, look: &PopulationLook) -> Line<'static> {
         let mut spans = vec![Span::raw(" ")];
-        for stage in STACK {
+        for band in STACK {
             spans.push(Span::styled(
                 look.full.to_string(),
-                Style::default().fg(look.colour(stage)),
+                Style::default().fg(look.colour(band)),
             ));
-            spans.push(Span::raw(format!(" {}  ", stage.plural())));
+            spans.push(Span::raw(format!(" {}  ", band.plural())));
         }
         spans.push(Span::styled(
             look.limit.symbol.to_string().repeat(3),
@@ -242,10 +279,9 @@ impl Plot {
             "{sprites} sprite{}",
             if sprites == 1 { "" } else { "s" }
         )];
-        stages.extend(STACK.map(|stage| {
-            let n = count.at(stage);
-            let name = if n == 1 { stage.name() } else { stage.plural() };
-            format!("{n} {name}")
+        stages.extend(STACK.map(|band| {
+            let n = band.of(count);
+            format!("{n} {}", band.name(n))
         }));
         let first = format!(" {when}: {}", stages.join(" · "));
         // Since the count the nearest column before shows, if it's an
@@ -278,11 +314,11 @@ fn gutter(top: u32) -> usize {
     top.to_string().len() + 3
 }
 
-/// The stage drawn in half `half` of a column's characters, from 0 at the
-/// bottom, showing `count`, each half `step` sprites high: the stage at its
+/// The band drawn in half `half` of a column's characters, from 0 at the
+/// bottom, showing `count`, each half `step` sprites high: the band at its
 /// middle, or at the top of the stack if that's lower. A half the stack
 /// doesn't reach is empty.
-fn stage_at(count: &PopulationCount, half: usize, step: f64) -> Option<LifeStage> {
+fn band_at(count: &PopulationCount, half: usize, step: f64) -> Option<Band> {
     let total = f64::from(count.sprites());
     let bottom = half as f64 * step;
     if total <= bottom {
@@ -290,21 +326,21 @@ fn stage_at(count: &PopulationCount, half: usize, step: f64) -> Option<LifeStage
     }
     let at = (bottom + step / 2.0).min(total - 0.5);
     let mut below = 0.0;
-    STACK.into_iter().find(|&stage| {
-        below += f64::from(count.at(stage));
+    STACK.into_iter().find(|&band| {
+        below += f64::from(band.of(count));
         at < below
     })
 }
 
-/// One character of the graph: its lower half's stage and its upper
-/// half's, in `look`; an empty one on the limit's row is a dot of its line.
+/// One character of the graph: its lower half's band and its upper half's,
+/// in `look`; an empty one on the limit's row is a dot of its line.
 fn block(
-    lower: Option<LifeStage>,
-    upper: Option<LifeStage>,
+    lower: Option<Band>,
+    upper: Option<Band>,
     on_limit: bool,
     look: &PopulationLook,
 ) -> Span<'static> {
-    let colour = |stage| look.colour(stage);
+    let colour = |band| look.colour(band);
     match (lower, upper) {
         (Some(lower), Some(upper)) if lower == upper => {
             Span::styled(look.full.to_string(), Style::default().fg(colour(lower)))

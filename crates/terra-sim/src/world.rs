@@ -10,7 +10,7 @@ use crate::action::{self, ActionView, ScriptedAction, chebyshev};
 use crate::ageing::{LifeStage, Switch};
 use crate::biochem::{self, Senses, Traits};
 use crate::brain::{self, Explanation, Memory, RememberedPlace};
-use crate::breeding::{self, Sex};
+use crate::breeding::{self, Sex, Unhatched};
 use crate::command::{self, Command};
 use crate::config::{MOST_SPRITES, WorldConfig};
 use crate::cursor::{Cursor, Grip};
@@ -97,11 +97,66 @@ impl WorldState {
     /// Rebuilds what a save leaves out because it's derived from the rest
     /// (design §2.8): which entity stands on each tile, each sprite's
     /// compiled genome, and its levels before the tick, taken as its levels
-    /// now, so each change on the Chem tab reads blank for one tick.
+    /// now, so each change on the Chem tab reads blank for one tick. A save
+    /// from when eggs were sprites has them turned into egg items first (M2
+    /// design §10.4).
     fn rebuild(&mut self, data: &DataPack) -> Result<(), String> {
         self.map.check_shape(data)?;
         self.objects.rebuild(&self.map, data)?;
-        self.sprites.rebuild(&self.map, data, self.tick)
+        self.sprites.rebuild(&self.map, data, self.tick)?;
+        self.old_eggs_to_items(data);
+        Ok(())
+    }
+
+    /// Turns each sprite that's still an egg, in a save from before eggs
+    /// were items (#196), into an egg item with its ID (M2 design §10.4):
+    /// on its tile, or if an item lies there, the nearest tile it may go on,
+    /// hatching when it would have. In a pack with no egg type, or a world
+    /// with nowhere to put it, it hatches at once.
+    fn old_eggs_to_items(&mut self, data: &DataPack) {
+        let old: Vec<EntityId> = self
+            .sprites
+            .iter()
+            .filter(|(_, sprite)| sprite.hatches.is_some())
+            .map(|(id, _)| id)
+            .collect();
+        for id in old {
+            let sprite = self.sprites.remove(id);
+            let pos = sprite.pos;
+            let (unhatched, hatches) = sprite.unhatched().expect("a sprite that's still an egg");
+            // Before eggs were items, the Cursor could lead one for a while.
+            if self.cursor.leads() == Some(id) {
+                self.cursor.grip = None;
+            }
+            let egg = data.egg_type().and_then(|kind| {
+                let tile = self.nearest_free(data, kind, pos)?;
+                let stage = data.object_types()[kind].hatching_stage()?;
+                let mut egg = new_object(data, kind, tile);
+                (egg.fresh, egg.stage, egg.stage_ends) = (false, Some(stage), hatches);
+                Some(egg)
+            });
+            match egg {
+                Some(mut egg) => {
+                    egg.unhatched = Some(Box::new(unhatched));
+                    self.objects.place(id, egg);
+                }
+                None => {
+                    let hatchling = Sprite::hatchling(unhatched, pos, self.tick, data);
+                    self.sprites.place(id, hatchling);
+                }
+            }
+        }
+    }
+
+    /// The nearest tile to `pos` that an egg of the type `kind` may lie on,
+    /// searching outwards a ring at a time, each row by row.
+    fn nearest_free(&self, data: &DataPack, kind: usize, pos: Pos) -> Option<Pos> {
+        let rings = self.map.width().max(self.map.height());
+        (0..rings).find_map(|radius| {
+            square(&self.map, pos, radius)
+                .filter(|&tile| chebyshev(tile, pos) == radius)
+                .find(|&tile| self.can_lie(data, kind, tile))
+        })
     }
 
     /// Gives `object` the next entity ID and puts it in the world. The caller
@@ -126,6 +181,13 @@ impl WorldState {
     pub(crate) fn can_place(&self, data: &DataPack, kind: usize, pos: Pos) -> bool {
         self.objects.can_place(&self.map, data, kind, pos)
             && !(data.object_types()[kind].solid && self.sprites.at(pos).is_some())
+    }
+
+    /// Whether an egg of the type `kind` may lie on the tile at `pos`, as
+    /// it's laid (M2 design §10.4): an item may go there, and a sprite may
+    /// stand there, so it can hatch.
+    pub(crate) fn can_lie(&self, data: &DataPack, kind: usize, pos: Pos) -> bool {
+        self.can_stand(data, pos) && self.can_place(data, kind, pos)
     }
 
     /// Whether a sprite may stand on the tile at `pos` (design §3.4): a
@@ -197,21 +259,15 @@ impl WorldState {
     }
 
     /// The index of `target`'s object type, whose verb table it answers
-    /// with: a pseudo type for water, a sprite, an egg or the Cursor. `None`
-    /// if it's gone, or the pack has no such pseudo type; for an egg, if
-    /// the pack has no category for eggs either (M2 design §10).
+    /// with: a pseudo type for water, a sprite or the Cursor. `None` if it's
+    /// gone, or the pack has no such pseudo type.
     pub(crate) fn kind_of(&self, data: &DataPack, target: Target) -> Option<usize> {
         match target {
             Target::Object(id) => self.objects.get(id).map(|o| o.kind),
             Target::Water(_) => data.pseudo_type(data.water_category()),
-            Target::Sprite(_) => data.pseudo_type(self.category_of(data, target)),
+            Target::Sprite(_) => data.pseudo_type(data.sprite_category()),
             Target::Cursor => data.pseudo_type(data.cursor_category()),
         }
-    }
-
-    /// Whether the sprite `id` is there, and an egg (M2 design §10).
-    pub(crate) fn is_egg(&self, id: EntityId) -> bool {
-        self.sprites.get(id).is_some_and(Sprite::is_egg)
     }
 
     /// The stable ID of `target`'s object type, as `kind_of` finds it.
@@ -220,16 +276,12 @@ impl WorldState {
             .map(|kind| data.object_types()[kind].id)
     }
 
-    /// The category `target` is perceived as (design v19 §3.5.5): an egg
-    /// as an egg, if the pack has eggs (M2 design §10).
+    /// The category `target` is perceived as (design v19 §3.5.5).
     pub(crate) fn category_of(&self, data: &DataPack, target: Target) -> CategoryId {
         match target {
             Target::Object(id) => data.object_types()[self.objects.kind(id)].category,
             Target::Water(_) => data.water_category(),
-            Target::Sprite(id) => match data.egg_category() {
-                Some(egg) if self.is_egg(id) => egg,
-                _ => data.sprite_category(),
-            },
+            Target::Sprite(_) => data.sprite_category(),
             Target::Cursor => data.cursor_category(),
         }
     }
@@ -434,16 +486,6 @@ impl<'a> SpriteView<'a> {
         self.sprite.stage()
     }
 
-    /// Whether it's still an egg (M2 design §10).
-    pub fn is_egg(&self) -> bool {
-        self.sprite.is_egg()
-    }
-
-    /// The tick it hatches on, while it's an egg (M2 design §10).
-    pub fn hatches(&self) -> Option<u64> {
-        self.sprite.hatches
-    }
-
     /// Its parents (M2 design §10): the one that laid it, then its partner,
     /// if it had one. None for a sprite the world began with or the Cursor
     /// made. A parent may have died since.
@@ -617,6 +659,18 @@ impl<'a> ObjectView<'a> {
         self.world.data.object_types()[self.object.kind].solid
     }
 
+    /// Whether the Cursor may throw it, once it holds it (design §3.5.4):
+    /// not an egg (M2 design §10.4).
+    pub fn is_throwable(&self) -> bool {
+        self.world.data.object_types()[self.object.kind].throwable
+    }
+
+    /// Whether it's an egg, which a sprite hatches from (M2 design §10.4):
+    /// `World::egg` tells more.
+    pub fn is_egg(&self) -> bool {
+        self.object.unhatched.is_some()
+    }
+
     /// The value of the object's counter called `name`, or `None` if its type has no such counter.
     pub fn counter(&self, name: &str) -> Option<u16> {
         let counters = &self.world.data.object_types()[self.object.kind].counters;
@@ -713,11 +767,82 @@ impl<'a> HeldView<'a> {
         &self.world.data.object_types()[self.object.kind].name
     }
 
+    /// Whether the Cursor may throw it (design §3.5.4): not an egg, which
+    /// it can only put down (M2 design §10.4).
+    pub fn is_throwable(&self) -> bool {
+        self.world.data.object_types()[self.object.kind].throwable
+    }
+
+    /// Whether it's an egg (M2 design §10.4): `World::egg` tells more.
+    pub fn is_egg(&self) -> bool {
+        self.object.unhatched.is_some()
+    }
+
     /// The name of the look a theme draws the item with, as for an object
     /// on the map (`ObjectView::visual_state`); held, it has no tile, so
     /// rules asking about one don't hold (design §3.5.2).
     pub fn visual_state(&self) -> &'a str {
         visual_state(self.world, self.object)
+    }
+}
+
+/// A read-only view of an egg (M2 design §10.4): an item, on the map or in
+/// the Cursor, holding the young sprite it hatches into.
+pub struct EggView<'a> {
+    id: EntityId,
+    object: &'a Object,
+    unhatched: &'a Unhatched,
+    world: &'a World,
+}
+
+impl<'a> EggView<'a> {
+    /// The egg's entity ID, which the sprite it hatches into keeps.
+    pub fn id(&self) -> EntityId {
+        self.id
+    }
+
+    /// The name of its type, as `objects.ron` gives it.
+    pub fn type_name(&self) -> &'a str {
+        &self.world.data.object_types()[self.object.kind].name
+    }
+
+    /// The tile it lies on, or `None` while the Cursor holds it.
+    pub fn pos(&self) -> Option<Pos> {
+        (!self.object.held).then_some(self.object.pos)
+    }
+
+    /// Who laid it, then the partner, if there was one. A parent may have
+    /// died since.
+    pub fn parents(&self) -> &'a [EntityId] {
+        &self.unhatched.parents
+    }
+
+    /// The tick it was laid on.
+    pub fn laid(&self) -> u64 {
+        self.unhatched.laid
+    }
+
+    /// The genome the sprite it holds hatches with, as copying left it (M2
+    /// design §12).
+    pub fn genome(&self) -> &'a Genome {
+        &self.unhatched.genome
+    }
+
+    /// The soonest tick it hatches on: when its stages up to hatching end,
+    /// each as short as it can be after the one it's in. Held, or with a
+    /// sprite on it, it hatches once it can after that.
+    pub fn hatches(&self) -> u64 {
+        let object_type = &self.world.data.object_types()[self.object.kind];
+        let stage = self
+            .object
+            .stage
+            .expect("an egg has a stage that ends in hatching");
+        self.object.stage_ends + object_type.least_ticks_after(stage)
+    }
+
+    /// The name the player gave it, which the sprite keeps, if any.
+    pub fn name(&self) -> Option<&'a str> {
+        self.unhatched.name.as_deref()
     }
 }
 
@@ -1011,19 +1136,22 @@ impl World {
     pub fn step(&mut self) -> Vec<Event> {
         let mut events = Vec::new();
         let state = &mut self.state;
-        state.population.begin(&state.sprites, state.tick);
+        state
+            .population
+            .begin(&state.sprites, &state.objects, state.tick);
         self.remember_levels();
         self.apply_commands(&mut events); // 1
         self.run_environment(&mut events); // 2
         self.grow(&mut events); // 3, first
         let dying = self.run_biochemistry(); // 3
-        let still = self.still(&dying);
-        self.run_learning(&still, &mut events); // 4
-        self.sense_and_decide(&still, &mut events); // 5
-        self.resolve_actions(&still, &mut events); // 6
+        self.run_learning(&dying, &mut events); // 4
+        self.sense_and_decide(&dying, &mut events); // 5
+        self.resolve_actions(&dying, &mut events); // 6
         self.finish_tick(&dying, &mut events); // 7
         let state = &mut self.state;
-        state.population.end(&state.sprites, state.tick, &events);
+        state
+            .population
+            .end(&state.sprites, &state.objects, state.tick, &events);
         self.checkpoint();
         #[cfg(debug_assertions)]
         if let Err(InvariantViolation(broken)) = self.check_invariants() {
@@ -1084,6 +1212,24 @@ impl World {
         self.state.sprites.iter().map(|(id, sprite)| SpriteView {
             id,
             sprite,
+            world: self,
+        })
+    }
+
+    /// Every egg, on the map or in the Cursor, in ascending ID order (M2
+    /// design §10.4).
+    pub fn eggs(&self) -> impl Iterator<Item = EggView<'_>> {
+        self.state.objects.iter().filter_map(|(id, _)| self.egg(id))
+    }
+
+    /// The egg `id`, if it's in the world and hasn't hatched (M2 design
+    /// §10.4).
+    pub fn egg(&self, id: EntityId) -> Option<EggView<'_>> {
+        let object = self.state.objects.get(id)?;
+        Some(EggView {
+            id,
+            object,
+            unhatched: object.unhatched.as_deref()?,
             world: self,
         })
     }
@@ -1160,9 +1306,10 @@ impl World {
     /// The population now, with what has happened since the last count, as
     /// a count taken now would have it (M2 design §14).
     pub fn population_now(&self) -> PopulationCount {
-        self.state
+        let state = &self.state;
+        state
             .population
-            .now(&self.state.sprites, self.state.tick)
+            .now(&state.sprites, &state.objects, state.tick)
     }
 
     /// Ticks between the population record's counts now (M2 design §14).
@@ -1215,17 +1362,14 @@ impl World {
 
     /// Step 3 begins with each sprite growing to its life stage (M2 design
     /// §9.2), so genes that switch on with it work from this tick's
-    /// chemistry on, an egg hatching on its tick (§10), then ageing its
-    /// genes (§9.4), and then a male adult turning female if its hormone
-    /// says so (§10), in ascending ID order.
+    /// chemistry on, then ageing its genes (§9.4), and then a male adult
+    /// turning female if its hormone says so (§10), in ascending ID order.
     fn grow(&mut self, events: &mut Vec<Event>) {
         let state = &mut self.state;
         let tick = state.tick;
         for (id, sprite) in state.sprites.iter_mut() {
             let grew = sprite.grow(tick, &self.data);
-            if !sprite.is_egg() {
-                sprite.age_genes(&self.data, &mut state.rng);
-            }
+            sprite.age_genes(&self.data, &mut state.rng);
             if sprite.turn(&self.data) {
                 events.push(Event {
                     tick,
@@ -1235,13 +1379,6 @@ impl World {
             let Some((was, stage)) = grew else {
                 continue;
             };
-            if was == LifeStage::Egg {
-                let parents = sprite.parents.clone();
-                events.push(Event {
-                    tick,
-                    kind: EventKind::Hatched { id, parents },
-                });
-            }
             // One whose genes have it grow old before it grows up does both
             // at once (M2 design §9.1).
             if was <= LifeStage::Young && stage.is_grown() {
@@ -1260,20 +1397,13 @@ impl World {
     }
 
     /// Step 3: every sprite's chemistry (design §4.4), then death check #1.
-    /// An egg has none (M2 design §10), and isn't counted as a sprite
-    /// nearby. A sprite sees a female or male adult within its sense radius.
+    /// A sprite sees a female or male adult within its sense radius.
     /// Returns the sprites marked dying, in ascending ID order.
     fn run_biochemistry(&mut self) -> Vec<EntityId> {
         let state = &mut self.state;
         let data = &self.data;
         let nearby = data.physiology().nearby_sprites;
         let (tick, sprites) = (state.tick, &state.sprites);
-        let hatched = |tile| {
-            sprites
-                .at(tile)
-                .and_then(|id| sprites.get(id))
-                .is_some_and(|sprite| !sprite.is_egg())
-        };
         let adults = |sex| -> Vec<(EntityId, Pos)> {
             sprites
                 .iter()
@@ -1284,10 +1414,9 @@ impl World {
         let (females, males) = (adults(Sex::Female), adults(Sex::Male));
         let senses: Vec<(EntityId, Senses)> = sprites
             .iter()
-            .filter(|(_, sprite)| !sprite.is_egg())
             .map(|(id, sprite)| {
                 let others = square(&state.map, sprite.pos, nearby.radius)
-                    .filter(|&tile| tile != sprite.pos && hatched(tile))
+                    .filter(|&tile| tile != sprite.pos && sprites.at(tile).is_some())
                     .count();
                 let sight = sprite.program.traits.sense_radius.round() as u16;
                 let near = |adults: &[(EntityId, Pos)]| {
@@ -1324,34 +1453,22 @@ impl World {
         dying
     }
 
-    /// The sprites that take no part in steps 4 to 6, in ascending ID
-    /// order: the `dying` (design §2.4), and eggs, which don't learn, sense
-    /// or act (M2 design §10).
-    fn still(&self, dying: &[EntityId]) -> Vec<EntityId> {
-        self.state
-            .sprites
-            .iter()
-            .filter(|(id, sprite)| sprite.is_egg() || dying.contains(id))
-            .map(|(id, _)| id)
-            .collect()
-    }
-
     /// Step 4: reinforcement from consumed reward and punishment, for every
-    /// sprite not `still`.
-    fn run_learning(&mut self, still: &[EntityId], events: &mut Vec<Event>) {
-        learning::run(&mut self.state, &self.data, still, events);
+    /// sprite not marked dying.
+    fn run_learning(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
+        learning::run(&mut self.state, &self.data, dying, events);
     }
 
     /// Step 5: perception, attention and decisions, for every sprite not
-    /// `still`.
-    fn sense_and_decide(&mut self, still: &[EntityId], events: &mut Vec<Event>) {
-        action::sense_and_decide(&mut self.state, &self.data, still, events);
+    /// marked dying.
+    fn sense_and_decide(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
+        action::sense_and_decide(&mut self.state, &self.data, dying, events);
     }
 
     /// Step 6: movement and verb effects, then trace entries, for every
-    /// sprite not `still`.
-    fn resolve_actions(&mut self, still: &[EntityId], events: &mut Vec<Event>) {
-        action::resolve(&mut self.state, &self.data, still, events);
+    /// sprite not marked dying.
+    fn resolve_actions(&mut self, dying: &[EntityId], events: &mut Vec<Event>) {
+        action::resolve(&mut self.state, &self.data, dying, events);
         learning::commit(&mut self.state, &self.data);
     }
 
@@ -1403,6 +1520,17 @@ impl World {
             )));
         }
         self.checked_next_id.set(state.next_id);
+        // An egg hands its ID on to the sprite it hatches into (M2 design
+        // §10.4), so an ID is an object's or a sprite's, never both.
+        if let Some((id, _)) = state
+            .sprites
+            .iter()
+            .find(|&(id, _)| state.objects.get(id).is_some())
+        {
+            return Err(InvariantViolation(format!(
+                "{id:?} is both a sprite and an object"
+            )));
+        }
         let mut ids = state
             .objects
             .iter()
@@ -1738,6 +1866,18 @@ mod tests {
             (ticks - expected).abs() <= 2.0,
             "{ticks} ticks, not {expected}"
         );
+    }
+
+    #[test]
+    fn an_id_both_a_sprite_and_an_object_breaks_an_invariant() {
+        // M2 design §10.4: a hatchling takes its egg's ID, and the egg is
+        // gone.
+        let (mut world, first, _) = field_with_sprites();
+        let berry = world.data.real_object_type("berry").expect("berries");
+        let object = new_object(&world.data, berry, Pos { x: 0, y: 0 });
+        world.state.objects.place(first, object);
+        let broken = world.check_invariants().expect_err("one ID, two things");
+        assert!(broken.0.contains("both"), "{broken:?}");
     }
 
     #[test]

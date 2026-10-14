@@ -13,13 +13,12 @@ use crate::registry::Trait;
     Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
 )]
 pub enum LifeStage {
-    /// From being laid until it hatches (M2 design §10): it feels, learns,
-    /// moves and needs nothing. No gene switches at it: an egg's genes are
-    /// expressed as a young sprite's, ready for it to hatch.
-    Egg,
     /// From hatching, or for a sprite placed young, being born, until it
-    /// grows up.
+    /// grows up. An egg is an item until it hatches (M2 design §10.4, #196),
+    /// so a save or genome file from before that may say `Egg`, which reads
+    /// as young: an egg's genes were expressed as a young sprite's.
     #[default]
+    #[serde(alias = "Egg")]
     Young,
     /// From growing up until it grows old.
     Adult,
@@ -34,28 +33,11 @@ impl LifeStage {
         matches!(self, LifeStage::Adult | LifeStage::Old)
     }
 
-    /// The stage its genes are expressed for: an egg's are a young
-    /// sprite's (M2 design §10).
-    pub(crate) fn expressed(self) -> LifeStage {
-        self.max(LifeStage::Young)
-    }
-
     /// The stage's name, as genome files and the player see it.
     pub fn name(self) -> &'static str {
         match self {
-            LifeStage::Egg => "egg",
             LifeStage::Young => "young",
             LifeStage::Adult => "adult",
-            LifeStage::Old => "old",
-        }
-    }
-
-    /// The stage's name for more than one, as the player sees it.
-    pub fn plural(self) -> &'static str {
-        match self {
-            LifeStage::Egg => "eggs",
-            LifeStage::Young => "young",
-            LifeStage::Adult => "adults",
             LifeStage::Old => "old",
         }
     }
@@ -73,9 +55,8 @@ pub struct Switch {
 }
 
 impl Switch {
-    /// Whether the gene works in `stage`, an egg's being a young sprite's.
+    /// Whether the gene works in `stage`.
     pub fn is_on(self, stage: LifeStage) -> bool {
-        let stage = stage.expressed();
         self.from <= stage && self.until.is_none_or(|until| stage < until)
     }
 

@@ -58,11 +58,12 @@
         // scarred, losing `hit` health for good, at any age.
         scar: (above: 0.5, chance: 0.002, hit: 0.05),
     ),
-    // Having young (M2 design §10). An egg hatches after `hatches` ticks (10
-    // minutes at 1x). It costs its parents `cost` energy in all, split
-    // between them, or all of it for one breeding alone. An adult is fertile
-    // while its energy and hydration are both above `fed`, and `rest` ticks
-    // or more after its last egg. Every sprite hatches male; an adult male
+    // Having young (M2 design §10). An egg is an item, `egg` in objects.ron,
+    // which says when it hatches (M2 design §10.4). It costs its parents
+    // `cost` energy in all, split between them, or all of it for one
+    // breeding alone. An adult is fertile while its energy and hydration are
+    // both above `fed`, and `rest` ticks or more after its last egg, in a
+    // pack with an egg. Every sprite hatches male; an adult male
     // turns female for good once its `feminiser` hormone is above
     // `turns_female`. A female can breed alone only once her `longing`
     // hormone has reached `breeds_alone`. The need `drive` drives breeding:
@@ -71,7 +72,6 @@
     // its genes from one parent in stretches: at each gene it switches to
     // the other with the chance `crossover` (M2 design §12).
     breeding: (
-        hatches: 750,
         cost: 0.3,
         fed: 0.5,
         rest: 1500,

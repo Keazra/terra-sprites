@@ -1,6 +1,7 @@
 //! The population record (M2 design §14): the world's counts of its sprites
-//! by life stage over its whole run, with what happened between them, for
-//! the population graph. It only watches: nothing in the world reads it.
+//! by life stage, and its eggs, over its whole run, with what happened
+//! between them, for the population graph. It only watches: nothing in the
+//! world reads it.
 //!
 //! It counts at the first tick it steps from, then every 100 ticks. Once it
 //! holds 512 counts it squeezes them: it keeps the first and every other
@@ -14,6 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ageing::LifeStage;
 use crate::events::{DeathCause, Event, EventKind};
+use crate::objects::Objects;
 use crate::sprites::Sprites;
 
 /// Ticks between counts, until the record first squeezes (M2 design §14).
@@ -22,8 +24,10 @@ pub const FIRST_COUNT_EVERY: u64 = 100;
 /// The most counts the record holds; at this many, it squeezes them.
 pub(crate) const MOST_COUNTS: usize = 512;
 
-/// One count of the population (M2 design §14): the sprites at each life
-/// stage at a tick, and what happened since the count before.
+/// One count of the population (M2 design §14): the eggs and the sprites at
+/// each life stage at a tick, and what happened since the count before. An
+/// egg is an item until it hatches (M2 design §10.4), on the map or in the
+/// Cursor.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PopulationCount {
     /// The tick it was taken at, before that tick's step.
@@ -43,26 +47,16 @@ impl PopulationCount {
         self.eggs + self.young + self.adults + self.old
     }
 
-    /// How many were at `stage`.
-    pub fn at(&self, stage: LifeStage) -> u32 {
-        match stage {
-            LifeStage::Egg => self.eggs,
-            LifeStage::Young => self.young,
-            LifeStage::Adult => self.adults,
-            LifeStage::Old => self.old,
-        }
-    }
-
-    /// The sprites in `sprites`, by life stage, at `tick`, with nothing
-    /// happened yet.
-    fn of(sprites: &Sprites, tick: u64) -> PopulationCount {
+    /// The sprites in `sprites`, by life stage, and the eggs in `objects`,
+    /// at `tick`, with nothing happened yet.
+    fn of(sprites: &Sprites, objects: &Objects, tick: u64) -> PopulationCount {
         let mut count = PopulationCount {
             tick,
+            eggs: objects.eggs() as u32,
             ..PopulationCount::default()
         };
         for (_, sprite) in sprites.iter() {
             *match sprite.stage() {
-                LifeStage::Egg => &mut count.eggs,
                 LifeStage::Young => &mut count.young,
                 LifeStage::Adult => &mut count.adults,
                 LifeStage::Old => &mut count.old,
@@ -147,32 +141,39 @@ impl PopulationRecord {
         self.every
     }
 
-    /// The population in `sprites` at `tick`, with what has happened since
-    /// the last count, as a count taken now would have it.
-    pub(crate) fn now(&self, sprites: &Sprites, tick: u64) -> PopulationCount {
+    /// The population in `sprites` and `objects` at `tick`, with what has
+    /// happened since the last count, as a count taken now would have it.
+    pub(crate) fn now(&self, sprites: &Sprites, objects: &Objects, tick: u64) -> PopulationCount {
         PopulationCount {
             since: self.since.clone(),
-            ..PopulationCount::of(sprites, tick)
+            ..PopulationCount::of(sprites, objects, tick)
         }
     }
 
     /// Before a tick's step: if the record has no count yet, as for a new
     /// world or one loaded from a save made before it, counts the sprites
-    /// as they are at `tick`.
-    pub(crate) fn begin(&mut self, sprites: &Sprites, tick: u64) {
+    /// and eggs as they are at `tick`.
+    pub(crate) fn begin(&mut self, sprites: &Sprites, objects: &Objects, tick: u64) {
         if self.counts.is_empty() {
-            self.counts.push(PopulationCount::of(sprites, tick));
+            self.counts
+                .push(PopulationCount::of(sprites, objects, tick));
         }
     }
 
     /// After a tick's step, `tick` being the next: notes what `events` did
     /// to the population, and counts it if a count is due.
-    pub(crate) fn end(&mut self, sprites: &Sprites, tick: u64, events: &[Event]) {
+    pub(crate) fn end(
+        &mut self,
+        sprites: &Sprites,
+        objects: &Objects,
+        tick: u64,
+        events: &[Event],
+    ) {
         self.since.note(events);
         if tick.is_multiple_of(self.every) {
             self.counts.push(PopulationCount {
                 since: std::mem::take(&mut self.since),
-                ..PopulationCount::of(sprites, tick)
+                ..PopulationCount::of(sprites, objects, tick)
             });
             if self.counts.len() >= MOST_COUNTS {
                 self.squeeze();

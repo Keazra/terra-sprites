@@ -287,11 +287,11 @@ Settled with the owner on 2026-10-11 ([#140](https://github.com/Keazra/terra-spr
 
 ### 9.1 Life stages
 
-- **A sprite's life stage is young, adult or old,** after an egg from Slice 23 (§10.4). "Stage" alone is an object's (M1 design §3.5); a sprite's is its life stage. An old sprite still counts as an adult for §5's rule.
+- **A sprite's life stage is young, adult or old.** Before that it's in an egg, an item and not yet a sprite (§10.4, #196). "Stage" alone is an object's (M1 design §3.5); a sprite's is its life stage. An old sprite still counts as an adult for §5's rule.
 - **It's young until it grows up, an adult until it grows old, then old** (§9.3). One whose genes have it grow old before it grows up does both at once, and is never an adult.
 - **The stage changes at the start of step 3** (M1 design §2.4), so genes that switch with it work from that tick's chemistry on.
 - **A world's first sprites start as adults,** at ages drawn evenly through adulthood, with a newborn's body (M1 design §4.7), so a fresh world isn't all children. A sprite the player places is a newborn. A scenario's sprites start just grown up, unless it lists them as newborns.
-- **An egg comes first:** since Slice 23, a sprite's life starts as an egg, which hatches into a young sprite (§10.4). An egg isn't an adult, and in what genes and switches see it counts as young.
+- **An egg comes first:** since Slice 23, a sprite's life starts in an egg, which hatches into a young sprite (§10.4). Since #196 an egg is an item, so it has no life stage: a save or genome file that says `Egg`, from before, reads it as young.
 
 ### 9.2 Genes that switch with life stage
 
@@ -386,7 +386,7 @@ The game's rule, "the world decides what happens to the body, the genes decide h
 ### 10.3 Mating and breeding alone
 
 - **Two actions, chosen by instinct** (the owner, Q1): `Mate`, with the sprite attended to, and `BreedAlone`. They show on the doing line and the Brain tab.
-- **`Mate` is offered only when both are adults** (§5): the sprite, and the one the verb would be aimed at, a running action's target or else the candidate (M1 design §5.5, #173). It works, once, if both are fertile, one is male and the other female, and she has a free tile beside her: she lays an egg there (§10.4). The partner learns about the one that mated with it too, as if touched. Otherwise it's a fruitless try.
+- **`Mate` is offered only when both are adults** (§5): the sprite, and the one the verb would be aimed at, a running action's target or else the candidate (M1 design §5.5, #173). It works, once, if both are fertile, one is male and the other female, and she has a free tile beside her: she lays an egg there (§10.4), on land with no sprite or item on it (#196). The partner learns about the one that mated with it too, as if touched. Otherwise it's a fruitless try.
 - **`BreedAlone` is offered only to a grown sprite.** It works for a fertile female whose **longing** has reached `breeds_alone` (0.5), with a free tile beside her; for a male, or a female not fertile or not longing enough, it's a fruitless try.
 - **Longing** is a hormone the starter genes raise while a grown sprite sees no male adult and lower fast while it sees one: about 1,100 ticks with no male in sight takes it to 0.5. It came after the owner saw that 9 eggs in 10 were laid alone. Most of those came from chance: a sprite now and then tries what it isn't drawn to (M1 design §5.5), and for a fertile female, breeding alone always worked. The body's rule stops that; the genes set how fast longing builds, so evolution can still tune it.
 - **The egg costs `cost` (0.3) energy** (Q2): split between a pair, or all hers alone. Per bite of food, both pass on as much of the parents' genes, so neither wins on cost; what makes partners pay is that a lone egg doubles its mother's genes, so each hidden flaw she carries is broken in about half her lone young (§12.3).
@@ -395,12 +395,13 @@ The game's rule, "the world decides what happens to the body, the genes decide h
 
 ### 10.4 Eggs and hatching
 
-- **An egg is the new sprite, at the first life stage, Egg** (Q5). It's laid on a random free tile beside its mother.
-- **An egg feels, learns, moves and needs nothing:** its body stays as it was laid and it decides nothing. Step 3 only counts it towards hatching, and steps 4 to 6 pass it by.
-- **It hatches after `hatches` (750) ticks,** where it lies, as a young male with a newborn's body; its age counts from then.
-- **Other sprites see an egg as a thing of its own kind,** the category `egg` and the pseudo type `egg`, not as a sprite: so "crowded, so hit a neighbour" never aims at one, and `nearby_sprites`, `female_near` and `male_near` don't count one. Its verb table is empty, so whatever a sprite tries on it is a fruitless try: an egg can't be hurt until something in the world is meant to hurt eggs.
-- **The Cursor can't touch, lead or hold an egg;** it says it's still an egg. Whether it can move one is for an issue of its own. The player can name one.
+- **An egg is an item until it hatches,** the object type `egg` (the owner, 2026-10-13, #196): small, like a berry. It holds the sprite it hatches into: its genes as copying left them (§12, §13), its parents, the name the player gave it, if any, and when it was laid. It's laid on a random free tile beside its mother. In Slice 23 it was a sprite at a first life stage, Egg (Q5).
+- **It hatches 750 ticks after it was laid,** where it lies, as a young male with a newborn's body, and the item is gone. The sprite keeps the egg's ID, and its age counts from then. The 750 is the egg type's one stage in `objects.ron`, which ends in `Hatch`: only one type may hatch, and only a sprite lays one. It was physiology's `breeding.hatches`, and a pack that still says that lays egg items that hatch after it.
+- **An egg due to hatch waits** while the Cursor holds it, and hatches on the tick it's put down; and while a sprite stands on it, until the sprite steps off (#196).
+- **Other sprites see an egg as a thing of its own kind,** the category `egg`, not as a sprite: so "crowded, so hit a neighbour" never aims at one, and `nearby_sprites`, `female_near` and `male_near` don't count one. Its verb table is empty, so whatever a sprite tries on it is a fruitless try: an egg can't be eaten or hurt until something in the world is meant to hurt eggs. A sprite walking onto one doesn't move it, since no verb pushes it. A rolling item knocks it on but never crushes it: it's hard (M1 design §3.5.4). Arousal reads 0 in a choice about an egg, as about any sprite not grown up (§5).
+- **The Cursor picks an egg up and puts it down** like any item, in Grab mode, **and never throws one** (the owner, #190): the egg type says `throwable: false`, so the screen refuses at once, "Can't throw an egg", and the world refuses a throw of one. Pets and zaps don't reach an egg: they act on sprites. The player can name one, and the sprite keeps the name.
 - **A sprite remembers its parents:** the one that laid it, then its partner.
+- **A save from before #196 loads with each egg it holds turned into an egg item,** on its tile, or the nearest free one if an item lies there, hatching when it would have. Its pack's `egg` pseudo type becomes the egg type, hatching after its `breeding.hatches`. One with no egg type to become, or no tile to lie on, hatches as it loads.
 
 ### 10.5 The child's genes
 
@@ -409,16 +410,18 @@ The game's rule, "the world decides what happens to the body, the genes decide h
 
 ### 10.6 What stops the world filling up
 
-- **Food and a limit** (Q7): births need fed and watered parents, so food holds numbers down. The **limit**, the preset's `most_sprites` (100 in the default world, eggs counted), is the safety net: in a full world no sprite is fertile, so none is aroused and none tries in vain. In the terrarium's story, the limit is the glass.
+- **Food and a limit** (Q7): births need fed and watered parents, so food holds numbers down. The **limit**, the preset's `most_sprites` (100 in the default world, eggs counted, on the map or in the Cursor, #196), is the safety net: in a full world no sprite is fertile, so none is aroused and none tries in vain. In the terrarium's story, the limit is the glass.
 - **The Cursor may place a sprite past the limit:** that's the player's call, not the sprites'.
 - **A lab scenario can set `most_sprites`.** A1 to A3 and the thorn trap watch only their own sprites, so they hold no more than they start with (an egg may replace a sprite that died).
 
 ### 10.7 What the player sees
 
 - **The log:** `Pip #12 laid an egg (with Bo #7)`, `Pip #12 laid an egg alone`, `Sprite #31 hatched (Pip #12 and Bo #7's)`, `Pip #12 turned female`.
-- **The map:** an egg is `o` in CP437 and `0` in ASCII, where `o` is the ball; the theme keys `egg` and `selected_egg`. A theme without them draws eggs as the young.
-- **The Body tab:** after the traits, the sex, `· fertile` while it is, and for a male, how near it is to turning, `male · fertile · turning 40%`; then `parents Pip #12 and Bo #7`. An egg shows `egg · hatches in 750 ticks` for its life stage.
-- **The sprite list** shows `egg` as the life stage; **the doing line** says `Going to mate with Bo #7`, `Mated with Bo #7`, `Breeding alone`, `Laid an egg alone`.
+- **The map:** an egg is `o` in CP437 and `0` in ASCII, where `o` is the ball: the theme's `objects` entry for `"egg"` (#196). A selected egg is drawn in reverse video. A theme from before, with the tiles `egg` and `selected_egg`, still loads, and draws the egg item with its `egg` glyph unless its `objects` give one.
+- **An egg's card:** a click on an egg in Select mode selects it, and every sprite tab shows its card in place of a sprite's: `egg · hatches in 750 ticks`, or while it waits `egg · hatches once it's put down` or `egg · hatches once nothing stands on it`; then `parents Pip #12 and Bo #7`. When it hatches, the selection goes on to the young sprite. `T` tracks an egg and `G` saves its genome, but the Cursor doesn't follow one, and Tab passes it by. The World tab counts the eggs on the map with the other items; the top bar counts only sprites.
+- **The Body tab:** after the traits, the sex, `· fertile` while it is, and for a male, how near it is to turning, `male · fertile · turning 40%`; then `parents Pip #12 and Bo #7`.
+- **The sprite list** shows young, adult or old as the life stage, and no eggs; **the doing line** says `Going to mate with Bo #7`, `Mated with Bo #7`, `Breeding alone`, `Laid an egg alone`.
+- **The Cursor's mark** shows what it holds as the map draws it: an egg as an egg, and a young sprite it leads small.
 - **Arousal** colours a sprite light magenta when it's its strongest drive above half.
 - The full family tree is Slice 25.
 
@@ -759,7 +762,7 @@ Settled with the owner on 2026-10-13 ([#144](https://github.com/Keazra/terra-spr
 
 ### 14.1 The population record
 
-- **The world counts its sprites by life stage,** eggs, young, adults and old, at the first tick it runs and then every 100 ticks, with what happened since the count before: the eggs laid and hatched, the sprites the Cursor spawned, and the deaths by cause.
+- **The world counts its sprites by life stage,** young, adults and old, **and its eggs,** which are items until they hatch (§10.4), on the map or in the Cursor, at the first tick it runs and then every 100 ticks, with what happened since the count before: the eggs laid and hatched, the sprites the Cursor spawned, and the deaths by cause.
 - **It's world state:** saved (M1 design §2.8), in the state hash, the same in a replay (M1 design §2.7), and checked every tick (M1 design §7.1): its counts go forward in time and never reach 512. Nothing in the world reads it, so the sprites live exactly as they did before it (§14.7).
 - **It always covers the whole run, and a save stays small.** Once it holds 512 counts, it keeps the first and every other one after it, folds what happened in the dropped ones' stretches into the next one kept, and counts half as often: every 200 ticks from about tick 51,000, every 400 from about 102,000, and so on. It never holds more than 511 counts.
 - **A save from before this slice** has no counts, so its record begins at the first tick it runs after loading. The save format stays 1: the record is new, with a default (M1 design §2.8).
@@ -768,7 +771,7 @@ Settled with the owner on 2026-10-13 ([#144](https://github.com/Keazra/terra-spr
 ### 14.2 The graph
 
 - **`p` opens it over the panels,** as `l` opens the sprite list (M1 design §6.1), and `p` or `Esc` closes it. Time runs on behind it, and `space`, `.`, `+` and `-` work as ever (Q2), so the player can watch it at 4×. Other keys do nothing while it's open, except those below, and the pointer picks moments rather than moving the Cursor on the map beneath. Its title says the ticks it covers.
-- **The life stages stack from the bottom,** young, adults, old, then eggs on top, each in its theme colour (Q1, B): young light green, adults cyan, old gray, and eggs light yellow, as an egg is on the map. A legend under the graph names them.
+- **The life stages stack from the bottom,** young, adults and old, then the eggs on top, each in its theme colour (Q1, B): young light green, adults cyan, old gray, and eggs light yellow, as an egg is on the map. A legend under the graph names them.
 - **The height runs from 0 to the world's limit,** most sprites (§10.6), drawn as a dotted dark gray line where nothing else is (the round said gray, but old sprites are gray), or to the most there have ever been, if the Cursor spawned sprites past it. It's labelled at the top, the middle and 0. Each row of characters is two halves: a character of one stage is `█`, and one of two stages is `▄` in the lower stage's colour on the upper's, or on nothing at the top of the stack. Each half shows the stage at its middle, and the top of the stack shows if it reaches into a half at all, so a lone egg or sprite is never lost.
 - **Each column is a stretch of time,** showing the count at its end. Until the run is as long as the graph is wide at 100 ticks a column, the graph grows from the left; after that the whole run is squeezed in, its columns standing for equal stretches. The time axis is marked at each quarter, labelled with its tick, rounded to the hundred.
 - **It fills the screen,** at any size the game allows.
