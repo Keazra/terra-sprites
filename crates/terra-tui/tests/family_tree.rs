@@ -6,7 +6,9 @@
 //! says each sprite's generation.
 
 mod common;
-use common::{LONE_MOTHER, QUICK, SCORCHED, at, grow, lone_line, pairs, parched_line, tree_of};
+use common::{
+    LONE, LONE_MOTHER, QUICK, SCORCHED, at, grow, lone_line, pairs, parched_line, tree_of,
+};
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -144,20 +146,20 @@ fn blinking(app: &App, world: &World) -> Option<String> {
 
 #[test]
 fn k_opens_the_tree_of_the_selected_sprite_and_k_or_esc_closes_it() {
-    let world = pairs(200);
+    let world = pairs(230);
     let mut app = app_on(&world);
-    tree_of(&mut app, &world, EntityId(9));
+    tree_of(&mut app, &world, EntityId(14));
     let shown = screen(&app, &world);
-    assert!(shown.contains("┌─ Family tree ── Sprite #9 ─"), "{shown}");
+    assert!(shown.contains("┌─ Family tree ── Sprite #14 ─"), "{shown}");
     assert!(
         shown.contains("←→↑↓ choose  enter centre on it  space pause  esc close"),
         "{shown}"
     );
     let rows = tree(&app, &world);
-    assert_eq!(said(&rows[CENTRE]), "Sprite #9");
+    assert_eq!(said(&rows[CENTRE]), "Sprite #14");
     assert_eq!(
         said(&rows[CENTRE + 1]),
-        "adult · male · age 120 · generation 2"
+        "adult · male · age 90 · generation 2"
     );
 
     app.apply(Action::FamilyTree, &world);
@@ -167,7 +169,7 @@ fn k_opens_the_tree_of_the_selected_sprite_and_k_or_esc_closes_it() {
     assert_eq!(app.screen(), Screen::Normal);
     assert_eq!(
         app.selection(),
-        Some(Selection::Living(EntityId(9))),
+        Some(Selection::Living(EntityId(14))),
         "closing it keeps the selection"
     );
 }
@@ -198,11 +200,11 @@ fn with_nothing_selected_the_tree_says_so() {
 
 #[test]
 fn a_sprite_s_parents_are_above_it_and_theirs_above_them() {
-    let world = pairs(200);
+    let world = pairs(230);
     let mut app = app_on(&world);
     tree_of(&mut app, &world, EntityId(16));
     let rows = tree(&app, &world);
-    // #3 is a parent of #16 and of its other parent, #13, so on the tree
+    // #3 is a parent of #16 and of its other parent, #12, so on the tree
     // twice.
     assert_eq!(
         said(&rows[GRANDPARENTS]),
@@ -210,11 +212,11 @@ fn a_sprite_s_parents_are_above_it_and_theirs_above_them() {
     );
     assert_eq!(
         said(&rows[GRANDPARENTS + 1]),
-        "adult · 7 young  adult · 7 young"
+        "adult · 8 young  adult · 6 young"
     );
     assert_eq!(rows[GRANDPARENTS_JOIN].trim(), "└───────────┬───────────┘");
-    assert_eq!(said(&rows[PARENTS]), "Sprite #3  Sprite #13");
-    assert_eq!(said(&rows[PARENTS + 1]), "adult · 7 young  adult · 1 young");
+    assert_eq!(said(&rows[PARENTS]), "Sprite #3  Sprite #12");
+    assert_eq!(said(&rows[PARENTS + 1]), "adult · 8 young  adult · 2 young");
     assert_eq!(
         rows[PARENTS_JOIN].trim(),
         "└───────────────────────┬───────────────────────┘"
@@ -234,26 +236,29 @@ fn a_sprite_s_parents_are_above_it_and_theirs_above_them() {
 
 #[test]
 fn a_sprite_s_young_are_below_it_by_their_other_parent() {
-    let world = pairs(200);
+    let world = pairs(230);
     let mut app = app_on(&world);
-    tree_of(&mut app, &world, EntityId(9));
+    tree_of(&mut app, &world, EntityId(14));
     let rows = tree(&app, &world);
     assert_eq!(
         rows[BROODS_JOIN].trim(),
-        "┌───────────┴───────────────────────────────────┐"
+        "┌───────────┴───────────────────────┐"
     );
-    assert_eq!(said(&rows[BROODS]), "with Sprite #10  with Sprite #3");
+    // #8, the sprite #14 last had an egg with, is its partner (M2 design
+    // §15.4), and named so; #1 isn't.
+    assert_eq!(
+        world.sprite(EntityId(14)).unwrap().partner(),
+        Some((EntityId(8), false))
+    );
+    assert_eq!(said(&rows[BROODS]), "with Sprite #1  partner Sprite #8");
     assert_eq!(
         rows[BROOD_JOIN].trim(),
-        "┌───────────────────────┼───────────────────────┐                       │"
+        "┌───────────┴───────────┐                       │"
     );
-    assert_eq!(
-        said(&rows[YOUNG]),
-        "Sprite #12  Sprite #14  Sprite #22  Sprite #18"
-    );
+    assert_eq!(said(&rows[YOUNG]), "Sprite #15  Sprite #19  Sprite #25");
     assert_eq!(
         said(&rows[YOUNG + 1]),
-        "adult · 2 young  adult · 2 young  egg · hatches in 1  adult"
+        "egg · hatches once  adult  egg · hatches in 14"
     );
 
     let world = lone_line(200);
@@ -274,45 +279,49 @@ impl InfoPolicy for Hiding {
 
 #[test]
 fn a_sprite_the_policy_hides_is_a_blank_card_that_leads_nowhere() {
-    // M2 design §17.6: #9's young #14, and #10, the other parent of #12
-    // and #14, are hidden.
-    let world = pairs(200);
+    // M2 design §17.6: #14's young #19, and #8, the other parent of #25,
+    // are hidden.
+    let world = pairs(230);
     let mut app = app_on(&world);
-    tree_of(&mut app, &world, EntityId(9));
-    let fourteen = label_at(&app, &world, YOUNG, "Sprite #14");
-    let twenty_two = label_at(&app, &world, YOUNG, "Sprite #22");
-    app.set_policy(Hiding(&[10, 14]));
+    tree_of(&mut app, &world, EntityId(14));
+    let nineteen = label_at(&app, &world, YOUNG, "Sprite #19");
+    let twenty_five = label_at(&app, &world, YOUNG, "Sprite #25");
+    app.set_policy(Hiding(&[8, 19]));
     let rows = tree(&app, &world);
-    assert_eq!(said(&rows[BROODS]), "with Sprite #3", "#10 goes unnamed");
-    assert_eq!(said(&rows[YOUNG]), "Sprite #12  Sprite #22  Sprite #18");
+    assert_eq!(said(&rows[BROODS]), "with Sprite #1", "#8 goes unnamed");
+    assert_eq!(said(&rows[YOUNG]), "Sprite #15  Sprite #25");
     assert_eq!(
-        label_at(&app, &world, YOUNG, "Sprite #22"),
-        twenty_two,
-        "#14 keeps its place"
+        label_at(&app, &world, YOUNG, "Sprite #25"),
+        twenty_five,
+        "#19 keeps its place"
     );
     app.apply(
         Action::Click {
-            at: fourteen,
+            at: nineteen,
             button: Button::Left,
             amplified: false,
         },
         &world,
     );
-    assert_eq!(app.selection(), Some(Selection::Living(EntityId(9))));
+    assert_eq!(app.selection(), Some(Selection::Living(EntityId(14))));
 }
 
 #[test]
 fn brothers_and_sisters_are_at_the_foot_with_the_parent_they_share() {
-    let world = pairs(200);
+    let world = pairs(230);
     let mut app = app_on(&world);
-    tree_of(&mut app, &world, EntityId(9));
+    tree_of(&mut app, &world, EntityId(14));
     let rows = tree(&app, &world);
     assert_eq!(said(&rows[SIBLINGS_HEADING]), "BROTHERS AND SISTERS");
     assert_eq!(
         said(&rows[SIBLINGS]),
-        "Sprite #6  Sprite #8  Sprite #11  Sprite #17"
+        "Sprite #6  Sprite #8  Sprite #10  Sprite #11  ►"
     );
-    assert_eq!(said(&rows[SIBLINGS + 1]), "adult  adult  adult  adult");
+    assert_eq!(
+        said(&rows[SIBLINGS + 1]),
+        "adult · 2 young  adult · 1 young  adult  adult"
+    );
+    assert_eq!(said(&rows[SIBLINGS + 2]), "", "they share both parents");
 
     // #16's are #3's young with #4: they share only #3.
     app.apply(Action::Back, &world);
@@ -320,7 +329,7 @@ fn brothers_and_sisters_are_at_the_foot_with_the_parent_they_share() {
     let rows = tree(&app, &world);
     assert_eq!(
         said(&rows[SIBLINGS]),
-        "Sprite #5  Sprite #7  Sprite #10  Sprite #13  ►"
+        "Sprite #5  Sprite #7  Sprite #9  Sprite #12  ►"
     );
     assert_eq!(
         said(&rows[SIBLINGS + 2]),
@@ -360,37 +369,37 @@ fn more_young_than_fit_scroll_sideways_as_the_arrows_go() {
     };
     assert_eq!(
         young(&app).0,
-        "Sprite #2  Sprite #4  Sprite #8  Sprite #10  ►"
+        "Sprite #2  Sprite #3  Sprite #7  Sprite #12  ►"
     );
     // Down to the young nearest the middle, then along.
     press(&mut app, &world, &[DOWN_ARROW, RIGHT, RIGHT, RIGHT]);
     assert_eq!(
         young(&app).0,
-        "◄  Sprite #4  Sprite #8  Sprite #10  Sprite #26  ►"
+        "◄  Sprite #3  Sprite #7  Sprite #12  Sprite #25  ►"
     );
     press(&mut app, &world, &[RIGHT, RIGHT, RIGHT]);
     assert_eq!(
         young(&app),
         (
-            "◄  Sprite #10  Sprite #26  Sprite #52  Sprite #72".to_string(),
-            "adult · 2 young  adult · 1 young  adult · 1 young  egg · hatches in 1".to_string()
+            "◄  Sprite #7  Sprite #12  Sprite #25  Sprite #45".to_string(),
+            "adult · 3 young  adult · 2 young  adult  egg · hatches once".to_string()
         ),
         "no further than the last"
     );
     press(&mut app, &world, &[LEFT, LEFT, LEFT, LEFT]);
     assert_eq!(
         young(&app).0,
-        "◄  Sprite #8  Sprite #10  Sprite #26  Sprite #52  ►"
+        "◄  Sprite #3  Sprite #7  Sprite #12  Sprite #25  ►"
     );
 }
 
 #[test]
 fn the_arrows_choose_a_sprite_on_the_tree_and_it_blinks() {
-    let world = pairs(200);
+    let world = pairs(230);
     let mut app = app_on(&world);
-    tree_of(&mut app, &world, EntityId(9));
+    tree_of(&mut app, &world, EntityId(14));
     assert!(app.flash_on());
-    assert_eq!(blinking(&app, &world).as_deref(), Some("Sprite #9"));
+    assert_eq!(blinking(&app, &world).as_deref(), Some("Sprite #14"));
     let chosen = |app: &mut App, actions: &[Action]| {
         press(app, &world, actions);
         blinking(app, &world)
@@ -405,19 +414,20 @@ fn the_arrows_choose_a_sprite_on_the_tree_and_it_blinks() {
     );
     assert_eq!(
         chosen(&mut app, &[DOWN_ARROW]).as_deref(),
-        Some("Sprite #9")
-    );
-    assert_eq!(
-        chosen(&mut app, &[DOWN_ARROW]).as_deref(),
         Some("Sprite #14")
     );
-    assert_eq!(chosen(&mut app, &[RIGHT]).as_deref(), Some("Sprite #22"));
     assert_eq!(
         chosen(&mut app, &[DOWN_ARROW]).as_deref(),
-        Some("Sprite #11")
+        Some("Sprite #19")
+    );
+    assert_eq!(chosen(&mut app, &[RIGHT]).as_deref(), Some("Sprite #25"));
+    assert_eq!(
+        chosen(&mut app, &[DOWN_ARROW]).as_deref(),
+        Some("Sprite #10"),
+        "the left one of two as near"
     );
     assert_eq!(chosen(&mut app, &[LEFT]).as_deref(), Some("Sprite #8"));
-    assert_eq!(chosen(&mut app, &[UP]).as_deref(), Some("Sprite #14"));
+    assert_eq!(chosen(&mut app, &[UP]).as_deref(), Some("Sprite #15"));
 
     // It blinks about twice a second.
     let mut seen = Vec::new();
@@ -430,15 +440,15 @@ fn the_arrows_choose_a_sprite_on_the_tree_and_it_blinks() {
 
 #[test]
 fn a_sprite_on_the_tree_twice_is_chosen_where_the_arrows_put_it() {
-    // #13 is #16's parent, and its brother as well, through #3.
-    let world = pairs(200);
+    // #12 is #16's parent, and its brother as well, through #3.
+    let world = pairs(230);
     let mut app = app_on(&world);
     tree_of(&mut app, &world, EntityId(16));
-    // Down to #21, its young, then to #7, nearest below, and along.
+    // Down to #20, its young, then to #7, nearest below, and along.
     press(&mut app, &world, &[DOWN_ARROW, DOWN_ARROW, RIGHT, RIGHT]);
     let rows = tree(&app, &world);
-    let brother = label_at(&app, &world, SIBLINGS, "Sprite #13");
-    let parent = label_at(&app, &world, PARENTS, "Sprite #13");
+    let brother = label_at(&app, &world, SIBLINGS, "Sprite #12");
+    let parent = label_at(&app, &world, PARENTS, "Sprite #12");
     let buffer = render(&app, &world);
     let reversed = |cell: Position| {
         buffer[(cell.x, cell.y)]
@@ -448,21 +458,21 @@ fn a_sprite_on_the_tree_twice_is_chosen_where_the_arrows_put_it() {
     assert!(reversed(brother), "{rows:#?}");
     assert!(!reversed(parent), "only the card chosen blinks");
     app.apply(LEFT, &world);
-    assert_eq!(blinking(&app, &world).as_deref(), Some("Sprite #10"));
+    assert_eq!(blinking(&app, &world).as_deref(), Some("Sprite #9"));
 }
 
 #[test]
 fn enter_walks_the_tree_to_the_sprite_chosen_and_selects_it() {
-    let world = pairs(200);
+    let world = pairs(230);
     let mut app = app_on(&world);
-    tree_of(&mut app, &world, EntityId(9));
+    tree_of(&mut app, &world, EntityId(14));
     press(&mut app, &world, &[UP, Action::Enter]);
     assert_eq!(app.selection(), Some(Selection::Living(EntityId(1))));
     assert_eq!(app.screen(), Screen::FamilyTree, "still open");
     let rows = tree(&app, &world);
     assert_eq!(said(&rows[CENTRE]), "Sprite #1");
     assert_eq!(blinking(&app, &world).as_deref(), Some("Sprite #1"));
-    assert!(said(&rows[YOUNG]).contains("Sprite #9"), "{rows:#?}");
+    assert!(said(&rows[YOUNG]).contains("Sprite #6"), "{rows:#?}");
 
     // `Tab` selects the next sprite, as ever, and the tree follows.
     app.apply(Action::SelectNext, &world);
@@ -472,16 +482,16 @@ fn enter_walks_the_tree_to_the_sprite_chosen_and_selects_it() {
 
 #[test]
 fn pointing_at_a_card_chooses_it_and_clicking_walks_to_it() {
-    let world = pairs(200);
+    let world = pairs(230);
     let mut app = app_on(&world);
-    tree_of(&mut app, &world, EntityId(9));
+    tree_of(&mut app, &world, EntityId(14));
     let mother = label_at(&app, &world, PARENTS, "Sprite #1");
     app.apply(Action::Point(mother), &world);
     assert_eq!(blinking(&app, &world).as_deref(), Some("Sprite #1"));
-    assert_eq!(app.selection(), Some(Selection::Living(EntityId(9))));
+    assert_eq!(app.selection(), Some(Selection::Living(EntityId(14))));
 
     // Anywhere on a card: here, the last line of a young one's text.
-    let young = label_at(&app, &world, YOUNG, "Sprite #22");
+    let young = label_at(&app, &world, YOUNG, "Sprite #25");
     let below = Position::new(young.x + 4, young.y + 2);
     app.apply(
         Action::Click {
@@ -491,10 +501,10 @@ fn pointing_at_a_card_chooses_it_and_clicking_walks_to_it() {
         },
         &world,
     );
-    assert_eq!(app.selection(), Some(Selection::Living(EntityId(22))));
+    assert_eq!(app.selection(), Some(Selection::Living(EntityId(25))));
     assert_eq!(
         said(&tree(&app, &world)[CENTRE + 1]),
-        "egg · hatches in 1 · generation 3"
+        "egg · hatches in 14 · generation 3"
     );
 }
 
@@ -506,11 +516,11 @@ fn the_dead_are_dark_gray_and_say_how_they_died() {
     let rows = tree(&app, &world);
     assert_eq!(said(&rows[GRANDPARENTS]), "Sprite #1");
     assert_eq!(said(&rows[GRANDPARENTS + 1]), "died of dehydration");
-    assert_eq!(said(&rows[PARENTS]), "Sprite #4");
+    assert_eq!(said(&rows[PARENTS]), "Sprite #3");
     assert_eq!(said(&rows[PARENTS + 1]), "died of dehydration");
     let buffer = render(&app, &world);
     let colour = |cell: Position| buffer[(cell.x, cell.y)].fg;
-    let parent = label_at(&app, &world, PARENTS, "Sprite #4");
+    let parent = label_at(&app, &world, PARENTS, "Sprite #3");
     assert_eq!(colour(parent), Color::DarkGray);
     assert_eq!(
         colour(Position::new(parent.x, parent.y + 1)),
@@ -529,16 +539,16 @@ fn walking_to_a_dead_sprite_selects_it_as_one_that_died() {
     assert_eq!(
         app.selection(),
         Some(Selection::Dead {
-            id: EntityId(4),
+            id: EntityId(3),
             cause: DeathCause::Dehydration,
-            age: 84,
+            age: 85,
         })
     );
     let rows = tree(&app, &world);
-    assert_eq!(said(&rows[CENTRE]), "Sprite #4");
+    assert_eq!(said(&rows[CENTRE]), "Sprite #3");
     assert_eq!(
         said(&rows[CENTRE + 1]),
-        "died of dehydration at age 84 · generation 2"
+        "died of dehydration at age 85 · generation 2"
     );
     app.apply(Action::FamilyTree, &world);
     while app.tab() != Tab::Body {
@@ -546,7 +556,7 @@ fn walking_to_a_dead_sprite_selects_it_as_one_that_died() {
     }
     let shown = screen(&app, &world);
     assert!(
-        shown.contains("Sprite #4 died of dehydration at age 84"),
+        shown.contains("Sprite #3 died of dehydration at age 85"),
         "{shown}"
     );
 }
@@ -557,7 +567,12 @@ fn a_sprite_that_died_before_it_grew_up_died_young() {
     // water: her first, #2, hatches on tick 21 and dies young.
     let [quick, eggs] = QUICK;
     let genes = LONE_MOTHER.replace("value: 10.0", "value: 100.0");
-    let mut world = grow(&[quick, eggs, SCORCHED], (12, 6), &[(at(1, 4), &genes)], 30);
+    let mut world = grow(
+        &[quick, eggs, LONE, SCORCHED],
+        (12, 6),
+        &[(at(1, 4), &genes)],
+        30,
+    );
     let mut app = app_on(&world);
     for _ in 0..2 {
         app.apply(Action::SelectNext, &world);
@@ -637,17 +652,17 @@ fn a_dead_sprite_keeps_its_name_through_a_save_and_a_load() {
     }
     let shown = screen(&app, &world);
     assert!(
-        shown.contains("Bramble #1 died of dehydration at age 95"),
+        shown.contains("Bramble #1 died of dehydration at age 94"),
         "{shown}"
     );
 }
 
 #[test]
 fn the_lineage_colours_mark_the_selected_sprite_s_lineage_on_the_map() {
-    let world = pairs(200);
+    let world = pairs(230);
     let mut app = app_on(&world);
-    let nine = EntityId(9);
-    tree_of(&mut app, &world, nine);
+    let fourteen = EntityId(14);
+    tree_of(&mut app, &world, fourteen);
     app.apply(Action::FamilyTree, &world);
     app.apply(Action::CycleColours, &world);
     assert_eq!(app.colour_mode(), ColourMode::Plain);
@@ -673,18 +688,18 @@ fn the_lineage_colours_mark_the_selected_sprite_s_lineage_on_the_map() {
             .find(|(at, _)| *at == id)
             .and_then(|(_, fg)| *fg)
     };
-    let own = colour(&colours(&app), nine).expect("#9 on the map");
+    let own = colour(&colours(&app), fourteen).expect("#14 on the map");
     app.apply(Action::CycleColours, &world);
     assert_eq!(app.colour_mode(), ColourMode::Lineage);
 
     let cells = colours(&app);
     assert_eq!(
-        colour(&cells, nine),
+        colour(&cells, fourteen),
         Some(own),
         "the selected sprite keeps its own"
     );
     let parents = [EntityId(1), EntityId(2)];
-    let young: Vec<EntityId> = world.young(nine);
+    let young: Vec<EntityId> = world.young(fourteen);
     let theirs: Vec<EntityId> = young.iter().flat_map(|&id| world.young(id)).collect();
     let siblings: Vec<EntityId> = parents.iter().flat_map(|&id| world.young(id)).collect();
     let mut seen = Vec::new();
@@ -692,7 +707,7 @@ fn the_lineage_colours_mark_the_selected_sprite_s_lineage_on_the_map() {
         let Some(drawn) = drawn else {
             continue;
         };
-        if id == nine {
+        if id == fourteen {
             continue;
         }
         let expected = if parents.contains(&id) {
@@ -722,7 +737,7 @@ fn the_lineage_colours_mark_the_selected_sprite_s_lineage_on_the_map() {
 
 #[test]
 fn the_body_tab_says_a_sprite_s_generation_and_the_world_tab_the_living_ones() {
-    let world = pairs(200);
+    let world = pairs(230);
     let mut app = app_on(&world);
     let body = |app: &mut App| {
         while app.tab() != Tab::Body {
@@ -741,7 +756,7 @@ fn the_body_tab_says_a_sprite_s_generation_and_the_world_tab_the_living_ones() {
     app.apply(Action::FamilyTree, &world);
     let shown = body(&mut app);
     assert!(
-        shown.contains(" parents Sprite #3 and Sprite #13"),
+        shown.contains(" parents Sprite #3 and Sprite #12"),
         "{shown}"
     );
     assert!(shown.contains(" generation 3"), "{shown}");

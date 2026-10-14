@@ -77,7 +77,7 @@ pub fn endings(events: &[Event]) -> Vec<(Verb, Outcome)> {
 
 /// The change to `physiology.ron` that puts breeding out of reach: no
 /// sprite is ever fertile (M2 design §10).
-pub const BARREN: (&str, &str) = ("fed: 0.5,", "fed: 1.0,");
+pub const BARREN: (&str, &str) = ("fed: 0.4,", "fed: 1.0,");
 
 /// The built-in data pack with breeding out of reach, for a test of
 /// something else that watches grown sprites long enough to breed.
@@ -190,11 +190,16 @@ impl<'a> WorldBuilder<'a> {
 }
 
 /// An instinct to mate with whatever sprite it sees, and nothing else (M2
-/// design §10).
+/// design §10), and a body receptive from the start, as if courted
+/// (§15.3).
 pub const KEEN: &str = r#"
     AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
     Instinct(inputs: [("always", false), ("attended_sprite", false)], verb: Mate, weight: 1.0),
+    InitialConcentration(chem: "receptivity", value: 1.0),
 "#;
+
+/// A body receptive from the start, as if courted (M2 design §15.3).
+pub const RECEPTIVE: &str = r#"InitialConcentration(chem: "receptivity", value: 1.0),"#;
 
 /// A body that turns female at once, as an adult (M2 design §10).
 pub const FEMALE: &str = r#"InitialConcentration(chem: "feminiser", value: 1.0),"#;
@@ -204,6 +209,34 @@ pub const ALONE: &str = r#"
     Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
     InitialConcentration(chem: "longing", value: 1.0),
 "#;
+
+/// The change to `physiology.ron` that lets a female breed alone at once,
+/// with a male in sight or not (M2 design §15.7), for tests of what a lone
+/// egg does.
+pub const LONE: (&str, &str) = ("alone_after: 4500,", "alone_after: 0,");
+
+/// The built-in data pack in which a female may breed alone at once.
+pub fn lone() -> DataPack {
+    builtin_changing("physiology.ron", &[LONE])
+}
+
+/// A world drawn from `rows`, with a sprite of its own genes on each tile,
+/// all grown up, made with `data`.
+pub fn world_in(data: DataPack, rows: &[&str], sprites: &[(Pos, &str)]) -> World {
+    let placed = sprites
+        .iter()
+        .map(|&(pos, genes)| (pos, Some(genome(genes, &data))))
+        .collect();
+    WorldBuilder::new(rows)
+        .data(data)
+        .sprites_with(placed)
+        .build()
+}
+
+/// The ID of the sprite standing on `pos`.
+pub fn id_at(world: &World, pos: Pos) -> EntityId {
+    world.sprite_at(pos).expect("a sprite there").id()
+}
 
 /// A small field of grass with a sprite of its own genes on each tile, the
 /// ones on `young` as newborns and the rest just grown up.
@@ -275,5 +308,5 @@ pub fn hatch(world: &mut World, egg: EntityId) {
 /// egg's genes are its parents' exactly, with no new flaws (M2 design §12).
 pub const NO_COPYING_ERRORS: [(&str, &str); 2] = [
     ("mutation: (chance: 0.01,", "mutation: (chance: 0.0,"),
-    ("flaws: (arise: 0.007,", "flaws: (arise: 0.0,"),
+    ("flaws: (arise: 0.004,", "flaws: (arise: 0.0,"),
 ];

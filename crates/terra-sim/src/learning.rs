@@ -7,13 +7,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::action::chebyshev;
 use crate::brain::{Learned, VERBS};
+use crate::courtship::Company;
 use crate::data::DataPack;
 use crate::events::{Event, EventKind};
 use crate::map::Pos;
 use crate::objects::EntityId;
 use crate::perception::Target;
 use crate::physiology::RememberedPlaces;
-use crate::registry::{CategoryId, Verb};
+use crate::registry::{BrainParam, CategoryId, Verb};
 use crate::world::WorldState;
 
 /// Instinct links (design §5.1, §5.4): a row per concept or input, a column
@@ -76,7 +77,8 @@ impl Links {
 }
 
 /// Reads a value for each verb, in `VERBS` order. A save from before Mate
-/// and BreedAlone has fewer, and theirs are 0 (M2 design §5, §10).
+/// and BreedAlone, or Court and Call, has fewer, and theirs are 0 (M2
+/// design §5, §10, §15).
 pub(crate) fn per_verb<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<[f32; VERBS.len()], D::Error> {
@@ -146,8 +148,9 @@ pub(crate) struct TypeMemory {
     pub(crate) habits: [f32; VERBS.len()],
     /// Taught habits: what the Cursor taught about doing each verb to it,
     /// kept apart from the habits it learns itself (design §5.6, #187), in
-    /// `VERBS` order. A save from before them has none.
-    #[serde(default)]
+    /// `VERBS` order. A save from before them has none, and one from before
+    /// Court and Call has fewer (M2 design §15).
+    #[serde(default, deserialize_with = "per_verb")]
     pub(crate) taught_habits: [f32; VERBS.len()],
     /// How familiar it is, from attending to it (0 to 1).
     pub(crate) familiarity: f32,
@@ -255,6 +258,11 @@ impl Experience {
             within([&individual.good], (0.0, 1.0), "a sprite's good")?;
             within([&individual.bad], (-1.0, 0.0), "a sprite's bad")?;
             within([&individual.fear], (-1.0, 0.0), "a sprite's fear")?;
+            within(
+                [&individual.familiarity],
+                (0.0, 1.0),
+                "a sprite's familiarity",
+            )?;
         }
         for place in &self.places {
             within([&place.recall], (0.0, 1.0), "a place's recall")?;
@@ -284,6 +292,15 @@ impl Experience {
         self.individuals
             .entry(sprite)
             .or_insert_with(|| SpriteMemory::new(needs))
+    }
+
+    /// Gets to know `sprite` better by `gain` (M2 design §15.2), for `needs`
+    /// needs: one it sees, or plays with, is remembered, from `below`, the
+    /// level it's forgotten under, so a glimpse is forgotten once it fades
+    /// by more than `gain`.
+    pub(crate) fn befriend(&mut self, sprite: EntityId, gain: f32, needs: usize, below: f32) {
+        let known = self.remember(sprite, needs);
+        known.familiarity = (known.familiarity.max(below) + gain).min(1.0);
     }
 
     /// Forgets every remembered sprite, and the Cursor, that everything
@@ -405,13 +422,29 @@ pub(crate) struct SpriteMemory {
     pub(crate) bad: f32,
     /// Fear, from its hurting the sprite (−1 to 0).
     pub(crate) fear: f32,
+    /// How well it knows the sprite, from seeing it and playing with it (0
+    /// to 1; M2 design §15.2). Always 0 for the Cursor. A save from before
+    /// it has none.
+    #[serde(default)]
+    pub(crate) familiarity: f32,
 }
 
 impl SpriteMemory {
-    /// Whether everything learned about it is nearer 0 than `below`.
+    /// Whether everything learned about it, familiarity included, is
+    /// nearer 0 than `below`.
     pub(crate) fn faded(&self, below: f32) -> bool {
-        let values = self.worth.iter().chain([&self.good, &self.bad, &self.fear]);
-        values.into_iter().all(|v| v.abs() < below)
+        self.familiarity < below && !self.taught(below)
+    }
+
+    /// Whether it has learned what the sprite is worth, or to fear it: a
+    /// value at least `below` from 0. One it only knows by sight hasn't,
+    /// and is judged as sprites in general are (M2 design §15.2).
+    pub(crate) fn taught(&self, below: f32) -> bool {
+        let learned = |v: f32| v.abs() >= below;
+        learned(self.good)
+            || learned(self.bad)
+            || learned(self.fear)
+            || self.worth.iter().any(|&v| learned(v))
     }
 
     /// A sprite newly remembered, for `needs` needs: nothing learned yet.
@@ -421,6 +454,7 @@ impl SpriteMemory {
             good: 0.0,
             bad: 0.0,
             fear: 0.0,
+            familiarity: 0.0,
         }
     }
 }
@@ -527,14 +561,19 @@ pub(crate) struct TraceEntry {
 
 /// Step 4 for every sprite not `dying` (design §2.4): reads each need's
 /// relief, reward and punishment, resets the last two to 0, keeps what the
-/// sprite felt, and learns from them, reporting each lesson.
+/// sprite felt, and learns from them, reporting each lesson. Each gets to
+/// know the sprites step 3 found it sees, in its `company` (M2 design
+/// §15.2).
 pub(crate) fn run(
     state: &mut WorldState,
     data: &DataPack,
     dying: &[EntityId],
+    company: &BTreeMap<EntityId, Company>,
     events: &mut Vec<Event>,
 ) {
     let indices = &data.physiology().indices;
+    let courts = indices.courtship.is_some();
+    let (forget_below, needs_count) = (data.physiology().forget_below, data.need_places().len());
     let tick = state.tick;
     let learning = state.learning;
     let window = data.physiology().touch_window;
@@ -608,6 +647,17 @@ pub(crate) fn run(
                 tick,
                 kind: EventKind::LearnedMilestone { id, learned, good },
             });
+        }
+        // Each sprite in sight grows more familiar after the tick's fading,
+        // so one in sight is never forgotten (M2 design §15.2).
+        if courts {
+            let gain = brain.params.get(BrainParam::BefriendRate);
+            let seen = company.get(&id).map_or(&[][..], |company| &company.seen);
+            for &other in seen.iter().filter(|other| alive.contains(other)) {
+                brain
+                    .experience
+                    .befriend(other, gain, needs_count, forget_below);
+            }
         }
     }
 }

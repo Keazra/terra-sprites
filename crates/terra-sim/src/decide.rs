@@ -6,11 +6,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::action::{Outcome, ScriptedAction, end, is_acting, penalty, set_off, start, trip};
-use crate::brain::{self, Aim, Seen, Situation, Snapshot, SpriteScoring, available, best_above};
+use crate::brain::{
+    self, Aim, Looks, Seen, Situation, Snapshot, SpriteScoring, available, best_above,
+};
 use crate::breeding;
+use crate::courtship;
 use crate::data::DataPack;
 use crate::events::Event;
-use crate::learning::Subject;
+use crate::family;
 use crate::map::Pos;
 use crate::objects::EntityId;
 use crate::perception::{Ground, Occupied, Target};
@@ -19,12 +22,15 @@ use crate::world::WorldState;
 
 /// Something a category offers the sprite (design §3.6): a thing in sight
 /// and the cost of the way there, or a remembered place out of sight, with
-/// how well it's remembered (M2 design §7).
+/// how well it's remembered (M2 design §7), or a sprite heard calling, out
+/// of sight, with the tile it called from (§15.1), or an egg of its own out
+/// of sight, with where it last saw it (§15.6).
 #[derive(Debug, Clone, Copy)]
 struct Offer {
     target: Target,
     cost: Option<u32>,
     recall: f32,
+    seek: Option<Pos>,
 }
 
 /// Something the sprite could aim at, as it stands this tick.
@@ -35,12 +41,27 @@ struct Candidate {
     /// sight (M2 design §7), or a running action's target out of reach
     /// (#173).
     goal: Option<Pos>,
-    /// Whether it's a remembered place out of sight (M2 design §7).
+    /// Whether it's a remembered place out of sight (M2 design §7), a
+    /// sprite heard calling (§15.1), or an egg of its own out of sight
+    /// (§15.6).
     remembered: bool,
+    /// The tile it's looked for on: where a sprite heard calling called
+    /// from (M2 design §15.1), or where it last saw its egg (§15.6).
+    seek: Option<Pos>,
     aim: Aim,
     /// The stable ID of its type: none for water or a sprite in a pack with
     /// no object type for them (design v19 §3.5.5).
     type_id: Option<u16>,
+}
+
+/// What `pick` picks out of every offer in `offered`, once each: what's
+/// already there to aim at, so what's remembered or heard of it isn't
+/// offered again.
+fn offered_by<T: Ord>(
+    offered: &BTreeMap<CategoryId, Vec<Offer>>,
+    pick: impl FnMut(&Offer) -> Option<T>,
+) -> BTreeSet<T> {
+    offered.values().flatten().filter_map(pick).collect()
 }
 
 /// Step 5a and 5b for sprite `id`, after 5.0 (design §5.5). A scripted
@@ -86,17 +107,14 @@ pub(crate) fn decide(
                 target,
                 cost: Some(cost),
                 recall: 1.0,
+                seek: None,
             });
             (category, things.collect())
         })
         .collect();
     // A remembered place joins its category's offers, as a thing at the
     // edge of sight, while nothing of its kind is in sight (M2 design §7).
-    let in_view: BTreeSet<Subject> = offered
-        .values()
-        .flatten()
-        .map(|offer| state.subject_of(data, offer.target))
-        .collect();
+    let in_view = offered_by(&offered, |offer| Some(state.subject_of(data, offer.target)));
     for place in &sprite.brain.experience.places {
         if in_view.contains(&place.subject) || state.whereabouts(data, place.target).is_none() {
             continue;
@@ -105,8 +123,52 @@ pub(crate) fn decide(
             target: place.target,
             cost: None,
             recall: place.recall,
+            seek: None,
         };
         let category = place.subject.category(data);
+        offered.entry(category).or_default().push(offer);
+    }
+    // So does a sprite heard calling, out of sight, which draws the eye less
+    // as its call fades (M2 design §15.1).
+    let heard_for = data.physiology().calls.heard_for;
+    let sprites_offered = offered_by(&offered, |offer| offer.target.sprite());
+    for heard in &sprite.heard {
+        let caller = heard.caller;
+        if sprites_offered.contains(&caller) || state.sprites.get(caller).is_none() {
+            continue;
+        }
+        let offer = Offer {
+            target: Target::Sprite(caller),
+            cost: None,
+            recall: heard.freshness(state.tick, heard_for),
+            seek: Some(heard.from),
+        };
+        offered
+            .entry(data.sprite_category())
+            .or_default()
+            .push(offer);
+    }
+    // So does an egg of its own out of sight, where it last saw it, as a
+    // remembered place is (M2 design §15.6).
+    let objects_offered = match sprite.eggs.is_empty() {
+        true => BTreeSet::new(),
+        false => offered_by(&offered, |offer| match offer.target {
+            Target::Object(id) => Some(id),
+            _ => None,
+        }),
+    };
+    for known in &sprite.eggs {
+        let egg = Target::Object(known.egg);
+        if objects_offered.contains(&known.egg) || state.whereabouts(data, egg).is_none() {
+            continue;
+        }
+        let offer = Offer {
+            target: egg,
+            cost: None,
+            recall: 1.0,
+            seek: Some(known.at),
+        };
+        let category = state.category_of(data, egg);
         offered.entry(category).or_default().push(offer);
     }
     // The breeding drive works only between adults (M2 design §5): it reads
@@ -133,6 +195,9 @@ pub(crate) fn decide(
         brain::without_drive(&mut state_only, data);
     }
     let curiosity_mod = sprite.body.loci[data.physiology().indices.curiosity_mod];
+    // Sprites in general, worked out once for everything the sprite weighs
+    // this tick (design v18 §5.6).
+    let general = sprite.brain.sprites_in_general(data);
     let found: BTreeMap<CategoryId, Offer> = offered
         .into_iter()
         .map(|(category, things)| {
@@ -142,12 +207,14 @@ pub(crate) fn decide(
                     distance: offer.cost.map_or(1.0, |cost| normalized(cost, reach)),
                     recall: offer.recall,
                     not_grown: not_grown(offer.target),
+                    relation: family::relation(state, id, offer.target),
                 };
                 let draw = sprite.brain.draw(
                     seen,
                     offer.target.sprite(),
                     &state_only,
                     curiosity_mod,
+                    &general,
                     data,
                 );
                 (offer, draw)
@@ -175,12 +242,14 @@ pub(crate) fn decide(
                 adjacent: state.on_goal_tile(data, sprite.pos, target),
                 recall: offer.recall,
                 not_grown: not_grown(target),
+                relation: family::relation(state, id, target),
             };
             let candidate = Candidate {
                 type_id,
                 target,
                 goal,
                 remembered: offer.cost.is_none(),
+                seek: offer.seek,
                 aim,
             };
             (category, candidate)
@@ -195,6 +264,9 @@ pub(crate) fn decide(
                 state.category_of(data, target),
                 state.on_goal_tile(data, sprite.pos, target),
             );
+            // A caller's own tile is within the flood only once it's in
+            // sight, so a trip to a call finds no goal here until then, and
+            // keeps to the way it set off on (M2 design §15.1).
             let whereabouts = state.whereabouts(data, target);
             let nearest =
                 whereabouts.and_then(|(there, own)| flood.nearest_goal(&state.map, there, own));
@@ -202,9 +274,15 @@ pub(crate) fn decide(
             let subject = state.subject_of(data, target);
             // A trip still out of sight is weighed as its place is
             // remembered, or one of its kind near it that it merged into (M2
-            // design §7.3).
+            // design §7.3), or as the call it goes to (§15.1), or as an egg
+            // of its own is (§15.6).
             let recall = match whereabouts {
                 _ if !a.remembered => 1.0,
+                Some(_) if a.seek.is_some() => target.sprite().map_or(1.0, |caller| {
+                    sprite
+                        .heard_from(caller, state.tick, heard_for)
+                        .map_or(0.0, |heard| heard.freshness(state.tick, heard_for))
+                }),
                 Some((there, _)) => sprite.brain.experience.recall(
                     subject,
                     there,
@@ -219,11 +297,13 @@ pub(crate) fn decide(
                 adjacent,
                 recall,
                 not_grown: not_grown(target),
+                relation: family::relation(state, id, target),
             };
             Candidate {
                 target,
                 goal: nearest.map(|(goal, _)| goal),
                 remembered: a.remembered,
+                seek: a.seek,
                 aim,
                 type_id: a.target_type,
             }
@@ -255,6 +335,7 @@ pub(crate) fn decide(
         distance: aim.distance,
         recall: aim.recall,
         not_grown: aim.not_grown,
+        relation: aim.relation,
     };
     let mut in_sight: BTreeMap<CategoryId, Seen> = candidates
         .iter()
@@ -273,15 +354,23 @@ pub(crate) fn decide(
         .filter(|&other| breeding::adults(state, id, other))
         .collect();
 
-    // What each sprite it may attend to shows it (M2 design §10).
-    let shown: BTreeMap<EntityId, Vec<f32>> = candidates
+    // What each sprite it may attend to shows it, and what it knows of
+    // that sprite (M2 design §10, §15). A heard caller shows as if in sight.
+    let known = &sprite.brain.experience.individuals;
+    let looks: BTreeMap<EntityId, Looks> = candidates
         .values()
         .map(|c| c.target)
         .chain(action.and_then(|a| a.target))
         .filter_map(Target::sprite)
         .filter_map(|other| {
             let other_sprite = state.sprites.get(other)?;
-            Some((other, brain::shown(&other_sprite.body, data)))
+            let looks = Looks {
+                body: brain::shown(&other_sprite.body, data),
+                familiar: known.get(&other).map_or(0.0, |known| known.familiarity),
+                partner: sprite.partner() == Some(other),
+                kin: courtship::kin(state, id, other),
+            };
+            Some((other, looks))
         })
         .collect();
 
@@ -290,7 +379,14 @@ pub(crate) fn decide(
     let brain = &mut sprite.brain;
 
     // 5a: attention, from the State inputs alone.
-    let attention = brain.attention_scores(&state_only, &in_sight, curiosity_mod, scoring, data);
+    let attention = brain.attention_scores_with(
+        &state_only,
+        &in_sight,
+        curiosity_mod,
+        scoring,
+        &general,
+        data,
+    );
     let scored = in_sight
         .iter()
         .map(|(&c, seen)| (c, seen.subject))
@@ -320,8 +416,7 @@ pub(crate) fn decide(
     let seen = aimed_target
         .or(candidate.map(|c| c.target))
         .and_then(Target::sprite)
-        .and_then(|other| shown.get(&other))
-        .map(Vec::as_slice);
+        .and_then(|other| looks.get(&other));
     let mut inputs = brain.inputs(&sprite.body, aim, seen, data);
     if !grown || aim.is_some_and(|aim| aim.not_grown) {
         brain::without_drive(&mut inputs, data);
@@ -337,11 +432,12 @@ pub(crate) fn decide(
         sprite: aimed_sprite,
         quiet,
     };
-    let scores = brain.scores(
+    let scores = brain.scores_with(
         &activations,
         &inputs,
         aim.map(|a| a.subject),
         decision_scoring,
+        &general,
         data,
     );
     // Verbs are offered on it only while there's a way to it: a running
@@ -359,6 +455,7 @@ pub(crate) fn decide(
         remembered,
         adults,
         grown,
+        courts: data.physiology().indices.courtship.is_some(),
     });
     let current = sprite.action.as_ref().filter(|_| running).map(|a| a.verb);
     let chosen = match current {
@@ -393,7 +490,7 @@ pub(crate) fn decide(
             let sense_radius = sprite.program.traits.sense_radius;
             (flood.wander_destination(sense_radius, rng), None)
         }
-        Verb::Rest | Verb::BreedAlone => (None, None),
+        Verb::Rest | Verb::BreedAlone | Verb::Call => (None, None),
         Verb::Retreat => {
             let weighed = weighed.expect("an aimed verb is offered only with a target");
             (None, Some((weighed.target, weighed.type_id)))
@@ -403,10 +500,12 @@ pub(crate) fn decide(
             (weighed.goal, Some((weighed.target, weighed.type_id)))
         }
     };
-    // Setting off for a remembered place, it finds the way there, which it
-    // keeps to; with none, it forgets the place and keeps to what it was
-    // doing, deciding nothing this tick, and chooses again at its next step
-    // 5 (M2 design §7.4).
+    // Setting off for a remembered place, a call or its egg, it finds the
+    // way there, which it keeps to; with none, it forgets the place, the
+    // call or where it saw the egg, and keeps to what it was doing, deciding
+    // nothing this tick, and chooses again at its next step 5 (M2 design
+    // §7.4, §15.1, §15.6).
+    let seek = weighed.and_then(|c| c.seek);
     let way = match (target, destination) {
         (Some((target, _)), None) if verb.heads_for_goal() => {
             let sprite = state.sprites.get(id).expect("the same sprite");
@@ -415,11 +514,15 @@ pub(crate) fn decide(
                 data,
                 sprite,
                 target,
+                seek,
                 Occupied::Penalty(penalty(data)),
             );
             if way.is_none() {
                 let sprite = state.sprites.get_mut(id).expect("the same sprite");
-                sprite.brain.experience.forget_place(target);
+                match seek {
+                    Some(_) => sprite.forget_sought(target),
+                    None => sprite.brain.experience.forget_place(target),
+                }
                 return;
             }
             way

@@ -61,6 +61,15 @@ pub enum EventKind {
     GrewUp { id: EntityId },
     /// A male adult turned female, for good (M2 design §10).
     TurnedFemale { id: EntityId },
+    /// Two sprites had their first egg together, and are partners (M2
+    /// design §15.4): `a` laid it.
+    Paired { a: EntityId, b: EntityId },
+    /// A sprite's partner died (M2 design §15.4).
+    LostPartner { id: EntityId, partner: EntityId },
+    /// Partners went too long with neither seeing nor hearing the other,
+    /// or `a` had an egg with another, and are partners no more (M2 design
+    /// §15.4).
+    Parted { a: EntityId, b: EntityId },
     /// A sprite grew old (M2 design §9.1).
     GrewOld { id: EntityId },
     /// A sprite learned a lesson (design §5.6): something it learned got

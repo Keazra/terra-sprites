@@ -458,6 +458,43 @@ fn a_brain_gene_written_by_number_reads_the_same_as_by_name() {
 }
 
 #[test]
+fn an_attention_instinct_about_whom_reads_and_writes_by_name_and_by_number() {
+    // M2 design §15.6: version 2 of an attention instinct's payload adds
+    // whom it's about, last: [input ID, category ID, weight, whom], with
+    // 0 any, 1 family, 2 kin, 3 partner, 4 parents and 5 young. Any is
+    // left unwritten by name.
+    let data = builtin();
+    let by_name = |whom: &str| {
+        genome_file(&[&format!(
+            r#"AttentionInstinct(input: "hunger", category: "fruit", {whom}weight: 0.5)"#
+        )])
+    };
+    let whoms = [
+        "",
+        "whom: Family, ",
+        "whom: Kin, ",
+        "whom: Partner, ",
+        "whom: Parent, ",
+        "whom: Young, ",
+    ];
+    for (number, whom) in whoms.into_iter().enumerate() {
+        let text = by_name(whom);
+        let genome = Genome::from_ron(&text, &data).expect("a valid genome");
+        assert_eq!(genome.to_ron(&data), text, "{whom}");
+        let payload = format!("940102ca3f000000{number:02x}");
+        let by_number = genome_file(&[&format!(
+            r#"Gene(type: 9, version: 2, payload: "{payload}")"#
+        )]);
+        let read = Genome::from_ron(&by_number, &data).expect("a valid genome");
+        assert_eq!(read, genome, "{whom}");
+    }
+    assert_invalid(
+        &[r#"Gene(type: 9, version: 2, payload: "940102ca3f00000006")"#],
+        "whom",
+    );
+}
+
+#[test]
 fn a_lifespan_gene_from_before_m2_reads_as_when_it_grows_old() {
     // M2 design §9.3: `lifespan` became `grows_old`. An older file still
     // loads, and is written back with the new name.

@@ -3,7 +3,9 @@
 // stable and append-only: never renumber or reuse one. An input that reads
 // `Target(...)` reads the same in the body of the sprite attended to, its body
 // language, and one that reads `Differs(...)` how far that differs from the
-// sprite's own (M2 design §10).
+// sprite's own (M2 design §10). `Familiar`, `Partner` and `Kin` read what the
+// sprite knows of the one it attends to (M2 design §15), and `Family` whether
+// what it attends to is its family (§15.6).
 //
 // Not brain inputs: physical chemicals (the brain feels the body only through
 // drives), reward and punishment (learning signals), the `moving` and
@@ -69,12 +71,47 @@ inputs: [
     (id: 72, name: "target_other_sex", reads: Differs(Locus("female"))),
     // How long it's gone without seeing a male adult.
     (id: 73, name: "longing",       reads: Chem("longing")),
+
+    // Calls and courtship (M2 design §15).
+    (id: 74, name: "heard",         reads: Locus("heard")),
+    (id: 75, name: "courted",       reads: Locus("courted")),
+    (id: 76, name: "danced",        reads: Locus("danced")),
+    (id: 77, name: "lost_partner",  reads: Locus("lost_partner")),
+    (id: 78, name: "partner_near",  reads: Locus("partner_near")),
+    (id: 79, name: "paired",        reads: Locus("paired")),
+    (id: 80, name: "male_near",     reads: Locus("male_near")),
+    (id: 81, name: "receptivity",   reads: Chem("receptivity")),
+    (id: 82, name: "grief",         reads: Chem("grief")),
+    // Body language: how healthy the sprite attended to looks, and how
+    // receptive.
+    (id: 83, name: "target_condition",   reads: Target(Locus("condition"))),
+    (id: 84, name: "target_receptivity", reads: Target(Chem("receptivity"))),
+    // What it knows of the sprite attended to: how well it knows it, from
+    // 0 to 1, and 1 if it's its partner, or its kin (a parent, a young one,
+    // or a sibling). A heard caller is read as if in sight.
+    (id: 85, name: "target_familiar",    reads: Familiar),
+    (id: 86, name: "target_partner",     reads: Partner),
+    (id: 87, name: "target_kin",         reads: Kin),
+
+    // Families (M2 design §15.6): the drive to keep near family, and what
+    // the sprite senses of its family out of sight.
+    (id: 88, name: "anxiety",       reads: Chem("anxiety")),
+    (id: 89, name: "egg_away",      reads: Locus("egg_away")),
+    (id: 90, name: "egg_alone",     reads: Locus("egg_alone")),
+    (id: 91, name: "young_away",    reads: Locus("young_away")),
+    (id: 92, name: "parent_away",   reads: Locus("parent_away")),
+    (id: 93, name: "partner_away",  reads: Locus("partner_away")),
+    // 1 while what it attends to is its family: its partner, its parents
+    // while it's young, its young, or an egg of its own.
+    (id: 94, name: "target_family", reads: Family),
+    // A pulse on finding family it was missing.
+    (id: 95, name: "found_family",  reads: Locus("found_family")),
 ],
 
 // The needs (design v16 §5.2, §5.6): the drives whose relief teaches a
 // sprite what things are good for, each a State input that reads a drive.
 // Pain is a drive but not a need: its fall is a hurt fading, not relief.
-needs: ["hunger", "thirst", "tiredness", "boredom", "loneliness", "crowdedness", "arousal"],
+needs: ["hunger", "thirst", "tiredness", "boredom", "loneliness", "crowdedness", "arousal", "anxiety"],
 
 // The first-order needs (design v21 §5.2, §5.6): the needs that come before a
 // sprite's likes. The more one presses, the less what it merely likes pulls,

@@ -6,7 +6,7 @@
 //! saved and replayed.
 
 mod common;
-use common::{ALONE, FEMALE, Laying, at, builtin, builtin_changing, family_in, hatch, laid};
+use common::{ALONE, FEMALE, LONE, Laying, at, builtin, builtin_changing, family_in, hatch, laid};
 
 use terra_sim::{
     Command, CopyChangeView, DataPack, EventKind, GeneView, Playback, World, WorldConfig,
@@ -18,7 +18,7 @@ const EVERY_VALUE_WRONG: (&str, &str) = ("mutation: (chance: 0.01,", "mutation: 
 
 /// The built-in physiology's copy and change, as its file begins it.
 const COPY_AND_CHANGE: &str =
-    "copy_and_change: (doubled: 0.00052, lost: 0.00052, changed: 0.00052,";
+    "copy_and_change: (doubled: 0.00029, lost: 0.00029, changed: 0.00029,";
 
 /// The change to the built-in physiology that copies whole genes as
 /// `rules` say.
@@ -27,10 +27,11 @@ fn whole_genes(rules: &str) -> (&'static str, String) {
 }
 
 /// The built-in pack, with every gene value copied wrongly, and every
-/// whole gene kept where it is.
+/// whole gene kept where it is. In each of these packs a female may breed
+/// alone at once (M2 design §15.7).
 fn always_wrong() -> DataPack {
     let (from, to) = whole_genes("doubled: 0.0, lost: 0.0, changed: 0.0");
-    builtin_changing("physiology.ron", &[EVERY_VALUE_WRONG, (from, &to)])
+    builtin_changing("physiology.ron", &[EVERY_VALUE_WRONG, (from, &to), LONE])
 }
 
 /// The built-in pack, with `changes` to its hidden flaws' line, and every
@@ -41,10 +42,11 @@ fn with_flaws(changes: &str) -> DataPack {
         "physiology.ron",
         &[
             (
-                "flaws: (arise: 0.007, founders: 0.06,",
+                "flaws: (arise: 0.004, founders: 0.035,",
                 &format!("flaws: ({changes}"),
             ),
             (from, &to),
+            LONE,
         ],
     )
 }
@@ -110,7 +112,7 @@ fn a_gene_flawed_in_both_copies_is_born_broken_at_half_health_and_brings_old_age
     // M2 design §12: with every copy flawed as it's copied, each of the
     // egg's genes that can weaken is broken.
     let female = format!("{ALONE}{FEMALE}");
-    let data = with_flaws("arise: 1.0, founders: 0.06,");
+    let data = with_flaws("arise: 1.0, founders: 0.035,");
     let mut world = family_in(data, &[(at(2, 1), &female)], &[], 1);
     let Laying { egg, by, .. } = laid(&mut world, 50).expect("she laid an egg");
     hatch(&mut world, egg);
@@ -159,7 +161,7 @@ fn the_first_sprites_carry_a_few_hidden_flaws_and_none_broken() {
 #[test]
 fn a_sprite_placed_from_the_starter_carries_hidden_flaws_and_one_from_a_file_none() {
     // M2 design §12: one from a genome file has the genes it was given.
-    let data = with_flaws("arise: 0.007, founders: 1.0,");
+    let data = with_flaws("arise: 0.004, founders: 1.0,");
     let mut world = family_in(data, &[(at(0, 0), "")], &[], 1);
     let file = world.sprite_at(at(0, 0)).unwrap().genome().clone();
     for (tile, genome) in [(at(3, 2), None), (at(5, 2), Some(file))] {
@@ -181,7 +183,7 @@ fn a_lone_egg_s_genes_are_now_and_then_doubled_lost_or_changed() {
     // was.
     let female = format!("{ALONE}{FEMALE}");
     let (from, to) = whole_genes("doubled: 0.1, lost: 0.1, changed: 0.1");
-    let data = builtin_changing("physiology.ron", &[(from, &to)]);
+    let data = builtin_changing("physiology.ron", &[(from, &to), LONE]);
     let mut world = family_in(data, &[(at(2, 1), &female)], &[], 1);
     let Laying { egg, by, .. } = laid(&mut world, 50).expect("she laid an egg");
     hatch(&mut world, egg);
@@ -235,8 +237,9 @@ fn copying_errors_flaws_and_copy_changes_load_and_replay_the_same() {
         "physiology.ron",
         &[
             EVERY_VALUE_WRONG,
-            ("flaws: (arise: 0.007,", "flaws: (arise: 0.5,"),
+            ("flaws: (arise: 0.004,", "flaws: (arise: 0.5,"),
             (from, &to),
+            LONE,
         ],
     );
     let mut world = family_in(data, &[(at(2, 1), &female)], &[], 3);

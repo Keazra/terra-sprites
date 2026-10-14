@@ -82,11 +82,18 @@ impl GeneView<'_> {
             GeneView::AttentionInstinct {
                 input,
                 category,
+                whom,
                 weight,
-            } => (
-                format!("{input} → attends to {category}"),
-                vec![("weight", *weight)],
-            ),
+            } => {
+                let attended = match whom.name() {
+                    Some(whom) => format!("its {whom} ({category})"),
+                    None => category.to_string(),
+                };
+                (
+                    format!("{input} → attends to {attended}"),
+                    vec![("weight", *weight)],
+                )
+            }
             GeneView::Unknown { .. } => return None,
         };
         Some(named)

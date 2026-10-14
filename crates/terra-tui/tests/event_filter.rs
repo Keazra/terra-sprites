@@ -70,6 +70,8 @@ fn hit(tick: u64, hitter: u64, hit: u64) -> Event {
         hurt: Hurt::default(),
         progress: Progress::Ended(Outcome::Applied),
         remembered: false,
+        heard: None,
+        egg_at: None,
     };
     Event {
         tick,

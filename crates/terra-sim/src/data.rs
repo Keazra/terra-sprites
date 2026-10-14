@@ -25,6 +25,11 @@ pub struct DataPack {
     terrain: Vec<TerrainProps>,
     chemicals: Vec<Chemical>,
     loci: Vec<Locus>,
+    /// Where each chemical and each locus is in `chemicals` and `loci`, by
+    /// ID, so finding one is no search: a sprite's brain reads its inputs'
+    /// loci every tick (design §7.4 A5).
+    chemical_places: Vec<Option<u16>>,
+    locus_places: Vec<Option<u16>>,
     /// Every brain input, in ID order.
     brain_inputs: Vec<BrainInput>,
     /// The needs (design §5.2), as places in `brain_inputs`.
@@ -122,6 +127,11 @@ struct TerrainEntry {
     drinkable: Option<bool>,
     #[serde(default)]
     allows_fixtures: Option<bool>,
+    /// How much a call weakens crossing a tile of it (M2 design §15.1): any
+    /// terrain may carry sound, walkable or not. None stops calls, as in a
+    /// pack from before calls.
+    #[serde(default)]
+    sound: Option<u16>,
 }
 
 /// Checks `terrain.ron` and returns each terrain's properties, indexed by `Terrain as usize`.
@@ -147,6 +157,11 @@ fn terrain_table(
 impl TerrainEntry {
     /// The validated properties, or what is wrong with the entry.
     fn into_props(self, terrain: Terrain) -> Result<TerrainProps, &'static str> {
+        if self.sound == Some(0) {
+            return Err(
+                "has a `sound` of 0, but a call must weaken crossing it, so it needs one above 0",
+            );
+        }
         if !self.walkable {
             // Carving turns unwalkable tiles into these two, so they must be walkable
             // for a generated map to be connected (design §3.2).
@@ -158,13 +173,16 @@ impl TerrainEntry {
                 || self.drinkable.is_some()
                 || self.allows_fixtures.is_some()
             {
-                return Err("is unwalkable, so it takes nothing but `walkable: false`");
+                return Err(
+                    "is unwalkable, so it takes nothing but `walkable: false` and maybe `sound`",
+                );
             }
             return Ok(TerrainProps {
                 step_cost: None,
                 fertility: 0.0,
                 drinkable: false,
                 allows_fixtures: false,
+                sound: self.sound,
             });
         }
         let step_cost = match self.step_cost {
@@ -186,6 +204,7 @@ impl TerrainEntry {
             fertility,
             drinkable,
             allows_fixtures,
+            sound: self.sound,
         })
     }
 }
@@ -271,6 +290,8 @@ impl DataPack {
         let mut pack = DataPack {
             manifest,
             terrain,
+            chemical_places: places(chemicals.iter().map(|c| c.id.0)),
+            locus_places: places(loci.iter().map(|l| l.id.0)),
             chemicals,
             loci,
             brain_inputs: brain_io.inputs,
@@ -527,7 +548,7 @@ impl DataPack {
 
     /// Where the chemical with the ID `id` is in the pack's chemical order.
     pub(crate) fn chemical_index(&self, id: ChemId) -> Option<usize> {
-        self.chemicals.iter().position(|c| c.id == id)
+        place(&self.chemical_places, id.0)
     }
 
     /// The chemical called `name`.
@@ -547,7 +568,7 @@ impl DataPack {
 
     /// Where the locus with the ID `id` is in the pack's locus order.
     pub(crate) fn locus_index(&self, id: LocusId) -> Option<usize> {
-        self.loci.iter().position(|l| l.id == id)
+        place(&self.locus_places, id.0)
     }
 
     /// The locus called `name`.
@@ -691,6 +712,25 @@ fn starter_genome(text: &str, data: &DataPack) -> Result<Genome, DataError> {
         }
     }
     Ok(genome)
+}
+
+/// Where each of `ids`, all different, is among them, by ID.
+fn places(ids: impl Iterator<Item = u16> + Clone) -> Vec<Option<u16>> {
+    let len = ids.clone().max().map_or(0, |most| usize::from(most) + 1);
+    let mut places = vec![None; len];
+    for (place, id) in ids.enumerate() {
+        places[usize::from(id)] = u16::try_from(place).ok();
+    }
+    places
+}
+
+/// Where `id` is, in `places` made by [`places`].
+fn place(places: &[Option<u16>], id: u16) -> Option<usize> {
+    places
+        .get(usize::from(id))
+        .copied()
+        .flatten()
+        .map(usize::from)
 }
 
 /// Checks that no two registry entries in `file` share an ID or a name.

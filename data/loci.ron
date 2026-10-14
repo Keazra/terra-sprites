@@ -18,6 +18,23 @@
     (id: 7,  name: "female",            kind: BodySensor),
     (id: 8,  name: "female_near",       kind: BodySensor),
     (id: 9,  name: "male_near",         kind: BodySensor),
+    // Courtship (M2 design §15): 1 while it sees its partner or has heard it
+    // call lately, 1 while it has a partner, and how healthy it looks: its
+    // energy, hydration and freedom from injury, times its genes' average
+    // health.
+    (id: 10, name: "partner_near",      kind: BodySensor),
+    (id: 11, name: "paired",            kind: BodySensor),
+    (id: 12, name: "condition",         kind: BodySensor),
+    // Families (M2 design §15.6): 1 while an egg of its own is out of sight,
+    // 1 while one of those was left with no other parent by it when it last
+    // saw it, or never seen, 1 while a young one of its own is out of sight,
+    // 1 while it's young and sees none of its living parents, and 1 while
+    // its partner is out of sight.
+    (id: 13, name: "egg_away",          kind: BodySensor),
+    (id: 14, name: "egg_alone",         kind: BodySensor),
+    (id: 15, name: "young_away",        kind: BodySensor),
+    (id: 16, name: "parent_away",       kind: BodySensor),
+    (id: 17, name: "partner_away",      kind: BodySensor),
 
     (id: 32, name: "ate",               kind: Pulse),
     (id: 33, name: "drank",             kind: Pulse),
@@ -31,6 +48,11 @@
     (id: 41, name: "cornered",          kind: Pulse),  // a retreat found no step away
     (id: 42, name: "fruitless",         kind: Pulse),  // a try that did nothing (design v16 §5.2)
     (id: 43, name: "bred",              kind: Pulse),  // it laid an egg or fathered one (M2 design §10)
+    (id: 44, name: "heard",             kind: Pulse),  // it heard a call; the caller is its source (M2 design §15.1)
+    (id: 45, name: "courted",           kind: Pulse),  // another danced for it; the dancer is its source (§15.3)
+    (id: 46, name: "danced",            kind: Pulse),  // it danced for another (§15.3)
+    (id: 47, name: "lost_partner",      kind: Pulse),  // its partner died (§15.4)
+    (id: 48, name: "found_family",      kind: Pulse),  // it found family it was missing (§15.6)
 
     (id: 64, name: "learning_rate_mod", kind: ReceptorTarget),
     (id: 65, name: "exploration_mod",   kind: ReceptorTarget),

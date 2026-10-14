@@ -3,7 +3,7 @@
 //! away, and some hits are hit back. Driven through hand-made worlds.
 
 mod common;
-use common::{at, builtin, walker};
+use common::{at, builtin, id_at, walker};
 
 use terra_sim::{
     DataPack, EntityId, EventKind, Genome, Map, Outcome, Pos, Scenario, ScriptedAction, Target,
@@ -81,11 +81,6 @@ fn next_choice(world: &mut World, id: EntityId, ticks: u32) -> Option<(Verb, Opt
         }
     }
     None
-}
-
-/// The ID of the sprite on `pos`.
-fn id_at(world: &World, pos: Pos) -> EntityId {
-    world.sprite_at(pos).expect("a sprite there").id()
 }
 
 /// Where the sprite `id` attends to.

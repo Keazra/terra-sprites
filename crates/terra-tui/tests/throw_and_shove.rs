@@ -614,9 +614,25 @@ fn the_aim_is_cancelled_when_the_led_sprite_dies() {
 }
 
 /// A field whose one sprite, on `mother`, lays an egg alone as soon as it
-/// can (M2 design §10.4), stepped until it has: the world and the egg.
+/// can (M2 design §10.4), in a pack that lets her at once (§15.7), stepped
+/// until it has: the world and the egg.
 fn laid_an_egg(mother: Pos) -> (World, EntityId) {
-    let pack = pack();
+    let physiology = include_str!("../../../data/physiology.ron")
+        .replace("alone_after: 4500,", "alone_after: 0,");
+    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
+        .iter()
+        .map(|&(path, text)| {
+            (
+                path,
+                if path == "physiology.ron" {
+                    &physiology[..]
+                } else {
+                    text
+                },
+            )
+        })
+        .collect();
+    let pack = DataPack::from_sources(&sources).expect("valid pack");
     let genome = terra_sim::Genome::from_ron(
         r#"(format: 1, genes: [
             InitialConcentration(chem: "feminiser", value: 1.0),

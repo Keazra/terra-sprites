@@ -255,7 +255,8 @@ pub(crate) enum Above {
 /// A sprite's young with one other parent, or laid alone.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Brood {
-    /// `with Sprite #27476`, or `alone`.
+    /// `with Sprite #27476`, `partner Sprite #27476` for its partner's (M2
+    /// design §17.2), or `alone`.
     pub(crate) heading: String,
     pub(crate) young: Vec<Card>,
 }
@@ -301,7 +302,13 @@ impl FamilyTree {
                 }
             })
             .collect();
-        // The young by their other parents, in the order they came.
+        // The young by their other parents, in the order they came, those
+        // with its partner, if it has one, under the partner's name (M2
+        // design §15.4).
+        let partner = match &known {
+            Known::Living(sprite) => sprite.partner().map(|(partner, _)| partner),
+            _ => None,
+        };
         let mut broods: Vec<(Vec<EntityId>, Brood)> = Vec::new();
         for young in world.young(id) {
             let others: Vec<EntityId> = Known::of(world, young)
@@ -323,10 +330,15 @@ impl FamilyTree {
                                 .collect();
                             // A parent the policy hides goes unnamed (M2
                             // design §17.6).
+                            let with = if partner.is_some_and(|partner| others == [partner]) {
+                                "partner"
+                            } else {
+                                "with"
+                            };
                             if names.iter().any(String::is_empty) {
                                 String::new()
                             } else {
-                                format!("with {}", names.join(" and "))
+                                format!("{with} {}", names.join(" and "))
                             }
                         }
                     };

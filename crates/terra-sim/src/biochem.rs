@@ -9,6 +9,7 @@ use crate::ageing::{LifeStage, frailty, health_of};
 use crate::data::DataPack;
 use crate::events::DeathCause;
 use crate::expression::{Expression, expressions};
+use crate::family::FamilySenses;
 use crate::genome::{EmitterMode, Gene, Genome, LocusRef, Term};
 use crate::objects::EntityId;
 use crate::physiology::halving_factor;
@@ -500,6 +501,12 @@ pub(crate) struct Senses {
     pub(crate) female: bool,
     pub(crate) female_near: bool,
     pub(crate) male_near: bool,
+    /// Whether it sees its partner or has lately heard it call, and whether
+    /// it has a partner (M2 design §15.4).
+    pub(crate) partner_near: bool,
+    pub(crate) paired: bool,
+    /// What it senses of its family (M2 design §15.6).
+    pub(crate) family: FamilySenses,
 }
 
 /// Step 3 for one sprite (design §4.4). Returns whether its injury has
@@ -667,6 +674,27 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
         loci[breeding.female] = level(senses.female);
         loci[breeding.female_near] = level(senses.female_near);
         loci[breeding.male_near] = level(senses.male_near);
+    }
+    if let Some(courtship) = indices.courtship {
+        let level = |sensed: bool| if sensed { 1.0 } else { 0.0 };
+        loci[courtship.partner_near] = level(senses.partner_near);
+        loci[courtship.paired] = level(senses.paired);
+        // How healthy it looks, which a mate may choose by (M2 design
+        // §15.3): fed, watered and unhurt, and how whole its genes are.
+        let fraction = |chem: usize| chems[chem].clamp(0.0, 1.0);
+        loci[courtship.condition] = fraction(indices.energy)
+            * fraction(indices.hydration)
+            * (1.0 - fraction(indices.injury))
+            * program.vigour;
+    }
+    if let Some(families) = indices.families {
+        let level = |sensed: bool| if sensed { 1.0 } else { 0.0 };
+        let family = senses.family;
+        loci[families.egg_away] = level(family.egg_away);
+        loci[families.egg_alone] = level(family.egg_alone);
+        loci[families.young_away] = level(family.young_away);
+        loci[families.parent_away] = level(family.parent_away);
+        loci[families.partner_away] = level(family.partner_away);
     }
 }
 
@@ -1189,6 +1217,64 @@ mod tests {
     }
 
     #[test]
+    fn courtship_sensors_report_a_partner_and_how_healthy_the_sprite_looks() {
+        // M2 design §15.3, §15.4: `condition` is energy × hydration × (1 −
+        // injury) × the genes' average health.
+        let mut sprite = Subject::quiet(&[]);
+        sprite.set("energy", 0.8);
+        sprite.set("hydration", 0.5);
+        sprite.set("injury", 0.5);
+        sprite.program.vigour = 0.5;
+        sprite.step_with(Senses {
+            paired: true,
+            partner_near: true,
+            ..adult()
+        });
+        assert_eq!(sprite.locus("paired"), 1.0);
+        assert_eq!(sprite.locus("partner_near"), 1.0);
+        assert_close(sprite.locus("condition"), 0.8 * 0.5 * 0.5 * 0.5);
+        sprite.step_with(adult());
+        assert_eq!(sprite.locus("paired"), 0.0);
+        assert_eq!(sprite.locus("partner_near"), 0.0);
+    }
+
+    #[test]
+    fn family_sensors_report_family_out_of_sight() {
+        // M2 design §15.6.
+        let mut sprite = Subject::quiet(&[]);
+        sprite.step_with(Senses {
+            family: FamilySenses {
+                egg_away: true,
+                egg_alone: true,
+                young_away: true,
+                parent_away: true,
+                partner_away: true,
+            },
+            ..adult()
+        });
+        for sensor in [
+            "egg_away",
+            "egg_alone",
+            "young_away",
+            "parent_away",
+            "partner_away",
+        ] {
+            assert_eq!(sprite.locus(sensor), 1.0, "{sensor}");
+        }
+        sprite.step_with(Senses {
+            family: FamilySenses {
+                egg_away: true,
+                ..FamilySenses::default()
+            },
+            ..adult()
+        });
+        assert_eq!(sprite.locus("egg_away"), 1.0);
+        for sensor in ["egg_alone", "young_away", "parent_away", "partner_away"] {
+            assert_eq!(sprite.locus(sensor), 0.0, "{sensor}");
+        }
+    }
+
+    #[test]
     fn a_worn_sprite_s_age_sensor_reaches_1_as_it_grows_old() {
         // M2 design §9.3, §9.4: the most worn sprite grows old at (1 −
         // `sooner`) of its `grows_old`, here .67 of 20,000 ticks.
@@ -1634,6 +1720,28 @@ mod tests {
         hungry.step();
         assert!((before - hungry.level("hunger") - 0.5).abs() < 0.01);
         assert_eq!(hungry.level("reward"), 0.0);
+    }
+
+    #[test]
+    fn a_starter_that_loses_its_partner_grieves_and_is_held_back_from_breeding() {
+        // M2 design §15.4: grief holds arousal down while it lasts, though
+        // the sprite is fertile.
+        let (mut grieving, mut free) = (starter(), starter());
+        for sprite in [&mut grieving, &mut free] {
+            sprite.set("arousal", 0.5);
+        }
+        grieving.pulse("lost_partner");
+        for _ in 0..100 {
+            for sprite in [&mut grieving, &mut free] {
+                sprite.step_with(Senses {
+                    fertile: true,
+                    ..adult()
+                });
+            }
+        }
+        assert!(grieving.level("grief") > 0.3, "it grieves");
+        assert_eq!(grieving.level("arousal"), 0.0);
+        assert!(free.level("arousal") > 0.5, "fertile, it's aroused");
     }
 
     #[test]

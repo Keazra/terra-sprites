@@ -34,7 +34,8 @@ fn world_in(
 }
 
 /// A newborn sprite of `genes` alone in a small field, whose body never
-/// needs anything, so it lives until old age harms it.
+/// needs anything, so it lives until old age harms it. Its calls cost
+/// nothing too (M2 design §15.1).
 fn carefree(genes: &str) -> World {
     carefree_changing(genes, &[])
 }
@@ -46,6 +47,7 @@ fn carefree_changing(genes: &str, changes: &[(&str, &str)]) -> World {
         ("per_sense_tile: 0.0000067,", "per_sense_tile: 0.0,"),
         ("hydration_loss: 0.00033", "hydration_loss: 0.0"),
         ("growth: 0.3,", "growth: 0.0,"),
+        ("calls: (cost: 0.002,", "calls: (cost: 0.0,"),
     ];
     all.extend_from_slice(changes);
     world_in(builtin_changing("physiology.ron", &all), genes, &[], &[])

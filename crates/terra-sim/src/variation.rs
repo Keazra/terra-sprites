@@ -237,15 +237,19 @@ mod tests {
                     }
                     (
                         Gene::AttentionInstinct {
-                            input, category, ..
+                            input,
+                            category,
+                            whom,
+                            ..
                         },
                         &Gene::AttentionInstinct {
                             input: i,
                             category: c,
+                            whom: w,
                             weight,
                         },
                     ) => {
-                        assert_eq!((*input, *category), (i, c));
+                        assert_eq!((*input, *category, *whom), (i, c, w));
                         assert!(within_ten_percent(0.8, weight), "{weight}");
                     }
                     (Gene::Unknown { .. }, _) => assert_eq!(before, after),

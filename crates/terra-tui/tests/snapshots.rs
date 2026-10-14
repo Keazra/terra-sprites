@@ -192,7 +192,7 @@ fn the_population_graph_matches_its_snapshot() {
 fn the_family_tree_matches_its_snapshot() {
     // Two pairs and their young, 200 ticks on: #16's parents are #3 and
     // #13, who is #3's young too, so #3 is on the tree twice.
-    let world = common::pairs(200);
+    let world = common::pairs(230);
     for (theme_name, theme) in themes() {
         let mut app = App::new(world.map(), theme, 7, ui::areas(Size::new(100, 30)));
         common::tree_of(&mut app, &world, EntityId(16));

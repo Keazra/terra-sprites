@@ -1,27 +1,27 @@
- Terra Sprites │ tick 200 │ ► 1x │ seed 7 │ sprites 20 │ not saved                           ? help
+ Terra Sprites │ tick 230 │ ► 1x │ seed 7 │ sprites 20 │ not saved                           ? help
 ┌─ Family tree ── Sprite #16 ────────────────────────────────────────────────────────── esc close ─┐
 │                                                                                                  │
 │             one of the first sprites                    Sprite #3               Sprite #4        │
-│                                                      adult · 7 young         adult · 7 young     │
+│                                                      adult · 8 young         adult · 6 young     │
 │                                                                                                  │
 │                                                             └───────────┬───────────┘            │
-│                     Sprite #3                                      Sprite #13                    │
-│                  adult · 7 young                                 adult · 1 young                 │
+│                     Sprite #3                                      Sprite #12                    │
+│                  adult · 8 young                                 adult · 2 young                 │
 │                                                                                                  │
 │                         └───────────────────────┬───────────────────────┘                        │
 │                                            Sprite #16                                            │
 │                               adult · male · age 60 · generation 3                               │
 │                                                 │                                                │
 │                                                 │                                                │
-│                                          with Sprite #3                                          │
-│                                                 │                                                │
-│                                            Sprite #21                                            │
-│                                        egg · hatches in 1                                        │
+│                                         partner Sprite #9                                        │
+│                                     ┌───────────┴───────────┐                                    │
+│                                Sprite #20              Sprite #24                                │
+│                                   adult            egg · hatches in 2                            │
 │                                                                                                  │
 │                                                                                                  │
 │ BROTHERS AND SISTERS                                                                             │
-│         Sprite #5               Sprite #7              Sprite #10              Sprite #13       ►│
-│      adult · 1 young         adult · 2 young         adult · 3 young         adult · 1 young     │
+│         Sprite #5               Sprite #7               Sprite #9              Sprite #12       ►│
+│           adult                   adult              adult · 2 young         adult · 2 young     │
 │     through Sprite #3       through Sprite #3       through Sprite #3       through Sprite #3    │
 │                                                                                                  │
 │                                                                                                  │

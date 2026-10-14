@@ -158,12 +158,17 @@ fn the_progress_line_says_how_far_it_has_got() {
     );
 }
 
-/// Two sprites on a field with no food or water: one hurts the other to
-/// death, and the other dies of thirst, within the hour.
+/// Three sprites on a field with no food or water: one is hurt to death by
+/// another, and the other two die of thirst, each at a different time,
+/// within the hour.
 fn a_deadly_field() -> World {
     let data = DataPack::builtin().expect("valid pack");
     let map = Map::from_ascii(&[".........."; 6], &data).expect("valid drawing");
-    let sprites = [(Pos { x: 2, y: 2 }, None), (Pos { x: 6, y: 3 }, None)];
+    let sprites = [
+        (Pos { x: 2, y: 2 }, None),
+        (Pos { x: 6, y: 3 }, None),
+        (Pos { x: 4, y: 4 }, None),
+    ];
     let scenario = Scenario {
         map,
         objects: &[],
@@ -185,10 +190,10 @@ fn the_rows_count_every_death_by_its_cause() {
         }
     }
     let died: BTreeMap<DeathCause, u64> = run.world().deaths_by_cause().collect();
-    assert_eq!(died.values().sum::<u64>(), 2, "both died");
+    assert_eq!(died.values().sum::<u64>(), 3, "all three died");
     assert_eq!(counted, died);
     let rows_with_deaths = rows.iter().filter(|row| !row.died.is_empty()).count();
-    assert_eq!(rows_with_deaths, 2, "each in the row it died by");
+    assert_eq!(rows_with_deaths, 3, "each in the row it died by");
 }
 
 fn id(n: u64) -> EntityId {
@@ -362,8 +367,9 @@ fn the_population_table_has_a_row_for_each_count_and_one_for_the_end() {
     run.run_to(HOUR + 50);
     let world = run.world();
     let table = cells(&fast_forward::population_table(world));
+    // Then a column for each other cause of death the world has seen.
     assert_eq!(
-        table[0],
+        table[0][..13],
         [
             "Hours",
             "Tick",

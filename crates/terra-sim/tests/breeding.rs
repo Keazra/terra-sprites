@@ -6,8 +6,9 @@
 
 mod common;
 use common::{
-    ALONE, FEMALE, KEEN, Laying, NO_COPYING_ERRORS, WorldBuilder, at, builtin, builtin_changing,
-    builtin_changing_files, close, endings, family, family_in, genome, laid, until,
+    ALONE, FEMALE, KEEN, LONE, Laying, NO_COPYING_ERRORS, RECEPTIVE, WorldBuilder, at, builtin,
+    builtin_changing, builtin_changing_files, close, endings, family, family_in, genome, laid,
+    lone, until,
 };
 
 use proptest::prelude::*;
@@ -37,11 +38,13 @@ fn field_in(data: DataPack, genes: &str, sprites: &[Pos], young: &[Pos], seed: u
         .build()
 }
 
-/// A Mate action as it started: the life stage of the sprite mating, and
-/// of the sprite it's aimed at, or `None` if it's aimed at no sprite.
+/// A Mate or Court action as it started: the life stage of the sprite
+/// mating or courting, and of the sprite it's aimed at, or `None` if it's
+/// aimed at no sprite.
 type Mating = (LifeStage, Option<LifeStage>);
 
-/// Steps `world` `ticks` times, returning each Mate action started. It
+/// Steps `world` `ticks` times, returning each Mate or Court action
+/// started (M2 design §15.3). It
 /// checks too that only a grown sprite starts to breed alone, and that
 /// every egg is laid by a grown female, with a grown male if with anyone
 /// (M2 design §10).
@@ -66,7 +69,7 @@ fn matings(world: &mut World, ticks: u64) -> Vec<Mating> {
             };
             match verb {
                 Verb::BreedAlone => assert!(sprite.life_stage().is_grown()),
-                Verb::Mate => {
+                Verb::Mate | Verb::Court => {
                     let partner = match sprite.action().and_then(|a| a.target) {
                         Some(Target::Sprite(other)) => match world.sprite(other) {
                             Some(other) => Some(other.life_stage()),
@@ -192,8 +195,10 @@ fn two_males_or_two_females_lay_nothing_together() {
 #[test]
 fn a_female_breeds_alone_and_pays_it_all_but_a_male_cannot() {
     let female = format!("{ALONE}{FEMALE}");
-    // Without copying errors (M2 design §12), the egg's genes are hers.
-    let exact = builtin_changing("physiology.ron", &NO_COPYING_ERRORS);
+    // Without copying errors (M2 design §12), the egg's genes are hers. In
+    // a pack that lets her breed alone with him in sight (§15.7).
+    let [no_errors, no_flaws] = NO_COPYING_ERRORS;
+    let exact = builtin_changing("physiology.ron", &[no_errors, no_flaws, LONE]);
     let mut world = family_in(exact, &[(at(2, 1), &female), (at(5, 2), ALONE)], &[], 1);
     let (mother, male) = (
         world.sprite_at(at(2, 1)).unwrap().id(),
@@ -230,7 +235,7 @@ fn an_egg_hatches_after_750_ticks_as_a_young_male_where_it_lies() {
     // M2 design §10.4: the item is gone, and the young sprite it held
     // stands on its tile, with its ID, born as it hatched.
     let female = format!("{ALONE}{FEMALE}");
-    let mut world = family(&[(at(2, 1), &female)], &[], 1);
+    let mut world = family_in(lone(), &[(at(2, 1), &female)], &[], 1);
     let Laying {
         egg,
         by: mother,
@@ -262,7 +267,7 @@ fn an_egg_lies_still_as_an_item_until_it_hatches() {
     // M2 design §10.4: an egg is no sprite, so it does nothing and needs
     // nothing, and a sprite's mother walks off it, as over any item.
     let female = format!("{ALONE}{FEMALE}");
-    let mut world = family(&[(at(2, 1), &female)], &[], 1);
+    let mut world = family_in(lone(), &[(at(2, 1), &female)], &[], 1);
     let egg = laid(&mut world, 50).expect("an egg").egg;
     let pos = world.egg(egg).unwrap().pos();
     for _ in 0..700 {
@@ -279,7 +284,7 @@ fn the_cursor_picks_up_and_puts_down_an_egg_but_never_throws_pets_or_zaps_it() {
     // mode holds as it does a berry; its type's data says it can't be
     // thrown; and pets and zaps are for sprites.
     let female = format!("{ALONE}{FEMALE}");
-    let mut world = family(&[(at(2, 1), &female)], &[], 1);
+    let mut world = family_in(lone(), &[(at(2, 1), &female)], &[], 1);
     let egg = laid(&mut world, 50).expect("an egg").egg;
     let pos = world.egg(egg).unwrap().pos().unwrap();
     let refused = |world: &mut World, commands: &[Command]| -> Vec<(Command, Rejection)> {
@@ -343,7 +348,7 @@ fn the_cursor_picks_up_and_puts_down_an_egg_but_never_throws_pets_or_zaps_it() {
 fn an_egg_held_when_it_is_due_hatches_on_the_tick_it_is_put_down() {
     // #196: while the Cursor holds it, an egg waits.
     let female = format!("{ALONE}{FEMALE}");
-    let mut world = family(&[(at(2, 1), &female)], &[], 1);
+    let mut world = family_in(lone(), &[(at(2, 1), &female)], &[], 1);
     let egg = laid(&mut world, 50).expect("an egg").egg;
     world.submit(Command::PickUp { item: egg });
     let due = world.egg(egg).unwrap().hatches();
@@ -381,7 +386,7 @@ fn an_egg_with_a_sprite_on_it_waits_until_the_sprite_steps_off() {
     // Cursor leads one onto the egg, keeps it there past the egg's time,
     // then leads it off.
     let female = format!("{ALONE}{FEMALE}");
-    let mut world = family(&[(at(2, 1), &female), (at(6, 3), REST)], &[], 1);
+    let mut world = family_in(lone(), &[(at(2, 1), &female), (at(6, 3), REST)], &[], 1);
     let egg = laid(&mut world, 50).expect("an egg").egg;
     let resting = world.sprite_at(at(6, 3)).unwrap().id();
     let under = world.egg(egg).unwrap().pos().unwrap();
@@ -419,7 +424,12 @@ fn hitting_an_egg_does_nothing() {
     // meant to hurt eggs, so it's a fruitless try, and it hatches as it
     // would have.
     let female = format!("{ALONE}{FEMALE}");
-    let mut world = family(&[(at(2, 1), &female), (at(6, 3), EGG_HITTER)], &[], 1);
+    let mut world = family_in(
+        lone(),
+        &[(at(2, 1), &female), (at(6, 3), EGG_HITTER)],
+        &[],
+        1,
+    );
     let egg = laid(&mut world, 50).expect("an egg").egg;
     let due = world.egg(egg).unwrap().hatches();
     let mut hits = Vec::new();
@@ -484,14 +494,6 @@ const LONGING: &str = r#"
     HalfLife(chem: "longing", ticks: 3000),
 "#;
 
-/// The starter genome's way to breeding alone: arousal while fertile, and
-/// longing, lead a female to it. And a weak habit of resting.
-const LONGS_TO_BREED: &str = r#"
-    Instinct(inputs: [("always", false)], verb: Rest, weight: 0.3),
-    Emitter(locus: Locus("fertile"), mode: Level, threshold: 0.5, gain: 0.01, chem: "arousal"),
-    Instinct(inputs: [("arousal", false), ("female", false), ("longing", false)], verb: BreedAlone, weight: 1.0),
-"#;
-
 #[test]
 fn a_female_longs_for_a_male_only_while_she_sees_no_male_adult() {
     // M2 design §10. A young male, which can't mate, doesn't count.
@@ -511,14 +513,24 @@ fn a_female_longs_for_a_male_only_while_she_sees_no_male_adult() {
 }
 
 #[test]
-fn the_starter_s_female_breeds_alone_only_after_long_without_a_male() {
-    // M2 design §10: breeding alone is a lonely female's fallback. With an
-    // adult male in sight she lays nothing alone; out of sight of one, she
-    // does once her longing has built.
-    let female = format!("{FEMALE}{LONGING}{LONGS_TO_BREED}");
-    let laid_alone = |young: &[Pos]| {
-        let mut world = family(&[(at(1, 1), &female), (at(6, 2), REST)], young, 1);
-        let ticks: Vec<u64> = (0..3_000)
+fn a_female_breeds_alone_only_long_after_she_last_saw_a_male_adult_whatever_her_genes() {
+    // M2 design §15.7: the body's rule, here after 1,000 ticks. With a male
+    // adult in sight she lays nothing alone, however she longs; with none,
+    // she can once that long has passed. A young male doesn't count.
+    let soon = || {
+        builtin_changing(
+            "physiology.ron",
+            &[("alone_after: 4500,", "alone_after: 1000,")],
+        )
+    };
+    let female = format!("{ALONE}{FEMALE}");
+    let laid_alone = |others: &[(Pos, &str)], young: &[Pos]| {
+        let sprites: Vec<(Pos, &str)> = [(at(1, 1), female.as_str())]
+            .into_iter()
+            .chain(others.iter().copied())
+            .collect();
+        let mut world = family_in(soon(), &sprites, young, 1);
+        let ticks: Vec<u64> = (0..1_500)
             .flat_map(|_| world.step())
             .filter_map(|event| match event.kind {
                 EventKind::Laid { with: None, .. } => Some(event.tick),
@@ -527,10 +539,18 @@ fn the_starter_s_female_breeds_alone_only_after_long_without_a_male() {
             .collect();
         ticks
     };
-    let watched = laid_alone(&[]);
+    let watched = laid_alone(&[(at(6, 2), REST)], &[]);
     assert!(watched.is_empty(), "{watched:?}");
-    let alone = laid_alone(&[at(6, 2)]);
-    assert!(alone.first().is_some_and(|&tick| tick > 500), "{alone:?}");
+    let alone = laid_alone(&[], &[]);
+    assert!(
+        alone.first().is_some_and(|&tick| tick >= 1_000),
+        "{alone:?}"
+    );
+    let with_young = laid_alone(&[(at(6, 2), REST)], &[at(6, 2)]);
+    assert!(
+        with_young.first().is_some_and(|&tick| tick >= 1_000),
+        "{with_young:?}"
+    );
 }
 
 #[test]
@@ -551,7 +571,10 @@ fn a_pack_from_before_eggs_were_items_lays_egg_items_that_hatch_when_it_says() {
         ),
         (
             "physiology.ron",
-            &[("breeding: (\n", "breeding: (\n        hatches: 300,\n")],
+            &[
+                ("breeding: (\n", "breeding: (\n        hatches: 300,\n"),
+                LONE,
+            ],
         ),
     ]);
     let female = format!("{ALONE}{FEMALE}");
@@ -567,7 +590,7 @@ fn a_pack_from_before_eggs_were_items_lays_egg_items_that_hatch_when_it_says() {
 #[test]
 fn an_egg_saved_and_loaded_hatches_the_same() {
     let female = format!("{ALONE}{FEMALE}");
-    let mut world = family(&[(at(2, 1), &female), (at(5, 2), KEEN)], &[], 4);
+    let mut world = family_in(lone(), &[(at(2, 1), &female), (at(5, 2), KEEN)], &[], 4);
     let egg = laid(&mut world, 50).expect("an egg").egg;
     world.step();
     world.submit(Command::Rename {
@@ -595,8 +618,8 @@ fn a_birth_hashes_differently() {
     // Births are world state (M2 design §10): two worlds alike but for an
     // egg aren't the same world.
     let female = format!("{ALONE}{FEMALE}");
-    let mut laying = family(&[(at(2, 1), &female)], &[], 1);
-    let mut not = family(&[(at(2, 1), FEMALE)], &[], 1);
+    let mut laying = family_in(lone(), &[(at(2, 1), &female)], &[], 1);
+    let mut not = family_in(lone(), &[(at(2, 1), FEMALE)], &[], 1);
     laid(&mut laying, 50).expect("an egg");
     while not.tick() < laying.tick() {
         not.step();
@@ -607,7 +630,7 @@ fn a_birth_hashes_differently() {
 #[test]
 fn births_replay_exactly() {
     let female = format!("{ALONE}{FEMALE}");
-    let mut world = family(&[(at(2, 1), &female), (at(5, 2), KEEN)], &[], 2);
+    let mut world = family_in(lone(), &[(at(2, 1), &female), (at(5, 2), KEEN)], &[], 2);
     world.start_recording();
     let mut births = 0;
     for _ in 0..2_000 {
@@ -642,7 +665,7 @@ const BODY_LANGUAGE: &str = r#"
 fn a_sprite_reads_whether_the_one_it_watches_is_aroused_and_of_the_other_sex() {
     // M2 design §10: body language. A male and a female mate, while two
     // males never try.
-    let female = format!("{BODY_LANGUAGE}{FEMALE}");
+    let female = format!("{BODY_LANGUAGE}{FEMALE}{RECEPTIVE}");
     let mut pair = family(&[(at(2, 1), &female), (at(3, 1), BODY_LANGUAGE)], &[], 1);
     let laying = laid(&mut pair, 200).expect("the pair laid an egg");
     assert!(laying.with.is_some(), "with a partner");
@@ -761,18 +784,29 @@ fn a_young_sprite_s_arousal_moves_it_to_nothing() {
 /// it go the starter's genes that read one. Its drive is still a need.
 fn without_breeding() -> DataPack {
     let male_near = r#"(id: 9,  name: "male_near",         kind: BodySensor),"#;
+    let reads_it = r#"(id: 80, name: "male_near",     reads: Locus("male_near")),"#;
+    let calls = |line: &str| {
+        let starter = include_str!("../../../data/genomes/starter.ron");
+        let found = starter.lines().find(|l| l.contains(line));
+        found.expect("the starter's call gene").to_string()
+    };
+    let female_calls = calls(r#"("male_near", true)], verb: Call"#);
     let longing = |line: &str| {
         let starter = include_str!("../../../data/genomes/starter.ron");
         let found = starter.lines().find(|l| l.contains(line));
         found.expect("the starter's longing gene").to_string()
     };
     let (raise, drop) = (
-        longing("invert: true, threshold: 0.5, gain: 0.001"),
+        longing("chem: \"longing\", from: Adult"),
         longing("gain: -0.01, chem: \"longing\""),
     );
     builtin_changing_files(&[
         ("loci.ron", &[(male_near, "")]),
-        ("genomes/starter.ron", &[(&raise, ""), (&drop, "")]),
+        ("brain_io.ron", &[(reads_it, "")]),
+        (
+            "genomes/starter.ron",
+            &[(&raise, ""), (&drop, ""), (&female_calls, "")],
+        ),
     ])
 }
 
@@ -866,6 +900,9 @@ fn instinct() -> impl Strategy<Value = String> {
         "Mate",
         "BreedAlone",
         "BreedAlone",
+        "Court",
+        "Court",
+        "Call",
         "Approach",
         "Play",
         "Hit",
@@ -877,6 +914,8 @@ fn instinct() -> impl Strategy<Value = String> {
         r#", ("attended_sprite", false)"#,
         r#", ("target_arousal", false)"#,
         r#", ("target_other_sex", false)"#,
+        r#", ("target_familiar", false)"#,
+        r#", ("target_receptivity", false)"#,
     ]);
     (state_input(), any::<bool>(), attended, verb, -1.0f32..1.0, switch()).prop_map(
         |(input, negated, attended, verb, weight, switch)| {
@@ -887,13 +926,22 @@ fn instinct() -> impl Strategy<Value = String> {
     )
 }
 
-/// A random attention instinct, leaning to sprites.
+/// A random attention instinct, leaning to sprites, and about any of them or
+/// only its family, kin, partner, parents or young (M2 design §15.6).
 fn attention() -> impl Strategy<Value = String> {
-    let category = prop::sample::select(vec!["sprite", "sprite", "bush", "water", "toy"]);
-    (state_input(), category, -1.0f32..1.0, switch()).prop_map(
-        |(input, category, weight, switch)| {
+    let category = prop::sample::select(vec!["sprite", "sprite", "egg", "bush", "water", "toy"]);
+    let whom = prop::sample::select(vec![
+        "",
+        ", whom: Family",
+        ", whom: Kin",
+        ", whom: Partner",
+        ", whom: Parent",
+        ", whom: Young",
+    ]);
+    (state_input(), category, whom, -1.0f32..1.0, switch()).prop_map(
+        |(input, category, whom, weight, switch)| {
             format!(
-                r#"AttentionInstinct(input: "{input}", category: "{category}", weight: {weight:?}{switch}),"#
+                r#"AttentionInstinct(input: "{input}", category: "{category}"{whom}, weight: {weight:?}{switch}),"#
             )
         },
     )
@@ -924,6 +972,8 @@ fn random_genes() -> impl Strategy<Value = String> {
                    Trait(trait: "grows_old", value: {grows_old:?}),
                    Instinct(inputs: [("always", false), ("attended_sprite", false)], verb: Mate, weight: 1.0, from: Young),
                    Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 0.5, from: Young),
+                   Instinct(inputs: [("always", false), ("attended_sprite", false)], verb: Court, weight: 1.0, from: Young),
+                   InitialConcentration(chem: "receptivity", value: 1.0),
                    {female}
                    {aroused}
                    {longs}
@@ -1005,17 +1055,29 @@ proptest! {
         young in prop::collection::vec(any::<bool>(), 4),
         seed: u64,
     ) {
-        // M2 design §5, G7: Mate and the breeding drive only between
-        // adults. Every tick also runs the self-check, which fails on a
-        // Mate action that isn't between adults.
-        let tiles = [at(2, 1), at(3, 1), at(2, 2), at(3, 2)];
+        // M2 design §5, G7: Mate, Court and the breeding drive only
+        // between adults, on a trip to a call too, and whomever an attention
+        // instinct is about (§15.1, §15.6, §15.9). Every tick also runs the
+        // self-check, which fails on a Mate or Court action that isn't
+        // between adults.
+        // The last is out of the others' sight, but within a call's reach.
+        let tiles = [at(2, 1), at(3, 1), at(2, 2), at(24, 2)];
         let newborns: Vec<Pos> = tiles
             .iter()
             .zip(&young)
             .filter(|&(_, &young)| young)
             .map(|(&pos, _)| pos)
             .collect();
-        let mut world = field_in(quick(), &genes, &tiles, &newborns, seed);
+        let data = quick();
+        let genome = genome(&genes, &data);
+        let field = ".".repeat(28);
+        let rows = [field.as_str(); 4];
+        let mut world = WorldBuilder::new(&rows)
+            .data(data)
+            .sprites_with(tiles.iter().map(|&pos| (pos, Some(genome.clone()))).collect())
+            .newborns(&newborns)
+            .seed(seed)
+            .build();
         for _ in 0..600 {
             for (stage, partner) in matings(&mut world, 1) {
                 prop_assert!(stage.is_grown(), "a {stage:?} sprite mated");

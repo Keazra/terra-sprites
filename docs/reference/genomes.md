@@ -27,7 +27,7 @@ A sprite's genes, as text (design §2.8, §4.3, §5.7). The pack's `data/genomes
 | `Trait(trait, value)` | `speed`, `sense_radius`, `grows_up` or `grows_old` (the ages, in ticks, at which it grows up and grows old; `lifespan` reads as `grows_old`), held within [physiology](physiology.md)'s range. |
 | `BrainParam(param, value)` | One of the brain parameters [physiology](physiology.md) lists, held within its range. |
 | `Instinct(inputs: [(input, negated)], verb, weight)` | When up to three brain inputs ([brain inputs](brain-io.md)) are high together (or low, for `negated: true`), lean towards `verb`. `attended_toy` means "looking at a toy". |
-| `AttentionInstinct(input, category, weight)` | When a State input is on, look at things of that category. |
+| `AttentionInstinct(input, category, whom, weight)` | When a State input is on, look at things of that category. `whom` is optional, and narrows it to whom the thing is to the sprite (M2 design §15.6): `Family` (its partner, its parents while it's young, its young and its eggs), `Kin`, `Partner`, `Parent` or `Young`. Left out, it's anything of the category. |
 
 **Duplicates.** `HalfLife`, `InitialConcentration`, `Trait`, `BrainParam`, `Instinct` and `AttentionInstinct` each set one value: the first gene for it counts, and a later one is **unexpressed**. `Reaction`, `Emitter` and `Receptor` add up.
 

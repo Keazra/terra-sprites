@@ -46,7 +46,7 @@ pub const QUICK: [Changes; 2] = [
         "physiology.ron",
         &[
             ("mutation: (chance: 0.01,", "mutation: (chance: 0.0,"),
-            ("flaws: (arise: 0.007,", "flaws: (arise: 0.0,"),
+            ("flaws: (arise: 0.004,", "flaws: (arise: 0.0,"),
             ("grows_up: (1500.0, 13500.0)", "grows_up: (10.0, 13500.0)"),
             ("rest: 1500,", "rest: 30,"),
             ("cost: 0.3,", "cost: 0.0,"),
@@ -60,6 +60,13 @@ pub const QUICK: [Changes; 2] = [
         )],
     ),
 ];
+
+/// The change that lets a female breed alone at once, with a male in
+/// sight or not (M2 design §15.7).
+pub const LONE: Changes = (
+    "physiology.ron",
+    &[("alone_after: 4500,", "alone_after: 0,")],
+);
 
 /// Changes that make thirst kill a sprite with no water 85 ticks or so
 /// after it's born.
@@ -93,7 +100,8 @@ pub const LONE_MOTHER: &str = r#"(format: 1, genes: [
 ])"#;
 
 /// Genes for a sprite that grows up 10 ticks after it hatches and mates
-/// with whatever sprite it sees, `female` or not.
+/// with whatever sprite it sees, `female` or not, receptive from the start
+/// as if courted (M2 design §15.3).
 pub fn keen(female: bool) -> String {
     let feminiser = if female {
         r#"InitialConcentration(chem: "feminiser", value: 1.0),"#
@@ -106,6 +114,7 @@ pub fn keen(female: bool) -> String {
     Trait(trait: "sense_radius", value: 9.0),
     Trait(trait: "grows_up", value: 10.0),
     {feminiser}
+    InitialConcentration(chem: "receptivity", value: 1.0),
     AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
     Instinct(inputs: [("always", false), ("attended_sprite", false)], verb: Mate, weight: 1.0),
 ])"#
@@ -152,19 +161,25 @@ pub fn grow(
 }
 
 /// One sprite the world began with, who lays alone, as do her young, run
-/// `ticks` ticks. By tick 200, #1 has seven young: #2, #4, #8, #10, #26,
-/// #52 and the egg #72.
+/// `ticks` ticks. By tick 200, #1 has six young: #2, #3, #7, #12, #25 and
+/// the egg #45.
 pub fn lone_line(ticks: u64) -> World {
-    grow(&QUICK, (12, 6), &[(at(1, 4), LONE_MOTHER)], ticks)
+    let [quick, eggs] = QUICK;
+    grow(
+        &[quick, eggs, LONE],
+        (12, 6),
+        &[(at(1, 4), LONE_MOTHER)],
+        ticks,
+    )
 }
 
 /// The same, with no water, so each sprite dies of thirst about 85 ticks
-/// after it's born. By tick 140, #1, #2, #3 and #4 have died, and #4's
+/// after it's born. By tick 140, #1, #2, #3 and #4 have died, and #3's
 /// young #5 lives.
 pub fn parched_line(ticks: u64) -> World {
     let [quick, eggs] = QUICK;
     grow(
-        &[quick, eggs, PARCHED],
+        &[quick, eggs, LONE, PARCHED],
         (12, 6),
         &[(at(1, 4), LONE_MOTHER)],
         ticks,
@@ -172,9 +187,10 @@ pub fn parched_line(ticks: u64) -> World {
 }
 
 /// Two pairs the world began with, #1 and #3 females, #2 and #4 males,
-/// who mate with whatever sprite they see, as their young do, run `ticks`
-/// ticks. By tick 200, #9 is the young of #1 and #2, with young by #10 and
-/// by #3, and #16 is the young of #3 and of #13, who is #3's young too.
+/// who mate with whatever sprite they see, kin or not, as their young do,
+/// run `ticks` ticks. By tick 230, #14 is the young of #1 and #2, with
+/// young by #1 and by its partner #8 (M2 design §15.4), and #16 is the
+/// young of #3 and of #12, who is #3's young too.
 pub fn pairs(ticks: u64) -> World {
     let (female, male) = (keen(true), keen(false));
     let sprites = [

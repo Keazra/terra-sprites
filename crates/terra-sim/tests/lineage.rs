@@ -6,7 +6,8 @@
 
 mod common;
 use common::{
-    ALONE, FEMALE, NO_COPYING_ERRORS, at, builtin_changing, family, family_in, hatch, laid, until,
+    ALONE, FEMALE, LONE, NO_COPYING_ERRORS, at, builtin_changing, family, family_in, hatch, laid,
+    until,
 };
 
 use terra_sim::{
@@ -20,11 +21,15 @@ const SCORCHED: [(&str, &str); 2] = [
     ("dehydration: 0.0011", "dehydration: 0.5"),
 ];
 
-/// A female who lays alone, with no water anywhere, so she and her young
-/// die of thirst soon after they're born, her eggs copied exactly. Returns
-/// the world and her ID.
+/// A female who lays alone at once (M2 design §15.7), with no water
+/// anywhere, so she and her young die of thirst soon after they're born,
+/// her eggs copied exactly. Returns the world and her ID.
 fn mother_of(seed: u64) -> (World, EntityId) {
-    let changes: Vec<_> = NO_COPYING_ERRORS.into_iter().chain(SCORCHED).collect();
+    let changes: Vec<_> = NO_COPYING_ERRORS
+        .into_iter()
+        .chain(SCORCHED)
+        .chain([LONE])
+        .collect();
     let data = builtin_changing("physiology.ron", &changes);
     let mother = format!("{ALONE}{FEMALE}");
     let world = family_in(data, &[(at(2, 1), &mother)], &[], seed);

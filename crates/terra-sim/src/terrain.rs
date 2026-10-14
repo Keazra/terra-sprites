@@ -26,6 +26,9 @@ pub struct TerrainProps {
     pub(crate) fertility: f32,
     pub(crate) drinkable: bool,
     pub(crate) allows_fixtures: bool,
+    /// How much a call weakens crossing a tile of it, or `None` if it stops
+    /// calls (M2 design §15.1).
+    pub(crate) sound: Option<u16>,
 }
 
 impl TerrainProps {
@@ -47,5 +50,11 @@ impl TerrainProps {
     /// Whether a fixture may stand here. Always false on unwalkable terrain.
     pub fn allows_fixtures(&self) -> bool {
         self.allows_fixtures
+    }
+
+    /// How much a call weakens crossing a tile of it, as a step's cost is
+    /// for walking, or `None` if it stops calls (M2 design §15.1).
+    pub fn sound(&self) -> Option<u16> {
+        self.sound
     }
 }

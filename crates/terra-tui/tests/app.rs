@@ -585,6 +585,8 @@ fn finished(tick: u64, id: EntityId, verb: Verb, outcome: Outcome) -> Event {
         hurt: Hurt::default(),
         progress: Progress::Ended(outcome),
         remembered: false,
+        heard: None,
+        egg_at: None,
     };
     Event {
         tick,

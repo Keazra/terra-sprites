@@ -22,8 +22,8 @@
 │                                                                                                  │
 │ COLOURS: a sprite's strongest drive, once it's above half                                        │
 │ @ hunger  @ thirst  @ pain  @ tiredness  @ boredom  @ loneliness  @ crowdedness  @ arousal       │
-│ @ none                                                                                           │
-│ EMOTES   ! hurt  / zapped  ? gave up  z resting  + pleased                                       │
+│ @ anxiety  @ none                                                                                │
+│ EMOTES   ! hurt  / zapped  ? gave up  z resting  + pleased  ^ danced  " called                   │
 │ LINEAGE  @ parents, grandparents  @ brothers, sisters  @ young, theirs  @ the rest               │
 │ FILES    /home/kel/.local/share/terra-sprites                                                    │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘

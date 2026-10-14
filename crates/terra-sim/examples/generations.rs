@@ -8,11 +8,20 @@
 //! from lone eggs lived against young from pairs; then how far the species'
 //! genes moved from the starter genome's (§12, G4); then the genes the
 //! starter lacks that the living carry, and in how many each works, and
-//! the genes they lost and doubled (§13). The bars: sprites alive at the end in at least 8 of 10
-//! seeds, and never more than the world's limit; at least 3 gene numbers
-//! moved by a tenth the same way in every seed (§12.7); and in at least 5
-//! of 10 seeds, a gene the starter lacks carried by at least a tenth of the
-//! living (§13).
+//! the genes they lost and doubled (§13); then courtship (§15.9): the
+//! share of eggs laid alone, of eggs from pairs that danced for each other
+//! first, partners, and the sexes of the adults; then families (§15.9): how
+//! much of the time partners, eggs and the young had family in sight. The
+//! bars: sprites alive at the end in at least 8 of 10 seeds, and never
+//! more than the world's limit; at least 3 gene numbers moved by a tenth
+//! the same way in every seed (§12.7); in at least 5 of 10 seeds, a gene
+//! the starter lacks carried by at least a tenth of the living (§13); at
+//! most 1 egg in 50 laid alone over all seeds, and none above 1 in 20; at
+//! least 9 in 10 of pairs' eggs after a dance each way; and, as the median
+//! over all of them, partners in each other's sight at least half the
+//! time, an egg with a parent in sight three quarters of its time, and a
+//! young sprite with a living parent seeing one half its childhood
+//! (§15.9).
 //!
 //! `cargo run --release -p terra-sim --example generations`
 //!
@@ -29,7 +38,7 @@ use std::sync::Mutex;
 
 use terra_sim::{
     DataPack, DeathCause, Drift, EntityId, EventKind, Expression, GeneView, Genome, LifeStage,
-    Outcome, Switch, Verb, World, WorldConfig, drift, gene_values, middle_values,
+    Outcome, Sex, Switch, Target, Verb, World, WorldConfig, drift, gene_values, middle_values,
 };
 
 /// Ticks in an hour at 1×, 1.25 ticks a second (design §6.6).
@@ -88,6 +97,86 @@ struct Run {
     hunger: u64,
     thirst: u64,
     hurt: u64,
+    /// Courtship (M2 design §15.9): pairs' eggs laid after the two danced
+    /// for each other since their last egg together, and those laid by kin; partners made, made again by
+    /// one who'd had one, parted and lost to death; calls; and the male
+    /// and female adults alive at the end.
+    danced_first: u64,
+    kin_eggs: u64,
+    paired: u64,
+    paired_again: u64,
+    parted: u64,
+    lost: u64,
+    calls: u64,
+    males: usize,
+    females: usize,
+    /// Families (M2 design §15.9): for each partnership, the share of the
+    /// ticks both were grown and partners in which each saw the other; for
+    /// each egg, the share of its ticks a parent saw it; and for each young
+    /// sprite, the share of the ticks it had a living parent in which it
+    /// saw one.
+    partners_in_sight: Vec<f64>,
+    eggs_in_sight: Vec<f64>,
+    young_in_sight: Vec<f64>,
+    /// The ticks it ran.
+    ticks: u64,
+}
+
+/// Ticks counted, and those with family in sight, for each partnership, egg
+/// and young sprite (M2 design §15.9).
+#[derive(Default)]
+struct InSight {
+    partners: BTreeMap<(EntityId, EntityId), (u64, u64)>,
+    eggs: BTreeMap<EntityId, (u64, u64)>,
+    young: BTreeMap<EntityId, (u64, u64)>,
+}
+
+impl InSight {
+    /// Counts the tick `world` is at.
+    fn count(&mut self, world: &World) {
+        let tally = |counts: &mut (u64, u64), seen: bool| {
+            counts.0 += 1;
+            counts.1 += u64::from(seen);
+        };
+        for sprite in world.sprites() {
+            let id = sprite.id();
+            let grown = sprite.life_stage().is_grown();
+            // Each partnership once, by the lower ID.
+            if let Some((partner, false)) = sprite.partner()
+                && id < partner
+                && grown
+                && let Some(them) = world.sprite(partner)
+                && them.partner() == Some((id, false))
+                && them.life_stage().is_grown()
+            {
+                let seen = sprite.sees(them.pos()) && them.sees(sprite.pos());
+                tally(self.partners.entry((id, partner)).or_default(), seen);
+            }
+            let mut parents = sprite.parents().iter().filter_map(|&p| world.sprite(p));
+            let mut parents = parents.by_ref().peekable();
+            if !grown && parents.peek().is_some() {
+                let seen = parents.any(|parent| sprite.sees(parent.pos()));
+                tally(self.young.entry(id).or_default(), seen);
+            }
+        }
+        for egg in world.eggs() {
+            // An egg the Cursor holds is in no one's sight, nor on the map.
+            let Some(pos) = egg.pos() else {
+                continue;
+            };
+            let mut parents = egg.parents().iter().filter_map(|&p| world.sprite(p));
+            let seen = parents.any(|parent| parent.sees(pos));
+            tally(self.eggs.entry(egg.id()).or_default(), seen);
+        }
+    }
+
+    /// Each one's share of its ticks with family in sight.
+    fn shares<K>(counts: &BTreeMap<K, (u64, u64)>) -> Vec<f64> {
+        let shares = counts.values().filter(|&&(ticks, _)| ticks > 0);
+        shares
+            .map(|&(ticks, seen)| seen as f64 / ticks as f64)
+            .collect()
+    }
 }
 
 fn main() -> ExitCode {
@@ -152,6 +241,8 @@ fn main() -> ExitCode {
     flaws(&runs);
     evolution(&starter, &runs);
     copy_and_change(&runs);
+    courtship(&runs);
+    families(&runs);
     ExitCode::SUCCESS
 }
 
@@ -532,17 +623,31 @@ fn run(
     ticks: u64,
 ) -> Run {
     let mut world = World::new(config.clone(), data.clone(), seed);
-    let mut run = Run::default();
+    let mut run = Run {
+        ticks,
+        ..Run::default()
+    };
     let mut generation: BTreeMap<EntityId, u32> =
         world.sprites().map(|sprite| (sprite.id(), 0)).collect();
     let mut hatchlings = Vec::new();
     let mut lone_eggs = BTreeSet::new();
+    // Who has danced for whom, and who has had a partner (M2 design §15).
+    let mut danced: BTreeSet<(EntityId, EntityId)> = BTreeSet::new();
+    let mut had_partner: BTreeSet<EntityId> = BTreeSet::new();
+    let mut in_sight = InSight::default();
     for _ in 0..ticks {
         for event in world.step() {
             match event.kind {
                 EventKind::Laid { egg, by, with } => {
                     if with.is_none() {
                         lone_eggs.insert(egg);
+                    }
+                    if let Some(with) = with {
+                        // Danced for each other since the pair's last egg.
+                        let both = danced.remove(&(by, with)) & danced.remove(&(with, by));
+                        run.danced_first += u64::from(both);
+                        let kin = world.sprite(by).is_some_and(|she| she.is_kin(with));
+                        run.kin_eggs += u64::from(kin);
                     }
                     let parents = [Some(by), with];
                     let deepest = parents
@@ -596,9 +701,31 @@ fn run(
                     outcome: Outcome::Failed,
                     ..
                 } => run.fruitless += 1,
+                EventKind::ActionEnded {
+                    id,
+                    verb: Verb::Court,
+                    outcome: Outcome::Applied,
+                    ref action,
+                } => {
+                    if let Some(Target::Sprite(them)) = action.target {
+                        danced.insert((id, them));
+                    }
+                }
+                EventKind::ActionStarted {
+                    verb: Verb::Call, ..
+                } => run.calls += 1,
+                EventKind::Paired { a, b } => {
+                    run.paired += 1;
+                    for id in [a, b] {
+                        run.paired_again += u64::from(!had_partner.insert(id));
+                    }
+                }
+                EventKind::Parted { .. } => run.parted += 1,
+                EventKind::LostPartner { .. } => run.lost += 1,
                 _ => {}
             }
         }
+        in_sight.count(&world);
         if world.tick() == ticks / 2 {
             run.flaws_halfway = flaw_load(&world);
         }
@@ -611,6 +738,15 @@ fn run(
     }
     run.eggs = world.eggs().count();
     run.alive = world.sprites().count();
+    for sprite in world.sprites().filter(|s| s.life_stage().is_grown()) {
+        match sprite.sex() {
+            Sex::Male => run.males += 1,
+            Sex::Female => run.females += 1,
+        }
+    }
+    run.partners_in_sight = InSight::shares(&in_sight.partners);
+    run.eggs_in_sight = InSight::shares(&in_sight.eggs);
+    run.young_in_sight = InSight::shares(&in_sight.young);
     run.numbers = middles(&world, starter);
     run.flaws_at_end = flaw_load(&world);
     run.genes = gene_pool(&world, starter_genes);
@@ -822,4 +958,128 @@ fn parse(args: &[String]) -> Result<Options, String> {
         }
     }
     Ok(options)
+}
+
+/// Courtship (M2 design §15.9): for each seed, the share of eggs laid
+/// alone; of the eggs laid by pairs, the share laid after the two danced
+/// for each other, and by kin; partners made, made again by a sprite that
+/// had had one, parted after too long apart and lost to death; calls an
+/// hour; and the male and female adults alive at the end. Then the bars.
+fn courtship(runs: &[(u64, Run)]) {
+    println!(
+        "\nCourtship: eggs laid alone, and of pairs' eggs those after a dance each way and those \
+         by kin; partners made, made again, parted and lost; calls an hour; adults at the end."
+    );
+    println!(
+        "\n{:>5} {:>7} {:>8} {:>5} {:>7} {:>6} {:>7} {:>5} {:>7} {:>6} {:>8}",
+        "Seed",
+        "Alone",
+        "Danced",
+        "Kin",
+        "Paired",
+        "Again",
+        "Parted",
+        "Lost",
+        "Calls/h",
+        "Males",
+        "Females"
+    );
+    let share = |part: u64, whole: u64| {
+        if whole == 0 {
+            "-".to_string()
+        } else {
+            format!("{:.1}%", 100.0 * part as f64 / whole as f64)
+        }
+    };
+    let (mut alone, mut eggs, mut danced, mut pairs) = (0, 0, 0, 0);
+    let mut worst: f64 = 0.0;
+    for (seed, run) in runs {
+        let laid = run.mated + run.alone;
+        println!(
+            "{seed:>5} {:>7} {:>8} {:>5} {:>7} {:>6} {:>7} {:>5} {:>7.0} {:>6} {:>8}",
+            share(run.alone, laid),
+            share(run.danced_first, run.mated),
+            run.kin_eggs,
+            run.paired,
+            run.paired_again,
+            run.parted,
+            run.lost,
+            run.calls as f64 / (run.ticks as f64 / HOUR),
+            run.males,
+            run.females
+        );
+        alone += run.alone;
+        eggs += laid;
+        danced += run.danced_first;
+        pairs += run.mated;
+        if laid > 0 {
+            worst = worst.max(run.alone as f64 / laid as f64);
+        }
+    }
+    println!(
+        "\nLaid alone: {} of all eggs (at most 1 in 50, 2%), and at most {:.1}% in a seed (at \
+         most 1 in 20, 5%).",
+        share(alone, eggs),
+        100.0 * worst
+    );
+    println!(
+        "After a dance each way: {} of pairs' eggs (at least 9 in 10, 90%).",
+        share(danced, pairs)
+    );
+}
+
+/// The families table (M2 design §15.9).
+fn families(runs: &[(u64, Run)]) {
+    println!(
+        "\nFamilies: the median share of their time that partners each saw the other, that an \
+         egg had a parent in sight, and that a young sprite with a living parent saw one; and \
+         how many partnerships, eggs and young were counted."
+    );
+    println!(
+        "\n{:>5} {:>9} {:>6} {:>6} {:>6} {:>6} {:>6}",
+        "Seed", "Partners", "n", "Eggs", "n", "Young", "n"
+    );
+    let median = |shares: &[f64]| {
+        let mut sorted = shares.to_vec();
+        sorted.sort_by(f64::total_cmp);
+        match sorted.len() {
+            0 => None,
+            n if n % 2 == 1 => Some(sorted[n / 2]),
+            n => Some((sorted[n / 2 - 1] + sorted[n / 2]) / 2.0),
+        }
+    };
+    let percent =
+        |share: Option<f64>| share.map_or("-".to_string(), |s| format!("{:.0}%", 100.0 * s));
+    let (mut partners, mut eggs, mut young) = (Vec::new(), Vec::new(), Vec::new());
+    for (seed, run) in runs {
+        println!(
+            "{seed:>5} {:>9} {:>6} {:>6} {:>6} {:>6} {:>6}",
+            percent(median(&run.partners_in_sight)),
+            run.partners_in_sight.len(),
+            percent(median(&run.eggs_in_sight)),
+            run.eggs_in_sight.len(),
+            percent(median(&run.young_in_sight)),
+            run.young_in_sight.len()
+        );
+        partners.extend(&run.partners_in_sight);
+        eggs.extend(&run.eggs_in_sight);
+        young.extend(&run.young_in_sight);
+    }
+    println!(
+        "\nPartners in each other's sight: {} of the time, the median of {} (at least half).",
+        percent(median(&partners)),
+        partners.len()
+    );
+    println!(
+        "An egg with a parent in sight: {} of its time, the median of {} (at least three \
+         quarters).",
+        percent(median(&eggs)),
+        eggs.len()
+    );
+    println!(
+        "A young sprite seeing a living parent: {} of its childhood, the median of {} (at least \
+         half).",
+        percent(median(&young)),
+        young.len()
+    );
 }

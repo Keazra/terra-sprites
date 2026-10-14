@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::action::{self, Hurt, Outcome};
+use crate::courtship;
 use crate::data::DataPack;
 use crate::ecology;
 use crate::events::{Event, EventKind};
@@ -131,8 +132,9 @@ pub(crate) fn fertile(state: &WorldState, sprite: &Sprite, data: &DataPack) -> b
 
 /// Sprite `actor`, beside `target`, tries to mate with it, once (M2 design
 /// §10). It works if both are adults, fertile, one male and one female,
-/// and the female has a free tile beside her: she lays an egg there, its
-/// genes mixed from both. Otherwise it's a fruitless try.
+/// she's receptive enough (§15.3), and she has a free tile beside her: she
+/// lays an egg there, its genes mixed from both, and they're partners
+/// (§15.4). Otherwise it's a fruitless try.
 pub(crate) fn mate(
     state: &mut WorldState,
     data: &DataPack,
@@ -151,7 +153,11 @@ pub(crate) fn mate(
                 (Sex::Male, Sex::Female) => (partner, actor),
                 _ => return None,
             };
-            both.then(|| lay(state, data, mother, Some(father), events))?
+            let her = state.sprites.get(mother)?;
+            let able = both && courtship::receptive(her, data);
+            let egg = able.then(|| lay(state, data, mother, Some(father), events))??;
+            courtship::pair(state, data, mother, father, events);
+            Some(egg)
         });
     // The partner touched the actor too, so each learns about the other
     // (M2 design §10).
@@ -164,9 +170,11 @@ pub(crate) fn mate(
 }
 
 /// Sprite `actor` tries to breed alone, once (M2 design §10). It works if
-/// it's a fertile adult female whose longing has reached
-/// `breeding.breeds_alone`, with a free tile beside her: she lays an egg
-/// there, its genes hers. Otherwise it's a fruitless try.
+/// it's a fertile adult female who has gone `breeding.alone_after` ticks
+/// with no male adult seen or heard (§15.7), with a free tile beside her:
+/// she lays an egg there, its genes hers. Otherwise it's a fruitless try.
+/// A pack from before that rule has her longing reach
+/// `breeding.breeds_alone` instead.
 pub(crate) fn breed_alone(
     state: &mut WorldState,
     data: &DataPack,
@@ -175,13 +183,16 @@ pub(crate) fn breed_alone(
 ) -> Outcome {
     let sprite = state.sprites.get(actor).expect("the actor");
     let physiology = data.physiology();
+    let breeding = &physiology.breeding;
     let longing = physiology
         .indices
         .breeding
         .map_or(0.0, |indices| sprite.body.chems[indices.longing]);
-    let able = sprite.sex == Sex::Female
-        && longing >= physiology.breeding.breeds_alone
-        && fertile(state, sprite, data);
+    let alone = breeding
+        .alone_after
+        .is_none_or(|ticks| state.tick >= sprite.last_male.saturating_add(ticks));
+    let longs = breeding.breeds_alone.is_none_or(|level| longing >= level);
+    let able = sprite.sex == Sex::Female && alone && longs && fertile(state, sprite, data);
     let laid = able
         .then(|| lay(state, data, actor, None, events))
         .flatten();
@@ -289,14 +300,16 @@ mod tests {
     use super::*;
     use crate::command::Command;
     use crate::map::Map;
-    use crate::test_util::at;
+    use crate::test_util::{at, builtin_changing};
     use crate::world::{Scenario, World};
 
     #[test]
     fn a_full_world_is_infertile_and_lays_nothing() {
         // M2 design §10.4: the limit counts eggs, and a sprite in a full
-        // world isn't fertile.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
+        // world isn't fertile. In a pack that lets a female breed alone at
+        // once (§15.7).
+        let changes = [("alone_after: 4500,", "alone_after: 0,")];
+        let data = builtin_changing("physiology.ron", &changes);
         let genome = Genome::from_ron(
             r#"(format: 1, genes: [
                 InitialConcentration(chem: "feminiser", value: 1.0),
@@ -363,7 +376,11 @@ mod tests {
             sprite.body.chems[indices.energy] = 1.0;
             sprite.body.chems[indices.hydration] = 1.0;
         }
-        state.sprites.get_mut(she).expect("her").sex = Sex::Female;
+        let her = state.sprites.get_mut(she).expect("her");
+        her.sex = Sex::Female;
+        // Courted till she's receptive (M2 design §15.3).
+        let courtship = indices.courtship.expect("a pack with courtship");
+        her.body.chems[courtship.receptivity] = 1.0;
         let mut events = Vec::new();
         mate(state, data, he, Target::Sprite(she), &mut events);
         assert!(

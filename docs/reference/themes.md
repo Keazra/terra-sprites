@@ -53,6 +53,7 @@ A **glyph** is `(glyph: '♣', fg: green)`, with two optional flags: `bold: true
 | `egg`, `selected_egg` | Retired: an egg is an item until it hatches, drawn from `objects` (M2 design §10.7). A theme that still has them loads, and draws the egg with its `egg` glyph if its `objects` have no `"egg"`. |
 | `decision_marker` | Where the selected sprite is heading. It flashes. |
 | `emote(hurt)`, `emote(pleased)`, `emote(shocked)`, `emote(failed)`, `emote(resting)` | What takes turns with a sprite's glyph when it's hurt, petted, zapped, gives up, or rests (design §6.3). |
+| `emote(dancing)`, `emote(calling)` | What takes turns with a sprite's glyph while it dances for another, or calls and listens (M2 design §15.8). Optional: a theme without them draws both as `emote(pleased)`. |
 
 ### `objects`
 
@@ -179,4 +180,4 @@ A bright theme, for a terminal whose dark colours are hard to see: light colours
 )
 ```
 
-Save it as `bright.ron` in the themes folder and pick it with `Ctrl+T`. Boredom, crowdedness and arousal are left out of `drives`, so a sprite bored, crowded or aroused above all else draws in white. `space` gives only the far stars, in gray rather than dark gray, so the glass and the nearer stars are drawn as the default theme draws them. `population` draws old sprites in white and the line of the world's limit in gray; the rest of the graph is drawn as in the default theme. `lineage` draws the sprites outside the lineage in gray, a little brighter than the default's dark gray.
+Save it as `bright.ron` in the themes folder and pick it with `Ctrl+T`. Boredom, crowdedness, arousal and anxiety are left out of `drives`, so a sprite bored, crowded, aroused or anxious above all else draws in white. `space` gives only the far stars, in gray rather than dark gray, so the glass and the nearer stars are drawn as the default theme draws them. `population` draws old sprites in white and the line of the world's limit in gray; the rest of the graph is drawn as in the default theme. `lineage` draws the sprites outside the lineage in gray, a little brighter than the default's dark gray.
