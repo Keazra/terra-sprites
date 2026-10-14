@@ -1,6 +1,6 @@
 # Generations on the population graph
 
-The population graph's reading says which generations were alive at the picked moment, as the World tab says it for now. Settled in Slice 25's design round (Q6, A) and filed as [#208](https://github.com/Keazra/terra-sprites/issues/208); the owner chose three reading lines on 2026-10-14, when the one line #208 described didn't fit the game's smallest screen.
+The population graph's reading says which generations were alive at the picked moment, as the World tab says it for now. Settled in Slice 25's design round (Q6, A) and filed as [#208](https://github.com/Keazra/terra-sprites/issues/208), built in PR [#215](https://github.com/Keazra/terra-sprites/pull/215); the owner chose three reading lines on 2026-10-14, when the one line #208 described didn't fit the game's smallest screen.
 
 ## M2 "Generations"
 
