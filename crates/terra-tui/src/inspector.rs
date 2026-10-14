@@ -11,7 +11,7 @@ use terra_sim::{
     DeathCause, Dir, EggView, EmitterMode, Emptied, EntityId, Event, EventKind, Explanation,
     Expression, GeneView, Grip, Learned, LifeStage, MAX_NAME_CHARS, NameProblem, ObjectView,
     Outcome, Part, PlaceRule, Pos, Progress, Rejection, Removal, SpriteView, Switch, Target,
-    Terrain, Thing, Trait, Verb, World,
+    Terrain, Thing, Trait, Verb, Whom, World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -1719,11 +1719,14 @@ fn gene_name(gene: &GeneView) -> String {
             verb_name(verb).to_lowercase()
         ),
         GeneView::AttentionInstinct {
-            input, category, ..
+            input,
+            category,
+            whom,
+            ..
         } => format!(
             "{} → attends to {}",
             display_name(input),
-            display_name(category)
+            attended(category, whom)
         ),
         GeneView::InitialConcentration { chem, .. } => format!("{}'s start", display_name(chem)),
         GeneView::Unknown { .. } => gene_text(gene),
@@ -1737,6 +1740,15 @@ fn health_text(health: f32) -> String {
         format!(" · health{BOUND}{}", level(health))
     } else {
         String::new()
+    }
+}
+
+/// What an attention instinct draws the eye to: `sprite`, or, about whom
+/// it is (M2 design §15.6), `its young (sprite)`.
+fn attended(category: &str, whom: Whom) -> String {
+    match whom.name() {
+        Some(whom) => format!("its {whom} ({})", display_name(category)),
+        None => display_name(category),
     }
 }
 
@@ -1807,11 +1819,14 @@ fn gene_text(gene: &GeneView) -> String {
             n(0)
         ),
         GeneView::AttentionInstinct {
-            input, category, ..
+            input,
+            category,
+            whom,
+            ..
         } => format!(
             "{} → attends to {} {}",
             display_name(input),
-            display_name(category),
+            attended(category, whom),
             n(0)
         ),
         GeneView::InitialConcentration { chem, .. } => {

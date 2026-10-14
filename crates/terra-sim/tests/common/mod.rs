@@ -220,6 +220,24 @@ pub fn lone() -> DataPack {
     builtin_changing("physiology.ron", &[LONE])
 }
 
+/// A world drawn from `rows`, with a sprite of its own genes on each tile,
+/// all grown up, made with `data`.
+pub fn world_in(data: DataPack, rows: &[&str], sprites: &[(Pos, &str)]) -> World {
+    let placed = sprites
+        .iter()
+        .map(|&(pos, genes)| (pos, Some(genome(genes, &data))))
+        .collect();
+    WorldBuilder::new(rows)
+        .data(data)
+        .sprites_with(placed)
+        .build()
+}
+
+/// The ID of the sprite standing on `pos`.
+pub fn id_at(world: &World, pos: Pos) -> EntityId {
+    world.sprite_at(pos).expect("a sprite there").id()
+}
+
 /// A small field of grass with a sprite of its own genes on each tile, the
 /// ones on `young` as newborns and the rest just grown up.
 pub fn family(sprites: &[(Pos, &str)], young: &[Pos], seed: u64) -> World {

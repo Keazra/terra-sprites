@@ -1265,6 +1265,7 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
         (92, "parent_away"),
         (93, "partner_away"),
         (94, "target_family"),
+        (95, "found_family"),
     ]);
     assert_eq!(inputs, expected);
 }

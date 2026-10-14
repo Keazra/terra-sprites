@@ -213,11 +213,12 @@
     flaws: (arise: 0.004, founders: 0.035, health: 0.5, wear: 0.05),
     // Copy and change (M2 design §13): as an egg's genes are copied, each
     // gene is now and then doubled, lost, or changed in what it does: what
-    // an instinct reacts to or its action, what draws the eye to what, or
-    // the life stages it works in. So about one hatchling in ten has a gene doubled,
-    // lost or changed. `on_copy` of the changes are made on a fresh copy, so
-    // the original still works. A genome never grows past `longest` times the
-    // starter's length. First guesses.
+    // an instinct reacts to or its action, what draws the eye to what or
+    // whom it's about, or the life stages it works in. So about one
+    // hatchling in ten has a gene doubled, lost or changed. `on_copy` of the
+    // changes are made on a fresh copy, so the original still works. A
+    // genome never grows past `longest` times the starter's length. First
+    // guesses.
     copy_and_change: (doubled: 0.00029, lost: 0.00029, changed: 0.00029, on_copy: 0.75, longest: 2.0),
 
     // A learned value this far from 0 is a lesson, which the event log

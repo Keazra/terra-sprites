@@ -1145,6 +1145,8 @@ pub(crate) struct FamilyIndices {
     pub(crate) young_away: usize,
     pub(crate) parent_away: usize,
     pub(crate) partner_away: usize,
+    /// The pulse it feels on finding family it was missing.
+    pub(crate) found: usize,
 }
 
 impl Indices {
@@ -1288,6 +1290,7 @@ impl Indices {
             sensor_if("young_away"),
             sensor_if("parent_away"),
             sensor_if("partner_away"),
+            locus("found_family", LocusKind::Pulse),
         ) {
             (
                 Some(_),
@@ -1296,12 +1299,14 @@ impl Indices {
                 Some(young_away),
                 Some(parent_away),
                 Some(partner_away),
+                Some(found),
             ) => Some(FamilyIndices {
                 egg_away,
                 egg_alone,
                 young_away,
                 parent_away,
                 partner_away,
+                found,
             }),
             _ => None,
         };

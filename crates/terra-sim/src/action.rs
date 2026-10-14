@@ -478,12 +478,8 @@ pub(crate) fn sense_and_decide(
                 None
             };
             let sprite = state.sprites.get_mut(id).expect("the same sprite");
-            if lost_trail {
-                match sought {
-                    Some(Target::Sprite(caller)) => sprite.forget_call(caller),
-                    Some(Target::Object(egg)) => sprite.forget_egg(egg),
-                    _ => {}
-                }
+            if lost_trail && let Some(sought) = sought {
+                sprite.forget_sought(sought);
             }
             let action = sprite.action.as_mut().expect("an action");
             match outcome {

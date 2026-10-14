@@ -14,7 +14,6 @@ use crate::courtship;
 use crate::data::DataPack;
 use crate::events::Event;
 use crate::family;
-use crate::learning::Subject;
 use crate::map::Pos;
 use crate::objects::EntityId;
 use crate::perception::{Ground, Occupied, Target};
@@ -53,6 +52,16 @@ struct Candidate {
     /// The stable ID of its type: none for water or a sprite in a pack with
     /// no object type for them (design v19 §3.5.5).
     type_id: Option<u16>,
+}
+
+/// What `pick` picks out of every offer in `offered`, once each: what's
+/// already there to aim at, so what's remembered or heard of it isn't
+/// offered again.
+fn offered_by<T: Ord>(
+    offered: &BTreeMap<CategoryId, Vec<Offer>>,
+    pick: impl FnMut(&Offer) -> Option<T>,
+) -> BTreeSet<T> {
+    offered.values().flatten().filter_map(pick).collect()
 }
 
 /// Step 5a and 5b for sprite `id`, after 5.0 (design §5.5). A scripted
@@ -105,11 +114,7 @@ pub(crate) fn decide(
         .collect();
     // A remembered place joins its category's offers, as a thing at the
     // edge of sight, while nothing of its kind is in sight (M2 design §7).
-    let in_view: BTreeSet<Subject> = offered
-        .values()
-        .flatten()
-        .map(|offer| state.subject_of(data, offer.target))
-        .collect();
+    let in_view = offered_by(&offered, |offer| Some(state.subject_of(data, offer.target)));
     for place in &sprite.brain.experience.places {
         if in_view.contains(&place.subject) || state.whereabouts(data, place.target).is_none() {
             continue;
@@ -126,14 +131,10 @@ pub(crate) fn decide(
     // So does a sprite heard calling, out of sight, which draws the eye less
     // as its call fades (M2 design §15.1).
     let heard_for = data.physiology().calls.heard_for;
-    let in_sight: BTreeSet<EntityId> = offered
-        .values()
-        .flatten()
-        .filter_map(|offer| offer.target.sprite())
-        .collect();
+    let sprites_offered = offered_by(&offered, |offer| offer.target.sprite());
     for heard in &sprite.heard {
         let caller = heard.caller;
-        if in_sight.contains(&caller) || state.sprites.get(caller).is_none() {
+        if sprites_offered.contains(&caller) || state.sprites.get(caller).is_none() {
             continue;
         }
         let offer = Offer {
@@ -149,20 +150,16 @@ pub(crate) fn decide(
     }
     // So does an egg of its own out of sight, where it last saw it, as a
     // remembered place is (M2 design §15.6).
-    let in_sight: BTreeSet<EntityId> = match sprite.eggs.is_empty() {
+    let objects_offered = match sprite.eggs.is_empty() {
         true => BTreeSet::new(),
-        false => offered
-            .values()
-            .flatten()
-            .filter_map(|offer| match offer.target {
-                Target::Object(id) => Some(id),
-                _ => None,
-            })
-            .collect(),
+        false => offered_by(&offered, |offer| match offer.target {
+            Target::Object(id) => Some(id),
+            _ => None,
+        }),
     };
     for known in &sprite.eggs {
         let egg = Target::Object(known.egg);
-        if in_sight.contains(&known.egg) || state.whereabouts(data, egg).is_none() {
+        if objects_offered.contains(&known.egg) || state.whereabouts(data, egg).is_none() {
             continue;
         }
         let offer = Offer {
@@ -522,10 +519,9 @@ pub(crate) fn decide(
             );
             if way.is_none() {
                 let sprite = state.sprites.get_mut(id).expect("the same sprite");
-                match (target, seek) {
-                    (Target::Sprite(caller), Some(_)) => sprite.forget_call(caller),
-                    (Target::Object(egg), Some(_)) => sprite.forget_egg(egg),
-                    _ => sprite.brain.experience.forget_place(target),
+                match seek {
+                    Some(_) => sprite.forget_sought(target),
+                    None => sprite.brain.experience.forget_place(target),
                 }
                 return;
             }

@@ -107,10 +107,10 @@
         HalfLife(chem: "grief", ticks: 860),
 
         // Anxiety holds a family together (M2 design §15.6). A parent's
-        // rises while its egg is out of sight, and faster if it left the egg
-        // with no other parent by it. It rises while its young are out of
-        // sight, faster in a young sprite while no parent is in sight, and
-        // a little while its partner is away. Each found drops it at once,
+        // rises while its egg is out of sight, four times as fast if it left
+        // the egg with no other parent by it. It rises while its young or its
+        // partner are out of sight, and faster in a young sprite while no
+        // parent is in sight. Finding the one it missed drops it at once,
         // and it fades within a few minutes. Hunger and thirst come first:
         // past 0.4, they drain it.
         Emitter(locus: Locus("egg_away"), mode: Level, gain: 0.01, chem: "anxiety"),
@@ -118,10 +118,7 @@
         Emitter(locus: Locus("young_away"), mode: Level, gain: 0.02, chem: "anxiety"),
         Emitter(locus: Locus("parent_away"), mode: Level, gain: 0.03, chem: "anxiety"),
         Emitter(locus: Locus("partner_away"), mode: Level, gain: 0.02, chem: "anxiety"),
-        Emitter(locus: Locus("egg_away"), mode: Fall, gain: -0.5, chem: "anxiety"),
-        Emitter(locus: Locus("young_away"), mode: Fall, gain: -0.5, chem: "anxiety"),
-        Emitter(locus: Locus("parent_away"), mode: Fall, gain: -0.5, chem: "anxiety"),
-        Emitter(locus: Locus("partner_away"), mode: Fall, gain: -0.5, chem: "anxiety"),
+        Emitter(locus: Locus("found_family"), mode: Level, gain: -0.5, chem: "anxiety"),
         HalfLife(chem: "anxiety", ticks: 300),
         Emitter(locus: Chem("hunger"), mode: Level, threshold: 0.4, gain: -0.05, chem: "anxiety"),
         Emitter(locus: Chem("thirst"), mode: Level, threshold: 0.4, gain: -0.05, chem: "anxiety"),

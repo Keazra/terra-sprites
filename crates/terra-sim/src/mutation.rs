@@ -218,13 +218,13 @@ enum Aspect {
 
 /// `gene`, working as `switch`, changed in one thing it does (M2 design
 /// §13), with when it then works: one of an instinct's inputs or its verb,
-/// what draws an attention instinct's eye or what to, and whom in it (§15.6),
-/// or the life stages a
-/// gene works in, each as likely as the others. A gene that may not switch,
-/// such as a trait (§9.2), has no life stages to change. Each choice is one
-/// the pack has, other than the one the gene had, and none makes a gene
-/// change the body directly (M1 design §4.3). None for a gene with nothing
-/// to change, or a change the pack can't have, which isn't made.
+/// what draws an attention instinct's eye or what to, or whom in it
+/// (§15.6), or the life stages a gene works in, each as likely as the
+/// others. A gene that may not switch, such as a trait (§9.2), has no life
+/// stages to change. Each choice is one the pack has, other than the one
+/// the gene had, and none makes a gene change the body directly (M1 design
+/// §4.3). None for a gene with nothing to change, or a change the pack
+/// can't have, which isn't made.
 fn changed(
     gene: &Gene,
     switch: Switch,

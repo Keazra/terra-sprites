@@ -27,9 +27,9 @@
     (id: 12, name: "condition",         kind: BodySensor),
     // Families (M2 design §15.6): 1 while an egg of its own is out of sight,
     // 1 while one of those was left with no other parent by it when it last
-    // saw it, 1 while a young one of its own is out of sight, 1 while it's
-    // young and sees none of its living parents, and 1 while its partner is
-    // out of sight.
+    // saw it, or never seen, 1 while a young one of its own is out of sight,
+    // 1 while it's young and sees none of its living parents, and 1 while
+    // its partner is out of sight.
     (id: 13, name: "egg_away",          kind: BodySensor),
     (id: 14, name: "egg_alone",         kind: BodySensor),
     (id: 15, name: "young_away",        kind: BodySensor),
@@ -52,6 +52,7 @@
     (id: 45, name: "courted",           kind: Pulse),  // another danced for it; the dancer is its source (§15.3)
     (id: 46, name: "danced",            kind: Pulse),  // it danced for another (§15.3)
     (id: 47, name: "lost_partner",      kind: Pulse),  // its partner died (§15.4)
+    (id: 48, name: "found_family",      kind: Pulse),  // it found family it was missing (§15.6)
 
     (id: 64, name: "learning_rate_mod", kind: ReceptorTarget),
     (id: 65, name: "exploration_mod",   kind: ReceptorTarget),

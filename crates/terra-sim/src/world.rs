@@ -3167,4 +3167,92 @@ mod tests {
         assert_eq!(kinds, [EventKind::Paired { a, b: c }]);
         assert_eq!(world.sprite(a).unwrap().partner(), Some((c, false)));
     }
+
+    #[test]
+    fn a_partner_lost_out_of_sight_ends_the_sense_of_it_away_but_is_not_found() {
+        // M2 design §15.6: `found_family` is for finding the one it missed,
+        // not for losing it.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let (mut world, ids) = resters(data, 30, &[0, 20]);
+        let (a, b) = (ids[0], ids[1]);
+        make_partners(&mut world, a, b);
+        world.step();
+        let families = world.data.physiology().indices.families;
+        let families = families.expect("the built-in pack has families");
+        let locus = |world: &World, at: usize| world.state.sprites.get(a).expect("a").body.loci[at];
+        assert_eq!(
+            locus(&world, families.partner_away),
+            1.0,
+            "b is out of sight"
+        );
+        let injury = world.data.physiology().indices.injury;
+        world.state.sprites.get_mut(b).expect("b").body.chems[injury] = 1.0;
+        for _ in 0..3 {
+            world.step();
+            assert_eq!(locus(&world, families.found), 0.0, "nothing found");
+        }
+        assert_eq!(
+            locus(&world, families.partner_away),
+            0.0,
+            "no partner to miss"
+        );
+    }
+
+    #[test]
+    fn a_parent_remembers_its_egg_until_it_hatches() {
+        // M2 design §15.6: the place an egg lay is forgotten once it has
+        // hatched, as well as once it's found gone.
+        let data = crate::test_util::builtin_changing(
+            "physiology.ron",
+            &[("alone_after: 4500,", "alone_after: 0,")],
+        );
+        let map = Map::from_ascii(&["......"], &data).expect("valid drawing");
+        let genes = r#"(format: 2, genes: [
+            Trait(trait: "speed", value: 10.0),
+            Trait(trait: "sense_radius", value: 10.0),
+            Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
+            InitialConcentration(chem: "longing", value: 1.0),
+            InitialConcentration(chem: "feminiser", value: 1.0),
+        ])"#;
+        let genome = Genome::from_ron(genes, &data).expect("a valid genome");
+        let sprites = [(Pos { x: 0, y: 0 }, Some(genome))];
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &sprites,
+            scripted: &[],
+            newborns: &[],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let mother = world
+            .sprite_at(Pos { x: 0, y: 0 })
+            .expect("the mother")
+            .id();
+        let remembered = |world: &World| -> Vec<EntityId> {
+            let sprite = world.state.sprites.get(mother).expect("the mother");
+            sprite.eggs.iter().map(|known| known.egg).collect()
+        };
+        // It looks for family before an egg is laid in the tick, so it
+        // notes the egg from the next.
+        let mut laid = None;
+        let mut noted = None;
+        for _ in 0..2_000 {
+            if let Some(egg) = noted {
+                assert_eq!(remembered(&world), [egg], "remembered until it hatches");
+            }
+            noted = laid;
+            for event in world.step() {
+                match event.kind {
+                    EventKind::Laid { egg, .. } => laid = Some(egg),
+                    EventKind::Hatched { id, .. } if Some(id) == laid => {
+                        world.step();
+                        assert_eq!(remembered(&world), [], "forgotten once hatched");
+                        return;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        panic!("the egg never hatched");
+    }
 }

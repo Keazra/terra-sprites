@@ -16,33 +16,37 @@ use crate::registry::{BrainParam, CategoryId, ChemId, LocusId, Trait, Verb};
 /// and format 2 for one with a gene that switches with life stage (M2
 /// design §9.2), which they refuse.
 const FORMAT: u32 = 2;
+/// The gene type ID of an attention instinct.
+const ATTENTION_INSTINCT: u16 = 9;
+
 /// The newest payload version this build reads of gene type `type_id`: 2
 /// for an attention instinct, which can name whom it's about (M2 design
 /// §15.6), and 1 for every other type.
 fn newest(type_id: u16) -> u8 {
-    if type_id == 9 { 2 } else { 1 }
+    if type_id == ATTENTION_INSTINCT { 2 } else { 1 }
 }
 
 /// Whom an attention instinct is about (M2 design §15.6): anything of its
 /// category, or only the sprite's family in it, its kin, or one kind of
-/// family: its partner, its parents or its young.
+/// family: its partner, its parents or its young. The discriminants are
+/// how a payload writes it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Whom {
     /// Anything of its category.
     #[default]
-    Any,
+    Any = 0,
     /// The sprite's family: its partner, its parents while it's young, its
     /// young, and its eggs.
-    Family,
+    Family = 1,
     /// Its close kin: its parents, its young and its eggs, and its brothers
     /// and sisters.
-    Kin,
+    Kin = 2,
     /// Its partner.
-    Partner,
+    Partner = 3,
     /// Its parents, while it's young.
-    Parent,
+    Parent = 4,
     /// Its young.
-    Young,
+    Young = 5,
 }
 
 impl Whom {
@@ -58,6 +62,19 @@ impl Whom {
     /// Whether it's about anything of its category.
     pub(crate) fn is_any(&self) -> bool {
         *self == Whom::Any
+    }
+
+    /// Whom it's about, as the player sees it: `family`, `kin`,
+    /// `partner`, `parents` or `young`, and nothing for anything.
+    pub fn name(self) -> Option<&'static str> {
+        match self {
+            Whom::Any => None,
+            Whom::Family => Some("family"),
+            Whom::Kin => Some("kin"),
+            Whom::Partner => Some("partner"),
+            Whom::Parent => Some("parents"),
+            Whom::Young => Some("young"),
+        }
     }
 }
 
@@ -1258,15 +1275,16 @@ fn decode(type_id: u16, version: u8, payload: Vec<u8>) -> Result<Gene, String> {
                 weight,
             }
         }
-        9 => {
+        ATTENTION_INSTINCT => {
             let (input, category, weight, whom): (InputId, u16, f32, u8) = if version < 2 {
                 let (input, category, weight) = read(&payload)?;
-                (input, category, weight, 0)
+                (input, category, weight, Whom::Any as u8)
             } else {
                 read(&payload)?
             };
-            let whom = *Whom::ALL
-                .get(usize::from(whom))
+            let whom = Whom::ALL
+                .into_iter()
+                .find(|&w| w as u8 == whom)
                 .ok_or_else(|| format!("has a payload with whom {whom}, which isn't 0 to 5"))?;
             Gene::AttentionInstinct {
                 input,

@@ -1372,8 +1372,9 @@ impl Brain {
     /// the eye beyond the instincts about its whole category (design v19
     /// §3.6, §5.3): the instincts about whom it is to the sprite (M2 design
     /// §15.6), its nearness, what it's worth, as much as it's recalled (§7),
-    /// how new it is, and, for a sprite, how frightening it is while near. `inputs` gives the State inputs, `curiosity_mod` the
-    /// receptor target wariness lowers, and `general` its sprites in general
+    /// how new it is, and, for a sprite, how frightening it is while near.
+    /// `inputs` gives the State inputs, `curiosity_mod` the receptor target
+    /// wariness lowers, and `general` its sprites in general
     /// (`sprites_in_general`), worked out once for all it sees.
     pub(crate) fn draw(
         &self,
@@ -2095,8 +2096,8 @@ mod tests {
         ]);
         let n = builtin().brain_inputs().count();
         assert_eq!(
-            n, 75,
-            "58 State inputs, 4 of body language, 4 of whom it knows and 9 Target inputs"
+            n, 76,
+            "59 State inputs, 4 of body language, 4 of whom it knows and 9 Target inputs"
         );
         // One singleton per input, and one conjunction for both genes naming it.
         assert_eq!(brain.concepts.len(), n + 1);

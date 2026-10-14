@@ -104,6 +104,8 @@ inputs: [
     // 1 while what it attends to is its family: its partner, its parents
     // while it's young, its young, or an egg of its own.
     (id: 94, name: "target_family", reads: Family),
+    // A pulse on finding family it was missing.
+    (id: 95, name: "found_family",  reads: Locus("found_family")),
 ],
 
 // The needs (design v16 §5.2, §5.6): the drives whose relief teaches a

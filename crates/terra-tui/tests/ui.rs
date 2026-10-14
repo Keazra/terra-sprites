@@ -2357,6 +2357,32 @@ fn the_genome_tab_shows_brain_settings_instincts_and_attention_instincts() {
 }
 
 #[test]
+fn the_genome_tab_shows_whom_an_attention_instinct_is_about() {
+    // M2 design §15.6: one about anything draws the eye to the category,
+    // and one about whom it is, only to them.
+    let genome = r#"(format: 2, genes: [
+        AttentionInstinct(input: "arousal", category: "sprite", weight: 1.0),
+        AttentionInstinct(input: "arousal", category: "sprite", whom: Kin, weight: -1.0),
+        AttentionInstinct(input: "anxiety", category: "egg", whom: Family, weight: 1.0),
+        AttentionInstinct(input: "anxiety", category: "sprite", whom: Young, weight: 1.0),
+    ])"#;
+    let (world, mut app) = one_sprite(genome, 0);
+    open(&mut app, &world, Tab::Genome);
+    let rows = right_part(&render(&app, &world, 100, 30), 46);
+    let text: Vec<&str> = rows[2..7].iter().map(|row| inside(row)).collect();
+    assert_eq!(
+        text,
+        [
+            "ATTENTION INSTINCTS",
+            "arousal → attends to sprite +1",
+            "arousal → attends to its kin (sprite) -1",
+            "anxiety → attends to its family (egg) +1",
+            "anxiety → attends to its young (sprite) +1",
+        ]
+    );
+}
+
+#[test]
 fn the_genome_tab_shows_switches_dormant_genes_and_weakened_genes() {
     // M2 design §9.6. In this pack water runs out at once and thirst
     // injures badly, and a bad injury scars a gene every tick: the tick its

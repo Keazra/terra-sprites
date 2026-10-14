@@ -352,7 +352,7 @@ The hormone a female's body needs for Mate to lay an egg: at least physiology's 
 _Avoid_: readiness (fertile is the body's ready), heat, oestrus
 
 **Partner** (M2, Slice 32):
-The sprite it had its latest egg with. In the starter genes partners court and mate only each other, an aroused one goes to the other, and one out of sight makes it anxious, a little (see **Family**). A partner is freed when the other dies, or after an hour neither seeing nor hearing the other, and may pair again; one that died is still named until the sprite pairs again.
+The sprite it had its latest egg with. In the starter genes partners court and mate only each other, an aroused one goes to the other, and one out of sight makes it anxious (see **Family**). A partner is freed when the other dies, or after an hour neither seeing nor hearing the other, and may pair again; one that died is still named until the sprite pairs again.
 _Avoid_: mate (that's the action), spouse, bond
 
 **Kin** (M2, Slice 32):
@@ -364,7 +364,7 @@ A sprite's partner, its parents while it's young, its young, and its eggs: those
 _Avoid_: clan, herd, kin (kin is by blood)
 
 **Anxiety** (M2, Slice 32):
-A drive and second-order need that rises while a sprite's family is out of sight, as the starter genes have it: fast for an egg it left alone, more slowly for one it left with its partner, for its young, and in a young sprite while no parent is in sight; a little for its partner. Finding them eases it, and hunger and thirst drain it. It's care, so it never reads the breeding drive.
+A drive and second-order need that rises while a sprite's family is out of sight, as the starter genes have it: fastest for an egg it left alone, then in a young sprite while no parent is in sight, then for its young or its partner, and slowest for an egg it left with the other parent by it. Finding the one it missed eases it, and hunger and thirst drain it. It's care: the starter's never comes from the breeding drive, and whatever the genes, the breeding drive draws no eye to a young sprite.
 _Avoid_: fear (fear is of someone), worry, loneliness (that's for any company)
 
 **Grief** (M2, Slice 32):
@@ -557,7 +557,7 @@ Where something that stays put, such as water or a bush, eased one of a sprite's
 _Avoid_: landmark, waypoint, place (alone, outside the Brain tab: that's putting a thing down with the Cursor)
 
 **Trip** (M2):
-An action aimed at a remembered place out of sight. The sprite knows the way: setting off, it plans a path as far as the place's distance plus its sense radius, keeps to it, and has as long as the walk takes on top of the timeout. Once the place comes into sight, the trip is an ordinary action. The screen says "the water it remembers".
+An action aimed at a place out of sight that the sprite knows of: a remembered place, the tile a call came from, or where it last saw an egg of its own. The sprite knows the way: setting off, it plans a path as far as the place's distance plus its sense radius, keeps to it, and has as long as the walk takes on top of the timeout. Once the place, the caller or the egg comes into sight, the trip is an ordinary action. The screen says "the water it remembers".
 _Avoid_: journey, expedition, recall (recall is how well the place is remembered)
 
 **Lesson**:

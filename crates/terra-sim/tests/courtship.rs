@@ -9,7 +9,7 @@
 mod common;
 use common::{
     ALONE, FEMALE, KEEN, LONE, WorldBuilder, at, builtin, builtin_changing, builtin_changing_files,
-    genome, hatch, laid, until,
+    genome, hatch, id_at, laid, until, world_in,
 };
 
 use terra_sim::{
@@ -29,27 +29,9 @@ const RESTER: &str = r#"
     BrainParam(param: "tau_base", value: 0.02),
 "#;
 
-/// A world drawn from `rows`, with a sprite of its own genes on each tile,
-/// all grown up, made with `data`.
-fn world_in(data: DataPack, rows: &[&str], sprites: &[(Pos, &str)]) -> World {
-    let placed = sprites
-        .iter()
-        .map(|&(pos, genes)| (pos, Some(genome(genes, &data))))
-        .collect();
-    WorldBuilder::new(rows)
-        .data(data)
-        .sprites_with(placed)
-        .build()
-}
-
 /// The same, with the built-in pack.
 fn world(rows: &[&str], sprites: &[(Pos, &str)]) -> World {
     world_in(builtin(), rows, sprites)
-}
-
-/// The ID of the sprite standing on `pos`.
-fn id_at(world: &World, pos: Pos) -> EntityId {
-    world.sprite_at(pos).expect("a sprite there").id()
 }
 
 /// Whether the sprite `id` has heard `caller` call, from `from`.

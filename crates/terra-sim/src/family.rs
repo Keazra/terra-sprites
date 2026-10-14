@@ -16,8 +16,8 @@ use crate::sprites::Sprite;
 use crate::world::WorldState;
 
 /// An egg of a sprite's own that it has seen (M2 design §15.6): where it
-/// last saw it, and whether no other parent saw it then, so it left it
-/// alone.
+/// last saw it, and whether it saw no other parent by it then, so it left
+/// it alone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct OwnEgg {
     pub(crate) egg: EntityId,
@@ -112,8 +112,8 @@ pub(crate) fn relation(state: &WorldState, me: EntityId, target: Target) -> Rela
 }
 
 /// Step 3's look for family, after the look round (M2 design §15.6): each
-/// sprite notes where it sees each egg of its own, and whether another
-/// parent sees it too, and forgets one that has hatched or is gone; then
+/// sprite notes where it sees each egg of its own, and whether it sees
+/// another parent by it, and forgets one that has hatched or is gone; then
 /// its `company` gains what it senses of its family. Nothing in a pack
 /// without families.
 pub(crate) fn look_for_family(
@@ -121,9 +121,9 @@ pub(crate) fn look_for_family(
     data: &DataPack,
     company: &mut BTreeMap<EntityId, Company>,
 ) {
-    if data.physiology().indices.families.is_none() {
+    let Some(indices) = data.physiology().indices.families else {
         return;
-    }
+    };
     // Every egg, with its tile, none while the Cursor holds it, and its
     // parents; and the young sprites of each sprite.
     let eggs: Vec<(EntityId, Option<Pos>, Vec<EntityId>)> = if state.objects.eggs() == 0 {
@@ -146,6 +146,7 @@ pub(crate) fn look_for_family(
         }
     }
     let mut seen_eggs: Vec<(EntityId, Vec<OwnEgg>)> = Vec::new();
+    let mut found = Vec::new();
     for (id, sprite) in sprites.iter() {
         let company = company.get_mut(&id).expect("each sprite looked round");
         let sees = |other: EntityId| company.seen.binary_search(&other).is_ok();
@@ -154,8 +155,9 @@ pub(crate) fn look_for_family(
         for (egg, pos, parents) in eggs.iter().filter(|(_, _, p)| p.contains(&id)) {
             match pos.filter(|&pos| sprite.sees(pos)) {
                 Some(at) => {
-                    let mut others = parents.iter().filter(|&&p| p != id);
-                    let alone = !others.any(|&p| sprites.get(p).is_some_and(|o| o.sees(at)));
+                    // By it: a parent it sees, which sees the egg.
+                    let by_it = |p: EntityId| sees(p) && sprites.get(p).is_some_and(|o| o.sees(at));
+                    let alone = !parents.iter().any(|&p| p != id && by_it(p));
                     seen.push(OwnEgg {
                         egg: *egg,
                         at,
@@ -169,18 +171,34 @@ pub(crate) fn look_for_family(
                 }
             }
         }
-        senses.young_away = young
-            .get(&id)
-            .is_some_and(|young| young.iter().any(|&y| !sees(y)));
-        let mut parents = sprite.parents.iter().filter(|&&p| sprites.get(p).is_some());
-        let mut parents = parents.by_ref().peekable();
-        senses.parent_away =
-            !sprite.stage().is_grown() && parents.peek().is_some() && !parents.any(|&p| sees(p));
+        let young = young.get(&id);
+        senses.young_away = young.is_some_and(|young| young.iter().any(|&y| !sees(y)));
+        // Only living sprites are in sight.
+        let has_parent = sprite.parents.iter().any(|&p| sprites.get(p).is_some());
+        let sees_parent = sprite.parents.iter().any(|&p| sees(p));
+        let is_young = !sprite.stage().is_grown();
+        senses.parent_away = is_young && has_parent && !sees_parent;
         senses.partner_away = sprite.partner().is_some_and(|p| !sees(p));
+        // It found family it was missing, with a `found_family` pulse: a
+        // sense that was on last tick is off, and not because the one it was
+        // about hatched, died, grew up or was freed. The body sensors still
+        // hold last tick's senses until biochemistry.
+        let was = |locus: usize| sprite.body.loci[locus] > 0.0;
+        if (was(indices.egg_away) && !senses.egg_away && !seen.is_empty())
+            || (was(indices.young_away) && !senses.young_away && young.is_some())
+            || (was(indices.parent_away) && is_young && sees_parent)
+            || (was(indices.partner_away) && sprite.partner().is_some_and(sees))
+        {
+            found.push(id);
+        }
         company.family = senses;
         if !seen.is_empty() || !sprite.eggs.is_empty() {
             seen_eggs.push((id, seen));
         }
+    }
+    for id in found {
+        let sprite = state.sprites.get_mut(id).expect("a sprite that looked");
+        sprite.body.pulse(indices.found, None);
     }
     for (id, seen) in seen_eggs {
         let sprite = state.sprites.get_mut(id).expect("a sprite that looked");
@@ -201,5 +219,16 @@ impl Sprite {
     /// back there and didn't find it.
     pub(crate) fn forget_egg(&mut self, egg: EntityId) {
         self.eggs.retain(|known| known.egg != egg);
+    }
+
+    /// Forgets the tile a trip to `target` looked for it on: where the
+    /// sprite heard it call (M2 design §15.1), or, for an egg of its own,
+    /// where it last saw it (§15.6).
+    pub(crate) fn forget_sought(&mut self, target: Target) {
+        match target {
+            Target::Sprite(caller) => self.forget_call(caller),
+            Target::Object(egg) => self.forget_egg(egg),
+            Target::Water(_) | Target::Cursor => {}
+        }
     }
 }

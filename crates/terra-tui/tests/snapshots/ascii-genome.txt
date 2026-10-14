@@ -6,16 +6,16 @@
 │.            +         .  .     .                   ││ HALF-LIVES                                 │
 │   +                      .                +        ││ hunger halves every 1,828 ticks            │
 │ *  *        +------------------------+        +  . ││ thirst halves every 1,833 ticks            │
-│             |.......X......,,,,::~~==| .           ││ arousal halves every 479 ticks             │
+│             |..............,,,,::~~==| .           ││ arousal halves every 479 ticks             │
 │           + |.'..........*.,,,,::~~==|   +   .     ││ feminiser halves every 543 ticks           │
-│  +*   . +   |..%.##........,,,,::~~==|             ││ longing halves every 3,026 ticks           │
-│         + . |....##.@............~~==|            +││ receptivity halves every 557 ticks         │
-│    *      . |.......Sv-.....@....~~==|             ││ h1 halves every 37 ticks                   │
+│  +*   . +   |..%.##..X@....,,,,::~~==|             ││ longing halves every 3,026 ticks           │
+│         + . |....##..............~~==|            +││ receptivity halves every 557 ticks         │
+│    *      . |.......Sv-..........~~==|             ││ h1 halves every 37 ticks                   │
 │             |....@..>.<........::~~==|             ││ h2 halves every 59 ticks                   │
-│           + |.......-^S........::~~==|.  .      +  ││ grief halves every 801 ticks               │
-│         +   |..................::~~==|    .     .  ││ anxiety halves every 322 ticks             │
+│           + |.......-^S......@.::~~==|.  .      +  ││ grief halves every 801 ticks               │
+│         +   |..................::~~==|    .     .  ││ anxiety halves every 296 ticks             │
 │           . +------------------------+             ││ pain halves every 21 ticks                 │
-│             .        .                   +      .  ││ h0 halves every 280 ticks                  │
+│             .        .                   +      .  ││ h0 halves every 277 ticks                  │
 │                  *      .     .      .        .  + ││ EMITTERS                                   │
 │     .            .                          .      ││ low energy → hunger +.00416 past .477      │
 │       +                                            ││ ate → hunger -.523                         │

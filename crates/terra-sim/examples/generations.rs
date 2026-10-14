@@ -12,16 +12,16 @@
 //! share of eggs laid alone, of eggs from pairs that danced for each other
 //! first, partners, and the sexes of the adults; then families (§15.9): how
 //! much of the time partners, eggs and the young had family in sight. The
-//! bars: sprites alive at
-//! the end in at least 8 of 10 seeds, and never more than the world's
-//! limit; at least 3 gene numbers moved by a tenth the same way in every
-//! seed (§12.7); in at least 5 of 10 seeds, a gene the starter lacks
-//! carried by at least a tenth of the living (§13); at most 1 egg in 50
-//! laid alone over all seeds, and none above 1 in 20; at least 9 in 10 of
-//! pairs' eggs after a dance each way; and, as the median over all of them,
-//! partners in each other's sight at least half the time, an egg with a
-//! parent in sight three quarters of its time, and a young sprite with a
-//! living parent seeing one half its childhood (§15.9).
+//! bars: sprites alive at the end in at least 8 of 10 seeds, and never
+//! more than the world's limit; at least 3 gene numbers moved by a tenth
+//! the same way in every seed (§12.7); in at least 5 of 10 seeds, a gene
+//! the starter lacks carried by at least a tenth of the living (§13); at
+//! most 1 egg in 50 laid alone over all seeds, and none above 1 in 20; at
+//! least 9 in 10 of pairs' eggs after a dance each way; and, as the median
+//! over all of them, partners in each other's sight at least half the
+//! time, an egg with a parent in sight three quarters of its time, and a
+//! young sprite with a living parent seeing one half its childhood
+//! (§15.9).
 //!
 //! `cargo run --release -p terra-sim --example generations`
 //!
@@ -38,7 +38,7 @@ use std::sync::Mutex;
 
 use terra_sim::{
     DataPack, DeathCause, EntityId, EventKind, Expression, GeneView, Genome, LifeStage, Outcome,
-    Sex, Switch, Target, Verb, Whom, World, WorldConfig,
+    Sex, Switch, Target, Verb, World, WorldConfig,
 };
 
 /// Ticks in an hour at 1×, 1.25 ticks a second (design §6.6).
@@ -430,16 +430,12 @@ fn named(gene: &GeneView) -> Option<(String, Vec<(&'static str, f32)>)> {
             whom,
             weight,
         } => {
-            let whom = match whom {
-                Whom::Any => String::new(),
-                Whom::Family => "family in ".into(),
-                Whom::Kin => "kin in ".into(),
-                Whom::Partner => "partner in ".into(),
-                Whom::Parent => "parent in ".into(),
-                Whom::Young => "young in ".into(),
+            let attended = match whom.name() {
+                Some(whom) => format!("its {whom} ({category})"),
+                None => category.to_string(),
             };
             (
-                format!("{input} → attends to {whom}{category}"),
+                format!("{input} → attends to {attended}"),
                 vec![("weight", *weight)],
             )
         }
