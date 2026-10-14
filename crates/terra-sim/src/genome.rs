@@ -28,8 +28,8 @@ fn newest(type_id: u16) -> u8 {
 
 /// Whom an attention instinct is about (M2 design §15.6): anything of its
 /// category, or only the sprite's family in it, its kin, or one kind of
-/// family: its partner, its parents or its young. The discriminants are
-/// how a payload writes it.
+/// family: its partner, its parents or its young; or grown-ups (§18.1).
+/// The discriminants are how a payload writes it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Whom {
     /// Anything of its category.
@@ -47,16 +47,19 @@ pub enum Whom {
     Parent = 4,
     /// Its young.
     Young = 5,
+    /// A sprite grown up, adult or old (M2 design §18.1).
+    Grown = 6,
 }
 
 impl Whom {
-    pub(crate) const ALL: [Whom; 6] = [
+    pub(crate) const ALL: [Whom; 7] = [
         Whom::Any,
         Whom::Family,
         Whom::Kin,
         Whom::Partner,
         Whom::Parent,
         Whom::Young,
+        Whom::Grown,
     ];
 
     /// Whether it's about anything of its category.
@@ -65,7 +68,8 @@ impl Whom {
     }
 
     /// Whom it's about, as the player sees it: `family`, `kin`,
-    /// `partner`, `parents` or `young`, and nothing for anything.
+    /// `partner`, `parents`, `young` or `grown-ups`, and nothing for
+    /// anything.
     pub fn name(self) -> Option<&'static str> {
         match self {
             Whom::Any => None,
@@ -74,6 +78,7 @@ impl Whom {
             Whom::Partner => Some("partner"),
             Whom::Parent => Some("parents"),
             Whom::Young => Some("young"),
+            Whom::Grown => Some("grown-ups"),
         }
     }
 }
@@ -1285,7 +1290,7 @@ fn decode(type_id: u16, version: u8, payload: Vec<u8>) -> Result<Gene, String> {
             let whom = Whom::ALL
                 .into_iter()
                 .find(|&w| w as u8 == whom)
-                .ok_or_else(|| format!("has a payload with whom {whom}, which isn't 0 to 5"))?;
+                .ok_or_else(|| format!("has a payload with whom {whom}, which isn't 0 to 6"))?;
             Gene::AttentionInstinct {
                 input,
                 category: CategoryId(category),

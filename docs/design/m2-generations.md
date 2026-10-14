@@ -1309,7 +1309,7 @@ cargo run --release -p terra-sim --example speed
 
 ## 18. Learning by watching (Slice 28)
 
-Settled with the owner on 2026-10-14 ([#146](https://github.com/Keazra/terra-sprites/issues/146), from [#66](https://github.com/Keazra/terra-sprites/issues/66)), in two rounds of questions. Until this slice a sprite learned only from what happened to itself. Since Slice 32 the young keep near their parents, seeing one for about three quarters of their childhood (§15.9), but they learned nothing from them. In the default world on `main` at `97c1175`, left alone for 60,000 ticks on seeds 1–10, the 1,539 young that saw a parent for most of their childhood learned that water is good for thirst a median 3,243 ticks after hatching, and the 453 that didn't at 3,259. 83% of all of them grew up without learning that food is good for hunger.
+Settled with the owner on 2026-10-14 ([#146](https://github.com/Keazra/terra-sprites/issues/146), from [#66](https://github.com/Keazra/terra-sprites/issues/66)), in two rounds of questions: the owner took the recommendations but for two, going further on what draws a young sprite's eye (Q1) and having everyone learn by watching (Q7). Until this slice a sprite learned only from what happened to itself. Since Slice 32 the young keep near their parents, seeing one for about three quarters of their childhood (§15.9), but they learned nothing from them. In the default world on `main` at `97c1175`, left alone for 60,000 ticks on seeds 1–10, the 1,539 young that saw a parent for most of their childhood learned that water is good for thirst a median 3,243 ticks after hatching, and the 453 that didn't at 3,259. 83% of all of them grew up without learning that food is good for hunger.
 
 The owner's direction: **the young pay attention to the grown-ups, their own parents most, and seeing them do something makes them want to try it too.** It's the guidance from fellow sprites that the harsher world leans on (§6, G5). So:
 
@@ -1317,7 +1317,8 @@ The owner's direction: **the young pay attention to the grown-ups, their own par
 - when that sprite uses something, the watcher **takes on a share of what it knows about the thing**: what it's good for, whether it's bad, and whether doing that to it works;
 - **what happens to the one it watches** teaches it too: a pet or a shock from the Cursor, or a hit from another sprite;
 - it **remembers the places** where it sees the other eased;
-- in the starter genes **only the young learn by watching**, and they watch the grown-ups, their parents most;
+- **everyone learns by watching**, but in the starter genes the young take in more, and pay the grown-ups more attention, their parents most;
+- **a parent doing something nearby draws its young's eye**, until the young has learned what it shows;
 - **nothing about mating is ever learned by watching** (§5).
 
 **The world and the genes.**
@@ -1325,17 +1326,19 @@ The owner's direction: **the young pay attention to the grown-ups, their own par
 | The world (the same for every sprite) | The genes (vary from sprite to sprite, and evolve) |
 |---|---|
 | A sprite sees what the sprite its eye is on does, and how it goes about it, which shows what that sprite knows about the thing | Whom it watches: grown-ups, its parents, anyone |
+| A young sprite senses when a parent in sight shows it something it hasn't learned | How much that draws its eye |
 | What it takes on is about things, and whom to fear; whom to like it finds out for itself | How much it takes in, and at what life stage |
 | Nothing about mating is ever learned by watching (§5) | — |
 
-Nothing here names an object or a species, so a new fruit, or a modded species, is learned by watching with no code, and a mod can make a species of keen watchers or of loners. It's the first way one sprite learns from another; NPCs in the larger game ([#47](https://github.com/Keazra/terra-sprites/issues/47)) that pick up a skill or a fear from each other would run on the same rule, with the gene working in adults (§18.1).
+Nothing here names an object or a species, so a new fruit, or a modded species, is learned by watching with no code, and a mod can make a species of keen watchers or of loners. It's the first way one sprite learns from another; NPCs in the larger game ([#47](https://github.com/Keazra/terra-sprites/issues/47)) that pick up a skill or a fear from each other would run on the same rule (§18.1).
 
 ### 18.1 Watching
 
 - **A sprite watches the one its eye is on** (round 1, Q1). At step 4 (M1 design §2.4), after every sprite has learned from what happened to itself, a sprite takes on what another's **moment** was about (§18.2) when it sees that sprite, by its own sight as §15.2 counts it, and its eye at its latest step 5 was on that sprite, or on what the moment was about: the same object type, the same sprite, or the Cursor. A sprite heard calling, out of sight, isn't watched. A sprite can watch several in one tick, as when its eye is on a bush and two sprites in sight eat from bushes.
-- **How much it takes in is a brain parameter, `watch_rate`** (ID 44, from 0 to 1, default 0): the share of the way its view moves towards the other's each time (§18.2). At 0 a sprite doesn't learn by watching. `learning_rate_mod` scales it, as it does every learning rate; `plasticity` doesn't, since it's a share rather than a rate, and the starter's is for the young already. A pack from before it gets the built-in range and default.
+- **How much it takes in is a brain parameter, `watch_rate`** (ID 44, from 0 to 1, default 0): the share of the way its view moves towards the other's each time (§18.2). At 0 a sprite doesn't learn by watching. `learning_rate_mod` scales it, as it does every learning rate; `plasticity` doesn't, since it's a share rather than a rate, and the starter's is already higher for the young. A pack from before it gets the built-in range and default.
 - **Grown-ups:** an attention instinct can be about **grown-ups**, `Grown` (ID 6), beside family, kin, partner, parents and young (§15.6): it draws the eye to a sprite grown up, adult or old. Copy and change (§13) can change whom a gene is about to it.
-- **The starter genes:** a young sprite has a `watch_rate` of .5 (Q3: half the gap), and `always` draws its eye to grown-ups, and to its parents as much again, so it watches the grown-ups when nothing presses, its parents most. All three work until adult (Q7), as the young's extra curiosity does (§9.5): grown sprites behave as before, so the Cursor's training (A3) and Slice 32's families don't move. Their weights are first guesses, tuned against §18.7, so watching doesn't crowd out eating and drinking.
+- **A parent showing it something** (the owner, Q1): a young sprite senses, with the body sensor `parent_showing`, when a parent in its sight tried something at the latest step 6 that the parent has learned a lesson about and it hasn't. That is, some value the young would take on by watching it (§18.2) is past `lesson_threshold` from 0 for the parent, and not yet for the young, on the same side or at 0. So it's on while there's something to learn, and off once the young has learned it, or if it learned the opposite itself, which watching can't undo. Like the other family senses (§15.6), the world gives the sense; the genes say how much it draws the eye. It's read at step 3, from each parent's latest try and what each knows then, as `parent_away` is. Never a try at Mate or Court (§18.3), nor one on the young itself. A pack without the sensor has none, and its sprites never sense it.
+- **The starter genes:** everyone learns by watching (the owner, Q7), the young more: a `watch_rate` of .5 until adult (Q3: half the gap), and .25 from adult, as round 1 offered. The young pay the grown-ups more attention (the owner, Q7): until adult, `always` draws a young sprite's eye to grown-ups, and to its parents as much again, so it watches the grown-ups when nothing presses, its parents most, and `parent_showing` draws its eye to its parents strongly. The weights are first guesses, tuned against §18.6, so watching doesn't crowd out eating and drinking. With grown sprites watching too, the Cursor's training can spread from the sprite it trains to the sprites watching it, which A3 measures.
 
 ### 18.2 What it takes on
 
@@ -1359,7 +1362,7 @@ Content safety (§5), for every genome and pack: a try at Mate or Court is never
 ### 18.4 What the player sees
 
 - **The log** says where a lesson came from when watching tipped it past half from nothing (Q8), as lessons are logged now (M1 design §5.6): `Kit #21 learned from watching Pip #12: water is good for thirst`, `Kit #21 learned from watching Pip #12: thornbushes are bad`.
-- **The Brain tab** is as before: a lesson learned by watching is listed with the rest, and its attention list shows whom a young one is watching. On the Genes tab an attention gene about grown-ups reads `grown-ups (sprite)`.
+- **The Brain tab** is as before: a lesson learned by watching is listed with the rest, and its attention list shows whom a sprite is watching; `parent showing` is listed with the other senses. On the Genes tab an attention gene about grown-ups reads `grown-ups (sprite)`.
 - **The map** gains nothing: watching isn't an action, and a young one beside its mother looks it already.
 
 ### 18.5 Following a parent
@@ -1380,6 +1383,5 @@ Agreed before measuring (round 1, Q9; round 2, Q10):
 ### 18.7 Later
 
 - **Copying the act itself** (Q2): seeing a sprite do something to a thing makes the young want to do the same, whatever came of it, so quirks run in families like traditions.
-- **Grown sprites watching each other** (Q7): one sprite's prick warns a group, as NPCs in the larger game would want ([#47](https://github.com/Keazra/terra-sprites/issues/47)).
 - **Going back to where it last saw its parent** (Q6), if the young lose their parents on trips.
 - **Parents teaching on purpose,** feeding and correcting their young ([#67](https://github.com/Keazra/terra-sprites/issues/67)).

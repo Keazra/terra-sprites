@@ -176,6 +176,10 @@
         "befriend_rate":     (range: (0.0, 0.01),    default: 0.0013),
         "befriend_play":     (range: (0.0, 1.0),     default: 0.1),
         "befriend_fade":     (range: (0.0, 0.01),    default: 0.000025),
+        // Learning by watching (M2 design §18.1): the share of the way a
+        // sprite's view moves towards what the sprite it watches knows. At
+        // 0 it doesn't learn by watching; the starter genome's young do.
+        "watch_rate":        (range: (0.0, 1.0),     default: 0.0),
     },
     // The range of each receptor target in `loci.ron`. Each rests at 1.0 when
     // no receptor writes it.

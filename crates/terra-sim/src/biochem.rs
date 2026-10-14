@@ -695,6 +695,9 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
         loci[families.young_away] = level(family.young_away);
         loci[families.parent_away] = level(family.parent_away);
         loci[families.partner_away] = level(family.partner_away);
+        if let Some(showing) = families.parent_showing {
+            loci[showing] = level(family.parent_showing);
+        }
     }
 }
 
@@ -1240,7 +1243,7 @@ mod tests {
 
     #[test]
     fn family_sensors_report_family_out_of_sight() {
-        // M2 design §15.6.
+        // M2 design §15.6, and a parent showing it something (§18.1).
         let mut sprite = Subject::quiet(&[]);
         sprite.step_with(Senses {
             family: FamilySenses {
@@ -1249,6 +1252,7 @@ mod tests {
                 young_away: true,
                 parent_away: true,
                 partner_away: true,
+                parent_showing: true,
             },
             ..adult()
         });
@@ -1258,6 +1262,7 @@ mod tests {
             "young_away",
             "parent_away",
             "partner_away",
+            "parent_showing",
         ] {
             assert_eq!(sprite.locus(sensor), 1.0, "{sensor}");
         }
@@ -1269,7 +1274,14 @@ mod tests {
             ..adult()
         });
         assert_eq!(sprite.locus("egg_away"), 1.0);
-        for sensor in ["egg_alone", "young_away", "parent_away", "partner_away"] {
+        let others = [
+            "egg_alone",
+            "young_away",
+            "parent_away",
+            "partner_away",
+            "parent_showing",
+        ];
+        for sensor in others {
             assert_eq!(sprite.locus(sensor), 0.0, "{sensor}");
         }
     }

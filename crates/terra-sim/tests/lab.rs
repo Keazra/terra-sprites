@@ -438,7 +438,7 @@ fn a_control_run_of_orphans_needs_young_that_appear_within_the_run() {
 
 #[test]
 fn a_scenario_can_give_each_sprite_a_newborn_of_its_own() {
-    // M2 design §18.7: young with a parent, against orphans.
+    // M2 design §18.6: young with a parent, against orphans.
     let data = builtin();
     let lab = LabScenario::from_ron(FAMILIES, &data).expect("a valid scenario");
     let run = lab.run(data, 1);
@@ -469,7 +469,7 @@ fn a_control_run_of_orphans_takes_the_grown_ups_away_as_their_young_appear() {
 
 #[test]
 fn the_young_s_lessons_count_who_learned_each_and_the_median_ticks_to_it() {
-    // M2 design §18.7: one that hasn't learned a lesson counts the ticks to
+    // M2 design §18.6: one that hasn't learned a lesson counts the ticks to
     // the window's end.
     let data = builtin();
     let long = FAMILIES

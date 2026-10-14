@@ -1197,7 +1197,7 @@ impl World {
         }
     }
 
-    /// For a lab scenario (M2 design §18.7): gives each sprite in the world,
+    /// For a lab scenario (M2 design §18.6): gives each sprite in the world,
     /// in ascending ID order, a newborn of its own, of the starter genome
     /// with spawn variation, on the nearest tile a sprite can stand on.
     /// Returns the young, in the same order.
@@ -1225,7 +1225,7 @@ impl World {
         young
     }
 
-    /// For a lab scenario (M2 design §18.7): takes the sprites `ids` out of
+    /// For a lab scenario (M2 design §18.6): takes the sprites `ids` out of
     /// the world, as if they had never been there: no death, and no record
     /// of the dead. Their young are left orphans.
     pub(crate) fn take_away(&mut self, ids: &[EntityId]) {
@@ -2786,10 +2786,70 @@ mod tests {
     }
 
     #[test]
-    fn a_world_nobody_trains_is_taught_nothing() {
-        // Design §5.6, #187: only the Cursor's Reward and Correct teach a
-        // taught habit, so sprites nobody trains learn as they did before.
+    fn a_young_sprite_senses_a_parent_showing_it_something_until_it_has_learned_it() {
+        // M2 design §18.1: its mother drinks, knowing water is good for
+        // thirst, and it doesn't yet; once it knows, it doesn't sense it.
         let data = DataPack::builtin().expect("built-in data pack is valid");
+        let map = Map::from_ascii(&["~.....", "~....."], &data).expect("valid drawing");
+        let rests = r#"(format: 1, genes: [Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0)])"#;
+        let rests = Genome::from_ron(rests, &data).expect("a valid genome");
+        let (mother, young) = (Pos { x: 1, y: 0 }, Pos { x: 3, y: 1 });
+        let drinks = ScriptedAction::Drink {
+            at: Pos { x: 0, y: 0 },
+        };
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &[(mother, Some(rests.clone())), (young, Some(rests))],
+            scripted: &[(mother, drinks), (mother, drinks), (mother, drinks)],
+            newborns: &[young],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let (mother, young) = (
+            world.sprite_at(mother).expect("the mother").id(),
+            world.sprite_at(young).expect("the young one").id(),
+        );
+        let needs = world.data.need_places().len();
+        let water = Subject::ObjectType(100);
+        let know_water = |world: &mut World, id: EntityId| {
+            let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
+            let known = brain.experience.learn_about(water, needs);
+            known.worth[1] = 0.6;
+            known.touched = true;
+        };
+        know_water(&mut world, mother);
+        world
+            .state
+            .sprites
+            .get_mut(young)
+            .expect("the young one")
+            .parents = vec![mother];
+        let families = world.data.physiology().indices.families.expect("families");
+        let showing = families.parent_showing.expect("the sensor");
+        let senses =
+            |world: &World| world.state.sprites.get(young).expect("young").body.loci[showing];
+        world.step();
+        assert_eq!(senses(&world), 0.0, "it hasn't drunk yet");
+        world.step();
+        assert_eq!(senses(&world), 1.0, "it drank at tick 0");
+        know_water(&mut world, young);
+        world.step();
+        assert_eq!(senses(&world), 0.0, "it knows");
+    }
+
+    #[test]
+    fn a_world_nobody_trains_that_doesn_t_watch_is_taught_nothing() {
+        // Design §5.6, #187: only the Cursor's Reward and Correct teach a
+        // taught habit, and watching passes one on (M2 design §18.2), so
+        // sprites nobody trains that don't learn by watching learn as they
+        // did before.
+        let data = crate::test_util::builtin_changing(
+            "physiology.ron",
+            &[(
+                r#""watch_rate":        (range: (0.0, 1.0),"#,
+                r#""watch_rate":        (range: (0.0, 0.0),"#,
+            )],
+        );
         let config = WorldConfig::builtin(&data);
         let mut world = World::new(config, data, 7);
         for _ in 0..2_000 {

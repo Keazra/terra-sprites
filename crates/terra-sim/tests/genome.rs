@@ -461,8 +461,8 @@ fn a_brain_gene_written_by_number_reads_the_same_as_by_name() {
 fn an_attention_instinct_about_whom_reads_and_writes_by_name_and_by_number() {
     // M2 design §15.6: version 2 of an attention instinct's payload adds
     // whom it's about, last: [input ID, category ID, weight, whom], with
-    // 0 any, 1 family, 2 kin, 3 partner, 4 parents and 5 young. Any is
-    // left unwritten by name.
+    // 0 any, 1 family, 2 kin, 3 partner, 4 parents, 5 young and, since
+    // §18.1, 6 grown-ups. Any is left unwritten by name.
     let data = builtin();
     let by_name = |whom: &str| {
         genome_file(&[&format!(
@@ -476,6 +476,7 @@ fn an_attention_instinct_about_whom_reads_and_writes_by_name_and_by_number() {
         "whom: Partner, ",
         "whom: Parent, ",
         "whom: Young, ",
+        "whom: Grown, ",
     ];
     for (number, whom) in whoms.into_iter().enumerate() {
         let text = by_name(whom);
@@ -489,7 +490,7 @@ fn an_attention_instinct_about_whom_reads_and_writes_by_name_and_by_number() {
         assert_eq!(read, genome, "{whom}");
     }
     assert_invalid(
-        &[r#"Gene(type: 9, version: 2, payload: "940102ca3f00000006")"#],
+        &[r#"Gene(type: 9, version: 2, payload: "940102ca3f00000007")"#],
         "whom",
     );
 }

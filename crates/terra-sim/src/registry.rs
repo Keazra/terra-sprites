@@ -155,6 +155,9 @@ listed_enum! {
         /// How much familiarity with a sprite fades each tick (M2 design
         /// §15.2).
         BefriendFade = 43 => "befriend_fade",
+        /// The share of the way a sprite's view moves towards what the
+        /// sprite it watches knows (M2 design §18.1).
+        WatchRate = 44 => "watch_rate",
     }
 
     pub(crate) const ALL;
@@ -335,7 +338,7 @@ mod tests {
         // `ALL`'s order is the ID order, from 1. Renaming a parameter still
         // round-trips here. Loading `physiology.ron` is what rejects a name
         // the data doesn't list, and a missing range for one it does.
-        assert_eq!(BrainParam::ALL.len(), 43);
+        assert_eq!(BrainParam::ALL.len(), 44);
         for (i, param) in BrainParam::ALL.into_iter().enumerate() {
             assert_eq!(param as u16, (i + 1) as u16);
             assert_eq!(BrainParam::named(param.name()), Some(param));

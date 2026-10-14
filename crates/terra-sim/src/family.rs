@@ -39,6 +39,9 @@ pub(crate) struct FamilySenses {
     pub(crate) parent_away: bool,
     /// Its partner is out of sight.
     pub(crate) partner_away: bool,
+    /// It's young, and a parent in sight shows it something it hasn't
+    /// learned (§18.1).
+    pub(crate) parent_showing: bool,
 }
 
 /// Who a thing is to a sprite (M2 design §15.6).
@@ -56,6 +59,8 @@ pub(crate) struct Relation {
     /// Its close kin (§15.5): a parent, a young one or an egg of its own, or
     /// a brother or sister, hatched or not.
     pub(crate) kin: bool,
+    /// A sprite grown up, adult or old (§18.1).
+    pub(crate) grown: bool,
 }
 
 impl Relation {
@@ -68,6 +73,7 @@ impl Relation {
             Whom::Partner => self.partner,
             Whom::Parent => self.parent,
             Whom::Young => self.young,
+            Whom::Grown => self.grown,
         }
     }
 }
@@ -92,6 +98,7 @@ pub(crate) fn relation(state: &WorldState, me: EntityId, target: Target) -> Rela
                 parent,
                 young: child,
                 kin: courtship::kin(state, me, other),
+                grown: !young(them),
             }
         }
         Target::Object(id) => {
@@ -137,6 +144,7 @@ pub(crate) fn look_for_family(
         eggs.collect()
     };
     let sprites = &state.sprites;
+    let tick = state.tick;
     let mut young: BTreeMap<EntityId, Vec<EntityId>> = BTreeMap::new();
     for (id, sprite) in sprites.iter() {
         if !sprite.stage().is_grown() {
@@ -178,6 +186,12 @@ pub(crate) fn look_for_family(
         let sees_parent = sprite.parents.iter().any(|&p| sees(p));
         let is_young = !sprite.stage().is_grown();
         senses.parent_away = is_young && has_parent && !sees_parent;
+        senses.parent_showing = is_young
+            && indices.parent_showing.is_some()
+            && sprite.parents.iter().any(|&p| {
+                let parent = sprites.get(p).filter(|_| sees(p));
+                parent.is_some_and(|parent| parent.brain.shows(&sprite.brain, id, tick, data))
+            });
         senses.partner_away = sprite.partner().is_some_and(|p| !sees(p));
         // It found family it was missing, with a `found_family` pulse: a
         // sense that was on last tick is off, and not because the one it was

@@ -13,7 +13,8 @@ cargo run --release -p terra-sim --example lab -- scenarios/a1-thornbush.ron --s
 | `most_sprites` | Optional. The most sprites the world holds, eggs included (M2 design §10): for a scenario that watches only its own sprites. A1 to A3 hold as many as they start with. |
 | `ticks` | How long each seed runs. |
 | `windows` | `[(from, to)]`: the tick ranges to count in. Each runs from `from` up to, but not including, `to`, and must end by `ticks`. |
-| `control` | Optional. `NoLearning` runs each seed a second time with learning switched off; `NoTrainer` a second time without the trainer. |
+| `young` | Optional. `(at: N)`: at tick N each sprite gets a newborn of the starter genome on the nearest free tile, its own young (M2 design §18.6). The report then has the young's own rows, and the median ticks from appearing to each lesson. |
+| `control` | Optional. `NoLearning` runs each seed a second time with learning switched off; `NoTrainer` a second time without the trainer; `Orphans` a second time with the grown-ups taken away as their young appear. |
 | `trainer` | Optional: a stand-in for the player, below. |
 
 **Drawn maps.** Each row is a line of tiles in the ascii theme's ground glyphs: `.` grass, `,` dirt, `:` sand, `~` shallow water, `=` deep water, `#` rock. The `key` gives any other character a meaning, on grass: `Sprite` (a sprite from the starter genome) or `Object("type")` (an object at the start of its life). A thing that can't stand where it's drawn is an error.

@@ -8,11 +8,11 @@
 │ *  *        ╔════════════════════════╗        ∙  · ││ thirst halves every 1,833 ticks            │
 │             ║..............,,,,::~~≈≈║ ·           ││ arousal halves every 479 ticks             │
 │           ∙ ║.'..........♠.,,,,::~~≈≈║   ∙   ·     ││ feminiser halves every 543 ticks           │
-│  ∙*   · ∙   ║..•.##..X☺....,,,,::~~≈≈║             ││ longing halves every 3,026 ticks           │
+│  ∙*   · ∙   ║..•.##...☺....,,,,::~~≈≈║             ││ longing halves every 3,026 ticks           │
 │         ∙ · ║....##..............~~≈≈║            ∙││ receptivity halves every 557 ticks         │
 │    *      · ║.......♦↓·..........~~≈≈║             ││ h1 halves every 37 ticks                   │
 │             ║....☻..→.←........::~~≈≈║             ││ h2 halves every 59 ticks                   │
-│           ∙ ║.......·↑♦......☺.::~~≈≈║·  ·      ∙  ││ grief halves every 801 ticks               │
+│           ∙ ║.......·↑♦...☺....::~~≈≈║·  ·      ∙  ││ grief halves every 801 ticks               │
 │         ∙   ║..................::~~≈≈║    ·     ·  ││ anxiety halves every 296 ticks             │
 │           · ╚════════════════════════╝             ││ pain halves every 21 ticks                 │
 │             ·        ·                   ∙      ·  ││ h0 halves every 277 ticks                  │

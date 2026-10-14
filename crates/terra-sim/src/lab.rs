@@ -32,7 +32,7 @@ pub struct LabScenario {
     young: Option<Young>,
 }
 
-/// Young for a scenario's sprites (M2 design §18.7): on the tick `at`, each
+/// Young for a scenario's sprites (M2 design §18.6): on the tick `at`, each
 /// sprite in the world gets a newborn of its own beside it.
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -52,7 +52,7 @@ enum Control {
     /// §7.3).
     NoTrainer,
     /// The same world with the grown-ups taken away as their young appear,
-    /// so the young are orphans (M2 design §18.7).
+    /// so the young are orphans (M2 design §18.6).
     Orphans,
 }
 
@@ -63,7 +63,7 @@ pub enum Without {
     Learning,
     /// The trainer.
     Trainer,
-    /// The young's parents (M2 design §18.7).
+    /// The young's parents (M2 design §18.6).
     Parents,
 }
 
@@ -122,7 +122,7 @@ struct LabFile {
     /// A trainer, if any (design v21 §7.1).
     #[serde(default)]
     trainer: Option<TrainerFile>,
-    /// Young for its sprites, if any (M2 design §18.7).
+    /// Young for its sprites, if any (M2 design §18.6).
     #[serde(default)]
     young: Option<Young>,
     /// Tick ranges, each from its first tick up to but not including its last.
@@ -236,12 +236,12 @@ pub struct Window {
     /// it rose.
     pub lessons: BTreeMap<(Learned, bool), u64>,
     /// What the young the scenario gives its sprites did and learned, once
-    /// they've appeared (M2 design §18.7), if it gives them any.
+    /// they've appeared (M2 design §18.6), if it gives them any.
     pub young: Option<YoungCounts>,
 }
 
 /// What a window counted of the young a scenario gives its sprites (M2
-/// design §18.7).
+/// design §18.6).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct YoungCounts {
     /// How many there are.
@@ -389,7 +389,7 @@ impl LabScenario {
             })
             .collect();
         // The young, by when each appeared, and when each learned each
-        // lesson (M2 design §18.7).
+        // lesson (M2 design §18.6).
         let mut young: BTreeMap<EntityId, u64> = BTreeMap::new();
         let mut learned: BTreeMap<(EntityId, (Learned, bool)), u64> = BTreeMap::new();
         // The trainer's commands, each with the tick it's submitted before.
@@ -412,6 +412,7 @@ impl LabScenario {
                     id,
                     learned: l,
                     good,
+                    ..
                 } = &event.kind
                     && young.contains_key(id)
                     && !about_a_sprite(l)
@@ -519,7 +520,7 @@ impl LabScenario {
 
 /// Fills in `counts` with how many of `young`, each by the tick it
 /// appeared, had learned each lesson by the tick `to`, by when each learned
-/// it in `learned`, and the median ticks each took (M2 design §18.7).
+/// it in `learned`, and the median ticks each took (M2 design §18.6).
 fn young_lessons(
     counts: &mut YoungCounts,
     young: &BTreeMap<EntityId, u64>,
@@ -679,7 +680,7 @@ fn windows_report(runs: &[(u64, &[Window])], data: &DataPack) -> String {
     out
 }
 
-/// The rows for the young a scenario gives its sprites (M2 design §18.7),
+/// The rows for the young a scenario gives its sprites (M2 design §18.6),
 /// if any of `windows` counted them: how many, what they did, how they
 /// died, how many learned each lesson, and the median ticks they took.
 fn young_rows(windows: &[&Window], data: &DataPack) -> String {

@@ -160,7 +160,7 @@ fn the_progress_line_says_how_far_it_has_got() {
 
 /// Three sprites on a field with no food or water: one is hurt to death by
 /// another, and the other two die of thirst, each at a different time,
-/// within the hour.
+/// within the hour, as they do with seed 5.
 fn a_deadly_field() -> World {
     let data = DataPack::builtin().expect("valid pack");
     let map = Map::from_ascii(&[".........."; 6], &data).expect("valid drawing");
@@ -176,7 +176,7 @@ fn a_deadly_field() -> World {
         scripted: &[],
         newborns: &[],
     };
-    World::from_scenario(scenario, data, 1).expect("valid scenario")
+    World::from_scenario(scenario, data, 5).expect("valid scenario")
 }
 
 #[test]

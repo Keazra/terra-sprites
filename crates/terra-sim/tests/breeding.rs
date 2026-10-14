@@ -13,8 +13,8 @@ use common::{
 
 use proptest::prelude::*;
 use terra_sim::{
-    Command, DataPack, EntityId, EventKind, LifeStage, Outcome, Part, Playback, Pos, Rejection,
-    Sex, Target, Thing, Verb, World,
+    Command, DataPack, EntityId, EventKind, Learned, LifeStage, Outcome, Part, Playback, Pos,
+    Rejection, Sex, Target, Thing, Verb, World,
 };
 
 /// A small field of grass with a sprite of `genes` on each tile of
@@ -937,6 +937,7 @@ fn attention() -> impl Strategy<Value = String> {
         ", whom: Partner",
         ", whom: Parent",
         ", whom: Young",
+        ", whom: Grown",
     ]);
     (state_input(), category, whom, -1.0f32..1.0, switch()).prop_map(
         |(input, category, whom, weight, switch)| {
@@ -949,8 +950,9 @@ fn attention() -> impl Strategy<Value = String> {
 
 /// A random genome of brain genes: each sprite grows up and old at random
 /// ages, early enough, in `quick`'s world, that some cross a life stage
-/// mid-run; some have a full feminiser, so they turn female if grown; and
-/// some are aroused, whatever their age.
+/// mid-run; some have a full feminiser, so they turn female if grown; some
+/// are aroused, whatever their age; and each learns by watching at a
+/// random rate (M2 design §18.1).
 fn random_genes() -> impl Strategy<Value = String> {
     let aroused = prop::sample::select(vec![
         "",
@@ -965,11 +967,13 @@ fn random_genes() -> impl Strategy<Value = String> {
         prop::sample::select(vec!["", FEMALE]),
         aroused,
         prop::sample::select(vec!["", LONGS]),
+        0.0f32..1.0,
     )
-        .prop_map(|(instincts, attention, grows_up, grows_old, female, aroused, longs)| {
+        .prop_map(|(instincts, attention, grows_up, grows_old, female, aroused, longs, watch)| {
             format!(
                 r#"Trait(trait: "grows_up", value: {grows_up:?}),
                    Trait(trait: "grows_old", value: {grows_old:?}),
+                   BrainParam(param: "watch_rate", value: {watch:?}),
                    Instinct(inputs: [("always", false), ("attended_sprite", false)], verb: Mate, weight: 1.0, from: Young),
                    Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 0.5, from: Young),
                    Instinct(inputs: [("always", false), ("attended_sprite", false)], verb: Court, weight: 1.0, from: Young),
@@ -1046,6 +1050,29 @@ fn drive_moved_a_child(world: &World) -> Option<String> {
     None
 }
 
+/// Whether a sprite not grown up knows anything about mating (M2 design
+/// §18.3): what anything is worth for the breeding drive, or a habit of
+/// mating or courting. It never tries either itself, so it could only have
+/// learned it by watching. Says which sprite and what, if one does.
+fn a_child_knows_about_mating(world: &World) -> Option<String> {
+    for sprite in world.sprites() {
+        if sprite.life_stage().is_grown() {
+            continue;
+        }
+        for memory in sprite.memory() {
+            let about_mating = match &memory.learned {
+                Learned::Worth { need, .. } => need.as_deref() == Some("arousal"),
+                Learned::Habit { verb, .. } => matches!(verb, Verb::Mate | Verb::Court),
+                _ => false,
+            };
+            if about_mating && memory.amount != 0.0 {
+                return Some(format!("{:?} knows {memory:?}", sprite.id()));
+            }
+        }
+    }
+    None
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(24))]
 
@@ -1057,9 +1084,9 @@ proptest! {
     ) {
         // M2 design §5, G7: Mate, Court and the breeding drive only
         // between adults, on a trip to a call too, and whomever an attention
-        // instinct is about (§15.1, §15.6, §15.9). Every tick also runs the
-        // self-check, which fails on a Mate or Court action that isn't
-        // between adults.
+        // instinct is about (§15.1, §15.6, §15.9), and nothing about it
+        // learned by watching (§18.3). Every tick also runs the self-check,
+        // which fails on a Mate or Court action that isn't between adults.
         // The last is out of the others' sight, but within a call's reach.
         let tiles = [at(2, 1), at(3, 1), at(2, 2), at(24, 2)];
         let newborns: Vec<Pos> = tiles
@@ -1087,6 +1114,7 @@ proptest! {
                 );
             }
             prop_assert_eq!(drive_moved_a_child(&world), None);
+            prop_assert_eq!(a_child_knows_about_mating(&world), None);
         }
     }
 }
