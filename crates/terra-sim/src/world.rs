@@ -22,7 +22,7 @@ use crate::generate::{generate, place_objects, place_sprites};
 use crate::genome::{GeneView, Genome};
 use crate::inheritance;
 use crate::learning::{self, Subject};
-use crate::lineage::{self, FIRST_GENERATION, Lineage, Origin, Record};
+use crate::lineage::{self, FIRST_GENERATION, Origin, Record, RecordOfTheDead};
 use crate::map::{Dir, Map, MapError, Pos};
 use crate::mutation::CopyChangeView;
 use crate::objects::{EntityId, Object, Objects};
@@ -49,7 +49,7 @@ pub struct World {
     checked_next_id: Cell<u64>,
     /// How many sprites had died when `check_invariants` last checked the
     /// record of the dead, which changes only when one dies (M2 design
-    /// §16), so it's checked again only then.
+    /// §16.1), so it's checked again only then.
     checked_deaths: Cell<u64>,
     /// The seed the world was made from, which the top bar shows. The RNG's
     /// state carries on from it, so nothing in the sim reads it.
@@ -97,10 +97,10 @@ pub(crate) struct WorldState {
     #[serde(default)]
     pub(crate) population: PopulationRecord,
     /// The world's record of the dead, for the family tree (M2 design
-    /// §16). Nothing in the world reads it. A save from before it has none,
+    /// §16.1). Nothing in the world reads it. A save from before it has none,
     /// so it remembers only the sprites that die after it's loaded.
     #[serde(default)]
-    pub(crate) lineage: Lineage,
+    pub(crate) dead: RecordOfTheDead,
 }
 
 impl WorldState {
@@ -120,13 +120,13 @@ impl WorldState {
     }
 
     /// Gives each sprite and egg in a save from before generations its
-    /// generation (M2 design §16), in ascending ID order, so a parent has
+    /// generation (M2 design §16.1), in ascending ID order, so a parent has
     /// its own before its young: one after its newer parent's, where the
     /// world knows that parent, and the first for one with no parents. A
     /// parent the world doesn't know, which died before generations, counts
     /// as the first.
     fn number_generations(&mut self) {
-        let mut unknown: Vec<EntityId> = self
+        let mut unnumbered: Vec<EntityId> = self
             .sprites
             .iter()
             .filter(|(_, sprite)| sprite.generation == 0)
@@ -143,8 +143,8 @@ impl WorldState {
                     .map(|(id, _)| id),
             )
             .collect();
-        unknown.sort();
-        for id in unknown {
+        unnumbered.sort();
+        for id in unnumbered {
             let parents = match self.sprites.get(id) {
                 Some(sprite) => sprite.parents.clone(),
                 None => self
@@ -159,7 +159,7 @@ impl WorldState {
                 self.sprites
                     .get(parent)
                     .map(|sprite| sprite.generation)
-                    .or_else(|| self.lineage.get(parent).map(|record| record.generation))
+                    .or_else(|| self.dead.get(parent).map(|record| record.generation))
                     .unwrap_or(FIRST_GENERATION)
             }));
             match self.sprites.get_mut(id) {
@@ -557,13 +557,13 @@ impl<'a> SpriteView<'a> {
         &self.sprite.parents
     }
 
-    /// Its generation (M2 design §16): the first for a sprite with no
+    /// Its generation (M2 design §16.1): the first for a sprite with no
     /// parents, else one after its newer parent's.
     pub fn generation(&self) -> u32 {
         self.sprite.generation
     }
 
-    /// Where it came from (M2 design §16): the world began with it, the
+    /// Where it came from (M2 design §16.1): the world began with it, the
     /// Cursor placed it, or it hatched.
     pub fn origin(&self) -> Origin {
         Origin::of(&self.sprite.parents, self.sprite.placed)
@@ -928,14 +928,14 @@ impl<'a> EggView<'a> {
         self.unhatched.name.as_deref()
     }
 
-    /// The generation the sprite it holds hatches into (M2 design §16).
+    /// The generation the sprite it holds hatches into (M2 design §16.1).
     pub fn generation(&self) -> u32 {
         self.unhatched.generation
     }
 }
 
 /// A read-only view of a sprite that died, as the world remembers it for
-/// the family tree (M2 design §16).
+/// the family tree (M2 design §16.1).
 pub struct DeadView<'a> {
     id: EntityId,
     record: &'a Record,
@@ -1161,7 +1161,7 @@ impl World {
                 cursor: Cursor::default(),
                 most_sprites: MOST_SPRITES,
                 population: PopulationRecord::default(),
-                lineage: Lineage::default(),
+                dead: RecordOfTheDead::default(),
             },
             data,
             checked_next_id: Cell::new(1),
@@ -1385,22 +1385,22 @@ impl World {
         })
     }
 
-    /// The dead sprite `id`, if the world remembers it (M2 design §16).
+    /// The dead sprite `id`, if the world remembers it (M2 design §16.1).
     pub fn dead(&self, id: EntityId) -> Option<DeadView<'_>> {
-        let record = self.state.lineage.get(id)?;
+        let record = self.state.dead.get(id)?;
         Some(DeadView { id, record })
     }
 
     /// Every dead sprite the world remembers, in ascending ID order (M2
-    /// design §16): the newest 10,000, and every one the player named.
+    /// design §16.1): the newest 10,000, and every one the player named.
     pub fn dead_sprites(&self) -> impl Iterator<Item = DeadView<'_>> {
         self.state
-            .lineage
+            .dead
             .iter()
             .map(|(id, record)| DeadView { id, record })
     }
 
-    /// The young of the sprite `id` (M2 design §16): every sprite, egg and
+    /// The young of the sprite `id` (M2 design §16.1): every sprite, egg and
     /// remembered dead sprite with `id` among its parents, in ascending ID
     /// order.
     pub fn young(&self, id: EntityId) -> Vec<EntityId> {
@@ -1417,7 +1417,7 @@ impl World {
             )
             .chain(
                 state
-                    .lineage
+                    .dead
                     .iter()
                     .filter(|(_, record)| record.parents.contains(&id))
                     .map(|(young, _)| young),
@@ -1682,7 +1682,7 @@ impl World {
             let cause = sprite.body.cause_of_death();
             *state.deaths.entry(cause).or_insert(0) += 1;
             state
-                .lineage
+                .dead
                 .remember(id, Record::of(&sprite, cause, state.tick));
             events.push(Event {
                 tick: state.tick,
@@ -1754,7 +1754,7 @@ impl World {
                     return Ok(());
                 }
                 self.checked_deaths.set(deaths);
-                state.lineage.check(&state.sprites, &state.objects)
+                state.dead.check(&state.sprites, &state.objects)
             })
             .map_err(InvariantViolation)
     }
@@ -1894,15 +1894,15 @@ mod tests {
     }
 
     /// A save whose record of the dead doesn't hold together (M2 design
-    /// §16) is refused, as a build with a bug might write it.
+    /// §16.1) is refused, as a build with a bug might write it.
     #[test]
     fn a_save_whose_record_of_the_dead_is_damaged_is_refused() {
-        let damage: [fn(&mut WorldState); 3] = [
+        let damage: [fn(&mut WorldState); 4] = [
             // A sprite remembered as dead that's still in the world.
             |state| {
                 let (id, sprite) = state.sprites.iter().next().expect("a sprite");
                 let record = Record::of(sprite, DeathCause::OldAge, state.tick);
-                state.lineage.remember(id, record);
+                state.dead.remember(id, record);
             },
             // One whose parent is younger than itself.
             |state| {
@@ -1910,16 +1910,23 @@ mod tests {
                 let mut record = Record::of(sprite, DeathCause::OldAge, state.tick);
                 record.parents = vec![EntityId(state.next_id)];
                 record.generation = 2;
-                state.lineage.remember(EntityId(state.next_id - 1), record);
+                state.dead.remember(EntityId(state.next_id - 1), record);
             },
             // One in its parent's generation.
             |state| {
                 let (_, sprite) = state.sprites.iter().next().expect("a sprite");
                 let record = Record::of(sprite, DeathCause::OldAge, state.tick);
-                state.lineage.remember(EntityId(0), record.clone());
+                state.dead.remember(EntityId(0), record.clone());
                 let mut young = record;
                 young.parents = vec![EntityId(0)];
-                state.lineage.remember(EntityId(state.next_id - 1), young);
+                state.dead.remember(EntityId(state.next_id - 1), young);
+            },
+            // One in the generation of its parent, who lives.
+            |state| {
+                let (parent, sprite) = state.sprites.iter().next().expect("a sprite");
+                let mut record = Record::of(sprite, DeathCause::OldAge, state.tick);
+                record.parents = vec![parent];
+                state.dead.remember(EntityId(state.next_id - 1), record);
             },
         ];
         for (n, damage) in damage.into_iter().enumerate() {

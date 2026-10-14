@@ -17,7 +17,7 @@ Slice 25 ([#143](https://github.com/Keazra/terra-sprites/issues/143)): each spri
 | 9 | **A sprite named before it died keeps its name** in the record, so a load names the dead as before. | Needed by 2 | §16.3 |
 | 10 | **`b` gains a third colour mode, lineage:** elders light blue, brothers and sisters light red, young and theirs light magenta, the rest dark gray. The round called it Family; it's lineage, since a family is Slice 32's household. Themes gain a `lineage` section, and the help screen a line. | Q7 (A); CONTEXT.md | §16.4 |
 | 11 | **The Body tab and an egg's card say the generation** after the parents or origin, and the World tab the generations alive. | Q6 (A) | §16.5 |
-| 12 | **The tree is a panel of its own,** `FamilyTree`, about each sprite on it; a hidden one is a blank card in its place, and the lineage colours ask it too. | M1 design §6.4 | §16.6 |
+| 12 | **The tree is a panel of its own,** `FamilyTree`, about each sprite on it; a hidden one is a blank card in its place, unnamed as another's parent, that leads nowhere, and the lineage colours ask it too. | M1 design §6.4; the slice's review | §16.6 |
 | 13 | **How we know it worked:** UI tests and snapshots of the tree, the world's tests of the record, the `generations` run byte for byte the same as `main`'s, and A5 at least 200 ticks a second and within 5% of `main`. Measured: the same run, and the same speed within the noise. | Q9 | §16.7 |
 | 14 | **G2 is the tree;** generations on the population graph, and the partner on the tree once Slice 32 is in, are later. | #143 | §6, §10.7, §14.8, §15.8, §16.8 |
 

@@ -305,7 +305,7 @@ fn is_emote(app: &App, sprite: &SpriteView) -> bool {
 
 /// The selected sprite and those of its lineage the map marks, while it
 /// shows the lineage colours and a sprite is selected, living or dead (M2
-/// design §16).
+/// design §16.4).
 type Marked = (EntityId, BTreeMap<EntityId, Lineage>);
 
 /// The lineage the map colours, if it does: not while the policy hides
@@ -325,7 +325,7 @@ fn lineage_on_map(app: &App, world: &World) -> Option<Marked> {
 /// strongest drive's above .5, or else `own`, its glyph's colour; or in the
 /// lineage colours, where it stands in the selected sprite's lineage. The
 /// selected sprite keeps `own`, as every sprite does with none selected (M2
-/// design §16). A drive the theme has no colour for draws `own` too, and so
+/// design §16.4). A drive the theme has no colour for draws `own` too, and so
 /// does a sprite whose colour, or place on the family tree, the policy
 /// hides (design §6.4).
 fn sprite_colour(app: &App, sprite: &SpriteView, own: Color, lineage: Option<&Marked>) -> Color {
@@ -632,7 +632,7 @@ fn render_population(buf: &mut Buffer, app: &App, world: &World) {
 }
 
 /// Draws the family tree over everything between the top bar and the
-/// status line (M2 design §16), titled with the sprite in its middle, or
+/// status line (M2 design §16.2), titled with the sprite in its middle, or
 /// says how to select one; or an empty box if the policy hides it.
 fn render_family_tree(buf: &mut Buffer, app: &App, world: &World) {
     let Some(area) = app.overlay() else {
@@ -915,7 +915,7 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
                 _ if app.screen() == Screen::Population => {
                     hint_if_fits(room, "←→ pick a moment  space pause  +/- speed  esc close")
                 }
-                // And the family tree (M2 design §16).
+                // And the family tree (M2 design §16.2).
                 _ if app.screen() == Screen::FamilyTree => hint_if_fits(
                     room,
                     "←→↑↓ choose  enter centre on it  space pause  esc close",

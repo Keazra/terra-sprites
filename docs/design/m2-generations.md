@@ -1008,7 +1008,7 @@ Settled with the owner on 2026-10-14 ([#143](https://github.com/Keazra/terra-spr
 - **And where it came from:** one the world began with, one the Cursor placed, or one that hatched. A sprite with no parents says which.
 - **The world keeps a record of each sprite that dies** (Q4): its name, its parents, its generation, whether the Cursor placed it, when it was born and died, and how, at what life stage and as which sex. A record is about 100 bytes in a save.
 - **It keeps the newest 10,000** (Q4, B): past that, the longest dead are forgotten first, but never a sprite the player named. About 3 sprites die every 1,000 ticks once the default world is full, so in play nothing is forgotten, and a long fast-forward (Slice 27) can't make a save grow without end.
-- **It's world state:** saved (M1 design §2.8), in the state hash, the same in a replay (M1 design §2.7), and checked every tick there's been a death (M1 design §7.1): the dead aren't in the world, each was born before it died, its parents are older than itself, and its generation comes after theirs.
+- **It's world state:** saved (M1 design §2.8), in the state hash, the same in a replay (M1 design §2.7), and checked every tick there's been a death (M1 design §7.1): the dead aren't in the world, each was born before it died, its parents are older than itself, and its generation comes after theirs, living or remembered.
 - **Nothing in the world reads it** (Q8, A). It's the player's, like a breeder's studbook, so the sprites live exactly as they did before it (§16.7). Sprites know their own parents already, and Slice 32 teaches them their kin (§15.5).
 - **The young of a sprite** are every sprite, egg and remembered dead with it as a parent, in the order they were laid.
 - **A save from before this slice** has no record, so a sprite that had died before it was saved is forgotten: the tree still names it from its young, but knows nothing more, and says it **lived long ago**. Its living sprites and eggs are given generations on loading, in ID order, as if a parent the world doesn't know were of the first generation. The save format stays 1: the record and generations are new, with defaults (M1 design §2.8).
@@ -1016,7 +1016,7 @@ Settled with the owner on 2026-10-14 ([#143](https://github.com/Keazra/terra-spr
 ### 16.2 The tree
 
 - **`k` opens it over the panels** (Q1, A), as `p` opens the population graph, on the selected sprite or egg, living or dead: `k` is for kin, as `f` is Follow and `p` the graph. With none selected, it reads "No sprite selected: click one, or press Tab", as the tabs do. `k` or `Esc` closes it. Time runs on behind it, and `space`, `.`, `+` and `-` work as ever, as do `Tab` and `Shift+Tab`, which select the next sprite and redraw the tree around it. Its title names the sprite in the middle.
-- **It reaches from grandparents to young** (Q2, A). Four grandparents fit side by side, each parent centred over its own, then the sprite in the middle, with its life stage, sex, age and generation. Its young are below it, grouped under their other parent (`with Sprite #27476`, or `alone`) in the order they were laid, and its **brothers and sisters**, the young of either parent, are at the foot, with the parent they share (`through Mira #10386`) when it's only one. Lines join the generations, `└──┬──┘` and the like. To see further, the player walks the tree (§16.3).
+- **It reaches from grandparents to young** (Q2, A). Four grandparents fit side by side, each parent centred over its own, then the sprite in the middle, with its life stage, sex, age and generation. Its young are below it, grouped under their other parent (`with Sprite #27476`, or `alone`), the groups and the young in each in the order they were laid, and its **brothers and sisters**, the young of either parent, are at the foot, with the parent they share (`through Mira #10386`) when it's only one. Lines join the generations, `└──┬──┘` and the like. To see further, the player walks the tree (§16.3).
 - **What it says of each** (Q3, A), under its name as the log names it, on up to two lines:
 
 | Sprite | Line |
@@ -1095,7 +1095,7 @@ Sprite #24222 is both the father of her second young and her brother, through Sp
 
 ### 16.6 The information policy
 
-The tree is a panel of its own, `FamilyTree`, about each sprite on it (M1 design §6.4). One the policy hides is a blank card that keeps its place, and so is where it came from. With the sprite in the middle hidden, the box stays, empty and titled ` Family tree `. The lineage colours ask it too: a sprite hidden from the tree, or every sprite when the selected one is, draws in its own colour.
+The tree is a panel of its own, `FamilyTree`, about each sprite on it (M1 design §6.4). One the policy hides is a blank card that keeps its place, and so is where it came from; a group of young, or a brother or sister, doesn't name it as the other parent or the one shared, and choosing its card does nothing. With the sprite in the middle hidden, the box stays, empty and titled ` Family tree `. The lineage colours ask it too: a sprite hidden from the tree, or every sprite when the selected one is, draws in its own colour.
 
 ### 16.7 How we know it worked
 

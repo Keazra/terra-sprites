@@ -64,7 +64,7 @@ pub enum Screen {
     SpriteList,
     /// The population graph is open (M2 design §14).
     Population,
-    /// The family tree is open (M2 design §16).
+    /// The family tree is open (M2 design §16.2).
     FamilyTree,
 }
 
@@ -79,7 +79,7 @@ listed_enum! {
         Plain => "plain",
         /// The selected sprite's parents and grandparents, brothers and
         /// sisters, and young and theirs each in their colour, and the rest
-        /// dark gray (M2 design §16).
+        /// dark gray (M2 design §16.4).
         Lineage => "lineage",
     }
 
@@ -539,7 +539,7 @@ pub struct App {
     /// time picked, if one is; otherwise it reads now (M2 design §14.3).
     graph_pick: Option<u64>,
     /// The card the family tree's arrows are on, if not the one in the
-    /// middle (M2 design §16).
+    /// middle (M2 design §16.3).
     tree_choice: Option<family_tree::Spot>,
     /// How far along the family tree's rows that scroll are.
     tree_scroll: family_tree::Scroll,
@@ -1076,7 +1076,7 @@ impl App {
         }
     }
 
-    /// Notes the names of the dead the world remembers (M2 design §16), for
+    /// Notes the names of the dead the world remembers (M2 design §16.3), for
     /// a world just loaded: those that die while the screen watches, it
     /// notes as they die.
     fn note_names_of_the_dead(&mut self, world: &World) {
@@ -1806,12 +1806,12 @@ impl App {
             return Flow::Continue;
         }
         match action {
-            Action::TogglePause => self.clock.toggle_pause(),
-            Action::StepOnce => self.clock.step_once(),
-            Action::Faster { held: false } => self.clock.faster(),
-            Action::Faster { held: true } => self.clock.faster_held(),
-            Action::Slower { held: false } => self.clock.slower(),
-            Action::Slower { held: true } => self.clock.slower_held(),
+            Action::TogglePause
+            | Action::StepOnce
+            | Action::Faster { .. }
+            | Action::Slower { .. } => {
+                self.apply_time(&action);
+            }
             // Scrolling by hand takes the view back from Track.
             Action::Scroll { dx, dy } => {
                 self.tracking = false;
@@ -2297,10 +2297,9 @@ impl App {
         Flow::Continue
     }
 
-    /// What an action does while the population graph is open (M2 design
-    /// §14): `←` and `→`, or the pointer over the graph, pick the moment it
-    /// reads; time runs as usual, and `p` or `Esc` closes it.
-    fn apply_in_graph(&mut self, action: Action, world: &World) -> Flow {
+    /// What the keys for time do, whatever's open: pause, step, faster and
+    /// slower (design §6.6). Returns whether `action` was one of them.
+    fn apply_time(&mut self, action: &Action) -> bool {
         match action {
             Action::TogglePause => self.clock.toggle_pause(),
             Action::StepOnce => self.clock.step_once(),
@@ -2308,6 +2307,19 @@ impl App {
             Action::Faster { held: true } => self.clock.faster_held(),
             Action::Slower { held: false } => self.clock.slower(),
             Action::Slower { held: true } => self.clock.slower_held(),
+            _ => return false,
+        }
+        true
+    }
+
+    /// What an action does while the population graph is open (M2 design
+    /// §14): `←` and `→`, or the pointer over the graph, pick the moment it
+    /// reads; time runs as usual, and `p` or `Esc` closes it.
+    fn apply_in_graph(&mut self, action: Action, world: &World) -> Flow {
+        if self.apply_time(&action) {
+            return Flow::Continue;
+        }
+        match action {
             Action::Scroll { dx, .. } if dx != 0 => {
                 if let Some(plot) = self.graph_plot(world) {
                     let from = plot.column_of(self.graph_pick);
@@ -2370,18 +2382,15 @@ impl App {
         self.graph_pick
     }
 
-    /// What an action does while the family tree is open (M2 design §16):
+    /// What an action does while the family tree is open (M2 design §16.3):
     /// the arrows or the pointer choose a sprite on it, and `Enter` or a
     /// click centres the tree on that one and selects it; `Tab` selects as
     /// ever, time runs as usual, and `k` or `Esc` closes it.
     fn apply_in_tree(&mut self, action: Action, world: &World) -> Flow {
+        if self.apply_time(&action) {
+            return Flow::Continue;
+        }
         match action {
-            Action::TogglePause => self.clock.toggle_pause(),
-            Action::StepOnce => self.clock.step_once(),
-            Action::Faster { held: false } => self.clock.faster(),
-            Action::Faster { held: true } => self.clock.faster_held(),
-            Action::Slower { held: false } => self.clock.slower(),
-            Action::Slower { held: true } => self.clock.slower_held(),
             Action::Scroll { dx, dy } => {
                 let step = match (dx.signum(), dy.signum()) {
                     (-1, _) => Step::Left,
@@ -2415,16 +2424,8 @@ impl App {
                 }
             }
             Action::Enter => self.walk_tree(world),
-            Action::SelectNext | Action::SelectPrevious => {
-                let direction = if matches!(action, Action::SelectNext) {
-                    Direction::Next
-                } else {
-                    Direction::Previous
-                };
-                self.select_along(world, direction);
-                self.tree_choice = None;
-                self.tree_scroll = family_tree::Scroll::default();
-            }
+            Action::SelectNext => self.redraw_tree_along(world, Direction::Next),
+            Action::SelectPrevious => self.redraw_tree_along(world, Direction::Previous),
             Action::FamilyTree | Action::Back => self.screen = Screen::Normal,
             Action::Quit => return Flow::Quit,
             _ => {}
@@ -2432,18 +2433,25 @@ impl App {
         Flow::Continue
     }
 
+    /// Selects the next or previous sprite, as `Tab` does, and redraws the
+    /// family tree around it, from the middle (M2 design §16.2).
+    fn redraw_tree_along(&mut self, world: &World, direction: Direction) {
+        self.select_along(world, direction);
+        self.tree_choice = None;
+        self.tree_scroll = family_tree::Scroll::default();
+    }
+
     /// The family tree of the selected sprite or egg, living or dead, as
     /// the screen lays it out now, if one is selected, the policy shows it,
-    /// and there's room (M2 design §16).
+    /// and there's room (M2 design §16.2).
     pub(crate) fn tree(&self, world: &World) -> Option<family_tree::Drawn> {
         let centre = self.selection?.id();
         if !family_tree::shown(self, centre) {
             return None;
         }
         let inner = self.overlay?.inner(Margin::new(1, 1));
-        let family = family_tree::Family::of(self, world, centre);
         Some(family_tree::draw(
-            &family,
+            &family_tree::FamilyTree::of(self, world, centre),
             usize::from(inner.width),
             self.tree_scroll,
             self.tree_choice,
@@ -2461,16 +2469,19 @@ impl App {
         tree.at(i32::from(at.x - inner.x), usize::from(at.y - inner.y))
     }
 
-    /// Walks the family tree to the sprite chosen on it (M2 design §16):
+    /// Walks the family tree to the sprite chosen on it (M2 design §16.3):
     /// the tree centres on it and it's selected, and the map centres on it
     /// if it's on the map. A dead one is selected as one that died while
-    /// selected is. One the world no longer remembers can't be.
+    /// selected is. One the world no longer remembers can't be, nor one
+    /// the policy hides.
     fn walk_tree(&mut self, world: &World) {
         let Some(tree) = self.tree(world) else {
             return;
         };
         let to = tree.chosen.id;
-        if self.selection.map(Selection::id) == Some(to) {
+        // A card the policy hides is blank, and leads nowhere (M2 design
+        // §16.6).
+        if self.selection.map(Selection::id) == Some(to) || !family_tree::shown(self, to) {
             return;
         }
         match family_tree::Known::of(world, to) {
@@ -3473,7 +3484,7 @@ impl App {
         ));
         *self = fresh;
         // Its names show at once, paused, before any tick is taken in, and
-        // the names of the dead it remembers (M2 design §16).
+        // the names of the dead it remembers (M2 design §16.3).
         self.note_names(&world);
         self.note_names_of_the_dead(&world);
         self.settle_cursor(&world);

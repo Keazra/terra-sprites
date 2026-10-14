@@ -6,7 +6,7 @@
 //! says each sprite's generation.
 
 mod common;
-use common::{LONE_MOTHER, QUICK, SCORCHED, at, grow, lone_line, pairs, parched_line};
+use common::{LONE_MOTHER, QUICK, SCORCHED, at, grow, lone_line, pairs, parched_line, tree_of};
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -18,6 +18,7 @@ use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{Command, DeathCause, EntityId, World};
 use terra_tui::app::{App, ColourMode, Screen, Selection, Tab};
 use terra_tui::input::{Action, Button};
+use terra_tui::policy::{InfoPolicy, Panel, Subject};
 use terra_tui::theme::Theme;
 use terra_tui::ui;
 
@@ -112,19 +113,6 @@ fn label_at(app: &App, world: &World, row: usize, text: &str) -> Position {
         .position(|window| window.iter().collect::<String>() == text)
         .unwrap_or_else(|| panic!("{text:?} on row {row}: {:?}", rows[row]));
     Position::new(inside.x + column as u16, inside.y + row as u16)
-}
-
-/// Selects `id` and opens its family tree.
-fn tree_of(app: &mut App, world: &World, id: EntityId) {
-    for _ in 0..world.sprites().count() {
-        if app.selection().map(Selection::id) == Some(id) {
-            break;
-        }
-        app.apply(Action::SelectNext, world);
-    }
-    assert_eq!(app.selection().map(Selection::id), Some(id));
-    app.apply(Action::FamilyTree, world);
-    assert_eq!(app.screen(), Screen::FamilyTree);
 }
 
 // The arrows, as the actions they make.
@@ -272,6 +260,45 @@ fn a_sprite_s_young_are_below_it_by_their_other_parent() {
     let mut app = app_on(&world);
     tree_of(&mut app, &world, EntityId(1));
     assert_eq!(said(&tree(&app, &world)[BROODS]), "alone");
+}
+
+/// A policy that hides from the family tree the sprites it lists.
+struct Hiding(&'static [u64]);
+
+impl InfoPolicy for Hiding {
+    fn can_view(&self, panel: Panel, subject: Subject) -> bool {
+        let hidden = matches!(subject, Subject::Sprite(id) if self.0.contains(&id.0));
+        !(panel == Panel::FamilyTree && hidden)
+    }
+}
+
+#[test]
+fn a_sprite_the_policy_hides_is_a_blank_card_that_leads_nowhere() {
+    // M2 design §16.6: #9's young #14, and #10, the other parent of #12
+    // and #14, are hidden.
+    let world = pairs(200);
+    let mut app = app_on(&world);
+    tree_of(&mut app, &world, EntityId(9));
+    let fourteen = label_at(&app, &world, YOUNG, "Sprite #14");
+    let twenty_two = label_at(&app, &world, YOUNG, "Sprite #22");
+    app.set_policy(Hiding(&[10, 14]));
+    let rows = tree(&app, &world);
+    assert_eq!(said(&rows[BROODS]), "with Sprite #3", "#10 goes unnamed");
+    assert_eq!(said(&rows[YOUNG]), "Sprite #12  Sprite #22  Sprite #18");
+    assert_eq!(
+        label_at(&app, &world, YOUNG, "Sprite #22"),
+        twenty_two,
+        "#14 keeps its place"
+    );
+    app.apply(
+        Action::Click {
+            at: fourteen,
+            button: Button::Left,
+            amplified: false,
+        },
+        &world,
+    );
+    assert_eq!(app.selection(), Some(Selection::Living(EntityId(9))));
 }
 
 #[test]
@@ -616,7 +643,7 @@ fn a_dead_sprite_keeps_its_name_through_a_save_and_a_load() {
 }
 
 #[test]
-fn the_lineage_colours_mark_the_selected_sprite_s_kin_on_the_map() {
+fn the_lineage_colours_mark_the_selected_sprite_s_lineage_on_the_map() {
     let world = pairs(200);
     let mut app = app_on(&world);
     let nine = EntityId(9);

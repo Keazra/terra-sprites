@@ -61,7 +61,7 @@ pub(crate) struct Unhatched {
     pub(crate) copy_changes: Vec<CopyChange>,
     /// The one that laid it, then its partner, if it had one.
     pub(crate) parents: Vec<EntityId>,
-    /// The generation it hatches into (M2 design §16): one after its newer
+    /// The generation it hatches into (M2 design §16.1): one after its newer
     /// parent's. 0 only in a save from before generations, until it's
     /// loaded.
     #[serde(default)]

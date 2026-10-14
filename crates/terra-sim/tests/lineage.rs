@@ -15,7 +15,7 @@ use terra_sim::{
 
 /// The changes to `physiology.ron` that make thirst kill within a few
 /// dozen ticks, so a sprite with no water dies soon after it hatches.
-const PARCHED: [(&str, &str); 2] = [
+const SCORCHED: [(&str, &str); 2] = [
     ("hydration_loss: 0.00033", "hydration_loss: 0.03"),
     ("dehydration: 0.0011", "dehydration: 0.5"),
 ];
@@ -24,7 +24,7 @@ const PARCHED: [(&str, &str); 2] = [
 /// die of thirst soon after they're born, her eggs copied exactly. Returns
 /// the world and her ID.
 fn mother_of(seed: u64) -> (World, EntityId) {
-    let changes: Vec<_> = NO_COPYING_ERRORS.into_iter().chain(PARCHED).collect();
+    let changes: Vec<_> = NO_COPYING_ERRORS.into_iter().chain(SCORCHED).collect();
     let data = builtin_changing("physiology.ron", &changes);
     let mother = format!("{ALONE}{FEMALE}");
     let world = family_in(data, &[(at(2, 1), &mother)], &[], seed);
@@ -152,7 +152,7 @@ fn the_dead_are_saved_and_loaded() {
 
 #[test]
 fn the_record_of_the_dead_is_hashed() {
-    // The record is world state (M2 design §16). Two worlds alike but for
+    // The record is world state (M2 design §16.1). Two worlds alike but for
     // the name of a sprite that has died differ only in what they remember
     // of it.
     let named = |name: &str| {

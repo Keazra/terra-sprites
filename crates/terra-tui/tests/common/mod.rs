@@ -6,7 +6,9 @@
 //! shared API stays one place, as in terra-sim's (#155).
 #![allow(dead_code)]
 
-use terra_sim::{DataPack, Genome, Map, Pos, Scenario, World};
+use terra_sim::{DataPack, EntityId, Genome, Map, Pos, Scenario, World};
+use terra_tui::app::{App, Screen, Selection};
+use terra_tui::input::Action;
 
 /// What to change in a data file: its name, and each text to replace in
 /// it, with what.
@@ -182,4 +184,17 @@ pub fn pairs(ticks: u64) -> World {
         (at(13, 5), male.as_str()),
     ];
     grow(&QUICK, (16, 8), &sprites, ticks)
+}
+
+/// Selects `id` and opens its family tree (M2 design §16.2).
+pub fn tree_of(app: &mut App, world: &World, id: EntityId) {
+    for _ in 0..world.sprites().count() {
+        if app.selection().map(Selection::id) == Some(id) {
+            break;
+        }
+        app.apply(Action::SelectNext, world);
+    }
+    assert_eq!(app.selection().map(Selection::id), Some(id));
+    app.apply(Action::FamilyTree, world);
+    assert_eq!(app.screen(), Screen::FamilyTree);
 }

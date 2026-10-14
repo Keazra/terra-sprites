@@ -96,7 +96,7 @@ pub enum Action {
     SpriteList,
     /// Open or close the population graph (`p`, M2 design §14).
     Population,
-    /// Open or close the family tree (`k`, M2 design §16).
+    /// Open or close the family tree (`k`, M2 design §16.2).
     FamilyTree,
     /// Show the Cursor to sprites in the current cursor mode, or hide it
     /// from them (`h`, design v29 §6.5).

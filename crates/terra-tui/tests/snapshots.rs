@@ -195,10 +195,7 @@ fn the_family_tree_matches_its_snapshot() {
     let world = common::pairs(200);
     for (theme_name, theme) in themes() {
         let mut app = App::new(world.map(), theme, 7, ui::areas(Size::new(100, 30)));
-        while app.selection().map(|selected| selected.id()) != Some(EntityId(16)) {
-            app.apply(Action::SelectNext, &world);
-        }
-        app.apply(Action::FamilyTree, &world);
+        common::tree_of(&mut app, &world, EntityId(16));
         check(&format!("{theme_name}-family-tree"), &screen(&app, &world));
     }
 }

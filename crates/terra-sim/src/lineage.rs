@@ -14,15 +14,15 @@ use crate::events::DeathCause;
 use crate::objects::{EntityId, Objects};
 use crate::sprites::{Sprite, Sprites};
 
-/// How many dead sprites the world remembers (M2 design §16): past it, the
+/// How many dead sprites the world remembers (M2 design §16.1): past it, the
 /// longest dead are forgotten first, but never one the player named.
 pub(crate) const REMEMBERED: usize = 10_000;
 
 /// The generation of a sprite with no parents: one the world began with,
-/// or the Cursor placed (M2 design §16).
+/// or the Cursor placed (M2 design §16.1).
 pub(crate) const FIRST_GENERATION: u32 = 1;
 
-/// Where a sprite came from (M2 design §16).
+/// Where a sprite came from (M2 design §16.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Origin {
     /// One the world began with.
@@ -47,7 +47,7 @@ impl Origin {
 
 /// The generation of a sprite whose parents are of `parents` generations:
 /// one more than the newer parent's, or the first, with none (M2 design
-/// §16).
+/// §16.1).
 pub(crate) fn generation_after(parents: impl IntoIterator<Item = u32>) -> u32 {
     parents
         .into_iter()
@@ -55,7 +55,7 @@ pub(crate) fn generation_after(parents: impl IntoIterator<Item = u32>) -> u32 {
         .map_or(FIRST_GENERATION, |newest| newest + 1)
 }
 
-/// What the world keeps of a sprite once it dies (M2 design §16).
+/// What the world keeps of a sprite once it dies (M2 design §16.1).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Record {
     /// Its parents: the one that laid it, then its partner, if it had one.
@@ -101,14 +101,14 @@ impl Record {
     }
 }
 
-/// The world's record of the dead (M2 design §16), by ID: the newest
+/// The world's record of the dead (M2 design §16.1), by ID: the newest
 /// `REMEMBERED`, and every one the player named.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub(crate) struct Lineage {
+pub(crate) struct RecordOfTheDead {
     dead: BTreeMap<EntityId, Record>,
 }
 
-impl Lineage {
+impl RecordOfTheDead {
     /// Remembers the dead sprite `id`, forgetting the longest dead the
     /// player didn't name while more than `REMEMBERED` are kept.
     pub(crate) fn remember(&mut self, id: EntityId, record: Record) {
@@ -144,13 +144,13 @@ impl Lineage {
 
     /// Checks the record (design §7.1): the dead aren't in the world, each
     /// was born before it died, of parents older than itself, in a
-    /// generation after theirs where the world remembers them, and no more
-    /// are kept than `REMEMBERED` and the named.
+    /// generation after theirs where the world knows them, living or
+    /// remembered, and no more are kept than `REMEMBERED` and the named.
     pub(crate) fn check(&self, sprites: &Sprites, objects: &Objects) -> Result<(), String> {
         let named = self.dead.values().filter(|r| r.name.is_some()).count();
         if self.dead.len() > REMEMBERED.max(named) {
             return Err(format!(
-                "the lineage remembers {} dead sprites, past {REMEMBERED}",
+                "the record of the dead holds {} sprites, past {REMEMBERED}",
                 self.dead.len()
             ));
         }
@@ -169,8 +169,11 @@ impl Lineage {
             let older = record
                 .parents
                 .iter()
-                .filter_map(|&parent| self.get(parent))
-                .find(|parent| parent.generation >= record.generation);
+                .filter_map(|&parent| match sprites.get(parent) {
+                    Some(sprite) => Some(sprite.generation),
+                    None => self.get(parent).map(|parent| parent.generation),
+                })
+                .find(|&generation| generation >= record.generation);
             if record.generation < FIRST_GENERATION || older.is_some() {
                 return Err(format!(
                     "{id:?} is remembered in generation {}, not after its parents'",
@@ -200,33 +203,44 @@ mod tests {
         }
     }
 
-    fn remembered(lineage: &Lineage) -> Vec<u64> {
-        lineage.iter().map(|(id, _)| id.0).collect()
+    fn remembered(dead: &RecordOfTheDead) -> Vec<u64> {
+        dead.iter().map(|(id, _)| id.0).collect()
     }
 
     #[test]
     fn past_the_most_the_longest_dead_are_forgotten_first() {
-        let mut lineage = Lineage::default();
+        let mut dead = RecordOfTheDead::default();
         // Sprite 1 died last, so it's kept the longest, whatever its ID.
         for (id, died) in [(1, 30), (2, 10), (3, 20), (4, 40)] {
-            lineage.remember_within(EntityId(id), record(died, None), 3);
+            dead.remember_within(EntityId(id), record(died, None), 3);
         }
-        assert_eq!(remembered(&lineage), [1, 3, 4]);
+        assert_eq!(remembered(&dead), [1, 3, 4]);
     }
 
     #[test]
     fn a_named_sprite_is_never_forgotten() {
-        let mut lineage = Lineage::default();
-        lineage.remember_within(EntityId(1), record(10, Some("Pip")), 2);
+        let mut dead = RecordOfTheDead::default();
+        dead.remember_within(EntityId(1), record(10, Some("Pip")), 2);
         for (id, died) in [(2, 20), (3, 30), (4, 40)] {
-            lineage.remember_within(EntityId(id), record(died, None), 2);
+            dead.remember_within(EntityId(id), record(died, None), 2);
         }
-        assert_eq!(remembered(&lineage), [1, 4]);
+        assert_eq!(remembered(&dead), [1, 4]);
         // With only the named left to forget, it keeps them all.
         for id in 5..8 {
-            lineage.remember_within(EntityId(id), record(50, Some("Bo")), 2);
+            dead.remember_within(EntityId(id), record(50, Some("Bo")), 2);
         }
-        assert_eq!(remembered(&lineage), [1, 5, 6, 7]);
+        assert_eq!(remembered(&dead), [1, 5, 6, 7]);
+    }
+
+    #[test]
+    fn the_world_remembers_the_newest_ten_thousand() {
+        let mut dead = RecordOfTheDead::default();
+        for id in 0..=10_000 {
+            dead.remember(EntityId(id), record(id, None));
+        }
+        let kept = remembered(&dead);
+        assert_eq!(kept.len(), 10_000);
+        assert_eq!(kept[0], 1, "the first to die is forgotten");
     }
 
     #[test]

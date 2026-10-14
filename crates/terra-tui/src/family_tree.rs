@@ -22,7 +22,7 @@ pub(crate) enum Known<'a> {
     Living(SpriteView<'a>),
     Egg(EggView<'a>),
     Dead(DeadView<'a>),
-    /// One the world no longer remembers, dead long ago (M2 design §16).
+    /// One the world no longer remembers, dead long ago (M2 design §16.1).
     Forgotten,
 }
 
@@ -77,7 +77,7 @@ impl<'a> Known<'a> {
 }
 
 /// Where a sprite with no parents came from, as the screen says it (M2
-/// design §16), or nothing for one that hatched.
+/// design §16.2), or nothing for one that hatched.
 pub(crate) fn origin_text(origin: Origin) -> Option<&'static str> {
     match origin {
         Origin::First => Some("one of the first sprites"),
@@ -91,7 +91,7 @@ const BOUND: char = '\u{a0}';
 
 /// How a death reads: `died of old age`, `died young of dehydration`,
 /// `died hurt by thornbush`. Young is said only of a sprite that died
-/// before it grew up (M2 design §16).
+/// before it grew up (M2 design §16.2).
 fn death_text(dead: &DeadView, world: &World) -> String {
     let young = dead.life_stage() == LifeStage::Young;
     let cause = cause_name(dead.cause(), world.data());
@@ -144,7 +144,7 @@ pub(crate) enum Band {
 
 /// A sprite on the tree: how it's named, what's said of it, in parts the
 /// tree joins with ` · `, and whether it's dead, so drawn dark gray. One the
-/// policy hides says nothing, but keeps its place (M2 design §16).
+/// policy hides says nothing, but keeps its place (M2 design §16.6).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Card {
     pub(crate) id: EntityId,
@@ -154,7 +154,7 @@ pub(crate) struct Card {
 }
 
 impl Card {
-    /// The card of a sprite of the middle one's lineage (M2 design §16):
+    /// The card of a sprite of the middle one's lineage (M2 design §16.2):
     /// living, its life stage and how many young it has; an egg, when it
     /// hatches; dead, how it died; forgotten, that it lived long ago. Then
     /// `more`, if any.
@@ -247,8 +247,9 @@ pub(crate) enum Above {
     Grandparents(Vec<Card>),
     /// Where it came from, having no parents.
     Origin(&'static str),
-    /// Nothing: the world no longer remembers it.
-    Unknown,
+    /// Nothing: the world no longer remembers it, or the policy hides
+    /// where it came from.
+    Nothing,
 }
 
 /// A sprite's young with one other parent, or laid alone.
@@ -259,11 +260,11 @@ pub(crate) struct Brood {
     pub(crate) young: Vec<Card>,
 }
 
-/// A sprite's family tree, as the screen says it (M2 design §16): the
+/// A sprite's family tree, as the screen says it (M2 design §16.2): the
 /// sprite in the middle, its parents and theirs above it, its young below,
 /// and its brothers and sisters.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Family {
+pub(crate) struct FamilyTree {
     pub(crate) centre: Card,
     pub(crate) parents: Vec<Branch>,
     /// Where it came from, in its parents' place, if it has none.
@@ -272,9 +273,9 @@ pub(crate) struct Family {
     pub(crate) siblings: Vec<Card>,
 }
 
-impl Family {
+impl FamilyTree {
     /// The family tree of the sprite or egg `id`, living or dead.
-    pub(crate) fn of(app: &App, world: &World, id: EntityId) -> Family {
+    pub(crate) fn of(app: &App, world: &World, id: EntityId) -> FamilyTree {
         let known = Known::of(world, id);
         let parents = known.parents();
         let branches = parents
@@ -286,7 +287,7 @@ impl Family {
                 let origin = theirs.origin().filter(|_| shown(app, parent));
                 let above = match (theirs.parents(), origin) {
                     ([], Some(origin)) => Above::Origin(origin),
-                    ([], None) => Above::Unknown,
+                    ([], None) => Above::Nothing,
                     (grandparents, _) => Above::Grandparents(
                         grandparents
                             .iter()
@@ -320,7 +321,13 @@ impl Family {
                                 .iter()
                                 .map(|&other| name_of(app, world, other))
                                 .collect();
-                            format!("with {}", names.join(" and "))
+                            // A parent the policy hides goes unnamed (M2
+                            // design §16.6).
+                            if names.iter().any(String::is_empty) {
+                                String::new()
+                            } else {
+                                format!("with {}", names.join(" and "))
+                            }
                         }
                     };
                     let young = vec![card];
@@ -328,33 +335,25 @@ impl Family {
                 }
             }
         }
-        // Brothers and sisters: the young of either parent. One with other
-        // parents than this one's says which it shares.
-        let mut siblings: Vec<EntityId> = parents
-            .iter()
-            .flat_map(|&parent| world.young(parent))
-            .filter(|&sibling| sibling != id)
-            .collect();
-        siblings.sort();
-        siblings.dedup();
-        let siblings = siblings
+        // One with other parents than this one's says which it shares.
+        let siblings = siblings(world, id)
             .into_iter()
             .map(|sibling| {
                 let theirs = Known::of(world, sibling).parents();
                 let alike =
                     theirs.len() == parents.len() && theirs.iter().all(|p| parents.contains(p));
-                let through = (!alike).then(|| {
-                    let shared: Vec<String> = theirs
-                        .iter()
-                        .filter(|p| parents.contains(p))
-                        .map(|&p| unbroken(&name_of(app, world, p)))
-                        .collect();
-                    format!("through {}", shared.join(" and "))
-                });
+                let shared: Vec<String> = theirs
+                    .iter()
+                    .filter(|p| parents.contains(p))
+                    .map(|&p| unbroken(&name_of(app, world, p)))
+                    .collect();
+                let named = shared.iter().all(|name| !name.is_empty());
+                let through =
+                    (!alike && named).then(|| format!("through {}", shared.join(" and ")));
                 Card::of(app, world, sibling, through)
             })
             .collect();
-        Family {
+        FamilyTree {
             centre: Card::centre(app, world, id),
             parents: branches,
             origin: known.origin(),
@@ -519,7 +518,7 @@ impl Drawn {
 /// have changed since: the same card, if it's there; or else, as young are
 /// born and die, the same sprite's card in the same band, or anywhere; or
 /// else the sprite in the middle's.
-fn found(places: &[Place], spot: Option<Spot>) -> Spot {
+fn find_again(places: &[Place], spot: Option<Spot>) -> Spot {
     let of = |id: EntityId| places.iter().filter(move |place| place.spot.id == id);
     spot.and_then(|spot| {
         of(spot.id)
@@ -532,12 +531,12 @@ fn found(places: &[Place], spot: Option<Spot>) -> Spot {
     .expect("a tree has a sprite in the middle")
 }
 
-/// Draws `family` `width` columns wide, its rows that scroll as far along
+/// Draws `family_tree` `width` columns wide, its rows that scroll as far along
 /// as `scroll` says, with the card `chosen`, or the one in the middle,
 /// blinking: its label in reverse video while `blink` is on (M2 design
-/// §16).
+/// §16.3).
 pub(crate) fn draw(
-    family: &Family,
+    family_tree: &FamilyTree,
     width: usize,
     scroll: Scroll,
     chosen: Option<Spot>,
@@ -551,7 +550,7 @@ pub(crate) fn draw(
     let quarter = width / 4;
     let slot = |at: usize| ((width - 4 * quarter) / 2 + at * quarter + quarter / 2) as i32;
     let centre = (slot(1) + slot(2)) / 2;
-    let (parents, slots): (Vec<i32>, &[[usize; 2]]) = match family.parents.len() {
+    let (parents, slots): (Vec<i32>, &[[usize; 2]]) = match family_tree.parents.len() {
         1 => (vec![centre], &[[1, 2]]),
         _ => (
             vec![(slot(0) + slot(1)) / 2, (slot(2) + slot(3)) / 2],
@@ -559,7 +558,7 @@ pub(crate) fn draw(
         ),
     };
     let mut grandparents = 0;
-    for ((branch, &x), slots) in family.parents.iter().zip(&parents).zip(slots) {
+    for ((branch, &x), slots) in family_tree.parents.iter().zip(&parents).zip(slots) {
         match &branch.above {
             Above::Grandparents(cards) => {
                 let xs: Vec<i32> = match cards.len() {
@@ -583,10 +582,10 @@ pub(crate) fn draw(
                 tree.canvas
                     .centred(x, GRANDPARENTS, text, 2 * quarter - 1, Style::default());
             }
-            Above::Unknown => {}
+            Above::Nothing => {}
         }
     }
-    for (index, (branch, &x)) in family.parents.iter().zip(&parents).enumerate() {
+    for (index, (branch, &x)) in family_tree.parents.iter().zip(&parents).enumerate() {
         tree.card(
             &branch.parent,
             Band::Parents,
@@ -596,23 +595,30 @@ pub(crate) fn draw(
             PARENTS,
         );
     }
-    if family.parents.is_empty() {
-        if let Some(origin) = family.origin {
+    if family_tree.parents.is_empty() {
+        if let Some(origin) = family_tree.origin {
             tree.canvas
                 .centred(centre, PARENTS, origin, width, Style::default());
         }
     } else {
         tree.canvas.join(PARENTS_JOIN, &parents, &[centre]);
     }
-    tree.card(&family.centre, Band::Centre, 0, centre, width + 1, CENTRE);
+    tree.card(
+        &family_tree.centre,
+        Band::Centre,
+        0,
+        centre,
+        width + 1,
+        CENTRE,
+    );
     // The young, under a heading for each other parent.
-    let young: Vec<&Card> = family.young().collect();
-    let (xs, shown) = strip(young.len(), width, scroll.young);
+    let young: Vec<&Card> = family_tree.young().collect();
+    let (xs, shown) = strip_columns(young.len(), width, scroll.young);
     if !young.is_empty() {
         tree.canvas.put(centre, DOWN, "│", Style::default());
         let mut headings = Vec::new();
         let mut from = 0;
-        for brood in &family.broods {
+        for brood in &family_tree.broods {
             let all = from..from + brood.young.len();
             from = all.end;
             let seen: Vec<usize> = all.clone().filter(|at| shown.contains(at)).collect();
@@ -631,9 +637,9 @@ pub(crate) fn draw(
         tree.canvas.join(BROODS_JOIN, &[centre], &headings);
         tree.strip(&young, Band::Young, &xs, &shown, YOUNG);
     }
-    if !family.siblings.is_empty() {
-        let siblings: Vec<&Card> = family.siblings.iter().collect();
-        let (xs, shown) = strip(siblings.len(), width, scroll.siblings);
+    if !family_tree.siblings.is_empty() {
+        let siblings: Vec<&Card> = family_tree.siblings.iter().collect();
+        let (xs, shown) = strip_columns(siblings.len(), width, scroll.siblings);
         tree.canvas.put(
             1,
             SIBLINGS_HEADING,
@@ -642,7 +648,7 @@ pub(crate) fn draw(
         );
         tree.strip(&siblings, Band::Siblings, &xs, &shown, SIBLINGS);
     }
-    let chosen = found(&tree.places, chosen);
+    let chosen = find_again(&tree.places, chosen);
     if blink && let Some(place) = tree.places.iter().find(|place| place.spot == chosen) {
         tree.canvas
             .mark(place.row, place.label.clone(), Modifier::REVERSED);
@@ -664,7 +670,7 @@ fn across(width: usize) -> usize {
 /// of them are shown: all of them, centred, if they fit; otherwise as many
 /// as fit, from the one at `first`, or as near it as leaves none
 /// unfilled.
-fn strip(count: usize, width: usize, first: usize) -> (Vec<i32>, Range<usize>) {
+fn strip_columns(count: usize, width: usize, first: usize) -> (Vec<i32>, Range<usize>) {
     let across = across(width);
     let shown = count.min(across);
     let first = first.min(count - shown);
@@ -888,8 +894,22 @@ fn joint(up: bool, down: bool, left: bool, right: bool) -> char {
     }
 }
 
+/// The brothers and sisters of the sprite `id`: the young of either of its
+/// parents, in ascending ID order (M2 design §16.2).
+fn siblings(world: &World, id: EntityId) -> Vec<EntityId> {
+    let mut siblings: Vec<EntityId> = Known::of(world, id)
+        .parents()
+        .iter()
+        .flat_map(|&parent| world.young(parent))
+        .filter(|&sibling| sibling != id)
+        .collect();
+    siblings.sort();
+    siblings.dedup();
+    siblings
+}
+
 /// Where a sprite on the map stands in the selected one's lineage, for the
-/// lineage colours (M2 design §16).
+/// lineage colours (M2 design §16.4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Lineage {
     /// A parent or grandparent.
@@ -901,7 +921,7 @@ pub(crate) enum Lineage {
 }
 
 /// The sprites of sprite `id`'s lineage the lineage colours mark (M2
-/// design §16): its parents and grandparents, its brothers and sisters, and
+/// design §16.4): its parents and grandparents, its brothers and sisters, and
 /// its young and theirs, living or dead or eggs. One that's there twice
 /// over, as in an inbred line, takes the first of these that it is.
 pub(crate) fn lineage(world: &World, id: EntityId) -> BTreeMap<EntityId, Lineage> {
@@ -919,10 +939,8 @@ pub(crate) fn lineage(world: &World, id: EntityId) -> BTreeMap<EntityId, Lineage
             marked.entry(theirs).or_insert(Lineage::Young);
         }
     }
-    for &parent in parents {
-        for sibling in world.young(parent) {
-            marked.entry(sibling).or_insert(Lineage::Sibling);
-        }
+    for sibling in siblings(world, id) {
+        marked.entry(sibling).or_insert(Lineage::Sibling);
     }
     marked.remove(&id);
     marked
@@ -997,14 +1015,14 @@ mod tests {
     #[test]
     fn a_row_that_scrolls_shows_as_many_as_fit_from_the_first_asked() {
         // Two fit in 98 columns: centred, four columns of 24 across.
-        assert_eq!(strip(2, 98, 0), (vec![37, 61], 0..2));
+        assert_eq!(strip_columns(2, 98, 0), (vec![37, 61], 0..2));
         // Seven don't: four, from the one asked, but none left unfilled.
-        let (xs, shown) = strip(7, 98, 2);
+        let (xs, shown) = strip_columns(7, 98, 2);
         assert_eq!((xs[2], shown), (13, 2..6));
-        let (xs, shown) = strip(7, 98, 5);
+        let (xs, shown) = strip_columns(7, 98, 5);
         assert_eq!((xs[3], xs[6], shown), (13, 85, 3..7));
         // Narrower than a column, one.
-        assert_eq!(strip(3, 10, 1).1, 1..2);
+        assert_eq!(strip_columns(3, 10, 1).1, 1..2);
     }
 
     fn spot(id: u64, band: Band, index: usize) -> Spot {
@@ -1035,20 +1053,20 @@ mod tests {
             place(spot(4, Band::Siblings, 0)),
             place(spot(5, Band::Young, 1)),
         ];
-        let found = |spot| found(&places, spot);
-        assert_eq!(found(None), centre);
+        let find_again = |spot| find_again(&places, spot);
+        assert_eq!(find_again(None), centre);
         let twice = spot(4, Band::Siblings, 0);
-        assert_eq!(found(Some(twice)), twice, "the card itself");
+        assert_eq!(find_again(Some(twice)), twice, "the card itself");
         assert_eq!(
-            found(Some(spot(5, Band::Young, 0))),
+            find_again(Some(spot(5, Band::Young, 0))),
             spot(5, Band::Young, 1),
             "moved along, as an egg joined a brood before it"
         );
         assert_eq!(
-            found(Some(spot(5, Band::Siblings, 2))),
+            find_again(Some(spot(5, Band::Siblings, 2))),
             spot(5, Band::Young, 1),
             "elsewhere"
         );
-        assert_eq!(found(Some(spot(6, Band::Young, 0))), centre, "gone");
+        assert_eq!(find_again(Some(spot(6, Band::Young, 0))), centre, "gone");
     }
 }
