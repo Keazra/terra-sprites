@@ -1275,8 +1275,15 @@ fn explained_lines(explained: &Explanation, data: &Words) -> Vec<String> {
 
 /// A lesson as the event log says it (design §6.1): "Sprite #12 learned:
 /// thornbushes are bad", "… water is good for thirst", "… eating balls is
-/// bad".
-pub(crate) fn learned_line(id: EntityId, learned: &Learned, good: bool, data: &Words) -> String {
+/// bad"; one learned by `watching` another, "Sprite #21 learned from
+/// watching Sprite #12: …" (M2 design §18.4).
+pub(crate) fn learned_line(
+    id: EntityId,
+    learned: &Learned,
+    good: bool,
+    watching: Option<EntityId>,
+    data: &Words,
+) -> String {
     let verdict = if good { "good" } else { "bad" };
     let what = match learned {
         Learned::Worth { .. } | Learned::Bad { .. } | Learned::Fear { .. } => {
@@ -1285,7 +1292,14 @@ pub(crate) fn learned_line(id: EntityId, learned: &Learned, good: bool, data: &W
         Learned::Habit { .. } => format!("{} is {verdict}", learned_name(learned, data)),
         Learned::NewThings => format!("new things are {verdict}"),
     };
-    format!("{} learned: {what}", data.label(id))
+    match watching {
+        Some(other) => format!(
+            "{} learned from watching {}: {what}",
+            data.label(id),
+            data.label(other)
+        ),
+        None => format!("{} learned: {what}", data.label(id)),
+    }
 }
 
 /// Something learned, as the memory words it: `thornbushes are bad`,
@@ -1782,11 +1796,13 @@ fn health_text(health: f32) -> String {
 }
 
 /// What an attention instinct draws the eye to: `sprite`, or, about whom
-/// it is (M2 design §15.6), `its young (sprite)`.
+/// it is (M2 design §15.6), `its young (sprite)`, and about grown-ups,
+/// whoever's they are, `grown-ups (sprite)` (§18.4).
 fn attended(category: &str, whom: Whom) -> String {
-    match whom.name() {
-        Some(whom) => format!("its {whom} ({})", display_name(category)),
-        None => display_name(category),
+    match (whom, whom.name()) {
+        (Whom::Grown, Some(whom)) => format!("{whom} ({})", display_name(category)),
+        (_, Some(whom)) => format!("its {whom} ({})", display_name(category)),
+        (_, None) => display_name(category),
     }
 }
 
@@ -2177,9 +2193,12 @@ pub(crate) fn event_line(event: &Event, data: &Words) -> Option<String> {
         EventKind::Parted { a, b } => {
             Some(format!("{} and {} parted", data.label(*a), data.label(*b)))
         }
-        EventKind::LearnedMilestone { id, learned, good } => {
-            Some(learned_line(*id, learned, *good, data))
-        }
+        EventKind::LearnedMilestone {
+            id,
+            learned,
+            good,
+            watching,
+        } => Some(learned_line(*id, learned, *good, *watching, data)),
         // The Cursor's touch, spoken to the player (design v21 §6.1).
         EventKind::Rewarded { id, .. } | EventKind::Corrected { id, .. } => {
             let touch = CursorTouch::reported(&event.kind).expect("the Cursor's touch");

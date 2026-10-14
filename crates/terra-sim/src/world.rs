@@ -1197,6 +1197,45 @@ impl World {
         }
     }
 
+    /// For a lab scenario (M2 design §18.6): gives each sprite in the world,
+    /// in ascending ID order, a newborn of its own, of the starter genome
+    /// with spawn variation, on the nearest tile a sprite can stand on.
+    /// Returns the young, in the same order.
+    pub(crate) fn give_young(&mut self) -> Vec<EntityId> {
+        let (state, data) = (&mut self.state, &self.data);
+        let parents: Vec<EntityId> = state.sprites.iter().map(|(id, _)| id).collect();
+        let mut young = Vec::new();
+        for parent in parents {
+            let sprite = state.sprites.get(parent).expect("a sprite in the world");
+            let (pos, generation) = (sprite.pos, sprite.generation);
+            let rings = state.map.width().max(state.map.height());
+            let Some(tile) = (1..rings).find_map(|radius| {
+                square(&state.map, pos, radius)
+                    .filter(|&tile| chebyshev(tile, pos) == radius)
+                    .find(|&tile| state.can_stand(data, tile))
+            }) else {
+                continue;
+            };
+            let genome = varied(data.starter(), data, &mut state.rng);
+            let mut child = Sprite::newborn(genome, tile, state.tick, data);
+            child.parents = vec![parent];
+            child.generation = generation + 1;
+            young.push(state.add_sprite(child));
+        }
+        young
+    }
+
+    /// For a lab scenario (M2 design §18.6): takes the sprites `ids` out of
+    /// the world, as if they had never been there: no death, and no record
+    /// of the dead. Their young are left orphans.
+    pub(crate) fn take_away(&mut self, ids: &[EntityId]) {
+        for &id in ids {
+            if self.state.sprites.get(id).is_some() {
+                self.state.sprites.remove(id);
+            }
+        }
+    }
+
     /// Stops every sprite learning from here on, for a lab scenario's
     /// control run (design §7.1).
     pub(crate) fn switch_off_learning(&mut self) {
@@ -2747,10 +2786,145 @@ mod tests {
     }
 
     #[test]
-    fn a_world_nobody_trains_is_taught_nothing() {
-        // Design §5.6, #187: only the Cursor's Reward and Correct teach a
-        // taught habit, so sprites nobody trains learn as they did before.
+    fn a_parent_drinking_draws_its_young_s_eye_until_the_young_knows_water() {
+        // M2 design §18.1: an attention instinct about a parent showing it
+        // something draws its eye to its mother drinking for her thirst,
+        // knowing water is good for thirst, before its nearer father, while
+        // it doesn't know that; once it does, the nearer parent draws it.
         let data = DataPack::builtin().expect("built-in data pack is valid");
+        let map = Map::from_ascii(&["~.....", "~....."], &data).expect("valid drawing");
+        let genes = |genes: &str| {
+            let genes = format!("(format: 2, genes: [{genes}])");
+            Genome::from_ron(&genes, &data).expect("a valid genome")
+        };
+        let rests = r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0)"#;
+        let looks = format!(
+            r#"{rests},
+            AttentionInstinct(input: "always", category: "sprite", whom: Showing, weight: 1.0),
+            BrainParam(param: "curiosity", value: 0.0),
+            BrainParam(param: "tau_att_base", value: 0.05),
+            BrainParam(param: "attention_margin", value: 0.0)"#
+        );
+        let drinks = r#"InitialConcentration(chem: "thirst", value: 1.0),
+            Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0)"#;
+        let (mother, father, young) = (Pos { x: 1, y: 0 }, Pos { x: 5, y: 1 }, Pos { x: 4, y: 1 });
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &[
+                (mother, Some(genes(drinks))),
+                (father, Some(genes(rests))),
+                (young, Some(genes(&looks))),
+            ],
+            scripted: &[],
+            newborns: &[young],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let id = |world: &World, pos: Pos| world.sprite_at(pos).expect("a sprite").id();
+        let (mother_id, father_id, young_id) =
+            (id(&world, mother), id(&world, father), id(&world, young));
+        let needs = world.data.need_places().len();
+        let know_water = |world: &mut World, id: EntityId| {
+            let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
+            let known = brain
+                .experience
+                .learn_about(Subject::ObjectType(100), needs);
+            known.worth[1] = 0.6;
+            known.touched = true;
+        };
+        know_water(&mut world, mother_id);
+        let parents = vec![mother_id, father_id];
+        world
+            .state
+            .sprites
+            .get_mut(young_id)
+            .expect("the young one")
+            .parents = parents;
+        let looks_at = |world: &World| world.sprite(young_id).expect("young").attending_to();
+        world.step();
+        assert_eq!(looks_at(&world), Some(mother), "its mother is drinking");
+        know_water(&mut world, young_id);
+        world.step();
+        assert_eq!(looks_at(&world), Some(father), "it knows water");
+    }
+
+    #[test]
+    fn a_parent_whose_target_is_gone_shows_its_young_nothing() {
+        // M2 design §18.1: the young, first in turn, weighs its mother while
+        // her Eat, which ate the berry, is still her latest action, aimed at
+        // a berry that's gone. She knows berries, but one that's gone shows
+        // it nothing, and isn't looked up.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let map = Map::from_ascii(&["....", "...."], &data).expect("valid drawing");
+        let genes = |genes: &str| {
+            let genes = format!("(format: 2, genes: [{genes}])");
+            Genome::from_ron(&genes, &data).expect("a valid genome")
+        };
+        let rests = r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0)"#;
+        let looks = format!(
+            r#"{rests},
+            AttentionInstinct(input: "always", category: "sprite", whom: Showing, weight: 1.0)"#
+        );
+        let (young, mother, berry) = (Pos { x: 3, y: 1 }, Pos { x: 1, y: 0 }, Pos { x: 0, y: 0 });
+        let scenario = Scenario {
+            map,
+            objects: &[(berry, "berry")],
+            sprites: &[(young, Some(genes(&looks))), (mother, Some(genes(rests)))],
+            scripted: &[(mother, ScriptedAction::Eat { at: berry })],
+            newborns: &[young],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let id = |world: &World, pos: Pos| world.sprite_at(pos).expect("a sprite").id();
+        let (young_id, mother_id) = (id(&world, young), id(&world, mother));
+        let needs = world.data.need_places().len();
+        let berry = world.data.real_object_type("berry").expect("berries");
+        let berry_type = world.data.object_types()[berry].id;
+        let brain = &mut world
+            .state
+            .sprites
+            .get_mut(mother_id)
+            .expect("mother")
+            .brain;
+        let known = brain
+            .experience
+            .learn_about(Subject::ObjectType(berry_type), needs);
+        known.worth[0] = 0.6;
+        known.touched = true;
+        world
+            .state
+            .sprites
+            .get_mut(young_id)
+            .expect("young")
+            .parents = vec![mother_id];
+        while world.state.objects.iter().next().is_some() {
+            world.step();
+        }
+        let showing = |world: &World| {
+            crate::family::relation(
+                &world.state,
+                &world.data,
+                young_id,
+                Target::Sprite(mother_id),
+            )
+            .showing
+        };
+        assert!(!showing(&world), "the berry is gone");
+        world.step();
+    }
+
+    #[test]
+    fn a_world_nobody_trains_that_doesn_t_watch_is_taught_nothing() {
+        // Design §5.6, #187: only the Cursor's Reward and Correct teach a
+        // taught habit, and watching passes one on (M2 design §18.2), so
+        // sprites nobody trains that don't learn by watching learn as they
+        // did before.
+        let data = crate::test_util::builtin_changing(
+            "physiology.ron",
+            &[(
+                r#""watch_rate":        (range: (0.0, 1.0),"#,
+                r#""watch_rate":        (range: (0.0, 0.0),"#,
+            )],
+        );
         let config = WorldConfig::builtin(&data);
         let mut world = World::new(config, data, 7);
         for _ in 0..2_000 {

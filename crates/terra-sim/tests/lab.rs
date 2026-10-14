@@ -106,6 +106,7 @@ fn a_run_counts_applied_actions_and_deaths_in_each_window() {
         deaths: BTreeMap::new(),
         touches: BTreeMap::new(),
         lessons: BTreeMap::new(),
+        young: None,
     });
     for _ in 0..3000 {
         let events = world.step();
@@ -148,6 +149,7 @@ fn the_report_lists_each_window_with_a_column_per_seed_and_the_median() {
         deaths: BTreeMap::from([(DeathCause::HurtBy(3), thorn_deaths)]),
         touches: BTreeMap::new(),
         lessons: BTreeMap::new(),
+        young: None,
     };
     let runs = [
         (
@@ -196,6 +198,7 @@ fn the_report_lists_the_control_runs_after_the_learning_runs() {
         deaths: BTreeMap::new(),
         touches: BTreeMap::new(),
         lessons: BTreeMap::new(),
+        young: None,
     };
     let runs = [
         (
@@ -355,6 +358,7 @@ fn the_report_counts_the_cursor_s_touches_and_lessons_and_names_the_control() {
         } else {
             BTreeMap::new()
         },
+        young: None,
     };
     let runs = [(
         1,
@@ -396,4 +400,98 @@ fn a_scenario_can_have_its_sprites_grow_old_at_another_age() {
     assert_eq!(old_age(&whole), None);
     let sooner = whole.replace("ticks: 7000", "grows_old: 6000.0,\n    ticks: 7000");
     assert_eq!(old_age(&sooner), Some(1));
+}
+
+/// Two grown sprites who each get a newborn of their own at tick 100, in a
+/// world with room for no more, and a control run of orphans.
+const FAMILIES: &str = r#"(
+    world: Drawn(
+        rows: [
+            "..........",
+            ".S......S.",
+            "....~~....",
+            "..........",
+        ],
+        key: {'S': Sprite},
+    ),
+    most_sprites: 4,
+    ticks: 400,
+    young: (at: 100),
+    control: Orphans,
+    windows: [(0, 100), (100, 400)],
+)"#;
+
+#[test]
+fn a_control_run_of_orphans_needs_young_that_appear_within_the_run() {
+    let data = builtin();
+    let no_young = FAMILIES.replace("young: (at: 100),", "");
+    assert_eq!(
+        LabScenario::from_ron(&no_young, &data).err(),
+        Some(LabError::NoYoung)
+    );
+    let late = FAMILIES.replace("(at: 100)", "(at: 400)");
+    assert_eq!(
+        LabScenario::from_ron(&late, &data).err(),
+        Some(LabError::LateYoung(400))
+    );
+}
+
+#[test]
+fn a_scenario_can_give_each_sprite_a_newborn_of_its_own() {
+    // M2 design §18.6: young with a parent, against orphans.
+    let data = builtin();
+    let lab = LabScenario::from_ron(FAMILIES, &data).expect("a valid scenario");
+    let run = lab.run(data, 1);
+    assert_eq!(run.windows[0].young, None, "none yet");
+    let young = run.windows[1].young.as_ref().expect("the young");
+    assert_eq!(young.young, 2);
+    // What the young did is part of what everyone did.
+    for (action, &count) in &young.applied {
+        assert!(run.windows[1].applied[action] >= count);
+    }
+}
+
+#[test]
+fn a_control_run_of_orphans_takes_the_grown_ups_away_as_their_young_appear() {
+    let data = builtin();
+    let lab = LabScenario::from_ron(FAMILIES, &data).expect("a valid scenario");
+    let run = lab.run(data, 1);
+    assert_eq!(run.without, Some(Without::Parents));
+    let control = run.control.expect("a control run");
+    // Until the young appear, the control run is the same world.
+    assert_eq!(control[0], run.windows[0]);
+    let young = control[1].young.as_ref().expect("the young");
+    assert_eq!(young.young, 2);
+    // Once they have, the young are all that acts.
+    assert!(run.windows[1].applied.values().sum::<u64>() > young.applied.values().sum::<u64>());
+    assert_eq!(control[1].applied, young.applied);
+}
+
+#[test]
+fn the_young_s_lessons_count_who_learned_each_and_the_median_ticks_to_it() {
+    // M2 design §18.6: one that hasn't learned a lesson counts the ticks to
+    // the window's end.
+    let data = builtin();
+    let long = FAMILIES
+        .replace("ticks: 400", "ticks: 4100")
+        .replace("(100, 400)", "(100, 4100)");
+    let lab = LabScenario::from_ron(&long, &data).expect("a valid scenario");
+    let run = lab.run(data.clone(), 1);
+    let young = run.windows[1].young.as_ref().expect("the young");
+    assert!(!young.learned.is_empty(), "they learned something");
+    for (lesson, &knew) in &young.learned {
+        let took = young.learned_after[lesson];
+        assert!((1..=2).contains(&knew));
+        assert!(took <= 4000);
+        if knew == 1 {
+            // Of two, the median is the mean of the one that learned it and
+            // the one that didn't, which counts the whole window.
+            assert!(took > 2000);
+        }
+    }
+    let text = report(&[(1, run)], &data);
+    assert!(text.contains("  young  "), "{text}");
+    assert!(text.contains("young learned: "), "{text}");
+    assert!(text.contains("ticks to learn: "), "{text}");
+    assert!(text.contains("control, orphans"), "{text}");
 }

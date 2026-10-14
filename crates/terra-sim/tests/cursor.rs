@@ -3,7 +3,7 @@
 //! from them.
 
 mod common;
-use common::{WorldBuilder, at, builtin, close, genome};
+use common::{WorldBuilder, at, builtin, close, genome, value_of};
 
 use terra_sim::{
     Command, EntityId, EventKind, Genome, Learned, Map, Pos, Rejection, Scenario, ScriptedAction,
@@ -264,16 +264,6 @@ fn kicker(genes: &str) -> (World, EntityId) {
     );
     let id = world.sprites().next().expect("the sprite").id();
     (world, id)
-}
-
-/// What sprite `id` has learned `learned` is worth, or 0.
-fn value_of(world: &World, id: EntityId, learned: &Learned) -> f32 {
-    let sprite = world.sprite(id).expect("the sprite");
-    sprite
-        .memory()
-        .into_iter()
-        .find(|m| &m.learned == learned)
-        .map_or(0.0, |m| m.amount)
 }
 
 fn balls_good() -> Learned {

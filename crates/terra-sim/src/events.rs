@@ -73,11 +73,14 @@ pub enum EventKind {
     /// A sprite grew old (M2 design §9.1).
     GrewOld { id: EntityId },
     /// A sprite learned a lesson (design §5.6): something it learned got
-    /// half a point from nothing for the first time, up if `good`.
+    /// half a point from nothing for the first time, up if `good`; from
+    /// watching the sprite `watching`, if watching tipped it (M2 design
+    /// §18.4).
     LearnedMilestone {
         id: EntityId,
         learned: Learned,
         good: bool,
+        watching: Option<EntityId>,
     },
     /// The Cursor rewarded a sprite (design v21 §4.6): a pet, or amplified,
     /// a hug.

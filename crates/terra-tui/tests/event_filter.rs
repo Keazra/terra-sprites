@@ -99,6 +99,7 @@ fn logged(world: &World) -> App {
                     thing: terra_sim::Thing::Sprite(EntityId(1)),
                 },
                 good: false,
+                watching: None,
             },
         },
         Event {

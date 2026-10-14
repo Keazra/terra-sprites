@@ -165,6 +165,11 @@
         // physiology's default.
         BrainParam(param: "curiosity", value: 0.5, until: Adult),
         BrainParam(param: "plasticity", value: 1.5, until: Adult),
+        // Every sprite learns by watching, the young most: they take on half
+        // the way to what one they watch knows of what it uses and of what
+        // happens to it; grown up, a quarter (M2 design §18.1).
+        BrainParam(param: "watch_rate", value: 0.5, until: Adult),
+        BrainParam(param: "watch_rate", value: 0.25, from: Adult),
 
         // It knows its own kind: loneliness draws its eye to other sprites.
         // Nothing draws it to food, water or toys; it learns what they're for.
@@ -186,6 +191,13 @@
         AttentionInstinct(input: "anxiety", category: "sprite", whom: Family, weight: 1.0),
         AttentionInstinct(input: "anxiety", category: "egg", whom: Family, weight: 1.0),
         AttentionInstinct(input: "egg_away", category: "egg", whom: Family, weight: 1.0),
+        // The young watch the grown-ups, and their parents as much again,
+        // and a parent doing something that would show them a lesson they
+        // haven't learned draws their eye strongly (M2 design §18.1). The
+        // weights are first guesses, tuned against §18.6.
+        AttentionInstinct(input: "always", category: "sprite", whom: Grown, weight: 0.3, until: Adult),
+        AttentionInstinct(input: "always", category: "sprite", whom: Parent, weight: 0.3, until: Adult),
+        AttentionInstinct(input: "always", category: "sprite", whom: Showing, weight: 1.0, until: Adult),
 
         // Each need leads to its action, on whatever is attended: hunger to
         // eating, thirst to drinking. Trying it on the wrong thing does nothing.

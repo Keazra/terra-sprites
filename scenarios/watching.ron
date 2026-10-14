@@ -1,0 +1,36 @@
+// Learning by watching (M2 design §18.6): six grown sprites live in an
+// arena with water at one end and berry bushes at the other, too far apart
+// to see both at once, for 20,000 ticks, long enough for all of them to
+// learn that water is good for thirst. Then each gets a newborn of its own
+// beside it. The control run takes the grown-ups away as their young
+// appear, so its young are orphans. The bar: the young with a parent learn
+// that water is good for thirst in at most half the ticks the orphans take
+// (median of 10 seeds). Food is for information: only about half the
+// grown-ups have learned it by then, so there's little to watch.
+(
+    world: Drawn(
+        rows: [
+            "........................................",
+            "..~~~~..............T...........B.......",
+            ".~~~~~~...................T.........B...",
+            ".~~~~~~.......S........S..........B.....",
+            "..~~~~...T...........................B..",
+            "...............S.........S.......T......",
+            "..~~~~..................................",
+            ".~~~~~~.....T.....S........S.......B....",
+            "..~~~~...........................B......",
+            "........................T...............",
+        ],
+        key: {'S': Sprite, 'T': Object("thornbush"), 'B': Object("berry_bush")},
+    ),
+    // The same sprites are watched for longer than a 4-hour life could
+    // allow some of them, so they grow old at 60,000 ticks (M2 design §2).
+    grows_old: 60000.0,
+    // Its six grown sprites fill it, so they lay no eggs (M2 design §10),
+    // and their young take it past full, so none after.
+    most_sprites: 6,
+    ticks: 25000,
+    young: (at: 20000),
+    control: Orphans,
+    windows: [(0, 20000), (20000, 25000)],
+)

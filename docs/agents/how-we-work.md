@@ -22,7 +22,7 @@ The owner's preferences and the project's conventions, for any agent session, lo
 ## The owner's design principles
 
 - **The engine enforces physics only.** Behaviour and safety policies belong in each object's data rules, and the data names things. For example, the cause of death "hurt by thornbush" comes from the object type, not from a list in the code.
-  - **The one exception is content safety.** A rule the project must never break, whatever a genome or data pack says, is enforced in the engine, because data can be edited and genes evolve. For now there is one: attraction and mating attempts only ever between adults ([#69](https://github.com/Keazra/terra-sprites/issues/69), for M2).
+  - **The one exception is content safety.** A rule the project must never break, whatever a genome or data pack says, is enforced in the engine, because data can be edited and genes evolve. For now there are two: attraction and mating attempts only ever between adults ([#69](https://github.com/Keazra/terra-sprites/issues/69), for M2), and nothing about mating ever learned by watching (M2 design §18.3).
 - **Solid means impassable, whatever a sprite has learned.**
 - **Each thing we add is its own self-contained thing.** What it is, what it does and what it's called live in its own entry, not spread across lists in the code or other files. So its plural sits beside its name in `objects.ron` (design v17), rather than in a word list of its own.
   - **The aim is easy modding,** as in the Creatures games, whose fun included how simple it was to make new species and new items. When a design choice comes up, say whether it makes adding a species or an item easier or harder.
@@ -99,6 +99,7 @@ The owner runs Gemini, and sometimes Codex, on each PR. Gemini's review is one r
 - **The session names its own branch** (`claude/…`). The project's is `feat/slice-N-<slug>`, so ask the owner which to use before the first push.
 - **Try `gh` before saying something can't be done.** The GitHub tools cover most work: a review thread gets a reply to its comment, then is resolved by its thread ID. What they can't do, such as making a milestone, `gh api` may: in the M2 planning session it worked through the proxy, where the session had first told the owner it couldn't be done.
 - **A branch on GitHub can't be deleted from a session:** the git proxy refuses with a 403. The owner deletes a merged branch from its PR page.
+- **Especially large runs go on the owner's PC, not in the cloud** (the owner, 2026-10-14): a `generations` run of 200,000 ticks or more over ten seeds, the soak, or anything else that would keep a cloud machine busy for an hour or more. Their PC steps the world about half again as fast as a 4-core cloud machine, which runs three worlds at a time. From a project thread, start a Remote Control session on their checkout, or give them the command in the thread. Try ideas on a seed or two in the cloud first, and save the PC for the full run. Slice 28's 200,000-tick run of all ten seeds is what prompted it.
 
 ## Triage
 

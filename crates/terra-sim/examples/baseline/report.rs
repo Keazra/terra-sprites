@@ -840,6 +840,7 @@ mod tests {
             deaths: deaths.iter().copied().collect(),
             touches: BTreeMap::new(),
             lessons: BTreeMap::new(),
+            young: None,
         }
     }
 

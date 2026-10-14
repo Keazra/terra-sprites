@@ -216,6 +216,10 @@ fn added_since_saves(param: BrainParam) -> Option<ParamRange> {
             range: (0.0, 0.01),
             default: 0.000025,
         }),
+        BrainParam::WatchRate => Some(ParamRange {
+            range: (0.0, 1.0),
+            default: 0.0,
+        }),
         _ => None,
     }
 }

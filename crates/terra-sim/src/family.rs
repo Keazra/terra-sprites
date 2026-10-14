@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::courtship::{self, Company};
 use crate::data::DataPack;
 use crate::genome::Whom;
+use crate::learning::Topic;
 use crate::map::Pos;
 use crate::objects::EntityId;
 use crate::perception::Target;
@@ -56,6 +57,11 @@ pub(crate) struct Relation {
     /// Its close kin (§15.5): a parent, a young one or an egg of its own, or
     /// a brother or sister, hatched or not.
     pub(crate) kin: bool,
+    /// A sprite grown up, adult or old (§18.1).
+    pub(crate) grown: bool,
+    /// Its parent, while it's young, doing something that would show it a
+    /// lesson it hasn't learned (§18.1).
+    pub(crate) showing: bool,
 }
 
 impl Relation {
@@ -68,12 +74,19 @@ impl Relation {
             Whom::Partner => self.partner,
             Whom::Parent => self.parent,
             Whom::Young => self.young,
+            Whom::Grown => self.grown,
+            Whom::Showing => self.showing,
         }
     }
 }
 
 /// Who `target` is to sprite `me` (M2 design §15.6).
-pub(crate) fn relation(state: &WorldState, me: EntityId, target: Target) -> Relation {
+pub(crate) fn relation(
+    state: &WorldState,
+    data: &DataPack,
+    me: EntityId,
+    target: Target,
+) -> Relation {
     let Some(sprite) = state.sprites.get(me) else {
         return Relation::default();
     };
@@ -92,6 +105,8 @@ pub(crate) fn relation(state: &WorldState, me: EntityId, target: Target) -> Rela
                 parent,
                 young: child,
                 kin: courtship::kin(state, me, other),
+                grown: !young(them),
+                showing: parent && shows(state, data, them, sprite, me),
             }
         }
         Target::Object(id) => {
@@ -109,6 +124,34 @@ pub(crate) fn relation(state: &WorldState, me: EntityId, target: Target) -> Rela
         }
         Target::Water(_) | Target::Cursor => Relation::default(),
     }
+}
+
+/// Whether `parent` is doing something that would show its young `me`,
+/// `young`, a lesson it hasn't learned (M2 design §18.1): its action under
+/// way is a try at a thing or a sprite still there, not at mating or
+/// courting (§18.3), that `young` would learn something from by watching.
+fn shows(
+    state: &WorldState,
+    data: &DataPack,
+    parent: &Sprite,
+    young: &Sprite,
+    me: EntityId,
+) -> bool {
+    let under_way = parent.action.as_ref().filter(|a| a.ended.is_none());
+    let Some(action) = under_way.filter(|a| a.verb.is_contact()) else {
+        return false;
+    };
+    // One it ate, or that hatched or died, is gone; one held isn't there to
+    // try either.
+    let Some(target) = action
+        .target
+        .filter(|&target| state.whereabouts(data, target).is_some())
+    else {
+        return false;
+    };
+    let subject = state.subject_of(data, target);
+    Topic::tried(action.verb, subject, target.sprite())
+        .is_some_and(|topic| parent.brain.shows(topic, &young.brain, me, data))
 }
 
 /// Step 3's look for family, after the look round (M2 design §15.6): each

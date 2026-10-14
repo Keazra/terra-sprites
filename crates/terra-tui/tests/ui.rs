@@ -1168,15 +1168,29 @@ fn the_event_log_shows_every_play_and_hit_and_whatever_hurt_a_sprite() {
 /// The event log's rows, newest first, once an app on `world` has recorded a
 /// lesson for each of `lessons`: (tick, sprite ID, what it learned, good).
 fn logged_lessons(world: &World, lessons: Vec<(u64, u64, Learned, bool)>) -> Vec<String> {
+    let watched = lessons
+        .into_iter()
+        .map(|(tick, id, learned, good)| (tick, id, learned, good, None))
+        .collect();
+    logged_watched(world, watched)
+}
+
+/// The same, each lesson with the sprite ID it was learned from watching,
+/// if any (M2 design §18.4).
+fn logged_watched(
+    world: &World,
+    lessons: Vec<(u64, u64, Learned, bool, Option<u64>)>,
+) -> Vec<String> {
     let mut app = app_for(world, Theme::cp437(), 100, 30);
     let events: Vec<Event> = lessons
         .into_iter()
-        .map(|(tick, id, learned, good)| Event {
+        .map(|(tick, id, learned, good, watching)| Event {
             tick,
             kind: EventKind::LearnedMilestone {
                 id: EntityId(id),
                 learned,
                 good,
+                watching: watching.map(EntityId),
             },
         })
         .collect();
@@ -1217,6 +1231,33 @@ fn the_event_log_says_what_a_sprite_learned_in_plain_words() {
             "32  Sprite #9 learned: eating balls is bad",
             "31  Sprite #12 learned: water is good for thirst",
             "30  Sprite #12 learned: thornbushes are bad",
+        ]
+    );
+}
+
+#[test]
+fn the_event_log_says_whom_a_lesson_was_learned_from_watching() {
+    // M2 design §18.4.
+    let world = garden(pack());
+    let water_for_thirst = Learned::Worth {
+        thing: "water".into(),
+        need: Some("thirst".into()),
+    };
+    let thorns_bad = Learned::Bad {
+        thing: "thornbush".into(),
+    };
+    let log = logged_watched(
+        &world,
+        vec![
+            (30, 21, water_for_thirst, true, Some(12)),
+            (31, 21, thorns_bad, false, Some(12)),
+        ],
+    );
+    assert_eq!(
+        log,
+        [
+            "31  Sprite #21 learned from watching Sprite #12: thornbushes are bad",
+            "30  Sprite #21 learned from watching Sprite #12: water is good for thirst",
         ]
     );
 }
@@ -2361,17 +2402,20 @@ fn the_genome_tab_shows_brain_settings_instincts_and_attention_instincts() {
 #[test]
 fn the_genome_tab_shows_whom_an_attention_instinct_is_about() {
     // M2 design §15.6: one about anything draws the eye to the category,
-    // and one about whom it is, only to them.
+    // and one about whom it is, only to them. Grown-ups aren't its own
+    // (§18.4); a parent showing it something is, and wraps.
     let genome = r#"(format: 2, genes: [
         AttentionInstinct(input: "arousal", category: "sprite", weight: 1.0),
         AttentionInstinct(input: "arousal", category: "sprite", whom: Kin, weight: -1.0),
         AttentionInstinct(input: "anxiety", category: "egg", whom: Family, weight: 1.0),
         AttentionInstinct(input: "anxiety", category: "sprite", whom: Young, weight: 1.0),
+        AttentionInstinct(input: "always", category: "sprite", whom: Grown, weight: 0.3),
+        AttentionInstinct(input: "always", category: "sprite", whom: Showing, weight: 1.0),
     ])"#;
     let (world, mut app) = one_sprite(genome, 0);
     open(&mut app, &world, Tab::Genome);
     let rows = right_part(&render(&app, &world, 100, 30), 46);
-    let text: Vec<&str> = rows[2..7].iter().map(|row| inside(row)).collect();
+    let text: Vec<&str> = rows[2..10].iter().map(|row| inside(row)).collect();
     assert_eq!(
         text,
         [
@@ -2380,6 +2424,9 @@ fn the_genome_tab_shows_whom_an_attention_instinct_is_about() {
             "arousal → attends to its kin (sprite) -1",
             "anxiety → attends to its family (egg) +1",
             "anxiety → attends to its young (sprite) +1",
+            "always → attends to grown-ups (sprite) +.3",
+            "always → attends to its parent showing",
+            "something (sprite) +1",
         ]
     );
 }
