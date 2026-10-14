@@ -1,7 +1,7 @@
 //! The population record (M2 design §14): the world's counts of its sprites
-//! by life stage, and its eggs, over its whole run, with what happened
-//! between them, for the population graph. It only watches: nothing in the
-//! world reads it.
+//! by life stage, and its eggs, over its whole run, with the oldest and
+//! newest generations alive (§17.1) and what happened between them, for the
+//! population graph. It only watches: nothing in the world reads it.
 //!
 //! It counts at the first tick it steps from, then every 100 ticks. Once it
 //! holds 512 counts it squeezes them: it keeps the first and every other
@@ -25,9 +25,9 @@ pub const FIRST_COUNT_EVERY: u64 = 100;
 pub(crate) const MOST_COUNTS: usize = 512;
 
 /// One count of the population (M2 design §14): the eggs and the sprites at
-/// each life stage at a tick, and what happened since the count before. An
-/// egg is an item until it hatches (M2 design §10.4), on the map or in the
-/// Cursor.
+/// each life stage at a tick, the generations of the sprites, and what
+/// happened since the count before. An egg is an item until it hatches (M2
+/// design §10.4), on the map or in the Cursor.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PopulationCount {
     /// The tick it was taken at, before that tick's step.
@@ -36,8 +36,39 @@ pub struct PopulationCount {
     pub young: u32,
     pub adults: u32,
     pub old: u32,
+    /// The oldest and newest generations among the sprites (M2 design
+    /// §17.1), not the eggs: none with no sprites, or in a count from a
+    /// save made before the record kept them (#208).
+    #[serde(default)]
+    pub generations: Option<Generations>,
     /// What happened since the count before; for the first count, nothing.
     pub since: PopulationChanges,
+}
+
+/// The oldest and newest generations among a count's sprites (M2 design
+/// §17.1, #208).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Generations {
+    pub oldest: u32,
+    pub newest: u32,
+}
+
+impl Generations {
+    /// The oldest and newest of `generations`, or none if there are none.
+    fn of(generations: impl IntoIterator<Item = u32>) -> Option<Generations> {
+        generations.into_iter().fold(None, |seen, generation| {
+            Some(seen.map_or(
+                Generations {
+                    oldest: generation,
+                    newest: generation,
+                },
+                |seen| Generations {
+                    oldest: seen.oldest.min(generation),
+                    newest: seen.newest.max(generation),
+                },
+            ))
+        })
+    }
 }
 
 impl PopulationCount {
@@ -52,12 +83,13 @@ impl PopulationCount {
         self.sprites() + self.eggs
     }
 
-    /// The sprites in `sprites`, by life stage, and the eggs in `objects`,
-    /// at `tick`, with nothing happened yet.
+    /// The sprites in `sprites`, by life stage, with their generations, and
+    /// the eggs in `objects`, at `tick`, with nothing happened yet.
     fn of(sprites: &Sprites, objects: &Objects, tick: u64) -> PopulationCount {
         let mut count = PopulationCount {
             tick,
             eggs: objects.eggs() as u32,
+            generations: Generations::of(sprites.iter().map(|(_, sprite)| sprite.generation)),
             ..PopulationCount::default()
         };
         for (_, sprite) in sprites.iter() {
@@ -211,13 +243,32 @@ impl PopulationRecord {
     }
 
     /// Why the record is broken, if it is (design §7.1): its counts must
-    /// run forward in time, and there must be no more than it holds.
+    /// run forward in time, there must be no more than it holds, and a
+    /// count's generations must run from the oldest to the newest, with
+    /// none in a count of no sprites.
     pub(crate) fn check(&self) -> Result<(), String> {
         if self.counts.len() >= MOST_COUNTS {
             return Err(format!(
                 "the population record holds {} counts, past its {MOST_COUNTS}",
                 self.counts.len()
             ));
+        }
+        for count in &self.counts {
+            match count.generations {
+                Some(Generations { oldest, newest }) if oldest > newest => {
+                    return Err(format!(
+                        "the population count at tick {} has generations {oldest} to {newest}",
+                        count.tick
+                    ));
+                }
+                Some(_) if count.sprites() == 0 => {
+                    return Err(format!(
+                        "the population count at tick {} has generations but no sprites",
+                        count.tick
+                    ));
+                }
+                _ => {}
+            }
         }
         if let Some(pair) = self
             .counts
@@ -246,6 +297,10 @@ mod tests {
             .map(|(i, &tick)| PopulationCount {
                 tick,
                 adults: tick as u32,
+                generations: Some(Generations {
+                    oldest: 1,
+                    newest: 1 + i as u32,
+                }),
                 since: PopulationChanges {
                     hatched: u32::from(i > 0),
                     ..PopulationChanges::default()
@@ -282,6 +337,12 @@ mod tests {
         );
         let counted: u32 = record.counts.iter().map(|c| c.adults).sum();
         assert_eq!(counted, 600, "a kept count keeps its own numbers");
+        let newest: Vec<u32> = record
+            .counts
+            .iter()
+            .filter_map(|c| c.generations.map(|g| g.newest))
+            .collect();
+        assert_eq!(newest, [1, 3, 5], "and its own generations (#208)");
     }
 
     #[test]
@@ -297,5 +358,33 @@ mod tests {
     fn counts_out_of_order_are_caught() {
         let record = record_of(100, &[0, 200, 100]);
         assert!(record.check().is_err());
+    }
+
+    #[test]
+    fn generations_out_of_order_or_without_sprites_are_caught() {
+        let mut record = record_of(100, &[100, 200]);
+        assert_eq!(record.check(), Ok(()));
+        record.counts[1].generations = Some(Generations {
+            oldest: 3,
+            newest: 2,
+        });
+        assert!(record.check().is_err(), "newest before oldest");
+        let mut record = record_of(100, &[100, 200]);
+        record.counts[1].adults = 0;
+        assert!(record.check().is_err(), "generations with no sprites");
+        record.counts[1].generations = None;
+        assert_eq!(record.check(), Ok(()));
+    }
+
+    #[test]
+    fn generations_are_the_oldest_and_newest() {
+        assert_eq!(Generations::of([]), None);
+        assert_eq!(
+            Generations::of([4, 2, 6, 3]),
+            Some(Generations {
+                oldest: 2,
+                newest: 6
+            })
+        );
     }
 }
