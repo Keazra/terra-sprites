@@ -35,10 +35,6 @@
     (id: 15, name: "young_away",        kind: BodySensor),
     (id: 16, name: "parent_away",       kind: BodySensor),
     (id: 17, name: "partner_away",      kind: BodySensor),
-    // Learning by watching (M2 design §18.1): 1 while it's young and a
-    // parent in sight tried something it has learned a lesson about that
-    // the sprite hasn't.
-    (id: 18, name: "parent_showing",    kind: BodySensor),
 
     (id: 32, name: "ate",               kind: Pulse),
     (id: 33, name: "drank",             kind: Pulse),

@@ -1151,10 +1151,6 @@ pub(crate) struct FamilyIndices {
     pub(crate) partner_away: usize,
     /// The pulse it feels on finding family it was missing.
     pub(crate) found: usize,
-    /// 1 while it's young and a parent in sight shows it something it
-    /// hasn't learned (M2 design §18.1), if the pack has the sensor: a pack
-    /// from before learning by watching doesn't.
-    pub(crate) parent_showing: Option<usize>,
 }
 
 impl Indices {
@@ -1315,7 +1311,6 @@ impl Indices {
                 parent_away,
                 partner_away,
                 found,
-                parent_showing: sensor_if("parent_showing"),
             }),
             _ => None,
         };

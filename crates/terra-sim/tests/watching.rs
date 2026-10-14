@@ -2,10 +2,10 @@
 //! the sprite its eye is on knows about what it uses.
 
 mod common;
-use common::{at, builtin, genome};
+use common::{WorldBuilder, at, builtin, genome, id_at, value_of};
 
 use terra_sim::{
-    Command, Event, EventKind, Learned, Map, Pos, Scenario, ScriptedAction, Thing, Verb, World,
+    Command, EntityId, Event, EventKind, Learned, Pos, ScriptedAction, Thing, Verb, World,
 };
 
 /// A room with water along its west wall.
@@ -17,12 +17,12 @@ const THIRSTY: &str = r#"InitialConcentration(chem: "thirst", value: 1.0),
 
 /// A sprite whose eye is always on the sprite it sees, never on anything
 /// new, and that rests, taking on `watch_rate` of what it watches.
-fn watcher(watch_rate: f32) -> String {
-    watcher_of("sprite", watch_rate)
+fn looking_on(watch_rate: f32) -> String {
+    looking_at("sprite", watch_rate)
 }
 
 /// The same, its eye always on what it sees of `category`.
-fn watcher_of(category: &str, watch_rate: f32) -> String {
+fn looking_at(category: &str, watch_rate: f32) -> String {
     format!(
         r#"AttentionInstinct(input: "always", category: "{category}", weight: 1.0),
         Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),
@@ -46,30 +46,16 @@ fn room_with(
     scripted: &[(Pos, ScriptedAction)],
 ) -> World {
     let data = builtin();
-    let map = Map::from_ascii(&ROOM, &data).expect("valid drawing");
-    let sprites: Vec<_> = sprites
+    let sprites = sprites
         .iter()
         .map(|&(pos, genes)| (pos, Some(genome(genes, &data))))
         .collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted,
-        newborns: &[],
-    };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
-}
-
-/// What the sprite on `pos` at the start, now `id`, has learned `learned`
-/// is worth, or 0.
-fn value_of(world: &World, id: terra_sim::EntityId, learned: &Learned) -> f32 {
-    let sprite = world.sprite(id).expect("the sprite");
-    sprite
-        .memory()
-        .into_iter()
-        .find(|m| &m.learned == learned)
-        .map_or(0.0, |m| m.amount)
+    WorldBuilder::new(&ROOM)
+        .data(data)
+        .objects(objects)
+        .sprites_with(sprites)
+        .scripts(scripted)
+        .build()
 }
 
 /// Water's worth for thirst.
@@ -85,16 +71,16 @@ fn a_sprite_takes_on_a_share_of_what_the_sprite_it_watches_knows_about_what_it_u
     // M2 design §18.2: the drinker's thirst falls by .5 at its drink, so it
     // learns water is worth .25 for thirst (.5 × worth_rate_good .5); the
     // sprite watching it takes on half of that.
-    let watcher = watcher(0.5);
+    let looking_on = looking_on(0.5);
     let mut world = room(
-        &[(at(1, 1), THIRSTY), (at(5, 1), &watcher)],
+        &[(at(1, 1), THIRSTY), (at(5, 1), &looking_on)],
         &[
             (at(1, 1), ScriptedAction::Drink { at: at(0, 1) }),
             (at(1, 1), ScriptedAction::Rest),
         ],
     );
-    let drinker = world.sprite_at(at(1, 1)).expect("the drinker").id();
-    let watching = world.sprite_at(at(5, 1)).expect("the watcher").id();
+    let drinker = id_at(&world, at(1, 1));
+    let watching = id_at(&world, at(5, 1));
     for _ in 0..5 {
         world.step();
     }
@@ -103,14 +89,7 @@ fn a_sprite_takes_on_a_share_of_what_the_sprite_it_watches_knows_about_what_it_u
 }
 
 /// Every lesson in `events`, as `(sprite, learned, good, whom it watched)`.
-fn lessons(
-    events: &[Event],
-) -> Vec<(
-    terra_sim::EntityId,
-    Learned,
-    bool,
-    Option<terra_sim::EntityId>,
-)> {
+fn lessons(events: &[Event]) -> Vec<(EntityId, Learned, bool, Option<EntityId>)> {
     events
         .iter()
         .filter_map(|event| match &event.kind {
@@ -134,16 +113,16 @@ fn a_lesson_watching_tips_says_whom_it_watched() {
         r#"{THIRSTY}
         BrainParam(param: "worth_rate_good", value: 1.0),"#
     );
-    let watcher = watcher(1.0);
+    let looking_on = looking_on(1.0);
     let mut world = room(
-        &[(at(1, 1), &drinker), (at(5, 1), &watcher)],
+        &[(at(1, 1), &drinker), (at(5, 1), &looking_on)],
         &[
             (at(1, 1), ScriptedAction::Drink { at: at(0, 1) }),
             (at(1, 1), ScriptedAction::Rest),
         ],
     );
-    let drinker = world.sprite_at(at(1, 1)).expect("the drinker").id();
-    let watching = world.sprite_at(at(5, 1)).expect("the watcher").id();
+    let drinker = id_at(&world, at(1, 1));
+    let watching = id_at(&world, at(5, 1));
     let mut learned = Vec::new();
     for _ in 0..5 {
         learned.extend(lessons(&world.step()));
@@ -159,19 +138,19 @@ fn a_lesson_watching_tips_says_whom_it_watched() {
     );
 }
 
-/// Water's worth for thirst to the sprite on `watcher` at the start, once
-/// a thirsty sprite on (1, 1) has drunk at the water beside it, in a room
+/// Water's worth for thirst to the sprite `watching` at the start, once a
+/// thirsty sprite on (1, 1) has drunk at the water beside it, in a room
 /// with `objects`.
-fn watched_drinking(objects: &[(Pos, &str)], watcher: (Pos, &str)) -> f32 {
+fn watched_drinking(objects: &[(Pos, &str)], watching: (Pos, &str)) -> f32 {
     let mut world = room_with(
         objects,
-        &[(at(1, 1), THIRSTY), watcher],
+        &[(at(1, 1), THIRSTY), watching],
         &[
             (at(1, 1), ScriptedAction::Drink { at: at(0, 1) }),
             (at(1, 1), ScriptedAction::Rest),
         ],
     );
-    let id = world.sprite_at(watcher.0).expect("the watcher").id();
+    let id = id_at(&world, watching.0);
     for _ in 0..5 {
         world.step();
     }
@@ -182,7 +161,7 @@ fn watched_drinking(objects: &[(Pos, &str)], watcher: (Pos, &str)) -> f32 {
 fn a_sprite_learns_from_one_using_the_kind_of_thing_its_eye_is_on() {
     // M2 design §18.1: its eye on the water, not the drinker, it still
     // takes on half of what the drinker knows of water.
-    let on_water = watcher_of("water", 0.5);
+    let on_water = looking_at("water", 0.5);
     assert_eq!(watched_drinking(&[], (at(5, 1), &on_water)), 0.125);
 }
 
@@ -190,31 +169,31 @@ fn a_sprite_learns_from_one_using_the_kind_of_thing_its_eye_is_on() {
 fn a_sprite_whose_eye_is_elsewhere_or_that_doesn_t_watch_learns_nothing_by_watching() {
     // M2 design §18.1: its eye on a ball, it doesn't watch the drinker; and
     // with a watch_rate of 0, the default, it takes nothing on.
-    let on_ball = watcher_of("toy", 0.5);
+    let on_ball = looking_at("toy", 0.5);
     let ball = [(at(6, 2), "ball")];
     assert_eq!(watched_drinking(&ball, (at(5, 1), &on_ball)), 0.0);
-    let not_watching = watcher(0.0);
+    let not_watching = looking_on(0.0);
     assert_eq!(watched_drinking(&[], (at(5, 1), &not_watching)), 0.0);
 }
 
 #[test]
 fn a_sprite_that_watches_another_eased_at_water_remembers_the_place() {
     // M2 design §18.2: as if it had drunk there itself (§7).
-    let watcher = watcher(0.5);
+    let looking_on = looking_on(0.5);
     let mut world = room(
-        &[(at(1, 1), THIRSTY), (at(5, 1), &watcher)],
+        &[(at(1, 1), THIRSTY), (at(5, 1), &looking_on)],
         &[
             (at(1, 1), ScriptedAction::Drink { at: at(0, 1) }),
             (at(1, 1), ScriptedAction::Rest),
         ],
     );
-    let id = world.sprite_at(at(5, 1)).expect("the watcher").id();
+    let id = id_at(&world, at(5, 1));
     for _ in 0..5 {
         world.step();
     }
     let places: Vec<(Thing, Pos)> = world
         .sprite(id)
-        .expect("the watcher")
+        .expect("the sprite watching")
         .remembered_places()
         .into_iter()
         .map(|place| (place.thing, place.at))
@@ -234,18 +213,18 @@ fn a_sprite_that_watches_another_hit_learns_to_fear_the_hitter() {
     // once, -1 (fear_rate 1 × punishment 1); the sprite watching it takes
     // on half, and more while the hit is felt, a lesson from watching it.
     let (me, victim, bully) = (at(4, 1), at(6, 1), at(8, 1));
-    let watcher = watcher(0.5);
+    let looking_on = looking_on(0.5);
     let mut world = room(
-        &[(me, &watcher), (victim, HIT_HURTS), (bully, HIT_HURTS)],
+        &[(me, &looking_on), (victim, HIT_HURTS), (bully, HIT_HURTS)],
         &[
             (bully, ScriptedAction::Hit { at: victim }),
             (bully, ScriptedAction::Rest),
         ],
     );
     let (me, victim, bully) = (
-        world.sprite_at(me).expect("the watcher").id(),
-        world.sprite_at(victim).expect("the one hit").id(),
-        world.sprite_at(bully).expect("the bully").id(),
+        id_at(&world, me),
+        id_at(&world, victim),
+        id_at(&world, bully),
     );
     let mut learned = Vec::new();
     for _ in 0..8 {
@@ -270,14 +249,15 @@ fn a_pet_for_what_the_watched_sprite_tried_passes_on_as_a_taught_habit() {
     // .5), and so is kicking them, .45 (.5 × taught_rate .9). The sprite
     // watching it takes on half of each.
     let (kicker, ball, me) = (at(2, 1), at(3, 1), at(6, 1));
-    let watcher = watcher(0.5);
+    let looking_on = looking_on(0.5);
     let mut script = vec![(kicker, ScriptedAction::Play { at: ball })];
     script.extend([(kicker, ScriptedAction::Rest); 5]);
-    let mut world = room_with(&[(ball, "ball")], &[(kicker, ""), (me, &watcher)], &script);
-    let (kicker, me) = (
-        world.sprite_at(kicker).expect("the kicker").id(),
-        world.sprite_at(me).expect("the watcher").id(),
+    let mut world = room_with(
+        &[(ball, "ball")],
+        &[(kicker, ""), (me, &looking_on)],
+        &script,
     );
+    let (kicker, me) = (id_at(&world, kicker), id_at(&world, me));
     while world.tick() < 6 {
         world.step();
     }
@@ -314,20 +294,16 @@ fn young_looks(weight: f32) -> (Option<Pos>, Pos, Pos) {
     );
     let rester = r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),"#;
     let data = builtin();
-    let map = Map::from_ascii(&ROOM, &data).expect("valid drawing");
-    let sprites = [
+    let sprites = vec![
         (me, Some(genome(&genes, &data))),
         (young, Some(genome(rester, &data))),
         (grown, Some(genome(rester, &data))),
     ];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[me, young],
-    };
-    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    let mut world = WorldBuilder::new(&ROOM)
+        .data(data)
+        .sprites_with(sprites)
+        .newborns(&[me, young])
+        .build();
     world.step();
     let sprite = world.sprite_at(me).expect("the young sprite");
     (sprite.attending_to(), young, grown)

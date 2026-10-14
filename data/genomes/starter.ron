@@ -192,12 +192,12 @@
         AttentionInstinct(input: "anxiety", category: "egg", whom: Family, weight: 1.0),
         AttentionInstinct(input: "egg_away", category: "egg", whom: Family, weight: 1.0),
         // The young watch the grown-ups, and their parents as much again,
-        // and a parent showing them something they haven't learned draws
-        // their eye to their parents strongly (M2 design §18.1). The weights
-        // are first guesses, tuned against §18.6.
+        // and a parent doing something that would show them a lesson they
+        // haven't learned draws their eye strongly (M2 design §18.1). The
+        // weights are first guesses, tuned against §18.6.
         AttentionInstinct(input: "always", category: "sprite", whom: Grown, weight: 0.3, until: Adult),
         AttentionInstinct(input: "always", category: "sprite", whom: Parent, weight: 0.3, until: Adult),
-        AttentionInstinct(input: "parent_showing", category: "sprite", whom: Parent, weight: 1.0, until: Adult),
+        AttentionInstinct(input: "always", category: "sprite", whom: Showing, weight: 1.0, until: Adult),
 
         // Each need leads to its action, on whatever is attended: hunger to
         // eating, thirst to drinking. Trying it on the wrong thing does nothing.

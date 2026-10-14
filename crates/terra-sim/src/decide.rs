@@ -207,7 +207,7 @@ pub(crate) fn decide(
                     distance: offer.cost.map_or(1.0, |cost| normalized(cost, reach)),
                     recall: offer.recall,
                     not_grown: not_grown(offer.target),
-                    relation: family::relation(state, id, offer.target),
+                    relation: family::relation(state, data, id, offer.target),
                 };
                 let draw = sprite.brain.draw(
                     seen,
@@ -242,7 +242,7 @@ pub(crate) fn decide(
                 adjacent: state.on_goal_tile(data, sprite.pos, target),
                 recall: offer.recall,
                 not_grown: not_grown(target),
-                relation: family::relation(state, id, target),
+                relation: family::relation(state, data, id, target),
             };
             let candidate = Candidate {
                 type_id,
@@ -297,7 +297,7 @@ pub(crate) fn decide(
                 adjacent,
                 recall,
                 not_grown: not_grown(target),
-                relation: family::relation(state, id, target),
+                relation: family::relation(state, data, id, target),
             };
             Candidate {
                 target,

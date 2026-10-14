@@ -927,7 +927,8 @@ fn instinct() -> impl Strategy<Value = String> {
 }
 
 /// A random attention instinct, leaning to sprites, and about any of them or
-/// only its family, kin, partner, parents or young (M2 design §15.6).
+/// only its family, kin, partner, parents or young (M2 design §15.6), the
+/// grown-ups or a parent showing it something (§18.1).
 fn attention() -> impl Strategy<Value = String> {
     let category = prop::sample::select(vec!["sprite", "sprite", "egg", "bush", "water", "toy"]);
     let whom = prop::sample::select(vec![
@@ -938,6 +939,7 @@ fn attention() -> impl Strategy<Value = String> {
         ", whom: Parent",
         ", whom: Young",
         ", whom: Grown",
+        ", whom: Showing",
     ]);
     (state_input(), category, whom, -1.0f32..1.0, switch()).prop_map(
         |(input, category, whom, weight, switch)| {

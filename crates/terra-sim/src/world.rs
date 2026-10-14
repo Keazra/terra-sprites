@@ -2786,55 +2786,67 @@ mod tests {
     }
 
     #[test]
-    fn a_young_sprite_senses_a_parent_showing_it_something_until_it_has_learned_it() {
-        // M2 design §18.1: its mother drinks, knowing water is good for
-        // thirst, and it doesn't yet; once it knows, it doesn't sense it.
+    fn a_parent_drinking_draws_its_young_s_eye_until_the_young_knows_water() {
+        // M2 design §18.1: an attention instinct about a parent showing it
+        // something draws its eye to its mother drinking, knowing water is
+        // good for thirst, before its nearer father, while it doesn't know
+        // that; once it does, the nearer parent draws it.
         let data = DataPack::builtin().expect("built-in data pack is valid");
         let map = Map::from_ascii(&["~.....", "~....."], &data).expect("valid drawing");
-        let rests = r#"(format: 1, genes: [Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0)])"#;
-        let rests = Genome::from_ron(rests, &data).expect("a valid genome");
-        let (mother, young) = (Pos { x: 1, y: 0 }, Pos { x: 3, y: 1 });
+        let genes = |genes: &str| {
+            let genes = format!("(format: 2, genes: [{genes}])");
+            Genome::from_ron(&genes, &data).expect("a valid genome")
+        };
+        let rests = r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0)"#;
+        let looks = format!(
+            r#"{rests},
+            AttentionInstinct(input: "always", category: "sprite", whom: Showing, weight: 1.0),
+            BrainParam(param: "curiosity", value: 0.0),
+            BrainParam(param: "tau_att_base", value: 0.05),
+            BrainParam(param: "attention_margin", value: 0.0)"#
+        );
+        let (mother, father, young) = (Pos { x: 1, y: 0 }, Pos { x: 5, y: 1 }, Pos { x: 4, y: 1 });
         let drinks = ScriptedAction::Drink {
             at: Pos { x: 0, y: 0 },
         };
         let scenario = Scenario {
             map,
             objects: &[],
-            sprites: &[(mother, Some(rests.clone())), (young, Some(rests))],
+            sprites: &[
+                (mother, Some(genes(rests))),
+                (father, Some(genes(rests))),
+                (young, Some(genes(&looks))),
+            ],
             scripted: &[(mother, drinks), (mother, drinks), (mother, drinks)],
             newborns: &[young],
         };
         let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
-        let (mother, young) = (
-            world.sprite_at(mother).expect("the mother").id(),
-            world.sprite_at(young).expect("the young one").id(),
-        );
+        let id = |world: &World, pos: Pos| world.sprite_at(pos).expect("a sprite").id();
+        let (mother_id, father_id, young_id) =
+            (id(&world, mother), id(&world, father), id(&world, young));
         let needs = world.data.need_places().len();
-        let water = Subject::ObjectType(100);
         let know_water = |world: &mut World, id: EntityId| {
             let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
-            let known = brain.experience.learn_about(water, needs);
+            let known = brain
+                .experience
+                .learn_about(Subject::ObjectType(100), needs);
             known.worth[1] = 0.6;
             known.touched = true;
         };
-        know_water(&mut world, mother);
+        know_water(&mut world, mother_id);
+        let parents = vec![mother_id, father_id];
         world
             .state
             .sprites
-            .get_mut(young)
+            .get_mut(young_id)
             .expect("the young one")
-            .parents = vec![mother];
-        let families = world.data.physiology().indices.families.expect("families");
-        let showing = families.parent_showing.expect("the sensor");
-        let senses =
-            |world: &World| world.state.sprites.get(young).expect("young").body.loci[showing];
+            .parents = parents;
+        let looks_at = |world: &World| world.sprite(young_id).expect("young").attending_to();
         world.step();
-        assert_eq!(senses(&world), 0.0, "it hasn't drunk yet");
+        assert_eq!(looks_at(&world), Some(mother), "its mother is drinking");
+        know_water(&mut world, young_id);
         world.step();
-        assert_eq!(senses(&world), 1.0, "it drank at tick 0");
-        know_water(&mut world, young);
-        world.step();
-        assert_eq!(senses(&world), 0.0, "it knows");
+        assert_eq!(looks_at(&world), Some(father), "it knows water");
     }
 
     #[test]

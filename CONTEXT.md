@@ -545,7 +545,7 @@ The part of a habit the Cursor taught: a Reward or Correct for what the sprite j
 _Avoid_: training (that's what the player does), conditioning
 
 **Watching** (M2, Slice 28):
-Learning from another sprite: when the sprite a watcher's eye is on uses something, or something is done to it, the watcher takes on a share of what that sprite knows about it, only ever up to the other's view, and remembers a place it sees the other eased at. It's about things and whom to fear, never whom to like, and never anything about mating. In the starter genes only the young watch, the grown-ups and their parents most.
+Learning from another sprite: when a sprite's eye is on another that uses something, or has something done to it, it takes on a share of what that sprite knows about it, only ever up to the other's view, and remembers a place it sees the other eased at. It's about things and whom to fear, never whom to like, and never anything about mating. In the starter genes every sprite watches, the young most, looking to the grown-ups, their parents more, and most of all to a parent doing something that would show them a lesson they haven't learned.
 _Avoid_: imitation, copying (copying the act itself is for later), observing (the observer is the agent that reads baseline reports)
 
 **Thing touched**:

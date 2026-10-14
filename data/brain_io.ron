@@ -106,10 +106,6 @@ inputs: [
     (id: 94, name: "target_family", reads: Family),
     // A pulse on finding family it was missing.
     (id: 95, name: "found_family",  reads: Locus("found_family")),
-
-    // Learning by watching (M2 design §18.1): a parent in sight showing it
-    // something it hasn't learned.
-    (id: 96, name: "parent_showing", reads: Locus("parent_showing")),
 ],
 
 // The needs (design v16 §5.2, §5.6): the drives whose relief teaches a

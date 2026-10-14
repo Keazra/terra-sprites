@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::courtship::{self, Company};
 use crate::data::DataPack;
 use crate::genome::Whom;
+use crate::learning::Topic;
 use crate::map::Pos;
 use crate::objects::EntityId;
 use crate::perception::Target;
@@ -39,9 +40,6 @@ pub(crate) struct FamilySenses {
     pub(crate) parent_away: bool,
     /// Its partner is out of sight.
     pub(crate) partner_away: bool,
-    /// It's young, and a parent in sight shows it something it hasn't
-    /// learned (§18.1).
-    pub(crate) parent_showing: bool,
 }
 
 /// Who a thing is to a sprite (M2 design §15.6).
@@ -61,6 +59,9 @@ pub(crate) struct Relation {
     pub(crate) kin: bool,
     /// A sprite grown up, adult or old (§18.1).
     pub(crate) grown: bool,
+    /// Its parent, while it's young, doing something that would show it a
+    /// lesson it hasn't learned (§18.1).
+    pub(crate) showing: bool,
 }
 
 impl Relation {
@@ -74,12 +75,18 @@ impl Relation {
             Whom::Parent => self.parent,
             Whom::Young => self.young,
             Whom::Grown => self.grown,
+            Whom::Showing => self.showing,
         }
     }
 }
 
 /// Who `target` is to sprite `me` (M2 design §15.6).
-pub(crate) fn relation(state: &WorldState, me: EntityId, target: Target) -> Relation {
+pub(crate) fn relation(
+    state: &WorldState,
+    data: &DataPack,
+    me: EntityId,
+    target: Target,
+) -> Relation {
     let Some(sprite) = state.sprites.get(me) else {
         return Relation::default();
     };
@@ -99,6 +106,7 @@ pub(crate) fn relation(state: &WorldState, me: EntityId, target: Target) -> Rela
                 young: child,
                 kin: courtship::kin(state, me, other),
                 grown: !young(them),
+                showing: parent && shows(state, data, them, sprite, me),
             }
         }
         Target::Object(id) => {
@@ -116,6 +124,28 @@ pub(crate) fn relation(state: &WorldState, me: EntityId, target: Target) -> Rela
         }
         Target::Water(_) | Target::Cursor => Relation::default(),
     }
+}
+
+/// Whether `parent` is doing something that would show its young `me`,
+/// `young`, a lesson it hasn't learned (M2 design §18.1): its action under
+/// way is a try at a thing or a sprite, not at mating or courting (§18.3),
+/// that `young` would learn something from by watching.
+fn shows(
+    state: &WorldState,
+    data: &DataPack,
+    parent: &Sprite,
+    young: &Sprite,
+    me: EntityId,
+) -> bool {
+    let Some(action) = parent.action.as_ref().filter(|a| a.verb.is_contact()) else {
+        return false;
+    };
+    let Some(target) = action.target else {
+        return false;
+    };
+    let subject = state.subject_of(data, target);
+    Topic::tried(action.verb, subject, target.sprite())
+        .is_some_and(|topic| parent.brain.shows(topic, &young.brain, me, data))
 }
 
 /// Step 3's look for family, after the look round (M2 design §15.6): each
@@ -144,7 +174,6 @@ pub(crate) fn look_for_family(
         eggs.collect()
     };
     let sprites = &state.sprites;
-    let tick = state.tick;
     let mut young: BTreeMap<EntityId, Vec<EntityId>> = BTreeMap::new();
     for (id, sprite) in sprites.iter() {
         if !sprite.stage().is_grown() {
@@ -186,12 +215,6 @@ pub(crate) fn look_for_family(
         let sees_parent = sprite.parents.iter().any(|&p| sees(p));
         let is_young = !sprite.stage().is_grown();
         senses.parent_away = is_young && has_parent && !sees_parent;
-        senses.parent_showing = is_young
-            && indices.parent_showing.is_some()
-            && sprite.parents.iter().any(|&p| {
-                let parent = sprites.get(p).filter(|_| sees(p));
-                parent.is_some_and(|parent| parent.brain.shows(&sprite.brain, id, tick, data))
-            });
         senses.partner_away = sprite.partner().is_some_and(|p| !sees(p));
         // It found family it was missing, with a `found_family` pulse: a
         // sense that was on last tick is off, and not because the one it was

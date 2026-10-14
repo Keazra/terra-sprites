@@ -294,33 +294,35 @@ impl Experience {
             .or_insert_with(|| SpriteMemory::new(needs))
     }
 
+    /// Its fear of `sprite`, or of the Cursor for none, moved `share` of the
+    /// way towards `theirs`, as watching moves it (M2 design §18.2), for
+    /// `needs` needs. It's remembered for it only if it moves.
+    pub(crate) fn fear_more(
+        &mut self,
+        sprite: Option<EntityId>,
+        theirs: f32,
+        share: f32,
+        needs: usize,
+    ) {
+        let known = match sprite {
+            Some(sprite) => self.individuals.get(&sprite),
+            None => self.cursor.as_ref(),
+        };
+        let mine = known.map_or(0.0, |known| known.fear);
+        let moved = toward(mine, theirs, share);
+        if moved != mine {
+            let known = match sprite {
+                Some(sprite) => self.remember(sprite, needs),
+                None => self.remember_the_cursor(needs),
+            };
+            known.fear = moved;
+        }
+    }
+
     /// Gets to know `sprite` better by `gain` (M2 design §15.2), for `needs`
     /// needs: one it sees, or plays with, is remembered, from `below`, the
     /// level it's forgotten under, so a glimpse is forgotten once it fades
     /// by more than `gain`.
-    /// Its fear of `sprite` moved `share` of the way towards `theirs`, as
-    /// watching moves it (M2 design §18.2). A sprite is remembered for it
-    /// only if it moves.
-    pub(crate) fn fear_more(&mut self, sprite: EntityId, theirs: f32, share: f32, needs: usize) {
-        let mine = self
-            .individuals
-            .get(&sprite)
-            .map_or(0.0, |known| known.fear);
-        let moved = toward(mine, theirs, share);
-        if moved != mine {
-            self.remember(sprite, needs).fear = moved;
-        }
-    }
-
-    /// The same for its fear of the Cursor.
-    pub(crate) fn fear_cursor_more(&mut self, theirs: f32, share: f32, needs: usize) {
-        let mine = self.cursor.as_ref().map_or(0.0, |known| known.fear);
-        let moved = toward(mine, theirs, share);
-        if moved != mine {
-            self.remember_the_cursor(needs).fear = moved;
-        }
-    }
-
     pub(crate) fn befriend(&mut self, sprite: EntityId, gain: f32, needs: usize, below: f32) {
         let known = self.remember(sprite, needs);
         known.familiarity = (known.familiarity.max(below) + gain).min(1.0);
@@ -543,6 +545,22 @@ pub(crate) enum Topic {
 }
 
 impl Topic {
+    /// A try at `verb` on `subject`, the particular `sprite` if it's one, as
+    /// a moment (M2 design §18.2): none for a try at mating or courting,
+    /// which is never a moment (§18.3).
+    pub(crate) fn tried(verb: Verb, subject: Subject, sprite: Option<EntityId>) -> Option<Topic> {
+        (!verb.is_mating()).then_some(Topic::Tried {
+            subject,
+            verb,
+            sprite,
+        })
+    }
+
+    /// The try `touch`, as a moment: none for a crash, which has no verb.
+    pub(crate) fn touched(touch: Touch) -> Option<Topic> {
+        Topic::tried(touch.verb?, touch.subject, touch.sprite)
+    }
+
     /// Whether it's about the sprite `id`: it hit `id`, or `id` hit it. A
     /// sprite learns nothing by watching about itself (M2 design §18.2).
     pub(crate) fn about(self, id: EntityId) -> bool {
@@ -571,18 +589,64 @@ impl Topic {
     }
 }
 
-/// What a watched sprite knows of what its moment was about, as a sprite
-/// watching it takes it on (M2 design §18.2): of a thing, its worth for each
-/// need, good and bad; of a sprite or the Cursor, its fear; and of either,
-/// the habit of the verb tried, its own and taught together.
+/// What a try was at, as watching takes it on (M2 design §18.2).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum TriedAt {
+    /// A thing, learned about as its object type: its worth, good and bad
+    /// pass on.
+    Thing,
+    /// The sprite, or for none the Cursor: only fear passes on, since whom
+    /// to like a sprite finds out for itself.
+    Feared(Option<EntityId>),
+}
+
+impl TriedAt {
+    /// What a try at `subject`, the particular `sprite` if it was one, was
+    /// at.
+    pub(crate) fn of(subject: Subject, sprite: Option<EntityId>, data: &DataPack) -> TriedAt {
+        match sprite {
+            Some(_) => TriedAt::Feared(sprite),
+            None if subject.category(data) == data.cursor_category() => TriedAt::Feared(None),
+            None => TriedAt::Thing,
+        }
+    }
+}
+
+/// What a sprite knows of what its moment was about: the values a sprite
+/// watching it takes on (M2 design §18.2). Of a thing, its worth for each
+/// need but the breeding drive's (§18.3), good and bad; of a sprite or the
+/// Cursor, its fear; and of either, the habit of the verb tried, its own
+/// and taught together. The rest are 0, which watching moves nothing
+/// towards.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct View {
+pub(crate) struct Knowledge {
     pub(crate) topic: Topic,
     pub(crate) worth: Vec<f32>,
     pub(crate) good: f32,
     pub(crate) bad: f32,
     pub(crate) fear: f32,
     pub(crate) habit: f32,
+}
+
+impl Knowledge {
+    /// Nothing known of `topic`, for `needs` needs.
+    pub(crate) fn nothing(topic: Topic, needs: usize) -> Knowledge {
+        Knowledge {
+            topic,
+            worth: vec![0.0; needs],
+            good: 0.0,
+            bad: 0.0,
+            fear: 0.0,
+            habit: 0.0,
+        }
+    }
+
+    /// Every value, in the same order for any two sprites' knowledge of a
+    /// topic.
+    pub(crate) fn values(&self) -> impl Iterator<Item = f32> + '_ {
+        let rest = [self.good, self.bad, self.fear, self.habit];
+        self.worth.iter().copied().chain(rest)
+    }
 }
 
 /// `mine` moved `share` of the way towards `theirs`, when theirs is further
@@ -788,8 +852,9 @@ pub(crate) fn run(
 /// itself (M2 design §18.1): each sprite that learns by watching, not
 /// `dying`, takes on what each sprite in its `company` that it watched knows
 /// about what its moment was about, one of `moments`, and each lesson that
-/// tips is reported with whom it watched. Every view is read before anyone
-/// takes anything on, so nothing passes through two sprites in a tick.
+/// tips is reported with whom it watched. What each knows is read before
+/// anyone takes anything on, so nothing passes through two sprites in a
+/// tick.
 fn watch(
     state: &mut WorldState,
     data: &DataPack,
@@ -818,20 +883,24 @@ fn watch(
                 continue;
             };
             let on_them = eye.target == Some(Target::Sprite(other));
-            let views: Vec<View> = moment
+            let shown: Vec<Knowledge> = moment
                 .iter()
                 .filter(|topic| !topic.about(id))
                 .filter(|topic| on_them || topic.caught(eye.target, eye.subject))
-                .map(|&topic| them.brain.view(topic, data))
+                .map(|&topic| them.brain.knowledge(topic, data))
                 .collect();
-            if !views.is_empty() {
-                watched.push((id, other, share, views));
+            if !shown.is_empty() {
+                watched.push((id, other, share, shown));
             }
         }
     }
-    for (id, other, share, views) in watched {
-        let brain = &mut state.sprites.get_mut(id).expect("a watcher").brain;
-        for (learned, good) in brain.watched(&views, share, data) {
+    for (id, other, share, shown) in watched {
+        let brain = &mut state
+            .sprites
+            .get_mut(id)
+            .expect("a sprite that watched")
+            .brain;
+        for (learned, good) in brain.watched(&shown, share, data) {
             events.push(Event {
                 tick,
                 kind: EventKind::LearnedMilestone {
@@ -1024,15 +1093,15 @@ mod tests {
     #[test]
     fn a_moment_is_about_a_sprite_when_it_hit_that_one_or_was_hit_by_it() {
         // M2 design §18.2: a sprite learns nothing by watching about itself.
-        let watcher = EntityId(4);
+        let me = EntityId(4);
         let hit_it = Topic::Tried {
             subject: Subject::ObjectType(101),
             verb: Verb::Hit,
-            sprite: Some(watcher),
+            sprite: Some(me),
         };
-        assert!(hit_it.about(watcher));
-        assert!(Topic::Hitter(watcher).about(watcher));
-        assert!(!Topic::Hitter(EntityId(5)).about(watcher));
+        assert!(hit_it.about(me));
+        assert!(Topic::Hitter(me).about(me));
+        assert!(!Topic::Hitter(EntityId(5)).about(me));
         let drank = Topic::Tried {
             subject: WATER,
             verb: Verb::Drink,
@@ -1044,12 +1113,12 @@ mod tests {
             at: at(0, 0),
         };
         for topic in [drank, Topic::Cursor, place] {
-            assert!(!topic.about(watcher), "{topic:?}");
+            assert!(!topic.about(me), "{topic:?}");
         }
     }
 
     #[test]
-    fn a_watcher_catches_a_moment_about_what_its_eye_is_on() {
+    fn a_sprite_watching_catches_a_moment_about_what_its_eye_is_on() {
         // M2 design §18.1: the same sprite, the Cursor, or the same object
         // type, not just the same one of it.
         let drank = Topic::Tried {

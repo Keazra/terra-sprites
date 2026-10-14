@@ -6,8 +6,8 @@
 #![allow(dead_code)]
 
 use terra_sim::{
-    DataPack, EntityId, Event, EventKind, Genome, Map, Outcome, Pos, Scenario, ScriptedAction,
-    Verb, World,
+    DataPack, EntityId, Event, EventKind, Genome, Learned, Map, Outcome, Pos, Scenario,
+    ScriptedAction, Verb, World,
 };
 
 /// The built-in data pack.
@@ -236,6 +236,16 @@ pub fn world_in(data: DataPack, rows: &[&str], sprites: &[(Pos, &str)]) -> World
 /// The ID of the sprite standing on `pos`.
 pub fn id_at(world: &World, pos: Pos) -> EntityId {
     world.sprite_at(pos).expect("a sprite there").id()
+}
+
+/// What sprite `id` has learned `learned` is worth, or 0.
+pub fn value_of(world: &World, id: EntityId, learned: &Learned) -> f32 {
+    let sprite = world.sprite(id).expect("the sprite");
+    sprite
+        .memory()
+        .into_iter()
+        .find(|m| &m.learned == learned)
+        .map_or(0.0, |m| m.amount)
 }
 
 /// A small field of grass with a sprite of its own genes on each tile, the

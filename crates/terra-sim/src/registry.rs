@@ -69,7 +69,14 @@ impl Verb {
     /// interaction, or mating or courting, which the engine itself resolves
     /// (M2 design §5, §15.3).
     pub(crate) fn is_contact(self) -> bool {
-        self.is_interaction() || matches!(self, Verb::Mate | Verb::Court)
+        self.is_interaction() || self.is_mating()
+    }
+
+    /// Whether the verb is mating or courting, which only ever happen
+    /// between adults and are never learned by watching (M2 design §5,
+    /// §18.3).
+    pub(crate) fn is_mating(self) -> bool {
+        matches!(self, Verb::Mate | Verb::Court)
     }
 }
 

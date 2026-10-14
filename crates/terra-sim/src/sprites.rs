@@ -741,7 +741,7 @@ impl Sprites {
             // Mating and courting only ever between adults, whatever its
             // genes or the data pack say (M2 design §5, §15.3), on a trip to
             // a call too (§15.1).
-            let courting = |a: &&Action| matches!(a.verb, Verb::Mate | Verb::Court);
+            let courting = |a: &&Action| a.verb.is_mating();
             if let Some(action) = sprite.action.as_ref().filter(courting) {
                 let partner = action.target.and_then(Target::sprite);
                 let grown = |other: EntityId| self.get(other).is_none_or(|o| o.stage().is_grown());

@@ -49,10 +49,13 @@ pub enum Whom {
     Young = 5,
     /// A sprite grown up, adult or old (M2 design §18.1).
     Grown = 6,
+    /// Its parent, while it's young, doing something that would show it
+    /// a lesson it hasn't learned (M2 design §18.1).
+    Showing = 7,
 }
 
 impl Whom {
-    pub(crate) const ALL: [Whom; 7] = [
+    pub(crate) const ALL: [Whom; 8] = [
         Whom::Any,
         Whom::Family,
         Whom::Kin,
@@ -60,6 +63,7 @@ impl Whom {
         Whom::Parent,
         Whom::Young,
         Whom::Grown,
+        Whom::Showing,
     ];
 
     /// Whether it's about anything of its category.
@@ -68,8 +72,8 @@ impl Whom {
     }
 
     /// Whom it's about, as the player sees it: `family`, `kin`,
-    /// `partner`, `parents`, `young` or `grown-ups`, and nothing for
-    /// anything.
+    /// `partner`, `parents`, `young`, `grown-ups` or `parent showing
+    /// something`, and nothing for anything.
     pub fn name(self) -> Option<&'static str> {
         match self {
             Whom::Any => None,
@@ -79,6 +83,7 @@ impl Whom {
             Whom::Parent => Some("parents"),
             Whom::Young => Some("young"),
             Whom::Grown => Some("grown-ups"),
+            Whom::Showing => Some("parent showing something"),
         }
     }
 }
@@ -1290,7 +1295,7 @@ fn decode(type_id: u16, version: u8, payload: Vec<u8>) -> Result<Gene, String> {
             let whom = Whom::ALL
                 .into_iter()
                 .find(|&w| w as u8 == whom)
-                .ok_or_else(|| format!("has a payload with whom {whom}, which isn't 0 to 6"))?;
+                .ok_or_else(|| format!("has a payload with whom {whom}, which isn't 0 to 7"))?;
             Gene::AttentionInstinct {
                 input,
                 category: CategoryId(category),
