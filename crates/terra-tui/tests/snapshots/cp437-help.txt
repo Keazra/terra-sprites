@@ -22,7 +22,7 @@
 │                                                                                                  │
 │ COLOURS: a sprite's strongest drive, once it's above half                                        │
 │ ☺ hunger  ☺ thirst  ☺ pain  ☺ tiredness  ☺ boredom  ☺ loneliness  ☺ crowdedness  ☺ arousal       │
-│ ☺ none                                                                                           │
+│ ☺ anxiety  ☺ none                                                                                │
 │ EMOTES   ! hurt  ‼ zapped  ? gave up  z resting  ♥ pleased  ♫ danced  ♪ called                   │
 │                                                                                                  │
 │ FILES    /home/kel/.local/share/terra-sprites                                                    │

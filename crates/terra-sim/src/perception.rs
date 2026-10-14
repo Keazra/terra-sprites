@@ -424,8 +424,9 @@ impl Flood {
     /// What each category around the flood's origin offers as its
     /// candidate (design v19 §3.6), with the cost of the way to each: for
     /// each object type in it, the nearest reachable thing of that type, the
-    /// one with the lowest (cost, ID), where water's ID is its tile index; in
-    /// ID order. Sprites are weighed one by one, so the Sprite category
+    /// one with the lowest (cost, ID), where water's ID is its tile index,
+    /// and every reachable egg of `me`'s own (M2 design §15.6); in ID
+    /// order. Sprites are weighed one by one, so the Sprite category
     /// offers every other sprite it reaches, in ID order (design v18 §3.6),
     /// or, while it feels a hit by `attacker`, the attacker alone, if it
     /// reaches it. Which of them draws the eye most is the brain's to say. A
@@ -452,6 +453,7 @@ impl Flood {
         };
         let (top_left, bottom_right) = self.near(map);
         let (x0, x1) = (top_left.x, bottom_right.x);
+        let mut own_eggs: Vec<(CategoryId, u64, Target, u32)> = Vec::new();
         // Row by row, as the objects store their tiles.
         for y in top_left.y..=bottom_right.y {
             for (x, &object) in (x0..).zip(ground.objects.row(y, x0, x1)) {
@@ -465,6 +467,10 @@ impl Flood {
                 if let Some(cost) = self.goal_cost(pos, own_tile) {
                     let key = (object_type.category, Some(index));
                     offer(key, Target::Object(id), id.0, cost);
+                    let egg = ground.objects.get(id).and_then(|o| o.unhatched.as_deref());
+                    if egg.is_some_and(|egg| egg.parents.contains(&me)) {
+                        own_eggs.push((object_type.category, id.0, Target::Object(id), cost));
+                    }
                 }
             }
         }
@@ -483,6 +489,12 @@ impl Flood {
                 .entry(category)
                 .or_default()
                 .push((id, target, cost));
+        }
+        for (category, id, target, cost) in own_eggs {
+            let things = offered.entry(category).or_default();
+            if things.iter().all(|&(other, ..)| other != id) {
+                things.push((id, target, cost));
+            }
         }
         let mut candidates: BTreeMap<CategoryId, Vec<(Target, u32)>> = offered
             .into_iter()

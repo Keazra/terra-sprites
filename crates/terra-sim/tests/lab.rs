@@ -22,21 +22,21 @@ const ARENA: &str = r#"(
         key: {'S': Sprite, 'T': Object("thornbush"), 'B': Object("berry_bush")},
     ),
     ticks: 3000,
-    windows: [(0, 1000), (2000, 3000)],
+    windows: [(0, 1000), (1000, 3000)],
 )"#;
 
 #[test]
 fn a_window_must_lie_within_the_run() {
     let data = builtin();
-    let past = ARENA.replace("(2000, 3000)", "(2000, 3001)");
+    let past = ARENA.replace("(1000, 3000)", "(1000, 3001)");
     assert_eq!(
         LabScenario::from_ron(&past, &data).err(),
         Some(LabError::BadWindow {
-            from: 2000,
+            from: 1000,
             to: 3001
         })
     );
-    let backwards = ARENA.replace("(2000, 3000)", "(2000, 2000)");
+    let backwards = ARENA.replace("(1000, 3000)", "(1000, 1000)");
     assert!(matches!(
         LabScenario::from_ron(&backwards, &data),
         Err(LabError::BadWindow { .. })
@@ -99,7 +99,7 @@ fn a_run_counts_applied_actions_and_deaths_in_each_window() {
         newborns: &[],
     };
     let mut world = World::from_scenario(scenario, data.clone(), 1).expect("a valid scenario");
-    let mut windows = [(0, 1000), (2000, 3000)].map(|(from, to)| Window {
+    let mut windows = [(0, 1000), (1000, 3000)].map(|(from, to)| Window {
         from,
         to,
         applied: BTreeMap::new(),
@@ -245,7 +245,7 @@ fn a_scenario_can_ask_for_a_control_run_of_each_seed_without_learning() {
     assert_eq!(run.without, Some(Without::Learning));
     let control = run.control.expect("a control run");
     let spans: Vec<(u64, u64)> = control.iter().map(|w| (w.from, w.to)).collect();
-    assert_eq!(spans, [(0, 1000), (2000, 3000)]);
+    assert_eq!(spans, [(0, 1000), (1000, 3000)]);
     assert!(
         control[0].applied.values().sum::<u64>() > 0,
         "its sprite lived too"
@@ -387,7 +387,7 @@ fn a_scenario_can_have_its_sprites_grow_old_at_another_age() {
     let data = barren();
     let whole = ARENA
         .replace("ticks: 3000", "ticks: 7000")
-        .replace("windows: [(0, 1000), (2000, 3000)]", "windows: [(0, 7000)]");
+        .replace("windows: [(0, 1000), (1000, 3000)]", "windows: [(0, 7000)]");
     let old_age = |text: &str| {
         let lab = LabScenario::from_ron(text, &data).expect("a valid scenario");
         let run = lab.run(data.clone(), 1);

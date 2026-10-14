@@ -1049,6 +1049,7 @@ fn the_event_log_leaves_object_and_action_events_out_and_keeps_the_latest_100() 
                         progress: Progress::Ended(Outcome::Failed),
                         remembered: false,
                         heard: None,
+                        egg_at: None,
                     },
                 },
             },
@@ -1097,6 +1098,7 @@ fn acted(
         progress: Progress::Ended(outcome),
         remembered: false,
         heard: None,
+        egg_at: None,
     };
     Event {
         tick,
@@ -1449,7 +1451,7 @@ fn the_body_tab_shows_age_life_stage_traits_drives_physical_levels_and_wear() {
     let (world, app) = one_sprite_doing(WORKED_GENOME, &[ScriptedAction::Rest], 1);
     let (_, text) = inspector_on(&app, &world, 32);
     assert_eq!(
-        text[..17],
+        text[..18],
         [
             "Resting · 9 ticks left",
             "age 7,501 · adult · grows old 13,500",
@@ -1465,6 +1467,7 @@ fn the_body_tab_shows_age_life_stage_traits_drives_physical_levels_and_wear() {
             "loneliness  ░░░░░░░░░░ .00",
             "crowdedness ░░░░░░░░░░ .00",
             "arousal     ░░░░░░░░░░ .00",
+            "anxiety     ░░░░░░░░░░ .00",
             "",
             // A newborn's are full, and one tick at rest takes them only to .9998 or so.
             "energy 1.00 · hydration 1.00 · stamina 1.00",
@@ -1472,8 +1475,8 @@ fn the_body_tab_shows_age_life_stage_traits_drives_physical_levels_and_wear() {
             "wear .00",
         ]
     );
-    assert_eq!(text[17..20], ["", "Observed", "nothing yet"]);
-    assert!(text[20..].iter().all(String::is_empty), "{text:?}");
+    assert_eq!(text[18..21], ["", "Observed", "nothing yet"]);
+    assert!(text[21..].iter().all(String::is_empty), "{text:?}");
 }
 
 /// A genome that walks a grass step a tick.
@@ -2238,6 +2241,7 @@ fn the_chem_tab_lists_every_chemical_with_its_level_and_change_per_tick() {
             "loneliness    .00",
             "crowdedness   .00",
             "arousal       .00",
+            "anxiety       .00",
             // Nothing felt: learning used up no reward or punishment.
             "reward        .00  felt +.00",
             "punishment    .00",
@@ -2246,9 +2250,8 @@ fn the_chem_tab_lists_every_chemical_with_its_level_and_change_per_tick() {
             "h4   .00   h5   .00   h6   .00   h7   .00",
             "h8   .00   h9   .00   h10  .00   h11  .00",
             "h12  .00   h13  .00   h14  .00   h15  .00",
-            "feminiser     .00",
         ],
-        "all of it fits at 100×32"
+        "as much as fits at 100×32"
     );
 }
 
@@ -2854,6 +2857,7 @@ fn finished(tick: u64, id: EntityId, verb: Verb, outcome: Outcome) -> Event {
         progress: Progress::Ended(outcome),
         remembered: false,
         heard: None,
+        egg_at: None,
     };
     Event {
         tick,
@@ -4102,7 +4106,7 @@ fn the_body_tab_names_a_sprite_s_partner_after_their_first_egg() {
 
 /// The built-in physiology's copy and change, as its file begins it.
 const COPY_AND_CHANGE: &str =
-    "copy_and_change: (doubled: 0.00039, lost: 0.00039, changed: 0.00039,";
+    "copy_and_change: (doubled: 0.00029, lost: 0.00029, changed: 0.00029,";
 
 #[test]
 fn the_genome_tab_of_a_sprite_with_parents_says_first_what_s_new_in_it() {
@@ -4111,7 +4115,7 @@ fn the_genome_tab_of_a_sprite_with_parents_says_first_what_s_new_in_it() {
     // began with, has no such list.
     let (mut world, egg) = a_lone_egg(&[
         ("mutation: (chance: 0.01,", "mutation: (chance: 1.0,"),
-        ("flaws: (arise: 0.005,", "flaws: (arise: 0.5,"),
+        ("flaws: (arise: 0.004,", "flaws: (arise: 0.5,"),
         (
             COPY_AND_CHANGE,
             "copy_and_change: (doubled: 0.0, lost: 0.0, changed: 0.0,",
@@ -4181,7 +4185,7 @@ fn the_genome_tab_lists_the_genes_copying_changed_doubled_and_lost() {
     // copy of; then the genes doubled, and those lost.
     let (mut world, egg) = a_lone_egg(&[
         ("mutation: (chance: 0.01,", "mutation: (chance: 0.0,"),
-        ("flaws: (arise: 0.005,", "flaws: (arise: 0.0,"),
+        ("flaws: (arise: 0.004,", "flaws: (arise: 0.0,"),
         (
             COPY_AND_CHANGE,
             "copy_and_change: (doubled: 0.3, lost: 0.3, changed: 0.3,",
@@ -4239,7 +4243,7 @@ fn the_event_log_says_what_s_new_in_a_hatchling_with_a_gene_changed() {
         let rules = format!("copy_and_change: (doubled: 0.0, lost: 0.0, changed: {changed},");
         let (mut world, egg) = a_lone_egg(&[
             ("mutation: (chance: 0.01,", "mutation: (chance: 0.0,"),
-            ("flaws: (arise: 0.005,", "flaws: (arise: 0.0,"),
+            ("flaws: (arise: 0.004,", "flaws: (arise: 0.0,"),
             (COPY_AND_CHANGE, rules.as_str()),
         ]);
         let mut app = app_for(&world, Theme::cp437(), 100, 30);

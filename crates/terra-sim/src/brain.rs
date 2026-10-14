@@ -11,7 +11,8 @@ use crate::biochem::Body;
 use crate::brain_io::Source;
 use crate::data::DataPack;
 use crate::expression::{Expression, expressions};
-use crate::genome::{Gene, Genome, LocusRef};
+use crate::family::Relation;
+use crate::genome::{Gene, Genome, LocusRef, Whom};
 use crate::learning::{
     Experience, Links, Signals, SpriteMemory, Subject, TRACE_CAP, Touch, TraceEntry, per_verb,
     still_counts, weight,
@@ -151,6 +152,8 @@ pub(crate) struct Seen {
     /// Whether it's a sprite not grown up, an egg or young, which the
     /// breeding drive never draws the eye to (M2 design §5).
     pub(crate) not_grown: bool,
+    /// Who it is to the sprite (M2 design §15.6).
+    pub(crate) relation: Relation,
 }
 
 #[cfg(test)]
@@ -162,6 +165,7 @@ impl Seen {
             distance,
             recall: 1.0,
             not_grown: false,
+            relation: Relation::default(),
         }
     }
 }
@@ -182,6 +186,21 @@ pub(crate) struct Aim {
     /// Whether it's a sprite not grown up, an egg or young, which the
     /// breeding drive never moves the sprite to act on (M2 design §5).
     pub(crate) not_grown: bool,
+    /// Who it is to the sprite (M2 design §15.6).
+    pub(crate) relation: Relation,
+}
+
+/// An attention instinct about whom (M2 design §15.6): a State input's
+/// link to attending to the sprite's family, or its kin, in a category.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub(crate) struct WhomLink {
+    /// The input, by its place in the pack.
+    input: usize,
+    /// The category, by its index in the pack.
+    category: usize,
+    whom: Whom,
+    /// Held within [−1, 1], as every instinct link is (M1 design §5.4).
+    weight: f32,
 }
 
 /// A sprite's brain: its parameters, concepts and links (design §5.1).
@@ -196,6 +215,10 @@ pub(crate) struct Brain {
     /// Attention instincts A: each State input's link to each category, in
     /// the pack's category order, by the input's place in the pack.
     attention: Links,
+    /// Attention instincts about whom (M2 design §15.6), in genome order:
+    /// none in a save from before them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    whom: Vec<WhomLink>,
     /// The category attention is on, if any.
     pub(crate) attended: Option<CategoryId>,
     /// What the brain did at the latest step 5 (design §5.5), for the trace
@@ -387,6 +410,7 @@ impl Brain {
         let mut concepts: Vec<Signature> = (0..inputs.len()).map(|i| vec![(i, false)]).collect();
         let mut decision = vec![vec![0.0; VERBS.len()]; inputs.len()];
         let mut attention = vec![vec![0.0; data.categories().len()]; inputs.len()];
+        let mut whom = Vec::new();
         for (index, (gene, expression)) in genome
             .genes
             .iter()
@@ -421,8 +445,20 @@ impl Brain {
                 Gene::AttentionInstinct {
                     input,
                     category,
+                    whom: Whom::Any,
                     weight,
                 } => attention[place(input)][data.category_index(category)] = weight * strength,
+                Gene::AttentionInstinct {
+                    input,
+                    category,
+                    whom: about,
+                    weight,
+                } => whom.push(WhomLink {
+                    input: place(input),
+                    category: data.category_index(category),
+                    whom: about,
+                    weight: (weight * strength).clamp(-1.0, 1.0),
+                }),
                 _ => {}
             }
         }
@@ -431,6 +467,7 @@ impl Brain {
             concepts,
             decision: Links::new(decision),
             attention: Links::new(attention),
+            whom,
             attended: None,
             snapshot: None,
             felt: 0.0,
@@ -459,6 +496,7 @@ impl Brain {
         self.concepts = grown.concepts;
         self.decision = grown.decision;
         self.attention = grown.attention;
+        self.whom = grown.whom;
         self.snapshot = None;
     }
 
@@ -1037,6 +1075,7 @@ impl Brain {
             && self.concepts == born.concepts
             && self.decision == born.decision
             && self.attention == born.attention
+            && self.whom == born.whom
             && self.attended.is_none_or(category)
             && self.snapshot.as_ref().is_none_or(snapshot)
             && self.trace.iter().all(traced)
@@ -1050,6 +1089,9 @@ impl Brain {
     pub(crate) fn check(&self) -> Result<(), String> {
         self.decision.check()?;
         self.attention.check()?;
+        if let Some(link) = self.whom.iter().find(|l| !(-1.0..=1.0).contains(&l.weight)) {
+            return Err(format!("a link at {}, outside -1 to 1", link.weight));
+        }
         self.experience.check()?;
         if !self.felt.is_finite() {
             return Err(format!("felt {}, which isn't a number", self.felt));
@@ -1228,6 +1270,7 @@ impl Brain {
                 Source::Familiar => looks.map_or(0.0, |looks| looks.familiar),
                 Source::Partner => flag(looks.is_some_and(|looks| looks.partner)),
                 Source::Kin => flag(looks.is_some_and(|looks| looks.kin)),
+                Source::Family => flag(aim.is_some_and(|a| a.relation.family)),
                 Source::Attended(category) => flag(aim.is_some_and(|a| a.category == category)),
                 Source::TargetDistance => aim.map_or(0.0, |a| a.distance),
                 Source::TargetAdjacent => flag(aim.is_some_and(|a| a.adjacent)),
@@ -1300,6 +1343,7 @@ impl Brain {
                     distance,
                     recall,
                     not_grown,
+                    relation,
                 } = seen;
                 let c = data.category_index(category);
                 // The breeding drive never draws the eye to a sprite not
@@ -1308,7 +1352,8 @@ impl Brain {
                     .iter()
                     .filter(|i| !(not_grown && drive.contains(i)))
                     .map(|&i| inputs[i] * self.attention.get(i, c))
-                    .sum();
+                    .sum::<f32>()
+                    + self.whom_pull(c, relation, not_grown, inputs, data);
                 let worth = recall
                     * value_gain
                     * self.worth_of(subject, scoring.sprite, inputs, general, data);
@@ -1324,10 +1369,10 @@ impl Brain {
     }
 
     /// How much a thing `seen`, the particular `sprite` if it's one, draws
-    /// the eye beyond the instincts about its category (design v19 §3.6,
-    /// §5.3): its nearness, what it's worth, as much as it's recalled (M2
-    /// design §7), how new it is, and, for a sprite, how frightening it is
-    /// while near. `inputs` gives the State inputs, `curiosity_mod` the
+    /// the eye beyond the instincts about its whole category (design v19
+    /// §3.6, §5.3): the instincts about whom it is to the sprite (M2 design
+    /// §15.6), its nearness, what it's worth, as much as it's recalled (§7),
+    /// how new it is, and, for a sprite, how frightening it is while near. `inputs` gives the State inputs, `curiosity_mod` the
     /// receptor target wariness lowers, and `general` its sprites in general
     /// (`sprites_in_general`), worked out once for all it sees.
     pub(crate) fn draw(
@@ -1347,15 +1392,43 @@ impl Brain {
             subject,
             distance,
             recall,
-            ..
+            not_grown,
+            relation,
         } = seen;
         let boldness = self.boldness(curiosity_mod);
         let worth = self.worth_of(subject, sprite, inputs, general, data);
-        self.params.get(BrainParam::SalienceGain) * (1.0 - distance)
+        let category = data.category_index(subject.category(data));
+        self.whom_pull(category, relation, not_grown, inputs, data)
+            + self.params.get(BrainParam::SalienceGain) * (1.0 - distance)
             + self.params.get(BrainParam::ValueGain) * recall * worth
             + self.params.get(BrainParam::Curiosity) * self.novelty(subject) * boldness
             + self.params.get(BrainParam::Vigilance)
                 * self.fright(subject.category(data), scoring, distance, general, data)
+    }
+
+    /// How much the attention instincts about whom draw the eye to a thing of
+    /// the category at index `category` that's `relation` to the sprite (M2
+    /// design §15.6): the State inputs through the links about its family,
+    /// if it's family, and about its kin, if it's kin. The breeding drive
+    /// never draws the eye to one `not_grown` (§5).
+    fn whom_pull(
+        &self,
+        category: usize,
+        relation: Relation,
+        not_grown: bool,
+        inputs: &[f32],
+        data: &DataPack,
+    ) -> f32 {
+        if self.whom.is_empty() {
+            return 0.0;
+        }
+        let drive = not_grown.then(|| drive_locus(data)).flatten();
+        self.whom
+            .iter()
+            .filter(|link| link.category == category && relation.is(link.whom))
+            .filter(|link| drive.is_none_or(|drive| !reads(data, link.input, drive)))
+            .map(|link| inputs[link.input] * link.weight)
+            .sum()
     }
 
     /// How boldly the unfamiliar draws the eye (design §5.3): the worth of
@@ -1647,22 +1720,31 @@ pub(crate) fn shown(body: &Body, data: &DataPack) -> Vec<f32> {
 /// the one it attends to, by place (M2 design §5): none in a pack whose
 /// needs don't include it.
 fn drive_inputs(data: &DataPack) -> Vec<usize> {
-    let Some(need) = data.physiology().indices.drive else {
+    let Some(drive) = drive_locus(data) else {
         return Vec::new();
     };
-    let inputs = data.brain_inputs_in_order();
-    let Source::State(drive) = inputs[data.need_places()[need]].source else {
-        return Vec::new();
-    };
-    inputs
-        .iter()
-        .enumerate()
-        .filter(|(_, input)| {
-            matches!(input.source,
-                Source::State(locus) | Source::Shown(locus) | Source::Differs(locus) if locus == drive)
-        })
-        .map(|(place, _)| place)
+    let inputs = data.brain_inputs_in_order().len();
+    (0..inputs)
+        .filter(|&place| reads(data, place, drive))
         .collect()
+}
+
+/// What the breeding drive's need reads, if the pack has one (M2 design
+/// §5).
+fn drive_locus(data: &DataPack) -> Option<LocusRef> {
+    let need = data.physiology().indices.drive?;
+    let inputs = data.brain_inputs_in_order();
+    match inputs[data.need_places()[need]].source {
+        Source::State(drive) => Some(drive),
+        _ => None,
+    }
+}
+
+/// Whether the brain input at `place` reads `drive`, in the sprite or the
+/// one it attends to.
+fn reads(data: &DataPack, place: usize, drive: LocusRef) -> bool {
+    matches!(data.brain_inputs_in_order()[place].source,
+        Source::State(locus) | Source::Shown(locus) | Source::Differs(locus) if locus == drive)
 }
 
 /// The chemical the breeding drive reads, by index, if it reads one (M2
@@ -2013,8 +2095,8 @@ mod tests {
         ]);
         let n = builtin().brain_inputs().count();
         assert_eq!(
-            n, 68,
-            "52 State inputs, 4 of body language, 3 of whom it knows and 9 Target inputs"
+            n, 75,
+            "58 State inputs, 4 of body language, 4 of whom it knows and 9 Target inputs"
         );
         // One singleton per input, and one conjunction for both genes naming it.
         assert_eq!(brain.concepts.len(), n + 1);

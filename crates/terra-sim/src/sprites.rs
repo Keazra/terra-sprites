@@ -12,6 +12,7 @@ use crate::brain::Brain;
 use crate::breeding::{Sex, Unhatched};
 use crate::courtship::{Heard, Partner};
 use crate::data::DataPack;
+use crate::family::OwnEgg;
 use crate::genome::{Gene, Genome};
 use crate::inheritance::{Parent, flaws_of, what_it_does};
 use crate::map::{Dir, Map, Pos};
@@ -108,6 +109,10 @@ pub(crate) struct Sprite {
     /// (M2 design §15.7). A sprite from before Slice 32 has 0.
     #[serde(default)]
     pub(crate) last_male: u64,
+    /// Each egg of its own it has seen, where it last saw it (M2 design
+    /// §15.6), in the order it first saw them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) eggs: Vec<OwnEgg>,
 }
 
 impl Sprite {
@@ -119,6 +124,18 @@ impl Sprite {
     /// Its life stage (M2 design §9.1).
     pub(crate) fn stage(&self) -> LifeStage {
         self.stage.expect("a loaded sprite has a life stage")
+    }
+
+    /// How far it sees, in tiles in any direction: its sense radius (design
+    /// §3.6).
+    pub(crate) fn sight(&self) -> u16 {
+        self.program.traits.sense_radius.round() as u16
+    }
+
+    /// Whether it sees `pos` (M2 design §10.1, §15): within its sight, in any
+    /// direction.
+    pub(crate) fn sees(&self, pos: Pos) -> bool {
+        chebyshev(self.pos, pos) <= self.sight()
     }
 
     /// How fast it walks on the tick `tick`, in move points (M2 design
@@ -441,6 +458,7 @@ impl Sprite {
             last_step: None,
             partner: None,
             heard: Vec::new(),
+            eggs: Vec::new(),
             last_male: tick,
         }
     }
@@ -753,6 +771,17 @@ impl Sprites {
                     return Err(format!(
                         "{id:?} remembers two calls from {:?}, or one of its own",
                         heard.caller
+                    ));
+                }
+            }
+            // It remembers where it last saw each egg of its own once, on
+            // the map (§15.6).
+            for (i, known) in sprite.eggs.iter().enumerate() {
+                let again = sprite.eggs[i + 1..].iter().any(|e| e.egg == known.egg);
+                if again || !map.contains(known.at) {
+                    return Err(format!(
+                        "{id:?} remembers its egg {:?} twice, or off the map",
+                        known.egg
                     ));
                 }
             }

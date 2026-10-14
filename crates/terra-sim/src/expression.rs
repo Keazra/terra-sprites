@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use crate::ageing::{LifeStage, Switch};
 use crate::brain_io::{InputId, Source};
 use crate::data::DataPack;
-use crate::genome::{Gene, Genome, Term};
+use crate::genome::{Gene, Genome, Term, Whom};
 use crate::registry::{BrainParam, CategoryId, ChemId, ChemicalClass, LocusKind, Trait, Verb};
 
 /// How a gene is expressed (design §4.3).
@@ -39,7 +39,9 @@ enum Setting {
     BrainParam(BrainParam),
     /// A concept's signature, its inputs in ID order, and a verb.
     Instinct(Vec<(InputId, bool)>, Verb),
-    AttentionInstinct(InputId, CategoryId),
+    /// An attention instinct's input, category, and whom in it (M2 design
+    /// §15.6).
+    AttentionInstinct(InputId, CategoryId, Whom),
 }
 
 impl Setting {
@@ -57,8 +59,11 @@ impl Setting {
                 Some(Setting::Instinct(signature, verb))
             }
             Gene::AttentionInstinct {
-                input, category, ..
-            } => Some(Setting::AttentionInstinct(input, category)),
+                input,
+                category,
+                whom,
+                ..
+            } => Some(Setting::AttentionInstinct(input, category, whom)),
             Gene::Reaction { .. }
             | Gene::Emitter { .. }
             | Gene::Receptor { .. }

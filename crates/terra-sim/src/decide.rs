@@ -13,6 +13,7 @@ use crate::breeding;
 use crate::courtship;
 use crate::data::DataPack;
 use crate::events::Event;
+use crate::family;
 use crate::learning::Subject;
 use crate::map::Pos;
 use crate::objects::EntityId;
@@ -23,13 +24,14 @@ use crate::world::WorldState;
 /// Something a category offers the sprite (design §3.6): a thing in sight
 /// and the cost of the way there, or a remembered place out of sight, with
 /// how well it's remembered (M2 design §7), or a sprite heard calling, out
-/// of sight, with the tile it called from (§15.1).
+/// of sight, with the tile it called from (§15.1), or an egg of its own out
+/// of sight, with where it last saw it (§15.6).
 #[derive(Debug, Clone, Copy)]
 struct Offer {
     target: Target,
     cost: Option<u32>,
     recall: f32,
-    heard: Option<Pos>,
+    seek: Option<Pos>,
 }
 
 /// Something the sprite could aim at, as it stands this tick.
@@ -40,12 +42,13 @@ struct Candidate {
     /// sight (M2 design §7), or a running action's target out of reach
     /// (#173).
     goal: Option<Pos>,
-    /// Whether it's a remembered place out of sight (M2 design §7), or a
-    /// sprite heard calling (§15.1).
+    /// Whether it's a remembered place out of sight (M2 design §7), a
+    /// sprite heard calling (§15.1), or an egg of its own out of sight
+    /// (§15.6).
     remembered: bool,
-    /// The tile a sprite heard calling, out of sight, called from (M2
-    /// design §15.1).
-    heard: Option<Pos>,
+    /// The tile it's looked for on: where a sprite heard calling called
+    /// from (M2 design §15.1), or where it last saw its egg (§15.6).
+    seek: Option<Pos>,
     aim: Aim,
     /// The stable ID of its type: none for water or a sprite in a pack with
     /// no object type for them (design v19 §3.5.5).
@@ -95,7 +98,7 @@ pub(crate) fn decide(
                 target,
                 cost: Some(cost),
                 recall: 1.0,
-                heard: None,
+                seek: None,
             });
             (category, things.collect())
         })
@@ -115,7 +118,7 @@ pub(crate) fn decide(
             target: place.target,
             cost: None,
             recall: place.recall,
-            heard: None,
+            seek: None,
         };
         let category = place.subject.category(data);
         offered.entry(category).or_default().push(offer);
@@ -137,12 +140,39 @@ pub(crate) fn decide(
             target: Target::Sprite(caller),
             cost: None,
             recall: heard.freshness(state.tick, heard_for),
-            heard: Some(heard.from),
+            seek: Some(heard.from),
         };
         offered
             .entry(data.sprite_category())
             .or_default()
             .push(offer);
+    }
+    // So does an egg of its own out of sight, where it last saw it, as a
+    // remembered place is (M2 design §15.6).
+    let in_sight: BTreeSet<EntityId> = match sprite.eggs.is_empty() {
+        true => BTreeSet::new(),
+        false => offered
+            .values()
+            .flatten()
+            .filter_map(|offer| match offer.target {
+                Target::Object(id) => Some(id),
+                _ => None,
+            })
+            .collect(),
+    };
+    for known in &sprite.eggs {
+        let egg = Target::Object(known.egg);
+        if in_sight.contains(&known.egg) || state.whereabouts(data, egg).is_none() {
+            continue;
+        }
+        let offer = Offer {
+            target: egg,
+            cost: None,
+            recall: 1.0,
+            seek: Some(known.at),
+        };
+        let category = state.category_of(data, egg);
+        offered.entry(category).or_default().push(offer);
     }
     // The breeding drive works only between adults (M2 design §5): it reads
     // 0 in a sprite not grown up, and in a choice about one, or about an
@@ -180,6 +210,7 @@ pub(crate) fn decide(
                     distance: offer.cost.map_or(1.0, |cost| normalized(cost, reach)),
                     recall: offer.recall,
                     not_grown: not_grown(offer.target),
+                    relation: family::relation(state, id, offer.target),
                 };
                 let draw = sprite.brain.draw(
                     seen,
@@ -214,13 +245,14 @@ pub(crate) fn decide(
                 adjacent: state.on_goal_tile(data, sprite.pos, target),
                 recall: offer.recall,
                 not_grown: not_grown(target),
+                relation: family::relation(state, id, target),
             };
             let candidate = Candidate {
                 type_id,
                 target,
                 goal,
                 remembered: offer.cost.is_none(),
-                heard: offer.heard,
+                seek: offer.seek,
                 aim,
             };
             (category, candidate)
@@ -245,10 +277,11 @@ pub(crate) fn decide(
             let subject = state.subject_of(data, target);
             // A trip still out of sight is weighed as its place is
             // remembered, or one of its kind near it that it merged into (M2
-            // design §7.3), or as the call it goes to (§15.1).
+            // design §7.3), or as the call it goes to (§15.1), or as an egg
+            // of its own is (§15.6).
             let recall = match whereabouts {
                 _ if !a.remembered => 1.0,
-                Some(_) if a.heard.is_some() => target.sprite().map_or(0.0, |caller| {
+                Some(_) if a.seek.is_some() => target.sprite().map_or(1.0, |caller| {
                     sprite
                         .heard_from(caller, state.tick, heard_for)
                         .map_or(0.0, |heard| heard.freshness(state.tick, heard_for))
@@ -267,12 +300,13 @@ pub(crate) fn decide(
                 adjacent,
                 recall,
                 not_grown: not_grown(target),
+                relation: family::relation(state, id, target),
             };
             Candidate {
                 target,
                 goal: nearest.map(|(goal, _)| goal),
                 remembered: a.remembered,
-                heard: a.heard,
+                seek: a.seek,
                 aim,
                 type_id: a.target_type,
             }
@@ -304,6 +338,7 @@ pub(crate) fn decide(
         distance: aim.distance,
         recall: aim.recall,
         not_grown: aim.not_grown,
+        relation: aim.relation,
     };
     let mut in_sight: BTreeMap<CategoryId, Seen> = candidates
         .iter()
@@ -468,11 +503,12 @@ pub(crate) fn decide(
             (weighed.goal, Some((weighed.target, weighed.type_id)))
         }
     };
-    // Setting off for a remembered place, or a call, it finds the way
-    // there, which it keeps to; with none, it forgets the place or the call
-    // and keeps to what it was doing, deciding nothing this tick, and
-    // chooses again at its next step 5 (M2 design §7.4, §15.1).
-    let heard = weighed.and_then(|c| c.heard);
+    // Setting off for a remembered place, a call or its egg, it finds the
+    // way there, which it keeps to; with none, it forgets the place, the
+    // call or where it saw the egg, and keeps to what it was doing, deciding
+    // nothing this tick, and chooses again at its next step 5 (M2 design
+    // §7.4, §15.1, §15.6).
+    let seek = weighed.and_then(|c| c.seek);
     let way = match (target, destination) {
         (Some((target, _)), None) if verb.heads_for_goal() => {
             let sprite = state.sprites.get(id).expect("the same sprite");
@@ -481,13 +517,14 @@ pub(crate) fn decide(
                 data,
                 sprite,
                 target,
-                heard,
+                seek,
                 Occupied::Penalty(penalty(data)),
             );
             if way.is_none() {
                 let sprite = state.sprites.get_mut(id).expect("the same sprite");
-                match (target, heard) {
+                match (target, seek) {
                     (Target::Sprite(caller), Some(_)) => sprite.forget_call(caller),
+                    (Target::Object(egg), Some(_)) => sprite.forget_egg(egg),
                     _ => sprite.brain.experience.forget_place(target),
                 }
                 return;

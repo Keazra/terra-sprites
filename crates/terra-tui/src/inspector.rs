@@ -413,10 +413,12 @@ fn aimed_line(action: &ActionView, data: &Words) -> Option<String> {
         true => format!("{what} it remembers"),
         false => what.clone(),
     };
-    // Out of sight, it goes to where the call came from (M2 design §15.8).
-    let call = action.heard.is_some() && !matches!(action.progress, Progress::Ended(_));
+    // Out of sight, it goes to where the call came from, or where it last
+    // saw its egg (M2 design §15.8).
+    let ended = matches!(action.progress, Progress::Ended(_));
     let going = match action.verb {
-        _ if call => format!("Going to {what}'s call"),
+        _ if action.heard.is_some() && !ended => format!("Going to {what}'s call"),
+        _ if action.egg_at.is_some() && !ended => "Going back to its egg".into(),
         Verb::Eat => format!("Going to eat {aim}"),
         Verb::Drink if action.remembered => format!("Going to drink at {aim}"),
         Verb::Drink => "Going to drink".into(),
@@ -2302,6 +2304,7 @@ mod tests {
             progress,
             remembered: false,
             heard: None,
+            egg_at: None,
         }
     }
 
@@ -2317,6 +2320,7 @@ mod tests {
             progress,
             remembered: false,
             heard: None,
+            egg_at: None,
         }
     }
 
@@ -2410,6 +2414,7 @@ mod tests {
             progress,
             remembered: false,
             heard: None,
+            egg_at: None,
         }
     }
 
@@ -2763,6 +2768,7 @@ mod tests {
         let to_call = |verb, progress| ActionView {
             remembered: true,
             heard: Some(Pos { x: 30, y: 4 }),
+            egg_at: None,
             ..aimed(verb, bo, 101, progress)
         };
         let tried = |view: ActionView| ActionView {
@@ -2827,6 +2833,31 @@ mod tests {
             Some("Sprite #3 danced for it")
         );
         assert_eq!(observed_line(&call(Ended(Applied)), &pack()), "Called");
+    }
+
+    #[test]
+    fn the_action_line_says_a_parent_goes_back_to_its_egg() {
+        // M2 design §15.8.
+        use Progress::*;
+        let back = |progress| ActionView {
+            remembered: true,
+            egg_at: Some(Pos { x: 30, y: 4 }),
+            ..aimed(Verb::Approach, Target::Object(EntityId(9)), 103, progress)
+        };
+        let view = back(Walking { steps_left: 12 });
+        assert_eq!(
+            action_line(&view, false, &pack()),
+            "Going back to its egg · 12 tiles to go"
+        );
+        assert_eq!(
+            action_line(&view, true, &pack()),
+            "APPROACH → egg #9 · from memory · walking (12 tiles)"
+        );
+        let view = back(Waiting { blocked_ticks: 2 });
+        assert_eq!(
+            action_line(&view, false, &pack()),
+            "Going back to its egg · waiting to get past"
+        );
     }
 
     #[test]

@@ -290,5 +290,5 @@ pub fn hatch(world: &mut World, egg: EntityId) {
 /// egg's genes are its parents' exactly, with no new flaws (M2 design §12).
 pub const NO_COPYING_ERRORS: [(&str, &str); 2] = [
     ("mutation: (chance: 0.01,", "mutation: (chance: 0.0,"),
-    ("flaws: (arise: 0.005,", "flaws: (arise: 0.0,"),
+    ("flaws: (arise: 0.004,", "flaws: (arise: 0.0,"),
 ];

@@ -19,13 +19,15 @@ The chemicals in a sprite's body (design §4.1, Appendix A). Each has a level fr
 
 **Courtship** (M2 design §15) reads one more: `receptivity`, as a pair can mate only once the female's is at least physiology's `breeding.receptive`. The built-in list also has `grief`, which only genes use: in the starter genome losing a partner raises it, and it holds arousal down. A pack without `receptivity` (or without courtship's [loci](loci.md)) breeds with no calls or courtship.
 
+**Families** (M2 design §15.6) read no chemical. The built-in list has the drive `anxiety`, which only genes use: in the starter genome it rises while a sprite's family is out of sight.
+
 ## Working example
 
 A new drive, `chill`, added to the list. To matter, it needs genes that raise and lower it ([genomes](genomes.md)), and a brain input so sprites can feel it ([brain inputs](brain-io.md)).
 
 <!-- example: chemicals -->
 ```ron
-(id: 26, name: "chill", class: Signal),
+(id: 27, name: "chill", class: Signal),
 ```
 
 The built-in list in `data/chemicals.ron` is the full working example.

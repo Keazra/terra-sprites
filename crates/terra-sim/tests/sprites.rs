@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 
 use terra_sim::{
     ChemicalKind, DataPack, DeathCause, EmitterMode, EntityId, EventKind, Expression, GeneView,
-    Genome, LifeStage, Map, Pos, Scenario, ScriptedAction, Trait, Traits, World, WorldConfig,
+    Genome, LifeStage, Map, Pos, Scenario, ScriptedAction, Trait, Traits, Whom, World, WorldConfig,
 };
 
 #[test]
@@ -378,6 +378,7 @@ fn a_sprite_lists_its_chemicals_in_pack_order_with_their_kinds() {
         ("reward", LearningSignal),
         ("punishment", LearningSignal),
         ("arousal", Drive),
+        ("anxiety", Drive),
     ]
     .into_iter()
     .map(|(name, kind)| (name.to_string(), kind))
@@ -571,16 +572,24 @@ fn starter_genes(world: &World) -> Vec<GeneView<'_>> {
 
 #[test]
 fn a_starter_sprite_is_drawn_by_instinct_only_to_its_own_kind() {
-    // Design v16 §5.8: it knows nothing of food, water or toys.
+    // Design v16 §5.8: it knows nothing of food, water or toys. Its own kind
+    // is sprites, and its own eggs (M2 design §15.6).
     let world = lone_sprite(builtin(), None);
-    let drawn_to: BTreeSet<&str> = starter_genes(&world)
+    let drawn_to: BTreeSet<(&str, Whom)> = starter_genes(&world)
         .iter()
         .filter_map(|gene| match gene {
-            GeneView::AttentionInstinct { category, .. } => Some(*category),
+            GeneView::AttentionInstinct { category, whom, .. } => Some((*category, *whom)),
             _ => None,
         })
         .collect();
-    assert_eq!(drawn_to, BTreeSet::from(["sprite"]));
+    let categories: BTreeSet<&str> = drawn_to.iter().map(|&(category, _)| category).collect();
+    assert_eq!(categories, BTreeSet::from(["egg", "sprite"]));
+    assert!(
+        drawn_to
+            .iter()
+            .all(|&(category, whom)| category == "sprite" || whom == Whom::Family),
+        "only to eggs of its own: {drawn_to:?}"
+    );
 }
 
 #[test]

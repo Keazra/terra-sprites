@@ -11,6 +11,7 @@ use crate::action::{Hurt, Outcome, chebyshev};
 use crate::breeding::{self, Sex};
 use crate::data::DataPack;
 use crate::events::{Event, EventKind};
+use crate::family::FamilySenses;
 use crate::map::{Dir, Map, Pos};
 use crate::objects::EntityId;
 use crate::perception::Target;
@@ -383,8 +384,9 @@ pub(crate) fn mourn(
 }
 
 /// What each sprite senses of others this tick, by sight and by hearing
-/// (M2 design §10.1, §15): whom it sees, and whether it sees or has lately
-/// heard a female adult, a male adult, and its partner.
+/// (M2 design §10.1, §15): whom it sees, whether it sees or has lately
+/// heard a female adult, a male adult, and its partner, and what it senses
+/// of its family (§15.6).
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Company {
     /// The other sprites it sees, in ascending ID order: within its sense
@@ -393,6 +395,7 @@ pub(crate) struct Company {
     pub(crate) female_near: bool,
     pub(crate) male_near: bool,
     pub(crate) partner_near: bool,
+    pub(crate) family: FamilySenses,
 }
 
 /// Step 3's look round (M2 design §15): each sprite forgets calls heard
@@ -425,10 +428,9 @@ pub(crate) fn look_round(
     let company: BTreeMap<EntityId, Company> = sprites
         .iter()
         .map(|(id, sprite)| {
-            let sight = sprite.program.traits.sense_radius.round() as u16;
             let seen: Vec<EntityId> = sprites
                 .iter()
-                .filter(|&(other, them)| other != id && chebyshev(them.pos, sprite.pos) <= sight)
+                .filter(|&(other, them)| other != id && sprite.sees(them.pos))
                 .map(|(other, _)| other)
                 .collect();
             let heard = sprite.heard.iter().map(|heard| heard.caller);
@@ -438,6 +440,7 @@ pub(crate) fn look_round(
                 male_near: sensed.iter().any(|&other| adult(other, Sex::Male)),
                 partner_near: sprite.partner().is_some_and(|p| sensed.contains(&p)),
                 seen,
+                family: FamilySenses::default(),
             };
             (id, company)
         })

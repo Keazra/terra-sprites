@@ -210,6 +210,7 @@ fn ended(tick: u64, id: EntityId, verb: Verb, outcome: Outcome, target: Option<T
         progress: Progress::Ended(outcome),
         remembered: false,
         heard: None,
+        egg_at: None,
     };
     Event {
         tick,

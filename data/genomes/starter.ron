@@ -106,6 +106,26 @@
         Emitter(locus: Chem("grief"), mode: Level, threshold: 0.3, gain: -0.2, chem: "arousal"),
         HalfLife(chem: "grief", ticks: 860),
 
+        // Anxiety holds a family together (M2 design §15.6). A parent's
+        // rises while its egg is out of sight, and faster if it left the egg
+        // with no other parent by it. It rises while its young are out of
+        // sight, faster in a young sprite while no parent is in sight, and
+        // a little while its partner is away. Each found drops it at once,
+        // and it fades within a few minutes. Hunger and thirst come first:
+        // past 0.4, they drain it.
+        Emitter(locus: Locus("egg_away"), mode: Level, gain: 0.01, chem: "anxiety"),
+        Emitter(locus: Locus("egg_alone"), mode: Level, gain: 0.03, chem: "anxiety"),
+        Emitter(locus: Locus("young_away"), mode: Level, gain: 0.02, chem: "anxiety"),
+        Emitter(locus: Locus("parent_away"), mode: Level, gain: 0.03, chem: "anxiety"),
+        Emitter(locus: Locus("partner_away"), mode: Level, gain: 0.02, chem: "anxiety"),
+        Emitter(locus: Locus("egg_away"), mode: Fall, gain: -0.5, chem: "anxiety"),
+        Emitter(locus: Locus("young_away"), mode: Fall, gain: -0.5, chem: "anxiety"),
+        Emitter(locus: Locus("parent_away"), mode: Fall, gain: -0.5, chem: "anxiety"),
+        Emitter(locus: Locus("partner_away"), mode: Fall, gain: -0.5, chem: "anxiety"),
+        HalfLife(chem: "anxiety", ticks: 300),
+        Emitter(locus: Chem("hunger"), mode: Level, threshold: 0.4, gain: -0.05, chem: "anxiety"),
+        Emitter(locus: Chem("thirst"), mode: Level, threshold: 0.4, gain: -0.05, chem: "anxiety"),
+
         // Pain comes with new injury, thorns and blows, and fades fast.
         Emitter(locus: Locus("pricked"), mode: Level, gain: 0.3, chem: "pain"),
         Emitter(locus: Locus("was_hit"), mode: Level, gain: 0.3, chem: "pain"),
@@ -156,8 +176,19 @@
         AttentionInstinct(input: "was_hit", category: "sprite", weight: 1.0),
         // Crowding draws attention to sprites.
         AttentionInstinct(input: "crowdedness", category: "sprite", weight: 1.0),
-        // So does arousal, in a grown sprite (M2 design §10).
+        // So does arousal, in a grown sprite (M2 design §10), but not to its
+        // kin (§15.5).
         AttentionInstinct(input: "arousal", category: "sprite", weight: 1.0),
+        AttentionInstinct(input: "arousal", category: "sprite", whom: Kin, weight: -1.0),
+        // Missing one of its family draws its eye to that one: its young,
+        // its parents while it's young, its partner, or its egg; and anxiety
+        // draws it to all its family (M2 design §15.6).
+        AttentionInstinct(input: "young_away", category: "sprite", whom: Young, weight: 1.0),
+        AttentionInstinct(input: "parent_away", category: "sprite", whom: Parent, weight: 1.0),
+        AttentionInstinct(input: "partner_away", category: "sprite", whom: Partner, weight: 1.0),
+        AttentionInstinct(input: "anxiety", category: "sprite", whom: Family, weight: 1.0),
+        AttentionInstinct(input: "anxiety", category: "egg", whom: Family, weight: 1.0),
+        AttentionInstinct(input: "egg_away", category: "egg", whom: Family, weight: 1.0),
 
         // Each need leads to its action, on whatever is attended: hunger to
         // eating, thirst to drinking. Trying it on the wrong thing does nothing.
@@ -181,14 +212,20 @@
         // should cure. The young don't fight for room (M2 design §9.5).
         Instinct(inputs: [("crowdedness", false)], verb: Retreat, weight: 1.0),
         Instinct(inputs: [("crowdedness", false), ("attended_sprite", false)], verb: Hit, weight: 0.6, from: Adult),
-        // A cornered sprite, looking at a sprite, turns on it.
+        // A cornered sprite, looking at a sprite, turns on it. None hits
+        // its family, though a family together is a crowd (M2 design §15.6).
         Instinct(inputs: [("cornered", false), ("attended_sprite", false)], verb: Hit, weight: 1.0),
+        Instinct(inputs: [("target_family", false)], verb: Hit, weight: -1.0),
         // Calling costs energy, so a sprite shies from it, unless it's
         // aroused with no adult of the other sex seen or heard (M2 design
-        // §15.1).
+        // §15.1), or anxious, to keep in touch with its family (§15.6).
         Instinct(inputs: [("always", false)], verb: Call, weight: -0.5),
         Instinct(inputs: [("arousal", false), ("female", true), ("female_near", true)], verb: Call, weight: 1.0),
         Instinct(inputs: [("arousal", false), ("female", false), ("male_near", true)], verb: Call, weight: 1.0),
+        Instinct(inputs: [("anxiety", false)], verb: Call, weight: 0.8),
+        // An anxious sprite goes to its family, in sight, heard calling, or
+        // its egg where it last saw it (§15.6).
+        Instinct(inputs: [("anxiety", false), ("target_family", false)], verb: Approach, weight: 1.0),
         // An aroused sprite plays with a stranger of the other sex, in sight
         // or heard calling, so they get to know each other (§15.2), and
         // goes to its partner.

@@ -19,6 +19,7 @@ use crate::data::DataPack;
 use crate::ecology::{self, holds_without_drawing, new_object, square};
 use crate::events::{DeathCause, Emptied, Event, EventKind};
 use crate::expression::{Expression, expressions};
+use crate::family;
 use crate::generate::{generate, place_objects, place_sprites};
 use crate::genome::{GeneView, Genome};
 use crate::inheritance;
@@ -530,6 +531,12 @@ impl<'a> SpriteView<'a> {
     pub fn heard(&self) -> Vec<(EntityId, Pos)> {
         let heard = self.sprite.heard.iter();
         heard.map(|heard| (heard.caller, heard.from)).collect()
+    }
+
+    /// Whether it sees `pos`: within its sense radius, in any direction
+    /// (M2 design §15).
+    pub fn sees(&self, pos: Pos) -> bool {
+        self.sprite.sees(pos)
     }
 
     /// Whether `other` is its close kin: a parent, a child, or a brother
@@ -1190,7 +1197,8 @@ impl World {
         self.apply_commands(&mut events); // 1
         self.run_environment(&mut events); // 2
         self.grow(&mut events); // 3, first
-        let company = courtship::look_round(&mut self.state, &self.data, &mut events); // 3
+        let mut company = courtship::look_round(&mut self.state, &self.data, &mut events); // 3
+        family::look_for_family(&mut self.state, &self.data, &mut company);
         let dying = self.run_biochemistry(&company); // 3
         self.run_learning(&dying, &company, &mut events); // 4
         self.sense_and_decide(&dying, &mut events); // 5
@@ -1473,6 +1481,7 @@ impl World {
                     male_near: company.male_near,
                     partner_near: company.partner_near,
                     paired: sprite.partner().is_some(),
+                    family: company.family,
                 };
                 (id, senses)
             })

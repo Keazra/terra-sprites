@@ -963,22 +963,22 @@ fn copying_errors_flaws_and_crossover_are_shares_and_large_changes_at_least_none
     ] {
         assert_invalid_physiology(mutation, &format!("mutation: ({to}),"), word);
     }
-    let flaws = "flaws: (arise: 0.005, founders: 0.043, health: 0.5, wear: 0.05),";
+    let flaws = "flaws: (arise: 0.004, founders: 0.035, health: 0.5, wear: 0.05),";
     for (to, word) in [
         (
-            "arise: 1.5, founders: 0.043, health: 0.5, wear: 0.05",
+            "arise: 1.5, founders: 0.035, health: 0.5, wear: 0.05",
             "flaws.arise",
         ),
         (
-            "arise: 0.005, founders: -0.1, health: 0.5, wear: 0.05",
+            "arise: 0.004, founders: -0.1, health: 0.5, wear: 0.05",
             "flaws.founders",
         ),
         (
-            "arise: 0.005, founders: 0.043, health: 2.0, wear: 0.05",
+            "arise: 0.004, founders: 0.035, health: 2.0, wear: 0.05",
             "flaws.health",
         ),
         (
-            "arise: 0.005, founders: 0.043, health: 0.5, wear: -0.05",
+            "arise: 0.004, founders: 0.035, health: 0.5, wear: -0.05",
             "flaws.wear",
         ),
     ] {
@@ -991,22 +991,22 @@ fn copying_errors_flaws_and_crossover_are_shares_and_large_changes_at_least_none
 fn copy_and_change_s_chances_are_shares_that_add_up_to_at_most_one() {
     // M2 design §13: one draw a gene decides which, if any, happens to it,
     // and a genome may grow at least as long as the starter.
-    let line = "copy_and_change: (doubled: 0.00039, lost: 0.00039, changed: 0.00039, on_copy: 0.75, longest: 2.0),";
+    let line = "copy_and_change: (doubled: 0.00029, lost: 0.00029, changed: 0.00029, on_copy: 0.75, longest: 2.0),";
     for (to, word) in [
         (
-            "doubled: 1.5, lost: 0.00039, changed: 0.00039, on_copy: 0.75, longest: 2.0",
+            "doubled: 1.5, lost: 0.00029, changed: 0.00029, on_copy: 0.75, longest: 2.0",
             "copy_and_change.doubled",
         ),
         (
-            "doubled: 0.00039, lost: -0.1, changed: 0.00039, on_copy: 0.75, longest: 2.0",
+            "doubled: 0.00029, lost: -0.1, changed: 0.00029, on_copy: 0.75, longest: 2.0",
             "copy_and_change.lost",
         ),
         (
-            "doubled: 0.00039, lost: 0.00039, changed: 2.0, on_copy: 0.75, longest: 2.0",
+            "doubled: 0.00029, lost: 0.00029, changed: 2.0, on_copy: 0.75, longest: 2.0",
             "copy_and_change.changed",
         ),
         (
-            "doubled: 0.00039, lost: 0.00039, changed: 0.00039, on_copy: 1.5, longest: 2.0",
+            "doubled: 0.00029, lost: 0.00029, changed: 0.00029, on_copy: 1.5, longest: 2.0",
             "copy_and_change.on_copy",
         ),
         (
@@ -1014,7 +1014,7 @@ fn copy_and_change_s_chances_are_shares_that_add_up_to_at_most_one() {
             "add up to more than 1",
         ),
         (
-            "doubled: 0.00039, lost: 0.00039, changed: 0.00039, on_copy: 0.75, longest: 0.5",
+            "doubled: 0.00029, lost: 0.00029, changed: 0.00029, on_copy: 0.75, longest: 0.5",
             "copy_and_change.longest",
         ),
     ] {
@@ -1231,7 +1231,8 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
     // State inputs carry on from 64, past the IDs kept for Target inputs,
     // with breeding's from 66, its body language, and longing (M2 design
     // §10); then courtship's, its body language, and what a sprite knows of
-    // the one it attends to (§15).
+    // the one it attends to (§15); then families' anxiety and senses, and
+    // whether the one it attends to is family (§15.6).
     expected.extend([
         (64, "cornered"),
         (65, "fruitless"),
@@ -1257,6 +1258,13 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
         (85, "target_familiar"),
         (86, "target_partner"),
         (87, "target_kin"),
+        (88, "anxiety"),
+        (89, "egg_away"),
+        (90, "egg_alone"),
+        (91, "young_away"),
+        (92, "parent_away"),
+        (93, "partner_away"),
+        (94, "target_family"),
     ]);
     assert_eq!(inputs, expected);
 }
@@ -1329,6 +1337,8 @@ fn a_brain_input_reads_a_drive_hormone_body_sensor_or_pulse_that_exists() {
         ("Target(Familiar)", "own mind"),
         ("Target(Partner)", "own mind"),
         ("Differs(Kin)", "own mind"),
+        // So is who's its family (§15.6).
+        ("Target(Family)", "own mind"),
     ] {
         let text = format!(r#"(inputs: [(id: 1, name: "odd", reads: {reads})], needs: [])"#);
         assert_invalid("brain_io.ron", &text, word);
@@ -1385,7 +1395,8 @@ fn the_needs_are_the_drives_whose_relief_teaches() {
             "boredom",
             "loneliness",
             "crowdedness",
-            "arousal"
+            "arousal",
+            "anxiety"
         ],
         "pain is a drive but not a need"
     );
@@ -1406,7 +1417,8 @@ fn the_drives_are_the_signal_chemicals_but_reward_and_punishment() {
             "boredom",
             "loneliness",
             "crowdedness",
-            "arousal"
+            "arousal",
+            "anxiety"
         ]
     );
 }

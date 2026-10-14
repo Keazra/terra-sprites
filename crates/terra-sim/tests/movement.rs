@@ -143,6 +143,7 @@ fn a_sprite_told_to_wander_to_a_spot_walks_there_a_step_at_a_time_and_arrives() 
                         progress: Progress::Ended(Outcome::Applied),
                         remembered: false,
                         heard: None,
+                        egg_at: None,
                     }
                 }
             ),

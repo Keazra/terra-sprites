@@ -275,7 +275,7 @@ fn the_aim_line_is_yellow_dots_ending_in_a_small_circle_or_semicolons_and_an_o()
 
 #[test]
 fn each_theme_colours_every_drive_of_the_built_in_pack_as_the_design_table_says() {
-    // Design §6.3, and arousal M2 design §10.
+    // Design §6.3, arousal M2 design §10, and anxiety §15.8.
     let expected = [
         ("hunger", Color::Yellow),
         ("thirst", Color::Cyan),
@@ -285,6 +285,7 @@ fn each_theme_colours_every_drive_of_the_built_in_pack_as_the_design_table_says(
         ("loneliness", Color::Magenta),
         ("crowdedness", Color::LightRed),
         ("arousal", Color::LightMagenta),
+        ("anxiety", Color::LightGreen),
     ];
     let pack = pack();
     let drives: Vec<&str> = pack.drives().collect();

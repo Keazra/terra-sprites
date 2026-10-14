@@ -8,7 +8,7 @@ What a sprite's brain can feel (design §5.2). The file has three parts.
 |---|---|
 | `id` | Permanent, never reused. 1 to 35, then from 64: IDs 36 to 63 are kept for the Target inputs. |
 | `name` | What genomes call it. |
-| `reads` | `Chem("name")` for a drive or a hormone, or `Locus("name")` for a body sensor or a pulse. Wrapped in `Target(...)`, such as `Target(Chem("arousal"))`, it reads the same in the body of the sprite it's looking at: its body language (M2 design §10). Wrapped in `Differs(...)`, such as `Differs(Locus("female"))`, it reads how far that sprite's level differs from its own. Both are 0 while it looks at anything but a sprite, such as an egg. A sprite heard calling, out of sight, reads as if it were in sight (M2 design §15.1). Three read what the sprite knows of the one it's looking at, rather than its body (M2 design §15): `Familiar`, how well it knows it, from 0 to 1; `Partner`, 1 if it's its partner; and `Kin`, 1 if it's its parent, its young, or its brother or sister. Any input that reads breeding's drive ([physiology](physiology.md)'s `breeding.drive`), in the sprite or the one it looks at, is 0 unless both are grown up (M2 design §5). |
+| `reads` | `Chem("name")` for a drive or a hormone, or `Locus("name")` for a body sensor or a pulse. Wrapped in `Target(...)`, such as `Target(Chem("arousal"))`, it reads the same in the body of the sprite it's looking at: its body language (M2 design §10). Wrapped in `Differs(...)`, such as `Differs(Locus("female"))`, it reads how far that sprite's level differs from its own. Both are 0 while it looks at anything but a sprite, such as an egg. A sprite heard calling, out of sight, reads as if it were in sight (M2 design §15.1). Four read what the sprite knows of the one it's looking at, rather than its body (M2 design §15): `Familiar`, how well it knows it, from 0 to 1; `Partner`, 1 if it's its partner; `Kin`, 1 if it's its parent, its young, or its brother or sister; and `Family`, 1 if it's its family: its partner, its parent while it's young, its young, or an egg of its own (§15.6). Any input that reads breeding's drive ([physiology](physiology.md)'s `breeding.drive`), in the sprite or the one it looks at, is 0 unless both are grown up (M2 design §5). |
 
 The brain can't read physical chemicals (it feels the body only through drives), `reward` and `punishment` (learning uses them), `moving` and `resting` (they'd feed an action back into itself) or receptor targets. Reading one is an error.
 
@@ -24,10 +24,10 @@ The new `chill` drive from [chemicals](chemicals.md), felt by the brain as a Sta
 
 <!-- example: brain_io -->
 ```ron
-(id: 88, name: "chill", reads: Chem("chill")),
+(id: 95, name: "chill", reads: Chem("chill")),
 ```
 
 <!-- example: brain_io_needs -->
 ```ron
-needs: ["hunger", "thirst", "tiredness", "boredom", "loneliness", "crowdedness", "arousal", "chill"],
+needs: ["hunger", "thirst", "tiredness", "boredom", "loneliness", "crowdedness", "arousal", "anxiety", "chill"],
 ```

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::ageing::{LifeStage, Switch, frailty};
 use crate::data::DataPack;
 use crate::expression::{Expression, breaks_restrictions, breaks_switching, expressions};
-use crate::genome::{Gene, GeneView, Genome};
+use crate::genome::{Gene, GeneView, Genome, Whom};
 use crate::inheritance::{Built, Inherited, flaws_of, longest, tidied, what_it_does};
 use crate::random::{chance, uniform, unit};
 use crate::registry::Verb;
@@ -210,13 +210,16 @@ enum Aspect {
     AttentionInput,
     /// What an attention instinct draws the eye to.
     Category,
+    /// Whom in it an attention instinct is about (§15.6).
+    Whom,
     /// The life stages it works in.
     Switch,
 }
 
 /// `gene`, working as `switch`, changed in one thing it does (M2 design
 /// §13), with when it then works: one of an instinct's inputs or its verb,
-/// what draws an attention instinct's eye or what to, or the life stages a
+/// what draws an attention instinct's eye or what to, and whom in it (§15.6),
+/// or the life stages a
 /// gene works in, each as likely as the others. A gene that may not switch,
 /// such as a trait (§9.2), has no life stages to change. Each choice is one
 /// the pack has, other than the one the gene had, and none makes a gene
@@ -230,7 +233,9 @@ fn changed(
 ) -> Option<(Gene, Switch)> {
     let mut aspects = match gene {
         Gene::Instinct { .. } => vec![Aspect::Input, Aspect::Verb],
-        Gene::AttentionInstinct { .. } => vec![Aspect::AttentionInput, Aspect::Category],
+        Gene::AttentionInstinct { .. } => {
+            vec![Aspect::AttentionInput, Aspect::Category, Aspect::Whom]
+        }
         _ => Vec::new(),
     };
     let switched = Switch {
@@ -266,6 +271,7 @@ fn changed(
             Gene::AttentionInstinct {
                 input,
                 category,
+                whom,
                 weight,
             },
         ) => {
@@ -277,6 +283,7 @@ fn changed(
                     let reading = Gene::AttentionInstinct {
                         input: other,
                         category: *category,
+                        whom: *whom,
                         weight: *weight,
                     };
                     other != *input && breaks_restrictions(&reading, data).is_none()
@@ -292,6 +299,13 @@ fn changed(
                 .filter(|other| other != category)
                 .collect();
             *category = *pick(&others, rng)?;
+        }
+        (Aspect::Whom, Gene::AttentionInstinct { whom, .. }) => {
+            let others: Vec<Whom> = Whom::ALL
+                .into_iter()
+                .filter(|other| other != whom)
+                .collect();
+            *whom = *pick(&others, rng)?;
         }
         (Aspect::Switch, _) => {
             let stages = [LifeStage::Young, LifeStage::Adult, LifeStage::Old];
@@ -497,8 +511,8 @@ mod tests {
     /// `physiology.ron` writes them.
     const MUTATION: &str =
         "    mutation: (chance: 0.01, small: 0.2, large: (share: 0.75, most: 2.0)),\n";
-    const FLAWS: &str = "    flaws: (arise: 0.005, founders: 0.043, health: 0.5, wear: 0.05),\n";
-    const COPY_AND_CHANGE: &str = "    copy_and_change: (doubled: 0.00039, lost: 0.00039, changed: 0.00039, on_copy: 0.75, longest: 2.0),\n";
+    const FLAWS: &str = "    flaws: (arise: 0.004, founders: 0.035, health: 0.5, wear: 0.05),\n";
+    const COPY_AND_CHANGE: &str = "    copy_and_change: (doubled: 0.00029, lost: 0.00029, changed: 0.00029, on_copy: 0.75, longest: 2.0),\n";
 
     /// The built-in pack without copy and change, so copying keeps each gene
     /// where it is and changes only values.
@@ -691,7 +705,7 @@ mod tests {
     #[test]
     fn a_founder_carries_about_three_flaws_all_hidden() {
         // M2 design §12: each gene of the starter's that can weaken has a
-        // flaw in one copy with the chance `flaws.founders` (0.043).
+        // flaw in one copy with the chance `flaws.founders` (0.035).
         let data = builtin();
         let starter = data.starter();
         let can_weaken = starter
@@ -711,7 +725,7 @@ mod tests {
             }
         }
         let each = carried as f32 / 1_000.0;
-        let expected = 0.043 * can_weaken as f32;
+        let expected = 0.035 * can_weaken as f32;
         assert!(
             (2.0..4.0).contains(&expected),
             "{can_weaken} genes can weaken"
@@ -792,7 +806,7 @@ mod tests {
             &[
                 ("mutation: (chance: 0.01,", "mutation: (chance: 1.0,"),
                 (
-                    "flaws: (arise: 0.005, founders: 0.043,",
+                    "flaws: (arise: 0.004, founders: 0.035,",
                     "flaws: (arise: 1.0, founders: 1.0,",
                 ),
                 (COPY_AND_CHANGE, rules),
@@ -907,7 +921,7 @@ mod tests {
 
     #[test]
     fn about_one_hatchling_of_the_starter_s_in_ten_has_a_whole_gene_doubled_lost_or_changed() {
-        // M2 design §13: each with the chance 0.00039 a gene, so about one
+        // M2 design §13: each with the chance 0.00029 a gene, so about one
         // hatchling in ten, each kind as likely as the others, but that a
         // trait has nothing to change.
         let data = builtin();
@@ -1094,11 +1108,13 @@ mod tests {
                 Gene::AttentionInstinct {
                     input: old,
                     category: was_on,
+                    whom: was_about,
                     weight: was,
                 },
                 Gene::AttentionInstinct {
                     input: new,
                     category: is_on,
+                    whom: is_about,
                     weight: is,
                 },
             ) => {
@@ -1111,6 +1127,9 @@ mod tests {
                 if was_on != is_on {
                     differ.push("category");
                 }
+                if was_about != is_about {
+                    differ.push("whom");
+                }
             }
             (was, now) => {
                 if was != now {
@@ -1122,9 +1141,10 @@ mod tests {
     }
 
     #[test]
-    fn a_changed_gene_changes_one_input_action_category_or_when_it_works() {
+    fn a_changed_gene_changes_one_input_action_category_whom_or_when_it_works() {
         // M2 design §13: what an instinct reacts to or its action, what
-        // draws the eye to what, or the life stages a gene works in, each a
+        // draws the eye to what and whom (§15.6), or the life stages a gene
+        // works in, each a
         // choice the pack has; a trait and a starting level have none to
         // change.
         let data = whole_genes_only(0.0, 0.0, 1.0, 0.0);
@@ -1185,6 +1205,7 @@ mod tests {
             (0, "switch"),
             (1, "attention input"),
             (1, "category"),
+            (1, "whom"),
             (1, "switch"),
             (2, "switch"),
             (3, "input"),

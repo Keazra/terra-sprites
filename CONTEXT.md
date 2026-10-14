@@ -352,19 +352,19 @@ The hormone a female's body needs for Mate to lay an egg: at least physiology's 
 _Avoid_: readiness (fertile is the body's ready), heat, oestrus
 
 **Partner** (M2, Slice 32):
-The sprite it had its latest egg with. In the starter genes partners court and mate only each other, and an aroused one goes to the other; keeping near each other the rest of the time is planned for Slice 32's families. A partner is freed when the other dies, or after an hour neither seeing nor hearing the other, and may pair again; one that died is still named until the sprite pairs again.
+The sprite it had its latest egg with. In the starter genes partners court and mate only each other, an aroused one goes to the other, and one out of sight makes it anxious, a little (see **Family**). A partner is freed when the other dies, or after an hour neither seeing nor hearing the other, and may pair again; one that died is still named until the sprite pairs again.
 _Avoid_: mate (that's the action), spouse, bond
 
 **Kin** (M2, Slice 32):
 A sprite's parents, its young, and its brothers and sisters, the sprites with a parent in common. The starter genes weigh strongly against courting kin, but nothing forbids it.
 _Avoid_: relatives, family (family is the household)
 
-**Family** (M2, Slice 32, planned):
-A sprite's partner, parents, young and eggs: those anxiety draws it back to. An attention instinct can name its family, and then draws the eye to them and not to others of their kind.
+**Family** (M2, Slice 32):
+A sprite's partner, its parents while it's young, its young, and its eggs: those anxiety draws it back to. An attention instinct can name whom it's about: its family, its kin, or one kind of family, its partner, its parents or its young. Then it draws the eye to them and not to others of their kind. A parent remembers where it last saw each egg of its own, and goes back there.
 _Avoid_: clan, herd, kin (kin is by blood)
 
-**Anxiety** (M2, Slice 32, planned):
-A drive and second-order need that rises while a sprite's family is out of sight: fast for an egg it left alone, slowly for one it left with its partner, and in a young sprite while no parent is in sight. Finding them eases it. It's care, so it never reads the breeding drive.
+**Anxiety** (M2, Slice 32):
+A drive and second-order need that rises while a sprite's family is out of sight, as the starter genes have it: fast for an egg it left alone, more slowly for one it left with its partner, for its young, and in a young sprite while no parent is in sight; a little for its partner. Finding them eases it, and hunger and thirst drain it. It's care, so it never reads the breeding drive.
 _Avoid_: fear (fear is of someone), worry, loneliness (that's for any company)
 
 **Grief** (M2, Slice 32):

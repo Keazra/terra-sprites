@@ -18,7 +18,7 @@ const EVERY_VALUE_WRONG: (&str, &str) = ("mutation: (chance: 0.01,", "mutation: 
 
 /// The built-in physiology's copy and change, as its file begins it.
 const COPY_AND_CHANGE: &str =
-    "copy_and_change: (doubled: 0.00039, lost: 0.00039, changed: 0.00039,";
+    "copy_and_change: (doubled: 0.00029, lost: 0.00029, changed: 0.00029,";
 
 /// The change to the built-in physiology that copies whole genes as
 /// `rules` say.
@@ -42,7 +42,7 @@ fn with_flaws(changes: &str) -> DataPack {
         "physiology.ron",
         &[
             (
-                "flaws: (arise: 0.005, founders: 0.043,",
+                "flaws: (arise: 0.004, founders: 0.035,",
                 &format!("flaws: ({changes}"),
             ),
             (from, &to),
@@ -112,7 +112,7 @@ fn a_gene_flawed_in_both_copies_is_born_broken_at_half_health_and_brings_old_age
     // M2 design §12: with every copy flawed as it's copied, each of the
     // egg's genes that can weaken is broken.
     let female = format!("{ALONE}{FEMALE}");
-    let data = with_flaws("arise: 1.0, founders: 0.043,");
+    let data = with_flaws("arise: 1.0, founders: 0.035,");
     let mut world = family_in(data, &[(at(2, 1), &female)], &[], 1);
     let Laying { egg, by, .. } = laid(&mut world, 50).expect("she laid an egg");
     hatch(&mut world, egg);
@@ -161,7 +161,7 @@ fn the_first_sprites_carry_a_few_hidden_flaws_and_none_broken() {
 #[test]
 fn a_sprite_placed_from_the_starter_carries_hidden_flaws_and_one_from_a_file_none() {
     // M2 design §12: one from a genome file has the genes it was given.
-    let data = with_flaws("arise: 0.005, founders: 1.0,");
+    let data = with_flaws("arise: 0.004, founders: 1.0,");
     let mut world = family_in(data, &[(at(0, 0), "")], &[], 1);
     let file = world.sprite_at(at(0, 0)).unwrap().genome().clone();
     for (tile, genome) in [(at(3, 2), None), (at(5, 2), Some(file))] {
@@ -237,7 +237,7 @@ fn copying_errors_flaws_and_copy_changes_load_and_replay_the_same() {
         "physiology.ron",
         &[
             EVERY_VALUE_WRONG,
-            ("flaws: (arise: 0.005,", "flaws: (arise: 0.5,"),
+            ("flaws: (arise: 0.004,", "flaws: (arise: 0.5,"),
             (from, &to),
             LONE,
         ],

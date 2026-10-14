@@ -9,6 +9,7 @@ use crate::ageing::{LifeStage, frailty, health_of};
 use crate::data::DataPack;
 use crate::events::DeathCause;
 use crate::expression::{Expression, expressions};
+use crate::family::FamilySenses;
 use crate::genome::{EmitterMode, Gene, Genome, LocusRef, Term};
 use crate::objects::EntityId;
 use crate::physiology::halving_factor;
@@ -504,6 +505,8 @@ pub(crate) struct Senses {
     /// it has a partner (M2 design §15.4).
     pub(crate) partner_near: bool,
     pub(crate) paired: bool,
+    /// What it senses of its family (M2 design §15.6).
+    pub(crate) family: FamilySenses,
 }
 
 /// Step 3 for one sprite (design §4.4). Returns whether its injury has
@@ -683,6 +686,15 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
             * fraction(indices.hydration)
             * (1.0 - fraction(indices.injury))
             * program.vigour;
+    }
+    if let Some(families) = indices.families {
+        let level = |sensed: bool| if sensed { 1.0 } else { 0.0 };
+        let family = senses.family;
+        loci[families.egg_away] = level(family.egg_away);
+        loci[families.egg_alone] = level(family.egg_alone);
+        loci[families.young_away] = level(family.young_away);
+        loci[families.parent_away] = level(family.parent_away);
+        loci[families.partner_away] = level(family.partner_away);
     }
 }
 
@@ -1224,6 +1236,42 @@ mod tests {
         sprite.step_with(adult());
         assert_eq!(sprite.locus("paired"), 0.0);
         assert_eq!(sprite.locus("partner_near"), 0.0);
+    }
+
+    #[test]
+    fn family_sensors_report_family_out_of_sight() {
+        // M2 design §15.6.
+        let mut sprite = Subject::quiet(&[]);
+        sprite.step_with(Senses {
+            family: FamilySenses {
+                egg_away: true,
+                egg_alone: true,
+                young_away: true,
+                parent_away: true,
+                partner_away: true,
+            },
+            ..adult()
+        });
+        for sensor in [
+            "egg_away",
+            "egg_alone",
+            "young_away",
+            "parent_away",
+            "partner_away",
+        ] {
+            assert_eq!(sprite.locus(sensor), 1.0, "{sensor}");
+        }
+        sprite.step_with(Senses {
+            family: FamilySenses {
+                egg_away: true,
+                ..FamilySenses::default()
+            },
+            ..adult()
+        });
+        assert_eq!(sprite.locus("egg_away"), 1.0);
+        for sensor in ["egg_alone", "young_away", "parent_away", "partner_away"] {
+            assert_eq!(sprite.locus(sensor), 0.0, "{sensor}");
+        }
     }
 
     #[test]

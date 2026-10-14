@@ -4,7 +4,8 @@
 // `Target(...)` reads the same in the body of the sprite attended to, its body
 // language, and one that reads `Differs(...)` how far that differs from the
 // sprite's own (M2 design §10). `Familiar`, `Partner` and `Kin` read what the
-// sprite knows of the one it attends to (M2 design §15).
+// sprite knows of the one it attends to (M2 design §15), and `Family` whether
+// what it attends to is its family (§15.6).
 //
 // Not brain inputs: physical chemicals (the brain feels the body only through
 // drives), reward and punishment (learning signals), the `moving` and
@@ -91,12 +92,24 @@ inputs: [
     (id: 85, name: "target_familiar",    reads: Familiar),
     (id: 86, name: "target_partner",     reads: Partner),
     (id: 87, name: "target_kin",         reads: Kin),
+
+    // Families (M2 design §15.6): the drive to keep near family, and what
+    // the sprite senses of its family out of sight.
+    (id: 88, name: "anxiety",       reads: Chem("anxiety")),
+    (id: 89, name: "egg_away",      reads: Locus("egg_away")),
+    (id: 90, name: "egg_alone",     reads: Locus("egg_alone")),
+    (id: 91, name: "young_away",    reads: Locus("young_away")),
+    (id: 92, name: "parent_away",   reads: Locus("parent_away")),
+    (id: 93, name: "partner_away",  reads: Locus("partner_away")),
+    // 1 while what it attends to is its family: its partner, its parents
+    // while it's young, its young, or an egg of its own.
+    (id: 94, name: "target_family", reads: Family),
 ],
 
 // The needs (design v16 §5.2, §5.6): the drives whose relief teaches a
 // sprite what things are good for, each a State input that reads a drive.
 // Pain is a drive but not a need: its fall is a hurt fading, not relief.
-needs: ["hunger", "thirst", "tiredness", "boredom", "loneliness", "crowdedness", "arousal"],
+needs: ["hunger", "thirst", "tiredness", "boredom", "loneliness", "crowdedness", "arousal", "anxiety"],
 
 // The first-order needs (design v21 §5.2, §5.6): the needs that come before a
 // sprite's likes. The more one presses, the less what it merely likes pulls,

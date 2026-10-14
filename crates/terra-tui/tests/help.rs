@@ -158,6 +158,7 @@ fn the_legend_shows_each_drive_s_colour_and_each_emote() {
             ("loneliness", Color::Magenta),
             ("crowdedness", Color::LightRed),
             ("arousal", Color::LightMagenta),
+            ("anxiety", Color::LightGreen),
             ("none", Color::White),
         ]
         .map(|(name, colour)| (name.to_string(), colour));

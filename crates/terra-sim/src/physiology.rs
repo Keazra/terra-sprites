@@ -1088,6 +1088,9 @@ pub(crate) struct Indices {
     /// What calls and courtship read and write (M2 design §15), if the pack
     /// breeds and has them all: a pack from before them doesn't.
     pub(crate) courtship: Option<CourtshipIndices>,
+    /// What families write (M2 design §15.6), if the pack has courtship and
+    /// them all: a pack from before them doesn't.
+    pub(crate) families: Option<FamilyIndices>,
     /// The need that drives breeding, `breeding.drive`, by its place among
     /// the needs, if it's one: it works only between adults, whether or not
     /// the pack breeds (M2 design §5).
@@ -1129,6 +1132,19 @@ pub(crate) struct CourtshipIndices {
     pub(crate) condition: usize,
     /// The hormone a female must have past `breeding.receptive` to mate.
     pub(crate) receptivity: usize,
+}
+
+/// The body sensors families write (M2 design §15.6): 1 while an egg of
+/// its own is out of sight, 1 while one of those was left alone, 1 while a
+/// young one of its own is out of sight, 1 while it's young and sees no
+/// living parent, and 1 while its partner is out of sight.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct FamilyIndices {
+    pub(crate) egg_away: usize,
+    pub(crate) egg_alone: usize,
+    pub(crate) young_away: usize,
+    pub(crate) parent_away: usize,
+    pub(crate) partner_away: usize,
 }
 
 impl Indices {
@@ -1264,6 +1280,31 @@ impl Indices {
             }),
             _ => None,
         };
+        let sensor_if = |name: &str| locus(name, LocusKind::BodySensor);
+        let families = match (
+            courtship,
+            sensor_if("egg_away"),
+            sensor_if("egg_alone"),
+            sensor_if("young_away"),
+            sensor_if("parent_away"),
+            sensor_if("partner_away"),
+        ) {
+            (
+                Some(_),
+                Some(egg_away),
+                Some(egg_alone),
+                Some(young_away),
+                Some(parent_away),
+                Some(partner_away),
+            ) => Some(FamilyIndices {
+                egg_away,
+                egg_alone,
+                young_away,
+                parent_away,
+                partner_away,
+            }),
+            _ => None,
+        };
         Ok(Indices {
             energy: chem("energy")?,
             hydration: chem("hydration")?,
@@ -1289,6 +1330,7 @@ impl Indices {
             shocked: pulse("shocked")?,
             breeding,
             courtship,
+            families,
             drive: drive_place,
         })
     }
@@ -1341,7 +1383,7 @@ mod tests {
                     "",
                 ),
                 (
-                    "flaws: (arise: 0.005, founders: 0.043, health: 0.5, wear: 0.05),",
+                    "flaws: (arise: 0.004, founders: 0.035, health: 0.5, wear: 0.05),",
                     "",
                 ),
             ],

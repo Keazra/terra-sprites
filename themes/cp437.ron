@@ -46,6 +46,7 @@
         "loneliness":  magenta,
         "crowdedness": light_red,
         "arousal":     light_magenta,
+        "anxiety":     light_green,
     },
     // Objects, by type name from the data pack's `objects.ron`, then visual
     // state. An object whose state isn't listed is drawn with its "default"

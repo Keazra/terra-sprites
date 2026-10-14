@@ -16,8 +16,50 @@ use crate::registry::{BrainParam, CategoryId, ChemId, LocusId, Trait, Verb};
 /// and format 2 for one with a gene that switches with life stage (M2
 /// design §9.2), which they refuse.
 const FORMAT: u32 = 2;
-/// The payload version of every gene type this build knows.
-const VERSION: u8 = 1;
+/// The newest payload version this build reads of gene type `type_id`: 2
+/// for an attention instinct, which can name whom it's about (M2 design
+/// §15.6), and 1 for every other type.
+fn newest(type_id: u16) -> u8 {
+    if type_id == 9 { 2 } else { 1 }
+}
+
+/// Whom an attention instinct is about (M2 design §15.6): anything of its
+/// category, or only the sprite's family in it, its kin, or one kind of
+/// family: its partner, its parents or its young.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Whom {
+    /// Anything of its category.
+    #[default]
+    Any,
+    /// The sprite's family: its partner, its parents while it's young, its
+    /// young, and its eggs.
+    Family,
+    /// Its close kin: its parents, its young and its eggs, and its brothers
+    /// and sisters.
+    Kin,
+    /// Its partner.
+    Partner,
+    /// Its parents, while it's young.
+    Parent,
+    /// Its young.
+    Young,
+}
+
+impl Whom {
+    pub(crate) const ALL: [Whom; 6] = [
+        Whom::Any,
+        Whom::Family,
+        Whom::Kin,
+        Whom::Partner,
+        Whom::Parent,
+        Whom::Young,
+    ];
+
+    /// Whether it's about anything of its category.
+    pub(crate) fn is_any(&self) -> bool {
+        *self == Whom::Any
+    }
+}
 
 /// A sprite's genes, in order. A genome is checked against the data pack it
 /// was read with, and must be used with that pack.
@@ -88,10 +130,13 @@ pub(crate) enum Gene {
         verb: Verb,
         weight: f32,
     },
-    /// Type 9: a State input starts with `weight` towards attending to `category`.
+    /// Type 9: a State input starts with `weight` towards attending to
+    /// `category`, or only to `whom` in it (M2 design §15.6).
     AttentionInstinct {
         input: InputId,
         category: CategoryId,
+        #[serde(default, skip_serializing_if = "Whom::is_any")]
+        whom: Whom,
         weight: f32,
     },
     /// A gene this build can't read: an unknown type, or a payload version
@@ -113,6 +158,8 @@ pub(crate) enum AsWritten {
     AttentionInstinct {
         input: String,
         category: String,
+        #[serde(default, skip_serializing_if = "Whom::is_any")]
+        whom: Whom,
         weight: f32,
     },
     /// An instinct by name whose inputs include a missing category's
@@ -202,10 +249,12 @@ pub enum GeneView<'a> {
         verb: Verb,
         weight: f32,
     },
-    /// Type 9: an input starts with `weight` towards attending to a category.
+    /// Type 9: an input starts with `weight` towards attending to a
+    /// category, or only to `whom` in it (M2 design §15.6).
     AttentionInstinct {
         input: &'a str,
         category: &'a str,
+        whom: Whom,
         weight: f32,
     },
     /// A gene this build can't read, with the length of its payload.
@@ -397,10 +446,12 @@ impl Gene {
             Gene::AttentionInstinct {
                 input: id,
                 category,
+                whom,
                 weight,
             } => GeneView::AttentionInstinct {
                 input: input(id),
                 category: &data.category(category).expect("a checked gene").name,
+                whom,
                 weight,
             },
             Gene::Unknown {
@@ -420,10 +471,12 @@ impl Gene {
             Gene::Unmatched(AsWritten::AttentionInstinct {
                 ref input,
                 ref category,
+                whom,
                 weight,
             }) => GeneView::AttentionInstinct {
                 input,
                 category,
+                whom,
                 weight,
             },
             Gene::Unmatched(AsWritten::Instinct {
@@ -580,6 +633,7 @@ impl Gene {
                 input: id,
                 category,
                 weight,
+                ..
             } => {
                 input(id)?;
                 data.category(category).ok_or_else(|| {
@@ -679,11 +733,13 @@ impl Gene {
             Gene::AttentionInstinct {
                 input: id,
                 category,
+                whom,
                 weight,
             } => format!(
-                "AttentionInstinct(input: {:?}, category: {:?}, weight: {weight:?})",
+                "AttentionInstinct(input: {:?}, category: {:?}, {}weight: {weight:?})",
                 input(id),
-                data.category(category).expect("a checked gene").name
+                data.category(category).expect("a checked gene").name,
+                whom_ron(whom)
             ),
             Gene::Unknown {
                 type_id,
@@ -701,9 +757,11 @@ impl Gene {
             Gene::Unmatched(AsWritten::AttentionInstinct {
                 ref input,
                 ref category,
+                whom,
                 weight,
             }) => format!(
-                "AttentionInstinct(input: {input:?}, category: {category:?}, weight: {weight:?})"
+                "AttentionInstinct(input: {input:?}, category: {category:?}, {}weight: {weight:?})",
+                whom_ron(whom)
             ),
             Gene::Unmatched(AsWritten::Instinct {
                 ref inputs,
@@ -814,6 +872,8 @@ enum GeneEntry {
     AttentionInstinct {
         input: String,
         category: String,
+        #[serde(default)]
+        whom: Whom,
         weight: f32,
         #[serde(default)]
         from: LifeStage,
@@ -993,6 +1053,7 @@ impl GeneEntry {
             GeneEntry::AttentionInstinct {
                 input: name,
                 category,
+                whom,
                 weight,
                 ..
             } => {
@@ -1001,11 +1062,13 @@ impl GeneEntry {
                     Some(category) => Gene::AttentionInstinct {
                         input: id,
                         category,
+                        whom,
                         weight,
                     },
                     None => Gene::Unmatched(AsWritten::AttentionInstinct {
                         input: name,
                         category,
+                        whom,
                         weight,
                     }),
                 }
@@ -1052,6 +1115,15 @@ fn missing_named(name: &str, data: &DataPack) -> bool {
     data.brain_input_named(name).is_none() && name.starts_with(ATTENDED)
 }
 
+/// Whom an attention instinct is about, as a genome file writes it before
+/// its weight: nothing for anything of its category (M2 design §15.6).
+fn whom_ron(whom: Whom) -> String {
+    match whom {
+        Whom::Any => String::new(),
+        _ => format!("whom: {whom:?}, "),
+    }
+}
+
 /// The bytes a payload's hex digits spell.
 fn hex(digits: &str) -> Result<Vec<u8>, String> {
     let bad = || format!("has the payload {digits:?}, which isn't pairs of hex digits");
@@ -1070,12 +1142,15 @@ fn hex(digits: &str) -> Result<Vec<u8>, String> {
 ///
 /// A payload is MessagePack: the gene's fields in order, as an array, with
 /// every reference as a stable ID, an emitter's locus as `[0, chemical ID]` or
-/// `[1, locus ID]`, and its mode as 0 (Level), 1 (Rise) or 2 (Fall).
+/// `[1, locus ID]`, and its mode as 0 (Level), 1 (Rise) or 2 (Fall). An
+/// attention instinct's version 2 adds whom it's about, last, as 0 (any),
+/// 1 (family), 2 (kin), 3 (partner), 4 (parents) or 5 (young) (M2 design
+/// §15.6).
 fn decode(type_id: u16, version: u8, payload: Vec<u8>) -> Result<Gene, String> {
     if version == 0 {
         return Err("has version 0, but versions start at 1".into());
     }
-    if version > VERSION {
+    if version > newest(type_id) {
         return Ok(Gene::Unknown {
             type_id,
             version,
@@ -1184,11 +1259,19 @@ fn decode(type_id: u16, version: u8, payload: Vec<u8>) -> Result<Gene, String> {
             }
         }
         9 => {
-            let (input, category, weight): (InputId, u16, f32) = read(&payload)?;
-            let category = CategoryId(category);
+            let (input, category, weight, whom): (InputId, u16, f32, u8) = if version < 2 {
+                let (input, category, weight) = read(&payload)?;
+                (input, category, weight, 0)
+            } else {
+                read(&payload)?
+            };
+            let whom = *Whom::ALL
+                .get(usize::from(whom))
+                .ok_or_else(|| format!("has a payload with whom {whom}, which isn't 0 to 5"))?;
             Gene::AttentionInstinct {
                 input,
-                category,
+                category: CategoryId(category),
+                whom,
                 weight,
             }
         }
@@ -1213,6 +1296,7 @@ mod tests {
         let gene = |category| Gene::AttentionInstinct {
             input: InputId(1),
             category: CategoryId(category),
+            whom: Whom::Any,
             weight: 0.5,
         };
         assert_eq!(gene(6).check(&data), Ok(()));

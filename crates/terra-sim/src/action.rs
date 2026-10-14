@@ -108,6 +108,9 @@ pub struct ActionView {
     /// The tile the call it's going to came from, while the caller is out
     /// of sight (M2 design §15.1).
     pub heard: Option<Pos>,
+    /// Where it last saw the egg of its own it's going back to, while the
+    /// egg is out of sight (M2 design §15.6).
+    pub egg_at: Option<Pos>,
 }
 
 /// Which sprites an action's attempt hurt: the actor, biting a thornbush
@@ -156,10 +159,11 @@ pub(crate) struct Action {
     /// The ticks past the timeout a trip has, for its walk (M2 design §7).
     #[serde(default)]
     pub(crate) extra_ticks: u32,
-    /// The tile the call a trip goes to came from, while the caller is out
-    /// of sight (M2 design §15.1).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) heard: Option<Pos>,
+    /// The tile a trip looks for its target on, while it's out of sight:
+    /// where the call it goes to came from (M2 design §15.1), or where the
+    /// sprite last saw its egg (§15.6).
+    #[serde(default, alias = "heard", skip_serializing_if = "Option::is_none")]
+    pub(crate) seek: Option<Pos>,
 }
 
 /// A sprite's way to where it's heading (design §3.7).
@@ -185,6 +189,20 @@ pub(crate) struct Did {
 }
 
 impl Action {
+    /// The tile the call it's going to came from, while the caller is out
+    /// of sight (M2 design §15.1).
+    fn heard(&self) -> Option<Pos> {
+        self.seek
+            .filter(|_| matches!(self.target, Some(Target::Sprite(_))))
+    }
+
+    /// Where it last saw the egg it's going back to, while the egg is out of
+    /// sight (M2 design §15.6).
+    fn egg_at(&self) -> Option<Pos> {
+        self.seek
+            .filter(|_| matches!(self.target, Some(Target::Object(_))))
+    }
+
     pub(crate) fn new(
         verb: Verb,
         destination: Option<Pos>,
@@ -211,37 +229,39 @@ impl Action {
             scripted,
             remembered: false,
             extra_ticks: 0,
-            heard: None,
+            seek: None,
         }
     }
 }
 
-/// The way to a remembered place (M2 design §7), or to a call (§15.1): the
-/// goal tile it heads for, the tiles to it, what walking them costs, in
-/// terrain units, and the tile a call came from.
+/// The way to a remembered place (M2 design §7), to a call (§15.1), or back
+/// to an egg (§15.6): the goal tile it heads for, the tiles to it, what
+/// walking them costs, in terrain units, and the tile it looks for its
+/// target on, the call's or where it last saw the egg.
 #[derive(Debug, Clone)]
 pub(crate) struct Way {
     pub(crate) goal: Pos,
     pub(crate) path: Vec<Pos>,
     pub(crate) cost: u32,
-    pub(crate) heard: Option<Pos>,
+    pub(crate) seek: Option<Pos>,
 }
 
 /// The way `sprite` takes to `target`, a remembered place out of sight (M2
 /// design §7), treating other sprites as `occupied` says: the cheapest way
 /// to its nearest goal tile, in a flood out to the place's distance plus the
-/// sprite's sense radius, since it has walked there before. A sprite
-/// `heard` calling from a tile is looked for on that tile (§15.1). `None`
-/// if there's no way there.
+/// sprite's sense radius, since it has walked there before. A target it
+/// `seek`s on a tile, a sprite heard calling from there (§15.1) or an egg
+/// last seen there (§15.6), is looked for on that tile. `None` if there's no
+/// way there.
 pub(crate) fn trip(
     state: &WorldState,
     data: &DataPack,
     sprite: &Sprite,
     target: Target,
-    heard: Option<Pos>,
+    seek: Option<Pos>,
     occupied: Occupied,
 ) -> Option<Way> {
-    let there = match heard {
+    let there = match seek {
         Some(from) => from,
         None => state.whereabouts(data, target)?.0,
     };
@@ -251,18 +271,17 @@ pub(crate) fn trip(
         sprites: &state.sprites,
         data,
     };
-    let reach = sprite.program.traits.sense_radius.round() as u16;
-    let radius = chebyshev(sprite.pos, there).saturating_add(reach);
+    let radius = chebyshev(sprite.pos, there).saturating_add(sprite.sight());
     let search = Flood::new(ground, sprite.pos, radius, occupied, state.tick);
-    let goal = match heard {
-        Some(from) => from,
+    let goal = match seek {
+        Some(on) => on,
         None => state.goal_for(data, &search, target)?,
     };
     Some(Way {
         goal,
         path: search.path_to(goal)?,
         cost: search.cost(goal)?,
-        heard,
+        seek,
     })
 }
 
@@ -284,7 +303,7 @@ pub(crate) fn set_off(action: &mut Action, way: Way, speed: f32, tick: u64) {
 fn keep_to(action: &mut Action, way: Way) {
     action.walk.destination = Some(way.goal);
     action.walk.committed = Some(way.path);
-    action.heard = way.heard;
+    action.seek = way.seek;
 }
 
 /// What a flood adds for a tile holding another sprite (design §3.6).
@@ -333,7 +352,8 @@ pub(crate) fn view(sprite: &Sprite, data: &DataPack) -> Option<ActionView> {
         hurt: action.hurt,
         progress,
         remembered: action.remembered,
-        heard: action.heard,
+        heard: action.heard(),
+        egg_at: action.egg_at(),
     })
 }
 
@@ -417,14 +437,16 @@ pub(crate) fn sense_and_decide(
             // A trip to a call heads for where the caller last called from:
             // calling again from elsewhere, it's heard there. Got there with
             // the caller still out of sight, it has lost the trail, and
-            // forgets the call (M2 design §15.1).
-            let caller = action.target.and_then(Target::sprite);
-            let call = action.heard.map(|from| {
+            // forgets the call (M2 design §15.1). A trip back to an egg is
+            // the same: got to where it last saw the egg with the egg out
+            // of sight, it forgets it there (§15.6).
+            let (sought, caller) = (action.target, action.target.and_then(Target::sprite));
+            let seek = action.seek.map(|on| {
                 let latest = caller.and_then(|c| sprite.heard_from(c, state.tick, heard_for));
-                latest.map_or(from, |heard| heard.from)
+                latest.map_or(on, |heard| heard.from)
             });
-            let called_again = call != action.heard;
-            let lost_trail = aim == Some(None) && call == Some(sprite.pos);
+            let called_again = seek != action.seek;
+            let lost_trail = aim == Some(None) && seek == Some(sprite.pos);
             // A trip to a remembered place goes out of sight; once its
             // target is in reach, it carries on as any action (M2 design
             // §7). Off its way, it finds the way again, round sprites if
@@ -438,7 +460,7 @@ pub(crate) fn sense_and_decide(
                         Occupied::Penalty(penalty(data))
                     };
                     let target = action.target.expect("a trip has a target");
-                    Some(trip(state, data, sprite, target, call, occupied))
+                    Some(trip(state, data, sprite, target, seek, occupied))
                 }
                 _ => None,
             };
@@ -456,8 +478,12 @@ pub(crate) fn sense_and_decide(
                 None
             };
             let sprite = state.sprites.get_mut(id).expect("the same sprite");
-            if lost_trail && let Some(caller) = caller {
-                sprite.forget_call(caller);
+            if lost_trail {
+                match sought {
+                    Some(Target::Sprite(caller)) => sprite.forget_call(caller),
+                    Some(Target::Object(egg)) => sprite.forget_egg(egg),
+                    _ => {}
+                }
             }
             let action = sprite.action.as_mut().expect("an action");
             match outcome {
@@ -475,7 +501,7 @@ pub(crate) fn sense_and_decide(
                         // In reach: no longer from memory, nor by ear.
                         action.remembered = false;
                         action.walk.committed = None;
-                        action.heard = None;
+                        action.seek = None;
                     }
                     if let Some(Some(goal)) = aim {
                         // A committed way round leads to where the target
@@ -602,7 +628,8 @@ pub(crate) fn end(
         hurt: action.hurt,
         progress: Progress::Ended(outcome),
         remembered: action.remembered,
-        heard: action.heard,
+        heard: action.heard(),
+        egg_at: action.egg_at(),
     };
     events.push(Event {
         tick,
@@ -876,8 +903,7 @@ pub(crate) fn flood(
         sprites: &state.sprites,
         data,
     };
-    let radius = sprite.program.traits.sense_radius.round() as u16;
-    Flood::new(ground, sprite.pos, radius, occupied, state.tick)
+    Flood::new(ground, sprite.pos, sprite.sight(), occupied, state.tick)
 }
 
 /// The tiles a walking sprite has still to step through: its committed path,

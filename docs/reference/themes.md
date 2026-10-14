@@ -167,4 +167,4 @@ A bright theme, for a terminal whose dark colours are hard to see: light colours
 )
 ```
 
-Save it as `bright.ron` in the themes folder and pick it with `Ctrl+T`. Boredom, crowdedness and arousal are left out of `drives`, so a sprite bored, crowded or aroused above all else draws in white. `space` gives only the far stars, in gray rather than dark gray, so the glass and the nearer stars are drawn as the default theme draws them. `population` draws old sprites in white and the line of the world's limit in gray; the rest of the graph is drawn as in the default theme.
+Save it as `bright.ron` in the themes folder and pick it with `Ctrl+T`. Boredom, crowdedness, arousal and anxiety are left out of `drives`, so a sprite bored, crowded, aroused or anxious above all else draws in white. `space` gives only the far stars, in gray rather than dark gray, so the glass and the nearer stars are drawn as the default theme draws them. `population` draws old sprites in white and the line of the world's limit in gray; the rest of the graph is drawn as in the default theme.
