@@ -1026,6 +1026,33 @@ The default world left alone for 200,000 ticks. "Courted" is the share of a pair
 - **For information, partners:** a seed made 433 to 518 pairs, of which 383 to 485 were by a sprite that had had a partner; 241 to 312 parted, after an hour apart or as one paired again, and 157 to 203 lost a partner to death. Partners staying together is 32b's to measure.
 - **For information, the rest:** hunger and thirst killed 62 of 5,393 sprites that died after tick 10,000 (1.1%; `main` 1.0%, §13.3 5.1%). The living had 0.46 to 1.18 broken genes each at the end (`main` 0.67 to 6.56): with few lone eggs, few young have their mother's flaws doubled (§12.3). The 4,955 hatchlings old age killed lived a median 6.6 hours, a tenth under 4.8 and nine tenths under 7.7 (`main` 6.5, 4.8 and 7.6). How far calls bring mates wasn't measured. G4: 1 of the 111 numbers moved a tenth the same way in all 10 seeds, `grows_old` again, which rose in all 10.
 
+**Measured for 32b (2026-10-14)** in release builds of this part at `341d08f` (A5 also after it, with the faster lookups, which change no outcome), in the cloud, with the same commands, seeds and bars, and the families' row now measured. "Partners", "eggs" and "young" are the median share of their time that partners each saw the other, that an egg had a parent in sight, and that a young sprite with a living parent saw one:
+
+| Seed | Alive at the end (and eggs) | Eggs alone | Courted | Partners made (again) | Partners | Eggs | Young | Calls an hour | Adults at the end, male and female | Generations |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 97 (2) | 2 (0.3%) | 93.9% | 326 (149) | 57% | 95% | 74% | 1,977 | 46, 43 | 19 |
+| 2 | 96 (4) | 0 (0.0%) | 91.5% | 312 (143) | 56% | 94% | 72% | 2,550 | 55, 36 | 17 |
+| 3 | 98 (2) | 1 (0.1%) | 93.2% | 324 (128) | 57% | 95% | 75% | 2,697 | 53, 26 | 20 |
+| 4 | 97 (2) | 3 (0.4%) | 94.0% | 345 (168) | 56% | 95% | 73% | 3,033 | 47, 39 | 20 |
+| 5 | 95 (3) | 5 (0.7%) | 93.8% | 336 (128) | 53% | 95% | 72% | 2,545 | 49, 34 | 17 |
+| 6 | 97 (3) | 6 (0.9%) | 92.8% | 314 (128) | 58% | 93% | 74% | 2,975 | 48, 27 | 18 |
+| 7 | 97 (3) | 1 (0.1%) | 94.2% | 296 (100) | 56% | 95% | 77% | 2,349 | 50, 33 | 21 |
+| 8 | 97 (3) | 14 (2.1%) | 94.7% | 305 (110) | 60% | 96% | 78% | 2,949 | 42, 36 | 18 |
+| 9 | 96 (4) | 0 (0.0%) | 93.6% | 314 (107) | 61% | 94% | 70% | 2,507 | 46, 39 | 19 |
+| 10 | 98 (2) | 8 (1.1%) | 92.4% | 333 (148) | 60% | 94% | 73% | 2,794 | 52, 32 | 18 |
+
+- **Keeps going: met.** Sprites are alive at the end in all 10 seeds, 17 to 21 generations deep (32a 21 to 24), and no world went over its limit of 100.
+- **Lone eggs very rare: met.** 40 of 6,895 eggs were laid alone (0.6%, at most 2%), and no seed laid more than 2.1% alone (at most 5%).
+- **Courted first: met.** 93.4% of the 6,855 eggs laid by pairs came after the two danced for each other (at least 90%). None was laid by kin.
+- **Families stay together: met.** Partners had each other in sight for a median 57% of the time both were alive and grown (at least half), over 3,193 partnerships; an egg had a parent in sight for 95% of its time (at least three quarters), over 6,895 eggs; and a young sprite with a living parent saw one for 74% of its childhood (at least half), over 6,867 young. No seed's median fell below 53%, 93% and 70%.
+- **Safe: met.** The property test with random genomes passes, now with attention instincts about eggs and about whom they name, its family, kin, partner, parents or young, run once with 1,000 genomes: courting and mating happen only between adults, and the self-check finds no Mate or Court that isn't.
+- **A4: met.** Of 973 deaths in ticks 10,000–50,000 of the viability run over all seeds, 2 were of hunger and 20 of thirst (2.3%, under 25%; 32a 0.5%).
+- **A3: met.** Over seeds 1–30, trained sprites hit a median of 0 times in ticks 10,000–20,000, against 40 untrained, and all of 100 random sets of 10 of those seeds pass.
+- **A5: not met here on `speed`'s own seed, met on six others.** In the cloud, `speed` steps 191 to 198 ticks a second on seed 7 (three runs), against 206 to 223 for 32a timed alongside, and 217 to 252 on seeds 1–6 (`--seed`), against 32a's 236 to 262. Seed 7's world grows more of its sprites old than 32a's does (5% of its sprites' ticks, against 3%), and an old sprite's brain is expressed afresh each tick a gene of it weakens (§9.4). Finding a chemical or locus by its ID at once, rather than searching the list, won back about half of 32b's cost on seeds 1–6, and changes no outcome. A5 asks for 200 on the development machine (M1 design §7.4), not the cloud.
+- **A1 and A2: met** (their tests pass).
+- **For information, partners:** a seed made 296 to 345 pairs (32a 433 to 518), of which 100 to 168 were by a sprite that had had a partner (32a 383 to 485); 56 to 77 parted (32a 241 to 312), and 222 to 262 lost a partner to death. Partners now mostly stay together until one dies.
+- **For information, the rest:** hunger and thirst killed 134 of 6,070 sprites that died after tick 10,000 (2.2%; 32a 1.1%, §13.3 5.1%), from 1.2% to 5.5% a seed: twice 32a's share but under §13.3's, likely because anxiety holds a sprite by its family a little longer before it goes to eat or drink (not traced). There were about three times as many calls (1,977 to 3,033 an hour, 32a 706 to 980), as anxious sprites call their family. The adults at the end were 488 males to 345 females over all ten seeds (32a 449 to 374), up to two to one in a seed. The living had 0.43 to 1.10 broken genes each at the end (32a 0.46 to 1.18). The 5,547 hatchlings old age killed lived a median 6.4 hours, a tenth under 4.8 and nine tenths under 7.4 (32a 6.6, 4.8 and 7.7). G4: 1 of the 132 numbers moved a tenth the same way in all 10 seeds, `grows_old`, which rose in all 10.
+
 ### 15.10 Later
 
 - **True echoes:** a call heard twice, or from the wrong side, in a hall.

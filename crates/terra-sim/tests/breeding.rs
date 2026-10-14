@@ -926,13 +926,22 @@ fn instinct() -> impl Strategy<Value = String> {
     )
 }
 
-/// A random attention instinct, leaning to sprites.
+/// A random attention instinct, leaning to sprites, and about any of them or
+/// only its family, kin, partner, parents or young (M2 design §15.6).
 fn attention() -> impl Strategy<Value = String> {
-    let category = prop::sample::select(vec!["sprite", "sprite", "bush", "water", "toy"]);
-    (state_input(), category, -1.0f32..1.0, switch()).prop_map(
-        |(input, category, weight, switch)| {
+    let category = prop::sample::select(vec!["sprite", "sprite", "egg", "bush", "water", "toy"]);
+    let whom = prop::sample::select(vec![
+        "",
+        ", whom: Family",
+        ", whom: Kin",
+        ", whom: Partner",
+        ", whom: Parent",
+        ", whom: Young",
+    ]);
+    (state_input(), category, whom, -1.0f32..1.0, switch()).prop_map(
+        |(input, category, whom, weight, switch)| {
             format!(
-                r#"AttentionInstinct(input: "{input}", category: "{category}", weight: {weight:?}{switch}),"#
+                r#"AttentionInstinct(input: "{input}", category: "{category}"{whom}, weight: {weight:?}{switch}),"#
             )
         },
     )
@@ -1047,9 +1056,10 @@ proptest! {
         seed: u64,
     ) {
         // M2 design §5, G7: Mate, Court and the breeding drive only
-        // between adults, on a trip to a call too (§15.1, §15.9). Every tick
-        // also runs the self-check, which fails on a Mate or Court action
-        // that isn't between adults.
+        // between adults, on a trip to a call too, and whomever an attention
+        // instinct is about (§15.1, §15.6, §15.9). Every tick also runs the
+        // self-check, which fails on a Mate or Court action that isn't
+        // between adults.
         // The last is out of the others' sight, but within a call's reach.
         let tiles = [at(2, 1), at(3, 1), at(2, 2), at(24, 2)];
         let newborns: Vec<Pos> = tiles
