@@ -8,10 +8,10 @@ use std::time::Duration;
 
 use terra_sim::{
     DataPack, DeathCause, EntityId, EventKind, LifeStage, Map, Mode, Pos, Scenario, World,
-    WorldConfig,
+    WorldConfig, gene_numbers, middle_numbers,
 };
 use terra_tui::fast_forward::{
-    self, FastForward, HEADER, HOUR, Row, Tally, hours, save_name, spoken,
+    self, FastForward, HEADER, HOUR, Moved, Row, Tally, hours, save_name, spoken,
 };
 
 /// A small generated Lab world.
@@ -90,10 +90,9 @@ fn a_row_counts_each_life_stage_and_the_eggs() {
     assert!(row.adults > 0, "a new world starts with grown sprites");
 }
 
-#[test]
-fn the_rows_count_every_death_by_its_cause() {
-    // Two sprites on a field with no food or water: one hurts the other to
-    // death, and the other dies of thirst, within the hour.
+/// Two sprites on a field with no food or water: one hurts the other to
+/// death, and the other dies of thirst, within the hour.
+fn a_deadly_field() -> World {
     let data = DataPack::builtin().expect("valid pack");
     let map = Map::from_ascii(&[".........."; 6], &data).expect("valid drawing");
     let sprites = [(Pos { x: 2, y: 2 }, None), (Pos { x: 6, y: 3 }, None)];
@@ -104,8 +103,12 @@ fn the_rows_count_every_death_by_its_cause() {
         scripted: &[],
         newborns: &[],
     };
-    let world = World::from_scenario(scenario, data, 1).expect("valid scenario");
-    let mut run = FastForward::new(world, 1);
+    World::from_scenario(scenario, data, 1).expect("valid scenario")
+}
+
+#[test]
+fn the_rows_count_every_death_by_its_cause() {
+    let mut run = FastForward::new(a_deadly_field(), 1);
     let rows = run_through(&mut run);
     let mut counted: BTreeMap<DeathCause, u64> = BTreeMap::new();
     for row in &rows {
@@ -259,4 +262,174 @@ fn the_report_opens_by_saying_which_world_it_runs_and_for_how_long() {
         fast_forward::opening_line(&world, Some("mira"), "default", 1),
         "Fast-forwarding mira, a Lab world at tick 0, for 1 hour (4,500 ticks)."
     );
+}
+
+/// The cells of a table, without the mark at its start that tells a
+/// spreadsheet it's UTF-8.
+fn cells(table: &str) -> Vec<Vec<String>> {
+    let table = table.strip_prefix('\u{feff}').expect("marked as UTF-8");
+    table
+        .lines()
+        .map(|line| line.split(',').map(str::to_string).collect())
+        .collect()
+}
+
+#[test]
+fn the_population_table_has_a_row_for_each_count_and_one_for_the_end() {
+    // Counts are taken every 100 ticks at first (M2 design §14), so the
+    // run stops between two.
+    let mut run = FastForward::new(lab_world(7), 2);
+    run.run_to(HOUR + 50);
+    let world = run.world();
+    let table = cells(&fast_forward::population_table(world));
+    assert_eq!(
+        table[0],
+        [
+            "Hours",
+            "Tick",
+            "Eggs",
+            "Young",
+            "Adults",
+            "Old",
+            "Laid",
+            "Hatched",
+            "Spawned",
+            "Died",
+            "Starvation",
+            "Dehydration",
+            "Old age"
+        ]
+    );
+    let counts = world.population();
+    assert_eq!(
+        table.len(),
+        1 + counts.len() + 1,
+        "the header, the counts and now"
+    );
+    let first = &counts[0];
+    assert_eq!(
+        table[1][..6],
+        [
+            "0",
+            "0",
+            &first.eggs.to_string(),
+            &first.young.to_string(),
+            &first.adults.to_string(),
+            &first.old.to_string()
+        ]
+    );
+    assert_eq!(table[2][..2], ["0.02", "100"]);
+    let now = world.population_now();
+    let last = table.last().unwrap();
+    assert_eq!(last[..2], ["1.01", "4550"]);
+    assert_eq!(last[3], now.young.to_string());
+    let laid: u32 = table[1..]
+        .iter()
+        .map(|row| row[6].parse::<u32>().unwrap())
+        .sum();
+    let laid_events = counts.iter().map(|c| c.since.laid).sum::<u32>() + now.since.laid;
+    assert_eq!(laid, laid_events);
+}
+
+#[test]
+fn a_population_table_that_ends_on_a_count_ends_there() {
+    let mut run = FastForward::new(lab_world(7), 1);
+    run_through(&mut run);
+    let world = run.world();
+    let table = cells(&fast_forward::population_table(world));
+    assert_eq!(table.len(), 1 + world.population().len());
+    assert_eq!(table.last().unwrap()[..2], ["1", "4500"]);
+}
+
+#[test]
+fn the_population_table_names_each_cause_of_death_the_world_has_seen() {
+    let mut run = FastForward::new(a_deadly_field(), 1);
+    run_through(&mut run);
+    let world = run.world();
+    let table = cells(&fast_forward::population_table(world));
+    let hurt = table[0]
+        .iter()
+        .position(|h| h.starts_with("Hurt by "))
+        .expect("a hurt column");
+    let thirst = table[0].iter().position(|h| h == "Dehydration").unwrap();
+    let total = |column: usize| -> u64 {
+        table[1..]
+            .iter()
+            .map(|row| row[column].parse::<u64>().unwrap())
+            .sum()
+    };
+    let died: BTreeMap<DeathCause, u64> = world.deaths_by_cause().collect();
+    assert_eq!(total(thirst), died[&DeathCause::Dehydration]);
+    let hurt_by: u64 = died
+        .iter()
+        .filter(|(c, _)| matches!(c, DeathCause::HurtBy(_)))
+        .map(|(_, n)| n)
+        .sum();
+    assert_eq!(total(hurt), hurt_by);
+}
+
+#[test]
+fn the_genes_table_starts_with_the_starter_then_has_a_row_an_hour() {
+    let world = lab_world(7);
+    let starter = gene_numbers(&world.data().starter().genes(world.data()));
+    let at_start = middle_numbers(&world, &starter).expect("sprites alive");
+    let mut run = FastForward::new(world, 2);
+    run_through(&mut run);
+    let table = cells(&run.genes().table());
+    let names: Vec<&str> = starter.iter().map(|(name, _)| name.as_str()).collect();
+    assert_eq!(table[0][..3], ["Hours", "Tick", "Sprites"]);
+    assert_eq!(table[0][3..], names);
+    assert_eq!(table[1][..3], ["starter", "", ""]);
+    assert_eq!(table[1][3], starter[0].1.to_string());
+    let hours: Vec<&str> = table[2..].iter().map(|row| row[0].as_str()).collect();
+    assert_eq!(hours, ["0", "1", "2"]);
+    assert_eq!(table[2][1], "0");
+    assert_eq!(table[2][2], lab_world(7).sprites().count().to_string());
+    let middle = |n: usize| at_start[n].map_or(String::new(), |v| v.to_string());
+    assert_eq!(table[2][3..6], [middle(0), middle(1), middle(2)]);
+}
+
+#[test]
+fn a_run_stopped_between_hours_ends_its_genes_table_where_it_stopped() {
+    let mut run = FastForward::new(lab_world(7), 2);
+    run.run_to(HOUR + 300);
+    run.finish();
+    let table = cells(&run.genes().table());
+    let ticks: Vec<&str> = table[2..].iter().map(|row| row[1].as_str()).collect();
+    assert_eq!(ticks, ["0", "4500", "4800"]);
+    run.finish();
+    assert_eq!(cells(&run.genes().table()).len(), 5, "only once");
+}
+
+#[test]
+fn the_numbers_that_moved_most_come_first_halving_as_far_as_doubling() {
+    let starter = [
+        ("a".to_string(), 1.0),
+        ("b".to_string(), 2.0),
+        ("never set".to_string(), 0.0),
+        ("lost".to_string(), 4.0),
+        ("c".to_string(), 1.0),
+        ("still".to_string(), 3.0),
+    ];
+    let now = [Some(1.5), Some(1.0), Some(5.0), None, Some(2.0), Some(3.05)];
+    let moved = fast_forward::moved_most(&starter, &now, 5);
+    let names: Vec<&str> = moved.iter().map(|m| m.name.as_str()).collect();
+    assert_eq!(names, ["b", "c", "a"], "only those a tenth or more from it");
+    assert_eq!(
+        moved[0],
+        Moved {
+            name: "b".into(),
+            starter: 2.0,
+            now: 1.0
+        }
+    );
+    assert_eq!(
+        moved[0].line(10),
+        "  b                  2 → 1         down 50%"
+    );
+    assert_eq!(
+        moved[1].line(10),
+        "  c                  1 → 2         up 100%"
+    );
+    assert_eq!(fast_forward::moved_most(&starter, &now, 1).len(), 1);
 }

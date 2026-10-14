@@ -1,15 +1,15 @@
 //! Fast-forward (M2 design §16): a Lab world run with no screen, as fast
 //! as the computer allows, for hours of play at 1×, then saved for the game
-//! to open. `main.rs` runs it for `--fast-forward` and writes what it
-//! leaves behind; what it runs and what it reports are here, so they can be
-//! tested.
+//! to open, with a population table and a genes table beside it. `main.rs`
+//! runs it for `--fast-forward` and writes what it leaves behind; what it
+//! runs, reports and tables is here, so it can be tested.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
-use terra_sim::{DeathCause, EntityId, EventKind, LifeStage, World};
+use terra_sim::{DeathCause, EntityId, EventKind, LifeStage, World, gene_numbers, middle_numbers};
 
-use crate::text::group_thousands;
+use crate::text::{cause_name, group_thousands};
 
 /// Ticks in an hour of play at 1×, 1.25 ticks a second (design §6.6).
 pub const HOUR: u64 = 4_500;
@@ -26,17 +26,21 @@ pub struct FastForward {
     /// How many rows it has reported.
     rows: u64,
     tally: Tally,
+    genes: GeneTable,
 }
 
 impl FastForward {
     /// Fast-forwards `world` by `hours` of play at 1×.
     pub fn new(world: World, hours: u64) -> FastForward {
         let start = world.tick();
+        let mut genes = GeneTable::new(&world);
+        genes.take(&world);
         FastForward {
             start,
             end: start + hours * HOUR,
             rows: 0,
             tally: Tally::starting_from(&world),
+            genes,
             world,
         }
     }
@@ -47,6 +51,11 @@ impl FastForward {
 
     pub fn into_world(self) -> World {
         self.world
+    }
+
+    /// The genes table so far: a row each hour it has run.
+    pub fn genes(&self) -> &GeneTable {
+        &self.genes
     }
 
     /// The deepest generation reached since it started.
@@ -75,12 +84,24 @@ impl FastForward {
         (self.rows < ROWS).then(|| self.start + self.ticks() * (self.rows + 1) / ROWS)
     }
 
-    /// Runs on to `tick`, but no further than its end.
+    /// Runs on to `tick`, but no further than its end, taking a row of the
+    /// genes table each hour.
     pub fn run_to(&mut self, tick: u64) {
         while self.world.tick() < tick.min(self.end) {
             for event in self.world.step() {
                 self.tally.note(&event.kind);
             }
+            if self.ticks_run().is_multiple_of(HOUR) {
+                self.genes.take(&self.world);
+            }
+        }
+    }
+
+    /// Ends the genes table where the run stopped, if that was between
+    /// hours.
+    pub fn finish(&mut self) {
+        if self.genes.last_tick() != Some(self.world.tick()) {
+            self.genes.take(&self.world);
         }
     }
 
@@ -314,5 +335,246 @@ pub fn spoken(time: Duration) -> String {
         (0, m) => plural(m, "minute"),
         (h, 0) => plural(h, "hour"),
         (h, m) => format!("{} {}", plural(h, "hour"), plural(m, "minute")),
+    }
+}
+
+/// A table's hours: of play at 1×, to a hundredth, as a spreadsheet reads
+/// a number.
+fn table_hours(ticks: u64) -> String {
+    let text = format!("{:.2}", ticks as f64 / HOUR as f64);
+    text.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
+/// `fields` as a line of a table: commas between, and a field with a
+/// comma or a quote in it quoted.
+fn table_line(fields: impl IntoIterator<Item = String>) -> String {
+    let fields: Vec<String> = fields
+        .into_iter()
+        .map(|field| {
+            if field.contains([',', '"']) {
+                format!("\"{}\"", field.replace('"', "\"\""))
+            } else {
+                field
+            }
+        })
+        .collect();
+    fields.join(",") + "\n"
+}
+
+/// What starts a table: the mark that tells a spreadsheet it's UTF-8, for
+/// the arrows in the genes' names.
+const UTF8: &str = "\u{feff}";
+
+/// The population table (M2 design §16): a row for each count the world
+/// keeps for its graph (M2 design §14), and one for the world as it is
+/// now, with what happened since the row before: eggs laid and hatched,
+/// sprites the Cursor spawned, and deaths, by cause. A cause has a column
+/// once any sprite has died of it, and physiology's always do.
+pub fn population_table(world: &World) -> String {
+    let mut counts = world.population().to_vec();
+    let now = world.population_now();
+    if counts.last().is_none_or(|last| last.tick < now.tick) {
+        counts.push(now);
+    }
+    let causes: BTreeSet<DeathCause> = DeathCause::PHYSIOLOGY
+        .into_iter()
+        .chain(
+            counts
+                .iter()
+                .flat_map(|count| count.since.died.keys().copied()),
+        )
+        .collect();
+    let headings = ["Hours", "Tick", "Eggs", "Young", "Adults", "Old"]
+        .into_iter()
+        .chain(["Laid", "Hatched", "Spawned", "Died"])
+        .map(str::to_string)
+        .chain(
+            causes
+                .iter()
+                .map(|&cause| capitalised(&cause_name(cause, world.data()))),
+        );
+    let mut table = String::from(UTF8) + &table_line(headings);
+    for count in &counts {
+        let since = &count.since;
+        let numbers = [count.eggs, count.young, count.adults, count.old]
+            .into_iter()
+            .chain([since.laid, since.hatched, since.spawned, since.deaths()])
+            .chain(
+                causes
+                    .iter()
+                    .map(|cause| since.died.get(cause).copied().unwrap_or(0)),
+            )
+            .map(|n| n.to_string());
+        let row = [table_hours(count.tick), count.tick.to_string()]
+            .into_iter()
+            .chain(numbers);
+        table += &table_line(row);
+    }
+    table
+}
+
+/// `text` with its first letter a capital.
+fn capitalised(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
+}
+
+/// The genes table (M2 design §16): each of the starter genome's numbers'
+/// middle value among the living (M2 design §12), a row an hour, with the
+/// starter's own first.
+#[derive(Debug, Clone)]
+pub struct GeneTable {
+    /// The starter's numbers, named, in its order: the table's columns.
+    starter: Vec<(String, f32)>,
+    rows: Vec<GeneRow>,
+}
+
+/// A row of the genes table.
+#[derive(Debug, Clone)]
+struct GeneRow {
+    tick: u64,
+    sprites: usize,
+    /// Each number's middle value, or none if no sprite was alive.
+    middles: Option<Vec<Option<f32>>>,
+}
+
+impl GeneTable {
+    /// A table with no rows yet, of the numbers of the starter genome in
+    /// `world`'s data pack.
+    pub fn new(world: &World) -> GeneTable {
+        let data = world.data();
+        GeneTable {
+            starter: gene_numbers(&data.starter().genes(data)),
+            rows: Vec::new(),
+        }
+    }
+
+    /// Takes a row from `world` as it is now.
+    pub fn take(&mut self, world: &World) {
+        self.rows.push(GeneRow {
+            tick: world.tick(),
+            sprites: world.sprites().count(),
+            middles: middle_numbers(world, &self.starter),
+        });
+    }
+
+    /// The tick of the last row, if there is one.
+    pub fn last_tick(&self) -> Option<u64> {
+        self.rows.last().map(|row| row.tick)
+    }
+
+    /// The table, for a spreadsheet: a column for each number, a row for
+    /// the starter's, then a row for each time taken.
+    pub fn table(&self) -> String {
+        let headings = ["Hours", "Tick", "Sprites"]
+            .into_iter()
+            .map(str::to_string)
+            .chain(self.starter.iter().map(|(name, _)| name.clone()));
+        let mut table = String::from(UTF8) + &table_line(headings);
+        let starter = self.starter.iter().map(|(_, value)| value.to_string());
+        let blank = || String::new();
+        table += &table_line(
+            ["starter".to_string(), blank(), blank()]
+                .into_iter()
+                .chain(starter),
+        );
+        for row in &self.rows {
+            let middles = self.starter.iter().enumerate().map(|(index, _)| {
+                let middle = row.middles.as_ref().and_then(|middles| middles[index]);
+                middle.map_or_else(blank, |value| value.to_string())
+            });
+            let first = [
+                table_hours(row.tick),
+                row.tick.to_string(),
+                row.sprites.to_string(),
+            ];
+            table += &table_line(first.into_iter().chain(middles));
+        }
+        table
+    }
+
+    /// The `most` numbers whose middle value moved furthest from the
+    /// starter's by the last row, as `moved_most` finds them.
+    pub fn moved_most(&self, most: usize) -> Vec<Moved> {
+        let now = self.rows.last().and_then(|row| row.middles.clone());
+        now.map_or_else(Vec::new, |now| moved_most(&self.starter, &now, most))
+    }
+}
+
+/// A gene number that moved from the starter's.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Moved {
+    pub name: String,
+    pub starter: f32,
+    pub now: f32,
+}
+
+impl Moved {
+    /// How far it moved: halving as far as doubling, and crossing 0
+    /// furthest of all.
+    fn distance(&self) -> f32 {
+        let ratio = self.now / self.starter;
+        if ratio <= 0.0 {
+            f32::INFINITY
+        } else if ratio >= 1.0 {
+            ratio - 1.0
+        } else {
+            1.0 / ratio - 1.0
+        }
+    }
+
+    /// The line the report gives it, its name `width` wide: where it
+    /// started, where it is, and by how much it went up or down.
+    pub fn line(&self, width: usize) -> String {
+        let change = (self.now - self.starter).abs() / self.starter.abs() * 100.0;
+        let way = if self.now > self.starter {
+            "up"
+        } else {
+            "down"
+        };
+        format!(
+            "  {:<width$}  {:>8} → {:<8}  {way} {change:.0}%",
+            self.name,
+            short(self.starter),
+            short(self.now)
+        )
+    }
+}
+
+/// Of the numbers in `starter`, the `most` whose value `now` moved furthest
+/// from it, furthest first, of those that moved by a tenth or more. A
+/// number the starter has at 0, or none alive has, is left out.
+pub fn moved_most(starter: &[(String, f32)], now: &[Option<f32>], most: usize) -> Vec<Moved> {
+    let mut moved: Vec<Moved> = starter
+        .iter()
+        .zip(now)
+        .filter_map(|((name, starter), now)| {
+            let now = (*now)?;
+            let ratio = now / starter;
+            (*starter != 0.0 && !(0.9..1.1).contains(&ratio)).then(|| Moved {
+                name: name.clone(),
+                starter: *starter,
+                now,
+            })
+        })
+        .collect();
+    moved.sort_by(|a, b| b.distance().total_cmp(&a.distance()));
+    moved.truncate(most);
+    moved
+}
+
+/// `value` to four figures, with no zeros on the end: `0.5`, `1235`.
+fn short(value: f32) -> String {
+    if value == 0.0 {
+        return "0".into();
+    }
+    let decimals = (3 - value.abs().log10().floor() as i32).max(0) as usize;
+    let text = format!("{value:.decimals$}");
+    if text.contains('.') {
+        text.trim_end_matches('0').trim_end_matches('.').to_string()
+    } else {
+        text
     }
 }

@@ -407,8 +407,10 @@ fn fast_forward(args: &Args, hours: u64) -> ExitCode {
         // Where it stopped, as a last row.
         println!("{}", run.take_row().line());
     }
+    run.finish();
     let ticks_run = run.ticks_run();
     let rate = per_second(ticks_run, started);
+    let genes = run.genes().clone();
     let world = run.into_world();
     let name = args
         .save
@@ -426,8 +428,45 @@ fn fast_forward(args: &Args, hours: u64) -> ExitCode {
         "Saved as {name} in your saves folder ({}): the title screen's Continue opens it.",
         folder.display()
     );
+    let tables = [
+        (
+            format!("{name}-population.csv"),
+            fast_forward::population_table(&world),
+        ),
+        (format!("{name}-genes.csv"), genes.table()),
+    ];
+    let mut written = Vec::new();
+    for (file, table) in &tables {
+        match std::fs::write(folder.join(file), table) {
+            Ok(()) => written.push(file.as_str()),
+            Err(err) => eprintln!("terra-sprites: couldn't write {file}: {err}"),
+        }
+    }
+    if !written.is_empty() {
+        println!("The tables are beside it: {}.", written.join(" and "));
+    }
+    println!();
+    let moved = genes.moved_most(MOVED_LISTED);
+    if world.sprites().next().is_none() {
+        println!("No sprite is left alive to measure the genes of.");
+    } else if moved.is_empty() {
+        println!("No gene number has moved a tenth from the starter's yet.");
+    } else {
+        println!("Moved most from the starter's, as the middle value among the living:");
+        let width = moved
+            .iter()
+            .map(|m| m.name.chars().count())
+            .max()
+            .unwrap_or(0);
+        for m in &moved {
+            println!("{}", m.line(width.min(50)));
+        }
+    }
     ExitCode::SUCCESS
 }
+
+/// How many gene numbers the end of a fast-forward lists as moved most.
+const MOVED_LISTED: usize = 5;
 
 /// Ticks a second, for `ticks` run since `started`.
 fn per_second(ticks: u64, started: Instant) -> f64 {

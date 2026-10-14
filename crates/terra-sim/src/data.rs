@@ -511,7 +511,7 @@ impl DataPack {
     }
 
     /// The genome sprites without parents are made from.
-    pub(crate) fn starter(&self) -> &Genome {
+    pub fn starter(&self) -> &Genome {
         &self.starter
     }
 
