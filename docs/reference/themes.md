@@ -1,6 +1,6 @@
 # Themes
 
-A **theme** says how the map is drawn: the character and colour of each kind of ground, each plant and toy, sprites, their emotes, the Cursor, the glass round the map and the stars in space past it (design §6.2, M2 design §11), and the colours and blocks of the population graph (M2 design §14). The game has two built in, `themes/cp437.ron` (the default) and `themes/ascii.ron` (`--ascii`). To draw it your own way, copy one, edit it, and put it in the `themes` folder of the game's folder (design §6.7). The help screen (`?`) shows where the game's folder is:
+A **theme** says how the map is drawn: the character and colour of each kind of ground, each plant and toy, sprites, their emotes, the Cursor, the glass round the map and the stars in space past it (design §6.2, M2 design §11), the colours and blocks of the population graph (M2 design §14), and the lineage colours (§17). The game has two built in, `themes/cp437.ron` (the default) and `themes/ascii.ron` (`--ascii`). To draw it your own way, copy one, edit it, and put it in the `themes` folder of the game's folder (design §6.7). The help screen (`?`) shows where the game's folder is:
 
 | System | The themes folder |
 |---|---|
@@ -27,7 +27,7 @@ cargo run --release -- --theme my-theme.ron --seed 7
 
 ## Fields
 
-A theme is one record with seven fields. The first five are needed; `space` and `population` may be left out.
+A theme is one record with eight fields. The first five are needed; `space`, `population` and `lineage` may be left out.
 
 | Field | Meaning |
 |---|---|
@@ -38,6 +38,7 @@ A theme is one record with seven fields. The first five are needed; `space` and 
 | `cursor` | How the Cursor is drawn (below). |
 | `space` | The glass round the map and the stars past it (below). Optional: whatever a theme leaves out of it, it draws as the default theme does. |
 | `population` | How the population graph (`p`) is drawn (below). Optional, as `space` is. |
+| `lineage` | The lineage colours (`b`) (below). Optional, as `space` is. |
 
 A **glyph** is `(glyph: '♣', fg: green)`, with two optional flags: `bold: true`, and `reversed: true`, which swaps the colour and the background. Characters go in single quotes; a quote itself is `'\''`.
 
@@ -96,6 +97,17 @@ The population graph (`p`, and small at the top of the World tab) stacks the egg
 | `full` | A character wholly of one stage: `'█'` in the default theme, `'#'` in the ASCII one. |
 | `half` | A character's lower half, `'▄'` or `'_'`: it's drawn in the stage below, on the stage above as its background, or on nothing at the top of the stack. |
 | `limit` | A glyph, a dot of the small graph's line at the most sprites the world holds, drawn where nothing else is. |
+
+### `lineage`
+
+`b`'s lineage colours draw each sprite on the map by where it stands in the selected one's lineage, as the family tree (`k`) shows it; the selected sprite keeps its own colour, and with none selected, every sprite does (M2 design §17). `lineage` is a record of four colours, each of which may be left out and is then drawn as the default theme draws it. A field the game doesn't know is refused, naming it.
+
+| Field | Meaning |
+|---|---|
+| `elders` | Its parents and grandparents: `light_blue` in the default theme. |
+| `siblings` | Its brothers and sisters, by either parent: `light_red`. |
+| `young` | Its young, and theirs: `light_magenta`. |
+| `others` | Every other sprite: `dark_gray`. |
 
 ## Working example
 
@@ -164,7 +176,8 @@ A bright theme, for a terminal whose dark colours are hard to see: light colours
         stages: (old: white),
         limit: (glyph: '·', fg: gray),
     ),
+    lineage: (others: gray),
 )
 ```
 
-Save it as `bright.ron` in the themes folder and pick it with `Ctrl+T`. Boredom, crowdedness, arousal and anxiety are left out of `drives`, so a sprite bored, crowded, aroused or anxious above all else draws in white. `space` gives only the far stars, in gray rather than dark gray, so the glass and the nearer stars are drawn as the default theme draws them. `population` draws old sprites in white and the line of the world's limit in gray; the rest of the graph is drawn as in the default theme.
+Save it as `bright.ron` in the themes folder and pick it with `Ctrl+T`. Boredom, crowdedness, arousal and anxiety are left out of `drives`, so a sprite bored, crowded, aroused or anxious above all else draws in white. `space` gives only the far stars, in gray rather than dark gray, so the glass and the nearer stars are drawn as the default theme draws them. `population` draws old sprites in white and the line of the world's limit in gray; the rest of the graph is drawn as in the default theme. `lineage` draws the sprites outside the lineage in gray, a little brighter than the default's dark gray.

@@ -4,7 +4,7 @@
 - **Date:** 2026-10-12
 - **History:** edited in place since v5; each change is a file in [`changes/`](changes/), whose README says where v1 to v5 are
 - **Builds on:** [M1 design](m1-a-sprite-lives.md), which stays the rulebook for everything M2 doesn't change
-- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), breeding (Slice 23), the view past the wall (Slice 31), mixing and mutating genes (Slice 24), with copy and change (24b), the population graph (Slice 26), and courtship and families (Slice 32)
+- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), breeding (Slice 23), the view past the wall (Slice 31), mixing and mutating genes (Slice 24), with copy and change (24b), the population graph (Slice 26), courtship and families (Slice 32), fast-forward and the speed cap (Slice 27), and the family tree (Slice 25)
 
 ---
 
@@ -66,7 +66,7 @@ The owner's times, as playtime at 1× (1.25 ticks a second, M1 design §6.6):
 - **These are the starter genome's times.** The genome brings them about (§3), so they vary from sprite to sprite and can evolve: a later old age costs nothing, so lives may grow longer over the generations, up to old age at about 13 hours (§12.5).
 - **Lives differ by up to 2 hours either way.** The owner (2026-10-12): "4 hours should be the shortest, and eight at the longest, for an average of 6 hours." A new sprite's `grows_old` varies by up to 40% at spawn where its other genes vary by 10% (§9.3), and a hatchling takes one parent's, now and then changed in copying (§12). Old age still lasts about an hour, and a hard life can still bring it sooner (§9.4).
 - **Growing old is where M1's lifespan went** (#140). The `grows_old` gene sets when a sprite grows old, and its genes then weaken until its body gives out and old age kills it (§9.4). How long that takes depends on the life it has had, not on a second gene. A save or genome that says `lifespan` reads it as `grows_old`, whose range is about **6,000–60,000**.
-- **A generation takes about 15–20 minutes at 4×,** Story mode's top speed (Slice 27), so an evening sees several. Long runs of evolution belong to the fast-forward mode.
+- **A generation takes about 15–20 minutes at 4×,** Story mode's top speed (§16.2), so an evening sees several. Long runs of evolution belong to fast-forward (§16.3).
 - **Lives got shorter in Slice 23, with breeding.** Until sprites had young, nothing replaced the dead: with 4-hour lives, the default world would have been empty after about 4 hours of play. So in Slice 22 sprites grew up and grew old at 1 and 3 hours, but old age lasted about 10 hours, and Slice 23 shortened it to about 1 (§9.4), for lives of about 4 hours. Later in Slice 23 the owner set them at 4 to 8 (2026-10-12), by growing old later.
 - **Childhood ends at growing up.** M1's viability run counts ticks 0–10,000 as childhood because sprites had no stages (M1 design §7.4, A4). From Slice 22, childhood is a stage, and the harsher world's goal (§6, G5) is counted at growing up.
 
@@ -106,7 +106,7 @@ Each slice is a GitHub issue and its own PR, worked as in `docs/agents/how-we-wo
 | **24. Mixing and mutating genes** | Children differ from their parents; gene quality joins ageing; now and then a gene is doubled, lost or changed in what it does | 23 |
 | **25. Family tree** | A sprite's parents, grandparents and children, living or dead | 23 |
 | **26. Population graph** | The population over time | 23 |
-| **27. Fast-forward and the speed cap** | A world run for many generations with no screen; 4× in Story mode, faster in Lab mode | 23 (and 21, if Lab mode is chosen there) |
+| **27. Fast-forward and the speed cap** | A world run for many generations with no screen; 4× in Story mode, faster in Lab mode (§16) | 21, 23 |
 | **28. Learning by watching** | The young copy what adults do, their parents most | 22, 25 |
 | **29. A harsher world** | About 20% of unattended newborns grow up | 20, 28 |
 | **30. M2 acceptance** | The criteria of §6, measured and played | all |
@@ -139,11 +139,11 @@ M2 is done when these hold, as well as M1's A1–A9. Each slice sets its criteri
 | # | Criterion | Slice |
 |---|---|---|
 | G1 | **Generations.** Left alone, the sprites keep their population going for several generations in most seeds: it doesn't die out, and it doesn't grow past the world's limit. | 23 |
-| G2 | **Family.** Any sprite's parents, grandparents and children can be seen, living or dead. | 25 |
+| G2 | **Family.** Any sprite's parents, grandparents and children can be seen, living or dead, on the family tree (§17). | 25 |
 | G3 | **Population.** A graph shows the population rising and falling over time (§14). | 26 |
 | G4 | **Evolution.** After enough generations, the species has measurably changed from the starter genome, beyond what noise explains: at least 3 gene numbers moved a tenth the same way in 10 seeds of 200,000 ticks (§12.7). | 24; not met there, so measured again with 27 and 29 |
 | G5 | **A harsh childhood.** About 20% of unattended newborns grow up, and grown sprites rarely die of hunger or thirst. | 29 |
-| G6 | **Fast-forward.** A world can run for many generations with no screen, and be opened afterwards. | 27 |
+| G6 | **Fast-forward.** A world can run for many generations with no screen, and be opened afterwards (§16). | 27 |
 | G7 | **Content safety.** A child is never a mating target, for any genome or data pack (§5). | 23 |
 
 Slice 30 gathers the evidence in `docs/acceptance/m2.md`, as `docs/acceptance/m1.md` did for M1, with a play-through checklist for the owner. Slices without a row of their own are checked there: the title screen (Slice 21) and how each slice feels in play, as M1's A8 checked the game in Windows Terminal. Memory of places (Slice 20) shows in G5, which can't be met without it.
@@ -269,8 +269,8 @@ A box in the middle of the screen, over the moving world, holds the title letter
 A small box over the menu, with:
 - **Seed:** a random one filled in. Typing a digit replaces it, then more digits add to it, as a save's name is typed (M1 design §6.7); `Backspace` rubs out, and `Tab` offers another random seed. A seed is a whole number from 0 to 18446744073709551615.
 - **Preset:** `↑` `↓` pick one from a list: `default` first (the built-in preset, or `--data`'s own `presets/default.ron`), then each `.ron` file in the `presets` folder of the game's folder (`%APPDATA%\terra-sprites\presets` on Windows), by name. A preset is checked against the data pack in use when the world is made.
+- **Mode:** Story or Lab, `←` `→` picking, Story unless changed; holding `?` explains the one picked. The world keeps it (§16.1; M4 design §11).
 - `Enter` starts the world; `Esc` goes back to the menu.
-- Once Slice 27 builds Lab mode, the choice between Story mode and Lab mode goes in this box, and the world keeps it (2026-10-12; M4 design §11).
 
 ### 8.4 Leaving a world
 
@@ -280,7 +280,8 @@ A small box over the menu, with:
 
 ### 8.5 Flags
 
-- **`--seed`, `--preset` and `--replay` make or load a world,** so they skip the title screen and go straight in, as before. Their world can still leave for the title screen with `t`.
+- **`--seed`, `--preset`, `--lab`, `--load` and `--replay` make or load a world,** so they skip the title screen and go straight in, as before (`--lab` and `--load` from §16). Their world can still leave for the title screen with `t`.
+- **`--fast-forward` runs a world with no screen at all,** and never shows the title screen (§16.3).
 - **`--data`, `--ascii` and `--theme`** change what the game's worlds are made of or how they're drawn, not which world it opens on, so the title screen still shows, drawn with them, and a new world made from it uses `--data`'s pack.
 
 ---
@@ -427,7 +428,7 @@ The game's rule, "the world decides what happens to the body, the genes decide h
 - **The sprite list** shows young, adult or old as the life stage, and no eggs; **the doing line** says `Going to mate with Bo #7`, `Mated with Bo #7`, `Breeding alone`, `Laid an egg alone`. Slice 32 rewords the first two (§15.8).
 - **The Cursor's mark** shows what it holds as the map draws it: an egg as an egg, and a young sprite it leads small.
 - **Arousal** colours a sprite light magenta when it's its strongest drive above half.
-- The full family tree is Slice 25.
+- The full family tree is Slice 25 (§17).
 
 ### 10.8 How we know it worked
 
@@ -872,8 +873,8 @@ cargo run --release -p terra-sim --example speed
 
 ### 14.8 Later
 
-- **Generations on the graph** need the family tree (Slice 25).
-- **A gene's average over time** belongs to the lab (Slice 27), which can also decide whether a fast-forward writes the counts to a file.
+- **Generations on the graph,** now that the family tree (§17) gives each sprite one ([#208](https://github.com/Keazra/terra-sprites/issues/208), §17.8).
+- **A gene's middle value over time, and the counts in a file,** are fast-forward's tables (Slice 27, §16.4).
 
 ---
 
@@ -970,7 +971,7 @@ The owner's direction: **lone eggs very rare, and a social species that lives in
   │ partner Kit #20                            │
   ```
 - **The Brain tab** lists the new actions, Court and Call, and how well the sprite knows each sprite it remembers.
-- The full family tree is Slice 25.
+- The full family tree is Slice 25 (§17), which names a sprite's partner over their young (§17.2).
 
 ### 15.9 How we know it worked
 
@@ -1060,3 +1061,246 @@ The default world left alone for 200,000 ticks. "Courted" is the share of a pair
 - **Eggs that need warmth:** an egg grows only while a parent is beside it, for Slice 29's harsher world ([#147](https://github.com/Keazra/terra-sprites/issues/147)).
 - **Sharing food** as part of getting along, once sprites can carry ([#135](https://github.com/Keazra/terra-sprites/issues/135)).
 - **A dance's vigour** as a gene females can choose on, as a peacock's tail.
+
+---
+
+## 16. Fast-forward and the speed cap (Slice 27)
+
+Settled with the owner on 2026-10-14 ([#145](https://github.com/Keazra/terra-sprites/issues/145), with [#121](https://github.com/Keazra/terra-sprites/issues/121)), in a round of seven questions. They chose both for the first, Lab mode from the start and an end-game unlock in Story mode (Q1, C); asked for holding `?` to explain a mode (Q2); and kept the other recommendations. Two sides of how time runs: Story mode, the game as it's meant to be played, tops out at 4×, so a life never feels rushed; and a Lab world can be run for many generations with no screen, then opened in the game (G6).
+
+### 16.1 Story mode and Lab mode
+
+- **New world has a Mode row** under the seed: Story first and picked unless `←` `→` pick Lab. The picked one shows in brackets, with what it means in a few words beside it: "4x at most" for Story, "every speed, for experiments" for Lab. The box's hints take two lines: `tab another seed  ←→ mode  ↑↓ preset` and `hold ? what the mode means  enter start  esc back`.
+
+```
+╔═ New world ══════════════════════════════════════════╗
+║ Seed    8261934477120934                             ║
+║ Mode    [Story]  Lab   4x at most                    ║
+║                                                      ║
+║ Preset  ► default                                    ║
+║           big-lake                                   ║
+║                                                      ║
+║                                                      ║
+║ tab another seed  ←→ mode  ↑↓ preset                 ║
+║ hold ? what the mode means  enter start  esc back    ║
+╚══════════════════════════════════════════════════════╝
+```
+
+- **Holding `?` explains the mode picked** (the owner, Q2), in the presets' place, and `←` `→` switch it while it's held:
+
+```
+║ Mode     Story  [Lab]  every speed, for experiments  ║
+║                                                      ║
+║ Lab mode: a world for experiments.                   ║
+║ · Every speed, up to Max; it can be fast-forwarded.  ║
+║ · A world keeps its mode for its whole life.         ║
+```
+
+  Story's reads "Story mode: the game as it's meant to be played.", "· Speeds up to 4x, so a life never feels rushed." and the same last line. Letting go of `?` puts it away; a terminal that never says a key was let go of (M1 design §6.6) puts it away at the next key other than `←` `→`, which does its own job too. The box is tall enough for it, so it doesn't jump. The owner's example also named the inventory, Story's alone (M4 design §2.2): its line, and the ship's other differences, join the explanation when M4 builds them, as M2 has no inventory yet.
+- **A world keeps its mode for its whole life** (M4 design §11): it's world state, saved (M1 design §2.8), in the state hash, and carried by a replay that starts from a new world (M1 design §2.7). A save or replay from before this slice is a Story world, the game it was, and the save format stays 1.
+- **From the command line, a new world is a Story world unless `--lab` is given** (Q2, A). The try-a-PR script passes it on: `.\scripts\try-pr.ps1 201 -Seed 7 --lab`.
+- **The top bar says "lab"** after the speed in a Lab world, as `► 16x lab` or `|| paused 4x lab`; a Story world's is as before.
+- **In M2 the modes differ only in speed and fast-forward.** Nothing in the simulation reads the mode yet: the same seed makes the same world in both, and the sprites live exactly as they did (§16.5). The ship's differences come with M4 (M4 design §2.2).
+
+### 16.2 The speed cap
+
+- **In a Story world, `+` stops at 4×,** pressed or held, and the status line says "4x is Story mode's fastest". The slow speeds, ⅛× to ½×, are in both modes. A Lab world's speeds are M1's, up to Max (M1 design §6.6).
+- **The cap holds wherever time runs:** the map, the population graph (§14.2), and a replay, which plays at its world's speeds. Loading a Story world over a clock running faster slows it to 4×. The title screen's world runs at 4×, as before (§8.1).
+- **The training aids still fit** (#121 asked): a pet's reach back is two seconds of the player's time, 10 ticks at 4× (M1 design §6.5), and a step while paused a second's worth, 5 ticks at 4× (M1 design §6.6). Both were built for every speed, and the cap only takes away their faster ends.
+- **The end-game unlock** (the owner, Q1): once the whole ship is reactivated, a Story world offers to lift the cap, and if the player accepts, it runs at every speed from then on, staying a Story world otherwise. It needs the ship, so M4 builds it (M4 design §2.3).
+
+### 16.3 Fast-forward
+
+A command, run with no screen at all (Q3, A): `cargo run --release -- --fast-forward 200 --seed 7`.
+
+- **It runs for hours of play at 1×** (Q4, A), 4,500 ticks an hour, a whole number from 1: 200 hours is 900,000 ticks, about 90 generations.
+- **It makes a new world, from `--seed`, `--preset` and `--data` as the game does, or carries on a save with `--load mira`.** Fast-forward is faster than 4×, so it's a Lab tool (Q5, A): the world it makes is a Lab world, and a Story save is refused: "mira is a Story world: only Lab worlds fast-forward". An evolved species still reaches a Story world as genome files: `g` saves one from a sprite, and the Place menu's "sprite from a genome file" works in both modes in M2.
+- **`--load <save>` also works on its own,** to open a save in the game from the command line as Load does: a save's name in the saves folder, or a path to a `.tspr` file. It goes straight in, as `--seed` does (§8.5).
+- **What it shows while it runs** (Q6):
+
+```
+PS> cargo run --release -- --fast-forward 20 --seed 7
+Fast-forwarding a new Lab world, seed 7, default preset, for 20 hours (90,000 ticks).
+Ctrl+C stops it early and saves what has run.
+
+ Hours  Sprites  Young  Adults  Old  Eggs  Generation   Died  Old age  Hunger  Thirst  Hurt
+     2       43     16      19    8     3           1      8        8       0       0     0
+     4       57     13      35    9     2           3     13       11       0       1     1
+   ...
+    20       95     16      62   17     3          11     24       24       0       0     0
+
+Done: 20 hours in 5 minutes, 258 ticks a second.
+Saved as seed-7-20h in your saves folder (…): the title screen's Continue opens it.
+The tables are beside it: seed-7-20h-population.csv and seed-7-20h-genes.csv.
+
+Moved most from the starter's, as the middle value among the living:
+  GrowsOld: trait             22500 → 29425     up 31%
+  always → Wander: weight       0.3 → 0.2498    down 17%
+```
+
+  - **A row each tenth of the run,** so always ten. "Sprites" counts the sprites at every life stage, and "Eggs" the eggs beside them, as the population graph does (§14): an egg isn't a sprite until it hatches. "Generation" is how many generations the longest line of descent has run since the run started: the world's sprites then are the 0th, its eggs then the 1st, an egg is one on from the deeper of its parents, and a sprite the Cursor spawns is the 0th. "Died" and the causes after it count since the row before: hunger is starvation, thirst dehydration, and hurt anything an object did.
+  - **A last line, redrawn in place between rows,** reads like `► 143 hours · generation 64 · 95 sprites · 3 eggs · 312 ticks a second · about 13 minutes left`. It shows only on a terminal, so a report sent to a file has the rows alone.
+  - **At the end** it says how long the run took and how fast it ran, where it saved, and the gene values that moved most (§16.4).
+- **It saves in the saves folder and keeps the world it came from:** `seed-7-200h` for a new world, `mira-200h` for mira, or the name `--save <name>` gives, stored as any save by name is (M1 design §6.7). A name a save already has gets `-2`, `-3` and so on, so nothing is saved over, and the report and the tables give the name it was saved by.
+- **`Ctrl+C` stops it early and saves what has run,** with a last row where it stopped, under the whole hours it reached: `seed-7-143h` for a run stopped at 143.5 hours. A second `Ctrl+C` stops at once, without saving. A long run is never lost by stopping it.
+- **It runs exactly the world the game would:** the same seed fast-forwarded is, tick for tick, the world the game has after running as long.
+- **Flags that can't go together** are refused before anything runs: `--replay` with any flag that makes or loads a world, `--load` with `--seed`, `--preset`, `--data` or `--lab`, and `--save` without `--fast-forward`.
+
+### 16.4 The tables
+
+Both are beside the save, named after it, and open in Excel or Google Sheets. Each starts with the mark that tells a spreadsheet it's UTF-8, for the arrows in the genes' names.
+
+- **The population table,** `seed-7-200h-population.csv`, has a row for each count the world keeps for its graph (§14.1): every 100 ticks at first, further apart as the run grows, never more than 511 rows, and one more for the end when it falls between counts. Its columns are the hours of play, the tick, the eggs and each life stage, then what happened since the row before: eggs laid and hatched, sprites spawned, deaths, and deaths by cause, a column for each cause any sprite has died of, named as the screen names it ("Hurt by thornbush"), physiology's three always.
+- **The genes table,** `seed-7-200h-genes.csv`, has a column for each of the starter genome's gene values, from the save's own data pack, named as the generations run names its gene numbers (§12.7): `always → Wander: weight`. Its first row is the starter's own values; then a row at the start, every hour of play, and where it stopped if that fell between hours, each with how many sprites were alive and each value's middle among them, blank where none carries it. A gene that's doubled lines up, the nth of a name with the starter's nth of it (§13).
+- **The gene values that moved most** end the report: up to five whose middle value at the end moved a tenth or more from the starter's, furthest first, with how far up or down. Halving counts as far as doubling, and crossing 0 furthest of all. With none, it says "No gene value has moved a tenth from the starter's yet", and with no sprite alive, "No sprite is left alive to measure the genes of".
+- **The generations run and fast-forward read gene values with the same code,** which moved from the run into the simulation's library for it; the run's report is byte for byte as before (§16.5).
+
+### 16.5 How we know it worked
+
+Agreed before building (Q7):
+
+1. **The cap.** Story mode never passes 4×, by any key, held or pressed, with the graph open or not, and Lab mode reaches Max. Tests.
+2. **The same world.** A world fast-forwarded is exactly the world the game would have after running the same seed as long: the same tick and state hash. A test, over an hour of play.
+3. **It opens.** The save is the newest, so Continue loads it; it loads in Lab mode, with its whole population record, and its clock goes past 4×. A test, and the owner trying it.
+4. **No slower than the game.** Fast-forward runs within a tenth of the speed check's ticks a second, so the report and the tables cost next to nothing.
+5. **For information, not a bar:** seeds 1 to 10 run for 220 hours each (about 100 generations), and how many gene values moved a tenth the same way in all ten. G4 is judged for real once Slice 29's harsher world gives selection something to work on (Slice 24's call, §12.7).
+
+**Measured (2026-10-14)** in release builds in the cloud:
+
+- **1, 2 and 3: met.** The tests pass, among them New world's Mode row and its explanation, the flags, the tables, and the report's rows and lines. Played in the cloud: a 2-hour and a 20-hour run, a run stopped with `Ctrl+C`, and a saved run carried on with `--load`.
+- **4: met, by the owner's call (2026-10-14), though not as written.** Against the speed check it falls short: the speed check ran 285 and 284 ticks a second (22,500 ticks), and fast-forward 212 and 214, a quarter slower, on seed 7 after 20 hours at 100 sprites. The bar was there to show that the report and the tables cost next to nothing, and they do: that same world ran 216 and 217 ticks a second fast-forwarded and 215 and 219 stepped plainly, in turn. A world that has run 20 hours is slower to step than the speed check's freshly crowded one, fast-forwarded or not. The plain stepping was timed with a throwaway example, not kept.
+- **The sprites live exactly as before:** the `generations` run, seeds 1–2 for 20,000 ticks, prints the same, byte for byte, on `main` at `27927d7` and on this slice. The state hash differs, as it should, since the mode is world state.
+- **5: to come.** Ten seeds of 990,000 ticks take most of a day in the cloud. The result is posted on [#145](https://github.com/Keazra/terra-sprites/issues/145) when it ends, and joins this section with Slice 29 (§12.7), which measures G4 again.
+
+### 16.6 Later
+
+- **A key in a Lab world that blanks the map and runs flat out,** with `Esc` to stop and look (Q3, B), if fast-forward from the command line ever isn't enough. Max already runs at about three quarters of what the computer can do.
+- **Runs measured in generations** (Q4, B), once a generation has a definition worth stopping on.
+- **The uncapped population** ([#205](https://github.com/Keazra/terra-sprites/issues/205)) runs with this: a preset with the limit at 1,000 sprites, fast-forwarded overnight, then its population table read and the world opened.
+
+---
+
+## 17. The family tree (Slice 25)
+
+Settled with the owner on 2026-10-14 ([#143](https://github.com/Keazra/terra-sprites/issues/143)), in a round of nine questions. They kept every recommendation, and changed one detail: the sprite the arrows are on blinks, rather than standing in reverse video ("Probably a blinking cursor", Q5). Grieving for and remembering the dead, recent or long ago, is pinned for later (Q8, [#206](https://github.com/Keazra/terra-sprites/issues/206)). Any sprite's parents, grandparents and young can be seen, living or dead (G2).
+
+### 17.1 Generations and the record of the dead
+
+- **Each sprite and egg has a generation** (Q6, A). The world's first sprites, and any the Cursor places, are **generation 1**; a hatchling is one more than its parents', or than the newer parent's when theirs differ. An egg has its generation from when it's laid.
+- **And where it came from:** one the world began with, one the Cursor placed, or one that hatched. A sprite with no parents says which.
+- **The world keeps a record of each sprite that dies** (Q4): its name, its parents, its generation, whether the Cursor placed it, when it was born and died, and how, at what life stage and as which sex. A record is about 100 bytes in a save.
+- **It keeps the newest 10,000** (Q4, B): past that, the longest dead are forgotten first, but never a sprite the player named. About 3 sprites die every 1,000 ticks once the default world is full, so in play nothing is forgotten, and a long fast-forward (Slice 27) can't make a save grow without end.
+- **It's world state:** saved (M1 design §2.8), in the state hash, the same in a replay (M1 design §2.7), and checked every tick there's been a death (M1 design §7.1): the dead aren't in the world, each was born before it died, its parents are older than itself, and its generation comes after theirs, living or remembered.
+- **Nothing in the world reads it** (Q8, A). It's the player's, like a breeder's studbook, so the sprites live exactly as they did before it (§17.7). Sprites know their own parents already, and Slice 32 teaches them their kin (§15.5).
+- **The young of a sprite** are every sprite, egg and remembered dead with it as a parent, in the order they were laid.
+- **A save from before this slice** has no record, so a sprite that had died before it was saved is forgotten: the tree still names it from its young, but knows nothing more, and says it **lived long ago**. Its living sprites and eggs are given generations on loading, in ID order, as if a parent the world doesn't know were of the first generation. The save format stays 1: the record and generations are new, with defaults (M1 design §2.8).
+
+### 17.2 The tree
+
+- **`k` opens it over the panels** (Q1, A), as `p` opens the population graph, on the selected sprite or egg, living or dead: `k` is for kin, as `f` is Follow and `p` the graph. With none selected, it reads "No sprite selected: click one, or press Tab", as the tabs do. `k` or `Esc` closes it. Time runs on behind it, and `space`, `.`, `+` and `-` work as ever, as do `Tab` and `Shift+Tab`, which select the next sprite and redraw the tree around it. Its title names the sprite in the middle.
+- **It reaches from grandparents to young** (Q2, A). Four grandparents fit side by side, each parent centred over its own, then the sprite in the middle, with its life stage, sex, age and generation. Its young are below it, grouped under their other parent (`with Sprite #27476`, `partner Sprite #27476` for its partner's (§15.4), or `alone`), the groups and the young in each in the order they were laid, and its **brothers and sisters**, the young of either parent, are at the foot, with the parent they share (`through Mira #10386`) when it's only one. Lines join the generations, `└──┬──┘` and the like. To see further, the player walks the tree (§17.3).
+- **What it says of each** (Q3, A), under its name as the log names it, on up to two lines:
+
+| Sprite | Line |
+|---|---|
+| Alive | `young`, `adult` or `old`, and `· 3 young` if it has any |
+| An egg | `egg · hatches in 500`, or `egg · hatches once it's put down` while the Cursor holds it, or `… once nothing stands on it` |
+| Dead | `died of old age`, `died young of dehydration`, `died hurt by thornbush`, all in dark gray |
+| Forgotten (§17.1) | `lived long ago`, in dark gray |
+| The sprite in the middle | `adult · female · age 19,331 · generation 4`; an egg, `egg · hatches in 500 · generation 5`; one dead, `died of old age at age 27,401 · generation 3` |
+
+- **"Young" is said of a death** only when the sprite died before growing up: that's the death Slice 29's harsh childhood is about.
+- **A sprite with no parents says where it came from** in their place: `one of the first sprites`, or `placed by the Cursor`. A parent with none says it above itself.
+- **An egg is named as the sprite it hatches into,** `Sprite #53074`, since it keeps its ID when it hatches (§10.4), and its line starts `egg`.
+- **A row that doesn't fit scrolls.** Each young sprite, and each brother or sister, takes 24 columns, so four fit at 100 columns. With more, the row shows as many as fit and scrolls sideways as the arrows go along it, with `◄` or `►` at an edge where there are more.
+- **A sprite can be on the tree twice.** Sprites don't avoid their kin until Slice 32, so a line can be inbred: a sprite's other parent may also be its brother, or its parents' parent the same sprite. Each place on the tree is a card of its own.
+
+The default world (seed 7) at tick 48,000, the round's mock-up as built. Its dead are dark gray in the game, and the sprite in the middle blinks until the arrows choose another.
+
+```
+ Terra Sprites │ tick 48,000 │ ► 1x │ seed 7 │ sprites 99 │ not saved                        ? help
+┌─ Family tree ── Sprite #30212 ─────────────────────────────────────────────────────── esc close ─┐
+│                                                                                                  │
+│        Sprite #531            Sprite #3639             Sprite #525             Sprite #552       │
+│      died of old age         died of old age         died of old age         died of old age     │
+│                                                                                                  │
+│             └───────────┬───────────┘                       └───────────┬───────────┘            │
+│                   Sprite #10386                                   Sprite #4072                   │
+│                  died of old age                                 died of old age                 │
+│                                                                                                  │
+│                         └───────────────────────┬───────────────────────┘                        │
+│                                           Sprite #30212                                          │
+│                            adult · female · age 19,331 · generation 4                            │
+│                                                 │                                                │
+│                         ┌───────────────────────┼───────────────────────┐                        │
+│                with Sprite #27476      with Sprite #24222      with Sprite #37867                │
+│                         │                       │                       │                        │
+│                   Sprite #40652           Sprite #45763           Sprite #53074                  │
+│                  adult · 1 young              adult           egg · hatches in 501               │
+│                                                                                                  │
+│                                                                                                  │
+│ BROTHERS AND SISTERS                                                                             │
+│                               Sprite #24222           Sprite #32305                              │
+│                               old · 2 young               adult                                  │
+│                           through Sprite #4072    through Sprite #10386                          │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+ (128,80) dirt · berry (fresh) │ SELECT     ←→↑↓ choose  enter centre on it  space pause  esc close
+```
+
+Sprite #24222 is both the father of her second young and her brother, through Sprite #4072.
+
+- **The status line's key hints** read `←→↑↓ choose  enter centre on it  space pause  esc close`.
+
+### 17.3 Walking the tree
+
+- **The arrows, or `W` `A` `S` `D`, choose a sprite on it** (Q5, A): left and right along a row, and up and down to the nearest in the next row up or down that has any, the left one of two as near. The pointer chooses the one it's over. The tree opens on the sprite in the middle.
+- **The one chosen blinks:** its name is in reverse video for half of each second (the owner, Q5).
+- **`Enter`, or a click, walks the tree to it:** the tree centres on it, and it's selected, so the inspector shows it, and the map centres on it if it's alive or an egg on the map. A dead one is selected as a sprite that died while selected is (M1 design §6.1): its tabs read `Sprite #10386 died of old age at age 22,787`. One that **lived long ago** can't be, and the status line says so: `Sprite #531 lived long ago: the world no longer remembers it`. `k` or `Esc` closes the tree on whatever was selected last.
+- **A sprite named before it died keeps its name** in the record, so after a load the screen names the dead as it did before, on the tree, in the log and in a dead sprite's tabs.
+
+### 17.4 The lineage colours
+
+- **`b` has a third colour mode, lineage** (Q7, A), after strongest drive and plain (M1 design §6.3), which the M1 design promised M2 would add. It colours the selected sprite's lineage on the map: its parents and grandparents **light blue**, its brothers and sisters **light red**, its young and theirs **light magenta**, and every other sprite **dark gray**, so a family stands out at a glance. The selected sprite keeps its own colour, and with none selected, every sprite does. The status line says `Colours: lineage`.
+- **The round called it Family;** the game calls it lineage, since a family is the household of Slice 32 (§15.6), and this is by blood.
+- **One that's two of these at once,** as in an inbred line, takes the first it is of elders, young and brothers and sisters.
+- **The colours were picked from swatches** of each colour of the 16 over grass, dirt, sand, shallow and deep water and rock: these four read on all of them, and stay apart from the drive colours a player knows (yellow, cyan, red, blue, magenta).
+- **The help screen** gains a line, `LINEAGE  ☺ parents, grandparents  ☺ brothers, sisters  ☺ young, theirs  ☺ the rest`, each `☺` in its colour.
+- **Themes gain a `lineage` section** (`docs/reference/themes.md`), its four colours, `elders`, `siblings`, `young` and `others`. A theme without it, or without some of it, draws what it leaves out as the default theme does, as with the population graph (§14.5).
+
+### 17.5 The inspector
+
+- **The Body tab** says where a sprite came from, and its generation, after its sex: `parents Mira #10386 and Sprite #4072 · generation 4`, on two lines when it's too long for one, or `one of the first sprites · generation 1`, or `placed by the Cursor · generation 1`. An egg's card says its parents and generation the same way.
+- **The World tab** says the generations alive after the number of sprites, `generations  3 to 6`, or `generation  1` when there's one. With no sprites, it leaves the line out.
+
+### 17.6 The information policy
+
+The tree is a panel of its own, `FamilyTree`, about each sprite on it (M1 design §6.4). One the policy hides is a blank card that keeps its place, and so is where it came from; a group of young, or a brother or sister, doesn't name it as the other parent or the one shared, and choosing its card does nothing. With the sprite in the middle hidden, the box stays, empty and titled ` Family tree `. The lineage colours ask it too: a sprite hidden from the tree, or every sprite when the selected one is, draws in its own colour.
+
+### 17.7 How we know it worked
+
+Agreed before building (Q9):
+
+- **UI tests** (ratatui's `TestBackend`) render the tree: grandparents, parents and young, living and dead, an egg, a sprite with no parents, a forgotten ancestor, more young than fit, walking the tree and the selection it leaves, the tree after a save and a load, and the lineage colours. Snapshots of the tree in both themes.
+- **The world's own tests** cover the record: written at each death, saved, in the state hash, the same in a replay, a save from before this slice, and forgetting past 10,000 with the named kept.
+- **The sprites live exactly as before:** the `generations` run (seeds 1–4, 30,000 ticks) prints the same, byte for byte, on `main` and on this branch.
+- **No slower:** the speed check (A5) at least 200 ticks a second, and within 5% of `main` measured the same way.
+
+**Measured (2026-10-14)** in release builds of this slice beside `main` at `27927d7`, in the cloud, with:
+
+```
+cargo run --release -p terra-sim --example generations -- --seeds 1-4 --ticks 30000
+cargo run --release -p terra-sim --example speed
+```
+
+- **The sprites live exactly as before: met.** The `generations` report is the same, byte for byte, on both. The state hash differs, as it should, since generations and the record are world state.
+- **No slower: met.** The speed check ran 192 and 194 ticks a second on `main`, and 191 and 201 on this slice, run in turn: the same, within the noise. This container was slower than Slice 26's (§14.7), so neither reached 200 every time; on the owner's PC A5 runs at about 540 (M1 acceptance).
+- **The UI tests, the snapshots and the world's tests pass.**
+
+### 17.8 Later
+
+- **Generations on the population graph** (Q6, A, [#208](https://github.com/Keazra/terra-sprites/issues/208)): `generations 3 to 6` in the lines that read a moment, now that both are in.
+- **Grieving for and remembering the dead,** recent or long ago ([#206](https://github.com/Keazra/terra-sprites/issues/206), the owner, Q8).
+- **Further back or down:** great-grandparents or grandchildren drawn on the tree (Q2, B and C), if walking it turns out too slow.

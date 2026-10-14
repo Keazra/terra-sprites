@@ -12,6 +12,7 @@ use crate::ecology;
 use crate::events::{Event, EventKind};
 use crate::genome::Genome;
 use crate::inheritance;
+use crate::lineage;
 use crate::map::Dir;
 use crate::mutation::{self, Copied, CopyChange, CopyingError};
 use crate::objects::EntityId;
@@ -61,6 +62,11 @@ pub(crate) struct Unhatched {
     pub(crate) copy_changes: Vec<CopyChange>,
     /// The one that laid it, then its partner, if it had one.
     pub(crate) parents: Vec<EntityId>,
+    /// The generation it hatches into (M2 design §17.1): one after its newer
+    /// parent's. 0 only in a save from before generations, until it's
+    /// loaded.
+    #[serde(default)]
+    pub(crate) generation: u32,
     /// The tick it was laid on.
     pub(crate) laid: u64,
     /// The name the player gave it, which the sprite keeps (design §2.5).
@@ -249,6 +255,11 @@ fn lay(
         mutation::copied(inherited, data, &mut state.rng)
     };
     let parents: Vec<EntityId> = std::iter::once(mother).chain(father).collect();
+    let generation = lineage::generation_after(
+        parents
+            .iter()
+            .map(|&parent| state.sprites.get(parent).expect("a parent").generation),
+    );
     let physiology = data.physiology();
     let (breeding, indices) = (&physiology.breeding, physiology.indices);
     let share = breeding.cost / parents.len() as f32;
@@ -268,6 +279,7 @@ fn lay(
         copying_errors: errors,
         copy_changes: changes,
         parents,
+        generation,
         laid: state.tick,
         name: None,
     }));
