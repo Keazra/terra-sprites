@@ -11,8 +11,8 @@ use common::{ALONE, FEMALE, WorldBuilder, at, builtin, family_in, lone, until};
 use std::collections::BTreeMap;
 
 use terra_sim::{
-    Command, EventKind, Generations, LifeStage, PopulationChanges, PopulationCount, World,
-    WorldConfig,
+    Command, EventKind, Generations, LifeStage, Playback, PopulationChanges, PopulationCount,
+    World, WorldConfig,
 };
 
 /// The eggs and sprites in `world` now, by life stage, in the order a count
@@ -183,6 +183,31 @@ fn a_count_keeps_the_oldest_and_newest_generations_of_its_sprites() {
         generations(1, 2),
         "and the count keeps them"
     );
+}
+
+#[test]
+fn a_replay_plays_the_record_back_with_its_generations() {
+    // #208: the generations are in the record, which is world state, so a
+    // replay checks them with the rest of it (design §2.7).
+    let female = format!("{FEMALE}{ALONE}");
+    let mut world = family_in(lone(), &[(at(0, 0), &female)], &[], 3);
+    world.start_recording();
+    for _ in 0..3_000 {
+        world.step();
+    }
+    assert!(
+        world
+            .population()
+            .iter()
+            .any(|count| count.generations == generations(1, 2)),
+        "her hatchling was counted"
+    );
+    let mut playback = Playback::new(&world.replay().unwrap()).expect("the replay plays");
+    while playback.world().tick() < playback.end() {
+        playback.step();
+    }
+    assert_eq!(playback.divergence(), None);
+    assert_eq!(playback.world().population(), world.population());
 }
 
 #[test]
