@@ -99,7 +99,7 @@ The population graph (`p`, and small at the top of the World tab) stacks the egg
 
 ### `lineage`
 
-`b`'s lineage colours draw each sprite on the map by its kinship to the selected one, the same kin the family tree (`k`) shows; the selected sprite keeps its own colour, and with none selected, every sprite does (M2 design §16). `lineage` is a record of four colours, each of which may be left out and is then drawn as the default theme draws it. A field the game doesn't know is refused, naming it.
+`b`'s lineage colours draw each sprite on the map by where it stands in the selected one's lineage, as the family tree (`k`) shows it; the selected sprite keeps its own colour, and with none selected, every sprite does (M2 design §16). `lineage` is a record of four colours, each of which may be left out and is then drawn as the default theme draws it. A field the game doesn't know is refused, naming it.
 
 | Field | Meaning |
 |---|---|
@@ -179,4 +179,4 @@ A bright theme, for a terminal whose dark colours are hard to see: light colours
 )
 ```
 
-Save it as `bright.ron` in the themes folder and pick it with `Ctrl+T`. Boredom, crowdedness and arousal are left out of `drives`, so a sprite bored, crowded or aroused above all else draws in white. `space` gives only the far stars, in gray rather than dark gray, so the glass and the nearer stars are drawn as the default theme draws them. `population` draws old sprites in white and the line of the world's limit in gray; the rest of the graph is drawn as in the default theme. `lineage` draws the sprites that aren't kin in gray, a little brighter than the default's dark gray.
+Save it as `bright.ron` in the themes folder and pick it with `Ctrl+T`. Boredom, crowdedness and arousal are left out of `drives`, so a sprite bored, crowded or aroused above all else draws in white. `space` gives only the far stars, in gray rather than dark gray, so the glass and the nearer stars are drawn as the default theme draws them. `population` draws old sprites in white and the line of the world's limit in gray; the rest of the graph is drawn as in the default theme. `lineage` draws the sprites outside the lineage in gray, a little brighter than the default's dark gray.

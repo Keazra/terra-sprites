@@ -322,7 +322,7 @@ fn a_policy_that_hides_the_family_tree_hides_the_lineage_colours_too() {
     assert_eq!(
         render(&app, &world)[cell(other)].fg,
         Color::DarkGray,
-        "no kin"
+        "not of its lineage"
     );
     app.set_policy(HideTheFamilyTree);
     assert_eq!(render(&app, &world)[cell(other)].fg, Color::White);

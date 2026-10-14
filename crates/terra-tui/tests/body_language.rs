@@ -178,8 +178,8 @@ fn b_switches_between_the_strongest_drive_plain_and_lineage_and_says_so() {
     let status: String = (0..100).map(|x| screen[(x, 29)].symbol()).collect();
     assert!(status.trim_end().ends_with("Colours: plain"), "{status}");
 
-    // With none selected, no one is kin, and each keeps its own colour
-    // (M2 design §16).
+    // With none selected, no lineage is marked, and each sprite keeps its
+    // own colour (M2 design §16).
     app.apply(Action::CycleColours, &world);
     assert_eq!(app.colour_mode(), ColourMode::Lineage);
     let screen = render(&app, &world);

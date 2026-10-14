@@ -164,19 +164,19 @@ fn colour_legend(app: &App, world: &World, width: usize) -> Vec<Line<'static>> {
     lines
 }
 
-/// The lineage colours (M2 design §16): who's drawn in each, kin to the
-/// selected sprite.
+/// The lineage colours (M2 design §16): who's drawn in each, of the
+/// selected sprite's lineage.
 fn lineage_legend(app: &App) -> Line<'static> {
     let sprite = app.theme.glyph(SemanticTile::Sprite).symbol.to_string();
     let lineage = app.theme.lineage();
-    let kin = [
+    let marked = [
         (lineage.elders, "parents, grandparents"),
         (lineage.siblings, "brothers, sisters"),
         (lineage.young, "young, theirs"),
         (lineage.others, "the rest"),
     ];
     let mut spans = vec![Span::raw(" LINEAGE  ")];
-    for (colour, who) in kin {
+    for (colour, who) in marked {
         spans.push(Span::styled(sprite.clone(), Style::default().fg(colour)));
         spans.push(Span::raw(format!(" {who}  ")));
     }

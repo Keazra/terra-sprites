@@ -2,7 +2,7 @@
 //! selected sprite or egg, with its grandparents, parents, young and
 //! brothers and sisters, living or dead; the arrows or the pointer choose
 //! one, and `Enter` or a click walks the tree to it and selects it. The
-//! lineage colours (`b`) mark the same kin on the map, and the inspector
+//! lineage colours (`b`) mark the same sprites on the map, and the inspector
 //! says each sprite's generation.
 
 mod common;
@@ -680,13 +680,16 @@ fn the_lineage_colours_mark_the_selected_sprite_s_kin_on_the_map() {
         assert_eq!(drawn, expected, "{id:?}");
         seen.push(expected);
     }
-    for kin in [
+    for colour in [
         Color::LightBlue,
         Color::LightMagenta,
         Color::LightRed,
         Color::DarkGray,
     ] {
-        assert!(seen.contains(&kin), "some {kin:?} on the map: {seen:?}");
+        assert!(
+            seen.contains(&colour),
+            "some {colour:?} on the map: {seen:?}"
+        );
     }
 }
 

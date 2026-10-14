@@ -9,7 +9,7 @@ use serde::Deserialize;
 use terra_sim::{DataPack, Terrain};
 
 use crate::app::{CursorMode, StatusMark};
-use crate::family_tree::Kin;
+use crate::family_tree::Lineage;
 use crate::graph::Band;
 use crate::space::{Depth, Pane};
 
@@ -140,13 +140,13 @@ pub struct LineageLook {
 }
 
 impl LineageLook {
-    /// The colour of a sprite that's `kin` to the selected one, or of one
-    /// that's none of its kin.
-    pub(crate) fn colour(&self, kin: Option<Kin>) -> Color {
-        match kin {
-            Some(Kin::Elder) => self.elders,
-            Some(Kin::Sibling) => self.siblings,
-            Some(Kin::Young) => self.young,
+    /// The colour of a sprite that stands in the selected one's lineage as
+    /// `lineage` says, or of one outside it.
+    pub(crate) fn colour(&self, lineage: Option<Lineage>) -> Color {
+        match lineage {
+            Some(Lineage::Elder) => self.elders,
+            Some(Lineage::Sibling) => self.siblings,
+            Some(Lineage::Young) => self.young,
             None => self.others,
         }
     }

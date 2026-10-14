@@ -4,7 +4,7 @@
 - **Date:** 2026-10-12
 - **History:** edited in place since v5; each change is a file in [`changes/`](changes/), whose README says where v1 to v5 are
 - **Builds on:** [M1 design](m1-a-sprite-lives.md), which stays the rulebook for everything M2 doesn't change
-- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), breeding (Slice 23), the view past the wall (Slice 31), mixing and mutating genes (Slice 24), with copy and change (24b), the population graph (Slice 26), and courtship and families (Slice 32)
+- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), breeding (Slice 23), the view past the wall (Slice 31), mixing and mutating genes (Slice 24), with copy and change (24b), the population graph (Slice 26), courtship and families (Slice 32), and the family tree (Slice 25)
 
 ---
 
@@ -139,7 +139,7 @@ M2 is done when these hold, as well as M1's A1–A9. Each slice sets its criteri
 | # | Criterion | Slice |
 |---|---|---|
 | G1 | **Generations.** Left alone, the sprites keep their population going for several generations in most seeds: it doesn't die out, and it doesn't grow past the world's limit. | 23 |
-| G2 | **Family.** Any sprite's parents, grandparents and children can be seen, living or dead. | 25 |
+| G2 | **Family.** Any sprite's parents, grandparents and children can be seen, living or dead, on the family tree (§16). | 25 |
 | G3 | **Population.** A graph shows the population rising and falling over time (§14). | 26 |
 | G4 | **Evolution.** After enough generations, the species has measurably changed from the starter genome, beyond what noise explains: at least 3 gene numbers moved a tenth the same way in 10 seeds of 200,000 ticks (§12.7). | 24; not met there, so measured again with 27 and 29 |
 | G5 | **A harsh childhood.** About 20% of unattended newborns grow up, and grown sprites rarely die of hunger or thirst. | 29 |
@@ -427,7 +427,7 @@ The game's rule, "the world decides what happens to the body, the genes decide h
 - **The sprite list** shows young, adult or old as the life stage, and no eggs; **the doing line** says `Going to mate with Bo #7`, `Mated with Bo #7`, `Breeding alone`, `Laid an egg alone`. Slice 32 rewords the first two (§15.8).
 - **The Cursor's mark** shows what it holds as the map draws it: an egg as an egg, and a young sprite it leads small.
 - **Arousal** colours a sprite light magenta when it's its strongest drive above half.
-- The full family tree is Slice 25.
+- The full family tree is Slice 25 (§16).
 
 ### 10.8 How we know it worked
 
@@ -872,7 +872,7 @@ cargo run --release -p terra-sim --example speed
 
 ### 14.8 Later
 
-- **Generations on the graph** need the family tree (Slice 25).
+- **Generations on the graph,** now that the family tree (§16) gives each sprite one (§16.8).
 - **A gene's average over time** belongs to the lab (Slice 27), which can also decide whether a fast-forward writes the counts to a file.
 
 ---
@@ -969,7 +969,7 @@ The owner's direction: **lone eggs very rare, and a social species that lives in
   │ partner Kit #20                            │
   ```
 - **The Brain tab** lists the new actions, Court and Call, and how well the sprite knows each sprite it remembers.
-- The full family tree is Slice 25.
+- The full family tree is Slice 25 (§16), which marks a sprite's partner once both are in (§16.8).
 
 ### 15.9 How we know it worked
 
@@ -995,3 +995,131 @@ Agreed before measuring (round 1, Q11; round 2, Q5). The default world left alon
 - **Eggs that need warmth:** an egg grows only while a parent is beside it, for Slice 29's harsher world ([#147](https://github.com/Keazra/terra-sprites/issues/147)).
 - **Sharing food** as part of getting along, once sprites can carry ([#135](https://github.com/Keazra/terra-sprites/issues/135)).
 - **A dance's vigour** as a gene females can choose on, as a peacock's tail.
+
+---
+
+## 16. The family tree (Slice 25)
+
+Settled with the owner on 2026-10-14 ([#143](https://github.com/Keazra/terra-sprites/issues/143)), in a round of nine questions. They kept every recommendation, and changed one detail: the sprite the arrows are on blinks, rather than standing in reverse video ("Probably a blinking cursor", Q5). Grieving for and remembering the dead, recent or long ago, is pinned for later (Q8, [#206](https://github.com/Keazra/terra-sprites/issues/206)). Any sprite's parents, grandparents and young can be seen, living or dead (G2).
+
+### 16.1 Generations and the record of the dead
+
+- **Each sprite and egg has a generation** (Q6, A). The world's first sprites, and any the Cursor places, are **generation 1**; a hatchling is one more than its parents', or than the newer parent's when theirs differ. An egg has its generation from when it's laid.
+- **And where it came from:** one the world began with, one the Cursor placed, or one that hatched. A sprite with no parents says which.
+- **The world keeps a record of each sprite that dies** (Q4): its name, its parents, its generation, whether the Cursor placed it, when it was born and died, and how, at what life stage and as which sex. A record is about 100 bytes in a save.
+- **It keeps the newest 10,000** (Q4, B): past that, the longest dead are forgotten first, but never a sprite the player named. About 3 sprites die every 1,000 ticks once the default world is full, so in play nothing is forgotten, and a long fast-forward (Slice 27) can't make a save grow without end.
+- **It's world state:** saved (M1 design §2.8), in the state hash, the same in a replay (M1 design §2.7), and checked every tick there's been a death (M1 design §7.1): the dead aren't in the world, each was born before it died, its parents are older than itself, and its generation comes after theirs.
+- **Nothing in the world reads it** (Q8, A). It's the player's, like a breeder's studbook, so the sprites live exactly as they did before it (§16.7). Sprites know their own parents already, and Slice 32 teaches them their kin (§15.5).
+- **The young of a sprite** are every sprite, egg and remembered dead with it as a parent, in the order they were laid.
+- **A save from before this slice** has no record, so a sprite that had died before it was saved is forgotten: the tree still names it from its young, but knows nothing more, and says it **lived long ago**. Its living sprites and eggs are given generations on loading, in ID order, as if a parent the world doesn't know were of the first generation. The save format stays 1: the record and generations are new, with defaults (M1 design §2.8).
+
+### 16.2 The tree
+
+- **`k` opens it over the panels** (Q1, A), as `p` opens the population graph, on the selected sprite or egg, living or dead: `k` is for kin, as `f` is Follow and `p` the graph. With none selected, it reads "No sprite selected: click one, or press Tab", as the tabs do. `k` or `Esc` closes it. Time runs on behind it, and `space`, `.`, `+` and `-` work as ever, as do `Tab` and `Shift+Tab`, which select the next sprite and redraw the tree around it. Its title names the sprite in the middle.
+- **It reaches from grandparents to young** (Q2, A). Four grandparents fit side by side, each parent centred over its own, then the sprite in the middle, with its life stage, sex, age and generation. Its young are below it, grouped under their other parent (`with Sprite #27476`, or `alone`) in the order they were laid, and its **brothers and sisters**, the young of either parent, are at the foot, with the parent they share (`through Mira #10386`) when it's only one. Lines join the generations, `└──┬──┘` and the like. To see further, the player walks the tree (§16.3).
+- **What it says of each** (Q3, A), under its name as the log names it, on up to two lines:
+
+| Sprite | Line |
+|---|---|
+| Alive | `young`, `adult` or `old`, and `· 3 young` if it has any |
+| An egg | `egg · hatches in 500`, or `egg · hatches once it's put down` while the Cursor holds it, or `… once nothing stands on it` |
+| Dead | `died of old age`, `died young of dehydration`, `died hurt by thornbush`, all in dark gray |
+| Forgotten (§16.1) | `lived long ago`, in dark gray |
+| The sprite in the middle | `adult · female · age 19,331 · generation 4`; an egg, `egg · hatches in 500 · generation 5`; one dead, `died of old age at age 27,401 · generation 3` |
+
+- **"Young" is said of a death** only when the sprite died before growing up: that's the death Slice 29's harsh childhood is about.
+- **A sprite with no parents says where it came from** in their place: `one of the first sprites`, or `placed by the Cursor`. A parent with none says it above itself.
+- **An egg is named as the sprite it hatches into,** `Sprite #53074`, since it keeps its ID when it hatches (§10.4), and its line starts `egg`.
+- **A row that doesn't fit scrolls.** Each young sprite, and each brother or sister, takes 24 columns, so four fit at 100 columns. With more, the row shows as many as fit and scrolls sideways as the arrows go along it, with `◄` or `►` at an edge where there are more.
+- **A sprite can be on the tree twice.** Sprites don't avoid their kin until Slice 32, so a line can be inbred: a sprite's other parent may also be its brother, or its parents' parent the same sprite. Each place on the tree is a card of its own.
+
+The default world (seed 7) at tick 48,000, the round's mock-up as built. Its dead are dark gray in the game, and the sprite in the middle blinks until the arrows choose another.
+
+```
+ Terra Sprites │ tick 48,000 │ ► 1x │ seed 7 │ sprites 99 │ not saved                        ? help
+┌─ Family tree ── Sprite #30212 ─────────────────────────────────────────────────────── esc close ─┐
+│                                                                                                  │
+│        Sprite #531            Sprite #3639             Sprite #525             Sprite #552       │
+│      died of old age         died of old age         died of old age         died of old age     │
+│                                                                                                  │
+│             └───────────┬───────────┘                       └───────────┬───────────┘            │
+│                   Sprite #10386                                   Sprite #4072                   │
+│                  died of old age                                 died of old age                 │
+│                                                                                                  │
+│                         └───────────────────────┬───────────────────────┘                        │
+│                                           Sprite #30212                                          │
+│                            adult · female · age 19,331 · generation 4                            │
+│                                                 │                                                │
+│                         ┌───────────────────────┼───────────────────────┐                        │
+│                with Sprite #27476      with Sprite #24222      with Sprite #37867                │
+│                         │                       │                       │                        │
+│                   Sprite #40652           Sprite #45763           Sprite #53074                  │
+│                  adult · 1 young              adult           egg · hatches in 501               │
+│                                                                                                  │
+│                                                                                                  │
+│ BROTHERS AND SISTERS                                                                             │
+│                               Sprite #24222           Sprite #32305                              │
+│                               old · 2 young               adult                                  │
+│                           through Sprite #4072    through Sprite #10386                          │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+ (128,80) dirt · berry (fresh) │ SELECT     ←→↑↓ choose  enter centre on it  space pause  esc close
+```
+
+Sprite #24222 is both the father of her second young and her brother, through Sprite #4072.
+
+- **The status line's key hints** read `←→↑↓ choose  enter centre on it  space pause  esc close`.
+
+### 16.3 Walking the tree
+
+- **The arrows, or `W` `A` `S` `D`, choose a sprite on it** (Q5, A): left and right along a row, and up and down to the nearest in the next row up or down that has any, the left one of two as near. The pointer chooses the one it's over. The tree opens on the sprite in the middle.
+- **The one chosen blinks:** its name is in reverse video for half of each second (the owner, Q5).
+- **`Enter`, or a click, walks the tree to it:** the tree centres on it, and it's selected, so the inspector shows it, and the map centres on it if it's alive or an egg on the map. A dead one is selected as a sprite that died while selected is (M1 design §6.1): its tabs read `Sprite #10386 died of old age at age 22,787`. One that **lived long ago** can't be, and the status line says so: `Sprite #531 lived long ago: the world no longer remembers it`. `k` or `Esc` closes the tree on whatever was selected last.
+- **A sprite named before it died keeps its name** in the record, so after a load the screen names the dead as it did before, on the tree, in the log and in a dead sprite's tabs.
+
+### 16.4 The lineage colours
+
+- **`b` has a third colour mode, lineage** (Q7, A), after strongest drive and plain (M1 design §6.3), which the M1 design promised M2 would add. It colours the selected sprite's lineage on the map: its parents and grandparents **light blue**, its brothers and sisters **light red**, its young and theirs **light magenta**, and every other sprite **dark gray**, so a family stands out at a glance. The selected sprite keeps its own colour, and with none selected, every sprite does. The status line says `Colours: lineage`.
+- **The round called it Family;** the game calls it lineage, since a family is the household of Slice 32 (§15.6), and this is by blood.
+- **One that's two of these at once,** as in an inbred line, takes the first it is of elders, young and brothers and sisters.
+- **The colours were picked from swatches** of each colour of the 16 over grass, dirt, sand, shallow and deep water and rock: these four read on all of them, and stay apart from the drive colours a player knows (yellow, cyan, red, blue, magenta).
+- **The help screen** gains a line, `LINEAGE  ☺ parents, grandparents  ☺ brothers, sisters  ☺ young, theirs  ☺ the rest`, each `☺` in its colour.
+- **Themes gain a `lineage` section** (`docs/reference/themes.md`), its four colours, `elders`, `siblings`, `young` and `others`. A theme without it, or without some of it, draws what it leaves out as the default theme does, as with the population graph (§14.5).
+
+### 16.5 The inspector
+
+- **The Body tab** says where a sprite came from, and its generation, after its sex: `parents Mira #10386 and Sprite #4072 · generation 4`, on two lines when it's too long for one, or `one of the first sprites · generation 1`, or `placed by the Cursor · generation 1`. An egg's card says its parents and generation the same way.
+- **The World tab** says the generations alive after the number of sprites, `generations  3 to 6`, or `generation  1` when there's one. With no sprites, it leaves the line out.
+
+### 16.6 The information policy
+
+The tree is a panel of its own, `FamilyTree`, about each sprite on it (M1 design §6.4). One the policy hides is a blank card that keeps its place, and so is where it came from. With the sprite in the middle hidden, the box stays, empty and titled ` Family tree `. The lineage colours ask it too: a sprite hidden from the tree, or every sprite when the selected one is, draws in its own colour.
+
+### 16.7 How we know it worked
+
+Agreed before building (Q9):
+
+- **UI tests** (ratatui's `TestBackend`) render the tree: grandparents, parents and young, living and dead, an egg, a sprite with no parents, a forgotten ancestor, more young than fit, walking the tree and the selection it leaves, the tree after a save and a load, and the lineage colours. Snapshots of the tree in both themes.
+- **The world's own tests** cover the record: written at each death, saved, in the state hash, the same in a replay, a save from before this slice, and forgetting past 10,000 with the named kept.
+- **The sprites live exactly as before:** the `generations` run (seeds 1–4, 30,000 ticks) prints the same, byte for byte, on `main` and on this branch.
+- **No slower:** the speed check (A5) at least 200 ticks a second, and within 5% of `main` measured the same way.
+
+**Measured (2026-10-14)** in release builds of this slice beside `main` at `27927d7`, in the cloud, with:
+
+```
+cargo run --release -p terra-sim --example generations -- --seeds 1-4 --ticks 30000
+cargo run --release -p terra-sim --example speed
+```
+
+- **The sprites live exactly as before: met.** The `generations` report is the same, byte for byte, on both. The state hash differs, as it should, since generations and the record are world state.
+- **No slower: met.** The speed check ran 192 and 194 ticks a second on `main`, and 191 and 201 on this slice, run in turn: the same, within the noise. This container was slower than Slice 26's (§14.7), so neither reached 200 every time; on the owner's PC A5 runs at about 540 (M1 acceptance).
+- **The UI tests, the snapshots and the world's tests pass.**
+
+### 16.8 Later
+
+- **Generations on the population graph** (Q6, A): `generations 3 to 6` in the lines that read a moment, now that both are in.
+- **The partner,** once Slice 32 is in: the tree marks a sprite's partner `· partner`. Whichever of the two merges second does it.
+- **Grieving for and remembering the dead,** recent or long ago ([#206](https://github.com/Keazra/terra-sprites/issues/206), the owner, Q8).
+- **Further back or down:** great-grandparents or grandchildren drawn on the tree (Q2, B and C), if walking it turns out too slow.

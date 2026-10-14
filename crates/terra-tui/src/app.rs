@@ -77,7 +77,8 @@ listed_enum! {
         Drive => "strongest drive",
         /// Its own colour.
         Plain => "plain",
-        /// The selected sprite's kin each in their colour, and the rest
+        /// The selected sprite's parents and grandparents, brothers and
+        /// sisters, and young and theirs each in their colour, and the rest
         /// dark gray (M2 design §16).
         Lineage => "lineage",
     }

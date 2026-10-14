@@ -3,7 +3,7 @@
 //! its young below, grouped by their other parent, and its brothers and
 //! sisters at the foot, living or dead. The arrows or the pointer choose
 //! one, which blinks, and `Enter` or a click walks the tree to it and
-//! selects it. The same kin colour the map in the lineage colours (`b`).
+//! selects it. The lineage colours (`b`) mark the same sprites on the map.
 
 use std::collections::BTreeMap;
 use std::ops::Range;
@@ -154,7 +154,7 @@ pub(crate) struct Card {
 }
 
 impl Card {
-    /// The card of a relative of the sprite in the middle (M2 design §16):
+    /// The card of a sprite of the middle one's lineage (M2 design §16):
     /// living, its life stage and how many young it has; an egg, when it
     /// hatches; dead, how it died; forgotten, that it lived long ago. Then
     /// `more`, if any.
@@ -888,10 +888,10 @@ fn joint(up: bool, down: bool, left: bool, right: bool) -> char {
     }
 }
 
-/// How a sprite on the map is kin to the selected one, for the lineage
-/// colours (M2 design §16).
+/// Where a sprite on the map stands in the selected one's lineage, for the
+/// lineage colours (M2 design §16).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Kin {
+pub(crate) enum Lineage {
     /// A parent or grandparent.
     Elder,
     /// A brother or sister.
@@ -900,32 +900,32 @@ pub(crate) enum Kin {
     Young,
 }
 
-/// The kin of sprite `id` the lineage colours mark (M2 design §16): its
-/// parents and grandparents, its brothers and sisters, and its young and
-/// theirs, living or dead or eggs. One that's kin twice over takes the
-/// first of these that it is.
-pub(crate) fn kin(world: &World, id: EntityId) -> BTreeMap<EntityId, Kin> {
-    let mut kin = BTreeMap::new();
+/// The sprites of sprite `id`'s lineage the lineage colours mark (M2
+/// design §16): its parents and grandparents, its brothers and sisters, and
+/// its young and theirs, living or dead or eggs. One that's there twice
+/// over, as in an inbred line, takes the first of these that it is.
+pub(crate) fn lineage(world: &World, id: EntityId) -> BTreeMap<EntityId, Lineage> {
+    let mut marked = BTreeMap::new();
     let parents = Known::of(world, id).parents();
     for &parent in parents {
-        kin.entry(parent).or_insert(Kin::Elder);
+        marked.entry(parent).or_insert(Lineage::Elder);
         for &grandparent in Known::of(world, parent).parents() {
-            kin.entry(grandparent).or_insert(Kin::Elder);
+            marked.entry(grandparent).or_insert(Lineage::Elder);
         }
     }
     for young in world.young(id) {
-        kin.entry(young).or_insert(Kin::Young);
+        marked.entry(young).or_insert(Lineage::Young);
         for theirs in world.young(young) {
-            kin.entry(theirs).or_insert(Kin::Young);
+            marked.entry(theirs).or_insert(Lineage::Young);
         }
     }
     for &parent in parents {
         for sibling in world.young(parent) {
-            kin.entry(sibling).or_insert(Kin::Sibling);
+            marked.entry(sibling).or_insert(Lineage::Sibling);
         }
     }
-    kin.remove(&id);
-    kin
+    marked.remove(&id);
+    marked
 }
 
 #[cfg(test)]

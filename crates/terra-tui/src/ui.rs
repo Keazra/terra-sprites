@@ -16,7 +16,7 @@ use crate::app::{
     item_look, spoken_duration, strongest_drive,
 };
 use crate::clock::Speed;
-use crate::family_tree::{self, Kin};
+use crate::family_tree::{self, Lineage};
 use crate::inspector::{self, INSPECTOR_WIDTH, NOTHING_SELECTED, first_shown};
 use crate::policy::{Panel, Subject};
 use crate::space::{self, Place};
@@ -303,13 +303,14 @@ fn is_emote(app: &App, sprite: &SpriteView) -> bool {
     app.emote(id).is_some() && app.can_view(Panel::Emotes, Subject::Sprite(id))
 }
 
-/// The selected sprite and its kin, while the map shows the lineage
-/// colours and a sprite is selected, living or dead (M2 design §16).
-type Lineage = (EntityId, BTreeMap<EntityId, Kin>);
+/// The selected sprite and those of its lineage the map marks, while it
+/// shows the lineage colours and a sprite is selected, living or dead (M2
+/// design §16).
+type Marked = (EntityId, BTreeMap<EntityId, Lineage>);
 
 /// The lineage the map colours, if it does: not while the policy hides
 /// the selected sprite from the family tree.
-fn lineage_on_map(app: &App, world: &World) -> Option<Lineage> {
+fn lineage_on_map(app: &App, world: &World) -> Option<Marked> {
     if app.colour_mode() != ColourMode::Lineage {
         return None;
     }
@@ -317,16 +318,17 @@ fn lineage_on_map(app: &App, world: &World) -> Option<Lineage> {
     if !family_tree::shown(app, id) {
         return None;
     }
-    Some((id, family_tree::kin(world, id)))
+    Some((id, family_tree::lineage(world, id)))
 }
 
 /// The colour `sprite` is drawn in, in the colour mode (design §6.3): its
 /// strongest drive's above .5, or else `own`, its glyph's colour; or in the
-/// lineage colours, its kinship to the selected sprite, which keeps `own`,
-/// as every sprite does with none selected (M2 design §16). A drive the
-/// theme has no colour for draws `own` too, and so does a sprite whose
-/// colour, or place on the family tree, the policy hides (design §6.4).
-fn sprite_colour(app: &App, sprite: &SpriteView, own: Color, lineage: Option<&Lineage>) -> Color {
+/// lineage colours, where it stands in the selected sprite's lineage. The
+/// selected sprite keeps `own`, as every sprite does with none selected (M2
+/// design §16). A drive the theme has no colour for draws `own` too, and so
+/// does a sprite whose colour, or place on the family tree, the policy
+/// hides (design §6.4).
+fn sprite_colour(app: &App, sprite: &SpriteView, own: Color, lineage: Option<&Marked>) -> Color {
     if !app.can_view(Panel::MapColours, Subject::Sprite(sprite.id())) {
         return own;
     }
@@ -338,10 +340,12 @@ fn sprite_colour(app: &App, sprite: &SpriteView, own: Color, lineage: Option<&Li
         // As the family tree does, the lineage colours ask the policy
         // about each sprite they mark.
         ColourMode::Lineage => match lineage {
-            Some((selected, kin))
+            Some((selected, marked))
                 if *selected != sprite.id() && family_tree::shown(app, sprite.id()) =>
             {
-                app.theme.lineage().colour(kin.get(&sprite.id()).copied())
+                app.theme
+                    .lineage()
+                    .colour(marked.get(&sprite.id()).copied())
             }
             _ => own,
         },
