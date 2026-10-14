@@ -4,7 +4,7 @@
 - **Date:** 2026-10-12
 - **History:** edited in place since v5; each change is a file in [`changes/`](changes/), whose README says where v1 to v5 are
 - **Builds on:** [M1 design](m1-a-sprite-lives.md), which stays the rulebook for everything M2 doesn't change
-- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), breeding (Slice 23), the view past the wall (Slice 31), mixing and mutating genes (Slice 24), with copy and change (24b), and the population graph (Slice 26)
+- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), breeding (Slice 23), the view past the wall (Slice 31), mixing and mutating genes (Slice 24), with copy and change (24b), the population graph (Slice 26), and courtship and families (Slice 32)
 
 ---
 
@@ -36,6 +36,7 @@ The owner's principles carry over unchanged (`docs/agents/how-we-work.md`). Thre
 | Learning by watching | 28 | [#146](https://github.com/Keazra/terra-sprites/issues/146) (from [#66](https://github.com/Keazra/terra-sprites/issues/66)) |
 | A harsher world | 29 | [#147](https://github.com/Keazra/terra-sprites/issues/147) (from [#122](https://github.com/Keazra/terra-sprites/issues/122)) |
 | M2 acceptance | 30 | [#148](https://github.com/Keazra/terra-sprites/issues/148) |
+| Courtship and families | 32 | [#186](https://github.com/Keazra/terra-sprites/issues/186) |
 
 ### 1.2 Not in M2
 
@@ -110,9 +111,11 @@ Each slice is a GitHub issue and its own PR, worked as in `docs/agents/how-we-wo
 | **29. A harsher world** | About 20% of unattended newborns grow up | 20, 28 |
 | **30. M2 acceptance** | The criteria of §6, measured and played | all |
 | **31. The view past the wall** | The view scrolls past the glass into space, with stars going by (§11) | — |
+| **32. Courtship and families** | Sprites call for a mate, court before mating, and stay together as partners; parents keep near their eggs and young; lone eggs are very rare (§15) | 23, 24 |
 
 - **20, 21 and 22 can start at once.** 21 touches only the front end. 20 and 22 both touch the brain and the body, so running them side by side means merging carefully.
 - **24, 25, 26 and 27 can run side by side** once 23 is in.
+- **32 comes before 28 and 29,** which lean on parents being near their young: the young copy their parents most, and guidance is how newborns survive a harsher world.
 
 ---
 
@@ -121,8 +124,9 @@ Each slice is a GitHub issue and its own PR, worked as in `docs/agents/how-we-wo
 The owner's one content-safety rule ([#69](https://github.com/Keazra/terra-sprites/issues/69), `docs/agents/how-we-work.md`): **attraction and mating attempts towards a sprite that isn't an adult are impossible,** for every genome and every data pack. Data can be edited and genes evolve, so the engine enforces it, the one exception to "the engine enforces physics only".
 
 Slice 23 builds it:
-- `Mate` is never offered unless both sprites are adults (an old sprite counts as one, §9.1). It's a hard check in verb availability, not a learned or genetic lean. Nor is `BreedAlone`, unless the sprite is grown (§10.3).
+- `Mate` is never offered unless both sprites are adults (an old sprite counts as one, §9.1). It's a hard check in verb availability, not a learned or genetic lean. Nor is `BreedAlone`, unless the sprite is grown (§10.3). Nor is `Court`, a dance before mating, unless both are adults (Slice 32, §15.3).
 - Attraction, whatever form it takes, never targets a non-adult. **The breeding drive works only between adults** (Slice 23): `physiology.ron` names it (`breeding.drive`, the starter's `arousal`), and whatever the genes, it reads 0 in a sprite not grown up, and in an adult's choices about one: it draws no eye to it, moves the sprite to do nothing to it, and its body language shows none, to other sprites or on screen: the engine's views read it as 0 in a young sprite. Its fall teaches worth only after a Mate, and only about that partner, never sprites in general or new things (§10.2).
+- **Courtship and calls are attraction too** (Slice 32): a heard call from a sprite not grown up counts as a sprite not grown up, so the breeding drive draws no eye to it and moves the sprite to nothing about it. Caring for the young is a drive of its own, anxiety, which never reads the breeding drive (§15.6).
 - `check_invariants` checks it every tick, and property tests with random genomes pin it.
 - Genes that switch on at adulthood (§3, reading A) are the natural home for mating instincts; the engine's check holds regardless.
 
@@ -362,14 +366,14 @@ cargo run --release -p terra-sim --example speed
 
 ## 10. Breeding (Slice 23)
 
-Settled with the owner on 2026-10-12 ([#141](https://github.com/Keazra/terra-sprites/issues/141)), in a round of ten questions and two decision cards. Grown sprites have young, alone or with a partner as their genes lean, and only ever between adults (§5). Seeing the slice built, the owner set its direction: sprites are a social species, and a female laying alone should be very rare. Pairs can't yet carry a world on their own (§10.8), so for now a female lays alone only after a long while with no male in sight (§10.3), and Slice 32 ([#186](https://github.com/Keazra/terra-sprites/issues/186)), courtship and family units, makes it very rare. The numbers are data, the `breeding` section of `physiology.ron` and the starter genome: first guesses, tuned against §10.8. A save from before this slice keeps the pack it was made with (M1 design §2.8), which has no breeding, so its sprites never have young.
+Settled with the owner on 2026-10-12 ([#141](https://github.com/Keazra/terra-sprites/issues/141)), in a round of ten questions and two decision cards. Grown sprites have young, alone or with a partner as their genes lean, and only ever between adults (§5). Seeing the slice built, the owner set its direction: sprites are a social species, and a female laying alone should be very rare. Pairs can't yet carry a world on their own (§10.8), so for now a female lays alone only after a long while with no male in sight (§10.3), and Slice 32 ([#186](https://github.com/Keazra/terra-sprites/issues/186)), courtship and family units, makes it very rare (§15). The numbers are data, the `breeding` section of `physiology.ron` and the starter genome: first guesses, tuned against §10.8. A save from before this slice keeps the pack it was made with (M1 design §2.8), which has no breeding, so its sprites never have young.
 
 ### 10.1 Sexes, by neighbours
 
 The owner chose sex by neighbours, as in clownfish and gobies, over hermaphrodites, two fixed sexes and mating types.
 
 - **Every sprite hatches male,** and no young sprite changes.
-- **A body sensor, `female_near`,** is 1 while a female adult is within the sprite's sense radius, and 0 otherwise. `female` is 1 for a female. The round had it count how many females are near; one is enough to keep a male male, so it's on or off. `male_near` is the same for a male adult; it feeds longing (§10.3).
+- **A body sensor, `female_near`,** is 1 while a female adult is within the sprite's sense radius, and 0 otherwise. `female` is 1 for a female. The round had it count how many females are near; one is enough to keep a male male, so it's on or off. `male_near` is the same for a male adult; it feeds longing (§10.3). Slice 32 makes a female or male adult heard calling lately count as near too (§15.1).
 - **A hormone, the `feminiser`, decides when a male turns.** The starter genes raise it while the sprite, grown up, sees no female adult and lower it fast while it sees one: a male long without females (about 800 ticks) turns. The genes set the pace, so evolution can tune it.
 - **Past `turns_female` (0.8), an adult male turns female for good,** at the start of step 3 (M1 design §2.4), as its life stage changes. It's the engine's rule, like growing up: the genes move the hormone, the body does the rest.
 - **Only a female lays eggs.** A pair needs a male and a female; a female can breed alone (§10.3).
@@ -387,7 +391,7 @@ The game's rule, "the world decides what happens to the body, the genes decide h
 
 - **Two actions, chosen by instinct** (the owner, Q1): `Mate`, with the sprite attended to, and `BreedAlone`. They show on the doing line and the Brain tab.
 - **`Mate` is offered only when both are adults** (§5): the sprite, and the one the verb would be aimed at, a running action's target or else the candidate (M1 design §5.5, #173). It works, once, if both are fertile, one is male and the other female, and she has a free tile beside her: she lays an egg there (§10.4), on land with no sprite or item on it (#196). The partner learns about the one that mated with it too, as if touched. Otherwise it's a fruitless try.
-- **`BreedAlone` is offered only to a grown sprite.** It works for a fertile female whose **longing** has reached `breeds_alone` (0.5), with a free tile beside her; for a male, or a female not fertile or not longing enough, it's a fruitless try.
+- **`BreedAlone` is offered only to a grown sprite.** It works for a fertile female whose **longing** has reached `breeds_alone` (0.5), with a free tile beside her; for a male, or a female not fertile or not longing enough, it's a fruitless try. Slice 32 replaces the gate on longing with the body's own rule: an hour with no male adult seen or heard (§15.7).
 - **Longing** is a hormone the starter genes raise while a grown sprite sees no male adult and lower fast while it sees one: about 1,100 ticks with no male in sight takes it to 0.5. It came after the owner saw that 9 eggs in 10 were laid alone. Most of those came from chance: a sprite now and then tries what it isn't drawn to (M1 design §5.5), and for a fertile female, breeding alone always worked. The body's rule stops that; the genes set how fast longing builds, so evolution can still tune it.
 - **The egg costs `cost` (0.3) energy** (Q2): split between a pair, or all hers alone. Per bite of food, both pass on as much of the parents' genes, so neither wins on cost; what makes partners pay is that a lone egg doubles its mother's genes, so each hidden flaw she carries is broken in about half her lone young (§12.3).
 - **Body language** (the owner's card, 2026-10-12): a sprite sees how aroused the sprite it attends to is, `target_arousal`, and whether it's of the other sex, `target_other_sex`. Before it, in tuning, most tries to mate met a partner of the same sex or one not fertile, and nearly every egg was laid alone. These are brain inputs `brain_io.ron` lists like any other: one that reads `Target(...)` reads the sprite attended to, and one that reads `Differs(...)` how far that differs from the sprite's own; both are 0 unless attention is on a sprite that has hatched, and any that reads arousal is 0 unless both are grown (§5). Attention can't read them, as it can't any input about what it attends to (M1 design §5.3).
@@ -420,7 +424,7 @@ The game's rule, "the world decides what happens to the body, the genes decide h
 - **The map:** an egg is `o` in CP437 and `0` in ASCII, where `o` is the ball: the theme's `objects` entry for `"egg"` (#196). A selected egg is drawn in reverse video. A theme from before, with the tiles `egg` and `selected_egg`, still loads, and draws the egg item with its `egg` glyph unless its `objects` give one.
 - **An egg's card:** a click on an egg in Select mode selects it, and every sprite tab shows its card in place of a sprite's: `egg · hatches in 750 ticks`, or while it waits `egg · hatches once it's put down` or `egg · hatches once nothing stands on it`; then `parents Pip #12 and Bo #7`. When it hatches, the selection goes on to the young sprite. `T` tracks an egg and `G` saves its genome, but the Cursor doesn't follow one, and Tab passes it by. The World tab counts the eggs on the map with the other items; the top bar counts only sprites.
 - **The Body tab:** after the traits, the sex, `· fertile` while it is, and for a male, how near it is to turning, `male · fertile · turning 40%`; then `parents Pip #12 and Bo #7`.
-- **The sprite list** shows young, adult or old as the life stage, and no eggs; **the doing line** says `Going to mate with Bo #7`, `Mated with Bo #7`, `Breeding alone`, `Laid an egg alone`.
+- **The sprite list** shows young, adult or old as the life stage, and no eggs; **the doing line** says `Going to mate with Bo #7`, `Mated with Bo #7`, `Breeding alone`, `Laid an egg alone`. Slice 32 rewords the first two (§15.8).
 - **The Cursor's mark** shows what it holds as the map draws it: an egg as an egg, and a young sprite it leads small.
 - **Arousal** colours a sprite light magenta when it's its strongest drive above half.
 - The full family tree is Slice 25.
@@ -752,7 +756,7 @@ The default world left alone for 200,000 ticks; the genes are those of the hatch
 
 - **The error rate as a gene:** the owner wants it pinned (round 1, Q2); [#194](https://github.com/Keazra/terra-sprites/issues/194).
 - **Born knowing what its ancestors learned:** measured with Slice 27's fast-forward and Slice 29's harsher world (§13.3).
-- **Breeding alone can take over:** in one of seeds 8 and 9 every sprite alive at the end had lost the gene by which a male near lowers a female's longing, and in the other at least a tenth had (§13.3); seed 8 laid four times as many lone eggs as in §12.7's run. Courtship and families, Slice 32 ([#186](https://github.com/Keazra/terra-sprites/issues/186)), should check pairs still pay.
+- **Breeding alone can take over:** in one of seeds 8 and 9 every sprite alive at the end had lost the gene by which a male near lowers a female's longing, and in the other at least a tenth had (§13.3); seed 8 laid four times as many lone eggs as in §12.7's run. Courtship and families, Slice 32 ([#186](https://github.com/Keazra/terra-sprites/issues/186)), should check pairs still pay. It makes breeding alone the body's rule, which no gene can loosen (§15.7).
 
 ---
 
@@ -869,3 +873,124 @@ cargo run --release -p terra-sim --example speed
 
 - **Generations on the graph** need the family tree (Slice 25).
 - **A gene's average over time** belongs to the lab (Slice 27), which can also decide whether a fast-forward writes the counts to a file.
+
+---
+
+## 15. Courtship and families (Slice 32)
+
+Settled with the owner on 2026-10-13 ([#186](https://github.com/Keazra/terra-sprites/issues/186)), in two rounds of questions. Until this slice, two aroused adults of different sexes who happened to look at each other mated, and that was all. Nothing kept the pair together, and a mother walked away from her egg. Sprites met only by chance, since a sprite sees about 1% of the default map. So a female who had gone a while without a male laid alone, and in Slice 24b's long runs breeding alone spread once a gene that held it back was lost (§13.3).
+
+The owner's direction: **lone eggs very rare, and a social species that lives in family units**, whose sprites find mates through courtship and attraction. So:
+
+- sprites that want a mate **call**;
+- a call brings two strangers close enough to **get to know each other**;
+- then he **dances**, she chooses, and if she likes him she dances back;
+- once her **receptivity** is high enough, they mate;
+- after their first egg they're **partners**;
+- both keep near their egg, and near their young until the young grow up, held together by **anxiety**;
+- a female can breed alone only after about an hour with no male seen or heard.
+
+**The world and the genes.** The engine enforces physics and content safety only (§5), so the world says who's whose, how far a call carries, when a body can breed, and who may court whom. The genes say what a sprite feels about all of it, so evolution can change it.
+
+| The world (data, so a mod can change it) | The genes (vary from sprite to sprite, and evolve) |
+|---|---|
+| Who's whose: a sprite knows its partner, parents, young and eggs, and its kin | How strongly its own draw its eye, and how much it avoids its kin |
+| A call carries round walls, and the hearer knows who called and from where | When to call, and whether to answer |
+| A pair can mate once her receptivity is high enough | What raises it: being danced for, and dancing back |
+| A female can breed alone only after about an hour with no male seen or heard | Whether she wants to |
+| Only adults court, mate or answer a call to mate (§5) | — |
+
+**Two parts.** **32a** builds calls, getting to know each other, courtship, partners, kin and the lone-egg rule. **32b** builds families: anxiety, eggs and the young. 32b builds on eggs as items ([#196](https://github.com/Keazra/terra-sprites/issues/196)). The numbers are data, the `calls` and `breeding` sections of `physiology.ron`, `terrain.ron`, and the starter genome: first guesses, tuned against §15.9. A save from before this slice keeps the pack it was made with (M1 design §2.8), which has no calls or courtship.
+
+### 15.1 Calls
+
+- **`Call` is a new action,** with no target, like Rest. The sprite calls once and the action ends. It costs `calls.cost` energy (0.002), so sprites don't call all the time.
+- **A call travels like a wave** (the owner, round 2). It spreads from the caller over every tile that carries sound, around anything that doesn't, and through doorways, and it weakens along the way. Each terrain says in `terrain.ron` how much sound it soaks up per tile, `sound`, and a terrain with none, such as rock or, in M4, the ship's hull, stops it. A call is heard wherever its way there costs at most `calls.reach` (300). Its way is measured as a sprite's is (M1 design §3.1): a step costs the tile's `sound`, a diagonal step 14/10 of it, and it doesn't cut a corner past a tile that stops it. In M2's terrarium every open terrain, water included, soaks up 10, so a call carries about 30 tiles straight and 21 on the diagonal, three times as far as a sprite sees. That covers about six times as much ground: about 6 other sprites in a full default world, against about 1 in sight. Objects don't stop sound. On the ship, plating can carry a call further than grass (M4 design §3.2).
+- **A hearer knows who called and where from.** It feels a `heard` pulse. For `calls.heard_for` ticks (150) the caller is offered among the sprites it could attend to, at the edge of sight, as a remembered place is (§7.3). What draws the eye to a heard call fades over that time. Body language reads a heard caller as if it were in sight: its arousal, its sex, whether it's kin.
+- **Going to a call is a trip** (§7.4), to the tile the call came from, by the sprite's own way there. With no way there, it doesn't set off. Once the caller is in sight, the trip is an ordinary action aimed at it.
+- **A call stops at a sector's hull** but goes through its doorways, so on the ship calls stop at the hull as counting and sight do (M4 design §3.1).
+- **Hearing counts for sex by neighbours** (round 1, Q4). A sprite that has heard a female adult call within `heard_for` ticks counts as having a female near (`female_near`), and the same for a male (`male_near`). So a male that hears females stays male, even where sprites are thinly spread (§10.1).
+- **The starter genes:** an aroused sprite with no adult of the other sex in sight calls. An aroused sprite that hears a possible mate turns its eye to the call and goes to it. Family uses calls to keep in touch (§15.6).
+
+### 15.2 Getting to know each other
+
+- **A sprite has a familiarity with each sprite it remembers:** how well it knows that individual, from 0 to 1. Until now familiarity was only of object types and of sprites as a whole (M1 design §5.6).
+- **It grows while the sprite sees the other,** by its own sight, so one that sees further may know the other better than it's known. It grows by the brain parameter `befriend_rate` (0.0013 a tick, so about 750 ticks, 10 minutes at 1×, from strangers to well known), and faster when they play together: a social Play between them adds `befriend_play` (0.1). It fades by `befriend_fade`, as slowly as a good lesson (0.000025). Seeing a sprite is enough to remember it. A sprite is forgotten once all it has learned about it, familiarity included, has faded below `forget_below`, or once it dies (M1 design §5.6).
+- **Body language reads it:** `target_familiar`, how well the sprite knows the one it attends to.
+- **The starter genes court only a sprite they know well,** so strangers brought together by a call spend time together first. If that proves too restricting when measured, the owner's call (round 1) is to drop it from the starter genes.
+
+### 15.3 Courtship
+
+- **`Court` is a new action,** aimed at the sprite attended to: the sprite walks up to it and **dances** once, as Play walks up and plays. The one danced for feels a `courted` pulse, and the dancer a `danced` pulse. It's offered only when both are adults (§5), as Mate is.
+- **Receptivity** is a new hormone. The starter genes raise it when a sprite is danced for, more when it dances back, and it fades within a few minutes. **Mate lays an egg only when the female's receptivity is at least `breeding.receptive` (0.5),** on top of §10.3's rules. Otherwise it's a fruitless try. This is the owner's "hormonal angle" (round 1, Q2): evolution can change what raises receptivity and how fast, so courtship is kept by its worth, not by a rule.
+- **He dances, she chooses** (round 1, Q1). In the starter genes, an aroused male dances for a female he knows. A female danced for by a male she knows dances back, more readily the healthier he looks. About three dances each make her receptive. Then arousal with an aroused sprite of the other sex leads to Mate, as before (§10.3). A sprite of either sex can carry genes to court; the starter's are a male's and a female's because sprites change sex (§10.1).
+- **She chooses by how healthy he looks** (round 2, Q2). Body language reads it as `target_health`: the sprite's energy, hydration and freedom from injury, times its genes' average health (§9.4). So a male with broken genes (§12.4) looks poorer, and choosy females pass on fewer flaws. How much it matters to her is in her genes.
+- **Gifts of food,** as part of how sprites get along, wait for sprites that can carry things ([#135](https://github.com/Keazra/terra-sprites/issues/135)).
+
+### 15.4 Partners
+
+- **Two sprites that have an egg together are partners** (round 1, Q5). Each remembers the other as its partner, which replaces any partner it had. It's world state, saved and in the state hash.
+- **Partners stay together for life,** in the starter genes: they keep near each other (§15.6), and court only each other while both live.
+- **A partner is freed** when the other dies, with a `lost_partner` pulse, or after `breeding.apart` ticks (4,500, an hour at 1×) in which neither has seen or heard the other. Each keeps when it last saw or heard its partner, and both are freed together once both times are that long ago. Then each may pair again.
+- **Mourning is in the genes:** in the starter, losing a partner raises a hormone, `grief`, that holds arousal down for about 1,500 ticks (20 minutes at 1×). Geese and swans pine after losing a partner, and swans often pair again.
+- **What a sprite feels about its partner:** a body sensor, `partner_near`, is 1 while it sees its partner or has heard it call within `heard_for` ticks; body language reads `target_partner`.
+
+### 15.5 Kin
+
+- **A sprite knows its close kin:** its parents, its young, and its brothers and sisters, sprites with a parent in common. Body language reads `target_kin`.
+- **Avoiding kin is in the genes** (round 1, Q6). The starter genes weigh strongly against courting kin, so it happens only now and then, as when no one else is about. Nothing forbids it. Kin share hidden flaws, so a child of two kin is more often born with broken genes (§12.3), and evolution can keep or lose the avoidance.
+
+### 15.6 Families and anxiety (32b)
+
+- **Both parents keep near their egg** until it hatches (round 1, Q7), and near their young until the young grow up (Q8). One parent can leave to eat or drink while the other stays with the egg. Once grown, nothing holds the young: the pull fades as they grow up, and they leave when their needs take them away. An orphan fends for itself.
+- **Anxiety** is a new drive and need, second-order like loneliness (round 2, Q4). It's what holds a family together, and what it rises with is in the genes. The world gives the senses: body sensors for an egg of its own out of sight (`egg_away`), out of sight and left with no other parent by it when the sprite last saw it (`egg_alone`), a young child out of sight (`young_away`), a parent out of sight for a young sprite (`parent_away`), and a partner out of sight (`partner_away`). In the starter genes, a parent's anxiety rises slowly while its egg is out of sight, and fast if it left the egg alone. It rises while its young are out of sight, in a young sprite while no parent is in sight, and a little while its partner is away. It falls fast when they're found. Hunger and thirst come first (M1 design §5.6), so a starving parent still goes to eat.
+- **Finding them eases it,** so a sprite learns its family is good for it, and care grows with practice. Anxiety is care, so it never reads the breeding drive (§5).
+- **Its own draw its eye.** An attention instinct can name **whom** it's about, as well as the category: its family (its partner, parents, young and eggs) or its kin. Then it draws the eye to such a sprite or egg, and not to others of its kind. In the starter genes, anxiety draws the eye to family, and arousal draws it away from kin. The egg category offers a parent its own egg when it reaches one, not only the nearest.
+- **A parent remembers where it last saw its egg.** With the egg out of sight, it's offered at the edge of sight like a remembered place (§7.3), so an anxious parent goes back to it on a trip (§7.4). One that finds the egg gone, as when the Cursor has moved it, forgets the place.
+- **Calls keep the family in touch:** in the starter genes, an anxious sprite calls, and one that hears its family call goes to it.
+
+### 15.7 Breeding alone
+
+- **A female can breed alone only after `breeding.alone_after` ticks (4,500, an hour at 1×) with no male adult seen or heard** (round 1, Q9). It's the body's rule, counted in the world, and it replaces the gate on longing, `breeds_alone` (§10.3). So no gene can make lone eggs common: in Slice 24b, the loss of the gene by which a male near lowers longing did just that (§13.3). Komodo dragons and some sharks have laid eggs alone in zoos, only when kept from males.
+- **Longing stays as whether she wants to.** The starter's "arousal and longing in a female → breed alone" is unchanged.
+- **A world down to its last few females can still recover,** which a rule of no lone eggs at all wouldn't allow.
+
+### 15.8 What the player sees
+
+- **The map:** a dance flashes `♫` over the dancer and a call `♪` over the caller, in arousal's light magenta, as other emotes flash (M1 design §6.3). In ASCII they're `~` and `"`. Anxiety colours a sprite when it's its strongest drive above half, in a colour picked in the build with swatches.
+- **The doing line:** `Courting Bo #7`, `Calling`, `Going to Bo #7's call · 24 tiles to go`. Mating is reworded, as #190 left for this slice: `Going to pair with Bo #7`, `Paired with Bo #7`, `Couldn't pair with Bo #7`. A parent going back: `Going back to its egg · 12 tiles to go`.
+- **The log:** `Pip #12 and Bo #7 are now partners` on their first egg together, `Pip #12 lost Bo #7` when a partner dies, and `Pip #12 and Bo #7 parted` when an hour apart frees them. Dances and calls stay out of the log, since they're frequent.
+- **The Body tab:** a line after the parents, `partner Kit #20`, or while mourning `partner Kit #20 · died`.
+
+  ```
+  │ male · fertile · turning 40%               │
+  │ parents Pip #12 and Bo #7                  │
+  │ partner Kit #20                            │
+  ```
+- **The Brain tab** lists the new actions, Court and Call, and how well the sprite knows each sprite it remembers.
+- The full family tree is Slice 25.
+
+### 15.9 How we know it worked
+
+Agreed before measuring (round 1, Q11; round 2, Q5). The default world left alone for **200,000 ticks** (about 45 hours at 1×, about 20 generations), seeds 1–10, the run where breeding alone took over in §13.3:
+
+- **Keeps going:** sprites alive at the end in **at least 8 of 10 seeds**, never more than the limit.
+- **Lone eggs very rare:** at most **1 egg in 50** laid alone over all ten seeds, and no seed above 1 in 20. In §10.8's runs it was 15% to 31%.
+- **Courted first:** at least **9 eggs in 10** laid by a pair come after the two danced for each other, all seeds together.
+- **Families stay together** (32b), as the median over all of them:
+  - partners have each other in sight for at least **half** the time both are alive and grown;
+  - an egg has a parent in sight for at least **three quarters** of its time;
+  - a young sprite with a living parent has one in sight for at least **half** its childhood.
+- **Safe:** tests with random genomes show that courting, mating and answering a call to mate only ever happen between adults.
+- **Nothing else got worse:** A1–A4 still met (A3 on seeds 1–30), and A5 at least 200 ticks a second with 100 sprites.
+- **For information:** males and females among the adults; how often partners pair again; how far calls bring mates; hunger and thirst's share of grown-up deaths (5.1% in §13.3); broken genes a sprite; how many hatchlings grow up.
+
+32a is measured on all but the families' row; 32b on all of them.
+
+### 15.10 Later
+
+- **True echoes:** a call heard twice, or from the wrong side, in a hall.
+- **Clans:** grown young who stay with their family, like elephants or meerkats (round 1, Q8).
+- **Eggs that need warmth:** an egg grows only while a parent is beside it, for Slice 29's harsher world ([#147](https://github.com/Keazra/terra-sprites/issues/147)).
+- **Sharing food** as part of getting along, once sprites can carry ([#135](https://github.com/Keazra/terra-sprites/issues/135)).
+- **A dance's vigour** as a gene females can choose on, as a peacock's tail.

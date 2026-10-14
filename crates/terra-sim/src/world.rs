@@ -784,6 +784,13 @@ impl<'a> HeldView<'a> {
     pub fn visual_state(&self) -> &'a str {
         visual_state(self.world, self.object)
     }
+
+    /// The name of the item's current stage, or `None` if its type has no
+    /// stages, as for an object on the map (`ObjectView::stage`).
+    pub fn stage(&self) -> Option<&'a str> {
+        let stages = &self.world.data.object_types()[self.object.kind].stages;
+        self.object.stage.map(|stage| stages[stage].name.as_str())
+    }
 }
 
 /// A read-only view of an egg (M2 design §10.4): an item, on the map or in
