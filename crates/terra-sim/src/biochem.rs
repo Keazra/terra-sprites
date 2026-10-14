@@ -82,6 +82,11 @@ pub(crate) struct Program {
     targets: Vec<Target>,
     /// Each signal chemical's index and level at birth, where a gene sets one.
     initial: Vec<(usize, f32)>,
+    /// How each gene is expressed at the life stage it was compiled for, in
+    /// genome order (design §4.3): the same until the stage or the genome
+    /// changes, so genes that only weakened are compiled again without
+    /// finding it afresh (#210).
+    expressed: Vec<Expression>,
 }
 
 /// A receptor target and the receptors aimed at it.
@@ -213,6 +218,26 @@ impl Program {
         stage: LifeStage,
         health: &[f32],
     ) -> Program {
+        Program::weakened_as(
+            genome,
+            data,
+            stage,
+            &expressions(genome, data, stage),
+            health,
+        )
+    }
+
+    /// The same, from how each gene is expressed at `stage`, in genome
+    /// order, which it keeps. Finding that is most of the work, so a sprite
+    /// finds it once for its brain and body, and keeps it while its genes
+    /// only weaken (#210).
+    pub(crate) fn weakened_as(
+        genome: &Genome,
+        data: &DataPack,
+        stage: LifeStage,
+        expressed: &[Expression],
+        health: &[f32],
+    ) -> Program {
         let range = |which: Trait| data.physiology().traits.range(which);
         // A trait no gene sets takes the middle of its range.
         let middle = |which: Trait| {
@@ -242,17 +267,12 @@ impl Program {
             })
             .collect();
         let mut weakening = (0.0, 0);
-        for (index, (gene, expression)) in genome
-            .genes
-            .iter()
-            .zip(expressions(genome, data, stage))
-            .enumerate()
-        {
+        for (index, (gene, expression)) in genome.genes.iter().zip(expressed).enumerate() {
             let strength = health_of(health, index);
             if frailty(gene) > 0.0 {
                 weakening = (weakening.0 + strength, weakening.1 + 1);
             }
-            if expression != Expression::Expressed {
+            if *expression != Expression::Expressed {
                 continue;
             }
             match *gene {
@@ -338,7 +358,14 @@ impl Program {
             change_emitters,
             targets,
             initial,
+            expressed: expressed.to_vec(),
         }
+    }
+
+    /// How each gene is expressed at the life stage it was compiled for, in
+    /// genome order.
+    pub(crate) fn expressed(&self) -> &[Expression] {
+        &self.expressed
     }
 }
 

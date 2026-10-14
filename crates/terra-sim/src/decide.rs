@@ -198,7 +198,8 @@ pub(crate) fn decide(
     // Sprites in general, worked out once for everything the sprite weighs
     // this tick (design v18 §5.6).
     let general = sprite.brain.sprites_in_general(data);
-    let found: BTreeMap<CategoryId, Offer> = offered
+    // Each with how it's seen, which its aim keeps (#210).
+    let found: BTreeMap<CategoryId, (Offer, Seen)> = offered
         .into_iter()
         .map(|(category, things)| {
             let drawn = things.into_iter().map(|offer| {
@@ -217,7 +218,7 @@ pub(crate) fn decide(
                     &general,
                     data,
                 );
-                (offer, draw)
+                ((offer, seen), draw)
             });
             let best = best_above(drawn, f32::NEG_INFINITY);
             (category, best.expect("a category offers something"))
@@ -225,7 +226,7 @@ pub(crate) fn decide(
         .collect();
     let candidates: BTreeMap<CategoryId, Candidate> = found
         .into_iter()
-        .map(|(category, offer)| {
+        .map(|(category, (offer, seen))| {
             let target = offer.target;
             // A remembered place's way is found only if the sprite sets off
             // for it (M2 design §7).
@@ -237,12 +238,12 @@ pub(crate) fn decide(
             let type_id = state.type_of(data, target);
             let aim = Aim {
                 category,
-                subject: state.subject_of(data, target),
-                distance: offer.cost.map_or(1.0, |cost| normalized(cost, reach)),
+                subject: seen.subject,
+                distance: seen.distance,
                 adjacent: state.on_goal_tile(data, sprite.pos, target),
-                recall: offer.recall,
-                not_grown: not_grown(target),
-                relation: family::relation(state, data, id, target),
+                recall: seen.recall,
+                not_grown: seen.not_grown,
+                relation: seen.relation,
             };
             let candidate = Candidate {
                 type_id,
