@@ -157,6 +157,8 @@ impl Flood {
         let mut straight = vec![BLOCKED; padded * (h + 2)];
         let mut diagonal = vec![BLOCKED; padded * (h + 2)];
         let mut open = vec![false; padded * (h + 2)];
+        // The dearest step, for the ring of buckets below.
+        let mut longest = None;
         for (y, map_y) in (y0..=y1).enumerate() {
             for (x, map_x) in (x0..=x1).enumerate() {
                 let pos = Pos { x: map_x, y: map_y };
@@ -172,6 +174,7 @@ impl Flood {
                 };
                 straight[index] = entry + extra;
                 diagonal[index] = step(Some(entry), Dir::NE, || true).expect("walkable") + extra;
+                longest = longest.max(Some(straight[index].max(diagonal[index])));
             }
         }
         let (ox, oy) = (usize::from(origin.x - x0), usize::from(origin.y - y0));
@@ -185,15 +188,13 @@ impl Flood {
         // being settled to `longest` more: a ring of that many buckets, one
         // per cost, holds them, and each bucket is sorted into tile order
         // when its turn comes. Nothing joins it then, since no step is free.
-        let longest = straight
-            .iter()
-            .chain(&diagonal)
-            .filter(|&&step| step != BLOCKED)
-            .max()
-            .map_or(1, |&step| step as usize);
+        // A ring of more buckets works as well, so it has a power of two,
+        // which finds a cost's bucket without a division (#210).
+        let longest = longest.map_or(1, |step| step as usize);
         // Each bucket is a list threaded through `waiting`, newest first:
         // a tile, and the place of the next entry in its bucket.
-        let ring = longest + 1;
+        let ring = (longest + 1).next_power_of_two();
+        let bucket = |cost: u32| cost as usize & (ring - 1);
         let mut buckets = vec![END_OF_LIST; ring];
         let mut waiting: Vec<(usize, usize)> = Vec::with_capacity(tiles * 2);
         waiting.push((start, END_OF_LIST));
@@ -202,7 +203,7 @@ impl Flood {
         let mut settling = Vec::new();
         let mut cost = 0;
         while queued > 0 {
-            let slot = cost as usize % ring;
+            let slot = bucket(cost);
             let mut entry = std::mem::replace(&mut buckets[slot], END_OF_LIST);
             while entry != END_OF_LIST {
                 let (index, next) = waiting[entry];
@@ -224,7 +225,7 @@ impl Flood {
                     if total < costs[next] {
                         costs[next] = total;
                         steps[next] = d;
-                        let slot = total as usize % ring;
+                        let slot = bucket(total);
                         waiting.push((next, buckets[slot]));
                         buckets[slot] = waiting.len() - 1;
                         queued += 1;

@@ -97,13 +97,12 @@ pub(crate) fn expressions(genome: &Genome, data: &DataPack, stage: LifeStage) ->
             if !switch.is_on(stage) {
                 return Expression::Dormant;
             }
-            match Setting::of(gene) {
-                Some(setting) if settings.contains(&setting) => Expression::Unexpressed,
-                Some(setting) => {
-                    settings.insert(setting);
-                    Expression::Expressed
-                }
-                _ => Expression::Expressed,
+            // Only the first gene to set a value sets it.
+            let set_before = Setting::of(gene).is_some_and(|setting| !settings.insert(setting));
+            if set_before {
+                Expression::Unexpressed
+            } else {
+                Expression::Expressed
             }
         })
         .collect()

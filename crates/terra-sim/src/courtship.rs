@@ -420,25 +420,51 @@ pub(crate) fn look_round(
             .retain(|heard| heard.fresh(tick, heard_for) && alive.contains(&heard.caller));
     }
     let sprites = &state.sprites;
-    let adult = |id: EntityId, sex: Sex| {
-        sprites
-            .get(id)
-            .is_some_and(|other| other.sex == sex && other.stage().is_grown())
+    // Each sprite's tile, and its sex if it's grown, in ascending ID order,
+    // found once: every sprite looks at every other (#210).
+    let everyone: Vec<(EntityId, Pos, Option<Sex>)> = sprites
+        .iter()
+        .map(|(id, sprite)| {
+            (
+                id,
+                sprite.pos,
+                sprite.stage().is_grown().then_some(sprite.sex),
+            )
+        })
+        .collect();
+    let grown = |id: EntityId| {
+        let place = everyone.binary_search_by_key(&id, |&(id, ..)| id);
+        place.ok().and_then(|place| everyone[place].2)
     };
     let company: BTreeMap<EntityId, Company> = sprites
         .iter()
         .map(|(id, sprite)| {
-            let seen: Vec<EntityId> = sprites
-                .iter()
-                .filter(|&(other, them)| other != id && sprite.sees(them.pos))
-                .map(|(other, _)| other)
-                .collect();
-            let heard = sprite.heard.iter().map(|heard| heard.caller);
-            let sensed: Vec<EntityId> = seen.iter().copied().chain(heard).collect();
+            // Those it senses: those it sees, as `Sprite::sees` says, with
+            // its sight found once, and those it has heard.
+            let (here, sight) = (sprite.pos, sprite.sight());
+            let mut seen = Vec::new();
+            let (mut female_near, mut male_near) = (false, false);
+            let mut sense = |sex: Option<Sex>| {
+                female_near |= sex == Some(Sex::Female);
+                male_near |= sex == Some(Sex::Male);
+            };
+            for &(other, pos, sex) in &everyone {
+                if other != id && chebyshev(here, pos) <= sight {
+                    seen.push(other);
+                    sense(sex);
+                }
+            }
+            for heard in &sprite.heard {
+                sense(grown(heard.caller));
+            }
+            let partner_near = sprite.partner().is_some_and(|partner| {
+                seen.binary_search(&partner).is_ok()
+                    || sprite.heard.iter().any(|heard| heard.caller == partner)
+            });
             let company = Company {
-                female_near: sensed.iter().any(|&other| adult(other, Sex::Female)),
-                male_near: sensed.iter().any(|&other| adult(other, Sex::Male)),
-                partner_near: sprite.partner().is_some_and(|p| sensed.contains(&p)),
+                female_near,
+                male_near,
+                partner_near,
                 seen,
                 family: FamilySenses::default(),
             };

@@ -422,7 +422,17 @@ impl DataPack {
 
     /// The brain input with the ID `id`.
     pub(crate) fn brain_input(&self, id: InputId) -> Option<&BrainInput> {
-        self.brain_inputs.iter().find(|input| input.id == id)
+        self.brain_input_index(id)
+            .map(|place| &self.brain_inputs[place])
+    }
+
+    /// Where the brain input with the ID `id` is in a brain's inputs. They're
+    /// in ID order, so it's a binary search: re-expressing an old sprite's
+    /// genes looks up every instinct's inputs (#210).
+    pub(crate) fn brain_input_index(&self, id: InputId) -> Option<usize> {
+        self.brain_inputs
+            .binary_search_by_key(&id, |input| input.id)
+            .ok()
     }
 
     /// The brain input called `name`.
@@ -543,7 +553,7 @@ impl DataPack {
 
     /// The chemical with the ID `id`.
     pub(crate) fn chemical(&self, id: ChemId) -> Option<&Chemical> {
-        self.chemicals.iter().find(|c| c.id == id)
+        self.chemical_index(id).map(|place| &self.chemicals[place])
     }
 
     /// Where the chemical with the ID `id` is in the pack's chemical order.
@@ -563,7 +573,7 @@ impl DataPack {
 
     /// The locus with the ID `id`.
     pub(crate) fn locus(&self, id: LocusId) -> Option<&Locus> {
-        self.loci.iter().find(|l| l.id == id)
+        self.locus_index(id).map(|place| &self.loci[place])
     }
 
     /// Where the locus with the ID `id` is in the pack's locus order.
@@ -604,14 +614,17 @@ impl DataPack {
 
     /// The category with the ID `id`.
     pub(crate) fn category(&self, id: CategoryId) -> Option<&Category> {
-        self.categories.iter().find(|c| c.id == id)
+        self.categories
+            .binary_search_by_key(&id, |c| c.id)
+            .ok()
+            .map(|place| &self.categories[place])
     }
 
     /// Where the category `id` is in the pack's order, which must have it.
+    /// They're in ID order, so it's a binary search.
     pub(crate) fn category_index(&self, id: CategoryId) -> usize {
         self.categories
-            .iter()
-            .position(|c| c.id == id)
+            .binary_search_by_key(&id, |c| c.id)
             .expect("a category in the pack")
     }
 
