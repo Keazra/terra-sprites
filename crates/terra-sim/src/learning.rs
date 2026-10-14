@@ -850,11 +850,10 @@ pub(crate) fn run(
 
 /// The end of step 4, once every sprite has learned from what happened to
 /// itself (M2 design §18.1): each sprite that learns by watching, not
-/// `dying`, takes on what each sprite in its `company` that it watched knows
-/// about what its moment was about, one of `moments`, and each lesson that
-/// tips is reported with whom it watched. What each knows is read before
-/// anyone takes anything on, so nothing passes through two sprites in a
-/// tick.
+/// `dying`, takes on what each sprite in its `company` that it watched shows
+/// of what its moment was about, one of `moments`, and each lesson that tips
+/// is reported with whom it watched. What each shows is read before anyone
+/// takes anything on, so nothing passes through two sprites in a tick.
 fn watch(
     state: &mut WorldState,
     data: &DataPack,
@@ -887,7 +886,7 @@ fn watch(
                 .iter()
                 .filter(|topic| !topic.about(id))
                 .filter(|topic| on_them || topic.caught(eye.target, eye.subject))
-                .map(|&topic| them.brain.knowledge(topic, data))
+                .map(|&topic| them.brain.shown(topic, data))
                 .collect();
             if !shown.is_empty() {
                 watched.push((id, other, share, shown));

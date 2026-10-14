@@ -15,6 +15,12 @@ const ROOM: [&str; 3] = ["~.........", "~.........", "~........."];
 const THIRSTY: &str = r#"InitialConcentration(chem: "thirst", value: 1.0),
     Emitter(locus: Locus("drank"), mode: Level, gain: -0.5, chem: "thirst"),"#;
 
+/// The same, that drinks for its thirst: thirst is a drink's motive (design
+/// §5.5).
+const DRINKER: &str = r#"InitialConcentration(chem: "thirst", value: 1.0),
+    Emitter(locus: Locus("drank"), mode: Level, gain: -0.5, chem: "thirst"),
+    Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),"#;
+
 /// A sprite whose eye is always on the sprite it sees, never on anything
 /// new, and that rests, taking on `watch_rate` of what it watches.
 fn looking_on(watch_rate: f32) -> String {
@@ -66,26 +72,67 @@ fn water_for_thirst() -> Learned {
     }
 }
 
+/// Water's worth for hunger.
+fn water_for_hunger() -> Learned {
+    Learned::Worth {
+        thing: "water".into(),
+        need: Some("hunger".into()),
+    }
+}
+
+/// Steps `world` to the step 4 after the sprite `drinker`'s first drink,
+/// where it learns what water is worth for thirst, and returns the events.
+fn first_drink(world: &mut World, drinker: EntityId) -> Vec<Event> {
+    let mut events = Vec::new();
+    while value_of(world, drinker, &water_for_thirst()) == 0.0 {
+        assert!(world.tick() < 20, "it never drank");
+        events.extend(world.step());
+    }
+    events
+}
+
 #[test]
 fn a_sprite_takes_on_a_share_of_what_the_sprite_it_watches_knows_about_what_it_uses() {
     // M2 design §18.2: the drinker's thirst falls by .5 at its drink, so it
     // learns water is worth .25 for thirst (.5 × worth_rate_good .5); the
     // sprite watching it takes on half of that.
     let looking_on = looking_on(0.5);
+    let mut world = room(&[(at(1, 1), DRINKER), (at(5, 1), &looking_on)], &[]);
+    let drinker = id_at(&world, at(1, 1));
+    let watching = id_at(&world, at(5, 1));
+    first_drink(&mut world, drinker);
+    assert_eq!(value_of(&world, drinker, &water_for_thirst()), 0.25);
+    assert_eq!(value_of(&world, watching, &water_for_thirst()), 0.125);
+}
+
+#[test]
+fn a_sprite_takes_on_a_thing_s_worth_only_for_the_need_the_one_it_watches_used_it_for() {
+    // M2 design §18.2: a drink that eases hunger as well teaches the
+    // drinker water is worth .25 for each, but it drank for its thirst, so
+    // the sprite watching takes on only water's worth for thirst. Nothing
+    // chose a scripted drink, which shows no worth at all.
+    let quenches = format!(
+        r#"{DRINKER}
+        InitialConcentration(chem: "hunger", value: 1.0),
+        Emitter(locus: Locus("drank"), mode: Level, gain: -0.5, chem: "hunger"),"#
+    );
+    let looking_on = looking_on(0.5);
+    let mut world = room(&[(at(1, 1), &quenches), (at(5, 1), &looking_on)], &[]);
+    let drinker = id_at(&world, at(1, 1));
+    let watching = id_at(&world, at(5, 1));
+    first_drink(&mut world, drinker);
+    assert_eq!(value_of(&world, drinker, &water_for_hunger()), 0.25);
+    assert_eq!(value_of(&world, watching, &water_for_thirst()), 0.125);
+    assert_eq!(value_of(&world, watching, &water_for_hunger()), 0.0);
+
     let mut world = room(
         &[(at(1, 1), THIRSTY), (at(5, 1), &looking_on)],
-        &[
-            (at(1, 1), ScriptedAction::Drink { at: at(0, 1) }),
-            (at(1, 1), ScriptedAction::Rest),
-        ],
+        &[(at(1, 1), ScriptedAction::Drink { at: at(0, 1) })],
     );
     let drinker = id_at(&world, at(1, 1));
     let watching = id_at(&world, at(5, 1));
-    for _ in 0..5 {
-        world.step();
-    }
-    assert_eq!(value_of(&world, drinker, &water_for_thirst()), 0.25);
-    assert_eq!(value_of(&world, watching, &water_for_thirst()), 0.125);
+    first_drink(&mut world, drinker);
+    assert_eq!(value_of(&world, watching, &water_for_thirst()), 0.0);
 }
 
 /// Every lesson in `events`, as `(sprite, learned, good, whom it watched)`.
@@ -110,23 +157,14 @@ fn a_lesson_watching_tips_says_whom_it_watched() {
     // for thirst at one drink, a lesson; a sprite that takes on all it
     // watches learns the same, from watching it.
     let drinker = format!(
-        r#"{THIRSTY}
+        r#"{DRINKER}
         BrainParam(param: "worth_rate_good", value: 1.0),"#
     );
     let looking_on = looking_on(1.0);
-    let mut world = room(
-        &[(at(1, 1), &drinker), (at(5, 1), &looking_on)],
-        &[
-            (at(1, 1), ScriptedAction::Drink { at: at(0, 1) }),
-            (at(1, 1), ScriptedAction::Rest),
-        ],
-    );
+    let mut world = room(&[(at(1, 1), &drinker), (at(5, 1), &looking_on)], &[]);
     let drinker = id_at(&world, at(1, 1));
     let watching = id_at(&world, at(5, 1));
-    let mut learned = Vec::new();
-    for _ in 0..5 {
-        learned.extend(lessons(&world.step()));
-    }
+    let mut learned = lessons(&first_drink(&mut world, drinker));
     // The drinker learns new things are good too, at the same drink.
     learned.retain(|(_, l, ..)| *l == water_for_thirst());
     assert_eq!(
@@ -142,18 +180,10 @@ fn a_lesson_watching_tips_says_whom_it_watched() {
 /// thirsty sprite on (1, 1) has drunk at the water beside it, in a room
 /// with `objects`.
 fn watched_drinking(objects: &[(Pos, &str)], watching: (Pos, &str)) -> f32 {
-    let mut world = room_with(
-        objects,
-        &[(at(1, 1), THIRSTY), watching],
-        &[
-            (at(1, 1), ScriptedAction::Drink { at: at(0, 1) }),
-            (at(1, 1), ScriptedAction::Rest),
-        ],
-    );
+    let mut world = room_with(objects, &[(at(1, 1), DRINKER), watching], &[]);
+    let drinker = id_at(&world, at(1, 1));
     let id = id_at(&world, watching.0);
-    for _ in 0..5 {
-        world.step();
-    }
+    first_drink(&mut world, drinker);
     value_of(&world, id, &water_for_thirst())
 }
 

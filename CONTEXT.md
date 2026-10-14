@@ -545,7 +545,7 @@ The part of a habit the Cursor taught: a Reward or Correct for what the sprite j
 _Avoid_: training (that's what the player does), conditioning
 
 **Watching** (M2, Slice 28):
-Learning from another sprite: when a sprite's eye is on another that uses something, or has something done to it, it takes on a share of what that sprite knows about it, only ever up to the other's view, and remembers a place it sees the other eased at. It's about things and whom to fear, never whom to like, and never anything about mating. In the starter genes every sprite watches, the young most, looking to the grown-ups, their parents more, and most of all to a parent doing something that would show them a lesson they haven't learned.
+Learning from another sprite: when a sprite's eye is on another that uses something, or has something done to it, it takes on a share of what that sprite knows about it, only ever up to the other's view, and remembers a place it sees the other eased at. Of what a thing is worth, it takes on only that for the other's motive. It's about things and whom to fear, never whom to like, and never anything about mating. In the starter genes every sprite watches, the young most, looking to the grown-ups, their parents more, and most of all to a parent doing something that would show them a lesson they haven't learned.
 _Avoid_: imitation, copying (copying the act itself is for later), observing (the observer is the agent that reads baseline reports)
 
 **Thing touched**:
@@ -557,7 +557,7 @@ A try at a verb on a thing that has no rule for it, or whose rule can't be met, 
 _Avoid_: fizzle, failed attempt (failed is an outcome)
 
 **Motive**:
-The need whose instinct did most to make a sprite choose a verb. A fruitless try disappoints it.
+The need whose instinct did most to make a sprite choose a verb. A fruitless try disappoints it, and a sprite watching takes on what the thing tried is worth for it alone.
 _Avoid_: reason, goal
 
 **Familiarity**:

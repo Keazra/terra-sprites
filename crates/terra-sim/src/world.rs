@@ -2788,9 +2788,9 @@ mod tests {
     #[test]
     fn a_parent_drinking_draws_its_young_s_eye_until_the_young_knows_water() {
         // M2 design §18.1: an attention instinct about a parent showing it
-        // something draws its eye to its mother drinking, knowing water is
-        // good for thirst, before its nearer father, while it doesn't know
-        // that; once it does, the nearer parent draws it.
+        // something draws its eye to its mother drinking for her thirst,
+        // knowing water is good for thirst, before its nearer father, while
+        // it doesn't know that; once it does, the nearer parent draws it.
         let data = DataPack::builtin().expect("built-in data pack is valid");
         let map = Map::from_ascii(&["~.....", "~....."], &data).expect("valid drawing");
         let genes = |genes: &str| {
@@ -2805,19 +2805,18 @@ mod tests {
             BrainParam(param: "tau_att_base", value: 0.05),
             BrainParam(param: "attention_margin", value: 0.0)"#
         );
+        let drinks = r#"InitialConcentration(chem: "thirst", value: 1.0),
+            Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0)"#;
         let (mother, father, young) = (Pos { x: 1, y: 0 }, Pos { x: 5, y: 1 }, Pos { x: 4, y: 1 });
-        let drinks = ScriptedAction::Drink {
-            at: Pos { x: 0, y: 0 },
-        };
         let scenario = Scenario {
             map,
             objects: &[],
             sprites: &[
-                (mother, Some(genes(rests))),
+                (mother, Some(genes(drinks))),
                 (father, Some(genes(rests))),
                 (young, Some(genes(&looks))),
             ],
-            scripted: &[(mother, drinks), (mother, drinks), (mother, drinks)],
+            scripted: &[],
             newborns: &[young],
         };
         let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
@@ -2853,8 +2852,8 @@ mod tests {
     fn a_parent_whose_target_is_gone_shows_its_young_nothing() {
         // M2 design §18.1: the young, first in turn, weighs its mother while
         // her Eat, which ate the berry, is still her latest action, aimed at
-        // a berry that's gone. She knows berries, so a berry still there
-        // would show it something; one that's gone shows it nothing.
+        // a berry that's gone. She knows berries, but one that's gone shows
+        // it nothing, and isn't looked up.
         let data = DataPack::builtin().expect("built-in data pack is valid");
         let map = Map::from_ascii(&["....", "...."], &data).expect("valid drawing");
         let genes = |genes: &str| {

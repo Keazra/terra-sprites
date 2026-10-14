@@ -755,10 +755,10 @@ impl Brain {
         (lessons, moment)
     }
 
-    /// What it knows of `topic`: the values a sprite watching it takes on
-    /// (M2 design §18.2). Of a thing, its worth for each need but the
-    /// breeding drive's (§18.3), good and bad; of a sprite or the Cursor,
-    /// its fear; and of either, the habit of the verb tried.
+    /// What it knows of `topic`, of the values watching passes on (M2
+    /// design §18.2). Of a thing, its worth for each need but the breeding
+    /// drive's (§18.3), good and bad; of a sprite or the Cursor, its fear;
+    /// and of either, the habit of the verb tried.
     pub(crate) fn knowledge(&self, topic: Topic, data: &DataPack) -> Knowledge {
         let experience = &self.experience;
         let mut knowledge = Knowledge::nothing(topic, data.need_places().len());
@@ -797,6 +797,33 @@ impl Brain {
         knowledge
     }
 
+    /// What a sprite watching it make the try `topic` takes on (M2 design
+    /// §18.2): what it knows of it, but of a thing's worth only that for
+    /// the try's motive, the need that chose it (design §5.5). A try no need
+    /// chose, or that its brain didn't choose, as a scripted one, shows no
+    /// worth.
+    pub(crate) fn shown(&self, topic: Topic, data: &DataPack) -> Knowledge {
+        let mut knowledge = self.knowledge(topic, data);
+        if let Topic::Tried { subject, verb, .. } = topic {
+            let motive = self.motive_for(verb, subject);
+            for (need, worth) in knowledge.worth.iter_mut().enumerate() {
+                if Some(need) != motive {
+                    *worth = 0.0;
+                }
+            }
+        }
+        knowledge
+    }
+
+    /// The motive of a try with `verb` at `subject` (design §5.5), if that's
+    /// what it chose at its latest step 5.
+    fn motive_for(&self, verb: Verb, subject: Subject) -> Option<usize> {
+        self.snapshot
+            .as_ref()
+            .filter(|s| s.verb == Some(verb) && s.subject == Some(subject))
+            .and_then(|s| s.motive)
+    }
+
     /// Its try at its latest step 6, from step 4 at `tick`.
     fn latest_try(&self, tick: u64) -> Option<Touch> {
         self.touched.filter(|touch| touch.tick + 1 == tick)
@@ -818,16 +845,16 @@ impl Brain {
             return false;
         }
         let threshold = data.physiology().lesson_threshold;
-        let theirs = self.knowledge(topic, data);
+        let theirs = self.shown(topic, data);
         let mine = learner.knowledge(topic, data);
         theirs.values().zip(mine.values()).any(|(theirs, mine)| {
             theirs.abs() >= threshold && mine.abs() < threshold && mine * theirs >= 0.0
         })
     }
 
-    /// Takes on `share` of each of `shown`, what a sprite it watched knows
-    /// (M2 design §18.2), and returns the lessons that tipped. Of a thing,
-    /// its worth for each need, good and bad, and it knows the thing's
+    /// Takes on `share` of each of `shown`, what a sprite it watched showed
+    /// it (M2 design §18.2), and returns the lessons that tipped. Of a
+    /// thing, its worth, good and bad, and it knows the thing's
     /// object type; of a sprite or the Cursor, only fear. The habit of the
     /// verb tried is kept as a taught habit, and a place is remembered.
     pub(crate) fn watched(
@@ -3674,11 +3701,59 @@ mod tests {
         );
     }
 
+    /// Has `brain` choose `verb` at a thing learned about as `subject` at
+    /// its latest step 5, for the need `motive`.
+    fn chose(brain: &mut Brain, verb: Verb, subject: Subject, motive: Option<usize>) {
+        let mut chosen = snapshot(0, Vec::new(), verb, Some(subject));
+        chosen.motive = motive;
+        brain.snapshot = Some(chosen);
+    }
+
+    #[test]
+    fn watching_moves_a_thing_s_worth_only_for_the_need_that_chose_the_try() {
+        // M2 design §18.2: of a thing's worth, a sprite watching another
+        // takes on only that for the try's motive (design §5.5). A try no
+        // need chose, or that the other's brain didn't choose, shows no
+        // worth; good and bad pass on whatever chose it.
+        let data = builtin();
+        let (hunger, thirst) = (0, 1);
+        let play = Topic::Tried {
+            subject: types::BALL,
+            verb: Verb::Play,
+            sprite: None,
+        };
+        let mut player = unfading(&[]);
+        let known = teach(&mut player, types::BALL);
+        known.worth.fill(0.8);
+        known.good = 0.6;
+        let watched = |player: &Brain| {
+            let mut learner = unfading(&[]);
+            learner.watched(&[player.shown(play, &data)], 0.5, &data);
+            about(&learner, types::BALL)
+        };
+        chose(&mut player, Verb::Play, types::BALL, Some(thirst));
+        let learned = watched(&player);
+        for (need, &value) in learned.worth.iter().enumerate() {
+            let expected = if need == thirst { 0.4 } else { 0.0 };
+            assert!(close(value, expected), "need {need}: {value}");
+        }
+        assert!(close(learned.good, 0.3), "{}", learned.good);
+        let no_worth = |learned: &TypeMemory| learned.worth.iter().all(|&w| w == 0.0);
+        chose(&mut player, Verb::Play, types::BALL, None);
+        let learned = watched(&player);
+        assert!(no_worth(&learned), "no motive");
+        assert!(close(learned.good, 0.3), "{}", learned.good);
+        chose(&mut player, Verb::Eat, types::BALL, Some(hunger));
+        assert!(no_worth(&watched(&player)), "another try");
+        player.snapshot = None;
+        assert!(no_worth(&watched(&player)), "none chosen");
+    }
+
     #[test]
     fn watching_never_moves_worth_for_the_breeding_drive() {
-        // M2 design §18.3: of a thing, a sprite watching another takes on
-        // its worth for every need but the breeding drive, whatever the
-        // other knows.
+        // M2 design §18.3: a sprite watching another takes on none of a
+        // thing's worth for the breeding drive, whatever the other knows,
+        // even when the drive chose the try.
         let data = builtin();
         let drive = data.physiology().indices.drive.expect("a breeding drive");
         let play = Topic::Tried {
@@ -3688,13 +3763,11 @@ mod tests {
         };
         let mut player = unfading(&[]);
         teach(&mut player, types::BALL).worth.fill(0.8);
+        chose(&mut player, Verb::Play, types::BALL, Some(drive));
         let mut learner = unfading(&[]);
-        learner.watched(&[player.knowledge(play, &data)], 0.5, &data);
+        learner.watched(&[player.shown(play, &data)], 0.5, &data);
         let worth = about(&learner, types::BALL).worth;
-        for (need, &value) in worth.iter().enumerate() {
-            let expected = if need == drive { 0.0 } else { 0.4 };
-            assert!(close(value, expected), "need {need}: {value}");
-        }
+        assert!(worth.iter().all(|&w| w == 0.0), "{worth:?}");
     }
 
     #[test]
@@ -3708,14 +3781,17 @@ mod tests {
             sprite: None,
         };
         let mut learner = unfading(&[]);
-        learner.watched(&[unfading(&[]).knowledge(eat, &data)], 0.5, &data);
+        let mut eater = unfading(&[]);
+        chose(&mut eater, Verb::Eat, types::BERRY_BUSH, Some(0));
+        learner.watched(&[eater.shown(eat, &data)], 0.5, &data);
         assert!(!about(&learner, types::BERRY_BUSH).touched);
     }
 
     #[test]
     fn a_try_shows_a_learner_only_a_lesson_it_could_take_on_and_hasn_t_learned() {
-        // M2 design §18.1: a value past lesson_threshold (.5) for the one
-        // trying, below it for the learner, on the same side or at 0.
+        // M2 design §18.1: a value the one trying shows (§18.2), past
+        // lesson_threshold (.5) for it, below it for the learner, on the
+        // same side or at 0.
         let data = builtin();
         let drive = data.physiology().indices.drive.expect("a breeding drive");
         let learner_id = EntityId(4);
@@ -3731,6 +3807,11 @@ mod tests {
         teach(&mut drinker, types::WATER).worth[1] = 0.6;
         let mut learner = unfading(&[]);
         assert!(
+            !shows(&drinker, drink, &learner),
+            "no thirst chose the drink"
+        );
+        chose(&mut drinker, Verb::Drink, types::WATER, Some(1));
+        assert!(
             shows(&drinker, drink, &learner),
             "it knows nothing of water"
         );
@@ -3743,6 +3824,7 @@ mod tests {
         // Never about mating (§18.3), nor about the learner itself.
         let mut player = unfading(&[]);
         teach(&mut player, types::BALL).worth[drive] = 0.9;
+        chose(&mut player, Verb::Play, types::BALL, Some(drive));
         let play = tried(Verb::Play, types::BALL, None);
         assert!(!shows(&player, play, &unfading(&[])), "the drive's worth");
         let mut hitter = unfading(&[]);
