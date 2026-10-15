@@ -4,7 +4,9 @@ An ASCII artificial-life game for the terminal, inspired by *Creatures*.
 
 Sprites have a genome, a simulated biochemistry and a brain that learns from experience. They live on a grid world of plants, water, toys and thorns. You watch, inspect, and intervene with a "hand of god": reward a sprite with a pet, correct it with a shock, or move things around, and watch individual sprites learn.
 
-**Status:** milestone 1 is done: every slice is built ([milestone](https://github.com/Keazra/terra-sprites/milestone/1)), and the owner signed it off after playing it through ([M1 acceptance](docs/acceptance/m1.md)). Today it generates a terrarium from a seed, with plants that grow, fruit, spread and expire, and a first population of sprites. The sprites start out on instinct: a hungry sprite walks to a berry bush and eats, a thirsty one finds water and drinks, a bored one kicks a ball (which rolls, bounces, knocks other balls on and crushes berries in its way), a lonely one goes over to others and plays with them, and a content one wanders or rests. A hurt sprite backs away from what hurt it; one that's hit usually backs away from its attacker, though some sprites hit back, and a cornered one fights. A crowded sprite backs away from the crowd, and now and then hits a neighbour. They find their way around each other and pass head-on in narrow passages. Play, hits, hurts and deaths show in the event log, and a red `!` flashes over a hurt sprite.
+**Status:** milestone 1 is done: every slice is built ([milestone](https://github.com/Keazra/terra-sprites/milestone/1)), and the owner signed it off after playing it through ([M1 acceptance](docs/acceptance/m1.md)). Milestone 2, *Generations*, is nearly done ([milestone](https://github.com/Keazra/terra-sprites/milestone/2)): sprites now hatch from eggs, grow up, court, breed and grow old, and the young are born with a mix of their parents' genes. Two slices are left: a harsher world, where most young die unless another sprite or the player guides them, and the sign-off. Milestone 3 is being planned.
+
+Today it generates a terrarium from a seed, with plants that grow, fruit, spread and expire, and a first population of sprites. The sprites start out on instinct: a hungry sprite walks to a berry bush and eats, a thirsty one finds water and drinks, a bored one kicks a ball (which rolls, bounces, knocks other balls on and crushes berries in its way), a lonely one goes over to others and plays with them, and a content one wanders or rests. A hurt sprite backs away from what hurt it; one that's hit usually backs away from its attacker, though some sprites hit back, and a cornered one fights. A crowded sprite backs away from the crowd, and now and then hits a neighbour. They find their way around each other and pass head-on in narrow passages. Play, hits, hurts and deaths show in the event log, and a red `!` flashes over a hurt sprite.
 
 Sprites learn from what happens to them. Each one learns, by touch, what things are worth: berries are good when hungry, water when thirsty, and a thornbush it bit is bad, so it stops going near thornbushes. It learns habits, such as "eating balls doesn't work", and whether new things are worth investigating. It remembers particular sprites: one that played with it is good company, and one that hit it becomes frightening, so it backs away from that one without becoming shy of every sprite. What it learns about one thing doesn't spread to the rest of its kind until it knows a few of them: one thornbush doesn't make every bush bad. Lessons fade unless they're renewed, bad ones more slowly than good, and instinct is never erased, only outvoted. Each time a sprite learns something well enough, the event log says so ("Sprite #12 learned: thornbushes are bad").
 
@@ -14,13 +16,20 @@ You can select a sprite and look inside it: its Brain tab shows what it's paying
 
 ## Getting started
 
-You need [Rust](https://rustup.rs) 1.97.1 or newer (`rustup update stable`) and a terminal of at least 100×30 characters; 140×40 is better. On Windows, use Windows Terminal. Then, from the repository root:
+You need [Rust](https://rustup.rs) 1.97.1 or newer (`rustup update stable`) and a terminal of at least 100×30 characters; 140×40 is better. On Windows, use Windows Terminal. To install the game as a command, without downloading the code yourself:
+
+```bash
+cargo install --git https://github.com/Keazra/terra-sprites terra-tui
+terra-sprites
+```
+
+Run the same `cargo install` line again to update it. Or, from a copy of the repository:
 
 ```bash
 cargo run --release
 ```
 
-The first build takes a minute or two. The game opens on its title screen: a light finds a sleeping sprite in the dark, and a terrarium wakes around it (any key skips this). Pick **New world** and press `Enter` for a new terrarium with time running at 1×, or **Continue** to carry on from your last save. A new world is a Story world, the game as it's meant to be played, which runs at 4× at most; `→` in New world picks a Lab world instead, for experiments, with every speed up to Max. Hold `?` there to see what each mode means. To go straight into a world instead, give it a seed: `cargo run --release -- --seed 7`. Some things to try first:
+The first build takes a minute or two. The game opens on its title screen: a light finds a sleeping sprite in the dark, and a terrarium wakes around it (any key skips this). Pick **New world** and press `Enter` for a new terrarium with time running at 1×, or **Continue** to carry on from your last save. A new world is a Story world, the game as it's meant to be played, which runs at 4× at most; `→` in New world picks a Lab world instead, for experiments, with every speed up to Max. Hold `?` there to see what each mode means. To go straight into a world instead, give it a seed: `cargo run --release -- --seed 7`, or `terra-sprites --seed 7` if you installed it (every flag below works either way). Some things to try first:
 
 1. **Watch one sprite.** Click a sprite (`☺`) to select it. The panel beside the map shows its body; `]` moves to its Brain tab, which says what it's paying attention to and why. `T` makes the view follow it.
 2. **Control time.** `space` pauses, `.` steps a little while paused, and `+` speeds up. A sprite's life is long at 1×, so try 4×.
@@ -130,4 +139,8 @@ The ground, the plants and toys, a sprite's body and its instincts, the size of 
 | **M6 — Words** | Teaching sprites words |
 | **Tiles** | A tile-window front end with sprite-sheet support |
 
-Built in Rust with [ratatui](https://ratatui.rs).
+Built in Rust with [ratatui](https://ratatui.rs). Fauxpaw designs the game, and [Claude Code](https://claude.com/claude-code) writes the code.
+
+## Licence
+
+Terra Sprites is free, under your choice of the [MIT licence](LICENSE-MIT) or the [Apache License 2.0](LICENSE-APACHE).

@@ -5,6 +5,7 @@ members = ["crates/terra-sim", "crates/terra-tui"]
 [workspace.package]
 edition = "2024"
 version = "0.1.0"
+license = "MIT OR Apache-2.0"
 # An LLVM miscompilation fixed in 1.97.1 (present since at least 1.87) made the
 # same seed play differently on 1.97.0 (#171, design §2.6); Cargo refuses older.
 rust-version = "1.97.1"
