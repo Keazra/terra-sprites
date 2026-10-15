@@ -18,5 +18,21 @@ ron = "0.12.2"
 serde = { version = "1.0.229", features = ["derive"] }
 terra-sim = { path = "../terra-sim" }
 
+# The renderer (#241), an example, so the game itself gains nothing: it
+# draws the game's screens into GIFs, MP4s and animated SVGs.
+[[example]]
+name = "render"
+path = "examples/render/main.rs"
+# Its own tests run with the workspace's.
+test = true
+
+[dev-dependencies]
+# Draws the renderer's font, Cascadia Mono: rasterised glyphs for GIFs and
+# MP4s, outlines for SVGs.
+ab_glyph = "0.2.32"
+# Writes the renderer's GIFs. Its colour quantiser isn't needed: the
+# renderer builds the palette from the terminal's colours.
+gif = { version = "0.14.2", default-features = false, features = ["std", "raii_no_panic"] }
+
 [lints]
 workspace = true

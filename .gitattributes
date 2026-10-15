@@ -4,3 +4,5 @@
 
 # Saves are MessagePack: never touch their bytes.
 *.tspr binary
+# The renderer's fonts (#241).
+*.ttf binary
