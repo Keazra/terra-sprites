@@ -440,9 +440,12 @@ try {
         }
     }
 
+    # The grade is a word ("1", "2" or "3") rather than a number: agy's
+    # stream-json output, used in the sandbox, turns the schema into a tool
+    # for Gemini, and Gemini refuses a tool whose choices are numbers.
     $schema = '{"type":"object","properties":{"summary":{"type":"string"},"comments":{"type":"array","items":' +
         '{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},' +
-        '"start_line":{"type":["integer","null"]},"grade":{"type":"integer","enum":[1,2,3]},' +
+        '"start_line":{"type":["integer","null"]},"grade":{"type":"string","enum":["1","2","3"]},' +
         '"confidence":{"type":"string","enum":["confirmed","likely","unconfirmed"]},' +
         '"headline":{"type":"string"},"details":{"type":"string"}},' +
         '"required":["path","line","start_line","grade","confidence","headline","details"]}}},' +
@@ -565,8 +568,10 @@ agy -p "@PROMPT@" --dangerously-skip-permissions @FLAGS@ \
     foreach ($f in @($result.comments)) {
         if ($null -eq $f) { continue }
         $f.path = ("$($f.path)" -replace '\\', '/') -replace '^\./', ''
-        if ($Grades.Keys -notcontains [int]$f.grade) { $f.grade = 3 }
-        $f.grade = [int]$f.grade
+        # "2" or 2 both count; anything else is taken as Minor.
+        $grade = 0
+        if (-not [int]::TryParse("$($f.grade)", [ref]$grade) -or $Grades.Keys -notcontains $grade) { $grade = 3 }
+        $f | Add-Member -Force -NotePropertyName grade -NotePropertyValue $grade
         $confidence = "$($f.confidence)".Trim().ToLowerInvariant()
         if ($Confidences -notcontains $confidence) { $confidence = "unconfirmed" }
         $f | Add-Member -Force -NotePropertyName confidence -NotePropertyValue $confidence
