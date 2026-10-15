@@ -189,14 +189,28 @@ fn event_log_area(screen: Rect) -> Option<Rect> {
 }
 
 fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
-    let map = world.map();
     if area.width < 2 || area.height < 2 {
         return;
     }
     // Single-lined all round: the glass shows where the wall is (M2 design
     // §11.2).
     draw_border(buf, area, " Map ");
-    let inner = area.inner(Margin::new(1, 1));
+    draw_tiles(buf, area.inner(Margin::new(1, 1)), app, world);
+}
+
+/// Draws the map view's tiles alone over the whole frame, with no border,
+/// top bar, panels or status line: for pictures of the map, such as the
+/// renderer's clips (#241). The app is to be fitted to `Areas` whose
+/// `tiles` is the frame, so the Cursor and the marks land where it says.
+pub fn render_map_alone(frame: &mut Frame, app: &App, world: &World) {
+    let area = frame.area();
+    draw_tiles(frame.buffer_mut(), area, app, world);
+}
+
+/// Draws what the map view shows in `inner`, inside its border: the tiles
+/// in view, the glass and space past the wall, and the marks over them.
+fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
+    let map = world.map();
     let destination = heading_for(app, world).filter(|_| app.flash_on());
     let attended = attended_by(app, world);
     // A held item being aimed, where it will be thrown from (design v25

@@ -1654,6 +1654,15 @@ impl App {
         self.pointer_past_wall && self.followed().is_none() && self.aim.is_none()
     }
 
+    /// Takes the Cursor out of reach, as a pointer over the glass or space
+    /// does (M2 design §11.4), with no pointer to put there: for pictures
+    /// of the game with no player in them, such as the renderer's clips
+    /// (#241). The pointer coming back over the map brings it back.
+    pub fn withdraw_cursor(&mut self) {
+        self.pointer = None;
+        self.pointer_past_wall = true;
+    }
+
     /// The tile the Cursor is drawn on, unless it's out of reach past the
     /// wall, where it isn't drawn at all (M2 design §11.4).
     pub fn shown_cursor(&self) -> Option<Pos> {
