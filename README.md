@@ -80,7 +80,7 @@ The same key in capitals or lower case does the same thing.
 | `--save <name>` | With `--fast-forward`, the name to save under |
 | `--version` | Print the game's version and the commit it was built from, and stop |
 
-To run the checks CI runs: `.\scripts\check.ps1` in PowerShell, or `scripts/check.sh` (formatting, lints and every test). To try a pull request's build: `.\scripts\try-pr.ps1 <number>`. To have Gemini review one, through the Antigravity CLI: `.\scripts\review-pr.ps1`.
+To run the checks CI runs: `.\scripts\check.ps1` in PowerShell, or `scripts/check.sh` (formatting, lints and every test). To try a pull request's build: `.\scripts\try-pr.ps1 <number>`. To have Gemini review them, through the Antigravity CLI: `.\scripts\review-pr.ps1`, which lists the open PRs to tick (`-Sandbox` runs the reviews hands-off in a Linux sandbox; the script's opening comment says how).
 
 ## Fast-forward
 
