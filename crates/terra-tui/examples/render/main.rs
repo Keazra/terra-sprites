@@ -8,6 +8,7 @@ mod clip;
 mod gif_file;
 mod glyphs;
 mod look;
+mod mp4_file;
 mod options;
 mod picture;
 mod svg_file;
@@ -81,15 +82,17 @@ fn render(options: &Options) -> Result<(), String> {
     write(&clip, &mut glyphs, options)?;
     if !glyphs.missing().is_empty() {
         let missing: String = glyphs.missing().iter().collect();
-        eprintln!("render: the font has no glyph for {missing}, drawn as its blank box");
+        eprintln!("render: the font has no glyph for {missing}, drawn as its missing-glyph box");
     }
     let (width, height) = picture::pixels(&glyphs, options.screen);
     let bytes = std::fs::metadata(&options.out).map_or(0, |file| file.len());
+    let frames = match clip.frames.len() {
+        1 => "a still".to_string(),
+        n => format!("{n} frames over {:.1} seconds", clip.length().as_secs_f64()),
+    };
     println!(
-        "Wrote {}: {} frames over {:.1} seconds, {width}x{height} pixels, {}",
+        "Wrote {}: {frames}, {width}x{height} pixels, {}",
         options.out.display(),
-        clip.frames.len(),
-        clip.length().as_secs_f64(),
         said_bytes(bytes)
     );
     Ok(())
@@ -132,7 +135,7 @@ fn write(clip: &Clip, glyphs: &mut Glyphs, options: &Options) -> Result<(), Stri
             svg_file::write(clip, glyphs, &mut out)?;
             out.flush().map_err(|err| cant_write(path, err))
         }
-        Format::Mp4 => Err("only GIFs and SVGs so far".into()),
+        Format::Mp4 => mp4_file::write(clip, glyphs, path, mp4_file::FFMPEG),
     }
 }
 

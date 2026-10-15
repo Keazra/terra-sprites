@@ -105,6 +105,31 @@ That runs a new world from seed 7 for 200 hours of play at 1× (900,000 ticks, a
 
 At the end it saves the world in your saves folder as `seed-7-200h` (or `mira-200h`; `--save <name>` picks another name), so the title screen's Continue opens it. `Ctrl+C` stops it early and saves what has run. Beside the save it writes two tables that open in Excel or Google Sheets: `seed-7-200h-population.csv`, the population over the whole run, and `seed-7-200h-genes.csv`, the middle value of each of the starter genome's gene values among the living, an hour apart. The report ends with the ones that moved most.
 
+## Clips: GIFs, videos and SVGs
+
+The renderer draws the game off-screen, through the game's own screen code, into a GIF, an MP4 or an animated SVG that loops. It's what the game looks like in Windows Terminal: Cascadia Mono, the Campbell colours, the same characters, title lettering and emotes. The title screen's opening scene:
+
+```powershell
+cargo run --release -p terra-tui --example render -- title -o title.gif
+```
+
+A world from seed 7, from tick 200 to tick 300 at 4×:
+
+```powershell
+cargo run --release -p terra-tui --example render -- world --seed 7 --from 200 --to 300 -o seed-7.gif
+```
+
+The file's ending picks the format: `.gif`, `.svg` or `.mp4`. A GIF or an SVG needs nothing else; an MP4 needs [ffmpeg](https://ffmpeg.org/download.html) on the PATH, and the renderer says so if it isn't. The world runs to `--from` unseen, then is drawn frame by frame to `--to`, at `--speed` (`1x`, `4x`, or `max` for 100 ticks a second; past 4× needs `--lab`), each frame showing for `--frame` milliseconds (100 by default). `--replay <file>` plays a replay back instead of a seed's world.
+
+The picture is 100×30 screen cells by default, the game's smallest screen with its panels. `--size <WxH>` picks another, `--map` draws the map view alone, at any size, and `--cell <WxH>` sizes a screen cell in pixels (10×20 by default). The view tracks the sprite `Tab` would select first, or `--track <n>` names another. Upright 9:16, for Shorts, at 1080×1920:
+
+```powershell
+cargo run --release -p terra-tui --example render -- world --seed 7 --from 200 --to 300 --size 54x48 --map --cell 20x40 -o seed-7-upright.mp4
+cargo run --release -p terra-tui --example render -- title --size 108x96 -o title-upright.mp4
+```
+
+`--font <file.ttf>` draws in another font; `samples` draws a still of a world's screen to try one: `cargo run --release -p terra-tui --example render -- samples --font Iosevka.ttf -o iosevka.gif`. The same command makes the same file, byte for byte (an MP4, with the same ffmpeg). `--help` lists the rest.
+
 ## Same seed, same world
 
 A world made from the same seed and world config, given the same clicks and keys, plays out exactly the same every time, in the same version of the game. That holds across computers too, for these targets:
