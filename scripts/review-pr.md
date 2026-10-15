@@ -75,7 +75,7 @@ Two fields.
 
 - `path`: the file, from the repository's root, with forward slashes.
 - `line`: the last line it's about. `start_line`: the first, when it spans several lines, or null.
-- `grade`: 1, 2 or 3.
+- `grade`: "1", "2" or "3".
 - `confidence`: `confirmed`, `likely` or `unconfirmed`.
 - `headline`: one sentence, what goes wrong.
 - `details`: Markdown, in three short parts: **How it happens:** the path from a real input to the failure, with `file:line`; if it's likely or unconfirmed, where you stopped being sure and what would settle it. **Rule:** the document and rule it breaks, if any. **Suggested fix:** a sentence or two, or a short snippet.
