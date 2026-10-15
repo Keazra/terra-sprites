@@ -4,6 +4,7 @@
 //! --help` says how to use it.
 
 mod boxes;
+mod clip;
 mod glyphs;
 mod look;
 mod options;
