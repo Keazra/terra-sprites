@@ -46,11 +46,29 @@ pub fn seeds(flag: &str, args: &mut Iter<'_, String>) -> Result<(u64, u64), Stri
     let value = args
         .next()
         .ok_or(format!("{flag} needs a range, such as 1-10"))?;
-    let bad = || format!("{flag} needs a range, such as 1-10, not {value}");
-    let (a, b) = value.split_once('-').ok_or_else(bad)?;
-    let (a, b) = (a.parse().map_err(|_| bad())?, b.parse().map_err(|_| bad())?);
-    if a > b {
-        return Err(bad());
+    range(value).ok_or(format!("{flag} needs a range, such as 1-10, not {value}"))
+}
+
+/// The next argument as seeds: a list, `5,9`, or a range, `1-10`, with A
+/// no more than B.
+pub fn seed_list(flag: &str, args: &mut Iter<'_, String>) -> Result<Vec<u64>, String> {
+    let value = args
+        .next()
+        .ok_or(format!("{flag} needs seeds, such as 5,9 or 1-10"))?;
+    let bad = || format!("{flag} needs seeds, such as 5,9 or 1-10, not {value}");
+    if value.contains('-') {
+        let (a, b) = range(value).ok_or_else(bad)?;
+        return Ok((a..=b).collect());
     }
-    Ok((a, b))
+    value
+        .split(',')
+        .map(|seed| seed.parse().map_err(|_| bad()))
+        .collect()
+}
+
+/// `A-B` as `(A, B)`, if A is no more than B.
+fn range(value: &str) -> Option<(u64, u64)> {
+    let (a, b) = value.split_once('-')?;
+    let (a, b) = (a.parse().ok()?, b.parse().ok()?);
+    (a <= b).then_some((a, b))
 }
