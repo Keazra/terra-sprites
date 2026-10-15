@@ -5,7 +5,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use ab_glyph::{Font, FontArc, GlyphId, PxScale, point};
+use ab_glyph::{Font, FontArc, GlyphId, OutlineCurve, Point, PxScale, point};
 use ratatui::layout::Size;
 
 use crate::boxes::{self, Shape};
@@ -75,6 +75,7 @@ impl Ink {
     }
 
     /// How much of pixel (`x`, `y`) is covered.
+    #[cfg(test)]
     pub fn at(&self, x: u16, y: u16) -> u8 {
         self.coverage[usize::from(y) * usize::from(self.width) + usize::from(x)]
     }
@@ -168,6 +169,11 @@ impl Glyphs {
         }
     }
 
+    /// A cell's size, in pixels.
+    pub fn cell(&self) -> Size {
+        self.cell
+    }
+
     /// `symbol`'s ink, in the bold face or not.
     pub fn ink(&mut self, symbol: char, bold: bool) -> &Ink {
         let key = (symbol, bold);
@@ -194,6 +200,104 @@ impl Glyphs {
     /// its blank box.
     pub fn missing(&self) -> &BTreeSet<char> {
         &self.missing
+    }
+
+    /// `symbol`'s outline, in the bold face or not, for an SVG; or `None`
+    /// if it has no ink.
+    pub fn outline(&mut self, symbol: char, bold: bool) -> Option<Outline> {
+        if let Some(shape) = boxes::shape(symbol, self.cell) {
+            let d: String = shape
+                .rects
+                .iter()
+                .filter(|rect| !rect.is_empty())
+                .map(|r| format!("M{} {}h{}v{}h-{}z", r.x, r.y, r.width, r.height, r.width))
+                .collect();
+            return (!d.is_empty()).then_some(Outline {
+                d,
+                alpha: shape.alpha,
+                overflows: false,
+            });
+        }
+        let face = if bold { &self.bold } else { &self.regular };
+        let id = face.font.glyph_id(symbol);
+        if id.0 == 0 && !symbol.is_whitespace() {
+            self.missing.insert(symbol);
+        }
+        face.outline(id, self.cell)
+    }
+}
+
+/// A character as an SVG path, a cell's worth, in pixels from the cell's
+/// top-left corner.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Outline {
+    /// The path's data, its `d`.
+    pub d: String,
+    /// How much it covers what's under it, out of 255.
+    pub alpha: u8,
+    /// Whether it reaches past the cell's edges, where a picture cuts it
+    /// off.
+    pub overflows: bool,
+}
+
+impl Face {
+    /// The glyph `id`'s outline in a cell `cell` pixels in size, or `None`
+    /// if it has none.
+    fn outline(&self, id: GlyphId, cell: Size) -> Option<Outline> {
+        let outline = self.font.outline(id)?;
+        let at = |p: Point| {
+            let x = decimal(self.x + p.x * self.scale);
+            let y = decimal(self.baseline - p.y * self.scale);
+            format!("{x} {y}")
+        };
+        let mut d = String::new();
+        let mut pen = None;
+        for curve in &outline.curves {
+            let (start, end) = match *curve {
+                OutlineCurve::Line(start, end)
+                | OutlineCurve::Quad(start, _, end)
+                | OutlineCurve::Cubic(start, _, _, end) => (start, end),
+            };
+            if pen != Some(start) {
+                if pen.is_some() {
+                    d.push('Z');
+                }
+                d += &format!("M{}", at(start));
+            }
+            d += &match *curve {
+                OutlineCurve::Line(_, end) => format!("L{}", at(end)),
+                OutlineCurve::Quad(_, control, end) => format!("Q{} {}", at(control), at(end)),
+                OutlineCurve::Cubic(_, one, two, end) => {
+                    format!("C{} {} {}", at(one), at(two), at(end))
+                }
+            };
+            pen = Some(end);
+        }
+        if d.is_empty() {
+            return None;
+        }
+        d.push('Z');
+        let bounds = outline.bounds;
+        let (width, height) = (f32::from(cell.width), f32::from(cell.height));
+        let overflows = self.x + bounds.min.x * self.scale < 0.0
+            || self.x + bounds.max.x * self.scale > width
+            || self.baseline - bounds.max.y * self.scale < 0.0
+            || self.baseline - bounds.min.y * self.scale > height;
+        Some(Outline {
+            d,
+            alpha: u8::MAX,
+            overflows,
+        })
+    }
+}
+
+/// `value` to a tenth, without a needless ".0": "1.5", "-2", "0".
+fn decimal(value: f32) -> String {
+    let tenths = (value * 10.0).round() as i64;
+    match (tenths / 10, (tenths % 10).abs()) {
+        (whole, 0) => whole.to_string(),
+        (0, tenth) if tenths < 0 => format!("-0.{tenth}"),
+        (whole, tenth) => format!("{whole}.{tenth}"),
     }
 }
 
@@ -299,6 +403,22 @@ mod tests {
         assert!(total(&bold) > total(&regular));
         assert_eq!(total(glyphs.ink(' ', false)), 0);
         assert!(total(glyphs.ink('☺', false)) > 0);
+    }
+
+    #[test]
+    fn outlines_are_the_same_characters_as_paths() {
+        let mut glyphs = glyphs();
+        // ─'s two arms, a pixel thick, meeting in the middle.
+        let line = glyphs.outline('─', false).unwrap();
+        assert_eq!(line.d, "M0 9h5v1h-5zM4 9h6v1h-6z");
+        assert_eq!(glyphs.outline('░', false).unwrap().alpha, 64);
+        let a = glyphs.outline('A', false).unwrap();
+        assert!(a.d.starts_with('M') && a.d.ends_with('Z'));
+        assert!(!a.overflows, "Cascadia's A fits its cell");
+        assert_ne!(glyphs.outline('A', true), Some(a));
+        assert_eq!(glyphs.outline(' ', false), None);
+        assert_eq!(decimal(-0.46), "-0.5");
+        assert_eq!(decimal(12.04), "12");
     }
 
     #[test]

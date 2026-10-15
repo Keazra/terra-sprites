@@ -68,6 +68,16 @@ pub enum Source {
     Replay { name: String, playback: Playback },
 }
 
+impl Source {
+    /// The world, as it stands.
+    pub fn world(&self) -> &World {
+        match self {
+            Source::World(world) => world,
+            Source::Replay { playback, .. } => playback.world(),
+        }
+    }
+}
+
 /// How long the title scene's clip shows the menu, once the scene is over,
 /// unless told how long the clip is.
 const MENU_SHOWS_FOR: Duration = Duration::from_secs(2);

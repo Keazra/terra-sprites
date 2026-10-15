@@ -10,6 +10,14 @@ use terra_tui::args::Args;
 use terra_tui::clock::{Clock, Speed};
 use terra_tui::ui;
 
+/// Whether the command line asks how to use the renderer.
+pub fn asks_for_help(args: &[String]) -> bool {
+    args.first().is_some_and(|first| first == "help")
+        || args
+            .iter()
+            .any(|arg| matches!(arg.as_str(), "--help" | "-h"))
+}
+
 /// How to use the renderer, shown with `--help` and with any mistake.
 pub const USAGE: &str = "\
 usage: render title [options] -o <file>
@@ -148,9 +156,6 @@ impl Options {
         let scene_name = args
             .next()
             .ok_or("say what to draw: title, world or samples")?;
-        if matches!(scene_name.as_str(), "--help" | "-h" | "help") {
-            return Err("how to use it:".into());
-        }
         let mut world = Args::default();
         let mut out = None;
         let mut screen = Size::new(100, 30);
