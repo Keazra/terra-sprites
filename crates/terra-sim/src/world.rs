@@ -3613,6 +3613,106 @@ mod tests {
         assert_eq!((entry.tick, entry.verb), (tick, Some(Verb::Approach)));
     }
 
+    /// A world drawn from `row`, 40 tiles long, three times, with `objects`,
+    /// and a sprite on (35, 1) that sees 6 tiles, with `genes`, that knows
+    /// what `subject` (its type, or the water's) is as `learn` makes it, and
+    /// remembers `target` on `at`, as well as `recall`; and the sprite.
+    fn remembering(
+        row: &str,
+        objects: &[(Pos, &str)],
+        genes: &str,
+        target: impl Fn(&World) -> Target,
+        recall: f32,
+        learn: impl Fn(&mut TypeMemory),
+    ) -> (World, EntityId) {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let map = Map::from_ascii(&[row; 3], &data).expect("valid drawing");
+        let genome = Genome::from_ron(
+            &format!(
+                r#"(format: 1, genes: [
+                    Trait(trait: "sense_radius", value: 6.0),
+                    BrainParam(param: "salience_gain", value: 0.0),
+                    BrainParam(param: "curiosity", value: 0.0),
+                    {genes}
+                ])"#
+            ),
+            &data,
+        )
+        .expect("a valid genome");
+        let scenario = Scenario {
+            map,
+            objects,
+            sprites: &[(Pos { x: 35, y: 1 }, Some(genome))],
+            scripted: &[],
+            newborns: &[],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let id = world.sprites().next().expect("the sprite").id();
+        let target = target(&world);
+        let (at, _) = world.state.whereabouts(&world.data, target).expect("it");
+        let subject = world.state.subject_of(&world.data, target);
+        let needs = world.data.needs().count();
+        let limits = world.data.physiology().remembered_places;
+        let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
+        brain.experience.remember_place(subject, target, at, limits);
+        brain.experience.places[0].recall = recall;
+        let known = brain.experience.learn_about(subject, needs);
+        known.touched = true;
+        learn(known);
+        (world, id)
+    }
+
+    #[test]
+    fn a_remembered_place_is_not_offered_while_one_of_its_kind_is_in_sight() {
+        // M2 design §7.3: it looks at the water it sees, not the water it
+        // remembers, even when it has learned water is bad, which draws the
+        // eye less the fainter the water is remembered.
+        let row = format!("~{}~", ".".repeat(38));
+        let (mut world, id) = remembering(
+            &row,
+            &[],
+            r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),"#,
+            |_| Target::Water(Pos { x: 0, y: 1 }),
+            0.5,
+            |known| known.bad = -0.5,
+        );
+        world.step();
+        let brain = &world.state.sprites.get(id).expect("the sprite").brain;
+        let eye = brain.snapshot.as_ref().and_then(|eye| eye.target);
+        assert!(
+            matches!(eye, Some(Target::Water(pos)) if pos.x == 39),
+            "{eye:?}"
+        );
+    }
+
+    #[test]
+    fn a_remembered_place_whose_thing_is_gone_is_not_offered() {
+        // M2 design §7.3: out of sight, it hasn't seen the bush is gone, so
+        // it still remembers it, but its eye doesn't turn there, hungry as
+        // it is, and it doesn't find there's no way to it and forget it.
+        let row = ".".repeat(40);
+        let (mut world, id) = remembering(
+            &row,
+            &[(Pos { x: 2, y: 1 }, "berry_bush")],
+            r#"InitialConcentration(chem: "hunger", value: 1.0),
+               Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),"#,
+            |world| {
+                let bush = world.object_at(Pos { x: 2, y: 1 }).expect("the bush");
+                Target::Object(bush.id())
+            },
+            1.0,
+            |known| known.worth[0] = 0.8,
+        );
+        let bush = world.state.objects.at(Pos { x: 2, y: 1 }).expect("it");
+        world.state.objects.remove(bush);
+        world.step();
+        let sprite = world.sprites().next().expect("the sprite");
+        assert_eq!(sprite.remembered_places().len(), 1, "it hasn't seen");
+        let brain = &world.state.sprites.get(id).expect("the sprite").brain;
+        let eye = brain.snapshot.as_ref().expect("a step 5");
+        assert_eq!(eye.target, None, "{eye:?}");
+    }
+
     #[test]
     fn too_many_places_of_a_kind_or_two_too_near_break_an_invariant() {
         // M2 design §7.2: 3 of a kind at most, none within 5 of another.

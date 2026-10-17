@@ -1005,6 +1005,29 @@ mod tests {
     }
 
     #[test]
+    fn with_its_memory_full_a_new_kind_of_place_pushes_out_the_faintest_of_any_kind() {
+        // M2 design §7.2: holding `held` places, and fewer than `per_kind`
+        // of the new place's kind, the faintest of all goes, here water.
+        let limits = RememberedPlaces {
+            held: 3,
+            per_kind: 3,
+            merge: 5,
+        };
+        let mut experience = Experience::default();
+        for x in [0, 10] {
+            experience.remember_place(WATER, Target::Water(at(x, 0)), at(x, 0), limits);
+        }
+        let bush = Target::Object(EntityId(7));
+        experience.remember_place(BUSH, bush, at(50, 0), limits);
+        experience.places[0].recall = 0.9;
+        experience.places[1].recall = 0.1;
+        experience.places[2].recall = 0.5;
+        let (third_kind, thing) = (Subject::ObjectType(2), Target::Object(EntityId(8)));
+        experience.remember_place(third_kind, thing, at(30, 0), limits);
+        assert_eq!(tiles(&experience), [at(0, 0), at(50, 0), at(30, 0)]);
+    }
+
+    #[test]
     fn a_place_eased_again_is_remembered_fully_again() {
         let mut experience = Experience::default();
         water(&mut experience, at(0, 0));
