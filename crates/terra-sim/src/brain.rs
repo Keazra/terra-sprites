@@ -254,6 +254,22 @@ pub(crate) struct Brain {
     /// Whether the sprite could see the Cursor that touched it this tick,
     /// from step 1 to step 4 (design v29 §5.6).
     pub(crate) seen_cursor: bool,
+    /// What its summaries were made of when it last looked for lessons, if
+    /// it has since it was made or loaded (design §5.6). Derived, so it
+    /// isn't saved or hashed.
+    #[serde(skip)]
+    looked: Option<SummaryBasis>,
+}
+
+/// What a brain's summaries are made of (design v18, v19 §5.6): the sprites
+/// and object types they're over, and how strongly it generalises. While
+/// that holds and it learns nothing, fading only brings a summary nearer 0.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct SummaryBasis {
+    sprites: usize,
+    types: usize,
+    generalise: u32,
+    generalise_types: u32,
 }
 
 /// What the brain saw and did at a step 5.
@@ -488,6 +504,7 @@ impl Brain {
             touched: None,
             reach_back: None,
             seen_cursor: false,
+            looked: None,
         }
     }
 
@@ -614,9 +631,8 @@ impl Brain {
         let relief = &signals.relief;
         let learning_rate_mod = learning_rate_mod * self.params.get(BrainParam::Plasticity);
         // A hurt done to it teaches fear of whoever did it (design v18 §5.6).
-        if signals.hit
-            && let Some(attacker) = signals.attacker
-        {
+        let hitter = signals.attacker.filter(|_| signals.hit);
+        if let Some(attacker) = hitter {
             let rate = self.params.get(BrainParam::FearRate) * learning_rate_mod;
             let attacker = self.experience.remember(attacker, relief.len());
             attacker.fear = (attacker.fear - rate * signals.punishment).max(-1.0);
@@ -792,7 +808,8 @@ impl Brain {
         // of, which the crash's pain isn't about (design v25 §5.6).
         let crashed = near.is_some_and(|touch| touch.verb.is_none());
         let tried = self.touched.filter(|_| signals.fruitless).map(|t| t.tick);
-        if !crashed && (r != 0.0 || tried.is_some()) {
+        let trace_teaches = !crashed && (r != 0.0 || tried.is_some());
+        if trace_teaches {
             let disappointment = self.params.get(BrainParam::Disappointment);
             let decay = self.params.get(BrainParam::TraceDecay);
             for entry in &self.trace {
@@ -823,9 +840,7 @@ impl Brain {
                 moment.push(topic);
             }
         }
-        if signals.hit
-            && let Some(attacker) = signals.attacker
-        {
+        if let Some(attacker) = hitter {
             moment.push(Topic::Hitter(attacker));
         }
         if feared {
@@ -835,7 +850,29 @@ impl Brain {
         // A sprite touched that taught it nothing isn't remembered, so it
         // doesn't count towards sprites in general (design v18 §5.6).
         self.experience.forget_faded(physiology.forget_below);
-        let lessons = self.lessons(data);
+        // Only learning can tip a lesson, and between ticks only fading,
+        // which brings every learned value nearer 0 while each fade and the
+        // Cursor's calming stay from 0 to 1, as the built-in pack's ranges
+        // keep them, but for two things: a summary whose sprites, object types
+        // or generalising changed, and a learned habit and a taught one
+        // pulling opposite ways, as one fades faster than the other. So
+        // with none of these there's no lesson to look for. Every kind of
+        // learning above is counted here.
+        let learned_anything = hitter.is_some()
+            || liked
+            || feared
+            || signals.reward != 0.0
+            || signals.punishment != 0.0
+            || relief.iter().any(|&v| v != 0.0)
+            || trace_teaches;
+        let lessons = if learned_anything
+            || self.looked != Some(self.summary_basis(data))
+            || self.habits_pull_apart()
+        {
+            self.lessons(data)
+        } else {
+            Vec::new()
+        };
         self.fade(physiology.forget_below);
         (lessons, moment)
     }
@@ -1012,6 +1049,7 @@ impl Brain {
     /// what it's about, so it's a lesson only once (design §5.6), however
     /// the sprites it remembers come and go (design v18 §5.6).
     fn lessons(&mut self, data: &DataPack) -> Vec<(Learned, bool)> {
+        self.looked = Some(self.summary_basis(data));
         let threshold = data.physiology().lesson_threshold;
         let mut found = Vec::new();
         let mut over = Vec::new();
@@ -1027,6 +1065,39 @@ impl Brain {
             }
         }
         found
+    }
+
+    /// What its summaries are made of now (design v18, v19 §5.6).
+    fn summary_basis(&self, data: &DataPack) -> SummaryBasis {
+        let below = data.physiology().forget_below;
+        let experience = &self.experience;
+        SummaryBasis {
+            sprites: experience
+                .individuals
+                .values()
+                .filter(|known| known.taught(below))
+                .count(),
+            types: experience
+                .types
+                .values()
+                .filter(|known| known.touched)
+                .count(),
+            generalise: self.params.get(BrainParam::Generalise).to_bits(),
+            generalise_types: self.params.get(BrainParam::GeneraliseTypes).to_bits(),
+        }
+    }
+
+    /// Whether a habit it learned and one the Cursor taught pull opposite
+    /// ways (#187): fading at their own rates, their sum can move away
+    /// from 0.
+    fn habits_pull_apart(&self) -> bool {
+        self.experience.types.values().any(|known| {
+            known
+                .habits
+                .iter()
+                .zip(&known.taught_habits)
+                .any(|(&learned, &taught)| learned * taught < 0.0)
+        })
     }
 
     /// One tick of fading (design §5.6): good and bad, fear, familiarity,
@@ -1614,19 +1685,13 @@ impl Brain {
         general: &SpriteMemory,
         data: &DataPack,
     ) -> BTreeMap<CategoryId, f32> {
-        let state: Vec<usize> = data
-            .brain_inputs_in_order()
-            .iter()
-            .enumerate()
-            .filter(|(_, input)| matches!(input.source, Source::State(_)))
-            .map(|(i, _)| i)
-            .collect();
+        let state = data.state_places();
         let salience = self.params.get(BrainParam::SalienceGain);
         let value_gain = self.params.get(BrainParam::ValueGain);
         let curiosity = self.params.get(BrainParam::Curiosity);
         let vigilance = self.params.get(BrainParam::Vigilance);
         let boldness = self.boldness(curiosity_mod);
-        let drive = drive_inputs(data);
+        let drive = data.drive_places();
         candidates
             .iter()
             .map(|(&category, &seen)| {
@@ -1715,11 +1780,11 @@ impl Brain {
         if self.whom.is_empty() {
             return 0.0;
         }
-        let drive = not_grown.then(|| drive_locus(data)).flatten();
+        let drive = data.drive_places();
         self.whom
             .iter()
             .filter(|link| link.category == category && relation.is(link.whom))
-            .filter(|link| drive.is_none_or(|drive| !reads(data, link.input, drive)))
+            .filter(|link| !(not_grown && drive.contains(&link.input)))
             .map(|link| inputs[link.input] * link.weight)
             .sum()
     }
@@ -2009,44 +2074,11 @@ pub(crate) fn shown(body: &Body, data: &DataPack) -> Vec<f32> {
         .collect()
 }
 
-/// Every brain input that reads the breeding drive, in the sprite or in
-/// the one it attends to, by place (M2 design §5): none in a pack whose
-/// needs don't include it.
-fn drive_inputs(data: &DataPack) -> Vec<usize> {
-    let Some(drive) = drive_locus(data) else {
-        return Vec::new();
-    };
-    let inputs = data.brain_inputs_in_order().len();
-    (0..inputs)
-        .filter(|&place| reads(data, place, drive))
-        .collect()
-}
-
-/// What the breeding drive's need reads, if the pack has one (M2 design
-/// §5).
-fn drive_locus(data: &DataPack) -> Option<LocusRef> {
-    let need = data.physiology().indices.drive?;
-    let inputs = data.brain_inputs_in_order();
-    match inputs[data.need_places()[need]].source {
-        Source::State(drive) => Some(drive),
-        _ => None,
-    }
-}
-
-/// Whether the brain input at `place` reads `drive`, in the sprite or the
-/// one it attends to.
-fn reads(data: &DataPack, place: usize, drive: LocusRef) -> bool {
-    matches!(data.brain_inputs_in_order()[place].source,
-        Source::State(locus) | Source::Shown(locus) | Source::Differs(locus) if locus == drive)
-}
-
 /// The chemical the breeding drive reads, by index, if it reads one (M2
 /// design §5): what the front end must show as 0 in a sprite not grown up.
 pub(crate) fn drive_chemical(data: &DataPack) -> Option<usize> {
-    let need = data.physiology().indices.drive?;
-    let inputs = data.brain_inputs_in_order();
-    match inputs[data.need_places()[need]].source {
-        Source::State(LocusRef::Chem(id)) => data.chemical_index(id),
+    match data.drive()? {
+        LocusRef::Chem(id) => data.chemical_index(id),
         _ => None,
     }
 }
@@ -2056,7 +2088,7 @@ pub(crate) fn drive_chemical(data: &DataPack) -> Option<usize> {
 /// it, in the sprite or in the one it attends to, reads 0 in `inputs`,
 /// whatever the genes.
 pub(crate) fn without_drive(inputs: &mut [f32], data: &DataPack) {
-    for place in drive_inputs(data) {
+    for &place in data.drive_places() {
         inputs[place] = 0.0;
     }
 }
@@ -2223,9 +2255,7 @@ impl LearnedKey {
 
 /// The `target_distance` input's value in `inputs` (design §5.2).
 fn target_distance(inputs: &[f32], data: &DataPack) -> f32 {
-    data.brain_inputs_in_order()
-        .iter()
-        .position(|input| matches!(input.source, Source::TargetDistance))
+    data.target_distance_place()
         .map_or(0.0, |place| inputs[place])
 }
 
@@ -3046,6 +3076,116 @@ mod tests {
         brain.learn(10, &hit, 1.0, &data);
         assert_eq!(about(&brain, types::SPRITE).bad, 0.0);
         assert_eq!(brain.experience.new_things, 0.0);
+    }
+
+    /// Step 4's signals in a tick that teaches nothing.
+    fn nothing_felt(data: &DataPack) -> Signals {
+        Signals {
+            needs: vec![0.0; data.need_places().len()],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn forgetting_a_sprite_can_tip_a_lesson_about_sprites_in_general_in_a_tick_it_learns_nothing() {
+        // Design v18 §5.6: sprites in general are the mean over the sprites
+        // it remembers, in full once it knows generalise (3). Three bullies
+        // feared at −.6 and a fourth sprite it barely fears make them
+        // −.45, no lesson. The fourth fades past forget_below (.01) and is
+        // forgotten, so the mean of the rest is −.6: a lesson, though the
+        // tick teaches it nothing.
+        let data = builtin();
+        let mut brain = brain(&[]);
+        let needs = data.need_places().len();
+        for (id, fear) in [(7, -0.6), (8, -0.6), (9, -0.6), (10, -0.01)] {
+            brain.experience.remember(EntityId(id), needs).fear = fear;
+        }
+        brain.learn(1, &nothing_felt(&data), 1.0, &data);
+        assert_eq!(
+            brain.experience.individuals.len(),
+            3,
+            "the fourth forgotten"
+        );
+        let in_general = Learned::Fear {
+            thing: Thing::Category("sprite".into()),
+        };
+        assert_eq!(
+            brain.learn(2, &nothing_felt(&data), 1.0, &data),
+            [(in_general, false)]
+        );
+    }
+
+    #[test]
+    fn a_learned_and_a_taught_habit_pulling_apart_can_tip_a_lesson_in_a_tick_it_learns_nothing() {
+        // #187: a habit is the one it learned plus the one the Cursor
+        // taught, each fading at its own rate. Playing with balls learned
+        // at .7 and taught at −.21 make .49, no lesson. The taught one fades
+        // by taught_fade (.01) a tick and the learned one not at all, so
+        // after five ticks of fading they pass .5, though no tick teaches it
+        // anything.
+        let data = builtin();
+        let mut brain = brain(&[
+            r#"BrainParam(param: "habit_fade", value: 0.0)"#,
+            r#"BrainParam(param: "taught_fade", value: 0.01)"#,
+        ]);
+        let ball = teach(&mut brain, types::BALL);
+        ball.habits[column(Verb::Play)] = 0.7;
+        ball.taught_habits[column(Verb::Play)] = -0.21;
+        let learned: Vec<(u64, Vec<(Learned, bool)>)> = (1..=10)
+            .map(|tick| (tick, brain.learn(tick, &nothing_felt(&data), 1.0, &data)))
+            .filter(|(_, lessons)| !lessons.is_empty())
+            .collect();
+        let playing_with_balls = Learned::Habit {
+            thing: "ball".into(),
+            verb: Verb::Play,
+        };
+        assert_eq!(learned, [(6, vec![(playing_with_balls, true)])]);
+    }
+
+    #[test]
+    fn touching_a_new_object_type_can_tip_a_category_lesson_in_a_tick_it_learns_nothing() {
+        // Design v19 §5.6: a category's summary is the mean over the object
+        // types in it the sprite has touched, at no strength while it knows
+        // one, and in full once it knows generalise_types (2 here). Berry
+        // bushes at −1 bad make bushes nothing while they're all it knows.
+        // Touching a thornbush that teaches it nothing makes them −.5: a
+        // lesson, though the tick teaches it nothing.
+        let data = builtin();
+        let mut brain = unfading(&[r#"BrainParam(param: "generalise_types", value: 2.0)"#]);
+        teach(&mut brain, types::BERRY_BUSH).bad = -1.0;
+        brain.learn(1, &nothing_felt(&data), 1.0, &data);
+        teach(&mut brain, types::THORNBUSH);
+        let bushes = Learned::Bad {
+            thing: Thing::Category("bush".into()),
+        };
+        assert_eq!(
+            brain.learn(2, &nothing_felt(&data), 1.0, &data),
+            [(bushes, false)]
+        );
+    }
+
+    #[test]
+    fn generalising_more_can_tip_a_lesson_about_sprites_in_general_in_a_tick_it_learns_nothing() {
+        // Design v18 §5.6: sprites in general count in full once it knows
+        // generalise sprites. Two bullies feared at −.6 make them −.3 at
+        // generalise 3, half strength. A new life stage can bring other
+        // brain parameters (M2 design §9.2); at generalise 2 they're −.6:
+        // a lesson, though the tick teaches it nothing.
+        let data = builtin();
+        let mut brain = brain(&[]);
+        let needs = data.need_places().len();
+        for id in [7, 8] {
+            brain.experience.remember(EntityId(id), needs).fear = -0.6;
+        }
+        brain.learn(1, &nothing_felt(&data), 1.0, &data);
+        brain.params = params(&[r#"BrainParam(param: "generalise", value: 2.0)"#]);
+        let in_general = Learned::Fear {
+            thing: Thing::Category("sprite".into()),
+        };
+        assert_eq!(
+            brain.learn(2, &nothing_felt(&data), 1.0, &data),
+            [(in_general, false)]
+        );
     }
 
     #[test]
