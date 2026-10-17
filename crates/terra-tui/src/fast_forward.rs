@@ -17,6 +17,10 @@ pub const HOUR: u64 = 4_500;
 /// How many rows a run reports: one each tenth of the way.
 pub const ROWS: u64 = 10;
 
+/// The most hours a run may be, so its ticks, counted in tenths for its
+/// rows, still fit in a tick count: about 400 trillion.
+pub const MOST_HOURS: u64 = u64::MAX / (HOUR * ROWS);
+
 /// How many gene values the end of a run lists as moved most (M2 design
 /// §16.4).
 pub const MOVED_LISTED: usize = 5;

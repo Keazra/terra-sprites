@@ -126,6 +126,22 @@ fn it_never_runs_past_its_end() {
 }
 
 #[test]
+fn the_longest_run_the_flags_allow_counts_its_ticks_without_overflowing() {
+    // M2 design §16.3: `--fast-forward` refuses more hours than this, so a
+    // run, its rows and its report can always count them.
+    let most = fast_forward::MOST_HOURS;
+    let mut world = lab_world(3);
+    world.step();
+    let opening = fast_forward::opening_line(&world, Some("mira"), "default", most);
+    assert!(opening.ends_with(" ticks)."), "{opening}");
+    let run = FastForward::new(world, most);
+    assert_eq!(run.ticks(), most * HOUR);
+    assert_eq!(run.next_row(), Some(1 + most * HOUR / 10));
+    assert_eq!(hours(run.ticks()), "409,927,646,082,434");
+    assert!(fast_forward::progress_line(&run, 300.0).contains("left"));
+}
+
+#[test]
 fn a_row_counts_each_life_stage_and_the_eggs_as_the_graph_does() {
     let mut run = FastForward::new(lab_world(7), 1);
     run.run_to(450);

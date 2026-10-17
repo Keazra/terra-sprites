@@ -4,6 +4,9 @@ use std::path::PathBuf;
 
 use terra_sim::Mode;
 
+use crate::fast_forward::MOST_HOURS;
+use crate::text::group_thousands;
+
 /// What the player asked for on the command line.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Args {
@@ -74,10 +77,16 @@ impl Args {
                 "--load" => parsed.load = Some(value_of(&flag, args.next())?),
                 "--fast-forward" => {
                     let value = value_of(&flag, args.next())?;
-                    let hours = value.parse().ok().filter(|&hours: &u64| hours > 0);
+                    // A run of more hours couldn't count its ticks (M2
+                    // design §16.3).
+                    let hours = value
+                        .parse()
+                        .ok()
+                        .filter(|hours: &u64| (1..=MOST_HOURS).contains(hours));
                     parsed.fast_forward = Some(hours.ok_or_else(|| {
                         format!(
-                            "`{value}` is not a number of hours to fast-forward: use a whole number from 1"
+                            "`{value}` is not a number of hours to fast-forward: use a whole number from 1 to {}",
+                            group_thousands(MOST_HOURS)
                         )
                     })?);
                 }
