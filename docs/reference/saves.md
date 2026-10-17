@@ -30,7 +30,7 @@ Saves are files in the `saves` folder of the game's folder. The help screen (`?`
 | macOS | `~/Library/Application Support/terra-sprites` |
 | Linux and others | `$XDG_DATA_HOME/terra-sprites`, or `~/.local/share/terra-sprites` |
 
-Each save is one file ending in `.tspr`: `quicksave.tspr`, `autosave-1.tspr` to `autosave-3.tspr`, and each named save as its name, such as `seed 7 tick 48210.tspr`. A fast-forward's save, such as `seed-7-200h.tspr`, has its two tables beside it, `seed-7-200h-population.csv` and `seed-7-200h-genes.csv` ([README](../../README.md#fast-forward)); the load list shows only the saves.
+Each save is one file ending in `.tspr`: `quicksave.tspr`, `autosave-1.tspr` to `autosave-3.tspr`, and each named save as its name, such as `seed 7 tick 48210.tspr`. A fast-forward's save, such as `seed-7-200h.tspr`, has its two tables beside it, `seed-7-200h-population.csv` and `seed-7-200h-genes.csv` ([manual](../manual.md#fast-forward)); the load list shows only the saves.
 
 - **Names are made safe for any system.** A character some system can't have in a file name (`/ \ : * ? " < > |`) becomes `-`, dots and spaces at the end are left off, and a name Windows keeps for a device, such as `con` or `lpt1`, gets a `-` after it. The game always says a save's name as it's stored, which is the name the load list shows.
 - **A save is never half written.** The game writes the new file beside the old one, then puts it in its place, so a save cut short, by a crash or a full disk, leaves the old save as it was.
