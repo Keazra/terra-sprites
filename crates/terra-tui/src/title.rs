@@ -301,10 +301,22 @@ impl Title {
         self.size = size;
     }
 
+    /// Whether the terminal, as last told, is too small to draw the title
+    /// screen on, so it says so instead.
+    fn too_small(&self) -> bool {
+        self.size.width < ui::MIN_SIZE.width || self.size.height < ui::MIN_SIZE.height
+    }
+
     /// What `action` does on the title screen.
     pub fn apply(&mut self, action: Action) -> TitleFlow {
         if action == Action::Quit {
             return TitleFlow::Quit;
+        }
+        // A terminal too small shows only that it is, so, as a world's
+        // does, it takes no clicks or turns of the wheel: they'd land on a
+        // menu that isn't drawn (M2 design §8.2).
+        if self.too_small() && is_pointer(action) {
+            return TitleFlow::Stay;
         }
         if !self.scene_over() {
             // Any key or click skips the scene, and does nothing else.
@@ -498,6 +510,19 @@ fn chosen_style(chosen: bool) -> Style {
     } else {
         Style::default()
     }
+}
+
+/// Whether `action` comes from the mouse: pointing, a click, a button let
+/// go of or a turn of the wheel.
+fn is_pointer(action: Action) -> bool {
+    matches!(
+        action,
+        Action::Point(_)
+            | Action::Click { .. }
+            | Action::Release { .. }
+            | Action::Follow { at: Some(_) }
+            | Action::Wheel { .. }
+    )
 }
 
 /// Moves `index` by one, the way `by` points, within `count` items.

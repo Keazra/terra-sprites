@@ -538,6 +538,52 @@ fn a_terminal_too_small_says_so() {
 }
 
 #[test]
+fn a_terminal_too_small_takes_no_clicks_or_turns_of_the_wheel() {
+    // M2 design §8.2: as a world's too-small screen takes none (design
+    // §6.1), the menu hidden behind the message can't be picked from.
+    let mut title = after_the_scene();
+    title.resize(Size::new(80, 24));
+    for y in 0..24 {
+        for x in 0..80 {
+            let click = Action::left_click(Position::new(x, y));
+            assert_eq!(title.apply(click), TitleFlow::Stay, "a click on {x},{y}");
+        }
+    }
+    let wheel = Action::Wheel {
+        at: Position::new(40, 15),
+        notches: 1,
+    };
+    for _ in 0..3 {
+        title.apply(wheel);
+    }
+    title.resize(Size::new(WIDTH, HEIGHT));
+    let shown = text(&render(&title));
+    assert!(
+        shown.contains("4 Quit") && !shown.contains("Seed"),
+        "the menu, with nothing opened from it:\n{shown}"
+    );
+    let TitleFlow::Stay = title.apply(Action::Enter) else {
+        panic!("the wheel moved the highlight off New world");
+    };
+    assert!(title.typing(), "New world is still the one highlighted");
+}
+
+#[test]
+fn esc_still_asks_to_quit_on_a_terminal_too_small() {
+    // M2 design §8.2.
+    let mut title = after_the_scene();
+    title.resize(Size::new(80, 24));
+    assert_eq!(title.apply(Action::Back), TitleFlow::Stay);
+    let shown = text(&render_at(&title, 80, 24));
+    assert!(shown.contains("Terminal too small"), "{shown}");
+    assert!(
+        shown.contains("Quit? (y/n)"),
+        "the question shows:\n{shown}"
+    );
+    assert_eq!(title.apply(Action::Confirm), TitleFlow::Quit);
+}
+
+#[test]
 fn everything_drawn_is_cp437() {
     let (mut title, _) = with_saves(&[("autosave-1", 2)]);
     title.set_presets(presets());
