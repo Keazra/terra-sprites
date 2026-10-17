@@ -3,8 +3,8 @@
 # need it. "update = none" makes `git clone --recurse-submodules` and the
 # README's `cargo install --git` skip it rather than fail, and "ignore = all"
 # keeps `git status` quiet as it moves on past the commit pinned here.
-[submodule "docs/private-docs"]
-	path = docs/private-docs
+[submodule "docs/terra-sprites-docs"]
+	path = docs/terra-sprites-docs
 	url = ../terra-sprites-docs.git
 	update = none
 	ignore = all
