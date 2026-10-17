@@ -25,8 +25,10 @@ Slice 30a ([#148](https://github.com/Keazra/terra-sprites/issues/148), settled i
 | 13 | **A graph record that began off the beat** keeps its first count and those on the new beat as it squeezes. | Trace | §14.1 |
 | 14 | **The graph's and the tree's pointers leave the Cursor where it is** on the map beneath. The tree's moved it, which the design didn't say; it now works as the graph's does. | Trace; lead's call, matching §14.3 | §14.3, §17.3 |
 | 15 | **With learning off, sprites grow no more familiar with each other:** knowing an individual is learned, though familiarity with object types still grows (M1 design §5.6). The code always did this; the design didn't say. | Trace; lead's call, keeping the code | §15.2 |
+| 15a | **A call's `listen` ticks count the tick it calls,** 10 in all. | Trace | §15.1 |
 | 16 | **A call counts as heard for as long as it's remembered** (`heard_for`, 150 ticks), for when partners last heard each other and for a female's time with no male seen or heard. | Trace | §15.4, §15.7 |
 | 17 | **A sprite is held back from hitting its family, as a lean:** cornered, crowded and hit together, or trying something new, it still can. The design said it never does. | Trace | §15.6 |
+| 17a | **A family member found is one that was missed:** `found_family` comes only for an egg or young one out of sight at the last look and back in sight now. With one egg away and another in sight, the away one hatching counted as found, and so did a young one dying or growing up out of sight while another was in sight. The code is fixed, and which eggs and young were missed is world state. | Trace | §15.6 |
 | 18 | **A fast-forwarded world is the game's with `--lab`:** fast-forward always makes a Lab world, and the mode is world state, so the Story world from the same seed differs in its state hash. | Trace | §16.3, §16.5 |
 | 18a | **`--fast-forward` refuses more hours than a run can count,** 409,927,646,082,434, past which its tick counts overflowed. | Trace | §16.3 |
 | 19 | **The World tab sets a single generation's number to the right,** `generation        1`, as its other numbers are. | Trace | §17.5 |
