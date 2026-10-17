@@ -33,9 +33,14 @@ Put every PR of a chain in its GitHub stack. A PR stacked by its base alone on a
 
 ## Handing it over
 
-The owner merges. When the stack is ready, the message handing it over lists the merges as numbered steps, bottom first, and each PR's plain-language comment repeats the order. A GitHub stack can also merge all at once, as one merge commit, as Slice 32's did: when every PR in it is ready, recommend that.
+The owner merges. When the stack is ready, the message handing it over lists the merges as numbered steps, bottom first, with what to check between them, and each PR's plain-language comment repeats them:
 
-**After a lower PR merges on its own,** check the next PR's base reads `main` before it's merged. A GitHub stack moves it there; a chain that isn't one moves only when the owner deletes the merged branch from its PR page. A PR still based on a merged branch would merge into that branch instead of `main`, so change its base (`update_pull_request` with `base: main`, or `gh api -X PATCH repos/Keazra/terra-sprites/pulls/<n> -f base=main`), merge `main` in, and run the checks.
+1. Merge #245.
+2. Check that #247 now says it merges into `main`, then merge it.
+
+A GitHub stack can also merge all at once, as one merge commit, as Slice 32's did. Recommend that when every PR in it is ready, unless the owner wants the lower PR on `main` sooner.
+
+**After a lower PR merges on its own,** check the next PR's base reads `main` before it's merged. GitHub deletes a merged PR's branch in both repos, and then moves any PR based on that branch onto the merged PR's base; a GitHub stack moves the next PR onto `main` itself. A PR still based on a merged branch would merge into that branch instead of `main`, so change its base (`update_pull_request` with `base: main`, or `gh api -X PATCH repos/Keazra/terra-sprites/pulls/<n> -f base=main`), merge `main` in, and run the checks.
 
 ## Across the two repos
 
