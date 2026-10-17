@@ -230,6 +230,43 @@ fn a_lone_egg_s_genes_are_now_and_then_doubled_lost_or_changed() {
 }
 
 #[test]
+fn copying_errors_flaws_and_copy_changes_are_saved_and_hashed_in_the_egg_and_the_hatchling() {
+    // M2 design §12.1, §12.3, §13.1: they're world state, saved and in the
+    // state hash, while the egg lies and once it has hatched.
+    let female = format!("{ALONE}{FEMALE}");
+    let (from, to) = whole_genes("doubled: 0.1, lost: 0.1, changed: 0.1");
+    let data = builtin_changing(
+        "physiology.ron",
+        &[
+            EVERY_VALUE_WRONG,
+            ("flaws: (arise: 0.004,", "flaws: (arise: 0.5,"),
+            (from, &to),
+            LONE,
+        ],
+    );
+    let mut world = family_in(data, &[(at(2, 1), &female)], &[], 3);
+    let Laying { egg, .. } = laid(&mut world, 50).expect("she laid an egg");
+    let mut from_the_egg = World::load(&world.save()).expect("the save loads");
+    assert_eq!(from_the_egg.state_hash(), world.state_hash());
+    hatch(&mut world, egg);
+    hatch(&mut from_the_egg, egg);
+    let from_the_hatchling = World::load(&world.save()).expect("the save loads");
+    let hatched = world.sprite(egg).expect("the hatchling");
+    let flawed = hatched.flaws().iter().filter(|&&flawed| flawed > 0).count();
+    assert!(flawed > 0, "{:?}", hatched.flaws());
+    assert!(!hatched.copying_errors().is_empty());
+    assert!(!hatched.copy_changes().is_empty());
+    for loaded in [&from_the_egg, &from_the_hatchling] {
+        assert_eq!(loaded.tick(), world.tick());
+        assert_eq!(loaded.state_hash(), world.state_hash());
+        let same = loaded.sprite(egg).expect("the hatchling");
+        assert_eq!(same.flaws(), hatched.flaws());
+        assert_eq!(same.copying_errors(), hatched.copying_errors());
+        assert_eq!(same.copy_changes(), hatched.copy_changes());
+    }
+}
+
+#[test]
 fn copying_errors_flaws_and_copy_changes_load_and_replay_the_same() {
     let female = format!("{ALONE}{FEMALE}");
     let (from, to) = whole_genes("doubled: 0.1, lost: 0.1, changed: 0.1");
