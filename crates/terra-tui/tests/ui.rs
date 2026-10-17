@@ -1522,6 +1522,92 @@ fn the_body_tab_shows_age_life_stage_traits_drives_physical_levels_and_wear() {
     assert!(text[22..].iter().all(String::is_empty), "{text:?}");
 }
 
+#[test]
+fn the_body_tab_says_when_the_young_grow_up_and_the_old_are_old() {
+    // M2 design §9.6: `age … · young · grows up 4,500`, then `· adult ·
+    // grows old …`, then `· old`. In this pack a sprite may grow old as
+    // soon as it likes.
+    let physiology = include_str!("../../../data/physiology.ron")
+        .replace("grows_old: (6000.0, 60000.0)", "grows_old: (10.0, 60000.0)")
+        .replace("grows_up: (1500.0, 13500.0)", "grows_up: (10.0, 13500.0)");
+    let pack =
+        DataPack::from_sources(&builtin_with("physiology.ron", &physiology)).expect("valid pack");
+    let genes = |grows_up: f32, grows_old: f32| {
+        let genes = format!(
+            r#"(format: 1, genes: [
+                Trait(trait: "grows_up", value: {grows_up:?}),
+                Trait(trait: "grows_old", value: {grows_old:?}),
+            ])"#
+        );
+        terra_sim::Genome::from_ron(&genes, &pack).expect("a valid genome")
+    };
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let (young, grown) = (Pos { x: 2, y: 3 }, Pos { x: 6, y: 1 });
+    let sprites = [
+        (young, Some(genes(4500.0, 13500.0))),
+        (grown, Some(genes(10.0, 20.0))),
+    ];
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: &[],
+        newborns: &[young],
+    };
+    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    world.step();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    let age_line = |app: &App, world: &World| {
+        let (_, text) = inspector(app, world);
+        text.into_iter()
+            .find(|line| line.starts_with("age "))
+            .expect("an age line")
+    };
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(age_line(&app, &world), "age 1 · young · grows up 4,500");
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(age_line(&app, &world), "age 11 · adult · grows old 20");
+    for _ in 0..10 {
+        world.step();
+    }
+    assert_eq!(age_line(&app, &world), "age 21 · old");
+}
+
+#[test]
+fn a_worn_sprite_grows_old_sooner_and_the_body_tab_says_its_genes_health() {
+    // M2 design §9.4, §9.6. In this pack water runs out at once and thirst
+    // injures badly, which wears the sprite, and a bad injury scars a gene
+    // every tick: once one has weakened, the wear line says the genes'
+    // average health too.
+    let physiology = include_str!("../../../data/physiology.ron")
+        .replace("hydration_loss: 0.00033", "hydration_loss: 1.0")
+        .replace("dehydration: 0.0011", "dehydration: 0.3")
+        .replace("chance: 0.002, hit: 0.05", "chance: 1.0, hit: 0.38");
+    let pack =
+        DataPack::from_sources(&builtin_with("physiology.ron", &physiology)).expect("valid pack");
+    let genome = r#"(format: 1, genes: [
+        Trait(trait: "grows_old", value: 13500.0),
+        Emitter(locus: Locus("always"), mode: Level, gain: 0.001, chem: "boredom"),
+    ])"#;
+    let (mut world, app) = one_sprite_in(pack, genome, &[], &[], 0);
+    let line = |world: &World, start: &str| {
+        let (_, text) = inspector(&app, world);
+        text.into_iter()
+            .find(|line| line.starts_with(start))
+            .unwrap_or_else(|| panic!("a line starting {start:?}"))
+    };
+    assert_eq!(line(&world, "age"), "age 7,500 · adult · grows old 13,500");
+    assert_eq!(line(&world, "wear"), "wear .00", "no gene weakened yet");
+    let vigour = |world: &World| world.sprites().next().expect("a sprite").vigour();
+    while vigour(&world) == 1.0 {
+        world.step();
+    }
+    let sprite = world.sprites().next().expect("a sprite");
+    assert!(sprite.grows_old_at() < 13_499.5, "worn sooner");
+    assert_eq!(line(&world, "age"), "age 7,503 · adult · grows old 13,489");
+    assert_eq!(line(&world, "wear"), "wear .00 · genes .62");
+}
+
 /// A genome that walks a grass step a tick.
 const SPEED_10: &str = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
 
