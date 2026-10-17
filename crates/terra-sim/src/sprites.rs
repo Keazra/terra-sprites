@@ -970,7 +970,7 @@ mod tests {
 
     use super::*;
     use crate::registry::BrainParam;
-    use crate::test_util::{at, builtin_changing};
+    use crate::test_util::{at, builtin, builtin_changing};
 
     /// A sprite of speed 9 and sense radius 10 that grows up at 3,000 ticks
     /// and old at 6,000, `age` ticks old on tick 10,000.
@@ -998,7 +998,7 @@ mod tests {
     #[test]
     fn the_young_walk_slower_until_they_grow_up() {
         // M2 design §9.5: from 0.67 of its speed at birth, rising steadily.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let data = builtin();
         assert_close(sprite(0, &data).speed(10_000, &data), 9.0 * 0.67);
         assert_close(
             sprite(1_500, &data).speed(10_000, &data),
@@ -1018,7 +1018,7 @@ mod tests {
         // M2 design §9.2: on a stage change its brain parameters and its
         // attention instincts, about whom or not, become its genes' for the
         // new stage, as its instincts do.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let data = builtin();
         let genome = Genome::from_ron(
             r#"(format: 2, genes: [
                 Trait(trait: "grows_up", value: 3000.0),
@@ -1048,7 +1048,7 @@ mod tests {
     fn a_starter_sprite_is_more_curious_and_learns_faster_until_it_grows_up() {
         // M2 design §9.5: curiosity .5 and plasticity 1.5 while young, then
         // the pack's .3 and 1; and it watches more while young (§18.1).
-        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let data = builtin();
         let params = |sprite: &Sprite| {
             [
                 BrainParam::Curiosity,
@@ -1090,7 +1090,7 @@ mod tests {
 
     #[test]
     fn an_adult_s_genes_stay_whole_while_it_isn_t_hurt() {
-        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let data = builtin();
         let mut adult = starter(6_000, &data);
         assert_eq!(adult.stage(), LifeStage::Adult);
         until_it_gives_out(&mut adult, &data, 20_000);
@@ -1102,7 +1102,7 @@ mod tests {
     fn an_old_sprite_s_genes_decay_until_its_body_gives_out_in_about_the_ticks_set() {
         // M2 design §9.4: 3,600 ticks for an unworn body, a third of that
         // for the most worn, when more than one gene weakens a tick.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let data = builtin();
         let mut easy = starter(30_000, &data);
         assert_eq!(easy.stage(), LifeStage::Old);
         let genome = easy.genome.clone();
@@ -1131,7 +1131,7 @@ mod tests {
     fn broken_genes_speed_the_decay_as_wear_does() {
         // M2 design §12.4: each broken gene counts as `flaws.wear` (0.05)
         // of wear, so twenty make the most worn body, a third of the ticks.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let data = builtin();
         let mut broken = starter(30_000, &data);
         let frail: Vec<usize> = (0..broken.genome.genes.len())
             .filter(|&i| frailty(&broken.genome.genes[i]) > 0.0)
@@ -1154,7 +1154,7 @@ mod tests {
         // M2 design §12.4: wear and broken genes together count up to the
         // most worn, so old age comes `sooner` (0.33) at most, and the body
         // gives out in a third of the ticks, never faster.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let data = builtin();
         let mut broken = starter(30_000, &data);
         let frail: Vec<usize> = (0..broken.genome.genes.len())
             .filter(|&i| frailty(&broken.genome.genes[i]) > 0.0)
@@ -1193,7 +1193,7 @@ mod tests {
 
     #[test]
     fn a_weakened_speed_gene_slows_the_sprite() {
-        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let data = builtin();
         let mut old = starter(30_000, &data);
         let speed = (0..old.genome.genes.len())
             .find(|&i| {
@@ -1214,7 +1214,7 @@ mod tests {
 
     #[test]
     fn a_bad_injury_can_scar_a_gene_at_any_age() {
-        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let data = builtin();
         let injury = data.physiology().indices.injury;
         let mut rng = ChaCha8Rng::seed_from_u64(3);
         let mut hurt = starter(500, &data);
@@ -1256,7 +1256,7 @@ mod tests {
     fn mating_or_courting_with_or_by_a_young_sprite_breaks_an_invariant() {
         // M2 design §5: only ever between adults, an old sprite counting
         // as one, checked every tick, whatever a genome or a pack says.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let data = builtin();
         let (adult, old, young) = (
             starter_on(at(0, 0), 6_000, &data),
             starter_on(at(1, 0), 30_000, &data),
@@ -1264,10 +1264,10 @@ mod tests {
         );
         assert_eq!(young.stage(), LifeStage::Young);
         for verb in [Verb::Mate, Verb::Court] {
-            // The sprite with the ID `at`, that `sprite` is aimed at.
-            let aimed = |sprite: &Sprite, at: u64| {
+            // `sprite`, aimed at the sprite with the ID `other`.
+            let aimed = |sprite: &Sprite, other: u64| {
                 let mut aimed = sprite.clone();
-                let target = Some((Target::Sprite(EntityId(at)), None));
+                let target = Some((Target::Sprite(EntityId(other)), None));
                 aimed.action = Some(Action::new(verb, None, target, false, 0));
                 aimed
             };
@@ -1284,7 +1284,7 @@ mod tests {
     #[test]
     fn a_young_female_or_a_young_sprite_breeding_alone_breaks_an_invariant() {
         // M2 design §5, §10: only a grown sprite is female or breeds alone.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let data = builtin();
         let ages = [(6_000, true), (30_000, true), (500, false)];
         for (age, grown) in ages {
             let mut female = starter_on(at(0, 0), age, &data);
@@ -1302,14 +1302,14 @@ mod tests {
     fn gene_health_or_wear_out_of_place_or_no_life_stage_breaks_an_invariant() {
         // M2 design §9.4: one health for each gene, each from 0 to 1, wear
         // from 0 to 1, and a life stage, checked every tick.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let data = builtin();
         let mut worn = starter_on(at(0, 0), 30_000, &data);
         worn.body.wear = 1.0;
         worn.health[0] = 0.0;
         assert_eq!(checked(&[worn.clone()], &data), Ok(()));
-        // What it breaks, and how.
-        type Damage = (&'static str, fn(&mut Sprite));
-        let damage: [Damage; 7] = [
+        // What each check finds, and how a test spoils the sprite for it.
+        type Spoiling = (&'static str, fn(&mut Sprite));
+        let spoilings: [Spoiling; 7] = [
             ("health -0.1", |sprite| sprite.health[0] = -0.1),
             ("health 1.1", |sprite| sprite.health[0] = 1.1),
             ("gene healths", |sprite| sprite.health.push(1.0)),
@@ -1318,10 +1318,10 @@ mod tests {
             ("wear of -0.1", |sprite| sprite.body.wear = -0.1),
             ("no life stage", |sprite| sprite.stage = None),
         ];
-        for (problem, damage) in damage {
-            let mut damaged = worn.clone();
-            damage(&mut damaged);
-            let broken = checked(&[damaged], &data).expect_err(problem);
+        for (problem, spoil) in spoilings {
+            let mut spoiled = worn.clone();
+            spoil(&mut spoiled);
+            let broken = checked(&[spoiled], &data).expect_err(problem);
             assert!(broken.contains(problem), "{broken}");
         }
     }

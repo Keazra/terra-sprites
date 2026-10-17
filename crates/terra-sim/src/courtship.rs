@@ -519,7 +519,7 @@ fn part(state: &mut WorldState, data: &DataPack, events: &mut Vec<Event>) {
 mod tests {
     use super::*;
     use crate::genome::Genome;
-    use crate::test_util::{at, builtin_changing};
+    use crate::test_util::{at, builtin_changing, id_at};
     use crate::world::{Scenario, World};
 
     /// A sprite that sees `sight` tiles and calls all the time, or with
@@ -557,8 +557,7 @@ mod tests {
             newborns: &[],
         };
         let world = World::from_scenario(scenario, data, 1).expect("valid scenario");
-        let id = |x| world.sprite_at(at(x, 0)).expect("a sprite").id();
-        let (a, b) = (id(0), id(gap));
+        let (a, b) = (id_at(&world, at(0, 0)), id_at(&world, at(gap, 0)));
         (world, a, b)
     }
 

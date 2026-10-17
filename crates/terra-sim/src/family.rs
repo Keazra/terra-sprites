@@ -300,7 +300,7 @@ mod tests {
     use crate::genome::Genome;
     use crate::map::Map;
     use crate::physiology::FamilyIndices;
-    use crate::test_util::{at, builtin};
+    use crate::test_util::{at, builtin, id_at};
     use crate::world::{Scenario, World};
 
     /// A resting mother on a row of grass 40 tiles long, with two young of
@@ -327,7 +327,7 @@ mod tests {
             newborns: &[at(2, 0), at(30, 0)],
         };
         let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
-        let [mother, near, away] = [0, 2, 30].map(|x| world.sprite_at(at(x, 0)).unwrap().id());
+        let [mother, near, away] = [0, 2, 30].map(|x| id_at(&world, at(x, 0)));
         let (state, _) = world.parts();
         for young in [near, away] {
             let sprite = state.sprites.get_mut(young).expect("a young one");

@@ -6,9 +6,9 @@
 
 mod common;
 use common::{
-    ALONE, FEMALE, KEEN, LONE, Laying, NO_COPYING_ERRORS, RECEPTIVE, WorldBuilder, at, builtin,
-    builtin_changing, builtin_changing_files, close, endings, family, family_in, genome, id_at,
-    laid, lone, until, value_of, world_in,
+    AGES_AT_ONCE, ALONE, FEMALE, KEEN, LONE, Laying, NO_COPYING_ERRORS, OLD, RECEPTIVE,
+    WorldBuilder, at, builtin, builtin_changing, builtin_changing_files, close, endings, family,
+    family_in, genome, id_at, laid, lone, pulse_in_h1, starting_with, until, value_of, world_in,
 };
 
 use proptest::prelude::*;
@@ -262,14 +262,6 @@ fn with_no_free_tile_beside_her_nothing_is_laid_and_nothing_paid() {
     }
 }
 
-/// The built-in pack, with every sprite's body starting with `energy` and
-/// `hydration`, as a newborn's does.
-fn starting_with(energy: f32, hydration: f32) -> DataPack {
-    let newborn = format!("newborn: (energy: {energy:?}, hydration: {hydration:?}, stamina: 1.0),");
-    let builtin = "newborn: (energy: 1.0, hydration: 1.0, stamina: 1.0),";
-    builtin_changing("physiology.ron", &[(builtin, newborn.as_str())])
-}
-
 #[test]
 fn an_adult_is_fertile_only_while_its_energy_and_hydration_are_both_above_0_4() {
     // M2 design §10.2: both above `fed`, a tick's metabolism after they
@@ -285,20 +277,15 @@ fn an_adult_is_fertile_only_while_its_energy_and_hydration_are_both_above_0_4() 
     assert!(!fertile(1.0, 0.39), "thirsty");
 }
 
-/// Copies the `bred` pulse into `h1`: 1 on the tick it goes live.
-const BRED: &str = r#"
-    Emitter(locus: Locus("bred"), mode: Level, gain: 4.0, chem: "h1"),
-    HalfLife(chem: "h1", ticks: 1),
-"#;
-
 #[test]
 fn both_parents_feel_their_egg_and_rest_1500_ticks_before_they_are_fertile_again() {
     // M2 design §10.2: each parent's `bred` pulse, and `rest` ticks since
     // its last egg, laid or fathered.
-    let female = format!("{KEEN}{FEMALE}{BRED}");
-    let male = format!("{KEEN}{BRED}");
+    let bred = pulse_in_h1("bred");
+    let female = format!("{KEEN}{FEMALE}{bred}");
+    let male = format!("{KEEN}{bred}");
     let mut world = family(&[(at(2, 1), &female), (at(3, 1), &male)], &[], 1);
-    let parents = [at(2, 1), at(3, 1)].map(|pos| world.sprite_at(pos).unwrap().id());
+    let parents = [at(2, 1), at(3, 1)].map(|pos| id_at(&world, pos));
     let laying = laid(&mut world, 100).expect("an egg");
     assert_eq!((laying.by, laying.with), (parents[0], Some(parents[1])));
     world.step();
@@ -320,19 +307,19 @@ fn both_parents_feel_their_egg_and_rest_1500_ticks_before_they_are_fertile_again
 
 #[test]
 fn an_old_pair_is_still_fertile_and_lays() {
-    // M2 design §10.2: old counts as grown. These grow old at once.
-    let old = r#"Trait(trait: "grows_old", value: 100.0),"#;
-    let female = format!("{KEEN}{FEMALE}{old}");
-    let male = format!("{KEEN}{old}");
-    let mut world = family_in(quick(), &[(at(2, 1), &female), (at(3, 1), &male)], &[], 1);
-    let parents = [at(2, 1), at(3, 1)].map(|pos| world.sprite_at(pos).unwrap().id());
-    for id in parents {
-        let sprite = world.sprite(id).unwrap();
+    // M2 design §5, §9.1, §10.2: an old sprite still counts as grown.
+    let female = format!("{KEEN}{FEMALE}{OLD}");
+    let male = format!("{KEEN}{OLD}");
+    let data = builtin_changing("physiology.ron", &AGES_AT_ONCE);
+    let mut world = family_in(data, &[(at(2, 1), &female), (at(3, 1), &male)], &[], 1);
+    let (mother, father) = (id_at(&world, at(2, 1)), id_at(&world, at(3, 1)));
+    for id in [mother, father] {
+        let sprite = world.sprite(id).expect("the sprite");
         assert_eq!(sprite.life_stage(), LifeStage::Old);
         assert!(sprite.is_fertile(), "{id:?}");
     }
     let laying = laid(&mut world, 100).expect("an old pair laid");
-    assert_eq!((laying.by, laying.with), (parents[0], Some(parents[1])));
+    assert_eq!((laying.by, laying.with), (mother, Some(father)));
 }
 
 #[test]
