@@ -67,8 +67,9 @@ usage: render title [options] -o <file>
   --font <file.ttf>    draw with this font instead of Cascadia Mono
   --bold-font <file>   and its bold face (default: --font's own)
 
-title takes --seed, --preset, --seconds, --size, --cell, --frame, the
-theme and the font; the rest are for a world.
+title takes --seed, --seconds, --size, --cell, --frame, the theme and
+the font; the rest are for a world. The opening scene is always the
+default preset's world.
 
 9:16 for Shorts: --size 54x48 --map-view --cell 20x40 is 1080x1920, and
 the opening scene at --size 108x96 is too.";
@@ -203,6 +204,7 @@ impl Options {
             if matches!(
                 flag.as_str(),
                 "--replay"
+                    | "--preset"
                     | "--lab"
                     | "--from"
                     | "--to"
@@ -261,8 +263,8 @@ impl Options {
             "title" => {
                 if let Some(flag) = for_a_world.first() {
                     return Err(format!(
-                        "{flag} is for a world's clip: the opening scene is the title \
-                         screen's own, on the whole screen"
+                        "{flag} is for a world's clip: the opening scene is always the \
+                         title screen's own (M2 design §8.1)"
                     ));
                 }
                 Scene::Title { seconds }
@@ -548,6 +550,10 @@ mod tests {
             "--replay is for a world's clip",
         );
         refused("title --from 5 -o a.gif", "--from is for a world's clip");
+        refused(
+            "title --preset a.ron -o a.gif",
+            "--preset is for a world's clip",
+        );
         refused("world --seconds 3 -o a.gif", "--seconds");
         refused("samples --to 5 -o a.gif", "--to");
         refused(
