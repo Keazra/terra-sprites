@@ -307,6 +307,48 @@ fn a_sprite_the_policy_hides_is_a_blank_card_that_leads_nowhere() {
 }
 
 #[test]
+fn the_arrows_and_the_pointer_pass_a_hidden_card_by() {
+    // M2 design §17.6: choosing a hidden sprite's card does nothing, so
+    // neither the arrows nor the pointer land on it. #14's young are #15,
+    // #19 and #25, with #19 right below it; #19 is hidden.
+    let world = pairs(230);
+    let mut app = app_on(&world);
+    tree_of(&mut app, &world, EntityId(14));
+    let nineteen = label_at(&app, &world, YOUNG, "Sprite #19");
+    app.set_policy(Hiding(&[19]));
+    let chosen = |app: &mut App, actions: &[Action]| {
+        press(app, &world, actions);
+        blinking(app, &world)
+    };
+    assert_eq!(
+        chosen(&mut app, &[Action::Point(nineteen)]).as_deref(),
+        Some("Sprite #14"),
+        "pointing at it chooses nothing"
+    );
+    assert_eq!(
+        chosen(&mut app, &[DOWN_ARROW]).as_deref(),
+        Some("Sprite #15"),
+        "down to the nearest shown, the left one of two as near"
+    );
+    assert_eq!(
+        chosen(&mut app, &[RIGHT]).as_deref(),
+        Some("Sprite #25"),
+        "along past it"
+    );
+    assert_eq!(chosen(&mut app, &[LEFT]).as_deref(), Some("Sprite #15"));
+
+    // A row with every card hidden is passed by too: #14's parents, #1
+    // and #2, have no parents above them, so up goes nowhere.
+    app.set_policy(Hiding(&[1, 2]));
+    assert_eq!(chosen(&mut app, &[UP]).as_deref(), Some("Sprite #14"));
+    assert_eq!(
+        chosen(&mut app, &[UP]).as_deref(),
+        Some("Sprite #14"),
+        "none shown above"
+    );
+}
+
+#[test]
 fn brothers_and_sisters_are_at_the_foot_with_the_parent_they_share() {
     let world = pairs(230);
     let mut app = app_on(&world);
