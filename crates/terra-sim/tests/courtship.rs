@@ -9,7 +9,7 @@
 mod common;
 use common::{
     ALONE, FEMALE, KEEN, LONE, WorldBuilder, at, builtin, builtin_changing, builtin_changing_files,
-    genome, hatch, id_at, laid, until, world_in,
+    genome, hatch, id_at, laid, pulse_in_h1, until, world_in,
 };
 
 use terra_sim::{
@@ -148,6 +148,187 @@ fn a_call_costs_the_caller_energy() {
     let energy = |world: &World| world.sprites().next().unwrap().chemical("energy").unwrap();
     let paid = energy(&resting) - energy(&calling);
     assert!((paid - 0.002).abs() < 0.0002, "it paid {paid}");
+}
+
+#[test]
+fn a_caller_calls_once_and_stands_listening_10_ticks_in_all() {
+    // M2 design §15.1: one call, on the action's first tick, heard on the
+    // next; the action, call and listening, takes `calls.listen` ticks in
+    // all, where it stands.
+    let field = row(10);
+    let rows = [field.as_str()];
+    let hears = format!("{RESTER}{}", pulse_in_h1("heard"));
+    let mut world = world(&rows, &[(at(0, 0), CALLER), (at(5, 0), &hears)]);
+    let (caller, hearer) = (id_at(&world, at(0, 0)), id_at(&world, at(5, 0)));
+    let (mut started, mut ended, mut heard) = (Vec::new(), Vec::new(), Vec::new());
+    for _ in 0..40 {
+        for event in world.step() {
+            match event.kind {
+                EventKind::ActionStarted {
+                    id,
+                    verb: Verb::Call,
+                } if id == caller => started.push(event.tick),
+                EventKind::ActionEnded {
+                    id,
+                    verb: Verb::Call,
+                    outcome: Outcome::Applied,
+                    ..
+                } if id == caller => ended.push(event.tick),
+                _ => {}
+            }
+        }
+        if world.sprite(hearer).unwrap().chemical("h1") == Some(1.0) {
+            heard.push(world.tick() - 1);
+        }
+        assert_eq!(world.sprite(caller).unwrap().pos(), at(0, 0), "it stood");
+    }
+    assert!(started.len() >= 3, "it called again and again: {started:?}");
+    let calls: Vec<u64> = started.iter().map(|t| t + 1).filter(|&t| t < 40).collect();
+    assert_eq!(heard, calls, "one call each, at {started:?}");
+    for (start, end) in started.iter().zip(&ended) {
+        let ticks = end - start + 1;
+        assert_eq!(ticks, 10, "started {started:?}, ended {ended:?}");
+    }
+}
+
+#[test]
+fn a_heard_call_is_known_for_150_ticks_and_then_forgotten() {
+    // M2 design §15.1: `calls.heard_for`. The caller calls once, and the
+    // Cursor then holds it where it stands, so it calls no more.
+    let field = row(10);
+    let rows = [field.as_str()];
+    let mut world = world(&rows, &[(at(0, 0), CALLER), (at(5, 0), RESTER)]);
+    let (caller, hearer) = (id_at(&world, at(0, 0)), id_at(&world, at(5, 0)));
+    world.step();
+    assert!(heard(&world, hearer, caller, at(0, 0)), "heard on tick 0");
+    world.submit(Command::TakeHold { sprite: caller });
+    world.submit(Command::MoveCursor { tile: at(0, 0) });
+    while world.tick() < 151 {
+        let knows = heard(&world, hearer, caller, at(0, 0));
+        assert!(knows, "forgotten too soon, at tick {}", world.tick());
+        world.step();
+    }
+    assert!(world.sprite(hearer).unwrap().heard().is_empty());
+}
+
+/// Goes up to the sprite it looks at while that one is of the other sex,
+/// and otherwise rests.
+const OTHER_SEX: &str = r#"
+    AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
+    Instinct(inputs: [("target_other_sex", false)], verb: Approach, weight: 1.0),
+    Instinct(inputs: [("always", false)], verb: Rest, weight: 0.5),
+    BrainParam(param: "tau_base", value: 0.02),
+    BrainParam(param: "curiosity", value: 0.0),
+"#;
+
+#[test]
+fn a_caller_heard_but_out_of_sight_shows_its_body_language() {
+    // M2 design §15.1: read as if in sight, so he goes to her call, 20
+    // tiles off, as she's of the other sex, and not to a male's.
+    let field = row(30);
+    let rows = [field.as_str()];
+    let goes = |caller: &str| {
+        let mut world = world(&rows, &[(at(0, 0), caller), (at(20, 0), OTHER_SEX)]);
+        let hearer = id_at(&world, at(20, 0));
+        (0..30).any(|_| {
+            world.step();
+            let action = world.sprite(hearer).unwrap().action();
+            action.is_some_and(|a| a.verb == Verb::Approach && a.heard == Some(at(0, 0)))
+        })
+    };
+    assert!(goes(&format!("{CALLER}{FEMALE}")), "he went to her call");
+    assert!(!goes(CALLER), "he went to a male's call");
+}
+
+/// A row of grass 30 tiles long and 5 deep, with berry bushes across it
+/// on the tenth column, all but one if `gap`.
+fn walled(gap: bool) -> (Vec<String>, Vec<(Pos, &'static str)>) {
+    let rows = (0..5).map(|_| row(30)).collect();
+    let skip = usize::from(gap);
+    let bushes = (0..5)
+        .skip(skip)
+        .map(|y| (at(9, y), "berry_bush"))
+        .collect();
+    (rows, bushes)
+}
+
+#[test]
+fn a_sprite_with_no_way_to_a_call_never_sets_off_and_forgets_it() {
+    // M2 design §15.1: objects don't stop sound, so the call is heard
+    // across a row of bushes; with no gap there's no way there, and the
+    // call is forgotten at once, long before `heard_for`. With a gap, it
+    // sets off. The caller calls once.
+    let data = builtin();
+    let trip = |gap: bool| {
+        let (rows, bushes) = walled(gap);
+        let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+        let placed = [(at(1, 2), CALLER), (at(25, 2), ANSWERS)]
+            .map(|(pos, genes)| (pos, Some(genome(genes, &data))))
+            .to_vec();
+        let mut world = WorldBuilder::new(&rows)
+            .objects(&bushes)
+            .sprites_with(placed)
+            .build();
+        let (caller, answerer) = (id_at(&world, at(1, 2)), id_at(&world, at(25, 2)));
+        world.step();
+        assert!(
+            heard(&world, answerer, caller, at(1, 2)),
+            "heard through bushes"
+        );
+        world.submit(Command::TakeHold { sprite: caller });
+        world.submit(Command::MoveCursor { tile: at(1, 2) });
+        let mut set_off = false;
+        for _ in 0..10 {
+            world.step();
+            let action = world.sprite(answerer).unwrap().action();
+            set_off |= action.is_some_and(|a| a.heard == Some(at(1, 2)));
+        }
+        let knows = !world.sprite(answerer).unwrap().heard().is_empty();
+        (set_off, knows)
+    };
+    let (set_off, knows) = trip(false);
+    assert!(!set_off && !knows, "set off {set_off}, knows {knows}");
+    let (set_off, knows) = trip(true);
+    assert!(
+        set_off && knows,
+        "through the gap: set off {set_off}, knows {knows}"
+    );
+}
+
+#[test]
+fn a_caller_that_calls_again_from_elsewhere_turns_the_trip_there() {
+    // M2 design §15.1: on the way to the call, the Cursor leads the caller
+    // off, out of sight, and lets it go to call again from there.
+    let field = row(30);
+    let rows = vec![field.as_str(); 16];
+    let (first, second) = (at(1, 1), at(1, 14));
+    let mut world = world(&rows, &[(first, CALLER), (at(28, 1), ANSWERS)]);
+    let (caller, answerer) = (id_at(&world, first), id_at(&world, at(28, 1)));
+    let heading = |world: &World| {
+        let action = world.sprite(answerer).unwrap().action();
+        action.filter(|a| a.remembered).and_then(|a| a.heard)
+    };
+    for _ in 0..3 {
+        world.step();
+    }
+    assert_eq!(heading(&world), Some(first), "on its way by ear");
+    world.submit(Command::TakeHold { sprite: caller });
+    world.submit(Command::MoveCursor { tile: second });
+    while world.sprite(caller).unwrap().pos() != second {
+        world.step();
+        assert_eq!(heading(&world), Some(first), "still on its way");
+    }
+    world.submit(Command::LetGo);
+    let mut turned = false;
+    for _ in 0..5 {
+        for event in world.step() {
+            let restarted =
+                matches!(event.kind, EventKind::ActionStarted { id, .. } if id == answerer);
+            assert!(!restarted, "a new action, not the trip turned");
+        }
+        turned |= heading(&world) == Some(second);
+    }
+    assert!(turned, "it heads for where the caller called again");
 }
 
 /// Goes up to whatever sprite it looks at.

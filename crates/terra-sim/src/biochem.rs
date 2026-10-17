@@ -1426,6 +1426,27 @@ mod tests {
     }
 
     #[test]
+    fn a_weakened_receptor_moves_its_target_less() {
+        // M2 design §9.4: a receptor's gain, too, scales with its gene's
+        // health.
+        let data = quiet();
+        let text = r#"(format: 1, genes: [
+            Receptor(chem: "h0", gain: 0.5, target: "learning_rate_mod"),
+        ])"#;
+        let genome = Genome::from_ron(text, &data).expect("a valid genome");
+        let program = Program::weakened(&genome, &data, LifeStage::Adult, &[0.5]);
+        let mut sprite = Subject {
+            body: Body::newborn(&program, &data),
+            program,
+            data,
+        };
+        sprite.set("h0", 0.8);
+        sprite.step();
+        // 1 + 0.8 × a gain of 0.25.
+        assert_close(sprite.locus("learning_rate_mod"), 1.2);
+    }
+
+    #[test]
     fn a_body_with_nothing_to_weaken_gives_out_when_old() {
         // M2 design §9.4: settings alone never weaken, so an old sprite
         // with no other genes would otherwise live for ever.

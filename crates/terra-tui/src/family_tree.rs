@@ -144,13 +144,15 @@ pub(crate) enum Band {
 
 /// A sprite on the tree: how it's named, what's said of it, in parts the
 /// tree joins with ` · `, and whether it's dead, so drawn dark gray. One the
-/// policy hides says nothing, but keeps its place (M2 design §17.6).
+/// policy hides says nothing, but keeps its place, and can't be chosen (M2
+/// design §17.6).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Card {
     pub(crate) id: EntityId,
     pub(crate) label: String,
     pub(crate) parts: Vec<String>,
     pub(crate) gone: bool,
+    pub(crate) hidden: bool,
 }
 
 impl Card {
@@ -182,6 +184,7 @@ impl Card {
             label: name_of(app, world, id),
             parts,
             gone: known.gone(),
+            hidden: false,
         }
     }
 
@@ -219,6 +222,7 @@ impl Card {
             label: name_of(app, world, id),
             parts: vec![text],
             gone: known.gone(),
+            hidden: false,
         }
     }
 
@@ -229,6 +233,7 @@ impl Card {
             label: String::new(),
             parts: Vec::new(),
             gone: false,
+            hidden: true,
         }
     }
 }
@@ -435,6 +440,9 @@ struct Place {
     label: Range<i32>,
     /// Whether it's in view, in a row that scrolls.
     shown: bool,
+    /// Whether the policy hides it: a blank card, which the arrows and the
+    /// pointer pass by (M2 design §17.6).
+    hidden: bool,
 }
 
 impl Place {
@@ -470,21 +478,26 @@ pub(crate) struct Drawn {
 impl Drawn {
     /// The card the arrows reach from `from` by `step`: the one beside it in
     /// its band, or the nearest in the next band up or down that has any.
+    /// A card the policy hides is passed by (M2 design §17.6).
     pub(crate) fn step(&self, from: Spot, step: Step) -> Option<Spot> {
         let here = self.place(from)?;
+        let choosable = self.places.iter().filter(|place| !place.hidden);
         let band = |band: Band| {
-            self.places
-                .iter()
+            choosable
+                .clone()
                 .filter(move |place| place.spot.band == band)
         };
         let (at, index) = (here.spot.band, here.spot.index);
         let next = match step {
-            Step::Left => band(at).find(|place| place.spot.index + 1 == index),
-            Step::Right => band(at).find(|place| place.spot.index == index + 1),
+            Step::Left => band(at)
+                .filter(|place| place.spot.index < index)
+                .max_by_key(|place| place.spot.index),
+            Step::Right => band(at)
+                .filter(|place| place.spot.index > index)
+                .min_by_key(|place| place.spot.index),
             Step::Up | Step::Down => {
-                let bands = self
-                    .places
-                    .iter()
+                let bands = choosable
+                    .clone()
                     .map(|place| place.spot.band)
                     .filter(|&b| if step == Step::Up { b < at } else { b > at });
                 let to = if step == Step::Up {
@@ -498,11 +511,12 @@ impl Drawn {
         next.map(|place| place.spot)
     }
 
-    /// The card at column `x` and row `y` of the tree.
+    /// The card at column `x` and row `y` of the tree, unless the policy
+    /// hides it (M2 design §17.6).
     pub(crate) fn at(&self, x: i32, y: usize) -> Option<Spot> {
         self.places
             .iter()
-            .find(|place| place.contains(x, y))
+            .find(|place| !place.hidden && place.contains(x, y))
             .map(|place| place.spot)
     }
 
@@ -529,9 +543,14 @@ impl Drawn {
 /// The card `spot` was, on a tree whose cards are at `places`, which may
 /// have changed since: the same card, if it's there; or else, as young are
 /// born and die, the same sprite's card in the same band, or anywhere; or
-/// else the sprite in the middle's.
+/// else the sprite in the middle's. Never one the policy hides now (M2
+/// design §17.6).
 fn find_again(places: &[Place], spot: Option<Spot>) -> Spot {
-    let of = |id: EntityId| places.iter().filter(move |place| place.spot.id == id);
+    let of = |id: EntityId| {
+        places
+            .iter()
+            .filter(move |place| place.spot.id == id && !place.hidden)
+    };
     spot.and_then(|spot| {
         of(spot.id)
             .find(|place| place.spot == spot)
@@ -726,6 +745,7 @@ impl Tree {
             row,
             label,
             shown: true,
+            hidden: card.hidden,
         });
     }
 
@@ -747,6 +767,7 @@ impl Tree {
                     row,
                     label: x..x,
                     shown: false,
+                    hidden: card.hidden,
                 });
             }
         }
@@ -1053,6 +1074,7 @@ mod tests {
             row: 0,
             label: 0..0,
             shown: true,
+            hidden: false,
         }
     }
 
@@ -1080,5 +1102,19 @@ mod tests {
             "elsewhere"
         );
         assert_eq!(find_again(Some(spot(6, Band::Young, 0))), centre, "gone");
+    }
+
+    #[test]
+    fn a_card_the_policy_hides_now_is_never_found_again() {
+        // M2 design §17.6: one chosen before the policy hid it.
+        let centre = spot(9, Band::Centre, 0);
+        let hidden = Place {
+            hidden: true,
+            ..place(spot(5, Band::Young, 0))
+        };
+        assert_eq!(
+            find_again(&[place(centre), hidden], Some(spot(5, Band::Young, 0))),
+            centre
+        );
     }
 }

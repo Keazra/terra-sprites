@@ -31,6 +31,14 @@ fn the_mode_changes_nothing_in_how_a_world_runs() {
 }
 
 #[test]
+fn the_mode_is_in_the_state_hash() {
+    // M2 design §16.1: the same seed makes the same world in both modes,
+    // but the mode is world state, so their hashes differ.
+    let (story, lab) = (world_in(Mode::Story, 7), world_in(Mode::Lab, 7));
+    assert_ne!(story.state_hash(), lab.state_hash());
+}
+
+#[test]
 fn a_save_keeps_its_worlds_mode() {
     let mut world = world_in(Mode::Lab, 7);
     for _ in 0..20 {

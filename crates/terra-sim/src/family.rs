@@ -59,8 +59,8 @@ pub(crate) struct Relation {
     pub(crate) kin: bool,
     /// A sprite grown up, adult or old (§18.1).
     pub(crate) grown: bool,
-    /// Its parent, while it's young, doing something that would show it a
-    /// lesson it hasn't learned (§18.1).
+    /// Its parent, while it's young, in its sight, doing something that
+    /// would show it a lesson it hasn't learned (§18.1).
     pub(crate) showing: bool,
 }
 
@@ -106,7 +106,9 @@ pub(crate) fn relation(
                 young: child,
                 kin: courtship::kin(state, me, other),
                 grown: !young(them),
-                showing: parent && shows(state, data, them, sprite, me),
+                // A parent heard calling out of sight shows it nothing: it
+                // has to see it (§18.1).
+                showing: parent && sprite.sees(them.pos) && shows(state, data, them, sprite, me),
             }
         }
         Target::Object(id) => {
@@ -156,9 +158,10 @@ fn shows(
 
 /// Step 3's look for family, after the look round (M2 design §15.6): each
 /// sprite notes where it sees each egg of its own, and whether it sees
-/// another parent by it, and forgets one that has hatched or is gone; then
-/// its `company` gains what it senses of its family. Nothing in a pack
-/// without families.
+/// another parent by it, and forgets one that has hatched or is gone; it
+/// keeps which of its eggs and young are out of its sight, to tell finding
+/// one from losing it next tick; then its `company` gains what it senses of
+/// its family. Nothing in a pack without families.
 pub(crate) fn look_for_family(
     state: &mut WorldState,
     data: &DataPack,
@@ -189,12 +192,14 @@ pub(crate) fn look_for_family(
         }
     }
     let mut seen_eggs: Vec<(EntityId, Vec<OwnEgg>)> = Vec::new();
+    let mut missing: Vec<(EntityId, Vec<Target>)> = Vec::new();
     let mut found = Vec::new();
     for (id, sprite) in sprites.iter() {
         let company = company.get_mut(&id).expect("each sprite looked round");
         let sees = |other: EntityId| company.seen.binary_search(&other).is_ok();
         let mut senses = FamilySenses::default();
         let mut seen = Vec::new();
+        let mut missed = Vec::new();
         for (egg, pos, parents) in eggs.iter().filter(|(_, _, p)| p.contains(&id)) {
             match pos.filter(|&pos| sprite.sees(pos)) {
                 Some(at) => {
@@ -209,13 +214,17 @@ pub(crate) fn look_for_family(
                 }
                 None => {
                     senses.egg_away = true;
+                    missed.push(Target::Object(*egg));
                     let known = sprite.eggs.iter().find(|known| known.egg == *egg);
                     senses.egg_alone |= known.is_none_or(|known| known.alone);
                 }
             }
         }
-        let young = young.get(&id);
-        senses.young_away = young.is_some_and(|young| young.iter().any(|&y| !sees(y)));
+        let young = young.get(&id).map_or(&[][..], Vec::as_slice);
+        for &away in young.iter().filter(|&&y| !sees(y)) {
+            senses.young_away = true;
+            missed.push(Target::Sprite(away));
+        }
         // Only living sprites are in sight.
         let has_parent = sprite.parents.iter().any(|&p| sprites.get(p).is_some());
         let sees_parent = sprite.parents.iter().any(|&p| sees(p));
@@ -223,12 +232,14 @@ pub(crate) fn look_for_family(
         senses.parent_away = is_young && has_parent && !sees_parent;
         senses.partner_away = sprite.partner().is_some_and(|p| !sees(p));
         // It found family it was missing, with a `found_family` pulse: a
-        // sense that was on last tick is off, and not because the one it was
-        // about hatched, died, grew up or was freed. The body sensors still
-        // hold last tick's senses until biochemistry.
+        // sense that was on last tick is off because one it was about is
+        // back in sight, not because it hatched, died, grew up or was
+        // freed. The body sensors still hold last tick's senses until
+        // biochemistry, and `missed` the eggs and young that were away.
         let was = |locus: usize| sprite.body.loci[locus] > 0.0;
-        if (was(indices.egg_away) && !senses.egg_away && !seen.is_empty())
-            || (was(indices.young_away) && !senses.young_away && young.is_some())
+        let back = |one: Target| sprite.missed.contains(&one);
+        if (!senses.egg_away && seen.iter().any(|own| back(Target::Object(own.egg))))
+            || (!senses.young_away && young.iter().any(|&y| back(Target::Sprite(y))))
             || (was(indices.parent_away) && is_young && sees_parent)
             || (was(indices.partner_away) && sprite.partner().is_some_and(sees))
         {
@@ -238,10 +249,17 @@ pub(crate) fn look_for_family(
         if !seen.is_empty() || !sprite.eggs.is_empty() {
             seen_eggs.push((id, seen));
         }
+        if !missed.is_empty() || !sprite.missed.is_empty() {
+            missing.push((id, missed));
+        }
     }
     for id in found {
         let sprite = state.sprites.get_mut(id).expect("a sprite that looked");
         sprite.body.pulse(indices.found, None);
+    }
+    for (id, missed) in missing {
+        let sprite = state.sprites.get_mut(id).expect("a sprite that looked");
+        sprite.missed = missed;
     }
     for (id, seen) in seen_eggs {
         let sprite = state.sprites.get_mut(id).expect("a sprite that looked");
@@ -273,5 +291,99 @@ impl Sprite {
             Target::Object(egg) => self.forget_egg(egg),
             Target::Water(_) | Target::Cursor => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::genome::Genome;
+    use crate::map::Map;
+    use crate::physiology::FamilyIndices;
+    use crate::test_util::{at, builtin, id_at};
+    use crate::world::{Scenario, World};
+
+    /// A resting mother on a row of grass 40 tiles long, with two young of
+    /// hers, one 2 tiles off, in her sight, and one 30 off, out of it, after
+    /// a tick: the world, the mother, the young one in sight and the one
+    /// away.
+    fn mother_and_two_young() -> (World, EntityId, EntityId, EntityId) {
+        let data = builtin();
+        let row = ".".repeat(40);
+        let map = Map::from_ascii(&[row.as_str()], &data).expect("valid drawing");
+        let genes = r#"(format: 2, genes: [
+            Trait(trait: "speed", value: 10.0),
+            Trait(trait: "sense_radius", value: 10.0),
+            Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),
+            BrainParam(param: "tau_base", value: 0.02),
+        ])"#;
+        let genome = Genome::from_ron(genes, &data).expect("a valid genome");
+        let sprites = [0, 2, 30].map(|x| (at(x, 0), Some(genome.clone())));
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &sprites,
+            scripted: &[],
+            newborns: &[at(2, 0), at(30, 0)],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let [mother, near, away] = [0, 2, 30].map(|x| id_at(&world, at(x, 0)));
+        let (state, _) = world.parts();
+        for young in [near, away] {
+            let sprite = state.sprites.get_mut(young).expect("a young one");
+            sprite.parents = vec![mother];
+            sprite.generation += 1;
+        }
+        world.step();
+        (world, mother, near, away)
+    }
+
+    /// What the sprite `id` senses at the family locus `which` picks.
+    fn sensed(world: &mut World, id: EntityId, which: fn(FamilyIndices) -> usize) -> f32 {
+        let (state, data) = world.parts();
+        let indices = data.physiology().indices.families;
+        let index = which(indices.expect("the built-in pack has families"));
+        state.sprites.get(id).expect("the sprite").body.loci[index]
+    }
+
+    #[test]
+    fn a_young_one_that_dies_out_of_sight_while_another_is_in_sight_is_not_found() {
+        // M2 design §15.6: its death ends its parent's sense of a young one
+        // away, but nothing was found.
+        let (mut world, mother, _, away) = mother_and_two_young();
+        assert_eq!(sensed(&mut world, mother, |f| f.young_away), 1.0);
+        let (state, data) = world.parts();
+        let injury = data.physiology().indices.injury;
+        state.sprites.get_mut(away).expect("away").body.chems[injury] = 1.0;
+        for _ in 0..3 {
+            world.step();
+            assert_eq!(sensed(&mut world, mother, |f| f.found), 0.0, "found");
+        }
+        assert!(world.sprite(away).is_none(), "it died");
+        assert_eq!(sensed(&mut world, mother, |f| f.young_away), 0.0);
+    }
+
+    #[test]
+    fn a_young_one_that_grows_up_out_of_sight_ends_both_senses_with_nothing_found() {
+        // M2 design §15.6: grown, it's no longer its mother's young one, nor
+        // has it a parent to miss, but neither found the other; with
+        // another young one of hers in sight.
+        let (mut world, mother, _, away) = mother_and_two_young();
+        assert_eq!(sensed(&mut world, mother, |f| f.young_away), 1.0);
+        assert_eq!(sensed(&mut world, away, |f| f.parent_away), 1.0);
+        let (state, _) = world.parts();
+        let tick = state.tick as i64;
+        let sprite = state.sprites.get_mut(away).expect("away");
+        sprite.born = tick - sprite.program.traits.grows_up as i64 - 1;
+        for _ in 0..3 {
+            world.step();
+            for id in [mother, away] {
+                let found = sensed(&mut world, id, |f| f.found);
+                assert_eq!(found, 0.0, "{id:?} found family");
+            }
+        }
+        assert!(world.sprite(away).unwrap().life_stage().is_grown());
+        assert_eq!(sensed(&mut world, mother, |f| f.young_away), 0.0);
+        assert_eq!(sensed(&mut world, away, |f| f.parent_away), 0.0);
     }
 }

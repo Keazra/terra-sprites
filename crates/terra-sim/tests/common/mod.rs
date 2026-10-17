@@ -85,6 +85,14 @@ pub fn barren() -> DataPack {
     builtin_changing("physiology.ron", &[BARREN])
 }
 
+/// The built-in data pack, with every sprite's body starting with `energy`
+/// and `hydration`, as a newborn's does.
+pub fn starting_with(energy: f32, hydration: f32) -> DataPack {
+    let newborn = format!("newborn: (energy: {energy:?}, hydration: {hydration:?}, stamina: 1.0),");
+    let builtin = "newborn: (energy: 1.0, hydration: 1.0, stamina: 1.0),";
+    builtin_changing("physiology.ron", &[(builtin, newborn.as_str())])
+}
+
 /// The built-in data pack, with `changes` made to `file`'s text.
 pub fn builtin_changing(file: &str, changes: &[(&str, &str)]) -> DataPack {
     builtin_changing_files(&[(file, changes)])
@@ -201,6 +209,17 @@ pub const KEEN: &str = r#"
 /// A body receptive from the start, as if courted (M2 design §15.3).
 pub const RECEPTIVE: &str = r#"InitialConcentration(chem: "receptivity", value: 1.0),"#;
 
+/// Genes that copy the pulse `pulse` into `h1`, so a test can read it: 1 on
+/// the tick it goes live.
+pub fn pulse_in_h1(pulse: &str) -> String {
+    format!(
+        r#"
+    Emitter(locus: Locus("{pulse}"), mode: Level, gain: 4.0, chem: "h1"),
+    HalfLife(chem: "h1", ticks: 1),
+"#
+    )
+}
+
 /// A body that turns female at once, as an adult (M2 design §10).
 pub const FEMALE: &str = r#"InitialConcentration(chem: "feminiser", value: 1.0),"#;
 
@@ -219,6 +238,20 @@ pub const LONE: (&str, &str) = ("alone_after: 4500,", "alone_after: 0,");
 pub fn lone() -> DataPack {
     builtin_changing("physiology.ron", &[LONE])
 }
+
+/// The changes to `physiology.ron` that let a sprite grow up and grow old
+/// as soon as 1 tick old (M2 design §9.3), so a test of a young or old
+/// sprite needn't wait the thousands of ticks the built-in ranges take.
+pub const AGES_AT_ONCE: [(&str, &str); 2] = [
+    ("grows_old: (6000.0,", "grows_old: (1.0,"),
+    ("grows_up: (1500.0,", "grows_up: (1.0,"),
+];
+
+/// Genes that have a sprite grow up and grow old at 1 tick old, in a pack
+/// changed by `AGES_AT_ONCE`: a scenario's sprite, which starts just grown
+/// up, starts old (M2 design §9.1).
+pub const OLD: &str = r#"Trait(trait: "grows_up", value: 1.0),
+    Trait(trait: "grows_old", value: 1.0),"#;
 
 /// A world drawn from `rows`, with a sprite of its own genes on each tile,
 /// all grown up, made with `data`.

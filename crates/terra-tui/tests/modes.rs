@@ -151,3 +151,14 @@ fn a_lab_worlds_top_bar_says_lab_after_the_speed() {
     let bar = top_bar(&app, &story);
     assert!(bar.contains("► 1x │") && !bar.contains("lab"), "{bar}");
 }
+
+#[test]
+fn a_paused_lab_worlds_top_bar_says_lab_after_the_speed_too() {
+    // M2 design §16.1: `|| paused 4x lab`.
+    let lab = world_in(Mode::Lab);
+    let mut app = app_for(&lab);
+    faster(&mut app, &lab, false, 2);
+    app.apply(Action::TogglePause, &lab);
+    let bar = top_bar(&app, &lab);
+    assert!(bar.contains("|| paused 4x lab │"), "{bar}");
+}

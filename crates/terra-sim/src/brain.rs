@@ -513,7 +513,9 @@ impl Brain {
     /// §9.4), as `weakened` would. Only for genes that have weakened since
     /// the brain was expressed, at the same stage: weakening changes no
     /// parameter or concept, so the rest of the brain stays as it is (#210).
-    /// As after `reach`, the snapshot is taken again at step 5.
+    /// That includes its snapshot of the last step 5, which still fits, so
+    /// at step 4 it still watches from where its eye was then, and shows a
+    /// sprite watching it what it chose its try for (§18.1, §18.2).
     pub(crate) fn reweaken<'a>(
         &mut self,
         genes: impl IntoIterator<Item = (&'a Gene, &'a Expression, f32)>,
@@ -568,7 +570,6 @@ impl Brain {
                 _ => {}
             }
         }
-        self.snapshot = None;
     }
 
     /// Whether its parameters, concepts and instinct links are `other`'s.
@@ -2811,6 +2812,30 @@ mod tests {
     }
 
     #[test]
+    fn a_weakened_instinct_links_as_strongly_as_its_gene_s_health() {
+        // M2 design §9.4: an instinct's weight, and an attention
+        // instinct's, about whom or not, scale with its gene's health.
+        let data = builtin();
+        let genome = Genome::from_ron(
+            r#"(format: 1, genes: [
+                Instinct(inputs: [("hunger", false)], verb: Eat, weight: 0.8),
+                AttentionInstinct(input: "thirst", category: "water", weight: 0.6),
+                AttentionInstinct(input: "always", category: "sprite", whom: Grown, weight: 0.4),
+            ])"#,
+            &data,
+        )
+        .expect("a valid genome");
+        let brain = Brain::weakened(&genome, &data, LifeStage::Adult, &[0.5, 0.25, 0.5]);
+        let eat = brain.decision.get(input("hunger"), column(Verb::Eat));
+        assert!(close(eat, 0.4), "{eat}");
+        let water = brain.attention.get(input("thirst"), at(WATER));
+        assert!(close(water, 0.15), "{water}");
+        let grown: Vec<f32> = brain.whom.iter().map(|link| link.weight).collect();
+        assert_eq!(grown.len(), 1);
+        assert!(close(grown[0], 0.2), "{grown:?}");
+    }
+
+    #[test]
     fn a_reward_or_a_punishment_leaves_the_instinct_links_as_they_were_born() {
         // Design v16 §5.1: instinct never changes in a sprite's life.
         let data = builtin();
@@ -3529,6 +3554,67 @@ mod tests {
     }
 
     #[test]
+    fn a_sprite_known_only_by_sight_is_judged_as_sprites_in_general_and_not_counted_in_them() {
+        // M2 design §15.2: one it knows well by sight, and has learned less
+        // than `forget_below` (0.01) of, isn't among the sprites its sprites
+        // in general are the mean of, is worth what they are, and isn't
+        // listed in its memory.
+        let data = builtin();
+        let mut brain = brain(&[r#"BrainParam(param: "generalise", value: 2.0)"#]);
+        let needs: Vec<&str> = data.needs().collect();
+        let hunger = needs.iter().position(|&n| n == "hunger").expect("a need");
+        for taught in [EntityId(7), EntityId(8)] {
+            brain.experience.remember(taught, needs.len()).worth[hunger] = 0.6;
+        }
+        let seen = EntityId(9);
+        let below = data.physiology().forget_below;
+        brain.experience.befriend(seen, 0.5, needs.len(), below);
+        brain.experience.remember(seen, needs.len()).worth[hunger] = 0.005;
+        let general = brain.sprites_in_general(&data);
+        assert!(close(general.worth[hunger], 0.6), "{general:?}");
+        let hungry = inputs(&[("hunger", 1.0)]);
+        let worth = |sprite| brain.worth_of(types::SPRITE, sprite, &hungry, &general, &data);
+        assert!(close(worth(Some(seen)), 0.6), "{}", worth(Some(seen)));
+        assert_eq!(worth(Some(seen)), worth(None));
+        let about_it = |m: &Memory| match &m.learned {
+            Learned::Worth { thing, .. } | Learned::Bad { thing } | Learned::Fear { thing } => {
+                *thing == Thing::Sprite(seen)
+            }
+            Learned::Habit { .. } | Learned::NewThings => false,
+        };
+        let memory = brain.memory(&data);
+        assert!(!memory.iter().any(about_it), "{memory:?}");
+        let taught = Learned::Worth {
+            thing: Thing::Sprite(EntityId(7)),
+            need: Some("hunger".to_string()),
+        };
+        assert!(memory.iter().any(|m| m.learned == taught), "{memory:?}");
+    }
+
+    #[test]
+    fn the_starter_genes_lean_a_crowded_adult_to_hitting_a_stranger_but_not_its_family() {
+        // M2 design §15.6: a family together is a crowd. Crowded and looking
+        // at a sprite, the starter's adult leans to hitting it, but when the
+        // sprite is its family, its partner or its young, Hit scores below
+        // nothing. A lean, not a rule: Hit is only less likely.
+        let data = builtin();
+        let brain = Brain::new(data.starter(), &data, LifeStage::Adult);
+        let hit = |family: f32| {
+            let x = inputs(&[
+                ("crowdedness", 1.0),
+                ("attended_sprite", 1.0),
+                ("target_family", family),
+            ]);
+            let sprite = Some(types::SPRITE);
+            let scoring = SpriteScoring::default();
+            brain.scores(&brain.activations(&x), &x, sprite, scoring, &data)[column(Verb::Hit)]
+        };
+        let (stranger, family) = (hit(0.0), hit(1.0));
+        assert!(stranger > 0.0, "a stranger: {stranger}");
+        assert!(family < 0.0, "its family: {family}");
+    }
+
+    #[test]
     fn a_frightening_sprite_near_is_backed_away_from_and_not_gone_near_but_never_hit() {
         // Design v18 §5.5: a fear of .5 adds flight (.8) × .5 to Retreat and
         // takes value_gain (1) × .5 from Approach, Eat, Drink and Play, but
@@ -4006,6 +4092,97 @@ mod tests {
         chose(&mut eater, Verb::Eat, types::BERRY_BUSH, Some(0));
         learner.watched(&[eater.shown(eat, &data)], 0.5, &data);
         assert!(!about(&learner, types::BERRY_BUSH).touched);
+    }
+
+    /// A ball's player whose ball is worth .8 for each need, .6 good, and
+    /// playing with one a habit of .9, that chose to play for its thirst;
+    /// and a sprite that knew nothing of balls having watched it play with
+    /// one, taking on half of what it showed.
+    fn watched_playing() -> Brain {
+        let data = builtin();
+        let play = Topic::Tried {
+            subject: types::BALL,
+            verb: Verb::Play,
+            sprite: None,
+        };
+        let mut player = unfading(&[]);
+        let known = teach(&mut player, types::BALL);
+        known.worth.fill(0.8);
+        known.good = 0.6;
+        known.habits[column(Verb::Play)] = 0.9;
+        chose(&mut player, Verb::Play, types::BALL, Some(1));
+        let mut learner = unfading(&[]);
+        learner.watched(&[player.shown(play, &data)], 0.5, &data);
+        learner
+    }
+
+    #[test]
+    fn having_taken_on_a_thing_s_worth_by_watching_a_sprite_knows_its_object_type() {
+        // M2 design §18.2: as if it had touched one, so its own view of
+        // balls counts rather than the toys' summary.
+        let learner = watched_playing();
+        let ball = about(&learner, types::BALL);
+        assert!(close(ball.good, 0.3), "{}", ball.good);
+        assert!(ball.touched);
+    }
+
+    #[test]
+    fn a_habit_taken_on_by_watching_is_kept_as_a_taught_habit() {
+        // M2 design §18.2 (Q3): apart from what it learns itself, fading as
+        // slowly as a habit the Cursor teaches (#187).
+        let learner = watched_playing();
+        let ball = about(&learner, types::BALL);
+        let play = column(Verb::Play);
+        assert!(close(ball.taught_habits[play], 0.45), "{ball:?}");
+        assert_eq!(ball.habits[play], 0.0);
+    }
+
+    #[test]
+    fn of_a_sprite_or_the_cursor_only_fear_passes_on_by_watching() {
+        // M2 design §18.2 (Q2, Q4): whom to like a sprite finds out for
+        // itself. The one it watches likes the sprite it plays with, and the
+        // Cursor it goes to, and fears them both.
+        let data = builtin();
+        let needs = data.need_places().len();
+        let (other, cursor) = (EntityId(9), Subject::Category(data.cursor_category()));
+        let mut watched = unfading(&[]);
+        let knows = |known: &mut SpriteMemory| {
+            known.worth.fill(0.8);
+            known.good = 0.6;
+            known.fear = -0.6;
+        };
+        knows(watched.experience.remember(other, needs));
+        knows(watched.experience.remember_the_cursor(needs));
+        let tries = [
+            (types::SPRITE, Verb::Play, Some(other)),
+            (cursor, Verb::Approach, None),
+        ];
+        for (subject, verb, sprite) in tries {
+            let topic = Topic::Tried {
+                subject,
+                verb,
+                sprite,
+            };
+            chose(&mut watched, verb, subject, Some(1));
+            let mut learner = unfading(&[]);
+            learner.watched(&[watched.shown(topic, &data)], 0.5, &data);
+            let experience = &learner.experience;
+            let known = match topic {
+                Topic::Tried {
+                    sprite: Some(_), ..
+                } => experience.individuals.get(&other),
+                _ => experience.cursor.as_ref(),
+            };
+            let known = known.expect("it remembers whom it fears");
+            assert!(close(known.fear, -0.3), "{topic:?}: {known:?}");
+            assert!(
+                known.worth.iter().all(|&w| w == 0.0),
+                "{topic:?}: {known:?}"
+            );
+            assert_eq!(known.good, 0.0, "{topic:?}");
+            let kind = about(&learner, subject);
+            assert!(kind.worth.iter().all(|&w| w == 0.0) && kind.good == 0.0);
+        }
     }
 
     #[test]

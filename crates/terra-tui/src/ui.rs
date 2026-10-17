@@ -68,8 +68,9 @@ pub(crate) const QUIT_PROMPT: &str = "Quit? y quit the game  t title screen  any
 /// The smallest screen the game draws on (design §6.1).
 pub const MIN_SIZE: Size = Size::new(100, 30);
 
-/// Whether a screen of `screen` cells is too small for the game.
-fn too_small(screen: Size) -> bool {
+/// Whether a screen of `screen` cells is too small for the game, or for
+/// the title screen (M2 design §8.2).
+pub(crate) fn too_small(screen: Size) -> bool {
     screen.width < MIN_SIZE.width || screen.height < MIN_SIZE.height
 }
 

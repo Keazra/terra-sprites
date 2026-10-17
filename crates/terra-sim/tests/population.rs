@@ -6,7 +6,7 @@
 //! small.
 
 mod common;
-use common::{ALONE, FEMALE, WorldBuilder, at, builtin, family_in, lone, until};
+use common::{ALONE, FEMALE, WorldBuilder, at, builtin, family_in, laid, lone, until};
 
 use std::collections::BTreeMap;
 
@@ -149,6 +149,28 @@ fn an_egg_is_counted_as_an_egg_and_its_laying_and_hatching_once_each() {
     assert_eq!((now.eggs, now.young), (0, 1));
     let all = all_changes(&world);
     assert_eq!((all.laid, all.hatched), (1, 1));
+}
+
+#[test]
+fn an_egg_the_cursor_holds_is_counted_as_one_on_the_map_is() {
+    // M2 design §14.1: the eggs are counted whether on the map or held by
+    // the Cursor.
+    let mut world = mother();
+    let egg = laid(&mut world, 3_000).expect("she lays alone").egg;
+    world.submit(Command::PickUp { item: egg });
+    world.step();
+    assert_eq!(
+        world.egg(egg).map(|egg| egg.pos()),
+        Some(None),
+        "the Cursor holds it"
+    );
+    assert_eq!(world.population_now().eggs, 1);
+    while !world.tick().is_multiple_of(100) {
+        world.step();
+    }
+    let last = world.population().last().expect("a count");
+    assert_eq!(last.tick, world.tick());
+    assert_eq!(last.eggs, 1, "a count taken while it's held");
 }
 
 /// The generations `oldest` to `newest`, as a count keeps them.

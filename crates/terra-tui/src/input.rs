@@ -171,6 +171,22 @@ impl Action {
     pub fn middle_click(at: Position) -> Action {
         Action::Follow { at: Some(at) }
     }
+
+    /// Whether this is the pointer's doing (pointing, a click, a middle
+    /// click or a turn of the wheel) or a button let go of, or the key that
+    /// stands for it: none of these is a key pressed, so none answers a
+    /// prompt (design v33 §6.6), and a screen too small to draw on takes
+    /// none (M2 design §8.2).
+    pub fn is_pointer(self) -> bool {
+        matches!(
+            self,
+            Action::Point(_)
+                | Action::Click { .. }
+                | Action::Release { .. }
+                | Action::Follow { at: Some(_) }
+                | Action::Wheel { .. }
+        )
+    }
 }
 
 /// How far Shift scrolls the viewport, in tiles (design §6.5).

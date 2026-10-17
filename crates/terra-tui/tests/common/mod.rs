@@ -6,25 +6,35 @@
 //! shared API stays one place, as in terra-sim's (#155).
 #![allow(dead_code)]
 
+use ratatui::layout::{Position, Size};
+use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{DataPack, EntityId, Genome, Map, Pos, Scenario, World};
-use terra_tui::app::{App, Screen, Selection};
+use terra_tui::app::{App, Screen, Selection, Tab};
 use terra_tui::input::Action;
+use terra_tui::ui;
 
 /// What to change in a data file: its name, and each text to replace in
 /// it, with what.
 pub type Changes = (&'static str, &'static [(&'static str, &'static str)]);
 
-/// The built-in data pack with its files changed as `changes` say.
-pub fn pack_changing(changes: &[Changes]) -> DataPack {
-    let texts: Vec<(&'static str, String)> = DataPack::builtin_sources()
+/// The built-in data pack with its files changed as `changes` say: a file's
+/// name, and each text to replace in it, with what. Each file is one of the
+/// pack's, and each text is in it, or the test fails, so a change can't
+/// quietly miss and leave the test on the built-in data.
+pub fn pack_changing(changes: &[(&str, &[(&str, &str)])]) -> DataPack {
+    let sources = DataPack::builtin_sources();
+    for (file, _) in changes {
+        let known = sources.iter().any(|&(path, _)| path == *file);
+        assert!(known, "{file} is no file of the pack");
+    }
+    let texts: Vec<(&'static str, String)> = sources
         .iter()
         .map(|&(path, builtin)| {
             let mut text = builtin.to_string();
             for (file, edits) in changes {
                 if *file == path {
                     for (from, to) in edits.iter() {
-                        assert!(text.contains(from), "{file}: {from}");
-                        text = text.replace(from, to);
+                        text = changed(&text, from, to);
                     }
                 }
             }
@@ -36,6 +46,13 @@ pub fn pack_changing(changes: &[Changes]) -> DataPack {
         .map(|(path, text)| (*path, text.as_str()))
         .collect();
     DataPack::from_sources(&sources).expect("a valid pack")
+}
+
+/// `text`, a data file or genes, with `from` replaced by `to`. `from` is
+/// in it, or the test fails, rather than going on with `text` unchanged.
+pub fn changed(text: &str, from: &str, to: &str) -> String {
+    assert!(text.contains(from), "{from:?} isn't there to change");
+    text.replace(from, to)
 }
 
 /// Changes that make generations quick: eggs copied exactly, hatching 20
@@ -88,6 +105,16 @@ pub const SCORCHED: Changes = (
     ],
 );
 
+/// The change that makes a thornbush's thorns kill the sprite that hits
+/// it, at once.
+pub const LETHAL_THORNS: Changes = (
+    "tags.ron",
+    &[(
+        r#"Hit:   [Inject(Actor, "injury", 0.03)"#,
+        r#"Hit:   [Inject(Actor, "injury", 1.0)"#,
+    )],
+);
+
 /// Genes for a sprite that grows up 10 ticks after it hatches, turns
 /// female and lays alone whenever it can.
 pub const LONE_MOTHER: &str = r#"(format: 1, genes: [
@@ -123,6 +150,27 @@ pub fn keen(female: bool) -> String {
 
 pub fn at(x: u16, y: u16) -> Pos {
     Pos { x, y }
+}
+
+/// The screen cell the pointer is on to point at map tile `tile` as `app`
+/// shows it: one down and right of the cell the tile is drawn in (design
+/// v27 §6.5).
+pub fn pointer_on(app: &App, tile: Pos) -> Position {
+    let cell = app.cell_of(tile).expect("in view");
+    Position::new(cell.x + 1, cell.y + 1)
+}
+
+/// `n` with its thousands grouped, as the screen writes it: `13,489`.
+pub fn group(n: u64) -> String {
+    let digits = n.to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// A field of grass `width` by `height`, with the data changed as
@@ -202,15 +250,76 @@ pub fn pairs(ticks: u64) -> World {
     grow(&QUICK, (16, 8), &sprites, ticks)
 }
 
-/// Selects `id` and opens its family tree (M2 design §17.2).
-pub fn tree_of(app: &mut App, world: &World, id: EntityId) {
+/// Selects the sprite `id` with `Tab`, as the player would.
+pub fn select(app: &mut App, world: &World, id: EntityId) {
     for _ in 0..world.sprites().count() {
-        if app.selection().map(Selection::id) == Some(id) {
-            break;
+        if app.selection() == Some(Selection::Living(id)) {
+            return;
         }
         app.apply(Action::SelectNext, world);
     }
-    assert_eq!(app.selection().map(Selection::id), Some(id));
+    assert_eq!(
+        app.selection(),
+        Some(Selection::Living(id)),
+        "Tab reaches it"
+    );
+}
+
+/// Selects `id` and opens its family tree (M2 design §17.2).
+pub fn tree_of(app: &mut App, world: &World, id: EntityId) {
+    select(app, world, id);
     app.apply(Action::FamilyTree, world);
     assert_eq!(app.screen(), Screen::FamilyTree);
+}
+
+/// Presses `]` until `tab` is open.
+pub fn open(app: &mut App, world: &World, tab: Tab) {
+    while app.tab() != tab {
+        app.apply(Action::NextTab, world);
+    }
+}
+
+/// The inspector on a 100×`height` screen: its title row, then each row
+/// inside its border, the border and trailing spaces left off and the
+/// margin kept. At 100 columns it's the right-hand 46, above the event
+/// log's 7 rows.
+pub fn inspector_rows(app: &App, world: &World, height: u16) -> (String, Vec<String>) {
+    let size = Size::new(100, height);
+    let mut terminal = Terminal::new(TestBackend::new(size.width, size.height)).unwrap();
+    terminal
+        .draw(|frame| ui::render(frame, app, world))
+        .unwrap();
+    let screen = terminal.backend().buffer();
+    let rows: Vec<String> = (0..size.height)
+        .map(|y| {
+            let row: String = (size.width - 46..size.width)
+                .map(|x| screen[(x, y)].symbol())
+                .collect();
+            row.trim_end().to_string()
+        })
+        .collect();
+    let inside = rows[2..rows.len() - 7]
+        .iter()
+        .map(|row| {
+            let row = row.trim_start_matches('│').trim_end_matches('│');
+            row.trim_end().to_string()
+        })
+        .collect();
+    (rows[1].clone(), inside)
+}
+
+/// `rows` from the first that starts with `start` after its margin.
+pub fn rows_from<'a>(rows: &'a [String], start: &str) -> &'a [String] {
+    let at = rows
+        .iter()
+        .position(|row| row.trim_start().starts_with(start))
+        .unwrap_or_else(|| panic!("a row starting {start:?} in {rows:#?}"));
+    &rows[at..]
+}
+
+/// The inspector's line on a 100×30 screen that starts with `start` after
+/// its margin, without the margin.
+pub fn inspector_line(app: &App, world: &World, start: &str) -> String {
+    let (_, rows) = inspector_rows(app, world, 30);
+    rows_from(&rows, start)[0].trim_start().to_string()
 }

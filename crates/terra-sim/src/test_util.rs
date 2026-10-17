@@ -3,6 +3,8 @@
 use crate::data::DataPack;
 use crate::genome::Genome;
 use crate::map::Pos;
+use crate::objects::EntityId;
+use crate::world::World;
 
 /// The built-in data pack.
 pub fn builtin() -> DataPack {
@@ -53,4 +55,9 @@ pub fn every_kind(data: &DataPack) -> Genome {
 /// A position at `(x, y)`.
 pub fn at(x: u16, y: u16) -> Pos {
     Pos::new(x, y)
+}
+
+/// The ID of the sprite standing on `pos`, as `tests/common`'s does.
+pub fn id_at(world: &World, pos: Pos) -> EntityId {
+    world.sprite_at(pos).expect("a sprite there").id()
 }
