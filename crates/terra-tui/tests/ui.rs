@@ -4353,3 +4353,25 @@ fn the_event_log_says_what_s_new_in_a_hatchling_with_a_gene_changed() {
         }
     }
 }
+
+#[test]
+fn the_map_view_alone_fills_the_frame_with_tiles_and_nothing_else() {
+    // A 40×16 field of grass with rock at (5, 2) and water at (34, 13): a
+    // 30×12 view centred on the map has them in its corners, with no border,
+    // top bar, panels or status line round it (#241).
+    let mut rows = vec![".".repeat(40); 16];
+    rows[2].replace_range(5..6, "#");
+    rows[13].replace_range(34..35, "~");
+    let drawing: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let world = drawn_world(&drawing);
+    let areas = ui::map_view_alone_areas(Size::new(30, 12));
+    assert_eq!(areas.tiles, Rect::new(0, 0, 30, 12));
+    let app = App::new(world.map(), Theme::ascii(), 7, areas);
+    let mut terminal = Terminal::new(TestBackend::new(30, 12)).unwrap();
+    terminal
+        .draw(|frame| ui::render_map_view_alone(frame, &app, &world))
+        .unwrap();
+    let shown = lines(terminal.backend().buffer());
+    assert_eq!(shown[0], format!("#{}", ".".repeat(29)));
+    assert_eq!(shown[11], format!("{}~", ".".repeat(29)));
+}

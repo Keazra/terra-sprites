@@ -189,14 +189,40 @@ fn event_log_area(screen: Rect) -> Option<Rect> {
 }
 
 fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
-    let map = world.map();
     if area.width < 2 || area.height < 2 {
         return;
     }
     // Single-lined all round: the glass shows where the wall is (M2 design
     // §11.2).
     draw_border(buf, area, " Map ");
-    let inner = area.inner(Margin::new(1, 1));
+    draw_tiles(buf, area.inner(Margin::new(1, 1)), app, world);
+}
+
+/// Where the app's panels are drawn when the map view is drawn alone
+/// (`render_map_view_alone`), on a screen of `screen` cells: its tiles fill
+/// the screen, and there are no other panels.
+pub fn map_view_alone_areas(screen: Size) -> Areas {
+    Areas {
+        tiles: Rect::from((Position::ORIGIN, screen)),
+        inspector: None,
+        event_log: None,
+        overlay: None,
+    }
+}
+
+/// Draws the map view alone over the whole frame, its tiles and what's past
+/// its wall with no border, top bar, panels or status line: for pictures of
+/// the map, such as the renderer's clips (#241). The app is to be fitted to
+/// `map_view_alone_areas`, so the Cursor and the marks land where it says.
+pub fn render_map_view_alone(frame: &mut Frame, app: &App, world: &World) {
+    let area = frame.area();
+    draw_tiles(frame.buffer_mut(), area, app, world);
+}
+
+/// Draws what the map view shows in `inner`, inside its border: the tiles
+/// in view, the glass and space past the wall, and the marks over them.
+fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
+    let map = world.map();
     let destination = heading_for(app, world).filter(|_| app.flash_on());
     let attended = attended_by(app, world);
     // A held item being aimed, where it will be thrown from (design v25
@@ -883,9 +909,11 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         .map(|label| format!(" │ placing: {label}"))
         .unwrap_or_default();
     // The tile under the Cursor is information the policy may hide (design
-    // §6.4). Out of reach past the wall, there's only space (M2 design
-    // §11.4).
-    let under = if app.out_of_reach() {
+    // §6.4). Out of reach past the wall, there's only space, and a
+    // withdrawn Cursor is under nothing (M2 design §11.4).
+    let under = if app.cursor_withdrawn() {
+        String::new()
+    } else if app.out_of_reach() {
         " space │".to_string()
     } else if app.can_view(Panel::TileInfo, Subject::Tile(cursor)) {
         format!(" ({},{}) {terrain}{sprite}{object} │", cursor.x, cursor.y)

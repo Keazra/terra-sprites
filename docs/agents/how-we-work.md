@@ -79,7 +79,7 @@ A slice too big for one PR ships as two ("4a", "4b"); only the last PR's descrip
 
 ## Baseline runs
 
-Each time `main` moves, a baseline run (design v24 §7.6) measures what's too slow for CI, and the observer, Gemini, writes a briefing on it. Both are in `docs/reports/`, which git ignores, on the owner's machine: `<date>-<commit>-report.md` and `<date>-<commit>-briefing.md`, with `baseline.log`. A local session reads the newest briefing when it starts (`AGENTS.md`). `scripts/baseline.ps1` runs one, by hand or from the task that `scripts/schedule-baseline.ps1` sets up.
+Each time `main` moves, a baseline run (design v24 §7.6) measures what's too slow for CI, and the observer, Gemini, writes a briefing on it. Both are in the private repo's `reports/` (`AGENTS.md`, "Public and private documents"): `<date>-<commit>-report.md` and `<date>-<commit>-briefing.md`, with `baseline.log`; a trial's are in `reports/trials/`. `scripts/baseline.ps1` runs one on the owner's PC, by hand or from the task that `scripts/schedule-baseline.ps1` sets up, then commits what it wrote there and pushes it. So a session can read the newest briefing when it starts (`AGENTS.md`), in the cloud as well as on the PC.
 
 - **The numbers are `main`'s baseline.** When the newest report's commit is `main`'s, its viability run, thorn trap and A1–A3 numbers (seeds 1–10) are what a slice compares itself with, without measuring `main` again.
 - **The observer's guesses are leads.** It reads the code but can't run it, so check a suggested cause before acting on it.

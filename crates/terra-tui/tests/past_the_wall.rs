@@ -252,6 +252,38 @@ fn over_space_the_cursor_is_not_drawn_and_the_status_line_says_space() {
 }
 
 #[test]
+fn a_withdrawn_cursor_is_out_of_reach_until_the_pointer_comes_back() {
+    // #241: a picture of the game with no player in it, such as the
+    // renderer's clips, withdraws the Cursor: out of reach, as a pointer
+    // over space takes it, with no pointer anywhere, so the status line
+    // says nothing of what it's over (M2 design §11.4). Ticks leave it
+    // there.
+    let (mut world, _) = small_field();
+    let mut app = app(&world);
+    let sprite = Pos { x: 4, y: 3 };
+    apply(&mut app, &world, Action::Point(on(sprite)));
+    app.withdraw_cursor();
+    tick(&mut app, &mut world);
+    assert!(app.out_of_reach());
+    let screen = render(&app, &world);
+    let at = cell(sprite);
+    // Grass round the sprite, which rests, with no arms or marks.
+    let round: String = (at.y - 1..=at.y + 1)
+        .flat_map(|y| (at.x - 1..=at.x + 1).map(move |x| (x, y)))
+        .filter(|&(x, y)| (x, y) != (at.x, at.y))
+        .map(|cell| screen[cell].symbol().to_string())
+        .collect();
+    assert_eq!(round, "........");
+    assert!(!screen[at].modifier.contains(Modifier::REVERSED));
+    assert!(app.cursor_withdrawn());
+    let status = status_line(&screen);
+    assert!(status.starts_with(" SELECT"), "{status}");
+    apply(&mut app, &world, Action::Point(on(sprite)));
+    assert!(!app.out_of_reach(), "back over the map");
+    assert!(!app.cursor_withdrawn());
+}
+
+#[test]
 fn over_space_a_click_q_or_e_does_nothing_in_any_mode() {
     // M2 design §11.4, every input that reaches the rule
     // (docs/agents/how-we-work.md): a click of each button, plain or
