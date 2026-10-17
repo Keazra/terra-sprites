@@ -1148,4 +1148,94 @@ mod tests {
         assert!((3..20).contains(&scarred), "{scarred} genes scarred");
         assert!(hurt.program.vigour < 1.0);
     }
+
+    /// The starter, `age` ticks old on tick 100,000, standing on `pos`.
+    fn starter_on(pos: Pos, age: u64, data: &DataPack) -> Sprite {
+        let mut sprite = starter(age, data);
+        sprite.pos = pos;
+        sprite
+    }
+
+    /// Checks `sprites`, with the IDs 1, 2 and so on, on a small field of
+    /// grass with nothing on it, as the world does every tick (design §7.1).
+    fn checked(sprites: &[Sprite], data: &DataPack) -> Result<(), String> {
+        let map = Map::from_ascii(&["....", "...."], data).expect("valid drawing");
+        let mut all = Sprites::new(&map);
+        for (n, sprite) in (1..).zip(sprites) {
+            all.place(EntityId(n), sprite.clone());
+        }
+        all.check(&map, &Objects::new(&map), data)
+    }
+
+    #[test]
+    fn mating_or_courting_with_or_by_a_young_sprite_breaks_an_invariant() {
+        // M2 design §5: only ever between adults, an old sprite counting
+        // as one, checked every tick, whatever a genome or a pack says.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let (adult, old, young) = (
+            starter_on(at(0, 0), 6_000, &data),
+            starter_on(at(1, 0), 30_000, &data),
+            starter_on(at(2, 0), 500, &data),
+        );
+        assert_eq!(young.stage(), LifeStage::Young);
+        for verb in [Verb::Mate, Verb::Court] {
+            // The sprite with the ID `at`, that `sprite` is aimed at.
+            let aimed = |sprite: &Sprite, at: u64| {
+                let mut aimed = sprite.clone();
+                let target = Some((Target::Sprite(EntityId(at)), None));
+                aimed.action = Some(Action::new(verb, None, target, false, 0));
+                aimed
+            };
+            let between = |a: &Sprite, b: &Sprite| checked(&[aimed(a, 2), b.clone()], &data);
+            assert_eq!(between(&adult, &old), Ok(()), "{verb:?}, adult at old");
+            assert_eq!(between(&old, &adult), Ok(()), "{verb:?}, old at adult");
+            let broken = between(&adult, &young).expect_err("at a young sprite");
+            assert!(broken.contains("only between adults"), "{broken}");
+            let broken = between(&young, &adult).expect_err("by a young sprite");
+            assert!(broken.contains("only between adults"), "{broken}");
+        }
+    }
+
+    #[test]
+    fn a_young_female_or_a_young_sprite_breeding_alone_breaks_an_invariant() {
+        // M2 design §5, §10: only a grown sprite is female or breeds alone.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let ages = [(6_000, true), (30_000, true), (500, false)];
+        for (age, grown) in ages {
+            let mut female = starter_on(at(0, 0), age, &data);
+            female.sex = Sex::Female;
+            let checks = checked(&[female], &data);
+            assert_eq!(checks.is_ok(), grown, "female at {age}: {checks:?}");
+            let mut alone = starter_on(at(0, 0), age, &data);
+            alone.action = Some(Action::new(Verb::BreedAlone, None, None, false, 0));
+            let checks = checked(&[alone], &data);
+            assert_eq!(checks.is_ok(), grown, "breeding alone at {age}: {checks:?}");
+        }
+    }
+
+    #[test]
+    fn gene_health_or_wear_out_of_place_or_no_life_stage_breaks_an_invariant() {
+        // M2 design §9.4: one health for each gene, each from 0 to 1, wear
+        // from 0 to 1, and a life stage, checked every tick.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let mut worn = starter_on(at(0, 0), 30_000, &data);
+        worn.body.wear = 1.0;
+        worn.health[0] = 0.0;
+        assert_eq!(checked(&[worn.clone()], &data), Ok(()));
+        let damage: [(&str, fn(&mut Sprite)); 7] = [
+            ("health -0.1", |sprite| sprite.health[0] = -0.1),
+            ("health 1.1", |sprite| sprite.health[0] = 1.1),
+            ("gene healths", |sprite| sprite.health.push(1.0)),
+            ("gene healths", |sprite| sprite.health.truncate(1)),
+            ("wear of 1.1", |sprite| sprite.body.wear = 1.1),
+            ("wear of -0.1", |sprite| sprite.body.wear = -0.1),
+            ("no life stage", |sprite| sprite.stage = None),
+        ];
+        for (problem, damage) in damage {
+            let mut damaged = worn.clone();
+            damage(&mut damaged);
+            let broken = checked(&[damaged], &data).expect_err(problem);
+            assert!(broken.contains(problem), "{broken}");
+        }
+    }
 }
