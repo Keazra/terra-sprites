@@ -513,7 +513,9 @@ impl Brain {
     /// §9.4), as `weakened` would. Only for genes that have weakened since
     /// the brain was expressed, at the same stage: weakening changes no
     /// parameter or concept, so the rest of the brain stays as it is (#210).
-    /// As after `reach`, the snapshot is taken again at step 5.
+    /// That includes its snapshot of the last step 5, which still fits, so
+    /// at step 4 it still watches from where its eye was then, and shows a
+    /// sprite watching it what it chose its try for (§18.1, §18.2).
     pub(crate) fn reweaken<'a>(
         &mut self,
         genes: impl IntoIterator<Item = (&'a Gene, &'a Expression, f32)>,
@@ -568,7 +570,6 @@ impl Brain {
                 _ => {}
             }
         }
-        self.snapshot = None;
     }
 
     /// Whether its parameters, concepts and instinct links are `other`'s.
