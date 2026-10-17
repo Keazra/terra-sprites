@@ -4,12 +4,13 @@
 //! generation and the deaths by cause.
 
 use std::collections::BTreeMap;
+use std::path::Path;
 use std::time::Duration;
 
 use ratatui::layout::Size;
 use terra_sim::{
-    DataPack, DeathCause, EntityId, EventKind, Map, Mode, Pos, Scenario, World, WorldConfig,
-    gene_values, middle_values,
+    DataPack, DeathCause, EntityId, EventKind, Genome, Map, Mode, Pos, Scenario, World,
+    WorldConfig, gene_values, middle_values,
 };
 use terra_tui::app::App;
 use terra_tui::clock::Speed;
@@ -601,4 +602,139 @@ fn the_report_says_when_no_sprite_is_left_to_measure() {
         run.genes().ending(),
         ["No sprite is left alive to measure the genes of."]
     );
+}
+
+/// A save with eggs in it (the golden save `terra-sim`'s `save.rs`
+/// describes): on an 8 by 8 field, the sprites 9 and 10 have each laid an
+/// egg, which hatch on tick 750. Saved on tick 2.
+const WITH_EGGS: &[u8] = include_bytes!("../../terra-sim/tests/golden/save-v1-eggs.tspr");
+
+#[test]
+fn a_run_that_starts_with_eggs_counts_them_the_first_generation_from_its_first_row() {
+    // M2 design §16.3: "the world's sprites then are the 0th, its eggs
+    // then the 1st", as when `--load` carries on a save with eggs in it.
+    let world = World::load(WITH_EGGS).expect("the save loads");
+    assert_eq!(world.eggs().count(), 2);
+    let mut run = FastForward::new(world, 1);
+    assert_eq!(run.generation(), 1, "before it has run a tick");
+    let first = run.next_row().expect("a row is due");
+    run.run_to(first);
+    assert_eq!(run.take_row().generation, 1);
+}
+
+#[test]
+fn a_value_that_crosses_0_moved_furthest_of_all() {
+    // M2 design §16.4: further even than a value ten times its starter's.
+    let starter = [
+        ("tenfold".to_string(), 1.0),
+        ("crossed".to_string(), 0.5),
+        ("halved".to_string(), 4.0),
+    ];
+    let now = [Some(10.0), Some(-0.1), Some(2.0)];
+    let moved = fast_forward::moved_most(&starter, &now, 5);
+    let names: Vec<&str> = moved.iter().map(|m| m.name.as_str()).collect();
+    assert_eq!(names, ["crossed", "tenfold", "halved"]);
+}
+
+#[test]
+fn the_genes_table_is_blank_where_no_sprite_carries_a_value() {
+    // M2 design §16.4: a sprite whose genome is two traits, speed and
+    // sense radius, carries none of the starter's other values.
+    let data = DataPack::builtin().expect("valid pack");
+    let genome = Genome::from_ron(
+        r#"(format: 2, genes: [
+            Trait(trait: "speed", value: 12.0),
+            Trait(trait: "sense_radius", value: 9.0),
+        ])"#,
+        &data,
+    )
+    .expect("a valid genome");
+    let map = Map::from_ascii(&[".........."; 6], &data).expect("valid drawing");
+    let sprites = [(Pos { x: 4, y: 3 }, Some(genome))];
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: &[],
+        newborns: &[],
+    };
+    let world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+    let run = FastForward::new(world, 1);
+    let table = cells(&run.genes().table());
+    let (headings, start) = (&table[0], &table[2]);
+    assert_eq!(
+        start[..3],
+        ["0", "0", "1"],
+        "the start, with its one sprite"
+    );
+    let carried: Vec<(&str, &str)> = headings[3..]
+        .iter()
+        .zip(&start[3..])
+        .filter(|(_, middle)| !middle.is_empty())
+        .map(|(name, middle)| (name.as_str(), middle.as_str()))
+        .collect();
+    assert_eq!(
+        carried,
+        [("Speed: trait", "12"), ("SenseRadius: trait", "9")]
+    );
+    assert!(headings.len() > 50, "{} columns", headings.len());
+}
+
+#[test]
+fn the_report_says_where_it_saved_and_where_the_tables_are_as_the_design_shows() {
+    // M2 design §16.3's sample, with the folder it leaves out as "…".
+    assert_eq!(
+        fast_forward::saved_line("seed-7-20h", Path::new("…")),
+        "Saved as seed-7-20h in your saves folder (…): the title screen's Continue opens it."
+    );
+    let run = FastForward::new(lab_world(7), 1);
+    let tables = fast_forward::tables("seed-7-20h", run.world(), run.genes());
+    let written: Vec<&str> = tables.iter().map(|(file, _)| file.as_str()).collect();
+    assert_eq!(
+        fast_forward::tables_line(&written).as_deref(),
+        Some("The tables are beside it: seed-7-20h-population.csv and seed-7-20h-genes.csv.")
+    );
+    assert_eq!(
+        fast_forward::tables_line(&written[1..]).as_deref(),
+        Some("The tables are beside it: seed-7-20h-genes.csv."),
+        "one that couldn't be written isn't named"
+    );
+    assert_eq!(fast_forward::tables_line(&[]), None, "with none written");
+}
+
+#[test]
+fn a_run_stopped_early_ends_with_a_row_where_it_stopped_and_saves_under_the_whole_hours() {
+    // M2 design §16.3: `Ctrl+C` stops it "with a last row where it
+    // stopped, under the whole hours it reached". main.rs runs a little at
+    // a time between looks at `Ctrl+C`; this stops at 1.5 of 2 hours.
+    let mut run = FastForward::new(a_deadly_field(), 2);
+    let mut rows = Vec::new();
+    while run.ticks_run() < HOUR + HOUR / 2 {
+        rows.extend(run.advance(50));
+    }
+    // A row each tenth: 900 ticks, so 7 by 6,750.
+    assert_eq!(rows.len(), 7);
+    let last = run.end().expect("a last row where it stopped");
+    assert_eq!(last.ticks_run, HOUR + HOUR / 2);
+    rows.push(last);
+    let died: u64 = rows.iter().flat_map(|row| row.died.values()).sum();
+    let deaths: u64 = run.world().deaths_by_cause().map(|(_, n)| n).sum();
+    assert_eq!(died, deaths, "every death in a row");
+    let table = cells(&run.genes().table());
+    let ticks: Vec<&str> = table[2..].iter().map(|row| row[1].as_str()).collect();
+    assert_eq!(
+        ticks,
+        ["0", "4500", "6750"],
+        "the genes table ends there too"
+    );
+    assert_eq!(save_name("seed-5", run.ticks_run()), "seed-5-1h");
+}
+
+#[test]
+fn a_run_that_reached_its_end_has_no_row_to_add() {
+    let mut run = FastForward::new(a_deadly_field(), 1);
+    run_through(&mut run);
+    assert_eq!(run.end(), None);
+    let table = cells(&run.genes().table());
+    assert_eq!(table.len(), 4, "the starter, the start and the hour");
 }

@@ -393,12 +393,11 @@ fn fast_forward(args: &Args, hours: u64) -> ExitCode {
     }
     progress.clear();
 
-    let stopped = !run.done();
-    if stopped {
-        // Where it stopped, as a last row.
-        println!("{}", run.take_row().line());
+    let stopped_at = run.end();
+    let stopped = stopped_at.is_some();
+    if let Some(row) = stopped_at {
+        println!("{}", row.line());
     }
-    run.finish();
     let ticks_run = run.ticks_run();
     let rate = per_second(ticks_run, started);
     let genes = run.genes().clone();
@@ -415,10 +414,7 @@ fn fast_forward(args: &Args, hours: u64) -> ExitCode {
         "\n{}",
         fast_forward::closing_line(stopped, ticks_run, started.elapsed(), rate)
     );
-    println!(
-        "Saved as {name} in your saves folder ({}): the title screen's Continue opens it.",
-        folder.display()
-    );
+    println!("{}", fast_forward::saved_line(&name, &folder));
     let tables = fast_forward::tables(&name, &world, &genes);
     let mut written = Vec::new();
     for (file, table) in &tables {
@@ -427,8 +423,8 @@ fn fast_forward(args: &Args, hours: u64) -> ExitCode {
             Err(err) => eprintln!("terra-sprites: couldn't write {file}: {err}"),
         }
     }
-    if !written.is_empty() {
-        println!("The tables are beside it: {}.", written.join(" and "));
+    if let Some(line) = fast_forward::tables_line(&written) {
+        println!("{line}");
     }
     println!();
     for line in genes.ending() {

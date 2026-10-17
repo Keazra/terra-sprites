@@ -5,6 +5,7 @@
 //! runs, reports and tables is here, so it can be tested.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 use std::time::Duration;
 
 use terra_sim::{DeathCause, EntityId, EventKind, World, drift, gene_values, middle_values};
@@ -119,6 +120,15 @@ impl FastForward {
         if self.genes.last_tick() != Some(self.world.tick()) {
             self.genes.take(&self.world);
         }
+    }
+
+    /// Ends the run where it is (M2 design §16.3): a run `Ctrl+C` stopped
+    /// before its end gives a last row, where it stopped, and the genes
+    /// table ends there too.
+    pub fn end(&mut self) -> Option<Row> {
+        let stopped = (!self.done()).then(|| self.take_row());
+        self.finish();
+        stopped
     }
 
     /// How the world stands now, with the deaths since the row before, as
@@ -293,6 +303,21 @@ pub fn closing_line(
     } else {
         format!("Done: {ran} {unit} in {took}, {rate} ticks a second.")
     }
+}
+
+/// What the report says once the world is saved as `name` in the saves
+/// folder, `folder` (M2 design §16.3).
+pub fn saved_line(name: &str, folder: &Path) -> String {
+    format!(
+        "Saved as {name} in your saves folder ({}): the title screen's Continue opens it.",
+        folder.display()
+    )
+}
+
+/// What the report says of the tables written beside the save, by their
+/// file names, or nothing if none could be (M2 design §16.3).
+pub fn tables_line(written: &[&str]) -> Option<String> {
+    (!written.is_empty()).then(|| format!("The tables are beside it: {}.", written.join(" and ")))
 }
 
 /// The name a run's save gets unless `--save` names it: what it's named
