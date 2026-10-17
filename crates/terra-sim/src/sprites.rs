@@ -963,6 +963,7 @@ mod tests {
     use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
+    use crate::registry::BrainParam;
     use crate::test_util::{at, builtin_changing};
 
     /// A sprite of speed 9 and sense radius 10 that grows up at 3,000 ticks
@@ -1000,10 +1001,62 @@ mod tests {
         assert_close(sprite(3_000, &data).speed(10_000, &data), 9.0);
     }
 
-    /// The starter, `age` ticks old on tick 100,000: it grows old at
-    /// 22,500 ticks.
+    /// The starter, `age` ticks old on tick 100,000: it grows up at 4,500
+    /// ticks and old at 22,500.
     fn starter(age: u64, data: &DataPack) -> Sprite {
         Sprite::aged(data.starter().clone(), at(0, 0), 100_000, age, data)
+    }
+
+    #[test]
+    fn growing_up_expresses_its_brain_s_settings_and_attention_afresh() {
+        // M2 design §9.2: on a stage change its brain parameters and its
+        // attention instincts, about whom or not, become its genes' for the
+        // new stage, as its instincts do.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let genome = Genome::from_ron(
+            r#"(format: 2, genes: [
+                Trait(trait: "grows_up", value: 3000.0),
+                Trait(trait: "grows_old", value: 6000.0),
+                BrainParam(param: "curiosity", value: 0.9, until: Adult),
+                AttentionInstinct(input: "hunger", category: "fruit", weight: 0.8, until: Adult),
+                AttentionInstinct(input: "thirst", category: "water", weight: 0.7, from: Adult),
+                AttentionInstinct(input: "always", category: "sprite", whom: Grown, weight: 0.5, until: Adult),
+            ])"#,
+            &data,
+        )
+        .expect("a valid genome");
+        let at_stage = |stage| Brain::new(&genome, &data, stage);
+        let (young, adult) = (at_stage(LifeStage::Young), at_stage(LifeStage::Adult));
+        assert_eq!(young.params.get(BrainParam::Curiosity), 0.9);
+        assert_eq!(adult.params.get(BrainParam::Curiosity), 0.3, "the pack's");
+        let mut sprite = Sprite::aged(genome.clone(), at(0, 0), 10_000, 2_999, &data);
+        assert_eq!(sprite.stage(), LifeStage::Young);
+        assert!(sprite.brain.instincts_match(&young));
+        assert!(!sprite.brain.instincts_match(&adult));
+        sprite.grow(10_001, &data);
+        assert_eq!(sprite.stage(), LifeStage::Adult);
+        assert!(sprite.brain.instincts_match(&adult), "an adult's brain");
+    }
+
+    #[test]
+    fn a_starter_sprite_is_more_curious_and_learns_faster_until_it_grows_up() {
+        // M2 design §9.5: curiosity .5 and plasticity 1.5 while young, then
+        // the pack's .3 and 1; and it watches more while young (§18.1).
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let params = |sprite: &Sprite| {
+            [
+                BrainParam::Curiosity,
+                BrainParam::Plasticity,
+                BrainParam::WatchRate,
+            ]
+            .map(|param| sprite.brain.params.get(param))
+        };
+        let mut sprite = starter(4_499, &data);
+        assert_eq!(sprite.stage(), LifeStage::Young);
+        assert_eq!(params(&sprite), [0.5, 1.5, 0.5]);
+        sprite.grow(100_001, &data);
+        assert_eq!(sprite.stage(), LifeStage::Adult);
+        assert_eq!(params(&sprite), [0.3, 1.0, 0.25]);
     }
 
     /// Ages `sprite`'s genes until its body gives out, or for at most
