@@ -250,7 +250,7 @@ mod tests {
         svg_file::write(&clip, &mut glyphs(), &mut svg).unwrap();
         assert_eq!(
             (hash(&gif), hash(&svg)),
-            (0x06cf_4e17_735c_4e61, 0x1811_3398_696f_2794),
+            (0x9d16_e14e_fc04_1d9a, 0x3202_464a_6699_81af),
             "{} and {} bytes",
             gif.len(),
             svg.len()

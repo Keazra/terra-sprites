@@ -607,7 +607,7 @@ mod tests {
             &framing(Size::new(100, 30), false),
         );
         let first = &clip.frames[0].screen;
-        // Dark but for the light, just arrived round the sleeper.
+        // Dark but for the light, just arrived round the Cursor's sprite.
         let lit = first
             .content()
             .iter()
