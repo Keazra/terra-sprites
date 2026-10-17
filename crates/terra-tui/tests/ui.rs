@@ -4496,12 +4496,151 @@ fn the_genome_tab_lists_the_genes_copying_changed_doubled_and_lost() {
     assert_eq!(after("lost: ").matches('·').count() + 1, lost, "{listed}");
 }
 
+/// What's new in `id`, a hatchling selected with `Tab`, as the top of its
+/// Genome tab lists it (M2 design §12.6), up to the blank row: each line
+/// whole, though the tab wraps a long one onto rows indented further.
+fn whats_new(world: &World, id: EntityId) -> Vec<String> {
+    let mut app = app_for(world, Theme::cp437(), 100, 40);
+    while app.selection() != Some(Selection::Living(id)) {
+        app.apply(Action::SelectNext, world);
+    }
+    open(&mut app, world, Tab::Genome);
+    let mut said: Vec<String> = Vec::new();
+    for row in &right_part(&render(&app, world, 100, 40), 46)[2..38] {
+        let row = row.trim_start_matches('│').trim_end_matches('│');
+        let row = row.trim_end();
+        if row.is_empty() {
+            return said;
+        }
+        match row.strip_prefix("   ") {
+            Some(more) => {
+                let line = said.last_mut().expect("a line it goes on");
+                line.push(' ');
+                line.push_str(more);
+            }
+            None => said.push(row.trim_start().to_string()),
+        }
+    }
+    panic!("no blank row after {said:#?}");
+}
+
+#[test]
+fn the_genome_tab_of_a_pair_s_young_says_it_is_from_them_both() {
+    // M2 design §12.6: `FROM PIP #12 AND BO #7`, the one that laid it
+    // first.
+    let (mut world, she, he) = a_pair(pack(), "");
+    let egg = world.eggs().next().expect("their egg").id();
+    assert_eq!(world.egg(egg).expect("the egg").parents(), [she, he]);
+    hatch(&mut world, egg);
+    let from = format!("FROM SPRITE #{} AND SPRITE #{}", she.0, he.0);
+    assert_eq!(whats_new(&world, egg)[0], from);
+}
+
+#[test]
+fn the_genome_tab_says_of_a_gene_copying_changed_only_the_numbers_that_differ() {
+    // M2 design §12.6: `+.00512 past .515, was +.00428`. Copying changed
+    // each gene value seven times in ten; in this world, the hunger
+    // emitter's two numbers and only the thirst emitter's gain.
+    let (mut world, egg) = a_lone_egg(&[
+        ("mutation: (chance: 0.01,", "mutation: (chance: 0.7,"),
+        ("flaws: (arise: 0.004,", "flaws: (arise: 0.0,"),
+        (
+            COPY_AND_CHANGE,
+            "copy_and_change: (doubled: 0.0, lost: 0.0, changed: 0.0,",
+        ),
+    ]);
+    hatch(&mut world, egg);
+    let listed = whats_new(&world, egg);
+    for said in [
+        "low energy → hunger +.00285 past .472, was +.004 past .5",
+        "low hydration → thirst +.00396 past .5, was +.004",
+        "speed 9.29, was 7",
+    ] {
+        assert!(
+            listed.iter().any(|line| line == said),
+            "{said:?} in {listed:#?}"
+        );
+    }
+}
+
+#[test]
+fn the_genome_tab_says_what_s_new_in_its_order() {
+    // M2 design §12.6, §13.2: where its genes came from; each gene
+    // changed; the genes doubled; those lost; each gene copying changed a
+    // number of; the genes broken; those that carry a flaw. Everything
+    // copying can do, it does often here.
+    let (mut world, egg) = a_lone_egg(&[
+        ("mutation: (chance: 0.01,", "mutation: (chance: 1.0,"),
+        ("flaws: (arise: 0.004,", "flaws: (arise: 0.5,"),
+        (
+            COPY_AND_CHANGE,
+            "copy_and_change: (doubled: 0.3, lost: 0.3, changed: 0.3,",
+        ),
+    ]);
+    hatch(&mut world, egg);
+    let listed = whats_new(&world, egg);
+    // Each kind of line, in the order the tab lists them; a gene copying
+    // changed a number of is named first, as the tab writes the gene.
+    let starts = [
+        "FROM ",
+        "new: ",
+        "doubled: ",
+        "lost: ",
+        "",
+        "broken: ",
+        "carries flaws: ",
+    ];
+    let kinds: Vec<usize> = listed
+        .iter()
+        .map(|line| {
+            let named = starts
+                .iter()
+                .position(|&start| !start.is_empty() && line.starts_with(start));
+            named.unwrap_or(4)
+        })
+        .collect();
+    assert!(
+        (0..starts.len()).all(|kind| kinds.contains(&kind)),
+        "{kinds:?}: {listed:#?}"
+    );
+    assert!(kinds.is_sorted(), "{kinds:?}: {listed:#?}");
+}
+
+#[test]
+fn a_broken_gene_counts_in_the_body_tab_s_genes_but_not_its_wear() {
+    // M2 design §12.6: the Body tab's `genes .97` counts a broken gene,
+    // whose health is .5; §12.4: it isn't wear. Every copy of every gene
+    // that can weaken is flawed, so each is broken.
+    let (mut world, egg) = a_lone_egg(&[
+        ("mutation: (chance: 0.01,", "mutation: (chance: 0.0,"),
+        ("flaws: (arise: 0.004,", "flaws: (arise: 1.0,"),
+    ]);
+    hatch(&mut world, egg);
+    let view = world.sprite(egg).expect("the hatchling");
+    assert!(view.flaws().contains(&2), "{:?}", view.flaws());
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    while app.selection() != Some(Selection::Living(egg)) {
+        app.apply(Action::SelectNext, &world);
+    }
+    open(&mut app, &world, Tab::Body);
+    let (_, text) = inspector(&app, &world);
+    let wear = text.iter().find(|line| line.starts_with("wear"));
+    assert_eq!(wear.map(String::as_str), Some("wear .00 · genes .50"));
+}
+
 #[test]
 fn the_event_log_says_what_s_new_in_a_hatchling_with_a_gene_changed() {
     // M2 design §13.2: the genes copying changed in what they do, not
-    // those doubled or lost.
-    for (changed, new) in [("0.0", false), ("1.0", true)] {
-        let rules = format!("copy_and_change: (doubled: 0.0, lost: 0.0, changed: {changed},");
+    // those doubled or lost: nothing changed, every gene doubled or lost,
+    // and every gene changed.
+    for (doubled_lost, changed, new) in [
+        ("0.0", "0.0", false),
+        ("0.5", "0.0", false),
+        ("0.0", "1.0", true),
+    ] {
+        let rules = format!(
+            "copy_and_change: (doubled: {doubled_lost}, lost: {doubled_lost}, changed: {changed},"
+        );
         let (mut world, egg) = a_lone_egg(&[
             ("mutation: (chance: 0.01,", "mutation: (chance: 0.0,"),
             ("flaws: (arise: 0.004,", "flaws: (arise: 0.0,"),
@@ -4533,6 +4672,15 @@ fn the_event_log_says_what_s_new_in_a_hatchling_with_a_gene_changed() {
             let named = ["low energy", "low hydration", "always"];
             assert!(named.iter().any(|name| rest.starts_with(name)), "{line}");
         } else {
+            let changes = world.sprite(egg).expect("the hatchling").copy_changes();
+            let doubled_or_lost = |change: &CopyChangeView| {
+                matches!(
+                    change,
+                    CopyChangeView::Doubled { .. } | CopyChangeView::Lost { .. }
+                )
+            };
+            assert_eq!(changes.is_empty(), doubled_lost == "0.0", "{changes:?}");
+            assert!(changes.iter().all(doubled_or_lost), "{changes:?}");
             assert!(line.ends_with(&hatched), "{line}");
         }
     }
