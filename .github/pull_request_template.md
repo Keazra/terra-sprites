@@ -1,3 +1,5 @@
+<!-- A PR that must merge after another starts here with one line naming it: "Stacked on #245: merge that first." -->
+
 ## What changes
 
 <!-- In plain words, for someone who hasn't read the code: what the player sees or what's different, before and after. -->

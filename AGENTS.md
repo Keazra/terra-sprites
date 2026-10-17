@@ -56,7 +56,7 @@ How the owner likes to work, the project's conventions and the slice loop are in
 
 **Starting work:**
 
-1. Start from an up-to-date `main` (`git pull --ff-only`) and a clean tree, and check the open PRs: one may already touch what you're about to change.
+1. Start from an up-to-date `main` (`git pull --ff-only`) and a clean tree, and check the open PRs: one may already touch what you're about to change, and then the work may belong on top of it (`docs/agents/stacked-prs.md`, "When to stack").
 2. For the next slice, take the earliest open "Slice N" issue in the current milestone whose `## Blocked by` issues are closed, and read its comments for items deferred from earlier slices.
 3. In a local session, read the newest briefing in `docs/reports/` (design §7.6), if there is one.
 4. Open issues with no triage label (`docs/agents/triage-labels.md`) go through `/triage`: mention them to the owner.
@@ -75,13 +75,21 @@ The skills live in the repo, in `.claude/skills/`. If a skill the workflow names
 
 ## Git and GitHub
 
-- Work on a feature branch and open a PR. Never commit to `main` directly: it moves only through merged PRs.
-- Fill in the PR template (`.github/pull_request_template.md`), its "Try it on your PC" section included.
+- Work on a feature branch and open a PR. `main` moves only through merged PRs, and the owner merges each one themselves.
 - Stage files by name, never with `git add -A` or `git add .`. The owner's review tooling writes files into the repo folder (`.agents/`, `ORIGINAL_REQUEST.md`).
 - Post issue and PR bodies and comments with `--body-file` and a temp file, never an inline `--body`: inline text breaks on backticks, quotes and paths.
-- After opening an issue or a PR, post a plain-language comment on it for a human reader: what it changes or proposes, why it matters, and any caveats for the reviewer.
+- After opening an issue, post a plain-language comment on it for a human reader: what it proposes, why it matters, and any caveats.
 - Follow-up work goes on GitHub, not just in the conversation. An item for a later slice is a comment on that slice's issue; anything else is a new issue, triaged `afk` or `hitl`.
 - "Closes #N" anywhere in a PR description closes that issue on merge, so write it only in the PR meant to close it. GitHub matches the keyword mid-sentence and in any form ("close", "closes", "fix", "fixes", "resolve", "resolves"), so a PR that only works towards an issue says "Part of #N" and never puts one of those words in front of the number. "Only 7c's PR closes #8" closed #8 when 7a merged.
+
+### Pull requests
+
+1. **Open it as a draft, from the template** (`.github/pull_request_template.md`), its "Try it on your PC" section included.
+2. **Comment on it in plain language** for a human reader: what it changes, why it matters, and any caveats for the reviewer.
+3. **Before marking it ready, bring in `main`** if anything merged since the branch's base: merge `origin/main` into it and run `scripts/check` again. `main` doesn't require a branch to be up to date, so two green PRs can break it together: #192 merged after #191 had changed a test helper both used, and `main`'s terra-tui tests stopped compiling until #197 reverted it.
+4. **Give the merge order** whenever PRs must merge in one: a stack, a pair with a private-docs PR, or two PRs that change the same lines. Each PR's description starts, above "What changes", with a line naming the PR it waits on ("Stacked on #245: merge that first."), and the message handing them to the owner lists the merges as numbered steps, first to last.
+
+**Stacking a PR** on another, or working on one in a stack: `docs/agents/stacked-prs.md`.
 
 ## Agent skills
 

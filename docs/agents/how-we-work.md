@@ -56,7 +56,7 @@ Each slice is a GitHub issue ("Slice N: …") in its milestone; M2's are Slices 
 4. Build red-green with `tdd`, one behaviour at a time, committing as it goes.
 5. Run `two-axis-review` against `main` (Standards and Spec, in parallel sub-agents), with `docs/agents/review-checklist.md`: the slips outside reviews kept finding. Fix every finding that holds up, and give reasons for the ones declined.
 6. Open the PR from the template ("Closes #N"), with `scripts/check` passing and its "Try it on your PC" steps filled in.
-7. Answer outside reviews (below), then merge when the owner says so: a merge commit, not a squash, then delete the branch and pull `main`. PR descriptions and review replies cite the slice's commits by hash, and a squash would drop them from `main`'s history.
+7. Answer outside reviews (below). The owner merges, with a merge commit rather than a squash: PR descriptions and review replies cite the slice's commits by hash, and a squash would drop them from `main`'s history.
 
 A slice too big for one PR ships as two ("4a", "4b"); only the last PR's description says "Closes #N".
 
@@ -97,8 +97,8 @@ The owner runs Gemini, and sometimes Codex, on each PR. Gemini's review is one r
 ## Cloud sessions
 
 - **Update Rust before running the checks:** `rustup update stable`. The container's toolchain can be older than the stable CI uses, and an older clippy flags lints CI doesn't: in slice 9e-b, 1.94 flagged `nonminimal_bool` in `inspector.rs`, on `main` too. Cargo's "requires rustc 1.97.1" error (#171) means run `rustup update stable`, not change the code. Raise `rust-version` when a newer API or dependency needs it (clippy's `incompatible_msrv` says so); it only has to stay at 1.97.1 or above.
-- **The session names its own branch** (`claude/…`). The project's is `feat/slice-N-<slug>`, so ask the owner which to use before the first push.
-- **Try `gh` before saying something can't be done.** The GitHub tools cover most work: a review thread gets a reply to its comment, then is resolved by its thread ID. What they can't do, such as making a milestone, `gh api` may: in the M2 planning session it worked through the proxy, where the session had first told the owner it couldn't be done.
+- **A cloud session pushes to the `claude/…` branch it's given,** where a local session names its own `feat/slice-N-<slug>`. A stack's further branches take the given name with a suffix (`docs/agents/stacked-prs.md`).
+- **Try `gh api` before saying something can't be done.** The GitHub tools cover most work: a review thread gets a reply to its comment, then is resolved by its thread ID. What they can't do, such as making a milestone or a stack, `gh api` with a REST path may: in the M2 planning session it worked through the proxy, where the session had first told the owner it couldn't be done. `gh`'s own commands, such as `gh pr list`, fail there, since GitHub's GraphQL is closed to cloud sessions.
 - **A branch on GitHub can't be deleted from a session:** the git proxy refuses with a 403. The owner deletes a merged branch from its PR page.
 - **Especially large runs go on the owner's PC, not in the cloud** (the owner, 2026-10-14): a `generations` run of 200,000 ticks or more over ten seeds, the soak, or anything else that would keep a cloud machine busy for an hour or more. Their PC steps the world about half again as fast as a 4-core cloud machine, which runs three worlds at a time. From a project thread, start a Remote Control session on their checkout, or give them the command in the thread. Try ideas on a seed or two in the cloud first, and save the PC for the full run. Slice 28's 200,000-tick run of all ten seeds is what prompted it.
 
