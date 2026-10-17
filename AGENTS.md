@@ -4,13 +4,13 @@
 
 Terra Sprites is an ASCII artificial-life game in Rust. The spec is the design docs in `docs/design/`: M1's (`m1-a-sprite-lives.md`) for the game as built, and M2's (`m2-generations.md`) for milestone 2, which builds on it; see `docs/agents/domain.md` for how to read them.
 
-Before pushing, run the checks CI runs: `scripts/check.sh`, or `.\scripts\check.ps1` in PowerShell. They run, as CI's test job does (`.github/workflows/ci.yml` is the source of truth):
+Before pushing, run the checks CI runs: `scripts/check.sh`, or `.\scripts\check.ps1` in PowerShell. In a cloud session, run `rustup update stable` first, since the container's Rust can be older than CI's (`docs/agents/how-we-work.md`, "Cloud sessions"). The checks run, as CI's test job does (`.github/workflows/ci.yml` is the source of truth):
 
 - `cargo fmt --all --check` (`listed_enum!` bodies aren't formatted by rustfmt; keep them tidy by hand)
 - `cargo clippy --workspace --all-targets -- -D warnings` (this includes the simulation's determinism lints)
 - `cargo test --workspace`: every test, the unit tests inside `src/` too, not only the files you changed
 
-A pre-push hook (`.githooks/pre-push`) runs them if you haven't, which makes the push take minutes; run them first and the push is instant. It's on once a clone has `git config core.hooksPath .githooks`; Claude Code sessions switch it on themselves. Don't skip it with `--no-verify`: three of six PRs in a row (#163, #167, #168) were opened with CI red for a check that wasn't run.
+A pre-push hook (`.githooks/pre-push`) runs them again on any commit they haven't passed, which makes the push take minutes. Commit first and then run them, and the push is instant. It's on once a clone has `git config core.hooksPath .githooks`; Claude Code sessions switch it on themselves. Don't skip it with `--no-verify`: three of six PRs in a row (#163, #167, #168) were opened with CI red for a check that wasn't run.
 
 To format a file of your own, `rustfmt <file>` (it reads `rustfmt.toml` for the 2024 edition) or `cargo fmt --all` when no other agent has untracked Rust files in the folder.
 
@@ -71,38 +71,47 @@ How the owner likes to work, the project's conventions and the slice loop are in
 
 **Starting work:**
 
-1. Start from an up-to-date `main` (`git pull --ff-only`) and a clean tree, and check the open PRs: one may already touch what you're about to change.
+1. Start from an up-to-date `main` (`git pull --ff-only`) and a clean tree, and check the open PRs: one may already touch what you're about to change, and then the work may belong on top of it (`docs/agents/stacked-prs.md`, "When to stack").
 2. For the next slice, take the earliest open "Slice N" issue in the current milestone whose `## Blocked by` issues are closed, and read its comments for items deferred from earlier slices.
 3. Read the newest briefing in the private repo's `reports/` (design §7.6), if the session has the private repo and there is one.
 4. Open issues with no triage label (`docs/agents/triage-labels.md`) go through `/triage`: mention them to the owner.
 
 **Before you finish:**
 
-1. Everything is committed and pushed to the feature branch, with `scripts/check` passing, and the PR is open with the template filled in.
+1. Everything is committed and pushed to the feature branch, with `scripts/check` passing, and the PR is open ("Pull requests", below).
 2. Follow-ups are on GitHub (below), not only in the conversation.
 3. A new convention or owner preference is in `docs/agents/how-we-work.md`, in the PR or a small one of its own.
 
-The skills live in the repo, in `.claude/skills/`. If a skill the workflow names isn't available to you (cloud sessions haven't always loaded the repo's skills), read its `.claude/skills/<name>/SKILL.md` and follow it as written.
+**Skills** live in `.claude/skills/`. When one the workflow names isn't loaded (cloud sessions don't always load the repo's skills), read its `SKILL.md` there and follow it as written.
 
-**Use the repo's copies of Matt Pocock's skills, not the plugin's.** The owner has the whole set on their claude.ai account as the "Skills For Real Engineers" plugin, so sessions may list two versions of a skill: the repo's, under its plain name (`tdd`), and the plugin's, under a prefix (`mattpocock-skills:tdd`). The repo's copies are adjusted for this project (`.claude/skills/THIRD-PARTY.md`), so pick them. For a review, that's `two-axis-review`, not the plugin's `code-review`. Plugin skills with no copy here, such as `to-spec` or `to-tickets`, are fine to use, except `pr` (PR bodies follow the template, below) and `handoff` (starting and finishing follow the steps above). This repo needs no `/setup-matt-pocock-skills`, since `docs/agents/` already holds what it would write.
+**Pick the repo's copy of a Matt Pocock skill** (`tdd`) over the plugin's (`mattpocock-skills:tdd`). The owner has the whole set as the "Skills For Real Engineers" plugin, and the repo's copies are adjusted for this project (`.claude/skills/THIRD-PARTY.md`). For a review, that's `two-axis-review`. Plugin skills with no copy here, such as `to-spec`, are fine, except `pr` and `handoff`: PR bodies follow the template, and starting and finishing follow the steps above. This repo needs no `/setup-matt-pocock-skills`, since `docs/agents/` already holds what it would write.
 
-**A message that starts with a skill's name, such as `/triage` or `/tdd`, asks you to run that skill.** Claude Code Projects and other cloud chats have no slash-command menu, so the name arrives as plain text rather than as a command: load the skill with the Skill tool, or read its `SKILL.md` if it isn't listed. Many of the plugin's skills, such as `to-spec`, `to-tickets` and `grill-me`, are marked for the user to start, which hides them from the Skill tool: find the file with `find ~/.claude -path '*/skills/<name>/SKILL.md'` (if several match, the newest) and follow it as written. `/grill-with-docs` means this repo's `grilling` with `domain-modeling` (`docs/agents/how-we-work.md`), not the plugin's skill of that name.
+**A message that starts with a skill's name** (`/triage`, `/tdd`) asks you to run that skill. Claude Code Projects and other cloud chats have no slash-command menu, so the name arrives as plain text: load the skill with the Skill tool. A plugin skill marked for the user to start (`to-spec`, `to-tickets`, `grill-me`) is hidden from the Skill tool: find it with `find ~/.claude -path '*/skills/<name>/SKILL.md'` (the newest, if several match) and follow it as written. `/grill-with-docs` means this repo's `grilling` with `domain-modeling` (`docs/agents/how-we-work.md`), not the plugin's skill of that name.
 
 ## Git and GitHub
 
-- Work on a feature branch and open a PR. Never commit to `main` directly: it moves only through merged PRs.
-- Fill in the PR template (`.github/pull_request_template.md`), its "Try it on your PC" section included.
+- Work on a feature branch and open a PR. `main` moves only through merged PRs, and the owner merges each one themselves.
 - Stage files by name, never with `git add -A` or `git add .`. The owner's review tooling writes files into the repo folder (`.agents/`, `ORIGINAL_REQUEST.md`).
-- Post issue and PR bodies and comments with `--body-file` and a temp file, never an inline `--body`: inline text breaks on backticks, quotes and paths.
-- After opening an issue or a PR, post a plain-language comment on it for a human reader: what it changes or proposes, why it matters, and any caveats for the reviewer.
+- With `gh`, post issue and PR bodies and comments with `--body-file` and a temp file: inline `--body` text breaks on backticks, quotes and paths.
+- After opening an issue, post a plain-language comment on it for a human reader: what it proposes, why it matters, and any caveats.
 - Follow-up work goes on GitHub, not just in the conversation. An item for a later slice is a comment on that slice's issue; anything else is a new issue, triaged `afk` or `hitl`.
 - "Closes #N" anywhere in a PR description closes that issue on merge, so write it only in the PR meant to close it. GitHub matches the keyword mid-sentence and in any form ("close", "closes", "fix", "fixes", "resolve", "resolves"), so a PR that only works towards an issue says "Part of #N" and never puts one of those words in front of the number. "Only 7c's PR closes #8" closed #8 when 7a merged.
+
+### Pull requests
+
+1. **Pick its base, every time:** `main`, or the open PR it needs. List the open PRs first, and stack on one only when this PR needs it (`docs/agents/stacked-prs.md`, "When to stack"). The description's first line, above "What changes", says which: "Based on `main`: needs nothing open." or "Stacked on #245: merge that first."
+2. **Open it as a draft, from the template** (`.github/pull_request_template.md`), its "Try it on your PC" section included.
+3. **Comment on it in plain language** for a human reader: what it changes, why it matters, and any caveats for the reviewer.
+4. **Mark it ready yourself once CI is green,** so ready means nothing is left for the session. First bring in `main` if anything merged since the branch's base: merge `origin/main` into it and run `scripts/check` again. `main` doesn't require a branch to be up to date, so two green PRs can break it together: #192 merged after #191 had changed a test helper both used, and `main`'s terra-tui tests stopped compiling until #197 reverted it.
+5. **Give the merge order** whenever PRs must merge in one: a stack, a pair with a private-docs PR, or two PRs that change the same lines. The message handing them to the owner lists the merges as numbered steps, first to last, with what to check between them, and each PR's plain-language comment repeats them.
+
+**Stacking a PR** on another, or working on one in a stack: `docs/agents/stacked-prs.md`.
 
 ## Agent skills
 
 ### Issue tracker
 
-Issues live in GitHub Issues for Keazra/terra-sprites and are handled with the `gh` CLI, or in cloud sessions, where `gh` isn't signed in, with the GitHub MCP tools. See `docs/agents/issue-tracker.md`.
+Issues live in GitHub Issues for Keazra/terra-sprites and are handled with the `gh` CLI, or in cloud sessions, where `gh`'s own commands fail, with the GitHub MCP tools and `gh api`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

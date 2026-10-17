@@ -1,3 +1,6 @@
+<!-- The PR's base, and why: "Based on `main`: needs nothing open." or "Stacked on #245: merge that first." -->
+Based on `main`: needs nothing open.
+
 ## What changes
 
 <!-- In plain words, for someone who hasn't read the code: what the player sees or what's different, before and after. -->
