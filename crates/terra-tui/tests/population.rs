@@ -11,7 +11,7 @@ use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{DataPack, Genome, Map, Pos, Scenario, World};
 use terra_tui::app::{App, Screen};
-use terra_tui::input::Action;
+use terra_tui::input::{Action, Button};
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
 use terra_tui::theme::Theme;
 use terra_tui::ui;
@@ -400,6 +400,36 @@ fn arrows_or_the_pointer_pick_a_moment_and_the_lines_under_the_graph_read_it() {
     app.apply(Action::Back, &world);
     app.apply(Action::Population, &world);
     assert_eq!(app.graph_pick(), None);
+}
+
+#[test]
+fn the_pointer_picks_a_moment_and_leaves_the_cursor_where_it_is_on_the_map() {
+    // M2 design §14.2: the pointer over the graph picks moments rather
+    // than moving the Cursor on the map beneath.
+    let mut world = field(2, 4);
+    run(&mut world, 250);
+    let mut app = app_on(&world);
+    // The pointer points at the tile up and left of it (design v27 §6.5).
+    let tile = Pos { x: 5, y: 1 };
+    let cell = app.cell_of(tile).expect("in view");
+    app.apply(Action::Point(Position::new(cell.x + 1, cell.y + 1)), &world);
+    assert_eq!(app.shown_cursor(), Some(tile));
+    app.apply(Action::Population, &world);
+    app.apply(Action::Point(Position::new(FIRST_COLUMN + 1, 9)), &world);
+    assert_eq!(app.graph_pick(), Some(200));
+    assert_eq!(app.shown_cursor(), Some(tile), "the pointer moved");
+    app.apply(
+        Action::Click {
+            at: Position::new(FIRST_COLUMN, 15),
+            button: Button::Left,
+            amplified: false,
+        },
+        &world,
+    );
+    assert_eq!(app.graph_pick(), Some(100));
+    assert_eq!(app.shown_cursor(), Some(tile), "a click");
+    app.apply(Action::Population, &world);
+    assert_eq!(app.shown_cursor(), Some(tile), "and closed");
 }
 
 #[test]

@@ -2458,8 +2458,10 @@ impl App {
                     self.tree_choice = Some(to);
                 }
             }
+            // The pointer chooses a sprite on the tree; it leaves the Cursor
+            // where it is on the map under the tree, as the population
+            // graph's does (M2 design §14.2).
             Action::Point(cell) => {
-                self.point(cell);
                 if let Some(spot) = self.tree_card_at(cell, world) {
                     self.tree_choice = Some(spot);
                 }
@@ -2469,7 +2471,6 @@ impl App {
                 button: Button::Left,
                 ..
             } => {
-                self.point(at);
                 if let Some(spot) = self.tree_card_at(at, world) {
                     self.tree_choice = Some(spot);
                     self.walk_tree(world);

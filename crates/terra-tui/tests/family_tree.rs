@@ -551,6 +551,40 @@ fn pointing_at_a_card_chooses_it_and_clicking_walks_to_it() {
 }
 
 #[test]
+fn the_pointer_on_the_tree_leaves_the_cursor_where_it_is_on_the_map() {
+    // As the population graph's does (M2 design §14.2): the pointer
+    // chooses and walks the tree, and the Cursor beneath stays put, on its
+    // tile and in reach. The pointer points at the tile up and left of it
+    // (design v27 §6.5).
+    let world = pairs(230);
+    let mut app = app_on(&world);
+    let tile = at(9, 4);
+    let cell = app.cell_of(tile).expect("in view");
+    app.apply(Action::Point(Position::new(cell.x + 1, cell.y + 1)), &world);
+    assert_eq!(app.shown_cursor(), Some(tile));
+    tree_of(&mut app, &world, EntityId(14));
+    for (row, label) in [(PARENTS, "Sprite #1"), (YOUNG, "Sprite #15")] {
+        let card = label_at(&app, &world, row, label);
+        app.apply(Action::Point(card), &world);
+        assert_eq!(blinking(&app, &world).as_deref(), Some(label));
+        assert_eq!(app.shown_cursor(), Some(tile), "pointing at {label}");
+    }
+    let young = label_at(&app, &world, YOUNG, "Sprite #25");
+    app.apply(
+        Action::Click {
+            at: young,
+            button: Button::Left,
+            amplified: false,
+        },
+        &world,
+    );
+    assert_eq!(app.selection(), Some(Selection::Living(EntityId(25))));
+    assert_eq!(app.shown_cursor(), Some(tile), "walking by a click");
+    app.apply(Action::FamilyTree, &world);
+    assert_eq!(app.shown_cursor(), Some(tile), "and closed");
+}
+
+#[test]
 fn the_dead_are_dark_gray_and_say_how_they_died() {
     let world = parched_line(140);
     let mut app = app_on(&world);
