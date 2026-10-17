@@ -577,11 +577,10 @@ fn an_egg_that_hatches_out_of_sight_while_another_is_in_sight_is_not_found() {
     assert!(on(&world, mother, YOUNG_AWAY), "a young one out of sight");
 }
 
-#[test]
-fn an_egg_the_cursor_holds_is_out_of_sight_and_found_once_put_down() {
-    // M2 design §15.6: an egg the Cursor holds is in no one's sight, even
-    // its mother's beside it; put down by her, it's back in sight, and
-    // found.
+/// A resting mother on a field of grass, a tick after the Cursor picked up
+/// the lone egg she laid beside her, in `lone`'s pack: the world, the
+/// mother, the egg and where it lay. Her egg was beside her until then.
+fn mother_whose_egg_the_cursor_holds() -> (World, EntityId, EntityId, Pos) {
     let rows = field(20, 3);
     let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
     let genes = format!(
@@ -596,6 +595,15 @@ fn an_egg_the_cursor_holds_is_out_of_sight_and_found_once_put_down() {
     assert!(!on(&world, mother, EGG_AWAY), "her egg is beside her");
     world.submit(Command::PickUp { item: egg });
     world.step();
+    (world, mother, egg, tile)
+}
+
+#[test]
+fn an_egg_the_cursor_holds_is_out_of_sight_and_found_once_put_down() {
+    // M2 design §15.6: an egg the Cursor holds is in no one's sight, even
+    // its mother's beside it; put down by her, it's back in sight, and
+    // found.
+    let (mut world, mother, _, tile) = mother_whose_egg_the_cursor_holds();
     assert!(on(&world, mother, EGG_AWAY), "held, it's out of sight");
     assert!(on(&world, mother, EGG_ALONE), "she saw no one by it");
     world.submit(Command::PutDown { tile });
@@ -603,4 +611,23 @@ fn an_egg_the_cursor_holds_is_out_of_sight_and_found_once_put_down() {
     assert!(world.sprite(mother).unwrap().sees(tile));
     assert!(!on(&world, mother, EGG_AWAY), "put down, it's in sight");
     assert!(on(&world, mother, FOUND), "she found it");
+}
+
+#[test]
+fn a_parent_saved_while_its_egg_is_away_finds_it_once_loaded() {
+    // M2 design §15.6: which of its eggs and young a sprite missed at its
+    // latest look is world state, saved and hashed, so a world loaded
+    // while her egg is away is the same world, and she finds it once it's
+    // back in sight, as she would have.
+    let (mut world, mother, _, tile) = mother_whose_egg_the_cursor_holds();
+    assert!(on(&world, mother, EGG_AWAY), "held, it's out of sight");
+    let mut loaded = World::load(&world.save()).expect("the save loads");
+    assert_eq!(loaded.state_hash(), world.state_hash());
+    for world in [&mut world, &mut loaded] {
+        world.submit(Command::PutDown { tile });
+        world.step();
+        assert!(!on(world, mother, EGG_AWAY), "put down, it's in sight");
+        assert!(on(world, mother, FOUND), "she found it");
+    }
+    assert_eq!(loaded.state_hash(), world.state_hash());
 }
