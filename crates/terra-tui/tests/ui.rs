@@ -4021,6 +4021,72 @@ fn an_egg_held_past_its_time_waits_and_its_hatchling_stays_selected() {
 }
 
 #[test]
+fn g_saves_a_selected_egg_s_genome_but_f_won_t_follow_it_and_tab_passes_it_by() {
+    // M2 design §10.7: an egg is clicked on to select it.
+    let (world, egg) = a_lone_egg(&[]);
+    let at = egg_tile(&world, egg);
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::left_click(pointer_on(&world, at.x, at.y)), &world);
+    assert_eq!(app.selection(), Some(Selection::Living(egg)));
+    // `F`, with the Cursor on the egg, where no sprite stands.
+    app.apply(Action::Follow { at: None }, &world);
+    assert_eq!(app.followed(), None);
+    assert_eq!(app.refusal(), Some("No sprite here to follow"));
+    // `G` saves the genome it hatches with.
+    let folder = std::env::temp_dir().join(format!("terra-ui-egg-genome-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&folder);
+    app.set_genome_folder(folder.clone());
+    app.apply(Action::ExportGenome, &world);
+    let file = folder.join(format!("sprite-{}-tick-{}.ron", egg.0, world.tick()));
+    let saved = std::fs::read_to_string(&file).expect("the genome saved");
+    let genome = world.egg(egg).expect("the egg").genome();
+    assert_eq!(saved, genome.to_ron(world.data()));
+    // `Tab` and `Shift+Tab` go from sprite to sprite: here, to the mother
+    // alone.
+    for action in [
+        Action::SelectNext,
+        Action::SelectNext,
+        Action::SelectPrevious,
+    ] {
+        app.apply(action, &world);
+        let mother = Selection::Living(EntityId(1));
+        assert_eq!(app.selection(), Some(mother), "{action:?}");
+    }
+}
+
+#[test]
+fn the_body_tab_says_how_near_a_male_is_to_turning_female_once_grown() {
+    // M2 design §10.7: `turning 50%` with half the feminiser it takes;
+    // never in a young one (§10.1).
+    let pack = pack();
+    let genome = r#"(format: 1, genes: [
+        InitialConcentration(chem: "feminiser", value: 0.4),
+    ])"#;
+    let genome = terra_sim::Genome::from_ron(genome, &pack).expect("a valid genome");
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let (grown, young) = (Pos { x: 2, y: 3 }, Pos { x: 6, y: 1 });
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &[(grown, Some(genome.clone())), (young, Some(genome))],
+        scripted: &[],
+        newborns: &[young],
+    };
+    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    let sex_line = |app: &App| {
+        let (_, text) = inspector(app, &world);
+        text.into_iter()
+            .find(|line| line.starts_with("male"))
+            .expect("its sex")
+    };
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(sex_line(&app), "male · fertile · turning 50%");
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(sex_line(&app), "male", "young");
+}
+
+#[test]
 fn paused_an_item_picked_up_leaves_the_map_and_one_put_down_shows_where_it_lands() {
     // Design §6.5, #203: a click waits for the next tick, and the map, as
     // the Cursor's marks do, shows what it will do.
@@ -4211,16 +4277,11 @@ fn a_lone_egg(changes: &[(&str, &str)]) -> (World, EntityId) {
     (world, egg)
 }
 
-#[test]
-fn the_body_tab_names_a_sprite_s_partner_after_their_first_egg() {
-    // M2 design §15.8: `partner Sprite #2`, after the parents' line.
-    let pack = pack();
-    let keen = |female: bool| {
-        let feminiser = if female {
-            r#"InitialConcentration(chem: "feminiser", value: 1.0),"#
-        } else {
-            ""
-        };
+/// A keen female and a keen male, his genome with `his` genes too, side by
+/// side by a thornbush, by `pack`'s rules, once they have had their first
+/// egg and become partners: the world, her and him.
+fn a_pair(pack: DataPack, his: &str) -> (World, EntityId, EntityId) {
+    let keen = |extra: &str| {
         let text = format!(
             r#"(format: 1, genes: [
                 Trait(trait: "speed", value: 10.0),
@@ -4228,19 +4289,20 @@ fn the_body_tab_names_a_sprite_s_partner_after_their_first_egg() {
                 AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
                 Instinct(inputs: [("always", false), ("attended_sprite", false)], verb: Mate, weight: 1.0),
                 InitialConcentration(chem: "receptivity", value: 1.0),
-                {feminiser}
+                {extra}
             ])"#
         );
         terra_sim::Genome::from_ron(&text, &pack).expect("a valid genome")
     };
+    let hers = r#"InitialConcentration(chem: "feminiser", value: 1.0),"#;
     let map = Map::from_ascii(&["......"; 2], &pack).expect("valid drawing");
     let sprites = [
-        (Pos { x: 1, y: 0 }, Some(keen(true))),
-        (Pos { x: 2, y: 0 }, Some(keen(false))),
+        (Pos { x: 1, y: 0 }, Some(keen(hers))),
+        (Pos { x: 2, y: 0 }, Some(keen(his))),
     ];
     let scenario = Scenario {
         map,
-        objects: &[],
+        objects: &[(Pos { x: 4, y: 1 }, "thornbush")],
         sprites: &sprites,
         scripted: &[],
         newborns: &[],
@@ -4253,16 +4315,52 @@ fn the_body_tab_names_a_sprite_s_partner_after_their_first_egg() {
             _ => None,
         });
     let (she, he) = paired.expect("they had an egg");
-    let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    let tile = world.sprite(she).unwrap().pos();
-    app.apply(
-        Action::left_click(pointer_on(&world, tile.x, tile.y)),
-        &world,
-    );
-    open(&mut app, &world, Tab::Body);
-    let text = lines(&render(&app, &world, 100, 30)).join("\n");
+    (world, she, he)
+}
+
+/// The screen, as text, with `id` clicked on and the Body tab open.
+fn body_of(world: &World, id: EntityId) -> String {
+    let mut app = app_for(world, Theme::cp437(), 100, 30);
+    let tile = world.sprite(id).expect("alive").pos();
+    app.apply(Action::left_click(pointer_on(world, tile.x, tile.y)), world);
+    open(&mut app, world, Tab::Body);
+    lines(&render(&app, world, 100, 30)).join("\n")
+}
+
+#[test]
+fn the_body_tab_names_a_sprite_s_partner_after_their_first_egg() {
+    // M2 design §15.8: `partner Sprite #2`, after the parents' line.
+    let (world, she, he) = a_pair(pack(), "");
+    let text = body_of(&world, she);
     assert!(
         text.contains(&format!("partner Sprite #{}", he.0)),
+        "{text}"
+    );
+    assert!(!text.contains("· died"), "{text}");
+}
+
+#[test]
+fn the_body_tab_says_when_a_sprite_s_partner_has_died() {
+    // M2 design §15.8: `partner Kit #20 · died`, until she pairs again.
+    // Once paired, he hits the thornbush, whose thorns kill at once.
+    let tags = include_str!("../../../data/tags.ron");
+    let (from, to) = (
+        r#"Hit:   [Inject(Actor, "injury", 0.03)"#,
+        r#"Hit:   [Inject(Actor, "injury", 1.0)"#,
+    );
+    assert!(tags.contains(from));
+    let tags = tags.replace(from, to);
+    let pack = DataPack::from_sources(&builtin_with("tags.ron", &tags)).expect("valid pack");
+    let his = r#"AttentionInstinct(input: "paired", category: "bush", weight: 2.0),
+        Instinct(inputs: [("paired", false), ("attended_bush", false)], verb: Hit, weight: 2.0),"#;
+    let (mut world, she, he) = a_pair(pack, his);
+    while world.sprite(he).is_some() {
+        assert!(world.tick() < 200, "he died");
+        world.step();
+    }
+    let text = body_of(&world, she);
+    assert!(
+        text.contains(&format!("partner Sprite #{} · died", he.0)),
         "{text}"
     );
 }
