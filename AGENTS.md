@@ -56,7 +56,7 @@ This repo is public. The owner's working documents are in a private one, [Keazra
 
 - **Public, here:** what anyone with a copy of the game needs to play, change or build on it. That's the designs with their change files and outside reviews (`docs/design/`), the data-format reference (`docs/reference/`, which the tests read), the acceptance records, ADRs (`docs/adr/`), how agents work here (`docs/agents/`), and `AGENTS.md`, `CONTEXT.md` and the README.
 - **Private, in `docs/terra-sprites-docs/`:** the work behind those. That's each topic's question rounds, research, mockups, run logs and patches, the baseline reports and briefings (design §7.6), play-test notes and the advertising material. The private repo's own `AGENTS.md` says where in it things go.
-- **When unsure, it's private.** A private document can be published later, but one pushed here stays public in git's history. The owner's real name and their PC's paths never go here.
+- **When unsure, it's private.** A private document can be published later, but one pushed here stays public in git's history. The owner's real name and their PC's paths never go here, nor in this repo's PRs, issues and comments, whose old wording GitHub keeps in each edit's history. A "Try it on your PC" section runs from "the terra-sprites folder", with no `cd` to the PC's own path.
 
 How it fits together:
 
