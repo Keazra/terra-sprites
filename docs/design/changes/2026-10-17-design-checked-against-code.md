@@ -10,6 +10,8 @@ Slice 30a ([#148](https://github.com/Keazra/terra-sprites/issues/148), settled i
 | 2 | **A committed path is M1's** (M1 design §3.7); M2 has no §3.7. | Trace | §7.4 |
 | 2a | **A trip with no way there leaves the sprite's eye where it was,** on what it's doing, so the place it can't reach doesn't take its eye for the next tick either. The code moved the eye; it's fixed. | Trace | §7.4 |
 | 2b | **The title screen works as a world does:** under 100×30 it takes no clicks, the pointer doesn't answer "Quit? (y/n)", Load takes the wheel and clicks and says where it looked when empty, and a save's name outside CP437 shows `?`. Each was a gap the trace found; the code is fixed. | Trace | §8.2 |
+| 2c | **A dormant gene sets nothing,** so the next gene that sets the same value works in its place, as the starter's two `watch_rate` genes rely on. The code always did this; the design didn't say. | Trace | §9.2 |
+| 2d | **A genome with no `grows_up` gene grows up at 7,500 ticks,** the middle of its range, as any trait no gene sets does (M1 design §4.8). | Trace | §9.3 |
 | 3 | **The `age` sensor is a share of the age the sprite grows old at,** not of `grows_old`, so it reaches 1 sooner for a worn sprite or one with broken genes, as it grows old. | Trace | §9.3 |
 | 4 | **Even the unworn starter takes more than one hit a tick** once old, about 1.7, so whole hits land each tick; the design said that was a worn sprite's case. | Trace | §9.4 |
 | 5 | **The genes' average health is over the genes that can weaken,** settings left out, and a genome with none gives out as soon as it's old. | Trace | §9.4 |

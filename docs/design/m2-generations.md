@@ -300,14 +300,14 @@ Settled with the owner on 2026-10-11 ([#140](https://github.com/Keazra/terra-spr
 
 ### 9.2 Genes that switch with life stage
 
-- **A gene can carry `from` and `until`,** a life stage each: it works from `from` (young if it has none) until `until` (never, if it has none). Outside them it's **dormant**: in the genome, but not working.
+- **A gene can carry `from` and `until`,** a life stage each: it works from `from` (young if it has none) until `until` (never, if it has none). Outside them it's **dormant**: in the genome, but not working. A dormant gene sets nothing, so the next gene that sets the same value works in its place (M1 design §4.3), as the starter's two `watch_rate` genes do, one until adult and one from it (#148).
 - **Traits and starting levels can't switch.** Traits work all life, since two of them set the stages, and a starting level applies only at birth. Such a gene that carries a switch is flagged and doesn't work (M1 design §4.3), as is one that switches off before it switches on.
 - **When its stage changes, a sprite's genes are expressed afresh:** its chemistry, brain parameters, concepts and instinct links become those of the genes working now. What it has learned, what it attends to and what it remembers doing stay as they were. So an instinct that switches on mid-life joins the instinct pathway without touching what was learned (#49).
 - **Genome files with switches are format 2;** format 1 still loads, and a format 1 file with a switch is refused.
 
 ### 9.3 When a sprite grows up and grows old
 
-- **Two trait genes set the ages,** so each can evolve on its own: `grows_up` (1,500–13,500 ticks; the starter's 4,500 is about an hour at 1×) and `grows_old` (6,000–60,000; the starter's 22,500 is about 5 hours).
+- **Two trait genes set the ages,** so each can evolve on its own: `grows_up` (1,500–13,500 ticks; the starter's 4,500 is about an hour at 1×) and `grows_old` (6,000–60,000; the starter's 22,500 is about 5 hours). A genome with no gene for one, as an M1 genome has none for `grows_up`, takes the middle of its range (M1 design §4.8), so grows up at 7,500 ticks (#148).
 - **`grows_old` varies more at spawn** (2026-10-12): by up to 40%, physiology's `trait_variation`, where every other gene varies by `spawn_variation`'s 10% (M1 design §4.9). So the world's first sprites, and those the Cursor places from the starter genome, grow old at 3 to 7 hours and die of it at 4 to 8 (§2).
 - **`grows_old` is M1's lifespan,** which it replaces (§2). A genome or save that says `lifespan` reads as `grows_old`. The `age` body sensor is age as a share of the age the sprite grows old at, so it reaches 1 as it grows old, sooner for a worn sprite (§9.4) or one with broken genes (§12.4), at about 22,500 ticks rather than M1's 60,000.
 - **Growing up costs food.** Growing takes `growth` energy (0.3) whenever it happens, spread evenly over childhood, so a sprite that grows up sooner is a hungrier child.
