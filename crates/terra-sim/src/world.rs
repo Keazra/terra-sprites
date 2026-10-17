@@ -3699,6 +3699,42 @@ mod tests {
         assert_eq!((entry.tick, entry.verb), (tick, Some(Verb::Approach)));
     }
 
+    #[test]
+    fn an_idle_sprite_with_no_way_to_a_remembered_place_still_takes_its_step_5() {
+        // M2 design §7.4, §18.1: doing nothing, it turns its eye to water it
+        // remembers beyond the wall. With no way there, it decides nothing,
+        // its eye goes back where it was, and its latest step 5 is that
+        // tick's, so it watches as it would have.
+        let (mut world, id, ball) = going_to_a_ball_with_water_beyond_a_wall("", &[]);
+        world.state.sprites.get_mut(id).expect("the sprite").action = None;
+        let tick = world.state.tick;
+        world.step();
+        let sprite = world.sprites().next().expect("the sprite");
+        assert_eq!(sprite.remembered_places(), [], "it forgot the water");
+        assert!(sprite.action().is_none(), "it decided nothing");
+        let toy = world.state.category_of(&world.data, Target::Object(ball));
+        let brain = &world.state.sprites.get(id).expect("the sprite").brain;
+        assert_eq!(brain.attended, Some(toy));
+        let eye = brain.snapshot.as_ref().expect("a step 5");
+        assert_eq!(eye.tick, tick, "its latest step 5 is this tick's");
+        assert_eq!((eye.attended, eye.verb), (Some(toy), None));
+    }
+
+    #[test]
+    fn a_sprite_lets_its_last_step_5_go_when_its_stage_changes() {
+        // M2 design §9.2, §18.1: the concepts its last step 5 was taken with
+        // may be gone, so until it takes another it learns nothing by
+        // watching, and one watching it is shown nothing.
+        let (mut world, id, _) = going_to_a_ball_with_water_beyond_a_wall("", &[]);
+        world.step();
+        let tick = world.state.tick;
+        let sprite = world.state.sprites.get_mut(id).expect("the sprite");
+        assert!(sprite.brain.snapshot.is_some(), "it took a step 5");
+        let grew = sprite.grow(tick + 100_000, &world.data);
+        assert_eq!(grew, Some((LifeStage::Adult, LifeStage::Old)));
+        assert!(sprite.brain.snapshot.is_none());
+    }
+
     /// A world drawn from `row`, 40 tiles long, three times, with `objects`,
     /// and a sprite on (35, 1) that sees 6 tiles, with `genes`, that knows
     /// what `subject` (its type, or the water's) is as `learn` makes it, and

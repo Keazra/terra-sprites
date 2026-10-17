@@ -69,6 +69,7 @@ struct Decision {
     moved: bool,
     /// The verb it chose to start, if it chose one.
     chosen: Option<Verb>,
+    /// This tick's step 5, which watching reads next tick (M2 design §18.1).
     snapshot: Snapshot,
 }
 
@@ -566,17 +567,15 @@ pub(crate) fn decide(
                     None => sprite.brain.experience.forget_place(target),
                 }
                 sprite.brain.attended = before;
-                // Carrying on, its latest step 5 is this tick's, with its eye
-                // on what it's doing, which it watches (§18.1).
-                if running {
-                    let Snapshot {
-                        attention, scored, ..
-                    } = decision.snapshot;
-                    let rng = &mut state.rng;
-                    let carried_on =
-                        decide_on(sprite, before, Some(target), attention, scored, rng);
-                    sprite.brain.snapshot = Some(carried_on.snapshot);
-                }
+                // Carrying on or doing nothing, its latest step 5 is this
+                // tick's, its eye where it was, which is what it watches
+                // (§18.1).
+                let Snapshot {
+                    attention, scored, ..
+                } = decision.snapshot;
+                let rng = &mut state.rng;
+                let carried_on = decide_on(sprite, before, Some(target), attention, scored, rng);
+                sprite.brain.snapshot = Some(carried_on.snapshot);
                 return;
             }
             way
