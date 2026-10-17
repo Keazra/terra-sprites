@@ -319,6 +319,30 @@ fn esc_asks_before_quitting_and_ctrl_c_quits_at_once() {
     assert_eq!(title.apply(Action::Quit), TitleFlow::Quit);
 }
 
+#[test]
+fn the_mouse_doesn_t_answer_the_quit_prompt() {
+    // M2 design §8.2: `Esc` asks as in a world, where the mouse doesn't
+    // answer the question; only a key does (M1 design §6.6).
+    let mut title = after_the_scene();
+    title.apply(Action::Back);
+    let over_the_menu = Position::new(50, 15);
+    let mouse = [
+        Action::left_click(over_the_menu),
+        Action::right_click(over_the_menu),
+        Action::middle_click(over_the_menu),
+        Action::Wheel {
+            at: over_the_menu,
+            notches: 1,
+        },
+    ];
+    for action in mouse {
+        assert_eq!(title.apply(action), TitleFlow::Stay, "{action:?}");
+        let shown = text(&render(&title));
+        assert!(shown.contains("Quit? (y/n)"), "still asks after {action:?}");
+    }
+    assert_eq!(title.apply(Action::Confirm), TitleFlow::Quit);
+}
+
 /// The title screen with New world open, offering `presets`.
 fn new_world(presets: Vec<Preset>) -> Title {
     let mut title = after_the_scene();
@@ -567,6 +591,29 @@ fn load_lists_every_save_newest_first_and_loads_the_one_picked() {
         title.apply(Action::Pick(2)),
         TitleFlow::Load(saves[1].clone())
     );
+}
+
+#[test]
+fn a_save_named_outside_cp437_shows_with_question_marks_as_in_a_world() {
+    // M2 design §8.2: everything drawn stays within CP437, and Load lists
+    // the saves as `Ctrl+O` does in a world, which shows such a name so.
+    let (mut title, _) = with_saves(&[("日記 mira", 2)]);
+    let menu = render(&title);
+    let shown = text(&menu);
+    assert!(
+        shown.contains("?? mira · 2 hours ago"),
+        "Continue:\n{shown}"
+    );
+    title.apply(Action::Pick(3));
+    let load = render(&title);
+    let shown = text(&load);
+    assert!(shown.contains("1 ?? mira"), "Load:\n{shown}");
+    for screen in [&menu, &load] {
+        for cell in screen.content() {
+            let c = cell.symbol().chars().next().unwrap_or(' ');
+            assert!(cp437::contains(c), "{c:?} isn't CP437:\n{}", text(screen));
+        }
+    }
 }
 
 #[test]

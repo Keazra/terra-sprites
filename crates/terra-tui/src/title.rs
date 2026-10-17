@@ -11,7 +11,7 @@ use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
 use terra_sim::{EntityId, Mode, Pos, World};
 
-use crate::app::{App, Draft};
+use crate::app::{App, Draft, shown};
 use crate::clock::Speed;
 use crate::input::Action;
 use crate::saves::{self, SaveFile};
@@ -346,8 +346,11 @@ impl Title {
                 if action == Action::Confirm {
                     return TitleFlow::Quit;
                 }
-                // Any other key cancels, `Esc` included (design v33 §6.6).
-                self.screen = Screen::Menu;
+                // Any other key cancels, `Esc` included (design v33 §6.6),
+                // and the mouse doesn't answer it, as in a world.
+                if !is_pointer(action) {
+                    self.screen = Screen::Menu;
+                }
                 TitleFlow::Stay
             }
             Screen::NewWorld(new) => self.apply_in_new_world(action, new),
@@ -777,7 +780,7 @@ fn draw_menu(buf: &mut Buffer, title: &Title) {
             let (save, ago) = &title.saves[0];
             let said_x = x + CONTINUE_SAID_AT;
             let room = usize::from(area.right().saturating_sub(said_x + 1));
-            let said = format!("{} · {ago}", save.name);
+            let said = format!("{} · {ago}", shown(&save.name));
             buf.set_stringn(said_x, y, said, room, Style::default().fg(Color::Gray));
         }
     }
@@ -903,7 +906,8 @@ fn draw_load(buf: &mut Buffer, title: &Title, choice: usize) {
         } else {
             " ".into()
         };
-        let line = format!(" {number} {}  ", save.name);
+        // A name outside CP437 shows as the world's list shows it.
+        let line = format!(" {number} {}  ", shown(&save.name));
         let y = inner.y + row as u16;
         let room = usize::from(inner.width);
         buf.set_stringn(inner.x, y, &line, room, chosen_style(index == choice));

@@ -174,8 +174,9 @@ type BuiltInTheme = (&'static str, fn() -> Theme);
 const BUILT_IN_THEMES: [BuiltInTheme; 2] = [("cp437", Theme::cp437), ("ascii", Theme::ascii)];
 
 /// A file's name as the screen can show it: a file put in a folder by hand
-/// may have a name with characters outside CP437 (design §7.2).
-fn shown(name: &str) -> String {
+/// may have a name with characters outside CP437 (design §7.2). The title
+/// screen shows saves' names so too (M2 design §8.2).
+pub(crate) fn shown(name: &str) -> String {
     name.chars()
         .map(|c| if cp437::contains(c) { c } else { '?' })
         .collect()
