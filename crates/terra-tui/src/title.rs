@@ -11,7 +11,7 @@ use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
 use terra_sim::{EntityId, Mode, Pos, World};
 
-use crate::app::{App, Draft, shown};
+use crate::app::{App, Draft, highlight_moved, shown};
 use crate::clock::Speed;
 use crate::input::Action;
 use crate::saves::{self, SaveFile};
@@ -312,21 +312,15 @@ impl Title {
         self.size = size;
     }
 
-    /// Whether the terminal, as last told, is too small to draw the title
-    /// screen on, so it says so instead.
-    fn too_small(&self) -> bool {
-        self.size.width < ui::MIN_SIZE.width || self.size.height < ui::MIN_SIZE.height
-    }
-
     /// What `action` does on the title screen.
     pub fn apply(&mut self, action: Action) -> TitleFlow {
         if action == Action::Quit {
             return TitleFlow::Quit;
         }
-        // A terminal too small shows only that it is, so, as a world's
-        // does, it takes no clicks or turns of the wheel: they'd land on a
-        // menu that isn't drawn (M2 design §8.2).
-        if self.too_small() && is_pointer(action) {
+        // A terminal too small, as last told, shows only that it is, so,
+        // as a world's does, it takes no clicks or turns of the wheel:
+        // they'd land on a menu that isn't drawn (M2 design §8.2).
+        if ui::too_small(self.size) && action.is_pointer() {
             return TitleFlow::Stay;
         }
         if !self.scene_over() {
@@ -348,7 +342,7 @@ impl Title {
                 }
                 // Any other key cancels, `Esc` included (design v33 §6.6),
                 // and the mouse doesn't answer it, as in a world.
-                if !is_pointer(action) {
+                if !action.is_pointer() {
                     self.screen = Screen::Menu;
                 }
                 TitleFlow::Stay
@@ -485,9 +479,7 @@ impl Title {
             Action::Enter if count > 0 => return TitleFlow::Load(self.saves[choice].0.clone()),
             Action::Scroll { dy, .. } if count > 0 => step(choice, dy, count),
             // A row a notch, as a world's lists move.
-            Action::Wheel { notches, .. } if count > 0 => {
-                (choice as i64 + i64::from(notches)).clamp(0, count as i64 - 1) as usize
-            }
+            Action::Wheel { notches, .. } if count > 0 => highlight_moved(choice, notches, count),
             Action::Click { at, .. } => {
                 let area = self.load_box(self.size);
                 if !area.contains(at) {
@@ -578,23 +570,9 @@ fn chosen_style(chosen: bool) -> Style {
     }
 }
 
-/// Whether `action` comes from the mouse: pointing, a click, a button let
-/// go of or a turn of the wheel.
-fn is_pointer(action: Action) -> bool {
-    matches!(
-        action,
-        Action::Point(_)
-            | Action::Click { .. }
-            | Action::Release { .. }
-            | Action::Follow { at: Some(_) }
-            | Action::Wheel { .. }
-    )
-}
-
 /// Moves `index` by one, the way `by` points, within `count` items.
 fn step(index: usize, by: i32, count: usize) -> usize {
-    let moved = index as i64 + i64::from(by.signum());
-    moved.clamp(0, count.saturating_sub(1) as i64) as usize
+    highlight_moved(index, by.signum(), count)
 }
 
 /// Another seed to offer, from the last one: a splitmix64 step, so each
@@ -623,7 +601,7 @@ fn ago(elapsed: Duration) -> String {
 pub fn render(frame: &mut Frame, title: &Title) {
     let area = frame.area();
     let buf = frame.buffer_mut();
-    if area.width < ui::MIN_SIZE.width || area.height < ui::MIN_SIZE.height {
+    if ui::too_small(area.as_size()) {
         let quitting = title.screen == Screen::QuitPrompt;
         let question = quitting.then(|| QUIT_PROMPT.to_string());
         return ui::render_too_small_with(buf, area, question.into_iter().collect());
