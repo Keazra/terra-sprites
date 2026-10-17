@@ -9,6 +9,7 @@ Slice 30a ([#148](https://github.com/Keazra/terra-sprites/issues/148), settled i
 | 1 | **Remembered places are fixtures:** the design said an object type's entry says whether it "stands on its own tile"; what it says is whether it's a fixture, its `Fixture` tag. | Trace | §7.1 |
 | 2 | **A committed path is M1's** (M1 design §3.7); M2 has no §3.7. | Trace | §7.4 |
 | 2a | **A trip with no way there leaves the sprite's eye where it was,** on what it's doing, so the place it can't reach doesn't take its eye for the next tick either. The code moved the eye; it's fixed. | Trace | §7.4 |
+| 2b | **The title screen works as a world does:** under 100×30 it takes no clicks, the pointer doesn't answer "Quit? (y/n)", Load takes the wheel and clicks and says where it looked when empty, and a save's name outside CP437 shows `?`. Each was a gap the trace found; the code is fixed. | Trace | §8.2 |
 | 3 | **The `age` sensor is a share of the age the sprite grows old at,** not of `grows_old`, so it reaches 1 sooner for a worn sprite or one with broken genes, as it grows old. | Trace | §9.3 |
 | 4 | **Even the unworn starter takes more than one hit a tick** once old, about 1.7, so whole hits land each tick; the design said that was a worn sprite's case. | Trace | §9.4 |
 | 5 | **The genes' average health is over the genes that can weaken,** settings left out, and a genome with none gives out as soon as it's old. | Trace | §9.4 |
@@ -25,6 +26,7 @@ Slice 30a ([#148](https://github.com/Keazra/terra-sprites/issues/148), settled i
 | 16 | **A call counts as heard for as long as it's remembered** (`heard_for`, 150 ticks), for when partners last heard each other and for a female's time with no male seen or heard. | Trace | §15.4, §15.7 |
 | 17 | **A sprite is held back from hitting its family, as a lean:** cornered, crowded and hit together, or trying something new, it still can. The design said it never does. | Trace | §15.6 |
 | 18 | **A fast-forwarded world is the game's with `--lab`:** fast-forward always makes a Lab world, and the mode is world state, so the Story world from the same seed differs in its state hash. | Trace | §16.3, §16.5 |
+| 18a | **`--fast-forward` refuses more hours than a run can count,** 409,927,646,082,434, past which its tick counts overflowed. | Trace | §16.3 |
 | 19 | **The World tab sets a single generation's number to the right,** `generation        1`, as its other numbers are. | Trace | §17.5 |
 | 19a | **A parent shows its young something only when the young sees it,** as the table at the top of §18 says; one heard calling out of sight counted. The code is fixed. | Trace | §18.1 |
 | 20 | **The arrows and the pointer pass a hidden card by** in the family tree, where they could choose it, though choosing it did nothing. | Trace | §17.6 |

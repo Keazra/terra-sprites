@@ -255,14 +255,14 @@ A box in the middle of the screen, over the moving world, holds the title letter
 |---|---|
 | **Continue** | Loads the newest save in the saves folder (any kind: the quicksave, an autosave or one by name), named beside it with how long ago it was saved: `autosave-1 · 2 hours ago`. Hidden when there's no save. |
 | **New world** | Opens the New world box (§8.3). |
-| **Load** | A list of every save, newest first, as `Ctrl+O` opens in a world (M1 design §6.7). |
+| **Load** | A list of every save, newest first, as `Ctrl+O` opens in a world (M1 design §6.7): picked by number, arrows, wheel or click, a click off it closes it, and with none it says where it looked, `No saves in …` (#148). |
 | **Help** | The help overlay, as `?` opens in a world. |
 | **Quit** | Closes the game. |
 
-- **`Esc` asks "Quit? (y/n)",** as in a world; only `y` quits. `Ctrl+C` quits at once.
+- **`Esc` asks "Quit? (y/n)",** as in a world; only `y` quits, and the pointer leaves the question waiting (#148). `Ctrl+C` quits at once.
 - **A world started or loaded from the title screen starts as one does from the flags:** a new world at 1×, a loaded one paused (M1 design §6.7). The session log starts afresh from it (M1 design §2.7). A save that can't be read, or a preset that isn't valid, is refused on the status line and the title screen stays.
-- A terminal under 100×30 shows "Terminal too small", as a world does (M1 design §6.1), and `Esc` still asks to quit under it.
-- Everything drawn stays within CP437 (M1 design §6.2).
+- A terminal under 100×30 shows "Terminal too small", as a world does (M1 design §6.1), and `Esc` still asks to quit under it. Like a world's, it takes no clicks: the menu it hides can't be chosen (#148).
+- Everything drawn stays within CP437 (M1 design §6.2): a save's name with other characters shows them as `?`, as in a world's list (#148).
 
 ### 8.3 New world
 
@@ -1154,7 +1154,7 @@ Moved most from the starter's, as the middle value among the living:
 - **It saves in the saves folder and keeps the world it came from:** `seed-7-200h` for a new world, `mira-200h` for mira, or the name `--save <name>` gives, stored as any save by name is (M1 design §6.7). A name a save already has gets `-2`, `-3` and so on, so nothing is saved over, and the report and the tables give the name it was saved by.
 - **`Ctrl+C` stops it early and saves what has run,** with a last row where it stopped, under the whole hours it reached: `seed-7-143h` for a run stopped at 143.5 hours. A second `Ctrl+C` stops at once, without saving. A long run is never lost by stopping it.
 - **It runs exactly the world the game would:** the same seed fast-forwarded is, tick for tick, the world the game has with `--lab` after running as long. A fast-forward's world is always a Lab world, and the mode is world state, so the game's Story world from the same seed is the same but for its mode.
-- **Flags that can't go together** are refused before anything runs: `--replay` with any flag that makes or loads a world, `--load` with `--seed`, `--preset`, `--data` or `--lab`, and `--save` without `--fast-forward`.
+- **Flags that can't go together** are refused before anything runs: `--replay` with any flag that makes or loads a world, `--load` with `--seed`, `--preset`, `--data` or `--lab`, and `--save` without `--fast-forward`. So are more hours than a run can count its ticks for, 409,927,646,082,434 (#148).
 
 ### 16.4 The tables
 
