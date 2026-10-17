@@ -4,7 +4,7 @@
 //! generations alive then (#208); a small copy heads the World tab.
 
 mod common;
-use common::{LONE, at, group, pack_changing, pointer_on};
+use common::{LONE, at, group, inspector_rows, pack_changing, pointer_on};
 
 use std::time::Duration;
 
@@ -497,7 +497,7 @@ fn a_save_from_before_generations_reads_none_for_its_earlier_moments() {
 }
 
 #[test]
-fn the_small_graph_reaches_past_the_limit_when_the_cursor_spawned_past_it() {
+fn the_small_graph_reaches_past_most_sprites_when_the_cursor_spawned_past_it() {
     // M2 design §14.2: 101 sprites in a world that holds 100. The full
     // graph shows shares, so only the small one has a height in sprites.
     let pack = pack();
@@ -522,9 +522,8 @@ fn the_small_graph_reaches_past_the_limit_when_the_cursor_spawned_past_it() {
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let app = app_on(&world);
-    let screen = render(&app, &world);
-    // The inspector is the right-hand 46 columns, its inside from column 55.
-    let top: String = (55..99).map(|x| screen[(x, 3)].symbol()).collect();
+    // The graph's top row, under its title.
+    let top = &inspector_rows(&app, &world, 30).1[1];
     assert!(top.starts_with(" 101 ┤"), "{top}");
 }
 
