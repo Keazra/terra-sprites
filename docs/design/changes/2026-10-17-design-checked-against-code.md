@@ -1,6 +1,6 @@
 # The M2 design checked against the code
 
-Slice 30a ([#148](https://github.com/Keazra/terra-sprites/issues/148), settled in [#226](https://github.com/Keazra/terra-sprites/issues/226) round 1, Q9): every rule in the M2 design was traced to the code that carries it out and a test that holds it, on 2026-10-17. Where the code was wrong it was fixed, test first, and where the design's words were wrong they're corrected here. A rule with no test got one. Nothing in the design was missing from the code. Where the design left a choice open, the row says it was Claude's call and which way it went, for the owner to overrule in review.
+Slice 30a ([#148](https://github.com/Keazra/terra-sprites/issues/148), settled in [#226](https://github.com/Keazra/terra-sprites/issues/226) round 1, Q9): every rule in the M2 design was traced to the code that carries it out and a test that holds it, on 2026-10-17, in [#281](https://github.com/Keazra/terra-sprites/pull/281). Where the code was wrong it was fixed, test first, and where the design's words were wrong they're corrected here. A rule with no test got one. Nothing in the design was missing from the code. Where the design left a choice open, the row says it was Claude's call and which way it went, for the owner to overrule in review.
 
 ## M2 "Generations"
 
