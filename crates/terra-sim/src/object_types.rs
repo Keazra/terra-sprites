@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 use crate::categories::Category;
 use crate::data::{DataError, check_unique};
+use crate::objects::EntityId;
 use crate::registry::{
     CategoryId, ChemId, Chemical, ChemicalClass, Locus, LocusId, LocusKind, Verb,
 };
@@ -155,6 +156,21 @@ pub(crate) enum Trigger {
     Every(u32),
     OnStageEnter(usize),
     OnExpire,
+}
+
+impl Trigger {
+    /// The first tick at or after `from` on which it fires for the object
+    /// `id` with no event to fire it: `Every(n)` when `(tick + object_id) %
+    /// n == 0` (design §3.5.2). `None` for one an event fires.
+    pub(crate) fn next_firing(self, id: EntityId, from: u64) -> Option<u64> {
+        match self {
+            Trigger::Every(n) => {
+                let period = u64::from(n);
+                Some(from + (period - (from + id.0) % period) % period)
+            }
+            Trigger::OnStageEnter(_) | Trigger::OnExpire => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

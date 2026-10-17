@@ -112,7 +112,7 @@ pub(crate) fn place_objects(config: &WorldConfig, data: &DataPack, state: &mut W
                 break;
             };
             let object = aged_object(data, &mut state.rng, kind, pos);
-            state.add_object(object);
+            state.add_object(object, data);
         }
     }
 }

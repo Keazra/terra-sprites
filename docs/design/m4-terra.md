@@ -29,7 +29,7 @@ Slice numbers run on across milestones, so these get theirs when M3's slices are
 
 | Slice | What it adds | Needs |
 |---|---|---|
-| **Turns when due** | The engine gives an object its turn only when it has something to do (§10) | nothing; it can come sooner, even in M2, if the speed check needs it |
+| **Turns when due** | The engine gives an object its turn only when it has something to do (§10) | nothing; built early, in M2 (2026-10-17) |
 | **Sectors and doors** | The map in sectors, with hull between them and open doorways, and counting that stops at the hull; one sector on screen, its neighbours dimmed; a click switches; Track, Follow and `Tab` cross with a sprite; the mode in the world; old worlds as a ship of one sector (§3, §9, §11) | M2's Slice 31 |
 | **The built-in ship** | Terra's plan in data: the bays drawn by hand, the main deck in three, plating, hull, glass and the prow (§3, §5) | Sectors and doors |
 | **Biome recipes** | Biomes made from recipes, with their staging areas and set pieces: the five biomes (§4) | The built-in ship |
@@ -299,10 +299,10 @@ Devices make things as *Creatures*' machines do (researched for round 6, Q2), wi
 
 Measured on 2026-10-12, in release builds, with 100 sprites, on a cloud machine.
 
-- **A bigger ship costs its things, not its land.** Nothing in a tick visits every tile, and a sprite only looks at the tiles around it, but every plant and berry takes a turn every tick, and the preset scales how many there are with the area. A map four times today's took 7.9 ms a tick by tick 10,000, against today's 5.1; with the same number of things, it cost the same as today's.
+- **A bigger ship costs its things, not its land.** Nothing in a tick visits every tile, and a sprite only looks at the tiles around it, but every plant and berry took a turn every tick (until Turns when due, below), and the preset scales how many there are with the area. A map four times today's took 7.9 ms a tick by tick 10,000, against today's 5.1; with the same number of things, it cost the same as today's.
 - **The simulation can't see the screen,** and mustn't (round 3, Q5). The world can't run differently depending on where the player looks: replays, saves and the determinism check (M1's Slice 15) would break, and a sprite would freeze the moment the player looked away.
 - **So every open sector lives at once, and sealed ones sleep** (§3.1, §7.1), which saves about 0.4 ms a tick on a 4× map at the start.
-- **The engine gives each object its turn only when it has something to do,** rather than every tick: most turns today do nothing, since a berry only waits to rot. It saves 0.5 to 1.4 ms a tick, and nothing has to catch up. It changes the order the world's dice fall in, so the golden files are made again, once.
+- **The engine gives each object its turn only when it has something to do,** rather than every tick: most turns today do nothing, since a berry only waits to rot. It saves 0.5 to 1.4 ms a tick, and nothing has to catch up. Built early, in M2 (2026-10-17): an object's turn comes on a tick it enters its first stage, its stage ends or one of its periodic rules is due, the objects due still take theirs in ascending ID order, and a turn that wasn't due would have done nothing, so every world stays as it was, the golden files included. On today's map it saves 1.4% of a tick's instructions; how that was measured is in [the change file](changes/2026-10-17-turns-when-due.md).
 - **Sectors with no sprites in them don't sleep.** It would save no more than sealed sectors do, and catching up exactly afterwards is fiddly.
 
 ---

@@ -699,7 +699,12 @@ mod tests {
         let mut placed_objects = Objects::new(&map);
         for (n, &(pos, name)) in objects.iter().enumerate() {
             let kind = data.object_type_named(name).expect("a built-in type");
-            placed_objects.place(EntityId(n as u64 + 101), new_object(&data, kind, pos));
+            placed_objects.place(
+                EntityId(n as u64 + 101),
+                new_object(&data, kind, pos),
+                &data,
+                0,
+            );
         }
         let mut placed = Sprites::new(&map);
         for (n, &pos) in sprites.iter().enumerate() {
