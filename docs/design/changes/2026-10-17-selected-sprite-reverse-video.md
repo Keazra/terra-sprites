@@ -1,6 +1,6 @@
 # A selected sprite is in reverse video at any age
 
-In the default theme a selected young sprite was drawn in reverse video, since CP437 has no filled `ö`, while a selected grown one only swapped `☺` for `☻`. The owner chose on 2026-10-17 to highlight every selected sprite, so a grown one is now `☻` in reverse video, the look the young, eggs and the ASCII theme already had ([#282](https://github.com/Keazra/terra-sprites/issues/282)).
+In the default theme a selected young sprite was drawn in reverse video, since CP437 has no filled `ö`, while a selected grown one only swapped `☺` for `☻`. The owner chose on 2026-10-17 to highlight every selected sprite, so a grown one is now `☻` in reverse video, the look the young, eggs and the ASCII theme already had ([#282](https://github.com/Keazra/terra-sprites/issues/282), PR [#283](https://github.com/Keazra/terra-sprites/pull/283)).
 
 ## M1 "A Sprite Lives"
 
