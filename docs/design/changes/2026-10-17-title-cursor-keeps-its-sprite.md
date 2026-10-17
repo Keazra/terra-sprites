@@ -1,6 +1,6 @@
 # The title's Cursor keeps its sprite
 
-Fauxpaw, on 2026-10-17, once the title's world ran from launch ([#281](https://github.com/Keazra/terra-sprites/pull/281)): the sprite beneath the Cursor should stay still, always shown as the happy face. It slept, woke pleased, walked out of the Cursor's frame at 2.5 s, and the menu then covered the place it had been.
+Fauxpaw, on 2026-10-17, once the title's world ran from launch ([#281](https://github.com/Keazra/terra-sprites/pull/281)): the sprite beneath the Cursor should stay still, always shown as the happy face. It slept, woke pleased, walked out of the Cursor's frame at 2.5 s, and the menu then covered the place it had been. Done in [#284](https://github.com/Keazra/terra-sprites/pull/284).
 
 ## M2 "Generations"
 
