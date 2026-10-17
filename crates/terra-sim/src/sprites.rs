@@ -123,6 +123,11 @@ pub(crate) struct Sprite {
     /// §15.6), in the order it first saw them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) eggs: Vec<OwnEgg>,
+    /// The eggs and young of its own that were out of its sight at its
+    /// latest look for family (M2 design §15.6), so it can tell finding one
+    /// from one hatching, dying or growing up.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) missed: Vec<Target>,
 }
 
 impl Sprite {
@@ -526,6 +531,7 @@ impl Sprite {
             partner: None,
             heard: Vec::new(),
             eggs: Vec::new(),
+            missed: Vec::new(),
             last_male: tick,
         }
     }

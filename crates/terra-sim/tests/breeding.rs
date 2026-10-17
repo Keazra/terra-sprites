@@ -8,7 +8,7 @@ mod common;
 use common::{
     ALONE, FEMALE, KEEN, LONE, Laying, NO_COPYING_ERRORS, RECEPTIVE, WorldBuilder, at, builtin,
     builtin_changing, builtin_changing_files, close, endings, family, family_in, genome, id_at,
-    laid, lone, until, value_of,
+    laid, lone, until, value_of, world_in,
 };
 
 use proptest::prelude::*;
@@ -228,6 +228,111 @@ fn a_female_breeds_alone_and_pays_it_all_but_a_male_cannot() {
         "{tries:?}"
     );
     assert_eq!(world.sprite(male).unwrap().sex(), Sex::Male);
+}
+
+#[test]
+fn with_no_free_tile_beside_her_nothing_is_laid_and_nothing_paid() {
+    // M2 design §10.3: a pair on a strip of two tiles, and a female alone
+    // on one, try in vain, and pay nothing for it, so they don't rest as if
+    // they'd bred.
+    let female = format!("{KEEN}{FEMALE}");
+    let pair = [(at(0, 0), female.as_str()), (at(1, 0), KEEN)];
+    let alone = format!("{ALONE}{FEMALE}");
+    let her = [(at(0, 0), alone.as_str())];
+    for (rows, sprites, data, verb) in [
+        (&[".."][..], &pair[..], builtin(), Verb::Mate),
+        (&["."][..], &her[..], lone(), Verb::BreedAlone),
+    ] {
+        let mut world = world_in(data, rows, sprites);
+        let mut tries = Vec::new();
+        for _ in 0..50 {
+            let events = world.step();
+            let laying = events
+                .iter()
+                .any(|e| matches!(e.kind, EventKind::Laid { .. }));
+            assert!(!laying, "laid with nowhere to lay");
+            tries.extend(endings(&events));
+        }
+        assert!(tries.contains(&(verb, Outcome::Failed)), "{tries:?}");
+        for sprite in world.sprites() {
+            let id = sprite.id();
+            assert!(energy(&world, id) > 0.98, "{id:?} paid for nothing");
+            assert!(sprite.is_fertile(), "{id:?} rests as if it had bred");
+        }
+    }
+}
+
+/// The built-in pack, with every sprite's body starting with `energy` and
+/// `hydration`, as a newborn's does.
+fn starting_with(energy: f32, hydration: f32) -> DataPack {
+    let newborn = format!("newborn: (energy: {energy:?}, hydration: {hydration:?}, stamina: 1.0),");
+    let builtin = "newborn: (energy: 1.0, hydration: 1.0, stamina: 1.0),";
+    builtin_changing("physiology.ron", &[(builtin, newborn.as_str())])
+}
+
+#[test]
+fn an_adult_is_fertile_only_while_its_energy_and_hydration_are_both_above_0_4() {
+    // M2 design §10.2: both above `fed`, a tick's metabolism after they
+    // start.
+    let fertile = |energy: f32, hydration: f32| {
+        let data = starting_with(energy, hydration);
+        let mut world = field_in(data, REST, &[at(2, 1)], &[], 1);
+        world.step();
+        world.sprites().next().expect("the sprite").is_fertile()
+    };
+    assert!(fertile(0.41, 0.41), "fed and watered");
+    assert!(!fertile(0.39, 1.0), "hungry");
+    assert!(!fertile(1.0, 0.39), "thirsty");
+}
+
+/// Copies the `bred` pulse into `h1`: 1 on the tick it goes live.
+const BRED: &str = r#"
+    Emitter(locus: Locus("bred"), mode: Level, gain: 4.0, chem: "h1"),
+    HalfLife(chem: "h1", ticks: 1),
+"#;
+
+#[test]
+fn both_parents_feel_their_egg_and_rest_1500_ticks_before_they_are_fertile_again() {
+    // M2 design §10.2: each parent's `bred` pulse, and `rest` ticks since
+    // its last egg, laid or fathered.
+    let female = format!("{KEEN}{FEMALE}{BRED}");
+    let male = format!("{KEEN}{BRED}");
+    let mut world = family(&[(at(2, 1), &female), (at(3, 1), &male)], &[], 1);
+    let parents = [at(2, 1), at(3, 1)].map(|pos| world.sprite_at(pos).unwrap().id());
+    let laying = laid(&mut world, 100).expect("an egg");
+    assert_eq!((laying.by, laying.with), (parents[0], Some(parents[1])));
+    world.step();
+    for id in parents {
+        let felt = world.sprite(id).unwrap().chemical("h1");
+        assert_eq!(felt, Some(1.0), "{id:?} felt its egg");
+    }
+    while world.tick() < laying.tick + 1_500 {
+        for id in parents {
+            let tick = world.tick();
+            assert!(!world.sprite(id).unwrap().is_fertile(), "{id:?} at {tick}");
+        }
+        world.step();
+    }
+    for id in parents {
+        assert!(world.sprite(id).unwrap().is_fertile(), "{id:?} rested");
+    }
+}
+
+#[test]
+fn an_old_pair_is_still_fertile_and_lays() {
+    // M2 design §10.2: old counts as grown. These grow old at once.
+    let old = r#"Trait(trait: "grows_old", value: 100.0),"#;
+    let female = format!("{KEEN}{FEMALE}{old}");
+    let male = format!("{KEEN}{old}");
+    let mut world = family_in(quick(), &[(at(2, 1), &female), (at(3, 1), &male)], &[], 1);
+    let parents = [at(2, 1), at(3, 1)].map(|pos| world.sprite_at(pos).unwrap().id());
+    for id in parents {
+        let sprite = world.sprite(id).unwrap();
+        assert_eq!(sprite.life_stage(), LifeStage::Old);
+        assert!(sprite.is_fertile(), "{id:?}");
+    }
+    let laying = laid(&mut world, 100).expect("an old pair laid");
+    assert_eq!((laying.by, laying.with), (parents[0], Some(parents[1])));
 }
 
 #[test]
@@ -486,8 +591,9 @@ fn a_male_that_sees_a_female_stays_male() {
 /// Longing enough to breed alone, from the start.
 const LONGS: &str = r#"InitialConcentration(chem: "longing", value: 1.0),"#;
 
-/// The starter genome's genes for longing (M2 design §10): it builds while
-/// no male adult is in sight, and falls fast while one is.
+/// Genes for longing like the starter genome's (M2 design §10), but building
+/// five times as fast: it builds while no male adult is in sight, and falls
+/// fast while one is.
 const LONGING: &str = r#"
     Emitter(locus: Locus("male_near"), mode: Level, invert: true, threshold: 0.5, gain: 0.001, chem: "longing", from: Adult),
     Emitter(locus: Locus("male_near"), mode: Level, gain: -0.01, chem: "longing"),

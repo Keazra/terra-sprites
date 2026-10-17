@@ -3554,6 +3554,67 @@ mod tests {
     }
 
     #[test]
+    fn a_sprite_known_only_by_sight_is_judged_as_sprites_in_general_and_not_counted_in_them() {
+        // M2 design §15.2: one it knows well by sight, and has learned less
+        // than `forget_below` (0.01) of, isn't among the sprites its sprites
+        // in general are the mean of, is worth what they are, and isn't
+        // listed in its memory.
+        let data = builtin();
+        let mut brain = brain(&[r#"BrainParam(param: "generalise", value: 2.0)"#]);
+        let needs: Vec<&str> = data.needs().collect();
+        let hunger = needs.iter().position(|&n| n == "hunger").expect("a need");
+        for taught in [EntityId(7), EntityId(8)] {
+            brain.experience.remember(taught, needs.len()).worth[hunger] = 0.6;
+        }
+        let seen = EntityId(9);
+        let below = data.physiology().forget_below;
+        brain.experience.befriend(seen, 0.5, needs.len(), below);
+        brain.experience.remember(seen, needs.len()).worth[hunger] = 0.005;
+        let general = brain.sprites_in_general(&data);
+        assert!(close(general.worth[hunger], 0.6), "{general:?}");
+        let hungry = inputs(&[("hunger", 1.0)]);
+        let worth = |sprite| brain.worth_of(types::SPRITE, sprite, &hungry, &general, &data);
+        assert!(close(worth(Some(seen)), 0.6), "{}", worth(Some(seen)));
+        assert_eq!(worth(Some(seen)), worth(None));
+        let about_it = |m: &Memory| match &m.learned {
+            Learned::Worth { thing, .. } | Learned::Bad { thing } | Learned::Fear { thing } => {
+                *thing == Thing::Sprite(seen)
+            }
+            Learned::Habit { .. } | Learned::NewThings => false,
+        };
+        let memory = brain.memory(&data);
+        assert!(!memory.iter().any(about_it), "{memory:?}");
+        let taught = Learned::Worth {
+            thing: Thing::Sprite(EntityId(7)),
+            need: Some("hunger".to_string()),
+        };
+        assert!(memory.iter().any(|m| m.learned == taught), "{memory:?}");
+    }
+
+    #[test]
+    fn the_starter_genes_lean_a_crowded_adult_to_hitting_a_stranger_but_not_its_family() {
+        // M2 design §15.6: a family together is a crowd. Crowded and looking
+        // at a sprite, the starter's adult leans to hitting it, but when the
+        // sprite is its family, its partner or its young, Hit scores below
+        // nothing. A lean, not a rule: Hit is only less likely.
+        let data = builtin();
+        let brain = Brain::new(data.starter(), &data, LifeStage::Adult);
+        let hit = |family: f32| {
+            let x = inputs(&[
+                ("crowdedness", 1.0),
+                ("attended_sprite", 1.0),
+                ("target_family", family),
+            ]);
+            let sprite = Some(types::SPRITE);
+            let scoring = SpriteScoring::default();
+            brain.scores(&brain.activations(&x), &x, sprite, scoring, &data)[column(Verb::Hit)]
+        };
+        let (stranger, family) = (hit(0.0), hit(1.0));
+        assert!(stranger > 0.0, "a stranger: {stranger}");
+        assert!(family < 0.0, "its family: {family}");
+    }
+
+    #[test]
     fn a_frightening_sprite_near_is_backed_away_from_and_not_gone_near_but_never_hit() {
         // Design v18 §5.5: a fear of .5 adds flight (.8) × .5 to Retreat and
         // takes value_gain (1) × .5 from Approach, Eat, Drink and Play, but

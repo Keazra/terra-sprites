@@ -354,6 +354,34 @@ mod tests {
     }
 
     #[test]
+    fn the_cursor_may_spawn_a_sprite_past_the_limit() {
+        // M2 design §10.6: the limit is the sprites' glass, not the
+        // player's. In a full world the Cursor still places a sprite, and
+        // none is fertile.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let map = Map::from_ascii(&[".....", ".....", "....."], &data).expect("valid drawing");
+        let sprites = [(at(1, 1), None), (at(3, 1), None)];
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &sprites,
+            scripted: &[],
+            newborns: &[],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        world.set_most_sprites(2);
+        world.submit(Command::SpawnSprite {
+            tile: at(2, 2),
+            genome: None,
+        });
+        let events = world.step();
+        let spawned = |event: &Event| matches!(event.kind, EventKind::Spawned { .. });
+        assert!(events.iter().any(spawned), "{events:?}");
+        assert_eq!(world.sprites().count(), 3);
+        assert!(world.sprites().all(|sprite| !sprite.is_fertile()));
+    }
+
+    #[test]
     fn a_partner_keeps_the_touch_of_its_mate_whatever_it_touches_later_that_tick() {
         // M2 design §10: each learns about the other, even when the one
         // mated with acts after, on the same tick.

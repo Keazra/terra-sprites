@@ -2820,6 +2820,96 @@ mod tests {
     }
 
     #[test]
+    fn with_learning_off_sprites_grow_no_more_familiar_with_each_other() {
+        // M2 design §15.2: unlike familiarity with object types (design
+        // §5.6), getting to know a sprite is learning, so a control run
+        // knows no sprite by sight or by playing with it. With learning on,
+        // the same two know each other.
+        let knowing = |learning: bool| {
+            let data = DataPack::builtin().expect("built-in data pack is valid");
+            let map = Map::from_ascii(&["....."], &data).expect("valid drawing");
+            let genes = |genes: &str| {
+                let text = format!(
+                    r#"(format: 1, genes: [{genes}
+                    BrainParam(param: "tau_base", value: 0.02),
+                ])"#
+                );
+                Genome::from_ron(&text, &data).expect("a valid genome")
+            };
+            let player = genes(
+                r#"AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
+                Instinct(inputs: [("attended_sprite", false)], verb: Play, weight: 1.0),"#,
+            );
+            let rester =
+                genes(r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),"#);
+            let scenario = Scenario {
+                map,
+                objects: &[],
+                sprites: &[
+                    (Pos { x: 0, y: 0 }, Some(player)),
+                    (Pos { x: 1, y: 0 }, Some(rester)),
+                ],
+                scripted: &[],
+                newborns: &[],
+            };
+            let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+            world.state.learning = learning;
+            let [a, b] = [0, 1].map(|x| world.sprite_at(Pos { x, y: 0 }).expect("a sprite").id());
+            let mut played = false;
+            for _ in 0..50 {
+                played |= world.step().iter().any(|event| {
+                    matches!(
+                        event.kind,
+                        EventKind::ActionEnded {
+                            verb: Verb::Play,
+                            outcome: Outcome::Applied,
+                            ..
+                        }
+                    )
+                });
+            }
+            assert!(played, "they played");
+            let knows = |id: EntityId, other| world.sprite(id).expect("alive").familiarity(other);
+            [knows(a, b), knows(b, a)]
+        };
+        assert_eq!(knowing(false), [0.0, 0.0]);
+        assert!(knowing(true).iter().all(|&known| known > 0.1));
+    }
+
+    #[test]
+    fn an_old_save_s_egg_with_no_egg_type_or_nowhere_to_lie_hatches_as_it_loads() {
+        // M2 design §10.4: an egg from before eggs were items, a sprite that
+        // hatches on tick 750, turned into an egg item as it loads; with no
+        // type to become, or with an item on the only tile there is, it
+        // hatches at once, keeping its ID.
+        let hatches = |data: DataPack, objects: &[(Pos, &str)]| {
+            let map = Map::from_ascii(&["."], &data).expect("valid drawing");
+            let at = Pos { x: 0, y: 0 };
+            let scenario = Scenario {
+                map,
+                objects,
+                sprites: &[(at, None)],
+                scripted: &[],
+                newborns: &[at],
+            };
+            let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+            let id = world.sprites().next().expect("the egg").id();
+            let egg = world.state.sprites.get_mut(id).expect("the egg");
+            egg.hatches = Some(750);
+            world.state.old_eggs_to_items(&world.data);
+            let as_egg = world.egg(id).map(|egg| egg.hatches());
+            (world.sprite(id).map(|sprite| sprite.age()), as_egg)
+        };
+        let builtin = DataPack::builtin().expect("built-in data pack is valid");
+        assert_eq!(hatches(builtin.clone(), &[]), (None, Some(750)), "an egg");
+        let berry = [(Pos { x: 0, y: 0 }, "berry")];
+        assert_eq!(hatches(builtin, &berry), (Some(0), None), "nowhere to lie");
+        let changes = [("next: Hatch", "next: Expire")];
+        let no_egg = crate::test_util::builtin_changing("objects.ron", &changes);
+        assert_eq!(hatches(no_egg, &[]), (Some(0), None), "no egg type");
+    }
+
+    #[test]
     fn a_parent_drinking_draws_its_young_s_eye_until_the_young_knows_water() {
         // M2 design §18.1: an attention instinct about a parent showing it
         // something draws its eye to its mother drinking for her thirst,
