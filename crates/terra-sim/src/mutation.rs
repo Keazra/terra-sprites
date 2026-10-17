@@ -1055,6 +1055,67 @@ mod tests {
     }
 
     #[test]
+    fn a_gene_this_build_cant_read_spends_no_roll_of_the_dice() {
+        // M2 design §13.1: so the genes it can read are copied as they would
+        // be without it, and the world's dice roll on as they would have.
+        let data = whole_genes_only(0.1, 0.1, 0.1, 0.75);
+        let unreadable = Genome::from_ron(
+            r#"(format: 1, genes: [
+                Gene(type: 900, version: 1, payload: "c0ffee"),
+                AttentionInstinct(input: "hunger", category: "tree", weight: 1.0),
+                Gene(type: 901, version: 1, payload: "decade"),
+            ])"#,
+            &data,
+        )
+        .expect("a valid genome")
+        .genes;
+        let starter = data.starter();
+        let (mut genes, mut switches) = (Vec::new(), Vec::new());
+        for (index, gene) in starter.genes.iter().enumerate() {
+            let before = match index {
+                0 => Some(0),
+                50 => Some(1),
+                _ => None,
+            };
+            if let Some(at) = before {
+                genes.push(unreadable[at].clone());
+                switches.push(Switch::default());
+            }
+            genes.push(gene.clone());
+            switches.push(starter.switch(index));
+        }
+        genes.push(unreadable[2].clone());
+        switches.push(Switch::default());
+        let with_them = Genome::switched(genes, switches);
+        let readable = |gene: &&Gene| !matches!(gene, Gene::Unknown { .. } | Gene::Unmatched(_));
+        assert_eq!(
+            with_them.genes.iter().filter(readable).count(),
+            starter.genes.len()
+        );
+        let mut changed = 0;
+        for seed in 0..20 {
+            let (mut dice, mut same_dice) = (
+                ChaCha8Rng::seed_from_u64(seed),
+                ChaCha8Rng::seed_from_u64(seed),
+            );
+            let without = copy(starter, &data, &mut dice).genome;
+            let with = copy(&with_them, &data, &mut same_dice).genome;
+            let read: Vec<&Gene> = with.genes.iter().filter(readable).collect();
+            assert!(
+                read.iter().copied().eq(without.genes.iter()),
+                "seed {seed}: the genes it can read were copied differently"
+            );
+            assert_eq!(
+                unit(&mut dice),
+                unit(&mut same_dice),
+                "seed {seed}: the next roll"
+            );
+            changed += usize::from(without != *starter);
+        }
+        assert!(changed > 0, "nothing was copied and changed");
+    }
+
+    #[test]
     fn a_doubled_gene_sits_next_to_its_original_with_its_switch_and_flaws() {
         // M2 design §13: so the two tend to be inherited together.
         let data = whole_genes_only(1.0, 0.0, 0.0, 0.0);
