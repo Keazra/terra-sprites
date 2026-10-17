@@ -1,4 +1,5 @@
-<!-- A PR that must merge after another starts here with one line naming it: "Stacked on #245: merge that first." -->
+<!-- The PR's base, and why: "Based on `main`: needs nothing open." or "Stacked on #245: merge that first." -->
+Based on `main`: needs nothing open.
 
 ## What changes
 

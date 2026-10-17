@@ -84,10 +84,11 @@ How the owner likes to work, the project's conventions and the slice loop are in
 
 ### Pull requests
 
-1. **Open it as a draft, from the template** (`.github/pull_request_template.md`), its "Try it on your PC" section included.
-2. **Comment on it in plain language** for a human reader: what it changes, why it matters, and any caveats for the reviewer.
-3. **Mark it ready yourself once CI is green,** so ready means nothing is left for the session. First bring in `main` if anything merged since the branch's base: merge `origin/main` into it and run `scripts/check` again. `main` doesn't require a branch to be up to date, so two green PRs can break it together: #192 merged after #191 had changed a test helper both used, and `main`'s terra-tui tests stopped compiling until #197 reverted it.
-4. **Give the merge order** whenever PRs must merge in one: a stack, a pair with a private-docs PR, or two PRs that change the same lines. Each PR's description starts, above "What changes", with a line naming the PR it waits on ("Stacked on #245: merge that first."). The message handing them to the owner lists the merges as numbered steps, first to last, with what to check between them, and each PR's plain-language comment repeats them.
+1. **Pick its base, every time:** `main`, or the open PR it needs. List the open PRs first, and stack on one only when this PR needs it (`docs/agents/stacked-prs.md`, "When to stack"). The description's first line, above "What changes", says which: "Based on `main`: needs nothing open." or "Stacked on #245: merge that first."
+2. **Open it as a draft, from the template** (`.github/pull_request_template.md`), its "Try it on your PC" section included.
+3. **Comment on it in plain language** for a human reader: what it changes, why it matters, and any caveats for the reviewer.
+4. **Mark it ready yourself once CI is green,** so ready means nothing is left for the session. First bring in `main` if anything merged since the branch's base: merge `origin/main` into it and run `scripts/check` again. `main` doesn't require a branch to be up to date, so two green PRs can break it together: #192 merged after #191 had changed a test helper both used, and `main`'s terra-tui tests stopped compiling until #197 reverted it.
+5. **Give the merge order** whenever PRs must merge in one: a stack, a pair with a private-docs PR, or two PRs that change the same lines. The message handing them to the owner lists the merges as numbered steps, first to last, with what to check between them, and each PR's plain-language comment repeats them.
 
 **Stacking a PR** on another, or working on one in a stack: `docs/agents/stacked-prs.md`.
 
