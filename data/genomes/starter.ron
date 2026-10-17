@@ -221,8 +221,9 @@
         // should cure. The young don't fight for room (M2 design §9.5).
         Instinct(inputs: [("crowdedness", false)], verb: Retreat, weight: 1.0),
         Instinct(inputs: [("crowdedness", false), ("attended_sprite", false)], verb: Hit, weight: 0.6, from: Adult),
-        // A cornered sprite, looking at a sprite, turns on it. None hits
-        // its family, though a family together is a crowd (M2 design §15.6).
+        // A cornered sprite, looking at a sprite, turns on it. Each is held
+        // back from hitting its family, though a family together is a crowd
+        // (M2 design §15.6).
         Instinct(inputs: [("cornered", false), ("attended_sprite", false)], verb: Hit, weight: 1.0),
         Instinct(inputs: [("target_family", false)], verb: Hit, weight: -1.0),
         // Calling costs energy, so a sprite shies from it, unless it's
