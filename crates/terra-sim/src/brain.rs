@@ -3567,6 +3567,29 @@ mod tests {
     }
 
     #[test]
+    fn the_starter_genes_lean_a_crowded_adult_to_hitting_a_stranger_but_not_its_family() {
+        // M2 design §15.6: a family together is a crowd. Crowded and looking
+        // at a sprite, the starter's adult leans to hitting it, but when the
+        // sprite is its family, its partner or its young, Hit scores below
+        // nothing. A lean, not a rule: Hit is only less likely.
+        let data = builtin();
+        let brain = Brain::new(data.starter(), &data, LifeStage::Adult);
+        let hit = |family: f32| {
+            let x = inputs(&[
+                ("crowdedness", 1.0),
+                ("attended_sprite", 1.0),
+                ("target_family", family),
+            ]);
+            let sprite = Some(types::SPRITE);
+            let scoring = SpriteScoring::default();
+            brain.scores(&brain.activations(&x), &x, sprite, scoring, &data)[column(Verb::Hit)]
+        };
+        let (stranger, family) = (hit(0.0), hit(1.0));
+        assert!(stranger > 0.0, "a stranger: {stranger}");
+        assert!(family < 0.0, "its family: {family}");
+    }
+
+    #[test]
     fn a_frightening_sprite_near_is_backed_away_from_and_not_gone_near_but_never_hit() {
         // Design v18 §5.5: a fear of .5 adds flight (.8) × .5 to Retreat and
         // takes value_gain (1) × .5 from Approach, Eat, Drink and Play, but
