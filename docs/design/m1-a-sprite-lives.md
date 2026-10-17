@@ -1446,7 +1446,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 | Berry | `•` | `%` | red |
 | Ball | `○` | `o` | white |
 | Sprite | `☺` | `@` | by colour mode (§6.3) |
-| Selected sprite | `☻` | `@` in reverse video (`&` is the berry bush) | by colour mode (§6.3) |
+| Selected sprite | `☻` in reverse video (#282) | `@` in reverse video (`&` is the berry bush) | by colour mode (§6.3) |
 | Cursor arrows | `↓ ↑ → ←` | `v ^ > <` | the cursor mode's colour |
 | Cursor arrows, following (v21; v26 name) | `▼ ▲ ► ◄` | `v ^ > <` (the status line says it's following) | the cursor mode's colour |
 | Cursor frame, visible (v29), in place of the arrows | `═ ═ ║ ║` | `= = \| \|` | the cursor mode's colour |

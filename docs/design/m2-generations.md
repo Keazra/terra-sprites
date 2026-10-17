@@ -337,7 +337,7 @@ The owner (2026-10-11): old age is the genome wearing out, and a hard life damag
 
 ### 9.6 What the player sees
 
-- **On the map, the young are drawn small:** `ö` in CP437 and `a` in ASCII, the theme keys `young_sprite` and `selected_young_sprite`. A theme without them draws the young as grown. The old show by moving slowly.
+- **On the map, the young are drawn small:** `ö` in CP437 and `a` in ASCII, the theme keys `young_sprite` and `selected_young_sprite`. Selected, a young sprite is in reverse video, as a grown one is (#282). A theme without them draws the young as grown. The old show by moving slowly.
 - **The log** says "Pip grew up" and "Pip grew old".
 - **The sprite list** has a Life stage column after Age: young, adult or old.
 - **The Body tab** shows the stage after the age, with when the next one comes: `age 3,120 · young · grows up 4,500`, `adult · grows old 22,500` (sooner for a worn sprite), or `old`. After the physical levels, `wear .12`, and `· genes .83`, its genes' average health, once any has weakened.

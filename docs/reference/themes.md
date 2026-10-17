@@ -124,7 +124,7 @@ A bright theme, for a terminal whose dark colours are hard to see: light colours
         terrain(deep_water):    (glyph: '≈', fg: light_blue),
         terrain(rock):          (glyph: '#', fg: white),
         sprite:                 (glyph: '☺', fg: white, bold: true),
-        selected_sprite:        (glyph: '☻', fg: white, bold: true),
+        selected_sprite:        (glyph: '☻', fg: white, bold: true, reversed: true),
         decision_marker:        (glyph: 'X', fg: white, bold: true),
         emote(hurt):            (glyph: '!', fg: light_red, bold: true),
         emote(pleased):         (glyph: '♥', fg: light_magenta),

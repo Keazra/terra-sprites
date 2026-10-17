@@ -13,7 +13,8 @@
         terrain(rock):          (glyph: '#', fg: gray),
         // Drawn over any item on the sprite's tile.
         sprite:                 (glyph: '☺', fg: white),
-        selected_sprite:        (glyph: '☻', fg: white),
+        // Selected, in reverse video, as the young and eggs are (design §6.2, #282).
+        selected_sprite:        (glyph: '☻', fg: white, reversed: true),
         // The young are drawn small (M2 design §9.6). `•` is the berry.
         young_sprite:           (glyph: 'ö', fg: white),
         selected_young_sprite:  (glyph: 'ö', fg: white, reversed: true),
