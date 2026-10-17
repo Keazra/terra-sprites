@@ -7,8 +7,9 @@
 
 mod common;
 use common::{
-    Changes, LONE, LONE_MOTHER, QUICK, SCORCHED, at, grow, lone_line, pack_changing, pairs,
-    parched_line, tree_of,
+    Changes, LETHAL_THORNS, LONE, LONE_MOTHER, QUICK, SCORCHED, at, changed, group, grow,
+    inspector_rows, lone_line, open, pack_changing, pairs, parched_line, pointer_on, rows_from,
+    select, tree_of,
 };
 
 use std::path::PathBuf;
@@ -600,8 +601,7 @@ fn the_pointer_on_the_tree_leaves_the_cursor_where_it_is_on_the_map() {
     let world = pairs(230);
     let mut app = app_on(&world);
     let tile = at(9, 4);
-    let cell = app.cell_of(tile).expect("in view");
-    app.apply(Action::Point(Position::new(cell.x + 1, cell.y + 1)), &world);
+    app.apply(Action::Point(pointer_on(&app, tile)), &world);
     assert_eq!(app.shown_cursor(), Some(tile));
     tree_of(&mut app, &world, EntityId(14));
     for (row, label) in [(PARENTS, "Sprite #1"), (YOUNG, "Sprite #15")] {
@@ -700,9 +700,7 @@ fn walking_to_a_dead_sprite_selects_it_as_one_that_died() {
         "died of dehydration at age 85 · generation 2"
     );
     app.apply(Action::FamilyTree, &world);
-    while app.tab() != Tab::Body {
-        app.apply(Action::NextTab, &world);
-    }
+    open(&mut app, &world, Tab::Body);
     let shown = screen(&app, &world);
     assert!(
         shown.contains("Sprite #3 died of dehydration at age 85"),
@@ -715,7 +713,7 @@ fn a_sprite_that_died_before_it_grew_up_died_young() {
     // A mother whose young grow up 100 ticks after they hatch, with no
     // water: her first, #2, hatches on tick 21 and dies young.
     let [quick, eggs] = QUICK;
-    let genes = LONE_MOTHER.replace("value: 10.0", "value: 100.0");
+    let genes = changed(LONE_MOTHER, "value: 10.0", "value: 100.0");
     let mut world = grow(
         &[quick, eggs, LONE, SCORCHED],
         (12, 6),
@@ -741,19 +739,13 @@ fn a_sprite_that_died_before_it_grew_up_died_young() {
 #[test]
 fn a_sprite_hurt_to_death_died_hurt_by_what_hurt_it() {
     // M2 design §17.2: `died hurt by thornbush`. A mother who lays alone
-    // and hits the thornbush beside her, whose thorns kill at once: she
-    // lays #3 and dies on tick 10, and #3 hatches on tick 20, does as she
-    // did, and dies young on tick 22.
+    // at once and hits the thornbush beside her, whose thorns kill at
+    // once; her young hatches, does as she did, and dies before it grows
+    // up.
     let [quick, eggs] = QUICK;
-    let lethal: Changes = (
-        "tags.ron",
-        &[(
-            r#"Hit:   [Inject(Actor, "injury", 0.03)"#,
-            r#"Hit:   [Inject(Actor, "injury", 1.0)"#,
-        )],
-    );
-    let pack = pack_changing(&[quick, eggs, LONE, lethal]);
-    let genes = LONE_MOTHER.replace(
+    let pack = pack_changing(&[quick, eggs, LONE, LETHAL_THORNS]);
+    let genes = changed(
+        LONE_MOTHER,
         "])",
         r#"    AttentionInstinct(input: "always", category: "bush", weight: 1.0),
     Instinct(inputs: [("always", false), ("attended_bush", false)], verb: Hit, weight: 0.5),
@@ -769,20 +761,33 @@ fn a_sprite_hurt_to_death_died_hurt_by_what_hurt_it() {
         newborns: &[],
     };
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
-    for _ in 0..21 {
+    let mother = world.sprites().next().expect("the mother").id();
+    let young = loop {
+        if let Some(egg) = world.eggs().next() {
+            break egg.id();
+        }
+        assert!(world.tick() < 100, "she lays");
+        world.step();
+    };
+    while world.sprite(young).is_none() {
+        assert!(world.tick() < 100, "her egg hatches");
         world.step();
     }
     let mut app = app_on(&world);
-    app.apply(Action::SelectNext, &world);
-    assert_eq!(app.selection(), Some(Selection::Living(EntityId(3))));
-    run(&mut app, &mut world, 5);
+    select(&mut app, &world, young);
+    while world.dead(young).is_none() {
+        assert!(world.tick() < 200, "her young dies");
+        run(&mut app, &mut world, 1);
+    }
+    assert!(world.dead(mother).is_some(), "she died");
     app.apply(Action::FamilyTree, &world);
     let rows = tree(&app, &world);
-    assert_eq!(said(&rows[PARENTS]), "Sprite #2");
+    assert_eq!(said(&rows[PARENTS]), format!("Sprite #{}", mother.0));
     assert_eq!(said(&rows[PARENTS + 1]), "died hurt by thornbush");
+    let age = group(world.dead(young).expect("it died").age());
     assert_eq!(
         said(&rows[CENTRE + 1]),
-        "died young, hurt by thornbush at age 2 · generation 2"
+        format!("died young, hurt by thornbush at age {age} · generation 2")
     );
 }
 
@@ -844,9 +849,7 @@ fn a_dead_sprite_keeps_its_name_through_a_save_and_a_load() {
         &world,
         &[UP, UP, Action::Enter, Action::FamilyTree],
     );
-    while app.tab() != Tab::Body {
-        app.apply(Action::NextTab, &world);
-    }
+    open(&mut app, &world, Tab::Body);
     let shown = screen(&app, &world);
     assert!(
         shown.contains("Bramble #1 died of dehydration at age 94"),
@@ -1006,29 +1009,11 @@ fn a_sprite_hidden_from_the_tree_keeps_its_own_colour_in_the_lineage_colours() {
     assert_eq!((colour(&app, 1), colour(&app, 2)), (own, Color::LightBlue));
 }
 
-/// The inspector's Body tab, a line for each row inside its box, with what's
-/// past each line's last character left off. At 100×30 the inspector is
-/// the right-hand 46 columns, its inside from column 55.
+/// The inspector's Body tab, opened, a line for each row inside its box
+/// with its margin.
 fn body_tab(app: &mut App, world: &World) -> Vec<String> {
-    while app.tab() != Tab::Body {
-        app.apply(Action::NextTab, world);
-    }
-    let buffer = render(app, world);
-    (2..24)
-        .map(|y| {
-            let row: String = (55..99).map(|x| buffer[(x, y)].symbol()).collect();
-            row.trim_end().to_string()
-        })
-        .collect()
-}
-
-/// The line of `lines` that starts with `start`, and the one after it.
-fn and_after<'a>(lines: &'a [String], start: &str) -> &'a [String] {
-    let at = lines
-        .iter()
-        .position(|line| line.starts_with(start))
-        .unwrap_or_else(|| panic!("{start:?} in {lines:#?}"));
-    &lines[at..at + 2]
+    open(app, world, Tab::Body);
+    inspector_rows(app, world, 30).1
 }
 
 #[test]
@@ -1039,7 +1024,7 @@ fn the_body_tab_says_a_sprite_s_generation_and_the_world_tab_the_living_ones() {
     app.apply(Action::FamilyTree, &world);
     let lines = body_tab(&mut app, &world);
     assert_eq!(
-        and_after(&lines, " one of")[0],
+        rows_from(&lines, "one of")[0],
         " one of the first sprites · generation 1"
     );
     // Too long for one line, on two (M2 design §17.5).
@@ -1047,13 +1032,11 @@ fn the_body_tab_says_a_sprite_s_generation_and_the_world_tab_the_living_ones() {
     app.apply(Action::FamilyTree, &world);
     let lines = body_tab(&mut app, &world);
     assert_eq!(
-        and_after(&lines, " parents"),
+        rows_from(&lines, "parents")[..2],
         [" parents Sprite #3 and Sprite #12", " generation 3"]
     );
 
-    while app.tab() != Tab::World {
-        app.apply(Action::NextTab, &world);
-    }
+    open(&mut app, &world, Tab::World);
     let shown = screen(&app, &world);
     assert!(shown.contains(" generations  1 to 4"), "{shown}");
 }
@@ -1071,7 +1054,7 @@ fn an_egg_s_card_says_its_parents_and_generation_as_the_body_tab_does() {
     assert!(world.egg(EntityId(45)).is_some());
     let lines = body_tab(&mut app, &world);
     assert_eq!(
-        and_after(&lines, " egg ·")[1],
+        rows_from(&lines, "egg ·")[1],
         " parents Sprite #1 · generation 2"
     );
 }
