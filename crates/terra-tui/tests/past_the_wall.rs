@@ -86,6 +86,17 @@ fn apply(app: &mut App, world: &World, action: Action) {
     assert_eq!(app.apply(action, world), Flow::Continue);
 }
 
+/// The small field with a ball on `tile`, and an app in Grab mode whose
+/// Cursor has taken hold of it, a tick on.
+fn holding_a_ball_from(tile: Pos) -> (World, App) {
+    let mut world = field_with(10, 6, &[(tile, "ball")], &[]);
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+    apply(&mut app, &world, Action::left_click(on(tile)));
+    tick(&mut app, &mut world);
+    (world, app)
+}
+
 /// The screen cell of the small field's `tile`.
 fn cell(tile: Pos) -> Position {
     Position::new(22 + tile.x, 9 + tile.y)
@@ -447,11 +458,7 @@ fn an_item_held_over_space_stays_held_until_the_pointer_comes_back() {
     // M2 design §11.4: over space, a click, `Q` or `E` does nothing, so the
     // ball the Cursor holds isn't put down on its last tile, (7, 3), or
     // aimed; back over the map, `Q` puts it down where the pointer is.
-    let mut world = field_with(10, 6, &[(Pos { x: 5, y: 3 }, "ball")], &[]);
-    let mut app = app(&world);
-    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
-    apply(&mut app, &world, Action::left_click(on(Pos { x: 5, y: 3 })));
-    tick(&mut app, &mut world);
+    let (mut world, mut app) = holding_a_ball_from(Pos { x: 5, y: 3 });
     assert!(matches!(app.grip(&world), Some(Grip::Holds(_))));
     apply(&mut app, &world, Action::Point(on(Pos { x: 7, y: 3 })));
     apply(&mut app, &world, Action::Point(SPACE));
@@ -493,11 +500,7 @@ fn an_aim_sent_over_space_leaves_the_cursor_where_it_was_out_of_reach() {
     // M2 design §11.4: "an aim that ends over space, sent or not, leaves
     // the Cursor where it was". The ball is aimed from (5, 3), pulled
     // across (2, 3) and on into space, and thrown from there.
-    let mut world = field_with(10, 6, &[(Pos { x: 5, y: 3 }, "ball")], &[]);
-    let mut app = app(&world);
-    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
-    apply(&mut app, &world, Action::left_click(on(Pos { x: 5, y: 3 })));
-    tick(&mut app, &mut world);
+    let (mut world, mut app) = holding_a_ball_from(Pos { x: 5, y: 3 });
     apply(
         &mut app,
         &world,
@@ -540,11 +543,7 @@ fn aiming_the_pull_goes_on_past_the_wall_and_a_right_click_or_e_over_space_sends
         },
     ];
     for send in sends {
-        let mut world = field_with(10, 6, &[(Pos { x: 0, y: 3 }, "ball")], &[]);
-        let mut app = app(&world);
-        apply(&mut app, &world, Action::Mode(CursorMode::Grab));
-        apply(&mut app, &world, Action::left_click(on(Pos { x: 0, y: 3 })));
-        tick(&mut app, &mut world);
+        let (world, mut app) = holding_a_ball_from(Pos { x: 0, y: 3 });
         apply(
             &mut app,
             &world,
@@ -569,11 +568,7 @@ fn aiming_a_click_over_space_reaches_what_is_aimed() {
     // M2 design §11.4: while the player aims, the Cursor isn't out of
     // reach, so a left click over space reaches what it aims, as `Q` does:
     // it puts the ball down where it's aimed from.
-    let mut world = field_with(10, 6, &[(Pos { x: 5, y: 3 }, "ball")], &[]);
-    let mut app = app(&world);
-    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
-    apply(&mut app, &world, Action::left_click(on(Pos { x: 5, y: 3 })));
-    tick(&mut app, &mut world);
+    let (world, mut app) = holding_a_ball_from(Pos { x: 5, y: 3 });
     apply(
         &mut app,
         &world,
@@ -658,11 +653,7 @@ fn over_space_esc_still_ends_an_aim_then_puts_the_held_item_down() {
     // it ends the aim, then it puts the ball down where the Cursor stayed,
     // on (5, 3), where it was aimed from, not on (2, 3), the last tile the
     // pull crossed: once the aim ends past the wall, the Cursor can't move.
-    let mut world = field_with(10, 6, &[(Pos { x: 5, y: 3 }, "ball")], &[]);
-    let mut app = app(&world);
-    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
-    apply(&mut app, &world, Action::left_click(on(Pos { x: 5, y: 3 })));
-    tick(&mut app, &mut world);
+    let (world, mut app) = holding_a_ball_from(Pos { x: 5, y: 3 });
     apply(
         &mut app,
         &world,
