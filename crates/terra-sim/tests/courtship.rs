@@ -9,7 +9,7 @@
 mod common;
 use common::{
     ALONE, FEMALE, KEEN, LONE, WorldBuilder, at, builtin, builtin_changing, builtin_changing_files,
-    genome, hatch, id_at, laid, until, world_in,
+    genome, hatch, id_at, laid, pulse_in_h1, until, world_in,
 };
 
 use terra_sim::{
@@ -150,15 +150,6 @@ fn a_call_costs_the_caller_energy() {
     assert!((paid - 0.002).abs() < 0.0002, "it paid {paid}");
 }
 
-/// Rests, and copies the `heard` pulse into `h1`: 1 on the tick it goes
-/// live.
-const HEARS: &str = r#"
-    Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),
-    BrainParam(param: "tau_base", value: 0.02),
-    Emitter(locus: Locus("heard"), mode: Level, gain: 4.0, chem: "h1"),
-    HalfLife(chem: "h1", ticks: 1),
-"#;
-
 #[test]
 fn a_caller_calls_once_and_stands_listening_10_ticks_in_all() {
     // M2 design §15.1: one call, on the action's first tick, heard on the
@@ -166,7 +157,8 @@ fn a_caller_calls_once_and_stands_listening_10_ticks_in_all() {
     // all, where it stands.
     let field = row(10);
     let rows = [field.as_str()];
-    let mut world = world(&rows, &[(at(0, 0), CALLER), (at(5, 0), HEARS)]);
+    let hears = format!("{RESTER}{}", pulse_in_h1("heard"));
+    let mut world = world(&rows, &[(at(0, 0), CALLER), (at(5, 0), &hears)]);
     let (caller, hearer) = (id_at(&world, at(0, 0)), id_at(&world, at(5, 0)));
     let (mut started, mut ended, mut heard) = (Vec::new(), Vec::new(), Vec::new());
     for _ in 0..40 {

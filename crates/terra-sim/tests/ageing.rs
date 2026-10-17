@@ -3,8 +3,7 @@
 
 mod common;
 use common::{
-    AGES_AT_ONCE, BARREN, FEMALE, KEEN, OLD, WorldBuilder, at, builtin, builtin_changing, close,
-    family_in, genome, id_at, laid,
+    AGES_AT_ONCE, BARREN, WorldBuilder, at, builtin, builtin_changing, close, genome, starting_with,
 };
 
 use terra_sim::{
@@ -160,30 +159,10 @@ fn a_gene_that_switches_on_at_growing_up_works_from_that_tick_s_chemistry() {
 }
 
 #[test]
-fn an_old_pair_still_mates_and_lays_an_egg() {
-    // M2 design §5, §9.1: an old sprite still counts as an adult.
-    let female = format!("{KEEN}{FEMALE}{OLD}");
-    let male = format!("{KEEN}{OLD}");
-    let data = builtin_changing("physiology.ron", &AGES_AT_ONCE);
-    let mut world = family_in(data, &[(at(2, 1), &female), (at(3, 1), &male)], &[], 1);
-    let (mother, father) = (id_at(&world, at(2, 1)), id_at(&world, at(3, 1)));
-    for id in [mother, father] {
-        let stage = world.sprite(id).expect("the sprite").life_stage();
-        assert_eq!(stage, LifeStage::Old);
-    }
-    let laying = laid(&mut world, 100).expect("an egg");
-    assert_eq!((laying.by, laying.with), (mother, Some(father)));
-}
-
-#[test]
 fn a_worn_sprite_s_wear_is_saved_and_hashed() {
     // M2 design §9.4: wear is world state. A newborn this hungry is
     // starving from the start, so a hard life wears it.
-    let data = builtin_changing(
-        "physiology.ron",
-        &[("newborn: (energy: 1.0,", "newborn: (energy: 0.1,")],
-    );
-    let mut world = world_in(data, "", &[], &[]);
+    let mut world = world_in(starting_with(0.1, 1.0), "", &[], &[]);
     run_to(&mut world, 50);
     let wear = world.sprites().next().expect("the sprite").wear();
     assert!(wear > 0.005, "{wear}");

@@ -85,6 +85,14 @@ pub fn barren() -> DataPack {
     builtin_changing("physiology.ron", &[BARREN])
 }
 
+/// The built-in data pack, with every sprite's body starting with `energy`
+/// and `hydration`, as a newborn's does.
+pub fn starting_with(energy: f32, hydration: f32) -> DataPack {
+    let newborn = format!("newborn: (energy: {energy:?}, hydration: {hydration:?}, stamina: 1.0),");
+    let builtin = "newborn: (energy: 1.0, hydration: 1.0, stamina: 1.0),";
+    builtin_changing("physiology.ron", &[(builtin, newborn.as_str())])
+}
+
 /// The built-in data pack, with `changes` made to `file`'s text.
 pub fn builtin_changing(file: &str, changes: &[(&str, &str)]) -> DataPack {
     builtin_changing_files(&[(file, changes)])
@@ -200,6 +208,17 @@ pub const KEEN: &str = r#"
 
 /// A body receptive from the start, as if courted (M2 design §15.3).
 pub const RECEPTIVE: &str = r#"InitialConcentration(chem: "receptivity", value: 1.0),"#;
+
+/// Genes that copy the pulse `pulse` into `h1`, so a test can read it: 1 on
+/// the tick it goes live.
+pub fn pulse_in_h1(pulse: &str) -> String {
+    format!(
+        r#"
+    Emitter(locus: Locus("{pulse}"), mode: Level, gain: 4.0, chem: "h1"),
+    HalfLife(chem: "h1", ticks: 1),
+"#
+    )
+}
 
 /// A body that turns female at once, as an adult (M2 design §10).
 pub const FEMALE: &str = r#"InitialConcentration(chem: "feminiser", value: 1.0),"#;
