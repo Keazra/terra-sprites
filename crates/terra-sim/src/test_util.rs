@@ -1,9 +1,11 @@
 //! Shared helpers for terra-sim unit tests; integration tests use `tests/common`.
 
+use crate::config::WorldConfig;
 use crate::data::DataPack;
 use crate::genome::Genome;
 use crate::map::Pos;
 use crate::objects::EntityId;
+use crate::save::Preset;
 use crate::world::World;
 
 /// The built-in data pack.
@@ -60,4 +62,33 @@ pub fn at(x: u16, y: u16) -> Pos {
 /// The ID of the sprite standing on `pos`, as `tests/common`'s does.
 pub fn id_at(world: &World, pos: Pos) -> EntityId {
     world.sprite_at(pos).expect("a sprite there").id()
+}
+
+/// `config` as a save or replay keeps it, broken in each way a damaged file
+/// might hold it: every rule a preset file must keep, broken once.
+pub fn broken_presets(config: &WorldConfig) -> Vec<Preset> {
+    let breaks: [fn(&mut Preset); 9] = [
+        |preset| preset.width = 0,
+        |preset| preset.height = 31,
+        |preset| preset.width = 1025,
+        |preset| {
+            preset.objects.insert("not_an_object_type".into(), 1);
+        },
+        |preset| preset.per_tiles = 0,
+        |preset| preset.sprites = 19,
+        |preset| preset.sprites = 101,
+        |preset| preset.most_sprites = 0,
+        |preset| {
+            preset.sprites = 50;
+            preset.most_sprites = 49;
+        },
+    ];
+    breaks
+        .into_iter()
+        .map(|damage| {
+            let mut preset = Preset::from(config);
+            damage(&mut preset);
+            preset
+        })
+        .collect()
 }

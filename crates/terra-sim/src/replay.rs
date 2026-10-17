@@ -12,7 +12,6 @@ use serde::{Deserialize, Serialize};
 use xxhash_rust::xxh3::xxh3_64;
 
 use crate::command::Command;
-use crate::config::WorldConfig;
 use crate::data::{DataError, DataPack};
 use crate::events::Event;
 use crate::mode::Mode;
@@ -252,7 +251,10 @@ impl Playback {
                     .map(|(path, text)| (path.as_str(), text.as_str()))
                     .collect();
                 let data = DataPack::from_sources(&sources).map_err(ReplayError::Pack)?;
-                World::new_in(WorldConfig::from(config), data, seed, mode)
+                // The world is generated again from the preset, so a damaged
+                // one is refused rather than generated from.
+                let config = config.config(&data).map_err(ReplayError::Damaged)?;
+                World::new_in(config, data, seed, mode)
             }
             Start::Snapshot(save) => World::load(&save).map_err(ReplayError::Start)?,
         };
@@ -369,7 +371,8 @@ impl Playback {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_util::builtin;
+    use crate::config::WorldConfig;
+    use crate::test_util::{broken_presets, builtin};
 
     /// Where a replay started before the modes (M2 design §16.1): a fresh
     /// world was its seed and preset alone.
@@ -410,5 +413,35 @@ mod tests {
         assert!(playback.started_fresh());
         assert_eq!(playback.world().mode(), Mode::Story);
         assert_eq!(playback.divergence(), None, "the Story world it was");
+    }
+
+    /// A fresh replay's world is generated again from the preset it keeps,
+    /// so one whose preset is damaged is refused, rather than generating a
+    /// world no preset file could make, or crashing trying (design §2.7).
+    #[test]
+    fn a_fresh_replay_whose_preset_breaks_a_rule_is_refused() {
+        let data = builtin();
+        let config = WorldConfig::builtin(&data);
+        for (n, preset) in broken_presets(&config).into_iter().enumerate() {
+            let start = Start::Fresh {
+                seed: 7,
+                config: preset,
+                mode: Mode::Story,
+            };
+            let body = rmp_serde::to_vec_named(&Contents {
+                pack: PackIdentity::of(&data),
+                sources: data.sources(),
+                start: &start,
+                commands: &[],
+                checkpoints: &[],
+                end: 0,
+            })
+            .expect("it serializes");
+            match Playback::new(&save::framed(MAGIC, &body)) {
+                Err(ReplayError::Damaged(why)) => assert!(why.contains("preset"), "{n}: {why}"),
+                Err(err) => panic!("preset {n} refused for the wrong reason: {err}"),
+                Ok(_) => panic!("preset {n} played"),
+            }
+        }
     }
 }

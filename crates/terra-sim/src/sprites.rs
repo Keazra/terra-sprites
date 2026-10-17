@@ -133,7 +133,7 @@ pub(crate) struct Sprite {
 impl Sprite {
     /// The sprite's age on the tick `tick`.
     pub(crate) fn age(&self, tick: u64) -> u64 {
-        u64::try_from(tick as i64 - self.born).expect("a sprite is born by now")
+        u64::try_from(i128::from(tick) - i128::from(self.born)).expect("a sprite is born by now")
     }
 
     /// Its life stage (M2 design §9.1).
@@ -651,7 +651,7 @@ impl Sprites {
             if !map.contains(sprite.pos) || self.on_tile.at(sprite.pos).is_some() {
                 return Err(format!("sprite {} has no tile of its own", id.0));
             }
-            if sprite.born > now as i64 {
+            if i128::from(sprite.born) > i128::from(now) {
                 return Err(format!("sprite {} was born after the save", id.0));
             }
             // The genome first: the brain is checked against it, once it

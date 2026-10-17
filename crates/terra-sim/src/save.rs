@@ -22,8 +22,8 @@ use std::collections::BTreeMap;
 use xxhash_rust::xxh3::xxh3_64;
 
 use crate::config::WorldConfig;
-use crate::data::DataError;
-use crate::map::Pos;
+use crate::data::{DataError, DataPack};
+use crate::map::{MAX_SIDE, Pos};
 use crate::world::WorldState;
 
 /// What every save starts with.
@@ -142,19 +142,20 @@ pub(crate) struct Loaded {
     pub(crate) view: Option<Pos>,
 }
 
-/// A world's preset as a save holds it: `WorldConfig`'s fields, kept
-/// here so the public `WorldConfig` can only be made by checking a preset.
+/// A world's preset as a save or replay holds it: `WorldConfig`'s fields,
+/// kept here so the public `WorldConfig` can only be made by checking a
+/// preset, as `config` does again.
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Preset {
-    width: u16,
-    height: u16,
-    objects: BTreeMap<String, u32>,
-    per_tiles: u32,
-    sprites: u16,
+    pub(crate) width: u16,
+    pub(crate) height: u16,
+    pub(crate) objects: BTreeMap<String, u32>,
+    pub(crate) per_tiles: u32,
+    pub(crate) sprites: u16,
     /// A save from before breeding had none, so it gets the default (M2
     /// design §10).
     #[serde(default = "crate::config::most_sprites")]
-    most_sprites: u16,
+    pub(crate) most_sprites: u16,
 }
 
 impl From<&WorldConfig> for Preset {
@@ -171,16 +172,20 @@ impl From<&WorldConfig> for Preset {
     }
 }
 
-impl From<Preset> for WorldConfig {
-    fn from(preset: Preset) -> WorldConfig {
+impl Preset {
+    /// The config it holds, checked against `data` as a preset file is, or
+    /// what's wrong with it, as a damaged file might have it.
+    pub(crate) fn config(self, data: &DataPack) -> Result<WorldConfig, String> {
         WorldConfig::from_parts(
-            preset.width,
-            preset.height,
-            preset.objects,
-            preset.per_tiles,
-            preset.sprites,
-            preset.most_sprites,
+            self.width,
+            self.height,
+            self.objects,
+            self.per_tiles,
+            self.sprites,
+            self.most_sprites,
+            data,
         )
+        .map_err(|err| format!("its preset breaks a rule: {err}"))
     }
 }
 
@@ -229,6 +234,10 @@ pub(crate) fn read_bytes<'de, D: Deserializer<'de>>(deserializer: D) -> Result<V
     deserializer.deserialize_byte_buf(BytesVisitor)
 }
 
+/// The most bytes `BytesVisitor` makes room for before they arrive: a
+/// largest map's tiles, one byte each.
+const MOST_RESERVED: usize = MAX_SIDE as usize * MAX_SIDE as usize;
+
 /// Takes bytes however the format hands them over.
 struct BytesVisitor;
 
@@ -248,10 +257,44 @@ impl<'de> Visitor<'de> for BytesVisitor {
     }
 
     fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Vec<u8>, A::Error> {
-        let mut bytes = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+        // The length is only the file's claim, and a damaged one could claim
+        // gigabytes: room is made up front for no more than `MOST_RESERVED`,
+        // and for the rest as the bytes arrive, so a false claim fails where
+        // the file ends.
+        let mut bytes = Vec::with_capacity(seq.size_hint().unwrap_or(0).min(MOST_RESERVED));
         while let Some(byte) = seq.next_element()? {
             bytes.push(byte);
         }
         Ok(bytes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Bytes as a save keeps them, for `read_bytes`.
+    #[derive(Debug, Deserialize)]
+    struct Kept(#[serde(deserialize_with = "read_bytes")] Vec<u8>);
+
+    /// Bytes written as a list of numbers, the way a format with no bytes
+    /// type hands them over, read back whole.
+    #[test]
+    fn bytes_written_as_a_list_of_numbers_read_back() {
+        let list = rmp_serde::to_vec(&[3u8, 1, 4]).expect("it serializes");
+        let kept: Kept = rmp_serde::from_slice(&list).expect("it reads");
+        assert_eq!(kept.0, [3, 1, 4]);
+    }
+
+    /// A list that claims to hold four billion bytes but holds two, as a
+    /// damaged save or replay might, is refused, without first making room
+    /// for all it claims: on a computer short of memory, that would stop
+    /// the game rather than say the file is damaged (design §2.8).
+    #[test]
+    fn a_list_of_bytes_claiming_more_than_it_holds_is_refused() {
+        // MessagePack's `array 32` of u32::MAX items, then two of them.
+        let claim = [0xdd, 0xff, 0xff, 0xff, 0xff, 0x01, 0x02];
+        let read: Result<Kept, _> = rmp_serde::from_slice(&claim);
+        assert!(read.is_err());
     }
 }
