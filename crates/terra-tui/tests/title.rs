@@ -71,6 +71,15 @@ fn find(buffer: &Buffer, needle: &str) -> Option<Position> {
     })
 }
 
+/// A turn of the wheel by `notches`, down being positive, with the pointer
+/// over the menu.
+fn wheel(notches: i32) -> Action {
+    Action::Wheel {
+        at: Position::new(50, 15),
+        notches,
+    }
+}
+
 fn lit_cells(buffer: &Buffer) -> usize {
     buffer
         .content()
@@ -266,10 +275,6 @@ fn the_arrows_move_through_the_menu_and_enter_picks() {
 fn the_wheel_moves_through_the_menu() {
     // M2 design §8.2: picked as the Place menu's are, the wheel too.
     let mut title = after_the_scene();
-    let wheel = |notches| Action::Wheel {
-        at: Position::new(50, 15),
-        notches,
-    };
     // New world, Load, Help, Quit: past the end, it stays on the last.
     for _ in 0..4 {
         title.apply(wheel(1));
@@ -330,10 +335,7 @@ fn the_mouse_doesn_t_answer_the_quit_prompt() {
         Action::left_click(over_the_menu),
         Action::right_click(over_the_menu),
         Action::middle_click(over_the_menu),
-        Action::Wheel {
-            at: over_the_menu,
-            notches: 1,
-        },
+        wheel(1),
     ];
     for action in mouse {
         assert_eq!(title.apply(action), TitleFlow::Stay, "{action:?}");
@@ -651,10 +653,6 @@ fn loading_three() -> (Title, Vec<SaveFile>) {
 fn the_wheel_moves_through_load_as_it_does_through_ctrl_o_s_list() {
     // M2 design §8.2: Load is the list `Ctrl+O` opens in a world.
     let (mut title, saves) = loading_three();
-    let wheel = |notches| Action::Wheel {
-        at: Position::new(50, 15),
-        notches,
-    };
     title.apply(wheel(1));
     title.apply(wheel(1));
     title.apply(wheel(1));
@@ -726,12 +724,8 @@ fn a_terminal_too_small_takes_no_clicks_or_turns_of_the_wheel() {
             assert_eq!(title.apply(click), TitleFlow::Stay, "a click on {x},{y}");
         }
     }
-    let wheel = Action::Wheel {
-        at: Position::new(40, 15),
-        notches: 1,
-    };
     for _ in 0..3 {
-        title.apply(wheel);
+        title.apply(wheel(1));
     }
     title.resize(Size::new(WIDTH, HEIGHT));
     let shown = text(&render(&title));
