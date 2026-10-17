@@ -348,3 +348,135 @@ fn an_attention_instinct_about_grown_ups_draws_a_young_sprite_s_eye_to_them() {
     let (attends, young, _) = young_looks(-1.0);
     assert_eq!(attends, Some(young));
 }
+
+#[test]
+fn learning_rate_mod_scales_what_a_sprite_takes_in_by_watching_but_plasticity_doesn_t() {
+    // M2 design §18.1: watch_rate is a share rather than a rate. At a
+    // plasticity of 1.5 a sprite still takes on half of the drinker's .25;
+    // at a learning_rate_mod of .5 it takes on a quarter.
+    let watching = looking_on(0.5);
+    let plastic = format!(r#"{watching}BrainParam(param: "plasticity", value: 1.5),"#);
+    assert_eq!(watched_drinking(&[], (at(5, 1), &plastic)), 0.125);
+    let slow = format!(
+        r#"{watching}InitialConcentration(chem: "h3", value: 1.0),
+        Receptor(chem: "h3", gain: -0.5, target: "learning_rate_mod"),"#
+    );
+    assert_eq!(watched_drinking(&[], (at(5, 1), &slow)), 0.0625);
+}
+
+#[test]
+fn a_sprite_heard_calling_out_of_sight_is_not_watched() {
+    // M2 design §18.1: the drinker calls, then drinks, 24 tiles from a
+    // sprite that heard it, out of its sight, whose eye is on it.
+    let field = format!("~{}", ".".repeat(29));
+    let rows = [field.as_str(); 3];
+    let calls_then_drinks = r#"
+        Emitter(locus: Locus("always"), mode: Level, gain: 0.1, chem: "thirst"),
+        Emitter(locus: Locus("drank"), mode: Level, gain: -0.5, chem: "thirst"),
+        Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
+        Instinct(inputs: [("always", false)], verb: Call, weight: 0.5),
+        BrainParam(param: "tau_base", value: 0.02),"#;
+    let looking_on = looking_on(1.0);
+    let data = builtin();
+    let sprites = vec![
+        (at(1, 1), Some(genome(calls_then_drinks, &data))),
+        (at(25, 1), Some(genome(&looking_on, &data))),
+    ];
+    let mut world = WorldBuilder::new(&rows)
+        .data(data)
+        .sprites_with(sprites)
+        .build();
+    let drinker = id_at(&world, at(1, 1));
+    let watching = id_at(&world, at(25, 1));
+    first_drink(&mut world, drinker);
+    let sprite = world.sprite(watching).expect("the sprite watching");
+    assert_eq!(sprite.attending_to(), Some(at(1, 1)), "its eye is on it");
+    assert!(value_of(&world, drinker, &water_for_thirst()) > 0.0);
+    assert_eq!(value_of(&world, watching, &water_for_thirst()), 0.0);
+}
+
+/// `DRINKER`, its eye always on the water, with `genes` as well.
+fn drinker_looking_at_water(genes: &str) -> String {
+    format!(
+        r#"{DRINKER}
+        AttentionInstinct(input: "always", category: "water", weight: 1.0),
+        BrainParam(param: "curiosity", value: 0.0),
+        BrainParam(param: "tau_att_base", value: 0.05),
+        {genes}"#
+    )
+}
+
+#[test]
+fn a_sprite_watches_several_in_one_tick() {
+    // M2 design §18.1: its eye on the water, it watches two sprites drink at
+    // once, and moves half way towards each one's view in turn: to .125,
+    // then to .1875.
+    let on_water = looking_at("water", 0.5);
+    let drinker = drinker_looking_at_water("");
+    let mut world = room(
+        &[
+            (at(1, 0), &drinker),
+            (at(1, 2), &drinker),
+            (at(5, 1), &on_water),
+        ],
+        &[],
+    );
+    let (one, other) = (id_at(&world, at(1, 0)), id_at(&world, at(1, 2)));
+    let watching = id_at(&world, at(5, 1));
+    first_drink(&mut world, one);
+    assert_eq!(
+        value_of(&world, other, &water_for_thirst()),
+        0.25,
+        "both drank"
+    );
+    assert_eq!(value_of(&world, watching, &water_for_thirst()), 0.1875);
+}
+
+#[test]
+fn nothing_passes_through_two_sprites_in_one_tick() {
+    // M2 design §18.2: the first drinker learns fast, .5 from its drink. The
+    // second, its eye on the water, learns .25 from its own and takes on
+    // all of the first's, .5. The third, its eye on the second, takes on
+    // all the second knew before anyone took anything on: .25.
+    let fast = drinker_looking_at_water(r#"BrainParam(param: "worth_rate_good", value: 1.0),"#);
+    let second = drinker_looking_at_water(r#"BrainParam(param: "watch_rate", value: 1.0),"#);
+    let third = looking_on(1.0);
+    let mut world = room(
+        &[(at(1, 0), &fast), (at(1, 2), &second), (at(2, 2), &third)],
+        &[],
+    );
+    let ids = [at(1, 0), at(1, 2), at(2, 2)].map(|pos| id_at(&world, pos));
+    first_drink(&mut world, ids[0]);
+    let views = ids.map(|id| value_of(&world, id, &water_for_thirst()));
+    assert_eq!(views, [0.5, 0.5, 0.25]);
+}
+
+#[test]
+fn a_sprite_that_watches_the_cursor_correct_another_learns_to_fear_the_cursor() {
+    // M2 design §18.2: if it sees the Cursor shock her, to be wary of the
+    // Cursor. The one shocked sees the Cursor on it, and learns to fear it;
+    // the sprite watching it takes on half.
+    let (me, other) = (at(4, 1), at(7, 1));
+    let looking_on = looking_on(0.5);
+    let rests = r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),"#;
+    let mut world = room(&[(me, &looking_on), (other, rests)], &[]);
+    let (me, shocked) = (id_at(&world, me), id_at(&world, other));
+    world.submit(Command::MoveCursor { tile: other });
+    world.submit(Command::ShowCursor { visible: true });
+    world.step();
+    world.submit(Command::Correct {
+        sprite: shocked,
+        amplified: true,
+    });
+    world.step();
+    let fears_the_cursor = Learned::Fear {
+        thing: Thing::Cursor,
+    };
+    let theirs = value_of(&world, shocked, &fears_the_cursor);
+    assert!(theirs < 0.0, "{theirs}");
+    let mine = value_of(&world, me, &fears_the_cursor);
+    assert!(
+        (mine - theirs / 2.0).abs() < 1e-6,
+        "{mine} against {theirs}"
+    );
+}

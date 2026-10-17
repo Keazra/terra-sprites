@@ -2164,6 +2164,60 @@ fn the_brain_tab_lists_the_places_the_sprite_remembers() {
 }
 
 #[test]
+fn the_brain_tab_lists_the_places_best_remembered_first_below_what_it_has_learned() {
+    // M2 design §7.5: it drinks at the water on its west, then eats from
+    // the bush on its east, and its places fade fast, so the water is
+    // remembered less well by the time it looks.
+    let pack = pack();
+    let map = Map::from_ascii(&["~........."; 5], &pack).expect("valid drawing");
+    let genome = r#"(format: 1, genes: [
+        InitialConcentration(chem: "thirst", value: 1.0),
+        Emitter(locus: Locus("drank"), mode: Level, gain: -0.5, chem: "thirst"),
+        InitialConcentration(chem: "hunger", value: 1.0),
+        Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "hunger"),
+        BrainParam(param: "place_fade", value: 0.01),
+    ])"#;
+    let genome = terra_sim::Genome::from_ron(genome, &pack).expect("a valid genome");
+    let (start, water, bush) = (Pos { x: 1, y: 3 }, Pos { x: 0, y: 3 }, Pos { x: 4, y: 3 });
+    let sprites = [(start, Some(genome))];
+    let scripted = [
+        (start, ScriptedAction::Drink { at: water }),
+        (start, ScriptedAction::Eat { at: bush }),
+        (start, ScriptedAction::Rest),
+    ];
+    let scenario = Scenario {
+        map,
+        objects: &[(bush, "berry_bush")],
+        sprites: &sprites,
+        scripted: &scripted,
+        newborns: &[],
+    };
+    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    world
+        .start_object(bush, "mature", &[("fruit", 6)])
+        .expect("the bush");
+    for _ in 0..20 {
+        world.step();
+    }
+    let mut app = app_for(&world, Theme::cp437(), 100, 40);
+    app.apply(Action::SelectNext, &world);
+    open(&mut app, &world, Tab::Brain);
+    let (_, text) = inspector(&app, &world);
+    let row = |starts: &str| {
+        let at = text.iter().position(|row| row.starts_with(starts));
+        at.unwrap_or_else(|| panic!("no {starts:?} in {text:?}"))
+    };
+    let places = row("PLACES");
+    assert!(row("WATER") < places, "{text:?}");
+    assert!(row("BERRY BUSHES") < places, "{text:?}");
+    assert_eq!(
+        (row("berry bush ·"), row("water ·")),
+        (places + 1, places + 2),
+        "{text:?}"
+    );
+}
+
+#[test]
 fn the_brain_tab_shows_what_the_sprite_thinks_of_a_category_once_it_counts() {
     // Design v19 §5.6, §6.1: a bite of a thornbush makes it −.8 bad, and a
     // bite of a berry bush with no fruit teaches nothing, but the sprite

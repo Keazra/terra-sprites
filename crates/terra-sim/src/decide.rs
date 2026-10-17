@@ -5,6 +5,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use rand_chacha::ChaCha8Rng;
+
 use crate::action::{Outcome, ScriptedAction, end, is_acting, penalty, set_off, start, trip};
 use crate::brain::{
     self, Aim, Looks, Seen, Situation, Snapshot, SpriteScoring, available, best_above,
@@ -14,10 +16,12 @@ use crate::courtship;
 use crate::data::DataPack;
 use crate::events::Event;
 use crate::family;
+use crate::learning::Subject;
 use crate::map::Pos;
 use crate::objects::EntityId;
 use crate::perception::{Ground, Occupied, Target};
 use crate::registry::{CategoryId, Verb};
+use crate::sprites::Sprite;
 use crate::world::WorldState;
 
 /// Something a category offers the sprite (design §3.6): a thing in sight
@@ -52,6 +56,20 @@ struct Candidate {
     /// The stable ID of its type: none for water or a sprite in a pack with
     /// no object type for them (design v19 §3.5.5).
     type_id: Option<u16>,
+}
+
+/// What step 5b weighed and chose (design §5.5).
+struct Decision {
+    /// What it weighed: a running action's target, or else the candidate.
+    weighed: Option<Candidate>,
+    /// Whether its running action, if any, goes on: attention stayed on its
+    /// target.
+    running: bool,
+    /// Whether attention moved off the running action's target.
+    moved: bool,
+    /// The verb it chose to start, if it chose one.
+    chosen: Option<Verb>,
+    snapshot: Snapshot,
 }
 
 /// What `pick` picks out of every offer in `offered`, once each: what's
@@ -375,12 +393,118 @@ pub(crate) fn decide(
         })
         .collect();
 
+    // 5b: the decision (design §5.5) for `sprite`, with its eye on
+    // `attended`, from 5a's `attention` and what each score was for. Its
+    // running action is weighed while attention stays on its target, and
+    // otherwise the attended category's candidate, with what the sprite it
+    // attends to shows (M2 design §10). Carrying on after finding no way to
+    // `no_way`, it decides nothing and weighs that no more (§7.4).
+    let tick = state.tick;
+    let decide_on = |sprite: &Sprite,
+                     attended: Option<CategoryId>,
+                     no_way: Option<Target>,
+                     attention: BTreeMap<CategoryId, f32>,
+                     scored: BTreeMap<CategoryId, Subject>,
+                     rng: &mut ChaCha8Rng| {
+        let brain = &sprite.brain;
+        let candidate = attended
+            .and_then(|c| candidates.get(&c))
+            .filter(|c| Some(c.target) != no_way);
+        // Attention moved off the action's target: it changed its mind. The
+        // action ends once the new one is sure to start, as a trip with no
+        // way there doesn't (M2 design §7.4).
+        let moved = no_way.is_none()
+            && aimed
+                .as_ref()
+                .is_some_and(|aimed| attended != Some(aimed.aim.category));
+        let running = running && !moved;
+        // What the decision weighs, and what a verb it chooses is aimed at: a
+        // running action's target, which a nearer one of its category doesn't
+        // replace, or else the candidate (design §5.3, #173).
+        let weighed = aimed.as_ref().filter(|_| running).or(candidate);
+        let aim = weighed.map(|c| c.aim);
+        let action = sprite.action.as_ref().filter(|_| running);
+        let aimed_target = action.and_then(|a| a.target);
+        let seen = aimed_target
+            .or(candidate.map(|c| c.target))
+            .and_then(Target::sprite)
+            .and_then(|other| looks.get(&other));
+        let mut inputs = brain.inputs(&sprite.body, aim, seen, data);
+        if !grown || aim.is_some_and(|aim| aim.not_grown) {
+            brain::without_drive(&mut inputs, data);
+        }
+        let activations = brain.activations(&inputs);
+        // The sprite the decision is about, as `aim` is: a running action's
+        // target, or else the candidate (design v18 §5.5).
+        let aimed_sprite = match aimed_target {
+            Some(target) => target.sprite(),
+            None => candidate_sprite,
+        };
+        let decision_scoring = SpriteScoring {
+            sprite: aimed_sprite,
+            quiet,
+        };
+        let scores = brain.scores_with(
+            &activations,
+            &inputs,
+            aim.map(|a| a.subject),
+            decision_scoring,
+            &general,
+            data,
+        );
+        // Verbs are offered on it only while there's a way to it: a running
+        // action's target out of reach, unless it's a remembered place,
+        // offers only what needs no target (design §5.5, #173).
+        let reachable = weighed.filter(|c| c.goal.is_some() || c.remembered);
+        let beside = reachable.is_some_and(|c| c.aim.adjacent);
+        let remembered = reachable.is_some_and(|c| c.remembered);
+        let adults = reachable
+            .and_then(|c| c.target.sprite())
+            .is_some_and(|other| partners.contains(&other));
+        let offered = available(Situation {
+            target: reachable.is_some(),
+            beside,
+            remembered,
+            adults,
+            grown,
+            courts: data.physiology().indices.courtship.is_some(),
+        });
+        let current = action.map(|a| a.verb);
+        let chosen = match current {
+            _ if no_way.is_some() => None,
+            Some(verb) => brain.switch(verb, &scores, &offered),
+            None => Some(brain.choose(&scores, &offered, exploration, rng)),
+        };
+        let verb = chosen.or(current);
+        let snapshot = Snapshot {
+            tick,
+            motive: verb.and_then(|verb| brain.motive(verb, &activations, data)),
+            inputs,
+            activations,
+            attention,
+            scored,
+            attended,
+            target: weighed.map(|c| c.target),
+            subject: aim.map(|a| a.subject),
+            scores,
+            verb,
+            sprite_seen: scoring.sprite,
+            scoring: decision_scoring,
+        };
+        Decision {
+            weighed: weighed.cloned(),
+            running,
+            moved,
+            chosen,
+            snapshot,
+        }
+    };
+
     let sprite = state.sprites.get_mut(id).expect("the same sprite");
     let rng = &mut state.rng;
-    let brain = &mut sprite.brain;
 
     // 5a: attention, from the State inputs alone.
-    let attention = brain.attention_scores_with(
+    let attention = sprite.brain.attention_scores_with(
         &state_only,
         &in_sight,
         curiosity_mod,
@@ -392,99 +516,16 @@ pub(crate) fn decide(
         .iter()
         .map(|(&c, seen)| (c, seen.subject))
         .collect();
-    let attended = brain.attend(&attention, running, exploration, rng);
-    let candidate = attended.and_then(|c| candidates.get(&c));
-    // Attention moved off the action's target: it changed its mind. The
-    // action ends once the new one is sure to start, as a trip with no way
-    // there doesn't (M2 design §7.4).
-    let moved = aimed
-        .as_ref()
-        .is_some_and(|aimed| attended != Some(aimed.aim.category));
-    let running = running && !moved;
-    // What the decision weighs, and what a verb it chooses is aimed at: a
-    // running action's target, which a nearer one of its category doesn't
-    // replace, or else the candidate (design §5.3, #173).
-    let weighed = aimed.as_ref().filter(|_| running).or(candidate);
-    let aim = weighed.map(|c| c.aim);
-
-    // 5b: the decision, with what the sprite it attends to shows (M2
-    // design §10).
-    let aimed_target = sprite
-        .action
-        .as_ref()
-        .filter(|_| running)
-        .and_then(|a| a.target);
-    let seen = aimed_target
-        .or(candidate.map(|c| c.target))
-        .and_then(Target::sprite)
-        .and_then(|other| looks.get(&other));
-    let mut inputs = brain.inputs(&sprite.body, aim, seen, data);
-    if !grown || aim.is_some_and(|aim| aim.not_grown) {
-        brain::without_drive(&mut inputs, data);
-    }
-    let activations = brain.activations(&inputs);
-    // The sprite the decision is about, as `aim` is: a running action's
-    // target, or else the candidate (design v18 §5.5).
-    let aimed_sprite = match aimed_target {
-        Some(target) => target.sprite(),
-        None => candidate_sprite,
-    };
-    let decision_scoring = SpriteScoring {
-        sprite: aimed_sprite,
-        quiet,
-    };
-    let scores = brain.scores_with(
-        &activations,
-        &inputs,
-        aim.map(|a| a.subject),
-        decision_scoring,
-        &general,
-        data,
-    );
-    // Verbs are offered on it only while there's a way to it: a running
-    // action's target out of reach, unless it's a remembered place, offers
-    // only what needs no target (design §5.5, #173).
-    let reachable = weighed.filter(|c| c.goal.is_some() || c.remembered);
-    let beside = reachable.is_some_and(|c| c.aim.adjacent);
-    let remembered = reachable.is_some_and(|c| c.remembered);
-    let adults = reachable
-        .and_then(|c| c.target.sprite())
-        .is_some_and(|other| partners.contains(&other));
-    let offered = available(Situation {
-        target: reachable.is_some(),
-        beside,
-        remembered,
-        adults,
-        grown,
-        courts: data.physiology().indices.courtship.is_some(),
-    });
-    let current = sprite.action.as_ref().filter(|_| running).map(|a| a.verb);
-    let chosen = match current {
-        Some(verb) => brain.switch(verb, &scores, &offered),
-        None => Some(brain.choose(&scores, &offered, exploration, rng)),
-    };
-    let target = weighed.map(|c| c.target);
-    let verb = chosen.or(current);
-    let motive = verb.and_then(|verb| brain.motive(verb, &activations, data));
-    let snapshot = Snapshot {
-        tick: state.tick,
-        inputs,
-        activations,
-        attention,
-        scored,
-        attended,
-        target,
-        subject: aim.map(|a| a.subject),
-        scores,
-        verb,
-        motive,
-        sprite_seen: scoring.sprite,
-        scoring: decision_scoring,
-    };
-    let Some(verb) = chosen else {
-        brain.snapshot = Some(snapshot);
+    // Where its eye was, which a trip with no way there leaves it on (M2
+    // design §7.4).
+    let before = sprite.brain.attended;
+    let attended = sprite.brain.attend(&attention, running, exploration, rng);
+    let decision = decide_on(sprite, attended, None, attention, scored, rng);
+    let Some(verb) = decision.chosen else {
+        sprite.brain.snapshot = Some(decision.snapshot);
         return;
     };
+    let weighed = decision.weighed.as_ref();
     let (destination, target) = match verb {
         Verb::Wander => {
             let flood = sprite.flood.as_ref().expect("step 5 made the flood");
@@ -503,9 +544,9 @@ pub(crate) fn decide(
     };
     // Setting off for a remembered place, a call or its egg, it finds the
     // way there, which it keeps to; with none, it forgets the place, the
-    // call or where it saw the egg, and keeps to what it was doing, deciding
-    // nothing this tick, and chooses again at its next step 5 (M2 design
-    // §7.4, §15.1, §15.6).
+    // call or where it saw the egg, and keeps to what it was doing, its eye
+    // where it was, deciding nothing this tick, and chooses again at its
+    // next step 5 (M2 design §7.4, §15.1, §15.6).
     let seek = weighed.and_then(|c| c.seek);
     let way = match (target, destination) {
         (Some((target, _)), None) if verb.heads_for_goal() => {
@@ -524,6 +565,18 @@ pub(crate) fn decide(
                     Some(_) => sprite.forget_sought(target),
                     None => sprite.brain.experience.forget_place(target),
                 }
+                sprite.brain.attended = before;
+                // Carrying on, its latest step 5 is this tick's, with its eye
+                // on what it's doing, which it watches (§18.1).
+                if running {
+                    let Snapshot {
+                        attention, scored, ..
+                    } = decision.snapshot;
+                    let rng = &mut state.rng;
+                    let carried_on =
+                        decide_on(sprite, before, Some(target), attention, scored, rng);
+                    sprite.brain.snapshot = Some(carried_on.snapshot);
+                }
                 return;
             }
             way
@@ -531,8 +584,8 @@ pub(crate) fn decide(
         _ => None,
     };
     let sprite = state.sprites.get_mut(id).expect("the same sprite");
-    sprite.brain.snapshot = Some(snapshot);
-    if running || moved {
+    sprite.brain.snapshot = Some(decision.snapshot);
+    if decision.running || decision.moved {
         let action = sprite.action.as_mut().expect("the running action");
         end(action, id, Outcome::Interrupted, state.tick, events);
     }

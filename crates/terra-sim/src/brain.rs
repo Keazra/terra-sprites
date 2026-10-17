@@ -4008,6 +4008,97 @@ mod tests {
         assert!(!about(&learner, types::BERRY_BUSH).touched);
     }
 
+    /// A ball's player whose ball is worth .8 for each need, .6 good, and
+    /// playing with one a habit of .9, that chose to play for its thirst;
+    /// and a sprite that knew nothing of balls having watched it play with
+    /// one, taking on half of what it showed.
+    fn watched_playing() -> Brain {
+        let data = builtin();
+        let play = Topic::Tried {
+            subject: types::BALL,
+            verb: Verb::Play,
+            sprite: None,
+        };
+        let mut player = unfading(&[]);
+        let known = teach(&mut player, types::BALL);
+        known.worth.fill(0.8);
+        known.good = 0.6;
+        known.habits[column(Verb::Play)] = 0.9;
+        chose(&mut player, Verb::Play, types::BALL, Some(1));
+        let mut learner = unfading(&[]);
+        learner.watched(&[player.shown(play, &data)], 0.5, &data);
+        learner
+    }
+
+    #[test]
+    fn having_taken_on_a_thing_s_worth_by_watching_a_sprite_knows_its_object_type() {
+        // M2 design §18.2: as if it had touched one, so its own view of
+        // balls counts rather than the toys' summary.
+        let learner = watched_playing();
+        let ball = about(&learner, types::BALL);
+        assert!(close(ball.good, 0.3), "{}", ball.good);
+        assert!(ball.touched);
+    }
+
+    #[test]
+    fn a_habit_taken_on_by_watching_is_kept_as_a_taught_habit() {
+        // M2 design §18.2 (Q3): apart from what it learns itself, fading as
+        // slowly as a habit the Cursor teaches (#187).
+        let learner = watched_playing();
+        let ball = about(&learner, types::BALL);
+        let play = column(Verb::Play);
+        assert!(close(ball.taught_habits[play], 0.45), "{ball:?}");
+        assert_eq!(ball.habits[play], 0.0);
+    }
+
+    #[test]
+    fn of_a_sprite_or_the_cursor_only_fear_passes_on_by_watching() {
+        // M2 design §18.2 (Q2, Q4): whom to like a sprite finds out for
+        // itself. The one it watches likes the sprite it plays with, and the
+        // Cursor it goes to, and fears them both.
+        let data = builtin();
+        let needs = data.need_places().len();
+        let (other, cursor) = (EntityId(9), Subject::Category(data.cursor_category()));
+        let mut watched = unfading(&[]);
+        let knows = |known: &mut SpriteMemory| {
+            known.worth.fill(0.8);
+            known.good = 0.6;
+            known.fear = -0.6;
+        };
+        knows(watched.experience.remember(other, needs));
+        knows(watched.experience.remember_the_cursor(needs));
+        let tries = [
+            (types::SPRITE, Verb::Play, Some(other)),
+            (cursor, Verb::Approach, None),
+        ];
+        for (subject, verb, sprite) in tries {
+            let topic = Topic::Tried {
+                subject,
+                verb,
+                sprite,
+            };
+            chose(&mut watched, verb, subject, Some(1));
+            let mut learner = unfading(&[]);
+            learner.watched(&[watched.shown(topic, &data)], 0.5, &data);
+            let experience = &learner.experience;
+            let known = match topic {
+                Topic::Tried {
+                    sprite: Some(_), ..
+                } => experience.individuals.get(&other),
+                _ => experience.cursor.as_ref(),
+            };
+            let known = known.expect("it remembers whom it fears");
+            assert!(close(known.fear, -0.3), "{topic:?}: {known:?}");
+            assert!(
+                known.worth.iter().all(|&w| w == 0.0),
+                "{topic:?}: {known:?}"
+            );
+            assert_eq!(known.good, 0.0, "{topic:?}");
+            let kind = about(&learner, subject);
+            assert!(kind.worth.iter().all(|&w| w == 0.0) && kind.good == 0.0);
+        }
+    }
+
     #[test]
     fn a_try_shows_a_learner_only_a_lesson_it_could_take_on_and_hasn_t_learned() {
         // M2 design §18.1: a value the one trying shows (§18.2), past

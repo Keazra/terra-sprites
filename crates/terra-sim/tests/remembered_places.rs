@@ -313,6 +313,88 @@ fn a_trip_with_no_way_round_a_sprite_ends_blocked_and_the_place_is_kept() {
     assert_eq!(places(&world).len(), 1, "it still remembers the water");
 }
 
+/// `ROOM`, 11 rows high, walled across at column 20 but for gaps on rows 2
+/// and 10. East of the wall, a corridor runs along row 2, and the only way
+/// from it to the gap on row 10 winds back and forth across the east side,
+/// about 80 tiles.
+fn winding() -> Vec<String> {
+    let tile = |x: usize, y: usize| match (x, y) {
+        (0, _) => '~',
+        (1..=19, _) | (20, 2 | 10) => '.',
+        (20, _) | (_, 0 | 1) => '#',
+        (_, 2 | 4 | 6 | 8 | 10) | (39, 3 | 7) | (21, 5 | 9) => '.',
+        _ => '#',
+    };
+    (0..11)
+        .map(|y| (0..ROOM[0].len()).map(|x| tile(x, y)).collect())
+        .collect()
+}
+
+#[test]
+fn a_trip_has_the_time_it_had_when_it_set_off_however_it_finds_the_way_again() {
+    // M2 design §7.4: held up at the gap, it finds the long way round, but
+    // still gives up at the timeout (60 ticks) plus the walk it set off on.
+    let data = builtin();
+    let thirsty = genome(
+        10.0,
+        r#"Emitter(locus: Locus("always"), mode: Level, gain: 0.004, chem: "thirst"),
+           Emitter(locus: Locus("drank"), mode: Level, gain: -0.5, chem: "thirst"),
+           Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
+           Instinct(inputs: [("always", false)], verb: Rest, weight: 0.3),
+           BrainParam(param: "tau_base", value: 0.05),
+           BrainParam(param: "salience_gain", value: 0.0),
+           BrainParam(param: "curiosity", value: 0.0),
+           BrainParam(param: "vigilance", value: 0.0),"#,
+        &data,
+    );
+    let resting = resting(&data);
+    let mut script = vec![ScriptedAction::Rest; 10];
+    script.push(ScriptedAction::Drink { at: at(0, 2) });
+    script.extend(along(1, 36));
+    let rows = winding();
+    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let mut world = world_in(data, &rows, &[], at(1, 2), thirsty, &script);
+    assert_eq!(first_drink(&mut world, 200), Some(at(1, 2)));
+    let first = world.sprites().next().expect("the sprite").id();
+    let mut set_off = None;
+    for _ in 0..1_000 {
+        let (tick, here) = (world.tick(), world.sprites().next().expect("it").pos());
+        world.step();
+        let sprite = world.sprite(first).expect("the sprite");
+        if sprite.action().is_some_and(|a| a.remembered) {
+            set_off = Some((tick, here));
+            break;
+        }
+    }
+    let (started, from) = set_off.expect("it set off for the water");
+    assert!(from.y == 2 && from.x > 22, "it set off from {from:?}");
+    world.submit(Command::SpawnSprite {
+        tile: at(20, 2),
+        genome: Some(resting),
+    });
+    let mut ended = None;
+    for _ in 0..300 {
+        let tick = world.tick();
+        for event in world.step() {
+            match event.kind {
+                EventKind::CommandRejected { reason, .. } => panic!("{reason:?}"),
+                EventKind::ActionEnded { id, outcome, .. } if id == first => {
+                    ended = Some((outcome, tick));
+                }
+                _ => {}
+            }
+        }
+        if ended.is_some() {
+            break;
+        }
+    }
+    let here = world.sprite(first).expect("the sprite").pos();
+    assert!(here.y > 2, "it went the long way round, to {here:?}");
+    // Along the corridor, a tile a tick, to beside the water at (1, 2).
+    let walk = u64::from(from.x - 1);
+    assert_eq!(ended, Some((Outcome::TimedOut, started + 60 + walk)));
+}
+
 #[test]
 fn a_sprite_that_never_found_the_water_never_goes_to_it_from_out_of_sight() {
     // It may wander within sight of the water, and drink then.
