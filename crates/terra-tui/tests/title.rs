@@ -202,6 +202,27 @@ fn the_world_holds_still_until_the_light_has_spread_then_runs_at_4x() {
 }
 
 #[test]
+fn after_a_long_frame_the_world_runs_at_most_5_ticks_and_drops_the_rest() {
+    // M2 design §8.1: at most 5 ticks a frame.
+    let mut title = title();
+    title.animate(Duration::from_secs(4));
+    assert_eq!(
+        title.world().tick(),
+        0,
+        "the light has just filled the screen"
+    );
+    // Three seconds at 4× is 15 ticks.
+    title.animate(Duration::from_secs(3));
+    assert_eq!(title.world().tick(), 5);
+    title.animate(Duration::from_millis(200));
+    assert_eq!(
+        title.world().tick(),
+        6,
+        "what the long frame owed was dropped, not caught up"
+    );
+}
+
+#[test]
 fn a_skipped_scene_s_world_runs_from_the_skip() {
     let mut title = title();
     title.apply(Action::Enter);
@@ -239,6 +260,23 @@ fn the_arrows_move_through_the_menu_and_enter_picks() {
     // Past the end, it stays on the last.
     title.apply(down);
     assert_eq!(title.apply(Action::Enter), TitleFlow::Quit);
+}
+
+#[test]
+fn the_wheel_moves_through_the_menu() {
+    // M2 design §8.2: picked as the Place menu's are, the wheel too.
+    let mut title = after_the_scene();
+    let wheel = |notches| Action::Wheel {
+        at: Position::new(50, 15),
+        notches,
+    };
+    // New world, Load, Help, Quit: past the end, it stays on the last.
+    for _ in 0..4 {
+        title.apply(wheel(1));
+    }
+    title.apply(wheel(-1));
+    assert_eq!(title.apply(Action::Enter), TitleFlow::Stay);
+    assert!(text(&render(&title)).contains("EMOTES"), "Help opens");
 }
 
 #[test]
@@ -459,6 +497,41 @@ fn holding_the_question_mark_explains_the_mode_picked() {
     );
     assert!(shown.contains("small"), "{shown}");
     assert!(shown.contains("12345"), "the seed is as it was:\n{shown}");
+}
+
+/// The New world box's top-left and bottom-right corners on `screen`.
+fn new_world_box(screen: &Buffer) -> (Position, Position) {
+    let top_left = find(screen, "╔═ New world").expect("the box shows");
+    let shown = text(screen);
+    let rows: Vec<&str> = shown.lines().collect();
+    let bottom = (usize::from(top_left.y)..rows.len())
+        .find(|&y| rows[y].chars().nth(usize::from(top_left.x)) == Some('╚'))
+        .expect("the box's bottom");
+    let right = rows[bottom]
+        .chars()
+        .enumerate()
+        .skip(usize::from(top_left.x))
+        .find(|&(_, c)| c == '╝')
+        .map(|(x, _)| x)
+        .expect("its bottom-right corner");
+    (top_left, Position::new(right as u16, bottom as u16))
+}
+
+#[test]
+fn the_new_world_box_stays_put_while_the_question_mark_is_held() {
+    // M2 design §16.1: the box is tall enough for the explanation, so it
+    // doesn't jump, even with fewer presets than the explanation has lines.
+    let mut title = new_world(vec![]);
+    let before = new_world_box(&render(&title));
+    title.apply(Action::Type('?'));
+    let held = render(&title);
+    assert_eq!(new_world_box(&held), before);
+    let shown = text(&held);
+    for line in STORY_EXPLAINED {
+        assert!(shown.contains(line), "{line:?} in\n{shown}");
+    }
+    title.apply(Action::HelpReleased);
+    assert_eq!(new_world_box(&render(&title)), before);
 }
 
 #[test]
