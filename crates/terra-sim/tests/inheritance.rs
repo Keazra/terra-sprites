@@ -6,10 +6,13 @@
 //! saved and replayed.
 
 mod common;
-use common::{ALONE, FEMALE, LONE, Laying, at, builtin, builtin_changing, family_in, hatch, laid};
+use common::{
+    AGES_AT_ONCE, ALONE, FEMALE, LONE, Laying, OLD, at, builtin, builtin_changing, family_in,
+    hatch, laid,
+};
 
 use terra_sim::{
-    Command, CopyChangeView, DataPack, EventKind, GeneView, Playback, World, WorldConfig,
+    Command, CopyChangeView, DataPack, EventKind, GeneView, LifeStage, Playback, World, WorldConfig,
 };
 
 /// The change to the built-in physiology that copies every gene value
@@ -136,6 +139,33 @@ fn a_gene_flawed_in_both_copies_is_born_broken_at_half_health_and_brings_old_age
     );
     assert!(mother.flaws().iter().all(|&flawed| flawed == 0));
     assert_eq!(mother.grows_old_at(), mother.traits().grows_old);
+}
+
+#[test]
+fn what_age_did_to_a_mother_s_genes_isn_t_passed_on() {
+    // M2 design §12.2: her egg's genes are whole but for any broken, however
+    // her own have weakened with age (§9.4).
+    let female = format!("{ALONE}{FEMALE}{OLD}");
+    let [old, up] = AGES_AT_ONCE;
+    let data = builtin_changing("physiology.ron", &[old, up, LONE]);
+    let mut world = family_in(data, &[(at(2, 1), &female)], &[], 1);
+    let Laying { egg, by, .. } = laid(&mut world, 50).expect("she laid an egg");
+    hatch(&mut world, egg);
+    let mother = world.sprite(by).expect("the mother");
+    assert_eq!(mother.life_stage(), LifeStage::Old);
+    let weakened = mother.gene_health().iter().filter(|&&health| health < 1.0);
+    assert!(weakened.count() > 0, "her genes haven't weakened");
+    let egg = world.sprite(egg).expect("the hatchling");
+    let (flaws, health) = (egg.flaws(), egg.gene_health());
+    assert_eq!(health.len(), egg.genes().len());
+    for (index, &health) in health.iter().enumerate() {
+        let born_with = if flaws.get(index) == Some(&2) {
+            0.5
+        } else {
+            1.0
+        };
+        assert_eq!(health, born_with, "gene {index}");
+    }
 }
 
 #[test]
