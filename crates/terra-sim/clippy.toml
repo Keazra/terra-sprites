@@ -58,7 +58,8 @@ disallowed-methods = [
     { path = "f64::acosh", reason = "use libm::acosh (design §2.6)" },
     { path = "f64::atanh", reason = "use libm::atanh (design §2.6)" },
     # The simulation never touches the filesystem: callers pass data in (design §2.1).
-    # Every function in `std::fs`, and the ways in through `File`, `OpenOptions` and `Path`.
+    # The functions in `std::fs`, and the ways in through `File`, `OpenOptions`,
+    # `DirBuilder` and `Path`. Any that std adds later must be added here.
     { path = "std::fs::canonicalize", reason = "the sim crate has no filesystem access (design §2.1)" },
     { path = "std::fs::copy", reason = "the sim crate has no filesystem access (design §2.1)" },
     { path = "std::fs::create_dir", reason = "the sim crate has no filesystem access (design §2.1)" },
@@ -75,6 +76,7 @@ disallowed-methods = [
     { path = "std::fs::remove_file", reason = "the sim crate has no filesystem access (design §2.1)" },
     { path = "std::fs::rename", reason = "the sim crate has no filesystem access (design §2.1)" },
     { path = "std::fs::set_permissions", reason = "the sim crate has no filesystem access (design §2.1)" },
+    { path = "std::fs::soft_link", reason = "the sim crate has no filesystem access (design §2.1)" },
     { path = "std::fs::symlink_metadata", reason = "the sim crate has no filesystem access (design §2.1)" },
     { path = "std::fs::write", reason = "the sim crate has no filesystem access (design §2.1)" },
     { path = "std::fs::File::open", reason = "the sim crate has no filesystem access (design §2.1)" },
@@ -84,6 +86,7 @@ disallowed-methods = [
     { path = "std::fs::File::create_new", reason = "the sim crate has no filesystem access (design §2.1)" },
     { path = "std::fs::File::options", reason = "the sim crate has no filesystem access (design §2.1)" },
     { path = "std::fs::OpenOptions::open", reason = "the sim crate has no filesystem access (design §2.1)" },
+    { path = "std::fs::DirBuilder::create", reason = "the sim crate has no filesystem access (design §2.1)" },
     { path = "std::path::Path::canonicalize", reason = "the sim crate has no filesystem access (design §2.1)" },
     { path = "std::path::Path::exists", reason = "the sim crate has no filesystem access (design §2.1)" },
     { path = "std::path::Path::is_dir", reason = "the sim crate has no filesystem access (design §2.1)" },

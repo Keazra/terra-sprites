@@ -244,7 +244,11 @@ impl Playback {
         }
         let fresh = matches!(read.start, Start::Fresh { .. });
         let world = match read.start {
-            Start::Fresh { seed, config, mode } => {
+            Start::Fresh {
+                seed,
+                config: preset,
+                mode,
+            } => {
                 let sources: Vec<(&str, &str)> = read
                     .sources
                     .iter()
@@ -253,7 +257,7 @@ impl Playback {
                 let data = DataPack::from_sources(&sources).map_err(ReplayError::Pack)?;
                 // The world is generated again from the preset, so a damaged
                 // one is refused rather than generated from.
-                let config = config.config(&data).map_err(ReplayError::Damaged)?;
+                let config = preset.config(&data).map_err(ReplayError::Damaged)?;
                 World::new_in(config, data, seed, mode)
             }
             Start::Snapshot(save) => World::load(&save).map_err(ReplayError::Start)?,

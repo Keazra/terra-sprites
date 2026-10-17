@@ -30,9 +30,11 @@
 # talk the reviewer into sending out. A stranger's comment could try the
 # same, on the owner's PR or on an issue it names, so a PR goes to the
 # sandbox only while everything the reviewer reads there was written by the
-# owner or a review bot, and while GitHub can say so: when it can't, the PR
-# isn't reviewed there. Without -Sandbox, Gemini only reads, so any PR can
-# be reviewed that way.
+# owner or a review bot, and while GitHub can say who wrote it. Without
+# -Sandbox, Gemini only reads, so any PR can be reviewed that way. Either
+# way, a PR whose comments, reviews or conversation GitHub couldn't hand over
+# isn't reviewed: the reviewer would miss what was said, and in the sandbox,
+# who said it.
 #
 # With no PR number, the open PRs are listed with where each stands with
 # Gemini, to tick with the arrow keys and Space. The ones never reviewed, or
@@ -57,6 +59,7 @@ $Grades = @{ 1 = "Critical"; 2 = "Medium"; 3 = "Minor" }
 $Confidences = "confirmed", "likely", "unconfirmed"
 $MostMinor = 5
 $SandboxName = "FTA2-Review"
+$NotSandboxed = "isn't reviewed in the sandbox (see this script's opening comment). Review it without -Sandbox, where Gemini only reads."
 $Owner = $GitHubRepo.Split("/")[0]
 # Who may have written what the reviewer reads in the sandbox: the owner, and
 # the review bots, whose words come from the owner's own PR.
@@ -385,12 +388,11 @@ if ($LASTEXITCODE -ne 0) { Fail "Couldn't find PR #$Pr on GitHub." }
 $info = $prJson | ConvertFrom-Json
 if ($info.state -ne "OPEN") { Fail "PR #$Pr is $($info.state.ToLower()), so there's nothing to review." }
 if ($Sandbox -and $info.author.login -ne $Owner) {
-    Fail "PR #$Pr is by $($info.author.login), not $Owner, so it isn't reviewed in the sandbox (see this script's opening comment). Review it without -Sandbox, where Gemini only reads."
+    Fail "PR #$Pr is by $($info.author.login), not $Owner, so it $NotSandboxed"
 }
 # Whoever can push to the PR's branch decides what the reviewer reads.
 if ($Sandbox -and $info.headRepositoryOwner.login -ne $Owner) {
-    Fail ("PR #$Pr's branch is in $($info.headRepositoryOwner.login)'s copy of the repository, not $Owner's, so it isn't reviewed " +
-        "in the sandbox (see this script's opening comment). Review it without -Sandbox, where Gemini only reads.")
+    Fail "PR #$Pr's branch is in $($info.headRepositoryOwner.login)'s copy of the repository, not $Owner's, so it $NotSandboxed"
 }
 $head = $info.headRefOid
 $short = $head.Substring(0, 7)
@@ -420,7 +422,8 @@ try {
     # gh pr checks fails when a check fails or is still running: its output is the point.
     $checks = & gh pr checks $Pr --repo $GitHubRepo 2>&1
     Write-Text (Join-Path $inputs "checks.txt") (Join-Lines $checks)
-    # Each of these is checked: in the sandbox, who wrote what's read there
+    # Each of these is checked (the opening comment): a review without them
+    # misses what was said, and in the sandbox, who wrote what's read there
     # is taken from them, so one cut short would let a stranger's words
     # through unseen.
     $comments = @(& gh api "repos/$GitHubRepo/pulls/$Pr/comments" --paginate `
@@ -458,8 +461,7 @@ try {
         }
         $others = @($writers | Where-Object { $SandboxWriters -notcontains $_ } | Select-Object -Unique)
         if ($others.Count -gt 0) {
-            Fail ("PR #$Pr, or an issue it names, has words by $($others -join ', '), so it isn't reviewed in the sandbox " +
-                "(see this script's opening comment). Review it without -Sandbox, where Gemini only reads.")
+            Fail "PR #$Pr, or an issue it names, has words by $($others -join ', '), so it $NotSandboxed"
         }
     }
 

@@ -12,7 +12,7 @@ use crate::ageing::LifeStage;
 use crate::breeding::Sex;
 use crate::events::DeathCause;
 use crate::objects::EntityId;
-use crate::sprites::{Sprite, Sprites};
+use crate::sprites::{Sprite, Sprites, ticks_since};
 
 /// How many dead sprites the world remembers (M2 design §17.1): past it, the
 /// longest dead are forgotten first, but never one the player named.
@@ -97,7 +97,7 @@ impl Record {
 
     /// Its age when it died, in ticks.
     pub(crate) fn age(&self) -> u64 {
-        u64::try_from(i128::from(self.died) - i128::from(self.born)).expect("born before it died")
+        ticks_since(self.born, self.died).expect("born before it died")
     }
 }
 
@@ -157,8 +157,10 @@ impl RecordOfTheDead {
             ));
         }
         for (&id, record) in &self.dead {
-            if i128::from(record.born) > i128::from(record.died) {
-                return Err(format!("{id:?} is remembered as dying before it was born"));
+            if ticks_since(record.born, record.died).is_none() {
+                return Err(format!(
+                    "{id:?} is remembered as dying before it was born, or longer after than a tick can count"
+                ));
             }
             if let Some(parent) = record.parents.iter().find(|parent| **parent >= id) {
                 return Err(format!(
@@ -269,9 +271,10 @@ mod tests {
     }
 
     #[test]
-    fn a_record_far_from_any_world_s_ticks_reads_without_overflowing() {
+    fn a_record_far_from_any_world_s_ticks_is_read_or_refused_never_wrapped() {
         // A damaged save could hold any ticks: an age, and the check that
-        // it died after it was born, count them all as they are.
+        // it died after it was born, count them as they are, and refuse a
+        // life longer than a tick can count, whose age couldn't be told.
         let sprites = no_sprites();
         let mut ancient = record(10, None);
         ancient.born = i64::MIN;
@@ -283,6 +286,13 @@ mod tests {
         dead.remember(EntityId(1), ancient);
         dead.remember(EntityId(2), last);
         assert_eq!(dead.check(&sprites), Ok(()));
+        let mut endless = record(u64::MAX, None);
+        endless.born = -1;
+        dead.remember(EntityId(3), endless);
+        assert!(
+            dead.check(&sprites)
+                .is_err_and(|why| why.contains("longer after than a tick can count"))
+        );
     }
 
     #[test]

@@ -130,10 +130,17 @@ pub(crate) struct Sprite {
     pub(crate) missed: Vec<Target>,
 }
 
+/// How many ticks `tick` is after `born`, a birth tick, or `None` if it's
+/// before it, or further after than a tick can count. Counted wide, so no
+/// pair of ticks a save holds can wrap or overflow (design §2.8).
+pub(crate) fn ticks_since(born: i64, tick: u64) -> Option<u64> {
+    u64::try_from(i128::from(tick) - i128::from(born)).ok()
+}
+
 impl Sprite {
     /// The sprite's age on the tick `tick`.
     pub(crate) fn age(&self, tick: u64) -> u64 {
-        u64::try_from(i128::from(tick) - i128::from(self.born)).expect("a sprite is born by now")
+        ticks_since(self.born, tick).expect("a sprite is born by now")
     }
 
     /// Its life stage (M2 design §9.1).
@@ -643,16 +650,20 @@ impl Sprites {
     /// step, and its levels before the tick, taken as its levels now; its
     /// remembered places are brought within the pack's limits. Says
     /// what's wrong if one is off the map or shares a tile, was born after
-    /// the tick `now`, its genome, body or brain doesn't fit `data`, or its
-    /// flood doesn't fit `map`.
+    /// the tick `now` or longer before it than a tick can count, its
+    /// genome, body or brain doesn't fit `data`, or its flood doesn't fit
+    /// `map`.
     pub(crate) fn rebuild(&mut self, map: &Map, data: &DataPack, now: u64) -> Result<(), String> {
         self.on_tile = Occupancy::new(map);
         for (&id, sprite) in &mut self.by_id {
             if !map.contains(sprite.pos) || self.on_tile.at(sprite.pos).is_some() {
                 return Err(format!("sprite {} has no tile of its own", id.0));
             }
-            if i128::from(sprite.born) > i128::from(now) {
-                return Err(format!("sprite {} was born after the save", id.0));
+            if ticks_since(sprite.born, now).is_none() {
+                return Err(format!(
+                    "sprite {} was born after the save, or longer before it than a tick can count",
+                    id.0
+                ));
             }
             // The genome first: the brain is checked against it, once it
             // has any brain parameter added since it was saved.

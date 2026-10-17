@@ -272,6 +272,7 @@ impl<'de> Visitor<'de> for BytesVisitor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde::de::{DeserializeSeed, IntoDeserializer, value};
 
     /// Bytes as a save keeps them, for `read_bytes`.
     #[derive(Debug, Deserialize)]
@@ -286,10 +287,42 @@ mod tests {
         assert_eq!(kept.0, [3, 1, 4]);
     }
 
-    /// A list that claims to hold four billion bytes but holds two, as a
-    /// damaged save or replay might, is refused, without first making room
-    /// for all it claims: on a computer short of memory, that would stop
-    /// the game rather than say the file is damaged (design §2.8).
+    /// Two bytes that claim to be as many as a list can hold.
+    struct Claiming(std::vec::IntoIter<u8>);
+
+    impl<'de> SeqAccess<'de> for Claiming {
+        type Error = value::Error;
+
+        fn next_element_seed<T: DeserializeSeed<'de>>(
+            &mut self,
+            seed: T,
+        ) -> Result<Option<T::Value>, value::Error> {
+            self.0
+                .next()
+                .map(|byte| seed.deserialize(byte.into_deserializer()))
+                .transpose()
+        }
+
+        fn size_hint(&self) -> Option<usize> {
+            Some(usize::MAX)
+        }
+    }
+
+    /// A list of bytes makes room up front for no more than a largest
+    /// map's tiles, whatever it claims: making room for all a damaged save
+    /// or replay claims could stop the game for want of memory, rather than
+    /// say the file is damaged (design §2.8).
+    #[test]
+    fn a_list_of_bytes_makes_room_for_a_map_s_worth_at_most() {
+        let bytes = BytesVisitor
+            .visit_seq(Claiming(vec![1, 2].into_iter()))
+            .expect("two bytes");
+        assert_eq!(bytes, [1, 2]);
+        assert!(bytes.capacity() <= MOST_RESERVED);
+    }
+
+    /// A list that claims to hold four billion bytes but holds two is
+    /// refused where the file ends.
     #[test]
     fn a_list_of_bytes_claiming_more_than_it_holds_is_refused() {
         // MessagePack's `array 32` of u32::MAX items, then two of them.

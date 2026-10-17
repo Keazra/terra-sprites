@@ -302,7 +302,8 @@ If the report has a Broken section, put your best guess at its cause in suspecte
         if (-not $broken) { $broken = "The run broke, but its page has no Broken section: see $stem-report.md." }
         $posted = Send-Broken -Commit $commit -Measured $measured -Broken $broken -Suspected $suspected -DryRun:($DryRun -or $trial)
     }
-    if (-not $posted) {
+    # A dry run or a trial posts nothing, so only a real run of main can fail to.
+    if (-not $posted -and -not ($DryRun -or $trial)) {
         Write-Log "ERROR: the broken run isn't on GitHub, so main isn't counted as measured: the next run measures it again"
         return 1
     }
