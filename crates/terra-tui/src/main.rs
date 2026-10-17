@@ -249,6 +249,7 @@ fn run_title(
     let mut title = Title::new(world, theme.clone(), time_seed());
     if let Some(folder) = files::save_folder() {
         title.set_saves(saves::list(&folder), SystemTime::now());
+        title.set_save_folder(folder);
     }
     title.set_presets(start::presets(files::preset_folder().as_deref()));
     if let Some(folder) = files::data_folder() {

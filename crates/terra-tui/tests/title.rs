@@ -497,12 +497,69 @@ fn load_lists_every_save_newest_first_and_loads_the_one_picked() {
 }
 
 #[test]
-fn load_with_no_saves_says_so_and_esc_goes_back() {
+fn load_with_no_saves_says_where_it_looked_and_esc_goes_back() {
+    // As `Ctrl+O`'s list says it in a world (M2 design §8.2).
     let mut title = after_the_scene();
+    let folder = PathBuf::from("/home/someone/.local/share/terra-sprites/saves");
+    title.set_save_folder(folder.clone());
     title.apply(Action::Pick(2));
-    assert!(text(&render(&title)).contains("No saves yet"));
+    let shown = text(&render(&title));
+    let said = format!("No saves in {}", folder.display());
+    assert!(shown.contains(&said), "{said:?} in\n{shown}");
     title.apply(Action::Back);
     assert_eq!(title.apply(Action::Pick(4)), TitleFlow::Quit);
+
+    let mut title = after_the_scene();
+    title.apply(Action::Pick(2));
+    let shown = text(&render(&title));
+    assert!(shown.contains("No folder for saves"), "{shown}");
+}
+
+/// The title screen with Load open on three saves, and the saves.
+fn loading_three() -> (Title, Vec<SaveFile>) {
+    let (mut title, saves) = with_saves(&[
+        ("autosave-1", 2),
+        ("quicksave", 5),
+        ("before the flood", 26),
+    ]);
+    // Continue is 1, so Load is 3.
+    title.apply(Action::Pick(3));
+    (title, saves)
+}
+
+#[test]
+fn the_wheel_moves_through_load_as_it_does_through_ctrl_o_s_list() {
+    // M2 design §8.2: Load is the list `Ctrl+O` opens in a world.
+    let (mut title, saves) = loading_three();
+    let wheel = |notches| Action::Wheel {
+        at: Position::new(50, 15),
+        notches,
+    };
+    title.apply(wheel(1));
+    title.apply(wheel(1));
+    title.apply(wheel(1));
+    title.apply(wheel(-1));
+    assert_eq!(
+        title.apply(Action::Enter),
+        TitleFlow::Load(saves[1].clone())
+    );
+}
+
+#[test]
+fn a_click_on_a_save_in_load_loads_it_and_a_click_off_the_list_closes_it() {
+    let (mut title, saves) = loading_three();
+    let at = find(&render(&title), "before the flood").expect("listed");
+    assert_eq!(
+        title.apply(Action::left_click(at)),
+        TitleFlow::Load(saves[2].clone())
+    );
+    assert_eq!(
+        title.apply(Action::left_click(Position::new(0, 0))),
+        TitleFlow::Stay
+    );
+    let shown = text(&render(&title));
+    assert!(!shown.contains("before the flood"), "closed:\n{shown}");
+    assert!(shown.contains("1 Continue"), "back on the menu:\n{shown}");
 }
 
 #[test]

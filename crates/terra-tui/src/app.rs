@@ -3406,10 +3406,7 @@ impl App {
 
     /// What the load menu says with no saves to list.
     pub fn no_saves(&self) -> String {
-        match &self.save_folder {
-            Some(folder) => format!("No saves in {}", folder.display()),
-            None => "No folder for saves".into(),
-        }
+        saves::none_listed(self.save_folder.as_deref())
     }
 
     /// Loads `file`, first asking if the world has run since it was last
