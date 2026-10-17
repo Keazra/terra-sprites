@@ -2,6 +2,8 @@
 
 An ASCII artificial-life game for the terminal, inspired by *Creatures*.
 
+![The title screen's opening scene: a light finds a sleeping sprite in the dark, and a terrarium wakes around it](docs/clips/title.gif)
+
 Sprites have a genome, a simulated biochemistry and a brain that learns from experience. They live on a grid world of plants, water, toys and thorns. You watch, inspect, and intervene with a "hand of god": reward a sprite with a pet, correct it with a shock, or move things around, and watch individual sprites learn.
 
 **Status:** milestone 1 is done: every slice is built ([milestone](https://github.com/Keazra/terra-sprites/milestone/1)), and the owner signed it off after playing it through ([M1 acceptance](docs/acceptance/m1.md)). Milestone 2, *Generations*, is nearly done ([milestone](https://github.com/Keazra/terra-sprites/milestone/2)): sprites now hatch from eggs, grow up, court, breed and grow old, and the young are born with a mix of their parents' genes. Two slices are left: a harsher world, where most young die unless another sprite or the player guides them, and the sign-off. Milestone 3 is being planned.
@@ -9,6 +11,10 @@ Sprites have a genome, a simulated biochemistry and a brain that learns from exp
 Today it generates a terrarium from a seed, with plants that grow, fruit, spread and expire, and a first population of sprites. The sprites start out on instinct: a hungry sprite walks to a berry bush and eats, a thirsty one finds water and drinks, a bored one kicks a ball (which rolls, bounces, knocks other balls on and crushes berries in its way), a lonely one goes over to others and plays with them, and a content one wanders or rests. A hurt sprite backs away from what hurt it; one that's hit usually backs away from its attacker, though some sprites hit back, and a cornered one fights. A crowded sprite backs away from the crowd, and now and then hits a neighbour. They find their way around each other and pass head-on in narrow passages. Play, hits, hurts and deaths show in the event log, and a red `!` flashes over a hurt sprite.
 
 Sprites learn from what happens to them. Each one learns, by touch, what things are worth: berries are good when hungry, water when thirsty, and a thornbush it bit is bad, so it stops going near thornbushes. It learns habits, such as "eating balls doesn't work", and whether new things are worth investigating. It remembers particular sprites: one that played with it is good company, and one that hit it becomes frightening, so it backs away from that one without becoming shy of every sprite. What it learns about one thing doesn't spread to the rest of its kind until it knows a few of them: one thornbush doesn't make every bush bad. Lessons fade unless they're renewed, bad ones more slowly than good, and instinct is never erased, only outvoted. Each time a sprite learns something well enough, the event log says so ("Sprite #12 learned: thornbushes are bad").
+
+![Sprite #533 tries to eat a thornbush, gets hurt and backs away, and its Brain tab stops listing the thornbush among what it's paying attention to](docs/clips/thornbush.gif)
+
+Seed 7, ticks 897 to 926, with sprite #533's Brain tab open: it tries to eat a thornbush, gets hurt and learns that thornbushes are bad. It backs away in pain, and the thornbush drops out of what it's paying attention to.
 
 Sprites live whole lives: the world's first live 4 to 8 hours at 1×, and their descendants can evolve longer lives. Each one hatches from an egg as a young sprite, which walks slowly, learns fast and watches the grown-ups, its parents most: a young sprite that sees its mother drink learns that water is good for thirst. After about an hour it grows up. Every sprite hatches male, and a grown male who sees no females turns female. A grown sprite looks for a partner, calling for one it can't see and dancing for one it knows, and the pair lay an egg and stay near it, and near their young until those grow up. The young are born with a mix of their parents' genes: now and then a number is copied wrong, or a gene is doubled, lost or changed, and hidden flaws show only when both parents pass the same one on. After about five hours a sprite grows old. It slows, its genes weaken, and about an hour later it dies. The family tree shows any sprite's parents, grandparents and young, and the population graph the world's rise and fall over the whole run.
 
@@ -117,6 +123,13 @@ A world from seed 7, from tick 200 to tick 300 at 4×:
 
 ```powershell
 cargo run --release -p terra-tui --example render -- world --seed 7 --from 200 --to 300 -o seed-7.gif
+```
+
+The two clips at the top of this page are made the same way, the second at 1× with the Brain tab of the sprite it tracks:
+
+```powershell
+cargo run --release -p terra-tui --example render -- title -o docs/clips/title.gif
+cargo run --release -p terra-tui --example render -- world --seed 7 --from 897 --to 926 --track 533 --tab brain --speed 1x -o docs/clips/thornbush.gif
 ```
 
 The file's ending picks the format: `.gif`, `.svg` or `.mp4`. A GIF or an SVG needs nothing else; an MP4 needs [ffmpeg](https://ffmpeg.org/download.html) on the PATH, and the renderer says so if it isn't. The world runs to `--from` unseen, then is drawn frame by frame to `--to`, at `--speed` (`1x`, `4x`, or `max` for 100 ticks a second; past 4× needs `--lab`), each frame showing for `--frame` milliseconds (100 by default). An SVG for a README is best kept under 2 MB, and the renderer says when one isn't: a busy world at a high speed runs past it in a few seconds.
