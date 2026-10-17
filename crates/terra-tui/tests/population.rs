@@ -10,7 +10,7 @@ use ratatui::layout::{Position, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{DataPack, Genome, Map, Pos, Scenario, World};
-use terra_tui::app::{App, Screen};
+use terra_tui::app::{App, CursorMode, Screen};
 use terra_tui::input::{Action, Button};
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
 use terra_tui::theme::Theme;
@@ -609,6 +609,53 @@ fn time_runs_as_usual_while_the_graph_is_open() {
 }
 
 #[test]
+fn other_keys_do_nothing_while_the_graph_is_open() {
+    // M2 design §14.2: only the graph's own keys and those for time.
+    let mut world = field(2, 4);
+    run(&mut world, 250);
+    let mut app = app_on(&world);
+    let state = |app: &App| {
+        (
+            app.selection(),
+            app.tab(),
+            app.colour_mode(),
+            app.mode(),
+            app.tracking(),
+            app.detail(),
+            app.event_filter(),
+            app.shown_cursor(),
+        )
+    };
+    let before = state(&app);
+    app.apply(Action::Population, &world);
+    let keys = [
+        Action::SelectNext,
+        Action::SelectPrevious,
+        Action::NextTab,
+        Action::PreviousTab,
+        Action::CycleColours,
+        Action::Mode(CursorMode::Grab),
+        Action::Track,
+        Action::ToggleDetail,
+        Action::CycleEventFilter,
+        Action::Press {
+            button: Button::Left,
+            amplified: false,
+        },
+        Action::Rename,
+        Action::Help,
+        Action::SpriteList,
+        Action::FamilyTree,
+        Action::Enter,
+    ];
+    for key in keys {
+        app.apply(key, &world);
+        assert_eq!(app.screen(), Screen::Population, "{key:?}");
+        assert_eq!(state(&app), before, "{key:?}");
+    }
+}
+
+#[test]
 fn the_world_tab_starts_with_a_small_graph() {
     let mut world = field(2, 4);
     run(&mut world, 250);
@@ -697,4 +744,15 @@ fn a_column_narrower_than_the_time_between_counts_reads_the_count_it_shows() {
     let [first, _, since] = reading(&screen);
     assert!(first.starts_with("tick 200: "), "{first}");
     assert_eq!(since, "since tick 0: none laid, hatched or died");
+
+    // The first column shows the first count, and says so (§14.3).
+    app.apply(Action::Point(Position::new(FIRST_COLUMN, 9)), &world);
+    terminal
+        .draw(|frame| ui::render(frame, &app, &world))
+        .unwrap();
+    let screen = terminal.backend().buffer().clone();
+    assert_eq!(screen[(FIRST_COLUMN, AXIS)].symbol(), "▲");
+    let [first, _, since] = reading(&screen);
+    assert!(first.starts_with("tick 0: 1 sprite"), "{first}");
+    assert_eq!(since, "the first count");
 }
