@@ -40,7 +40,7 @@ jobs:
 
   # The cross-platform determinism check (design §2.6, §7.5): the same world
   # on every runner in the matrix, whose state hashes must all match. Its
-  # targets are exactly those the README promises.
+  # targets are exactly those the manual promises.
   determinism:
     name: determinism (${{ matrix.name }})
     strategy:
