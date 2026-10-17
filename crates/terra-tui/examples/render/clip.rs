@@ -96,8 +96,7 @@ pub fn title_clip(
     seconds: Option<Duration>,
     framing: &Framing,
 ) -> Clip {
-    let mut title = Title::new(world, theme, seed);
-    title.resize(framing.screen);
+    let mut title = Title::new(world, theme, seed, framing.screen);
     let mut terminal = terminal(framing.screen);
     let mut clip = Clip::default();
     let (mut shown, mut menu_shown) = (Duration::ZERO, Duration::ZERO);

@@ -9,25 +9,21 @@ use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
-use terra_sim::{Command, EntityId, Mode, Pos, World};
+use terra_sim::{Mode, Pos, World};
 
 use crate::app::{App, Draft, highlight_moved, shown};
 use crate::clock::Speed;
 use crate::input::Action;
 use crate::saves::{self, SaveFile};
 use crate::start::Preset;
-use crate::theme::{Emote, SemanticTile, Theme};
+use crate::theme::{Glyph, SemanticTile, Theme};
 use crate::ui;
 
 /// When the Cursor's light has arrived and starts to spread (M2 design
 /// §8.1).
 const LIGHT_ARRIVES: Duration = Duration::from_millis(1000);
-/// When the sprite under the light wakes, and the Cursor lets it go.
-const WAKES: Duration = Duration::from_millis(2500);
 /// When the light has filled the screen, and the title starts to fade in.
 const LIGHT_FILLS: Duration = Duration::from_millis(4000);
-/// How long the woken sprite shows it's pleased.
-const PLEASED_UNTIL: Duration = Duration::from_millis(4500);
 /// When the scene ends and the menu shows.
 const SCENE_ENDS: Duration = Duration::from_millis(5500);
 /// How often the world behind the menu ticks: 4×, 5 ticks a second.
@@ -36,6 +32,9 @@ const TICK_EVERY: Duration = Duration::from_millis(200);
 const MOST_TICKS_AT_ONCE: u32 = 5;
 /// The menu's box: as wide as the title lettering and a margin.
 const BOX_WIDTH: u16 = 56;
+/// The most choices the menu has: Continue's, when there's a save, and the
+/// four always there.
+const MOST_CHOICES: usize = 5;
 /// The most saves the list of saves shows at once; it scrolls for more.
 const LOAD_ROWS: usize = 12;
 /// The longest seed: `u64::MAX` has 20 digits.
@@ -157,11 +156,7 @@ pub struct Title {
     shown_for: Duration,
     /// Time owed to the world behind, in ticks of `TICK_EVERY`.
     owed: Duration,
-    /// The sprite the Cursor's light arrives on.
-    woken: Option<EntityId>,
-    /// Whether the Cursor still holds it asleep where the light finds it.
-    asleep: bool,
-    /// Where the light arrives: the woken sprite's tile.
+    /// Where the Cursor's light arrives and stays, over its sprite.
     light: Pos,
     screen: Screen,
     choice: usize,
@@ -180,32 +175,18 @@ pub struct Title {
 }
 
 impl Title {
-    /// The title screen on `world`, which the scene wakes, offering `seed`
-    /// first for a new world. It offers no saves and only the default
-    /// preset until told of more.
-    pub fn new(world: World, theme: Theme, seed: u64) -> Title {
+    /// The title screen on `world`, which the scene wakes, on a terminal
+    /// of `screen`, offering `seed` first for a new world. It offers no
+    /// saves and only the default preset until told of more.
+    pub fn new(world: World, theme: Theme, seed: u64, screen: Size) -> Title {
         let map = world.map();
-        let centre = Pos {
-            x: map.width() / 2,
-            y: map.height() / 2,
-        };
-        let woken = world
-            .sprites()
-            .min_by_key(|sprite| {
-                let pos = sprite.pos();
-                // A cell is about twice as tall as it is wide, so rows count double.
-                pos.x.abs_diff(centre.x) + 2 * pos.y.abs_diff(centre.y)
-            })
-            .map(|sprite| (sprite.id(), sprite.pos()));
         let areas = ui::areas(ui::MIN_SIZE);
         let help = App::new(map, theme.clone(), world.seed(), areas);
-        let mut title = Title {
+        Title {
             theme,
             shown_for: Duration::ZERO,
             owed: Duration::ZERO,
-            woken: woken.map(|(id, _)| id),
-            asleep: woken.is_some(),
-            light: woken.map_or(centre, |(_, pos)| pos),
+            light: light_for(&world, screen),
             screen: Screen::Menu,
             choice: 0,
             saves: Vec::new(),
@@ -214,16 +195,9 @@ impl Title {
             seed,
             refusal: None,
             help,
-            size: Size::new(map.width(), map.height()),
+            size: screen,
             world,
-        };
-        // The world runs from launch, as the terrarium does without the
-        // player, but the sprite the light finds sleeps in the Cursor's hold
-        // until it wakes (M2 design §8.1).
-        if let Some(sprite) = title.woken {
-            title.world.submit(Command::TakeHold { sprite });
         }
-        title
     }
 
     /// The saves Continue and Load offer, newest first, and the time now,
@@ -296,7 +270,6 @@ impl Title {
     /// Lets `elapsed` pass: the scene plays on, and the world runs at 4×.
     pub fn animate(&mut self, elapsed: Duration) {
         self.shown_for = self.shown_for.saturating_add(elapsed);
-        self.wake();
         self.owed += elapsed;
         let mut ticks = 0;
         while self.owed >= TICK_EVERY && ticks < MOST_TICKS_AT_ONCE {
@@ -307,15 +280,6 @@ impl Title {
         // What a long frame left owing is dropped rather than caught up.
         if ticks == MOST_TICKS_AT_ONCE {
             self.owed = Duration::ZERO;
-        }
-    }
-
-    /// Once it's time, the sprite under the light wakes, and the Cursor
-    /// lets it go to live as the others do (M2 design §8.1).
-    fn wake(&mut self) {
-        if self.asleep && self.shown_for >= WAKES {
-            self.world.submit(Command::LetGo);
-            self.asleep = false;
         }
     }
 
@@ -340,7 +304,6 @@ impl Title {
             // Any key or click skips the scene, and does nothing else.
             if !matches!(action, Action::Point(_) | Action::Release { .. }) {
                 self.shown_for = SCENE_ENDS;
-                self.wake();
             }
             return TitleFlow::Stay;
         }
@@ -555,6 +518,32 @@ fn menu_box(screen: Size, choices: usize) -> Rect {
     centred_box(screen, BOX_WIDTH, choices as u16 + MENU_FRAME_ROWS)
 }
 
+/// Where the Cursor's light arrives and stays (M2 design §8.1): over the
+/// tile nearest the middle of the rows above the menu's box that a sprite
+/// could stand on and nothing's on at launch, its frame clear of the box,
+/// however many choices it has, so the menu never covers it.
+fn light_for(world: &World, screen: Size) -> Pos {
+    let map = world.map();
+    let width = map.width().min(screen.width);
+    let height = map.height().min(screen.height);
+    // The frame takes a row above its sprite and a row below.
+    let top = menu_box(screen, MOST_CHOICES).y;
+    let rows = 1..top.min(height).saturating_sub(1);
+    let middle = Pos {
+        x: width / 2,
+        y: (rows.start + rows.end.saturating_sub(1)) / 2,
+    };
+    let free = |pos: Pos| {
+        let walkable = world.data().terrain(map.terrain(pos)).step_cost().is_some();
+        walkable && world.sprite_at(pos).is_none() && world.object_at(pos).is_none()
+    };
+    rows.flat_map(|y| (1..width.saturating_sub(1)).map(move |x| Pos { x, y }))
+        .filter(|&pos| free(pos))
+        // A cell is about twice as tall as it is wide, so rows count double.
+        .min_by_key(|pos| pos.x.abs_diff(middle.x) + 2 * pos.y.abs_diff(middle.y))
+        .unwrap_or(middle)
+}
+
 /// A box `width` wide, or as wide as the screen, and `height` tall in the
 /// middle of a screen of `screen`, above its status line. The screen is
 /// taken to be at least `ui::MIN_SIZE`, as nothing smaller draws the boxes.
@@ -624,6 +613,7 @@ pub fn render(frame: &mut Frame, title: &Title) {
     if !title.scene_over() {
         draw_scene(buf, area, title);
     }
+    draw_cursor(buf, area, title);
     // New world and Load take the menu's place.
     let in_a_box = matches!(title.screen, Screen::NewWorld(_) | Screen::Load { .. });
     if title.shown_for >= LIGHT_FILLS && !in_a_box {
@@ -661,21 +651,26 @@ fn draw_world(buf: &mut Buffer, area: Rect, title: &Title) {
             } else {
                 title.theme.glyph(SemanticTile::Terrain(map.terrain(pos)))
             };
-            let mut style = Style::default().fg(glyph.fg);
-            if glyph.bold {
-                style = style.add_modifier(Modifier::BOLD);
-            }
-            if glyph.reversed {
-                style = style.add_modifier(Modifier::REVERSED);
-            }
-            cell.set_char(glyph.symbol).set_style(style);
+            cell.set_char(glyph.symbol).set_style(style_of(glyph));
         }
     }
 }
 
+/// How `glyph` is drawn: in its colour, and bold or in reverse video if
+/// it says so.
+fn style_of(glyph: Glyph) -> Style {
+    let mut style = Style::default().fg(glyph.fg);
+    if glyph.bold {
+        style = style.add_modifier(Modifier::BOLD);
+    }
+    if glyph.reversed {
+        style = style.add_modifier(Modifier::REVERSED);
+    }
+    style
+}
+
 /// The scene over the world (M2 design §8.1): dark beyond the light's
-/// reach, the sprite under the light asleep, then pleased, and the Cursor's
-/// frame of light brightening as it arrives.
+/// reach, its edge `░`.
 fn draw_scene(buf: &mut Buffer, area: Rect, title: &Title) {
     let t = title.shown_for;
     let light = title.light;
@@ -699,23 +694,24 @@ fn draw_scene(buf: &mut Buffer, area: Rect, title: &Title) {
             }
         }
     }
-    let woken = title.woken.and_then(|id| title.world.sprite(id));
-    if let Some(sprite) = woken.filter(|_| t < PLEASED_UNTIL) {
-        let emote = if t < WAKES {
-            Emote::Resting
-        } else {
-            Emote::Pleased
-        };
-        let glyph = title.theme.glyph(SemanticTile::Emote(emote));
-        let pos = sprite.pos();
-        if area.contains(Position::new(pos.x, pos.y)) {
-            buf[(pos.x, pos.y)]
-                .set_char(glyph.symbol)
-                .set_style(Style::default().fg(glyph.fg));
-        }
+}
+
+/// The Cursor's frame of light, brightening as it arrives, with its sprite
+/// inside, still and smiling for as long as the title screen is open (M2
+/// design §8.1). It's the scene's own sprite, drawn over the world as the
+/// Cursor is over a map, so it needs nothing and none of the world's is
+/// held.
+fn draw_cursor(buf: &mut Buffer, area: Rect, title: &Title) {
+    let light = title.light;
+    if area.contains(Position::new(light.x, light.y)) {
+        let sprite = title.theme.glyph(SemanticTile::Sprite);
+        buf[(light.x, light.y)]
+            .set_char(sprite.symbol)
+            .set_style(style_of(sprite));
     }
+    let brightness = title.shown_for.as_secs_f64() / LIGHT_ARRIVES.as_secs_f64();
     let frame = title.theme.visible_frame();
-    let style = Style::default().fg(fade(t.as_secs_f64() / LIGHT_ARRIVES.as_secs_f64()));
+    let style = Style::default().fg(fade(brightness));
     let sides = [
         (Some(light.x), light.y.checked_sub(1), frame.up),
         (Some(light.x), light.y.checked_add(1), frame.down),

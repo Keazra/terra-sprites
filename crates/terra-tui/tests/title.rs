@@ -24,11 +24,14 @@ const OFFERED: u64 = 12345;
 /// A title screen on a 100×30 terminal, as the game opens it, with no
 /// saves.
 fn title() -> Title {
-    let world = start::title_world(&Args::default(), 3, (WIDTH, HEIGHT)).expect("a world");
-    let mut title = Title::new(world, Theme::cp437(), OFFERED);
-    // The map is 32 rows, the fewest a map may have, on a 30-row terminal.
-    title.resize(Size::new(WIDTH, HEIGHT));
-    title
+    title_on(WIDTH, HEIGHT)
+}
+
+/// A title screen on a terminal `width` by `height`, with no saves.
+fn title_on(width: u16, height: u16) -> Title {
+    let world = start::title_world(&Args::default(), 3, (width, height)).expect("a world");
+    // On a 30-row terminal the map is 32 rows, the fewest a map may have.
+    Title::new(world, Theme::cp437(), OFFERED, Size::new(width, height))
 }
 
 /// A title screen whose opening scene has played.
@@ -80,6 +83,21 @@ fn wheel(notches: i32) -> Action {
     }
 }
 
+/// Where the Cursor is on the screen, by its frame of light, and what's
+/// inside the frame.
+fn the_cursor(buffer: &Buffer) -> Option<(Position, String)> {
+    let area = buffer.area;
+    (area.top() + 1..area.bottom() - 1)
+        .flat_map(|y| (area.left() + 1..area.right() - 1).map(move |x| (x, y)))
+        .find(|&(x, y)| {
+            buffer[(x - 1, y)].symbol() == "║"
+                && buffer[(x + 1, y)].symbol() == "║"
+                && buffer[(x, y - 1)].symbol() == "═"
+                && buffer[(x, y + 1)].symbol() == "═"
+        })
+        .map(|(x, y)| (Position::new(x, y), buffer[(x, y)].symbol().to_string()))
+}
+
 fn lit_cells(buffer: &Buffer) -> usize {
     buffer
         .content()
@@ -109,7 +127,7 @@ fn with_saves(names: &[(&str, u64)]) -> (Title, Vec<SaveFile>) {
 }
 
 #[test]
-fn the_scene_opens_dark_with_the_cursor_s_light_over_a_sleeping_sprite() {
+fn the_scene_opens_dark_with_the_cursor_s_light_over_a_sprite() {
     let mut title = title();
     title.animate(Duration::from_millis(500));
     let screen = render(&title);
@@ -118,8 +136,8 @@ fn the_scene_opens_dark_with_the_cursor_s_light_over_a_sleeping_sprite() {
         lit_cells(&screen) < 40,
         "only the light and what's under it, and the status line:\n{shown}"
     );
-    assert!(shown.contains('z'), "the sprite sleeps:\n{shown}");
-    assert!(shown.contains('═') && shown.contains('║'), "{shown}");
+    let inside = the_cursor(&screen).map(|(_, inside)| inside);
+    assert_eq!(inside.as_deref(), Some("☺"), "{shown}");
     assert!(!shown.contains("New world"), "no menu yet");
 }
 
@@ -141,10 +159,49 @@ fn the_light_spreads_until_the_terrarium_fills_the_screen() {
 }
 
 #[test]
-fn the_sprite_wakes_pleased_as_the_light_spreads() {
+fn the_sprite_under_the_cursor_stays_still_with_its_happy_face_the_whole_time() {
+    // M2 design §8.1 (Fauxpaw, 2026-10-17): it never sleeps, wakes or
+    // wanders off, through the scene and for as long as the menu shows.
     let mut title = title();
-    title.animate(Duration::from_millis(3000));
-    assert!(text(&render(&title)).contains('♥'));
+    let mut shown_for = Duration::ZERO;
+    let mut seen = Vec::new();
+    for until in [500, 2000, 2600, 3500, 4200, 5600, 60_000] {
+        while shown_for < Duration::from_millis(until) {
+            title.animate(Duration::from_millis(100));
+            shown_for += Duration::from_millis(100);
+        }
+        let screen = render(&title);
+        seen.push((until, the_cursor(&screen), text(&screen)));
+    }
+    let (_, first, shown) = &seen[0];
+    let first = first.clone().expect("the Cursor's light");
+    assert_eq!(first.1, "☺", "{shown}");
+    for (at, cursor, shown) in &seen {
+        assert_eq!(cursor.as_ref(), Some(&first), "at {at} ms:\n{shown}");
+    }
+}
+
+#[test]
+fn the_cursor_and_its_sprite_stay_clear_of_the_menu() {
+    // M2 design §8.1: above the menu's box, whether or not Continue makes
+    // it a row taller, and on a bigger terminal.
+    let now = SystemTime::now();
+    for (width, height) in [(WIDTH, HEIGHT), (140, 45)] {
+        for saves in [
+            vec![],
+            vec![save("quicksave", now, Duration::from_secs(60))],
+        ] {
+            let mut title = title_on(width, height);
+            title.set_saves(saves, now);
+            title.animate(Duration::from_secs(10));
+            let screen = render_at(&title, width, height);
+            let shown = text(&screen);
+            let (at, inside) = the_cursor(&screen).expect("the Cursor, in sight");
+            assert_eq!(inside, "☺", "{shown}");
+            let menu = find(&screen, "╔").expect("the menu's box");
+            assert!(at.y + 1 < menu.y, "the frame above the box:\n{shown}");
+        }
+    }
 }
 
 #[test]
@@ -212,33 +269,26 @@ fn the_world_runs_at_4x_from_launch_while_the_light_spreads() {
 }
 
 #[test]
-fn the_sprite_under_the_light_sleeps_in_the_cursor_s_hold_until_it_wakes() {
-    // M2 design §8.1: the others move as the light spreads, while it stays
-    // where the light finds it, until it wakes and the Cursor lets it go.
+fn the_world_runs_untouched_by_the_cursor() {
+    // M2 design §8.1: the sprite in the Cursor's frame is the scene's own,
+    // so the Cursor holds none of the world's, and they all go about their
+    // lives.
     let mut title = title();
     let at_launch: Vec<_> = title.world().sprites().map(|s| (s.id(), s.pos())).collect();
-    for _ in 0..24 {
+    for _ in 0..30 {
         title.animate(Duration::from_millis(100));
+        assert_eq!(title.world().cursor().leads(), None);
     }
     let world = title.world();
-    let asleep = world.cursor().leads().expect("the Cursor holds it");
-    let moved = |id| {
-        let now = world.sprite(id).map(|sprite| sprite.pos());
-        at_launch
-            .iter()
-            .any(|&(was, pos)| was == id && Some(pos) != now)
-    };
-    assert!(!moved(asleep), "it stays where the light found it");
+    let moved = at_launch
+        .iter()
+        .filter(|&&(id, pos)| world.sprite(id).map(|s| s.pos()) != Some(pos))
+        .count();
     assert!(
-        at_launch.iter().any(|&(id, _)| id != asleep && moved(id)),
-        "the others are about their lives"
+        moved > at_launch.len() / 4,
+        "{moved} of {}",
+        at_launch.len()
     );
-    let shown = text(&render(&title));
-    assert!(shown.contains('z'), "it sleeps:\n{shown}");
-    for _ in 0..2 {
-        title.animate(Duration::from_millis(100));
-    }
-    assert_eq!(title.world().cursor().leads(), None, "it woke");
 }
 
 #[test]
@@ -257,12 +307,14 @@ fn after_a_long_frame_the_world_runs_at_most_5_ticks_and_drops_the_rest() {
 }
 
 #[test]
-fn a_skipped_scene_s_world_runs_from_the_skip_with_the_sprite_awake() {
+fn a_skipped_scene_s_world_runs_from_the_skip_with_the_cursor_s_sprite_where_it_was() {
     let mut title = title();
+    title.animate(Duration::from_millis(500));
+    let before = the_cursor(&render(&title));
     title.apply(Action::Enter);
     title.animate(Duration::from_secs(1));
-    assert_eq!(title.world().tick(), 5);
-    assert_eq!(title.world().cursor().leads(), None, "the skip woke it");
+    assert_eq!(title.world().tick(), 7);
+    assert_eq!(the_cursor(&render(&title)), before);
 }
 
 #[test]

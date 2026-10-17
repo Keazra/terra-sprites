@@ -2,7 +2,7 @@
 
 A terminal terrarium of little creatures that live, learn and breed on their own. Inspired by *Creatures*.
 
-![The title screen's opening scene: a light finds a sleeping sprite in the dark, and a terrarium wakes around it](docs/clips/title.gif)
+![The title screen's opening scene: a light finds a sprite in the dark, and a terrarium wakes around it](docs/clips/title.gif)
 
 Every sprite hatches with genes from its parents, a body that runs on chemistry and a brain that learns from experience. You don't control them. You watch, and when you feel like it you reach in: pet one for something you like, zap it for something you don't, hand it a berry, or lead it somewhere else. Then see what it makes of that. Eventually it grows old and its kids carry on, each generation a bit different from the last.
 

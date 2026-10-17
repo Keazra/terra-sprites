@@ -246,7 +246,7 @@ fn run_title(
     theme: &Theme,
     keys: &mut Keys,
 ) -> io::Result<Option<Opening>> {
-    let mut title = Title::new(world, theme.clone(), time_seed());
+    let mut title = Title::new(world, theme.clone(), time_seed(), terminal.size()?);
     if let Some(folder) = files::save_folder() {
         title.set_saves(saves::list(&folder), SystemTime::now());
         title.set_save_folder(folder);
