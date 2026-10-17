@@ -505,6 +505,7 @@ mod tests {
     use crate::brain_io::Source;
     use crate::expression::expressions;
     use crate::genome::Gene;
+    use crate::inheritance::{Parent, of_pair};
     use crate::test_util::{builtin, builtin_changing, every_kind};
 
     /// The built-in pack's copying errors, flaws, and copy and change, as
@@ -681,7 +682,7 @@ mod tests {
     #[test]
     fn about_one_egg_in_two_gets_a_new_flaw_only_in_genes_that_can_weaken() {
         // M2 design §12: each sound copy of a gene that can weaken gets a
-        // flaw with the chance `flaws.arise` (0.005), so about one egg of
+        // flaw with the chance `flaws.arise` (0.004), so about one egg of
         // the starter's in two has a new one.
         let data = values_only();
         let starter = data.starter();
@@ -823,6 +824,63 @@ mod tests {
         )
     }
 
+    /// Checks `copy`, what copying made of `inherited` (M2 design §13):
+    /// each change is one the pack can have, none flags a gene that
+    /// worked, a flagged gene carries no flaws, and it never grows past
+    /// `longest` unless what it inherited already had.
+    fn check_copy(
+        inherited: &Inherited,
+        copy: &Copied,
+        data: &DataPack,
+    ) -> Result<(), TestCaseError> {
+        prop_assert!(copy.genome.fits(data));
+        prop_assert_eq!(check_changes(&copy.genome, &copy.changes, data), Ok(()));
+        let most = inherited.genome.genes.len().max(longest(data));
+        prop_assert!(copy.genome.genes.len() <= most);
+        for change in &copy.changes {
+            if let CopyChange::Changed {
+                gene,
+                ref was,
+                switch,
+                ..
+            } = *change
+            {
+                let now = (&copy.genome.genes[gene], copy.genome.switch(gene));
+                prop_assert!(
+                    flagged(was, switch, data) || !flagged(now.0, now.1, data),
+                    "{:?} became {:?}",
+                    was,
+                    now
+                );
+            }
+        }
+        let expressed = expressions(&copy.genome, data, LifeStage::Adult);
+        for (index, how) in expressed.iter().enumerate() {
+            if matches!(how, Expression::Flagged(_)) {
+                prop_assert_eq!(flaws_of(&copy.flaws, index), 0);
+            }
+        }
+        Ok(())
+    }
+
+    /// The built-in pack with every gene value copied wrongly, every copy
+    /// that can be flawed flawed, and whole genes often doubled, lost and
+    /// changed, in a genome no longer than the starter's.
+    fn every_change() -> DataPack {
+        every_copy_wrong(
+            "    copy_and_change: (doubled: 0.3, lost: 0.3, changed: 0.4, on_copy: 0.5, longest: 1.0),\n",
+        )
+    }
+
+    /// A genome of `genes`, as an egg inherits it from a founder with one
+    /// copy of each gene that can be flawed flawed.
+    fn founded(genes: &[String], data: &DataPack, rng: &mut ChaCha8Rng) -> Inherited {
+        let file = format!("(format: 2, genes: [{}])", genes.join(",\n"));
+        let genome = Genome::from_ron(&file, data).expect("a valid genome");
+        let flaws = founders(&genome, data, rng);
+        Inherited { genome, flaws }
+    }
+
     proptest! {
         #[test]
         fn copying_errors_never_change_how_a_gene_is_expressed(seed: u64) {
@@ -880,38 +938,48 @@ mod tests {
             // change is one the pack can have, none flags a gene that
             // worked, a flagged gene carries no flaws, and the genome
             // never grows past `longest`.
-            let data = every_copy_wrong(
-                "    copy_and_change: (doubled: 0.3, lost: 0.3, changed: 0.4, on_copy: 0.5, longest: 1.0),\n",
-            );
-            let file = format!("(format: 2, genes: [{}])", genes.join(",\n"));
-            let genome = Genome::from_ron(&file, &data).expect("a valid genome");
+            let data = every_change();
             let rng = &mut ChaCha8Rng::seed_from_u64(seed);
-            // Each copy of each gene that can be flawed is.
-            let flaws = founders(&genome, &data, rng);
-            let mut inherited = Inherited { genome, flaws };
+            let mut inherited = founded(&genes, &data, rng);
             // Over generations, as changes on copies grow it to the limit.
             for _ in 0..30 {
                 let copy = copied(inherited.clone(), &data, rng);
-                prop_assert!(copy.genome.fits(&data));
-                prop_assert_eq!(check_changes(&copy.genome, &copy.changes, &data), Ok(()));
-                let most = inherited.genome.genes.len().max(longest(&data));
-                prop_assert!(copy.genome.genes.len() <= most);
-                for change in &copy.changes {
-                    if let CopyChange::Changed { gene, ref was, switch, .. } = *change {
-                        let now = (&copy.genome.genes[gene], copy.genome.switch(gene));
-                        prop_assert!(
-                            flagged(was, switch, &data) || !flagged(now.0, now.1, &data),
-                            "{:?} became {:?}", was, now
-                        );
-                    }
-                }
-                let expressed = expressions(&copy.genome, &data, LifeStage::Adult);
-                for (index, how) in expressed.iter().enumerate() {
-                    if matches!(how, Expression::Flagged(_)) {
-                        prop_assert_eq!(flaws_of(&copy.flaws, index), 0);
-                    }
-                }
+                check_copy(&inherited, &copy, &data)?;
                 inherited = Inherited {
+                    genome: copy.genome,
+                    flaws: copy.flaws,
+                };
+            }
+        }
+
+        #[test]
+        fn whatever_the_genomes_no_whole_gene_change_makes_a_working_gene_in_a_pair_s_child_change_the_body(
+            hers in prop::collection::vec(random_gene(), 1..12),
+            his in prop::collection::vec(random_gene(), 1..12),
+            seed: u64,
+        ) {
+            // M2 design §13.3: the same for a pair's child, whose parents'
+            // genes line up and mix (§12.2) before they're copied, and
+            // which never grows past `longest` either, generation after
+            // generation.
+            let data = every_change();
+            let rng = &mut ChaCha8Rng::seed_from_u64(seed);
+            let (mut mother, mut father) = (founded(&hers, &data, rng), founded(&his, &data, rng));
+            fn parent(inherited: &Inherited) -> Parent<'_> {
+                Parent {
+                    genome: &inherited.genome,
+                    flaws: &inherited.flaws,
+                }
+            }
+            for _ in 0..30 {
+                let child = of_pair(parent(&mother), parent(&father), &data, rng);
+                prop_assert!(child.genome.genes.len() <= longest(&data));
+                let copy = copied(child.clone(), &data, rng);
+                check_copy(&child, &copy, &data)?;
+                prop_assert!(copy.flaws.len() <= copy.genome.genes.len());
+                prop_assert!(copy.flaws.iter().all(|&flawed| flawed <= 2));
+                mother = father;
+                father = Inherited {
                     genome: copy.genome,
                     flaws: copy.flaws,
                 };
@@ -987,6 +1055,67 @@ mod tests {
     }
 
     #[test]
+    fn a_gene_this_build_cant_read_spends_no_roll_of_the_dice() {
+        // M2 design §13.1: so the genes it can read are copied as they would
+        // be without it, and the world's dice roll on as they would have.
+        let data = whole_genes_only(0.1, 0.1, 0.1, 0.75);
+        let unreadable = Genome::from_ron(
+            r#"(format: 1, genes: [
+                Gene(type: 900, version: 1, payload: "c0ffee"),
+                AttentionInstinct(input: "hunger", category: "tree", weight: 1.0),
+                Gene(type: 901, version: 1, payload: "decade"),
+            ])"#,
+            &data,
+        )
+        .expect("a valid genome")
+        .genes;
+        let starter = data.starter();
+        let (mut genes, mut switches) = (Vec::new(), Vec::new());
+        for (index, gene) in starter.genes.iter().enumerate() {
+            let before = match index {
+                0 => Some(0),
+                50 => Some(1),
+                _ => None,
+            };
+            if let Some(at) = before {
+                genes.push(unreadable[at].clone());
+                switches.push(Switch::default());
+            }
+            genes.push(gene.clone());
+            switches.push(starter.switch(index));
+        }
+        genes.push(unreadable[2].clone());
+        switches.push(Switch::default());
+        let with_them = Genome::switched(genes, switches);
+        let readable = |gene: &&Gene| !matches!(gene, Gene::Unknown { .. } | Gene::Unmatched(_));
+        assert_eq!(
+            with_them.genes.iter().filter(readable).count(),
+            starter.genes.len()
+        );
+        let mut changed = 0;
+        for seed in 0..20 {
+            let (mut dice, mut same_dice) = (
+                ChaCha8Rng::seed_from_u64(seed),
+                ChaCha8Rng::seed_from_u64(seed),
+            );
+            let without = copy(starter, &data, &mut dice).genome;
+            let with = copy(&with_them, &data, &mut same_dice).genome;
+            let read: Vec<&Gene> = with.genes.iter().filter(readable).collect();
+            assert!(
+                read.iter().copied().eq(without.genes.iter()),
+                "seed {seed}: the genes it can read were copied differently"
+            );
+            assert_eq!(
+                unit(&mut dice),
+                unit(&mut same_dice),
+                "seed {seed}: the next roll"
+            );
+            changed += usize::from(without != *starter);
+        }
+        assert!(changed > 0, "nothing was copied and changed");
+    }
+
+    #[test]
     fn a_doubled_gene_sits_next_to_its_original_with_its_switch_and_flaws() {
         // M2 design §13: so the two tend to be inherited together.
         let data = whole_genes_only(1.0, 0.0, 0.0, 0.0);
@@ -1016,7 +1145,8 @@ mod tests {
 
     #[test]
     fn a_genome_never_grows_past_twice_the_starter_s_length() {
-        // M2 design §13: `longest` (2) times the starter's 67 genes.
+        // M2 design §13: `longest` (2) times as many genes as the starter
+        // has.
         let data = whole_genes_only(1.0, 0.0, 0.0, 0.0);
         let longest = 2 * data.starter().genes.len();
         assert_eq!(super::longest(&data), longest);

@@ -202,7 +202,8 @@
     // about 4 hours to about 8 at 1x (M2 design §2).
     trait_variation: { "grows_old": 0.4 },
     // Copying errors (M2 design §12): when an egg is laid, each gene value
-    // has `chance` of changing, so about one hatchling in two has a change.
+    // has `chance` of changing, so about three of the starter's hatchlings
+    // in four have a change.
     // Rare and mostly large, so they show: a `large.share` of the changes
     // are a factor from 1 / `large.most` to `large.most`, the rest small, a
     // factor between 1 − `small` and 1 + `small`. First guesses.

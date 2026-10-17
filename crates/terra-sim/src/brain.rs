@@ -513,7 +513,9 @@ impl Brain {
     /// §9.4), as `weakened` would. Only for genes that have weakened since
     /// the brain was expressed, at the same stage: weakening changes no
     /// parameter or concept, so the rest of the brain stays as it is (#210).
-    /// As after `reach`, the snapshot is taken again at step 5.
+    /// That includes its snapshot of the last step 5, which still fits, so
+    /// at step 4 it still watches from where its eye was then, and shows a
+    /// sprite watching it what it chose its try for (§18.1, §18.2).
     pub(crate) fn reweaken<'a>(
         &mut self,
         genes: impl IntoIterator<Item = (&'a Gene, &'a Expression, f32)>,
@@ -568,7 +570,6 @@ impl Brain {
                 _ => {}
             }
         }
-        self.snapshot = None;
     }
 
     /// Whether its parameters, concepts and instinct links are `other`'s.
@@ -2808,6 +2809,30 @@ mod tests {
 
     fn close(a: f32, b: f32) -> bool {
         (a - b).abs() < 1e-6
+    }
+
+    #[test]
+    fn a_weakened_instinct_links_as_strongly_as_its_gene_s_health() {
+        // M2 design §9.4: an instinct's weight, and an attention
+        // instinct's, about whom or not, scale with its gene's health.
+        let data = builtin();
+        let genome = Genome::from_ron(
+            r#"(format: 1, genes: [
+                Instinct(inputs: [("hunger", false)], verb: Eat, weight: 0.8),
+                AttentionInstinct(input: "thirst", category: "water", weight: 0.6),
+                AttentionInstinct(input: "always", category: "sprite", whom: Grown, weight: 0.4),
+            ])"#,
+            &data,
+        )
+        .expect("a valid genome");
+        let brain = Brain::weakened(&genome, &data, LifeStage::Adult, &[0.5, 0.25, 0.5]);
+        let eat = brain.decision.get(input("hunger"), column(Verb::Eat));
+        assert!(close(eat, 0.4), "{eat}");
+        let water = brain.attention.get(input("thirst"), at(WATER));
+        assert!(close(water, 0.15), "{water}");
+        let grown: Vec<f32> = brain.whom.iter().map(|link| link.weight).collect();
+        assert_eq!(grown.len(), 1);
+        assert!(close(grown[0], 0.2), "{grown:?}");
     }
 
     #[test]

@@ -253,7 +253,8 @@ mod tests {
     use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
-    use crate::test_util::builtin;
+    use crate::registry::Verb;
+    use crate::test_util::{builtin, builtin_changing};
 
     /// A genome of `genes`, written as a genome file's.
     fn genome(genes: &[String], data: &DataPack) -> Genome {
@@ -357,6 +358,37 @@ mod tests {
     }
 
     #[test]
+    fn the_nth_of_his_genes_that_do_something_lines_up_with_the_nth_of_hers() {
+        // M2 design §12.2: where a parent has two genes that do the same, as
+        // a doubled gene's copies do (§13), his first lines up with her
+        // first, and his second with her second.
+        let data = builtin();
+        let genes = |eat: [f32; 2], drink: f32| {
+            let [first, second] = eat;
+            let genes = [
+                instinct("Eat", first),
+                instinct("Eat", second),
+                instinct("Drink", drink),
+            ];
+            genome(&genes, &data)
+        };
+        let (mine, theirs) = (genes([0.1, 0.2], 0.25), genes([0.3, 0.4], 0.75));
+        let mut from_his = 0;
+        for seed in 0..200 {
+            let mut rng = ChaCha8Rng::seed_from_u64(seed);
+            let child = of_pair(sound(&mine), sound(&theirs), &data, &mut rng).genome;
+            let weights: Vec<f32> = child.genes.iter().map(weight).collect();
+            let lined_up = [[0.1, 0.3], [0.2, 0.4], [0.25, 0.75]];
+            assert_eq!(weights.len(), lined_up.len());
+            for (weight, either) in weights.iter().zip(lined_up) {
+                assert!(either.contains(weight), "{weights:?}");
+            }
+            from_his += weights.iter().filter(|&&weight| weight > 0.25).count();
+        }
+        assert!(from_his > 0, "the child had none of his genes");
+    }
+
+    #[test]
     fn a_gene_only_one_parent_has_goes_to_about_half_the_young_where_it_was() {
         // M2 design §12: his extra gene follows the gene it followed in his
         // genome; hers stays where it was in hers.
@@ -380,7 +412,7 @@ mod tests {
                 .position(|gene| matches!(gene, Gene::AttentionInstinct { .. }))
             {
                 his_extra += 1;
-                assert_eq!(at, 3, "after the instinct to hit, as in his");
+                assert_eq!(at, 3, "after the instinct to play, as in his");
             }
             her_extra += usize::from(child.genes.iter().any(|gene| {
                 matches!(gene, Gene::Instinct { verb, .. } if *verb == crate::registry::Verb::Approach)
@@ -437,6 +469,55 @@ mod tests {
     }
 
     #[test]
+    fn a_gene_only_one_parent_has_gets_a_sound_copy_from_the_other() {
+        // M2 design §12.3: so a child of a parent with both copies of it
+        // flawed carries the flaw hidden, but never has the gene broken.
+        let data = builtin();
+        let mine = genome(&instincts(&VERBS, 0.25), &data);
+        // His alone: an attention instinct. Hers alone: the instinct to
+        // approach.
+        let mut his = instincts(&VERBS, 0.75);
+        his.insert(
+            3,
+            r#"AttentionInstinct(input: "thirst", category: "water", weight: 0.8)"#.into(),
+        );
+        his.retain(|gene| !gene.contains("Approach"));
+        let theirs = genome(&his, &data);
+        // Each carries every flaw doubled.
+        let (hers, his) = (vec![2; mine.genes.len()], vec![2; theirs.genes.len()]);
+        let (mut his_own, mut her_own) = (0, 0);
+        for seed in 0..200 {
+            let mother = Parent {
+                genome: &mine,
+                flaws: &hers,
+            };
+            let father = Parent {
+                genome: &theirs,
+                flaws: &his,
+            };
+            let mut rng = ChaCha8Rng::seed_from_u64(seed);
+            let child = of_pair(mother, father, &data, &mut rng);
+            for (index, gene) in child.genome.genes.iter().enumerate() {
+                let (only_his, only_hers) = (
+                    matches!(gene, Gene::AttentionInstinct { .. }),
+                    matches!(
+                        gene,
+                        Gene::Instinct {
+                            verb: Verb::Approach,
+                            ..
+                        }
+                    ),
+                );
+                let flawed = if only_his || only_hers { 1 } else { 2 };
+                assert_eq!(flaws_of(&child.flaws, index), flawed, "{gene:?}");
+                his_own += usize::from(only_his);
+                her_own += usize::from(only_hers);
+            }
+        }
+        assert!(his_own > 0 && her_own > 0, "{his_own} and {her_own}");
+    }
+
+    #[test]
     fn a_lone_egg_gets_one_of_its_mothers_copies_doubled() {
         // M2 design §12: so each flaw she carries is broken in about half
         // her lone young, and none is carried hidden.
@@ -483,6 +564,74 @@ mod tests {
             trimmed += usize::from(child.genes.len() == longest);
         }
         assert!(trimmed > 0, "no child would have grown past it");
+    }
+
+    #[test]
+    fn a_pair_s_child_too_long_drops_only_genes_one_parent_has_the_last_first() {
+        // M2 design §13.1: every gene both parents have stays, and of the
+        // genes only one has, the child keeps the first that fit. Hers are
+        // the genes they share, then her own two; his are his own two, then
+        // the genes they share. So a child with his and hers has two too
+        // many, and keeps his.
+        let data = builtin();
+        let longest = longest(&data);
+        let unlimited = builtin_changing("physiology.ron", &[("longest: 2.0)", "longest: 100.0)")]);
+        let shared = longest - 2;
+        let mut hers = vec![instinct("Eat", 0.25); shared];
+        hers.extend(instincts(&["Drink", "Play"], 0.25));
+        let mut his = instincts(&["Hit", "Rest"], 0.75);
+        his.extend(vec![instinct("Eat", 0.75); shared]);
+        let (mine, theirs) = (genome(&hers, &data), genome(&his, &data));
+        let eats = |gene: &Gene| {
+            matches!(
+                gene,
+                Gene::Instinct {
+                    verb: Verb::Eat,
+                    ..
+                }
+            )
+        };
+        // What the child does that isn't eating, in order.
+        let own = |genes: &[Gene]| -> Vec<Verb> {
+            genes
+                .iter()
+                .filter(|&gene| !eats(gene))
+                .map(|gene| match *gene {
+                    Gene::Instinct { verb, .. } => verb,
+                    _ => panic!("not an instinct: {gene:?}"),
+                })
+                .collect()
+        };
+        let mut kept_some = 0;
+        for seed in 0..200 {
+            let child = |data: &DataPack| {
+                let mut rng = ChaCha8Rng::seed_from_u64(seed);
+                of_pair(sound(&mine), sound(&theirs), data, &mut rng)
+                    .genome
+                    .genes
+            };
+            // The same child with no limit, its genes only one parent has
+            // dropped from the end until it fits.
+            let mut fitted = child(&unlimited);
+            let all = own(&fitted);
+            let mut index = fitted.len();
+            while fitted.len() > longest {
+                index -= 1;
+                if !eats(&fitted[index]) {
+                    fitted.remove(index);
+                }
+            }
+            let genes = child(&data);
+            assert_eq!(genes.iter().filter(|&gene| eats(gene)).count(), shared);
+            assert!(
+                genes == fitted,
+                "seed {seed}: {:?} of {all:?} kept, not {:?}",
+                own(&genes),
+                own(&fitted)
+            );
+            kept_some += usize::from(all.len() > 2 && !own(&genes).is_empty());
+        }
+        assert!(kept_some > 0, "no child kept some but not all");
     }
 
     #[test]

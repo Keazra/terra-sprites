@@ -2,10 +2,13 @@
 //! the sprite its eye is on knows about what it uses.
 
 mod common;
-use common::{WorldBuilder, at, builtin, genome, id_at, value_of};
+use common::{
+    AGES_AT_ONCE, OLD, WorldBuilder, at, builtin, builtin_changing, close, genome, id_at, value_of,
+};
 
 use terra_sim::{
-    Command, EntityId, Event, EventKind, Learned, Pos, ScriptedAction, Thing, Verb, World,
+    Command, DataPack, EntityId, Event, EventKind, Learned, LifeStage, Pos, ScriptedAction, Thing,
+    Verb, World,
 };
 
 /// A room with water along its west wall.
@@ -51,7 +54,16 @@ fn room_with(
     sprites: &[(Pos, &str)],
     scripted: &[(Pos, ScriptedAction)],
 ) -> World {
-    let data = builtin();
+    room_in(builtin(), objects, sprites, scripted)
+}
+
+/// The same, made with `data`.
+fn room_in(
+    data: DataPack,
+    objects: &[(Pos, &str)],
+    sprites: &[(Pos, &str)],
+    scripted: &[(Pos, ScriptedAction)],
+) -> World {
     let sprites = sprites
         .iter()
         .map(|&(pos, genes)| (pos, Some(genome(genes, &data))))
@@ -133,6 +145,60 @@ fn a_sprite_takes_on_a_thing_s_worth_only_for_the_need_the_one_it_watches_used_i
     let watching = id_at(&world, at(5, 1));
     first_drink(&mut world, drinker);
     assert_eq!(value_of(&world, watching, &water_for_thirst()), 0.0);
+}
+
+/// The built-in data pack, in which a sprite may grow old at 1 tick old, and
+/// an old sprite's genes take hits so small and so many that every gene
+/// that can weaken, each instinct included, weakens a little every tick (M2
+/// design §9.4).
+fn old_every_tick() -> DataPack {
+    let [old, up] = AGES_AT_ONCE;
+    let tiny_hits = ("hit: 0.01, gives_out", "hit: 0.0001, gives_out");
+    builtin_changing("physiology.ron", &[old, up, tiny_hits])
+}
+
+/// What the sprite watching takes on of water's worth for thirst, and what
+/// the drinker learns of it, once a sprite of `DRINKER`'s genes on (1, 1)
+/// has drunk at the water beside it, watched by one on (5, 1) whose eye is
+/// on it, in `old_every_tick`'s pack. Each is `OLD` from the start if its
+/// flag says so.
+fn watched_drinking_when_old(drinker_old: bool, watching_old: bool) -> (f32, f32) {
+    let old = |is_old: bool| if is_old { OLD } else { "" };
+    let drinker = format!("{DRINKER}{}", old(drinker_old));
+    let watching = format!("{}{}", looking_on(0.5), old(watching_old));
+    let mut world = room_in(
+        old_every_tick(),
+        &[],
+        &[(at(1, 1), &drinker), (at(5, 1), &watching)],
+        &[],
+    );
+    let (drinker, id) = (id_at(&world, at(1, 1)), id_at(&world, at(5, 1)));
+    for (sprite, is_old) in [(drinker, drinker_old), (id, watching_old)] {
+        let stage = world.sprite(sprite).expect("the sprite").life_stage();
+        assert_eq!(stage == LifeStage::Old, is_old, "{stage:?}");
+    }
+    first_drink(&mut world, drinker);
+    (
+        value_of(&world, id, &water_for_thirst()),
+        value_of(&world, drinker, &water_for_thirst()),
+    )
+}
+
+#[test]
+fn an_old_sprite_whose_genes_weaken_every_tick_still_watches_and_is_still_watched() {
+    // M2 design §9.2, §9.4, §18.1: genes weakening leave the mind as it
+    // was, so an old sprite still learns by watching, from where its eye
+    // was at its last step 5, and still shows what it chose a try for. The
+    // one watching takes on half of what the drinker learned, as when
+    // neither is old.
+    for (drinker_old, watching_old) in [(false, false), (false, true), (true, false)] {
+        let (taken, learned) = watched_drinking_when_old(drinker_old, watching_old);
+        assert!(learned > 0.2, "it learned water is good: {learned}");
+        assert!(
+            close(taken, learned / 2.0),
+            "old drinker {drinker_old}, old watcher {watching_old}: {taken} of {learned}"
+        );
+    }
 }
 
 /// Every lesson in `events`, as `(sprite, learned, good, whom it watched)`.

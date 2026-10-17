@@ -154,4 +154,12 @@ mod tests {
             .ever_on()
         );
     }
+
+    #[test]
+    fn an_old_sprite_still_counts_as_grown_up() {
+        // M2 design §5, §9.1: for mating, an old sprite is an adult.
+        assert!(!LifeStage::Young.is_grown());
+        assert!(LifeStage::Adult.is_grown());
+        assert!(LifeStage::Old.is_grown());
+    }
 }

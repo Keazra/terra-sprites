@@ -7,14 +7,14 @@
 mod common;
 use common::{
     ALONE, FEMALE, KEEN, LONE, Laying, NO_COPYING_ERRORS, RECEPTIVE, WorldBuilder, at, builtin,
-    builtin_changing, builtin_changing_files, close, endings, family, family_in, genome, laid,
-    lone, until,
+    builtin_changing, builtin_changing_files, close, endings, family, family_in, genome, id_at,
+    laid, lone, until, value_of,
 };
 
 use proptest::prelude::*;
 use terra_sim::{
     Command, DataPack, EntityId, EventKind, Learned, LifeStage, Outcome, Part, Playback, Pos,
-    Rejection, Sex, Target, Thing, Verb, World,
+    Rejection, ScriptedAction, Sex, Target, Thing, Verb, World,
 };
 
 /// A small field of grass with a sprite of `genes` on each tile of
@@ -866,6 +866,76 @@ fn a_young_sprite_s_arousal_never_shows_on_screen() {
             "a {:?} sprite",
             sprite.life_stage()
         );
+    }
+}
+
+/// What `id` has learned `thing` is worth for its breeding drive.
+fn worth_for_the_drive(world: &World, id: EntityId, thing: Thing) -> f32 {
+    let drive = Learned::Worth {
+        thing,
+        need: Some("arousal".into()),
+    };
+    value_of(world, id, &drive)
+}
+
+/// Aroused from the start, and cooling fast all the while, whatever it
+/// does; its eye on the sprite it sees, which it courts.
+const COOLING: &str = r#"
+    InitialConcentration(chem: "arousal", value: 1.0),
+    HalfLife(chem: "arousal", ticks: 10),
+    AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
+    Instinct(inputs: [("always", false)], verb: Court, weight: 1.0),
+    BrainParam(param: "tau_base", value: 0.05),
+    BrainParam(param: "curiosity", value: 0.0),
+"#;
+
+/// Aroused from the start, until it has young.
+const SPENT: &str = r#"
+    InitialConcentration(chem: "arousal", value: 1.0),
+    Emitter(locus: Locus("bred"), mode: Level, gain: -1.0, chem: "arousal"),
+"#;
+
+#[test]
+fn the_breeding_drive_eased_teaches_worth_only_after_a_mate_and_only_of_the_partner() {
+    // M2 design §5: the drive's fall while it plays with a ball, plays with
+    // an adult or courts one teaches nothing of what either is worth for
+    // the drive. Only a Mate's does, about the partner.
+    let (me, ball, other) = (at(2, 1), at(2, 2), at(3, 1));
+    let data = builtin();
+    let sprites = vec![
+        (me, Some(genome(COOLING, &data))),
+        (other, Some(genome(REST, &data))),
+    ];
+    let mut world = WorldBuilder::new(&["........", "........", "........", "........"])
+        .data(data)
+        .objects(&[(ball, "ball")])
+        .sprites_with(sprites)
+        .scripts(&[
+            (me, ScriptedAction::Play { at: ball }),
+            (me, ScriptedAction::Play { at: other }),
+        ])
+        .build();
+    let (me, other) = (id_at(&world, me), id_at(&world, other));
+    let mut tries = Vec::new();
+    for _ in 0..20 {
+        tries.extend(endings(&world.step()));
+    }
+    for tried in [Verb::Play, Verb::Court] {
+        assert!(tries.contains(&(tried, Outcome::Applied)), "{tries:?}");
+    }
+    assert_eq!(worth_for_the_drive(&world, me, "ball".into()), 0.0);
+    assert_eq!(worth_for_the_drive(&world, me, Thing::Sprite(other)), 0.0);
+
+    let female = format!("{KEEN}{FEMALE}{SPENT}");
+    let male = format!("{KEEN}{SPENT}");
+    let mut world = family(&[(at(2, 1), &female), (at(3, 1), &male)], &[], 1);
+    let laying = laid(&mut world, 100).expect("an egg");
+    let father = laying.with.expect("a pair's egg");
+    world.step();
+    world.step();
+    for (id, partner) in [(laying.by, father), (father, laying.by)] {
+        let worth = worth_for_the_drive(&world, id, Thing::Sprite(partner));
+        assert!(worth > 0.0, "{worth}");
     }
 }
 
