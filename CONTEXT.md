@@ -859,6 +859,14 @@ _Avoid_: branching, forking, rewinding
 Playback finding the world different from its recording at a checkpoint. It's reported with the last checkpoint that matched, as the world parted somewhere between the two.
 _Avoid_: desync, mismatch (for this; a mismatched version or pack is refused before playback starts)
 
+**Clip** (#241):
+A stretch of the game drawn by the renderer into a picture that moves, a GIF, an MP4 or an animated SVG: the game's own screens, from a seed or a replay, in Cascadia Mono and the Campbell colours. The same command makes the same file.
+_Avoid_: recording (that's the world keeping one), video (an MP4 is one kind), screen capture
+
+**Withdrawn Cursor** (#241):
+The Cursor taken out of a picture with no player in it, such as a clip: out of reach, as over space, with no pointer anywhere, so it isn't drawn and the status line says nothing of what it's over (M2 design §11.4).
+_Avoid_: hidden Cursor (any Cursor out of reach is hidden)
+
 ### Testing and tuning
 
 **Lab scenario**:

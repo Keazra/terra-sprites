@@ -198,11 +198,23 @@ fn render_map_view(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     draw_tiles(buf, area.inner(Margin::new(1, 1)), app, world);
 }
 
-/// Draws the map view's tiles alone over the whole frame, with no border,
-/// top bar, panels or status line: for pictures of the map, such as the
-/// renderer's clips (#241). The app is to be fitted to `Areas` whose
-/// `tiles` is the frame, so the Cursor and the marks land where it says.
-pub fn render_map_alone(frame: &mut Frame, app: &App, world: &World) {
+/// Where the app's panels are drawn when the map view is drawn alone
+/// (`render_map_view_alone`), on a screen of `screen` cells: its tiles fill
+/// the screen, and there are no other panels.
+pub fn map_view_alone_areas(screen: Size) -> Areas {
+    Areas {
+        tiles: Rect::from((Position::ORIGIN, screen)),
+        inspector: None,
+        event_log: None,
+        overlay: None,
+    }
+}
+
+/// Draws the map view alone over the whole frame, its tiles and what's past
+/// its wall with no border, top bar, panels or status line: for pictures of
+/// the map, such as the renderer's clips (#241). The app is to be fitted to
+/// `map_view_alone_areas`, so the Cursor and the marks land where it says.
+pub fn render_map_view_alone(frame: &mut Frame, app: &App, world: &World) {
     let area = frame.area();
     draw_tiles(frame.buffer_mut(), area, app, world);
 }
@@ -897,9 +909,11 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         .map(|label| format!(" │ placing: {label}"))
         .unwrap_or_default();
     // The tile under the Cursor is information the policy may hide (design
-    // §6.4). Out of reach past the wall, there's only space (M2 design
-    // §11.4).
-    let under = if app.out_of_reach() {
+    // §6.4). Out of reach past the wall, there's only space, and a
+    // withdrawn Cursor is under nothing (M2 design §11.4).
+    let under = if app.cursor_withdrawn() {
+        String::new()
+    } else if app.out_of_reach() {
         " space │".to_string()
     } else if app.can_view(Panel::TileInfo, Subject::Tile(cursor)) {
         format!(" ({},{}) {terrain}{sprite}{object} │", cursor.x, cursor.y)

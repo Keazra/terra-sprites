@@ -254,9 +254,10 @@ fn over_space_the_cursor_is_not_drawn_and_the_status_line_says_space() {
 #[test]
 fn a_withdrawn_cursor_is_out_of_reach_until_the_pointer_comes_back() {
     // #241: a picture of the game with no player in it, such as the
-    // renderer's clips, takes the Cursor out of reach as a pointer over
-    // space does (M2 design §11.4), with no pointer to put there. Ticks
-    // leave it there.
+    // renderer's clips, withdraws the Cursor: out of reach, as a pointer
+    // over space takes it, with no pointer anywhere, so the status line
+    // says nothing of what it's over (M2 design §11.4). Ticks leave it
+    // there.
     let (mut world, _) = small_field();
     let mut app = app(&world);
     let sprite = Pos { x: 4, y: 3 };
@@ -274,10 +275,12 @@ fn a_withdrawn_cursor_is_out_of_reach_until_the_pointer_comes_back() {
         .collect();
     assert_eq!(round, "........");
     assert!(!screen[at].modifier.contains(Modifier::REVERSED));
+    assert!(app.cursor_withdrawn());
     let status = status_line(&screen);
-    assert!(status.starts_with(" space │ SELECT"), "{status}");
+    assert!(status.starts_with(" SELECT"), "{status}");
     apply(&mut app, &world, Action::Point(on(sprite)));
     assert!(!app.out_of_reach(), "back over the map");
+    assert!(!app.cursor_withdrawn());
 }
 
 #[test]

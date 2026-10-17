@@ -9,7 +9,7 @@ use terra_sim::{
     EventKind, Grip, Hurt, Learned, Map, Outcome, Pos, Progress, Rejection, Removal, Scenario,
     ScriptedAction, Target, Terrain, Thing, Verb, World, WorldConfig,
 };
-use terra_tui::app::{App, Areas, CursorMode, Flow, Selection, Tab};
+use terra_tui::app::{App, CursorMode, Flow, Selection, Tab};
 use terra_tui::input::{Action, Button};
 use terra_tui::theme::Theme;
 use terra_tui::ui;
@@ -4355,7 +4355,7 @@ fn the_event_log_says_what_s_new_in_a_hatchling_with_a_gene_changed() {
 }
 
 #[test]
-fn the_map_alone_fills_the_frame_with_tiles_and_nothing_else() {
+fn the_map_view_alone_fills_the_frame_with_tiles_and_nothing_else() {
     // A 40×16 field of grass with rock at (5, 2) and water at (34, 13): a
     // 30×12 view centred on the map has them in its corners, with no border,
     // top bar, panels or status line round it (#241).
@@ -4364,16 +4364,12 @@ fn the_map_alone_fills_the_frame_with_tiles_and_nothing_else() {
     rows[13].replace_range(34..35, "~");
     let drawing: Vec<&str> = rows.iter().map(String::as_str).collect();
     let world = drawn_world(&drawing);
-    let areas = Areas {
-        tiles: Rect::new(0, 0, 30, 12),
-        inspector: None,
-        event_log: None,
-        overlay: None,
-    };
+    let areas = ui::map_view_alone_areas(Size::new(30, 12));
+    assert_eq!(areas.tiles, Rect::new(0, 0, 30, 12));
     let app = App::new(world.map(), Theme::ascii(), 7, areas);
     let mut terminal = Terminal::new(TestBackend::new(30, 12)).unwrap();
     terminal
-        .draw(|frame| ui::render_map_alone(frame, &app, &world))
+        .draw(|frame| ui::render_map_view_alone(frame, &app, &world))
         .unwrap();
     let shown = lines(terminal.backend().buffer());
     assert_eq!(shown[0], format!("#{}", ".".repeat(29)));

@@ -4,6 +4,8 @@ use std::time::Duration;
 
 use terra_sim::Mode;
 
+use crate::listed::listed_enum;
+
 /// Rates are counted in 32nds of a tick per second, so ⅛× (5/32 of a tick a
 /// second) stays exact.
 const PARTS: u128 = 32;
@@ -13,20 +15,28 @@ const NANOS_PER_SECOND: u128 = 1_000_000_000;
 /// about how long a player takes to react. Tuned in play.
 const REACH_BACK_SECONDS: u32 = 2;
 
-/// Simulation speed. 1× is 1.25 ticks per second, slow enough to watch a
-/// sprite walk; each step halves or doubles it. Max runs as fast as the frame
-/// budget allows. Slower speeds come first, so they compare as less.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Speed {
-    Eighth,
-    Quarter,
-    Half,
-    X1,
-    X2,
-    X4,
-    X8,
-    X16,
-    Max,
+listed_enum! {
+    /// Simulation speed. 1× is 1.25 ticks per second, slow enough to watch a
+    /// sprite walk; each step halves or doubles it. Max runs as fast as the
+    /// frame budget allows. Slower speeds come first, so they compare as less.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    pub enum Speed {
+        Eighth => "1/8x",
+        Quarter => "1/4x",
+        Half => "1/2x",
+        X1 => "1x",
+        X2 => "2x",
+        X4 => "4x",
+        X8 => "8x",
+        X16 => "16x",
+        Max => "Max",
+    }
+
+    /// Every speed, slowest first.
+    pub const ALL;
+
+    /// How the top bar shows it (design §6.6): `1/8x` to `16x`, and `Max`.
+    pub fn label(self) -> &'static str;
 }
 
 impl Speed {
@@ -36,21 +46,6 @@ impl Speed {
         match mode {
             Mode::Story => Speed::X4,
             Mode::Lab => Speed::Max,
-        }
-    }
-
-    /// How the top bar shows it (design §6.6): `1/8x` to `16x`, and `Max`.
-    pub fn label(self) -> &'static str {
-        match self {
-            Speed::Eighth => "1/8x",
-            Speed::Quarter => "1/4x",
-            Speed::Half => "1/2x",
-            Speed::X1 => "1x",
-            Speed::X2 => "2x",
-            Speed::X4 => "4x",
-            Speed::X8 => "8x",
-            Speed::X16 => "16x",
-            Speed::Max => "Max",
         }
     }
 

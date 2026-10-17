@@ -528,6 +528,7 @@ Past the glass is space: black, with stars drifting right to left, since the shi
 - **`F`, or a middle click, over space reaches no tile** (#184): following, the Cursor stops, as anywhere; otherwise, out of reach, it follows the selected sprite, if there is one, rather than the sprite on its last tile (M1 design §6.5). The wheel over space cycles the modes, as anywhere over the map view.
 - **Out of sight, the Cursor draws no leash either** (#184). Wherever it's drawn, its arrows and marks show only over the map's tiles, never over the glass, as they stopped at the map view's border before.
 - **Off the map view, the pointer is past nothing** (#184): moved on from space to the inspector, say, the Cursor shows again on its last tile, as when the pointer leaves the map view from a tile, and `Q` and `E` reach it.
+- **A picture with no player in it withdraws the Cursor** (#241), as the renderer's clips do: out of reach, as over space, with no pointer anywhere. It isn't drawn, and the status line says nothing of what it's over, not "space", since nothing is pointed at. The pointer coming back over the map brings it back. The map view can also be drawn alone, its tiles and what's past the wall filling the picture, with no border, top bar, panels or status line.
 
 ### 11.5 Themes
 
