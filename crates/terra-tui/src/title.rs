@@ -11,10 +11,10 @@ use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
 use terra_sim::{EntityId, Mode, Pos, World};
 
-use crate::app::{App, Draft};
+use crate::app::{App, Draft, highlight_moved, shown};
 use crate::clock::Speed;
 use crate::input::Action;
-use crate::saves::SaveFile;
+use crate::saves::{self, SaveFile};
 use crate::start::Preset;
 use crate::theme::{Emote, SemanticTile, Theme};
 use crate::ui;
@@ -37,6 +37,8 @@ const TICK_EVERY: Duration = Duration::from_millis(200);
 const MOST_TICKS_AT_ONCE: u32 = 5;
 /// The menu's box: as wide as the title lettering and a margin.
 const BOX_WIDTH: u16 = 56;
+/// The most saves the list of saves shows at once; it scrolls for more.
+const LOAD_ROWS: usize = 12;
 /// The longest seed: `u64::MAX` has 20 digits.
 const MAX_SEED_DIGITS: usize = 20;
 /// What `Esc` asks on the title screen (M2 design §8.2).
@@ -164,6 +166,8 @@ pub struct Title {
     choice: usize,
     /// The saves, newest first, with when they were saved, said.
     saves: Vec<(SaveFile, String)>,
+    /// The folder they're in, if there is one.
+    save_folder: Option<PathBuf>,
     presets: Vec<Preset>,
     /// The seed New world offers next.
     seed: u64,
@@ -203,6 +207,7 @@ impl Title {
             screen: Screen::Menu,
             choice: 0,
             saves: Vec::new(),
+            save_folder: None,
             presets: vec![Preset::default()],
             seed,
             refusal: None,
@@ -226,6 +231,12 @@ impl Title {
             })
             .collect();
         self.choice = 0;
+    }
+
+    /// The folder the saves are in, which Load names when it has none to
+    /// list.
+    pub fn set_save_folder(&mut self, folder: PathBuf) {
+        self.save_folder = Some(folder);
     }
 
     /// The presets New world offers, the default first. With none, it
@@ -306,6 +317,12 @@ impl Title {
         if action == Action::Quit {
             return TitleFlow::Quit;
         }
+        // A terminal too small, as last told, shows only that it is, so,
+        // as a world's does, it takes no clicks or turns of the wheel:
+        // they'd land on a menu that isn't drawn (M2 design §8.2).
+        if ui::too_small(self.size) && action.is_pointer() {
+            return TitleFlow::Stay;
+        }
         if !self.scene_over() {
             // Any key or click skips the scene, and does nothing else.
             if !matches!(action, Action::Point(_) | Action::Release { .. }) {
@@ -323,8 +340,11 @@ impl Title {
                 if action == Action::Confirm {
                     return TitleFlow::Quit;
                 }
-                // Any other key cancels, `Esc` included (design v33 §6.6).
-                self.screen = Screen::Menu;
+                // Any other key cancels, `Esc` included (design v33 §6.6),
+                // and the mouse doesn't answer it, as in a world.
+                if !action.is_pointer() {
+                    self.screen = Screen::Menu;
+                }
                 TitleFlow::Stay
             }
             Screen::NewWorld(new) => self.apply_in_new_world(action, new),
@@ -446,36 +466,86 @@ impl Title {
         TitleFlow::Stay
     }
 
+    /// What an action does in the list of saves, as in the one `Ctrl+O`
+    /// opens in a world (M2 design §8.2): a number or `Enter` loads a save,
+    /// the arrow keys or the wheel move the highlight, a click loads the
+    /// save under it or, off the list, closes it, and `Esc` closes it.
     fn apply_in_load(&mut self, action: Action, choice: usize) -> TitleFlow {
         let count = self.saves.len();
-        match action {
+        let moved = match action {
             Action::Pick(n) if (1..=count).contains(&usize::from(n)) => {
                 return TitleFlow::Load(self.saves[usize::from(n) - 1].0.clone());
             }
             Action::Enter if count > 0 => return TitleFlow::Load(self.saves[choice].0.clone()),
-            Action::Scroll { dy, .. } if count > 0 => {
-                self.screen = Screen::Load {
-                    choice: step(choice, dy, count),
-                };
+            Action::Scroll { dy, .. } if count > 0 => step(choice, dy, count),
+            // A row a notch, as a world's lists move.
+            Action::Wheel { notches, .. } if count > 0 => highlight_moved(choice, notches, count),
+            Action::Click { at, .. } => {
+                let area = self.load_box(self.size);
+                if !area.contains(at) {
+                    self.screen = Screen::Menu;
+                    return TitleFlow::Stay;
+                }
+                let row = usize::from(at.y.wrapping_sub(area.y + 1));
+                let index = self.first_save_shown(choice) + row;
+                if row < self.load_rows() && index < count {
+                    return TitleFlow::Load(self.saves[index].0.clone());
+                }
+                choice
             }
-            Action::Back => self.screen = Screen::Menu,
-            _ => {}
-        }
+            Action::Back => {
+                self.screen = Screen::Menu;
+                return TitleFlow::Stay;
+            }
+            _ => choice,
+        };
+        self.screen = Screen::Load { choice: moved };
         TitleFlow::Stay
+    }
+
+    /// How many rows the list of saves shows: a row for each save, up to
+    /// `LOAD_ROWS`, or one to say there are none.
+    fn load_rows(&self) -> usize {
+        self.saves.len().clamp(1, LOAD_ROWS)
+    }
+
+    /// The first save the list shows, scrolled to keep the one highlighted,
+    /// `choice`, in view.
+    fn first_save_shown(&self, choice: usize) -> usize {
+        choice.saturating_sub(self.load_rows() - 1)
+    }
+
+    /// What the list of saves says with none to list, as a world's does.
+    fn no_saves(&self) -> String {
+        saves::none_listed(self.save_folder.as_deref())
+    }
+
+    /// The list of saves' box on a screen of `screen`: as wide as the
+    /// other boxes, or wider to say where there are no saves, as a world's
+    /// list is as wide as what it says.
+    fn load_box(&self, screen: Size) -> Rect {
+        let none = if self.saves.is_empty() {
+            // A space before it, and the border either side.
+            self.no_saves().chars().count() + 3
+        } else {
+            0
+        };
+        let width = u16::try_from(none).unwrap_or(u16::MAX).max(BOX_WIDTH);
+        centred_box(screen, width, self.load_rows() as u16 + 2)
     }
 }
 
 /// The menu's box, with `choices` choices, in the middle of a screen of
 /// `screen`.
 fn menu_box(screen: Size, choices: usize) -> Rect {
-    centred_box(screen, choices as u16 + MENU_FRAME_ROWS)
+    centred_box(screen, BOX_WIDTH, choices as u16 + MENU_FRAME_ROWS)
 }
 
-/// A box `BOX_WIDTH` wide and `height` tall in the middle of a screen of
-/// `screen`, above its status line. The screen is taken to be at least
-/// `ui::MIN_SIZE`, as nothing smaller draws the boxes.
-fn centred_box(screen: Size, height: u16) -> Rect {
-    let width = BOX_WIDTH.min(screen.width.max(ui::MIN_SIZE.width));
+/// A box `width` wide, or as wide as the screen, and `height` tall in the
+/// middle of a screen of `screen`, above its status line. The screen is
+/// taken to be at least `ui::MIN_SIZE`, as nothing smaller draws the boxes.
+fn centred_box(screen: Size, width: u16, height: u16) -> Rect {
+    let width = width.min(screen.width.max(ui::MIN_SIZE.width));
     let screen_height = screen.height.max(ui::MIN_SIZE.height);
     Rect::new(
         screen.width.max(ui::MIN_SIZE.width).saturating_sub(width) / 2,
@@ -502,8 +572,7 @@ fn chosen_style(chosen: bool) -> Style {
 
 /// Moves `index` by one, the way `by` points, within `count` items.
 fn step(index: usize, by: i32, count: usize) -> usize {
-    let moved = index as i64 + i64::from(by.signum());
-    moved.clamp(0, count.saturating_sub(1) as i64) as usize
+    highlight_moved(index, by.signum(), count)
 }
 
 /// Another seed to offer, from the last one: a splitmix64 step, so each
@@ -532,7 +601,7 @@ fn ago(elapsed: Duration) -> String {
 pub fn render(frame: &mut Frame, title: &Title) {
     let area = frame.area();
     let buf = frame.buffer_mut();
-    if area.width < ui::MIN_SIZE.width || area.height < ui::MIN_SIZE.height {
+    if ui::too_small(area.as_size()) {
         let quitting = title.screen == Screen::QuitPrompt;
         let question = quitting.then(|| QUIT_PROMPT.to_string());
         return ui::render_too_small_with(buf, area, question.into_iter().collect());
@@ -689,7 +758,7 @@ fn draw_menu(buf: &mut Buffer, title: &Title) {
             let (save, ago) = &title.saves[0];
             let said_x = x + CONTINUE_SAID_AT;
             let room = usize::from(area.right().saturating_sub(said_x + 1));
-            let said = format!("{} · {ago}", save.name);
+            let said = format!("{} · {ago}", shown(&save.name));
             buf.set_stringn(said_x, y, said, room, Style::default().fg(Color::Gray));
         }
     }
@@ -709,7 +778,7 @@ fn draw_new_world(buf: &mut Buffer, title: &Title, new: &NewWorld) {
     let rows = title.presets.len().min(8).max(explained.len()) as u16;
     // The border, the seed, the mode, a blank row, the presets, a blank
     // row, two rows of hints and the border.
-    let area = centred_box(buf.area.as_size(), rows + 8).intersection(buf.area);
+    let area = centred_box(buf.area.as_size(), BOX_WIDTH, rows + 8).intersection(buf.area);
     let inner = double_box(buf, area, " New world ");
     let room = |x: u16| usize::from(inner.right().saturating_sub(x));
     // The seed offered shows highlighted, as the first key replaces it;
@@ -794,20 +863,20 @@ fn draw_presets(buf: &mut Buffer, title: &Title, picked: usize, inner: Rect, top
 
 /// The list of saves to load, newest first, over the menu.
 fn draw_load(buf: &mut Buffer, title: &Title, choice: usize) {
-    let rows = title.saves.len().clamp(1, 12) as u16;
-    let area = centred_box(buf.area.as_size(), rows + 2).intersection(buf.area);
+    let area = title.load_box(buf.area.as_size()).intersection(buf.area);
     let inner = double_box(buf, area, " Load ");
     if title.saves.is_empty() {
-        buf.set_string(inner.x, inner.y, " No saves yet", Style::default());
+        let none = format!(" {}", title.no_saves());
+        let room = usize::from(inner.width);
+        buf.set_stringn(inner.x, inner.y, none, room, Style::default());
         return;
     }
-    let first = choice.saturating_sub(usize::from(rows) - 1);
     for (row, (index, (save, ago))) in title
         .saves
         .iter()
         .enumerate()
-        .skip(first)
-        .take(usize::from(rows))
+        .skip(title.first_save_shown(choice))
+        .take(title.load_rows())
         .enumerate()
     {
         let number = if index < 9 {
@@ -815,7 +884,8 @@ fn draw_load(buf: &mut Buffer, title: &Title, choice: usize) {
         } else {
             " ".into()
         };
-        let line = format!(" {number} {}  ", save.name);
+        // A name outside CP437 shows as the world's list shows it.
+        let line = format!(" {number} {}  ", shown(&save.name));
         let y = inner.y + row as u16;
         let room = usize::from(inner.width);
         buf.set_stringn(inner.x, y, &line, room, chosen_style(index == choice));

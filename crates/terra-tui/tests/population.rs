@@ -3,6 +3,9 @@
 //! moment picked with `←` `→` or the pointer read under it, with the
 //! generations alive then (#208); a small copy heads the World tab.
 
+mod common;
+use common::{LONE, at, group, inspector_rows, pack_changing, pointer_on};
+
 use std::time::Duration;
 
 use ratatui::buffer::Buffer;
@@ -10,8 +13,8 @@ use ratatui::layout::{Position, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{DataPack, Genome, Map, Pos, Scenario, World};
-use terra_tui::app::{App, Screen};
-use terra_tui::input::Action;
+use terra_tui::app::{App, CursorMode, Screen};
+use terra_tui::input::{Action, Button};
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
 use terra_tui::theme::Theme;
 use terra_tui::ui;
@@ -23,20 +26,7 @@ fn pack() -> DataPack {
 /// The built-in pack, in which a female may lay alone at once (M2 design
 /// §15.7).
 fn lone() -> DataPack {
-    let physiology = include_str!("../../../data/physiology.ron")
-        .replace("alone_after: 4500,", "alone_after: 0,");
-    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, text)| {
-            let text = if path == "physiology.ron" {
-                &physiology[..]
-            } else {
-                text
-            };
-            (path, text)
-        })
-        .collect();
-    DataPack::from_sources(&sources).expect("valid pack")
+    pack_changing(&[LONE])
 }
 
 /// A field of grass with `young` newborn starter sprites along the top row
@@ -403,6 +393,34 @@ fn arrows_or_the_pointer_pick_a_moment_and_the_lines_under_the_graph_read_it() {
 }
 
 #[test]
+fn the_pointer_picks_a_moment_and_leaves_the_cursor_where_it_is_on_the_map() {
+    // M2 design §14.2: the pointer over the graph picks moments rather
+    // than moving the Cursor on the map beneath.
+    let mut world = field(2, 4);
+    run(&mut world, 250);
+    let mut app = app_on(&world);
+    let tile = at(5, 1);
+    app.apply(Action::Point(pointer_on(&app, tile)), &world);
+    assert_eq!(app.shown_cursor(), Some(tile));
+    app.apply(Action::Population, &world);
+    app.apply(Action::Point(Position::new(FIRST_COLUMN + 1, 9)), &world);
+    assert_eq!(app.graph_pick(), Some(200));
+    assert_eq!(app.shown_cursor(), Some(tile), "the pointer moved");
+    app.apply(
+        Action::Click {
+            at: Position::new(FIRST_COLUMN, 15),
+            button: Button::Left,
+            amplified: false,
+        },
+        &world,
+    );
+    assert_eq!(app.graph_pick(), Some(100));
+    assert_eq!(app.shown_cursor(), Some(tile), "a click");
+    app.apply(Action::Population, &world);
+    assert_eq!(app.shown_cursor(), Some(tile), "and closed");
+}
+
+#[test]
 fn a_picked_moment_stays_picked_as_time_runs_and_now_moves_on() {
     let mut world = field(2, 4);
     run(&mut world, 250);
@@ -479,7 +497,7 @@ fn a_save_from_before_generations_reads_none_for_its_earlier_moments() {
 }
 
 #[test]
-fn the_small_graph_reaches_past_the_limit_when_the_cursor_spawned_past_it() {
+fn the_small_graph_reaches_past_most_sprites_when_the_cursor_spawned_past_it() {
     // M2 design §14.2: 101 sprites in a world that holds 100. The full
     // graph shows shares, so only the small one has a height in sprites.
     let pack = pack();
@@ -504,9 +522,8 @@ fn the_small_graph_reaches_past_the_limit_when_the_cursor_spawned_past_it() {
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let app = app_on(&world);
-    let screen = render(&app, &world);
-    // The inspector is the right-hand 46 columns, its inside from column 55.
-    let top: String = (55..99).map(|x| screen[(x, 3)].symbol()).collect();
+    // The graph's top row, under its title.
+    let top = &inspector_rows(&app, &world, 30).1[1];
     assert!(top.starts_with(" 101 ┤"), "{top}");
 }
 
@@ -545,19 +562,6 @@ fn a_death_is_read_in_the_moment_it_happened() {
     );
 }
 
-/// `n` with its thousands grouped, as the screen writes it.
-fn group(n: u64) -> String {
-    let digits = n.to_string();
-    let mut out = String::new();
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
-}
-
 #[test]
 fn time_runs_as_usual_while_the_graph_is_open() {
     let world = field(2, 4);
@@ -576,6 +580,53 @@ fn time_runs_as_usual_while_the_graph_is_open() {
     app.apply(Action::TogglePause, &world);
     assert!(!app.clock.is_paused());
     assert_eq!(app.screen(), Screen::Population, "and it stays open");
+}
+
+#[test]
+fn other_keys_do_nothing_while_the_graph_is_open() {
+    // M2 design §14.2: only the graph's own keys and those for time.
+    let mut world = field(2, 4);
+    run(&mut world, 250);
+    let mut app = app_on(&world);
+    let state = |app: &App| {
+        (
+            app.selection(),
+            app.tab(),
+            app.colour_mode(),
+            app.mode(),
+            app.tracking(),
+            app.detail(),
+            app.event_filter(),
+            app.shown_cursor(),
+        )
+    };
+    let before = state(&app);
+    app.apply(Action::Population, &world);
+    let keys = [
+        Action::SelectNext,
+        Action::SelectPrevious,
+        Action::NextTab,
+        Action::PreviousTab,
+        Action::CycleColours,
+        Action::Mode(CursorMode::Grab),
+        Action::Track,
+        Action::ToggleDetail,
+        Action::CycleEventFilter,
+        Action::Press {
+            button: Button::Left,
+            amplified: false,
+        },
+        Action::Rename,
+        Action::Help,
+        Action::SpriteList,
+        Action::FamilyTree,
+        Action::Enter,
+    ];
+    for key in keys {
+        app.apply(key, &world);
+        assert_eq!(app.screen(), Screen::Population, "{key:?}");
+        assert_eq!(state(&app), before, "{key:?}");
+    }
 }
 
 #[test]
@@ -667,4 +718,15 @@ fn a_column_narrower_than_the_time_between_counts_reads_the_count_it_shows() {
     let [first, _, since] = reading(&screen);
     assert!(first.starts_with("tick 200: "), "{first}");
     assert_eq!(since, "since tick 0: none laid, hatched or died");
+
+    // The first column shows the first count, and says so (§14.3).
+    app.apply(Action::Point(Position::new(FIRST_COLUMN, 9)), &world);
+    terminal
+        .draw(|frame| ui::render(frame, &app, &world))
+        .unwrap();
+    let screen = terminal.backend().buffer().clone();
+    assert_eq!(screen[(FIRST_COLUMN, AXIS)].symbol(), "▲");
+    let [first, _, since] = reading(&screen);
+    assert!(first.starts_with("tick 0: 1 sprite"), "{first}");
+    assert_eq!(since, "the first count");
 }

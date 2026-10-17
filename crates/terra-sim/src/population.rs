@@ -360,6 +360,18 @@ mod tests {
     }
 
     #[test]
+    fn a_record_of_512_counts_is_caught() {
+        // M2 design §14.1: it never holds more than 511.
+        let ticks: Vec<u64> = (1..MOST_COUNTS as u64).map(|i| i * 100).collect();
+        let mut record = record_of(100, &ticks);
+        assert_eq!(record.check(), Ok(()));
+        let mut one_more = record.counts[0].clone();
+        one_more.tick = MOST_COUNTS as u64 * 100;
+        record.counts.push(one_more);
+        assert!(record.check().is_err_and(|why| why.contains("512 counts")));
+    }
+
+    #[test]
     fn generations_out_of_order_or_without_sprites_are_caught() {
         let mut record = record_of(100, &[100, 200]);
         assert_eq!(record.check(), Ok(()));

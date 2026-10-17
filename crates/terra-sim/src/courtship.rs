@@ -514,3 +514,114 @@ fn part(state: &mut WorldState, data: &DataPack, events: &mut Vec<Event>) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::genome::Genome;
+    use crate::test_util::{at, builtin_changing, id_at};
+    use crate::world::{Scenario, World};
+
+    /// A sprite that sees `sight` tiles and calls all the time, or with
+    /// `calls` false, rests.
+    fn genes(sight: f32, calls: bool, data: &DataPack) -> Genome {
+        let verb = if calls { "Call" } else { "Rest" };
+        let text = format!(
+            r#"(format: 1, genes: [
+                Trait(trait: "speed", value: 10.0),
+                Trait(trait: "sense_radius", value: {sight:?}),
+                Instinct(inputs: [("always", false)], verb: {verb}, weight: 1.0),
+                BrainParam(param: "tau_base", value: 0.02),
+            ])"#
+        );
+        Genome::from_ron(&text, data).expect("a valid genome")
+    }
+
+    /// Two sprites, as `a` and `b` make them, on a row of grass 30 tiles
+    /// long, at its start and `gap` tiles on, in a pack where partners
+    /// part after `breeding.apart` 50 ticks: the world and the two.
+    fn two(
+        a: impl Fn(&DataPack) -> Genome,
+        b: impl Fn(&DataPack) -> Genome,
+        gap: u16,
+    ) -> (World, EntityId, EntityId) {
+        let data = builtin_changing("physiology.ron", &[("apart: 4500,", "apart: 50,")]);
+        let row = ".".repeat(30);
+        let map = Map::from_ascii(&[row.as_str()], &data).expect("valid drawing");
+        let sprites = [(at(0, 0), Some(a(&data))), (at(gap, 0), Some(b(&data)))];
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &sprites,
+            scripted: &[],
+            newborns: &[],
+        };
+        let world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let (a, b) = (id_at(&world, at(0, 0)), id_at(&world, at(gap, 0)));
+        (world, a, b)
+    }
+
+    /// The ticks, in its first 100, on which the partners of [`two`] parted,
+    /// paired as an egg of theirs would pair them.
+    fn partings(
+        a: impl Fn(&DataPack) -> Genome,
+        b: impl Fn(&DataPack) -> Genome,
+        gap: u16,
+    ) -> Vec<u64> {
+        let (mut world, a, b) = two(a, b, gap);
+        let (state, data) = world.parts();
+        pair(state, data, a, b, &mut Vec::new());
+        let mut parted = Vec::new();
+        for _ in 0..100 {
+            for event in world.step() {
+                if let EventKind::Parted { .. } = event.kind {
+                    parted.push(event.tick);
+                }
+            }
+        }
+        parted
+    }
+
+    #[test]
+    fn a_heard_call_pulses_heard_with_the_caller_as_its_source() {
+        // M2 design §15.1: 20 tiles off, out of sight; the pulse goes live
+        // at the next step 3.
+        let (mut world, caller, hearer) = two(
+            |data| genes(10.0, true, data),
+            |data| genes(10.0, false, data),
+            20,
+        );
+        world.step();
+        world.step();
+        let (state, data) = world.parts();
+        let heard = data.physiology().indices.courtship.expect("calls").heard;
+        let body = &state.sprites.get(hearer).expect("the hearer").body;
+        assert_eq!(body.loci[heard], 1.0, "heard");
+        assert_eq!(body.sources.get(&heard), Some(&caller));
+    }
+
+    #[test]
+    fn partners_who_only_hear_each_other_never_part() {
+        // M2 design §15.4: 20 tiles apart, out of sight, a call heard
+        // counts as the partner seen. Resting, they part after 50 ticks.
+        let parted = |calls: bool| {
+            let partner = |data: &DataPack| genes(10.0, calls, data);
+            partings(partner, partner, 20)
+        };
+        assert_eq!(parted(true), [] as [u64; 0], "calling");
+        assert_eq!(parted(false), [50], "resting");
+    }
+
+    #[test]
+    fn partners_part_only_once_neither_has_sensed_the_other_for_long_enough() {
+        // M2 design §15.4: "both times". 12 tiles apart, one sees 14 tiles
+        // and the other 6, so only one of them sees the other: they stay
+        // partners. Each seeing 6 tiles, they part.
+        let parted = |sight: f32| {
+            let far = |data: &DataPack| genes(sight, false, data);
+            partings(far, |data| genes(6.0, false, data), 12)
+        };
+        assert_eq!(parted(14.0), [] as [u64; 0], "one sees the other");
+        assert_eq!(parted(6.0), [50], "neither sees the other");
+    }
+}

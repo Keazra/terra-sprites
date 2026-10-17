@@ -174,8 +174,9 @@ type BuiltInTheme = (&'static str, fn() -> Theme);
 const BUILT_IN_THEMES: [BuiltInTheme; 2] = [("cp437", Theme::cp437), ("ascii", Theme::ascii)];
 
 /// A file's name as the screen can show it: a file put in a folder by hand
-/// may have a name with characters outside CP437 (design §7.2).
-fn shown(name: &str) -> String {
+/// may have a name with characters outside CP437 (design §7.2). The title
+/// screen shows saves' names so too (M2 design §8.2).
+pub(crate) fn shown(name: &str) -> String {
     name.chars()
         .map(|c| if cp437::contains(c) { c } else { '?' })
         .collect()
@@ -321,6 +322,15 @@ fn along<T: Copy + PartialEq>(all: &[T], here: T, steps: i32) -> T {
         .position(|&one| one == here)
         .expect("one of them") as i32;
     all[(here + steps).rem_euclid(all.len() as i32) as usize]
+}
+
+/// Where a highlight on row `index` of a list of `count` rows goes, moved
+/// `by` rows, down being positive: it stops at either end. The arrow keys
+/// move it a row, and the wheel a row a notch (#128), in every list and
+/// menu, the title screen's too (M2 design §8.2).
+pub(crate) fn highlight_moved(index: usize, by: i32, count: usize) -> usize {
+    let last = count.saturating_sub(1) as i64;
+    (index as i64 + i64::from(by)).clamp(0, last) as usize
 }
 
 /// Where on screen the panels the app works with are drawn.
@@ -1824,11 +1834,7 @@ impl App {
                 // The mouse carries on as usual and doesn't answer the prompt;
                 // nor does letting go of a button, or of `E`, which isn't a
                 // key pressed.
-                Action::Point(_)
-                | Action::Click { .. }
-                | Action::Follow { at: Some(_) }
-                | Action::Wheel { .. }
-                | Action::Release { .. } => {}
+                _ if action.is_pointer() => {}
                 // Any other key cancels the prompt, and does nothing else.
                 _ => {
                     self.screen = Screen::Normal;
@@ -2458,8 +2464,10 @@ impl App {
                     self.tree_choice = Some(to);
                 }
             }
+            // The pointer chooses a sprite on the tree; it leaves the Cursor
+            // where it is on the map under the tree, as the population
+            // graph's does (M2 design §14.2).
             Action::Point(cell) => {
-                self.point(cell);
                 if let Some(spot) = self.tree_card_at(cell, world) {
                     self.tree_choice = Some(spot);
                 }
@@ -2469,7 +2477,6 @@ impl App {
                 button: Button::Left,
                 ..
             } => {
-                self.point(at);
                 if let Some(spot) = self.tree_card_at(at, world) {
                     self.tree_choice = Some(spot);
                     self.walk_tree(world);
@@ -2582,11 +2589,8 @@ impl App {
     /// closes the list.
     fn apply_in_list(&mut self, action: Action, world: &World) -> Flow {
         let ids = sprite_list::order(self, world);
-        let choice = self.list_row(world) as i32;
-        let moved = |by: i32| {
-            let last = ids.len().max(1) as i32 - 1;
-            ids.get((choice + by).clamp(0, last) as usize).copied()
-        };
+        let choice = self.list_row(world);
+        let moved = |by: i32| ids.get(highlight_moved(choice, by, ids.len())).copied();
         match action {
             Action::Scroll { dy, .. } => self.list_choice = moved(dy.signum()),
             Action::Wheel { at, notches } => {
@@ -2835,15 +2839,13 @@ impl App {
             }
             Action::Enter if count > 0 => self.choose(self.menu_choice, world),
             Action::Scroll { dy, .. } if count > 0 => {
-                let moved = self.menu_choice as i32 + dy.signum();
-                self.menu_choice = moved.clamp(0, count as i32 - 1) as usize;
+                self.menu_choice = highlight_moved(self.menu_choice, dy.signum(), count);
             }
             // The wheel moves the highlight a row a notch, as the sprite
             // list's does (#128).
             Action::Wheel { at, notches } if count > 0 => {
                 self.point(at);
-                let moved = self.menu_choice as i32 + notches;
-                self.menu_choice = moved.clamp(0, count as i32 - 1) as usize;
+                self.menu_choice = highlight_moved(self.menu_choice, notches, count);
             }
             Action::Click { at, .. } => {
                 let area = self.menu_area(world).expect("a menu is open");
@@ -3406,10 +3408,7 @@ impl App {
 
     /// What the load menu says with no saves to list.
     pub fn no_saves(&self) -> String {
-        match &self.save_folder {
-            Some(folder) => format!("No saves in {}", folder.display()),
-            None => "No folder for saves".into(),
-        }
+        saves::none_listed(self.save_folder.as_deref())
     }
 
     /// Loads `file`, first asking if the world has run since it was last
@@ -3454,10 +3453,7 @@ impl App {
             }
             Action::Quit => return Flow::Quit,
             Action::Point(cell) => self.point(cell),
-            Action::Click { .. }
-            | Action::Follow { at: Some(_) }
-            | Action::Wheel { .. }
-            | Action::Release { .. } => {}
+            _ if action.is_pointer() => {}
             _ => {
                 self.to_load = None;
                 self.screen = Screen::Normal;

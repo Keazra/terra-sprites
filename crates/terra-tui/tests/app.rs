@@ -358,6 +358,29 @@ fn letting_go_of_a_mouse_button_leaves_the_quit_prompt_open() {
 }
 
 #[test]
+fn a_click_or_a_turn_of_the_wheel_leaves_the_quit_prompt_open() {
+    // Only a key answers the prompt (design §6.6), as on the title screen
+    // (M2 design §8.2).
+    let world = grass(40, 30);
+    let mut app = app(&world, tile_area(20, 10));
+    app.apply(Action::Back, &world);
+    let at = Position::new(3, 3);
+    for pointer in [
+        Action::Click {
+            at,
+            button: Button::Left,
+            amplified: false,
+        },
+        Action::Wheel { at, notches: 1 },
+        Action::Wheel { at, notches: -1 },
+    ] {
+        assert_eq!(app.apply(pointer, &world), Flow::Continue, "{pointer:?}");
+        assert_eq!(app.screen(), Screen::QuitPrompt, "{pointer:?}");
+    }
+    assert_eq!(app.apply(Action::Confirm, &world), Flow::Quit);
+}
+
+#[test]
 fn a_middle_click_leaves_the_quit_prompt_open_and_f_cancels_it() {
     // A middle click is the mouse, and `F` a key (design v26 §6.5).
     let world = grass(40, 30);

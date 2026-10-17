@@ -1897,6 +1897,7 @@ mod tests {
     use crate::mutation::{CopyChange, CopyingError};
     use crate::objects::Roll;
     use crate::registry::{ChemId, Verb};
+    use crate::test_util::id_at;
 
     /// A 7×5 field of grass, with a pool of shallow water at (5, 3), and a
     /// berry bush at (2, 2), before any step.
@@ -2820,6 +2821,136 @@ mod tests {
     }
 
     #[test]
+    fn with_learning_off_sprites_grow_no_more_familiar_with_each_other() {
+        // M2 design §15.2: unlike familiarity with object types (design
+        // §5.6), getting to know a sprite is learning, so a control run
+        // knows no sprite by sight or by playing with it. With learning on,
+        // the same two know each other.
+        let knowing = |learning: bool| {
+            let data = DataPack::builtin().expect("built-in data pack is valid");
+            let map = Map::from_ascii(&["....."], &data).expect("valid drawing");
+            let genes = |genes: &str| {
+                let text = format!(
+                    r#"(format: 1, genes: [{genes}
+                    BrainParam(param: "tau_base", value: 0.02),
+                ])"#
+                );
+                Genome::from_ron(&text, &data).expect("a valid genome")
+            };
+            let player = genes(
+                r#"AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
+                Instinct(inputs: [("attended_sprite", false)], verb: Play, weight: 1.0),"#,
+            );
+            let rester =
+                genes(r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),"#);
+            let scenario = Scenario {
+                map,
+                objects: &[],
+                sprites: &[
+                    (Pos { x: 0, y: 0 }, Some(player)),
+                    (Pos { x: 1, y: 0 }, Some(rester)),
+                ],
+                scripted: &[],
+                newborns: &[],
+            };
+            let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+            world.state.learning = learning;
+            let [a, b] = [0, 1].map(|x| world.sprite_at(Pos { x, y: 0 }).expect("a sprite").id());
+            let mut played = false;
+            for _ in 0..50 {
+                played |= world.step().iter().any(|event| {
+                    matches!(
+                        event.kind,
+                        EventKind::ActionEnded {
+                            verb: Verb::Play,
+                            outcome: Outcome::Applied,
+                            ..
+                        }
+                    )
+                });
+            }
+            assert!(played, "they played");
+            let knows = |id: EntityId, other| world.sprite(id).expect("alive").familiarity(other);
+            [knows(a, b), knows(b, a)]
+        };
+        assert_eq!(knowing(false), [0.0, 0.0]);
+        assert!(knowing(true).iter().all(|&known| known > 0.1));
+    }
+
+    #[test]
+    fn an_old_save_s_egg_with_no_egg_type_or_nowhere_to_lie_hatches_as_it_loads() {
+        // M2 design §10.4: an egg from before eggs were items, a sprite that
+        // hatches on tick 750, turned into an egg item as it loads; with no
+        // type to become, or with an item on the only tile there is, it
+        // hatches at once, keeping its ID.
+        let hatches = |data: DataPack, objects: &[(Pos, &str)]| {
+            let map = Map::from_ascii(&["."], &data).expect("valid drawing");
+            let at = Pos { x: 0, y: 0 };
+            let scenario = Scenario {
+                map,
+                objects,
+                sprites: &[(at, None)],
+                scripted: &[],
+                newborns: &[at],
+            };
+            let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+            let id = world.sprites().next().expect("the egg").id();
+            let egg = world.state.sprites.get_mut(id).expect("the egg");
+            egg.hatches = Some(750);
+            world.state.old_eggs_to_items(&world.data);
+            let as_egg = world.egg(id).map(|egg| egg.hatches());
+            (world.sprite(id).map(|sprite| sprite.age()), as_egg)
+        };
+        let builtin = DataPack::builtin().expect("built-in data pack is valid");
+        assert_eq!(hatches(builtin.clone(), &[]), (None, Some(750)), "an egg");
+        let berry = [(Pos { x: 0, y: 0 }, "berry")];
+        assert_eq!(hatches(builtin, &berry), (Some(0), None), "nowhere to lie");
+        let changes = [("next: Hatch", "next: Expire")];
+        let no_egg = crate::test_util::builtin_changing("objects.ron", &changes);
+        assert_eq!(hatches(no_egg, &[]), (Some(0), None), "no egg type");
+    }
+
+    /// The built-in pack's water, as sprites learn about it (`objects.ron`).
+    const WATER: Subject = Subject::ObjectType(100);
+
+    /// Rests, and does nothing else.
+    const RESTS: &str = r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),"#;
+
+    /// Thirsty from the start, and drinks.
+    const DRINKS: &str = r#"InitialConcentration(chem: "thirst", value: 1.0),
+        Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),"#;
+
+    /// Rests, its eye drawn to a parent showing it something (M2 design
+    /// §18.1) and to nothing by chance, with `genes` as well.
+    fn looks_to_a_parent_showing(genes: &str) -> String {
+        format!(
+            r#"{RESTS}
+            AttentionInstinct(input: "always", category: "sprite", whom: Showing, weight: 1.0),
+            BrainParam(param: "curiosity", value: 0.0),
+            BrainParam(param: "tau_att_base", value: 0.05),
+            {genes}"#
+        )
+    }
+
+    /// A genome of `genes`, read with `data`.
+    fn genome_of(genes: &str, data: &DataPack) -> Genome {
+        let text = format!("(format: 2, genes: [{genes}])");
+        Genome::from_ron(&text, data).expect("a valid genome")
+    }
+
+    /// Teaches the sprite `id` that water is good for thirst, as if it had
+    /// drunk.
+    fn know_water(world: &mut World, id: EntityId) {
+        let needs = world.data.need_places().len();
+        let thirst = world.data.needs().position(|need| need == "thirst");
+        let thirst = thirst.expect("thirst is a need");
+        let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
+        let known = brain.experience.learn_about(WATER, needs);
+        known.worth[thirst] = 0.6;
+        known.touched = true;
+    }
+
+    #[test]
     fn a_parent_drinking_draws_its_young_s_eye_until_the_young_knows_water() {
         // M2 design §18.1: an attention instinct about a parent showing it
         // something draws its eye to its mother drinking for her thirst,
@@ -2827,45 +2958,23 @@ mod tests {
         // it doesn't know that; once it does, the nearer parent draws it.
         let data = DataPack::builtin().expect("built-in data pack is valid");
         let map = Map::from_ascii(&["~.....", "~....."], &data).expect("valid drawing");
-        let genes = |genes: &str| {
-            let genes = format!("(format: 2, genes: [{genes}])");
-            Genome::from_ron(&genes, &data).expect("a valid genome")
-        };
-        let rests = r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0)"#;
-        let looks = format!(
-            r#"{rests},
-            AttentionInstinct(input: "always", category: "sprite", whom: Showing, weight: 1.0),
-            BrainParam(param: "curiosity", value: 0.0),
-            BrainParam(param: "tau_att_base", value: 0.05),
-            BrainParam(param: "attention_margin", value: 0.0)"#
-        );
-        let drinks = r#"InitialConcentration(chem: "thirst", value: 1.0),
-            Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0)"#;
+        let looks =
+            looks_to_a_parent_showing(r#"BrainParam(param: "attention_margin", value: 0.0),"#);
         let (mother, father, young) = (Pos { x: 1, y: 0 }, Pos { x: 5, y: 1 }, Pos { x: 4, y: 1 });
         let scenario = Scenario {
             map,
             objects: &[],
             sprites: &[
-                (mother, Some(genes(drinks))),
-                (father, Some(genes(rests))),
-                (young, Some(genes(&looks))),
+                (mother, Some(genome_of(DRINKS, &data))),
+                (father, Some(genome_of(RESTS, &data))),
+                (young, Some(genome_of(&looks, &data))),
             ],
             scripted: &[],
             newborns: &[young],
         };
         let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
-        let id = |world: &World, pos: Pos| world.sprite_at(pos).expect("a sprite").id();
-        let (mother_id, father_id, young_id) =
-            (id(&world, mother), id(&world, father), id(&world, young));
-        let needs = world.data.need_places().len();
-        let know_water = |world: &mut World, id: EntityId| {
-            let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
-            let known = brain
-                .experience
-                .learn_about(Subject::ObjectType(100), needs);
-            known.worth[1] = 0.6;
-            known.touched = true;
-        };
+        let [mother_id, father_id, young_id] =
+            [mother, father, young].map(|pos| id_at(&world, pos));
         know_water(&mut world, mother_id);
         let parents = vec![mother_id, father_id];
         world
@@ -2890,26 +2999,23 @@ mod tests {
         // it nothing, and isn't looked up.
         let data = DataPack::builtin().expect("built-in data pack is valid");
         let map = Map::from_ascii(&["....", "...."], &data).expect("valid drawing");
-        let genes = |genes: &str| {
-            let genes = format!("(format: 2, genes: [{genes}])");
-            Genome::from_ron(&genes, &data).expect("a valid genome")
-        };
-        let rests = r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0)"#;
         let looks = format!(
-            r#"{rests},
+            r#"{RESTS}
             AttentionInstinct(input: "always", category: "sprite", whom: Showing, weight: 1.0)"#
         );
         let (young, mother, berry) = (Pos { x: 3, y: 1 }, Pos { x: 1, y: 0 }, Pos { x: 0, y: 0 });
         let scenario = Scenario {
             map,
             objects: &[(berry, "berry")],
-            sprites: &[(young, Some(genes(&looks))), (mother, Some(genes(rests)))],
+            sprites: &[
+                (young, Some(genome_of(&looks, &data))),
+                (mother, Some(genome_of(RESTS, &data))),
+            ],
             scripted: &[(mother, ScriptedAction::Eat { at: berry })],
             newborns: &[young],
         };
         let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
-        let id = |world: &World, pos: Pos| world.sprite_at(pos).expect("a sprite").id();
-        let (young_id, mother_id) = (id(&world, young), id(&world, mother));
+        let (young_id, mother_id) = (id_at(&world, young), id_at(&world, mother));
         let needs = world.data.need_places().len();
         let berry = world.data.real_object_type("berry").expect("berries");
         let berry_type = world.data.object_types()[berry].id;
@@ -2944,6 +3050,65 @@ mod tests {
         };
         assert!(!showing(&world), "the berry is gone");
         world.step();
+    }
+
+    #[test]
+    fn a_parent_heard_calling_out_of_sight_shows_its_young_nothing() {
+        // M2 design §18.1: a young sprite *sees* its parent showing it
+        // something. Its mother drinks, knowing water is good for thirst,
+        // out of its sight, and it heard her call: she draws its eye as a
+        // call does, but not as showing it something, so the ball it sees
+        // draws it more.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let rows = [format!("~{}", ".".repeat(29)), ".".repeat(30)];
+        let rows = rows.each_ref().map(String::as_str);
+        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
+        let seeing_6 = |genes: &str| {
+            let genes = format!(r#"Trait(trait: "sense_radius", value: 6.0), {genes}"#);
+            genome_of(&genes, &data)
+        };
+        let looks = looks_to_a_parent_showing(
+            r#"AttentionInstinct(input: "always", category: "toy", weight: 0.5),
+            BrainParam(param: "salience_gain", value: 0.0),"#,
+        );
+        let (mother, young_tile, ball) =
+            (Pos { x: 5, y: 0 }, Pos { x: 20, y: 1 }, Pos { x: 22, y: 1 });
+        let scenario = Scenario {
+            map,
+            objects: &[(ball, "ball")],
+            sprites: &[
+                (mother, Some(seeing_6(DRINKS))),
+                (young_tile, Some(seeing_6(&looks))),
+            ],
+            scripted: &[],
+            newborns: &[young_tile],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let (mother_id, young_id) = (id_at(&world, mother), id_at(&world, young_tile));
+        know_water(&mut world, mother_id);
+        let tick = world.state.tick;
+        let young = world.state.sprites.get_mut(young_id).expect("young");
+        young.parents = vec![mother_id];
+        young.heard.push(crate::courtship::Heard {
+            caller: mother_id,
+            from: mother,
+            tick,
+        });
+        world.step();
+        let action = world.sprite(mother_id).expect("mother").action();
+        let action = action.expect("her action");
+        assert_eq!(action.verb, Verb::Drink, "she goes to drink");
+        let walking = matches!(action.progress, crate::action::Progress::Walking { .. });
+        assert!(walking, "{:?}", action.progress);
+        let showing = crate::family::relation(
+            &world.state,
+            &world.data,
+            young_id,
+            Target::Sprite(mother_id),
+        );
+        assert!(!showing.showing, "she's out of its sight");
+        let looks_at = world.sprite(young_id).expect("young").attending_to();
+        assert_eq!(looks_at, Some(ball));
     }
 
     #[test]
@@ -3378,11 +3543,14 @@ mod tests {
         world
     }
 
-    #[test]
-    fn a_remembered_place_with_no_way_there_leaves_what_the_sprite_is_doing_be() {
-        // M2 design §7.4: going to a ball, very thirsty, its eye turns to
-        // water it remembers beyond a wall. With no way there, it forgets
-        // the water and goes on to the ball, and decides nothing new.
+    /// A sprite going to a ball at (36, 2), its eye on it, very thirsty,
+    /// that remembers water at (0, 2) beyond a wall whose one gap a bush
+    /// stands in, with `genes` and `objects` as well; and the ball. Its next
+    /// step 5 turns its eye to the water (M2 design §7.4).
+    fn going_to_a_ball_with_water_beyond_a_wall(
+        genes: &str,
+        objects: &[(Pos, &str)],
+    ) -> (World, EntityId, EntityId) {
         let data = DataPack::builtin().expect("built-in data pack is valid");
         // A wall with a gap that a bush stands in.
         let (wall, gap) = (
@@ -3392,24 +3560,29 @@ mod tests {
         let rows = [&wall, &wall, &gap, &wall, &wall].map(String::as_str);
         let map = Map::from_ascii(&rows, &data).expect("valid drawing");
         let genome = Genome::from_ron(
-            r#"(format: 1, genes: [
-                Trait(trait: "speed", value: 10.0),
-                Trait(trait: "sense_radius", value: 6.0),
-                Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
-                Instinct(inputs: [("always", false)], verb: Approach, weight: 0.3),
-                BrainParam(param: "tau_base", value: 0.05),
-                BrainParam(param: "salience_gain", value: 0.0),
-                BrainParam(param: "curiosity", value: 0.0),
-            ])"#,
+            &format!(
+                r#"(format: 1, genes: [
+                    Trait(trait: "speed", value: 10.0),
+                    Trait(trait: "sense_radius", value: 6.0),
+                    Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
+                    Instinct(inputs: [("always", false)], verb: Approach, weight: 0.3),
+                    BrainParam(param: "tau_base", value: 0.05),
+                    BrainParam(param: "salience_gain", value: 0.0),
+                    BrainParam(param: "curiosity", value: 0.0),
+                    {genes}
+                ])"#
+            ),
             &data,
         )
         .expect("a valid genome");
+        let mut objects = objects.to_vec();
+        objects.extend([
+            (Pos { x: 20, y: 2 }, "berry_bush"),
+            (Pos { x: 36, y: 2 }, "ball"),
+        ]);
         let scenario = Scenario {
             map,
-            objects: &[
-                (Pos { x: 20, y: 2 }, "berry_bush"),
-                (Pos { x: 36, y: 2 }, "ball"),
-            ],
+            objects: &objects,
             sprites: &[(Pos { x: 30, y: 2 }, Some(genome))],
             scripted: &[],
             newborns: &[],
@@ -3418,16 +3591,12 @@ mod tests {
         let id = world.sprites().next().expect("the sprite").id();
         let ball = world.object_at(Pos { x: 36, y: 2 }).expect("the ball").id();
         let ball_type = world.data.object_type_id("ball");
+        let toy = world.state.category_of(&world.data, Target::Object(ball));
         let at = Pos { x: 0, y: 2 };
         let water = world.state.subject_of(&world.data, Target::Water(at));
         let needs = world.data.needs().count();
         let quench = world.data.needs().position(|n| n == "thirst");
-        let thirst = world
-            .data
-            .chemicals()
-            .iter()
-            .position(|c| c.name == "thirst");
-        let (quench, thirst) = (quench.expect("thirst"), thirst.expect("thirst"));
+        let (quench, thirst) = (quench.expect("thirst"), thirst_chem(&world));
         // A step first, for its flood.
         world.step();
         let tick = world.state.tick;
@@ -3454,6 +3623,24 @@ mod tests {
             tick,
             &mut events,
         );
+        sprite.brain.attended = Some(toy);
+        (world, id, ball)
+    }
+
+    /// Where the built-in pack's thirst is among its chemicals.
+    fn thirst_chem(world: &World) -> usize {
+        let chemicals = world.data.chemicals();
+        let thirst = chemicals.iter().position(|c| c.name == "thirst");
+        thirst.expect("thirst")
+    }
+
+    #[test]
+    fn a_remembered_place_with_no_way_there_leaves_what_the_sprite_is_doing_be() {
+        // M2 design §7.4: going to a ball, very thirsty, its eye turns to
+        // water it remembers beyond a wall. With no way there, it forgets
+        // the water and goes on to the ball, and decides nothing new.
+        let (mut world, id, ball) = going_to_a_ball_with_water_beyond_a_wall("", &[]);
+        let at = Pos { x: 0, y: 2 };
         let events = world.step();
         let sprite = world.sprites().next().expect("the sprite");
         assert_eq!(sprite.remembered_places(), [], "it forgot the water");
@@ -3465,6 +3652,187 @@ mod tests {
         assert_eq!(action.verb, Verb::Approach);
         assert_eq!(action.target, Some(Target::Object(ball)));
         assert_ne!(sprite.attending_to(), Some(at), "no decision about it");
+    }
+
+    #[test]
+    fn a_remembered_place_with_no_way_there_leaves_the_sprite_s_eye_where_it_was() {
+        // M2 design §7.4: a place it can't get to never interrupts anything.
+        // A bush in sight draws its eye a little more than the ball, but by
+        // less than `attention_margin` (.2), so its eye stays on the ball,
+        // the tick after the water took it too.
+        let (mut world, id, ball) = going_to_a_ball_with_water_beyond_a_wall(
+            r#"AttentionInstinct(input: "always", category: "bush", weight: 0.1),"#,
+            &[(Pos { x: 33, y: 1 }, "berry_bush")],
+        );
+        world.step();
+        assert_eq!(world.sprites().next().expect("it").remembered_places(), []);
+        // No longer thirsty, it has no reason to change what it's doing.
+        let thirst = thirst_chem(&world);
+        world.state.sprites.get_mut(id).expect("it").body.chems[thirst] = 0.0;
+        let events = world.step();
+        let ended = events
+            .iter()
+            .any(|e| matches!(e.kind, EventKind::ActionEnded { id: ended, .. } if ended == id));
+        assert!(!ended, "{events:?}");
+        let sprite = world.sprites().next().expect("the sprite");
+        let action = sprite.action().expect("its action");
+        assert_eq!(action.verb, Verb::Approach);
+        assert_eq!(action.target, Some(Target::Object(ball)));
+    }
+
+    #[test]
+    fn a_remembered_place_with_no_way_there_leaves_its_eye_on_what_it_is_doing_that_tick() {
+        // M2 design §7.4, §18.1: carrying on, its latest step 5 is that
+        // tick's, with its eye on the ball, so it watches as it would have.
+        let (mut world, id, ball) = going_to_a_ball_with_water_beyond_a_wall("", &[]);
+        let tick = world.state.tick;
+        world.step();
+        let toy = world.state.category_of(&world.data, Target::Object(ball));
+        let brain = &world.state.sprites.get(id).expect("the sprite").brain;
+        assert_eq!(brain.attended, Some(toy));
+        let eye = brain.snapshot.as_ref().expect("a step 5");
+        assert_eq!(eye.tick, tick, "its latest step 5 is this tick's");
+        assert_eq!(eye.attended, Some(toy));
+        assert_eq!(eye.target, Some(Target::Object(ball)));
+        assert_eq!(eye.verb, Some(Verb::Approach));
+        let entry = brain.trace.back().expect("a trace entry");
+        assert_eq!((entry.tick, entry.verb), (tick, Some(Verb::Approach)));
+    }
+
+    #[test]
+    fn an_idle_sprite_with_no_way_to_a_remembered_place_still_takes_its_step_5() {
+        // M2 design §7.4, §18.1: doing nothing, it turns its eye to water it
+        // remembers beyond the wall. With no way there, it decides nothing,
+        // its eye goes back where it was, and its latest step 5 is that
+        // tick's, so it watches as it would have.
+        let (mut world, id, ball) = going_to_a_ball_with_water_beyond_a_wall("", &[]);
+        world.state.sprites.get_mut(id).expect("the sprite").action = None;
+        let tick = world.state.tick;
+        world.step();
+        let sprite = world.sprites().next().expect("the sprite");
+        assert_eq!(sprite.remembered_places(), [], "it forgot the water");
+        assert!(sprite.action().is_none(), "it decided nothing");
+        let toy = world.state.category_of(&world.data, Target::Object(ball));
+        let brain = &world.state.sprites.get(id).expect("the sprite").brain;
+        assert_eq!(brain.attended, Some(toy));
+        let eye = brain.snapshot.as_ref().expect("a step 5");
+        assert_eq!(eye.tick, tick, "its latest step 5 is this tick's");
+        assert_eq!((eye.attended, eye.verb), (Some(toy), None));
+    }
+
+    #[test]
+    fn a_sprite_lets_its_last_step_5_go_when_its_stage_changes() {
+        // M2 design §9.2, §18.1: the concepts its last step 5 was taken with
+        // may be gone, so until it takes another it learns nothing by
+        // watching, and one watching it is shown nothing.
+        let (mut world, id, _) = going_to_a_ball_with_water_beyond_a_wall("", &[]);
+        world.step();
+        let tick = world.state.tick;
+        let sprite = world.state.sprites.get_mut(id).expect("the sprite");
+        assert!(sprite.brain.snapshot.is_some(), "it took a step 5");
+        let grew = sprite.grow(tick + 100_000, &world.data);
+        assert_eq!(grew, Some((LifeStage::Adult, LifeStage::Old)));
+        assert!(sprite.brain.snapshot.is_none());
+    }
+
+    /// A world drawn from `row`, 40 tiles long, three times, with `objects`,
+    /// and a sprite on (35, 1) that sees 6 tiles, with `genes`, that knows
+    /// what `subject` (its type, or the water's) is as `learn` makes it, and
+    /// remembers `target` on `at`, as well as `recall`; and the sprite.
+    fn remembering(
+        row: &str,
+        objects: &[(Pos, &str)],
+        genes: &str,
+        target: impl Fn(&World) -> Target,
+        recall: f32,
+        learn: impl Fn(&mut TypeMemory),
+    ) -> (World, EntityId) {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let map = Map::from_ascii(&[row; 3], &data).expect("valid drawing");
+        let genome = Genome::from_ron(
+            &format!(
+                r#"(format: 1, genes: [
+                    Trait(trait: "sense_radius", value: 6.0),
+                    BrainParam(param: "salience_gain", value: 0.0),
+                    BrainParam(param: "curiosity", value: 0.0),
+                    {genes}
+                ])"#
+            ),
+            &data,
+        )
+        .expect("a valid genome");
+        let scenario = Scenario {
+            map,
+            objects,
+            sprites: &[(Pos { x: 35, y: 1 }, Some(genome))],
+            scripted: &[],
+            newborns: &[],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let id = world.sprites().next().expect("the sprite").id();
+        let target = target(&world);
+        let (at, _) = world.state.whereabouts(&world.data, target).expect("it");
+        let subject = world.state.subject_of(&world.data, target);
+        let needs = world.data.needs().count();
+        let limits = world.data.physiology().remembered_places;
+        let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
+        brain.experience.remember_place(subject, target, at, limits);
+        brain.experience.places[0].recall = recall;
+        let known = brain.experience.learn_about(subject, needs);
+        known.touched = true;
+        learn(known);
+        (world, id)
+    }
+
+    #[test]
+    fn a_remembered_place_is_not_offered_while_one_of_its_kind_is_in_sight() {
+        // M2 design §7.3: it looks at the water it sees, not the water it
+        // remembers, even when it has learned water is bad, which draws the
+        // eye less the fainter the water is remembered.
+        let row = format!("~{}~", ".".repeat(38));
+        let (mut world, id) = remembering(
+            &row,
+            &[],
+            r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),"#,
+            |_| Target::Water(Pos { x: 0, y: 1 }),
+            0.5,
+            |known| known.bad = -0.5,
+        );
+        world.step();
+        let brain = &world.state.sprites.get(id).expect("the sprite").brain;
+        let eye = brain.snapshot.as_ref().and_then(|eye| eye.target);
+        assert!(
+            matches!(eye, Some(Target::Water(pos)) if pos.x == 39),
+            "{eye:?}"
+        );
+    }
+
+    #[test]
+    fn a_remembered_place_whose_thing_is_gone_is_not_offered() {
+        // M2 design §7.3: out of sight, it hasn't seen the bush is gone, so
+        // it still remembers it, but its eye doesn't turn there, hungry as
+        // it is, and it doesn't find there's no way to it and forget it.
+        let row = ".".repeat(40);
+        let (mut world, id) = remembering(
+            &row,
+            &[(Pos { x: 2, y: 1 }, "berry_bush")],
+            r#"InitialConcentration(chem: "hunger", value: 1.0),
+               Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),"#,
+            |world| {
+                let bush = world.object_at(Pos { x: 2, y: 1 }).expect("the bush");
+                Target::Object(bush.id())
+            },
+            1.0,
+            |known| known.worth[0] = 0.8,
+        );
+        let bush = world.state.objects.at(Pos { x: 2, y: 1 }).expect("it");
+        world.state.objects.remove(bush);
+        world.step();
+        let sprite = world.sprites().next().expect("the sprite");
+        assert_eq!(sprite.remembered_places().len(), 1, "it hasn't seen");
+        let brain = &world.state.sprites.get(id).expect("the sprite").brain;
+        let eye = brain.snapshot.as_ref().expect("a step 5");
+        assert_eq!(eye.target, None, "{eye:?}");
     }
 
     #[test]

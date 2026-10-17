@@ -365,3 +365,50 @@ impl Playback {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_util::builtin;
+
+    /// Where a replay started before the modes (M2 design §16.1): a fresh
+    /// world was its seed and preset alone.
+    #[derive(Serialize)]
+    enum StartBeforeModes {
+        Fresh { seed: u64, config: Preset },
+    }
+
+    /// A replay's body as it was written before the modes.
+    #[derive(Serialize)]
+    struct ContentsBeforeModes<'a> {
+        pack: PackIdentity,
+        sources: &'a [(String, String)],
+        start: StartBeforeModes,
+        commands: &'a [(u64, Command)],
+        checkpoints: &'a [(u64, u64)],
+        end: u64,
+    }
+
+    #[test]
+    fn a_replay_from_before_the_modes_plays_as_a_story_world() {
+        let data = builtin();
+        let config = WorldConfig::builtin(&data);
+        let story = World::new(config.clone(), data.clone(), 7);
+        let body = rmp_serde::to_vec_named(&ContentsBeforeModes {
+            pack: PackIdentity::of(&data),
+            sources: data.sources(),
+            start: StartBeforeModes::Fresh {
+                seed: 7,
+                config: Preset::from(&config),
+            },
+            commands: &[],
+            checkpoints: &[(0, story.state_hash())],
+            end: 0,
+        })
+        .expect("it serializes");
+        let playback = Playback::new(&save::framed(MAGIC, &body)).expect("it plays");
+        assert!(playback.started_fresh());
+        assert_eq!(playback.world().mode(), Mode::Story);
+        assert_eq!(playback.divergence(), None, "the Story world it was");
+    }
+}

@@ -7,7 +7,10 @@
 //! it last saw its egg, and forgets the place once it finds the egg gone.
 
 mod common;
-use common::{ALONE, FEMALE, RECEPTIVE, at, builtin, hatch, id_at, laid, lone, world_in};
+use common::{
+    ALONE, FEMALE, LONE, RECEPTIVE, at, builtin, builtin_changing, hatch, id_at, laid, lone,
+    world_in,
+};
 
 use terra_sim::{
     ActionView, Command, DataPack, EntityId, EventKind, Outcome, Pos, Progress, Target, Verb, World,
@@ -525,4 +528,106 @@ fn an_egg_that_hatches_out_of_sight_is_not_found_and_not_gone_back_to() {
         let back = action.is_some_and(|action| action.egg_at == Some(tile));
         assert!(!back, "it went back to where the egg was");
     }
+}
+
+#[test]
+fn an_egg_that_hatches_out_of_sight_while_another_is_in_sight_is_not_found() {
+    // M2 design §15.6: with one egg in sight and the other away, the away
+    // one hatching ends the egg's sense, but nothing was found: found_family
+    // is for one back in sight. Two eggs a hundred ticks apart.
+    let rows = field(40, 3);
+    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let data = builtin_changing("physiology.ron", &[LONE, ("rest: 1500,", "rest: 100,")]);
+    let genes = format!("{SENSES}{ALONE}{FEMALE}");
+    let mut world = world_in(data, &rows, &[(at(2, 1), &genes)]);
+    let mother = id_at(&world, at(2, 1));
+    let first = laid(&mut world, 100).expect("an egg").egg;
+    let second = laid(&mut world, 300).expect("another egg").egg;
+    // The first out of her sight, the second beside her, and she held
+    // where she is.
+    world.submit(Command::PickUp { item: first });
+    world.submit(Command::PutDown { tile: at(36, 1) });
+    world.step();
+    let home = pos(&world, mother);
+    world.submit(Command::TakeHold { sprite: mother });
+    world.submit(Command::MoveCursor { tile: home });
+    world.step();
+    assert!(
+        on(&world, mother, EGG_AWAY),
+        "her first egg is out of sight"
+    );
+    assert!(world.sprite(mother).unwrap().sees(egg_at(&world, second)));
+    let mut hatched = None;
+    for tick in 0..1_000 {
+        let events = world.step();
+        let hatching =
+            |e: &terra_sim::Event| matches!(e.kind, EventKind::Hatched { id, .. } if id == first);
+        assert!(!on(&world, mother, FOUND), "found nothing");
+        if events.iter().any(hatching) {
+            hatched = Some(tick);
+        }
+        if hatched.is_some_and(|hatched| tick > hatched + 3) {
+            break;
+        }
+    }
+    assert!(hatched.is_some(), "the first egg hatched");
+    assert_eq!(pos(&world, mother), home, "she stayed by her second egg");
+    assert!(world.egg(second).is_some(), "the second egg hasn't hatched");
+    assert!(!on(&world, mother, EGG_AWAY), "her egg left is in sight");
+    assert!(on(&world, mother, YOUNG_AWAY), "a young one out of sight");
+}
+
+/// A resting mother on a field of grass, a tick after the Cursor picked up
+/// the lone egg she laid beside her, in `lone`'s pack: the world, the
+/// mother, the egg and where it lay. Her egg was beside her until then.
+fn mother_whose_egg_the_cursor_holds() -> (World, EntityId, EntityId, Pos) {
+    let rows = field(20, 3);
+    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let genes = format!(
+        r#"{SENSES}{RESTER}{ALONE}{FEMALE}
+        BrainParam(param: "curiosity", value: 0.0),"#
+    );
+    let mut world = world_in(lone(), &rows, &[(at(2, 1), &genes)]);
+    let mother = id_at(&world, at(2, 1));
+    let egg = laid(&mut world, 100).expect("an egg").egg;
+    let tile = egg_at(&world, egg);
+    world.step();
+    assert!(!on(&world, mother, EGG_AWAY), "her egg is beside her");
+    world.submit(Command::PickUp { item: egg });
+    world.step();
+    (world, mother, egg, tile)
+}
+
+#[test]
+fn an_egg_the_cursor_holds_is_out_of_sight_and_found_once_put_down() {
+    // M2 design §15.6: an egg the Cursor holds is in no one's sight, even
+    // its mother's beside it; put down by her, it's back in sight, and
+    // found.
+    let (mut world, mother, _, tile) = mother_whose_egg_the_cursor_holds();
+    assert!(on(&world, mother, EGG_AWAY), "held, it's out of sight");
+    assert!(on(&world, mother, EGG_ALONE), "she saw no one by it");
+    world.submit(Command::PutDown { tile });
+    world.step();
+    assert!(world.sprite(mother).unwrap().sees(tile));
+    assert!(!on(&world, mother, EGG_AWAY), "put down, it's in sight");
+    assert!(on(&world, mother, FOUND), "she found it");
+}
+
+#[test]
+fn a_parent_saved_while_its_egg_is_away_finds_it_once_loaded() {
+    // M2 design §15.6: which of its eggs and young a sprite missed at its
+    // latest look is world state, saved and hashed, so a world loaded
+    // while her egg is away is the same world, and she finds it once it's
+    // back in sight, as she would have.
+    let (mut world, mother, _, tile) = mother_whose_egg_the_cursor_holds();
+    assert!(on(&world, mother, EGG_AWAY), "held, it's out of sight");
+    let mut loaded = World::load(&world.save()).expect("the save loads");
+    assert_eq!(loaded.state_hash(), world.state_hash());
+    for world in [&mut world, &mut loaded] {
+        world.submit(Command::PutDown { tile });
+        world.step();
+        assert!(!on(world, mother, EGG_AWAY), "put down, it's in sight");
+        assert!(on(world, mother, FOUND), "she found it");
+    }
+    assert_eq!(loaded.state_hash(), world.state_hash());
 }
