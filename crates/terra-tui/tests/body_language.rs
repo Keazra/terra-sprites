@@ -11,7 +11,7 @@ use terra_sim::{
     ActionView, DataPack, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos, Progress,
     Scenario, ScriptedAction, Target, Thing, Verb, World,
 };
-use terra_tui::app::{App, ColourMode, PLEASED_AT, Ticks};
+use terra_tui::app::{App, ColourMode, PLEASED_AT, Selection, Ticks};
 use terra_tui::clock::Speed;
 use terra_tui::input::Action;
 use terra_tui::theme::{SemanticTile, Theme};
@@ -163,18 +163,27 @@ fn the_young_are_drawn_small() {
 }
 
 #[test]
-fn a_selected_sprite_is_in_reverse_video_whatever_its_age() {
+fn a_selected_sprite_is_in_reverse_video_young_or_grown() {
     // Design §6.2 and M2 design §9.6 (#282): the young and the grown show
     // they're selected the same way, in both themes, as an egg does.
     let (young, grown) = (at(2, 3), at(5, 3));
     let world = field_with_newborns(&[(young, feeling(&[])), (grown, feeling(&[]))], &[young]);
-    for theme in [Theme::cp437(), Theme::ascii()] {
+    let id = |pos| world.sprite_at(pos).expect("a sprite").id();
+    for (name, theme) in [("cp437", Theme::cp437()), ("ascii", Theme::ascii())] {
         let mut app = app_for(&world, theme);
-        for (selected, other) in [(young, grown), (grown, young)] {
+        // `Tab` selects the young one, then the grown one.
+        for (selected, other, stage) in [(young, grown, "young"), (grown, young, "grown")] {
             app.apply(Action::SelectNext, &world);
+            assert_eq!(app.selection(), Some(Selection::Living(id(selected))));
             let screen = render(&app, &world);
-            assert!(screen[cell(selected)].modifier.contains(Modifier::REVERSED));
-            assert!(!screen[cell(other)].modifier.contains(Modifier::REVERSED));
+            assert!(
+                screen[cell(selected)].modifier.contains(Modifier::REVERSED),
+                "{name}: the selected {stage} sprite"
+            );
+            assert!(
+                !screen[cell(other)].modifier.contains(Modifier::REVERSED),
+                "{name}: the other sprite, with the {stage} one selected"
+            );
         }
     }
 }

@@ -703,7 +703,7 @@ fn the_selected_sprite_is_drawn_with_its_own_glyph() {
     );
     let (selected, other) = (cell(&world, 7, 1), cell(&world, 2, 3));
     assert_eq!(screen[other].symbol(), "☺", "the other sprite");
-    // In reverse video too, as a selected young sprite is (#282).
+    // In reverse video too, as a selected young sprite is (design §6.2, #282).
     assert!(screen[selected].modifier.contains(Modifier::REVERSED));
     assert!(!screen[other].modifier.contains(Modifier::REVERSED));
 
