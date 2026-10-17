@@ -4603,8 +4603,10 @@ fn numbers_of(gene: &GeneView) -> Vec<f32> {
             vec![value]
         }
         GeneView::Emitter {
-            gain, threshold, ..
-        } if threshold == 0.0 => vec![gain],
+            gain,
+            threshold: 0.0,
+            ..
+        } => vec![gain],
         GeneView::Emitter {
             gain, threshold, ..
         } => vec![gain, threshold],
