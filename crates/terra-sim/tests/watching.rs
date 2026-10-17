@@ -2,7 +2,9 @@
 //! the sprite its eye is on knows about what it uses.
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_changing, close, genome, id_at, value_of};
+use common::{
+    AGES_AT_ONCE, OLD, WorldBuilder, at, builtin, builtin_changing, close, genome, id_at, value_of,
+};
 
 use terra_sim::{
     Command, DataPack, EntityId, Event, EventKind, Learned, LifeStage, Pos, ScriptedAction, Thing,
@@ -145,31 +147,20 @@ fn a_sprite_takes_on_a_thing_s_worth_only_for_the_need_the_one_it_watches_used_i
     assert_eq!(value_of(&world, watching, &water_for_thirst()), 0.0);
 }
 
-/// Genes that have a sprite grow up and grow old at 1 tick old, so a
-/// scenario's sprite, which starts just grown up, starts old, in
-/// `old_every_tick`'s pack.
-const OLD: &str = r#"Trait(trait: "grows_up", value: 1.0),
-    Trait(trait: "grows_old", value: 1.0),"#;
-
 /// The built-in data pack, in which a sprite may grow old at 1 tick old, and
 /// an old sprite's genes take hits so small and so many that every gene
 /// that can weaken, each instinct included, weakens a little every tick (M2
 /// design §9.4).
 fn old_every_tick() -> DataPack {
-    builtin_changing(
-        "physiology.ron",
-        &[
-            ("grows_old: (6000.0,", "grows_old: (1.0,"),
-            ("grows_up: (1500.0,", "grows_up: (1.0,"),
-            ("hit: 0.01, gives_out", "hit: 0.0001, gives_out"),
-        ],
-    )
+    let [old, up] = AGES_AT_ONCE;
+    let tiny_hits = ("hit: 0.01, gives_out", "hit: 0.0001, gives_out");
+    builtin_changing("physiology.ron", &[old, up, tiny_hits])
 }
 
 /// What the sprite watching takes on of water's worth for thirst, and what
 /// the drinker learns of it, once a sprite of `DRINKER`'s genes on (1, 1)
 /// has drunk at the water beside it, watched by one on (5, 1) whose eye is
-/// on it, in `old_every_tick`'s pack. Each is old from the start if its
+/// on it, in `old_every_tick`'s pack. Each is `OLD` from the start if its
 /// flag says so.
 fn watched_drinking_when_old(drinker_old: bool, watching_old: bool) -> (f32, f32) {
     let old = |is_old: bool| if is_old { OLD } else { "" };

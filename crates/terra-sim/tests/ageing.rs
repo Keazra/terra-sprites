@@ -2,7 +2,10 @@
 //! genes set, and a gene may switch on as they do.
 
 mod common;
-use common::{BARREN, WorldBuilder, at, builtin, builtin_changing, genome};
+use common::{
+    AGES_AT_ONCE, BARREN, FEMALE, KEEN, OLD, WorldBuilder, at, builtin, builtin_changing, close,
+    family_in, genome, id_at, laid,
+};
 
 use terra_sim::{
     DataPack, Event, EventKind, Learned, LifeStage, Part, Pos, ScriptedAction, Thing, Verb, World,
@@ -129,6 +132,67 @@ fn an_instinct_that_switches_on_at_growing_up_joins_without_touching_what_was_le
             .any(|c| c.part == Part::Concept(vec![("always", false)]) && c.amount > 0.5),
         "the new instinct drives the rest: {explanation:?}"
     );
+}
+
+#[test]
+fn a_gene_that_switches_on_at_growing_up_works_from_that_tick_s_chemistry() {
+    // M2 design §9.1: its stage changes at the start of step 3, before its
+    // chemistry runs, so a feeling that switches on rises that tick.
+    let mut world = world_in(
+        builtin_changing("physiology.ron", &AGES_AT_ONCE),
+        r#"Trait(trait: "grows_up", value: 3.0),
+           Emitter(locus: Locus("always"), mode: Level, gain: 0.1, chem: "longing", from: Adult),"#,
+        &[],
+        &[],
+    );
+    run_to(&mut world, 3);
+    let young = world.sprites().next().expect("the sprite");
+    assert_eq!(young.life_stage(), LifeStage::Young);
+    assert_eq!(young.chemical("longing"), Some(0.0));
+    let events = world.step();
+    let adult = world.sprites().next().expect("the sprite");
+    assert!(events.contains(&Event {
+        tick: 3,
+        kind: EventKind::GrewUp { id: adult.id() }
+    }));
+    let longing = adult.chemical("longing").expect("longing");
+    assert!(close(longing, 0.1), "{longing}");
+}
+
+#[test]
+fn an_old_pair_still_mates_and_lays_an_egg() {
+    // M2 design §5, §9.1: an old sprite still counts as an adult.
+    let female = format!("{KEEN}{FEMALE}{OLD}");
+    let male = format!("{KEEN}{OLD}");
+    let data = builtin_changing("physiology.ron", &AGES_AT_ONCE);
+    let mut world = family_in(data, &[(at(2, 1), &female), (at(3, 1), &male)], &[], 1);
+    let (mother, father) = (id_at(&world, at(2, 1)), id_at(&world, at(3, 1)));
+    for id in [mother, father] {
+        let stage = world.sprite(id).expect("the sprite").life_stage();
+        assert_eq!(stage, LifeStage::Old);
+    }
+    let laying = laid(&mut world, 100).expect("an egg");
+    assert_eq!((laying.by, laying.with), (mother, Some(father)));
+}
+
+#[test]
+fn a_worn_sprite_s_wear_is_saved_and_hashed() {
+    // M2 design §9.4: wear is world state. A newborn this hungry is
+    // starving from the start, so a hard life wears it.
+    let data = builtin_changing(
+        "physiology.ron",
+        &[("newborn: (energy: 1.0,", "newborn: (energy: 0.1,")],
+    );
+    let mut world = world_in(data, "", &[], &[]);
+    run_to(&mut world, 50);
+    let wear = world.sprites().next().expect("the sprite").wear();
+    assert!(wear > 0.005, "{wear}");
+    let mut loaded = World::load(&world.save()).expect("the save loads");
+    assert_eq!(loaded.state_hash(), world.state_hash());
+    assert_eq!(loaded.sprites().next().expect("the sprite").wear(), wear);
+    run_to(&mut world, 100);
+    run_to(&mut loaded, 100);
+    assert_eq!(loaded.state_hash(), world.state_hash());
 }
 
 #[test]

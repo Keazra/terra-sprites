@@ -220,6 +220,20 @@ pub fn lone() -> DataPack {
     builtin_changing("physiology.ron", &[LONE])
 }
 
+/// The changes to `physiology.ron` that let a sprite grow up and grow old
+/// as soon as 1 tick old (M2 design §9.3), so a test of a young or old
+/// sprite needn't wait the thousands of ticks the built-in ranges take.
+pub const AGES_AT_ONCE: [(&str, &str); 2] = [
+    ("grows_old: (6000.0,", "grows_old: (1.0,"),
+    ("grows_up: (1500.0,", "grows_up: (1.0,"),
+];
+
+/// Genes that have a sprite grow up and grow old at 1 tick old, in a pack
+/// changed by `AGES_AT_ONCE`: a scenario's sprite, which starts just grown
+/// up, starts old (M2 design §9.1).
+pub const OLD: &str = r#"Trait(trait: "grows_up", value: 1.0),
+    Trait(trait: "grows_old", value: 1.0),"#;
+
 /// A world drawn from `rows`, with a sprite of its own genes on each tile,
 /// all grown up, made with `data`.
 pub fn world_in(data: DataPack, rows: &[&str], sprites: &[(Pos, &str)]) -> World {
