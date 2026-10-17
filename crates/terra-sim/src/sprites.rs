@@ -1301,7 +1301,9 @@ mod tests {
         worn.body.wear = 1.0;
         worn.health[0] = 0.0;
         assert_eq!(checked(&[worn.clone()], &data), Ok(()));
-        let damage: [(&str, fn(&mut Sprite)); 7] = [
+        // What it breaks, and how.
+        type Damage = (&'static str, fn(&mut Sprite));
+        let damage: [Damage; 7] = [
             ("health -0.1", |sprite| sprite.health[0] = -0.1),
             ("health 1.1", |sprite| sprite.health[0] = 1.1),
             ("gene healths", |sprite| sprite.health.push(1.0)),
