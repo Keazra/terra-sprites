@@ -10,8 +10,8 @@ use ratatui::layout::{Position, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{DataPack, Genome, Map, Pos, Scenario, World};
-use terra_tui::app::{App, Screen};
-use terra_tui::input::Action;
+use terra_tui::app::{App, CursorMode, Screen};
+use terra_tui::input::{Action, Button};
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
 use terra_tui::theme::Theme;
 use terra_tui::ui;
@@ -403,6 +403,36 @@ fn arrows_or_the_pointer_pick_a_moment_and_the_lines_under_the_graph_read_it() {
 }
 
 #[test]
+fn the_pointer_picks_a_moment_and_leaves_the_cursor_where_it_is_on_the_map() {
+    // M2 design §14.2: the pointer over the graph picks moments rather
+    // than moving the Cursor on the map beneath.
+    let mut world = field(2, 4);
+    run(&mut world, 250);
+    let mut app = app_on(&world);
+    // The pointer points at the tile up and left of it (design v27 §6.5).
+    let tile = Pos { x: 5, y: 1 };
+    let cell = app.cell_of(tile).expect("in view");
+    app.apply(Action::Point(Position::new(cell.x + 1, cell.y + 1)), &world);
+    assert_eq!(app.shown_cursor(), Some(tile));
+    app.apply(Action::Population, &world);
+    app.apply(Action::Point(Position::new(FIRST_COLUMN + 1, 9)), &world);
+    assert_eq!(app.graph_pick(), Some(200));
+    assert_eq!(app.shown_cursor(), Some(tile), "the pointer moved");
+    app.apply(
+        Action::Click {
+            at: Position::new(FIRST_COLUMN, 15),
+            button: Button::Left,
+            amplified: false,
+        },
+        &world,
+    );
+    assert_eq!(app.graph_pick(), Some(100));
+    assert_eq!(app.shown_cursor(), Some(tile), "a click");
+    app.apply(Action::Population, &world);
+    assert_eq!(app.shown_cursor(), Some(tile), "and closed");
+}
+
+#[test]
 fn a_picked_moment_stays_picked_as_time_runs_and_now_moves_on() {
     let mut world = field(2, 4);
     run(&mut world, 250);
@@ -579,6 +609,53 @@ fn time_runs_as_usual_while_the_graph_is_open() {
 }
 
 #[test]
+fn other_keys_do_nothing_while_the_graph_is_open() {
+    // M2 design §14.2: only the graph's own keys and those for time.
+    let mut world = field(2, 4);
+    run(&mut world, 250);
+    let mut app = app_on(&world);
+    let state = |app: &App| {
+        (
+            app.selection(),
+            app.tab(),
+            app.colour_mode(),
+            app.mode(),
+            app.tracking(),
+            app.detail(),
+            app.event_filter(),
+            app.shown_cursor(),
+        )
+    };
+    let before = state(&app);
+    app.apply(Action::Population, &world);
+    let keys = [
+        Action::SelectNext,
+        Action::SelectPrevious,
+        Action::NextTab,
+        Action::PreviousTab,
+        Action::CycleColours,
+        Action::Mode(CursorMode::Grab),
+        Action::Track,
+        Action::ToggleDetail,
+        Action::CycleEventFilter,
+        Action::Press {
+            button: Button::Left,
+            amplified: false,
+        },
+        Action::Rename,
+        Action::Help,
+        Action::SpriteList,
+        Action::FamilyTree,
+        Action::Enter,
+    ];
+    for key in keys {
+        app.apply(key, &world);
+        assert_eq!(app.screen(), Screen::Population, "{key:?}");
+        assert_eq!(state(&app), before, "{key:?}");
+    }
+}
+
+#[test]
 fn the_world_tab_starts_with_a_small_graph() {
     let mut world = field(2, 4);
     run(&mut world, 250);
@@ -667,4 +744,15 @@ fn a_column_narrower_than_the_time_between_counts_reads_the_count_it_shows() {
     let [first, _, since] = reading(&screen);
     assert!(first.starts_with("tick 200: "), "{first}");
     assert_eq!(since, "since tick 0: none laid, hatched or died");
+
+    // The first column shows the first count, and says so (§14.3).
+    app.apply(Action::Point(Position::new(FIRST_COLUMN, 9)), &world);
+    terminal
+        .draw(|frame| ui::render(frame, &app, &world))
+        .unwrap();
+    let screen = terminal.backend().buffer().clone();
+    assert_eq!(screen[(FIRST_COLUMN, AXIS)].symbol(), "▲");
+    let [first, _, since] = reading(&screen);
+    assert!(first.starts_with("tick 0: 1 sprite"), "{first}");
+    assert_eq!(since, "the first count");
 }

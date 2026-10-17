@@ -1,8 +1,11 @@
 //! Track (`T`, design v21 §6.1): the view follows the selected sprite.
 
-use ratatui::layout::Rect;
+mod common;
+use common::{LONE, LONE_MOTHER, QUICK, grow};
+
+use ratatui::layout::{Position, Rect};
 use terra_sim::{DataPack, Map, Pos, Scenario, ScriptedAction, World};
-use terra_tui::app::{App, Areas, Origin};
+use terra_tui::app::{App, Areas, Origin, Selection};
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
 
@@ -136,6 +139,49 @@ fn track_stops_a_quarter_of_the_view_past_the_wall() {
     select(&mut app, &world, at(1, 1));
     app.apply(Action::Track, &world);
     assert_eq!(app.viewport(), Origin { x: -5, y: -2 });
+}
+
+#[test]
+fn t_tracks_an_egg_where_it_lies() {
+    // M2 design §10.7: a mother who lays alone at once, on the field, and
+    // her egg, clicked on to select it.
+    let [quick, eggs] = QUICK;
+    let world = grow(
+        &[quick, eggs, LONE],
+        (60, 40),
+        &[(at(50, 30), LONE_MOTHER)],
+        1,
+    );
+    let egg = world.eggs().next().expect("an egg");
+    let (id, lies) = (egg.id(), egg.pos().expect("on the map"));
+    let areas = Areas {
+        tiles: Rect::new(1, 2, 20, 10),
+        inspector: None,
+        event_log: None,
+        overlay: None,
+    };
+    let mut app = App::new(world.map(), Theme::cp437(), 1, areas);
+    // The view scrolled to the egg, which the pointer points at from the
+    // cell down and right of it (design v27 §6.5).
+    let from = app.viewport();
+    let (dx, dy) = (
+        i32::from(lies.x) - from.x - 10,
+        i32::from(lies.y) - from.y - 5,
+    );
+    app.apply(Action::Scroll { dx, dy }, &world);
+    let cell = app.cell_of(lies).expect("in view");
+    let pointer = Position::new(cell.x + 1, cell.y + 1);
+    app.apply(Action::left_click(pointer), &world);
+    assert_eq!(app.selection(), Some(Selection::Living(id)));
+    app.apply(Action::Scroll { dx: -40, dy: -25 }, &world);
+    assert!(!centred_on(&app, lies), "scrolled away");
+    app.apply(Action::Track, &world);
+    assert!(app.tracking());
+    assert_eq!(
+        app.notice(),
+        Some(format!("Tracking Sprite #{}", id.0).as_str())
+    );
+    assert!(centred_on(&app, lies), "{:?}", app.viewport());
 }
 
 #[test]

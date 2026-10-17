@@ -1522,6 +1522,92 @@ fn the_body_tab_shows_age_life_stage_traits_drives_physical_levels_and_wear() {
     assert!(text[22..].iter().all(String::is_empty), "{text:?}");
 }
 
+#[test]
+fn the_body_tab_says_when_the_young_grow_up_and_the_old_are_old() {
+    // M2 design §9.6: `age … · young · grows up 4,500`, then `· adult ·
+    // grows old …`, then `· old`. In this pack a sprite may grow old as
+    // soon as it likes.
+    let physiology = include_str!("../../../data/physiology.ron")
+        .replace("grows_old: (6000.0, 60000.0)", "grows_old: (10.0, 60000.0)")
+        .replace("grows_up: (1500.0, 13500.0)", "grows_up: (10.0, 13500.0)");
+    let pack =
+        DataPack::from_sources(&builtin_with("physiology.ron", &physiology)).expect("valid pack");
+    let genes = |grows_up: f32, grows_old: f32| {
+        let genes = format!(
+            r#"(format: 1, genes: [
+                Trait(trait: "grows_up", value: {grows_up:?}),
+                Trait(trait: "grows_old", value: {grows_old:?}),
+            ])"#
+        );
+        terra_sim::Genome::from_ron(&genes, &pack).expect("a valid genome")
+    };
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let (young, grown) = (Pos { x: 2, y: 3 }, Pos { x: 6, y: 1 });
+    let sprites = [
+        (young, Some(genes(4500.0, 13500.0))),
+        (grown, Some(genes(10.0, 20.0))),
+    ];
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &sprites,
+        scripted: &[],
+        newborns: &[young],
+    };
+    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    world.step();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    let age_line = |app: &App, world: &World| {
+        let (_, text) = inspector(app, world);
+        text.into_iter()
+            .find(|line| line.starts_with("age "))
+            .expect("an age line")
+    };
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(age_line(&app, &world), "age 1 · young · grows up 4,500");
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(age_line(&app, &world), "age 11 · adult · grows old 20");
+    for _ in 0..10 {
+        world.step();
+    }
+    assert_eq!(age_line(&app, &world), "age 21 · old");
+}
+
+#[test]
+fn a_worn_sprite_grows_old_sooner_and_the_body_tab_says_its_genes_health() {
+    // M2 design §9.4, §9.6. In this pack water runs out at once and thirst
+    // injures badly, which wears the sprite, and a bad injury scars a gene
+    // every tick: once one has weakened, the wear line says the genes'
+    // average health too.
+    let physiology = include_str!("../../../data/physiology.ron")
+        .replace("hydration_loss: 0.00033", "hydration_loss: 1.0")
+        .replace("dehydration: 0.0011", "dehydration: 0.3")
+        .replace("chance: 0.002, hit: 0.05", "chance: 1.0, hit: 0.38");
+    let pack =
+        DataPack::from_sources(&builtin_with("physiology.ron", &physiology)).expect("valid pack");
+    let genome = r#"(format: 1, genes: [
+        Trait(trait: "grows_old", value: 13500.0),
+        Emitter(locus: Locus("always"), mode: Level, gain: 0.001, chem: "boredom"),
+    ])"#;
+    let (mut world, app) = one_sprite_in(pack, genome, &[], &[], 0);
+    let line = |world: &World, start: &str| {
+        let (_, text) = inspector(&app, world);
+        text.into_iter()
+            .find(|line| line.starts_with(start))
+            .unwrap_or_else(|| panic!("a line starting {start:?}"))
+    };
+    assert_eq!(line(&world, "age"), "age 7,500 · adult · grows old 13,500");
+    assert_eq!(line(&world, "wear"), "wear .00", "no gene weakened yet");
+    let vigour = |world: &World| world.sprites().next().expect("a sprite").vigour();
+    while vigour(&world) == 1.0 {
+        world.step();
+    }
+    let sprite = world.sprites().next().expect("a sprite");
+    assert!(sprite.grows_old_at() < 13_499.5, "worn sooner");
+    assert_eq!(line(&world, "age"), "age 7,503 · adult · grows old 13,489");
+    assert_eq!(line(&world, "wear"), "wear .00 · genes .62");
+}
+
 /// A genome that walks a grass step a tick.
 const SPEED_10: &str = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
 
@@ -3989,6 +4075,72 @@ fn an_egg_held_past_its_time_waits_and_its_hatchling_stays_selected() {
 }
 
 #[test]
+fn g_saves_a_selected_egg_s_genome_but_f_won_t_follow_it_and_tab_passes_it_by() {
+    // M2 design §10.7: an egg is clicked on to select it.
+    let (world, egg) = a_lone_egg(&[]);
+    let at = egg_tile(&world, egg);
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::left_click(pointer_on(&world, at.x, at.y)), &world);
+    assert_eq!(app.selection(), Some(Selection::Living(egg)));
+    // `F`, with the Cursor on the egg, where no sprite stands.
+    app.apply(Action::Follow { at: None }, &world);
+    assert_eq!(app.followed(), None);
+    assert_eq!(app.refusal(), Some("No sprite here to follow"));
+    // `G` saves the genome it hatches with.
+    let folder = std::env::temp_dir().join(format!("terra-ui-egg-genome-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&folder);
+    app.set_genome_folder(folder.clone());
+    app.apply(Action::ExportGenome, &world);
+    let file = folder.join(format!("sprite-{}-tick-{}.ron", egg.0, world.tick()));
+    let saved = std::fs::read_to_string(&file).expect("the genome saved");
+    let genome = world.egg(egg).expect("the egg").genome();
+    assert_eq!(saved, genome.to_ron(world.data()));
+    // `Tab` and `Shift+Tab` go from sprite to sprite: here, to the mother
+    // alone.
+    for action in [
+        Action::SelectNext,
+        Action::SelectNext,
+        Action::SelectPrevious,
+    ] {
+        app.apply(action, &world);
+        let mother = Selection::Living(EntityId(1));
+        assert_eq!(app.selection(), Some(mother), "{action:?}");
+    }
+}
+
+#[test]
+fn the_body_tab_says_how_near_a_male_is_to_turning_female_once_grown() {
+    // M2 design §10.7: `turning 50%` with half the feminiser it takes;
+    // never in a young one (§10.1).
+    let pack = pack();
+    let genome = r#"(format: 1, genes: [
+        InitialConcentration(chem: "feminiser", value: 0.4),
+    ])"#;
+    let genome = terra_sim::Genome::from_ron(genome, &pack).expect("a valid genome");
+    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
+    let (grown, young) = (Pos { x: 2, y: 3 }, Pos { x: 6, y: 1 });
+    let scenario = Scenario {
+        map,
+        objects: &[],
+        sprites: &[(grown, Some(genome.clone())), (young, Some(genome))],
+        scripted: &[],
+        newborns: &[young],
+    };
+    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    let sex_line = |app: &App| {
+        let (_, text) = inspector(app, &world);
+        text.into_iter()
+            .find(|line| line.starts_with("male"))
+            .expect("its sex")
+    };
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(sex_line(&app), "male · fertile · turning 50%");
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(sex_line(&app), "male", "young");
+}
+
+#[test]
 fn paused_an_item_picked_up_leaves_the_map_and_one_put_down_shows_where_it_lands() {
     // Design §6.5, #203: a click waits for the next tick, and the map, as
     // the Cursor's marks do, shows what it will do.
@@ -4179,16 +4331,11 @@ fn a_lone_egg(changes: &[(&str, &str)]) -> (World, EntityId) {
     (world, egg)
 }
 
-#[test]
-fn the_body_tab_names_a_sprite_s_partner_after_their_first_egg() {
-    // M2 design §15.8: `partner Sprite #2`, after the parents' line.
-    let pack = pack();
-    let keen = |female: bool| {
-        let feminiser = if female {
-            r#"InitialConcentration(chem: "feminiser", value: 1.0),"#
-        } else {
-            ""
-        };
+/// A keen female and a keen male, his genome with `his` genes too, side by
+/// side by a thornbush, by `pack`'s rules, once they have had their first
+/// egg and become partners: the world, her and him.
+fn a_pair(pack: DataPack, his: &str) -> (World, EntityId, EntityId) {
+    let keen = |extra: &str| {
         let text = format!(
             r#"(format: 1, genes: [
                 Trait(trait: "speed", value: 10.0),
@@ -4196,19 +4343,20 @@ fn the_body_tab_names_a_sprite_s_partner_after_their_first_egg() {
                 AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
                 Instinct(inputs: [("always", false), ("attended_sprite", false)], verb: Mate, weight: 1.0),
                 InitialConcentration(chem: "receptivity", value: 1.0),
-                {feminiser}
+                {extra}
             ])"#
         );
         terra_sim::Genome::from_ron(&text, &pack).expect("a valid genome")
     };
+    let hers = r#"InitialConcentration(chem: "feminiser", value: 1.0),"#;
     let map = Map::from_ascii(&["......"; 2], &pack).expect("valid drawing");
     let sprites = [
-        (Pos { x: 1, y: 0 }, Some(keen(true))),
-        (Pos { x: 2, y: 0 }, Some(keen(false))),
+        (Pos { x: 1, y: 0 }, Some(keen(hers))),
+        (Pos { x: 2, y: 0 }, Some(keen(his))),
     ];
     let scenario = Scenario {
         map,
-        objects: &[],
+        objects: &[(Pos { x: 4, y: 1 }, "thornbush")],
         sprites: &sprites,
         scripted: &[],
         newborns: &[],
@@ -4221,16 +4369,52 @@ fn the_body_tab_names_a_sprite_s_partner_after_their_first_egg() {
             _ => None,
         });
     let (she, he) = paired.expect("they had an egg");
-    let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    let tile = world.sprite(she).unwrap().pos();
-    app.apply(
-        Action::left_click(pointer_on(&world, tile.x, tile.y)),
-        &world,
-    );
-    open(&mut app, &world, Tab::Body);
-    let text = lines(&render(&app, &world, 100, 30)).join("\n");
+    (world, she, he)
+}
+
+/// The screen, as text, with `id` clicked on and the Body tab open.
+fn body_of(world: &World, id: EntityId) -> String {
+    let mut app = app_for(world, Theme::cp437(), 100, 30);
+    let tile = world.sprite(id).expect("alive").pos();
+    app.apply(Action::left_click(pointer_on(world, tile.x, tile.y)), world);
+    open(&mut app, world, Tab::Body);
+    lines(&render(&app, world, 100, 30)).join("\n")
+}
+
+#[test]
+fn the_body_tab_names_a_sprite_s_partner_after_their_first_egg() {
+    // M2 design §15.8: `partner Sprite #2`, after the parents' line.
+    let (world, she, he) = a_pair(pack(), "");
+    let text = body_of(&world, she);
     assert!(
         text.contains(&format!("partner Sprite #{}", he.0)),
+        "{text}"
+    );
+    assert!(!text.contains("· died"), "{text}");
+}
+
+#[test]
+fn the_body_tab_says_when_a_sprite_s_partner_has_died() {
+    // M2 design §15.8: `partner Kit #20 · died`, until she pairs again.
+    // Once paired, he hits the thornbush, whose thorns kill at once.
+    let tags = include_str!("../../../data/tags.ron");
+    let (from, to) = (
+        r#"Hit:   [Inject(Actor, "injury", 0.03)"#,
+        r#"Hit:   [Inject(Actor, "injury", 1.0)"#,
+    );
+    assert!(tags.contains(from));
+    let tags = tags.replace(from, to);
+    let pack = DataPack::from_sources(&builtin_with("tags.ron", &tags)).expect("valid pack");
+    let his = r#"AttentionInstinct(input: "paired", category: "bush", weight: 2.0),
+        Instinct(inputs: [("paired", false), ("attended_bush", false)], verb: Hit, weight: 2.0),"#;
+    let (mut world, she, he) = a_pair(pack, his);
+    while world.sprite(he).is_some() {
+        assert!(world.tick() < 200, "he died");
+        world.step();
+    }
+    let text = body_of(&world, she);
+    assert!(
+        text.contains(&format!("partner Sprite #{} · died", he.0)),
         "{text}"
     );
 }
@@ -4366,12 +4550,151 @@ fn the_genome_tab_lists_the_genes_copying_changed_doubled_and_lost() {
     assert_eq!(after("lost: ").matches('·').count() + 1, lost, "{listed}");
 }
 
+/// What's new in `id`, a hatchling selected with `Tab`, as the top of its
+/// Genome tab lists it (M2 design §12.6), up to the blank row: each line
+/// whole, though the tab wraps a long one onto rows indented further.
+fn whats_new(world: &World, id: EntityId) -> Vec<String> {
+    let mut app = app_for(world, Theme::cp437(), 100, 40);
+    while app.selection() != Some(Selection::Living(id)) {
+        app.apply(Action::SelectNext, world);
+    }
+    open(&mut app, world, Tab::Genome);
+    let mut said: Vec<String> = Vec::new();
+    for row in &right_part(&render(&app, world, 100, 40), 46)[2..38] {
+        let row = row.trim_start_matches('│').trim_end_matches('│');
+        let row = row.trim_end();
+        if row.is_empty() {
+            return said;
+        }
+        match row.strip_prefix("   ") {
+            Some(more) => {
+                let line = said.last_mut().expect("a line it goes on");
+                line.push(' ');
+                line.push_str(more);
+            }
+            None => said.push(row.trim_start().to_string()),
+        }
+    }
+    panic!("no blank row after {said:#?}");
+}
+
+#[test]
+fn the_genome_tab_of_a_pair_s_young_says_it_is_from_them_both() {
+    // M2 design §12.6: `FROM PIP #12 AND BO #7`, the one that laid it
+    // first.
+    let (mut world, she, he) = a_pair(pack(), "");
+    let egg = world.eggs().next().expect("their egg").id();
+    assert_eq!(world.egg(egg).expect("the egg").parents(), [she, he]);
+    hatch(&mut world, egg);
+    let from = format!("FROM SPRITE #{} AND SPRITE #{}", she.0, he.0);
+    assert_eq!(whats_new(&world, egg)[0], from);
+}
+
+#[test]
+fn the_genome_tab_says_of_a_gene_copying_changed_only_the_numbers_that_differ() {
+    // M2 design §12.6: `+.00512 past .515, was +.00428`. Copying changed
+    // each gene value seven times in ten; in this world, the hunger
+    // emitter's two numbers and only the thirst emitter's gain.
+    let (mut world, egg) = a_lone_egg(&[
+        ("mutation: (chance: 0.01,", "mutation: (chance: 0.7,"),
+        ("flaws: (arise: 0.004,", "flaws: (arise: 0.0,"),
+        (
+            COPY_AND_CHANGE,
+            "copy_and_change: (doubled: 0.0, lost: 0.0, changed: 0.0,",
+        ),
+    ]);
+    hatch(&mut world, egg);
+    let listed = whats_new(&world, egg);
+    for said in [
+        "low energy → hunger +.00285 past .472, was +.004 past .5",
+        "low hydration → thirst +.00396 past .5, was +.004",
+        "speed 9.29, was 7",
+    ] {
+        assert!(
+            listed.iter().any(|line| line == said),
+            "{said:?} in {listed:#?}"
+        );
+    }
+}
+
+#[test]
+fn the_genome_tab_says_what_s_new_in_its_order() {
+    // M2 design §12.6, §13.2: where its genes came from; each gene
+    // changed; the genes doubled; those lost; each gene copying changed a
+    // number of; the genes broken; those that carry a flaw. Everything
+    // copying can do, it does often here.
+    let (mut world, egg) = a_lone_egg(&[
+        ("mutation: (chance: 0.01,", "mutation: (chance: 1.0,"),
+        ("flaws: (arise: 0.004,", "flaws: (arise: 0.5,"),
+        (
+            COPY_AND_CHANGE,
+            "copy_and_change: (doubled: 0.3, lost: 0.3, changed: 0.3,",
+        ),
+    ]);
+    hatch(&mut world, egg);
+    let listed = whats_new(&world, egg);
+    // Each kind of line, in the order the tab lists them; a gene copying
+    // changed a number of is named first, as the tab writes the gene.
+    let starts = [
+        "FROM ",
+        "new: ",
+        "doubled: ",
+        "lost: ",
+        "",
+        "broken: ",
+        "carries flaws: ",
+    ];
+    let kinds: Vec<usize> = listed
+        .iter()
+        .map(|line| {
+            let named = starts
+                .iter()
+                .position(|&start| !start.is_empty() && line.starts_with(start));
+            named.unwrap_or(4)
+        })
+        .collect();
+    assert!(
+        (0..starts.len()).all(|kind| kinds.contains(&kind)),
+        "{kinds:?}: {listed:#?}"
+    );
+    assert!(kinds.is_sorted(), "{kinds:?}: {listed:#?}");
+}
+
+#[test]
+fn a_broken_gene_counts_in_the_body_tab_s_genes_but_not_its_wear() {
+    // M2 design §12.6: the Body tab's `genes .97` counts a broken gene,
+    // whose health is .5; §12.4: it isn't wear. Every copy of every gene
+    // that can weaken is flawed, so each is broken.
+    let (mut world, egg) = a_lone_egg(&[
+        ("mutation: (chance: 0.01,", "mutation: (chance: 0.0,"),
+        ("flaws: (arise: 0.004,", "flaws: (arise: 1.0,"),
+    ]);
+    hatch(&mut world, egg);
+    let view = world.sprite(egg).expect("the hatchling");
+    assert!(view.flaws().contains(&2), "{:?}", view.flaws());
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    while app.selection() != Some(Selection::Living(egg)) {
+        app.apply(Action::SelectNext, &world);
+    }
+    open(&mut app, &world, Tab::Body);
+    let (_, text) = inspector(&app, &world);
+    let wear = text.iter().find(|line| line.starts_with("wear"));
+    assert_eq!(wear.map(String::as_str), Some("wear .00 · genes .50"));
+}
+
 #[test]
 fn the_event_log_says_what_s_new_in_a_hatchling_with_a_gene_changed() {
     // M2 design §13.2: the genes copying changed in what they do, not
-    // those doubled or lost.
-    for (changed, new) in [("0.0", false), ("1.0", true)] {
-        let rules = format!("copy_and_change: (doubled: 0.0, lost: 0.0, changed: {changed},");
+    // those doubled or lost: nothing changed, every gene doubled or lost,
+    // and every gene changed.
+    for (doubled_lost, changed, new) in [
+        ("0.0", "0.0", false),
+        ("0.5", "0.0", false),
+        ("0.0", "1.0", true),
+    ] {
+        let rules = format!(
+            "copy_and_change: (doubled: {doubled_lost}, lost: {doubled_lost}, changed: {changed},"
+        );
         let (mut world, egg) = a_lone_egg(&[
             ("mutation: (chance: 0.01,", "mutation: (chance: 0.0,"),
             ("flaws: (arise: 0.004,", "flaws: (arise: 0.0,"),
@@ -4403,6 +4726,15 @@ fn the_event_log_says_what_s_new_in_a_hatchling_with_a_gene_changed() {
             let named = ["low energy", "low hydration", "always"];
             assert!(named.iter().any(|name| rest.starts_with(name)), "{line}");
         } else {
+            let changes = world.sprite(egg).expect("the hatchling").copy_changes();
+            let doubled_or_lost = |change: &CopyChangeView| {
+                matches!(
+                    change,
+                    CopyChangeView::Doubled { .. } | CopyChangeView::Lost { .. }
+                )
+            };
+            assert_eq!(changes.is_empty(), doubled_lost == "0.0", "{changes:?}");
+            assert!(changes.iter().all(doubled_or_lost), "{changes:?}");
             assert!(line.ends_with(&hatched), "{line}");
         }
     }

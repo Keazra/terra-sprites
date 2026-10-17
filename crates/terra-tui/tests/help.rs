@@ -175,3 +175,40 @@ fn the_legend_shows_each_drive_s_colour_and_each_emote() {
         assert_eq!(emote_row, expected);
     }
 }
+
+#[test]
+fn the_lineage_line_draws_each_sprite_in_its_colour() {
+    // M2 design §17.4: `LINEAGE  ☺ parents, grandparents  ☺ brothers,
+    // sisters  ☺ young, theirs  ☺ the rest`, each `☺` in its colour.
+    for (theme, sprite) in [(Theme::cp437(), "☺"), (Theme::ascii(), "@")] {
+        let world = field();
+        let mut app = app_for(&world, theme);
+        app.apply(Action::Help, &world);
+        let screen = render(&app, &world);
+        let y = text(&screen)
+            .iter()
+            .position(|row| row.contains(" LINEAGE "))
+            .expect("the lineage line") as u16;
+        let colours: Vec<(String, Color)> = (0..100)
+            .filter(|&x| screen[(x, y)].symbol() == sprite)
+            .map(|x| {
+                let who: String = (x + 2..100)
+                    .map(|x| screen[(x, y)].symbol())
+                    .collect::<String>()
+                    .split("  ")
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
+                (who, screen[(x, y)].fg)
+            })
+            .collect();
+        let expected = [
+            ("parents, grandparents", Color::LightBlue),
+            ("brothers, sisters", Color::LightRed),
+            ("young, theirs", Color::LightMagenta),
+            ("the rest", Color::DarkGray),
+        ]
+        .map(|(who, colour)| (who.to_string(), colour));
+        assert_eq!(colours, expected);
+    }
+}

@@ -7,7 +7,8 @@
 
 mod common;
 use common::{
-    LONE, LONE_MOTHER, QUICK, SCORCHED, at, grow, lone_line, pairs, parched_line, tree_of,
+    Changes, LONE, LONE_MOTHER, QUICK, SCORCHED, at, grow, lone_line, pack_changing, pairs,
+    parched_line, tree_of,
 };
 
 use std::path::PathBuf;
@@ -17,7 +18,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Margin, Position, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
-use terra_sim::{Command, DeathCause, EntityId, World};
+use terra_sim::{Command, DeathCause, EntityId, Genome, Map, Scenario, World};
 use terra_tui::app::{App, ColourMode, Screen, Selection, Tab};
 use terra_tui::input::{Action, Button};
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
@@ -307,6 +308,88 @@ fn a_sprite_the_policy_hides_is_a_blank_card_that_leads_nowhere() {
 }
 
 #[test]
+fn the_arrows_and_the_pointer_pass_a_hidden_card_by() {
+    // M2 design §17.6: choosing a hidden sprite's card does nothing, so
+    // neither the arrows nor the pointer land on it. #14's young are #15,
+    // #19 and #25, with #19 right below it; #19 is hidden.
+    let world = pairs(230);
+    let mut app = app_on(&world);
+    tree_of(&mut app, &world, EntityId(14));
+    let nineteen = label_at(&app, &world, YOUNG, "Sprite #19");
+    app.set_policy(Hiding(&[19]));
+    let chosen = |app: &mut App, actions: &[Action]| {
+        press(app, &world, actions);
+        blinking(app, &world)
+    };
+    assert_eq!(
+        chosen(&mut app, &[Action::Point(nineteen)]).as_deref(),
+        Some("Sprite #14"),
+        "pointing at it chooses nothing"
+    );
+    assert_eq!(
+        chosen(&mut app, &[DOWN_ARROW]).as_deref(),
+        Some("Sprite #15"),
+        "down to the nearest shown, the left one of two as near"
+    );
+    assert_eq!(
+        chosen(&mut app, &[RIGHT]).as_deref(),
+        Some("Sprite #25"),
+        "along past it"
+    );
+    assert_eq!(chosen(&mut app, &[LEFT]).as_deref(), Some("Sprite #15"));
+
+    // A row with every card hidden is passed by too: #14's parents, #1
+    // and #2, have no parents above them, so up goes nowhere.
+    app.set_policy(Hiding(&[1, 2]));
+    assert_eq!(chosen(&mut app, &[UP]).as_deref(), Some("Sprite #14"));
+    assert_eq!(
+        chosen(&mut app, &[UP]).as_deref(),
+        Some("Sprite #14"),
+        "none shown above"
+    );
+}
+
+#[test]
+fn where_a_hidden_sprite_came_from_goes_unsaid_too() {
+    // M2 design §17.6: #14's parents, #1 and #2, are both of the first
+    // sprites, which each says above itself; #1 is hidden.
+    let world = pairs(230);
+    let mut app = app_on(&world);
+    tree_of(&mut app, &world, EntityId(14));
+    let first = "one of the first sprites";
+    assert_eq!(
+        said(&tree(&app, &world)[GRANDPARENTS]),
+        [first; 2].join("  ")
+    );
+    let two = label_at(&app, &world, GRANDPARENTS, first).x;
+    app.set_policy(Hiding(&[1]));
+    let rows = tree(&app, &world);
+    assert_eq!(said(&rows[GRANDPARENTS]), first, "#2's alone");
+    assert!(
+        label_at(&app, &world, GRANDPARENTS, first).x > two,
+        "{:?}",
+        rows[GRANDPARENTS]
+    );
+}
+
+#[test]
+fn a_brother_or_sister_doesn_t_name_a_hidden_parent_it_shares() {
+    // M2 design §17.6: #16's brothers and sisters share only #3 with it,
+    // and say so, until #3 is hidden.
+    let world = pairs(230);
+    let mut app = app_on(&world);
+    tree_of(&mut app, &world, EntityId(16));
+    assert!(said(&tree(&app, &world)[SIBLINGS + 2]).starts_with("through Sprite #3"));
+    app.set_policy(Hiding(&[3]));
+    let rows = tree(&app, &world);
+    assert_eq!(
+        said(&rows[SIBLINGS]),
+        "Sprite #5  Sprite #7  Sprite #9  Sprite #12  ►"
+    );
+    assert_eq!(said(&rows[SIBLINGS + 2]), "");
+}
+
+#[test]
 fn brothers_and_sisters_are_at_the_foot_with_the_parent_they_share() {
     let world = pairs(230);
     let mut app = app_on(&world);
@@ -509,6 +592,40 @@ fn pointing_at_a_card_chooses_it_and_clicking_walks_to_it() {
 }
 
 #[test]
+fn the_pointer_on_the_tree_leaves_the_cursor_where_it_is_on_the_map() {
+    // As the population graph's does (M2 design §14.2): the pointer
+    // chooses and walks the tree, and the Cursor beneath stays put, on its
+    // tile and in reach. The pointer points at the tile up and left of it
+    // (design v27 §6.5).
+    let world = pairs(230);
+    let mut app = app_on(&world);
+    let tile = at(9, 4);
+    let cell = app.cell_of(tile).expect("in view");
+    app.apply(Action::Point(Position::new(cell.x + 1, cell.y + 1)), &world);
+    assert_eq!(app.shown_cursor(), Some(tile));
+    tree_of(&mut app, &world, EntityId(14));
+    for (row, label) in [(PARENTS, "Sprite #1"), (YOUNG, "Sprite #15")] {
+        let card = label_at(&app, &world, row, label);
+        app.apply(Action::Point(card), &world);
+        assert_eq!(blinking(&app, &world).as_deref(), Some(label));
+        assert_eq!(app.shown_cursor(), Some(tile), "pointing at {label}");
+    }
+    let young = label_at(&app, &world, YOUNG, "Sprite #25");
+    app.apply(
+        Action::Click {
+            at: young,
+            button: Button::Left,
+            amplified: false,
+        },
+        &world,
+    );
+    assert_eq!(app.selection(), Some(Selection::Living(EntityId(25))));
+    assert_eq!(app.shown_cursor(), Some(tile), "walking by a click");
+    app.apply(Action::FamilyTree, &world);
+    assert_eq!(app.shown_cursor(), Some(tile), "and closed");
+}
+
+#[test]
 fn the_dead_are_dark_gray_and_say_how_they_died() {
     let world = parched_line(140);
     let mut app = app_on(&world);
@@ -528,6 +645,38 @@ fn the_dead_are_dark_gray_and_say_how_they_died() {
     );
     let centre = label_at(&app, &world, CENTRE, "Sprite #5");
     assert_eq!(colour(centre), Color::Reset, "the living as ever");
+}
+
+#[test]
+fn walking_to_a_sprite_or_an_egg_on_the_map_centres_the_map_on_it() {
+    // M2 design §17.3, on a field bigger than the map view. By tick 45,
+    // #1 has two young: #2, grown up, and #3, an egg lying beside her.
+    let [quick, eggs] = QUICK;
+    let world = grow(
+        &[quick, eggs, LONE],
+        (120, 50),
+        &[(at(60, 25), LONE_MOTHER)],
+        45,
+    );
+    let mut app = app_on(&world);
+    let tiles = ui::areas(Size::new(100, 30)).tiles;
+    let middle = Position::new(tiles.x + tiles.width / 2, tiles.y + tiles.height / 2);
+    let egg = world.egg(EntityId(3)).and_then(|egg| egg.pos());
+    let brother = world.sprite(EntityId(2)).map(|sprite| sprite.pos());
+    // `Tab` selects #1, then the map view is scrolled off to its top left
+    // corner.
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(app.selection(), Some(Selection::Living(EntityId(1))));
+    app.apply(Action::Scroll { dx: -60, dy: -30 }, &world);
+    assert_eq!(egg.and_then(|egg| app.cell_of(egg)), None, "out of view");
+    app.apply(Action::FamilyTree, &world);
+    press(&mut app, &world, &[DOWN_ARROW, RIGHT, Action::Enter]);
+    assert_eq!(app.selection(), Some(Selection::Living(EntityId(3))));
+    assert_eq!(egg.and_then(|egg| app.cell_of(egg)), Some(middle));
+    // Down from the egg, which has no young, to its brother.
+    press(&mut app, &world, &[DOWN_ARROW, Action::Enter]);
+    assert_eq!(app.selection(), Some(Selection::Living(EntityId(2))));
+    assert_eq!(brother.and_then(|at| app.cell_of(at)), Some(middle));
 }
 
 #[test]
@@ -587,6 +736,54 @@ fn a_sprite_that_died_before_it_grew_up_died_young() {
         "died young of dehydration at age 35 · generation 2"
     );
     assert_eq!(said(&rows[PARENTS + 1]), "died of dehydration");
+}
+
+#[test]
+fn a_sprite_hurt_to_death_died_hurt_by_what_hurt_it() {
+    // M2 design §17.2: `died hurt by thornbush`. A mother who lays alone
+    // and hits the thornbush beside her, whose thorns kill at once: she
+    // lays #3 and dies on tick 10, and #3 hatches on tick 20, does as she
+    // did, and dies young on tick 22.
+    let [quick, eggs] = QUICK;
+    let lethal: Changes = (
+        "tags.ron",
+        &[(
+            r#"Hit:   [Inject(Actor, "injury", 0.03)"#,
+            r#"Hit:   [Inject(Actor, "injury", 1.0)"#,
+        )],
+    );
+    let pack = pack_changing(&[quick, eggs, LONE, lethal]);
+    let genes = LONE_MOTHER.replace(
+        "])",
+        r#"    AttentionInstinct(input: "always", category: "bush", weight: 1.0),
+    Instinct(inputs: [("always", false), ("attended_bush", false)], verb: Hit, weight: 0.5),
+])"#,
+    );
+    let map = Map::from_ascii(&["............"; 6], &pack).expect("valid drawing");
+    let mother = Genome::from_ron(&genes, &pack).expect("valid genes");
+    let scenario = Scenario {
+        map,
+        objects: &[(at(2, 4), "thornbush")],
+        sprites: &[(at(1, 4), Some(mother))],
+        scripted: &[],
+        newborns: &[],
+    };
+    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    for _ in 0..21 {
+        world.step();
+    }
+    let mut app = app_on(&world);
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(app.selection(), Some(Selection::Living(EntityId(3))));
+    run(&mut app, &mut world, 5);
+    app.apply(Action::FamilyTree, &world);
+    let rows = tree(&app, &world);
+    assert_eq!(said(&rows[PARENTS]), "Sprite #2");
+    assert_eq!(said(&rows[PARENTS + 1]), "died hurt by thornbush");
+    assert_eq!(
+        said(&rows[CENTRE + 1]),
+        "died young, hurt by thornbush at age 2 · generation 2"
+    );
 }
 
 /// A save from before the family tree: its world remembers no sprite
@@ -653,6 +850,46 @@ fn a_dead_sprite_keeps_its_name_through_a_save_and_a_load() {
     let shown = screen(&app, &world);
     assert!(
         shown.contains("Bramble #1 died of dehydration at age 94"),
+        "{shown}"
+    );
+}
+
+#[test]
+fn after_a_load_the_log_names_a_dead_sprite_as_she_was_named() {
+    // M2 design §17.3: Bramble lays an egg, dies of thirst on tick 35, and
+    // her egg hatches on tick 60, after a save and a load on tick 40, on a
+    // screen that never saw her named.
+    let [quick, _] = QUICK;
+    let slow: Changes = (
+        "objects.ron",
+        &[(
+            "ticks: (750, 750), next: Hatch",
+            "ticks: (60, 60), next: Hatch",
+        )],
+    );
+    let mut world = grow(
+        &[quick, slow, LONE, SCORCHED],
+        (12, 6),
+        &[(at(1, 4), LONE_MOTHER)],
+        0,
+    );
+    world.submit(Command::Rename {
+        sprite: EntityId(1),
+        name: "Bramble".into(),
+    });
+    for _ in 0..40 {
+        world.step();
+    }
+    assert!(world.dead(EntityId(1)).is_some(), "she died");
+    let mut app = app_on(&world);
+    app.set_save_folder(scratch_folder("log"));
+    app.apply(Action::Quicksave, &world);
+    app.apply(Action::Quickload, &world);
+    let mut world = app.take_loaded().expect("the quicksave loaded");
+    run(&mut app, &mut world, 25);
+    let shown = screen(&app, &world);
+    assert!(
+        shown.contains("Sprite #2 hatched (Bramble #1's)"),
         "{shown}"
     );
 }
@@ -736,34 +973,105 @@ fn the_lineage_colours_mark_the_selected_sprite_s_lineage_on_the_map() {
 }
 
 #[test]
+fn a_sprite_hidden_from_the_tree_keeps_its_own_colour_in_the_lineage_colours() {
+    // M2 design §17.6: of #14's parents, #1 is hidden, and #2 isn't.
+    let world = pairs(230);
+    let mut app = app_on(&world);
+    tree_of(&mut app, &world, EntityId(14));
+    app.apply(Action::FamilyTree, &world);
+    // The Decision marker off, so it draws over no one.
+    app.animate(Duration::from_millis(500));
+    let colour = |app: &App, id: u64| {
+        let pos = world.sprite(EntityId(id)).expect("alive").pos();
+        let cell = app.cell_of(pos).expect("in view");
+        let buffer = render(app, &world);
+        let cell = &buffer[(cell.x, cell.y)];
+        assert_eq!(cell.symbol(), "☺", "#{id} drawn");
+        cell.fg
+    };
+    let to = |app: &mut App, mode: ColourMode| {
+        while app.colour_mode() != mode {
+            app.apply(Action::CycleColours, &world);
+        }
+    };
+    to(&mut app, ColourMode::Plain);
+    let own = colour(&app, 1);
+    assert_ne!(own, Color::LightBlue);
+    to(&mut app, ColourMode::Lineage);
+    assert_eq!(
+        (colour(&app, 1), colour(&app, 2)),
+        (Color::LightBlue, Color::LightBlue)
+    );
+    app.set_policy(Hiding(&[1]));
+    assert_eq!((colour(&app, 1), colour(&app, 2)), (own, Color::LightBlue));
+}
+
+/// The inspector's Body tab, a line for each row inside its box, with what's
+/// past each line's last character left off. At 100×30 the inspector is
+/// the right-hand 46 columns, its inside from column 55.
+fn body_tab(app: &mut App, world: &World) -> Vec<String> {
+    while app.tab() != Tab::Body {
+        app.apply(Action::NextTab, world);
+    }
+    let buffer = render(app, world);
+    (2..24)
+        .map(|y| {
+            let row: String = (55..99).map(|x| buffer[(x, y)].symbol()).collect();
+            row.trim_end().to_string()
+        })
+        .collect()
+}
+
+/// The line of `lines` that starts with `start`, and the one after it.
+fn and_after<'a>(lines: &'a [String], start: &str) -> &'a [String] {
+    let at = lines
+        .iter()
+        .position(|line| line.starts_with(start))
+        .unwrap_or_else(|| panic!("{start:?} in {lines:#?}"));
+    &lines[at..at + 2]
+}
+
+#[test]
 fn the_body_tab_says_a_sprite_s_generation_and_the_world_tab_the_living_ones() {
     let world = pairs(230);
     let mut app = app_on(&world);
-    let body = |app: &mut App| {
-        while app.tab() != Tab::Body {
-            app.apply(Action::NextTab, &world);
-        }
-        screen(app, &world)
-    };
     tree_of(&mut app, &world, EntityId(1));
     app.apply(Action::FamilyTree, &world);
-    let shown = body(&mut app);
-    assert!(
-        shown.contains(" one of the first sprites · generation 1"),
-        "{shown}"
+    let lines = body_tab(&mut app, &world);
+    assert_eq!(
+        and_after(&lines, " one of")[0],
+        " one of the first sprites · generation 1"
     );
+    // Too long for one line, on two (M2 design §17.5).
     tree_of(&mut app, &world, EntityId(16));
     app.apply(Action::FamilyTree, &world);
-    let shown = body(&mut app);
-    assert!(
-        shown.contains(" parents Sprite #3 and Sprite #12"),
-        "{shown}"
+    let lines = body_tab(&mut app, &world);
+    assert_eq!(
+        and_after(&lines, " parents"),
+        [" parents Sprite #3 and Sprite #12", " generation 3"]
     );
-    assert!(shown.contains(" generation 3"), "{shown}");
 
     while app.tab() != Tab::World {
         app.apply(Action::NextTab, &world);
     }
     let shown = screen(&app, &world);
     assert!(shown.contains(" generations  1 to 4"), "{shown}");
+}
+
+#[test]
+fn an_egg_s_card_says_its_parents_and_generation_as_the_body_tab_does() {
+    // M2 design §17.5. By tick 200, the last of #1's young, #45, is an
+    // egg; the tree walks to it.
+    let world = lone_line(200);
+    let mut app = app_on(&world);
+    tree_of(&mut app, &world, EntityId(1));
+    press(&mut app, &world, &[DOWN_ARROW, RIGHT, RIGHT, RIGHT, RIGHT]);
+    press(&mut app, &world, &[Action::Enter, Action::FamilyTree]);
+    assert_eq!(app.selection(), Some(Selection::Living(EntityId(45))));
+    assert!(world.egg(EntityId(45)).is_some());
+    let lines = body_tab(&mut app, &world);
+    assert_eq!(
+        and_after(&lines, " egg ·")[1],
+        " parents Sprite #1 · generation 2"
+    );
 }
