@@ -197,29 +197,54 @@ fn title_fresh_clicked() -> Title {
 }
 
 #[test]
-fn the_world_holds_still_until_the_light_has_spread_then_runs_at_4x() {
+fn the_world_runs_at_4x_from_launch_while_the_light_spreads() {
+    // M2 design §8.1: the light finds the sprites already about their lives.
     let mut title = title();
-    for _ in 0..40 {
-        title.animate(Duration::from_millis(100));
-    }
-    assert_eq!(title.world().tick(), 0, "still while the light spreads");
     for _ in 0..20 {
         title.animate(Duration::from_millis(100));
     }
     // 4× is 5 ticks a second.
-    assert_eq!(title.world().tick(), 10);
+    assert_eq!(title.world().tick(), 10, "running in the dark");
+    for _ in 0..40 {
+        title.animate(Duration::from_millis(100));
+    }
+    assert_eq!(title.world().tick(), 30);
+}
+
+#[test]
+fn the_sprite_under_the_light_sleeps_in_the_cursor_s_hold_until_it_wakes() {
+    // M2 design §8.1: the others move as the light spreads, while it stays
+    // where the light finds it, until it wakes and the Cursor lets it go.
+    let mut title = title();
+    let at_launch: Vec<_> = title.world().sprites().map(|s| (s.id(), s.pos())).collect();
+    for _ in 0..24 {
+        title.animate(Duration::from_millis(100));
+    }
+    let world = title.world();
+    let asleep = world.cursor().leads().expect("the Cursor holds it");
+    let moved = |id| {
+        let now = world.sprite(id).map(|sprite| sprite.pos());
+        at_launch
+            .iter()
+            .any(|&(was, pos)| was == id && Some(pos) != now)
+    };
+    assert!(!moved(asleep), "it stays where the light found it");
+    assert!(
+        at_launch.iter().any(|&(id, _)| id != asleep && moved(id)),
+        "the others are about their lives"
+    );
+    let shown = text(&render(&title));
+    assert!(shown.contains('z'), "it sleeps:\n{shown}");
+    for _ in 0..2 {
+        title.animate(Duration::from_millis(100));
+    }
+    assert_eq!(title.world().cursor().leads(), None, "it woke");
 }
 
 #[test]
 fn after_a_long_frame_the_world_runs_at_most_5_ticks_and_drops_the_rest() {
     // M2 design §8.1: at most 5 ticks a frame.
     let mut title = title();
-    title.animate(Duration::from_secs(4));
-    assert_eq!(
-        title.world().tick(),
-        0,
-        "the light has just filled the screen"
-    );
     // Three seconds at 4× is 15 ticks.
     title.animate(Duration::from_secs(3));
     assert_eq!(title.world().tick(), 5);
@@ -232,11 +257,12 @@ fn after_a_long_frame_the_world_runs_at_most_5_ticks_and_drops_the_rest() {
 }
 
 #[test]
-fn a_skipped_scene_s_world_runs_from_the_skip() {
+fn a_skipped_scene_s_world_runs_from_the_skip_with_the_sprite_awake() {
     let mut title = title();
     title.apply(Action::Enter);
     title.animate(Duration::from_secs(1));
     assert_eq!(title.world().tick(), 5);
+    assert_eq!(title.world().cursor().leads(), None, "the skip woke it");
 }
 
 #[test]

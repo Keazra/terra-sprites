@@ -9,7 +9,7 @@ use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
-use terra_sim::{EntityId, Mode, Pos, World};
+use terra_sim::{Command, EntityId, Mode, Pos, World};
 
 use crate::app::{App, Draft, highlight_moved, shown};
 use crate::clock::Speed;
@@ -22,10 +22,9 @@ use crate::ui;
 /// When the Cursor's light has arrived and starts to spread (M2 design
 /// §8.1).
 const LIGHT_ARRIVES: Duration = Duration::from_millis(1000);
-/// When the sprite under the light wakes.
+/// When the sprite under the light wakes, and the Cursor lets it go.
 const WAKES: Duration = Duration::from_millis(2500);
-/// When the light has filled the screen, the title starts to fade in and
-/// the world starts to move.
+/// When the light has filled the screen, and the title starts to fade in.
 const LIGHT_FILLS: Duration = Duration::from_millis(4000);
 /// How long the woken sprite shows it's pleased.
 const PLEASED_UNTIL: Duration = Duration::from_millis(4500);
@@ -160,6 +159,8 @@ pub struct Title {
     owed: Duration,
     /// The sprite the Cursor's light arrives on.
     woken: Option<EntityId>,
+    /// Whether the Cursor still holds it asleep where the light finds it.
+    asleep: bool,
     /// Where the light arrives: the woken sprite's tile.
     light: Pos,
     screen: Screen,
@@ -198,11 +199,12 @@ impl Title {
             .map(|sprite| (sprite.id(), sprite.pos()));
         let areas = ui::areas(ui::MIN_SIZE);
         let help = App::new(map, theme.clone(), world.seed(), areas);
-        Title {
+        let mut title = Title {
             theme,
             shown_for: Duration::ZERO,
             owed: Duration::ZERO,
             woken: woken.map(|(id, _)| id),
+            asleep: woken.is_some(),
             light: woken.map_or(centre, |(_, pos)| pos),
             screen: Screen::Menu,
             choice: 0,
@@ -214,7 +216,14 @@ impl Title {
             help,
             size: Size::new(map.width(), map.height()),
             world,
+        };
+        // The world runs from launch, as the terrarium does without the
+        // player, but the sprite the light finds sleeps in the Cursor's hold
+        // until it wakes (M2 design §8.1).
+        if let Some(sprite) = title.woken {
+            title.world.submit(Command::TakeHold { sprite });
         }
+        title
     }
 
     /// The saves Continue and Load offer, newest first, and the time now,
@@ -284,16 +293,11 @@ impl Title {
         self.refusal = Some(why);
     }
 
-    /// Lets `elapsed` pass: the scene plays on, and once the light has
-    /// filled the screen, the world runs at 4×.
+    /// Lets `elapsed` pass: the scene plays on, and the world runs at 4×.
     pub fn animate(&mut self, elapsed: Duration) {
-        let before = self.shown_for;
         self.shown_for = self.shown_for.saturating_add(elapsed);
-        if self.shown_for <= LIGHT_FILLS {
-            return;
-        }
-        // Only the time since the light filled the screen counts.
-        self.owed += self.shown_for - before.max(LIGHT_FILLS);
+        self.wake();
+        self.owed += elapsed;
         let mut ticks = 0;
         while self.owed >= TICK_EVERY && ticks < MOST_TICKS_AT_ONCE {
             self.world.step();
@@ -303,6 +307,15 @@ impl Title {
         // What a long frame left owing is dropped rather than caught up.
         if ticks == MOST_TICKS_AT_ONCE {
             self.owed = Duration::ZERO;
+        }
+    }
+
+    /// Once it's time, the sprite under the light wakes, and the Cursor
+    /// lets it go to live as the others do (M2 design §8.1).
+    fn wake(&mut self) {
+        if self.asleep && self.shown_for >= WAKES {
+            self.world.submit(Command::LetGo);
+            self.asleep = false;
         }
     }
 
@@ -327,6 +340,7 @@ impl Title {
             // Any key or click skips the scene, and does nothing else.
             if !matches!(action, Action::Point(_) | Action::Release { .. }) {
                 self.shown_for = SCENE_ENDS;
+                self.wake();
             }
             return TitleFlow::Stay;
         }
