@@ -1144,6 +1144,32 @@ mod tests {
     }
 
     #[test]
+    fn a_hard_life_and_more_broken_genes_never_wear_a_body_past_the_most_worn() {
+        // M2 design §12.4: wear and broken genes together count up to the
+        // most worn, so old age comes `sooner` (0.33) at most, and the body
+        // gives out in a third of the ticks, never faster.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let mut broken = starter(30_000, &data);
+        let frail: Vec<usize> = (0..broken.genome.genes.len())
+            .filter(|&i| frailty(&broken.genome.genes[i]) > 0.0)
+            .collect();
+        assert!(frail.len() > 40, "{} genes can weaken", frail.len());
+        broken.flaws = vec![0; broken.genome.genes.len()];
+        for &i in &frail {
+            broken.flaws[i] = 2;
+        }
+        broken.body.wear = 0.5;
+        assert_eq!(broken.worn(&data), 1.0);
+        assert_close(broken.sooner(&data), 0.33);
+        let ticks = until_it_gives_out(&mut broken, &data, 100_000);
+        assert!(
+            (1_000..1_400).contains(&ticks),
+            "a worn body with {} broken genes gave out after {ticks} ticks",
+            frail.len()
+        );
+    }
+
+    #[test]
     fn a_tiny_hit_lands_in_rounds_and_still_wears_the_body_out_in_the_ticks_set() {
         // A billion hits a tick would stall the world if each landed alone.
         let data = builtin_changing(
