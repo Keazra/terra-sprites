@@ -188,6 +188,8 @@ impl RecordOfTheDead {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::map::Map;
+    use crate::test_util::builtin;
 
     fn record(died: u64, name: Option<&str>) -> Record {
         Record {
@@ -241,6 +243,47 @@ mod tests {
         let kept = remembered(&dead);
         assert_eq!(kept.len(), 10_000);
         assert_eq!(kept[0], 1, "the first to die is forgotten");
+    }
+
+    /// No sprites or objects, to check a record alone against.
+    fn nothing() -> (Sprites, Objects) {
+        let map = Map::from_ascii(&["."], &builtin()).expect("a map");
+        (Sprites::new(&map), Objects::new(&map))
+    }
+
+    #[test]
+    fn one_remembered_as_dying_before_it_was_born_is_caught() {
+        // M2 design §17.1, checked every tick (design §7.1).
+        let (sprites, objects) = nothing();
+        let mut dead = RecordOfTheDead::default();
+        let mut on_the_tick = record(10, None);
+        on_the_tick.born = 10;
+        dead.remember(EntityId(1), on_the_tick);
+        assert_eq!(dead.check(&sprites, &objects), Ok(()));
+        let mut early = record(10, None);
+        early.born = 11;
+        dead.remember(EntityId(2), early);
+        assert!(
+            dead.check(&sprites, &objects)
+                .is_err_and(|why| why.contains("dying before it was born"))
+        );
+    }
+
+    #[test]
+    fn more_remembered_than_ten_thousand_is_caught_unless_they_re_named() {
+        // M2 design §17.1: the newest 10,000, and the named however many.
+        let (sprites, objects) = nothing();
+        let (mut unnamed, mut named) = (RecordOfTheDead::default(), RecordOfTheDead::default());
+        for id in 0..=REMEMBERED as u64 {
+            unnamed.remember_within(EntityId(id), record(id, None), REMEMBERED + 1);
+            named.remember_within(EntityId(id), record(id, Some("Pip")), REMEMBERED + 1);
+        }
+        assert!(
+            unnamed
+                .check(&sprites, &objects)
+                .is_err_and(|why| why.contains("past 10000"))
+        );
+        assert_eq!(named.check(&sprites, &objects), Ok(()));
     }
 
     #[test]
