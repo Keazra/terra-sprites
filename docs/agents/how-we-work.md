@@ -6,6 +6,11 @@ The owner's preferences and the project's conventions, for any agent session, lo
 
 - **They review by feel, after trying the build** in Windows Terminal, and change direction when something feels off. Don't build on a direction they haven't confirmed.
   - **Every PR says how to try it,** in the template's "Try it on your PC" section: PowerShell, with what to look for and which seed shows it. `scripts/try-pr.ps1` takes the newest commit from GitHub whatever older copy their folder has (a plain `git pull` refused theirs, from before the history rewrite) and says which commit it is.
+  - **Not every slice needs a full playtest** (the owner, 2026-10-17, [#231](https://github.com/Keazra/terra-sprites/issues/231)). Each slice's issue gives its playtest rank and why, and the PR's "Try it on your PC" follows it:
+    - **Critical:** the owner plays it before it merges, a proper session with a checklist written for it, and "Try it on your PC" says what to watch. Its lines join the milestone's final play-through.
+    - **Medium:** a short look, 10 to 15 minutes with 3 to 5 lines to check, before it merges or alongside the next slice's playtest.
+    - **Minor:** no playtest. Tests, runs and screen snapshots are enough, and the PR says so.
+    - **A slice takes the highest rank of what's in it.** Rank by what the owner would notice playing: what changes much of what's on screen, or brings a new way to live or die, is critical (M3's grabbing before eating, and breaking eggs); something new to see once is medium; numbers, words and docs are minor.
 - **Plain words, from the start.** Write questions and options for someone who hasn't read the code: say what the player sees or what changes, not step letters, gene jargon or type names. A question once had to be asked again because it wasn't plain.
   - **Name a place by what it's for, not by its file:** "a word list of its own", not `themes/words.ron`. Slice 9b's question about where plurals should live had to be asked again for that reason.
   - **Results too.** Before any numbers, say in a sentence or two what was tested and why, then what happened, as a story; tables come after. In slice 10 the owner had to ask twice ("in plain language?", "what is it we are testing, again?") before a measurement round made sense to them.

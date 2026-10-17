@@ -7,7 +7,9 @@ Based on `main`: needs nothing open.
 
 ## Try it on your PC
 
-<!-- PowerShell, from the terra-sprites folder. Pick a seed that shows the change, and say what to look for. The script pulls the PR's newest commit, whatever branch the folder is on. -->
+<!-- The playtest rank (critical, medium or minor; a slice's comes from its issue; docs/agents/how-we-work.md) and what it asks for. For minor, say so: no playtest needed, and why. Otherwise PowerShell, from the terra-sprites folder. Pick a seed that shows the change, and say what to look for. The script pulls the PR's newest commit, whatever branch the folder is on. -->
+
+Playtest rank:
 
 ```powershell
 .\scripts\try-pr.ps1 NUMBER -Seed 7
