@@ -285,7 +285,7 @@ fn both_parents_feel_their_egg_and_rest_1500_ticks_before_they_are_fertile_again
     let female = format!("{KEEN}{FEMALE}{bred}");
     let male = format!("{KEEN}{bred}");
     let mut world = family(&[(at(2, 1), &female), (at(3, 1), &male)], &[], 1);
-    let parents = [at(2, 1), at(3, 1)].map(|pos| world.sprite_at(pos).unwrap().id());
+    let parents = [at(2, 1), at(3, 1)].map(|pos| id_at(&world, pos));
     let laying = laid(&mut world, 100).expect("an egg");
     assert_eq!((laying.by, laying.with), (parents[0], Some(parents[1])));
     world.step();

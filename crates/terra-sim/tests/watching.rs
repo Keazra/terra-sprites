@@ -4,6 +4,7 @@
 mod common;
 use common::{
     AGES_AT_ONCE, OLD, WorldBuilder, at, builtin, builtin_changing, close, genome, id_at, value_of,
+    world_in,
 };
 
 use terra_sim::{
@@ -443,15 +444,8 @@ fn a_sprite_heard_calling_out_of_sight_is_not_watched() {
         Instinct(inputs: [("always", false)], verb: Call, weight: 0.5),
         BrainParam(param: "tau_base", value: 0.02),"#;
     let looking_on = looking_on(1.0);
-    let data = builtin();
-    let sprites = vec![
-        (at(1, 1), Some(genome(calls_then_drinks, &data))),
-        (at(25, 1), Some(genome(&looking_on, &data))),
-    ];
-    let mut world = WorldBuilder::new(&rows)
-        .data(data)
-        .sprites_with(sprites)
-        .build();
+    let sprites = [(at(1, 1), calls_then_drinks), (at(25, 1), &looking_on)];
+    let mut world = world_in(builtin(), &rows, &sprites);
     let drinker = id_at(&world, at(1, 1));
     let watching = id_at(&world, at(25, 1));
     first_drink(&mut world, drinker);

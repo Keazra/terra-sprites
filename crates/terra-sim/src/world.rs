@@ -2999,26 +2999,23 @@ mod tests {
         // it nothing, and isn't looked up.
         let data = DataPack::builtin().expect("built-in data pack is valid");
         let map = Map::from_ascii(&["....", "...."], &data).expect("valid drawing");
-        let genes = |genes: &str| {
-            let genes = format!("(format: 2, genes: [{genes}])");
-            Genome::from_ron(&genes, &data).expect("a valid genome")
-        };
-        let rests = r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0)"#;
         let looks = format!(
-            r#"{rests},
+            r#"{RESTS}
             AttentionInstinct(input: "always", category: "sprite", whom: Showing, weight: 1.0)"#
         );
         let (young, mother, berry) = (Pos { x: 3, y: 1 }, Pos { x: 1, y: 0 }, Pos { x: 0, y: 0 });
         let scenario = Scenario {
             map,
             objects: &[(berry, "berry")],
-            sprites: &[(young, Some(genes(&looks))), (mother, Some(genes(rests)))],
+            sprites: &[
+                (young, Some(genome_of(&looks, &data))),
+                (mother, Some(genome_of(RESTS, &data))),
+            ],
             scripted: &[(mother, ScriptedAction::Eat { at: berry })],
             newborns: &[young],
         };
         let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
-        let id = |world: &World, pos: Pos| world.sprite_at(pos).expect("a sprite").id();
-        let (young_id, mother_id) = (id(&world, young), id(&world, mother));
+        let (young_id, mother_id) = (id_at(&world, young), id_at(&world, mother));
         let needs = world.data.need_places().len();
         let berry = world.data.real_object_type("berry").expect("berries");
         let berry_type = world.data.object_types()[berry].id;
