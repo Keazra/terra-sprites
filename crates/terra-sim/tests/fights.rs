@@ -138,27 +138,29 @@ fn a_sprite_pricked_by_a_thornbush_backs_away_from_it() {
     assert!(backed_away >= 8, "backed away in {backed_away} of 10");
 }
 
-#[test]
-fn a_hit_sprite_mostly_backs_away_from_its_attacker_and_sometimes_hits_back() {
+/// Of 40 starter sprites, each with spawn variation, each hit once by a
+/// sprite beside it, how many back away from it and how many hit back as
+/// their next choice: newborns if `young`, else just grown up.
+fn hit_once(young: bool) -> (u32, u32) {
     let (me, attacker) = (at(3, 3), at(4, 3));
     let rows = ["........"; 8];
     let (mut backed_away, mut hit_back) = (0, 0);
     for seed in 0..40 {
         // The attacker hits once, as the sprite it hits sets off on its
-        // first action, and rests. That sprite is the starter genome with
-        // spawn variation.
+        // first action, and rests.
         let script = [
             (attacker, ScriptedAction::Hit { at: me }),
             (attacker, ScriptedAction::Rest),
         ];
         let data = builtin();
         let sprites = [(me, None), (attacker, Some(walker(&data)))];
+        let newborns = if young { &[me][..] } else { &[] };
         let scenario = Scenario {
             map: Map::from_ascii(&rows, &data).expect("valid drawing"),
             objects: &[],
             sprites: &sprites,
             scripted: &script,
-            newborns: &[],
+            newborns,
         };
         let mut world = World::from_scenario(scenario, data, seed).expect("a valid scenario");
         let (id, them) = (id_at(&world, me), id_at(&world, attacker));
@@ -179,6 +181,12 @@ fn a_hit_sprite_mostly_backs_away_from_its_attacker_and_sometimes_hits_back() {
             _ => {}
         }
     }
+    (backed_away, hit_back)
+}
+
+#[test]
+fn a_hit_sprite_mostly_backs_away_from_its_attacker_and_sometimes_hits_back() {
+    let (backed_away, hit_back) = hit_once(false);
     // About one sprite in three hits back. The instincts alone make it one
     // in four, but learning punishes the wander the hit interrupted, so
     // hitting back clears the switch margin a little more often (design
@@ -189,8 +197,10 @@ fn a_hit_sprite_mostly_backs_away_from_its_attacker_and_sometimes_hits_back() {
     );
 }
 
-#[test]
-fn a_crowded_sprite_mostly_backs_away_and_sometimes_hits_a_neighbour() {
+/// Of 100 starter sprites, each crowded by four resting neighbours, how
+/// many back away from a neighbour and how many hit one as their first
+/// choice: newborns if `young`, else just grown up.
+fn crowded(young: bool) -> (u32, u32) {
     let me = at(3, 3);
     let neighbours = [at(2, 2), at(4, 2), at(2, 4), at(4, 4)];
     let (mut backed_away, mut hit) = (0, 0);
@@ -207,12 +217,13 @@ fn a_crowded_sprite_mostly_backs_away_and_sometimes_hits_a_neighbour() {
         let mut sprites = vec![(me, Some(crowded))];
         sprites.extend(neighbours.map(|pos| (pos, Some(walker(&data)))));
         let script = neighbours.map(|pos| (pos, ScriptedAction::Rest));
+        let newborns = if young { &[me][..] } else { &[] };
         let scenario = Scenario {
             map: Map::from_ascii(&["........"; 8], &data).expect("valid drawing"),
             objects: &[],
             sprites: &sprites,
             scripted: &script,
-            newborns: &[],
+            newborns,
         };
         let mut world = World::from_scenario(scenario, data, seed).expect("a valid scenario");
         let id = id_at(&world, me);
@@ -222,9 +233,29 @@ fn a_crowded_sprite_mostly_backs_away_and_sometimes_hits_a_neighbour() {
             _ => {}
         }
     }
+    (backed_away, hit)
+}
+
+#[test]
+fn a_crowded_sprite_mostly_backs_away_and_sometimes_hits_a_neighbour() {
+    let (backed_away, hit) = crowded(false);
     assert!(
         backed_away > 5 * hit && hit >= 3,
         "backed away {backed_away}, hit {hit}, of 100"
+    );
+}
+
+#[test]
+fn a_young_sprite_never_fights_for_room_but_still_hits_back() {
+    // M2 design §9.5: the starter's instinct to hit a neighbour when
+    // crowded switches on as it grows up; hitting back works all its life.
+    let (backed_away, hit) = crowded(true);
+    assert_eq!(hit, 0, "backed away {backed_away}, hit {hit}, of 100");
+    assert!(backed_away > 50, "backed away {backed_away} of 100");
+    let (backed_away, hit_back) = hit_once(true);
+    assert!(
+        hit_back >= 3,
+        "backed away {backed_away}, hit back {hit_back}, of 40"
     );
 }
 
