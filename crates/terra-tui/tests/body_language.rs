@@ -163,6 +163,23 @@ fn the_young_are_drawn_small() {
 }
 
 #[test]
+fn a_selected_sprite_is_in_reverse_video_whatever_its_age() {
+    // Design §6.2 and M2 design §9.6 (#282): the young and the grown show
+    // they're selected the same way, in both themes, as an egg does.
+    let (young, grown) = (at(2, 3), at(5, 3));
+    let world = field_with_newborns(&[(young, feeling(&[])), (grown, feeling(&[]))], &[young]);
+    for theme in [Theme::cp437(), Theme::ascii()] {
+        let mut app = app_for(&world, theme);
+        for (selected, other) in [(young, grown), (grown, young)] {
+            app.apply(Action::SelectNext, &world);
+            let screen = render(&app, &world);
+            assert!(screen[cell(selected)].modifier.contains(Modifier::REVERSED));
+            assert!(!screen[cell(other)].modifier.contains(Modifier::REVERSED));
+        }
+    }
+}
+
+#[test]
 fn b_switches_between_the_strongest_drive_plain_and_lineage_and_says_so() {
     let world = field(&[(at(2, 3), feeling(&[("hunger", 0.8)]))]);
     let mut app = app_for(&world, Theme::cp437());
