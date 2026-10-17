@@ -476,24 +476,24 @@ mod tests {
         let mine = genome(&instincts(&VERBS, 0.25), &data);
         // His alone: an attention instinct. Hers alone: the instinct to
         // approach.
-        let mut his = instincts(&VERBS, 0.75);
-        his.insert(
+        let mut his_genes = instincts(&VERBS, 0.75);
+        his_genes.insert(
             3,
             r#"AttentionInstinct(input: "thirst", category: "water", weight: 0.8)"#.into(),
         );
-        his.retain(|gene| !gene.contains("Approach"));
-        let theirs = genome(&his, &data);
+        his_genes.retain(|gene| !gene.contains("Approach"));
+        let theirs = genome(&his_genes, &data);
         // Each carries every flaw doubled.
-        let (hers, his) = (vec![2; mine.genes.len()], vec![2; theirs.genes.len()]);
+        let (her_flaws, his_flaws) = (vec![2; mine.genes.len()], vec![2; theirs.genes.len()]);
         let (mut his_own, mut her_own) = (0, 0);
         for seed in 0..200 {
             let mother = Parent {
                 genome: &mine,
-                flaws: &hers,
+                flaws: &her_flaws,
             };
             let father = Parent {
                 genome: &theirs,
-                flaws: &his,
+                flaws: &his_flaws,
             };
             let mut rng = ChaCha8Rng::seed_from_u64(seed);
             let child = of_pair(mother, father, &data, &mut rng);

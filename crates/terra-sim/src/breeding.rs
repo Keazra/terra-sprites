@@ -301,7 +301,7 @@ mod tests {
     use super::*;
     use crate::command::Command;
     use crate::map::Map;
-    use crate::test_util::{at, builtin_changing};
+    use crate::test_util::{at, builtin, builtin_changing};
     use crate::world::{Scenario, World};
 
     #[test]
@@ -354,11 +354,11 @@ mod tests {
     }
 
     #[test]
-    fn the_cursor_may_spawn_a_sprite_past_the_limit() {
-        // M2 design §10.6: the limit is the sprites' glass, not the
+    fn the_cursor_may_spawn_a_sprite_past_most_sprites() {
+        // M2 design §10.6: most sprites is the sprites' glass, not the
         // player's. In a full world the Cursor still places a sprite, and
         // none is fertile.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let data = builtin();
         let map = Map::from_ascii(&[".....", ".....", "....."], &data).expect("valid drawing");
         let sprites = [(at(1, 1), None), (at(3, 1), None)];
         let scenario = Scenario {
@@ -385,7 +385,7 @@ mod tests {
     fn a_partner_keeps_the_touch_of_its_mate_whatever_it_touches_later_that_tick() {
         // M2 design §10: each learns about the other, even when the one
         // mated with acts after, on the same tick.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let data = builtin();
         let map = Map::from_ascii(&[".....", ".....", "....."], &data).expect("valid drawing");
         let sprites = [(at(1, 1), None), (at(2, 1), None), (at(3, 1), None)];
         let scenario = Scenario {
