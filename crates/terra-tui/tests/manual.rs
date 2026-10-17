@@ -1,26 +1,26 @@
-//! The README's controls table matches the keybindings in code (design
+//! The manual's controls table matches the keybindings in code (design
 //! §7.4, A9): every key the game binds is in the table, and every key the
 //! table's first column names does something.
 //!
 //! The keys come from the code itself: each key a keyboard can press goes
 //! through `Keys::action_for`, and any that doesn't come back as `Dismiss`
-//! is bound. So a key added to `input.rs` fails this test until the README
-//! lists it.
+//! is bound. So a key added to `input.rs` fails this test until the manual
+//! (`docs/manual.md`, #244) lists it.
 
 use std::collections::BTreeSet;
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use terra_tui::input::{Action, Keys};
 
-const README: &str = include_str!("../../../README.md");
+const MANUAL: &str = include_str!("../../../docs/manual.md");
 
 /// The controls table's rows, as their cells: from the row after
 /// `| Key | Action |` and its rule, until the table ends.
 fn controls_rows() -> Vec<Vec<String>> {
-    let start = README
+    let start = MANUAL
         .find("| Key | Action |")
-        .expect("the README has a controls table");
-    README[start..]
+        .expect("the manual has a controls table");
+    MANUAL[start..]
         .lines()
         .skip(2)
         .take_while(|line| line.starts_with('|'))
@@ -52,7 +52,7 @@ fn keys_in(cell: &str) -> BTreeSet<String> {
     keys
 }
 
-/// A key as the README and this test both name it: a letter in capitals,
+/// A key as the manual and this test both name it: a letter in capitals,
 /// since the game reads either case the same.
 fn canonical(key: &str) -> String {
     match key.chars().collect::<Vec<_>>()[..] {
@@ -61,7 +61,7 @@ fn canonical(key: &str) -> String {
     }
 }
 
-/// Every key the game binds outside a prompt, by its README name.
+/// Every key the game binds outside a prompt, by its manual name.
 fn bound_keys() -> BTreeSet<String> {
     let plain = (' '..='~').map(|c| (KeyCode::Char(c), KeyModifiers::NONE));
     let ctrl = ('a'..='z').map(|c| (KeyCode::Char(c), KeyModifiers::CONTROL));
@@ -97,7 +97,7 @@ fn bound_keys() -> BTreeSet<String> {
         .collect()
 }
 
-/// The README's name for a key.
+/// The manual's name for a key.
 fn name(code: KeyCode, modifiers: KeyModifiers) -> String {
     let key = match code {
         KeyCode::Char(' ') => "space".to_string(),
@@ -126,7 +126,7 @@ fn name(code: KeyCode, modifiers: KeyModifiers) -> String {
 }
 
 #[test]
-fn every_key_the_game_binds_is_in_the_readme_controls_table() {
+fn every_key_the_game_binds_is_in_the_manual_controls_table() {
     let mentioned: BTreeSet<String> = controls_rows()
         .iter()
         .flatten()
@@ -135,18 +135,18 @@ fn every_key_the_game_binds_is_in_the_readme_controls_table() {
     let missing: Vec<String> = bound_keys().difference(&mentioned).cloned().collect();
     assert!(
         missing.is_empty(),
-        "the README's controls table doesn't mention {missing:?}"
+        "the manual's controls table doesn't mention {missing:?}"
     );
 }
 
 #[test]
-fn every_key_in_the_readme_controls_table_does_something() {
+fn every_key_in_the_manual_controls_table_does_something() {
     let bound = bound_keys();
     for row in controls_rows() {
         for key in keys_in(&row[0]) {
             assert!(
                 bound.contains(&key),
-                "the README lists `{key}`, which the game doesn't bind"
+                "the manual lists `{key}`, which the game doesn't bind"
             );
         }
     }
@@ -155,7 +155,7 @@ fn every_key_in_the_readme_controls_table_does_something() {
 #[test]
 fn the_check_reads_the_keys_the_game_binds() {
     // A guard on the guard: if `bound_keys` found nothing, the first test
-    // would pass with any README.
+    // would pass with any manual.
     let bound = bound_keys();
     for key in [
         "space",

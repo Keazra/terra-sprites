@@ -27,6 +27,9 @@
 # owner's own PRs are reviewed there: this repository is public, and the
 # sandbox also holds the private FTA2 repository and a GitHub key for it,
 # which a stranger's PR could try to talk the reviewer into sending out.
+# A stranger's comment could try the same, on the owner's PR or on an issue
+# it names, so a PR goes to the sandbox only while everything the reviewer
+# reads there was written by the owner or a review bot.
 #
 # With no PR number, the open PRs are listed with where each stands with
 # Gemini, to tick with the arrow keys and Space. The ones never reviewed, or
@@ -52,6 +55,9 @@ $Confidences = "confirmed", "likely", "unconfirmed"
 $MostMinor = 5
 $SandboxName = "FTA2-Review"
 $Owner = $GitHubRepo.Split("/")[0]
+# Who may have written what the reviewer reads in the sandbox: the owner, and
+# the review bots, whose words come from the owner's own PR.
+$SandboxWriters = @($Owner, "Copilot", "copilot-pull-request-reviewer[bot]", "chatgpt-codex-connector[bot]")
 $SandboxSetup = "Run 'Set up the Gemini sandbox.bat', in the FTA2 folder, again."
 
 function Fail([string]$Why) {
@@ -411,9 +417,31 @@ try {
     Write-Text (Join-Path $inputs "conversation.txt") (Join-Lines (& gh pr view $Pr --repo $GitHubRepo --comments))
     $issues = [regex]::Matches("$($info.body)", '(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|part of)\s+#(\d+)') |
         ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
+    $named = @()
     foreach ($issue in $issues) {
         $text = & gh issue view $issue --repo $GitHubRepo --comments 2>$null
-        if ($LASTEXITCODE -eq 0) { Write-Text (Join-Path $inputs "issue-$issue.txt") (Join-Lines $text) }
+        if ($LASTEXITCODE -eq 0) {
+            Write-Text (Join-Path $inputs "issue-$issue.txt") (Join-Lines $text)
+            $named += $issue
+        }
+    }
+
+    # In the sandbox, everything above must be the owner's or a review bot's
+    # (the opening comment): the PR's own text and the issues it names, with
+    # their comments, and the reviews and review comments.
+    if ($Sandbox) {
+        $writers = @($comments + $reviews | Where-Object { $_ } | ForEach-Object { ($_ | ConvertFrom-Json).user })
+        foreach ($number in @($Pr) + $named) {
+            $writers += @(& gh api "repos/$GitHubRepo/issues/$number" --jq '.user.login')
+            if ($LASTEXITCODE -ne 0) { Fail "Couldn't check who wrote #$number, so PR #$Pr isn't reviewed in the sandbox." }
+            $writers += @(& gh api "repos/$GitHubRepo/issues/$number/comments" --paginate --jq '.[].user.login')
+            if ($LASTEXITCODE -ne 0) { Fail "Couldn't check who commented on #$number, so PR #$Pr isn't reviewed in the sandbox." }
+        }
+        $others = @($writers | Where-Object { $SandboxWriters -notcontains $_ } | Select-Object -Unique)
+        if ($others.Count -gt 0) {
+            Fail ("PR #$Pr, or an issue it names, has words by $($others -join ', '), so it isn't reviewed in the sandbox " +
+                "(see this script's opening comment). Review it without -Sandbox.")
+        }
     }
 
     # A PR Gemini has reviewed before: what changed since that review's commit.
