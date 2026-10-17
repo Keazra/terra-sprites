@@ -6,7 +6,7 @@
 //! small.
 
 mod common;
-use common::{ALONE, FEMALE, WorldBuilder, at, builtin, family_in, lone, until};
+use common::{ALONE, FEMALE, WorldBuilder, at, builtin, family_in, laid, lone, until};
 
 use std::collections::BTreeMap;
 
@@ -156,11 +156,7 @@ fn an_egg_the_cursor_holds_is_counted_as_one_on_the_map_is() {
     // M2 design §14.1: the eggs are counted whether on the map or held by
     // the Cursor.
     let mut world = mother();
-    let egg = until(&mut world, 3_000, |event| match event.kind {
-        EventKind::Laid { egg, .. } => Some(egg),
-        _ => None,
-    })
-    .expect("she lays alone");
+    let egg = laid(&mut world, 3_000).expect("she lays alone").egg;
     world.submit(Command::PickUp { item: egg });
     world.step();
     assert_eq!(

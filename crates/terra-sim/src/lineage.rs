@@ -246,7 +246,7 @@ mod tests {
     }
 
     /// No sprites or objects, to check a record alone against.
-    fn nothing() -> (Sprites, Objects) {
+    fn no_sprites_or_objects() -> (Sprites, Objects) {
         let map = Map::from_ascii(&["."], &builtin()).expect("a map");
         (Sprites::new(&map), Objects::new(&map))
     }
@@ -254,7 +254,7 @@ mod tests {
     #[test]
     fn one_remembered_as_dying_before_it_was_born_is_caught() {
         // M2 design §17.1, checked every tick (design §7.1).
-        let (sprites, objects) = nothing();
+        let (sprites, objects) = no_sprites_or_objects();
         let mut dead = RecordOfTheDead::default();
         let mut on_the_tick = record(10, None);
         on_the_tick.born = 10;
@@ -272,7 +272,7 @@ mod tests {
     #[test]
     fn more_remembered_than_ten_thousand_is_caught_unless_they_re_named() {
         // M2 design §17.1: the newest 10,000, and the named however many.
-        let (sprites, objects) = nothing();
+        let (sprites, objects) = no_sprites_or_objects();
         let (mut unnamed, mut named) = (RecordOfTheDead::default(), RecordOfTheDead::default());
         for id in 0..=REMEMBERED as u64 {
             unnamed.remember_within(EntityId(id), record(id, None), REMEMBERED + 1);
