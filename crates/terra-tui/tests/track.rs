@@ -1,9 +1,9 @@
 //! Track (`T`, design v21 §6.1): the view follows the selected sprite.
 
 mod common;
-use common::{LONE, LONE_MOTHER, QUICK, grow};
+use common::{LONE, LONE_MOTHER, QUICK, at, grow, pointer_on};
 
-use ratatui::layout::{Position, Rect};
+use ratatui::layout::Rect;
 use terra_sim::{DataPack, Map, Pos, Scenario, ScriptedAction, World};
 use terra_tui::app::{App, Areas, Origin, Selection};
 use terra_tui::input::Action;
@@ -13,8 +13,15 @@ fn pack() -> DataPack {
     DataPack::builtin().expect("valid pack")
 }
 
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
+/// An app on `world` showing 20×10 tiles of it, with no panels.
+fn small_view(world: &World) -> App {
+    let areas = Areas {
+        tiles: Rect::new(1, 2, 20, 10),
+        inspector: None,
+        event_log: None,
+        overlay: None,
+    };
+    App::new(world.map(), Theme::cp437(), 1, areas)
 }
 
 /// A 60×40 field with a starter sprite at (50, 30) wandering to (42, 30),
@@ -37,22 +44,14 @@ fn field() -> (World, App) {
         newborns: &[],
     };
     let world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
-    let areas = Areas {
-        tiles: Rect::new(1, 2, 20, 10),
-        inspector: None,
-        event_log: None,
-        overlay: None,
-    };
-    let app = App::new(world.map(), Theme::cp437(), 1, areas);
+    let app = small_view(&world);
     (world, app)
 }
 
 /// Selects the sprite on `tile`, with `Tab`.
 fn select(app: &mut App, world: &World, tile: Pos) {
     let id = world.sprite_at(tile).expect("a sprite").id();
-    while app.selection().map(|s| s.id()) != Some(id) {
-        app.apply(Action::SelectNext, world);
-    }
+    common::select(app, world, id);
 }
 
 /// Whether the viewport has `tile` at its centre.
@@ -129,13 +128,7 @@ fn track_stops_a_quarter_of_the_view_past_the_wall() {
         newborns: &[],
     };
     let world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
-    let areas = Areas {
-        tiles: Rect::new(1, 2, 20, 10),
-        inspector: None,
-        event_log: None,
-        overlay: None,
-    };
-    let mut app = App::new(world.map(), Theme::cp437(), 1, areas);
+    let mut app = small_view(&world);
     select(&mut app, &world, at(1, 1));
     app.apply(Action::Track, &world);
     assert_eq!(app.viewport(), Origin { x: -5, y: -2 });
@@ -154,24 +147,15 @@ fn t_tracks_an_egg_where_it_lies() {
     );
     let egg = world.eggs().next().expect("an egg");
     let (id, lies) = (egg.id(), egg.pos().expect("on the map"));
-    let areas = Areas {
-        tiles: Rect::new(1, 2, 20, 10),
-        inspector: None,
-        event_log: None,
-        overlay: None,
-    };
-    let mut app = App::new(world.map(), Theme::cp437(), 1, areas);
-    // The view scrolled to the egg, which the pointer points at from the
-    // cell down and right of it (design v27 §6.5).
+    let mut app = small_view(&world);
+    // The view scrolled to the egg, and the pointer on it.
     let from = app.viewport();
     let (dx, dy) = (
         i32::from(lies.x) - from.x - 10,
         i32::from(lies.y) - from.y - 5,
     );
     app.apply(Action::Scroll { dx, dy }, &world);
-    let cell = app.cell_of(lies).expect("in view");
-    let pointer = Position::new(cell.x + 1, cell.y + 1);
-    app.apply(Action::left_click(pointer), &world);
+    app.apply(Action::left_click(pointer_on(&app, lies)), &world);
     assert_eq!(app.selection(), Some(Selection::Living(id)));
     app.apply(Action::Scroll { dx: -40, dy: -25 }, &world);
     assert!(!centred_on(&app, lies), "scrolled away");

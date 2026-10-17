@@ -3,6 +3,9 @@
 //! moment picked with `←` `→` or the pointer read under it, with the
 //! generations alive then (#208); a small copy heads the World tab.
 
+mod common;
+use common::{LONE, at, group, pack_changing, pointer_on};
+
 use std::time::Duration;
 
 use ratatui::buffer::Buffer;
@@ -23,20 +26,7 @@ fn pack() -> DataPack {
 /// The built-in pack, in which a female may lay alone at once (M2 design
 /// §15.7).
 fn lone() -> DataPack {
-    let physiology = include_str!("../../../data/physiology.ron")
-        .replace("alone_after: 4500,", "alone_after: 0,");
-    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, text)| {
-            let text = if path == "physiology.ron" {
-                &physiology[..]
-            } else {
-                text
-            };
-            (path, text)
-        })
-        .collect();
-    DataPack::from_sources(&sources).expect("valid pack")
+    pack_changing(&[LONE])
 }
 
 /// A field of grass with `young` newborn starter sprites along the top row
@@ -409,10 +399,8 @@ fn the_pointer_picks_a_moment_and_leaves_the_cursor_where_it_is_on_the_map() {
     let mut world = field(2, 4);
     run(&mut world, 250);
     let mut app = app_on(&world);
-    // The pointer points at the tile up and left of it (design v27 §6.5).
-    let tile = Pos { x: 5, y: 1 };
-    let cell = app.cell_of(tile).expect("in view");
-    app.apply(Action::Point(Position::new(cell.x + 1, cell.y + 1)), &world);
+    let tile = at(5, 1);
+    app.apply(Action::Point(pointer_on(&app, tile)), &world);
     assert_eq!(app.shown_cursor(), Some(tile));
     app.apply(Action::Population, &world);
     app.apply(Action::Point(Position::new(FIRST_COLUMN + 1, 9)), &world);
@@ -573,19 +561,6 @@ fn a_death_is_read_in_the_moment_it_happened() {
             format!("since tick {}: 1 died (dehydration 1)", group(tick - 100)),
         ]
     );
-}
-
-/// `n` with its thousands grouped, as the screen writes it.
-fn group(n: u64) -> String {
-    let digits = n.to_string();
-    let mut out = String::new();
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
 }
 
 #[test]
