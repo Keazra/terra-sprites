@@ -156,7 +156,7 @@ The ground, the plants and toys, a sprite's body and its instincts, the size of 
 - [M4 "Terra" design](docs/design/m4-terra.md) (the plan for the ship, a later milestone: its sectors, devices and sealed doors, and what "M4 is done" means).
 - [Design changes](docs/design/changes/): each change to a design, one file per PR; its README says where the earlier numbered revisions are. The evaluations of v1 are in [`docs/design/reviews/`](docs/design/reviews/).
 
-The `docs/private-docs` folder is empty in your copy. It's where the owner keeps their private working notes, and nothing in the game needs it.
+The `docs/terra-sprites-docs` folder is empty in your copy. It's where the owner keeps their private working notes, and nothing in the game needs it.
 
 ## Roadmap
 

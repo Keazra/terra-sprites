@@ -52,17 +52,17 @@ The game's content is data in `data/*.ron` (terrain, chemicals, loci, brain inpu
 
 ## Public and private documents
 
-This repo is public. The owner's working documents are in a private one, [Keazra/terra-sprites-docs](https://github.com/Keazra/terra-sprites-docs), which their PC has at `docs/private-docs/`. Before writing a document, decide which it belongs in:
+This repo is public. The owner's working documents are in a private one, [Keazra/terra-sprites-docs](https://github.com/Keazra/terra-sprites-docs), which their PC has at `docs/terra-sprites-docs/`. Before writing a document, decide which it belongs in:
 
 - **Public, here:** what anyone with a copy of the game needs to play, change or build on it. That's the designs with their change files and outside reviews (`docs/design/`), the data-format reference (`docs/reference/`, which the tests read), the acceptance records, ADRs (`docs/adr/`), how agents work here (`docs/agents/`), and `AGENTS.md`, `CONTEXT.md` and the README.
-- **Private, in `docs/private-docs/`:** the work behind those. That's each topic's question rounds, research, mockups, run logs and patches, the baseline reports and briefings (design §7.6), play-test notes and the advertising material. The private repo's own `AGENTS.md` says where in it things go.
+- **Private, in `docs/terra-sprites-docs/`:** the work behind those. That's each topic's question rounds, research, mockups, run logs and patches, the baseline reports and briefings (design §7.6), play-test notes and the advertising material. The private repo's own `AGENTS.md` says where in it things go.
 - **When unsure, it's private.** A private document can be published later, but one pushed here stays public in git's history. The owner's real name and their PC's paths never go here.
 
 How it fits together:
 
-- **Where it is.** On the owner's PC, `docs/private-docs/` is a submodule. A cloud session given the private repo has it cloned beside this one, as `../terra-sprites-docs`. Work in that clone, and leave this repo's `docs/private-docs/` empty, as it is in every public copy.
+- **Where it is.** On the owner's PC, `docs/terra-sprites-docs/` is a submodule. A cloud session given the private repo has it cloned beside this one, as `../terra-sprites-docs`. Work in that clone, and leave this repo's `docs/terra-sprites-docs/` empty, as it is in every public copy.
 - **Nothing public may need it,** since nobody else can fetch it. The build, the tests, CI and the README's links work without it, and a public document doesn't link into it. Only the owner's own scripts use it: `scripts/baseline.ps1` keeps its reports there. Its entry in `.gitmodules` makes clones and the README's `cargo install --git` skip it rather than fail, and keeps `git status` quiet as the private repo moves on; the comment there says how.
-- **Leave its pointer alone.** This repo pins it at one commit only to say where it goes, so never commit a change to `docs/private-docs`. `git commit -a` does that silently, since `ignore = all` hides it from the diff too.
+- **Leave its pointer alone.** This repo pins it at one commit only to say where it goes, so never commit a change to `docs/terra-sprites-docs`. `git commit -a` does that silently, since `ignore = all` hides it from the diff too.
 - **Never initialise it** (`git submodule init`, or `update --init`). Left uninitialised, git's recursive commands pass it by. Once it's initialised, a recursive switch to a branch from before the submodule removes the folder, and switching back leaves it on the pinned commit instead of its `main`.
 
 ## Workflow
