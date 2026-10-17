@@ -443,6 +443,84 @@ fn leading_a_sprite_over_space_the_cursor_stays_and_the_sprite_is_not_led_on() {
 }
 
 #[test]
+fn an_item_held_over_space_stays_held_until_the_pointer_comes_back() {
+    // M2 design §11.4: over space, a click, `Q` or `E` does nothing, so the
+    // ball the Cursor holds isn't put down on its last tile, (7, 3), or
+    // aimed; back over the map, `Q` puts it down where the pointer is.
+    let mut world = field_with(10, 6, &[(Pos { x: 5, y: 3 }, "ball")], &[]);
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+    apply(&mut app, &world, Action::left_click(on(Pos { x: 5, y: 3 })));
+    tick(&mut app, &mut world);
+    assert!(matches!(app.grip(&world), Some(Grip::Holds(_))));
+    apply(&mut app, &world, Action::Point(on(Pos { x: 7, y: 3 })));
+    apply(&mut app, &world, Action::Point(SPACE));
+    for button in [Button::Left, Button::Right] {
+        let click = Action::Click {
+            at: SPACE,
+            button,
+            amplified: false,
+        };
+        let press = Action::Press {
+            button,
+            amplified: false,
+        };
+        for input in [click, press] {
+            apply(&mut app, &world, input);
+            assert_eq!(app.take_commands(), [], "{input:?}");
+            assert!(!app.aiming(), "{input:?}");
+        }
+    }
+    for _ in 0..10 {
+        tick(&mut app, &mut world);
+    }
+    assert!(matches!(app.grip(&world), Some(Grip::Holds(_))), "held");
+    assert_eq!(app.cursor(), Pos { x: 7, y: 3 }, "on its last tile");
+    apply(&mut app, &world, Action::Point(on(Pos { x: 8, y: 2 })));
+    let q = Action::Press {
+        button: Button::Left,
+        amplified: false,
+    };
+    apply(&mut app, &world, q);
+    let put_down = Command::PutDown {
+        tile: Pos { x: 8, y: 2 },
+    };
+    assert_eq!(app.take_commands(), [put_down]);
+}
+
+#[test]
+fn an_aim_sent_over_space_leaves_the_cursor_where_it_was_out_of_reach() {
+    // M2 design §11.4: "an aim that ends over space, sent or not, leaves
+    // the Cursor where it was". The ball is aimed from (5, 3), pulled
+    // across (2, 3) and on into space, and thrown from there.
+    let mut world = field_with(10, 6, &[(Pos { x: 5, y: 3 }, "ball")], &[]);
+    let mut app = app(&world);
+    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+    apply(&mut app, &world, Action::left_click(on(Pos { x: 5, y: 3 })));
+    tick(&mut app, &mut world);
+    apply(
+        &mut app,
+        &world,
+        Action::right_click(on(Pos { x: 5, y: 3 })),
+    );
+    apply(&mut app, &world, Action::Point(on(Pos { x: 2, y: 3 })));
+    apply(&mut app, &world, Action::Point(SPACE));
+    apply(&mut app, &world, Action::right_click(SPACE));
+    let sent = app.take_commands();
+    assert!(
+        matches!(sent[..], [Command::Throw { from, .. }] if from == Pos { x: 5, y: 3 }),
+        "{sent:?}"
+    );
+    assert!(!app.aiming());
+    assert!(app.out_of_reach());
+    assert_eq!(app.cursor(), Pos { x: 5, y: 3 }, "not the last tile pulled");
+    for _ in 0..5 {
+        tick(&mut app, &mut world);
+        assert_eq!(app.cursor(), Pos { x: 5, y: 3 }, "it stays");
+    }
+}
+
+#[test]
 fn aiming_the_pull_goes_on_past_the_wall_and_a_right_click_or_e_over_space_sends_it() {
     // M2 design §11.4: the Cursor sits on what the player aims, so it isn't
     // out of reach, and the pointer pulls on past the wall. The ball is on

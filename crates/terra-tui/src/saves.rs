@@ -185,3 +185,13 @@ pub fn list(folder: &Path) -> Vec<SaveFile> {
     });
     saves
 }
+
+/// What a list of the saves in `folder`, the saves folder, says with none
+/// to list: a world's `Ctrl+O` and the title screen's Load (M2 design
+/// §8.2) say it alike.
+pub fn none_listed(folder: Option<&Path>) -> String {
+    match folder {
+        Some(folder) => format!("No saves in {}", folder.display()),
+        None => "No folder for saves".into(),
+    }
+}

@@ -202,6 +202,27 @@ fn the_world_holds_still_until_the_light_has_spread_then_runs_at_4x() {
 }
 
 #[test]
+fn after_a_long_frame_the_world_runs_at_most_5_ticks_and_drops_the_rest() {
+    // M2 design §8.1: at most 5 ticks a frame.
+    let mut title = title();
+    title.animate(Duration::from_secs(4));
+    assert_eq!(
+        title.world().tick(),
+        0,
+        "the light has just filled the screen"
+    );
+    // Three seconds at 4× is 15 ticks.
+    title.animate(Duration::from_secs(3));
+    assert_eq!(title.world().tick(), 5);
+    title.animate(Duration::from_millis(200));
+    assert_eq!(
+        title.world().tick(),
+        6,
+        "what the long frame owed was dropped, not caught up"
+    );
+}
+
+#[test]
 fn a_skipped_scene_s_world_runs_from_the_skip() {
     let mut title = title();
     title.apply(Action::Enter);
@@ -242,6 +263,23 @@ fn the_arrows_move_through_the_menu_and_enter_picks() {
 }
 
 #[test]
+fn the_wheel_moves_through_the_menu() {
+    // M2 design §8.2: picked as the Place menu's are, the wheel too.
+    let mut title = after_the_scene();
+    let wheel = |notches| Action::Wheel {
+        at: Position::new(50, 15),
+        notches,
+    };
+    // New world, Load, Help, Quit: past the end, it stays on the last.
+    for _ in 0..4 {
+        title.apply(wheel(1));
+    }
+    title.apply(wheel(-1));
+    assert_eq!(title.apply(Action::Enter), TitleFlow::Stay);
+    assert!(text(&render(&title)).contains("EMOTES"), "Help opens");
+}
+
+#[test]
 fn a_click_on_a_choice_picks_it() {
     let mut title = after_the_scene();
     let at = find(&render(&title), "Quit").expect("Quit shows");
@@ -279,6 +317,30 @@ fn esc_asks_before_quitting_and_ctrl_c_quits_at_once() {
 
     let mut title = after_the_scene();
     assert_eq!(title.apply(Action::Quit), TitleFlow::Quit);
+}
+
+#[test]
+fn the_mouse_doesn_t_answer_the_quit_prompt() {
+    // M2 design §8.2: `Esc` asks as in a world, where the mouse doesn't
+    // answer the question; only a key does (M1 design §6.6).
+    let mut title = after_the_scene();
+    title.apply(Action::Back);
+    let over_the_menu = Position::new(50, 15);
+    let mouse = [
+        Action::left_click(over_the_menu),
+        Action::right_click(over_the_menu),
+        Action::middle_click(over_the_menu),
+        Action::Wheel {
+            at: over_the_menu,
+            notches: 1,
+        },
+    ];
+    for action in mouse {
+        assert_eq!(title.apply(action), TitleFlow::Stay, "{action:?}");
+        let shown = text(&render(&title));
+        assert!(shown.contains("Quit? (y/n)"), "still asks after {action:?}");
+    }
+    assert_eq!(title.apply(Action::Confirm), TitleFlow::Quit);
 }
 
 /// The title screen with New world open, offering `presets`.
@@ -461,6 +523,41 @@ fn holding_the_question_mark_explains_the_mode_picked() {
     assert!(shown.contains("12345"), "the seed is as it was:\n{shown}");
 }
 
+/// The New world box's top-left and bottom-right corners on `screen`.
+fn new_world_box(screen: &Buffer) -> (Position, Position) {
+    let top_left = find(screen, "╔═ New world").expect("the box shows");
+    let shown = text(screen);
+    let rows: Vec<&str> = shown.lines().collect();
+    let bottom = (usize::from(top_left.y)..rows.len())
+        .find(|&y| rows[y].chars().nth(usize::from(top_left.x)) == Some('╚'))
+        .expect("the box's bottom");
+    let right = rows[bottom]
+        .chars()
+        .enumerate()
+        .skip(usize::from(top_left.x))
+        .find(|&(_, c)| c == '╝')
+        .map(|(x, _)| x)
+        .expect("its bottom-right corner");
+    (top_left, Position::new(right as u16, bottom as u16))
+}
+
+#[test]
+fn the_new_world_box_stays_put_while_the_question_mark_is_held() {
+    // M2 design §16.1: the box is tall enough for the explanation, so it
+    // doesn't jump, even with fewer presets than the explanation has lines.
+    let mut title = new_world(vec![]);
+    let before = new_world_box(&render(&title));
+    title.apply(Action::Type('?'));
+    let held = render(&title);
+    assert_eq!(new_world_box(&held), before);
+    let shown = text(&held);
+    for line in STORY_EXPLAINED {
+        assert!(shown.contains(line), "{line:?} in\n{shown}");
+    }
+    title.apply(Action::HelpReleased);
+    assert_eq!(new_world_box(&render(&title)), before);
+}
+
 #[test]
 fn another_key_puts_the_explanation_away_and_does_its_job() {
     // Where the terminal never says `?` was let go of.
@@ -497,12 +594,92 @@ fn load_lists_every_save_newest_first_and_loads_the_one_picked() {
 }
 
 #[test]
-fn load_with_no_saves_says_so_and_esc_goes_back() {
+fn a_save_named_outside_cp437_shows_with_question_marks_as_in_a_world() {
+    // M2 design §8.2: everything drawn stays within CP437, and Load lists
+    // the saves as `Ctrl+O` does in a world, which shows such a name so.
+    let (mut title, _) = with_saves(&[("日記 mira", 2)]);
+    let menu = render(&title);
+    let shown = text(&menu);
+    assert!(
+        shown.contains("?? mira · 2 hours ago"),
+        "Continue:\n{shown}"
+    );
+    title.apply(Action::Pick(3));
+    let load = render(&title);
+    let shown = text(&load);
+    assert!(shown.contains("1 ?? mira"), "Load:\n{shown}");
+    for screen in [&menu, &load] {
+        for cell in screen.content() {
+            let c = cell.symbol().chars().next().unwrap_or(' ');
+            assert!(cp437::contains(c), "{c:?} isn't CP437:\n{}", text(screen));
+        }
+    }
+}
+
+#[test]
+fn load_with_no_saves_says_where_it_looked_and_esc_goes_back() {
+    // As `Ctrl+O`'s list says it in a world (M2 design §8.2).
     let mut title = after_the_scene();
+    let folder = PathBuf::from("/home/someone/.local/share/terra-sprites/saves");
+    title.set_save_folder(folder.clone());
     title.apply(Action::Pick(2));
-    assert!(text(&render(&title)).contains("No saves yet"));
+    let shown = text(&render(&title));
+    let said = format!("No saves in {}", folder.display());
+    assert!(shown.contains(&said), "{said:?} in\n{shown}");
     title.apply(Action::Back);
     assert_eq!(title.apply(Action::Pick(4)), TitleFlow::Quit);
+
+    let mut title = after_the_scene();
+    title.apply(Action::Pick(2));
+    let shown = text(&render(&title));
+    assert!(shown.contains("No folder for saves"), "{shown}");
+}
+
+/// The title screen with Load open on three saves, and the saves.
+fn loading_three() -> (Title, Vec<SaveFile>) {
+    let (mut title, saves) = with_saves(&[
+        ("autosave-1", 2),
+        ("quicksave", 5),
+        ("before the flood", 26),
+    ]);
+    // Continue is 1, so Load is 3.
+    title.apply(Action::Pick(3));
+    (title, saves)
+}
+
+#[test]
+fn the_wheel_moves_through_load_as_it_does_through_ctrl_o_s_list() {
+    // M2 design §8.2: Load is the list `Ctrl+O` opens in a world.
+    let (mut title, saves) = loading_three();
+    let wheel = |notches| Action::Wheel {
+        at: Position::new(50, 15),
+        notches,
+    };
+    title.apply(wheel(1));
+    title.apply(wheel(1));
+    title.apply(wheel(1));
+    title.apply(wheel(-1));
+    assert_eq!(
+        title.apply(Action::Enter),
+        TitleFlow::Load(saves[1].clone())
+    );
+}
+
+#[test]
+fn a_click_on_a_save_in_load_loads_it_and_a_click_off_the_list_closes_it() {
+    let (mut title, saves) = loading_three();
+    let at = find(&render(&title), "before the flood").expect("listed");
+    assert_eq!(
+        title.apply(Action::left_click(at)),
+        TitleFlow::Load(saves[2].clone())
+    );
+    assert_eq!(
+        title.apply(Action::left_click(Position::new(0, 0))),
+        TitleFlow::Stay
+    );
+    let shown = text(&render(&title));
+    assert!(!shown.contains("before the flood"), "closed:\n{shown}");
+    assert!(shown.contains("1 Continue"), "back on the menu:\n{shown}");
 }
 
 #[test]
@@ -535,6 +712,52 @@ fn a_terminal_too_small_says_so() {
     let shown = text(&render_at(&title, 80, 24));
     assert!(shown.contains("Terminal too small"), "{shown}");
     assert!(shown.contains("needs 100x30, this is 80x24"), "{shown}");
+}
+
+#[test]
+fn a_terminal_too_small_takes_no_clicks_or_turns_of_the_wheel() {
+    // M2 design §8.2: as a world's too-small screen takes none (design
+    // §6.1), the menu hidden behind the message can't be picked from.
+    let mut title = after_the_scene();
+    title.resize(Size::new(80, 24));
+    for y in 0..24 {
+        for x in 0..80 {
+            let click = Action::left_click(Position::new(x, y));
+            assert_eq!(title.apply(click), TitleFlow::Stay, "a click on {x},{y}");
+        }
+    }
+    let wheel = Action::Wheel {
+        at: Position::new(40, 15),
+        notches: 1,
+    };
+    for _ in 0..3 {
+        title.apply(wheel);
+    }
+    title.resize(Size::new(WIDTH, HEIGHT));
+    let shown = text(&render(&title));
+    assert!(
+        shown.contains("4 Quit") && !shown.contains("Seed"),
+        "the menu, with nothing opened from it:\n{shown}"
+    );
+    let TitleFlow::Stay = title.apply(Action::Enter) else {
+        panic!("the wheel moved the highlight off New world");
+    };
+    assert!(title.typing(), "New world is still the one highlighted");
+}
+
+#[test]
+fn esc_still_asks_to_quit_on_a_terminal_too_small() {
+    // M2 design §8.2.
+    let mut title = after_the_scene();
+    title.resize(Size::new(80, 24));
+    assert_eq!(title.apply(Action::Back), TitleFlow::Stay);
+    let shown = text(&render_at(&title, 80, 24));
+    assert!(shown.contains("Terminal too small"), "{shown}");
+    assert!(
+        shown.contains("Quit? (y/n)"),
+        "the question shows:\n{shown}"
+    );
+    assert_eq!(title.apply(Action::Confirm), TitleFlow::Quit);
 }
 
 #[test]

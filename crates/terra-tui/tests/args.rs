@@ -141,6 +141,26 @@ fn fast_forward_takes_a_whole_number_of_hours_from_one() {
 }
 
 #[test]
+fn fast_forward_refuses_more_hours_than_a_run_can_count() {
+    // M2 design §16.3: at 4,500 ticks an hour, counted in tenths for the
+    // report's rows, a run's ticks must fit in a tick count. The most is
+    // u64::MAX / 45,000.
+    for hours in [
+        "18446744073709551615",
+        "4100000000000000",
+        "409927646082435",
+    ] {
+        let error = parse(&["--fast-forward", hours]).expect_err("refused");
+        assert!(
+            error.contains(hours) && error.contains("409,927,646,082,434"),
+            "{error}"
+        );
+    }
+    let most = parse(&["--fast-forward", "409927646082434"]).expect("the most there can be");
+    assert_eq!(most.fast_forward, Some(409_927_646_082_434));
+}
+
+#[test]
 fn a_saved_world_refuses_the_flags_that_make_a_new_one() {
     for flag in [
         &["--seed", "1"][..],
