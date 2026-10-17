@@ -119,7 +119,7 @@ impl WorldState {
     /// design §10.4).
     fn rebuild(&mut self, data: &DataPack) -> Result<(), String> {
         self.map.check_shape(data)?;
-        self.objects.rebuild(&self.map, data)?;
+        self.objects.rebuild(&self.map, data, self.tick)?;
         self.sprites.rebuild(&self.map, data, self.tick)?;
         self.old_eggs_to_items(data);
         self.number_generations();
@@ -209,7 +209,7 @@ impl WorldState {
             match egg {
                 Some(mut egg) => {
                     egg.unhatched = Some(Box::new(unhatched));
-                    self.objects.place(id, egg);
+                    self.objects.place(id, egg, data, self.tick);
                 }
                 None => {
                     let hatchling = Sprite::hatchling(unhatched, pos, self.tick, data);
@@ -230,11 +230,24 @@ impl WorldState {
         })
     }
 
-    /// Gives `object` the next entity ID and puts it in the world. The caller
-    /// has checked that it may go there.
-    pub(crate) fn add_object(&mut self, object: Object) -> EntityId {
+    /// Gives `object` the next entity ID and puts it in the world, scheduled
+    /// from the current tick. The caller has checked that it may go there.
+    pub(crate) fn add_object(&mut self, object: Object, data: &DataPack) -> EntityId {
+        let from = self.tick;
+        self.add_object_from(object, data, from)
+    }
+
+    /// Gives `object` the next entity ID and puts it in the world, scheduled
+    /// from `from` (M4 design §10), such as `tick + 1` for an object created
+    /// during step 2 or step 6. The caller has checked that it may go there.
+    pub(crate) fn add_object_from(
+        &mut self,
+        object: Object,
+        data: &DataPack,
+        from: u64,
+    ) -> EntityId {
         let id = self.new_id();
-        self.objects.place(id, object);
+        self.objects.place(id, object, data, from);
         id
     }
 
@@ -1100,7 +1113,7 @@ impl World {
                     pos,
                 });
             }
-            state.add_object(new_object(&world.data, kind, pos));
+            state.add_object(new_object(&world.data, kind, pos), &world.data);
         }
         for (pos, genome) in scenario.sprites {
             let state = &mut world.state;
@@ -1177,6 +1190,7 @@ impl World {
                 })?;
             object.counters[counter] = value.min(object_type.counters[counter].max);
         }
+        state.objects.schedule(id, &self.data, state.tick);
         Ok(())
     }
 
@@ -1851,7 +1865,7 @@ impl World {
         }
         state
             .objects
-            .check(&state.map, &self.data)
+            .check(&state.map, &self.data, state.tick)
             .and_then(|()| state.sprites.check(&state.map, &state.objects, &self.data))
             .and_then(|()| {
                 state
@@ -2072,7 +2086,8 @@ mod tests {
     /// Puts an object of type `name` on `pos` without checking the placement rules.
     fn force_place(world: &mut World, name: &str, pos: Pos) {
         let kind = world.data.object_type_named(name).expect("a built-in type");
-        world.state.add_object(new_object(&world.data, kind, pos));
+        let object = new_object(&world.data, kind, pos);
+        world.state.add_object(object, &world.data);
     }
 
     /// Puts a berry on `pos`, and gives its ID.
@@ -2249,7 +2264,8 @@ mod tests {
         let (mut world, first, _) = field_with_sprites();
         let berry = world.data.real_object_type("berry").expect("berries");
         let object = new_object(&world.data, berry, Pos { x: 0, y: 0 });
-        world.state.objects.place(first, object);
+        let tick = world.state.tick;
+        world.state.objects.place(first, object, &world.data, tick);
         let broken = world.check_invariants().expect_err("one ID, two things");
         assert!(broken.0.contains("both"), "{broken:?}");
     }
@@ -2362,6 +2378,24 @@ mod tests {
         let mut world = field_with_a_bush();
         let berry = force_berry(&mut world, Pos { x: 0, y: 0 });
         world.state.objects.pick_up(berry);
+        assert!(world.check_invariants().is_err());
+    }
+
+    #[test]
+    fn an_object_not_scheduled_for_its_next_turn_breaks_an_invariant() {
+        let mut world = field_with_a_bush();
+        world.step();
+        let bush = world
+            .state
+            .objects
+            .at(Pos { x: 2, y: 2 })
+            .expect("the bush");
+        world
+            .state
+            .objects
+            .get_mut(bush)
+            .expect("the bush")
+            .stage_ends = 5;
         assert!(world.check_invariants().is_err());
     }
 

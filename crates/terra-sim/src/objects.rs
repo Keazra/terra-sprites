@@ -1,12 +1,13 @@
 //! The world's objects and where they stand (design §3.3–3.4).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
 use crate::breeding::Unhatched;
 use crate::data::DataPack;
 use crate::map::{Dir, Map, Pos};
+use crate::object_types::ObjectType;
 use crate::occupancy::Occupancy;
 
 /// An entity's ID. IDs come from a world counter that only goes up, and are
@@ -49,6 +50,28 @@ pub(crate) struct Roll {
     pub(crate) left: u16,
 }
 
+impl Object {
+    /// The soonest tick at or after `from` on which this object has something
+    /// to do (M4 design §10): entering its first stage, finishing its current
+    /// stage, or firing a periodic `Every(n)` rule; `None` if it has none.
+    pub(crate) fn next_turn(
+        &self,
+        object_type: &ObjectType,
+        id: EntityId,
+        from: u64,
+    ) -> Option<u64> {
+        if self.fresh {
+            return Some(from);
+        }
+        let stage_turn = self.stage.map(|_| self.stage_ends.max(from));
+        let rule_turns = object_type
+            .rules
+            .iter()
+            .filter_map(|rule| rule.trigger.next_firing(id, from));
+        stage_turn.into_iter().chain(rule_turns).min()
+    }
+}
+
 /// Every object in the world, and the tile each stands on. A tile holds at most
 /// one object (design §3.4).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,6 +85,15 @@ pub(crate) struct Objects {
     /// derived from `by_id`, so it isn't hashed.
     #[serde(skip)]
     eggs: usize,
+    /// The objects due for a turn on each tick, in ascending ID order (M4
+    /// design §10). Derived from `by_id` and the world's tick, so it isn't
+    /// hashed.
+    #[serde(skip)]
+    due_on: BTreeMap<u64, BTreeSet<EntityId>>,
+    /// The tick each scheduled object is next due on. Derived from `by_id`
+    /// and the world's tick, so it isn't hashed.
+    #[serde(skip)]
+    next_due: BTreeMap<EntityId, u64>,
 }
 
 impl Objects {
@@ -71,6 +103,8 @@ impl Objects {
             by_id: BTreeMap::new(),
             on_tile: Occupancy::new(map),
             eggs: 0,
+            due_on: BTreeMap::new(),
+            next_due: BTreeMap::new(),
         }
     }
 
@@ -164,38 +198,84 @@ impl Objects {
         }
     }
 
-    /// Puts a new object on its tile. The caller has checked `can_place`.
-    pub(crate) fn place(&mut self, id: EntityId, object: Object) {
+    /// Puts a new object on its tile, scheduled from `from`. The caller has
+    /// checked `can_place`.
+    pub(crate) fn place(&mut self, id: EntityId, object: Object, data: &DataPack, from: u64) {
         self.on_tile.put(object.pos, id);
         self.eggs += usize::from(object.unhatched.is_some());
         self.by_id.insert(id, object);
+        self.schedule(id, data, from);
     }
 
-    /// Rebuilds which object stands on each tile of `map`, after a load: every
-    /// object but a held one, which is off the map. Says what's wrong if
-    /// one is of a type `data` doesn't have, or is off the map or shares a
-    /// tile.
-    pub(crate) fn rebuild(&mut self, map: &Map, data: &DataPack) -> Result<(), String> {
+    /// Schedules the object `id`, if it exists, for its next turn at or after
+    /// `from` (M4 design §10), replacing any turn it had scheduled.
+    pub(crate) fn schedule(&mut self, id: EntityId, data: &DataPack, from: u64) {
+        self.unschedule(id);
+        let Some(object) = self.by_id.get(&id) else {
+            return;
+        };
+        let Some(object_type) = data.object_types().get(object.kind) else {
+            return;
+        };
+        if let Some(due) = object.next_turn(object_type, id, from) {
+            self.due_on.entry(due).or_default().insert(id);
+            self.next_due.insert(id, due);
+        }
+    }
+
+    /// Removes any scheduled turn for `id`.
+    fn unschedule(&mut self, id: EntityId) {
+        if let Some(was) = self.next_due.remove(&id)
+            && let Some(set) = self.due_on.get_mut(&was)
+        {
+            set.remove(&id);
+            if set.is_empty() {
+                self.due_on.remove(&was);
+            }
+        }
+    }
+
+    /// Takes and returns the objects due for a turn on `tick`, in ascending
+    /// ID order (M4 design §10).
+    pub(crate) fn take_due(&mut self, tick: u64) -> Vec<EntityId> {
+        let Some(due) = self.due_on.remove(&tick) else {
+            return Vec::new();
+        };
+        for &id in &due {
+            self.next_due.remove(&id);
+        }
+        due.into_iter().collect()
+    }
+
+    /// Rebuilds which object stands on each tile of `map` and when each is
+    /// next due from `tick`, after a load: every object but a held one, which
+    /// is off the map. Says what's wrong if one is of a type `data` doesn't
+    /// have, or is off the map or shares a tile.
+    pub(crate) fn rebuild(&mut self, map: &Map, data: &DataPack, tick: u64) -> Result<(), String> {
         self.on_tile = Occupancy::new(map);
+        self.due_on.clear();
+        self.next_due.clear();
         self.eggs = self
             .by_id
             .values()
             .filter(|o| o.unhatched.is_some())
             .count();
-        for (&id, object) in &self.by_id {
+        let ids: Vec<EntityId> = self.by_id.keys().copied().collect();
+        for id in ids {
+            let object = &self.by_id[&id];
             if object.kind >= data.object_types().len() {
                 return Err(format!(
                     "object {} is of a type its pack doesn't have",
                     id.0
                 ));
             }
-            if object.held {
-                continue;
+            if !object.held {
+                if !map.contains(object.pos) || self.on_tile.at(object.pos).is_some() {
+                    return Err(format!("object {} has no tile of its own", id.0));
+                }
+                self.on_tile.put(object.pos, id);
             }
-            if !map.contains(object.pos) || self.on_tile.at(object.pos).is_some() {
-                return Err(format!("object {} has no tile of its own", id.0));
-            }
-            self.on_tile.put(object.pos, id);
+            self.schedule(id, data, tick);
         }
         Ok(())
     }
@@ -214,6 +294,7 @@ impl Objects {
 
     /// Takes the object `id`, which must exist, out of the world.
     pub(crate) fn remove(&mut self, id: EntityId) -> Object {
+        self.unschedule(id);
         let object = self
             .by_id
             .remove(&id)
@@ -250,9 +331,9 @@ impl Objects {
     }
 
     /// Checks that every object stands where the rules allow, alone on its
-    /// tile, with its stage and counters in range, and rolls only if it's an
-    /// item with tiles to go; describes the first problem.
-    pub(crate) fn check(&self, map: &Map, data: &DataPack) -> Result<(), String> {
+    /// tile, with its stage, schedule and counters in range, and rolls only if
+    /// it's an item with tiles to go; describes the first problem.
+    pub(crate) fn check(&self, map: &Map, data: &DataPack, tick: u64) -> Result<(), String> {
         let indexed = self.on_tile.count();
         let on_map = self.by_id.values().filter(|o| !o.held).count();
         if indexed != on_map {
@@ -314,6 +395,8 @@ impl Objects {
                 "is rolling with no tiles to go"
             } else if object.unhatched.is_some() != object_type.hatches() {
                 "holds a sprite unless it hatches, or hatches without one"
+            } else if self.next_due.get(&id).copied() != object.next_turn(object_type, id, tick) {
+                "isn't scheduled for the tick its rules and stage say"
             } else if let Some(Err(problem)) = object
                 .unhatched
                 .as_ref()
@@ -330,6 +413,25 @@ impl Objects {
                 "{} {id:?} at {:?} {problem}",
                 object_type.name, object.pos
             ));
+        }
+        let queued: usize = self.due_on.values().map(BTreeSet::len).sum();
+        if queued != self.next_due.len() {
+            return Err(format!(
+                "{queued} object turns are queued, but {} objects have a next turn",
+                self.next_due.len()
+            ));
+        }
+        for (&id, &due) in &self.next_due {
+            if !self.by_id.contains_key(&id) {
+                return Err(format!(
+                    "{id:?} has a turn scheduled, but isn't in the world"
+                ));
+            }
+            if !self.due_on.get(&due).is_some_and(|set| set.contains(&id)) {
+                return Err(format!(
+                    "{id:?} is due on tick {due}, but not in that tick's queue"
+                ));
+            }
         }
         Ok(())
     }
@@ -399,7 +501,7 @@ mod tests {
                 held: false,
                 unhatched: None,
             };
-            self.objects.place(id, object);
+            self.objects.place(id, object, &self.data, 0);
             id
         }
 
@@ -592,6 +694,71 @@ mod tests {
         scene.objects.remove(bush);
         assert_eq!(scene.objects.at(at(1, 1)), None);
         assert!(scene.can_place("berry", at(1, 1)));
+    }
+
+    #[test]
+    fn next_turn_schedules_only_when_a_stage_or_periodic_rule_is_due() {
+        let mut scene = Scene::new(&[
+            "...", //
+            "...", //
+            "...", //
+        ]);
+        // A ball has no stages and no periodic rules, so once past its fresh
+        // turn it needs no turn at all.
+        let ball = scene.place("ball", at(0, 0));
+        assert_eq!(scene.objects.next_due.get(&ball), None);
+
+        // A fresh object is due on the tick it is scheduled from.
+        let berry = EntityId(scene.next_id);
+        scene.next_id += 1;
+        scene.objects.place(
+            berry,
+            Object {
+                kind: scene.kind("berry"),
+                pos: at(1, 0),
+                stage: Some(0),
+                stage_ends: 500,
+                counters: Vec::new(),
+                fresh: true,
+                roll: None,
+                held: false,
+                unhatched: None,
+            },
+            &scene.data,
+            10,
+        );
+        assert_eq!(scene.objects.take_due(10), vec![berry]);
+
+        // Once no longer fresh, a berry (stages only, no Every rule) is due
+        // when its stage ends.
+        scene.objects.get_mut(berry).expect("the berry").fresh = false;
+        scene.objects.schedule(berry, &scene.data, 11);
+        assert_eq!(scene.objects.next_due.get(&berry), Some(&500));
+
+        // A berry bush has Every(200) and Every(50) rules alongside its
+        // stage; with id 3, (tick + 3) % 50 == 0 first holds at tick 47,
+        // before stage_ends 800.
+        let bush = EntityId(scene.next_id);
+        scene.next_id += 1;
+        assert_eq!(bush, EntityId(3));
+        scene.objects.place(
+            bush,
+            Object {
+                kind: scene.kind("berry_bush"),
+                pos: at(2, 0),
+                stage: Some(0),
+                stage_ends: 800,
+                counters: vec![0],
+                fresh: false,
+                roll: None,
+                held: false,
+                unhatched: None,
+            },
+            &scene.data,
+            1,
+        );
+        assert_eq!(scene.objects.next_due.get(&bush), Some(&47));
+        assert_eq!(scene.objects.check(&scene.map, &scene.data, 1), Ok(()));
     }
 
     /// A map with rooms, one-tile corridors and a pond, so a careless placement could cut it.

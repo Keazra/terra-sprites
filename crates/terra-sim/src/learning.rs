@@ -765,18 +765,20 @@ pub(crate) fn run(
     // How far each sprite that knows the Cursor sees it, by its flood's
     // reach, if its flood reaches it (design v29 §3.6, §5.6): only those can
     // get used to it.
-    let cursor = state.cursor.seen_at();
-    let cursor_distances: BTreeMap<EntityId, f32> = state
-        .sprites
-        .iter()
-        .filter(|(_, sprite)| sprite.brain.experience.cursor.is_some())
-        .filter_map(|(id, sprite)| {
-            let (tile, flood) = (cursor?, sprite.flood.as_ref()?);
-            flood.nearest_goal(&state.map, tile, true)?;
-            let reach = f32::from(flood.reach().max(1));
-            Some((id, f32::from(chebyshev(tile, sprite.pos)) / reach))
-        })
-        .collect();
+    let cursor_distances: BTreeMap<EntityId, f32> = match state.cursor.seen_at() {
+        Some(tile) => state
+            .sprites
+            .iter()
+            .filter(|(_, sprite)| sprite.brain.experience.cursor.is_some())
+            .filter_map(|(id, sprite)| {
+                let flood = sprite.flood.as_ref()?;
+                flood.nearest_goal(&state.map, tile, true)?;
+                let reach = f32::from(flood.reach().max(1));
+                Some((id, f32::from(chebyshev(tile, sprite.pos)) / reach))
+            })
+            .collect(),
+        None => BTreeMap::new(),
+    };
     // What each sprite's moment was about, for those watching it (M2
     // design §18.2).
     let mut moments: BTreeMap<EntityId, Vec<Topic>> = BTreeMap::new();

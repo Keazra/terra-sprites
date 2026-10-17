@@ -90,11 +90,11 @@ fn duration(rng: &mut ChaCha8Rng, stage: &Stage) -> u64 {
     u64::from(min) + uniform(rng, u64::from(max - min) + 1)
 }
 
-/// Runs step 2: every object that exists as it begins takes a turn, in
-/// ascending ID order. Objects created during it first run next tick.
+/// Runs step 2: every object due on this tick takes a turn, in ascending ID
+/// order (M4 design §10). Objects created during it first run next tick.
 pub(crate) fn run(state: &mut WorldState, data: &DataPack, events: &mut Vec<Event>) {
-    let ids: Vec<EntityId> = state.objects.iter().map(|(id, _)| id).collect();
-    for id in ids {
+    let tick = state.tick;
+    for id in state.objects.take_due(tick) {
         turn(state, data, id, events);
     }
 }
@@ -141,7 +141,7 @@ fn turn(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec<
 
     for rule in &object_type.rules {
         let fires = match rule.trigger {
-            Trigger::Every(n) => !expiring && (tick + id.0).is_multiple_of(u64::from(n)),
+            Trigger::Every(_) => !expiring && rule.trigger.next_firing(id, tick) == Some(tick),
             Trigger::OnStageEnter(stage) => !expiring && entered == Some(stage),
             Trigger::OnExpire => expiring,
         };
@@ -163,6 +163,8 @@ fn turn(state: &mut WorldState, data: &DataPack, id: EntityId, events: &mut Vec<
     if expiring {
         let old = state.objects.remove(id);
         removed(state, data, id, old.kind, Removal::Expired, events);
+    } else {
+        state.objects.schedule(id, data, tick + 1);
     }
 }
 
@@ -325,7 +327,7 @@ pub(crate) fn apply(
             // Off the tile first, so the new object's placement is judged without it.
             let old = state.objects.remove(id);
             if !state.can_place(data, kind, pos) {
-                state.objects.place(id, old);
+                state.objects.place(id, old, data, state.tick + 1);
                 return Turn::Continues;
             }
             removed(state, data, id, old.kind, Removal::Replaced, events);
@@ -382,7 +384,8 @@ pub(crate) fn removed(
 /// Creates an object of type `kind` on `pos` during step 2, where the caller
 /// has checked it may go. It takes its first turn next tick.
 fn create(state: &mut WorldState, data: &DataPack, kind: usize, pos: Pos, events: &mut Vec<Event>) {
-    let id = state.add_object(new_object(data, kind, pos));
+    let next_tick = state.tick + 1;
+    let id = state.add_object_from(new_object(data, kind, pos), data, next_tick);
     events.push(Event {
         tick: state.tick,
         kind: EventKind::ObjectSpawned {

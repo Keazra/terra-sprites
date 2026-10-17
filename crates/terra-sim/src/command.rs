@@ -539,7 +539,7 @@ fn place(
             });
         }
     }
-    let id = state.add_object(object);
+    let id = state.add_object(object, data);
     Ok(EventKind::Placed {
         id,
         object_type: placed.name.clone(),

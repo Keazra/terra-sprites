@@ -283,7 +283,8 @@ fn lay(
         laid: state.tick,
         name: None,
     }));
-    let egg = state.add_object(egg);
+    let next_tick = state.tick + 1;
+    let egg = state.add_object_from(egg, data, next_tick);
     events.push(Event {
         tick: state.tick,
         kind: EventKind::Laid {

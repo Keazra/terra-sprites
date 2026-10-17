@@ -4,10 +4,10 @@ use ron::extensions::Extensions;
 use serde::Deserialize;
 
 use crate::ageing::LifeStage;
-use crate::brain_io::{BRAIN_IO, BrainInput, BrainIoFile, InputId, brain_io};
+use crate::brain_io::{BRAIN_IO, BrainInput, BrainIoFile, InputId, Source, brain_io};
 use crate::categories::{CATEGORIES, CURSOR, Category, SPRITE, WATER, categories};
 use crate::expression::{Expression, expressions};
-use crate::genome::{Gene, Genome, GenomeError};
+use crate::genome::{Gene, Genome, GenomeError, LocusRef};
 use crate::names::{NAMES, Syllables};
 use crate::object_types::{
     Condition, Effect, OBJECTS, ObjectType, TypeEntry, has_egg, object_types, upgrade_old_egg,
@@ -32,16 +32,35 @@ pub struct DataPack {
     locus_places: Vec<Option<u16>>,
     /// Every brain input, in ID order.
     brain_inputs: Vec<BrainInput>,
+    /// The State inputs, as places in `brain_inputs`, found once for
+    /// attention's scoring every tick (design §5.2, §5.3).
+    state_places: Vec<usize>,
+    /// What the breeding drive's need reads, if the pack has one and it
+    /// reads a State input (M2 design §5).
+    drive: Option<LocusRef>,
+    /// Every brain input that reads the breeding drive, in the sprite or in
+    /// the one it attends to, as places in `brain_inputs` (M2 design §5).
+    drive_places: Vec<usize>,
+    /// Where `target_distance` is in `brain_inputs` (design §5.2).
+    target_distance_place: Option<usize>,
     /// The needs (design §5.2), as places in `brain_inputs`.
     needs: Vec<usize>,
     /// The first-order needs, as places in `brain_inputs` (design v21 §5.2).
     first_order: Vec<usize>,
     /// What sprites perceive things as (design v19 §3.5.5), in ascending ID order.
     categories: Vec<Category>,
+    /// The categories water, sprites and the Cursor are perceived as
+    /// (design v19, v29 §3.5.5), found once.
+    water_category: CategoryId,
+    sprite_category: CategoryId,
+    cursor_category: CategoryId,
     /// The tags defined in the data (design v23 §3.5.6), in listed order.
     tags: Vec<Tag>,
     /// In ascending ID order.
     object_types: Vec<ObjectType>,
+    /// Where each object type (design §3.5.3) is in `object_types`, by ID,
+    /// so looking one up is no search.
+    object_type_places: Vec<Option<u16>>,
     /// The index of the type whose objects hatch, the egg a mother lays
     /// (M2 design §10.4), if the pack has one.
     egg_type: Option<usize>,
@@ -287,6 +306,47 @@ impl DataPack {
                 file: NAMES.into(),
                 message,
             })?;
+        let state_places: Vec<usize> = brain_io
+            .inputs
+            .iter()
+            .enumerate()
+            .filter(|(_, input)| matches!(input.source, Source::State(_)))
+            .map(|(place, _)| place)
+            .collect();
+        let drive = physiology.indices.drive.and_then(|need| {
+            match brain_io.inputs[brain_io.needs[need]].source {
+                Source::State(drive) => Some(drive),
+                _ => None,
+            }
+        });
+        let drive_places: Vec<usize> = match drive {
+            Some(drive) => brain_io
+                .inputs
+                .iter()
+                .enumerate()
+                .filter(|(_, input)| {
+                    matches!(
+                        input.source,
+                        Source::State(locus) | Source::Shown(locus) | Source::Differs(locus)
+                            if locus == drive
+                    )
+                })
+                .map(|(place, _)| place)
+                .collect(),
+            None => Vec::new(),
+        };
+        let target_distance_place = brain_io
+            .inputs
+            .iter()
+            .position(|input| matches!(input.source, Source::TargetDistance));
+        let category_named = |name: &str| {
+            category_called(&categories, name)
+                .expect("a checked pack has water, sprites and the Cursor")
+        };
+        let water_category = category_named(WATER);
+        let sprite_category = category_named(SPRITE);
+        let cursor_category = category_named(CURSOR);
+        let object_type_places = places(object_types.iter().map(|t| t.id));
         let mut pack = DataPack {
             manifest,
             terrain,
@@ -295,11 +355,19 @@ impl DataPack {
             chemicals,
             loci,
             brain_inputs: brain_io.inputs,
+            state_places,
+            drive,
+            drive_places,
+            target_distance_place,
             needs: brain_io.needs,
             first_order: brain_io.first_order,
             categories,
+            water_category,
+            sprite_category,
+            cursor_category,
             tags,
             object_types,
+            object_type_places,
             egg_type,
             physiology,
             starter: Genome::switched(Vec::new(), Vec::new()),
@@ -420,6 +488,28 @@ impl DataPack {
         &self.first_order
     }
 
+    /// The State inputs, as places in the brain's inputs.
+    pub(crate) fn state_places(&self) -> &[usize] {
+        &self.state_places
+    }
+
+    /// What the breeding drive's need reads, if the pack has one and it
+    /// reads a State input (M2 design §5).
+    pub(crate) fn drive(&self) -> Option<LocusRef> {
+        self.drive
+    }
+
+    /// Every brain input that reads the breeding drive, in the sprite or in
+    /// the one it attends to, as places in the brain's inputs (M2 design §5).
+    pub(crate) fn drive_places(&self) -> &[usize] {
+        &self.drive_places
+    }
+
+    /// Where `target_distance` is in the brain's inputs (design §5.2).
+    pub(crate) fn target_distance_place(&self) -> Option<usize> {
+        self.target_distance_place
+    }
+
     /// The brain input with the ID `id`.
     pub(crate) fn brain_input(&self, id: InputId) -> Option<&BrainInput> {
         self.brain_input_index(id)
@@ -456,10 +546,7 @@ impl DataPack {
     /// The name of the object type with the stable ID `id`, such as the one
     /// a `DeathCause::HurtBy` names.
     pub fn object_type_name(&self, id: u16) -> Option<&str> {
-        self.object_types
-            .iter()
-            .find(|t| t.id == id)
-            .map(|t| t.name.as_str())
+        self.object_type(id).map(|t| t.name.as_str())
     }
 
     /// The name of the category the object type called `object_type` is in
@@ -598,7 +685,7 @@ impl DataPack {
 
     /// The object type with the stable ID `id`.
     pub(crate) fn object_type(&self, id: u16) -> Option<&ObjectType> {
-        self.object_types.iter().find(|t| t.id == id)
+        place(&self.object_type_places, id).map(|index| &self.object_types[index])
     }
 
     /// The index of the object type called `name`.
@@ -630,22 +717,17 @@ impl DataPack {
 
     /// The ID of the category called `name`.
     pub(crate) fn category_named(&self, name: &str) -> Option<CategoryId> {
-        self.categories
-            .iter()
-            .find(|c| c.name == name)
-            .map(|c| c.id)
+        category_called(&self.categories, name)
     }
 
     /// The category water tiles are perceived as (design v19 §3.5.5).
     pub(crate) fn water_category(&self) -> CategoryId {
-        self.category_named(WATER)
-            .expect("a checked pack has water")
+        self.water_category
     }
 
     /// The category sprites are perceived as (design v19 §3.5.5).
     pub(crate) fn sprite_category(&self) -> CategoryId {
-        self.category_named(SPRITE)
-            .expect("a checked pack has sprites")
+        self.sprite_category
     }
 
     /// The index of the type whose objects hatch, the egg a mother lays
@@ -658,8 +740,7 @@ impl DataPack {
     /// The category the Cursor is perceived as, while sprites can see it
     /// (design v29 §3.5.5).
     pub(crate) fn cursor_category(&self) -> CategoryId {
-        self.category_named(CURSOR)
-            .expect("a checked pack has the Cursor")
+        self.cursor_category
     }
 
     /// The index of the pseudo type of `category`, the verb table of water or
@@ -725,6 +806,11 @@ fn starter_genome(text: &str, data: &DataPack) -> Result<Genome, DataError> {
         }
     }
     Ok(genome)
+}
+
+/// The ID of the category in `categories` called `name`.
+fn category_called(categories: &[Category], name: &str) -> Option<CategoryId> {
+    categories.iter().find(|c| c.name == name).map(|c| c.id)
 }
 
 /// Where each of `ids`, all different, is among them, by ID.
