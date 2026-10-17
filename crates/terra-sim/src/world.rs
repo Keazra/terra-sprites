@@ -2820,6 +2820,63 @@ mod tests {
     }
 
     #[test]
+    fn with_learning_off_sprites_grow_no_more_familiar_with_each_other() {
+        // M2 design §15.2: unlike familiarity with object types (design
+        // §5.6), getting to know a sprite is learning, so a control run
+        // knows no sprite by sight or by playing with it. With learning on,
+        // the same two know each other.
+        let knowing = |learning: bool| {
+            let data = DataPack::builtin().expect("built-in data pack is valid");
+            let map = Map::from_ascii(&["....."], &data).expect("valid drawing");
+            let genes = |genes: &str| {
+                let text = format!(
+                    r#"(format: 1, genes: [{genes}
+                    BrainParam(param: "tau_base", value: 0.02),
+                ])"#
+                );
+                Genome::from_ron(&text, &data).expect("a valid genome")
+            };
+            let player = genes(
+                r#"AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
+                Instinct(inputs: [("attended_sprite", false)], verb: Play, weight: 1.0),"#,
+            );
+            let rester =
+                genes(r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),"#);
+            let scenario = Scenario {
+                map,
+                objects: &[],
+                sprites: &[
+                    (Pos { x: 0, y: 0 }, Some(player)),
+                    (Pos { x: 1, y: 0 }, Some(rester)),
+                ],
+                scripted: &[],
+                newborns: &[],
+            };
+            let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+            world.state.learning = learning;
+            let [a, b] = [0, 1].map(|x| world.sprite_at(Pos { x, y: 0 }).expect("a sprite").id());
+            let mut played = false;
+            for _ in 0..50 {
+                played |= world.step().iter().any(|event| {
+                    matches!(
+                        event.kind,
+                        EventKind::ActionEnded {
+                            verb: Verb::Play,
+                            outcome: Outcome::Applied,
+                            ..
+                        }
+                    )
+                });
+            }
+            assert!(played, "they played");
+            let knows = |id: EntityId, other| world.sprite(id).expect("alive").familiarity(other);
+            [knows(a, b), knows(b, a)]
+        };
+        assert_eq!(knowing(false), [0.0, 0.0]);
+        assert!(knowing(true).iter().all(|&known| known > 0.1));
+    }
+
+    #[test]
     fn a_parent_drinking_draws_its_young_s_eye_until_the_young_knows_water() {
         // M2 design §18.1: an attention instinct about a parent showing it
         // something draws its eye to its mother drinking for her thirst,
