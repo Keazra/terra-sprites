@@ -48,7 +48,7 @@ The owner's preferences and the project's conventions, for any agent session, lo
 - The spec is the two designs in `docs/design/`: M1's (`m1-a-sprite-lives.md`) is the rulebook for the game as built, and M2's (`m2-generations.md`) plans milestone 2 and holds what its slices decide.
 - **A change edits the design in place and adds a file to `docs/design/changes/`,** named by the date it was settled (`2026-10-08-version-flag.md`), with a table per design it changes: what changed, where the decision came from, and which sections it touches. That folder's README has the template. Until the PR merges, both may be amended freely; after that, a later change is a new file. A rule it adds is marked with its issue, "(#160)".
   - **Why, and where the numbered revisions (M1 v1–v40, M2 v1–v5) are:** that folder's README.
-- The designs keep their names, so the README's links and issues' links to them don't go stale.
+- The designs keep their names, so the manual's links and issues' links to them don't go stale.
 - New or changed terms go in `CONTEXT.md` (the `domain-modeling` skill); code and comments use its words, not the ones on its _Avoid_ lists.
 
 ## The slice loop
