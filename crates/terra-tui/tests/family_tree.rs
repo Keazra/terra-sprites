@@ -7,7 +7,8 @@
 
 mod common;
 use common::{
-    LONE, LONE_MOTHER, QUICK, SCORCHED, at, grow, lone_line, pairs, parched_line, tree_of,
+    Changes, LONE, LONE_MOTHER, QUICK, SCORCHED, at, grow, lone_line, pack_changing, pairs,
+    parched_line, tree_of,
 };
 
 use std::path::PathBuf;
@@ -17,7 +18,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Margin, Position, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
-use terra_sim::{Command, DeathCause, EntityId, World};
+use terra_sim::{Command, DeathCause, EntityId, Genome, Map, Scenario, World};
 use terra_tui::app::{App, ColourMode, Screen, Selection, Tab};
 use terra_tui::input::{Action, Button};
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
@@ -607,6 +608,38 @@ fn the_dead_are_dark_gray_and_say_how_they_died() {
 }
 
 #[test]
+fn walking_to_a_sprite_or_an_egg_on_the_map_centres_the_map_on_it() {
+    // M2 design §17.3, on a field bigger than the map view. By tick 45,
+    // #1 has two young: #2, grown up, and #3, an egg lying beside her.
+    let [quick, eggs] = QUICK;
+    let world = grow(
+        &[quick, eggs, LONE],
+        (120, 50),
+        &[(at(60, 25), LONE_MOTHER)],
+        45,
+    );
+    let mut app = app_on(&world);
+    let tiles = ui::areas(Size::new(100, 30)).tiles;
+    let middle = Position::new(tiles.x + tiles.width / 2, tiles.y + tiles.height / 2);
+    let egg = world.egg(EntityId(3)).and_then(|egg| egg.pos());
+    let brother = world.sprite(EntityId(2)).map(|sprite| sprite.pos());
+    // `Tab` selects #1, then the map view is scrolled off to its top left
+    // corner.
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(app.selection(), Some(Selection::Living(EntityId(1))));
+    app.apply(Action::Scroll { dx: -60, dy: -30 }, &world);
+    assert_eq!(egg.and_then(|egg| app.cell_of(egg)), None, "out of view");
+    app.apply(Action::FamilyTree, &world);
+    press(&mut app, &world, &[DOWN_ARROW, RIGHT, Action::Enter]);
+    assert_eq!(app.selection(), Some(Selection::Living(EntityId(3))));
+    assert_eq!(egg.and_then(|egg| app.cell_of(egg)), Some(middle));
+    // Down from the egg, which has no young, to its brother.
+    press(&mut app, &world, &[DOWN_ARROW, Action::Enter]);
+    assert_eq!(app.selection(), Some(Selection::Living(EntityId(2))));
+    assert_eq!(brother.and_then(|at| app.cell_of(at)), Some(middle));
+}
+
+#[test]
 fn walking_to_a_dead_sprite_selects_it_as_one_that_died() {
     let world = parched_line(140);
     let mut app = app_on(&world);
@@ -663,6 +696,54 @@ fn a_sprite_that_died_before_it_grew_up_died_young() {
         "died young of dehydration at age 35 · generation 2"
     );
     assert_eq!(said(&rows[PARENTS + 1]), "died of dehydration");
+}
+
+#[test]
+fn a_sprite_hurt_to_death_died_hurt_by_what_hurt_it() {
+    // M2 design §17.2: `died hurt by thornbush`. A mother who lays alone
+    // and hits the thornbush beside her, whose thorns kill at once: she
+    // lays #3 and dies on tick 10, and #3 hatches on tick 20, does as she
+    // did, and dies young on tick 22.
+    let [quick, eggs] = QUICK;
+    let lethal: Changes = (
+        "tags.ron",
+        &[(
+            r#"Hit:   [Inject(Actor, "injury", 0.03)"#,
+            r#"Hit:   [Inject(Actor, "injury", 1.0)"#,
+        )],
+    );
+    let pack = pack_changing(&[quick, eggs, LONE, lethal]);
+    let genes = LONE_MOTHER.replace(
+        "])",
+        r#"    AttentionInstinct(input: "always", category: "bush", weight: 1.0),
+    Instinct(inputs: [("always", false), ("attended_bush", false)], verb: Hit, weight: 0.5),
+])"#,
+    );
+    let map = Map::from_ascii(&["............"; 6], &pack).expect("valid drawing");
+    let mother = Genome::from_ron(&genes, &pack).expect("valid genes");
+    let scenario = Scenario {
+        map,
+        objects: &[(at(2, 4), "thornbush")],
+        sprites: &[(at(1, 4), Some(mother))],
+        scripted: &[],
+        newborns: &[],
+    };
+    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    for _ in 0..21 {
+        world.step();
+    }
+    let mut app = app_on(&world);
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(app.selection(), Some(Selection::Living(EntityId(3))));
+    run(&mut app, &mut world, 5);
+    app.apply(Action::FamilyTree, &world);
+    let rows = tree(&app, &world);
+    assert_eq!(said(&rows[PARENTS]), "Sprite #2");
+    assert_eq!(said(&rows[PARENTS + 1]), "died hurt by thornbush");
+    assert_eq!(
+        said(&rows[CENTRE + 1]),
+        "died young, hurt by thornbush at age 2 · generation 2"
+    );
 }
 
 /// A save from before the family tree: its world remembers no sprite
@@ -729,6 +810,46 @@ fn a_dead_sprite_keeps_its_name_through_a_save_and_a_load() {
     let shown = screen(&app, &world);
     assert!(
         shown.contains("Bramble #1 died of dehydration at age 94"),
+        "{shown}"
+    );
+}
+
+#[test]
+fn after_a_load_the_log_names_a_dead_sprite_as_she_was_named() {
+    // M2 design §17.3: Bramble lays an egg, dies of thirst on tick 35, and
+    // her egg hatches on tick 60, after a save and a load on tick 40, on a
+    // screen that never saw her named.
+    let [quick, _] = QUICK;
+    let slow: Changes = (
+        "objects.ron",
+        &[(
+            "ticks: (750, 750), next: Hatch",
+            "ticks: (60, 60), next: Hatch",
+        )],
+    );
+    let mut world = grow(
+        &[quick, slow, LONE, SCORCHED],
+        (12, 6),
+        &[(at(1, 4), LONE_MOTHER)],
+        0,
+    );
+    world.submit(Command::Rename {
+        sprite: EntityId(1),
+        name: "Bramble".into(),
+    });
+    for _ in 0..40 {
+        world.step();
+    }
+    assert!(world.dead(EntityId(1)).is_some(), "she died");
+    let mut app = app_on(&world);
+    app.set_save_folder(scratch_folder("log"));
+    app.apply(Action::Quicksave, &world);
+    app.apply(Action::Quickload, &world);
+    let mut world = app.take_loaded().expect("the quicksave loaded");
+    run(&mut app, &mut world, 25);
+    let shown = screen(&app, &world);
+    assert!(
+        shown.contains("Sprite #2 hatched (Bramble #1's)"),
         "{shown}"
     );
 }
