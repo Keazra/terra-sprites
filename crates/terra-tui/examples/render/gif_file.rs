@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use gif::{DisposalMethod, Encoder, Repeat};
 use ratatui::buffer::Buffer;
+use ratatui::layout::Rect;
 
 use crate::clip::Clip;
 use crate::glyphs::Glyphs;
@@ -85,10 +86,10 @@ impl<W: Write> Writer<W> {
                 delay: now as u16,
                 dispose: DisposalMethod::Keep,
                 transparent: change.see_through,
-                left: change.left,
-                top: change.top,
-                width: change.width,
-                height: change.height,
+                left: change.area.x,
+                top: change.area.y,
+                width: change.area.width,
+                height: change.area.height,
                 buffer: Cow::Borrowed(&change.indexes),
                 ..gif::Frame::default()
             };
@@ -106,10 +107,8 @@ impl<W: Write> Writer<W> {
 /// indexes, where `see_through`'s leave what's under them.
 #[derive(Debug, Clone)]
 struct Change {
-    left: u16,
-    top: u16,
-    width: u16,
-    height: u16,
+    /// Where it's painted, in pixels.
+    area: Rect,
     indexes: Vec<u8>,
     see_through: Option<u8>,
 }
@@ -118,10 +117,7 @@ impl Change {
     /// The whole of `image`.
     fn whole(image: &[u8], width: usize, height: usize) -> Change {
         Change {
-            left: 0,
-            top: 0,
-            width: width as u16,
-            height: height as u16,
+            area: Rect::new(0, 0, width as u16, height as u16),
             indexes: image.to_vec(),
             see_through: None,
         }
@@ -130,10 +126,7 @@ impl Change {
     /// A pixel that changes nothing.
     fn nothing(see_through: u8) -> Change {
         Change {
-            left: 0,
-            top: 0,
-            width: 1,
-            height: 1,
+            area: Rect::new(0, 0, 1, 1),
             indexes: vec![see_through],
             see_through: Some(see_through),
         }
@@ -167,10 +160,12 @@ impl Change {
             })
             .collect();
         Some(Change {
-            left: left as u16,
-            top: top as u16,
-            width: (right - left + 1) as u16,
-            height: (bottom - top + 1) as u16,
+            area: Rect::new(
+                left as u16,
+                top as u16,
+                (right - left + 1) as u16,
+                (bottom - top + 1) as u16,
+            ),
             indexes,
             see_through: Some(see_through),
         })
@@ -262,12 +257,12 @@ mod tests {
 
     use gif::{ColorOutput, DecodeOptions, Repeat};
     use ratatui::buffer::Buffer;
-    use ratatui::layout::{Rect, Size};
+    use ratatui::layout::Rect;
     use ratatui::style::{Color, Style};
 
     use super::*;
     use crate::clip::Frame;
-    use crate::glyphs::Fonts;
+    use crate::test_util::glyphs;
 
     /// A frame of three 10×20 cells, `text` in red, for `millis`.
     fn frame(text: &str, millis: u64) -> Frame {
@@ -277,10 +272,6 @@ mod tests {
             screen,
             shows_for: Duration::from_millis(millis),
         }
-    }
-
-    fn glyphs() -> Glyphs {
-        Glyphs::new(Fonts::cascadia(), Size::new(10, 20))
     }
 
     fn gif_of(clip: &Clip) -> Vec<u8> {

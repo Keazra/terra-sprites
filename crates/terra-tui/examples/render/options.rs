@@ -7,8 +7,10 @@ use ratatui::layout::Size;
 use terra_sim::{EntityId, Mode};
 use terra_tui::app::Tab;
 use terra_tui::args::Args;
-use terra_tui::clock::{Clock, Speed};
+use terra_tui::clock::Speed;
 use terra_tui::ui;
+
+use crate::clip::Framing;
 
 /// Whether the command line asks how to use the renderer.
 pub fn asks_for_help(args: &[String]) -> bool {
@@ -22,21 +24,25 @@ pub fn asks_for_help(args: &[String]) -> bool {
 pub const USAGE: &str = "\
 usage: render title [options] -o <file>
        render world [--seed <n> | --replay <file>] [options] -o <file>
-       render samples [--font <file.ttf>] [options] -o <file>
+       render samples [--font <file.ttf>]... [options] -o <file>
 
   title                the title screen's opening scene: a light finds a
                        sleeping sprite in the dark
   world                a world from a seed, or a replay, from one tick to
                        another
-  samples              a still of a world's screen, to try a font
+  samples              a still of a world's screen in Cascadia Mono and in
+                       each --font, a file each, to compare fonts: each
+                       file is named after its font, and the renderer says
+                       which of the screen's characters each lacks
 
   -o, --out <file>     where to write it: .gif, .mp4 (needs ffmpeg) or .svg
   --seed <n>           the world's seed (default 7)
   --replay <file>      play a replay back instead of a seed's world
   --preset <file>      a world config to make the world from
   --lab                a Lab world, for speeds past 4x
-  --from <tick>        the tick the clip starts on (default 0): the world
-                       runs there first, unseen
+  --from <tick>        the tick the clip starts on (default: where the
+                       world or the replay starts): the world runs there
+                       first, unseen
   --to <tick>          the tick it ends on (default 100 ticks on, or where
                        a replay ends)
   --speed <speed>      the game's speed: 1/8x, 1/4x, 1/2x, 1x, 2x, 4x
@@ -44,11 +50,12 @@ usage: render title [options] -o <file>
                        max:<n>, n ticks a second. Past 4x needs a Lab world
   --frame <ms>         how long each frame shows, in milliseconds: a
                        multiple of 10, from 20 (default 100)
-  --seconds <s>        how long the title scene is (default: the scene and
-                       two seconds of the menu)
+  --seconds <s>        how long the opening scene's clip is (default: the
+                       scene and two seconds of the menu)
   --size <WxH>         the picture's size in screen cells (default 100x30,
                        the smallest screen the game draws its panels on)
-  --map                the map alone, with no panels, at any size
+  --map-view           the map view alone, with no border or panels, at
+                       any size
   --cell <WxH>         a screen cell's size in pixels (default 10x20)
   --track <n|none>     the sprite the view tracks (default: the one Tab
                        selects first), or none
@@ -60,8 +67,11 @@ usage: render title [options] -o <file>
   --font <file.ttf>    draw with this font instead of Cascadia Mono
   --bold-font <file>   and its bold face (default: --font's own)
 
-9:16 for Shorts: --size 54x48 --map --cell 20x40 is 1080x1920, and the
-title scene at --size 108x96 is too.";
+title takes --seed, --preset, --seconds, --size, --cell, --frame, the
+theme and the font; the rest are for a world.
+
+9:16 for Shorts: --size 54x48 --map-view --cell 20x40 is 1080x1920, and
+the opening scene at --size 108x96 is too.";
 
 /// What the renderer draws, and how.
 #[derive(Debug, Clone)]
@@ -73,16 +83,13 @@ pub struct Options {
     /// The world's flags, as the game takes them: the seed, the replay,
     /// the preset, the mode and the theme.
     pub world: Args,
-    /// The picture's size, in screen cells.
-    pub screen: Size,
+    /// The picture's size and shape, and how long each frame shows.
+    pub framing: Framing,
     /// A screen cell's size, in pixels.
     pub cell: Size,
-    /// The map view's tiles alone, with no panels.
-    pub map_alone: bool,
-    /// How long each frame shows.
-    pub frame: Duration,
-    /// A font to draw with, and its bold face, in place of Cascadia Mono.
-    pub font: Option<PathBuf>,
+    /// The fonts to draw with in place of Cascadia Mono: one for a clip,
+    /// with its bold face, or any number for samples.
+    pub fonts: Vec<PathBuf>,
     pub bold_font: Option<PathBuf>,
 }
 
@@ -94,22 +101,33 @@ pub enum Scene {
     Title { seconds: Option<Duration> },
     /// A world from one tick to another.
     World(WorldScene),
-    /// A still of a world's screen at its first tick, to try a font.
+    /// A still of a world's screen at its first tick, in each font, to
+    /// compare them.
     Samples(WorldScene),
 }
 
 /// A world's clip: the stretch of ticks, how fast, and what's in view.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorldScene {
-    pub from: u64,
-    /// `None`: 100 ticks on, or where a replay ends.
-    pub to: Option<u64>,
+    /// `None`: where the world starts, or the replay.
+    pub from: Option<u64>,
+    pub end: End,
     pub pace: Pace,
     pub track: Track,
     /// Whether the Cursor shows, following the tracked sprite.
     pub cursor: bool,
     /// The inspector tab open, if not the one selecting a sprite opens.
     pub tab: Option<Tab>,
+}
+
+/// Where a world's clip ends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum End {
+    /// 100 ticks on, or where a replay ends.
+    Usual,
+    At(u64),
+    /// Where it starts: a still.
+    Start,
 }
 
 /// How fast the world runs in the clip.
@@ -140,7 +158,7 @@ pub enum Format {
     Svg,
 }
 
-/// The seed a world or the title scene is made from unless told.
+/// The seed a world or the opening scene is made from unless told.
 const DEFAULT_SEED: u64 = 7;
 /// How many ticks a seed's clip runs unless told.
 pub const DEFAULT_TICKS: u64 = 100;
@@ -158,16 +176,20 @@ impl Options {
             .ok_or("say what to draw: title, world or samples")?;
         let mut world = Args::default();
         let mut out = None;
-        let mut screen = Size::new(100, 30);
+        let mut framing = Framing {
+            screen: Size::new(100, 30),
+            map_view_alone: false,
+            frame: Duration::from_millis(100),
+        };
         let mut cell = Size::new(10, 20);
-        let mut map_alone = false;
-        let mut frame = Duration::from_millis(100);
-        let mut font = None;
+        let mut fonts = Vec::new();
         let mut bold_font = None;
         let mut seconds = None;
+        // The flags given that only a world's clip takes.
+        let mut for_a_world = Vec::new();
         let mut scene = WorldScene {
-            from: 0,
-            to: None,
+            from: None,
+            end: End::Usual,
             pace: Pace::Game(Speed::X4),
             track: Track::First,
             cursor: false,
@@ -178,26 +200,40 @@ impl Options {
                 args.next()
                     .ok_or_else(|| format!("{flag} needs a value after it"))
             };
+            if matches!(
+                flag.as_str(),
+                "--replay"
+                    | "--lab"
+                    | "--from"
+                    | "--to"
+                    | "--speed"
+                    | "--track"
+                    | "--cursor"
+                    | "--tab"
+                    | "--map-view"
+            ) {
+                for_a_world.push(flag.clone());
+            }
             match flag.as_str() {
                 "-o" | "--out" => out = Some(PathBuf::from(value()?)),
                 "--seed" => world.seed = Some(number(&flag, &value()?)?),
                 "--replay" => world.replay = Some(value()?.into()),
                 "--preset" => world.preset = Some(value()?.into()),
                 "--lab" => world.mode = Mode::Lab,
-                "--from" => scene.from = number(&flag, &value()?)?,
-                "--to" => scene.to = Some(number(&flag, &value()?)?),
+                "--from" => scene.from = Some(number(&flag, &value()?)?),
+                "--to" => scene.end = End::At(number(&flag, &value()?)?),
                 "--speed" => scene.pace = pace(&value()?)?,
-                "--frame" => frame = Duration::from_millis(number(&flag, &value()?)?),
+                "--frame" => framing.frame = Duration::from_millis(number(&flag, &value()?)?),
                 "--seconds" => seconds = Some(duration(&value()?)?),
-                "--size" => screen = size(&flag, &value()?)?,
-                "--map" => map_alone = true,
+                "--size" => framing.screen = size(&flag, &value()?)?,
+                "--map-view" => framing.map_view_alone = true,
                 "--cell" => cell = size(&flag, &value()?)?,
                 "--track" => scene.track = track(&value()?)?,
                 "--cursor" => scene.cursor = true,
                 "--tab" => scene.tab = Some(tab(&value()?)?),
                 "--ascii" => world.ascii = true,
                 "--theme" => world.theme = Some(value()?.into()),
-                "--font" => font = Some(value()?.into()),
+                "--font" => fonts.push(value()?.into()),
                 "--bold-font" => bold_font = Some(value()?.into()),
                 _ => return Err(format!("`{flag}` isn't a flag the renderer knows")),
             }
@@ -211,28 +247,57 @@ impl Options {
         let out = out.ok_or("say where to write it with -o <file>")?;
         let format = format_of(&out)?;
         let scene = match scene_name.as_str() {
-            "title" if map_alone => {
-                return Err("the title scene is the whole screen: leave out --map".into());
+            "title" => {
+                if let Some(flag) = for_a_world.first() {
+                    return Err(format!(
+                        "{flag} is for a world's clip: the opening scene is the title \
+                         screen's own, on the whole screen"
+                    ));
+                }
+                Scene::Title { seconds }
             }
-            "title" => Scene::Title { seconds },
             "world" => Scene::World(scene),
-            "samples" => Scene::Samples(scene),
+            "samples" if scene.end != End::Usual => {
+                return Err("samples are a still at --from: leave out --to".into());
+            }
+            "samples" => Scene::Samples(WorldScene {
+                end: End::Start,
+                ..scene
+            }),
             other => {
                 return Err(format!(
                     "`{other}` isn't something to draw: title, world or samples"
                 ));
             }
         };
-        if let Scene::World(scene) | Scene::Samples(scene) = &scene
-            && scene.to.is_some_and(|to| to < scene.from)
+        if seconds.is_some() && !matches!(scene, Scene::Title { .. }) {
+            return Err("--seconds is for the opening scene's clip: a world's takes --to".into());
+        }
+        match &scene {
+            Scene::Samples(_) if bold_font.is_some() => {
+                return Err("samples draw each font as its own bold: leave out --bold-font".into());
+            }
+            Scene::Title { .. } | Scene::World(_) if fonts.len() > 1 => {
+                return Err("a clip is drawn in one --font: samples take several".into());
+            }
+            Scene::Title { .. } | Scene::World(_) if bold_font.is_some() && fonts.is_empty() => {
+                return Err("--bold-font goes with --font".into());
+            }
+            _ => {}
+        }
+        if let Scene::World(scene) = &scene
+            && let End::At(to) = scene.end
+            && to < scene.from.unwrap_or(0)
         {
             return Err("--to is a tick at or after --from".into());
         }
-        let smallest = ui::MIN_SIZE;
-        if !map_alone && (screen.width < smallest.width || screen.height < smallest.height) {
+        let (screen, smallest) = (framing.screen, ui::MIN_SIZE);
+        if !framing.map_view_alone
+            && (screen.width < smallest.width || screen.height < smallest.height)
+        {
             return Err(format!(
                 "the game draws its screen on {}x{} cells at least, and this is {}x{}: \
-                 give a bigger --size, or --map for the map alone",
+                 give a bigger --size, or --map-view for the map view alone",
                 smallest.width, smallest.height, screen.width, screen.height
             ));
         }
@@ -252,7 +317,8 @@ impl Options {
         }
         // A GIF counts time in hundredths of a second, and browsers slow
         // anything quicker than two of them.
-        if frame.as_millis() < 20 || !frame.as_millis().is_multiple_of(10) {
+        let frame = framing.frame.as_millis();
+        if frame < 20 || !frame.is_multiple_of(10) {
             return Err("--frame is a multiple of 10 milliseconds, from 20".into());
         }
         Ok(Options {
@@ -260,11 +326,9 @@ impl Options {
             out,
             format,
             world,
-            screen,
+            framing,
             cell,
-            map_alone,
-            frame,
-            font,
+            fonts,
             bold_font,
         })
     }
@@ -295,20 +359,6 @@ fn size(flag: &str, value: &str) -> Result<Size, String> {
     Ok(Size::new(number(flag, width)?, number(flag, height)?))
 }
 
-/// The game's speeds, slowest first.
-pub fn speeds() -> Vec<Speed> {
-    let mut clock = Clock::new();
-    while clock.speed() != Speed::Eighth {
-        clock.slower();
-    }
-    let mut speeds = vec![clock.speed()];
-    while clock.speed() != Speed::Max {
-        clock.faster();
-        speeds.push(clock.speed());
-    }
-    speeds
-}
-
 /// A speed as the game's top bar shows it, or `max` with its rate.
 fn pace(value: &str) -> Result<Pace, String> {
     let lower = value.to_lowercase();
@@ -322,7 +372,7 @@ fn pace(value: &str) -> Result<Pace, String> {
             .map(Pace::Max)
             .ok_or_else(|| format!("max's rate is a whole number of ticks a second: `{value}`"));
     }
-    speeds()
+    Speed::ALL
         .into_iter()
         .find(|speed| *speed != Speed::Max && speed.label().eq_ignore_ascii_case(&lower))
         .map(Pace::Game)
@@ -394,25 +444,26 @@ mod tests {
         assert_eq!(options.out, PathBuf::from("title.gif"));
         assert_eq!(options.format, Format::Gif);
         assert_eq!(options.world.seed, Some(7));
-        assert_eq!(options.screen, Size::new(100, 30));
+        assert_eq!(options.framing.screen, Size::new(100, 30));
         assert_eq!(options.cell, Size::new(10, 20));
-        assert_eq!(options.frame, Duration::from_millis(100));
-        assert!(!options.map_alone);
+        assert_eq!(options.framing.frame, Duration::from_millis(100));
+        assert!(!options.framing.map_view_alone);
+        assert!(options.fonts.is_empty());
     }
 
     #[test]
     fn a_world_clip_takes_its_ticks_speed_size_and_sprite() {
         let options = parse(
             "world --seed 12 --lab --from 500 --to 800 --speed 16x --frame 50 \
-             --size 54x48 --map --cell 20x40 --track 9 --cursor --tab brain -o clip.MP4",
+             --size 54x48 --map-view --cell 20x40 --track 9 --cursor --tab brain -o clip.MP4",
         )
         .unwrap();
         let Scene::World(scene) = &options.scene else {
             panic!("a world: {:?}", options.scene);
         };
         assert_eq!(
-            (scene.from, scene.to, scene.pace),
-            (500, Some(800), Pace::Game(Speed::X16))
+            (scene.from, scene.end, scene.pace),
+            (Some(500), End::At(800), Pace::Game(Speed::X16))
         );
         assert_eq!(scene.track, Track::Sprite(EntityId(9)));
         assert!(scene.cursor);
@@ -421,14 +472,37 @@ mod tests {
         assert_eq!(options.world.mode, Mode::Lab);
         assert_eq!(options.format, Format::Mp4);
         assert_eq!(
-            (options.screen, options.cell, options.frame),
+            (options.framing.screen, options.cell, options.framing.frame),
             (
                 Size::new(54, 48),
                 Size::new(20, 40),
                 Duration::from_millis(50)
             )
         );
-        assert!(options.map_alone);
+        assert!(options.framing.map_view_alone);
+    }
+
+    #[test]
+    fn a_replay_starts_where_it_starts_unless_told() {
+        let options = parse("world --replay last_session.replay -o a.gif").unwrap();
+        let Scene::World(scene) = &options.scene else {
+            panic!("a world: {:?}", options.scene);
+        };
+        assert_eq!((scene.from, scene.end), (None, End::Usual));
+        assert_eq!(options.world.seed, None, "the replay's own");
+    }
+
+    #[test]
+    fn samples_are_a_still_in_each_font() {
+        let options = parse("samples --font a.ttf --font b.ttf --from 40 -o fonts.gif").unwrap();
+        let Scene::Samples(scene) = &options.scene else {
+            panic!("samples: {:?}", options.scene);
+        };
+        assert_eq!((scene.from, scene.end), (Some(40), End::Start));
+        assert_eq!(
+            options.fonts,
+            [PathBuf::from("a.ttf"), PathBuf::from("b.ttf")]
+        );
     }
 
     #[test]
@@ -453,8 +527,27 @@ mod tests {
         };
         refused("title", "-o <file>");
         refused("title -o title.png", ".gif, .mp4 or .svg");
-        refused("world --size 54x48 -o a.gif", "--map");
-        refused("title --map -o a.gif", "the title scene");
+        refused("world --size 54x48 -o a.gif", "--map-view");
+        refused(
+            "title --map-view -o a.gif",
+            "--map-view is for a world's clip",
+        );
+        refused(
+            "title --replay a.replay -o a.gif",
+            "--replay is for a world's clip",
+        );
+        refused("title --from 5 -o a.gif", "--from is for a world's clip");
+        refused("world --seconds 3 -o a.gif", "--seconds");
+        refused("samples --to 5 -o a.gif", "--to");
+        refused(
+            "world --font a.ttf --font b.ttf -o a.gif",
+            "samples take several",
+        );
+        refused(
+            "samples --font a.ttf --bold-font b.ttf -o a.gif",
+            "--bold-font",
+        );
+        refused("world --bold-font b.ttf -o a.gif", "goes with --font");
         refused("world --frame 25 -o a.gif", "multiple of 10");
         refused("world --from 300 --to 200 -o a.gif", "after --from");
         refused("world --speed 3x -o a.gif", "3x");

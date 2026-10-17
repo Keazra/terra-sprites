@@ -188,12 +188,20 @@ impl Glyphs {
         if let Some(shape) = boxes::shape(symbol, self.cell) {
             return Ink::of_shape(&shape, self.cell);
         }
+        let cell = self.cell;
+        let (face, id) = self.glyph(symbol, bold);
+        face.ink(id, cell)
+    }
+
+    /// The face `symbol` is drawn in, bold or not, and its glyph there,
+    /// noting it as missing if the font has none.
+    fn glyph(&mut self, symbol: char, bold: bool) -> (&Face, GlyphId) {
         let face = if bold { &self.bold } else { &self.regular };
         let id = face.font.glyph_id(symbol);
         if id.0 == 0 && !symbol.is_whitespace() {
             self.missing.insert(symbol);
         }
-        face.ink(id, self.cell)
+        (if bold { &self.bold } else { &self.regular }, id)
     }
 
     /// The characters asked for that the font has no glyph for: drawn as
@@ -218,12 +226,9 @@ impl Glyphs {
                 overflows: false,
             });
         }
-        let face = if bold { &self.bold } else { &self.regular };
-        let id = face.font.glyph_id(symbol);
-        if id.0 == 0 && !symbol.is_whitespace() {
-            self.missing.insert(symbol);
-        }
-        face.outline(id, self.cell)
+        let cell = self.cell;
+        let (face, id) = self.glyph(symbol, bold);
+        face.outline(id, cell)
     }
 }
 
@@ -306,10 +311,7 @@ mod tests {
     use ratatui::layout::Size;
 
     use super::*;
-
-    fn glyphs() -> Glyphs {
-        Glyphs::new(Fonts::cascadia(), Size::new(10, 20))
-    }
+    use crate::test_util::glyphs;
 
     /// The rows with ink in column `x`.
     fn rows_inked(ink: &Ink, x: u16) -> Vec<u16> {

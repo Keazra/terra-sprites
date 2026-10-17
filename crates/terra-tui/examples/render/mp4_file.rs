@@ -153,21 +153,17 @@ mod tests {
     use std::path::PathBuf;
 
     use ratatui::buffer::Buffer;
-    use ratatui::layout::{Rect, Size};
+    use ratatui::layout::Rect;
 
     use super::*;
     use crate::clip::Frame;
-    use crate::glyphs::Fonts;
+    use crate::test_util::glyphs;
 
     fn frame(millis: u64) -> Frame {
         Frame {
             screen: Buffer::empty(Rect::new(0, 0, 3, 1)),
             shows_for: Duration::from_millis(millis),
         }
-    }
-
-    fn glyphs() -> Glyphs {
-        Glyphs::new(Fonts::cascadia(), Size::new(10, 20))
     }
 
     #[test]

@@ -61,11 +61,11 @@ pub fn mix(bg: Rgb, fg: Rgb, coverage: u8) -> Rgb {
 #[cfg(test)]
 mod tests {
     use ratatui::buffer::Buffer;
-    use ratatui::layout::{Rect, Size};
+    use ratatui::layout::Rect;
     use ratatui::style::{Color, Style};
 
     use super::*;
-    use crate::glyphs::Fonts;
+    use crate::test_util::glyphs;
 
     /// The colour of pixel (`x`, `y`) of a picture `width` pixels wide.
     fn pixel(rgb: &[u8], width: usize, x: usize, y: usize) -> [u8; 3] {
@@ -80,7 +80,7 @@ mod tests {
         screen.set_string(0, 0, "█", Style::default().fg(Color::Red));
         screen.set_string(1, 0, " ", Style::default().bg(Color::Blue));
         screen.set_string(2, 0, "A", Style::default().fg(Color::Green));
-        let mut glyphs = Glyphs::new(Fonts::cascadia(), Size::new(10, 20));
+        let mut glyphs = glyphs();
         let rgb = rgb(&mut glyphs, &screen);
         assert_eq!(rgb.len(), 30 * 20 * 3);
         let all = |x0: usize| (x0..x0 + 10).flat_map(|x| (0..20).map(move |y| (x, y)));

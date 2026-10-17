@@ -285,12 +285,12 @@ mod tests {
     use std::time::Duration;
 
     use ratatui::buffer::Buffer;
-    use ratatui::layout::{Rect, Size};
+    use ratatui::layout::Rect;
     use ratatui::style::{Color, Style};
 
     use super::*;
     use crate::clip::Frame;
-    use crate::glyphs::Fonts;
+    use crate::test_util::glyphs;
 
     /// A frame of four 10×20 cells, `text` in green, for `millis`.
     fn frame(text: &str, millis: u64) -> Frame {
@@ -303,7 +303,7 @@ mod tests {
     }
 
     fn svg_of(clip: &Clip) -> String {
-        let mut glyphs = Glyphs::new(Fonts::cascadia(), Size::new(10, 20));
+        let mut glyphs = glyphs();
         let mut bytes = Vec::new();
         write(clip, &mut glyphs, &mut bytes).unwrap();
         String::from_utf8(bytes).unwrap()

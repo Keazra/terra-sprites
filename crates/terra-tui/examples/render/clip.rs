@@ -6,10 +6,10 @@ use std::time::Duration;
 
 use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Rect, Size};
+use ratatui::layout::Size;
 use ratatui::{Frame as Drawing, Terminal};
 use terra_sim::{EntityId, Mode, Playback, World};
-use terra_tui::app::{App, Areas, Selection, Ticks};
+use terra_tui::app::{App, Selection, Tab, Ticks};
 use terra_tui::clock::{Clock, Speed};
 use terra_tui::input::Action;
 use terra_tui::session::Session;
@@ -17,7 +17,7 @@ use terra_tui::theme::Theme;
 use terra_tui::title::{self, Title};
 use terra_tui::ui;
 
-use crate::options::{Pace, Track, WorldScene};
+use crate::options::{End, Pace, Track, WorldScene};
 
 /// A screen of the clip, and how long it shows.
 #[derive(Debug, Clone, PartialEq)]
@@ -51,12 +51,12 @@ impl Clip {
     }
 }
 
-/// How the clip is drawn: the screen's size in cells, whether it's the map
-/// alone, and how long each frame shows.
-#[derive(Debug, Clone, Copy)]
-pub struct View {
+/// How a clip is framed: the screen's size in cells, whether it's the map
+/// view alone, and how long each frame shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Framing {
     pub screen: Size,
-    pub map_alone: bool,
+    pub map_view_alone: bool,
     pub frame: Duration,
 }
 
@@ -78,8 +78,8 @@ impl Source {
     }
 }
 
-/// How long the title scene's clip shows the menu, once the scene is over,
-/// unless told how long the clip is.
+/// How long the opening scene's clip shows the menu, once the scene is
+/// over, unless told how long the clip is.
 const MENU_SHOWS_FOR: Duration = Duration::from_secs(2);
 
 /// The longest the app's notices are waited out before the first frame,
@@ -94,27 +94,27 @@ pub fn title_clip(
     theme: Theme,
     seed: u64,
     seconds: Option<Duration>,
-    view: &View,
+    framing: &Framing,
 ) -> Clip {
     let mut title = Title::new(world, theme, seed);
-    title.resize(view.screen);
-    let mut terminal = terminal(view.screen);
+    title.resize(framing.screen);
+    let mut terminal = terminal(framing.screen);
     let mut clip = Clip::default();
     let (mut shown, mut menu_shown) = (Duration::ZERO, Duration::ZERO);
     loop {
         let screen = draw(&mut terminal, |frame| title::render(frame, &title));
-        clip.push(&screen, view.frame);
+        clip.push(&screen, framing.frame);
         let done = match seconds {
-            Some(seconds) => shown + view.frame >= seconds,
+            Some(seconds) => shown + framing.frame >= seconds,
             None => menu_shown >= MENU_SHOWS_FOR,
         };
         if done {
             return clip;
         }
-        title.animate(view.frame);
-        shown += view.frame;
+        title.animate(framing.frame);
+        shown += framing.frame;
         if title.scene_over() {
-            menu_shown += view.frame;
+            menu_shown += framing.frame;
         }
     }
 }
@@ -126,37 +126,40 @@ pub fn world_clip(
     source: Source,
     theme: Theme,
     scene: &WorldScene,
-    view: &View,
+    framing: &Framing,
 ) -> Result<Clip, String> {
+    // A replay starts where its recording did, from a save perhaps.
+    let start = source.world().tick();
+    let from = scene.from.unwrap_or(start);
+    if from < start {
+        return Err(format!(
+            "the replay starts at tick {start}, after --from {from}"
+        ));
+    }
     let (mut session, replay) = match source {
         Source::World(world) => (Session::Live(Box::new(world)), None),
-        Source::Replay { name, playback } => {
-            if scene.from < playback.start() {
-                return Err(format!(
-                    "the replay starts at tick {}, after --from",
-                    playback.start()
-                ));
-            }
-            (Session::replay(playback), Some(name))
-        }
+        Source::Replay { name, playback } => (Session::replay(playback), Some(name)),
     };
-    while session.world().tick() < scene.from {
+    while session.world().tick() < from {
         session.step();
     }
-    let to = scene.to.unwrap_or_else(|| match session.playback() {
-        Some(playback) => playback.end().max(scene.from),
-        None => scene.from + crate::options::DEFAULT_TICKS,
-    });
+    let to = match scene.end {
+        End::At(to) => to,
+        End::Start => from,
+        End::Usual => match session.playback() {
+            Some(playback) => playback.end().max(from),
+            None => from + crate::options::DEFAULT_TICKS,
+        },
+    };
     let world = session.world();
-    let areas = if view.map_alone {
-        Areas {
-            tiles: Rect::from((ratatui::layout::Position::ORIGIN, view.screen)),
-            inspector: None,
-            event_log: None,
-            overlay: None,
-        }
+    // The whole screen, or the map view alone.
+    let (areas, render): (_, fn(&mut Drawing, &App, &World)) = if framing.map_view_alone {
+        (
+            ui::map_view_alone_areas(framing.screen),
+            ui::render_map_view_alone,
+        )
     } else {
-        ui::areas(view.screen)
+        (ui::areas(framing.screen), ui::render)
     };
     let mut app = App::new(world.map(), theme, world.seed(), areas);
     if let (Some(name), Some(playback)) = (&replay, session.playback()) {
@@ -166,48 +169,43 @@ pub fn world_clip(
     }
     set_pace(&mut app.clock, scene.pace, world.mode())?;
     set_view(&mut app, world, scene)?;
-    settle(&mut app, view.frame);
+    settle(&mut app, framing.frame);
 
-    let mut terminal = terminal(view.screen);
+    let mut terminal = terminal(framing.screen);
     let mut clip = Clip::default();
-    let mut max_owed = 0;
+    // At Max, the thousandths of a tick the clip owes, from frame to frame.
+    let mut thousandths_owed = 0;
     loop {
         let world = session.world();
-        let screen = draw(&mut terminal, |frame| {
-            if view.map_alone {
-                ui::render_map_alone(frame, &app, world);
-            } else {
-                ui::render(frame, &app, world);
-            }
-        });
-        clip.push(&screen, view.frame);
+        let screen = draw(&mut terminal, |frame| render(frame, &app, world));
+        clip.push(&screen, framing.frame);
         // A replay's end, or where it parts from the recording, pauses it.
         if world.tick() >= to || app.clock.is_paused() {
             return Ok(clip);
         }
-        app.animate(view.frame);
+        app.animate(framing.frame);
         // At Max, a set number of ticks a second, so the clip is the same
         // each time.
-        let most = match scene.pace {
+        let most_ticks = match scene.pace {
             Pace::Game(_) => u64::MAX,
             Pace::Max(rate) => {
-                max_owed += view.frame.as_millis() as u64 * u64::from(rate);
-                let most = max_owed / 1000;
-                max_owed %= 1000;
-                most
+                thousandths_owed += framing.frame.as_millis() as u64 * u64::from(rate);
+                let whole = thousandths_owed / 1000;
+                thousandths_owed %= 1000;
+                whole
             }
         };
         let mut ticks = Ticks::default();
         let (tick, ran) = (Cell::new(world.tick()), Cell::new(0));
         app.clock.advance(
-            view.frame,
+            framing.frame,
             || {
                 let events = session.step();
                 ticks.note(events, session.world());
                 tick.set(session.world().tick());
                 ran.set(ran.get() + 1);
             },
-            || tick.get() >= to || ran.get() >= most,
+            || tick.get() >= to || ran.get() >= most_ticks,
         );
         app.take_in(ticks, session.world());
         if let Some(playback) = session.playback() {
@@ -258,7 +256,7 @@ fn set_view(app: &mut App, world: &World, scene: &WorldScene) -> Result<(), Stri
         app.withdraw_cursor();
     }
     if let Some(tab) = scene.tab {
-        for _ in 0..terra_tui::app::Tab::ALL.len() {
+        for _ in 0..Tab::ALL.len() {
             if app.tab() == tab {
                 break;
             }
@@ -317,7 +315,7 @@ mod tests {
     use terra_tui::theme::Theme;
 
     use super::*;
-    use crate::options::{Pace, Track, WorldScene};
+    use crate::options::{End, Pace, Track, WorldScene};
 
     fn pack() -> DataPack {
         DataPack::builtin().expect("built-in data pack is valid")
@@ -349,8 +347,8 @@ mod tests {
 
     fn scene(from: u64, to: u64, pace: Pace, track: Track) -> WorldScene {
         WorldScene {
-            from,
-            to: Some(to),
+            from: Some(from),
+            end: End::At(to),
             pace,
             track,
             cursor: false,
@@ -358,10 +356,10 @@ mod tests {
         }
     }
 
-    fn view(screen: Size, map_alone: bool) -> View {
-        View {
+    fn framing(screen: Size, map_view_alone: bool) -> Framing {
+        Framing {
             screen,
-            map_alone,
+            map_view_alone,
             frame: Duration::from_millis(100),
         }
     }
@@ -384,7 +382,7 @@ mod tests {
             live(world),
             Theme::cp437(),
             &scene,
-            &view(Size::new(100, 30), false),
+            &framing(Size::new(100, 30), false),
         )
         .unwrap();
         let top_bar = |frame: &Frame| row(&frame.screen, 0);
@@ -403,6 +401,45 @@ mod tests {
     }
 
     #[test]
+    fn a_replay_from_a_save_starts_where_its_recording_did() {
+        // A recording begun at tick 5, as a session log is after a load,
+        // starts from a snapshot there: its clip starts there too, unless
+        // told, and runs to its end (#241).
+        let mut world = field(&[Pos { x: 20, y: 10 }], &[]);
+        for _ in 0..5 {
+            world.step();
+        }
+        world.start_recording();
+        for _ in 0..10 {
+            world.step();
+        }
+        let playback = Playback::new(&world.replay().expect("recording")).expect("it plays");
+        let scene = WorldScene {
+            from: None,
+            end: End::Usual,
+            pace: Pace::Game(Speed::X4),
+            track: Track::First,
+            cursor: false,
+            tab: None,
+        };
+        let source = Source::Replay {
+            name: "last_session.replay".into(),
+            playback,
+        };
+        let clip = world_clip(
+            source,
+            Theme::cp437(),
+            &scene,
+            &framing(Size::new(100, 30), false),
+        )
+        .unwrap();
+        let first = row(&clip.frames[0].screen, 0);
+        let last = row(&clip.frames.last().unwrap().screen, 0);
+        assert!(first.contains("tick 5 "), "{first}");
+        assert!(last.contains("tick 15 "), "{last}");
+    }
+
+    #[test]
     fn frames_that_look_the_same_are_one_frame_shown_for_longer() {
         // An empty field, alone: nothing changes as two ticks run at 1×,
         // 1.25 ticks a second, so the frames drawn every tenth of a second
@@ -413,7 +450,7 @@ mod tests {
             live(world),
             Theme::cp437(),
             &scene,
-            &view(Size::new(20, 10), true),
+            &framing(Size::new(20, 10), true),
         )
         .unwrap();
         assert_eq!(clip.frames.len(), 1);
@@ -423,7 +460,7 @@ mod tests {
 
     #[test]
     fn the_view_tracks_the_chosen_sprite() {
-        // Two sprites; the second walks off east. The map alone, 21×11, has
+        // Two sprites; the second walks off east. The map view alone, 21×11, has
         // it in the middle, selected (☻), as the rocks go by.
         let (stays, walks) = (Pos { x: 12, y: 6 }, Pos { x: 14, y: 10 });
         let world = field(
@@ -441,7 +478,7 @@ mod tests {
             live(world),
             Theme::cp437(),
             &scene,
-            &view(Size::new(21, 11), true),
+            &framing(Size::new(21, 11), true),
         )
         .unwrap();
         let (first, last) = (&clip.frames[0].screen, &clip.frames.last().unwrap().screen);
@@ -462,7 +499,7 @@ mod tests {
             live(field(&[Pos { x: 5, y: 5 }], &[])),
             Theme::cp437(),
             &tracking_nobody,
-            &view(Size::new(20, 10), true),
+            &framing(Size::new(20, 10), true),
         )
         .err()
         .unwrap();
@@ -473,7 +510,7 @@ mod tests {
             live(story),
             Theme::cp437(),
             &too_fast,
-            &view(Size::new(20, 10), true),
+            &framing(Size::new(20, 10), true),
         )
         .err()
         .unwrap();
@@ -481,7 +518,7 @@ mod tests {
     }
 
     #[test]
-    fn the_title_scene_starts_in_the_dark_and_ends_on_the_title() {
+    fn the_opening_scene_starts_in_the_dark_and_ends_on_the_title() {
         let args = Args::default();
         let world = start::title_world(&args, 7, (100, 30)).unwrap();
         let clip = title_clip(
@@ -489,7 +526,7 @@ mod tests {
             Theme::cp437(),
             7,
             None,
-            &view(Size::new(100, 30), false),
+            &framing(Size::new(100, 30), false),
         );
         let first = &clip.frames[0].screen;
         // Dark but for the light, just arrived round the sleeper.
