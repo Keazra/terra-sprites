@@ -1,3 +1,8 @@
+mod common;
+use common::{
+    LETHAL_THORNS, LONE, group, inspector_line, inspector_rows, open, pack_changing, select,
+};
+
 use std::time::Duration;
 
 use ratatui::buffer::Buffer;
@@ -6,8 +11,8 @@ use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
     ActionView, Blocker, Command, CopyChangeView, DataPack, DeathCause, Emptied, EntityId, Event,
-    EventKind, Grip, Hurt, Learned, Map, Outcome, Pos, Progress, Rejection, Removal, Scenario,
-    ScriptedAction, Target, Terrain, Thing, Verb, World, WorldConfig,
+    EventKind, GeneView, Grip, Hurt, Learned, Map, Outcome, Pos, Progress, Rejection, Removal,
+    Scenario, ScriptedAction, Target, Terrain, Thing, Verb, World, WorldConfig,
 };
 use terra_tui::app::{App, CursorMode, Flow, Selection, Tab};
 use terra_tui::input::{Action, Button};
@@ -99,11 +104,11 @@ fn cell(world: &World, x: u16, y: u16) -> Position {
     app.cell_of(Pos { x, y }).expect("in view")
 }
 
-/// The screen cell the pointer is on to point at `world`'s map tile (x, y),
-/// as `cell` places it: one down and right of the tile (design v27 §6.5).
+/// The screen cell the pointer is on to point at `world`'s map tile (x, y)
+/// on a 100×30 screen, not scrolled, as `cell` places the tile.
 fn pointer_on(world: &World, x: u16, y: u16) -> Position {
-    let at = cell(world, x, y);
-    Position::new(at.x + 1, at.y + 1)
+    let app = app_for(world, Theme::cp437(), 100, 30);
+    common::pointer_on(&app, Pos { x, y })
 }
 
 /// `world`'s map as drawn on `screen`, a row a line, with the glass round it
@@ -744,11 +749,13 @@ fn objects_are_drawn_with_their_themes_glyph_for_their_visual_state() {
 #[test]
 fn a_fruiting_bush_is_drawn_bold_red() {
     // A quick-growing berry bush: one tick as a seedling, a fruit every tick.
-    let objects = include_str!("../../../data/objects.ron")
-        .replace("ticks: (1500, 2500)", "ticks: (1, 1)")
-        .replace("Every(200)", "Every(1)");
-    let pack = DataPack::from_sources(&builtin_with("objects.ron", &objects)).expect("valid pack");
-    let mut world = garden(pack);
+    let mut world = garden(pack_changing(&[(
+        "objects.ron",
+        &[
+            ("ticks: (1500, 2500)", "ticks: (1, 1)"),
+            ("Every(200)", "Every(1)"),
+        ],
+    )]));
     for _ in 0..3 {
         world.step();
     }
@@ -930,14 +937,6 @@ fn while_the_terminal_is_too_small_the_game_runs_on_and_esc_still_asks_to_quit()
         "the quit prompt shows: {screen:?}"
     );
     assert_eq!(app.apply(Action::Confirm, &world), Flow::Quit);
-}
-
-/// The built-in pack's files with `file` replaced by `text`.
-fn builtin_with<'a>(file: &str, text: &'a str) -> Vec<(&'static str, &'a str)> {
-    DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, builtin)| (path, if path == file { text } else { builtin }))
-        .collect()
 }
 
 fn died(tick: u64, id: u64, cause: DeathCause, age: u64) -> Event {
@@ -1266,14 +1265,13 @@ fn the_event_log_says_whom_a_lesson_was_learned_from_watching() {
 fn a_lesson_words_an_object_type_as_it_names_itself() {
     // Design v17 §3.5.1: thornbushes renamed brambles, and balls with no
     // plural, as if they were a thing you don't count.
-    let builtin = include_str!("../../../data/objects.ron");
-    let (thorns, balls) = (r#"plural: "thornbushes""#, r#" plural: "balls","#);
-    assert!(builtin.contains(thorns) && builtin.contains(balls));
-    let objects = builtin
-        .replace(thorns, r#"plural: "brambles""#)
-        .replace(balls, "");
-    let pack = DataPack::from_sources(&builtin_with("objects.ron", &objects)).expect("valid pack");
-    let world = garden(pack);
+    let world = garden(pack_changing(&[(
+        "objects.ron",
+        &[
+            (r#"plural: "thornbushes""#, r#"plural: "brambles""#),
+            (r#" plural: "balls","#, ""),
+        ],
+    )]));
     let thorns_bad = Learned::Bad {
         thing: "thornbush".into(),
     };
@@ -1313,13 +1311,6 @@ fn a_100_by_30_screen_has_every_panel() {
     assert!(screen[24].contains("Events"));
 }
 
-/// Presses `]` until `tab` is open.
-fn open(app: &mut App, world: &World, tab: Tab) {
-    while app.tab() != tab {
-        app.apply(Action::NextTab, world);
-    }
-}
-
 /// The inspector's rows on a 100×30 screen: its title, then the text inside
 /// its border, trimmed.
 fn inspector(app: &App, world: &World) -> (String, Vec<String>) {
@@ -1328,12 +1319,12 @@ fn inspector(app: &App, world: &World) -> (String, Vec<String>) {
 
 /// `inspector`, on a screen `height` rows tall.
 fn inspector_on(app: &App, world: &World, height: u16) -> (String, Vec<String>) {
-    let rows = right_part(&render(app, world, 100, height), 46);
-    let text = rows[2..rows.len() - 7]
+    let (title, rows) = inspector_rows(app, world, height);
+    let text = rows
         .iter()
-        .map(|row| inside(row).to_string())
+        .map(|row| row.trim_start().to_string())
         .collect();
-    (rows[1].clone(), text)
+    (title, text)
 }
 
 #[test]
@@ -1527,11 +1518,13 @@ fn the_body_tab_says_when_the_young_grow_up_and_the_old_are_old() {
     // M2 design §9.6: `age … · young · grows up 4,500`, then `· adult ·
     // grows old …`, then `· old`. In this pack a sprite may grow old as
     // soon as it likes.
-    let physiology = include_str!("../../../data/physiology.ron")
-        .replace("grows_old: (6000.0, 60000.0)", "grows_old: (10.0, 60000.0)")
-        .replace("grows_up: (1500.0, 13500.0)", "grows_up: (10.0, 13500.0)");
-    let pack =
-        DataPack::from_sources(&builtin_with("physiology.ron", &physiology)).expect("valid pack");
+    let pack = pack_changing(&[(
+        "physiology.ron",
+        &[
+            ("grows_old: (6000.0, 60000.0)", "grows_old: (10.0, 60000.0)"),
+            ("grows_up: (1500.0, 13500.0)", "grows_up: (10.0, 13500.0)"),
+        ],
+    )]);
     let genes = |grows_up: f32, grows_old: f32| {
         let genes = format!(
             r#"(format: 1, genes: [
@@ -1557,55 +1550,70 @@ fn the_body_tab_says_when_the_young_grow_up_and_the_old_are_old() {
     let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     world.step();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    let age_line = |app: &App, world: &World| {
-        let (_, text) = inspector(app, world);
-        text.into_iter()
-            .find(|line| line.starts_with("age "))
-            .expect("an age line")
-    };
     app.apply(Action::SelectNext, &world);
-    assert_eq!(age_line(&app, &world), "age 1 · young · grows up 4,500");
+    assert_eq!(
+        inspector_line(&app, &world, "age "),
+        "age 1 · young · grows up 4,500"
+    );
     app.apply(Action::SelectNext, &world);
-    assert_eq!(age_line(&app, &world), "age 11 · adult · grows old 20");
+    assert_eq!(
+        inspector_line(&app, &world, "age "),
+        "age 11 · adult · grows old 20"
+    );
     for _ in 0..10 {
         world.step();
     }
-    assert_eq!(age_line(&app, &world), "age 21 · old");
+    assert_eq!(inspector_line(&app, &world, "age "), "age 21 · old");
 }
+
+/// Changes after which water runs out at once and thirst injures badly,
+/// and a bad injury scars a gene every tick, by .38 of its health (M2
+/// design §9.4).
+const SCARRING: common::Changes = (
+    "physiology.ron",
+    &[
+        ("hydration_loss: 0.00033", "hydration_loss: 1.0"),
+        ("dehydration: 0.0011", "dehydration: 0.3"),
+        ("chance: 0.002, hit: 0.05", "chance: 1.0, hit: 0.38"),
+    ],
+);
 
 #[test]
 fn a_worn_sprite_grows_old_sooner_and_the_body_tab_says_its_genes_health() {
     // M2 design §9.4, §9.6. In this pack water runs out at once and thirst
     // injures badly, which wears the sprite, and a bad injury scars a gene
     // every tick: once one has weakened, the wear line says the genes'
-    // average health too.
-    let physiology = include_str!("../../../data/physiology.ron")
-        .replace("hydration_loss: 0.00033", "hydration_loss: 1.0")
-        .replace("dehydration: 0.0011", "dehydration: 0.3")
-        .replace("chance: 0.002, hit: 0.05", "chance: 1.0, hit: 0.38");
-    let pack =
-        DataPack::from_sources(&builtin_with("physiology.ron", &physiology)).expect("valid pack");
+    // average health too. Its one gene that weakens, the emitter, is whole
+    // to begin with, as the wear line says: a scenario's sprite carries no
+    // flaws (M2 design §12.3). The first scar takes .38 of its health.
     let genome = r#"(format: 1, genes: [
         Trait(trait: "grows_old", value: 13500.0),
         Emitter(locus: Locus("always"), mode: Level, gain: 0.001, chem: "boredom"),
     ])"#;
-    let (mut world, app) = one_sprite_in(pack, genome, &[], &[], 0);
-    let line = |world: &World, start: &str| {
-        let (_, text) = inspector(&app, world);
-        text.into_iter()
-            .find(|line| line.starts_with(start))
-            .unwrap_or_else(|| panic!("a line starting {start:?}"))
-    };
-    assert_eq!(line(&world, "age"), "age 7,500 · adult · grows old 13,500");
-    assert_eq!(line(&world, "wear"), "wear .00", "no gene weakened yet");
+    let (mut world, app) = one_sprite_in(pack_changing(&[SCARRING]), genome, &[], &[], 0);
+    assert_eq!(
+        inspector_line(&app, &world, "age"),
+        "age 7,500 · adult · grows old 13,500"
+    );
+    assert_eq!(
+        inspector_line(&app, &world, "wear"),
+        "wear .00",
+        "no gene weakened yet"
+    );
     let vigour = |world: &World| world.sprites().next().expect("a sprite").vigour();
     while vigour(&world) == 1.0 {
         world.step();
     }
     let sprite = world.sprites().next().expect("a sprite");
-    assert!(sprite.grows_old_at() < 13_499.5, "worn sooner");
-    assert_eq!(line(&world, "age"), "age 7,503 · adult · grows old 13,489");
-    assert_eq!(line(&world, "wear"), "wear .00 · genes .62");
+    let grows_old = sprite.grows_old_at();
+    assert!(grows_old < 13_499.5, "worn sooner");
+    let said = format!(
+        "age {} · adult · grows old {}",
+        group(sprite.age()),
+        group(grows_old.round() as u64)
+    );
+    assert_eq!(inspector_line(&app, &world, "age"), said);
+    assert_eq!(inspector_line(&app, &world, "wear"), "wear .00 · genes .62");
 }
 
 /// A genome that walks a grass step a tick.
@@ -2578,17 +2586,11 @@ fn the_genome_tab_shows_switches_dormant_genes_and_weakened_genes() {
     // injury first passes .5, its one gene that weakens, the emitter, is
     // scarred to .62. Its brain setting switches off as it grows up, so in
     // an adult it's dormant.
-    let physiology = include_str!("../../../data/physiology.ron")
-        .replace("hydration_loss: 0.00033", "hydration_loss: 1.0")
-        .replace("dehydration: 0.0011", "dehydration: 0.3")
-        .replace("chance: 0.002, hit: 0.05", "chance: 1.0, hit: 0.38");
-    let pack =
-        DataPack::from_sources(&builtin_with("physiology.ron", &physiology)).expect("valid pack");
     let genome = r#"(format: 2, genes: [
         BrainParam(param: "curiosity", value: 0.6, until: Adult),
         Emitter(locus: Locus("always"), mode: Level, gain: 0.001, chem: "boredom"),
     ])"#;
-    let (mut world, mut app) = one_sprite_in(pack, genome, &[], &[], 0);
+    let (mut world, mut app) = one_sprite_in(pack_changing(&[SCARRING]), genome, &[], &[], 0);
     let vigour = |world: &World| world.sprites().next().expect("a sprite").vigour();
     for _ in 0..10 {
         if vigour(&world) < 1.0 {
@@ -2898,11 +2900,13 @@ fn every_tab_s_text_is_within_cp437() {
 #[test]
 fn the_world_tab_shows_the_population_and_the_deaths_by_cause() {
     // Water runs out in two ticks, and then dehydration kills in two more.
-    let physiology = include_str!("../../../data/physiology.ron")
-        .replace("hydration_loss: 0.00033", "hydration_loss: 0.5")
-        .replace("dehydration: 0.0011", "dehydration: 0.5");
-    let pack =
-        DataPack::from_sources(&builtin_with("physiology.ron", &physiology)).expect("valid pack");
+    let pack = pack_changing(&[(
+        "physiology.ron",
+        &[
+            ("hydration_loss: 0.00033", "hydration_loss: 0.5"),
+            ("dehydration: 0.0011", "dehydration: 0.5"),
+        ],
+    )]);
     let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
     let at = |x, y| (terra_sim::Pos { x, y }, None);
     let sprites = [at(1, 1), at(4, 2), at(8, 3)];
@@ -2967,16 +2971,13 @@ fn a_death_message_too_long_for_one_line_wraps() {
 
 #[test]
 fn a_world_tab_list_too_long_for_one_line_wraps_after_a_dot() {
-    let objects = include_str!("../../../data/objects.ron")
-        .replace("\"mature\"", "\"fully_grown_and_bearing_fruit\"");
-    let world =
-        garden(DataPack::from_sources(&builtin_with("objects.ron", &objects)).expect("valid pack"));
+    let world = garden(pack_changing(&[(
+        "objects.ron",
+        &[("\"mature\"", "\"fully_grown_and_bearing_fruit\"")],
+    )]));
     let app = app_for(&world, Theme::cp437(), 100, 30);
-    let rows = right_part(&render(&app, &world, 100, 30), 46);
-    let text: Vec<&str> = rows[2 + GRAPH_LINES..10 + GRAPH_LINES]
-        .iter()
-        .map(|row| row.trim_start_matches('│').trim_end_matches('│').trim_end())
-        .collect();
+    let (_, rows) = inspector_rows(&app, &world, 30);
+    let text = &rows[GRAPH_LINES..8 + GRAPH_LINES];
     assert_eq!(
         text[4..7],
         [
@@ -3006,20 +3007,12 @@ fn selecting_the_selected_sprite_from_a_scrolled_world_tab_opens_body_at_the_top
 #[test]
 fn chemical_names_show_with_spaces_for_underscores() {
     // "boredom" renamed "bored_ness" in the pack, its brain inputs and the starter genome.
-    let files: Vec<(&str, String)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, text)| {
-            let renamed = match path {
-                "chemicals.ron" | "brain_io.ron" | "genomes/starter.ron" => {
-                    text.replace("\"boredom\"", "\"bored_ness\"")
-                }
-                _ => text.to_string(),
-            };
-            (path, renamed)
-        })
-        .collect();
-    let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
-    let pack = DataPack::from_sources(&files).expect("valid pack");
+    let renamed: &[(&str, &str)] = &[("\"boredom\"", "\"bored_ness\"")];
+    let pack = pack_changing(&[
+        ("chemicals.ron", renamed),
+        ("brain_io.ron", renamed),
+        ("genomes/starter.ron", renamed),
+    ]);
     let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
     let sprites = [(terra_sim::Pos { x: 2, y: 3 }, None)];
     let scenario = Scenario {
@@ -4128,16 +4121,13 @@ fn the_body_tab_says_how_near_a_male_is_to_turning_female_once_grown() {
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    let sex_line = |app: &App| {
-        let (_, text) = inspector(app, &world);
-        text.into_iter()
-            .find(|line| line.starts_with("male"))
-            .expect("its sex")
-    };
     app.apply(Action::SelectNext, &world);
-    assert_eq!(sex_line(&app), "male · fertile · turning 50%");
+    assert_eq!(
+        inspector_line(&app, &world, "male"),
+        "male · fertile · turning 50%"
+    );
     app.apply(Action::SelectNext, &world);
-    assert_eq!(sex_line(&app), "male", "young");
+    assert_eq!(inspector_line(&app, &world, "male"), "male", "young");
 }
 
 #[test]
@@ -4290,14 +4280,7 @@ fn leading_a_young_sprite_the_cursor_s_mark_shows_it_small() {
 /// changed as `changes` say, has laid an egg alone, and the egg. She may
 /// breed alone at once (M2 design §15.7).
 fn a_lone_egg(changes: &[(&str, &str)]) -> (World, EntityId) {
-    let mut physiology = include_str!("../../../data/physiology.ron").to_string();
-    let lone = ("alone_after: 4500,", "alone_after: 0,");
-    for &(from, to) in std::iter::once(&lone).chain(changes) {
-        assert!(physiology.contains(from), "{from:?}");
-        physiology = physiology.replace(from, to);
-    }
-    let pack =
-        DataPack::from_sources(&builtin_with("physiology.ron", &physiology)).expect("valid pack");
+    let pack = pack_changing(&[LONE, ("physiology.ron", changes)]);
     let genome = terra_sim::Genome::from_ron(
         r#"(format: 1, genes: [
             Trait(trait: "speed", value: 7.0),
@@ -4397,17 +4380,9 @@ fn the_body_tab_names_a_sprite_s_partner_after_their_first_egg() {
 fn the_body_tab_says_when_a_sprite_s_partner_has_died() {
     // M2 design §15.8: `partner Kit #20 · died`, until she pairs again.
     // Once paired, he hits the thornbush, whose thorns kill at once.
-    let tags = include_str!("../../../data/tags.ron");
-    let (from, to) = (
-        r#"Hit:   [Inject(Actor, "injury", 0.03)"#,
-        r#"Hit:   [Inject(Actor, "injury", 1.0)"#,
-    );
-    assert!(tags.contains(from));
-    let tags = tags.replace(from, to);
-    let pack = DataPack::from_sources(&builtin_with("tags.ron", &tags)).expect("valid pack");
     let his = r#"AttentionInstinct(input: "paired", category: "bush", weight: 2.0),
         Instinct(inputs: [("paired", false), ("attended_bush", false)], verb: Hit, weight: 2.0),"#;
-    let (mut world, she, he) = a_pair(pack, his);
+    let (mut world, she, he) = a_pair(pack_changing(&[LETHAL_THORNS]), his);
     while world.sprite(he).is_some() {
         assert!(world.tick() < 200, "he died");
         world.step();
@@ -4440,16 +4415,9 @@ fn the_genome_tab_of_a_sprite_with_parents_says_first_what_s_new_in_it() {
     let mut app = app_for(&world, Theme::cp437(), 100, 40);
     app.apply(Action::SelectNext, &world);
     open(&mut app, &world, Tab::Genome);
-    let text = |app: &App| -> Vec<String> {
-        right_part(&render(app, &world, 100, 40), 46)[2..38]
-            .iter()
-            .map(|row| inside(row).to_string())
-            .collect()
-    };
+    let text = |app: &App| inspector_on(app, &world, 40).1;
     assert_eq!(text(&app)[0], "TRAITS", "the mother has no list");
-    while app.selection() != Some(terra_tui::app::Selection::Living(egg)) {
-        app.apply(Action::SelectNext, &world);
-    }
+    select(&mut app, &world, egg);
     let rows = text(&app);
     assert_eq!(rows[0], "FROM SPRITE #1 ALONE");
     let view = world.sprite(egg).expect("the hatchling");
@@ -4508,14 +4476,9 @@ fn the_genome_tab_lists_the_genes_copying_changed_doubled_and_lost() {
     ]);
     hatch(&mut world, egg);
     let mut app = app_for(&world, Theme::cp437(), 100, 40);
-    while app.selection() != Some(terra_tui::app::Selection::Living(egg)) {
-        app.apply(Action::SelectNext, &world);
-    }
+    select(&mut app, &world, egg);
     open(&mut app, &world, Tab::Genome);
-    let rows: Vec<String> = right_part(&render(&app, &world, 100, 40), 46)[2..38]
-        .iter()
-        .map(|row| inside(row).to_string())
-        .collect();
+    let (_, rows) = inspector_on(&app, &world, 40);
     let list = rows
         .iter()
         .position(|row| row.is_empty())
@@ -4555,14 +4518,10 @@ fn the_genome_tab_lists_the_genes_copying_changed_doubled_and_lost() {
 /// whole, though the tab wraps a long one onto rows indented further.
 fn whats_new(world: &World, id: EntityId) -> Vec<String> {
     let mut app = app_for(world, Theme::cp437(), 100, 40);
-    while app.selection() != Some(Selection::Living(id)) {
-        app.apply(Action::SelectNext, world);
-    }
+    select(&mut app, world, id);
     open(&mut app, world, Tab::Genome);
     let mut said: Vec<String> = Vec::new();
-    for row in &right_part(&render(&app, world, 100, 40), 46)[2..38] {
-        let row = row.trim_start_matches('│').trim_end_matches('│');
-        let row = row.trim_end();
+    for row in inspector_rows(&app, world, 40).1 {
         if row.is_empty() {
             return said;
         }
@@ -4592,9 +4551,11 @@ fn the_genome_tab_of_a_pair_s_young_says_it_is_from_them_both() {
 
 #[test]
 fn the_genome_tab_says_of_a_gene_copying_changed_only_the_numbers_that_differ() {
-    // M2 design §12.6: `+.00512 past .515, was +.00428`. Copying changed
-    // each gene value seven times in ten; in this world, the hunger
-    // emitter's two numbers and only the thirst emitter's gain.
+    // M2 design §12.6: `+.00512 past .515, was +.00428`. Copying changes
+    // each gene value seven times in ten, so a gene may change in each of
+    // its numbers or in only one of two. Each changed gene's line says the
+    // gene as it is, then what it was: the numbers that read differently,
+    // or all of them if none does.
     let (mut world, egg) = a_lone_egg(&[
         ("mutation: (chance: 0.01,", "mutation: (chance: 0.7,"),
         ("flaws: (arise: 0.004,", "flaws: (arise: 0.0,"),
@@ -4605,16 +4566,65 @@ fn the_genome_tab_says_of_a_gene_copying_changed_only_the_numbers_that_differ() 
     ]);
     hatch(&mut world, egg);
     let listed = whats_new(&world, egg);
-    for said in [
-        "low energy → hunger +.00285 past .472, was +.004 past .5",
-        "low hydration → thirst +.00396 past .5, was +.004",
-        "speed 9.29, was 7",
-    ] {
-        assert!(
-            listed.iter().any(|line| line == said),
-            "{said:?} in {listed:#?}"
-        );
+    let view = world.sprite(egg).expect("the hatchling");
+    let (genes, errors) = (view.genes(), view.copying_errors());
+    // Where it's from, then a line for each changed gene, in genome order.
+    assert_eq!(listed.len(), errors.len() + 1, "{listed:#?}");
+    let mut some_alike = false;
+    for ((index, was), line) in errors.iter().zip(&listed[1..]) {
+        let (now_said, was_said) = line
+            .split_once(", was ")
+            .unwrap_or_else(|| panic!("{line:?}"));
+        let (now, was) = (numbers_of(&genes[*index].0), numbers_of(was));
+        let all = |values: &[f32]| values.iter().map(|&v| reads(v)).collect::<Vec<_>>();
+        assert_eq!(numbers_in(now_said), all(&now), "{line:?}");
+        let differ: Vec<String> = was
+            .iter()
+            .zip(&now)
+            .filter(|&(&was, &now)| reads(was) != reads(now))
+            .map(|(&was, _)| reads(was))
+            .collect();
+        some_alike |= !differ.is_empty() && differ.len() < was.len();
+        let shown = if differ.is_empty() { all(&was) } else { differ };
+        assert_eq!(numbers_in(was_said), shown, "{line:?}");
     }
+    assert!(
+        some_alike,
+        "a gene with a number copying left alone: {listed:#?}"
+    );
+}
+
+/// A gene's numbers in the order the Genome tab writes them, for the kinds
+/// of gene `a_lone_egg`'s mother has: an emitter's gain, then its
+/// threshold unless it's 0.
+fn numbers_of(gene: &GeneView) -> Vec<f32> {
+    match *gene {
+        GeneView::Trait { value, .. } | GeneView::InitialConcentration { value, .. } => {
+            vec![value]
+        }
+        GeneView::Emitter {
+            gain, threshold, ..
+        } if threshold == 0.0 => vec![gain],
+        GeneView::Emitter {
+            gain, threshold, ..
+        } => vec![gain, threshold],
+        GeneView::Instinct { weight, .. } => vec![weight],
+        ref other => panic!("no such gene in the mother: {other:?}"),
+    }
+}
+
+/// How a gene's value reads to 3 significant figures, as the Genome tab
+/// writes it: `.00428` and `4.28e-3` read alike.
+fn reads(value: f32) -> String {
+    format!("{value:.2e}")
+}
+
+/// The numbers written in `said`, as they read.
+fn numbers_in(said: &str) -> Vec<String> {
+    said.split(char::is_whitespace)
+        .filter_map(|word| word.replace(',', "").parse::<f32>().ok())
+        .map(reads)
+        .collect()
 }
 
 #[test]
@@ -4673,13 +4683,9 @@ fn a_broken_gene_counts_in_the_body_tab_s_genes_but_not_its_wear() {
     let view = world.sprite(egg).expect("the hatchling");
     assert!(view.flaws().contains(&2), "{:?}", view.flaws());
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    while app.selection() != Some(Selection::Living(egg)) {
-        app.apply(Action::SelectNext, &world);
-    }
+    select(&mut app, &world, egg);
     open(&mut app, &world, Tab::Body);
-    let (_, text) = inspector(&app, &world);
-    let wear = text.iter().find(|line| line.starts_with("wear"));
-    assert_eq!(wear.map(String::as_str), Some("wear .00 · genes .50"));
+    assert_eq!(inspector_line(&app, &world, "wear"), "wear .00 · genes .50");
 }
 
 #[test]
