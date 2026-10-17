@@ -57,6 +57,12 @@ const README_SVG_BYTES: u64 = 2_000_000;
 /// samples.
 fn render(options: &Options) -> Result<(), String> {
     let framing = &options.framing;
+    // The samples' fonts load before the world runs, so a bad one says so
+    // at once.
+    let samples = match options.scene {
+        Scene::Samples(_) => Some(sample_fonts(&options.fonts)?),
+        _ => None,
+    };
     let clip = match &options.scene {
         Scene::Title { seconds } => {
             let seed = options.world.seed.unwrap_or_default();
@@ -67,15 +73,7 @@ fn render(options: &Options) -> Result<(), String> {
         }
         Scene::World(scene) | Scene::Samples(scene) => world_clip(options, scene, framing)?,
     };
-    if let Scene::Samples(_) = options.scene {
-        let mut fonts = vec![("cascadia-mono".to_string(), Fonts::cascadia())];
-        for path in &options.fonts {
-            let name = path.file_stem().map_or_else(
-                || "font".to_string(),
-                |stem| stem.to_string_lossy().into_owned(),
-            );
-            fonts.push((name, Fonts::from_files(path, None)?));
-        }
+    if let Some(fonts) = samples {
         for (name, fonts) in fonts {
             draw(&clip, fonts, options, &sample_path(&options.out, &name))?;
         }
@@ -86,6 +84,30 @@ fn render(options: &Options) -> Result<(), String> {
         None => Fonts::cascadia(),
     };
     draw(&clip, fonts, options, &options.out)
+}
+
+/// The fonts samples are drawn in, Cascadia Mono first, each named for its
+/// file. Two of the same name would write the same file, so they're
+/// refused; Windows sees `Mono` and `mono` as one name.
+fn sample_fonts(paths: &[PathBuf]) -> Result<Vec<(String, Fonts)>, String> {
+    let mut fonts = vec![("cascadia-mono".to_string(), Fonts::cascadia())];
+    for path in paths {
+        let name = path.file_stem().map_or_else(
+            || "font".to_string(),
+            |stem| stem.to_string_lossy().into_owned(),
+        );
+        if fonts
+            .iter()
+            .any(|(taken, _)| taken.eq_ignore_ascii_case(&name))
+        {
+            return Err(format!(
+                "two fonts are named {name}, so their samples would be the same file: \
+                 rename one"
+            ));
+        }
+        fonts.push((name, Fonts::from_files(path, None)?));
+    }
+    Ok(fonts)
 }
 
 /// Draws `clip` in `fonts` and writes it to `out`, saying what it wrote.
@@ -233,5 +255,15 @@ mod tests {
             gif.len(),
             svg.len()
         );
+    }
+
+    #[test]
+    fn two_sample_fonts_of_one_name_are_refused() {
+        // Both would write fonts-cascadia-mono.gif (#241); the check comes
+        // before the file is read, so it needn't exist.
+        let err = super::sample_fonts(&["new/Cascadia-Mono.ttf".into()])
+            .err()
+            .unwrap();
+        assert!(err.contains("rename one"), "{err}");
     }
 }

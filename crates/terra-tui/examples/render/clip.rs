@@ -136,6 +136,14 @@ pub fn world_clip(
             "the replay starts at tick {start}, after --from {from}"
         ));
     }
+    if let Source::Replay { playback, .. } = &source
+        && from > playback.end()
+    {
+        return Err(format!(
+            "the replay ends at tick {}, before --from {from}",
+            playback.end()
+        ));
+    }
     let (mut session, replay) = match source {
         Source::World(world) => (Session::Live(Box::new(world)), None),
         Source::Replay { name, playback } => (Session::replay(playback), Some(name)),
@@ -151,6 +159,9 @@ pub fn world_clip(
             None => from + crate::options::DEFAULT_TICKS,
         },
     };
+    if to < from {
+        return Err(format!("the clip starts at tick {from}, after --to {to}"));
+    }
     let world = session.world();
     // The whole screen, or the map view alone.
     let (areas, render): (_, fn(&mut Drawing, &App, &World)) = if framing.map_view_alone {
@@ -197,16 +208,20 @@ pub fn world_clip(
         };
         let mut ticks = Ticks::default();
         let (tick, ran) = (Cell::new(world.tick()), Cell::new(0));
-        app.clock.advance(
-            framing.frame,
-            || {
-                let events = session.step();
-                ticks.note(events, session.world());
-                tick.set(session.world().tick());
-                ran.set(ran.get() + 1);
-            },
-            || tick.get() >= to || ran.get() >= most_ticks,
-        );
+        // The clock runs a tick before it asks whether to stop, so a frame
+        // owed no whole tick doesn't ask it.
+        if most_ticks > 0 {
+            app.clock.advance(
+                framing.frame,
+                || {
+                    let events = session.step();
+                    ticks.note(events, session.world());
+                    tick.set(session.world().tick());
+                    ran.set(ran.get() + 1);
+                },
+                || tick.get() >= to || ran.get() >= most_ticks,
+            );
+        }
         app.take_in(ticks, session.world());
         if let Some(playback) = session.playback() {
             app.take_in_replay(playback);
@@ -486,6 +501,70 @@ mod tests {
         assert_eq!(last[(10, 5)].symbol(), "☻");
         assert_ne!(row(first, 2), row(last, 2), "the rocks moved");
         assert!(!row(first, 0).contains("Terra Sprites"), "no top bar");
+    }
+
+    #[test]
+    fn max_at_a_tick_a_second_runs_a_tick_a_second() {
+        // At a tick a second, a frame every tenth of a second is owed no
+        // whole tick nine times in ten, and runs none: ticks 0 to 2 take
+        // two seconds, and the clip ends on the frame of tick 2 (#241).
+        // Max is for a Lab world.
+        let scene = scene(0, 2, Pace::Max(1), Track::First);
+        let lab = World::new_in(
+            terra_sim::WorldConfig::builtin(&pack()),
+            pack(),
+            7,
+            terra_sim::Mode::Lab,
+        );
+        let clip = world_clip(
+            live(lab),
+            Theme::cp437(),
+            &scene,
+            &framing(Size::new(20, 10), true),
+        )
+        .unwrap();
+        assert_eq!(clip.length(), Duration::from_millis(2100));
+    }
+
+    #[test]
+    fn a_replay_s_clip_must_fall_within_its_ticks() {
+        // A recording from tick 5 to tick 15 (#241).
+        let replay = || {
+            let mut world = field(&[], &[]);
+            for _ in 0..5 {
+                world.step();
+            }
+            world.start_recording();
+            for _ in 0..10 {
+                world.step();
+            }
+            let playback = Playback::new(&world.replay().expect("recording")).expect("it plays");
+            Source::Replay {
+                name: "last_session.replay".into(),
+                playback,
+            }
+        };
+        let refused = |from, end, why: &str| {
+            let scene = WorldScene {
+                from,
+                end,
+                pace: Pace::Game(Speed::X4),
+                track: Track::First,
+                cursor: false,
+                tab: None,
+            };
+            let err = world_clip(
+                replay(),
+                Theme::cp437(),
+                &scene,
+                &framing(Size::new(20, 10), true),
+            )
+            .err()
+            .unwrap();
+            assert!(err.contains(why), "{err}");
+        };
+        refused(None, End::At(3), "after --to 3");
+        refused(Some(20), End::Usual, "ends at tick 15");
     }
 
     #[test]

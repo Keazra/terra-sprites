@@ -238,8 +238,19 @@ impl Options {
                 _ => return Err(format!("`{flag}` isn't a flag the renderer knows")),
             }
         }
-        if world.seed.is_some() && world.replay.is_some() {
-            return Err("a world comes from --seed or --replay, not both".into());
+        // A replay brings its own world, as in the game (design §2.7).
+        let makes_one = [
+            ("--seed", world.seed.is_some()),
+            ("--preset", world.preset.is_some()),
+            ("--lab", world.mode == Mode::Lab),
+        ];
+        if world.replay.is_some()
+            && let Some((flag, _)) = makes_one.iter().find(|(_, given)| *given)
+        {
+            return Err(format!(
+                "{flag} makes a new world, and --replay plays a recorded one: use one or \
+                 the other"
+            ));
         }
         if world.replay.is_none() {
             world.seed = world.seed.or(Some(DEFAULT_SEED));
@@ -346,8 +357,8 @@ fn duration(value: &str) -> Result<Duration, String> {
     value
         .parse::<f64>()
         .ok()
-        .filter(|seconds| seconds.is_finite() && *seconds > 0.0)
-        .map(Duration::from_secs_f64)
+        .and_then(|seconds| Duration::try_from_secs_f64(seconds).ok())
+        .filter(|seconds| !seconds.is_zero())
         .ok_or_else(|| format!("--seconds takes a number of seconds, not `{value}`"))
 }
 
@@ -552,10 +563,14 @@ mod tests {
         refused("world --from 300 --to 200 -o a.gif", "after --from");
         refused("world --speed 3x -o a.gif", "3x");
         refused("world --track bob -o a.gif", "bob");
-        refused(
-            "world --seed 7 --replay a.replay -o a.gif",
-            "--seed or --replay",
-        );
+        for flag in ["--seed 7", "--preset a.ron", "--lab"] {
+            refused(
+                &format!("world {flag} --replay a.replay -o a.gif"),
+                "--replay plays a recorded one",
+            );
+        }
+        refused("title --seconds 1e300 -o a.gif", "1e300");
+        refused("title --seconds 1e-12 -o a.gif", "1e-12");
         refused("sing -o a.gif", "sing");
     }
 }
