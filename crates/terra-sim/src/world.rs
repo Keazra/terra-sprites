@@ -2947,6 +2947,85 @@ mod tests {
     }
 
     #[test]
+    fn a_parent_heard_calling_out_of_sight_shows_its_young_nothing() {
+        // M2 design §18.1: a young sprite *sees* its parent showing it
+        // something. Its mother drinks, knowing water is good for thirst,
+        // out of its sight, and it heard her call: she draws its eye as a
+        // call does, but not as showing it something, so the ball it sees
+        // draws it more.
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let rows = [format!("~{}", ".".repeat(29)), ".".repeat(30)];
+        let rows = rows.each_ref().map(String::as_str);
+        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
+        let genes = |genes: &str| {
+            let genes = format!(
+                r#"(format: 2, genes: [
+                    Trait(trait: "sense_radius", value: 6.0),
+                    {genes}
+                ])"#
+            );
+            Genome::from_ron(&genes, &data).expect("a valid genome")
+        };
+        let rests = r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0)"#;
+        let looks = format!(
+            r#"{rests},
+            AttentionInstinct(input: "always", category: "sprite", whom: Showing, weight: 1.0),
+            AttentionInstinct(input: "always", category: "toy", weight: 0.5),
+            BrainParam(param: "curiosity", value: 0.0),
+            BrainParam(param: "salience_gain", value: 0.0),
+            BrainParam(param: "tau_att_base", value: 0.05)"#
+        );
+        let drinks = r#"InitialConcentration(chem: "thirst", value: 1.0),
+            Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0)"#;
+        let (mother, young, ball) = (Pos { x: 5, y: 0 }, Pos { x: 20, y: 1 }, Pos { x: 22, y: 1 });
+        let scenario = Scenario {
+            map,
+            objects: &[(ball, "ball")],
+            sprites: &[(mother, Some(genes(drinks))), (young, Some(genes(&looks)))],
+            scripted: &[],
+            newborns: &[young],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let id = |world: &World, pos: Pos| world.sprite_at(pos).expect("a sprite").id();
+        let (mother_id, young_id) = (id(&world, mother), id(&world, young));
+        let needs = world.data.need_places().len();
+        let brain = &mut world
+            .state
+            .sprites
+            .get_mut(mother_id)
+            .expect("mother")
+            .brain;
+        let known = brain
+            .experience
+            .learn_about(Subject::ObjectType(100), needs);
+        known.worth[1] = 0.6;
+        known.touched = true;
+        let tick = world.state.tick;
+        let kit = world.state.sprites.get_mut(young_id).expect("young");
+        kit.parents = vec![mother_id];
+        kit.heard.push(crate::courtship::Heard {
+            caller: mother_id,
+            from: mother,
+            tick,
+        });
+        world.step();
+        let action = world.sprite(mother_id).expect("mother").action();
+        let action = action.expect("her action");
+        assert_eq!(action.verb, Verb::Drink, "she goes to drink");
+        let walking = matches!(action.progress, crate::action::Progress::Walking { .. });
+        assert!(walking, "{:?}", action.progress);
+        let showing = crate::family::relation(
+            &world.state,
+            &world.data,
+            young_id,
+            Target::Sprite(mother_id),
+        );
+        assert!(!showing.showing, "she's out of its sight");
+        let looks_at = world.sprite(young_id).expect("young").attending_to();
+        assert_eq!(looks_at, Some(ball));
+    }
+
+    #[test]
     fn a_world_nobody_trains_that_doesn_t_watch_is_taught_nothing() {
         // Design §5.6, #187: only the Cursor's Reward and Correct teach a
         // taught habit, and watching passes one on (M2 design §18.2), so

@@ -59,8 +59,8 @@ pub(crate) struct Relation {
     pub(crate) kin: bool,
     /// A sprite grown up, adult or old (§18.1).
     pub(crate) grown: bool,
-    /// Its parent, while it's young, doing something that would show it a
-    /// lesson it hasn't learned (§18.1).
+    /// Its parent, while it's young, in its sight, doing something that
+    /// would show it a lesson it hasn't learned (§18.1).
     pub(crate) showing: bool,
 }
 
@@ -106,7 +106,9 @@ pub(crate) fn relation(
                 young: child,
                 kin: courtship::kin(state, me, other),
                 grown: !young(them),
-                showing: parent && shows(state, data, them, sprite, me),
+                // A parent heard calling out of sight shows it nothing: it
+                // has to see it (§18.1).
+                showing: parent && sprite.sees(them.pos) && shows(state, data, them, sprite, me),
             }
         }
         Target::Object(id) => {
