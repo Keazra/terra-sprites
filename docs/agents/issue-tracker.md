@@ -35,6 +35,16 @@ Create a GitHub issue.
 
 Run `gh issue view <number> --comments`.
 
+## Playtest rank
+
+A slice issue says how much the owner playtests it (`docs/agents/how-we-work.md`), in a section of its own, above `## Blocked by`:
+
+```markdown
+## Playtest
+
+Critical: <why, in a line>
+```
+
 ## Blocking
 
 A slice issue lists the issues it waits on in a section at the end of its body:
