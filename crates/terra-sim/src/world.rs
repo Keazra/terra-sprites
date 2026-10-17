@@ -3378,11 +3378,14 @@ mod tests {
         world
     }
 
-    #[test]
-    fn a_remembered_place_with_no_way_there_leaves_what_the_sprite_is_doing_be() {
-        // M2 design §7.4: going to a ball, very thirsty, its eye turns to
-        // water it remembers beyond a wall. With no way there, it forgets
-        // the water and goes on to the ball, and decides nothing new.
+    /// A sprite going to a ball at (36, 2), its eye on it, very thirsty,
+    /// that remembers water at (0, 2) beyond a wall whose one gap a bush
+    /// stands in, with `genes` and `objects` as well; and the ball. Its next
+    /// step 5 turns its eye to the water (M2 design §7.4).
+    fn going_to_a_ball_with_water_beyond_a_wall(
+        genes: &str,
+        objects: &[(Pos, &str)],
+    ) -> (World, EntityId, EntityId) {
         let data = DataPack::builtin().expect("built-in data pack is valid");
         // A wall with a gap that a bush stands in.
         let (wall, gap) = (
@@ -3392,24 +3395,29 @@ mod tests {
         let rows = [&wall, &wall, &gap, &wall, &wall].map(String::as_str);
         let map = Map::from_ascii(&rows, &data).expect("valid drawing");
         let genome = Genome::from_ron(
-            r#"(format: 1, genes: [
-                Trait(trait: "speed", value: 10.0),
-                Trait(trait: "sense_radius", value: 6.0),
-                Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
-                Instinct(inputs: [("always", false)], verb: Approach, weight: 0.3),
-                BrainParam(param: "tau_base", value: 0.05),
-                BrainParam(param: "salience_gain", value: 0.0),
-                BrainParam(param: "curiosity", value: 0.0),
-            ])"#,
+            &format!(
+                r#"(format: 1, genes: [
+                    Trait(trait: "speed", value: 10.0),
+                    Trait(trait: "sense_radius", value: 6.0),
+                    Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
+                    Instinct(inputs: [("always", false)], verb: Approach, weight: 0.3),
+                    BrainParam(param: "tau_base", value: 0.05),
+                    BrainParam(param: "salience_gain", value: 0.0),
+                    BrainParam(param: "curiosity", value: 0.0),
+                    {genes}
+                ])"#
+            ),
             &data,
         )
         .expect("a valid genome");
+        let mut objects = objects.to_vec();
+        objects.extend([
+            (Pos { x: 20, y: 2 }, "berry_bush"),
+            (Pos { x: 36, y: 2 }, "ball"),
+        ]);
         let scenario = Scenario {
             map,
-            objects: &[
-                (Pos { x: 20, y: 2 }, "berry_bush"),
-                (Pos { x: 36, y: 2 }, "ball"),
-            ],
+            objects: &objects,
             sprites: &[(Pos { x: 30, y: 2 }, Some(genome))],
             scripted: &[],
             newborns: &[],
@@ -3418,16 +3426,12 @@ mod tests {
         let id = world.sprites().next().expect("the sprite").id();
         let ball = world.object_at(Pos { x: 36, y: 2 }).expect("the ball").id();
         let ball_type = world.data.object_type_id("ball");
+        let toy = world.state.category_of(&world.data, Target::Object(ball));
         let at = Pos { x: 0, y: 2 };
         let water = world.state.subject_of(&world.data, Target::Water(at));
         let needs = world.data.needs().count();
         let quench = world.data.needs().position(|n| n == "thirst");
-        let thirst = world
-            .data
-            .chemicals()
-            .iter()
-            .position(|c| c.name == "thirst");
-        let (quench, thirst) = (quench.expect("thirst"), thirst.expect("thirst"));
+        let (quench, thirst) = (quench.expect("thirst"), thirst_chem(&world));
         // A step first, for its flood.
         world.step();
         let tick = world.state.tick;
@@ -3454,6 +3458,24 @@ mod tests {
             tick,
             &mut events,
         );
+        sprite.brain.attended = Some(toy);
+        (world, id, ball)
+    }
+
+    /// Where the built-in pack's thirst is among its chemicals.
+    fn thirst_chem(world: &World) -> usize {
+        let chemicals = world.data.chemicals();
+        let thirst = chemicals.iter().position(|c| c.name == "thirst");
+        thirst.expect("thirst")
+    }
+
+    #[test]
+    fn a_remembered_place_with_no_way_there_leaves_what_the_sprite_is_doing_be() {
+        // M2 design §7.4: going to a ball, very thirsty, its eye turns to
+        // water it remembers beyond a wall. With no way there, it forgets
+        // the water and goes on to the ball, and decides nothing new.
+        let (mut world, id, ball) = going_to_a_ball_with_water_beyond_a_wall("", &[]);
+        let at = Pos { x: 0, y: 2 };
         let events = world.step();
         let sprite = world.sprites().next().expect("the sprite");
         assert_eq!(sprite.remembered_places(), [], "it forgot the water");
@@ -3465,6 +3487,51 @@ mod tests {
         assert_eq!(action.verb, Verb::Approach);
         assert_eq!(action.target, Some(Target::Object(ball)));
         assert_ne!(sprite.attending_to(), Some(at), "no decision about it");
+    }
+
+    #[test]
+    fn a_remembered_place_with_no_way_there_leaves_the_sprite_s_eye_where_it_was() {
+        // M2 design §7.4: a place it can't get to never interrupts anything.
+        // A bush in sight draws its eye a little more than the ball, but by
+        // less than `attention_margin` (.2), so its eye stays on the ball,
+        // the tick after the water took it too.
+        let (mut world, id, ball) = going_to_a_ball_with_water_beyond_a_wall(
+            r#"AttentionInstinct(input: "always", category: "bush", weight: 0.1),"#,
+            &[(Pos { x: 33, y: 1 }, "berry_bush")],
+        );
+        world.step();
+        assert_eq!(world.sprites().next().expect("it").remembered_places(), []);
+        // No longer thirsty, it has no reason to change what it's doing.
+        let thirst = thirst_chem(&world);
+        world.state.sprites.get_mut(id).expect("it").body.chems[thirst] = 0.0;
+        let events = world.step();
+        let ended = events
+            .iter()
+            .any(|e| matches!(e.kind, EventKind::ActionEnded { id: ended, .. } if ended == id));
+        assert!(!ended, "{events:?}");
+        let sprite = world.sprites().next().expect("the sprite");
+        let action = sprite.action().expect("its action");
+        assert_eq!(action.verb, Verb::Approach);
+        assert_eq!(action.target, Some(Target::Object(ball)));
+    }
+
+    #[test]
+    fn a_remembered_place_with_no_way_there_leaves_its_eye_on_what_it_is_doing_that_tick() {
+        // M2 design §7.4, §18.1: carrying on, its latest step 5 is that
+        // tick's, with its eye on the ball, so it watches as it would have.
+        let (mut world, id, ball) = going_to_a_ball_with_water_beyond_a_wall("", &[]);
+        let tick = world.state.tick;
+        world.step();
+        let toy = world.state.category_of(&world.data, Target::Object(ball));
+        let brain = &world.state.sprites.get(id).expect("the sprite").brain;
+        assert_eq!(brain.attended, Some(toy));
+        let eye = brain.snapshot.as_ref().expect("a step 5");
+        assert_eq!(eye.tick, tick, "its latest step 5 is this tick's");
+        assert_eq!(eye.attended, Some(toy));
+        assert_eq!(eye.target, Some(Target::Object(ball)));
+        assert_eq!(eye.verb, Some(Verb::Approach));
+        let entry = brain.trace.back().expect("a trace entry");
+        assert_eq!((entry.tick, entry.verb), (tick, Some(Verb::Approach)));
     }
 
     #[test]
