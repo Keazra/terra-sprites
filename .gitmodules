@@ -1,0 +1,10 @@
+# The owner's private working documents: Keazra/terra-sprites-docs (AGENTS.md,
+# "Public and private documents"). Nobody else can fetch it, so nothing in this repo may
+# need it. "update = none" makes `git clone --recurse-submodules` and the
+# README's `cargo install --git` skip it rather than fail, and "ignore = all"
+# keeps `git status` quiet as it moves on past the commit pinned here.
+[submodule "docs/private-docs"]
+	path = docs/private-docs
+	url = ../terra-sprites-docs.git
+	update = none
+	ignore = all

@@ -50,6 +50,21 @@ The game's content is data in `data/*.ron` (terrain, chemicals, loci, brain inpu
 - Golden files (`crates/terra-sim/tests/golden/`) must round-trip byte for byte. `.gitattributes` forces LF everywhere, which they rely on.
 - `proptest-regressions/` files are committed; keep them.
 
+## Public and private documents
+
+This repo is public. The owner's working documents are in a private one, [Keazra/terra-sprites-docs](https://github.com/Keazra/terra-sprites-docs), which their PC has at `docs/private-docs/`. Before writing a document, decide which it belongs in:
+
+- **Public, here:** what anyone with a copy of the game needs to play, change or build on it. That's the designs with their change files and outside reviews (`docs/design/`), the data-format reference (`docs/reference/`, which the tests read), the acceptance records, ADRs (`docs/adr/`), how agents work here (`docs/agents/`), and `AGENTS.md`, `CONTEXT.md` and the README.
+- **Private, in `docs/private-docs/`:** the work behind those. That's each topic's question rounds, research, mockups, run logs and patches, the baseline reports and briefings (design §7.6), play-test notes and the advertising material. The private repo's own `AGENTS.md` says where in it things go.
+- **When unsure, it's private.** A private document can be published later, but one pushed here stays public in git's history. The owner's real name and their PC's paths never go here.
+
+How it fits together:
+
+- **Where it is.** On the owner's PC, `docs/private-docs/` is a submodule. A cloud session given the private repo has it cloned beside this one, as `../terra-sprites-docs`. Work in that clone, and leave this repo's `docs/private-docs/` empty, as it is in every public copy.
+- **Nothing public may need it,** since nobody else can fetch it. The build, the tests, CI and the README's links work without it, and a public document doesn't link into it. Only the owner's own scripts use it: `scripts/baseline.ps1` keeps its reports there. Its entry in `.gitmodules` makes clones and the README's `cargo install --git` skip it rather than fail, and keeps `git status` quiet as the private repo moves on; the comment there says how.
+- **Leave its pointer alone.** This repo pins it at one commit only to say where it goes, so never commit a change to `docs/private-docs`. `git commit -a` does that silently, since `ignore = all` hides it from the diff too.
+- **Never initialise it** (`git submodule init`, or `update --init`). Left uninitialised, git's recursive commands pass it by. Once it's initialised, a recursive switch to a branch from before the submodule removes the folder, and switching back leaves it on the pinned commit instead of its `main`.
+
 ## Workflow
 
 How the owner likes to work, the project's conventions and the slice loop are in `docs/agents/how-we-work.md`. Read it before starting.
@@ -58,7 +73,7 @@ How the owner likes to work, the project's conventions and the slice loop are in
 
 1. Start from an up-to-date `main` (`git pull --ff-only`) and a clean tree, and check the open PRs: one may already touch what you're about to change.
 2. For the next slice, take the earliest open "Slice N" issue in the current milestone whose `## Blocked by` issues are closed, and read its comments for items deferred from earlier slices.
-3. In a local session, read the newest briefing in `docs/reports/` (design §7.6), if there is one.
+3. Read the newest briefing in the private repo's `reports/` (design §7.6), if the session has the private repo and there is one.
 4. Open issues with no triage label (`docs/agents/triage-labels.md`) go through `/triage`: mention them to the owner.
 
 **Before you finish:**

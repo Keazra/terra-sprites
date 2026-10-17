@@ -3,7 +3,9 @@
 # Measures GitHub's `main` in a clean worktree of its own, if it has moved
 # since the last baseline report, and has the observer write a briefing.
 # Task Scheduler runs it daily (scripts/schedule-baseline.ps1); it can also be
-# run by hand. Reports, briefings and the log go in docs/reports/.
+# run by hand. Reports, briefings and the log go in the private repo's
+# reports/ folder, which the owner's PC has at docs/private-docs/ (AGENTS.md,
+# "Public and private documents"), and are committed and pushed there.
 #
 # Everything with an effect is done here. The observer (Gemini, through the
 # Antigravity CLI) runs without --dangerously-skip-permissions: it reads, and
@@ -12,12 +14,14 @@
 #
 #   -Force     measure even if main hasn't moved
 #   -Seeds N   fewer seeds, for trying it out (the report says how many)
-#   -DryRun    print the issue it would file or comment, instead of posting it
+#   -DryRun    print the issue it would file or comment, instead of posting it,
+#              and leave the reports uncommitted
 #   -Ref R     measure R instead of GitHub's main, for trying out a branch
 #
 # A trial (-Ref, or fewer seeds than 10) is compared with main's last report
-# but saved in docs/reports/trials/, never becomes main's baseline, and never
-# posts: its issues are only printed.
+# but saved in reports/trials/, never becomes main's baseline, and never
+# posts: its issues are only printed. Its reports are committed and pushed,
+# as a run of main's are.
 
 param(
     [string]$Model = "gemini-3.8-flash-high",
@@ -29,7 +33,8 @@ param(
 
 $ErrorActionPreference = "Continue"
 $Repo = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$Reports = Join-Path $Repo "docs\reports"
+$PrivateDocs = Join-Path $Repo "docs\private-docs"
+$Reports = Join-Path $PrivateDocs "reports"
 $Worktree = Join-Path (Split-Path -Parent $Repo) "terra-sprites-baseline"
 $ObserverDir = Join-Path $Worktree ".baseline"
 $LogFile = Join-Path $Reports "baseline.log"
@@ -128,7 +133,41 @@ Found by the baseline run on ``main`` at $Commit, $Measured (design section 7.6)
     Write-Log "Filed $url"
 }
 
+# Commits what a run wrote to the private repo's reports/ and pushes it, so a
+# session in the cloud can read the briefing too. Only reports/ is committed,
+# which leaves the owner's other changes there alone, and only on its main.
+# A failure is logged, and the next run's commit takes this run's files too.
+function Save-Reports([string]$Message) {
+    $branch = & git -C $PrivateDocs symbolic-ref --quiet --short HEAD
+    if ($branch -ne "main") {
+        Write-Log "ERROR: docs\private-docs isn't on its main branch, so the reports weren't committed"
+        return
+    }
+    if (-not (& git -C $PrivateDocs status --porcelain -- reports)) { return }
+    # Sessions and the owner push to the private repo too. Catching up before
+    # committing keeps its history a straight line, unless an earlier run's
+    # commit is still waiting to go up.
+    & git -C $PrivateDocs pull --quiet --no-rebase --no-edit | Out-Null
+    $caughtUp = $LASTEXITCODE -eq 0
+    if (-not $caughtUp) { & git -C $PrivateDocs merge --abort 2>$null | Out-Null }
+    & git -C $PrivateDocs add -- reports | Out-Null
+    & git -C $PrivateDocs commit --quiet -m $Message -- reports | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Log "ERROR: couldn't commit the reports in docs\private-docs"; return }
+    if (-not $caughtUp) {
+        Write-Log "ERROR: couldn't bring docs\private-docs up to date, so its reports are committed but not pushed"
+        return
+    }
+    & git -C $PrivateDocs push --quiet | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Log "ERROR: couldn't push docs\private-docs, so its reports are committed but not pushed" }
+}
+
 function Invoke-Baseline {
+    # The reports, and the log, live in the private repo.
+    if (-not (Test-Path (Join-Path $PrivateDocs ".git"))) {
+        Write-Host ("ERROR: the private repo isn't checked out at docs\private-docs, where the reports go " +
+            "(AGENTS.md, `"Public and private documents`")")
+        return 1
+    }
     New-Item -ItemType Directory -Force -Path $Reports | Out-Null
     $trial = ($Ref -ne "origin/main") -or ($Seeds -ne 10)
     $out = $Reports
@@ -150,6 +189,11 @@ function Invoke-Baseline {
         Write-Log "main is still at ${commit}: nothing to measure"
         return 0
     }
+    $what = "main"
+    if ($trial) { $what = "a trial of $Ref" }
+    # From here on, what the run writes goes up to the private repo once it
+    # stops, a failed run's log too.
+    $script:SaveAs = "Baseline: $what at $commit"
 
     # 2. A clean worktree of it, outside the project folder. Its target/
     # folder is ignored, so builds after the first are quick.
@@ -172,8 +216,6 @@ function Invoke-Baseline {
             Sort-Object LastWriteTime -Descending | Select-Object -First 1
     }
     if ($previousReport) { $arguments += " --previous `"$($previousReport.FullName)`"" }
-    $what = "main"
-    if ($trial) { $what = "a trial of $Ref" }
     Write-Log "Measuring $what at $commit$(if ($previousReport) { ", against $previous" })..."
     $code = Invoke-Logged "cargo" $arguments $Worktree (Join-Path $out "$stem-run.log") `
         (Join-Path $out "$stem-run-errors.log") 180
@@ -253,6 +295,12 @@ If the report has a Broken section, put your best guess at its cause in suspecte
 
 # Dot-sourcing the script loads its functions without running it.
 if ($MyInvocation.InvocationName -ne ".") {
+    $script:SaveAs = $null
     $result = Invoke-Baseline
+    if ($script:SaveAs -and $DryRun) {
+        Write-Log "A dry run: the reports are left uncommitted"
+    } elseif ($script:SaveAs) {
+        Save-Reports $script:SaveAs
+    }
     exit ($result | Select-Object -Last 1)
 }
