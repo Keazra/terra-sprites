@@ -380,7 +380,7 @@ mod tests {
                 .position(|gene| matches!(gene, Gene::AttentionInstinct { .. }))
             {
                 his_extra += 1;
-                assert_eq!(at, 3, "after the instinct to hit, as in his");
+                assert_eq!(at, 3, "after the instinct to play, as in his");
             }
             her_extra += usize::from(child.genes.iter().any(|gene| {
                 matches!(gene, Gene::Instinct { verb, .. } if *verb == crate::registry::Verb::Approach)

@@ -681,7 +681,7 @@ mod tests {
     #[test]
     fn about_one_egg_in_two_gets_a_new_flaw_only_in_genes_that_can_weaken() {
         // M2 design §12: each sound copy of a gene that can weaken gets a
-        // flaw with the chance `flaws.arise` (0.005), so about one egg of
+        // flaw with the chance `flaws.arise` (0.004), so about one egg of
         // the starter's in two has a new one.
         let data = values_only();
         let starter = data.starter();
@@ -1016,7 +1016,8 @@ mod tests {
 
     #[test]
     fn a_genome_never_grows_past_twice_the_starter_s_length() {
-        // M2 design §13: `longest` (2) times the starter's 67 genes.
+        // M2 design §13: `longest` (2) times as many genes as the starter
+        // has.
         let data = whole_genes_only(1.0, 0.0, 0.0, 0.0);
         let longest = 2 * data.starter().genes.len();
         assert_eq!(super::longest(&data), longest);
