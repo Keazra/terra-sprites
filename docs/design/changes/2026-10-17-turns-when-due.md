@@ -1,6 +1,6 @@
 # Turns when due, built early
 
-M4's first slice, Turns when due (M4 design §10), built in M2 from the owner's patch of 2026-10-17, as the slice table allowed. It changes no world, where §10 expected the golden files to be made again. No issue: M4's slices get theirs when M3's are planned (M4 design §1.1).
+M4's first slice, Turns when due (M4 design §10), built in M2 from the owner's patch of 2026-10-17 ([PR #253](https://github.com/Keazra/terra-sprites/pull/253)), as the slice table allowed. It changes no world, where §10 expected the golden files to be made again. No issue: M4's slices get theirs when M3's are planned (M4 design §1.1).
 
 ## M4 "Terra"
 
