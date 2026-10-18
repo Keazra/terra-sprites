@@ -34,7 +34,7 @@ fn field() -> World {
 fn app_for(world: &World, theme: Theme) -> App {
     let areas = ui::areas(Size::new(100, 30));
     let mut app = App::new(world.map(), theme, 7, areas);
-    app.set_data_folder(PathBuf::from("/home/kel/.local/share/terra-sprites"));
+    app.set_data_folder(PathBuf::from("/home/player/.local/share/terra-sprites"));
     app
 }
 
@@ -84,7 +84,7 @@ fn question_mark_opens_help_over_the_panels_and_esc_or_question_mark_closes_it()
         assert!(all.contains(key), "{key}");
     }
     assert!(!all.contains("Events"), "the event log is covered");
-    assert!(all.contains("FILES    /home/kel/.local/share/terra-sprites"));
+    assert!(all.contains("FILES    /home/player/.local/share/terra-sprites"));
 
     assert_eq!(app.apply(Action::Back, &world), Flow::Continue);
     assert_eq!(

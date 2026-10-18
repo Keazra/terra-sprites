@@ -40,7 +40,7 @@ fn played(ticks: u32, theme: Theme) -> (World, App) {
     let mut world = World::new(WorldConfig::builtin(&pack), pack, 7);
     let areas = ui::areas(Size::new(100, 30));
     let mut app = App::new(world.map(), theme, 7, areas);
-    app.set_data_folder("/home/kel/.local/share/terra-sprites".into());
+    app.set_data_folder("/home/player/.local/share/terra-sprites".into());
     for _ in 0..ticks {
         let mut tick = Ticks::default();
         tick.step(&mut world);
