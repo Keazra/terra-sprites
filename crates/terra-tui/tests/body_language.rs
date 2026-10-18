@@ -2,7 +2,7 @@
 //! the map how a sprite is.
 
 mod common;
-use common::{WorldBuilder, app_in, app_on, at, pack, render};
+use common::{WorldBuilder, app_in, app_on, at, pack, pointer_on, render};
 
 use std::time::Duration;
 
@@ -48,13 +48,8 @@ fn field_with_newborns(sprites: &[(Pos, Genome)], newborns: &[Pos]) -> World {
 
 fn app_for(world: &World, theme: Theme) -> App {
     let mut app = app_in(world, theme);
-    // The Cursor out of the way, on (9, 4): the pointer is one down and
-    // right of it (design v27 §6.5).
-    let corner = cell(at(9, 4));
-    app.apply(
-        Action::Point(Position::new(corner.x + 1, corner.y + 1)),
-        world,
-    );
+    // The Cursor out of the way, on (9, 4).
+    app.apply(Action::Point(pointer_on(&app, at(9, 4))), world);
     app
 }
 

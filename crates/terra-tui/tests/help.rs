@@ -2,13 +2,11 @@
 //! game's folder.
 
 mod common;
-use common::{DATA_FOLDER, WorldBuilder, app_in, at, lines, render};
-
-use std::path::PathBuf;
+use common::{DATA_FOLDER, WorldBuilder, app_in, app_on, at, lines, render};
 
 use ratatui::style::Color;
 use terra_sim::World;
-use terra_tui::app::{App, Flow, Screen};
+use terra_tui::app::{Flow, Screen};
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
 
@@ -20,18 +18,10 @@ fn field() -> World {
         .build()
 }
 
-/// An app on `world` in `theme`, on a 100×30 screen, with a fixed folder
-/// for its files.
-fn app_for(world: &World, theme: Theme) -> App {
-    let mut app = app_in(world, theme);
-    app.set_data_folder(PathBuf::from(DATA_FOLDER));
-    app
-}
-
 #[test]
 fn question_mark_opens_help_over_the_panels_and_esc_or_question_mark_closes_it() {
     let world = field();
-    let mut app = app_for(&world, Theme::cp437());
+    let mut app = app_on(&world);
     app.apply(Action::Help, &world);
     assert_eq!(app.screen(), Screen::Help);
     let screen = lines(&render(&app, &world));
@@ -71,7 +61,7 @@ fn question_mark_opens_help_over_the_panels_and_esc_or_question_mark_closes_it()
 #[test]
 fn while_help_is_open_other_keys_do_nothing() {
     let world = field();
-    let mut app = app_for(&world, Theme::cp437());
+    let mut app = app_on(&world);
     app.apply(Action::Help, &world);
     app.apply(Action::SelectNext, &world);
     app.apply(Action::Scroll { dx: 1, dy: 0 }, &world);
@@ -91,7 +81,7 @@ fn the_legend_shows_each_drive_s_colour_and_each_emote() {
         (Theme::ascii(), "@", ["!", "/", "?", "z", "+", "^", "\""]),
     ] {
         let world = field();
-        let mut app = app_for(&world, theme);
+        let mut app = app_in(&world, theme);
         app.apply(Action::Help, &world);
         let screen = render(&app, &world);
         let rows = lines(&screen);
@@ -153,7 +143,7 @@ fn the_lineage_line_draws_each_sprite_in_its_colour() {
     // sisters  ☺ young, theirs  ☺ the rest`, each `☺` in its colour.
     for (theme, sprite) in [(Theme::cp437(), "☺"), (Theme::ascii(), "@")] {
         let world = field();
-        let mut app = app_for(&world, theme);
+        let mut app = app_in(&world, theme);
         app.apply(Action::Help, &world);
         let screen = render(&app, &world);
         let y = lines(&screen)

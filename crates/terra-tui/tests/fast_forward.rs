@@ -3,28 +3,27 @@
 //! went a tenth of the way at a time: the life stages, the deepest
 //! generation and the deaths by cause.
 
+mod common;
+use common::{app_on, pack, scratch_folder};
+
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::Duration;
 
-use ratatui::layout::Size;
 use terra_sim::{
-    DataPack, DeathCause, EntityId, EventKind, Genome, Map, Mode, Pos, Scenario, World,
-    WorldConfig, gene_values, middle_values,
+    DeathCause, EntityId, EventKind, Genome, Map, Mode, Pos, Scenario, World, WorldConfig,
+    gene_values, middle_values,
 };
-use terra_tui::app::App;
 use terra_tui::clock::Speed;
 use terra_tui::fast_forward::{
     self, FastForward, HEADER, HOUR, Moved, Row, Tally, hours, save_name, spoken,
 };
 use terra_tui::input::Action;
 use terra_tui::saves;
-use terra_tui::theme::Theme;
-use terra_tui::ui;
 
 /// A small generated Lab world.
 fn lab_world(seed: u64) -> World {
-    let data = DataPack::builtin().expect("valid pack");
+    let data = pack();
     let config = WorldConfig::builtin(&data).sized(40, 32);
     World::new_in(config, data, seed, Mode::Lab)
 }
@@ -57,8 +56,7 @@ fn a_fast_forwarded_world_opens_from_continue_in_lab_mode_with_its_whole_graph()
     let mut run = FastForward::new(lab_world(7), 1);
     run_through(&mut run);
     let world = run.into_world();
-    let folder = std::env::temp_dir().join(format!("terra-ff-opens-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&folder);
+    let folder = scratch_folder("opens");
     saves::write(&folder, "seed-7-1h", &world.save()).expect("saved");
     // Continue loads the newest save (M2 design §8.2).
     let newest = saves::list(&folder).into_iter().next().expect("listed");
@@ -68,12 +66,7 @@ fn a_fast_forwarded_world_opens_from_continue_in_lab_mode_with_its_whole_graph()
     assert_eq!(loaded.state_hash(), world.state_hash());
     assert_eq!(loaded.population(), world.population());
     // The game opens it as Load does, and its clock goes past 4×.
-    let mut app = App::new(
-        loaded.map(),
-        Theme::cp437(),
-        loaded.seed(),
-        ui::areas(Size::new(100, 30)),
-    );
+    let mut app = app_on(&loaded);
     app.load_from_title(loaded, newest.name);
     let opened = app.take_loaded().expect("opened");
     for _ in 0..6 {
@@ -179,7 +172,7 @@ fn the_progress_line_says_how_far_it_has_got() {
 /// another, and the other two die of thirst, each at a different time,
 /// within the hour, as they do with seed 5.
 fn a_deadly_field() -> World {
-    let data = DataPack::builtin().expect("valid pack");
+    let data = pack();
     let map = Map::from_ascii(&[".........."; 6], &data).expect("valid drawing");
     let sprites = [
         (Pos { x: 2, y: 2 }, None),
@@ -585,7 +578,7 @@ fn the_report_says_when_no_value_has_moved_yet() {
 
 #[test]
 fn the_report_says_when_no_sprite_is_left_to_measure() {
-    let data = DataPack::builtin().expect("valid pack");
+    let data = pack();
     let map = Map::from_ascii(&[".........."; 6], &data).expect("valid drawing");
     let scenario = Scenario {
         map,
@@ -640,7 +633,7 @@ fn a_value_that_crosses_0_moved_furthest_of_all() {
 fn the_genes_table_is_blank_where_no_sprite_carries_a_value() {
     // M2 design §16.4: a sprite whose genome is two traits, speed and
     // sense radius, carries none of the starter's other values.
-    let data = DataPack::builtin().expect("valid pack");
+    let data = pack();
     let genome = Genome::from_ron(
         r#"(format: 2, genes: [
             Trait(trait: "speed", value: 12.0),

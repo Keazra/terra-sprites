@@ -6,7 +6,7 @@
 mod common;
 use common::{
     LONE, WorldBuilder, app_on, at, group, inspector_rows, pack, pack_changing, pointer_on, render,
-    render_on, row, run,
+    render_on, row, run, sized_app,
 };
 
 use std::time::Duration;
@@ -19,7 +19,6 @@ use terra_tui::app::{App, CursorMode, Screen};
 use terra_tui::input::{Action, Button};
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
 use terra_tui::theme::Theme;
-use terra_tui::ui;
 
 /// The built-in pack, in which a female may lay alone at once (M2 design
 /// §15.7).
@@ -657,7 +656,7 @@ fn a_column_narrower_than_the_time_between_counts_reads_the_count_it_shows() {
     run(&mut world, 52_000);
     assert_eq!(world.population_every(), 200);
     let size = Size::new(700, 30);
-    let mut app = App::new(world.map(), Theme::cp437(), 7, ui::areas(size));
+    let mut app = sized_app(&world, Theme::cp437(), size);
     app.apply(Action::Population, &world);
     app.apply(Action::Point(Position::new(FIRST_COLUMN + 2, 9)), &world);
     assert_eq!(app.graph_pick(), Some(300));

@@ -3,7 +3,7 @@
 //! world runs up to Max, and the top bar says when a world is a Lab world.
 
 mod common;
-use common::{app_on, pack, render, row};
+use common::{app_on, pack, render, row, scratch_folder};
 
 use terra_sim::{Mode, Playback, World, WorldConfig};
 use terra_tui::app::App;
@@ -73,9 +73,7 @@ fn replayed(world: World, name: &str) -> (Playback, App) {
     for _ in 0..20 {
         session.step();
     }
-    let folder = std::env::temp_dir().join(format!("terra-modes-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&folder);
-    std::fs::create_dir_all(&folder).expect("a scratch folder");
+    let folder = scratch_folder(name);
     let log = folder.join(files::SESSION_LOG);
     session.write_session_log(&log).expect("the log is written");
     let playback = Playback::new(&std::fs::read(&log).expect("the log")).expect("it plays");

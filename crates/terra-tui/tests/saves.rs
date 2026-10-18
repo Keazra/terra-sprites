@@ -3,7 +3,7 @@
 //! that has run, and the autosaves.
 
 mod common;
-use common::{apply, at, ball_world, map_only, pack, render_on, row, run, scratch_folder};
+use common::{apply, at, ball_world, map_app, pack, render_on, row, run, scratch_folder};
 
 use std::path::Path;
 use std::time::Duration;
@@ -14,12 +14,10 @@ use terra_sim::{Command, Map, Scenario, World};
 use terra_tui::app::{AUTOSAVE_EVERY, App, CursorMode, Origin, Screen};
 use terra_tui::input::{Action, Keys};
 use terra_tui::saves::{self, QUICKSAVE};
-use terra_tui::theme::Theme;
 
 /// An app for `world`, saving in `folder`.
 fn app_for(world: &World, folder: &Path) -> App {
-    let areas = map_only(Rect::new(1, 2, 11, 8));
-    let mut app = App::new(world.map(), Theme::cp437(), world.seed(), areas);
+    let mut app = map_app(world, Rect::new(1, 2, 11, 8));
     app.set_save_folder(folder.to_path_buf());
     app
 }
@@ -322,7 +320,7 @@ fn a_loaded_world_keeps_the_cursor_as_it_was() {
     world.submit(Command::ShowCursor { visible: true });
     world.step();
     saves::write(&folder, QUICKSAVE, &world.save()).expect("written");
-    let fresh = self::ball_world();
+    let fresh = ball_world();
     let mut app = app_for(&fresh, &folder);
     apply(&mut app, &fresh, Action::Quickload);
     let loaded = app.take_loaded().expect("loaded");

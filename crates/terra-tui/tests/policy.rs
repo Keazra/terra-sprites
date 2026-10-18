@@ -2,10 +2,10 @@
 //! `InfoPolicy` first.
 
 mod common;
-use common::{WorldBuilder, app_on, at, pack, render};
+use common::{SCREEN, WorldBuilder, app_on, at, pack, pointer_on, render, status_line};
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Position, Size};
+use ratatui::layout::Position;
 use ratatui::style::Color;
 use terra_sim::{
     ActionView, Command, DeathCause, EntityId, Event, EventKind, Grip, Hurt, Map, Outcome, Pos,
@@ -77,15 +77,8 @@ fn event_log_text(buffer: &Buffer) -> String {
 /// design §11.1).
 fn cell(tile: Pos) -> Position {
     let map = Map::from_ascii(&[".........."; 5], &pack()).expect("valid drawing");
-    let app = App::new(&map, Theme::cp437(), 7, ui::areas(Size::new(100, 30)));
+    let app = App::new(&map, Theme::cp437(), 7, ui::areas(SCREEN));
     app.cell_of(tile).expect("in view")
-}
-
-/// The screen cell the pointer is on to point at `tile`: one down and right
-/// of it (design v27 §6.5).
-fn pointer_on(tile: Pos) -> Position {
-    let at = cell(tile);
-    Position::new(at.x + 1, at.y + 1)
 }
 
 /// Row `y` of a 10×5 field's tiles, as drawn.
@@ -102,7 +95,7 @@ const WANDERER: Pos = Pos { x: 2, y: 3 };
 fn busy_app(world: &World) -> App {
     let mut app = app_on(world);
     let wanderer = world.sprite_at(Pos { x: 2, y: 3 }).unwrap().id();
-    app.apply(Action::left_click(pointer_on(WANDERER)), world);
+    app.apply(Action::left_click(pointer_on(&app, WANDERER)), world);
     let hurt = ActionView {
         verb: Verb::Hit,
         destination: None,
@@ -276,7 +269,7 @@ fn a_policy_that_hides_map_colours_draws_sprites_in_their_own_colour() {
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let mut app = app_on(&world);
-    app.apply(Action::Point(pointer_on(Pos { x: 9, y: 4 })), &world);
+    app.apply(Action::Point(pointer_on(&app, Pos { x: 9, y: 4 })), &world);
     assert_eq!(render(&app, &world)[cell(WANDERER)].fg, Color::Yellow);
     app.set_policy(Blind);
     assert_eq!(render(&app, &world)[cell(WANDERER)].fg, Color::White);
@@ -320,9 +313,9 @@ fn the_cursors_own_lines_ask_the_policy_about_the_sprite_they_name() {
     let other = world.sprites().map(|s| s.id()).find(|&id| id != wanderer);
     let other = other.expect("a second sprite");
     let hide = |id| HideCursorLinesAbout(Subject::Sprite(id));
-    let on_wanderer = pointer_on(WANDERER);
-    let status = |app: &App| row(&render(app, &world), 29, 0..100);
+    let status = |app: &App| status_line(app, &world);
     let mut following = app_on(&world);
+    let on_wanderer = pointer_on(&following, WANDERER);
     following.apply(Action::left_click(on_wanderer), &world);
     following.apply(Action::Follow { at: None }, &world);
     assert!(status(&following).contains("│ following Sprite #"));
@@ -352,11 +345,11 @@ fn the_cursors_own_lines_ask_the_policy_about_the_sprite_they_name() {
         newborns: &[],
     };
     let ball_field = World::from_scenario(scenario, pack, 7).expect("valid scenario");
-    let holding_line = |app: &App| row(&render(app, &ball_field), 29, 0..100);
+    let holding_line = |app: &App| status_line(app, &ball_field);
     let mut holding = app_on(&ball_field);
     holding.apply(Action::Mode(CursorMode::Grab), &ball_field);
     holding.apply(
-        Action::left_click(pointer_on(Pos { x: 4, y: 1 })),
+        Action::left_click(pointer_on(&holding, Pos { x: 4, y: 1 })),
         &ball_field,
     );
     let line = holding_line(&holding);

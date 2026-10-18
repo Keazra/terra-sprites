@@ -1,22 +1,16 @@
 //! Track (`T`, design v21 §6.1): the view follows the selected sprite.
 
 mod common;
-use common::{LONE, LONE_MOTHER, QUICK, WorldBuilder, at, grow, map_only, pack, pointer_on};
+use common::{LONE, LONE_MOTHER, QUICK, WorldBuilder, at, grow, map_app, pack, pointer_on};
 
 use ratatui::layout::Rect;
 use terra_sim::{Map, Pos, Scenario, ScriptedAction, World};
 use terra_tui::app::{App, Origin, Selection};
 use terra_tui::input::Action;
-use terra_tui::theme::Theme;
 
 /// An app on `world` showing 20×10 tiles of it, with no panels.
 fn small_view(world: &World) -> App {
-    App::new(
-        world.map(),
-        Theme::cp437(),
-        1,
-        map_only(Rect::new(1, 2, 20, 10)),
-    )
+    map_app(world, Rect::new(1, 2, 20, 10))
 }
 
 /// A 60×40 field with a starter sprite at (50, 30) wandering to (42, 30),

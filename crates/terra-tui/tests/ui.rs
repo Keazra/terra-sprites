@@ -1,7 +1,7 @@
 mod common;
 use common::{
     LETHAL_THORNS, LONE, finished, group, inspector_line, inspector_rows, lines, open, pack,
-    pack_changing, select, status_line,
+    pack_changing, render_on, select, sized_app, status_line,
 };
 
 use std::time::Duration;
@@ -30,12 +30,11 @@ fn drawn_world(rows: &[&str]) -> World {
     World::from_map(map, pack(), 7).expect("one region")
 }
 
-/// A UI for `world` sized for a `width`×`height` screen, showing seed 7.
-/// The game draws nothing smaller than 100×30 (design §6.1), so a smaller
-/// screen is a corner of one that size: see `render`.
+/// A UI for `world` sized for a `width`×`height` screen. The game draws
+/// nothing smaller than 100×30 (design §6.1), so a smaller screen is a
+/// corner of one that size: see `render`.
 fn app_for(world: &World, theme: Theme, width: u16, height: u16) -> App {
-    let areas = ui::areas(at_least_min(width, height));
-    App::new(world.map(), theme, 7, areas)
+    sized_app(world, theme, at_least_min(width, height))
 }
 
 /// A screen of at least the smallest size the game draws on.
@@ -52,11 +51,7 @@ fn at_least_min(width: u16, height: u16) -> Size {
 /// of small maps read as they did before the minimum.
 fn render(app: &App, world: &World, width: u16, height: u16) -> Buffer {
     let full = at_least_min(width, height);
-    let mut terminal = Terminal::new(TestBackend::new(full.width, full.height)).unwrap();
-    terminal
-        .draw(|frame| ui::render(frame, app, world))
-        .unwrap();
-    let drawn = terminal.backend().buffer().clone();
+    let drawn = render_on(app, world, full);
     if Size::new(width, height) == full {
         return drawn;
     }
@@ -897,7 +892,7 @@ fn while_the_terminal_is_too_small_the_game_runs_on_and_esc_still_asks_to_quit()
     // Design v29 §6.1: shrinking the window doesn't pause it.
     let mut world = big_world();
     let small = Size::new(80, 24);
-    let mut app = App::new(world.map(), Theme::cp437(), 7, ui::areas(small));
+    let mut app = sized_app(&world, Theme::cp437(), small);
     let before = world.tick();
     let mut ran = 0;
     for _ in 0..10 {
@@ -909,11 +904,7 @@ fn while_the_terminal_is_too_small_the_game_runs_on_and_esc_still_asks_to_quit()
     app.apply(Action::TogglePause, &world);
     assert!(app.clock.is_paused(), "space still pauses");
     app.apply(Action::Back, &world);
-    let mut terminal = Terminal::new(TestBackend::new(small.width, small.height)).unwrap();
-    terminal
-        .draw(|frame| ui::render(frame, &app, &world))
-        .unwrap();
-    let screen = lines(terminal.backend().buffer());
+    let screen = lines(&render_on(&app, &world, small));
     assert!(
         screen
             .iter()

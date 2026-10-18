@@ -6,9 +6,9 @@
 //! terra-tui --test snapshots`, and the new files reviewed like code.
 
 mod common;
-use common::{DATA_FOLDER, WorldBuilder, app_in, at, lines, pairs, render, tree_of};
+use common::{WorldBuilder, app_in, at, lines, pairs, render, tree_of};
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use ratatui::layout::Position;
 use terra_sim::{EntityId, Pos, ScriptedAction, World};
@@ -51,11 +51,9 @@ fn field() -> World {
     world
 }
 
-/// An app in `theme` on `world` with the wanderer selected, with a fixed
-/// folder for its files.
+/// An app in `theme` on `world` with the wanderer selected.
 fn app_for(world: &World, theme: Theme) -> App {
     let mut app = app_in(world, theme);
-    app.set_data_folder(PathBuf::from(DATA_FOLDER));
     app.apply(Action::SelectNext, world);
     app
 }
@@ -63,8 +61,8 @@ fn app_for(world: &World, theme: Theme) -> App {
 /// The screen's text, a line per row, without the spaces at each line's
 /// end.
 fn screen(app: &App, world: &World) -> String {
-    let lines = lines(&render(app, world));
-    lines.iter().map(|line| format!("{line}\n")).collect()
+    let rows = lines(&render(app, world));
+    rows.iter().map(|line| format!("{line}\n")).collect()
 }
 
 /// Compares `text` with the snapshot `name`, or with `UPDATE_SNAPSHOTS`

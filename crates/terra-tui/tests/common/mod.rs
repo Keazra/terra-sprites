@@ -128,7 +128,7 @@ impl<'a> WorldBuilder<'a> {
 }
 
 /// An all-grass world, 10×6, with `objects`, and starter sprites on
-/// `sprites`: small enough for `app` to show all of it.
+/// `sprites`.
 pub fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> World {
     WorldBuilder::grass(10, 6)
         .objects(objects)
@@ -186,13 +186,12 @@ pub fn map_only(tiles: Rect) -> Areas {
     }
 }
 
-/// The app on `world` in the default theme, showing seed 1, with only the
-/// map view, its tiles drawn from screen cell (0, 0), as many as the map
-/// has: so a tile's cell is its position (see `pointing_at`).
+/// The app on `world` in the default theme, with only the map view, its
+/// tiles drawn from screen cell (0, 0), as many as the map has: so a
+/// tile's cell is its position (see `pointing_at`).
 pub fn app(world: &World) -> App {
     let map = world.map();
-    let tiles = Rect::new(0, 0, map.width(), map.height());
-    App::new(map, Theme::cp437(), 1, map_only(tiles))
+    map_app(world, Rect::new(0, 0, map.width(), map.height()))
 }
 
 /// The same app in Grab mode.
@@ -202,21 +201,36 @@ pub fn grab_app(world: &World) -> App {
     app
 }
 
-/// An app on `world` in the default theme, on a 100×30 screen, showing
-/// seed 7.
+/// An app on `world` in the default theme, with only the map view, its
+/// tiles drawn on `tiles`.
+pub fn map_app(world: &World, tiles: Rect) -> App {
+    App::new(world.map(), Theme::cp437(), world.seed(), map_only(tiles))
+}
+
+/// The smallest screen the game draws on (design §6.1).
+pub const SCREEN: Size = Size::new(100, 30);
+
+/// An app on `world` in the default theme, on a 100×30 screen.
 pub fn app_on(world: &World) -> App {
     app_in(world, Theme::cp437())
 }
 
-/// An app on `world` in `theme`, on a 100×30 screen, showing seed 7.
+/// An app on `world` in `theme`, on a 100×30 screen.
 pub fn app_in(world: &World, theme: Theme) -> App {
-    App::new(world.map(), theme, 7, ui::areas(Size::new(100, 30)))
+    sized_app(world, theme, SCREEN)
 }
 
-/// One frame on a 100×30 screen, the smallest the game draws on (design
-/// §6.1).
+/// An app on `world` in `theme`, with its panels laid out for a screen of
+/// `size`. Its help screen shows [`DATA_FOLDER`].
+pub fn sized_app(world: &World, theme: Theme, size: Size) -> App {
+    let mut app = App::new(world.map(), theme, world.seed(), ui::areas(size));
+    app.set_data_folder(PathBuf::from(DATA_FOLDER));
+    app
+}
+
+/// One frame on a 100×30 screen.
 pub fn render(app: &App, world: &World) -> Buffer {
-    render_on(app, world, Size::new(100, 30))
+    render_on(app, world, SCREEN)
 }
 
 /// One frame on a screen of `size`.
@@ -238,7 +252,7 @@ pub fn row(screen: &Buffer, y: u16) -> String {
 
 /// The status line of a 100×30 screen, without the spaces at its end.
 pub fn status_line(app: &App, world: &World) -> String {
-    row(&render(app, world), 29)
+    row(&render(app, world), SCREEN.height - 1)
 }
 
 /// The screen's text, a line per row, without the spaces at each line's

@@ -4,7 +4,7 @@
 //! parted from its recording; and `--data` reads a folder of pack files.
 
 mod common;
-use common::{at, ball_world, map_only, pack, render_on, row, scratch_folder};
+use common::{at, ball_world, map_app, pack, render_on, row, scratch_folder};
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
@@ -15,13 +15,11 @@ use terra_tui::app::{AUTOSAVE_EVERY, App, CursorMode, Flow, REPLAY_REFUSAL, Tick
 use terra_tui::files;
 use terra_tui::input::{Action, Button};
 use terra_tui::session::{self, Session};
-use terra_tui::theme::Theme;
 
 /// An app on `world` showing 11×8 tiles of it from screen cell (1, 2), with
 /// no panels.
 fn app_for(world: &World) -> App {
-    let areas = map_only(Rect::new(1, 2, 11, 8));
-    App::new(world.map(), Theme::cp437(), world.seed(), areas)
+    map_app(world, Rect::new(1, 2, 11, 8))
 }
 
 /// The top bar, as drawn on a 120×32 screen.

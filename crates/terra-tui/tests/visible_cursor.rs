@@ -3,15 +3,13 @@
 //! every move onto a new tile tells the world.
 
 mod common;
-use common::{apply, at, field, point, render, status_line, tick};
+use common::{app_on, apply, at, field, point, render, status_line, tick};
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::layout::Position;
 use terra_sim::{Command, Pos, World};
 use terra_tui::app::{App, CursorMode};
 use terra_tui::input::{Action, Keys};
-use terra_tui::theme::Theme;
-use terra_tui::ui;
 
 /// The app, with the map view's tiles drawn from screen cell (0, 0), so a
 /// tile's cell is its position, its first commands taken.
@@ -128,8 +126,7 @@ fn a_visible_cursor_following_a_sprite_tells_the_world_as_the_sprite_walks() {
 #[test]
 fn the_status_line_says_when_sprites_can_see_the_cursor() {
     let world = field(&[], &[]);
-    let areas = ui::areas(ratatui::layout::Size::new(100, 30));
-    let mut app = App::new(world.map(), Theme::cp437(), 1, areas);
+    let mut app = app_on(&world);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
     assert!(!status_line(&app, &world).contains("seen"));
     apply(&mut app, &world, Action::ToggleVisible);
@@ -246,8 +243,7 @@ fn a_visible_cursor_draws_as_a_frame_of_light_following_or_not() {
     // Design v29 §6.5: hidden, the arrows (solid while following); visible,
     // a frame of light in their place.
     let world = field(&[], &[at(2, 2)]);
-    let areas = ui::areas(ratatui::layout::Size::new(100, 30));
-    let mut app = App::new(world.map(), Theme::cp437(), 1, areas);
+    let mut app = app_on(&world);
     apply(&mut app, &world, Action::SelectNext);
     apply(&mut app, &world, Action::Follow { at: None });
     assert_eq!(sides(&app, &world, at(2, 2)), ["▼", "►", "◄", "▲"]);

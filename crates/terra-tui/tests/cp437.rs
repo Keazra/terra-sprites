@@ -2,7 +2,7 @@
 //! draw every panel (design §6.2).
 
 mod common;
-use common::{DATA_FOLDER, app_in, pack, pairs, render, render_on, tree_of};
+use common::{app_in, pack, pairs, render, render_on, tree_of};
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Size;
@@ -30,7 +30,6 @@ fn played(ticks: u32, theme: Theme) -> (World, App) {
     let pack = pack();
     let mut world = World::new(WorldConfig::builtin(&pack), pack, 7);
     let mut app = app_in(&world, theme);
-    app.set_data_folder(DATA_FOLDER.into());
     for _ in 0..ticks {
         let mut tick = Ticks::default();
         tick.step(&mut world);
