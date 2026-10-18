@@ -4773,3 +4773,111 @@ fn the_map_view_alone_fills_the_frame_with_tiles_and_nothing_else() {
     assert_eq!(shown[0], format!("#{}", ".".repeat(29)));
     assert_eq!(shown[11], format!("{}~", ".".repeat(29)));
 }
+
+/// One 100×30 frame of `world`, drawn with only the screen's `parts`, and
+/// its app fitted to them.
+fn render_parts(world: &World, parts: ui::Parts) -> Vec<String> {
+    let screen = Size::new(100, 30);
+    let app = App::new(
+        world.map(),
+        Theme::ascii(),
+        7,
+        ui::areas_with(screen, parts),
+    );
+    let mut terminal = Terminal::new(TestBackend::new(screen.width, screen.height)).unwrap();
+    terminal
+        .draw(|frame| ui::render_with(frame, &app, world, parts))
+        .unwrap();
+    lines(terminal.backend().buffer())
+}
+
+#[test]
+fn a_picture_without_the_event_log_gives_its_rows_to_the_map_view_and_inspector() {
+    // #291: the renderer's clips can leave the event log out.
+    let parts = ui::Parts {
+        event_log: false,
+        ..ui::Parts::ALL
+    };
+    let areas = ui::areas_with(Size::new(100, 30), parts);
+    assert_eq!(areas.event_log, None);
+    assert_eq!(areas.tiles, Rect::new(1, 2, 52, 26));
+    let inspector = areas.inspector.expect("the inspector");
+    assert_eq!((inspector.y, inspector.bottom()), (1, 29));
+    let shown = render_parts(&generated_world(), parts);
+    assert!(
+        shown.iter().all(|line| !line.contains(" Events ")),
+        "{shown:#?}"
+    );
+    // The map view's bottom border sits on the status line.
+    assert!(shown[28].starts_with('└'), "{}", shown[28]);
+    assert!(shown[28].ends_with('┘'), "{}", shown[28]);
+}
+
+#[test]
+fn a_picture_without_the_inspector_gives_its_columns_to_the_map_view() {
+    // #291.
+    let parts = ui::Parts {
+        inspector: false,
+        ..ui::Parts::ALL
+    };
+    let areas = ui::areas_with(Size::new(100, 30), parts);
+    assert_eq!(areas.inspector, None);
+    assert_eq!(areas.tiles, Rect::new(1, 2, 98, 21));
+    let shown = render_parts(&generated_world(), parts);
+    assert!(shown[1].starts_with("┌─ Map ─"), "{}", shown[1]);
+    assert!(shown[1].ends_with('┐'), "{}", shown[1]);
+    assert_eq!(shown[1].chars().count(), 100, "{}", shown[1]);
+}
+
+#[test]
+fn a_picture_without_the_top_bar_and_status_line_starts_and_ends_on_panels() {
+    // #291: the map view and the inspector start on the top row, and the
+    // event log ends on the bottom one.
+    let parts = ui::Parts {
+        top_bar: false,
+        status_line: false,
+        ..ui::Parts::ALL
+    };
+    let areas = ui::areas_with(Size::new(100, 30), parts);
+    assert_eq!(areas.tiles, Rect::new(1, 1, 52, 23));
+    assert_eq!(areas.event_log, Some(Rect::new(0, 25, 100, 5)));
+    assert_eq!(areas.overlay, Some(Rect::new(0, 0, 100, 30)));
+    let shown = render_parts(&generated_world(), parts);
+    assert!(shown[0].starts_with("┌─ Map ─"), "{}", shown[0]);
+    assert!(shown[25].starts_with("┌─ Events ─"), "{}", shown[25]);
+    assert!(shown[29].starts_with('└'), "{}", shown[29]);
+}
+
+#[test]
+fn a_picture_without_any_other_part_is_the_map_view_in_its_border() {
+    // #291: the map view's border runs round the whole picture.
+    let parts = ui::Parts {
+        top_bar: false,
+        inspector: false,
+        event_log: false,
+        status_line: false,
+    };
+    let areas = ui::areas_with(Size::new(100, 30), parts);
+    assert_eq!(areas.tiles, Rect::new(1, 1, 98, 28));
+    assert_eq!((areas.inspector, areas.event_log), (None, None));
+    let shown = render_parts(&generated_world(), parts);
+    assert!(shown[0].starts_with("┌─ Map ─"), "{}", shown[0]);
+    assert!(shown[0].ends_with('┐'), "{}", shown[0]);
+    assert!(shown[29].starts_with('└'), "{}", shown[29]);
+    assert!(shown[29].ends_with('┘'), "{}", shown[29]);
+}
+
+#[test]
+fn the_game_draws_every_part_of_the_screen() {
+    // #291: leaving parts out is for pictures; the game's own screen has
+    // the top bar, the map view and the inspector side by side, the event
+    // log and the status line.
+    let world = generated_world();
+    let app = app_for(&world, Theme::cp437(), 100, 30);
+    let shown = lines(&render(&app, &world, 100, 30));
+    assert!(shown[0].starts_with(" Terra Sprites"), "{}", shown[0]);
+    assert!(shown[1].starts_with("┌─ Map ─"), "{}", shown[1]);
+    assert_eq!(shown[1].matches('┌').count(), 2, "{}", shown[1]);
+    assert!(shown[24].starts_with("┌─ Events ─"), "{}", shown[24]);
+    assert!(!shown[29].starts_with('└'), "{}", shown[29]);
+}

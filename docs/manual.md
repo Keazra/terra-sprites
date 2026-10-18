@@ -160,7 +160,7 @@ The file's ending picks the format: `.gif`, `.svg` or `.mp4`. A GIF or an SVG ne
 
 `--replay <file>` plays a replay back instead of a seed's world, from where its recording starts unless `--from` says. That's how to show the Cursor at work: play the scene in the game, then render its `last_session.replay`.
 
-The picture is 100×30 screen cells by default, the game's smallest screen with its panels. `--size <WxH>` picks another, `--map-view` draws the map view alone, with no border or panels, at any size, and `--cell <WxH>` sizes a screen cell in pixels (10×20 by default). The view tracks the sprite `Tab` would select first, or `--track <n>` names another. Upright 9:16, for Shorts, at 1080×1920:
+The picture is 100×30 screen cells by default, the game's smallest screen with its panels. `--size <WxH>` picks another, `--map-view` draws the map view alone, with no border or panels, at any size, `--hide` leaves out parts of the screen for the map view and the inspector to take their room (`top-bar`, `inspector`, `event-log` or `status-line`, a comma between several, as in `--hide event-log`), and `--cell <WxH>` sizes a screen cell in pixels (10×20 by default). The view tracks the sprite `Tab` would select first, or `--track <n>` names another. Upright 9:16, for Shorts, at 1080×1920:
 
 ```powershell
 cargo run --release -p terra-tui --example render -- world --seed 7 --from 200 --to 300 --size 54x48 --map-view --cell 20x40 -o seed-7-upright.mp4

@@ -9,7 +9,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Size;
 use ratatui::{Frame as Drawing, Terminal};
 use terra_sim::{EntityId, Mode, Playback, World};
-use terra_tui::app::{App, Selection, Tab, Ticks};
+use terra_tui::app::{App, Areas, Selection, Tab, Ticks};
 use terra_tui::clock::{Clock, Speed};
 use terra_tui::input::Action;
 use terra_tui::session::Session;
@@ -51,13 +51,41 @@ impl Clip {
     }
 }
 
-/// How a clip is framed: the screen's size in cells, whether it's the map
-/// view alone, and how long each frame shows.
+/// How a clip is framed: the screen's size in cells, what's drawn on it,
+/// and how long each frame shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Framing {
     pub screen: Size,
-    pub map_view_alone: bool,
+    pub view: View,
     pub frame: Duration,
+}
+
+/// What a world's clip draws on its screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum View {
+    /// The game's screen with these of its parts, the map view taking the
+    /// room the rest leave (M2 design §11.4).
+    Screen(ui::Parts),
+    /// The map view alone, with no border or panels.
+    MapViewAlone,
+}
+
+impl View {
+    /// Where the app's panels are on a `screen` that draws this.
+    fn areas(self, screen: Size) -> Areas {
+        match self {
+            View::Screen(parts) => ui::areas_with(screen, parts),
+            View::MapViewAlone => ui::map_view_alone_areas(screen),
+        }
+    }
+
+    /// Draws one frame of it.
+    fn render(self, frame: &mut Drawing, app: &App, world: &World) {
+        match self {
+            View::Screen(parts) => ui::render_with(frame, app, world, parts),
+            View::MapViewAlone => ui::render_map_view_alone(frame, app, world),
+        }
+    }
 }
 
 /// Where a world's clip comes from.
@@ -162,15 +190,7 @@ pub fn world_clip(
         return Err(format!("the clip starts at tick {from}, after --to {to}"));
     }
     let world = session.world();
-    // The whole screen, or the map view alone.
-    let (areas, render): (_, fn(&mut Drawing, &App, &World)) = if framing.map_view_alone {
-        (
-            ui::map_view_alone_areas(framing.screen),
-            ui::render_map_view_alone,
-        )
-    } else {
-        (ui::areas(framing.screen), ui::render)
-    };
+    let areas = framing.view.areas(framing.screen);
     let mut app = App::new(world.map(), theme, world.seed(), areas);
     if let (Some(name), Some(playback)) = (&replay, session.playback()) {
         app.start_replay(name, playback);
@@ -187,7 +207,9 @@ pub fn world_clip(
     let mut thousandths_owed = 0;
     loop {
         let world = session.world();
-        let screen = draw(&mut terminal, |frame| render(frame, &app, world));
+        let screen = draw(&mut terminal, |frame| {
+            framing.view.render(frame, &app, world)
+        });
         clip.push(&screen, framing.frame);
         // A replay's end, or where it parts from the recording, pauses it.
         if world.tick() >= to || app.clock.is_paused() {
@@ -373,7 +395,11 @@ mod tests {
     fn framing(screen: Size, map_view_alone: bool) -> Framing {
         Framing {
             screen,
-            map_view_alone,
+            view: if map_view_alone {
+                View::MapViewAlone
+            } else {
+                View::Screen(ui::Parts::ALL)
+            },
             frame: Duration::from_millis(100),
         }
     }
@@ -412,6 +438,30 @@ mod tests {
                 .iter()
                 .all(|frame| frame.screen.area.as_size() == Size::new(100, 30))
         );
+    }
+
+    #[test]
+    fn a_clip_can_leave_out_the_event_log_for_the_map_view_to_take_its_rows() {
+        // #291.
+        let world = field(&[Pos { x: 20, y: 10 }], &[]);
+        let scene = scene(0, 1, Pace::Game(Speed::X4), Track::First);
+        let framing = Framing {
+            view: View::Screen(ui::Parts {
+                event_log: false,
+                ..ui::Parts::ALL
+            }),
+            ..framing(Size::new(100, 30), false)
+        };
+        let clip = world_clip(live(world), Theme::cp437(), &scene, &framing).unwrap();
+        for frame in &clip.frames {
+            let rows: Vec<String> = (0..30).map(|y| row(&frame.screen, y)).collect();
+            assert!(
+                rows.iter().all(|row| !row.contains(" Events ")),
+                "{rows:#?}"
+            );
+            // The map view's bottom border sits on the status line.
+            assert!(rows[28].starts_with('└'), "{}", rows[28]);
+        }
     }
 
     #[test]

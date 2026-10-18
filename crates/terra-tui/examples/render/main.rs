@@ -219,8 +219,9 @@ mod tests {
     use terra_tui::args::Args;
     use terra_tui::start;
     use terra_tui::theme::Theme;
+    use terra_tui::ui;
 
-    use crate::clip::{self, Framing};
+    use crate::clip::{self, Framing, View};
     use crate::test_util::glyphs;
     use crate::{gif_file, svg_file};
 
@@ -241,7 +242,7 @@ mod tests {
         let world = start::title_world(&Args::default(), 7, (100, 30)).unwrap();
         let framing = Framing {
             screen: Size::new(100, 30),
-            map_view_alone: false,
+            view: View::Screen(ui::Parts::ALL),
             frame: Duration::from_millis(100),
         };
         let clip = clip::title_clip(world, Theme::cp437(), 7, None, &framing);
