@@ -136,6 +136,16 @@ pub fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> World {
         .build()
 }
 
+/// An 11×8 grass world with starter sprites on (2, 2) and (8, 3) and a
+/// ball on (5, 5).
+pub fn ball_world() -> World {
+    WorldBuilder::grass(11, 8)
+        .objects(&[(at(5, 5), "ball")])
+        .sprites(&[at(2, 2), at(8, 3)])
+        .seed(7)
+        .build()
+}
+
 /// Steps `world` `ticks` ticks.
 pub fn run(world: &mut World, ticks: u64) {
     for _ in 0..ticks {

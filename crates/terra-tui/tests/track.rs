@@ -1,49 +1,34 @@
 //! Track (`T`, design v21 §6.1): the view follows the selected sprite.
 
 mod common;
-use common::{LONE, LONE_MOTHER, QUICK, at, grow, pointer_on};
+use common::{LONE, LONE_MOTHER, QUICK, WorldBuilder, at, grow, map_only, pack, pointer_on};
 
 use ratatui::layout::Rect;
-use terra_sim::{DataPack, Map, Pos, Scenario, ScriptedAction, World};
-use terra_tui::app::{App, Areas, Origin, Selection};
+use terra_sim::{Map, Pos, Scenario, ScriptedAction, World};
+use terra_tui::app::{App, Origin, Selection};
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
 
-fn pack() -> DataPack {
-    DataPack::builtin().expect("valid pack")
-}
-
 /// An app on `world` showing 20×10 tiles of it, with no panels.
 fn small_view(world: &World) -> App {
-    let areas = Areas {
-        tiles: Rect::new(1, 2, 20, 10),
-        inspector: None,
-        event_log: None,
-        overlay: None,
-    };
-    App::new(world.map(), Theme::cp437(), 1, areas)
+    App::new(
+        world.map(),
+        Theme::cp437(),
+        1,
+        map_only(Rect::new(1, 2, 20, 10)),
+    )
 }
 
 /// A 60×40 field with a starter sprite at (50, 30) wandering to (42, 30),
 /// within its sight, and one at (5, 5), and an app showing 20×10 tiles of it.
 fn field() -> (World, App) {
-    let row = ".".repeat(60);
-    let map = Map::from_ascii(&vec![row.as_str(); 40], &pack()).expect("valid drawing");
-    let sprites = [(at(50, 30), None), (at(5, 5), None)];
-    let scripted = [(
-        at(50, 30),
-        ScriptedAction::Wander {
-            destination: at(42, 30),
-        },
-    )];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
+    let wander = ScriptedAction::Wander {
+        destination: at(42, 30),
     };
-    let world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
+    let world = WorldBuilder::grass(60, 40)
+        .sprites(&[at(50, 30), at(5, 5)])
+        .scripts(&[(at(50, 30), wander)])
+        .build();
     let app = small_view(&world);
     (world, app)
 }
