@@ -27,7 +27,7 @@ usage: render title [options] -o <file>
        render samples [--font <file.ttf>]... [options] -o <file>
 
   title                the title screen's opening scene: a light finds a
-                       sleeping sprite in the dark
+                       sprite in the dark
   world                a world from a seed, or a replay, from one tick to
                        another
   samples              a still of a world's screen in Cascadia Mono and in
