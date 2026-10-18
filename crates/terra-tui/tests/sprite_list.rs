@@ -1,25 +1,18 @@
 //! The sprite list (`l`, design §6.1): every sprite, its age, its strongest
 //! drive and what it's doing, sorted as the player chooses.
 
+mod common;
+use common::{WorldBuilder, app_on, at, pack, render, row};
+
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Size};
 use ratatui::style::{Color, Modifier};
-use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{Command, DataPack, EntityId, Genome, Map, Pos, Scenario, ScriptedAction, World};
 use terra_tui::app::{App, Flow, Screen};
 use terra_tui::input::Action;
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
 use terra_tui::sprite_list::SortBy;
-use terra_tui::theme::Theme;
 use terra_tui::ui;
-
-fn pack() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
 
 /// A genome starting `chem` at `value`.
 fn starting(chem: &str, value: f32, pack: &DataPack) -> Genome {
@@ -33,28 +26,22 @@ fn starting(chem: &str, value: f32, pack: &DataPack) -> Genome {
 /// thirsty; #4 at (4, 4), a little hungry. #1 is named Zed, and #3 Abel.
 fn field() -> World {
     let pack = pack();
-    let row = ".".repeat(120);
-    let map = Map::from_ascii(&vec![row.as_str(); 60], &pack).expect("valid drawing");
-    let sprites = [
+    let sprites = vec![
         (at(2, 3), None),
         (at(110, 55), Some(starting("hunger", 0.9, &pack))),
         (at(6, 1), Some(starting("thirst", 0.7, &pack))),
         (at(4, 4), Some(starting("hunger", 0.6, &pack))),
     ];
-    let scripted = [(
-        at(2, 3),
-        ScriptedAction::Wander {
-            destination: at(8, 3),
-        },
-    )];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[at(2, 3), at(110, 55), at(6, 1), at(4, 4)],
+    let wander = ScriptedAction::Wander {
+        destination: at(8, 3),
     };
-    World::from_scenario(scenario, pack, 7).expect("valid scenario")
+    WorldBuilder::grass(120, 60)
+        .sprites_with(sprites)
+        .scripts(&[(at(2, 3), wander)])
+        .newborns(&[at(2, 3), at(110, 55), at(6, 1), at(4, 4)])
+        .data(pack)
+        .seed(7)
+        .build()
 }
 
 /// The field's sprites' IDs, in ID order.
@@ -64,8 +51,7 @@ fn ids(world: &World) -> Vec<EntityId> {
 
 /// An app on `world` a tick on, which has seen #1 named Zed and #3 Abel.
 fn named(world: &mut World) -> App {
-    let areas = ui::areas(Size::new(100, 30));
-    let mut app = App::new(world.map(), Theme::cp437(), 7, areas);
+    let mut app = app_on(world);
     let ids = ids(world);
     for (sprite, name) in [(ids[0], "Zed"), (ids[2], "Abel")] {
         world.submit(Command::Rename {
@@ -76,21 +62,6 @@ fn named(world: &mut World) -> App {
     let events = world.step();
     app.record(&events, world);
     app
-}
-
-fn render(app: &App, world: &World) -> Buffer {
-    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
-    terminal
-        .draw(|frame| ui::render(frame, app, world))
-        .unwrap();
-    terminal.backend().buffer().clone()
-}
-
-fn row(buffer: &Buffer, y: u16) -> String {
-    let text: String = (0..buffer.area.width)
-        .map(|x| buffer[(x, y)].symbol())
-        .collect();
-    text.trim_end().to_string()
 }
 
 /// The labels of the list's rows, top to bottom, as drawn.
@@ -341,8 +312,7 @@ fn with_no_sprites_the_list_says_so() {
         newborns: &[],
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
-    let areas = ui::areas(Size::new(100, 30));
-    let mut app = App::new(world.map(), Theme::cp437(), 7, areas);
+    let mut app = app_on(&world);
     app.apply(Action::SpriteList, &world);
     let screen = render(&app, &world);
     assert_eq!(row(&screen, 2), format!("│ No sprites{}│", " ".repeat(87)));
@@ -365,8 +335,7 @@ fn a_long_list_scrolls_to_keep_the_highlight_in_view() {
         newborns: &[],
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
-    let areas = ui::areas(Size::new(100, 30));
-    let mut app = App::new(world.map(), Theme::cp437(), 7, areas);
+    let mut app = app_on(&world);
     app.apply(Action::SpriteList, &world);
     assert_eq!(app.list_rows(), 25);
     for _ in 0..29 {

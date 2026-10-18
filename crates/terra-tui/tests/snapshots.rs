@@ -6,22 +6,20 @@
 //! terra-tui --test snapshots`, and the new files reviewed like code.
 
 mod common;
+use common::{DATA_FOLDER, WorldBuilder, app_in, at, lines, pairs, render, tree_of};
 
 use std::path::{Path, PathBuf};
 
-use ratatui::layout::{Position, Size};
-use ratatui::{Terminal, backend::TestBackend};
-use terra_sim::{DataPack, EntityId, Map, Pos, Scenario, ScriptedAction, World};
+use ratatui::layout::Position;
+use terra_sim::{EntityId, Pos, ScriptedAction, World};
 use terra_tui::app::{App, Tab};
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
-use terra_tui::ui;
 
 /// A field with grass, dirt, sand, water and rock, a berry bush, a berry,
 /// a ball and a thornbush, and three starter sprites, one wandering to the
 /// water's edge, three ticks on.
 fn field() -> World {
-    let pack = DataPack::builtin().expect("built-in data pack is valid");
     let drawing = [
         "..............,,,,::~~==",
         "..............,,,,::~~==",
@@ -32,32 +30,21 @@ fn field() -> World {
         "..................::~~==",
         "..................::~~==",
     ];
-    let map = Map::from_ascii(&drawing, &pack).expect("valid drawing");
     let objects = [
-        (Pos { x: 1, y: 1 }, "berry_bush"),
-        (Pos { x: 2, y: 2 }, "berry"),
-        (Pos { x: 9, y: 6 }, "ball"),
-        (Pos { x: 12, y: 1 }, "thornbush"),
+        (at(1, 1), "berry_bush"),
+        (at(2, 2), "berry"),
+        (at(9, 6), "ball"),
+        (at(12, 1), "thornbush"),
     ];
-    let sprites = [
-        (Pos { x: 3, y: 5 }, None),
-        (Pos { x: 8, y: 2 }, None),
-        (Pos { x: 15, y: 6 }, None),
-    ];
-    let scripted = [(
-        Pos { x: 3, y: 5 },
-        ScriptedAction::Wander {
-            destination: Pos { x: 17, y: 4 },
-        },
-    )];
-    let scenario = Scenario {
-        map,
-        objects: &objects,
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
+    let wander = ScriptedAction::Wander {
+        destination: at(17, 4),
     };
-    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut world = WorldBuilder::new(&drawing)
+        .objects(&objects)
+        .sprites(&[at(3, 5), at(8, 2), at(15, 6)])
+        .scripts(&[(at(3, 5), wander)])
+        .seed(7)
+        .build();
     for _ in 0..3 {
         world.step();
     }
@@ -67,9 +54,8 @@ fn field() -> World {
 /// An app in `theme` on `world` with the wanderer selected, with a fixed
 /// folder for its files.
 fn app_for(world: &World, theme: Theme) -> App {
-    let areas = ui::areas(Size::new(100, 30));
-    let mut app = App::new(world.map(), theme, 7, areas);
-    app.set_data_folder(PathBuf::from("/home/player/.local/share/terra-sprites"));
+    let mut app = app_in(world, theme);
+    app.set_data_folder(PathBuf::from(DATA_FOLDER));
     app.apply(Action::SelectNext, world);
     app
 }
@@ -77,20 +63,8 @@ fn app_for(world: &World, theme: Theme) -> App {
 /// The screen's text, a line per row, without the spaces at each line's
 /// end.
 fn screen(app: &App, world: &World) -> String {
-    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
-    terminal
-        .draw(|frame| ui::render(frame, app, world))
-        .unwrap();
-    let buffer = terminal.backend().buffer();
-    let mut text = String::new();
-    for y in 0..buffer.area.height {
-        let row: String = (0..buffer.area.width)
-            .map(|x| buffer[(x, y)].symbol())
-            .collect();
-        text.push_str(row.trim_end());
-        text.push('\n');
-    }
-    text
+    let lines = lines(&render(app, world));
+    lines.iter().map(|line| format!("{line}\n")).collect()
 }
 
 /// Compares `text` with the snapshot `name`, or with `UPDATE_SNAPSHOTS`
@@ -192,10 +166,10 @@ fn the_population_graph_matches_its_snapshot() {
 fn the_family_tree_matches_its_snapshot() {
     // Two pairs and their young, 200 ticks on: #16's parents are #3 and
     // #13, who is #3's young too, so #3 is on the tree twice.
-    let world = common::pairs(230);
+    let world = pairs(230);
     for (theme_name, theme) in themes() {
-        let mut app = App::new(world.map(), theme, 7, ui::areas(Size::new(100, 30)));
-        common::tree_of(&mut app, &world, EntityId(16));
+        let mut app = app_in(&world, theme);
+        tree_of(&mut app, &world, EntityId(16));
         check(&format!("{theme_name}-family-tree"), &screen(&app, &world));
     }
 }

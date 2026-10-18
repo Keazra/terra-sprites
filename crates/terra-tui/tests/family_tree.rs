@@ -7,34 +7,20 @@
 
 mod common;
 use common::{
-    Changes, LETHAL_THORNS, LONE, LONE_MOTHER, QUICK, SCORCHED, at, changed, group, grow,
-    inspector_rows, lone_line, open, pack_changing, pairs, parched_line, pointer_on, rows_from,
-    select, tree_of,
+    Changes, LETHAL_THORNS, LONE, LONE_MOTHER, QUICK, SCORCHED, app_on, at, changed, group, grow,
+    inspector_rows, lines, lone_line, open, pack_changing, pairs, parched_line, pointer_on, render,
+    rows_from, scratch_folder, select, tree_of,
 };
 
-use std::path::PathBuf;
 use std::time::Duration;
 
-use ratatui::buffer::Buffer;
 use ratatui::layout::{Margin, Position, Size};
 use ratatui::style::{Color, Modifier};
-use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{Command, DeathCause, EntityId, Genome, Map, Scenario, World};
 use terra_tui::app::{App, ColourMode, Screen, Selection, Tab};
 use terra_tui::input::{Action, Button};
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
-use terra_tui::theme::Theme;
 use terra_tui::ui;
-
-/// An app at 100×30 on `world`, in the default theme.
-fn app_on(world: &World) -> App {
-    App::new(
-        world.map(),
-        Theme::cp437(),
-        7,
-        ui::areas(Size::new(100, 30)),
-    )
-}
 
 /// Steps `world` `ticks` ticks, with `app` watching.
 fn run(app: &mut App, world: &mut World, ticks: u64) {
@@ -44,26 +30,9 @@ fn run(app: &mut App, world: &mut World, ticks: u64) {
     }
 }
 
-fn render(app: &App, world: &World) -> Buffer {
-    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
-    terminal
-        .draw(|frame| ui::render(frame, app, world))
-        .unwrap();
-    terminal.backend().buffer().clone()
-}
-
 /// The screen as text, a line for each row.
 fn screen(app: &App, world: &World) -> String {
-    let buffer = render(app, world);
-    (0..buffer.area.height)
-        .map(|y| {
-            let row: String = (0..buffer.area.width)
-                .map(|x| buffer[(x, y)].symbol())
-                .collect();
-            row.trim_end().to_string()
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+    lines(&render(app, world)).join("\n")
 }
 
 // The tree's rows, from the top of its box's inside.
@@ -811,14 +780,6 @@ fn a_sprite_that_died_before_the_world_remembered_the_dead_lived_long_ago() {
         Some("Sprite #2 lived long ago: the world no longer remembers it")
     );
     assert_eq!(app.selection(), Some(Selection::Living(EntityId(3))));
-}
-
-/// A fresh, empty folder for saves.
-fn scratch_folder(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("terra-family-tree-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("a scratch folder");
-    dir
 }
 
 #[test]

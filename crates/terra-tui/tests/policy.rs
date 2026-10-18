@@ -1,23 +1,21 @@
 //! What the screen may show (design §6.4): every display asks the app's
 //! `InfoPolicy` first.
 
+mod common;
+use common::{WorldBuilder, app_on, at, pack, render};
+
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Size};
 use ratatui::style::Color;
-use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
-    ActionView, Command, DataPack, DeathCause, EntityId, Event, EventKind, Grip, Hurt, Map,
-    Outcome, Pos, Progress, Rejection, Scenario, ScriptedAction, Target, Verb, World,
+    ActionView, Command, DeathCause, EntityId, Event, EventKind, Grip, Hurt, Map, Outcome, Pos,
+    Progress, Rejection, Scenario, ScriptedAction, Target, Verb, World,
 };
 use terra_tui::app::{App, ColourMode, CursorMode, Tab};
 use terra_tui::input::Action;
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
 use terra_tui::theme::Theme;
 use terra_tui::ui;
-
-fn pack() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
 
 /// A policy that shows nothing.
 struct Blind;
@@ -41,34 +39,17 @@ impl InfoPolicy for HideCursorLinesAbout {
 /// Two starter sprites in a field, the one at (2, 3) wandering to (8, 3),
 /// and a berry bush at (1, 1).
 fn field() -> World {
-    let pack = pack();
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
-    let objects = [(Pos { x: 1, y: 1 }, "berry_bush")];
-    let sprites = [(Pos { x: 2, y: 3 }, None), (Pos { x: 6, y: 1 }, None)];
-    let scripted = [(
-        Pos { x: 2, y: 3 },
-        ScriptedAction::Wander {
-            destination: Pos { x: 8, y: 3 },
-        },
-    )];
-    let scenario = Scenario {
-        map,
-        objects: &objects,
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
+    let wander = ScriptedAction::Wander {
+        destination: at(8, 3),
     };
-    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut world = WorldBuilder::grass(10, 5)
+        .objects(&[(at(1, 1), "berry_bush")])
+        .sprites(&[at(2, 3), at(6, 1)])
+        .scripts(&[(at(2, 3), wander)])
+        .seed(7)
+        .build();
     world.step();
     world
-}
-
-fn render(app: &App, world: &World) -> Buffer {
-    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
-    terminal
-        .draw(|frame| ui::render(frame, app, world))
-        .unwrap();
-    terminal.backend().buffer().clone()
 }
 
 fn row(buffer: &Buffer, y: u16, xs: std::ops::Range<u16>) -> String {
@@ -119,8 +100,7 @@ const WANDERER: Pos = Pos { x: 2, y: 3 };
 /// An app on `world` with the wanderer selected, hurt, a death and a hurt
 /// in the event log, and the Cursor on the wanderer.
 fn busy_app(world: &World) -> App {
-    let areas = ui::areas(Size::new(100, 30));
-    let mut app = App::new(world.map(), Theme::cp437(), 7, areas);
+    let mut app = app_on(world);
     let wanderer = world.sprite_at(Pos { x: 2, y: 3 }).unwrap().id();
     app.apply(Action::left_click(pointer_on(WANDERER)), world);
     let hurt = ActionView {
@@ -295,8 +275,7 @@ fn a_policy_that_hides_map_colours_draws_sprites_in_their_own_colour() {
         newborns: &[],
     };
     let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
-    let areas = ui::areas(Size::new(100, 30));
-    let mut app = App::new(world.map(), Theme::cp437(), 7, areas);
+    let mut app = app_on(&world);
     app.apply(Action::Point(pointer_on(Pos { x: 9, y: 4 })), &world);
     assert_eq!(render(&app, &world)[cell(WANDERER)].fg, Color::Yellow);
     app.set_policy(Blind);
@@ -343,9 +322,7 @@ fn the_cursors_own_lines_ask_the_policy_about_the_sprite_they_name() {
     let hide = |id| HideCursorLinesAbout(Subject::Sprite(id));
     let on_wanderer = pointer_on(WANDERER);
     let status = |app: &App| row(&render(app, &world), 29, 0..100);
-    let areas = ui::areas(Size::new(100, 30));
-
-    let mut following = App::new(world.map(), Theme::cp437(), 7, areas);
+    let mut following = app_on(&world);
     following.apply(Action::left_click(on_wanderer), &world);
     following.apply(Action::Follow { at: None }, &world);
     assert!(status(&following).contains("│ following Sprite #"));
@@ -355,7 +332,7 @@ fn the_cursors_own_lines_ask_the_policy_about_the_sprite_they_name() {
     let line = status(&following);
     assert!(!line.contains("following"), "{line}");
 
-    let mut leading = App::new(world.map(), Theme::cp437(), 7, areas);
+    let mut leading = app_on(&world);
     leading.apply(Action::Mode(CursorMode::Grab), &world);
     leading.apply(Action::left_click(on_wanderer), &world);
     assert!(status(&leading).contains("│ leading: Sprite #"));
@@ -376,7 +353,7 @@ fn the_cursors_own_lines_ask_the_policy_about_the_sprite_they_name() {
     };
     let ball_field = World::from_scenario(scenario, pack, 7).expect("valid scenario");
     let holding_line = |app: &App| row(&render(app, &ball_field), 29, 0..100);
-    let mut holding = App::new(ball_field.map(), Theme::cp437(), 7, areas);
+    let mut holding = app_on(&ball_field);
     holding.apply(Action::Mode(CursorMode::Grab), &ball_field);
     holding.apply(
         Action::left_click(pointer_on(Pos { x: 4, y: 1 })),
@@ -391,7 +368,7 @@ fn the_cursors_own_lines_ask_the_policy_about_the_sprite_they_name() {
     let line = holding_line(&holding);
     assert!(!line.contains("holding"), "{line}");
 
-    let mut naming = App::new(world.map(), Theme::cp437(), 7, areas);
+    let mut naming = app_on(&world);
     naming.apply(Action::left_click(on_wanderer), &world);
     naming.apply(Action::Rename, &world);
     assert!(status(&naming).starts_with(" Name Sprite #"));
@@ -404,7 +381,7 @@ fn the_cursors_own_lines_ask_the_policy_about_the_sprite_they_name() {
 
     // A refusal names both sprites: the one the click took hold of, and the
     // one already led.
-    let mut refused = App::new(world.map(), Theme::cp437(), 7, areas);
+    let mut refused = app_on(&world);
     let rejected = Event {
         tick: 1,
         kind: EventKind::CommandRejected {

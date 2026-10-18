@@ -1,25 +1,21 @@
 //! Body language (design §6.3): sprite colours and emotes, which show on
 //! the map how a sprite is.
 
+mod common;
+use common::{WorldBuilder, app_in, app_on, at, pack, render};
+
 use std::time::Duration;
 
-use ratatui::buffer::Buffer;
-use ratatui::layout::{Position, Size};
+use ratatui::layout::Position;
 use ratatui::style::{Color, Modifier};
-use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
-    ActionView, DataPack, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos, Progress,
-    Scenario, ScriptedAction, Target, Thing, Verb, World,
+    ActionView, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos, Progress, Scenario,
+    ScriptedAction, Target, Thing, Verb, World,
 };
 use terra_tui::app::{App, ColourMode, PLEASED_AT, Selection, Ticks};
 use terra_tui::clock::Speed;
 use terra_tui::input::Action;
 use terra_tui::theme::{SemanticTile, Theme};
-use terra_tui::ui;
-
-fn pack() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
 
 /// A genome whose sprite starts with the drives `levels`, and nothing else.
 fn feeling(levels: &[(&str, f32)]) -> Genome {
@@ -39,25 +35,19 @@ fn field(sprites: &[(Pos, Genome)]) -> World {
 
 /// The same, those on `newborns` newborns and the rest grown up.
 fn field_with_newborns(sprites: &[(Pos, Genome)], newborns: &[Pos]) -> World {
-    let pack = pack();
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
-    let sprites: Vec<(Pos, Option<Genome>)> = sprites
+    let sprites = sprites
         .iter()
         .map(|(pos, genome)| (*pos, Some(genome.clone())))
         .collect();
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns,
-    };
-    World::from_scenario(scenario, pack, 7).expect("valid scenario")
+    WorldBuilder::grass(10, 5)
+        .sprites_with(sprites)
+        .newborns(newborns)
+        .seed(7)
+        .build()
 }
 
 fn app_for(world: &World, theme: Theme) -> App {
-    let areas = ui::areas(Size::new(100, 30));
-    let mut app = App::new(world.map(), theme, 7, areas);
+    let mut app = app_in(world, theme);
     // The Cursor out of the way, on (9, 4): the pointer is one down and
     // right of it (design v27 §6.5).
     let corner = cell(at(9, 4));
@@ -68,30 +58,13 @@ fn app_for(world: &World, theme: Theme) -> App {
     app
 }
 
-fn render(app: &App, world: &World) -> Buffer {
-    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
-    terminal
-        .draw(|frame| ui::render(frame, app, world))
-        .unwrap();
-    terminal.backend().buffer().clone()
-}
-
 /// The screen cell tile `tile` of the field is drawn on, on a 100×30
 /// screen: the field is small, so it's in the middle of the map view (M2
 /// design §11.1).
 fn cell(tile: Pos) -> Position {
     let world = field(&[]);
-    let app = App::new(
-        world.map(),
-        Theme::cp437(),
-        7,
-        ui::areas(Size::new(100, 30)),
-    );
+    let app = app_on(&world);
     app.cell_of(tile).expect("in view")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
 }
 
 #[test]

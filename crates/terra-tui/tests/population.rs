@@ -4,24 +4,22 @@
 //! generations alive then (#208); a small copy heads the World tab.
 
 mod common;
-use common::{LONE, at, group, inspector_rows, pack_changing, pointer_on};
+use common::{
+    LONE, WorldBuilder, app_on, at, group, inspector_rows, pack, pack_changing, pointer_on, render,
+    render_on, row, run,
+};
 
 use std::time::Duration;
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Size};
 use ratatui::style::{Color, Modifier};
-use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{DataPack, Genome, Map, Pos, Scenario, World};
 use terra_tui::app::{App, CursorMode, Screen};
 use terra_tui::input::{Action, Button};
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
 use terra_tui::theme::Theme;
 use terra_tui::ui;
-
-fn pack() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
 
 /// The built-in pack, in which a female may lay alone at once (M2 design
 /// §15.7).
@@ -32,70 +30,24 @@ fn lone() -> DataPack {
 /// A field of grass with `young` newborn starter sprites along the top row
 /// and `adults` grown ones along the next.
 fn field(young: u16, adults: u16) -> World {
-    let pack = pack();
-    let map = Map::from_ascii(&["............"; 4], &pack).expect("valid drawing");
-    let young_at: Vec<Pos> = (0..young).map(|x| Pos { x, y: 0 }).collect();
-    let sprites: Vec<(Pos, Option<Genome>)> = young_at
-        .iter()
-        .copied()
-        .chain((0..adults).map(|x| Pos { x, y: 1 }))
-        .map(|pos| (pos, None))
-        .collect();
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &young_at,
-    };
-    World::from_scenario(scenario, pack, 7).expect("valid scenario")
+    let young: Vec<Pos> = (0..young).map(|x| at(x, 0)).collect();
+    let adults: Vec<Pos> = (0..adults).map(|x| at(x, 1)).collect();
+    WorldBuilder::grass(12, 4)
+        .sprites(&young)
+        .sprites(&adults)
+        .newborns(&young)
+        .seed(7)
+        .build()
 }
 
 /// A single tile of grass with one newborn starter sprite, which dies of
 /// thirst at about tick 4,000.
 fn doomed() -> World {
-    let pack = pack();
-    let map = Map::from_ascii(&["."], &pack).expect("valid drawing");
-    let at = Pos { x: 0, y: 0 };
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[(at, None)],
-        scripted: &[],
-        newborns: &[at],
-    };
-    World::from_scenario(scenario, pack, 1).expect("valid scenario")
-}
-
-fn run(world: &mut World, ticks: u64) {
-    for _ in 0..ticks {
-        world.step();
-    }
-}
-
-/// An app on `world` at 100×30, in the default theme.
-fn app_on(world: &World) -> App {
-    App::new(
-        world.map(),
-        Theme::cp437(),
-        7,
-        ui::areas(Size::new(100, 30)),
-    )
-}
-
-fn render(app: &App, world: &World) -> Buffer {
-    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
-    terminal
-        .draw(|frame| ui::render(frame, app, world))
-        .unwrap();
-    terminal.backend().buffer().clone()
-}
-
-fn row(buffer: &Buffer, y: u16) -> String {
-    let text: String = (0..buffer.area.width)
-        .map(|x| buffer[(x, y)].symbol())
-        .collect();
-    text.trim_end().to_string()
+    let tile = at(0, 0);
+    WorldBuilder::grass(1, 1)
+        .sprites(&[tile])
+        .newborns(&[tile])
+        .build()
 }
 
 // At 100×30 the graph's box is rows 1 to 28, its inside rows 2 to 27 from
@@ -709,11 +661,7 @@ fn a_column_narrower_than_the_time_between_counts_reads_the_count_it_shows() {
     app.apply(Action::Population, &world);
     app.apply(Action::Point(Position::new(FIRST_COLUMN + 2, 9)), &world);
     assert_eq!(app.graph_pick(), Some(300));
-    let mut terminal = Terminal::new(TestBackend::new(700, 30)).unwrap();
-    terminal
-        .draw(|frame| ui::render(frame, &app, &world))
-        .unwrap();
-    let screen = terminal.backend().buffer().clone();
+    let screen = render_on(&app, &world, size);
     assert_eq!(screen[(FIRST_COLUMN + 2, AXIS)].symbol(), "▲");
     let [first, _, since] = reading(&screen);
     assert!(first.starts_with("tick 200: "), "{first}");
@@ -721,10 +669,7 @@ fn a_column_narrower_than_the_time_between_counts_reads_the_count_it_shows() {
 
     // The first column shows the first count, and says so (§14.3).
     app.apply(Action::Point(Position::new(FIRST_COLUMN, 9)), &world);
-    terminal
-        .draw(|frame| ui::render(frame, &app, &world))
-        .unwrap();
-    let screen = terminal.backend().buffer().clone();
+    let screen = render_on(&app, &world, size);
     assert_eq!(screen[(FIRST_COLUMN, AXIS)].symbol(), "▲");
     let [first, _, since] = reading(&screen);
     assert!(first.starts_with("tick 0: 1 sprite"), "{first}");
