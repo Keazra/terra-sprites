@@ -7,13 +7,13 @@ use std::time::{Duration, SystemTime};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Size};
 use ratatui::{Terminal, backend::TestBackend};
-use terra_sim::Mode;
+use terra_sim::{DataPack, Map, Mode, Pos, World};
 use terra_tui::args::Args;
 use terra_tui::cp437;
 use terra_tui::input::{Action, Button};
 use terra_tui::saves::SaveFile;
 use terra_tui::start::{self, Preset};
-use terra_tui::theme::Theme;
+use terra_tui::theme::{SemanticTile, Theme};
 use terra_tui::title::{self, Choice, Title, TitleFlow};
 
 const WIDTH: u16 = 100;
@@ -24,11 +24,14 @@ const OFFERED: u64 = 12345;
 /// A title screen on a 100×30 terminal, as the game opens it, with no
 /// saves.
 fn title() -> Title {
-    let world = start::title_world(&Args::default(), 3, (WIDTH, HEIGHT)).expect("a world");
-    let mut title = Title::new(world, Theme::cp437(), OFFERED);
-    // The map is 32 rows, the fewest a map may have, on a 30-row terminal.
-    title.resize(Size::new(WIDTH, HEIGHT));
-    title
+    title_on(WIDTH, HEIGHT)
+}
+
+/// A title screen on a terminal `width` by `height`, with no saves.
+fn title_on(width: u16, height: u16) -> Title {
+    let world = start::title_world(&Args::default(), 3, (width, height)).expect("a world");
+    // On a 30-row terminal the map is 32 rows, the fewest a map may have.
+    Title::new(world, Theme::cp437(), OFFERED, Size::new(width, height))
 }
 
 /// A title screen whose opening scene has played.
@@ -80,6 +83,45 @@ fn wheel(notches: i32) -> Action {
     }
 }
 
+/// Where the Cursor is on the screen, by the default theme's frame of
+/// light, and what's inside the frame.
+fn cursor_and_inside(buffer: &Buffer) -> Option<(Position, String)> {
+    cursor_and_inside_in(buffer, &Theme::cp437())
+}
+
+/// Where the Cursor is on the screen, by `theme`'s frame of light, and
+/// what's inside the frame.
+fn cursor_and_inside_in(buffer: &Buffer, theme: &Theme) -> Option<(Position, String)> {
+    let frame = theme.visible_frame();
+    let is = |x: u16, y: u16, side: char| buffer[(x, y)].symbol() == side.to_string();
+    let area = buffer.area;
+    (area.top() + 1..area.bottom() - 1)
+        .flat_map(|y| (area.left() + 1..area.right() - 1).map(move |x| (x, y)))
+        .find(|&(x, y)| {
+            is(x - 1, y, frame.left)
+                && is(x + 1, y, frame.right)
+                && is(x, y - 1, frame.up)
+                && is(x, y + 1, frame.down)
+        })
+        .map(|(x, y)| (Position::new(x, y), buffer[(x, y)].symbol().to_string()))
+}
+
+/// Whether the Cursor's frame is in sight above the box at the top of
+/// `screen`, with `☺` inside, saying what's wrong if not.
+fn cursor_above_the_box(screen: &Buffer) -> Result<(), String> {
+    let shown = text(screen);
+    let Some((at, inside)) = cursor_and_inside(screen) else {
+        return Err(format!("no Cursor in sight:\n{shown}"));
+    };
+    let Some(top) = find(screen, "╔") else {
+        return Err(format!("no box:\n{shown}"));
+    };
+    if inside != "☺" || at.y + 1 >= top.y {
+        return Err(format!("{inside} at {at:?}, the box at {top:?}:\n{shown}"));
+    }
+    Ok(())
+}
+
 fn lit_cells(buffer: &Buffer) -> usize {
     buffer
         .content()
@@ -109,7 +151,7 @@ fn with_saves(names: &[(&str, u64)]) -> (Title, Vec<SaveFile>) {
 }
 
 #[test]
-fn the_scene_opens_dark_with_the_cursor_s_light_over_a_sleeping_sprite() {
+fn the_scene_opens_dark_with_the_cursor_s_light_over_a_sprite() {
     let mut title = title();
     title.animate(Duration::from_millis(500));
     let screen = render(&title);
@@ -118,8 +160,8 @@ fn the_scene_opens_dark_with_the_cursor_s_light_over_a_sleeping_sprite() {
         lit_cells(&screen) < 40,
         "only the light and what's under it, and the status line:\n{shown}"
     );
-    assert!(shown.contains('z'), "the sprite sleeps:\n{shown}");
-    assert!(shown.contains('═') && shown.contains('║'), "{shown}");
+    let inside = cursor_and_inside(&screen).map(|(_, inside)| inside);
+    assert_eq!(inside.as_deref(), Some("☺"), "{shown}");
     assert!(!shown.contains("New world"), "no menu yet");
 }
 
@@ -141,10 +183,151 @@ fn the_light_spreads_until_the_terrarium_fills_the_screen() {
 }
 
 #[test]
-fn the_sprite_wakes_pleased_as_the_light_spreads() {
+fn the_sprite_under_the_cursor_stays_still_with_its_happy_face_the_whole_time() {
+    // M2 design §8.1 (Fauxpaw, 2026-10-17): it never sleeps, wakes or
+    // wanders off, through the scene and for as long as the menu shows.
     let mut title = title();
-    title.animate(Duration::from_millis(3000));
-    assert!(text(&render(&title)).contains('♥'));
+    let mut shown_for = Duration::ZERO;
+    let mut seen = Vec::new();
+    for until in [500, 2000, 2600, 3500, 4200, 5600, 60_000] {
+        while shown_for < Duration::from_millis(until) {
+            title.animate(Duration::from_millis(100));
+            shown_for += Duration::from_millis(100);
+        }
+        let screen = render(&title);
+        seen.push((until, cursor_and_inside(&screen), text(&screen)));
+    }
+    let (_, first, shown) = &seen[0];
+    let first = first.clone().expect("the Cursor's light");
+    assert_eq!(first.1, "☺", "{shown}");
+    for (at, cursor, shown) in &seen {
+        assert_eq!(cursor.as_ref(), Some(&first), "at {at} ms:\n{shown}");
+    }
+}
+
+#[test]
+fn the_light_arrives_on_a_free_tile_a_sprite_could_stand_on() {
+    // M2 design §8.1.
+    let title = title();
+    let (at, _) = cursor_and_inside(&render(&title)).expect("the Cursor's light");
+    let world = title.world();
+    let pos = Pos { x: at.x, y: at.y };
+    assert!(world.sprite_at(pos).is_none() && world.object_at(pos).is_none());
+    let terrain = world.data().terrain(world.map().terrain(pos));
+    assert!(
+        terrain.step_cost().is_some(),
+        "{:?}",
+        world.map().terrain(pos)
+    );
+}
+
+#[test]
+fn the_cursor_and_its_sprite_stay_clear_of_the_menu() {
+    // M2 design §8.1: above the menu's box, whether or not Continue makes
+    // it a row taller, and on a bigger terminal.
+    let now = SystemTime::now();
+    for (width, height) in [(WIDTH, HEIGHT), (140, 45)] {
+        for saves in [
+            vec![],
+            vec![save("quicksave", now, Duration::from_secs(60))],
+        ] {
+            let mut title = title_on(width, height);
+            title.set_saves(saves, now);
+            title.animate(Duration::from_secs(10));
+            cursor_above_the_box(&render_at(&title, width, height)).unwrap();
+        }
+    }
+}
+
+/// A title screen on a 100×30 terminal whose world has rock along its top
+/// five rows, so no tile above the title's boxes is one a sprite could
+/// stand on.
+fn title_under_rock() -> Title {
+    let rows: Vec<String> = (0..32)
+        .map(|y| if y < 5 { "#" } else { "." }.repeat(100))
+        .collect();
+    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let data = DataPack::builtin().expect("the built-in data");
+    let map = Map::from_ascii(&rows, &data).expect("a map");
+    let world = World::from_map(map, data, 3).expect("a world");
+    Title::new(world, Theme::cp437(), OFFERED, Size::new(WIDTH, HEIGHT))
+}
+
+#[test]
+fn with_no_free_tile_above_the_boxes_the_cursor_s_sprite_shows_at_their_middle() {
+    // M2 design §8.1: still above every box, over the rock.
+    let mut title = title_under_rock();
+    title.animate(Duration::from_secs(10));
+    let screen = render(&title);
+    cursor_above_the_box(&screen).unwrap();
+    let (at, _) = cursor_and_inside(&screen).unwrap();
+    assert_eq!(at, Position::new(50, 2), "{}", text(&screen));
+}
+
+#[test]
+fn new_world_and_load_leave_the_cursor_in_sight_however_tall_they_grow() {
+    // M2 design §8.1: only the help screen covers it.
+    let now = SystemTime::now();
+    let saves: Vec<SaveFile> = (0..13)
+        .map(|n| save(&format!("save-{n}"), now, Duration::from_secs(60 * n)))
+        .collect();
+    let presets: Vec<Preset> = (0..9)
+        .map(|n| Preset {
+            name: format!("preset-{n}"),
+            path: Some(PathBuf::from(format!("preset-{n}.ron"))),
+        })
+        .collect();
+    for mut title in [title(), title_under_rock()] {
+        title.set_saves(saves.clone(), now);
+        title.set_presets(presets.clone());
+        title.animate(Duration::from_secs(10));
+        for choice in [Choice::NewWorld, Choice::Load] {
+            let number = title.choices().iter().position(|&c| c == choice).unwrap() + 1;
+            title.apply(Action::Pick(number as u8));
+            cursor_above_the_box(&render(&title)).unwrap();
+            title.apply(Action::Back);
+        }
+    }
+}
+
+#[test]
+fn a_resize_moves_the_cursor_only_when_it_would_hide_it() {
+    // M2 design §8.1.
+    let mut title = title();
+    title.animate(Duration::from_secs(10));
+    let before = cursor_and_inside(&render(&title));
+    for size in [
+        Size::new(120, 30),
+        Size::new(80, 24),
+        Size::new(WIDTH, HEIGHT),
+    ] {
+        title.resize(size);
+    }
+    assert_eq!(cursor_and_inside(&render(&title)), before, "it stays put");
+
+    // A taller terminal's map puts it lower, and a wider one's further
+    // right, where the box or the edge would hide it on a smaller one.
+    let now = SystemTime::now();
+    for (width, height) in [(100, 50), (200, 30)] {
+        let mut title = title_on(width, height);
+        title.set_saves(vec![save("quicksave", now, Duration::from_secs(60))], now);
+        title.animate(Duration::from_secs(10));
+        title.resize(Size::new(WIDTH, HEIGHT));
+        cursor_above_the_box(&render(&title)).unwrap();
+    }
+}
+
+#[test]
+fn the_cursor_s_sprite_is_drawn_as_the_theme_draws_a_sprite() {
+    // M2 design §8.1: `@` in `--ascii`.
+    let theme = Theme::ascii();
+    let world = start::title_world(&Args::default(), 3, (WIDTH, HEIGHT)).expect("a world");
+    let mut title = Title::new(world, theme.clone(), OFFERED, Size::new(WIDTH, HEIGHT));
+    title.animate(Duration::from_secs(10));
+    let screen = render(&title);
+    let inside = cursor_and_inside_in(&screen, &theme).map(|(_, inside)| inside);
+    let sprite = theme.glyph(SemanticTile::Sprite).symbol.to_string();
+    assert_eq!(inside, Some(sprite), "{}", text(&screen));
 }
 
 #[test]
@@ -212,33 +395,28 @@ fn the_world_runs_at_4x_from_launch_while_the_light_spreads() {
 }
 
 #[test]
-fn the_sprite_under_the_light_sleeps_in_the_cursor_s_hold_until_it_wakes() {
-    // M2 design §8.1: the others move as the light spreads, while it stays
-    // where the light finds it, until it wakes and the Cursor lets it go.
+fn the_world_runs_untouched_by_cursor_and_inside() {
+    // M2 design §8.1: the sprite in the Cursor's frame is the scene's own,
+    // so the Cursor leads none of the world's, and they go about their
+    // lives.
     let mut title = title();
     let at_launch: Vec<_> = title.world().sprites().map(|s| (s.id(), s.pos())).collect();
-    for _ in 0..24 {
+    for _ in 0..30 {
         title.animate(Duration::from_millis(100));
+        assert_eq!(title.world().cursor().leads(), None);
     }
     let world = title.world();
-    let asleep = world.cursor().leads().expect("the Cursor holds it");
-    let moved = |id| {
-        let now = world.sprite(id).map(|sprite| sprite.pos());
-        at_launch
-            .iter()
-            .any(|&(was, pos)| was == id && Some(pos) != now)
-    };
-    assert!(!moved(asleep), "it stays where the light found it");
+    let moved = at_launch
+        .iter()
+        .filter(|&&(id, pos)| world.sprite(id).map(|s| s.pos()) != Some(pos))
+        .count();
+    // In 15 ticks most have stepped somewhere; a quarter is a floor well
+    // under that, so this is about the world running, not how fast.
     assert!(
-        at_launch.iter().any(|&(id, _)| id != asleep && moved(id)),
-        "the others are about their lives"
+        moved > at_launch.len() / 4,
+        "{moved} of {}",
+        at_launch.len()
     );
-    let shown = text(&render(&title));
-    assert!(shown.contains('z'), "it sleeps:\n{shown}");
-    for _ in 0..2 {
-        title.animate(Duration::from_millis(100));
-    }
-    assert_eq!(title.world().cursor().leads(), None, "it woke");
 }
 
 #[test]
@@ -257,12 +435,15 @@ fn after_a_long_frame_the_world_runs_at_most_5_ticks_and_drops_the_rest() {
 }
 
 #[test]
-fn a_skipped_scene_s_world_runs_from_the_skip_with_the_sprite_awake() {
+fn a_skip_leaves_the_world_running_and_the_cursor_s_sprite_where_it_was() {
     let mut title = title();
+    title.animate(Duration::from_millis(500));
+    let before = cursor_and_inside(&render(&title));
     title.apply(Action::Enter);
     title.animate(Duration::from_secs(1));
-    assert_eq!(title.world().tick(), 5);
-    assert_eq!(title.world().cursor().leads(), None, "the skip woke it");
+    // 2 ticks before the skip, and the 5 a frame runs at most after it.
+    assert_eq!(title.world().tick(), 7);
+    assert_eq!(cursor_and_inside(&render(&title)), before);
 }
 
 #[test]

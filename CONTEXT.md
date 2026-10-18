@@ -595,7 +595,7 @@ The screen the game opens on, before any world is running: a new random world mo
 _Avoid_: main menu, start screen, splash screen
 
 **Opening scene** (M2):
-How the title screen starts: in the dark, the Cursor's light finds a sleeping sprite and the world fills in around it, the sprite wakes pleased, and the title and menu appear. Any key skips it (M2 design §8.1).
+How the title screen starts: in the dark, the Cursor's light finds a sprite and the world fills in around it, then the title and menu appear below the Cursor, which keeps its sprite, still, for as long as the title screen is open. Any key skips it (M2 design §8.1).
 _Avoid_: intro, splash, cutscene
 
 **Story mode** (M2):

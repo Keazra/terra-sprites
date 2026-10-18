@@ -2,6 +2,7 @@
 //! player's world is running. The opening scene plays, then the menu shows
 //! over the world it woke, which runs behind it.
 
+use std::ops::Range;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
@@ -9,25 +10,21 @@ use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
-use terra_sim::{Command, EntityId, Mode, Pos, World};
+use terra_sim::{Mode, Pos, World};
 
 use crate::app::{App, Draft, highlight_moved, shown};
 use crate::clock::Speed;
 use crate::input::Action;
 use crate::saves::{self, SaveFile};
 use crate::start::Preset;
-use crate::theme::{Emote, SemanticTile, Theme};
+use crate::theme::{Glyph, SemanticTile, Theme};
 use crate::ui;
 
 /// When the Cursor's light has arrived and starts to spread (M2 design
 /// §8.1).
 const LIGHT_ARRIVES: Duration = Duration::from_millis(1000);
-/// When the sprite under the light wakes, and the Cursor lets it go.
-const WAKES: Duration = Duration::from_millis(2500);
 /// When the light has filled the screen, and the title starts to fade in.
 const LIGHT_FILLS: Duration = Duration::from_millis(4000);
-/// How long the woken sprite shows it's pleased.
-const PLEASED_UNTIL: Duration = Duration::from_millis(4500);
 /// When the scene ends and the menu shows.
 const SCENE_ENDS: Duration = Duration::from_millis(5500);
 /// How often the world behind the menu ticks: 4×, 5 ticks a second.
@@ -36,8 +33,18 @@ const TICK_EVERY: Duration = Duration::from_millis(200);
 const MOST_TICKS_AT_ONCE: u32 = 5;
 /// The menu's box: as wide as the title lettering and a margin.
 const BOX_WIDTH: u16 = 56;
+/// The choices the menu always offers, after Continue when there's a save.
+const ALWAYS_OFFERED: [Choice; 4] = [Choice::NewWorld, Choice::Load, Choice::Help, Choice::Quit];
 /// The most saves the list of saves shows at once; it scrolls for more.
 const LOAD_ROWS: usize = 12;
+/// The list of saves' rows besides the saves: its border.
+const LOAD_FRAME_ROWS: u16 = 2;
+/// The most presets the New world box shows at once; it scrolls for more.
+const PRESET_ROWS: usize = 8;
+/// The New world box's rows besides its presets: the border, the seed,
+/// the mode, a blank row, then under the presets a blank row, two rows of
+/// hints and the border.
+const NEW_WORLD_FRAME_ROWS: u16 = 8;
 /// The longest seed: `u64::MAX` has 20 digits.
 const MAX_SEED_DIGITS: usize = 20;
 /// What `Esc` asks on the title screen (M2 design §8.2).
@@ -157,11 +164,7 @@ pub struct Title {
     shown_for: Duration,
     /// Time owed to the world behind, in ticks of `TICK_EVERY`.
     owed: Duration,
-    /// The sprite the Cursor's light arrives on.
-    woken: Option<EntityId>,
-    /// Whether the Cursor still holds it asleep where the light finds it.
-    asleep: bool,
-    /// Where the light arrives: the woken sprite's tile.
+    /// Where the Cursor's light arrives and stays, over its sprite.
     light: Pos,
     screen: Screen,
     choice: usize,
@@ -180,32 +183,18 @@ pub struct Title {
 }
 
 impl Title {
-    /// The title screen on `world`, which the scene wakes, offering `seed`
-    /// first for a new world. It offers no saves and only the default
-    /// preset until told of more.
-    pub fn new(world: World, theme: Theme, seed: u64) -> Title {
+    /// The title screen on `world`, which the scene wakes, on a terminal
+    /// of `screen`, offering `seed` first for a new world. It offers no
+    /// saves and only the default preset until told of more.
+    pub fn new(world: World, theme: Theme, seed: u64, screen: Size) -> Title {
         let map = world.map();
-        let centre = Pos {
-            x: map.width() / 2,
-            y: map.height() / 2,
-        };
-        let woken = world
-            .sprites()
-            .min_by_key(|sprite| {
-                let pos = sprite.pos();
-                // A cell is about twice as tall as it is wide, so rows count double.
-                pos.x.abs_diff(centre.x) + 2 * pos.y.abs_diff(centre.y)
-            })
-            .map(|sprite| (sprite.id(), sprite.pos()));
         let areas = ui::areas(ui::MIN_SIZE);
         let help = App::new(map, theme.clone(), world.seed(), areas);
-        let mut title = Title {
+        Title {
             theme,
             shown_for: Duration::ZERO,
             owed: Duration::ZERO,
-            woken: woken.map(|(id, _)| id),
-            asleep: woken.is_some(),
-            light: woken.map_or(centre, |(_, pos)| pos),
+            light: light_for(&world, screen),
             screen: Screen::Menu,
             choice: 0,
             saves: Vec::new(),
@@ -214,16 +203,9 @@ impl Title {
             seed,
             refusal: None,
             help,
-            size: Size::new(map.width(), map.height()),
+            size: screen,
             world,
-        };
-        // The world runs from launch, as the terrarium does without the
-        // player, but the sprite the light finds sleeps in the Cursor's hold
-        // until it wakes (M2 design §8.1).
-        if let Some(sprite) = title.woken {
-            title.world.submit(Command::TakeHold { sprite });
         }
-        title
     }
 
     /// The saves Continue and Load offer, newest first, and the time now,
@@ -276,10 +258,7 @@ impl Title {
     /// The menu's choices, in order.
     pub fn choices(&self) -> Vec<Choice> {
         let continues = (!self.saves.is_empty()).then_some(Choice::Continue);
-        continues
-            .into_iter()
-            .chain([Choice::NewWorld, Choice::Load, Choice::Help, Choice::Quit])
-            .collect()
+        continues.into_iter().chain(ALWAYS_OFFERED).collect()
     }
 
     /// Whether keys type, as they do in the New world box.
@@ -296,7 +275,6 @@ impl Title {
     /// Lets `elapsed` pass: the scene plays on, and the world runs at 4×.
     pub fn animate(&mut self, elapsed: Duration) {
         self.shown_for = self.shown_for.saturating_add(elapsed);
-        self.wake();
         self.owed += elapsed;
         let mut ticks = 0;
         while self.owed >= TICK_EVERY && ticks < MOST_TICKS_AT_ONCE {
@@ -310,19 +288,17 @@ impl Title {
         }
     }
 
-    /// Once it's time, the sprite under the light wakes, and the Cursor
-    /// lets it go to live as the others do (M2 design §8.1).
-    fn wake(&mut self) {
-        if self.asleep && self.shown_for >= WAKES {
-            self.world.submit(Command::LetGo);
-            self.asleep = false;
-        }
-    }
-
     /// The terminal is now `size`, so a click finds the menu where it's
-    /// drawn.
+    /// drawn. The Cursor stays where it is unless the new size would hide
+    /// it, or put a box over it (M2 design §8.1).
     pub fn resize(&mut self, size: Size) {
         self.size = size;
+        let (columns, rows) = clear_of_boxes(&self.world, size);
+        let hidden = !columns.contains(&self.light.x) || !rows.contains(&self.light.y);
+        // Under "Terminal too small" there's no Cursor drawn to hide.
+        if hidden && !ui::too_small(size) {
+            self.light = light_for(&self.world, size);
+        }
     }
 
     /// What `action` does on the title screen.
@@ -340,7 +316,6 @@ impl Title {
             // Any key or click skips the scene, and does nothing else.
             if !matches!(action, Action::Point(_) | Action::Release { .. }) {
                 self.shown_for = SCENE_ENDS;
-                self.wake();
             }
             return TitleFlow::Stay;
         }
@@ -545,7 +520,7 @@ impl Title {
             0
         };
         let width = u16::try_from(none).unwrap_or(u16::MAX).max(BOX_WIDTH);
-        centred_box(screen, width, self.load_rows() as u16 + 2)
+        centred_box(screen, width, self.load_rows() as u16 + LOAD_FRAME_ROWS)
     }
 }
 
@@ -553,6 +528,48 @@ impl Title {
 /// `screen`.
 fn menu_box(screen: Size, choices: usize) -> Rect {
     centred_box(screen, BOX_WIDTH, choices as u16 + MENU_FRAME_ROWS)
+}
+
+/// Where the Cursor's light arrives and stays (M2 design §8.1): over the
+/// tile nearest the middle of the rows above the title's boxes that a
+/// sprite could stand on and nothing's on, or that middle when there's no
+/// such tile.
+fn light_for(world: &World, screen: Size) -> Pos {
+    let map = world.map();
+    let (columns, rows) = clear_of_boxes(world, screen);
+    let middle = Pos {
+        x: (columns.start + columns.end) / 2,
+        y: (rows.start + rows.end.saturating_sub(1)) / 2,
+    };
+    let free = |pos: Pos| {
+        let walkable = world.data().terrain(map.terrain(pos)).step_cost().is_some();
+        walkable && world.sprite_at(pos).is_none() && world.object_at(pos).is_none()
+    };
+    rows.flat_map(|y| columns.clone().map(move |x| Pos { x, y }))
+        .filter(|&pos| free(pos))
+        // A cell is about twice as tall as it is wide, so rows count double.
+        .min_by_key(|pos| pos.x.abs_diff(middle.x) + 2 * pos.y.abs_diff(middle.y))
+        .unwrap_or(middle)
+}
+
+/// The columns and rows the Cursor's sprite may be in on a terminal of
+/// `screen`, with its frame on the map shown and above the tallest box the
+/// title draws, however many choices, presets or saves it holds, so none
+/// covers it. Only the help screen, over everything, does (M2 design
+/// §8.1).
+fn clear_of_boxes(world: &World, screen: Size) -> (Range<u16>, Range<u16>) {
+    let map = world.map();
+    let width = map.width().min(screen.width);
+    let height = map.height().min(screen.height);
+    let menu = (ALWAYS_OFFERED.len() + 1) as u16 + MENU_FRAME_ROWS;
+    let new_world = PRESET_ROWS as u16 + NEW_WORLD_FRAME_ROWS;
+    let load = LOAD_ROWS as u16 + LOAD_FRAME_ROWS;
+    let top = centred_box(screen, BOX_WIDTH, menu.max(new_world).max(load)).y;
+    // The frame takes a tile each side of its sprite.
+    (
+        1..width.saturating_sub(1),
+        1..top.min(height).saturating_sub(1),
+    )
 }
 
 /// A box `width` wide, or as wide as the screen, and `height` tall in the
@@ -624,6 +641,7 @@ pub fn render(frame: &mut Frame, title: &Title) {
     if !title.scene_over() {
         draw_scene(buf, area, title);
     }
+    draw_cursor(buf, area, title);
     // New world and Load take the menu's place.
     let in_a_box = matches!(title.screen, Screen::NewWorld(_) | Screen::Load { .. });
     if title.shown_for >= LIGHT_FILLS && !in_a_box {
@@ -661,21 +679,26 @@ fn draw_world(buf: &mut Buffer, area: Rect, title: &Title) {
             } else {
                 title.theme.glyph(SemanticTile::Terrain(map.terrain(pos)))
             };
-            let mut style = Style::default().fg(glyph.fg);
-            if glyph.bold {
-                style = style.add_modifier(Modifier::BOLD);
-            }
-            if glyph.reversed {
-                style = style.add_modifier(Modifier::REVERSED);
-            }
-            cell.set_char(glyph.symbol).set_style(style);
+            cell.set_char(glyph.symbol).set_style(style_of(glyph));
         }
     }
 }
 
+/// How `glyph` is drawn: in its colour, and bold or in reverse video if
+/// it says so.
+fn style_of(glyph: Glyph) -> Style {
+    let mut style = Style::default().fg(glyph.fg);
+    if glyph.bold {
+        style = style.add_modifier(Modifier::BOLD);
+    }
+    if glyph.reversed {
+        style = style.add_modifier(Modifier::REVERSED);
+    }
+    style
+}
+
 /// The scene over the world (M2 design §8.1): dark beyond the light's
-/// reach, the sprite under the light asleep, then pleased, and the Cursor's
-/// frame of light brightening as it arrives.
+/// reach, its edge `░`.
 fn draw_scene(buf: &mut Buffer, area: Rect, title: &Title) {
     let t = title.shown_for;
     let light = title.light;
@@ -699,23 +722,24 @@ fn draw_scene(buf: &mut Buffer, area: Rect, title: &Title) {
             }
         }
     }
-    let woken = title.woken.and_then(|id| title.world.sprite(id));
-    if let Some(sprite) = woken.filter(|_| t < PLEASED_UNTIL) {
-        let emote = if t < WAKES {
-            Emote::Resting
-        } else {
-            Emote::Pleased
-        };
-        let glyph = title.theme.glyph(SemanticTile::Emote(emote));
-        let pos = sprite.pos();
-        if area.contains(Position::new(pos.x, pos.y)) {
-            buf[(pos.x, pos.y)]
-                .set_char(glyph.symbol)
-                .set_style(Style::default().fg(glyph.fg));
-        }
+}
+
+/// The Cursor's frame of light, brightening as it arrives, with its sprite
+/// inside, still and drawn as a sprite is, for as long as the title screen
+/// is open (M2 design §8.1). It's the scene's own sprite, drawn over the
+/// world as the Cursor is over a map, so it needs nothing, and the Cursor
+/// leads none of the world's sprites.
+fn draw_cursor(buf: &mut Buffer, area: Rect, title: &Title) {
+    let light = title.light;
+    if area.contains(Position::new(light.x, light.y)) {
+        let sprite = title.theme.glyph(SemanticTile::Sprite);
+        buf[(light.x, light.y)]
+            .set_char(sprite.symbol)
+            .set_style(style_of(sprite));
     }
+    let brightness = title.shown_for.as_secs_f64() / LIGHT_ARRIVES.as_secs_f64();
     let frame = title.theme.visible_frame();
-    let style = Style::default().fg(fade(t.as_secs_f64() / LIGHT_ARRIVES.as_secs_f64()));
+    let style = Style::default().fg(fade(brightness));
     let sides = [
         (Some(light.x), light.y.checked_sub(1), frame.up),
         (Some(light.x), light.y.checked_add(1), frame.down),
@@ -789,10 +813,9 @@ fn draw_new_world(buf: &mut Buffer, title: &Title, new: &NewWorld) {
     let explained = explained(new.mode);
     // The presets, or the explanation in their place: room for whichever
     // is longer, so the box stays put when `?` is held.
-    let rows = title.presets.len().min(8).max(explained.len()) as u16;
-    // The border, the seed, the mode, a blank row, the presets, a blank
-    // row, two rows of hints and the border.
-    let area = centred_box(buf.area.as_size(), BOX_WIDTH, rows + 8).intersection(buf.area);
+    let rows = title.presets.len().min(PRESET_ROWS).max(explained.len()) as u16;
+    let height = rows + NEW_WORLD_FRAME_ROWS;
+    let area = centred_box(buf.area.as_size(), BOX_WIDTH, height).intersection(buf.area);
     let inner = double_box(buf, area, " New world ");
     let room = |x: u16| usize::from(inner.right().saturating_sub(x));
     // The seed offered shows highlighted, as the first key replaces it;
