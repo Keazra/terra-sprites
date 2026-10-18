@@ -52,11 +52,14 @@ impl Clip {
 }
 
 /// How a clip is framed: the screen's size in cells, whether it's the map
-/// view alone, and how long each frame shows.
+/// view alone or which of the screen's other parts it shows, and how long
+/// each frame shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Framing {
     pub screen: Size,
     pub map_view_alone: bool,
+    /// The parts drawn with the map view, when it isn't alone (#291).
+    pub parts: ui::Parts,
     pub frame: Duration,
 }
 
@@ -163,14 +166,19 @@ pub fn world_clip(
         return Err(format!("the clip starts at tick {from}, after --to {to}"));
     }
     let world = session.world();
-    // The whole screen, or the map view alone.
-    let (areas, render): (_, fn(&mut Drawing, &App, &World)) = if framing.map_view_alone {
-        (
-            ui::map_view_alone_areas(framing.screen),
-            ui::render_map_view_alone,
-        )
+    // The screen, or as much of it as the clip shows, or the map view
+    // alone.
+    let areas = if framing.map_view_alone {
+        ui::map_view_alone_areas(framing.screen)
     } else {
-        (ui::areas(framing.screen), ui::render)
+        ui::areas_with(framing.screen, framing.parts)
+    };
+    let render = |frame: &mut Drawing, app: &App, world: &World| {
+        if framing.map_view_alone {
+            ui::render_map_view_alone(frame, app, world);
+        } else {
+            ui::render_with(frame, app, world, framing.parts);
+        }
     };
     let mut app = App::new(world.map(), theme, world.seed(), areas);
     if let (Some(name), Some(playback)) = (&replay, session.playback()) {
@@ -375,6 +383,7 @@ mod tests {
         Framing {
             screen,
             map_view_alone,
+            parts: ui::Parts::ALL,
             frame: Duration::from_millis(100),
         }
     }
@@ -413,6 +422,30 @@ mod tests {
                 .iter()
                 .all(|frame| frame.screen.area.as_size() == Size::new(100, 30))
         );
+    }
+
+    #[test]
+    fn a_clip_can_leave_out_the_event_log_for_the_map_view_to_take_its_rows() {
+        // #291.
+        let world = field(&[Pos { x: 20, y: 10 }], &[]);
+        let scene = scene(0, 1, Pace::Game(Speed::X4), Track::First);
+        let framing = Framing {
+            parts: ui::Parts {
+                event_log: false,
+                ..ui::Parts::ALL
+            },
+            ..framing(Size::new(100, 30), false)
+        };
+        let clip = world_clip(live(world), Theme::cp437(), &scene, &framing).unwrap();
+        for frame in &clip.frames {
+            let rows: Vec<String> = (0..30).map(|y| row(&frame.screen, y)).collect();
+            assert!(
+                rows.iter().all(|row| !row.contains(" Events ")),
+                "{rows:#?}"
+            );
+            // The map view's bottom border sits on the status line.
+            assert!(rows[28].starts_with('└'), "{}", rows[28]);
+        }
     }
 
     #[test]

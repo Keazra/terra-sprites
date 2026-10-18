@@ -56,6 +56,9 @@ usage: render title [options] -o <file>
                        the smallest screen the game draws its panels on)
   --map-view           the map view alone, with no border or panels, at
                        any size
+  --hide <parts>       leave parts of the screen out, for the map view to
+                       take their room: top-bar, inspector, event-log or
+                       status-line, a comma between several
   --cell <WxH>         a screen cell's size in pixels (default 10x20)
   --track <n|none>     the sprite the view tracks (default: the one Tab
                        selects first), or none
@@ -180,6 +183,7 @@ impl Options {
         let mut framing = Framing {
             screen: Size::new(100, 30),
             map_view_alone: false,
+            parts: ui::Parts::ALL,
             frame: Duration::from_millis(100),
         };
         let mut cell = Size::new(10, 20);
@@ -213,6 +217,7 @@ impl Options {
                     | "--cursor"
                     | "--tab"
                     | "--map-view"
+                    | "--hide"
             ) {
                 for_a_world.push(flag.clone());
             }
@@ -229,6 +234,7 @@ impl Options {
                 "--seconds" => seconds = Some(duration(&value()?)?),
                 "--size" => framing.screen = size(&flag, &value()?)?,
                 "--map-view" => framing.map_view_alone = true,
+                "--hide" => hide(&value()?, &mut framing.parts)?,
                 "--cell" => cell = size(&flag, &value()?)?,
                 "--track" => scene.track = track(&value()?)?,
                 "--cursor" => scene.cursor = true,
@@ -304,6 +310,20 @@ impl Options {
         {
             return Err("--to is a tick at or after --from".into());
         }
+        if framing.map_view_alone && framing.parts != ui::Parts::ALL {
+            return Err(
+                "--map-view draws the map view alone, with no other parts to --hide".into(),
+            );
+        }
+        if let Scene::World(scene) = &scene
+            && scene.tab.is_some()
+            && !framing.parts.inspector
+        {
+            return Err(
+                "--tab opens one of the inspector's tabs, and --hide inspector leaves it out"
+                    .into(),
+            );
+        }
         let (screen, smallest) = (framing.screen, ui::MIN_SIZE);
         if !framing.map_view_alone
             && (screen.width < smallest.width || screen.height < smallest.height)
@@ -345,6 +365,25 @@ impl Options {
             bold_font,
         })
     }
+}
+
+/// Leaves out the parts of the screen named, a comma between several.
+fn hide(value: &str, parts: &mut ui::Parts) -> Result<(), String> {
+    for name in value.split(',') {
+        match name.trim().to_lowercase().as_str() {
+            "top-bar" => parts.top_bar = false,
+            "inspector" => parts.inspector = false,
+            "event-log" => parts.event_log = false,
+            "status-line" => parts.status_line = false,
+            _ => {
+                return Err(format!(
+                    "--hide leaves out the top-bar, inspector, event-log or status-line, not \
+                     `{name}`"
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// A whole number from the command line.
@@ -496,6 +535,27 @@ mod tests {
     }
 
     #[test]
+    fn a_world_clip_can_leave_parts_of_the_screen_out() {
+        // #291: the map view takes the room they leave.
+        let options = parse("world --hide event-log,inspector --hide top-bar -o a.gif").unwrap();
+        assert_eq!(
+            options.framing.parts,
+            ui::Parts {
+                top_bar: false,
+                inspector: false,
+                event_log: false,
+                status_line: true,
+            }
+        );
+        let options = parse("world --hide status-line -o a.gif").unwrap();
+        assert!(!options.framing.parts.status_line);
+        assert_eq!(
+            parse("world -o a.gif").unwrap().framing.parts,
+            ui::Parts::ALL
+        );
+    }
+
+    #[test]
     fn a_replay_starts_where_it_starts_unless_told() {
         let options = parse("world --replay last_session.replay -o a.gif").unwrap();
         let Scene::World(scene) = &options.scene else {
@@ -578,5 +638,21 @@ mod tests {
         refused("title --seconds 1e300 -o a.gif", "1e300");
         refused("title --seconds 1e-12 -o a.gif", "1e-12");
         refused("sing -o a.gif", "sing");
+        refused(
+            "world --hide map -o a.gif",
+            "top-bar, inspector, event-log or status-line",
+        );
+        refused(
+            "title --hide event-log -o a.gif",
+            "--hide is for a world's clip",
+        );
+        refused(
+            "world --map-view --hide event-log -o a.gif",
+            "--map-view draws the map view alone",
+        );
+        refused(
+            "world --hide inspector --tab brain -o a.gif",
+            "--tab opens one of the inspector's tabs",
+        );
     }
 }
