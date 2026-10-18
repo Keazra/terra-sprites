@@ -3,13 +3,17 @@
 # opened red. Switched on per clone with `git config core.hooksPath .githooks`;
 # Claude Code sessions switch it on themselves (.claude/settings.json).
 #
-# A commit whose tree scripts/check.sh already passed goes straight through.
-# Any other is checked out on its own in a scratch worktree, so neither
-# uncommitted changes nor untracked files (a forgotten module, another agent's
-# test) sway the result. That takes a few minutes. Tags and deletes are skipped.
+# A commit whose tree scripts/check.sh already passed, on the Rust there is
+# now, goes straight through. Any other is checked out on its own in a scratch
+# worktree and checked with its own scripts/check.sh, as CI runs a commit's
+# own workflow, so neither uncommitted changes nor untracked files (a
+# forgotten module, another agent's test, an edit to check.sh itself) sway
+# the result. That takes a few minutes. Tags and deletes are skipped.
 set -euo pipefail
 check="$(cd "$(dirname "$0")/.." && pwd)/scripts/check.sh"
 cd "$(git rev-parse --show-toplevel)"
+# A new Rust brings new lints, so a pass on an older one says nothing now.
+rust=$(rustc -V)
 
 zero=0000000000000000000000000000000000000000
 stamps="$(git rev-parse --git-common-dir)/terra-checks-passed"
@@ -18,7 +22,7 @@ while read -r local_ref local_sha _remote_ref _remote_sha; do
     case "$local_ref" in refs/tags/*) continue ;; esac
     [ "$local_sha" = "$zero" ] && continue
     tree=$(git rev-parse "$local_sha^{tree}")
-    [ -f "$stamps" ] && grep -qx "$tree" "$stamps" && continue
+    [ -f "$stamps" ] && grep -qxF "$tree $rust" "$stamps" && continue
     to_check+=("$local_sha")
 done
 
@@ -36,5 +40,6 @@ for sha in "${to_check[@]}"; do
     echo "Run scripts/check.sh (or check.ps1) on a clean, committed tree first and this step is instant."
     cleanup
     git worktree add -q --detach "$scratch" "$sha"
-    (cd "$scratch" && bash "$check")
+    # A commit from before scripts/check.sh is checked with this folder's.
+    (cd "$scratch" && if [ -f scripts/check.sh ]; then bash scripts/check.sh; else bash "$check"; fi)
 done

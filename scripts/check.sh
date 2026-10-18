@@ -4,11 +4,12 @@
 # what the checks are and why it's `fmt --check`.
 #
 # When they pass on a committed tree, with no untracked files cargo would also
-# read, the tree is noted so the pre-push hook (.githooks/pre-push) needn't run
-# them again.
+# read, the tree is noted with the Rust they passed on, so the pre-push hook
+# (.githooks/pre-push) needn't run them again on that Rust.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 tested=$(git rev-parse 'HEAD^{tree}')
+rust=$(rustc -V)
 
 step() { printf '\n== %s\n' "$1"; }
 
@@ -33,6 +34,6 @@ if [ -n "$untracked" ]; then
 elif ! git diff --quiet HEAD -- || [ "$(git rev-parse 'HEAD^{tree}')" != "$tested" ]; then
     printf '\nAll checks passed, on changes not yet committed (or HEAD moved during the run): pushing checks the commit again.\n'
 else
-    echo "$tested" >> "$(git rev-parse --git-common-dir)/terra-checks-passed"
+    echo "$tested $rust" >> "$(git rev-parse --git-common-dir)/terra-checks-passed"
     printf '\nAll checks passed on %s.\n' "$(git rev-parse --short HEAD)"
 fi

@@ -92,6 +92,12 @@ impl WorldConfig {
             .with_default_extension(Extensions::IMPLICIT_SOME)
             .from_str(text)
             .map_err(|e| ConfigError::Parse(e.to_string()))?;
+        WorldConfig::checked(preset, data)
+    }
+
+    /// The config `preset` gives, if it keeps the rules, checking the
+    /// object types it names against `data`.
+    fn checked(preset: Preset, data: &DataPack) -> Result<WorldConfig, ConfigError> {
         for (side, value) in [("width", preset.width), ("height", preset.height)] {
             if !SIDE.contains(&value) {
                 return Err(ConfigError::Invalid(format!(
@@ -162,8 +168,9 @@ impl WorldConfig {
         )
     }
 
-    /// A config from the fields a save kept, checked when it was made.
-    /// Nothing in the sim reads a loaded world's config.
+    /// A config from the fields a save or replay kept, checked again as a
+    /// preset is (design §2.7, §2.8): a damaged file could hold any values,
+    /// and a replay generates its world from them again.
     pub(crate) fn from_parts(
         width: u16,
         height: u16,
@@ -171,15 +178,18 @@ impl WorldConfig {
         per_tiles: u32,
         sprites: u16,
         most_sprites: u16,
-    ) -> WorldConfig {
-        WorldConfig {
+        data: &DataPack,
+    ) -> Result<WorldConfig, ConfigError> {
+        let preset = Preset {
             width,
             height,
             objects,
-            per_tiles,
-            sprites,
-            most_sprites,
-        }
+            per_tiles: Some(per_tiles),
+            // A config with no sprites came from a preset that left them out.
+            sprites: (sprites > 0).then_some(sprites),
+            most_sprites: Some(most_sprites),
+        };
+        WorldConfig::checked(preset, data)
     }
 
     /// The map's width, in tiles.

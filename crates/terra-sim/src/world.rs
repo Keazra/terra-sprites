@@ -50,9 +50,10 @@ pub struct World {
     data: DataPack,
     /// The ID counter as `check_invariants` last saw it, to catch it going back.
     checked_next_id: Cell<u64>,
-    /// How many sprites had died when `check_invariants` last checked the
-    /// record of the dead, which changes only when one dies (M2 design
-    /// §17.1), so it's checked again only then.
+    /// How many sprites had died when `check_invariants` last found the
+    /// record of the dead whole. The record changes only when one dies (M2
+    /// design §17.1), so its own rules are checked again only then; that
+    /// nothing in the world is remembered as dead is checked every tick.
     checked_deaths: Cell<u64>,
     /// The seed the world was made from, which the top bar shows. The RNG's
     /// state carries on from it, so nothing in the sim reads it.
@@ -1328,6 +1329,10 @@ impl World {
             .collect();
         let data = DataPack::from_sources(&sources).map_err(LoadError::Pack)?;
         state.rebuild(&data).map_err(LoadError::Damaged)?;
+        let config = config
+            .map(|preset| preset.config(&data))
+            .transpose()
+            .map_err(LoadError::Damaged)?;
         let world = World {
             checked_next_id: Cell::new(state.next_id),
             // Never a count of deaths, so a load checks the record.
@@ -1335,7 +1340,7 @@ impl World {
             state,
             data,
             seed,
-            config: config.map(WorldConfig::from),
+            config,
             view,
             recording: None,
         };
@@ -1852,15 +1857,24 @@ impl World {
                 "{id:?} is both a sprite and an object"
             )));
         }
-        let mut ids = state
-            .objects
-            .iter()
-            .map(|(id, _)| id)
-            .chain(state.sprites.iter().map(|(id, _)| id));
-        if let Some(id) = ids.find(|id| id.0 >= state.next_id) {
+        let ids = || {
+            state
+                .objects
+                .iter()
+                .map(|(id, _)| id)
+                .chain(state.sprites.iter().map(|(id, _)| id))
+        };
+        if let Some(id) = ids().find(|id| id.0 >= state.next_id) {
             return Err(InvariantViolation(format!(
                 "{id:?} is at or above the ID counter, {}: IDs must only go up",
                 state.next_id
+            )));
+        }
+        // An ID is never used again, so nothing in the world is one the
+        // world remembers as dead (M2 design §17.1).
+        if let Some(id) = ids().find(|&id| state.dead.get(id).is_some()) {
+            return Err(InvariantViolation(format!(
+                "{id:?} is remembered as dead but is in the world"
             )));
         }
         state
@@ -1878,8 +1892,11 @@ impl World {
                 if deaths == self.checked_deaths.get() {
                     return Ok(());
                 }
+                // Noted only once it holds, so a record found broken is
+                // found broken again however often it's checked.
+                state.dead.check(&state.sprites)?;
                 self.checked_deaths.set(deaths);
-                state.dead.check(&state.sprites, &state.objects)
+                Ok(())
             })
             .map_err(InvariantViolation)
     }
@@ -2075,6 +2092,100 @@ mod tests {
                 Err(err) => panic!("damage {n} refused for the wrong reason: {err}"),
                 Ok(_) => panic!("damage {n} loaded"),
             }
+        }
+    }
+
+    /// A save whose preset breaks a rule a preset file must keep, as a
+    /// damaged file might hold it, is refused (design §2.8): a world
+    /// recorded from its first tick is generated again from its preset
+    /// (design §2.7).
+    #[test]
+    fn a_save_whose_preset_breaks_a_rule_is_refused() {
+        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let config = WorldConfig::builtin(&data);
+        let world = World::new(config.clone(), data, 7);
+        assert!(World::load(&world.save()).is_ok());
+        for (n, preset) in crate::test_util::broken_presets(&config)
+            .into_iter()
+            .enumerate()
+        {
+            let bytes = save::write(&save::Contents {
+                seed: world.seed,
+                config: Some(preset),
+                pack: world.data.sources().to_vec(),
+                state: &world.state,
+                view: None,
+            });
+            match World::load(&bytes) {
+                Err(LoadError::Damaged(why)) => assert!(why.contains("preset"), "{n}: {why}"),
+                Err(err) => panic!("preset {n} refused for the wrong reason: {err}"),
+                Ok(_) => panic!("preset {n} loaded"),
+            }
+        }
+    }
+
+    /// Two sprites, a step on, with the record of the dead checked as it
+    /// stands.
+    fn two_sprites_a_step_on() -> World {
+        let mut world = field_with_a_bush();
+        for x in [1, 4] {
+            world.submit(Command::SpawnSprite {
+                tile: Pos { x, y: 1 },
+                genome: None,
+            });
+        }
+        world.step();
+        assert_eq!(world.check_invariants(), Ok(()));
+        world
+    }
+
+    /// A sprite or an object the world remembers as dead is caught on any
+    /// tick, not only one when a sprite died (design §7.1).
+    #[test]
+    fn something_in_the_world_remembered_as_dead_is_caught_on_any_tick() {
+        let mut world = two_sprites_a_step_on();
+        let (id, sprite) = world.state.sprites.iter().next().expect("a sprite");
+        let record = Record::of(sprite, DeathCause::OldAge, world.state.tick);
+        world.state.dead.remember(id, record.clone());
+        assert!(
+            world
+                .check_invariants()
+                .is_err_and(|broken| broken.0.contains("remembered as dead"))
+        );
+        world.state.dead = RecordOfTheDead::default();
+        let bush = world
+            .state
+            .objects
+            .at(Pos { x: 2, y: 2 })
+            .expect("the bush");
+        world.state.dead.remember(bush, record);
+        assert!(
+            world
+                .check_invariants()
+                .is_err_and(|broken| broken.0.contains("remembered as dead"))
+        );
+    }
+
+    /// A record of the dead found broken is found broken again, however
+    /// often it's checked (design §7.1).
+    #[test]
+    fn a_broken_record_of_the_dead_stays_caught() {
+        let mut world = two_sprites_a_step_on();
+        let (_, sprite) = world.state.sprites.iter().next().expect("a sprite");
+        let mut record = Record::of(sprite, DeathCause::OldAge, world.state.tick);
+        record.parents = vec![EntityId(world.state.next_id)];
+        record.generation = 2;
+        let gone = EntityId(world.state.next_id - 1);
+        world.state.sprites.remove(gone);
+        world.state.dead.remember(gone, record);
+        *world.state.deaths.entry(DeathCause::OldAge).or_insert(0) += 1;
+        for check in 1..=2 {
+            assert!(
+                world
+                    .check_invariants()
+                    .is_err_and(|broken| broken.0.contains("younger than itself")),
+                "check {check}"
+            );
         }
     }
 
