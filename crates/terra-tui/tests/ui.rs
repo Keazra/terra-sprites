@@ -4849,9 +4849,35 @@ fn a_picture_without_the_top_bar_and_status_line_starts_and_ends_on_panels() {
 }
 
 #[test]
+fn a_picture_without_any_other_part_is_the_map_view_in_its_border() {
+    // #291: the map view's border runs round the whole picture.
+    let parts = ui::Parts {
+        top_bar: false,
+        inspector: false,
+        event_log: false,
+        status_line: false,
+    };
+    let areas = ui::areas_with(Size::new(100, 30), parts);
+    assert_eq!(areas.tiles, Rect::new(1, 1, 98, 28));
+    assert_eq!((areas.inspector, areas.event_log), (None, None));
+    let shown = render_parts(&generated_world(), parts);
+    assert!(shown[0].starts_with("┌─ Map ─"), "{}", shown[0]);
+    assert!(shown[0].ends_with('┐'), "{}", shown[0]);
+    assert!(shown[29].starts_with('└'), "{}", shown[29]);
+    assert!(shown[29].ends_with('┘'), "{}", shown[29]);
+}
+
+#[test]
 fn the_game_draws_every_part_of_the_screen() {
-    // #291: leaving parts out is for pictures; the game's own screen is
-    // the whole of it.
-    let screen = Size::new(100, 30);
-    assert_eq!(ui::areas_with(screen, ui::Parts::ALL), ui::areas(screen));
+    // #291: leaving parts out is for pictures; the game's own screen has
+    // the top bar, the map view and the inspector side by side, the event
+    // log and the status line.
+    let world = generated_world();
+    let app = app_for(&world, Theme::cp437(), 100, 30);
+    let shown = lines(&render(&app, &world, 100, 30));
+    assert!(shown[0].starts_with(" Terra Sprites"), "{}", shown[0]);
+    assert!(shown[1].starts_with("┌─ Map ─"), "{}", shown[1]);
+    assert_eq!(shown[1].matches('┌').count(), 2, "{}", shown[1]);
+    assert!(shown[24].starts_with("┌─ Events ─"), "{}", shown[24]);
+    assert!(!shown[29].starts_with('└'), "{}", shown[29]);
 }

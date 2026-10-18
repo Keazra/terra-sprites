@@ -31,7 +31,8 @@ const MIN_HEIGHT_FOR_EVENT_LOG: u16 = 30;
 
 /// Which of the screen's parts are drawn, besides the map view: all of them
 /// in the game, and as few as a picture of it wants, such as one of the
-/// renderer's clips (#291). The map view takes the room a part leaves.
+/// renderer's clips. The map view takes the room a part leaves, with the
+/// inspector beside it while that's drawn (M2 design §11.4, #291).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Parts {
     pub top_bar: bool,
@@ -50,12 +51,12 @@ impl Parts {
     };
 
     /// The rows the top bar takes: one, or none.
-    fn top(self) -> u16 {
+    fn top_rows(self) -> u16 {
         u16::from(self.top_bar)
     }
 
     /// The rows the status line takes: one, or none.
-    fn bottom(self) -> u16 {
+    fn bottom_rows(self) -> u16 {
         u16::from(self.status_line)
     }
 }
@@ -67,7 +68,7 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
 }
 
 /// Draws one frame with only the screen's `parts`, and the map view in the
-/// room the rest leave (#291). The app is to be fitted to `areas_with` the
+/// room the rest leave (M2 design §11.4). The app is to be fitted to `areas_with` the
 /// same parts, so the Cursor and the marks land where it says.
 pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
     let area = frame.area();
@@ -75,9 +76,9 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
         return render_too_small(frame.buffer_mut(), area, app);
     }
     let [top_bar, _, status] = Layout::vertical([
-        Constraint::Length(parts.top()),
+        Constraint::Length(parts.top_rows()),
         Constraint::Min(0),
-        Constraint::Length(parts.bottom()),
+        Constraint::Length(parts.bottom_rows()),
     ])
     .areas(area);
     if parts.top_bar {
@@ -157,7 +158,7 @@ pub fn areas(screen: Size) -> Areas {
 }
 
 /// Where the app's panels are drawn on a screen of `screen` cells that
-/// draws only `parts` (`render_with`, #291).
+/// draws only `parts` (`render_with`, M2 design §11.4).
 pub fn areas_with(screen: Size, parts: Parts) -> Areas {
     // A screen too small for the game draws no panels, so nothing can be
     // clicked on it.
@@ -177,8 +178,9 @@ pub fn areas_with(screen: Size, parts: Parts) -> Areas {
     }
 }
 
-/// The map view, border included: below the top bar, at the left, leaving
-/// room for the inspector and the event log when there is some. A small map
+/// The map view, border included: below the top bar if it's drawn, at the
+/// left, leaving room for the inspector and the event log when they're drawn
+/// and there is some. A small map
 /// is drawn in the middle of it, with space round it (M2 design §11.1).
 fn map_view_area(screen: Rect, parts: Parts) -> Rect {
     let width = match inspector_area(screen, parts) {
@@ -188,14 +190,15 @@ fn map_view_area(screen: Rect, parts: Parts) -> Rect {
     let height = panels_height(screen, parts);
     Rect::new(
         screen.x,
-        screen.y + parts.top().min(screen.height),
+        screen.y + parts.top_rows().min(screen.height),
         width,
         height,
     )
 }
 
 /// The rows for the map view and the inspector: between the top bar and the
-/// event log, or the status line if there's no room for the log.
+/// event log, or the status line if the log isn't drawn, each part where it
+/// is drawn and the screen's edge where it isn't.
 fn panels_height(screen: Rect, parts: Parts) -> u16 {
     let log = if event_log_area(screen, parts).is_some() {
         EVENT_LOG_HEIGHT
@@ -204,17 +207,17 @@ fn panels_height(screen: Rect, parts: Parts) -> u16 {
     };
     screen
         .height
-        .saturating_sub(parts.top() + parts.bottom() + log)
+        .saturating_sub(parts.top_rows() + parts.bottom_rows() + log)
 }
 
-/// The inspector, border included: at the right, below the top bar, on a
-/// terminal wide enough for it.
+/// The inspector, border included, if it's drawn: at the right, below the
+/// top bar if that's drawn, on a terminal wide enough for it.
 fn inspector_area(screen: Rect, parts: Parts) -> Option<Rect> {
     let room = screen.width >= MIN_WIDTH_FOR_INSPECTOR && screen.height > 2;
     (parts.inspector && room).then(|| {
         Rect::new(
             screen.right() - INSPECTOR_WIDTH,
-            screen.y + parts.top(),
+            screen.y + parts.top_rows(),
             INSPECTOR_WIDTH,
             panels_height(screen, parts),
         )
@@ -222,23 +225,27 @@ fn inspector_area(screen: Rect, parts: Parts) -> Option<Rect> {
 }
 
 /// Where the help screen and the sprite list are drawn: the full width,
-/// between the top bar and the status line.
+/// between the top bar and the status line, or the screen's edges where
+/// they aren't drawn.
 fn overlay_area(screen: Rect, parts: Parts) -> Rect {
     Rect::new(
         screen.x,
-        screen.y + parts.top(),
+        screen.y + parts.top_rows(),
         screen.width,
-        screen.height.saturating_sub(parts.top() + parts.bottom()),
+        screen
+            .height
+            .saturating_sub(parts.top_rows() + parts.bottom_rows()),
     )
 }
 
-/// The event log, border included: the full width, just above the status
-/// line, on a terminal tall enough for it.
+/// The event log, border included, if it's drawn: the full width, just
+/// above the status line or the screen's bottom edge, on a terminal tall
+/// enough for it.
 fn event_log_area(screen: Rect, parts: Parts) -> Option<Rect> {
     (parts.event_log && screen.height >= MIN_HEIGHT_FOR_EVENT_LOG).then(|| {
         Rect::new(
             screen.x,
-            screen.bottom() - parts.bottom() - EVENT_LOG_HEIGHT,
+            screen.bottom() - parts.bottom_rows() - EVENT_LOG_HEIGHT,
             screen.width,
             EVENT_LOG_HEIGHT,
         )

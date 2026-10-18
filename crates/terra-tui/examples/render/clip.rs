@@ -9,7 +9,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Size;
 use ratatui::{Frame as Drawing, Terminal};
 use terra_sim::{EntityId, Mode, Playback, World};
-use terra_tui::app::{App, Selection, Tab, Ticks};
+use terra_tui::app::{App, Areas, Selection, Tab, Ticks};
 use terra_tui::clock::{Clock, Speed};
 use terra_tui::input::Action;
 use terra_tui::session::Session;
@@ -51,16 +51,41 @@ impl Clip {
     }
 }
 
-/// How a clip is framed: the screen's size in cells, whether it's the map
-/// view alone or which of the screen's other parts it shows, and how long
-/// each frame shows.
+/// How a clip is framed: the screen's size in cells, what's drawn on it,
+/// and how long each frame shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Framing {
     pub screen: Size,
-    pub map_view_alone: bool,
-    /// The parts drawn with the map view, when it isn't alone (#291).
-    pub parts: ui::Parts,
+    pub view: View,
     pub frame: Duration,
+}
+
+/// What a world's clip draws on its screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum View {
+    /// The game's screen with these of its parts, the map view taking the
+    /// room the rest leave (M2 design §11.4).
+    Screen(ui::Parts),
+    /// The map view alone, with no border or panels.
+    MapViewAlone,
+}
+
+impl View {
+    /// Where the app's panels are on a `screen` that draws this.
+    fn areas(self, screen: Size) -> Areas {
+        match self {
+            View::Screen(parts) => ui::areas_with(screen, parts),
+            View::MapViewAlone => ui::map_view_alone_areas(screen),
+        }
+    }
+
+    /// Draws one frame of it.
+    fn render(self, frame: &mut Drawing, app: &App, world: &World) {
+        match self {
+            View::Screen(parts) => ui::render_with(frame, app, world, parts),
+            View::MapViewAlone => ui::render_map_view_alone(frame, app, world),
+        }
+    }
 }
 
 /// Where a world's clip comes from.
@@ -165,20 +190,7 @@ pub fn world_clip(
         return Err(format!("the clip starts at tick {from}, after --to {to}"));
     }
     let world = session.world();
-    // The screen, or as much of it as the clip shows, or the map view
-    // alone.
-    let areas = if framing.map_view_alone {
-        ui::map_view_alone_areas(framing.screen)
-    } else {
-        ui::areas_with(framing.screen, framing.parts)
-    };
-    let render = |frame: &mut Drawing, app: &App, world: &World| {
-        if framing.map_view_alone {
-            ui::render_map_view_alone(frame, app, world);
-        } else {
-            ui::render_with(frame, app, world, framing.parts);
-        }
-    };
+    let areas = framing.view.areas(framing.screen);
     let mut app = App::new(world.map(), theme, world.seed(), areas);
     if let (Some(name), Some(playback)) = (&replay, session.playback()) {
         app.start_replay(name, playback);
@@ -195,7 +207,9 @@ pub fn world_clip(
     let mut thousandths_owed = 0;
     loop {
         let world = session.world();
-        let screen = draw(&mut terminal, |frame| render(frame, &app, world));
+        let screen = draw(&mut terminal, |frame| {
+            framing.view.render(frame, &app, world)
+        });
         clip.push(&screen, framing.frame);
         // A replay's end, or where it parts from the recording, pauses it.
         if world.tick() >= to || app.clock.is_paused() {
@@ -381,8 +395,11 @@ mod tests {
     fn framing(screen: Size, map_view_alone: bool) -> Framing {
         Framing {
             screen,
-            map_view_alone,
-            parts: ui::Parts::ALL,
+            view: if map_view_alone {
+                View::MapViewAlone
+            } else {
+                View::Screen(ui::Parts::ALL)
+            },
             frame: Duration::from_millis(100),
         }
     }
@@ -429,10 +446,10 @@ mod tests {
         let world = field(&[Pos { x: 20, y: 10 }], &[]);
         let scene = scene(0, 1, Pace::Game(Speed::X4), Track::First);
         let framing = Framing {
-            parts: ui::Parts {
+            view: View::Screen(ui::Parts {
                 event_log: false,
                 ..ui::Parts::ALL
-            },
+            }),
             ..framing(Size::new(100, 30), false)
         };
         let clip = world_clip(live(world), Theme::cp437(), &scene, &framing).unwrap();
