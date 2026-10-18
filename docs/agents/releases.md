@@ -31,7 +31,13 @@ At the end of the milestone's acceptance slice (M2's is Slice 30b, [#148](https:
      ```
 
      `--locked` builds with the release's own `Cargo.lock`. Without it, `cargo install` picks the newest versions of every library, so an old release can stop building, or build differently, as libraries move on.
-2. **The owner merges it, then makes the release on GitHub at once,** since the README now names it: Releases, "Draft a new release", a new tag `v0.2.0` on `main` at the version PR's merge commit, the title "v0.2.0: Generations", and the notes file's text as the description. Sessions can't push tags (the git proxy refuses), so the owner makes it. GitHub's REST API (`gh api -X POST repos/Keazra/terra-sprites/releases`) might work from a session, but that's untried, and a release is public the moment it's made, so a session asks the owner before trying it.
+2. **The owner merges it, then makes the release at once,** since the README now names it. Sessions can't: the git proxy refuses their tags, and GitHub refuses their releases ("not permitted for this session type", 2026-10-18). With `gh`, from the terra-sprites folder in PowerShell, on an up-to-date `main`, one command makes the tag and the release together:
+
+   ```powershell
+   gh release create v0.2.0 --target <the version PR's merge commit> --title "v0.2.0: Generations" --notes-file docs/releases/v0.2.0.md
+   ```
+
+   Or on GitHub: Releases, "Draft a new release", a new tag `v0.2.0` on that commit, the same title, and the notes file's text as the description. When the tag is already pushed, as v0.1.0's was, `--verify-tag` in place of `--target` makes `gh` use it.
 3. **Check it installs:** the `cargo install` line above, on the owner's PC or in a cloud session, then `terra-sprites --version`.
 
 ### The notes
