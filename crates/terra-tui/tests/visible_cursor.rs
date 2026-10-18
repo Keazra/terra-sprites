@@ -3,7 +3,7 @@
 //! every move onto a new tile tells the world.
 
 mod common;
-use common::{apply, at, field, point, render, row, tick};
+use common::{apply, at, field, point, render, status_line, tick};
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::layout::Position;
@@ -123,11 +123,6 @@ fn a_visible_cursor_following_a_sprite_tells_the_world_as_the_sprite_walks() {
     assert_eq!(told.first(), Some(&at(2, 2)));
     tick(&mut app, &mut world);
     assert_eq!(world.cursor().tile(), Some(now), "told {told:?}");
-}
-
-/// The status line of a 100×30 screen.
-fn status_line(app: &App, world: &World) -> String {
-    row(&render(app, world), 29)
 }
 
 #[test]

@@ -1,6 +1,7 @@
 mod common;
 use common::{
-    LETHAL_THORNS, LONE, group, inspector_line, inspector_rows, open, pack_changing, select,
+    LETHAL_THORNS, LONE, finished, group, inspector_line, inspector_rows, lines, open, pack,
+    pack_changing, select, status_line,
 };
 
 use std::time::Duration;
@@ -18,10 +19,6 @@ use terra_tui::app::{App, CursorMode, Flow, Selection, Tab};
 use terra_tui::input::{Action, Button};
 use terra_tui::theme::Theme;
 use terra_tui::ui;
-
-fn pack() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
 
 fn generated_world() -> World {
     World::new(WorldConfig::builtin(&pack()), pack(), 7)
@@ -71,23 +68,6 @@ fn render(app: &App, world: &World, width: u16, height: u16) -> Buffer {
         }
     }
     corner
-}
-
-/// The screen's text, one string per row, without trailing spaces.
-fn lines(buffer: &Buffer) -> Vec<String> {
-    (0..buffer.area.height)
-        .map(|y| {
-            let row: String = (0..buffer.area.width)
-                .map(|x| buffer[(x, y)].symbol())
-                .collect();
-            row.trim_end().to_string()
-        })
-        .collect()
-}
-
-/// The status line of a 100×30 screen.
-fn status_line(app: &App, world: &World) -> String {
-    lines(&render(app, world, 100, 30))[29].clone()
 }
 
 /// The status line up to its key hints, which the gap of two spaces before
@@ -3058,32 +3038,6 @@ fn observed_section(app: &App, world: &World) -> Vec<String> {
     text[start..end].to_vec()
 }
 
-/// Sprite `id` finished `verb`, aimed at nothing, with `outcome`, on `tick`.
-fn finished(tick: u64, id: EntityId, verb: Verb, outcome: Outcome) -> Event {
-    let action = ActionView {
-        verb,
-        destination: None,
-        target: None,
-        target_type: None,
-        attempted: false,
-        target_gone: false,
-        hurt: Hurt::default(),
-        progress: Progress::Ended(outcome),
-        remembered: false,
-        heard: None,
-        egg_at: None,
-    };
-    Event {
-        tick,
-        kind: EventKind::ActionEnded {
-            id,
-            verb,
-            outcome,
-            action,
-        },
-    }
-}
-
 #[test]
 fn the_body_tab_ends_with_what_was_observed_and_how_long_ago() {
     let (mut world, _) = one_sprite(WORKED_GENOME, 0);
@@ -3413,42 +3367,7 @@ fn a_train_click_with_nothing_to_act_on_says_so_in_the_hints_place_for_3_seconds
 /// The Cursor's events for sprite 12, at `tick`: a pet, hug, zap or shock by
 /// name, or one refused.
 fn touched(tick: u64, what: &str) -> Event {
-    let id = EntityId(12);
-    let kind = match what {
-        "pet" => EventKind::Rewarded {
-            id,
-            amplified: false,
-        },
-        "hug" => EventKind::Rewarded {
-            id,
-            amplified: true,
-        },
-        "zap" => EventKind::Corrected {
-            id,
-            amplified: false,
-        },
-        "shock" => EventKind::Corrected {
-            id,
-            amplified: true,
-        },
-        "refused pet" => EventKind::CommandRejected {
-            command: Command::Reward {
-                sprite: id,
-                amplified: false,
-                reach_back: 3,
-            },
-            reason: Rejection::Gone,
-        },
-        "refused shock" => EventKind::CommandRejected {
-            command: Command::Correct {
-                sprite: id,
-                amplified: true,
-            },
-            reason: Rejection::Gone,
-        },
-        _ => unreachable!("{what}"),
-    };
-    Event { tick, kind }
+    common::touched(tick, EntityId(12), what)
 }
 
 /// The event log's first three rows once an app has recorded `events`.

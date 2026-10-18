@@ -4,8 +4,8 @@
 
 mod common;
 use common::{
-    app, apply, at, click, field, grab_app, lines, pack, pointing_at, render, row, scratch_folder,
-    tick,
+    app, apply, at, click, field, grab_app, lines, pack, pointing_at, render, scratch_folder,
+    status_line, tick,
 };
 
 use std::path::PathBuf;
@@ -543,11 +543,6 @@ fn a_menu_longer_than_the_map_view_scrolls_to_keep_the_highlight_in_view() {
     );
     assert_eq!(app.screen(), Screen::Normal);
     let _ = std::fs::remove_dir_all(&dir);
-}
-
-/// The status line of a 100×30 screen.
-fn status_line(app: &App, world: &World) -> String {
-    row(&render(app, world), 29)
 }
 
 #[test]

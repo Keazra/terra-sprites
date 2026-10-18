@@ -14,8 +14,8 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect, Size};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
-    ActionView, DataPack, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos, Progress,
-    Scenario, ScriptedAction, Verb, World,
+    ActionView, Command, DataPack, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos,
+    Progress, Rejection, Scenario, ScriptedAction, Verb, World,
 };
 use terra_tui::app::{App, Areas, CursorMode, Flow, Screen, Selection, Tab};
 use terra_tui::input::{Action, Button};
@@ -236,6 +236,11 @@ pub fn row(screen: &Buffer, y: u16) -> String {
     text.trim_end().to_string()
 }
 
+/// The status line of a 100×30 screen, without the spaces at its end.
+pub fn status_line(app: &App, world: &World) -> String {
+    row(&render(app, world), 29)
+}
+
 /// The screen's text, a line per row, without the spaces at each line's
 /// end.
 pub fn lines(screen: &Buffer) -> Vec<String> {
@@ -309,6 +314,46 @@ pub fn finished(tick: u64, id: EntityId, verb: Verb, outcome: Outcome) -> Event 
             action,
         },
     }
+}
+
+/// The Cursor touching sprite `id` on `tick`: a pet, hug, zap or shock by
+/// name, or a pet or shock refused.
+pub fn touched(tick: u64, id: EntityId, what: &str) -> Event {
+    let kind = match what {
+        "pet" => EventKind::Rewarded {
+            id,
+            amplified: false,
+        },
+        "hug" => EventKind::Rewarded {
+            id,
+            amplified: true,
+        },
+        "zap" => EventKind::Corrected {
+            id,
+            amplified: false,
+        },
+        "shock" => EventKind::Corrected {
+            id,
+            amplified: true,
+        },
+        "refused pet" => EventKind::CommandRejected {
+            command: Command::Reward {
+                sprite: id,
+                amplified: false,
+                reach_back: 3,
+            },
+            reason: Rejection::Gone,
+        },
+        "refused shock" => EventKind::CommandRejected {
+            command: Command::Correct {
+                sprite: id,
+                amplified: true,
+            },
+            reason: Rejection::Gone,
+        },
+        _ => unreachable!("{what}"),
+    };
+    Event { tick, kind }
 }
 
 /// What to change in a data file: its name, and each text to replace in

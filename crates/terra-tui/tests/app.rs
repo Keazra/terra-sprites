@@ -1,31 +1,18 @@
+mod common;
+use common::{WorldBuilder, at, finished, map_only, sprite_on};
+
 use ratatui::layout::{Position, Rect};
 use terra_sim::{
-    ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Map, Outcome, Pos,
-    Progress, Scenario, Target, Verb, World,
+    ActionView, DeathCause, EntityId, Event, EventKind, Outcome, Pos, Target, Verb, World,
 };
-use terra_tui::app::{App, Areas, Flow, Origin, Screen, Selection, Tab};
+use terra_tui::app::{App, Flow, Origin, Screen, Selection, Tab};
 use terra_tui::clock::Speed;
 use terra_tui::input::{Action, Button};
 use terra_tui::theme::Theme;
 
-fn pack() -> DataPack {
-    DataPack::builtin().expect("valid pack")
-}
-
 /// An all-grass world, with starter sprites on `sprites`.
 fn grass_with(width: usize, height: usize, sprites: &[Pos]) -> World {
-    let row = ".".repeat(width);
-    let rows = vec![row.as_str(); height];
-    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
-    let sprites: Vec<(Pos, _)> = sprites.iter().map(|&pos| (pos, None)).collect();
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, pack(), 1).expect("valid scenario")
+    WorldBuilder::grass(width, height).sprites(sprites).build()
 }
 
 /// An all-grass world with no sprites.
@@ -39,21 +26,7 @@ fn tile_area(width: u16, height: u16) -> Rect {
 }
 
 fn app(world: &World, tile_area: Rect) -> App {
-    App::new(world.map(), Theme::cp437(), 1, no_inspector(tile_area))
-}
-
-/// Panels with the map view's tiles on `tiles`, and no room for the inspector.
-fn no_inspector(tiles: Rect) -> Areas {
-    Areas {
-        tiles,
-        inspector: None,
-        event_log: None,
-        overlay: None,
-    }
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
+    App::new(world.map(), Theme::cp437(), 1, map_only(tile_area))
 }
 
 /// A viewport starting at (`x`, `y`), which past the wall is negative.
@@ -77,11 +50,6 @@ fn click(app: &mut App, world: &World, column: u16, row: u16) {
         app.apply(Action::left_click(Position::new(column, row)), world),
         Flow::Continue
     );
-}
-
-/// The ID of the sprite on `pos`.
-fn sprite_on(world: &World, pos: Pos) -> EntityId {
-    world.sprite_at(pos).expect("a sprite").id()
 }
 
 #[test]
@@ -245,7 +213,7 @@ fn a_bigger_view_after_a_resize_stops_at_its_own_margin() {
     scroll(&mut app, &world, 1000, 1000);
     assert_eq!(app.viewport(), origin(145, 88));
     // A 40×20 view goes 10 tiles past the wall sideways and 5 up or down.
-    app.fit(no_inspector(tile_area(40, 20)));
+    app.fit(map_only(tile_area(40, 20)));
     assert_eq!(app.viewport(), origin(130, 81));
 }
 
@@ -594,32 +562,6 @@ fn the_detail_view_starts_off_and_toggles_whatever_is_selected() {
     assert!(app.detail(), "a new selection keeps it");
     app.apply(Action::ToggleDetail, &world);
     assert!(!app.detail());
-}
-
-/// Sprite `id` finished `verb`, aimed at nothing, with `outcome`, on `tick`.
-fn finished(tick: u64, id: EntityId, verb: Verb, outcome: Outcome) -> Event {
-    let action = ActionView {
-        verb,
-        destination: None,
-        target: None,
-        target_type: None,
-        attempted: false,
-        target_gone: false,
-        hurt: Hurt::default(),
-        progress: Progress::Ended(outcome),
-        remembered: false,
-        heard: None,
-        egg_at: None,
-    };
-    Event {
-        tick,
-        kind: EventKind::ActionEnded {
-            id,
-            verb,
-            outcome,
-            action,
-        },
-    }
 }
 
 /// The observed list, newest first, as `(line, count, tick)`.

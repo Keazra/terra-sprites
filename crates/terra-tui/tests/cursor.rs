@@ -2,14 +2,13 @@
 //! and Follow.
 
 mod common;
-use common::{app, apply, at, click, field, pack, pointing_at, sprite_on};
+use common::{app, apply, at, click, field, pack, pointing_at, sprite_on, touched};
 
 use std::time::Duration;
 
 use ratatui::layout::Position;
 use terra_sim::{
-    Command, DeathCause, EntityId, Event, EventKind, Map, Pos, Rejection, Scenario, ScriptedAction,
-    World,
+    Command, DeathCause, EntityId, Event, EventKind, Map, Pos, Scenario, ScriptedAction, World,
 };
 use terra_tui::app::{App, CursorMode, Screen, StatusMark};
 use terra_tui::input::{Action, Button};
@@ -420,35 +419,6 @@ fn q_and_f_act_where_the_cursor_is() {
         Some(id),
         "Q didn't select the sprite pointed at"
     );
-}
-
-/// The Cursor touching sprite `id` on `tick`: a pet, hug, zap or shock, or
-/// a pet refused.
-fn touched(tick: u64, id: EntityId, what: &str) -> Event {
-    let kind = match what {
-        "pet" => EventKind::Rewarded {
-            id,
-            amplified: false,
-        },
-        "hug" => EventKind::Rewarded {
-            id,
-            amplified: true,
-        },
-        "zap" => EventKind::Corrected {
-            id,
-            amplified: false,
-        },
-        "shock" => EventKind::Corrected {
-            id,
-            amplified: true,
-        },
-        "refused pet" => EventKind::CommandRejected {
-            command: pet(id, 3),
-            reason: Rejection::Gone,
-        },
-        _ => unreachable!("{what}"),
-    };
-    Event { tick, kind }
 }
 
 #[test]
