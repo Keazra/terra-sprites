@@ -56,6 +56,26 @@ The first build takes a minute or two. The game opens on its title screen: a lig
 
 The status line at the bottom always says what's under the Cursor, and the event log under the map tells you what the sprites are doing.
 
+### Uninstalling
+
+If you installed it with `cargo install`, this removes the `terra-sprites` command (`terra-tui` is the name of the code it's built from):
+
+```bash
+cargo uninstall terra-tui
+```
+
+If you ran it from a copy of the repository instead, delete that folder.
+
+Either way, your worlds stay. Everything the game writes goes in one folder, the game's folder: saves and autosaves, the last session's replay, genomes you saved and fast-forward tables, along with any themes or presets you put there yourself. The help screen (`?`) shows where it is on its last line, `FILES`. Delete it to remove them too, or keep it, and the game finds them again if you reinstall:
+
+| System | Delete the game's folder |
+|---|---|
+| Windows (PowerShell) | `Remove-Item -Recurse "$env:APPDATA\terra-sprites"` |
+| macOS | `rm -rf ~/Library/Application\ Support/terra-sprites` |
+| Linux and others | `rm -rf ~/.local/share/terra-sprites`, or `$XDG_DATA_HOME/terra-sprites` if you've set that |
+
+`cargo install` also leaves what it downloaded in Cargo's folder (`~/.cargo`, or `$env:USERPROFILE\.cargo` on Windows), so the next build needn't download it again: the game's code, in the folders whose names start with `terra-sprites-` in `git/checkouts` and `git/db` (about 15 MB), and the libraries it's built from, in `registry` (about 130 MB), which any other Rust program you build shares. Both are safe to delete, since Cargo downloads what it needs again. If you installed Rust only for this game, `rustup self uninstall` removes Rust and everything in Cargo's folder, the game's command included; the game's folder stays until you delete it.
+
 ## Controls
 
 The same key in capitals or lower case does the same thing.
