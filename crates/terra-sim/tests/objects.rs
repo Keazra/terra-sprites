@@ -2,11 +2,9 @@
 //! (design §3.5).
 
 mod common;
-use common::{at, builtin};
+use common::{WorldBuilder, at, builtin};
 
-use terra_sim::{
-    DataPack, EntityId, Event, EventKind, Map, Pos, Removal, Scenario, ScenarioError, World,
-};
+use terra_sim::{DataPack, EntityId, Event, EventKind, Pos, Removal, ScenarioError, World};
 
 /// The built-in pack with `objects.ron` holding only `types`.
 fn pack_with(types: &[&str]) -> DataPack {
@@ -33,21 +31,18 @@ fn try_scenario(
     rows: &[&str],
     objects: &[(u16, u16, &str)],
 ) -> Result<World, ScenarioError> {
-    let map = Map::from_ascii(rows, data).expect("valid drawing");
     let objects: Vec<(Pos, &str)> = objects
         .iter()
         .map(|&(x, y, name)| (at(x, y), name))
         .collect();
-    let scenario = Scenario {
-        map,
-        objects: &objects,
-        sprites: &[],
-        scripted: &[],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, data.clone(), 7)
+    WorldBuilder::new(rows)
+        .data(data.clone())
+        .objects(&objects)
+        .seed(7)
+        .try_build()
 }
 
+/// `try_scenario`'s world, which must be valid.
 fn scenario(data: &DataPack, rows: &[&str], objects: &[(u16, u16, &str)]) -> World {
     try_scenario(data, rows, objects).expect("valid scenario")
 }
@@ -415,15 +410,11 @@ fn spawn_nearby_chooses_uniformly_among_the_candidates() {
             &ticker(100, &spawn_once(r#"SpawnNearby("pebble", 1)"#)),
             PEBBLE,
         ]);
-        let map = Map::from_ascii(&FIELD, &pack).expect("valid drawing");
-        let scenario = Scenario {
-            map,
-            objects: &[(at(3, 2), "ticker")],
-            sprites: &[],
-            scripted: &[],
-            newborns: &[],
-        };
-        let mut world = World::from_scenario(scenario, pack, seed).expect("valid");
+        let mut world = WorldBuilder::new(&FIELD)
+            .data(pack)
+            .objects(&[(at(3, 2), "ticker")])
+            .seed(seed)
+            .build();
         world.step();
         chosen.extend(pebbles(&world));
     }

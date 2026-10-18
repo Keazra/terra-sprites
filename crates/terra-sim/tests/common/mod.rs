@@ -7,7 +7,7 @@
 
 use terra_sim::{
     DataPack, EntityId, Event, EventKind, Genome, Learned, Map, Outcome, Pos, Scenario,
-    ScriptedAction, Verb, World,
+    ScenarioError, ScriptedAction, Verb, World,
 };
 
 /// The built-in data pack.
@@ -117,18 +117,35 @@ pub fn builtin_changing_files(files: &[(&str, &[(&str, &str)])]) -> DataPack {
     DataPack::from_sources(&borrowed).expect("the changed pack is valid")
 }
 
-/// Builds a hand-drawn test world: rows, objects, sprites (optional genome),
-/// scripted actions, and a seed.
+/// Makes a sprite's genome from the data pack.
+pub type MakeGenome = fn(&DataPack) -> Genome;
+
+/// Builds a hand-drawn test world: rows, objects, sprites (of genes, of a
+/// genome, or of the starter genome), scripted actions, and a seed.
 ///
 /// Sprite and script methods append; [`Self::objects`] replaces.
 pub struct WorldBuilder<'a> {
     rows: &'a [&'a str],
     objects: &'a [(Pos, &'a str)],
-    sprites: Vec<(Pos, Option<Genome>)>,
+    sprites: Vec<(Pos, SpriteGenome<'a>)>,
     scripted: Vec<(Pos, ScriptedAction)>,
     newborns: Vec<Pos>,
     data: Option<DataPack>,
     seed: u64,
+}
+
+/// Where the genome of a [`WorldBuilder`] sprite comes from. Those read
+/// with the data pack are read once the world is built, so the pack can be
+/// set before or after.
+enum SpriteGenome<'a> {
+    /// The starter genome, with spawn variation.
+    Starter,
+    /// A genome already made.
+    Made(Genome),
+    /// [`genome`]`(genes)`, read with the world's data pack.
+    Genes(&'a str),
+    /// What this makes from the world's data pack.
+    MadeBy(MakeGenome),
 }
 
 impl<'a> WorldBuilder<'a> {
@@ -163,15 +180,55 @@ impl<'a> WorldBuilder<'a> {
         self
     }
 
-    /// Sprites already built as `(pos, optional genome)` (appends).
+    /// A sprite of [`genome`]`(genes)` on each tile, as `(tile, genes)`
+    /// (appends).
+    pub fn sprites(mut self, sprites: &[(Pos, &'a str)]) -> Self {
+        let genomes = sprites
+            .iter()
+            .map(|&(pos, genes)| (pos, SpriteGenome::Genes(genes)));
+        self.sprites.extend(genomes);
+        self
+    }
+
+    /// A sprite on each tile with the genome its function makes, as
+    /// `(tile, function)` (appends).
+    pub fn sprites_made(mut self, sprites: &[(Pos, MakeGenome)]) -> Self {
+        let genomes = sprites
+            .iter()
+            .map(|&(pos, make)| (pos, SpriteGenome::MadeBy(make)));
+        self.sprites.extend(genomes);
+        self
+    }
+
+    /// Sprites already built as `(pos, optional genome)`, `None` for the
+    /// starter genome (appends).
     pub fn sprites_with(mut self, sprites: Vec<(Pos, Option<Genome>)>) -> Self {
-        self.sprites.extend(sprites);
+        let genomes = sprites.into_iter().map(|(pos, genome)| {
+            let genome = genome.map_or(SpriteGenome::Starter, SpriteGenome::Made);
+            (pos, genome)
+        });
+        self.sprites.extend(genomes);
+        self
+    }
+
+    /// A sprite of the starter genome, with spawn variation, on each of
+    /// `tiles` (appends).
+    pub fn starters(mut self, tiles: &[Pos]) -> Self {
+        let genomes = tiles.iter().map(|&pos| (pos, SpriteGenome::Starter));
+        self.sprites.extend(genomes);
         self
     }
 
     /// Scripted actions by starting tile (appends).
     pub fn scripts(mut self, scripted: &[(Pos, ScriptedAction)]) -> Self {
         self.scripted.extend_from_slice(scripted);
+        self
+    }
+
+    /// The sprite starting on `tile` does `script`, in order (appends).
+    pub fn script(mut self, tile: Pos, script: &[ScriptedAction]) -> Self {
+        self.scripted
+            .extend(script.iter().map(|&action| (tile, action)));
         self
     }
 
@@ -184,16 +241,32 @@ impl<'a> WorldBuilder<'a> {
 
     /// Builds the world.
     pub fn build(self) -> World {
+        self.try_build().expect("a valid scenario")
+    }
+
+    /// Builds the world, or says why the scenario can't be one, for a test
+    /// of what `World::from_scenario` turns away. The drawing must be valid.
+    pub fn try_build(self) -> Result<World, ScenarioError> {
         let data = self.data.unwrap_or_else(builtin);
         let map = Map::from_ascii(self.rows, &data).expect("valid drawing");
+        let sprites: Vec<(Pos, Option<Genome>)> = self
+            .sprites
+            .into_iter()
+            .map(|(pos, source)| match source {
+                SpriteGenome::Starter => (pos, None),
+                SpriteGenome::Made(genome) => (pos, Some(genome)),
+                SpriteGenome::Genes(genes) => (pos, Some(genome(genes, &data))),
+                SpriteGenome::MadeBy(make) => (pos, Some(make(&data))),
+            })
+            .collect();
         let scenario = Scenario {
             map,
             objects: self.objects,
-            sprites: &self.sprites,
+            sprites: &sprites,
             scripted: &self.scripted,
             newborns: &self.newborns,
         };
-        World::from_scenario(scenario, data, self.seed).expect("a valid scenario")
+        World::from_scenario(scenario, data, self.seed)
     }
 }
 
@@ -256,14 +329,7 @@ pub const OLD: &str = r#"Trait(trait: "grows_up", value: 1.0),
 /// A world drawn from `rows`, with a sprite of its own genes on each tile,
 /// all grown up, made with `data`.
 pub fn world_in(data: DataPack, rows: &[&str], sprites: &[(Pos, &str)]) -> World {
-    let placed = sprites
-        .iter()
-        .map(|&(pos, genes)| (pos, Some(genome(genes, &data))))
-        .collect();
-    WorldBuilder::new(rows)
-        .data(data)
-        .sprites_with(placed)
-        .build()
+    WorldBuilder::new(rows).data(data).sprites(sprites).build()
 }
 
 /// The ID of the sprite standing on `pos`.
@@ -289,13 +355,9 @@ pub fn family(sprites: &[(Pos, &str)], young: &[Pos], seed: u64) -> World {
 
 /// The same, with `data`.
 pub fn family_in(data: DataPack, sprites: &[(Pos, &str)], young: &[Pos], seed: u64) -> World {
-    let placed = sprites
-        .iter()
-        .map(|&(pos, genes)| (pos, Some(genome(genes, &data))))
-        .collect();
     WorldBuilder::new(&["........", "........", "........", "........"])
         .data(data)
-        .sprites_with(placed)
+        .sprites(sprites)
         .newborns(young)
         .seed(seed)
         .build()

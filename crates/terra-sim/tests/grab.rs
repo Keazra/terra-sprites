@@ -2,11 +2,11 @@
 //! and holds items, one thing at a time.
 
 mod common;
-use common::{at, builtin, builtin_changing};
+use common::{WorldBuilder, at, builtin_changing, id_at};
 
 use terra_sim::{
-    Blocker, Command, DataPack, Emptied, EntityId, Event, EventKind, Grip, Map, Outcome, Pos,
-    Rejection, Removal, Scenario, ScriptedAction, Terrain, World,
+    Blocker, Command, DataPack, Emptied, EntityId, Event, EventKind, Grip, Outcome, Pos, Rejection,
+    Removal, ScriptedAction, Terrain, World,
 };
 
 /// A world drawn from `rows`, with `objects`, and a starter sprite on each
@@ -17,22 +17,11 @@ fn world(
     sprites: &[Pos],
     script: &[(Pos, ScriptedAction)],
 ) -> World {
-    let data = builtin();
-    let map = Map::from_ascii(rows, &data).expect("valid drawing");
-    let sprites: Vec<(Pos, Option<_>)> = sprites.iter().map(|&pos| (pos, None)).collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted: script,
-        newborns: &[],
-    };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
-}
-
-/// The sprite on `pos`.
-fn sprite_on(world: &World, pos: Pos) -> EntityId {
-    world.sprite_at(pos).expect("a sprite there").id()
+    WorldBuilder::new(rows)
+        .objects(objects)
+        .starters(sprites)
+        .scripts(script)
+        .build()
 }
 
 #[test]
@@ -43,7 +32,7 @@ fn taking_hold_of_a_sprite_leads_it_and_leaves_it_where_it_stands() {
         &[at(2, 1)],
         &[(at(2, 1), ScriptedAction::Rest)],
     );
-    let id = sprite_on(&world, at(2, 1));
+    let id = id_at(&world, at(2, 1));
     world.submit(Command::TakeHold { sprite: id });
     let events = world.step();
     assert!(
@@ -69,7 +58,7 @@ fn taking_hold_of_a_sprite_pulls_it_away_from_what_it_was_doing() {
             },
         )],
     );
-    let id = sprite_on(&world, at(0, 0));
+    let id = id_at(&world, at(0, 0));
     world.step();
     world.submit(Command::TakeHold { sprite: id });
     let events = world.step();
@@ -105,7 +94,7 @@ fn a_sprite_that_is_gone_cant_be_taken_hold_of() {
 #[test]
 fn a_cursor_leading_one_sprite_cant_take_hold_of_another() {
     let mut world = world(&["....."], &[], &[at(0, 0), at(4, 0)], &[]);
-    let (first, second) = (sprite_on(&world, at(0, 0)), sprite_on(&world, at(4, 0)));
+    let (first, second) = (id_at(&world, at(0, 0)), id_at(&world, at(4, 0)));
     let command = Command::TakeHold { sprite: second };
     world.submit(Command::TakeHold { sprite: first });
     world.submit(command.clone());
@@ -120,7 +109,7 @@ fn a_cursor_leading_one_sprite_cant_take_hold_of_another() {
 #[test]
 fn a_led_sprite_walks_to_the_cursor_at_its_own_pace_and_chooses_nothing() {
     let mut world = world(&["........"], &[], &[at(0, 0)], &[]);
-    let id = sprite_on(&world, at(0, 0));
+    let id = id_at(&world, at(0, 0));
     world.submit(Command::TakeHold { sprite: id });
     world.submit(Command::MoveCursor { tile: at(5, 0) });
     let mut started = Vec::new();
@@ -147,7 +136,7 @@ fn a_led_sprite_walks_to_the_cursor_at_its_own_pace_and_chooses_nothing() {
 /// Leads the sprite on `from` towards `tile` for `ticks` ticks, and says
 /// where it ends up.
 fn lead(world: &mut World, from: Pos, tile: Pos, ticks: u32) -> Pos {
-    let id = sprite_on(world, from);
+    let id = id_at(world, from);
     world.submit(Command::TakeHold { sprite: id });
     world.submit(Command::MoveCursor { tile });
     for _ in 0..ticks {
@@ -181,7 +170,7 @@ fn a_led_sprite_held_up_by_another_waits_and_never_gives_up() {
 #[test]
 fn a_pet_reaches_a_led_sprite() {
     let mut world = world(&["....."], &[], &[at(0, 0)], &[]);
-    let id = sprite_on(&world, at(0, 0));
+    let id = id_at(&world, at(0, 0));
     world.submit(Command::TakeHold { sprite: id });
     world.step();
     world.submit(Command::Reward {
@@ -203,7 +192,7 @@ fn a_pet_reaches_a_led_sprite() {
 #[test]
 fn let_go_a_sprite_chooses_for_itself_again_at_once() {
     let mut world = world(&["....."], &[], &[at(0, 0)], &[]);
-    let id = sprite_on(&world, at(0, 0));
+    let id = id_at(&world, at(0, 0));
     world.submit(Command::TakeHold { sprite: id });
     world.step();
     world.submit(Command::LetGo);
@@ -247,16 +236,11 @@ fn a_led_sprite_that_dies_empties_the_cursor() {
             ("dehydration: 0.0011", "dehydration: 1.0"),
         ],
     );
-    let map = Map::from_ascii(&["..."], &data).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[(at(0, 0), None)],
-        scripted: &[],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
-    let id = sprite_on(&world, at(0, 0));
+    let mut world = WorldBuilder::new(&["..."])
+        .data(data)
+        .starters(&[at(0, 0)])
+        .build();
+    let id = id_at(&world, at(0, 0));
     world.submit(Command::TakeHold { sprite: id });
     let mut events = Vec::new();
     for _ in 0..10 {
@@ -454,15 +438,10 @@ fn short_lived_sprouting_berries() -> DataPack {
 #[test]
 fn a_held_berry_expires_and_empties_the_cursor_but_never_sprouts() {
     let data = short_lived_sprouting_berries();
-    let map = Map::from_ascii(&["....."], &data).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[(at(2, 0), "berry")],
-        sprites: &[],
-        scripted: &[],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    let mut world = WorldBuilder::new(&["....."])
+        .data(data)
+        .objects(&[(at(2, 0), "berry")])
+        .build();
     let berry = object_on(&world, at(2, 0));
     world.submit(Command::PickUp { item: berry });
     let mut events = Vec::new();
@@ -496,16 +475,11 @@ fn a_held_items_location_conditions_are_false() {
          (trigger: Every(1), if: [Fertility(Ge, 0.0)], do: [DestroySelf]),"#,
         )],
     );
-    let map = Map::from_ascii(&["....."], &data).expect("valid drawing");
     let objects = [(at(2, 0), "berry"), (at(4, 0), "berry")];
-    let scenario = Scenario {
-        map,
-        objects: &objects,
-        sprites: &[],
-        scripted: &[],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    let mut world = WorldBuilder::new(&["....."])
+        .data(data)
+        .objects(&objects)
+        .build();
     let held = object_on(&world, at(2, 0));
     world.submit(Command::PickUp { item: held });
     for _ in 0..3 {
@@ -523,7 +497,7 @@ fn a_sprite_heading_for_an_item_that_is_picked_up_gives_up_as_it_is_gone() {
     let eater = at(0, 0);
     let script = [(eater, ScriptedAction::Eat { at: at(5, 0) })];
     let mut world = world(&["......"], &[(at(5, 0), "berry")], &[eater], &script);
-    let (sprite, berry) = (sprite_on(&world, eater), object_on(&world, at(5, 0)));
+    let (sprite, berry) = (id_at(&world, eater), object_on(&world, at(5, 0)));
     world.step();
     world.submit(Command::PickUp { item: berry });
     let events = world.step();
@@ -542,7 +516,7 @@ fn a_sprite_heading_for_an_item_that_is_picked_up_gives_up_as_it_is_gone() {
 #[test]
 fn a_grab_and_a_let_go_queued_together_both_apply_on_the_next_tick() {
     let mut world = world(&["....."], &[(at(3, 0), "ball")], &[at(0, 0)], &[]);
-    let (sprite, ball) = (sprite_on(&world, at(0, 0)), object_on(&world, at(3, 0)));
+    let (sprite, ball) = (id_at(&world, at(0, 0)), object_on(&world, at(3, 0)));
     world.submit(Command::TakeHold { sprite });
     world.submit(Command::LetGo);
     world.submit(Command::PickUp { item: ball });

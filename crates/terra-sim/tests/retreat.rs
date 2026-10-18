@@ -3,15 +3,11 @@
 //! cornered. Driven through hand-made worlds with scripted actions.
 
 mod common;
-use common::{at, builtin, endings, walker};
+use common::{MakeGenome, WorldBuilder, at, endings, walker};
 
 use terra_sim::{
-    DataPack, Event, EventKind, Genome, Map, Outcome, Pos, Progress, Scenario, ScriptedAction,
-    Verb, World,
+    DataPack, Event, EventKind, Genome, Outcome, Pos, Progress, ScriptedAction, Verb, World,
 };
-
-/// Makes a sprite's genome from the data pack.
-type MakeGenome = fn(&DataPack) -> Genome;
 
 /// A walker that sees as little as a sprite can: 6 tiles.
 fn short_sighted(data: &DataPack) -> Genome {
@@ -54,20 +50,11 @@ fn scene(
     sprites: &[(Pos, MakeGenome)],
     scripted: &[(Pos, ScriptedAction)],
 ) -> World {
-    let data = builtin();
-    let map = Map::from_ascii(rows, &data).expect("valid drawing");
-    let sprites: Vec<(Pos, Option<Genome>)> = sprites
-        .iter()
-        .map(|&(pos, genome)| (pos, Some(genome(&data))))
-        .collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted,
-        newborns: &[],
-    };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+    WorldBuilder::new(rows)
+        .objects(objects)
+        .sprites_made(sprites)
+        .scripts(scripted)
+        .build()
 }
 
 /// Where the one sprite stands, or the first placed, if there are more.
