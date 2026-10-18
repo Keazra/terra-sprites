@@ -2,78 +2,28 @@
 //! sprites in the current cursor mode, or hides it, and while it's visible
 //! every move onto a new tile tells the world.
 
-use ratatui::Terminal;
-use ratatui::backend::TestBackend;
+mod common;
+use common::{apply, at, field, point, render, row, tick};
+
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use ratatui::layout::{Position, Rect};
-use terra_sim::{Command, DataPack, Map, Pos, Scenario, World};
-use terra_tui::app::{App, Areas, CursorMode, Flow};
+use ratatui::layout::Position;
+use terra_sim::{Command, Pos, World};
+use terra_tui::app::{App, CursorMode};
 use terra_tui::input::{Action, Keys};
 use terra_tui::theme::Theme;
 use terra_tui::ui;
 
-fn pack() -> DataPack {
-    DataPack::builtin().expect("valid pack")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
-
-/// An all-grass world, 10×6, with starter sprites on `sprites`.
-fn field(sprites: &[Pos]) -> World {
-    let rows = vec![".........."; 6];
-    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
-    let sprites: Vec<(Pos, _)> = sprites.iter().map(|&pos| (pos, None)).collect();
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, pack(), 1).expect("valid scenario")
-}
-
 /// The app, with the map view's tiles drawn from screen cell (0, 0), so a
 /// tile's cell is its position, its first commands taken.
 fn app(world: &World) -> App {
-    let areas = Areas {
-        tiles: Rect::new(0, 0, 10, 6),
-        inspector: None,
-        event_log: None,
-        overlay: None,
-    };
-    let mut app = App::new(world.map(), Theme::cp437(), 1, areas);
+    let mut app = common::app(world);
     app.take_commands();
     app
 }
 
-fn apply(app: &mut App, world: &World, action: Action) {
-    assert_eq!(app.apply(action, world), Flow::Continue);
-}
-
-/// Points at `tile`: the pointer one down and right of it (design v27 §6.5).
-fn point(app: &mut App, world: &World, tile: Pos) {
-    apply(
-        app,
-        world,
-        Action::Point(Position::new(tile.x + 1, tile.y + 1)),
-    );
-}
-
-/// Hands the app's commands to the world and runs a tick, as a frame does.
-fn tick(app: &mut App, world: &mut World) {
-    for command in app.take_commands() {
-        world.submit(command);
-    }
-    let events = world.step();
-    app.record(&events, world);
-}
-
 #[test]
 fn every_mode_starts_with_the_cursor_hidden_and_moving_it_tells_the_world_nothing() {
-    let world = field(&[]);
+    let world = field(&[], &[]);
     let mut app = app(&world);
     for mode in CursorMode::ALL {
         apply(&mut app, &world, Action::Mode(mode));
@@ -85,7 +35,7 @@ fn every_mode_starts_with_the_cursor_hidden_and_moving_it_tells_the_world_nothin
 
 #[test]
 fn h_shows_the_cursor_where_it_is_and_again_hides_it() {
-    let world = field(&[]);
+    let world = field(&[], &[]);
     let mut app = app(&world);
     point(&mut app, &world, at(3, 3));
     apply(&mut app, &world, Action::ToggleVisible);
@@ -107,7 +57,7 @@ fn h_shows_the_cursor_where_it_is_and_again_hides_it() {
 
 #[test]
 fn while_visible_each_move_onto_a_new_tile_tells_the_world() {
-    let world = field(&[]);
+    let world = field(&[], &[]);
     let mut app = app(&world);
     point(&mut app, &world, at(3, 3));
     apply(&mut app, &world, Action::ToggleVisible);
@@ -128,7 +78,7 @@ fn while_visible_each_move_onto_a_new_tile_tells_the_world() {
 fn each_mode_keeps_its_own_switch() {
     // Design v29 §6.5: visible in Train, the Cursor hides on going to
     // Select, and shows again on coming back.
-    let world = field(&[]);
+    let world = field(&[], &[]);
     let mut app = app(&world);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
     apply(&mut app, &world, Action::ToggleVisible);
@@ -152,7 +102,7 @@ fn each_mode_keeps_its_own_switch() {
 
 #[test]
 fn a_visible_cursor_following_a_sprite_tells_the_world_as_the_sprite_walks() {
-    let mut world = field(&[at(2, 2)]);
+    let mut world = field(&[], &[at(2, 2)]);
     let mut app = app(&world);
     let sprite = world.sprite_at(at(2, 2)).expect("a sprite").id();
     point(&mut app, &world, at(2, 2));
@@ -177,17 +127,12 @@ fn a_visible_cursor_following_a_sprite_tells_the_world_as_the_sprite_walks() {
 
 /// The status line of a 100×30 screen.
 fn status_line(app: &App, world: &World) -> String {
-    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
-    terminal
-        .draw(|frame| ui::render(frame, app, world))
-        .unwrap();
-    let buffer = terminal.backend().buffer();
-    (0..100).map(|x| buffer[(x, 29)].symbol()).collect()
+    row(&render(app, world), 29)
 }
 
 #[test]
 fn the_status_line_says_when_sprites_can_see_the_cursor() {
-    let world = field(&[]);
+    let world = field(&[], &[]);
     let areas = ui::areas(ratatui::layout::Size::new(100, 30));
     let mut app = App::new(world.map(), Theme::cp437(), 1, areas);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
@@ -229,7 +174,7 @@ fn a_touch_from_a_visible_cursor_is_told_as_coming_from_the_cursor() {
         (false, "Felt a gentle touch out of nowhere"),
         (true, "Felt a gentle touch from the Cursor"),
     ] {
-        let mut world = field(&[at(2, 2)]);
+        let mut world = field(&[], &[at(2, 2)]);
         let mut app = app(&world);
         apply(&mut app, &world, Action::SelectNext);
         apply(&mut app, &world, Action::Mode(CursorMode::Train));
@@ -255,7 +200,7 @@ fn a_touch_from_a_visible_cursor_is_told_as_coming_from_the_cursor() {
 #[test]
 fn being_led_and_shoved_by_a_visible_cursor_is_told_as_the_cursor_s_doing() {
     for (visible, how) in [(false, "out of nowhere"), (true, "by the Cursor")] {
-        let mut world = field(&[at(2, 2)]);
+        let mut world = field(&[], &[at(2, 2)]);
         let mut app = app(&world);
         apply(&mut app, &world, Action::SelectNext);
         apply(&mut app, &world, Action::Mode(CursorMode::Grab));
@@ -292,11 +237,7 @@ fn being_led_and_shoved_by_a_visible_cursor_is_told_as_the_cursor_s_doing() {
 /// The four sides of the Cursor drawn on a 100×30 screen, top, left, right
 /// and bottom, with the Cursor on `tile`.
 fn sides(app: &App, world: &World, tile: Pos) -> [String; 4] {
-    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
-    terminal
-        .draw(|frame| ui::render(frame, app, world))
-        .unwrap();
-    let buffer = terminal.backend().buffer();
+    let buffer = render(app, world);
     let centre = app.cell_of(tile).expect("the Cursor in view");
     [(0, -1), (-1, 0), (1, 0), (0, 1)].map(|(dx, dy)| {
         let x = centre.x.checked_add_signed(dx).unwrap();
@@ -309,7 +250,7 @@ fn sides(app: &App, world: &World, tile: Pos) -> [String; 4] {
 fn a_visible_cursor_draws_as_a_frame_of_light_following_or_not() {
     // Design v29 §6.5: hidden, the arrows (solid while following); visible,
     // a frame of light in their place.
-    let world = field(&[at(2, 2)]);
+    let world = field(&[], &[at(2, 2)]);
     let areas = ui::areas(ratatui::layout::Size::new(100, 30));
     let mut app = App::new(world.map(), Theme::cp437(), 1, areas);
     apply(&mut app, &world, Action::SelectNext);

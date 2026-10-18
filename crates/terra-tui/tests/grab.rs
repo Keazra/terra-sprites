@@ -2,91 +2,21 @@
 //! Cursor, taking hold of a sprite or picking up an item, and the next lets
 //! go or puts it down.
 
-use ratatui::layout::{Position, Rect};
-use terra_sim::{Command, DataPack, EntityId, Grip, Map, Pos, Scenario, ScriptedAction, World};
-use terra_tui::app::{App, Areas, CursorMode, Flow, Screen, StatusMark};
+mod common;
+use common::{
+    WorldBuilder, apply, at, click, field, follow, grab_app, object_on, pack, point, sprite_on,
+    tick,
+};
+
+use terra_sim::{Command, Grip, Map, Scenario, ScriptedAction, World};
+use terra_tui::app::{App, CursorMode, Screen, StatusMark};
 use terra_tui::input::{Action, Button};
-use terra_tui::theme::Theme;
-
-fn pack() -> DataPack {
-    DataPack::builtin().expect("valid pack")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
-
-/// An all-grass world, 10×6, with `objects`, and starter sprites on
-/// `sprites`.
-fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> World {
-    let rows = vec![".........."; 6];
-    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
-    let sprites: Vec<(Pos, _)> = sprites.iter().map(|&pos| (pos, None)).collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, pack(), 1).expect("valid scenario")
-}
-
-/// The app in Grab mode, with the map view's tiles drawn from screen cell
-/// (0, 0), so a tile's cell is its position.
-fn grab_app(world: &World) -> App {
-    let areas = Areas {
-        tiles: Rect::new(0, 0, 10, 6),
-        inspector: None,
-        event_log: None,
-        overlay: None,
-    };
-    let mut app = App::new(world.map(), Theme::cp437(), 1, areas);
-    apply(&mut app, world, Action::Mode(CursorMode::Grab));
-    app
-}
-
-/// The screen cell the pointer is on to point at `tile`: one down and right of
-/// it (design v27 §6.5). The map view's tiles are drawn from screen cell (0, 0).
-fn pointing_at(tile: Pos) -> Position {
-    Position::new(tile.x + 1, tile.y + 1)
-}
-
-fn apply(app: &mut App, world: &World, action: Action) {
-    assert_eq!(app.apply(action, world), Flow::Continue);
-}
-
-fn click(app: &mut App, world: &World, tile: Pos) {
-    let action = Action::Click {
-        at: pointing_at(tile),
-        button: Button::Left,
-        amplified: false,
-    };
-    apply(app, world, action);
-}
-
-/// Hands the app's commands to the world and runs a tick, as a frame does.
-fn tick(app: &mut App, world: &mut World) {
-    for command in app.take_commands() {
-        world.submit(command.clone());
-    }
-    let events = world.step();
-    app.record(&events, world);
-}
-
-fn sprite_on(world: &World, pos: Pos) -> EntityId {
-    world.sprite_at(pos).expect("a sprite").id()
-}
-
-fn object_on(world: &World, pos: Pos) -> EntityId {
-    world.object_at(pos).expect("an object").id()
-}
 
 #[test]
 fn a_grab_click_on_a_sprite_takes_hold_of_it() {
     let world = field(&[], &[at(4, 2)]);
     let mut app = grab_app(&world);
-    click(&mut app, &world, at(4, 2));
+    click(&mut app, &world, at(4, 2), Button::Left);
     let sprite = sprite_on(&world, at(4, 2));
     assert_eq!(app.take_commands(), vec![Command::TakeHold { sprite }]);
 }
@@ -95,7 +25,7 @@ fn a_grab_click_on_a_sprite_takes_hold_of_it() {
 fn a_grab_click_on_an_item_picks_it_up() {
     let world = field(&[(at(4, 2), "ball")], &[]);
     let mut app = grab_app(&world);
-    click(&mut app, &world, at(4, 2));
+    click(&mut app, &world, at(4, 2), Button::Left);
     let item = object_on(&world, at(4, 2));
     assert_eq!(app.take_commands(), vec![Command::PickUp { item }]);
 }
@@ -104,7 +34,7 @@ fn a_grab_click_on_an_item_picks_it_up() {
 fn a_sprite_is_grabbed_before_the_item_it_stands_on() {
     let world = field(&[(at(4, 2), "berry")], &[at(4, 2)]);
     let mut app = grab_app(&world);
-    click(&mut app, &world, at(4, 2));
+    click(&mut app, &world, at(4, 2), Button::Left);
     let sprite = sprite_on(&world, at(4, 2));
     assert_eq!(app.take_commands(), vec![Command::TakeHold { sprite }]);
 }
@@ -113,7 +43,7 @@ fn a_sprite_is_grabbed_before_the_item_it_stands_on() {
 fn a_grab_click_on_empty_ground_sends_nothing_and_says_so() {
     let world = field(&[], &[]);
     let mut app = grab_app(&world);
-    click(&mut app, &world, at(4, 2));
+    click(&mut app, &world, at(4, 2), Button::Left);
     assert_eq!(app.take_commands(), Vec::new());
     assert_eq!(app.status_mark(), StatusMark::Rejected);
     assert_eq!(app.refusal(), Some("Nothing here to grab"));
@@ -123,7 +53,7 @@ fn a_grab_click_on_empty_ground_sends_nothing_and_says_so() {
 fn a_grab_click_on_a_bush_sends_nothing_and_says_it_is_rooted() {
     let world = field(&[(at(4, 2), "berry_bush")], &[]);
     let mut app = grab_app(&world);
-    click(&mut app, &world, at(4, 2));
+    click(&mut app, &world, at(4, 2), Button::Left);
     assert_eq!(app.take_commands(), Vec::new());
     assert_eq!(app.status_mark(), StatusMark::Rejected);
     assert_eq!(
@@ -136,9 +66,9 @@ fn a_grab_click_on_a_bush_sends_nothing_and_says_it_is_rooted() {
 fn leading_a_sprite_a_grab_click_lets_go() {
     let mut world = field(&[], &[at(4, 2)]);
     let mut app = grab_app(&world);
-    click(&mut app, &world, at(4, 2));
+    click(&mut app, &world, at(4, 2), Button::Left);
     tick(&mut app, &mut world);
-    click(&mut app, &world, at(7, 4));
+    click(&mut app, &world, at(7, 4), Button::Left);
     assert_eq!(app.take_commands(), vec![Command::LetGo]);
 }
 
@@ -146,9 +76,9 @@ fn leading_a_sprite_a_grab_click_lets_go() {
 fn holding_an_item_a_grab_click_puts_it_down_there() {
     let mut world = field(&[(at(4, 2), "ball")], &[]);
     let mut app = grab_app(&world);
-    click(&mut app, &world, at(4, 2));
+    click(&mut app, &world, at(4, 2), Button::Left);
     tick(&mut app, &mut world);
-    click(&mut app, &world, at(7, 4));
+    click(&mut app, &world, at(7, 4), Button::Left);
     assert_eq!(
         app.take_commands(),
         vec![Command::PutDown { tile: at(7, 4) }]
@@ -160,8 +90,8 @@ fn while_paused_a_click_after_a_queued_grab_lets_go_and_both_apply_next_tick() {
     let mut world = field(&[], &[at(4, 2)]);
     let mut app = grab_app(&world);
     let sprite = sprite_on(&world, at(4, 2));
-    click(&mut app, &world, at(4, 2));
-    click(&mut app, &world, at(6, 2));
+    click(&mut app, &world, at(4, 2), Button::Left);
+    click(&mut app, &world, at(6, 2), Button::Left);
     assert_eq!(
         app.take_commands(),
         vec![Command::TakeHold { sprite }, Command::LetGo]
@@ -180,7 +110,7 @@ fn a_queued_grab_the_world_refuses_leaves_the_cursor_as_the_world_says() {
     let mut world = field(&[], &[at(4, 2), at(8, 4)]);
     let mut app = grab_app(&world);
     let (mine, other) = (sprite_on(&world, at(4, 2)), sprite_on(&world, at(8, 4)));
-    click(&mut app, &world, at(4, 2));
+    click(&mut app, &world, at(4, 2), Button::Left);
     assert_eq!(app.grip(&world), Some(Grip::Leads(mine)), "as queued");
     // Another command gets there first, so the world refuses the app's grab.
     world.submit(Command::TakeHold { sprite: other });
@@ -189,16 +119,12 @@ fn a_queued_grab_the_world_refuses_leaves_the_cursor_as_the_world_says() {
     assert_eq!(app.status_mark(), StatusMark::Rejected);
 }
 
-fn point(app: &mut App, world: &World, tile: Pos) {
-    apply(app, world, Action::Point(pointing_at(tile)));
-}
-
 #[test]
 fn while_leading_each_move_of_the_cursor_onto_a_new_tile_is_sent_once() {
     let world = field(&[], &[at(4, 2)]);
     let mut app = grab_app(&world);
     let sprite = sprite_on(&world, at(4, 2));
-    click(&mut app, &world, at(4, 2));
+    click(&mut app, &world, at(4, 2), Button::Left);
     point(&mut app, &world, at(6, 2));
     point(&mut app, &world, at(6, 2));
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
@@ -219,7 +145,7 @@ fn not_leading_the_cursor_moves_without_telling_the_world() {
     let world = field(&[(at(4, 2), "ball")], &[]);
     let mut app = grab_app(&world);
     point(&mut app, &world, at(6, 2));
-    click(&mut app, &world, at(4, 2));
+    click(&mut app, &world, at(4, 2), Button::Left);
     point(&mut app, &world, at(7, 3));
     let item = object_on(&world, at(4, 2));
     assert_eq!(app.take_commands(), vec![Command::PickUp { item }]);
@@ -231,12 +157,6 @@ fn press(app: &mut App, world: &World) {
         amplified: false,
     };
     apply(app, world, action);
-}
-
-/// Has the Cursor follow the sprite on `tile`, with a middle click (design
-/// v26 §6.5).
-fn follow(app: &mut App, world: &World, tile: Pos) {
-    apply(app, world, Action::middle_click(pointing_at(tile)));
 }
 
 #[test]
@@ -288,7 +208,7 @@ fn while_leading_a_cursor_following_another_walking_sprite_tells_the_world_where
     let mut world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
     let mut app = grab_app(&world);
     let id = sprite_on(&world, walker);
-    click(&mut app, &world, at(1, 1));
+    click(&mut app, &world, at(1, 1), Button::Left);
     follow(&mut app, &world, walker);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
     for _ in 0..6 {
@@ -327,9 +247,9 @@ fn the_observed_list_tells_of_being_pulled_away_and_along_as_the_sprite_felt_it(
     apply(&mut app, &world, Action::SelectNext);
     tick(&mut app, &mut world);
     let now = world.sprites().next().expect("the sprite").pos();
-    click(&mut app, &world, now);
+    click(&mut app, &world, now, Button::Left);
     tick(&mut app, &mut world);
-    click(&mut app, &world, at(5, 5));
+    click(&mut app, &world, at(5, 5), Button::Left);
     tick(&mut app, &mut world);
     let observed: Vec<&str> = app.observed().map(|o| o.line.as_str()).collect();
     assert_eq!(
@@ -344,17 +264,12 @@ fn the_observed_list_tells_of_being_pulled_away_and_along_as_the_sprite_felt_it(
 /// A field with a ball on (1, 1) and a sprite resting on (4, 2) for a
 /// while, so it stays put.
 fn resting_sprite_and_ball() -> World {
-    let rows = vec![".........."; 6];
-    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
     let resting = at(4, 2);
-    let scenario = Scenario {
-        map,
-        objects: &[(at(1, 1), "ball")],
-        sprites: &[(resting, None)],
-        scripted: &[(resting, ScriptedAction::Rest); 5],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, pack(), 1).expect("valid scenario")
+    WorldBuilder::grass(10, 6)
+        .objects(&[(at(1, 1), "ball")])
+        .sprites(&[resting])
+        .scripts(&[(resting, ScriptedAction::Rest); 5])
+        .build()
 }
 
 #[test]
@@ -377,7 +292,7 @@ fn holding_an_item_while_following_a_sprite_a_click_puts_it_at_its_feet() {
     // followed sprite.
     let mut world = resting_sprite_and_ball();
     let mut app = grab_app(&world);
-    click(&mut app, &world, at(1, 1));
+    click(&mut app, &world, at(1, 1), Button::Left);
     tick(&mut app, &mut world);
     follow(&mut app, &world, at(4, 2));
     point(&mut app, &world, at(8, 5));
@@ -395,10 +310,10 @@ fn holding_an_item_while_following_a_sprite_a_mouse_click_anywhere_puts_it_at_it
     // it lands.
     let mut world = resting_sprite_and_ball();
     let mut app = grab_app(&world);
-    click(&mut app, &world, at(1, 1));
+    click(&mut app, &world, at(1, 1), Button::Left);
     tick(&mut app, &mut world);
     follow(&mut app, &world, at(4, 2));
-    click(&mut app, &world, at(8, 5));
+    click(&mut app, &world, at(8, 5), Button::Left);
     assert_eq!(
         app.take_commands(),
         vec![Command::PutDown { tile: at(4, 2) }]
@@ -423,28 +338,14 @@ fn leading_the_followed_sprite_follow_steps_aside_in_every_mode() {
 /// A field 20 wide with a sprite resting on (1, 1), which the app in Grab
 /// mode has just taken hold of, and a sprite resting on (12, 3).
 fn leading_in_a_wide_field() -> (World, App) {
-    let rows = vec!["...................."; 6];
-    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
     let (led, other) = (at(1, 1), at(12, 3));
-    let mut scripted = vec![(led, ScriptedAction::Rest); 9];
-    scripted.extend([(other, ScriptedAction::Rest); 9]);
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[(led, None), (other, None)],
-        scripted: &scripted,
-        newborns: &[],
-    };
-    let world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
-    let areas = Areas {
-        tiles: Rect::new(0, 0, 20, 6),
-        inspector: None,
-        event_log: None,
-        overlay: None,
-    };
-    let mut app = App::new(world.map(), Theme::cp437(), 1, areas);
-    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
-    click(&mut app, &world, led);
+    let world = WorldBuilder::grass(20, 6)
+        .sprites(&[led, other])
+        .scripts(&[(led, ScriptedAction::Rest); 9])
+        .scripts(&[(other, ScriptedAction::Rest); 9])
+        .build();
+    let mut app = grab_app(&world);
+    click(&mut app, &world, led, Button::Left);
     (world, app)
 }
 
@@ -463,7 +364,7 @@ fn leading_the_cursor_goes_no_further_than_the_leash_and_clicks_land_where_it_is
     // A pet clicked on the sprite past the leash lands on the Cursor's tile,
     // where there's no one.
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
-    click(&mut app, &world, at(12, 3));
+    click(&mut app, &world, at(12, 3), Button::Left);
     assert_eq!(app.take_commands(), Vec::new());
     assert_eq!(app.refusal(), Some("No sprite here to pet"));
 }
@@ -497,7 +398,7 @@ fn leading_a_sprite_esc_lets_go_and_the_next_esc_returns_to_select() {
     // Design v33 §6.5: Esc lets go before it leaves the mode.
     let mut world = field(&[], &[at(4, 2)]);
     let mut app = grab_app(&world);
-    click(&mut app, &world, at(4, 2));
+    click(&mut app, &world, at(4, 2), Button::Left);
     tick(&mut app, &mut world);
     escape(&mut app, &world);
     assert_eq!(app.mode(), CursorMode::Grab, "letting go comes first");
@@ -514,7 +415,7 @@ fn while_paused_a_second_esc_after_a_queued_let_go_returns_to_select_sending_not
     // `LetGo` already counts before time moves.
     let mut world = field(&[], &[at(4, 2)]);
     let mut app = grab_app(&world);
-    click(&mut app, &world, at(4, 2));
+    click(&mut app, &world, at(4, 2), Button::Left);
     tick(&mut app, &mut world);
     escape(&mut app, &world);
     escape(&mut app, &world);
@@ -529,7 +430,7 @@ fn holding_an_item_esc_puts_it_down_on_the_cursor_s_tile() {
     let mut world = field(&[(at(4, 2), "ball")], &[]);
     let mut app = grab_app(&world);
     let ball = object_on(&world, at(4, 2));
-    click(&mut app, &world, at(4, 2));
+    click(&mut app, &world, at(4, 2), Button::Left);
     tick(&mut app, &mut world);
     point(&mut app, &world, at(7, 4));
     escape(&mut app, &world);
@@ -550,7 +451,7 @@ fn holding_an_item_while_following_a_sprite_esc_puts_it_at_its_feet() {
     // where Esc puts the item down.
     let mut world = resting_sprite_and_ball();
     let mut app = grab_app(&world);
-    click(&mut app, &world, at(1, 1));
+    click(&mut app, &world, at(1, 1), Button::Left);
     tick(&mut app, &mut world);
     follow(&mut app, &world, at(4, 2));
     point(&mut app, &world, at(8, 5));
@@ -568,7 +469,7 @@ fn esc_lets_go_in_every_mode_before_it_asks_to_quit() {
     let mut world = field(&[(at(4, 2), "ball")], &[]);
     let mut app = grab_app(&world);
     let ball = object_on(&world, at(4, 2));
-    click(&mut app, &world, at(4, 2));
+    click(&mut app, &world, at(4, 2), Button::Left);
     tick(&mut app, &mut world);
     apply(&mut app, &world, Action::Mode(CursorMode::Select));
     point(&mut app, &world, at(6, 3));
@@ -587,7 +488,7 @@ fn esc_putting_an_item_down_where_it_cant_go_is_refused_with_why() {
     let mut world = field(&[(at(4, 2), "ball"), (at(7, 4), "berry_bush")], &[]);
     let mut app = grab_app(&world);
     let ball = object_on(&world, at(4, 2));
-    click(&mut app, &world, at(4, 2));
+    click(&mut app, &world, at(4, 2), Button::Left);
     tick(&mut app, &mut world);
     point(&mut app, &world, at(7, 4));
     escape(&mut app, &world);

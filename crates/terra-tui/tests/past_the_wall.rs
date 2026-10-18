@@ -2,16 +2,16 @@
 //! the stars going by in it, and the pointer over it, where the Cursor
 //! can't reach.
 
+mod common;
+use common::{WorldBuilder, apply, render, tick};
+
 use std::time::Duration;
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier};
-use ratatui::{Terminal, backend::TestBackend};
-use terra_sim::{
-    Command, CursorTouch, DataPack, Dir, EntityId, Grip, Map, Pos, Scenario, ScriptedAction, World,
-};
-use terra_tui::app::{App, CursorMode, Flow};
+use terra_sim::{Command, CursorTouch, Dir, EntityId, Grip, Pos, ScriptedAction, World};
+use terra_tui::app::{App, CursorMode};
 use terra_tui::input::{Action, Button};
 use terra_tui::space::Place;
 use terra_tui::theme::Theme;
@@ -24,10 +24,6 @@ const SCREEN: Size = Size::new(100, 30);
 /// The map view's tiles on `SCREEN`.
 const TILES: Rect = Rect::new(1, 2, 52, 21);
 
-fn pack() -> DataPack {
-    DataPack::builtin().expect("valid pack")
-}
-
 /// An all-grass world `width`×`height`, with starter sprites on `sprites`.
 fn field(width: usize, height: usize, sprites: &[Pos]) -> World {
     field_with(width, height, &[], sprites)
@@ -36,30 +32,15 @@ fn field(width: usize, height: usize, sprites: &[Pos]) -> World {
 /// An all-grass world `width`×`height`, with `objects`, and starter sprites
 /// on `sprites` that rest, so they go only where they're led.
 fn field_with(width: usize, height: usize, objects: &[(Pos, &str)], sprites: &[Pos]) -> World {
-    let row = ".".repeat(width);
-    let map = Map::from_ascii(&vec![row.as_str(); height], &pack()).expect("valid drawing");
     let scripted: Vec<(Pos, ScriptedAction)> = sprites
         .iter()
         .flat_map(|&pos| [(pos, ScriptedAction::Rest); 50])
         .collect();
-    let sprites: Vec<(Pos, _)> = sprites.iter().map(|&pos| (pos, None)).collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
-    };
-    World::from_scenario(scenario, pack(), 1).expect("valid scenario")
-}
-
-/// Hands the app's commands to the world and runs a tick, as a frame does.
-fn tick(app: &mut App, world: &mut World) {
-    for command in app.take_commands() {
-        world.submit(command);
-    }
-    let events = world.step();
-    app.record(&events, world);
+    WorldBuilder::grass(width, height)
+        .objects(objects)
+        .sprites(sprites)
+        .scripts(&scripted)
+        .build()
 }
 
 /// A 10×6 field with a sprite on (4, 3). It fits in the map view with its
@@ -80,10 +61,6 @@ fn app(world: &World) -> App {
     let mut app = App::new(world.map(), Theme::cp437(), 1, ui::areas(SCREEN));
     app.take_commands();
     app
-}
-
-fn apply(app: &mut App, world: &World, action: Action) {
-    assert_eq!(app.apply(action, world), Flow::Continue);
 }
 
 /// The small field with a ball on `tile`, and an app in Grab mode whose
@@ -119,14 +96,6 @@ fn past(x: i32, y: i32) -> Position {
 
 /// A cell over space, well clear of the small field and its glass.
 const SPACE: Position = Position::new(6, 5);
-
-fn render(app: &App, world: &World) -> Buffer {
-    let mut terminal = Terminal::new(TestBackend::new(SCREEN.width, SCREEN.height)).unwrap();
-    terminal
-        .draw(|frame| ui::render(frame, app, world))
-        .unwrap();
-    terminal.backend().buffer().clone()
-}
 
 /// The map view's tiles as drawn, a string a row.
 fn map_view(screen: &Buffer) -> Vec<String> {

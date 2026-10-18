@@ -3,90 +3,23 @@
 //! what's under it first if it's empty, by pulling back from the Cursor, and
 //! letting go sends it.
 
-use ratatui::layout::{Position, Rect};
+mod common;
+use common::{
+    LONE, WorldBuilder, apply, at, click, follow, grab_app, object_on, pack_changing, point,
+    pointing_at, sprite_on, tick,
+};
+
 use terra_sim::{Command, DataPack, Dir, EntityId, Map, Pos, Scenario, ScriptedAction, World};
-use terra_tui::app::{App, Areas, CursorMode, Flow, StatusMark};
+use terra_tui::app::{App, CursorMode, StatusMark};
 use terra_tui::input::{Action, Button};
-use terra_tui::theme::Theme;
-
-fn pack() -> DataPack {
-    DataPack::builtin().expect("valid pack")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
 
 /// An all-grass world, 20×12, with `objects`, and starter sprites on
 /// `sprites`.
 fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> World {
-    let rows = vec!["...................."; 12];
-    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
-    let sprites: Vec<(Pos, _)> = sprites.iter().map(|&pos| (pos, None)).collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, pack(), 1).expect("valid scenario")
-}
-
-/// The app in Grab mode, with the map view's tiles drawn from screen cell
-/// (0, 0), so a tile's cell is its position.
-fn grab_app(world: &World) -> App {
-    let areas = Areas {
-        tiles: Rect::new(0, 0, 20, 12),
-        inspector: None,
-        event_log: None,
-        overlay: None,
-    };
-    let mut app = App::new(world.map(), Theme::cp437(), 1, areas);
-    apply(&mut app, world, Action::Mode(CursorMode::Grab));
-    app
-}
-
-fn apply(app: &mut App, world: &World, action: Action) {
-    assert_eq!(app.apply(action, world), Flow::Continue);
-}
-
-/// The screen cell the pointer is on to point at `tile`: one down and right of
-/// it (design v27 §6.5). The map view's tiles are drawn from screen cell (0, 0).
-fn pointing_at(tile: Pos) -> Position {
-    Position::new(tile.x + 1, tile.y + 1)
-}
-
-fn click(app: &mut App, world: &World, tile: Pos, button: Button) {
-    let action = Action::Click {
-        at: pointing_at(tile),
-        button,
-        amplified: false,
-    };
-    apply(app, world, action);
-}
-
-/// Has the Cursor follow the sprite on `tile`, with a middle click (design
-/// v26 §6.5).
-fn follow(app: &mut App, world: &World, tile: Pos) {
-    apply(app, world, Action::middle_click(pointing_at(tile)));
-}
-
-/// Hands the app's commands to the world and runs a tick, as a frame does.
-fn tick(app: &mut App, world: &mut World) {
-    for command in app.take_commands() {
-        world.submit(command.clone());
-    }
-    let events = world.step();
-    app.record(&events, world);
-}
-
-fn sprite_on(world: &World, pos: Pos) -> EntityId {
-    world.sprite_at(pos).expect("a sprite").id()
-}
-
-fn object_on(world: &World, pos: Pos) -> EntityId {
-    world.object_at(pos).expect("an object").id()
+    WorldBuilder::grass(20, 12)
+        .objects(objects)
+        .sprites(sprites)
+        .build()
 }
 
 #[test]
@@ -116,11 +49,6 @@ fn hold(app: &mut App, world: &mut World, tile: Pos) -> EntityId {
     tick(app, world);
     assert!(world.cursor().holds().is_some());
     item
-}
-
-/// Points at `tile`, as a mouse move, or a drag, does.
-fn point(app: &mut App, world: &World, tile: Pos) {
-    apply(app, world, Action::Point(pointing_at(tile)));
 }
 
 /// Lets go of the right button over `tile`.
@@ -362,22 +290,18 @@ fn a_queued_throw_leaves_the_marks_empty_and_a_refused_one_says_why() {
 /// Cursor took hold of the sprite on (5, 5) and shoved it east 3 tiles,
 /// in a field with `objects` and another sprite on each of `others`.
 fn shove_seen(objects: &[(Pos, &str)], others: &[Pos]) -> Vec<String> {
-    let mut sprites = vec![(at(5, 5), None)];
-    sprites.extend(others.iter().map(|&pos| (pos, None)));
+    let mut sprites = vec![at(5, 5)];
+    sprites.extend_from_slice(others);
     // Resting whenever they choose, so they stay where they are.
     let rests: Vec<(Pos, ScriptedAction)> = sprites
         .iter()
-        .flat_map(|&(pos, _)| [(pos, ScriptedAction::Rest); 20])
+        .flat_map(|&pos| [(pos, ScriptedAction::Rest); 20])
         .collect();
-    let map = Map::from_ascii(&["...................."; 12], &pack()).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted: &rests,
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
+    let mut world = WorldBuilder::grass(20, 12)
+        .objects(objects)
+        .sprites(&sprites)
+        .scripts(&rests)
+        .build();
     let mut app = grab_app(&world);
     apply(&mut app, &world, Action::SelectNext);
     lead(&mut app, &mut world, at(5, 5));
@@ -617,22 +541,7 @@ fn the_aim_is_cancelled_when_the_led_sprite_dies() {
 /// can (M2 design §10.4), in a pack that lets her at once (§15.7), stepped
 /// until it has: the world and the egg.
 fn laid_an_egg(mother: Pos) -> (World, EntityId) {
-    let physiology = include_str!("../../../data/physiology.ron")
-        .replace("alone_after: 4500,", "alone_after: 0,");
-    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, text)| {
-            (
-                path,
-                if path == "physiology.ron" {
-                    &physiology[..]
-                } else {
-                    text
-                },
-            )
-        })
-        .collect();
-    let pack = DataPack::from_sources(&sources).expect("valid pack");
+    let pack = pack_changing(&[LONE]);
     let genome = terra_sim::Genome::from_ron(
         r#"(format: 1, genes: [
             InitialConcentration(chem: "feminiser", value: 1.0),
@@ -642,15 +551,10 @@ fn laid_an_egg(mother: Pos) -> (World, EntityId) {
         &pack,
     )
     .expect("a valid genome");
-    let map = Map::from_ascii(&["...................."; 12], &pack).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[(mother, Some(genome))],
-        scripted: &[],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, pack, 1).expect("valid scenario");
+    let mut world = WorldBuilder::grass(20, 12)
+        .sprites_with(vec![(mother, Some(genome))])
+        .data(pack)
+        .build();
     let egg = (0..50)
         .flat_map(|_| world.step())
         .find_map(|event| match event.kind {
