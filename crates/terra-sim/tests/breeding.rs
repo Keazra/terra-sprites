@@ -994,15 +994,9 @@ fn the_breeding_drive_eased_teaches_worth_only_after_a_mate_and_only_of_the_part
     // an adult or courts one teaches nothing of what either is worth for
     // the drive. Only a Mate's does, about the partner.
     let (me, ball, other) = (at(2, 1), at(2, 2), at(3, 1));
-    let data = builtin();
-    let sprites = vec![
-        (me, Some(genome(COOLING, &data))),
-        (other, Some(genome(REST, &data))),
-    ];
     let mut world = WorldBuilder::new(&["........", "........", "........", "........"])
-        .data(data)
         .objects(&[(ball, "ball")])
-        .sprites_with(sprites)
+        .sprites(&[(me, COOLING), (other, REST)])
         .scripts(&[
             (me, ScriptedAction::Play { at: ball }),
             (me, ScriptedAction::Play { at: other }),
