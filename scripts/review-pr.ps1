@@ -24,12 +24,17 @@
 # copied in, Gemini's steps show here as it works, and its answer is read
 # back; GitHub is still only reached from here. The review is posted without
 # asking, and the sandbox is shut down afterwards. Only the repository
-# owner's own PRs are reviewed there: this repository is public, and the
-# sandbox also holds the private FTA2 repository and a GitHub key for it,
-# which a stranger's PR could try to talk the reviewer into sending out.
-# A stranger's comment could try the same, on the owner's PR or on an issue
-# it names, so a PR goes to the sandbox only while everything the reviewer
-# reads there was written by the owner or a review bot.
+# owner's own PRs, from branches in the owner's own copy of it, are reviewed
+# there: this repository is public, and the sandbox also holds the private
+# FTA2 repository and a GitHub key for it, which a stranger's PR could try to
+# talk the reviewer into sending out. A stranger's comment could try the
+# same, on the owner's PR or on an issue it names, so a PR goes to the
+# sandbox only while everything the reviewer reads there was written by the
+# owner or a review bot, and while GitHub can say who wrote it. Without
+# -Sandbox, Gemini only reads, so any PR can be reviewed that way. Either
+# way, a PR whose comments, reviews or conversation GitHub couldn't hand over
+# isn't reviewed: the reviewer would miss what was said, and in the sandbox,
+# who said it.
 #
 # With no PR number, the open PRs are listed with where each stands with
 # Gemini, to tick with the arrow keys and Space. The ones never reviewed, or
@@ -54,6 +59,7 @@ $Grades = @{ 1 = "Critical"; 2 = "Medium"; 3 = "Minor" }
 $Confidences = "confirmed", "likely", "unconfirmed"
 $MostMinor = 5
 $SandboxName = "FTA2-Review"
+$NotSandboxed = "isn't reviewed in the sandbox (see this script's opening comment). Review it without -Sandbox, where Gemini only reads."
 $Owner = $GitHubRepo.Split("/")[0]
 # Who may have written what the reviewer reads in the sandbox: the owner, and
 # the review bots, whose words come from the owner's own PR.
@@ -286,6 +292,8 @@ function Get-Review($Output) {
 }
 
 Set-Location $Repo
+# The model goes on agy's command line, so it must be one word.
+if ($Model -and $Model -notmatch '^[A-Za-z0-9._:/-]+$') { Fail "'$Model' isn't a model name." }
 $consoleEncoding = [Console]::OutputEncoding
 # gh and git write UTF-8; PowerShell 5.1 would read it in the console's code page.
 try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch { }
@@ -305,7 +313,7 @@ if (-not (Test-Path $Instructions)) { Fail "Couldn't find the reviewer's instruc
 # 1. Which PRs. With none given, the owner ticks them, and each is reviewed
 # by this script run again with its number.
 if (-not $Pr) {
-    $listed = & gh pr list --repo $GitHubRepo --state open --limit 100 --json number,title,isDraft,headRefOid,author
+    $listed = & gh pr list --repo $GitHubRepo --state open --limit 100 --json number,title,isDraft,headRefOid,author,headRepositoryOwner
     if ($LASTEXITCODE -ne 0) { Fail "Couldn't list the open PRs on GitHub. Is gh signed in? (gh auth status)" }
     # The parentheses make PowerShell 5.1 hand on the array's items, not the array.
     $open = @((Join-Lines $listed | ConvertFrom-Json) | ForEach-Object { $_ } | Sort-Object { [int]$_.number })
@@ -316,6 +324,8 @@ if (-not $Pr) {
         $needed = $false
         if ($Sandbox -and $p.author.login -ne $Owner) {
             $status = "by $($p.author.login): not in the sandbox"
+        } elseif ($Sandbox -and $p.headRepositoryOwner.login -ne $Owner) {
+            $status = "from $($p.headRepositoryOwner.login)'s copy: not in the sandbox"
         } elseif (-not $p.isDraft) {
             # If GitHub can't say, count it as needing a review: a second
             # review costs less than a missed one.
@@ -372,13 +382,17 @@ if (-not $Pr) {
 $Pr = $Pr.Trim().TrimStart("#")
 if ($Pr -notmatch '^\d+$') { Fail "'$Pr' isn't a PR number." }
 
-$fields = "number,title,body,author,state,isDraft,headRefName,headRefOid,baseRefName,files,commits,url"
+$fields = "number,title,body,author,state,isDraft,headRefName,headRefOid,headRepositoryOwner,baseRefName,files,commits,url"
 $prJson = Join-Lines (& gh pr view $Pr --repo $GitHubRepo --json $fields)
 if ($LASTEXITCODE -ne 0) { Fail "Couldn't find PR #$Pr on GitHub." }
 $info = $prJson | ConvertFrom-Json
 if ($info.state -ne "OPEN") { Fail "PR #$Pr is $($info.state.ToLower()), so there's nothing to review." }
 if ($Sandbox -and $info.author.login -ne $Owner) {
-    Fail "PR #$Pr is by $($info.author.login), not $Owner, so it isn't reviewed in the sandbox (see this script's opening comment). Review it without -Sandbox."
+    Fail "PR #$Pr is by $($info.author.login), not $Owner, so it $NotSandboxed"
+}
+# Whoever can push to the PR's branch decides what the reviewer reads.
+if ($Sandbox -and $info.headRepositoryOwner.login -ne $Owner) {
+    Fail "PR #$Pr's branch is in $($info.headRepositoryOwner.login)'s copy of the repository, not $Owner's, so it $NotSandboxed"
 }
 $head = $info.headRefOid
 $short = $head.Substring(0, 7)
@@ -408,13 +422,21 @@ try {
     # gh pr checks fails when a check fails or is still running: its output is the point.
     $checks = & gh pr checks $Pr --repo $GitHubRepo 2>&1
     Write-Text (Join-Path $inputs "checks.txt") (Join-Lines $checks)
+    # Each of these is checked (the opening comment): a review without them
+    # misses what was said, and in the sandbox, who wrote what's read there
+    # is taken from them, so one cut short would let a stranger's words
+    # through unseen.
     $comments = @(& gh api "repos/$GitHubRepo/pulls/$Pr/comments" --paginate `
         --jq '.[] | {id, in_reply_to_id, user: .user.login, path, line, original_line, original_commit_id, created_at, body}')
+    if ($LASTEXITCODE -ne 0) { Fail "Couldn't fetch PR #$Pr's review comments." }
     Write-Text (Join-Path $inputs "comments.jsonl") (Join-Lines $comments)
     $reviews = @(& gh api "repos/$GitHubRepo/pulls/$Pr/reviews" --paginate `
         --jq '.[] | {user: .user.login, state, commit_id, submitted_at, body}')
+    if ($LASTEXITCODE -ne 0) { Fail "Couldn't fetch PR #$Pr's reviews." }
     Write-Text (Join-Path $inputs "reviews.jsonl") (Join-Lines $reviews)
-    Write-Text (Join-Path $inputs "conversation.txt") (Join-Lines (& gh pr view $Pr --repo $GitHubRepo --comments))
+    $conversation = & gh pr view $Pr --repo $GitHubRepo --comments
+    if ($LASTEXITCODE -ne 0) { Fail "Couldn't fetch PR #$Pr's conversation." }
+    Write-Text (Join-Path $inputs "conversation.txt") (Join-Lines $conversation)
     $issues = [regex]::Matches("$($info.body)", '(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|part of)\s+#(\d+)') |
         ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
     $named = @()
@@ -439,8 +461,7 @@ try {
         }
         $others = @($writers | Where-Object { $SandboxWriters -notcontains $_ } | Select-Object -Unique)
         if ($others.Count -gt 0) {
-            Fail ("PR #$Pr, or an issue it names, has words by $($others -join ', '), so it isn't reviewed in the sandbox " +
-                "(see this script's opening comment). Review it without -Sandbox.")
+            Fail "PR #$Pr, or an issue it names, has words by $($others -join ', '), so it $NotSandboxed"
         }
     }
 
@@ -488,7 +509,6 @@ try {
     $answer = Join-Path $work "answer.json"
     $errors = Join-Path $work "errors.log"
     if ($Sandbox) {
-        if ($Model -and $Model -notmatch '^[A-Za-z0-9._:/-]+$') { Fail "'$Model' isn't a model name." }
         $log = "\\wsl$\$SandboxName\home\reviewer\review-logs\terra-pr-$Pr.txt"
 
         # 4a. The sandbox's clone at the PR's commit, with .review copied in. The

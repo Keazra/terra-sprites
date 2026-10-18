@@ -315,16 +315,16 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "a scratch folder for the test, and reading back what it wrote"
+    )]
     fn a_report_is_saved_as_a_page_and_as_ron_named_by_day_and_commit() {
         let dir = std::env::temp_dir().join(format!("baseline-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("a scratch folder");
         let (md, ron) = save(&dir, &report(), "the page").expect("written");
         assert_eq!(md, dir.join("2026-10-01-abc1234-report.md"));
         assert_eq!(ron, dir.join("2026-10-01-abc1234-report.ron"));
-        #[expect(
-            clippy::disallowed_methods,
-            reason = "reading back what the test wrote"
-        )]
         let (page, text) = (
             std::fs::read_to_string(&md).expect("the page"),
             std::fs::read_to_string(&ron).expect("the RON"),

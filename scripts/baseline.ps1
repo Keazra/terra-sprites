@@ -22,6 +22,10 @@
 # but saved in reports/trials/, never becomes main's baseline, and never
 # posts: its issues are only printed. Its reports are committed and pushed,
 # as a run of main's are.
+#
+# main counts as measured (reports/last-commit.txt) only once a run is done
+# and any issue it had to file or comment is on GitHub. So a run that
+# couldn't post, or a dry run, leaves main to be measured again next time.
 
 param(
     [string]$Model = "gemini-3.8-flash-high",
@@ -80,6 +84,7 @@ function Get-BrokenSection([string]$Page) {
 
 # Files an issue for a broken run, or comments on the open one, after
 # checking for it. With -DryRun it prints what it would post instead.
+# Returns whether it did what it was asked.
 function Send-Broken([string]$Commit, [string]$Measured, [string]$Broken, [string]$Suspected, [switch]$DryRun) {
     if (-not $Suspected) { $Suspected = "The observer had no guess." }
     $body = @"
@@ -99,17 +104,17 @@ Found by the baseline run on ``main`` at $Commit, $Measured (design section 7.6)
     $open = & gh issue list --repo $GitHubRepo --state open --search "Baseline run broken in:title" --json number --jq ".[0].number"
     if ($LASTEXITCODE -ne 0) {
         Write-Log "ERROR: couldn't look for an open issue on GitHub, so none was filed or commented on"
-        return
+        return $false
     }
     if ($open) {
-        if ($DryRun) { Write-Host "Would comment on #${open}:`n$body"; return }
+        if ($DryRun) { Write-Host "Would comment on #${open}:`n$body"; return $true }
         & gh issue comment $open --repo $GitHubRepo --body-file $bodyFile | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Log "ERROR: couldn't comment on #${open} on GitHub"
-            return
+            return $false
         }
         Write-Log "Commented on #${open}: still broken at $Commit"
-        return
+        return $true
     }
     $title = "Baseline run broken at $Commit"
     $plain = @"
@@ -119,18 +124,21 @@ Found by the baseline run on ``main`` at $Commit, $Measured (design section 7.6)
 "@
     $plainFile = Join-Path $env:TEMP "baseline-broken-$Commit-plain.md"
     Write-Text $plainFile $plain
-    if ($DryRun) { Write-Host "Would file: $title (afk)`n$body`nThen comment:`n$plain"; return }
+    if ($DryRun) { Write-Host "Would file: $title (afk)`n$body`nThen comment:`n$plain"; return $true }
     $url = & gh issue create --repo $GitHubRepo --title $title --label afk --body-file $bodyFile
     if ($LASTEXITCODE -ne 0 -or -not $url) {
         Write-Log "ERROR: couldn't file the issue on GitHub"
-        return
+        return $false
     }
+    # The issue is up, which is what the run must post; the comment only
+    # explains it, so a run that couldn't add it isn't measured again.
     & gh issue comment $url --repo $GitHubRepo --body-file $plainFile | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-Log "Filed $url, but ERROR: couldn't add its plain-language comment"
-        return
+        return $true
     }
     Write-Log "Filed $url"
+    return $true
 }
 
 # Commits what a run wrote to the private repo's reports/ and pushes it, so a
@@ -162,6 +170,11 @@ function Save-Reports([string]$Message) {
 }
 
 function Invoke-Baseline {
+    # The model goes on agy's command line, so it must be one word.
+    if ($Model -notmatch '^[A-Za-z0-9._:/-]+$') {
+        Write-Host "ERROR: '$Model' isn't a model name"
+        return 1
+    }
     # The reports, and the log, live in the private repo.
     if (-not (Test-Path (Join-Path $PrivateDocs ".git"))) {
         Write-Host ("ERROR: the private repo isn't checked out at docs\terra-sprites-docs, where the reports go " +
@@ -225,7 +238,6 @@ function Invoke-Baseline {
     }
     $isBroken = $code -eq 2
     $page = Read-Text (Join-Path $out "$stem-report.md")
-    if (-not $trial) { Write-Text $LastCommit $commit }
 
     # 4. What the observer reads, inside its workspace: the reports, and the
     # commits since the last one with the files each changed.
@@ -284,11 +296,19 @@ If the report has a Broken section, put your best guess at its cause in suspecte
 
     # 6. A broken run (the program says so with exit code 2) files an issue,
     # or comments on the open one. A trial only prints it.
+    $posted = $true
     if ($isBroken) {
         $broken = Get-BrokenSection $page
         if (-not $broken) { $broken = "The run broke, but its page has no Broken section: see $stem-report.md." }
-        Send-Broken -Commit $commit -Measured $measured -Broken $broken -Suspected $suspected -DryRun:($DryRun -or $trial)
+        $posted = Send-Broken -Commit $commit -Measured $measured -Broken $broken -Suspected $suspected -DryRun:($DryRun -or $trial)
     }
+    # A dry run or a trial posts nothing, so only a real run of main can fail to.
+    if (-not $posted -and -not ($DryRun -or $trial)) {
+        Write-Log "ERROR: the broken run isn't on GitHub, so main isn't counted as measured: the next run measures it again"
+        return 1
+    }
+    # main is measured once all its run had to post is up; a dry run posted nothing.
+    if (-not $trial -and -not $DryRun) { Write-Text $LastCommit $commit }
     Write-Log "Done: $stem-report.md$(if ($isBroken) { ' (BROKEN)' })"
     return 0
 }

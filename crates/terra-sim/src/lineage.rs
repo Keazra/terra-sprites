@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 use crate::ageing::LifeStage;
 use crate::breeding::Sex;
 use crate::events::DeathCause;
-use crate::objects::{EntityId, Objects};
-use crate::sprites::{Sprite, Sprites};
+use crate::objects::EntityId;
+use crate::sprites::{Sprite, Sprites, ticks_since};
 
 /// How many dead sprites the world remembers (M2 design §17.1): past it, the
 /// longest dead are forgotten first, but never one the player named.
@@ -97,7 +97,7 @@ impl Record {
 
     /// Its age when it died, in ticks.
     pub(crate) fn age(&self) -> u64 {
-        u64::try_from(self.died as i64 - self.born).expect("born before it died")
+        ticks_since(self.born, self.died).expect("born before it died")
     }
 }
 
@@ -142,11 +142,13 @@ impl RecordOfTheDead {
         self.dead.iter().map(|(&id, record)| (id, record))
     }
 
-    /// Checks the record (design §7.1): the dead aren't in the world, each
-    /// was born before it died, of parents older than itself, in a
-    /// generation after theirs where the world knows them, living or
-    /// remembered, and no more are kept than `REMEMBERED` and the named.
-    pub(crate) fn check(&self, sprites: &Sprites, objects: &Objects) -> Result<(), String> {
+    /// Checks the record (design §7.1): each of the dead was born before it
+    /// died, of parents older than itself, in a generation after theirs
+    /// where the world knows them, living or remembered, and no more are
+    /// kept than `REMEMBERED` and the named. That none of them is still in
+    /// the world is checked from the world's side, every tick
+    /// (`World::check_invariants`).
+    pub(crate) fn check(&self, sprites: &Sprites) -> Result<(), String> {
         let named = self.dead.values().filter(|r| r.name.is_some()).count();
         if self.dead.len() > REMEMBERED.max(named) {
             return Err(format!(
@@ -155,11 +157,10 @@ impl RecordOfTheDead {
             ));
         }
         for (&id, record) in &self.dead {
-            if sprites.get(id).is_some() || objects.get(id).is_some() {
-                return Err(format!("{id:?} is remembered as dead but is in the world"));
-            }
-            if record.born > record.died as i64 {
-                return Err(format!("{id:?} is remembered as dying before it was born"));
+            if ticks_since(record.born, record.died).is_none() {
+                return Err(format!(
+                    "{id:?} is remembered as dying before it was born, or longer after than a tick can count"
+                ));
             }
             if let Some(parent) = record.parents.iter().find(|parent| **parent >= id) {
                 return Err(format!(
@@ -245,34 +246,59 @@ mod tests {
         assert_eq!(kept[0], 1, "the first to die is forgotten");
     }
 
-    /// No sprites or objects, to check a record alone against.
-    fn no_sprites_or_objects() -> (Sprites, Objects) {
+    /// No sprites, to check a record alone against.
+    fn no_sprites() -> Sprites {
         let map = Map::from_ascii(&["."], &builtin()).expect("a map");
-        (Sprites::new(&map), Objects::new(&map))
+        Sprites::new(&map)
     }
 
     #[test]
     fn one_remembered_as_dying_before_it_was_born_is_caught() {
         // M2 design §17.1, checked every tick (design §7.1).
-        let (sprites, objects) = no_sprites_or_objects();
+        let sprites = no_sprites();
         let mut dead = RecordOfTheDead::default();
         let mut on_the_tick = record(10, None);
         on_the_tick.born = 10;
         dead.remember(EntityId(1), on_the_tick);
-        assert_eq!(dead.check(&sprites, &objects), Ok(()));
+        assert_eq!(dead.check(&sprites), Ok(()));
         let mut early = record(10, None);
         early.born = 11;
         dead.remember(EntityId(2), early);
         assert!(
-            dead.check(&sprites, &objects)
+            dead.check(&sprites)
                 .is_err_and(|why| why.contains("dying before it was born"))
+        );
+    }
+
+    #[test]
+    fn a_record_far_from_any_world_s_ticks_is_read_or_refused_never_wrapped() {
+        // A damaged save could hold any ticks: an age, and the check that
+        // it died after it was born, count them as they are, and refuse a
+        // life longer than a tick can count, whose age couldn't be told.
+        let sprites = no_sprites();
+        let mut ancient = record(10, None);
+        ancient.born = i64::MIN;
+        assert_eq!(ancient.age(), 10 + (1 << 63));
+        let mut last = record(u64::MAX, None);
+        last.born = 0;
+        assert_eq!(last.age(), u64::MAX);
+        let mut dead = RecordOfTheDead::default();
+        dead.remember(EntityId(1), ancient);
+        dead.remember(EntityId(2), last);
+        assert_eq!(dead.check(&sprites), Ok(()));
+        let mut endless = record(u64::MAX, None);
+        endless.born = -1;
+        dead.remember(EntityId(3), endless);
+        assert!(
+            dead.check(&sprites)
+                .is_err_and(|why| why.contains("longer after than a tick can count"))
         );
     }
 
     #[test]
     fn more_remembered_than_ten_thousand_is_caught_unless_they_re_named() {
         // M2 design §17.1: the newest 10,000, and the named however many.
-        let (sprites, objects) = no_sprites_or_objects();
+        let sprites = no_sprites();
         let (mut unnamed, mut named) = (RecordOfTheDead::default(), RecordOfTheDead::default());
         for id in 0..=REMEMBERED as u64 {
             unnamed.remember_within(EntityId(id), record(id, None), REMEMBERED + 1);
@@ -280,10 +306,10 @@ mod tests {
         }
         assert!(
             unnamed
-                .check(&sprites, &objects)
+                .check(&sprites)
                 .is_err_and(|why| why.contains("past 10000"))
         );
-        assert_eq!(named.check(&sprites, &objects), Ok(()));
+        assert_eq!(named.check(&sprites), Ok(()));
     }
 
     #[test]
