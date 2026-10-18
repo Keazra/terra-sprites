@@ -54,7 +54,7 @@ The game's content is data in `data/*.ron` (terrain, chemicals, loci, brain inpu
 
 This repo is public. The owner's working documents are in a private one, [Keazra/terra-sprites-docs](https://github.com/Keazra/terra-sprites-docs), which their PC has at `docs/terra-sprites-docs/`. Before writing a document, decide which it belongs in:
 
-- **Public, here:** what anyone with a copy of the game needs to play, change or build on it. That's the designs with their change files and outside reviews (`docs/design/`), the data-format reference (`docs/reference/`, which the tests read), the acceptance records, ADRs (`docs/adr/`), how agents work here (`docs/agents/`), and `AGENTS.md`, `CONTEXT.md` and the README.
+- **Public, here:** what anyone with a copy of the game needs to play, change or build on it. That's the designs with their change files and outside reviews (`docs/design/`), the data-format reference (`docs/reference/`, which the tests read), the acceptance records, the release notes (`docs/releases/`), ADRs (`docs/adr/`), how agents work here (`docs/agents/`), and `AGENTS.md`, `CONTEXT.md` and the README.
 - **Private, in `docs/terra-sprites-docs/`:** the work behind those. That's each topic's question rounds, research, mockups, run logs and patches, the baseline reports and briefings (design §7.6), play-test notes and the advertising material. The private repo's own `AGENTS.md` says where in it things go.
 - **When unsure, it's private.** A private document can be published later, but one pushed here stays public in git's history. The owner's real name and their PC's paths never go here, nor in this repo's PRs, issues and comments, whose old wording GitHub keeps in each edit's history. A "Try it on your PC" section runs from "the terra-sprites folder", with no `cd` to the PC's own path.
 
@@ -108,6 +108,10 @@ How the owner likes to work, the project's conventions and the slice loop are in
 5. **Give the merge order** whenever PRs must merge in one: a stack, a pair with a private-docs PR, or two PRs that change the same lines. The message handing them to the owner lists the merges as numbered steps, first to last, with what to check between them, and each PR's plain-language comment repeats them.
 
 **Stacking a PR** on another, or working on one in a stack: `docs/agents/stacked-prs.md`.
+
+### Releases
+
+Each finished milestone is a numbered release (M1 is v0.1.0, M2 v0.2.0), and from v0.2.0 on the README installs the newest one. `main` carries the work in progress, and PRs keep going to it one at a time: a milestone is never held back on a branch or a stack of its own. The milestone's acceptance slice makes its release, and the owner tags it, since sessions can't push tags: `docs/agents/releases.md`.
 
 ## Agent skills
 
